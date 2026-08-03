@@ -1,0 +1,18 @@
+{
+  "id": "t-brembana-quadro-2026",
+  "subject": "rinnovo ordine quadro — richiesta sconto",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-brembana-quadro-2026",
+      "from": { "name": "Ivan Locatelli", "email": "i.locatelli@termobrembana.it", "org": "Termoidraulica Brembana S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "rinnovo ordine quadro — richiesta sconto",
+      "date": "2026-07-30T09:12:00+02:00",
+      "body": "Buongiorno Rovelli,\n\ndobbiamo rinnovare il quadro per la stagione 2026-27 e stavolta il discorso va affrontato seriamente.\n\nCon gli aumenti che avete fatto a gennaio i nostri conti non stanno più in piedi: sulle sfere ottone parliamo di un +6% secco. O ci riconoscete l'8% sul quadro, o siamo costreti a valutare l'offerta di GBR Rubinetterie che abbiamo già sul tavolo.\n\nParliamo di 30.000 euro l'anno di ordinato, un pensiero fatecelo.\n\nAttendo un riscontro entro la settimana, poi da lunedì siamo in ferie anche noi.\n\nSaluti\nIvan Locatelli\nUfficio acquisti — Termoidraulica Brembana",
+      "direction": "ricevuta",
+      "unanswered": true
+    }
+  ]
+}

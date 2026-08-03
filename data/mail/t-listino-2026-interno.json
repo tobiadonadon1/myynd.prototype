@@ -1,0 +1,47 @@
+{
+  "id": "t-listino-2026-interno",
+  "subject": "listino 2026 — in vigore da lunedì 12",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-listino-2026-interno",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [
+        { "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" },
+        { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it" },
+        { "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }
+      ],
+      "cc": [],
+      "subject": "listino 2026 — in vigore da lunedì 12",
+      "date": "2026-01-09T08:15:00+01:00",
+      "body": "in allegato il listino 2026. va in vigore lunedì 12.\naumento medio 6%, ottone e inox. le flange un filo meno.\nda lunedì il 2025 non esce più dall'azienda: non si manda ai clienti e non si usa come base per i preventivi. se un cliente ve lo chiede, si manda questo.\nGiulia: aggiorna i modelli delle offerte, tutti.\nPR",
+      "attachments": [{ "name": "listino-2026.md", "path": "documenti/listino-2026.md" }],
+      "direction": "inviata"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-listino-2026-interno",
+      "from": { "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: listino 2026 — in vigore da lunedì 12",
+      "date": "2026-01-09T09:03:00+01:00",
+      "body": "Ciao Pietro,\n\nscusa la domanda forse banale: per gli ordini già confermati a dicembre coi prezzi vecchi come ci comportiamo? E i preventivi mandati a dicembre che sono ancora aperti?\n\nAggiorno i modelli entro oggi.\n\nGrazie, Giulia",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-listino-2026-interno",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }],
+      "cc": [
+        { "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" },
+        { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it" }
+      ],
+      "subject": "R: R: listino 2026 — in vigore da lunedì 12",
+      "date": "2026-01-09T09:20:00+01:00",
+      "body": "domanda giusta, non banale.\nordini confermati: prezzi vecchi, la parola data vale.\npreventivi aperti: valgono fino alla scadenza scritta sopra, poi si rifanno col 2026.\ntutto quello che si quota da lunedì: listino nuovo, senza eccezioni. anche se il cliente piange.\nPR",
+      "direction": "inviata"
+    }
+  ]
+}

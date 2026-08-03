@@ -1,0 +1,40 @@
+{
+  "id": "t-giulia-nuovo-cliente-pagamenti",
+  "subject": "cliente nuovo chiede 60 gg — cosa rispondo?",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-giulia-nuovo-cliente-pagamenti",
+      "from": { "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "cliente nuovo chiede 60 gg — cosa rispondo?",
+      "date": "2026-05-06T11:32:00+02:00",
+      "body": "Ciao Pietro,\n\nscusa se ti disturbo. Mi ha chiamato un'officina di Seriate, mai lavorato con loro: vorrebbero fare un primo ordine da circa 3.000 euro di VSO ma chiedono pagamento a 60 giorni \"come fanno con tutti i fornitori\".\n\nNon mi sembrava il caso di dire di sì, ma non volevo nemmeno perdere l'ordine senza chiederti. Cosa rispondo?\n\nGrazie, Giulia",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-giulia-nuovo-cliente-pagamenti",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: cliente nuovo chiede 60 gg — cosa rispondo?",
+      "date": "2026-05-06T12:01:00+02:00",
+      "body": "hai fatto bene a chiedere.\nregola per i clienti nuovi: primi due ordini in proforma, oppure 50% all'ordine e saldo alla consegna. dal terzo ordine, bonifico a 30 giorni come tutti.\n60 giorni a uno che non conosciamo non si fanno mai, nemmeno se l'ordine è bello. anzi: più l'ordine è grosso più si sta attenti.\nse l'ordine è vero, le condizioni non lo fermano. se lo fermano, non era un cliente.\nin allegato la nota con tutte le condizioni, tienila buona.\nPR",
+      "attachments": [{ "name": "nota-condizioni-pagamento.md", "path": "documenti/nota-condizioni-pagamento.md" }],
+      "direction": "inviata"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-giulia-nuovo-cliente-pagamenti",
+      "from": { "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: R: cliente nuovo chiede 60 gg — cosa rispondo?",
+      "date": "2026-05-06T14:20:00+02:00",
+      "body": "Perfetto, grazie. Ho risposto con la proforma sui primi due ordini: hanno accettato senza fare una piega. Avevi ragione.\n\nGiulia",
+      "direction": "ricevuta"
+    }
+  ]
+}

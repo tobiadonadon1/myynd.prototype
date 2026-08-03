@@ -1,0 +1,40 @@
+{
+  "id": "t-enolmec-preventivo",
+  "subject": "fornitura valvole inox — richiesta informazioni",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-enolmec-preventivo",
+      "from": { "name": "Davide Carraro", "email": "d.carraro@enolmeccanica.it", "org": "Enolmeccanica Trevigiana S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "fornitura valvole inox — richiesta informazioni",
+      "date": "2026-07-08T10:34:00+02:00",
+      "body": "Buongiorno,\n\nsiamo un costruttore di macchine per l'industria enologica di Conegliano (linee di imbottigliamento e trattamento mosti). Il Vs. nominativo ce lo ha fatto un fornitore comune.\n\nCerchiamo un fornitore diretto di valvole a sfera inox per le nostre macchine: oggi compriamo da un distributore ma tempi e prezzi non ci soddisfano più.\n\nTrattate il settore alimentare/enologico? Con quali materiali lavorate?\n\nCordiali saluti\nDavide Carraro\nUfficio acquisti — Enolmeccanica Trevigiana S.r.l.",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-enolmec-preventivo",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Davide Carraro", "email": "d.carraro@enolmeccanica.it" }],
+      "cc": [{ "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" }],
+      "subject": "R: fornitura valvole inox — richiesta informazioni",
+      "date": "2026-07-09T08:12:00+02:00",
+      "body": "Buongiorno Carraro,\nsì, l'inox per il settore alimentare lo seguiamo già: valvole a sfera in AISI 316 dal DN25 al DN50 e flange EN 1092-1, tutto con rintracciabilità di colata.\nMi mandi misure e quantità e le preparo un'offerta. In copia il nostro commerciale Foresti per il seguito.\nSaluti,\nPietro Rovelli",
+      "direction": "inviata"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-enolmec-preventivo",
+      "from": { "name": "Davide Carraro", "email": "d.carraro@enolmeccanica.it", "org": "Enolmeccanica Trevigiana S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [{ "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" }],
+      "subject": "R: R: fornitura valvole inox — richiesta informazioni",
+      "date": "2026-07-29T09:41:00+02:00",
+      "body": "Buongiorno Sig. Rovelli,\n\nci siamo confrontati internamente, per partire avremmo bisogno di:\n\n- 60 pz valvola a sfera inox DN25\n- 20 pz valvola a sfera inox DN50\n\nNel frattempo, tramite un'azienda con cui collaborate, ci è arrivato un Vs. listino datato 2025: la DN25 inox risulta a 38,80 €/pz. Ci confermate questo prezzo e i tempi di consegna?\n\nSe l'offerta ci va bene l'ordine parte subito, il nostro magazzino è quasi a terra e vorremmo la merce il prima possibile.\n\nGrazie in anticipo,\nDavide Carraro\nUfficio acquisti — Enolmeccanica Trevigiana S.r.l.",
+      "direction": "ricevuta",
+      "unanswered": true
+    }
+  ]
+}

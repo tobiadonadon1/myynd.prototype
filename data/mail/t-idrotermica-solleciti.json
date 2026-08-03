@@ -1,0 +1,61 @@
+{
+  "id": "t-idrotermica-solleciti",
+  "subject": "sollecito pagamento fattura 214/2025",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-idrotermica-solleciti",
+      "from": { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Elena Sartori", "email": "e.sartori@idrotermicapadana.it" }],
+      "cc": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "subject": "sollecito pagamento fattura 214/2025",
+      "date": "2025-10-28T09:40:00+01:00",
+      "body": "Buongiorno Dott.ssa Sartori,\n\nLe segnalo che la fattura n. 214/2025 di € 12.400,00 + IVA, con scadenza 30/09/2025, non risulta ancora saldata.\n\nLe chiedo cortesemente di verificare e di darci un riscontro sui tempi di pagamento.\n\nGrazie, cordiali saluti\nMarta Cattaneo\nAmministrazione — Officine Rovelli S.r.l.",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-idrotermica-solleciti",
+      "from": { "name": "Elena Sartori", "email": "e.sartori@idrotermicapadana.it", "org": "Idrotermica Padana S.p.A." },
+      "to": [{ "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it" }],
+      "cc": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "subject": "R: sollecito pagamento fattura 214/2025",
+      "date": "2025-10-30T11:15:00+01:00",
+      "body": "Buongiorno Sig.ra Cattaneo,\n\nmi scuso per il ritardo: abbiamo avuto un cambio di gestionale in amministrazione e alcune scadenze sono slittate.\n\nLa fattura 214 è in pagamento entro il 15/11, glielo confermo personalmente.\n\nCordiali saluti\nElena Sartori",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-idrotermica-solleciti",
+      "from": { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: sollecito pagamento fattura 214/2025 — blocco spedizioni?",
+      "date": "2025-10-30T11:42:00+01:00",
+      "body": "Ciao Pietro,\n\nhai visto la risposta della Sartori. Siamo a 30 giorni di scaduto sulla 214 e a metà novembre parte la seconda tranche dell'ordine 102. Blocco la spedizione in via prudenziale o mando avanti?\n\nGrazie, Marta",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-4",
+      "threadId": "t-idrotermica-solleciti",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: R: sollecito pagamento fattura 214/2025 — blocco spedizioni?",
+      "date": "2025-10-30T12:05:00+01:00",
+      "body": "la regola è quella: si blocca sopra i sessanta giorni di scaduto. qui siamo a trenta, si spedisce.\ncon la Padana ci vuole pazienza: riba a novanta, pagano lenti ma in dodici anni non hanno mai saltato un pagamento. e fanno un quinto del nostro fatturato.\nse al 30/11 la 214 non è pagata, mi riporti la pratica e decido io.\nPR",
+      "direction": "inviata"
+    },
+    {
+      "id": "m-5",
+      "threadId": "t-idrotermica-solleciti",
+      "from": { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: R: R: sollecito pagamento fattura 214/2025 — blocco spedizioni?",
+      "date": "2025-11-17T08:55:00+01:00",
+      "body": "Ciao Pietro,\n\nper chiudere il giro: la 214 è stata pagata venerdì 14/11, bonifico intero. Come al solito: lenti ma arrivano.\n\nMarta",
+      "direction": "ricevuta"
+    }
+  ]
+}

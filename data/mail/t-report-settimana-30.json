@@ -1,0 +1,32 @@
+{
+  "id": "t-report-settimana-30",
+  "subject": "report produzione settimana 30",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-report-settimana-30",
+      "from": { "name": "Sergio Bonardi", "email": "sergio.bonardi@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [
+        { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" },
+        { "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" }
+      ],
+      "cc": [],
+      "subject": "report produzione settimana 30",
+      "date": "2026-07-24T11:48:00+02:00",
+      "body": "in allegato il report della 30.\nnota principale: transfer 3 fermo da giovedi pomeriggio, cuscinetto mandrino. ricambio arriva lunedi, intervento mercoledi. x la CMB ci stiamo cmq, spedizione 5/8 confermata.\nscarti ok tranne il lotto VSI-50, 1,8%, utensile. inserto cambiato, tengo d'occhio il prossimo lotto.\nsergio",
+      "attachments": [{ "name": "report-produzione-2026-sett30.md", "path": "documenti/report-produzione-2026-sett30.md" }],
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-report-settimana-30",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Sergio Bonardi", "email": "sergio.bonardi@officinerovelli.it" }],
+      "cc": [{ "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" }],
+      "subject": "R: report produzione settimana 30",
+      "date": "2026-07-24T13:15:00+02:00",
+      "body": "visto. scarti sotto l'uno e mezzo di media, bene, ma il lotto VSI-50 me lo ricontrolli sul prossimo giro.\nil transfer 3 mi raccomando: marciante mercoledì sera, giovedì si parte con la CMB. quella spedizione del 5 non si tocca.\nPR",
+      "direction": "inviata"
+    }
+  ]
+}

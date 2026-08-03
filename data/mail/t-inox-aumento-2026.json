@@ -1,0 +1,53 @@
+{
+  "id": "t-inox-aumento-2026",
+  "subject": "adeguamento listino AISI 316 dal 01/01/2026",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-inox-aumento-2026",
+      "from": { "name": "Michele Businaro", "email": "m.businaro@inoxcenterpd.it", "org": "Inox Center Padova S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "adeguamento listino AISI 316 dal 01/01/2026",
+      "date": "2025-12-15T09:30:00+01:00",
+      "body": "Gentile Sig. Rovelli,\n\nLa informiamo che a partire dal 01/01/2026, a seguito dell'andamento di nichel ed energia, i nostri listini sulla barra AISI 316 subiranno un adeguamento del 7%.\n\nGli ordini pervenuti entro il 20/12 saranno evasi alle condizioni attuali.\n\nRestiamo a disposizione per qualsiasi chiarimento.\n\nCordiali saluti\nMichele Businaro\nInox Center Padova S.r.l.",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-inox-aumento-2026",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Michele Businaro", "email": "m.businaro@inoxcenterpd.it" }],
+      "cc": [],
+      "subject": "R: adeguamento listino AISI 316 dal 01/01/2026",
+      "date": "2025-12-16T08:20:00+01:00",
+      "body": "Businaro,\nil 7 è tanto. L'anno scorso da voi abbiamo passato le otto tonnellate.\nFacciamo così: sopra le due tonnellate a trimestre voglio il 5, sotto pazienza, il 7.\nSe va bene chiudiamo entro la settimana e a gennaio si riparte senza discussioni.\nSaluti, PR",
+      "direction": "inviata"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-inox-aumento-2026",
+      "from": { "name": "Michele Businaro", "email": "m.businaro@inoxcenterpd.it", "org": "Inox Center Padova S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: R: adeguamento listino AISI 316 dal 01/01/2026",
+      "date": "2025-12-18T15:44:00+01:00",
+      "body": "Gentile Sig. Rovelli,\n\nvista la continuità del rapporto confermiamo: +5% sulle forniture nei trimestri con ritiri superiori alle 2 tonnellate, +7% negli altri casi.\n\nLe faremo avere il listino aggiornato con la conferma d'ordine di gennaio.\n\nBuone feste,\nMichele Businaro",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-4",
+      "threadId": "t-inox-aumento-2026",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [
+        { "name": "Marta Cattaneo", "email": "marta.cattaneo@officinerovelli.it" },
+        { "name": "Luca Foresti", "email": "luca.foresti@officinerovelli.it" }
+      ],
+      "cc": [],
+      "subject": "aumenti materia prima — listino 2026",
+      "date": "2025-12-18T17:10:00+01:00",
+      "body": "chiuso con Inox Center: +5 sopra le due tonnellate a trimestre, +7 sotto. volevano 7 secco.\ncon questo e con l'ottone che è salito anche lui, il listino 2026 va fatto: media +6 sui nostri prezzi.\nlo chiudo io entro Natale, entra in vigore a metà gennaio. fino ad allora non si anticipa niente ai clienti.\nPR",
+      "direction": "inviata"
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+/**
+ * myynd — tokens.
+ *
+ * Ogni valore usato nell'app viene da qui. Nessun colore, misura o tempo
+ * scritto a mano nei componenti.
+ *
+ * La finestra Electron è trasparente con vibrancy `under-window`:
+ * le superfici qui sotto sono velature, non colori pieni.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ─── inchiostro ─────────────────────────────────────────────────────
+     Un nero caldo, e UN solo grigio per tutto ciò che è secondario.
+     Il grigio è inchiostro con alpha, così tiene il contrasto anche
+     quando la scrivania dietro la finestra è scura. */
+  --ink:        #1c1a17;                  /* testo primario */
+  --ink-2:      rgba(28, 26, 23, 0.58);   /* l'unico grigio: secondario */
+  --ink-faint:  rgba(28, 26, 23, 0.28);   /* stesso grigio, più tenue:
+                                             placeholder, segni sorgente,
+                                             presa della scrollbar */
+  --ink-hover:  rgba(28, 26, 23, 0.84);   /* il bottone pieno sotto il mouse */
+  --ink-press:  rgba(28, 26, 23, 0.92);   /* il bottone pieno mentre è premuto */
+  --focus:      rgba(28, 26, 23, 0.5);    /* anello di focus: neutro,
+                                             mai il colore d'attesa */
+
+  /* ─── attesa ─────────────────────────────────────────────────────────
+     L'UNICO accento dell'interfaccia. Terra di Siena bruciata.
+     Serve a una cosa sola: segnare lavoro che aspetta una persona.
+     Mai su link, mai su focus, mai su hover, mai sul marchio.
+     Se serve un secondo accento, l'interfaccia ha troppo dentro. */
+  --attesa: #b4552b;
+
+  /* ─── superfici (traslucide, la vibrancy sta dietro) ────────────────── */
+  --surface:      rgba(251, 249, 245, 0.72);  /* velatura della finestra */
+  --surface-bar:  rgba(251, 249, 245, 0.20);  /* barra alta: un velo sul
+                                                 guscio, mai una lastra */
+  --surface-pop:  rgba(253, 251, 247, 0.88);  /* popover sorgente */
+  --surface-edit: rgba(255, 255, 255, 0.42);  /* corpo bozza in modifica */
+  --wash:         rgba(28, 26, 23, 0.045);    /* hover di righe e bottoni */
+  --wash-strong:  rgba(28, 26, 23, 0.12);     /* selezione del testo,
+                                                 pollice della scrollbar */
+
+  --on-ink: rgba(255, 253, 249, 0.96);        /* testo sul bottone pieno */
+
+  /* ─── linee ──────────────────────────────────────────────────────────
+     Filiformi. 0.5px legge meglio su retina. */
+  --hairline:     0.5px;
+  --hairline-strong: 1px;  /* il filo pieno: focus dei campi, barra delle
+                              citazioni, cursore di streaming */
+  --focus-w:      2px;     /* spessore dell'anello di focus */
+  --line:         rgba(28, 26, 23, 0.13);
+  --line-strong:  rgba(28, 26, 23, 0.28);
+  --rim:          rgba(255, 255, 255, 0.38);  /* bordo interno finestra */
+
+  /* ─── caratteri ──────────────────────────────────────────────────────
+     L'interfaccia parla in sans di sistema.
+     Ciò che il cervello scrive — risposte, bozze, estratti — è composto
+     in un serif da libro (Iowan Old Style, di serie su macOS). */
+  --font-ui:    -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Helvetica Neue", sans-serif;
+  --font-prose: "Iowan Old Style", "New York", ui-serif, Georgia, serif;
+  --font-mono:  ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* scala tipografica */
+  --text-xs:     11px;   /* etichette, orari del registro */
+  --text-s:      12px;   /* meta, note, contatori */
+  --text-ui:     13px;   /* misura base dell'interfaccia */
+  --text-l:      15px;   /* titoli di riga, input */
+  --text-ask:    17px;   /* campo domanda */
+  --text-prose:  16px;   /* corpo bozze e risposte, in serif */
+  --text-title:  21px;   /* titolo di schermata, in serif */
+
+  --leading-ui:    1.45;
+  --leading-prose: 1.62;
+
+  --track-wide: 0.14em;  /* solo il marchio */
+
+  /* ─── spazio ─────────────────────────────────────────────────────────
+     Base 4. Lo spazio lavora al posto delle ombre. */
+  --s0: 2px;   /* mezzo passo, fuori dalla scala base-4, di proposito:
+                  strette ottiche (meta del popover, scatto d'ingresso) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --s8: 64px;
+
+  /* misura del testo lungo */
+  --measure: 62ch;
+
+  /* ─── raggi ─────────────────────────────────────────────────────────── */
+  --r-s:      6px;    /* bottoni, campi */
+  --r-m:      9px;    /* popover, area di modifica */
+  --r-window: 12px;   /* la finestra stessa */
+  --r-full:   999px;  /* tondo pieno: il pollice della scrollbar */
+
+  /* ─── segni ──────────────────────────────────────────────────────────
+     Il puntino di sorgente. Quasi invisibile è il punto: il budget di
+     invisibilità si regola qui e su --ink-faint. */
+  --src-dot: 3.5px;
+
+  /* ─── tempo ──────────────────────────────────────────────────────────
+     Corto, e solo su ciò che si muove davvero. */
+  --t-fast: 120ms;
+  --t-mid:  160ms;
+  --t-slow: 180ms;
+  --t-intent: 240ms;  /* indugio prima del popover sorgente: un passaggio
+                         distratto del mouse non deve far apparire nulla */
+  --t-caret: 1100ms;  /* battito del cursore durante lo streaming */
+  --ease:   cubic-bezier(0.3, 0.1, 0.2, 1);
+
+  /* ─── sfocature ──────────────────────────────────────────────────────
+     Dentro l'app il frost è CSS; dietro la finestra è vibrancy. */
+  --blur-pop: 22px;
+  --sat:      150%;
+
+  /* ─── livelli ───────────────────────────────────────────────────────── */
+  --z-bar: 10;
+  --z-pop: 60;
+
+  /* ─── geometrie della finestra ──────────────────────────────────────── */
+  --topbar-h: 46px;
+  --rail-w:   176px;
+  --traffic-w: 78px;  /* spazio dei semafori macOS nella barra */
+}

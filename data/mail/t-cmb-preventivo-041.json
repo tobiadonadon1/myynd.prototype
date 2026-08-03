@@ -1,0 +1,51 @@
+{
+  "id": "t-cmb-preventivo-041",
+  "subject": "richiesta offerta — commessa depuratore Peschiera",
+  "messages": [
+    {
+      "id": "m-1",
+      "threadId": "t-cmb-preventivo-041",
+      "from": { "name": "Stefano Rigamonti", "email": "s.rigamonti@cmbimpianti.it", "org": "CMB Impianti S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [{ "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }],
+      "subject": "richiesta offerta — commessa depuratore Peschiera",
+      "date": "2026-05-05T09:47:00+02:00",
+      "body": "Buongiorno Pietro,\n\nci siamo aggiudicati la commessa del depuratore di Peschiera. Per la parte valvole ci servono:\n\n- 120 pz VSO-25\n- 60 pz VSO-50\n- 40 pz VSI-25\n\nMi fai avere un'offerta? Tempi: ci serve la merce entro metà giugno, quindi con le vostre solite 4 settimane ci stiamo se chiudiamo in fretta.\n\nGrazie, un saluto\nStefano Rigamonti\nUfficio tecnico — CMB Impianti",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-2",
+      "threadId": "t-cmb-preventivo-041",
+      "from": { "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [],
+      "subject": "R: richiesta offerta — commessa depuratore Peschiera",
+      "date": "2026-05-07T15:28:00+02:00",
+      "body": "Ciao Pietro,\n\nti ho preparato la bozza dell'offerta per CMB, la 041/2026. Ho usato il listino 2026 e ho ricontrollato i codici due volte — dopo la storia di febbraio non mi fido più di me stessa.\n\nTotale 4.348,00 + IVA, consegna 4 settimane, pagamento 30 gg come sempre con loro. Sergio mi ha confermato che in produzione ci stanno.\n\nMe la firmi che la mando?\n\nGiulia",
+      "direction": "ricevuta"
+    },
+    {
+      "id": "m-3",
+      "threadId": "t-cmb-preventivo-041",
+      "from": { "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it", "org": "Officine Rovelli S.r.l." },
+      "to": [{ "name": "Stefano Rigamonti", "email": "s.rigamonti@cmbimpianti.it" }],
+      "cc": [{ "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }],
+      "subject": "R: richiesta offerta — commessa depuratore Peschiera",
+      "date": "2026-05-12T08:40:00+02:00",
+      "body": "Rigamonti,\nin allegato la nostra offerta 041/2026 per il depuratore.\n4.348,00 € + IVA, resa franco nostro stabilimento, consegna 4 settimane dall'ordine. Pagamento solito, 30 giorni.\nSe confermi entro la settimana, la merce esce in tempo per metà giugno.\nComplimenti per la commessa.\nSaluti, PR",
+      "attachments": [{ "name": "preventivo-2026-041-cmb.md", "path": "documenti/preventivo-2026-041-cmb.md" }],
+      "direction": "inviata"
+    },
+    {
+      "id": "m-4",
+      "threadId": "t-cmb-preventivo-041",
+      "from": { "name": "Stefano Rigamonti", "email": "s.rigamonti@cmbimpianti.it", "org": "CMB Impianti S.r.l." },
+      "to": [{ "name": "Pietro Rovelli", "email": "pietro.rovelli@officinerovelli.it" }],
+      "cc": [{ "name": "Giulia Pedretti", "email": "giulia.pedretti@officinerovelli.it" }],
+      "subject": "R: R: richiesta offerta — commessa depuratore Peschiera",
+      "date": "2026-05-13T10:18:00+02:00",
+      "body": "Confermata la 041/2026, ordine formale in giornata dal nostro gestionale.\n\nGrazie della rapidità come sempre.\n\nStefano",
+      "direction": "ricevuta"
+    }
+  ]
+}
