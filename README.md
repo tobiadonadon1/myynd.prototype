@@ -1,69 +1,55 @@
-# Myynd — prototipo
+# Myynd
 
-Copia digitale di chi in azienda sa come funzionano le cose. I colleghi
-chiedono a lei invece di interrompere lui.
+Il secondo cervello dell'azienda. Legge le fonti che le colleghi, ti mette
+davanti solo quello che richiede una decisione, e tiene il resto a portata di
+domanda.
 
-Questo è il passo 1: l'interfaccia, su dati inventati ma veri — file che
-l'app legge, indicizza e da cui genera davvero. Niente risposte scritte a
-mano da qualche parte.
+Questa è l'interfaccia, importata dal design
+[Myynd dashboard design](https://claude.ai/design/p/62b47f1f-7438-4d88-99cb-cd6f9478812c)
+e riscritta in React + TypeScript.
 
 ## Avvio
 
 ```bash
 npm install
-npm run dev
+npm run dev      # http://localhost:5173
 ```
 
-Poi **⌥Spazio** da qualunque applicazione: la finestra viene avanti sopra
-quello che stai facendo.
+Altri comandi: `npm run build` (typecheck + bundle), `npm run preview`,
+`npm run typecheck`.
 
-Serve il CLI `claude` installato e collegato (l'abbonamento, non una chiave
-api). Se non c'è, l'app lo dice e si ferma — non inventa.
+## Le schermate
 
-## Le quattro schermate
-
-`oggi` · `lavoro in attesa` · `chiedi` · `trasparenza`
-
-All'apertura ci sono tre risposte già scritte, in attesa di una persona.
-`invia` · `modifica` · `ignora`. **Niente parte da solo, mai.** `invia`
-registra l'approvazione: la bozza resta una bozza finché non la manda una
-persona dal suo client.
+| Schermata       | Cosa fa                                                                  |
+| --------------- | ------------------------------------------------------------------------ |
+| **Myynd**       | Il feed. La cosa più urgente in grande, il resto sotto, le fatte in fondo |
+| **Chat**        | Domande sul corpus, con le fonti citate sotto ogni risposta              |
+| **Automazioni** | Le regole che girano da sole, con i passi di ognuna                       |
+| **Mappa**       | Il grafo dei nodi: 4.045 nodi in 5 gruppi, navigabile in 3D              |
+| **Preferenze**  | Quanta autonomia dare a Myynd, con che tono, e dove non deve entrare      |
+| **Connettori**  | Le fonti collegate e quelle da collegare                                  |
 
 ## Com'è fatto
 
 ```
 src/
-  main/        finestra traslucida, scorciatoia globale, segno nel menu bar
-  preload/     il ponte, unica superficie che il renderer può toccare
-  core/        il motore: lettura, retrieval BM25, generazione, registro
-  renderer/    le quattro schermate — non sa che esistono file su disco
-  shared/      i contratti fra i tre
-data/          il corpus (vedi data/FORMATO.md)
+  App.tsx          guscio: colonna di sinistra, schermata attiva, finestre
+  vals.ts          tutto lo stato + i valori già pronti per il rendering
+  data.ts          il corpus del prototipo (inventato)
+  brain.ts         generazione della palla di nodi, seme fisso
+  useMappa.ts      disegno del grafo su canvas, trascinamento e zoom
+  modals.tsx       compositore, documento, originale, ricerca, toast
+  screens/         una schermata per file
+  ui.tsx           stili condivisi e `Hov` (l'equivalente di `style-hover`)
+  icons.tsx        le icone SVG
 ```
 
-Tre documenti governano il codice, e vincono sulle scelte fatte scrivendolo:
+`vals.ts` ricalca il `renderVals()` del design: lo stato sta tutto lì e le
+schermate ricevono valori già calcolati, senza decidere niente per conto loro.
 
-- **`DESIGN.md`** — il linguaggio visivo. Chi scrive JSX non scrive css né copy.
-- **`RENDERER.md`** — la struttura del renderer.
-- **`data/FORMATO.md`** — il formato del corpus su disco.
+## Stato
 
-## Sostituire i dati
-
-`DataSource` in `src/shared/types.ts` è la cucitura. Qualunque cosa la
-implementi — la cartella `data/` oggi, Gmail o Drive domani — funziona senza
-toccare una riga di interfaccia. Sopra quel livello nessuno sa che esistono
-file: i riferimenti alle sorgenti sono opachi e li decide la DataSource.
-
-## Le due regole che non si toccano
-
-**Non manda niente da solo.** Nessun timer, nessuna azione senza che una
-persona abbia premuto un bottone.
-
-**Quando non sa, lo dice e si ferma.** Se il materiale non contiene la
-risposta: `non lo so`, più una riga su cosa manca. Mai una deduzione, mai un
-numero plausibile. Una risposta sbagliata detta con sicurezza costa più di
-cinquanta risposte corrette.
-
-Le sorgenti sono presenti e quasi invisibili: un segno tenue nella riga,
-rivelato passando il mouse. Nessun blocco di citazioni, nessun pannello.
-Un numero che il modello ha calcolato non prende mai un segno di fonte.
+Prototipo dell'interfaccia. I dati in `data.ts` sono inventati — Donadon Srl, i
+clienti, i fornitori e i documenti servono solo a far vedere come si comporta
+Myynd. Non c'è ancora un motore dietro: il prossimo passo è collegare
+[gbrain](https://github.com/garrytan/gbrain) come cervello vero.

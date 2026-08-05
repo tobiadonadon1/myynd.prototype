@@ -1,0 +1,17 @@
+:root{--fi:1.4;--mo:running}
+body{margin:0;background:#E7DFD3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+a{color:#3E5140;text-decoration:none}a:hover{color:#C4623B}
+button,input,textarea,select{font-family:inherit}
+@keyframes flA{0%{transform:translate(0,0) scale(1)}33%{transform:translate(3.5%,2.5%) scale(1.05)}66%{transform:translate(-2.5%,3.5%) scale(.96)}100%{transform:translate(0,0) scale(1)}}
+@keyframes flB{0%{transform:translate(0,0) scale(1.02)}40%{transform:translate(-4%,2%) scale(.95)}75%{transform:translate(2.5%,4%) scale(1.06)}100%{transform:translate(0,0) scale(1.02)}}
+@keyframes flC{0%{transform:translate(0,0) scale(.98)}50%{transform:translate(4%,-3%) scale(1.06)}100%{transform:translate(0,0) scale(.98)}}
+@keyframes flD{0%{transform:translate(0,0) scale(1.04)}45%{transform:translate(3%,3.5%) scale(.95)}80%{transform:translate(-4%,1.5%) scale(1.05)}100%{transform:translate(0,0) scale(1.04)}}
+@keyframes flE{0%{transform:translate(0,0) scale(1)}50%{transform:translate(-4.5%,-2.5%) scale(1.07)}100%{transform:translate(0,0) scale(1)}}
+@keyframes puls{0%,100%{opacity:.72}50%{opacity:1}}
+@keyframes drift{0%{transform:translate(0,0) scale(1.08)}50%{transform:translate(2%,-1.5%) scale(1.12)}100%{transform:translate(0,0) scale(1.08)}}
+@keyframes rip{0%{transform:scale(.12);opacity:.55}70%{opacity:.18}100%{transform:scale(1);opacity:0}}
+@keyframes toastin{0%{transform:translateY(-14px) scale(.96);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}
+@keyframes heroin{0%{transform:translateY(10px) rotate(-.35deg);opacity:0}100%{transform:translateY(0) rotate(-.35deg);opacity:1}}
+@keyframes fadein{0%{opacity:0}100%{opacity:1}}
+.fl{position:absolute;border-radius:50%;will-change:transform,opacity;pointer-events:none;animation-play-state:var(--mo,running)}
+.wash{position:absolute;inset:-28%;pointer-events:none;animation:drift 70s ease-in-out infinite;animation-play-state:var(--mo,running)}
