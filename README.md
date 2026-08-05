@@ -1,12 +1,11 @@
 # Myynd
 
-Il secondo cervello dell'azienda. Legge le fonti che le colleghi, ti mette
-davanti solo quello che richiede una decisione, e tiene il resto a portata di
-domanda.
+Il secondo cervello dell'azienda. Legge le fonti che le colleghi — posta, file,
+note — e da lì risponde alle tue domande citando da dove viene la risposta.
 
-Questa è l'interfaccia, importata dal design
-[Myynd dashboard design](https://claude.ai/design/p/62b47f1f-7438-4d88-99cb-cd6f9478812c)
-e riscritta in React + TypeScript.
+Gira tutto in locale: l'indice e le credenziali stanno in `~/.myynd` su questa
+macchina. L'unica cosa che esce sono le domande che fai a Claude, insieme ai
+pezzi di documento che servono a rispondere.
 
 ## Avvio
 
@@ -15,41 +14,73 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-Altri comandi: `npm run build` (typecheck + bundle), `npm run preview`,
-`npm run typecheck`.
+Partono due cose: il server locale su `127.0.0.1:5174` (legge posta, file e
+note) e l'interfaccia su `5173`. Al primo avvio si apre l'onboarding.
 
-## Le schermate
+## Connettori
 
-| Schermata       | Cosa fa                                                                  |
-| --------------- | ------------------------------------------------------------------------ |
-| **Myynd**       | Il feed. La cosa più urgente in grande, il resto sotto, le fatte in fondo |
-| **Chat**        | Domande sul corpus, con le fonti citate sotto ogni risposta              |
-| **Automazioni** | Le regole che girano da sole, con i passi di ognuna                       |
-| **Mappa**       | Il grafo dei nodi: 4.045 nodi in 5 gruppi, navigabile in 3D              |
-| **Preferenze**  | Quanta autonomia dare a Myynd, con che tono, e dove non deve entrare      |
-| **Connettori**  | Le fonti collegate e quelle da collegare                                  |
+| Connettore | Stato | Cosa serve |
+| ---------- | ----- | ---------- |
+| **Posta** | funziona | Host IMAP, indirizzo, password della casella |
+| **Desktop** | funziona | Le cartelle che scegli — solo lettura, solo file di testo |
+| **Notion** | funziona | Token di integrazione interna + pagine condivise con l'integrazione |
+| **Claude** | funziona | Una chiave API da console.anthropic.com |
+| WhatsApp, Teams, Slack, Calendario, Drive, SharePoint, Dropbox, Fatture in Cloud | da fare | App registrata o OAuth |
+
+### Posta su Register.it
+
+Il dominio `donadon.com` è su Register.it, che dà IMAP e SMTP normali: niente
+OAuth, basta la password della casella.
+
+```
+IMAP   imap.register.it : 993   (SSL)
+SMTP   smtp.register.it : 465   (SSL)
+utente il tuo indirizzo completo
+```
+
+Gmail, Outlook e Aruba sono precompilati nel server (`server/connettori/posta.ts`);
+per Gmail serve una password per le app, non quella dell'account.
+
+### Notion
+
+Crea un'integrazione interna su notion.so/my-integrations, copia il token, poi
+**condividi con l'integrazione le pagine che vuoi far leggere** — senza quel
+passaggio l'API non le vede, anche col token giusto.
 
 ## Com'è fatto
 
 ```
+server/                 Node, solo su 127.0.0.1
+  index.ts              le API
+  config.ts             ~/.myynd/config.json, 0600 — i segreti non escono mai di qui
+  store.ts              ~/.myynd/mente.db — SQLite + FTS5, dal modulo node:sqlite
+  claude.ts             il ragionamento: recupera dall'indice, poi chiede a Claude
+  connettori/           posta (IMAP) · desktop (file) · notion (API) · registro
+
 src/
-  App.tsx          guscio: colonna di sinistra, schermata attiva, finestre
-  vals.ts          tutto lo stato + i valori già pronti per il rendering
-  data.ts          il corpus del prototipo (inventato)
-  brain.ts         generazione della palla di nodi, seme fisso
-  useMappa.ts      disegno del grafo su canvas, trascinamento e zoom
-  modals.tsx       compositore, documento, originale, ricerca, toast
-  screens/         una schermata per file
-  ui.tsx           stili condivisi e `Hov` (l'equivalente di `style-hover`)
-  icons.tsx        le icone SVG
+  onboarding/           il primo avvio: campo.ts è il campo di particelle
+  screens/              una schermata per file
+  vals.ts               tutto lo stato dell'app, alimentato dalle API
+  brain.ts              la palla della Mappa, costruita sui gruppi veri
+  useMappa.ts           il disegno del grafo su canvas
 ```
 
-`vals.ts` ricalca il `renderVals()` del design: lo stato sta tutto lì e le
-schermate ricevono valori già calcolati, senza decidere niente per conto loro.
+Niente dati finti: se non hai collegato niente, le schermate lo dicono invece
+di mostrare un'azienda inventata.
+
+## Comandi
+
+| Comando | Cosa fa |
+| ------- | ------- |
+| `npm run dev` | Server + interfaccia |
+| `npm run typecheck` | Controlla i tipi di entrambi |
+| `npm run build` | Typecheck + bundle |
 
 ## Stato
 
-Prototipo dell'interfaccia. I dati in `data.ts` sono inventati — Donadon Srl, i
-clienti, i fornitori e i documenti servono solo a far vedere come si comporta
-Myynd. Non c'è ancora un motore dietro: il prossimo passo è collegare
-[gbrain](https://github.com/garrytan/gbrain) come cervello vero.
+Funzionano: onboarding, i quattro connettori, indicizzazione, ricerca
+full-text, mappa, chat con citazione delle fonti, feed generato da Claude.
+
+Non ci sono ancora: le automazioni (la schermata lo dice), l'invio di email
+(SMTP è configurato ma non collegato a un'azione), e i connettori che
+richiedono OAuth.

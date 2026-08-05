@@ -1,23 +1,36 @@
 {
   "name": "myynd",
   "version": "0.2.0",
-  "description": "Myynd — dashboard",
+  "description": "Myynd \u2014 dashboard",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node --watch --disable-warning=ExperimentalWarning server/index.ts",
+    "dev:web": "vite",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@notionhq/client": "^5.23.3",
+    "express": "^5.2.1",
+    "imapflow": "^1.6.5",
+    "mailparser": "^3.9.14",
+    "nodemailer": "^9.0.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^26.1.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^10.0.4",
     "typescript": "^5.7.3",
     "vite": "^7.3.6"
   }

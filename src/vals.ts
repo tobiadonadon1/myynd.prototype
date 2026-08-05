@@ -1,63 +1,48 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import {
-  ALLEGATI, AUTOS, AUTO_ON, CLUSTERS, COMPOSER, CONNETTORI, DOCS, FEED, RISULTATI, THREADS, WORDS,
-  fmtOre, type Connettore, type Fonte, type Screen, type Thread
-} from './data'
-import { BALL } from './brain'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { AUTONOMIE, ESEMPIO_TONO, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { costruisci } from './brain'
+import { api, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 
 type Toast = { text: string; undo: boolean } | null
-type Fatta = { id: string; at: string }
 
-/**
- * Tutto lo stato del prototipo e i valori già pronti per il rendering.
- * Ricalca `renderVals()` del design: le schermate ricevono questo oggetto
- * e non calcolano niente per conto loro.
- */
-export function useVals() {
+const COLORE_FONTE: Record<string, string> = {
+  posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A'
+}
+
+/** Tutto lo stato dell'app, alimentato dal server locale. */
+export function useVals(iniziale: Stato, riapriOnboarding: () => void) {
+  const [stato, setStato] = useState<Stato>(iniziale)
   const [screen, setScreen] = useState<Screen>('myynd')
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
   const [query, setQuery] = useState('')
+  const [risultati, setRisultati] = useState<{ id: string; titolo: string; fonte: string; gruppo: string; quando: string; estratto: string }[]>([])
 
-  const [order, setOrder] = useState<string[]>(FEED.map(f => f.id))
-  const [done, setDone] = useState<Fatta[]>([])
+  const [aperti, setAperti] = useState<VoceFeed[]>([])
+  const [fatte, setFatte] = useState<VoceFeed[]>([])
   const [doneOpen, setDoneOpen] = useState(true)
   const [openDone, setOpenDone] = useState<string | null>(null)
   const [heroLong, setHeroLong] = useState(false)
+  const [generando, setGenerando] = useState(false)
 
-  const [editing, setEditing] = useState(false)
-  const [editText, setEditText] = useState('')
-  const [bodies, setBodies] = useState<Record<string, string>>({})
-  const [orig, setOrig] = useState<string | null>(null)
-  const [doc, setDoc] = useState(false)
-
-  const [autoOn, setAutoOn] = useState<Record<string, boolean>>({ ...AUTO_ON })
-  const [openAuto, setOpenAuto] = useState<string | null>(null)
-
-  const [conn, setConn] = useState<Connettore[]>(CONNETTORI.map(c => ({ ...c })))
-
-  const [threads, setThreads] = useState<Thread[]>(THREADS.map(t => ({ ...t, messages: [...t.messages] })))
-  const [thread, setThread] = useState<string | null>('th0')
-  const [hoverThread, setHoverThread] = useState<string | null>(null)
-  const [draftMsg, setDraftMsg] = useState('')
-
-  const [sel, setSel] = useState('clienti')
+  const [gruppi, setGruppi] = useState<Gruppo[]>([])
+  const [sel, setSel] = useState('')
   const [filtro, setFiltro] = useState<string | null>(null)
   const [mapFull, setMapFull] = useState(false)
   const [nodeMsg, setNodeMsg] = useState('')
 
-  const [tono, setTono] = useState('diretto')
-  const [autonomia, setAutonomia] = useState('preparare')
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({ mattina: true, silenzio: false, autoinvio: false, imparare: true })
-  const [areeOff, setAreeOff] = useState<Record<string, boolean>>({ buste: true, legale: true, prezzi: false, hr: false })
+  const [threads, setThreads] = useState<Thread[]>([])
+  const [thread, setThread] = useState<string | null>(null)
+  const [hoverThread, setHoverThread] = useState<string | null>(null)
+  const [messaggi, setMessaggi] = useState<Messaggio[]>([])
+  const [draftMsg, setDraftMsg] = useState('')
+  const [pensando, setPensando] = useState(false)
 
+  const [doc, setDoc] = useState<Record<string, string> | null>(null)
   const [toast, setToast] = useState<Toast>(null)
-  const [nuova, setNuova] = useState(false)
-  const [nuovaText, setNuovaText] = useState('')
-  const [ticket, setTicket] = useState(false)
-  const [ticketText, setTicketText] = useState('')
+  const [sincronizzando, setSincronizzando] = useState<string | null>(null)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const cvA = useRef<HTMLCanvasElement>(null)
@@ -71,66 +56,130 @@ export function useVals() {
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
-  const onPick = useCallback((s: string, cluster: string) => {
-    setSel(s)
-    setFiltro(cluster)
+  const ball = useMemo(() => costruisci(gruppi), [gruppi])
+  const onPick = useCallback((s: string, cluster: string) => { setSel(s); setFiltro(cluster) }, [])
+  const mappa = useMappa(cvA, cvB, mapFull, filtro, sel, onPick, ball, gruppi)
+
+  // — caricamento iniziale —
+
+  const caricaFeed = useCallback(async () => {
+    const f = await api.feed()
+    setAperti(f.aperti as unknown as VoceFeed[])
+    setFatte(f.fatte as unknown as VoceFeed[])
   }, [])
-  const mappa = useMappa(cvA, cvB, mapFull, filtro, sel, onPick)
 
-  const th = threads.find(t => t.id === thread) || threads[0]
-  const nMsg = th ? th.messages.length : 0
+  const caricaMente = useCallback(async () => {
+    const m = await api.mente()
+    setGruppi(m.gruppi)
+    setSel(s => s || m.gruppi[0]?.id || '')
+  }, [])
 
-  // la chat resta incollata in fondo quando arriva un messaggio o si cambia schermata
+  const caricaChat = useCallback(async () => {
+    const c = await api.chat()
+    setThreads(c)
+    setThread(t => t ?? c[0]?.id ?? null)
+  }, [])
+
+  useEffect(() => {
+    caricaFeed().catch(() => {})
+    caricaMente().catch(() => {})
+    caricaChat().catch(() => {})
+  }, [caricaFeed, caricaMente, caricaChat])
+
+  useEffect(() => {
+    if (!thread) { setMessaggi([]); return }
+    api.messaggi(thread).then(setMessaggi).catch(() => setMessaggi([]))
+  }, [thread])
+
   useEffect(() => {
     const el = threadRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
     const id = requestAnimationFrame(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight })
     return () => cancelAnimationFrame(id)
-  }, [nMsg, screen])
+  }, [messaggi.length, screen, pensando])
+
+  useEffect(() => {
+    if (!search || !query.trim()) { setRisultati([]); return }
+    const t = setTimeout(() => { api.cerca(query).then(setRisultati).catch(() => setRisultati([])) }, 180)
+    return () => clearTimeout(t)
+  }, [query, search])
+
+  const ricaricaStato = useCallback(async () => {
+    const s = await api.stato()
+    setStato(s)
+    return s
+  }, [])
+
+  // — azioni —
 
   const go = (s: Screen) => (e?: { preventDefault?: () => void }) => {
-    if (e && e.preventDefault) e.preventDefault()
-    setScreen(s)
-    setSearch(false)
-    setMenu(false)
+    if (e?.preventDefault) e.preventDefault()
+    setScreen(s); setSearch(false); setMenu(false)
   }
 
-  const say = (text: string, answer: string, sources?: Fonte[]) => {
-    const n = Date.now()
-    setScreen('chat')
-    setSearch(false)
-    setMapFull(false)
-    setMenu(false)
-    setDraftMsg('')
-    setNodeMsg('')
-    setThreads(ts => ts.map(t => t.id === thread
-      ? { ...t, messages: [...t.messages, { id: 'u' + n, role: 'u' as const, text }, { id: 'a' + n, role: 'a' as const, text: answer, sources }] }
-      : t))
+  const chiedi = async (testo: string, chatId?: string) => {
+    const id = chatId ?? thread ?? `th${Date.now()}`
+    setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
+    setThread(id)
+    setDraftMsg(''); setNodeMsg('')
+    setMessaggi(m => [...m, { id: `tmp${Date.now()}`, role: 'u', text: testo }])
+    setPensando(true)
+    try {
+      const r = await api.chiedi(id, testo)
+      setMessaggi(r.messaggi)
+      await caricaChat()
+    } catch (e) {
+      mostraToast(e instanceof Error ? e.message : 'Non sono riuscito a rispondere.')
+      setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
+    }
+    setPensando(false)
   }
 
-  const items = order.map(id => FEED.find(f => f.id === id)!).filter(Boolean)
-  const hero = items[0]
-  const rest = items.slice(1)
-  const connOn = conn.filter(c => c.on).length
-  const apertaAuto = AUTOS.find(a => a.id === openAuto)
-  const ore = AUTOS.reduce((t, a) => t + (autoOn[a.id] ? a.ore : 0), 0)
-  const attive = AUTOS.filter(a => autoOn[a.id]).length
-  const cl = CLUSTERS.find(c => c.id === sel.split('|')[0]) || CLUSTERS[0]
-  const selName = sel.includes('|') ? sel.split('|')[1] : null
-  const q = query.trim().toLowerCase()
-  const edited = hero ? bodies[hero.id] : null
-  const origItem = orig ? FEED.find(f => f.id === orig)! : null
-
-  const resolve = (item: typeof FEED[number]) => () => {
-    setOrder(o => o.filter(x => x !== item.id))
-    setHeroLong(false)
-    setEditing(false)
-    setDone(d => [{ id: item.id, at: '14:32' }, ...d])
-    mostraToast(bodies[item.id] ? 'Inviata con le tue modifiche.' : item.toast, item.undo)
+  const sincronizza = async (fonte?: string) => {
+    setSincronizzando('preparo')
+    try {
+      await api.sincronizza(m => {
+        if (m.fase !== 'fine') setSincronizzando(`${m.fase} · ${m.stato}`)
+      }, fonte)
+      await Promise.all([ricaricaStato(), caricaMente(), caricaFeed()])
+      mostraToast('Letto tutto quello che è cambiato.')
+    } catch (e) {
+      mostraToast(e instanceof Error ? e.message : 'Sincronizzazione fallita.')
+    }
+    setSincronizzando(null)
   }
 
+  const genera = async () => {
+    setGenerando(true)
+    try {
+      const r = await api.generaFeed()
+      await caricaFeed()
+      mostraToast(r.generate ? `${r.generate} cose nuove nel feed.` : 'Non ho trovato niente da segnalare.')
+    } catch (e) {
+      mostraToast(e instanceof Error ? e.message : 'La lettura non è riuscita.')
+    }
+    setGenerando(false)
+  }
+
+  // — valori derivati —
+
+  const hero = aperti[0]
+  const resto = aperti.slice(1)
+  const cl = gruppi.find(g => g.id === sel) ?? gruppi[0]
+  const connettori = stato.connettori
+  const connOn = connettori.filter(c => c.pronto && c.collegato)
+  const claudeOn = !!connettori.find(c => c.id === 'claude')?.collegato
+  const th = threads.find(t => t.id === thread)
   const noop = () => {}
+
+  const risolvi = (v: VoceFeed) => async () => {
+    setAperti(a => a.filter(x => x.id !== v.id))
+    setFatte(f => [v, ...f])
+    setHeroLong(false)
+    try { await api.segnaFeed(v.id, 'fatto') } catch { /* lo stato locale basta per ora */ }
+    mostraToast('Segnata come fatta.', true)
+  }
 
   return {
     threadRef, cvA, cvB,
@@ -147,72 +196,55 @@ export function useVals() {
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
     goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'),
-    connCount: connOn, apertiCount: items.length,
-    badge: { fontSize: '11.5px', fontWeight: 500, opacity: items.length ? 1 : 0.35 } as CSSProperties,
 
-    headline: items.length === 0 ? 'Tutto chiuso, mentre dormivi.' : WORDS[items.length] + ', mentre dormivi.',
-    hasHero: !!hero, feedEmpty: items.length === 0 && done.length === 0, hasRest: rest.length > 0,
+    nome: stato.config.nome ?? 'tu',
+    ruolo: stato.config.ruolo ?? '',
+    iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
+    connCount: connOn.length,
+    apertiCount: aperti.length,
+    totaleDocumenti: stato.conteggi.totale,
+    badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length ? 1 : 0.35 } as CSSProperties,
+    sincronizzando,
+    sincronizza: () => sincronizza(),
+    claudeOn,
+
+    // — feed —
+    oggi: new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }),
+    ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+    headline: aperti.length === 0
+      ? (stato.conteggi.totale ? 'Niente che richieda te, adesso.' : 'La tua mente è ancora vuota.')
+      : `${parole(aperti.length)}, da guardare.`,
+    hasHero: !!hero,
+    feedVuoto: aperti.length === 0 && fatte.length === 0,
+    hasRest: resto.length > 0,
+    generando, genera,
     heroStyle: {
       borderRadius: '28px 24px 28px 22px',
       background: 'linear-gradient(138deg,rgba(176,82,46,.9),rgba(154,100,55,.88) 46%,rgba(65,96,74,.9))',
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       border: '1px solid rgba(255,255,255,.6)',
       boxShadow: '0 30px 70px rgba(120,74,48,.34),inset 0 1px 0 rgba(255,255,255,.35)',
-      padding: '24px 26px 22px', transform: 'rotate(-.35deg)', color: '#FFF7F0', minHeight: 340, flex: 'none',
+      padding: '24px 26px 22px', transform: 'rotate(-.35deg)', color: '#FFF7F0', minHeight: 300, flex: 'none',
       display: 'flex', flexDirection: 'column', animation: 'heroin .35s ease'
     } as CSSProperties,
-    heroTipo: hero ? hero.tipo : '', heroFonte: hero ? hero.fonte : '', heroOra: hero ? hero.ora : '',
-    heroUrgenza: hero ? hero.urgenza : '',
-    heroTesto: hero ? hero.testo : '',
-    heroQuoteFonte: hero ? hero.quoteFonte : '', heroQuoteTitolo: hero ? hero.quoteTitolo : '',
-    heroQuote: hero ? edited || (heroLong ? hero.quoteFull : hero.quote) : '',
-    heroSecondaryLabel: hero ? (heroLong || edited ? 'Chiudi' : hero.expand) : '',
-    heroSecondary: hero ? () => setHeroLong(v => !v) : noop,
-    heroEditText: editText, heroEditabile: true, heroModificata: !!edited,
-    heroEditLabel: hero ? COMPOSER[hero.id].label : '',
-    heroOpenLabel: hero ? 'Apri in ' + hero.app : '',
-    heroHasAllegato: !!(hero && ALLEGATI[hero.id]),
-    heroAllegato: hero && ALLEGATI[hero.id] ? ALLEGATI[hero.id].nome : '',
-    heroAllegatoMeta: hero && ALLEGATI[hero.id] ? ALLEGATI[hero.id].meta : '',
+    heroTipo: hero?.tipo ?? '',
+    heroTitolo: hero?.titolo ?? '',
+    heroFonte: hero?.fonte ?? '',
+    heroOra: quando(hero?.quando),
+    heroUrgenza: hero?.urgenza ?? '',
+    heroTesto: hero?.testo ?? '',
+    heroLong,
+    heroToggle: () => setHeroLong(v => !v),
+    heroHaDoc: !!hero?.doc,
+    heroPrimary: hero ? risolvi(hero) : noop,
+    heroAsk: hero ? () => chiedi(`${hero.titolo} — dimmi di più`) : noop,
+    heroSkip: hero ? () => setAperti(a => [...a.slice(1), a[0]]) : noop,
+    apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => mostraToast('Non trovo più il documento.')) } : noop,
 
-    compOpen: !!(hero && editing),
-    compApp: hero ? hero.app : '', compStato: hero ? COMPOSER[hero.id].stato : '',
-    compCampi: hero ? COMPOSER[hero.id].campi : [],
-    compDot: { width: 7, height: 7, borderRadius: '50%', flex: 'none', background: hero ? hero.colore : '#C4623B' } as CSSProperties,
-    startEdit: hero ? () => { setEditing(true); setEditText(edited || hero.quoteFull) } : noop,
-    onHeroEdit: (e: { target: { value: string } }) => setEditText(e.target.value),
-    saveEdit: hero
-      ? () => { setEditing(false); setBodies(b => ({ ...b, [hero.id]: editText })); mostraToast('Salvata. La invii quando vuoi.') }
-      : noop,
-    sendFromComposer: hero
-      ? () => { setBodies(b => ({ ...b, [hero.id]: editText })); resolve(hero)() }
-      : noop,
-    cancelEdit: () => setEditing(false),
-
-    docOpen: !!(hero && doc), openDoc: () => setDoc(true), closeDoc: () => setDoc(false),
-    docTipo: hero && DOCS[hero.id] ? DOCS[hero.id].tipo : '',
-    docNumero: hero && DOCS[hero.id] ? DOCS[hero.id].numero : '',
-    docData: hero && DOCS[hero.id] ? DOCS[hero.id].data : '',
-    docMeta: hero && DOCS[hero.id] ? DOCS[hero.id].meta : [],
-    docHasRighe: !!(hero && DOCS[hero.id] && DOCS[hero.id].righe.length),
-    docRighe: hero && DOCS[hero.id] ? DOCS[hero.id].righe : [],
-    docTotali: hero && DOCS[hero.id] ? DOCS[hero.id].totali : [],
-    docNote: hero && DOCS[hero.id] ? DOCS[hero.id].note : '',
-
-    openOriginal: hero ? () => setOrig(hero.id) : noop,
-    closeOriginal: () => setOrig(null),
-    editFromOriginal: hero ? () => { setOrig(null); setEditing(true); setEditText(edited || hero.quoteFull) } : noop,
-    origOpen: !!origItem,
-    origApp: origItem ? origItem.app : '', origColore: origItem ? origItem.colore : '#C4623B',
-    origTitolo: origItem ? origItem.orig.titolo : '', origCampi: origItem ? origItem.orig.campi : [],
-    origCorpo: origItem ? origItem.orig.corpo : '',
-
-    heroPrimaryLabel: hero ? hero.p : '',
-    heroPrimary: hero ? resolve(hero) : noop,
-    heroAsk: hero ? () => say(hero.q, hero.a, hero.src) : noop,
-    heroSkip: hero ? () => { setOrder(o => [...o.slice(1), o[0]]); setHeroLong(false) } : noop,
-    resto: rest.map((i, ix) => ({
-      id: i.id, tipo: i.tipo, fonte: i.fonte, ora: i.ora, testo: i.testo, urgenza: i.urgenza, dot: dot(i.colore),
+    resto: resto.map((i, ix) => ({
+      id: i.id, tipo: i.tipo, titolo: i.titolo, fonte: i.fonte ?? '', ora: quando(i.quando),
+      testo: i.testo, urgenza: i.urgenza ?? '',
+      dot: dot(COLORE_FONTE[i.fonte ?? ''] ?? '#C4623B'),
       pill: {
         flex: 'none', fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#8E3F1F',
         background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
@@ -221,47 +253,50 @@ export function useVals() {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer',
         borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.09)'
       } as CSSProperties,
-      onPromote: () => { setOrder(o => [i.id, ...o.filter(x => x !== i.id)]); setHeroLong(false) }
+      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) }
     })),
-    resetFeed: () => { setOrder(FEED.map(f => f.id)); setDone([]) },
 
-    hasDone: done.length > 0, doneCount: done.length, doneOpen,
+    hasDone: fatte.length > 0, doneCount: fatte.length, doneOpen,
     toggleDone: () => setDoneOpen(v => !v),
     doneChevron: { display: 'flex', transform: doneOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' } as CSSProperties,
-    fatte: done.map((d, ix) => {
-      const item = FEED.find(f => f.id === d.id)!
-      const open = openDone === d.id
-      return {
-        id: d.id, at: d.at, esito: item.esito, tipo: item.tipo, fonte: item.fonte,
-        quoteTitolo: item.quoteTitolo, quote: bodies[d.id] || item.quoteFull, open,
-        label: open ? 'Chiudi' : 'Vedi',
-        wrap: {
-          borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.08)',
-          background: open ? 'rgba(255,255,255,.5)' : 'transparent'
-        } as CSSProperties,
-        onOpen: () => setOpenDone(v => (v === d.id ? null : d.id)),
-        onRestore: (e: React.MouseEvent) => {
-          e.stopPropagation()
-          setOrder(o => [d.id, ...o])
-          setDone(ds => ds.filter(x => x.id !== d.id))
-          setOpenDone(null)
-          mostraToast('Rimessa in cima al feed.')
-        },
-        onAsk: (e: React.MouseEvent) => { e.stopPropagation(); say(item.q, item.a, item.src) }
-      }
-    }),
+    fatte: fatte.map((d, ix) => ({
+      id: d.id, esito: d.titolo, tipo: d.tipo, fonte: d.fonte ?? '', at: quando(d.quando),
+      testo: d.testo, open: openDone === d.id, label: openDone === d.id ? 'Chiudi' : 'Vedi',
+      wrap: {
+        borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.08)',
+        background: openDone === d.id ? 'rgba(255,255,255,.5)' : 'transparent'
+      } as CSSProperties,
+      onOpen: () => setOpenDone(v => (v === d.id ? null : d.id)),
+      onRestore: async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        setFatte(f => f.filter(x => x.id !== d.id))
+        setAperti(a => [d, ...a])
+        setOpenDone(null)
+        try { await api.segnaFeed(d.id, 'aperto') } catch { /* rimane comunque in cima */ }
+        mostraToast('Rimessa in cima al feed.')
+      },
+      onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(`${d.titolo} — dimmi di più`) }
+    })),
 
-    toastOn: !!toast, toastText: toast ? toast.text : '', toastUndo: !!(toast && toast.undo),
+    // — documento aperto —
+    docOpen: !!doc,
+    doc,
+    chiudiDoc: () => setDoc(null),
+
+    // — toast —
+    toastOn: !!toast, toastText: toast?.text ?? '', toastUndo: !!toast?.undo,
     undo: () => {
-      const last = done[0]
+      const ultima = fatte[0]
       setToast(null)
-      if (!last) return
-      setOrder(o => [last.id, ...o])
-      setDone(ds => ds.slice(1))
+      if (!ultima) return
+      setFatte(f => f.slice(1))
+      setAperti(a => [ultima, ...a])
+      api.segnaFeed(ultima.id, 'aperto').catch(() => {})
     },
 
+    // — chat —
     threads: threads.map(t => ({
-      id: t.id, titolo: t.titolo, quando: t.quando,
+      id: t.id, titolo: t.titolo, quando: quando(t.quando),
       row: {
         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10, cursor: 'pointer',
         background: t.id === thread ? 'rgba(255,255,255,.92)' : t.id === hoverThread ? 'rgba(255,255,255,.6)' : 'transparent'
@@ -274,101 +309,61 @@ export function useVals() {
       onEnter: () => setHoverThread(t.id),
       onLeave: () => setHoverThread(h => (h === t.id ? null : h)),
       onClick: () => setThread(t.id),
-      onDelete: (e: React.MouseEvent) => {
+      onDelete: async (e: React.MouseEvent) => {
         e.stopPropagation()
-        setThreads(ts => {
-          const left = ts.filter(x => x.id !== t.id)
-          setThread(cur => (cur === t.id ? (left[0] ? left[0].id : null) : cur))
-          return left
-        })
+        await api.eliminaChat(t.id).catch(() => {})
+        const resto = threads.filter(x => x.id !== t.id)
+        setThreads(resto)
+        if (thread === t.id) setThread(resto[0]?.id ?? null)
         mostraToast('Chat eliminata.')
       }
     })),
-    newChat: () => {
-      const id = 'th' + Date.now()
-      setThread(id)
-      setScreen('chat')
-      setThreads(ts => [{ id, titolo: 'Nuova chat', quando: 'ora', messages: [] }, ...ts])
-    },
-    chatEmpty: !th || th.messages.length === 0,
-    messages: th
-      ? th.messages.map(m => ({
-          id: m.id, text: m.text, hasSources: !!(m.sources && m.sources.length), sources: m.sources || [],
-          row: { display: 'flex', justifyContent: m.role === 'u' ? 'flex-end' : 'flex-start' } as CSSProperties,
-          bubble: (m.role === 'u'
-            ? {
-                maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
-                background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
-                color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55
-              }
-            : {
-                maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
-                background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
-                color: '#22271F', fontSize: '15px', lineHeight: 1.6
-              }) as CSSProperties
-        }))
+    newChat: () => { setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
+    chatEmpty: messaggi.length === 0,
+    chatTitolo: th?.titolo ?? 'Nuova chat',
+    pensando,
+    messages: messaggi.map(m => ({
+      id: m.id, text: m.text,
+      hasSources: !!(m.sources && m.sources.length), sources: m.sources ?? [],
+      row: { display: 'flex', justifyContent: m.role === 'u' ? 'flex-end' : 'flex-start' } as CSSProperties,
+      bubble: (m.role === 'u'
+        ? {
+            maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
+            background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
+            color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap'
+          }
+        : {
+            maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
+            background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
+            color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap'
+          }) as CSSProperties
+    })),
+    prompts: stato.conteggi.totale
+      ? [
+          { id: 'p1', text: 'Cosa è arrivato oggi?', onClick: () => chiedi('Cosa è arrivato oggi?') },
+          { id: 'p2', text: 'Chi aspetta una mia risposta?', onClick: () => chiedi('Chi aspetta una mia risposta?') },
+          { id: 'p3', text: 'Riassumimi la settimana', onClick: () => chiedi('Riassumimi la settimana') }
+        ]
       : [],
-    prompts: [
-      { id: 'p1', text: 'Chi non mi ha ancora risposto?', onClick: () => say('Chi non mi ha ancora risposto?', 'Tre: Bertoli (preventivo, 6 giorni), lo studio del commercialista (F24 di luglio, 4 giorni) e Vetreria Sile (disponibilità settembre, 2 giorni).', [{ id: 'x1', label: 'Gmail' }]) },
-      { id: 'p2', text: 'Cosa scade questa settimana?', onClick: () => say('Cosa scade questa settimana?', "Il preventivo per Studio Ferri (venerdì), l'F24 (giovedì) e la conferma di consegna a Ceramiche Lodi che avevi promesso in call.", [{ id: 'x3', label: 'Calendario' }, { id: 'x4', label: 'Fatture in Cloud' }]) },
-      { id: 'p3', text: 'Dove stiamo perdendo margine?', onClick: () => say('Dove stiamo perdendo margine?', 'Sui trasporti: Rossi ha alzato del 12% da giugno e due consegne su tre passano da loro. Poi sui pezzi su misura sotto i 500 euro.', [{ id: 'x5', label: 'Fatture fornitori' }]) }
-    ],
     draftMsg,
     onType: (e: { target: { value: string } }) => setDraftMsg(e.target.value),
-    onKey: (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && draftMsg.trim()) say(draftMsg.trim(), 'Sto cercando tra le fonti collegate. In questo prototipo le risposte pronte sono quelle dei suggerimenti qui sotto.')
-    },
-    send: () => {
-      if (draftMsg.trim()) say(draftMsg.trim(), 'Sto cercando tra le fonti collegate. In questo prototipo le risposte pronte sono quelle dei suggerimenti qui sotto.')
-    },
+    onKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && draftMsg.trim()) chiedi(draftMsg.trim()) },
+    send: () => { if (draftMsg.trim()) chiedi(draftMsg.trim()) },
 
-    autoMeta: attive + ' attive · ' + fmtOre(ore) + ' risparmiate questo mese',
-    automazioni: AUTOS.map(a => {
-      const on = !!autoOn[a.id]
-      return {
-        id: a.id, nome: a.nome, desc: a.desc, esecuzioni: a.esecuzioni, risparmio: fmtOre(a.ore), ultima: a.ultima,
-        card: {
-          borderRadius: 22, padding: '20px', cursor: 'pointer', border: '1px solid rgba(255,255,255,.78)',
-          background: a.id === openAuto
-            ? 'linear-gradient(150deg,rgba(196,98,59,.2),rgba(255,253,249,.82) 50%,rgba(126,156,130,.24))'
-            : 'rgba(255,253,249,.66)',
-          backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-          boxShadow: a.id === openAuto ? '0 26px 60px rgba(84,64,44,.2)' : '0 18px 44px rgba(84,64,44,.1)',
-          opacity: on ? 1 : 0.62, transition: 'box-shadow .2s, opacity .2s'
-        } as CSSProperties,
-        track: track(on), knob: knob(),
-        onOpen: () => setOpenAuto(v => (v === a.id ? null : a.id)),
-        onToggle: (e: React.MouseEvent) => {
-          e.stopPropagation()
-          setAutoOn(s => ({ ...s, [a.id]: !s[a.id] }))
-          mostraToast(on ? a.nome + ' in pausa.' : a.nome + ' riattivata.')
-        }
-      }
-    }),
-    autoDetail: !!apertaAuto, detailNome: apertaAuto ? apertaAuto.nome : '',
-    detailMeta: apertaAuto ? apertaAuto.esecuzioni + ' esecuzioni · ' + fmtOre(apertaAuto.ore) + ' · ultima ' + apertaAuto.ultima : '',
-    detailSteps: apertaAuto ? apertaAuto.steps : [],
-    closeAuto: () => setOpenAuto(null),
-
-    nuovaOpen: nuova, nuovaText,
-    openNuova: () => setNuova(true), closeNuova: () => setNuova(false),
-    onNuova: (e: { target: { value: string } }) => setNuovaText(e.target.value),
-    sendNuova: () => { setNuova(false); setNuovaText(''); mostraToast('Richiesta ricevuta. Te la faccio provare prima di attivarla.') },
-    ticketOpen: ticket, ticketText,
-    openTicket: () => setTicket(true), closeTicket: () => setTicket(false),
-    onTicket: (e: { target: { value: string } }) => setTicketText(e.target.value),
-    sendTicket: () => { setTicket(false); setTicketText(''); mostraToast('Ticket aperto. Risposta entro un giorno lavorativo.') },
-
-    mappaMeta: BALL.nodes.length.toLocaleString('it-IT') + ' nodi · 5 gruppi',
+    // — mappa —
+    mappaMeta: gruppi.length
+      ? `${stato.conteggi.totale.toLocaleString('it-IT')} documenti · ${gruppi.length} gruppi`
+      : 'ancora nessun documento',
+    mappaVuota: !gruppi.length,
     mapFull,
     expandMap: () => setMapFull(true),
     closeMap: () => setMapFull(false),
     resetView: () => { mappa.reset(); setFiltro(null) },
-    legenda: CLUSTERS.map(c => {
-      const on = !filtro || filtro === c.id
+    legenda: gruppi.map(g => {
+      const on = !filtro || filtro === g.id
       return {
-        id: c.id, nome: c.nome,
+        id: g.id, nome: g.nome,
         chip: {
           display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99,
           cursor: 'pointer', fontFamily: 'inherit', fontSize: '11.5px',
@@ -376,109 +371,78 @@ export function useVals() {
           border: '1px solid ' + (on ? 'rgba(255,247,240,.28)' : 'rgba(255,247,240,.1)'),
           color: 'rgba(255,247,240,' + (on ? '.94' : '.45') + ')'
         } as CSSProperties,
-        dot: { width: 8, height: 8, borderRadius: '50%', background: c.colore, flex: 'none' } as CSSProperties,
-        onClick: () => { setFiltro(f => (f === c.id ? null : c.id)); setSel(c.id) }
+        dot: { width: 8, height: 8, borderRadius: '50%', background: g.colore, flex: 'none' } as CSSProperties,
+        onClick: () => { setFiltro(f => (f === g.id ? null : g.id)); setSel(g.id) }
       }
     }),
-    selTipo: selName ? cl.nome : cl.tipo, selNome: selName || cl.nome,
-    selDot: { width: 10, height: 10, borderRadius: '50%', background: cl.colore, flex: 'none', marginTop: 4 } as CSSProperties,
-    selTesto: selName ? 'Nodo dentro ' + cl.nome.toLowerCase() + '. ' + cl.testo : cl.testo,
-    selFatti: cl.fatti,
-    selChiesto: cl.chiesto.map((c, i) => ({ id: cl.id + i, q: c.q, onClick: () => say(c.q, c.a) })),
-    nodePlaceholder: 'Chiedi su ' + (selName || cl.nome.toLowerCase()) + '…',
+    selTipo: cl ? `${cl.nodi.toLocaleString('it-IT')} documenti` : '',
+    selNome: cl?.nome ?? 'Niente ancora',
+    selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
+    selTesto: cl
+      ? `Tutto quello che è arrivato da ${cl.nome.toLowerCase()}. Clicca un nodo per filtrare, o chiedi qui sotto.`
+      : 'Collega una fonte e qui comparirà quello che Myynd ha letto.',
+    nodePlaceholder: cl ? `Chiedi su ${cl.nome.toLowerCase()}…` : 'Chiedi…',
     nodeMsg,
     onNodeType: (e: { target: { value: string } }) => setNodeMsg(e.target.value),
-    onNodeKey: (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && nodeMsg.trim()) {
-        say(nodeMsg.trim() + ' (' + (selName || cl.nome) + ')', cl.testo + ' Dimmi quale nodo ti interessa e scendo nel dettaglio.')
-      }
-    },
-    askNode: () => say(
-      (nodeMsg.trim() || 'Riassumimi ' + (selName || cl.nome.toLowerCase())) + (nodeMsg.trim() ? ' (' + (selName || cl.nome) + ')' : ''),
-      cl.testo + ' Vuoi che parta da quello che è cambiato oggi?'
-    ),
+    onNodeKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && nodeMsg.trim()) chiedi(nodeMsg.trim()) },
+    askNode: () => { if (nodeMsg.trim()) chiedi(nodeMsg.trim()) },
 
-    toni: [{ id: 'diretto', label: 'Diretto' }, { id: 'cordiale', label: 'Cordiale' }, { id: 'formale', label: 'Formale' }].map(t => ({
+    // — preferenze —
+    toni: TONI.map(t => ({
       ...t,
-      onClick: () => setTono(t.id),
-      style: (t.id === tono
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: t.id } })); api.profilo({ tono: t.id }).catch(() => {}) },
+      style: (t.id === stato.config.tono
         ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
         : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
     })),
-    tonoEsempio: tono === 'diretto'
-      ? '"Ciao Marta, ti mando il preventivo aggiornato. Consegna quattro settimane dalla conferma."'
-      : tono === 'cordiale'
-        ? '"Ciao Marta, come promesso ti mando il preventivo aggiornato: spero sia tutto chiaro, fammi sapere."'
-        : '"Gentile Dott.ssa Ferri, in allegato il preventivo aggiornato come da Sua richiesta. Resto a disposizione."',
-    autonomie: [
-      { id: 'osservare', titolo: 'Solo osservare', nota: 'Legge e indicizza. Risponde solo se le chiedi.' },
-      { id: 'preparare', titolo: 'Preparare e aspettare', nota: 'Scrive bozze e brief, niente esce senza il tuo Invia.' },
-      { id: 'agire', titolo: 'Agire sulla routine', nota: 'Archivia e risponde dove hai già confermato tre volte.' }
-    ].map(a => ({
+    tonoEsempio: ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto,
+    autonomie: AUTONOMIE.map(a => ({
       ...a,
-      onClick: () => setAutonomia(a.id),
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => {}) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-        background: autonomia === a.id ? 'rgba(255,255,255,.85)' : 'transparent',
-        boxShadow: autonomia === a.id ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+        background: stato.config.autonomia === a.id ? 'rgba(255,255,255,.85)' : 'transparent',
+        boxShadow: stato.config.autonomia === a.id ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
       } as CSSProperties,
       radio: {
         width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-        border: autonomia === a.id ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
-        background: autonomia === a.id ? '#FFF7F0' : 'transparent'
+        border: stato.config.autonomia === a.id ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
+        background: stato.config.autonomia === a.id ? '#FFF7F0' : 'transparent'
       } as CSSProperties
     })),
-    switches: [
-      { id: 'mattina', titolo: 'Riepilogo del mattino', nota: 'Alle 7:30.' },
-      { id: 'silenzio', titolo: 'Silenzio dopo le 19', nota: 'Niente notifiche fino al mattino.' },
-      { id: 'autoinvio', titolo: 'Invio automatico delle bozze', nota: 'Solo per i clienti già approvati tre volte.' },
-      { id: 'imparare', titolo: 'Impara dalle mie correzioni', nota: 'Tiene la tua versione come riferimento.' }
-    ].map(x => ({
-      ...x, track: track(prefs[x.id]), knob: knob(),
-      onToggle: () => setPrefs(p => ({ ...p, [x.id]: !p[x.id] }))
-    })),
-    aree: [
-      { id: 'buste', label: 'Buste paga' }, { id: 'legale', label: 'Contenzioso legale' },
-      { id: 'prezzi', label: 'Prezzi speciali' }, { id: 'hr', label: 'Colloqui e HR' }
-    ].map(a => ({
-      ...a,
-      onClick: () => setAreeOff(s => ({ ...s, [a.id]: !s[a.id] })),
-      style: (areeOff[a.id]
-        ? { padding: '8px 15px', borderRadius: 99, border: '1px solid #A34E2D', background: 'rgba(196,98,59,.14)', color: '#8E3F1F', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer' }
-        : { padding: '8px 15px', borderRadius: 99, border: '1px dashed rgba(34,39,31,.3)', background: 'none', color: 'rgba(34,39,31,.6)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer' }) as CSSProperties
-    })),
+    riapriOnboarding,
 
-    connMeta: connOn + ' attivi · ' + (conn.length - connOn) + ' da collegare',
-    connAttivi: conn.filter(c => c.on).map(c => ({
-      id: c.id, nome: c.nome, stato: c.stato,
-      onClick: () => {
-        setConn(cs => cs.map(x => (x.id === c.id ? { ...x, on: false, stato: '' } : x)))
-        mostraToast(c.nome + ' scollegato.')
+    // — connettori —
+    connMeta: `${connOn.length} attivi · ${connettori.filter(c => c.pronto).length - connOn.length} da collegare`,
+    connAttivi: connOn.map(c => ({
+      id: c.id, nome: c.nome, stato: c.documenti ? `${c.documenti} documenti` : 'collegato',
+      onClick: async () => {
+        await api.scollega(c.id).catch(() => {})
+        await Promise.all([ricaricaStato(), caricaMente()])
+        mostraToast(`${c.nome} scollegato.`)
       }
     })),
-    connSpenti: conn.filter(c => !c.on).map(c => ({
-      id: c.id, nome: c.nome,
-      onClick: () => {
-        setConn(cs => cs.map(x => (x.id === c.id ? { ...x, on: true, stato: 'ora' } : x)))
-        mostraToast(c.nome + ' collegato.')
-      }
+    connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({
+      id: c.id, nome: c.nome, nota: c.nota, onClick: riapriOnboarding
     })),
+    connFuturi: connettori.filter(c => !c.pronto).map(c => ({ id: c.id, nome: c.nome, nota: c.nota })),
 
+    // — ricerca —
     searchOpen: search, query,
     openSearch: () => setSearch(true),
     closeSearch: () => { setSearch(false); setQuery('') },
     onQuery: (e: { target: { value: string } }) => setQuery(e.target.value),
-    risultati: RISULTATI.filter(r => !q || (r.titolo + ' ' + r.fonte).toLowerCase().includes(q)).map(r => ({
-      id: r.id, titolo: r.titolo, fonte: r.fonte, quando: r.quando, dot: dot(r.colore),
+    risultati: risultati.map(r => ({
+      id: r.id, titolo: r.titolo, fonte: `${r.fonte} · ${r.estratto.slice(0, 60)}…`, quando: quando(r.quando),
+      dot: dot(COLORE_FONTE[r.fonte] ?? '#C4623B'),
       onClick: () => {
-        setScreen(r.screen)
-        setSearch(false)
-        setQuery('')
-        setMenu(false)
-        if (r.cluster) { setSel(r.cluster); setFiltro(r.cluster) }
+        api.documento(r.id).then(d => { setDoc(d); setSearch(false); setQuery('') }).catch(() => {})
       }
-    }))
+    })),
+
+    track, knob
   }
 }
 
 export type Vals = ReturnType<typeof useVals>
+export type { Connettore }

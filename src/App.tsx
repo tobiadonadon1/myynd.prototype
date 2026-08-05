@@ -1,20 +1,49 @@
+import { useEffect, useState } from 'react'
 import { Sfondo } from './Sfondo'
 import { Hov } from './ui'
 import {
   IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
   IconMappa, IconMyynd, IconPiu, IconSpina, IconSuPiccola
 } from './icons'
-import { Composer, Documento, Originale, Ricerca, Scheda, Toast } from './modals'
+import { Documento, Ricerca, Toast } from './modals'
 import { Automazioni } from './screens/Automazioni'
 import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
 import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
 import { Preferenze } from './screens/Preferenze'
+import { Onboarding } from './onboarding/Onboarding'
 import { useVals } from './vals'
+import { api, type Stato } from './api'
 
 export default function App() {
-  const v = useVals()
+  const [stato, setStato] = useState<Stato | null>(null)
+  const [errore, setErrore] = useState('')
+  const [onboarding, setOnboarding] = useState(false)
+
+  useEffect(() => {
+    api.stato()
+      .then(s => { setStato(s); setOnboarding(!s.config.onboarding) })
+      .catch(e => setErrore(e instanceof Error ? e.message : String(e)))
+  }, [])
+
+  if (errore) return <Guasto errore={errore} />
+  if (!stato) return <Attesa />
+
+  if (onboarding) {
+    return (
+      <Onboarding
+        stato={stato}
+        fatto={() => { api.stato().then(s => { setStato(s); setOnboarding(false) }) }}
+      />
+    )
+  }
+
+  return <Casa stato={stato} riapri={() => setOnboarding(true)} />
+}
+
+function Casa({ stato, riapri }: { stato: Stato; riapri: () => void }) {
+  const v = useVals(stato, riapri)
 
   return (
     <div style={{
@@ -55,7 +84,7 @@ export default function App() {
           {v.isChat && (
             <div style={{ margin: '2px 0 6px', padding: 5, borderRadius: 14, background: 'rgba(34,39,31,.05)', animation: 'fadein .2s ease' }}>
               <Hov as="button" onClick={v.newChat}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 11, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.66)', color: '#8E3F1F', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 11, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.66)', color: '#8E3F1F', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
                 hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>
                 <IconPiu />Nuova chat
               </Hov>
@@ -81,6 +110,12 @@ export default function App() {
 
         <div style={{ flex: 1 }} />
 
+        {v.sincronizzando && (
+          <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.6)', padding: '0 6px 12px', lineHeight: 1.5 }}>
+            {v.sincronizzando}
+          </div>
+        )}
+
         <div style={{ position: 'relative' }}>
           {v.menuOpen && (
             <div style={{ position: 'absolute', left: -3, right: -3, bottom: 54, borderRadius: '18px 16px 18px 14px', background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
@@ -96,8 +131,10 @@ export default function App() {
           <Hov onClick={v.toggleMenu}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>TD</div>
-            <span style={{ flex: 1, fontSize: '13.5px' }}>Tobia <span style={{ color: 'rgba(34,39,31,.6)' }}>· Titolare</span></span>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
+            <span style={{ flex: 1, fontSize: '13.5px' }}>
+              {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
+            </span>
             <span style={v.chevron}><IconSuPiccola /></span>
           </Hov>
         </div>
@@ -114,21 +151,32 @@ export default function App() {
       </div>
 
       {v.mapFull && <MappaPiena v={v} />}
-      {v.compOpen && <Composer v={v} />}
       {v.docOpen && <Documento v={v} />}
-      {v.origOpen && <Originale v={v} />}
       {v.toastOn && <Toast v={v} />}
-      {v.nuovaOpen && (
-        <Scheda titolo="Nuova automazione" valore={v.nuovaText} onChange={v.onNuova}
-          placeholder="Quando arriva un ordine sopra i 5.000 euro, avvisami prima di confermarlo."
-          conferma="Costruiscila" onConferma={v.sendNuova} onChiudi={v.closeNuova} />
-      )}
-      {v.ticketOpen && (
-        <Scheda titolo="Apri un ticket" valore={v.ticketText} onChange={v.onTicket}
-          placeholder="Cosa non funziona."
-          conferma="Invia" onConferma={v.sendTicket} onChiudi={v.closeTicket} />
-      )}
       {v.searchOpen && <Ricerca v={v} />}
+    </div>
+  )
+}
+
+function Attesa() {
+  return (
+    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: 'rgba(244,239,232,.6)', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 15 }}>
+      <div style={{ animation: 'puls 1.6s ease-in-out infinite' }}>myynd</div>
+    </div>
+  )
+}
+
+function Guasto({ errore }: { errore: string }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: '#F4EFE8', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", padding: 40 }}>
+      <div style={{ maxWidth: 480, textAlign: 'center' }}>
+        <div style={{ fontSize: 26, letterSpacing: '-.02em' }}>Il server non risponde.</div>
+        <div style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(244,239,232,.6)', marginTop: 16 }}>
+          Myynd ha bisogno del suo server locale per leggere posta, file e note.
+          Avvialo con <code style={{ background: 'rgba(244,239,232,.1)', padding: '2px 7px', borderRadius: 5 }}>npm run dev</code> e ricarica.
+        </div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(232,144,122,.9)', marginTop: 18 }}>{errore}</div>
+      </div>
     </div>
   )
 }

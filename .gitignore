@@ -4,3 +4,6 @@ dist/
 *.log
 .env
 .env.local
+
+# stato locale di Myynd
+.myynd/

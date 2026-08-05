@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import { BALL } from './brain'
-import { CLUSTERS } from './data'
+import type { Ball } from './brain'
+import type { Gruppo } from './data'
 
 type Vista = { yaw: number; pitch: number; zoom: number; drag: null | { x: number; y: number; yaw: number; pitch: number; moved: number }; t: number }
 type Proiezione = { x: number; y: number; r: number; z: number; pers: number; i: number }
@@ -17,13 +17,15 @@ export function useMappa(
   mapFull: boolean,
   filtro: string | null,
   sel: string,
-  onPick: (sel: string, cluster: string) => void
+  onPick: (sel: string, cluster: string) => void,
+  ball: Ball,
+  gruppi: Gruppo[]
 ): MappaCtl {
   const vista = useRef<Vista>({ yaw: 0.5, pitch: -0.18, zoom: 1, drag: null, t: 0 })
   const proj = useRef<Proiezione[] | null>(null)
   const chiave = useRef<string>('')
-  const stato = useRef({ mapFull, filtro, sel, onPick })
-  stato.current = { mapFull, filtro, sel, onPick }
+  const stato = useRef({ mapFull, filtro, sel, onPick, ball, gruppi })
+  stato.current = { mapFull, filtro, sel, onPick, ball, gruppi }
 
   useEffect(() => {
     let raf = 0
@@ -39,8 +41,8 @@ export function useMappa(
         if (d < bd && d < Math.max(64, p.r * p.r * 9)) { bd = d; best = p }
       })
       if (best) {
-        const n = BALL.nodes[(best as Proiezione).i]
-        stato.current.onPick(n.name ? n.cluster + '|' + n.name : n.cluster, n.cluster)
+        const n = stato.current.ball.nodes[(best as Proiezione).i]
+        stato.current.onPick(n.cluster, n.cluster)
       }
     }
 
@@ -86,7 +88,7 @@ export function useMappa(
         cv.height = Math.round(h * dpr)
       }
       const f_ = stato.current.filtro, s_ = stato.current.sel
-      const key = [v.yaw.toFixed(3), v.pitch.toFixed(3), v.zoom.toFixed(3), w, h, f_, s_].join('|')
+      const key = [v.yaw.toFixed(3), v.pitch.toFixed(3), v.zoom.toFixed(3), w, h, f_, s_, stato.current.ball.nodes.length].join('|')
       if (key === chiave.current) return
       chiave.current = key
 
@@ -96,8 +98,10 @@ export function useMappa(
       ctx.clearRect(0, 0, w, h)
       const R = Math.min(w, h) * 0.43 * v.zoom, cx = w / 2, cy = h / 2, f = 3.1
       const cy0 = Math.cos(v.yaw), sy0 = Math.sin(v.yaw), cp = Math.cos(v.pitch), sp = Math.sin(v.pitch)
-      const selName = s_.includes('|') ? s_.split('|')[1] : null
 
+      const BALL = stato.current.ball
+      const CLUSTERS = stato.current.gruppi
+      if (!BALL.nodes.length) { ctx.globalAlpha = 1; return }
       const P: Proiezione[] = new Array(BALL.nodes.length)
       BALL.nodes.forEach((n, i) => {
         const x1 = n.x * cy0 + n.z * sy0, z1 = -n.x * sy0 + n.z * cy0
@@ -126,7 +130,7 @@ export function useMappa(
       order.forEach(p => {
         const n = BALL.nodes[p.i]
         const dim = f_ && f_ !== n.cluster
-        const isSel = (!selName && s_ === n.cluster && n.hub) || (selName && n.name === selName)
+        const isSel = s_ === n.cluster && n.hub
         let a = (0.34 + (0.66 * (p.z + 1)) / 2) * (n.rim ? 0.72 : 1)
         if (dim) a *= 0.18
         ctx.globalAlpha = Math.min(1, a)
@@ -146,7 +150,8 @@ export function useMappa(
       ctx.textAlign = 'center'
       BALL.nodes.forEach((n, i) => {
         if (!n.hub) return
-        const c = CLUSTERS.find(x => x.id === n.cluster)!
+        const c = CLUSTERS.find(x => x.id === n.cluster)
+        if (!c) return
         const p = P[i]
         ctx.globalAlpha = f_ && f_ !== n.cluster ? 0.22 : 0.35 + (0.55 * (p.z + 1)) / 2
         ctx.fillStyle = 'rgba(255,247,240,.9)'
