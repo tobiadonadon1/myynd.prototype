@@ -45,7 +45,8 @@ export function Ricerca({ v }: { v: Vals }) {
       <div style={{ position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)', width: 600, maxWidth: '82%', borderRadius: '24px 20px 24px 20px', background: 'rgba(255,253,249,.96)', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)', zIndex: 47, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(34,39,31,.09)' }}>
           <IconCerca size={17} style={{ flex: 'none', color: 'rgba(34,39,31,.6)' }} />
-          <input value={v.query} onChange={v.onQuery} placeholder="Cerca in tutto quello che Myynd ha letto…" autoFocus
+          <input value={v.query} onChange={v.onQuery}
+            placeholder={v.totaleDocumenti ? `Cerca fra ${v.totaleDocumenti.toLocaleString('it-IT')} documenti…` : 'Niente da cercare ancora'} autoFocus
             onKeyDown={e => { if (e.key === 'Escape') v.closeSearch() }}
             style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 16, color: '#22271F' }} />
           <button onClick={v.closeSearch} style={{ border: '1px solid rgba(34,39,31,.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(34,39,31,.6)', cursor: 'pointer' }}>esc</button>
@@ -66,11 +67,9 @@ export function Ricerca({ v }: { v: Vals }) {
           {v.query.trim() && !v.risultati.length && (
             <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.6)' }}>Niente che corrisponda.</div>
           )}
-          {!v.query.trim() && (
+          {!v.query.trim() && !v.risultati.length && (
             <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.55)' }}>
-              {v.totaleDocumenti
-                ? `${v.totaleDocumenti.toLocaleString('it-IT')} documenti indicizzati.`
-                : 'Non c’è ancora niente da cercare.'}
+              Non c’è ancora niente da cercare.
             </div>
           )}
         </div>

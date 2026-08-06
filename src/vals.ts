@@ -12,7 +12,7 @@ const COLORE_FONTE: Record<string, string> = {
 }
 
 /** Tutto lo stato dell'app, alimentato dal server locale. */
-export function useVals(iniziale: Stato, riapriOnboarding: () => void) {
+export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   const [stato, setStato] = useState<Stato>(iniziale)
   const [screen, setScreen] = useState<Screen>('myynd')
   const [menu, setMenu] = useState(false)
@@ -99,9 +99,10 @@ export function useVals(iniziale: Stato, riapriOnboarding: () => void) {
     return () => cancelAnimationFrame(id)
   }, [messaggi.length, screen, pensando])
 
+  // aperta la ricerca senza scrivere niente, mostro gli ultimi documenti letti
   useEffect(() => {
-    if (!search || !query.trim()) { setRisultati([]); return }
-    const t = setTimeout(() => { api.cerca(query).then(setRisultati).catch(() => setRisultati([])) }, 180)
+    if (!search) { setRisultati([]); return }
+    const t = setTimeout(() => { api.cerca(query).then(setRisultati).catch(() => setRisultati([])) }, query.trim() ? 180 : 0)
     return () => clearTimeout(t)
   }, [query, search])
 
@@ -410,7 +411,7 @@ export function useVals(iniziale: Stato, riapriOnboarding: () => void) {
         background: stato.config.autonomia === a.id ? '#FFF7F0' : 'transparent'
       } as CSSProperties
     })),
-    riapriOnboarding,
+    apriConnessioni,
 
     // — connettori —
     connMeta: `${connOn.length} attivi · ${connettori.filter(c => c.pronto).length - connOn.length} da collegare`,
@@ -423,7 +424,7 @@ export function useVals(iniziale: Stato, riapriOnboarding: () => void) {
       }
     })),
     connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({
-      id: c.id, nome: c.nome, nota: c.nota, onClick: riapriOnboarding
+      id: c.id, nome: c.nome, nota: c.nota, onClick: apriConnessioni
     })),
     connFuturi: connettori.filter(c => !c.pronto).map(c => ({ id: c.id, nome: c.nome, nota: c.nota })),
 

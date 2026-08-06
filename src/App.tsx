@@ -14,6 +14,7 @@ import { Myynd } from './screens/Myynd'
 import { Preferenze } from './screens/Preferenze'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
+import { Connessioni } from './components/Connessioni'
 import { useVals } from './vals'
 import { api, type Stato } from './api'
 
@@ -21,6 +22,8 @@ export default function App() {
   const [stato, setStato] = useState<Stato | null>(null)
   const [errore, setErrore] = useState('')
   const [onboarding, setOnboarding] = useState(false)
+  const [connessioni, setConnessioni] = useState(false)
+  const [chiave, setChiave] = useState(0)
 
   useEffect(() => {
     api.stato()
@@ -40,11 +43,21 @@ export default function App() {
     )
   }
 
-  return <Casa stato={stato} riapri={() => setOnboarding(true)} />
+  return (
+    <>
+      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} />
+      {connessioni && (
+        <Connessioni
+          chiudi={() => setConnessioni(false)}
+          cambiato={() => api.stato().then(s => { setStato(s); setChiave(k => k + 1) })}
+        />
+      )}
+    </>
+  )
 }
 
-function Casa({ stato, riapri }: { stato: Stato; riapri: () => void }) {
-  const v = useVals(stato, riapri)
+function Casa({ stato, apriConnessioni }: { stato: Stato; apriConnessioni: () => void }) {
+  const v = useVals(stato, apriConnessioni)
 
   return (
     <div style={{

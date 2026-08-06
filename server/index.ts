@@ -123,11 +123,14 @@ app.get('/api/sincronizza', async (req, res) => {
 
   try {
     if (c.desktop && (!soloFonte || soloFonte === 'desktop')) {
-      invia({ fase: 'desktop', stato: 'leggo le cartelle' })
-      const docs = await desktop.sincronizza(c.desktop)
-      store.salvaDocumenti(docs)
-      totale += docs.length
-      invia({ fase: 'desktop', stato: 'fatto', documenti: docs.length })
+      invia({ fase: 'desktop', stato: 'apro le cartelle' })
+      const esito = await desktop.sincronizza(c.desktop, n => invia({ fase: 'desktop', stato: `${n} documenti` }))
+      store.salvaDocumenti(esito.docs)
+      totale += esito.docs.length
+      invia({
+        fase: 'desktop', stato: 'fatto', documenti: esito.docs.length,
+        saltati: esito.saltatiProgetti.length, falliti: esito.falliti
+      })
     }
     if (c.notion && (!soloFonte || soloFonte === 'notion')) {
       invia({ fase: 'notion', stato: 'leggo le pagine' })
@@ -167,8 +170,10 @@ app.get('/api/mente', (_req, res) => {
 })
 
 app.get('/api/cerca', (req, res) => {
-  const q = String(req.query.q ?? '')
-  res.json(store.cerca(q, 20).map(d => ({
+  const q = String(req.query.q ?? '').trim()
+  // senza query mostro gli ultimi letti: così si vede subito cosa c'è dentro
+  const trovati = q ? store.cerca(q, 20) : store.recenti(20)
+  res.json(trovati.map(d => ({
     id: d.id, titolo: d.titolo, fonte: d.fonte, gruppo: d.gruppo,
     quando: d.quando, estratto: d.corpo.slice(0, 180)
   })))

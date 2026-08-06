@@ -3,6 +3,7 @@ import { Campo } from './campo'
 import { api, type Stato } from '../api'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
+import { Form, FormClaude } from '../components/forms'
 import { Stato as Indicatore } from '../components/Stato'
 
 const COLORI: Record<string, string> = {
@@ -12,7 +13,7 @@ const COLORI: Record<string, string> = {
   claude: '#7FA98A'
 }
 
-type Passo = 'risveglio' | 'nome' | 'connetti' | 'leggi' | 'genera' | 'pronta'
+type Passo = 'risveglio' | 'claude' | 'nome' | 'connetti' | 'leggi' | 'genera' | 'pronta'
 
 const CHIARO = '#F4EFE8'
 const TENUE = 'rgba(244,239,232,.62)'
@@ -36,7 +37,8 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
   useEffect(() => {
     const coesione =
       passo === 'risveglio' ? 0 :
-      passo === 'nome' ? 0.18 :
+      passo === 'claude' ? 0.12 :
+      passo === 'nome' ? 0.22 :
       passo === 'connetti' ? 0.2 + Math.min(0.55, collegati.length * 0.16) :
       passo === 'leggi' ? 0.86 : 1
     campo.imposta({
@@ -56,12 +58,28 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
     }}>
       <canvas ref={cv} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
+      {/* il velo: il testo deve restare leggibile qualunque cosa passi dietro */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'radial-gradient(58% 46% at 50% 50%, rgba(16,14,12,.82) 0%, rgba(16,14,12,.62) 45%, rgba(16,14,12,0) 100%)'
+      }} />
+
       <div style={{
         position: 'relative', height: '100%', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', padding: '40px 24px', pointerEvents: 'none'
       }}>
-        <div style={{ width: 640, maxWidth: '100%', pointerEvents: 'auto' }}>
-          {passo === 'risveglio' && <Risveglio avanti={() => setPasso('nome')} />}
+        <div style={{
+          width: 640, maxWidth: '100%', pointerEvents: 'auto',
+          textShadow: '0 1px 24px rgba(12,10,8,.75)'
+        }}>
+          {passo === 'risveglio' && <Risveglio avanti={() => setPasso('claude')} />}
+          {passo === 'claude' && (
+            <PassoClaude
+              collegato={!!s.connettori.find(c => c.id === 'claude')?.collegato}
+              ricarica={ricarica}
+              avanti={() => setPasso('nome')}
+            />
+          )}
           {passo === 'nome' && (
             <Nome
               nome={nome} setNome={setNome} ruolo={ruolo} setRuolo={setRuolo}
@@ -90,6 +108,11 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
 
 // — cornice comune —
 
+function Errore({ testo }: { testo: string }) {
+  if (!testo) return null
+  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5 }}>{testo}</div>
+}
+
 function Titolo({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 42, lineHeight: 1.14, letterSpacing: '-.035em', textWrap: 'pretty' }}>{children}</div>
 }
@@ -113,7 +136,7 @@ function Primario({ onClick, children, disabilitato }: { onClick: () => void; ch
 }
 
 function Passi({ corrente }: { corrente: Passo }) {
-  const tutti: Passo[] = ['risveglio', 'nome', 'connetti', 'leggi', 'genera', 'pronta']
+  const tutti: Passo[] = ['risveglio', 'claude', 'nome', 'connetti', 'leggi', 'genera', 'pronta']
   const i = tutti.indexOf(corrente)
   return (
     <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 7 }}>
@@ -155,6 +178,39 @@ const ETICHETTA: React.CSSProperties = {
   fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(244,239,232,.45)'
 }
 
+/** Il primo collegamento: senza Claude, Myynd non ragiona. */
+function PassoClaude({ collegato, ricarica, avanti }: {
+  collegato: boolean; ricarica: () => Promise<Stato>; avanti: () => void
+}) {
+  return (
+    <div style={{ animation: 'fadein .5s ease' }}>
+      <Titolo>Prima di tutto,<br />collega Claude.</Titolo>
+      <Sotto>
+        Senza, Myynd resta un archivio: cerca e trova, ma non ti dice mai
+        cosa conta.
+      </Sotto>
+      {collegato ? (
+        <>
+          <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FA98A' }} />
+            <span style={{ fontSize: 14, color: CHIARO }}>Claude è collegato.</span>
+          </div>
+          <Primario onClick={avanti}>Avanti</Primario>
+        </>
+      ) : (
+        <>
+          <div style={{ marginTop: 26, maxWidth: 460 }}>
+            <FormClaude tema="scuro" senzaNota ok={async () => { await ricarica() }} />
+          </div>
+          <Hov as="button" onClick={avanti}
+            style={{ marginTop: 22, border: 'none', background: 'none', color: TENUE, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', display: 'block' }}
+            hover={{ color: CHIARO }}>Lo collego dopo</Hov>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
   nome: string; setNome: (v: string) => void
   ruolo: string; setRuolo: (v: string) => void
@@ -181,12 +237,13 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
 
 function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<Stato>; avanti: () => void }) {
   const [aperto, setAperto] = useState<string | null>(null)
-  const pronti = s.connettori.filter(c => c.pronto)
+  // Claude l'ha già chiesto il passo prima
+  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude')
   const dopo = s.connettori.filter(c => !c.pronto)
   const quanti = pronti.filter(c => c.collegato).length
 
   return (
-    <div style={{ animation: 'fadein .5s ease', maxHeight: '76vh', overflowY: 'auto', paddingRight: 4 }}>
+    <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
       <Titolo>Cosa le do da leggere?</Titolo>
       <Sotto>
         Tutto resta su questo computer: le credenziali finiscono in
@@ -256,168 +313,10 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
         )}
       </div>
       {aperto && !c.collegato && (
-        <div style={{ padding: '4px 18px 18px', animation: 'fadein .2s ease' }}>
-          {c.id === 'posta' && <FormPosta ok={async () => { await ricarica(); chiudi() }} />}
-          {c.id === 'desktop' && <FormDesktop ok={async () => { await ricarica(); chiudi() }} />}
-          {c.id === 'notion' && <FormNotion ok={async () => { await ricarica(); chiudi() }} />}
-          {c.id === 'claude' && <FormClaude ok={async () => { await ricarica(); chiudi() }} />}
+        <div style={{ padding: '2px 18px 18px', animation: 'fadein .2s ease' }}>
+          <Form id={c.id} tema="scuro" ok={async () => { await ricarica(); chiudi() }} />
         </div>
       )}
-    </div>
-  )
-}
-
-function Errore({ testo }: { testo: string }) {
-  if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5 }}>{testo}</div>
-}
-
-function Conferma({ onClick, occupato, children }: { onClick: () => void; occupato: boolean; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} disabled={occupato} style={{
-      marginTop: 16, padding: '10px 20px', borderRadius: 99, border: 'none',
-      background: occupato ? 'rgba(244,239,232,.2)' : CHIARO, color: occupato ? TENUE : '#191715',
-      fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: occupato ? 'default' : 'pointer'
-    }}>{occupato ? 'Provo…' : children}</button>
-  )
-}
-
-function FormPosta({ ok }: { ok: () => void }) {
-  const [host, setHost] = useState('imap.register.it')
-  const [utente, setUtente] = useState('')
-  const [password, setPassword] = useState('')
-  const [giorni, setGiorni] = useState(30)
-  const [err, setErr] = useState('')
-  const [occupato, setOccupato] = useState(false)
-
-  const collega = async () => {
-    setOccupato(true); setErr('')
-    try {
-      await api.collegaPosta({ host, porta: 993, utente, password, giorni })
-      setPassword('')
-      ok()
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: '12.5px', color: TENUE, lineHeight: 1.55, marginBottom: 6 }}>
-        La password della casella la scrivi qui tu: resta su questa macchina e
-        viene usata solo per parlare con il tuo server IMAP.
-      </div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 2 }}><div style={ETICHETTA}>Server IMAP</div><input value={host} onChange={e => setHost(e.target.value)} style={CAMPO} /></div>
-        <div style={{ flex: 1 }}><div style={ETICHETTA}>Giorni</div><input type="number" value={giorni} onChange={e => setGiorni(Number(e.target.value))} style={CAMPO} /></div>
-      </div>
-      <div style={ETICHETTA}>Indirizzo</div>
-      <input value={utente} onChange={e => setUtente(e.target.value)} placeholder="tu@tuodominio.it" autoComplete="off" style={CAMPO} />
-      <div style={ETICHETTA}>Password della casella</div>
-      <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" style={CAMPO} />
-      <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato}>Collega la posta</Conferma>
-    </div>
-  )
-}
-
-function FormDesktop({ ok }: { ok: () => void }) {
-  const [cartelle, setCartelle] = useState<string[]>([])
-  const [manuale, setManuale] = useState('')
-  const [suggeriti, setSuggeriti] = useState<string[]>([])
-  const [err, setErr] = useState('')
-  const [occupato, setOccupato] = useState(false)
-
-  useEffect(() => { api.stato().then(s => setSuggeriti(s.suggerimentiDesktop)).catch(() => {}) }, [])
-
-  const alterna = (c: string) =>
-    setCartelle(v => v.includes(c) ? v.filter(x => x !== c) : [...v, c])
-
-  const collega = async () => {
-    setOccupato(true); setErr('')
-    const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
-    try {
-      await api.collegaDesktop(tutte)
-      ok()
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: '12.5px', color: TENUE, lineHeight: 1.55, marginBottom: 12 }}>
-        Legge solo file di testo (.md, .txt, .csv…), solo dentro le cartelle che
-        scegli, e non modifica niente.
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {suggeriti.map(c => {
-          const on = cartelle.includes(c)
-          return (
-            <button key={c} onClick={() => alterna(c)} style={{
-              padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
-              border: `1px solid ${on ? '#E0A44A' : 'rgba(244,239,232,.22)'}`,
-              background: on ? 'rgba(224,164,74,.16)' : 'none',
-              color: on ? '#F0C88A' : TENUE
-            }}>{c.split('/').pop()}</button>
-          )
-        })}
-      </div>
-      <div style={{ ...ETICHETTA, marginTop: 14 }}>Oppure un percorso</div>
-      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder="/Users/…/Lavoro" style={CAMPO} />
-      <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato}>Collega il desktop</Conferma>
-    </div>
-  )
-}
-
-function FormNotion({ ok }: { ok: () => void }) {
-  const [token, setToken] = useState('')
-  const [err, setErr] = useState('')
-  const [occupato, setOccupato] = useState(false)
-
-  const collega = async () => {
-    setOccupato(true); setErr('')
-    try { await api.collegaNotion(token); setToken(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: '12.5px', color: TENUE, lineHeight: 1.55, marginBottom: 6 }}>
-        Crea un'integrazione interna su notion.so/my-integrations, copia il
-        token, poi condividi con l'integrazione le pagine che vuoi far leggere —
-        senza quel passaggio l'API non le vede.
-      </div>
-      <div style={ETICHETTA}>Token di integrazione</div>
-      <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="ntn_…" autoComplete="new-password" style={CAMPO} />
-      <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato}>Collega Notion</Conferma>
-    </div>
-  )
-}
-
-function FormClaude({ ok }: { ok: () => void }) {
-  const [apiKey, setApiKey] = useState('')
-  const [err, setErr] = useState('')
-  const [occupato, setOccupato] = useState(false)
-
-  const collega = async () => {
-    setOccupato(true); setErr('')
-    try { await api.collegaClaude(apiKey); setApiKey(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: '12.5px', color: TENUE, lineHeight: 1.55, marginBottom: 6 }}>
-        È quello che fa ragionare Myynd sul tuo materiale: senza, resta un
-        archivio consultabile. La chiave si prende da console.anthropic.com.
-      </div>
-      <div style={ETICHETTA}>Chiave API</div>
-      <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-ant-…" autoComplete="new-password" style={CAMPO} />
-      <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato}>Collega Claude</Conferma>
     </div>
   )
 }

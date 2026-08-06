@@ -1,9 +1,10 @@
-// Il campo dell'onboarding: una sfera di energia nei nostri colori.
+// Il campo dell'onboarding.
 //
-// Il fondo non è nero pieno — è attraversato da lavate di terracotta e salvia
-// che respirano. Al centro un orbe che si accende man mano che colleghi le
-// fonti: da bagliore appena percettibile a sfera piena, con la grana sopra.
-// Le particelle ci orbitano dentro e il cursore le scosta.
+// Il colore vive su tutto lo schermo — campi larghi di terracotta, ruggine e
+// salvia che si muovono piano — e resta profondo, perché il testo ci sta
+// sopra. Le particelle partono sparse e si raccolgono man mano che colleghi
+// le fonti; dove si addensano il colore si scalda appena. Il cursore le
+// scosta: è quello che le rende vive.
 
 type Particella = {
   x: number; y: number
@@ -21,19 +22,6 @@ export type Opzioni = {
   quantita: number
   legami: boolean
 }
-
-// La nostra tavolozza, dal cuore caldo al bordo verde. Le fasce restano
-// sature fin quasi al bordo: è quello che rende l'orbe energia e non foschia.
-const ORBE: [number, string, number][] = [
-  [0.00, '255,244,222', 0.99],
-  [0.10, '250,206,132', 0.98],
-  [0.26, '238,146,74',  0.97],
-  [0.44, '212,100,54',  0.95],
-  [0.62, '176,80,42',   0.88],
-  [0.78, '134,116,72',  0.62],
-  [0.90, '96,126,100',  0.32],
-  [1.00, '92,118,96',   0.00]
-]
 
 const PREDEFINITE: Opzioni = { coesione: 0, colori: ['#D8A46E'], quantita: 520, legami: false }
 
@@ -144,70 +132,49 @@ export class Campo {
     }
   }
 
-  /** Le lavate sul fondo: accenti ai bordi, non un'inondazione. */
-  private fondo(ctx: CanvasRenderingContext2D) {
-    const lavate: [number, number, number, string, number][] = [
-      [0.06, 0.06, 0.52, '196,98,59', 0.30],
-      [0.96, 0.14, 0.46, '216,164,110', 0.22],
-      [0.04, 0.96, 0.54, '92,118,96', 0.28],
-      [0.92, 0.94, 0.48, '163,78,45', 0.24]
-    ]
+  /** Il colore sta su tutto lo schermo, non in un punto solo: campi larghi
+   *  e profondi che si muovono piano. Restano scuri — il testo ci deve stare
+   *  sopra senza sforzo. */
+  private fondo(ctx: CanvasRenderingContext2D, k: number) {
     const D = Math.max(this.w, this.h)
-    lavate.forEach(([fx, fy, r, rgb, a], i) => {
-      const x = fx * this.w + Math.sin(this.t * (0.5 + i * 0.13)) * this.w * 0.04
-      const y = fy * this.h + Math.cos(this.t * (0.4 + i * 0.11)) * this.h * 0.04
+    // [x, y, raggio, colore, alpha, velocità]
+    const campi: [number, number, number, string, number, number][] = [
+      [0.14, 0.18, 0.85, '176,74,40',  0.58, 0.31],
+      [0.86, 0.12, 0.78, '198,122,56', 0.48, 0.24],
+      [0.08, 0.82, 0.88, '68,104,76',  0.56, 0.27],
+      [0.92, 0.86, 0.80, '150,66,36',  0.46, 0.21],
+      [0.50, 0.06, 0.70, '128,104,58', 0.36, 0.35],
+      [0.46, 0.96, 0.74, '76,112,84',  0.42, 0.29],
+      [0.72, 0.48, 0.66, '164,86,48',  0.32, 0.19],
+      [0.24, 0.52, 0.62, '88,116,90',  0.32, 0.23]
+    ]
+    campi.forEach(([fx, fy, r, rgb, a, vel], i) => {
+      const x = fx * this.w + Math.sin(this.t * vel + i) * this.w * 0.09
+      const y = fy * this.h + Math.cos(this.t * vel * 0.8 + i) * this.h * 0.09
       const g = ctx.createRadialGradient(x, y, 0, x, y, D * r)
-      const alpha = a * (0.7 + 0.3 * (0.5 + 0.5 * Math.sin(this.t * (0.6 + i * 0.2))))
+      // man mano che la mente si forma il colore sale, ma resta sotto al testo
+      const alpha = a * (0.72 + 0.28 * k)
       g.addColorStop(0, `rgba(${rgb},${alpha})`)
-      g.addColorStop(0.5, `rgba(${rgb},${alpha * 0.3})`)
+      g.addColorStop(0.42, `rgba(${rgb},${alpha * 0.45})`)
       g.addColorStop(1, `rgba(${rgb},0)`)
       ctx.fillStyle = g
       ctx.fillRect(0, 0, this.w, this.h)
     })
   }
 
-  /** L'orbe. Le fasce di colore si disegnano piene (source-over) e solo il
-   *  nucleo riceve un po' di bloom: così resta energia satura, non foschia. */
-  private orbe(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, k: number) {
-    if (k < 0.02) return
-    const pulsa = 1 + Math.sin(this.t * 1.6) * 0.03
-    const forza = Math.pow(k, 0.7)
-    const raggio = R * 1.32 * pulsa
-
-    // il nucleo è decentrato: la luce vera non è mai simmetrica
-    const ox = cx - R * 0.13 + Math.sin(this.t * 0.9) * R * 0.03
-    const oy = cy - R * 0.15 + Math.cos(this.t * 0.7) * R * 0.03
-
-    const g = ctx.createRadialGradient(ox, oy, 0, cx, cy, raggio)
-    ORBE.forEach(([stop, rgb, a]) => g.addColorStop(stop, `rgba(${rgb},${(a * forza).toFixed(3)})`))
-    ctx.globalAlpha = 1
+  /** Dove si raccolgono le particelle il colore si scalda appena. Non è più
+   *  una palla luminosa: è un addensamento, e il testo resta leggibile. */
+  private cuore(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, k: number) {
+    if (k < 0.05) return
+    const forza = Math.pow(k, 1.2) * 0.5
+    const pulsa = 1 + Math.sin(this.t * 1.4) * 0.04
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.9 * pulsa)
+    g.addColorStop(0.00, `rgba(206,124,72,${0.30 * forza})`)
+    g.addColorStop(0.35, `rgba(176,86,48,${0.24 * forza})`)
+    g.addColorStop(0.68, `rgba(112,120,88,${0.16 * forza})`)
+    g.addColorStop(1.00, 'rgba(92,118,96,0)')
     ctx.fillStyle = g
-    ctx.beginPath()
-    ctx.arc(cx, cy, raggio, 0, 6.2832)
-    ctx.fill()
-
-    // macchie interne: rompono la simmetria del gradiente
-    const macchia = (dx: number, dy: number, r: number, rgb: string, a: number, f: number) => {
-      const x = cx + dx * R + Math.sin(this.t * f) * R * 0.07
-      const y = cy + dy * R + Math.cos(this.t * f * 0.8) * R * 0.07
-      const gg = ctx.createRadialGradient(x, y, 0, x, y, R * r)
-      gg.addColorStop(0, `rgba(${rgb},${a * forza})`)
-      gg.addColorStop(1, `rgba(${rgb},0)`)
-      ctx.fillStyle = gg
-      ctx.fillRect(cx - raggio, cy - raggio, raggio * 2, raggio * 2)
-    }
-    macchia(-0.30, 0.26, 0.62, '224,120,66', 0.42, 1.1)
-    macchia(0.30, -0.24, 0.52, '246,206,140', 0.40, 0.8)
-    macchia(0.12, 0.42, 0.48, '110,142,114', 0.30, 0.95)
-
-    // bloom solo attorno al cuore
-    ctx.globalCompositeOperation = 'lighter'
-    const b = ctx.createRadialGradient(ox, oy, 0, ox, oy, R * 0.75)
-    b.addColorStop(0, `rgba(255,236,198,${0.34 * forza})`)
-    b.addColorStop(1, 'rgba(255,236,198,0)')
-    ctx.fillStyle = b
     ctx.fillRect(0, 0, this.w, this.h)
-    ctx.globalCompositeOperation = 'source-over'
   }
 
   private disegna = () => {
@@ -223,15 +190,15 @@ export class Campo {
     ctx.clearRect(0, 0, this.w, this.h)
 
     // fondo caldo, mai nero pieno
-    ctx.fillStyle = '#17140F'
+    ctx.fillStyle = '#141210'
     ctx.fillRect(0, 0, this.w, this.h)
-    this.fondo(ctx)
+    this.fondo(ctx, k)
 
     const cx = this.w / 2
     const cy = this.h / 2
     const R = Math.min(this.w, this.h) * 0.30
 
-    this.orbe(ctx, cx, cy, R, k)
+    this.cuore(ctx, cx, cy, R, k)
 
     const yaw = this.t * 0.9
     const cyw = Math.cos(yaw), syw = Math.sin(yaw)
@@ -277,8 +244,7 @@ export class Campo {
       q.y += q.vy
 
       const profondita = k > 0.25 ? (z2 + 1) / 2 : 0.7
-      // dentro l'orbe le particelle si schiariscono invece di sparire
-      const alpha = (0.22 + 0.6 * profondita) * (0.5 + 0.5 * k)
+      const alpha = (0.14 + 0.34 * profondita) * (0.45 + 0.55 * k)
       ctx.globalAlpha = Math.min(1, alpha)
       ctx.fillStyle = colori[q.c % colori.length]
       ctx.beginPath()
@@ -291,7 +257,7 @@ export class Campo {
 
     if (this.opt.legami && k > 0.35) {
       ctx.lineWidth = 0.55
-      ctx.globalAlpha = (k - 0.35) * 0.42
+      ctx.globalAlpha = (k - 0.35) * 0.20
       ctx.strokeStyle = 'rgba(255,226,190,.5)'
       ctx.beginPath()
       for (let i = 0; i < vicini.length; i++) {
