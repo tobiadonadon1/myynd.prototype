@@ -10,11 +10,44 @@ import * as posta from './connettori/posta.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as notion from './connettori/notion.ts'
 import { CATALOGO } from './connettori/registro.ts'
+import * as auth from './auth.ts'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
 const PORTA = Number(process.env.MYYND_PORT ?? 5174)
+
+// — accesso —
+
+app.get('/api/auth', (req, res) => {
+  res.json({
+    registrato: auth.registrato(),
+    entrato: auth.valida(auth.tokenDi(req)),
+    account: auth.conto()
+  })
+})
+
+app.post('/api/auth/registra', (req, res) => {
+  const { email, password, azienda } = req.body ?? {}
+  const e = auth.registra(String(email ?? ''), String(password ?? ''), String(azienda ?? ''))
+  if (!e.ok) return res.status(400).json({ errore: e.errore })
+  res.json({ ok: true, token: e.token, account: auth.conto() })
+})
+
+app.post('/api/auth/entra', (req, res) => {
+  const { email, password } = req.body ?? {}
+  const e = auth.entra(String(email ?? ''), String(password ?? ''))
+  if (!e.ok) return res.status(401).json({ errore: e.errore })
+  res.json({ ok: true, token: e.token, account: auth.conto() })
+})
+
+app.post('/api/auth/esci', (req, res) => {
+  auth.esci(auth.tokenDi(req))
+  res.json({ ok: true })
+})
+
+// da qui in giù serve essere dentro
+app.use(auth.guardia)
 
 function errore(res: express.Response, e: unknown, stato = 500) {
   const m = e instanceof Error ? e.message : String(e)

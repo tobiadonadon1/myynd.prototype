@@ -3,7 +3,7 @@ import { Sfondo } from './Sfondo'
 import { Hov } from './ui'
 import {
   IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconMyynd, IconPiu, IconSpina, IconSuPiccola
+  IconMappa, IconMyynd, IconPiu, IconSpina, IconSuPiccola, IconEsci
 } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
 import { Automazioni } from './screens/Automazioni'
@@ -16,22 +16,57 @@ import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
 import { useVals } from './vals'
-import { api, type Stato } from './api'
+import { alloScadere, api, type Accesso as TipoAccesso, type Stato } from './api'
+import { Accesso } from './Accesso'
 
 export default function App() {
+  const [accesso, setAccesso] = useState<TipoAccesso | null>(null)
   const [stato, setStato] = useState<Stato | null>(null)
   const [errore, setErrore] = useState('')
   const [onboarding, setOnboarding] = useState(false)
   const [connessioni, setConnessioni] = useState(false)
   const [chiave, setChiave] = useState(0)
 
+  // se la sessione cade, si torna all'accesso senza schianti
   useEffect(() => {
-    api.stato()
-      .then(s => { setStato(s); setOnboarding(!s.config.onboarding) })
+    alloScadere(() => { setStato(null); setAccesso(a => (a ? { ...a, entrato: false } : a)) })
+  }, [])
+
+  useEffect(() => {
+    api.accesso()
+      .then(a => {
+        setAccesso(a)
+        if (!a.entrato) return
+        return api.stato().then(s => { setStato(s); setOnboarding(!s.config.onboarding) })
+      })
       .catch(e => setErrore(e instanceof Error ? e.message : String(e)))
   }, [])
 
+  const dentro = async (conto: { email: string; azienda: string }) => {
+    setAccesso({ registrato: true, entrato: true, account: conto })
+    const s = await api.stato()
+    setStato(s)
+    setOnboarding(!s.config.onboarding)
+  }
+
+  const fuori = async () => {
+    await api.esci()
+    setStato(null)
+    setOnboarding(false)
+    setAccesso({ registrato: true, entrato: false, account: accesso?.account ?? null })
+  }
+
   if (errore) return <Guasto errore={errore} />
+  if (!accesso) return <Attesa />
+  if (!accesso.entrato) {
+    return (
+      <Accesso
+        registrato={accesso.registrato}
+        azienda={accesso.account?.azienda ?? null}
+        entrato={dentro}
+      />
+    )
+  }
   if (!stato) return <Attesa />
 
   if (onboarding) {
@@ -45,7 +80,8 @@ export default function App() {
 
   return (
     <>
-      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} />
+      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori}
+        azienda={accesso.account?.azienda ?? ''} />
       {connessioni && (
         <Connessioni
           chiudi={() => setConnessioni(false)}
@@ -56,7 +92,9 @@ export default function App() {
   )
 }
 
-function Casa({ stato, apriConnessioni }: { stato: Stato; apriConnessioni: () => void }) {
+function Casa({ stato, apriConnessioni, esci, azienda }: {
+  stato: Stato; apriConnessioni: () => void; esci: () => void; azienda: string
+}) {
   const v = useVals(stato, apriConnessioni)
 
   return (
@@ -140,14 +178,26 @@ function Casa({ stato, apriConnessioni }: { stato: Stato; apriConnessioni: () =>
                 <span style={{ flex: 1 }}>Connettori</span>
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
+              <div style={{ height: 1, background: 'rgba(34,39,31,.1)', margin: '5px 8px' }} />
+              <Hov as="a" href="#"
+                onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}
+                style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 12, fontSize: '13.5px', cursor: 'pointer', color: 'rgba(34,39,31,.7)' }}
+                hover={{ color: '#8E3F1F', background: 'rgba(196,98,59,.1)' }}>
+                <IconEsci style={{ flex: 'none' }} />Esci
+              </Hov>
             </div>
           )}
           <Hov onClick={v.toggleMenu}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
-            <span style={{ flex: 1, fontSize: '13.5px' }}>
-              {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: '13.5px', display: 'block' }}>
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
+              </span>
+              {azienda && (
+                <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.5)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{azienda}</span>
+              )}
             </span>
             <span style={v.chevron}><IconSuPiccola /></span>
           </Hov>

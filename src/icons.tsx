@@ -101,3 +101,10 @@ export const IconSpina = ({ size = 16, style }: P) => (
     <path d="M12 14.2v3.6a3.2 3.2 0 0 1-3.2 3.2H7" />
   </svg>
 )
+
+export const IconEsci = ({ size = 16, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M14.5 4.5H18a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-3.5" />
+    <path d="M10 15.5 13.5 12 10 8.5M13.5 12H4.5" />
+  </svg>
+)

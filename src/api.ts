@@ -34,17 +34,64 @@ export type Stato = {
   home: string
 }
 
+const CHIAVE = 'myynd.token'
+
+export const sessione = {
+  token: () => localStorage.getItem(CHIAVE) ?? '',
+  imposta: (t: string) => localStorage.setItem(CHIAVE, t),
+  pulisci: () => localStorage.removeItem(CHIAVE)
+}
+
+/** Chiamato quando il server dice che la sessione non vale più. */
+let suScaduta: () => void = () => {}
+export function alloScadere(f: () => void) { suScaduta = f }
+
 async function json<T>(url: string, opz?: RequestInit): Promise<T> {
+  const t = sessione.token()
   const r = await fetch(url, {
     ...opz,
-    headers: { 'content-type': 'application/json', ...(opz?.headers ?? {}) }
+    headers: {
+      'content-type': 'application/json',
+      ...(t ? { authorization: `Bearer ${t}` } : {}),
+      ...(opz?.headers ?? {})
+    }
   })
   const corpo = await r.json().catch(() => ({}))
+  if (r.status === 401 && !url.startsWith('/api/auth')) {
+    sessione.pulisci()
+    suScaduta()
+  }
   if (!r.ok) throw new Error((corpo as { errore?: string }).errore || `Errore ${r.status}`)
   return corpo as T
 }
 
+export type Accesso = {
+  registrato: boolean
+  entrato: boolean
+  account: { email: string; azienda: string } | null
+}
+
 export const api = {
+  accesso: () => json<Accesso>('/api/auth'),
+
+  registra: async (email: string, password: string, azienda: string) => {
+    const r = await json<{ token: string; account: { email: string; azienda: string } }>(
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, azienda }) })
+    sessione.imposta(r.token)
+    return r
+  },
+
+  entra: async (email: string, password: string) => {
+    const r = await json<{ token: string; account: { email: string; azienda: string } }>(
+      '/api/auth/entra', { method: 'POST', body: JSON.stringify({ email, password }) })
+    sessione.imposta(r.token)
+    return r
+  },
+
+  esci: async () => {
+    try { await json('/api/auth/esci', { method: 'POST' }) } finally { sessione.pulisci() }
+  },
+
   stato: () => json<Stato>('/api/stato'),
 
   profilo: (p: Record<string, unknown>) =>
@@ -67,7 +114,8 @@ export const api = {
   /** La sincronizzazione arriva a pezzi: ogni riga è un avanzamento. */
   sincronizza(su: (m: Record<string, unknown>) => void, fonte?: string): Promise<void> {
     return new Promise((risolvi, rifiuta) => {
-      const es = new EventSource(`/api/sincronizza${fonte ? `?fonte=${fonte}` : ''}`)
+      const q = new URLSearchParams({ t: sessione.token(), ...(fonte ? { fonte } : {}) })
+      const es = new EventSource(`/api/sincronizza?${q}`)
       es.onmessage = e => {
         const m = JSON.parse(e.data)
         su(m)
