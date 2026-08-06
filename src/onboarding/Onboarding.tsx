@@ -5,6 +5,7 @@ import { Hov } from '../ui'
 import { IconPiu } from '../icons'
 import { Form, FormClaude } from '../components/forms'
 import { Stato as Indicatore } from '../components/Stato'
+import { Logo } from '../components/Marchio'
 
 const COLORI: Record<string, string> = {
   posta: '#C4553C',
@@ -96,7 +97,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
             <Genera s={s} avanti={() => setPasso('pronta')} />
           )}
           {passo === 'pronta' && (
-            <Pronta nome={nome} totale={s.conteggi.totale} entra={async () => { await api.profilo({ onboarding: true }); fatto() }} />
+            <Pronta totale={s.conteggi.totale} entra={async () => { await api.profilo({ onboarding: true }); fatto() }} />
           )}
         </div>
       </div>
@@ -156,13 +157,9 @@ function Passi({ corrente }: { corrente: Passo }) {
 function Risveglio({ avanti }: { avanti: () => void }) {
   return (
     <div style={{ animation: 'fadein .8s ease' }}>
-      <div style={{ fontSize: 13, letterSpacing: '.18em', textTransform: 'uppercase', color: 'rgba(244,239,232,.45)', marginBottom: 22 }}>myynd</div>
-      <Titolo>Questa è la tua mente.<br />Adesso è vuota.</Titolo>
-      <Sotto>
-        Passaci sopra il cursore: reagisce già, ma non sa ancora niente di te.
-        Collegale le cose che leggi e scrivi ogni giorno e smette di essere
-        una decorazione.
-      </Sotto>
+      <div style={{ marginBottom: 30 }}><Logo dim={46} testo={26} tinta={CHIARO} /></div>
+      <Titolo>Questa mente è vuota.</Titolo>
+      <Sotto>Riempila con quello che leggi e scrivi ogni giorno.</Sotto>
       <Primario onClick={avanti}>Cominciamo</Primario>
     </div>
   )
@@ -184,16 +181,13 @@ function PassoClaude({ collegato, ricarica, avanti }: {
 }) {
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>Prima di tutto,<br />collega Claude.</Titolo>
-      <Sotto>
-        Senza, Myynd resta un archivio: cerca e trova, ma non ti dice mai
-        cosa conta.
-      </Sotto>
+      <Titolo>Collega Claude.</Titolo>
+      <Sotto>Serve a ragionare su quello che legge. Senza, resta solo un archivio.</Sotto>
       {collegato ? (
         <>
           <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FA98A' }} />
-            <span style={{ fontSize: 14, color: CHIARO }}>Claude è collegato.</span>
+            <span style={{ fontSize: 14, color: CHIARO }}>Collegato.</span>
           </div>
           <Primario onClick={avanti}>Avanti</Primario>
         </>
@@ -218,8 +212,8 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
 }) {
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>Chi sei?</Titolo>
-      <Sotto>Serve solo perché Myynd scriva come scriveresti tu.</Sotto>
+      <Titolo>Come ti chiami?</Titolo>
+      <Sotto>Per scrivere come scriveresti tu.</Sotto>
       <div style={{ display: 'flex', gap: 14, marginTop: 30 }}>
         <div style={{ flex: 1 }}>
           <div style={ETICHETTA}>Nome</div>
@@ -244,11 +238,11 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
 
   return (
     <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
-      <Titolo>Cosa le do da leggere?</Titolo>
+      <Titolo>Cosa le fai leggere?</Titolo>
       <Sotto>
-        Tutto resta su questo computer: le credenziali finiscono in
+        Le credenziali restano in
         <code style={{ color: CHIARO, background: 'rgba(244,239,232,.1)', padding: '1px 6px', borderRadius: 5, margin: '0 4px' }}>~/.myynd</code>
-        e vanno solo al servizio a cui servono.
+        su questo computer.
       </Sotto>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
@@ -343,11 +337,11 @@ function Leggi({ ricarica, avanti }: { ricarica: () => Promise<Stato>; avanti: (
 
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{finito ? 'Ho letto tutto.' : 'Sto leggendo.'}</Titolo>
+      <Titolo>{finito ? 'Fatto.' : 'Leggo.'}</Titolo>
       <Sotto>
         {finito
-          ? `${totale} documenti indicizzati su questa macchina. Da qui in poi posso cercarci dentro e ragionarci sopra.`
-          : 'La prima lettura è la più lunga: dopo tiene solo il passo delle novità.'}
+          ? `${totale} document${totale === 1 ? 'o' : 'i'}.`
+          : 'La prima volta è la più lunga.'}
       </Sotto>
       <div style={{ marginTop: 26 }}>
         {!finito && <Indicatore tipo="leggo" testo={righe.at(-1) ?? 'mi collego'} chiaro />}
@@ -380,15 +374,15 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
 
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>La prima lettura.</Titolo>
+      <Titolo>Prima lettura.</Titolo>
       <Sotto>
         {senzaClaude
-          ? 'Per questo passaggio serve Claude collegato. Puoi saltarlo: la mente resta consultabile, ma non tirerà fuori niente da sola.'
+          ? 'Serve Claude. Puoi saltarla: la mente resta consultabile.'
           : quante === null
-            ? 'Myynd guarda quello che ha appena letto e tira fuori le cose che meritano la tua attenzione. Sono le prime voci del tuo feed.'
+            ? 'Guardo cosa c’è e metto da parte quello che sembra richiedere te.'
             : quante === 0
-              ? 'Non ha trovato abbastanza materiale per tirare fuori qualcosa. Collega un’altra fonte e riprova più tardi.'
-              : `${quante} cose messe da parte per te. Le trovi appena entri.`}
+              ? 'Non ho trovato niente da segnalare.'
+              : `${quante} cos${quante === 1 ? 'a' : 'e'} messe da parte.`}
       </Sotto>
       <Errore testo={err} />
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -408,14 +402,14 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
   )
 }
 
-function Pronta({ nome, totale, entra }: { nome: string; totale: number; entra: () => void }) {
+function Pronta({ totale, entra }: { totale: number; entra: () => void }) {
   return (
     <div style={{ animation: 'fadein .6s ease' }}>
-      <Titolo>{nome ? `È pronta, ${nome}.` : 'È pronta.'}</Titolo>
+      <Titolo>Pronta.</Titolo>
       <Sotto>
         {totale
-          ? `${totale} documenti dentro. Da adesso puoi chiederle qualsiasi cosa sul tuo materiale, e sa dirti da dove viene la risposta.`
-          : 'Non ha ancora letto niente, ma i connettori sono al loro posto: torna nelle impostazioni quando vuoi darle qualcosa.'}
+          ? `${totale} document${totale === 1 ? 'o' : 'i'} dentro. Chiedile qualcosa.`
+          : 'Ancora vuota. Collega una fonte quando vuoi.'}
       </Sotto>
       <Primario onClick={entra}>Entra</Primario>
     </div>

@@ -28,8 +28,8 @@ app.get('/api/auth', (req, res) => {
 })
 
 app.post('/api/auth/registra', (req, res) => {
-  const { email, password, azienda } = req.body ?? {}
-  const e = auth.registra(String(email ?? ''), String(password ?? ''), String(azienda ?? ''))
+  const { email, password } = req.body ?? {}
+  const e = auth.registra(String(email ?? ''), String(password ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   res.json({ ok: true, token: e.token, account: auth.conto() })
 })

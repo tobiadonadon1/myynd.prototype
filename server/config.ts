@@ -24,7 +24,7 @@ export type ConfigDesktop = { cartelle: string[]; estensioni?: string[] }
 export type ConfigNotion = { token: string }
 export type ConfigClaude = { apiKey: string }
 
-export type Account = { email: string; sale: string; hash: string; azienda: string }
+export type Account = { email: string; sale: string; hash: string }
 
 export type Config = {
   account?: Account
@@ -68,7 +68,7 @@ export function aggiorna(patch: Partial<Config>): Config {
 /** La configurazione senza nessun segreto — questa sì può uscire dall'API. */
 export function pubblica(c: Config = leggi()) {
   return {
-    account: c.account ? { email: c.account.email, azienda: c.account.azienda } : null,
+    account: c.account ? { email: c.account.email } : null,
     nome: c.nome ?? null,
     ruolo: c.ruolo ?? null,
     onboarding: !!c.onboarding,

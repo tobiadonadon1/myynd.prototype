@@ -15,6 +15,7 @@ import { Preferenze } from './screens/Preferenze'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
+import { Logo } from './components/Marchio'
 import { useVals } from './vals'
 import { alloScadere, api, type Accesso as TipoAccesso, type Stato } from './api'
 import { Accesso } from './Accesso'
@@ -42,7 +43,7 @@ export default function App() {
       .catch(e => setErrore(e instanceof Error ? e.message : String(e)))
   }, [])
 
-  const dentro = async (conto: { email: string; azienda: string }) => {
+  const dentro = async (conto: { email: string }) => {
     setAccesso({ registrato: true, entrato: true, account: conto })
     const s = await api.stato()
     setStato(s)
@@ -60,11 +61,7 @@ export default function App() {
   if (!accesso) return <Attesa />
   if (!accesso.entrato) {
     return (
-      <Accesso
-        registrato={accesso.registrato}
-        azienda={accesso.account?.azienda ?? null}
-        entrato={dentro}
-      />
+      <Accesso registrato={accesso.registrato} entrato={dentro} />
     )
   }
   if (!stato) return <Attesa />
@@ -80,8 +77,7 @@ export default function App() {
 
   return (
     <>
-      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori}
-        azienda={accesso.account?.azienda ?? ''} />
+      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori} />
       {connessioni && (
         <Connessioni
           chiudi={() => setConnessioni(false)}
@@ -92,8 +88,8 @@ export default function App() {
   )
 }
 
-function Casa({ stato, apriConnessioni, esci, azienda }: {
-  stato: Stato; apriConnessioni: () => void; esci: () => void; azienda: string
+function Casa({ stato, apriConnessioni, esci }: {
+  stato: Stato; apriConnessioni: () => void; esci: () => void
 }) {
   const v = useVals(stato, apriConnessioni)
 
@@ -114,7 +110,7 @@ function Casa({ stato, apriConnessioni, esci, azienda }: {
         border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 24px' }}>
-          <span style={{ fontSize: 22, fontWeight: 300, letterSpacing: '.02em', lineHeight: 1, flex: 1 }}>myynd</span>
+          <div style={{ flex: 1 }}><Logo dim={26} testo={21} animato={false} /></div>
           <Hov as="button" title="Cerca" onClick={v.openSearch}
             style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
             hover={{ color: '#C4623B' }}>
@@ -191,13 +187,8 @@ function Casa({ stato, apriConnessioni, esci, azienda }: {
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: '13.5px', display: 'block' }}>
-                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
-              </span>
-              {azienda && (
-                <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.5)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{azienda}</span>
-              )}
+            <span style={{ flex: 1, fontSize: '13.5px' }}>
+              {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
             </span>
             <span style={v.chevron}><IconSuPiccola /></span>
           </Hov>

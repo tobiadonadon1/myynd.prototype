@@ -6,22 +6,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
 import { api } from './api'
+import { Logo } from './components/Marchio'
 
 const CHIARO = '#F4EFE8'
-const TENUE = 'rgba(244,239,232,.6)'
-export const VERSIONE = '4'
 
-export function Accesso({ registrato, azienda, entrato }: {
+export function Accesso({ registrato, entrato }: {
   registrato: boolean
-  azienda: string | null
-  entrato: (a: { email: string; azienda: string }) => void
+  entrato: (a: { email: string }) => void
 }) {
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [nomeAzienda, setNomeAzienda] = useState('')
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -36,7 +33,7 @@ export function Accesso({ registrato, azienda, entrato }: {
     try {
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password, nomeAzienda)
+        : await api.registra(email, password)
       entrato(r.account)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -45,8 +42,8 @@ export function Accesso({ registrato, azienda, entrato }: {
   }
 
   const pronto = registrato
-    ? email.trim() && password.length > 0
-    : email.trim() && password.length >= 8 && nomeAzienda.trim()
+    ? !!email.trim() && password.length > 0
+    : !!email.trim() && password.length >= 8
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -66,26 +63,9 @@ export function Accesso({ registrato, azienda, entrato }: {
         alignItems: 'center', justifyContent: 'center', padding: 24
       }}>
         <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)' }}>
-          {/* il marchio: Myynd e la versione, l'azienda sotto */}
-          <div style={{ marginBottom: 40 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-              <span style={{ fontSize: 34, fontWeight: 300, letterSpacing: '.01em', lineHeight: 1 }}>myynd</span>
-              <span style={{
-                fontSize: 15, fontWeight: 500, color: '#D8A46E',
-                border: '1px solid rgba(216,164,110,.45)', borderRadius: 8, padding: '2px 8px'
-              }}>{VERSIONE}</span>
-            </div>
-            <div style={{ fontSize: 14, color: TENUE, marginTop: 10, letterSpacing: '.02em' }}>
-              {registrato ? (azienda ?? '') : 'Il secondo cervello della tua azienda'}
-            </div>
+          <div style={{ marginBottom: 44 }}>
+            <Logo dim={54} testo={30} tinta={CHIARO} />
           </div>
-
-          {!registrato && (
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: TENUE, marginBottom: 24 }}>
-              Crea l'accesso a questa mente. Resta su questo computer: non c'è
-              nessun account da nessun'altra parte.
-            </div>
-          )}
 
           <div style={ETICHETTA}>Email</div>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
@@ -94,15 +74,7 @@ export function Accesso({ registrato, azienda, entrato }: {
           <div style={ETICHETTA}>Password</div>
           <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
             type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
-            placeholder={registrato ? '' : 'almeno otto caratteri'} style={CAMPO} />
-
-          {!registrato && (
-            <>
-              <div style={ETICHETTA}>Azienda</div>
-              <input value={nomeAzienda} onChange={e => setNomeAzienda(e.target.value)} onKeyDown={tasto}
-                placeholder="Donadon Srl" style={CAMPO} />
-            </>
-          )}
+            placeholder={registrato ? '' : 'otto caratteri'} style={CAMPO} />
 
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{err}</div>}
 
@@ -113,12 +85,11 @@ export function Accesso({ registrato, azienda, entrato }: {
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {occupato ? 'Un attimo…' : registrato ? 'Entra' : 'Crea l’accesso'}
+            {occupato ? '…' : 'Entra'}
           </button>
 
-          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.38)', marginTop: 20, lineHeight: 1.6 }}>
-            La password chiude l'interfaccia, non cifra l'archivio: i file in
-            ~/.myynd restano leggibili da chi ha accesso a questo utente del Mac.
+          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>
+            Resta su questo computer.
           </div>
         </div>
       </div>

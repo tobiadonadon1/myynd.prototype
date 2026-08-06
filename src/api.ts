@@ -68,21 +68,21 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
 export type Accesso = {
   registrato: boolean
   entrato: boolean
-  account: { email: string; azienda: string } | null
+  account: { email: string } | null
 }
 
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string, azienda: string) => {
-    const r = await json<{ token: string; account: { email: string; azienda: string } }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, azienda }) })
+  registra: async (email: string, password: string) => {
+    const r = await json<{ token: string; account: { email: string } }>(
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password }) })
     sessione.imposta(r.token)
     return r
   },
 
   entra: async (email: string, password: string) => {
-    const r = await json<{ token: string; account: { email: string; azienda: string } }>(
+    const r = await json<{ token: string; account: { email: string } }>(
       '/api/auth/entra', { method: 'POST', body: JSON.stringify({ email, password }) })
     sessione.imposta(r.token)
     return r

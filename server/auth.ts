@@ -29,20 +29,19 @@ export function registrato(): boolean {
   return !!leggi().account
 }
 
-export function conto(): { email: string; azienda: string } | null {
+export function conto(): { email: string } | null {
   const a = leggi().account
-  return a ? { email: a.email, azienda: a.azienda } : null
+  return a ? { email: a.email } : null
 }
 
-export function registra(email: string, password: string, azienda: string):
+export function registra(email: string, password: string):
   { ok: true; token: string } | { ok: false; errore: string } {
   if (registrato()) return { ok: false, errore: 'Un account esiste già su questa macchina.' }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, errore: 'Indirizzo non valido.' }
   if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
-  if (!azienda.trim()) return { ok: false, errore: 'Manca il nome dell’azienda.' }
 
   const sale = randomBytes(16).toString('hex')
-  aggiorna({ account: { email: email.trim(), sale, hash: impasta(password, sale), azienda: azienda.trim() } })
+  aggiorna({ account: { email: email.trim(), sale, hash: impasta(password, sale) } })
   return { ok: true, token: apri() }
 }
 
