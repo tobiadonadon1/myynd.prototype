@@ -1,5 +1,6 @@
 import { Hov, LABEL } from '../ui'
 import { IconDoc, IconGiu, IconSpunta } from '../icons'
+import { Glifo, Stato } from '../components/Stato'
 import type { Vals } from '../vals'
 
 /** Il feed: la cosa più urgente in grande, il resto sotto, le fatte in fondo. */
@@ -24,7 +25,7 @@ export function Myynd({ v }: { v: Vals }) {
       {v.hasHero && (
         <div style={v.heroStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FFF7F0', flex: 'none' }} />
+            <Glifo tipo="penso" dim={15} />
             <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{v.heroTipo}</span>
             <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{v.heroFonte}{v.heroOra ? ` · ${v.heroOra}` : ''}</span>
             <div style={{ flex: 1 }} />
@@ -34,7 +35,7 @@ export function Myynd({ v }: { v: Vals }) {
           </div>
 
           <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500 }}>{v.heroTitolo}</div>
-          <div style={{ fontSize: 16, lineHeight: 1.6, marginTop: 12, maxWidth: 600, color: 'rgba(255,247,240,.9)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>{v.heroTesto}</div>
+          <div style={{ fontSize: 16, lineHeight: 1.6, marginTop: 12, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>{v.heroTesto}</div>
 
           {v.heroHaDoc && (
             <Hov onClick={v.apriDoc}
@@ -140,13 +141,13 @@ function Vuoto({ v }: { v: Vals }) {
         {senzaFonti || !v.claudeOn ? (
           <button onClick={v.goConn} style={BOTTONE}>Vai ai connettori</button>
         ) : senzaDocumenti ? (
-          <button onClick={v.sincronizza} style={BOTTONE} disabled={!!v.sincronizzando}>
-            {v.sincronizzando ?? 'Leggi adesso'}
-          </button>
+          v.sincronizzando
+            ? <Stato tipo="leggo" testo={v.sincronizzando} />
+            : <button onClick={v.sincronizza} style={BOTTONE}>Leggi adesso</button>
         ) : (
-          <button onClick={v.genera} style={BOTTONE} disabled={v.generando}>
-            {v.generando ? 'Sto leggendo…' : 'Fai una lettura'}
-          </button>
+          v.generando
+            ? <Stato tipo="cerco" testo="Leggo tutto e scelgo cosa conta" />
+            : <button onClick={v.genera} style={BOTTONE}>Fai una lettura</button>
         )}
       </div>
     </div>

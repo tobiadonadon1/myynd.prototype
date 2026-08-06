@@ -3,6 +3,7 @@ import { Campo } from './campo'
 import { api, type Stato } from '../api'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
+import { Stato as Indicatore } from '../components/Stato'
 
 const COLORI: Record<string, string> = {
   posta: '#C4553C',
@@ -449,12 +450,15 @@ function Leggi({ ricarica, avanti }: { ricarica: () => Promise<Stato>; avanti: (
           ? `${totale} documenti indicizzati su questa macchina. Da qui in poi posso cercarci dentro e ragionarci sopra.`
           : 'La prima lettura è la più lunga: dopo tiene solo il passo delle novità.'}
       </Sotto>
-      <div style={{
-        marginTop: 26, padding: '16px 18px', borderRadius: 16,
-        background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
-        fontSize: '12.5px', lineHeight: 1.9, color: TENUE, minHeight: 96, fontVariantNumeric: 'tabular-nums'
-      }}>
-        {righe.length ? righe.map((r, i) => <div key={i}>{r}</div>) : <div>mi collego…</div>}
+      <div style={{ marginTop: 26 }}>
+        {!finito && <Indicatore tipo="leggo" testo={righe.at(-1) ?? 'mi collego'} chiaro />}
+        <div style={{
+          marginTop: finito ? 0 : 14, padding: '14px 18px', borderRadius: 16,
+          background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
+          fontSize: '12.5px', lineHeight: 1.9, color: TENUE, minHeight: 84, fontVariantNumeric: 'tabular-nums'
+        }}>
+          {righe.length ? righe.map((r, i) => <div key={i}>{r}</div>) : <div>mi collego…</div>}
+        </div>
       </div>
       <Errore testo={err} />
       <Primario onClick={avanti} disabilitato={!finito && !err}>Avanti</Primario>
@@ -490,7 +494,9 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
       <Errore testo={err} />
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         {!senzaClaude && quante === null && (
-          <Primario onClick={genera} disabilitato={occupato}>{occupato ? 'Sto leggendo…' : 'Fai la prima lettura'}</Primario>
+          occupato
+            ? <div style={{ marginTop: 34 }}><Indicatore tipo="cerco" testo="Leggo tutto e scelgo cosa conta" chiaro /></div>
+            : <Primario onClick={genera}>Fai la prima lettura</Primario>
         )}
         {(senzaClaude || quante !== null) && <Primario onClick={avanti}>Avanti</Primario>}
         {!senzaClaude && quante === null && !occupato && (

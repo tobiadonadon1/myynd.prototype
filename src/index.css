@@ -15,3 +15,4 @@ button,input,textarea,select{font-family:inherit}
 @keyframes fadein{0%{opacity:0}100%{opacity:1}}
 .fl{position:absolute;border-radius:50%;will-change:transform,opacity;pointer-events:none;animation-play-state:var(--mo,running)}
 .wash{position:absolute;inset:-28%;pointer-events:none;animation:drift 70s ease-in-out infinite;animation-play-state:var(--mo,running)}
+@keyframes pixel{0%,100%{opacity:.16}45%{opacity:1}70%{opacity:.5}}

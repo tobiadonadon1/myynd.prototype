@@ -1,5 +1,6 @@
 import { Hov } from '../ui'
 import { IconSu } from '../icons'
+import { Stato } from '../components/Stato'
 import type { Vals } from '../vals'
 
 /** La chat sul tuo materiale: bolle, fonti citate sotto ogni risposta. */
@@ -35,14 +36,7 @@ export function Chat({ v }: { v: Vals }) {
 
         {v.pensando && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <div style={{ padding: '15px 18px', borderRadius: '20px 20px 20px 6px', background: 'rgba(255,253,249,.6)', border: '1px solid rgba(255,255,255,.7)', display: 'flex', gap: 6, alignItems: 'center' }}>
-              {[0, 1, 2].map(i => (
-                <span key={i} style={{
-                  width: 6, height: 6, borderRadius: '50%', background: 'rgba(34,39,31,.4)',
-                  animation: `puls 1.1s ease-in-out ${i * 0.18}s infinite`
-                }} />
-              ))}
-            </div>
+            <Stato tipo="cerco" testo="Cerco tra le fonti" stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
           </div>
         )}
       </div>

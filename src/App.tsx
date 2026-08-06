@@ -13,6 +13,7 @@ import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
 import { Preferenze } from './screens/Preferenze'
 import { Onboarding } from './onboarding/Onboarding'
+import { Stato as Indicatore } from './components/Stato'
 import { useVals } from './vals'
 import { api, type Stato } from './api'
 
@@ -111,8 +112,8 @@ function Casa({ stato, riapri }: { stato: Stato; riapri: () => void }) {
         <div style={{ flex: 1 }} />
 
         {v.sincronizzando && (
-          <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.6)', padding: '0 6px 12px', lineHeight: 1.5 }}>
-            {v.sincronizzando}
+          <div style={{ padding: '0 2px 12px' }}>
+            <Indicatore tipo="leggo" testo={v.sincronizzando} stile={{ padding: '8px 12px 8px 9px', fontSize: 12 }} />
           </div>
         )}
 
