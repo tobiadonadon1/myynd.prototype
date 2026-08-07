@@ -65,6 +65,24 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
   return corpo as T
 }
 
+/** Trasforma un avanzamento della lettura in una riga da mostrare. */
+export function rigaSincronizzazione(m: Record<string, unknown>): string {
+  const fonte = String(m.fase ?? '')
+  if (m.stato !== 'fatto') return `${fonte} · ${m.stato}`
+  const parti = [`${Number(m.documenti ?? 0)} documenti`]
+  if (Number(m.tolti)) parti.push(`${Number(m.tolti)} spariti`)
+  if (Number(m.saltati)) parti.push(`${Number(m.saltati)} progetti saltati`)
+  if (Number(m.falliti)) parti.push(`${Number(m.falliti)} illeggibili`)
+  if (Number(m.parziali)) parti.push(`${Number(m.parziali)} pagine a metà`)
+  if (m.troncato) parti.push('tetto raggiunto')
+  if (m.interrotto) parti.push('interrotto da Notion')
+  const dirs = (m.illeggibili as string[] | undefined) ?? []
+  if (dirs.length) parti.push(`${dirs.length} cartelle senza permessi`)
+  const fall = (m.cartelleFallite as string[] | undefined) ?? []
+  if (fall.length) parti.push(`${fall.length} cartelle non lette`)
+  return `${fonte} · ${parti.join(' · ')}`
+}
+
 export type Accesso = {
   registrato: boolean
   entrato: boolean
@@ -98,7 +116,8 @@ export const api = {
     json('/api/profilo', { method: 'POST', body: JSON.stringify(p) }),
 
   collegaPosta: (p: { host: string; porta: number; utente: string; password: string; giorni: number }) =>
-    json<{ ok: true; cartelle: string[] }>('/api/connettori/posta', { method: 'POST', body: JSON.stringify(p) }),
+    json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null }>(
+      '/api/connettori/posta', { method: 'POST', body: JSON.stringify(p) }),
 
   collegaDesktop: (cartelle: string[]) =>
     json<{ ok: true; cartelle: string[] }>('/api/connettori/desktop', { method: 'POST', body: JSON.stringify({ cartelle }) }),
@@ -112,19 +131,30 @@ export const api = {
   scollega: (id: string) => json(`/api/connettori/${id}`, { method: 'DELETE' }),
 
   /** La sincronizzazione arriva a pezzi: ogni riga è un avanzamento. */
-  sincronizza(su: (m: Record<string, unknown>) => void, fonte?: string): Promise<void> {
+  async sincronizza(su: (m: Record<string, unknown>) => void, fonte?: string): Promise<void> {
+    // EventSource non porta intestazioni e non espone lo stato HTTP: prima
+    // controllo la sessione, così una scadenza riporta all'accesso invece di
+    // diventare un generico "interrotta"
+    await json('/api/stato')
+
     return new Promise((risolvi, rifiuta) => {
       const q = new URLSearchParams({ t: sessione.token(), ...(fonte ? { fonte } : {}) })
       const es = new EventSource(`/api/sincronizza?${q}`)
+      let finita = false
+      const chiudi = (f: () => void) => { if (!finita) { finita = true; es.close(); f() } }
+
       es.onmessage = e => {
-        const m = JSON.parse(e.data)
-        su(m)
-        if (m.fase === 'fine' || m.fase === 'errore') {
-          es.close()
-          m.fase === 'errore' ? rifiuta(new Error(String(m.errore))) : risolvi()
+        let m: Record<string, unknown>
+        try {
+          m = JSON.parse(e.data)
+        } catch {
+          return chiudi(() => rifiuta(new Error('Risposta illeggibile dal server.')))
         }
+        su(m)
+        if (m.fase === 'fine') chiudi(risolvi)
+        else if (m.fase === 'errore') chiudi(() => rifiuta(new Error(String(m.errore))))
       }
-      es.onerror = () => { es.close(); rifiuta(new Error('Sincronizzazione interrotta.')) }
+      es.onerror = () => chiudi(() => rifiuta(new Error('Lettura interrotta.')))
     })
   },
 

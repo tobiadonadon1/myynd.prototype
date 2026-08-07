@@ -78,8 +78,13 @@ app.get('/api/stato', (_req, res) => {
 })
 
 app.post('/api/profilo', (req, res) => {
-  const { nome, ruolo, tono, autonomia, onboarding } = req.body ?? {}
-  res.json(cfg.pubblica(cfg.aggiorna({ nome, ruolo, tono, autonomia, onboarding })))
+  // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
+  const b = req.body ?? {}
+  const patch: Record<string, unknown> = {}
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding'] as const) {
+    if (b[k] !== undefined) patch[k] = b[k]
+  }
+  res.json(cfg.pubblica(cfg.aggiorna(patch)))
 })
 
 // — connettori —
@@ -92,7 +97,7 @@ app.post('/api/connettori/posta', async (req, res) => {
     const esito = await posta.prova(c)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ posta: c })
-    res.json({ ok: true, cartelle: esito.cartelle })
+    res.json({ ok: true, cartelle: esito.cartelle, certificatoAdattato: esito.certificatoAdattato })
   } catch (e) { errore(res, e) }
 })
 
@@ -144,11 +149,21 @@ app.delete('/api/connettori/:id', (req, res) => {
 
 // — sincronizzazione, in streaming —
 
+let sincronizzazioneInCorso = false
+
 app.get('/api/sincronizza', async (req, res) => {
+  if (sincronizzazioneInCorso) {
+    return res.status(409).json({ errore: 'Una lettura è già in corso.' })
+  }
+  sincronizzazioneInCorso = true
+
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
-  const invia = (d: unknown) => res.write(`data: ${JSON.stringify(d)}\n\n`)
+  const invia = (d: unknown) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(d)}\n\n`) }
+
+  let annullata = false
+  req.on('close', () => { annullata = true })
 
   const c = cfg.leggi()
   const soloFonte = typeof req.query.fonte === 'string' ? req.query.fonte : null
@@ -157,34 +172,39 @@ app.get('/api/sincronizza', async (req, res) => {
   try {
     if (c.desktop && (!soloFonte || soloFonte === 'desktop')) {
       invia({ fase: 'desktop', stato: 'apro le cartelle' })
-      const esito = await desktop.sincronizza(c.desktop, n => invia({ fase: 'desktop', stato: `${n} documenti` }))
-      store.salvaDocumenti(esito.docs)
-      totale += esito.docs.length
+      const e = await desktop.sincronizza(c.desktop, n => invia({ fase: 'desktop', stato: `${n} documenti` }))
+      store.salvaDocumenti(e.docs)
+      const tolti = store.riconcilia('desktop', e.docs.map(d => d.id))
+      totale += e.docs.length
       invia({
-        fase: 'desktop', stato: 'fatto', documenti: esito.docs.length,
-        saltati: esito.saltatiProgetti.length, falliti: esito.falliti
+        fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
+        saltati: e.saltatiProgetti.length, falliti: e.falliti,
+        illeggibili: e.illeggibili, troncato: e.troncato, tolti
       })
     }
-    if (c.notion && (!soloFonte || soloFonte === 'notion')) {
+    if (!annullata && c.notion && (!soloFonte || soloFonte === 'notion')) {
       invia({ fase: 'notion', stato: 'leggo le pagine' })
-      const docs = await notion.sincronizza(c.notion)
-      store.salvaDocumenti(docs)
-      totale += docs.length
-      invia({ fase: 'notion', stato: 'fatto', documenti: docs.length })
+      const e = await notion.sincronizza(c.notion)
+      store.salvaDocumenti(e.docs)
+      const tolti = e.interrotto ? 0 : store.riconcilia('notion', e.docs.map(d => d.id))
+      totale += e.docs.length
+      invia({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti })
     }
-    if (c.posta && (!soloFonte || soloFonte === 'posta')) {
+    if (!annullata && c.posta && (!soloFonte || soloFonte === 'posta')) {
       invia({ fase: 'posta', stato: 'mi collego alla casella' })
-      const docs = await posta.sincronizza(c.posta, (fatti, tot) =>
+      const e = await posta.sincronizza(c.posta, (fatti, tot) =>
         invia({ fase: 'posta', stato: `${fatti} di ${tot} messaggi` }))
-      store.salvaDocumenti(docs)
-      totale += docs.length
-      invia({ fase: 'posta', stato: 'fatto', documenti: docs.length })
+      store.salvaDocumenti(e.docs)
+      totale += e.docs.length
+      invia({ fase: 'posta', stato: 'fatto', documenti: e.docs.length, cartelleFallite: e.cartelleFallite })
     }
     invia({ fase: 'fine', totale, conteggi: store.conteggi() })
   } catch (e) {
     invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
+  } finally {
+    sincronizzazioneInCorso = false
+    if (!res.writableEnded) res.end()
   }
-  res.end()
 })
 
 // — la mente —
@@ -248,20 +268,34 @@ app.post('/api/chat/:id', async (req, res) => {
   const chat = req.params.id
   const domanda: string = req.body?.testo ?? ''
   if (!domanda.trim()) return res.status(400).json({ errore: 'Scrivi qualcosa.' })
+
+  const idMsg = (p: string) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  const idUtente = idMsg('u')
   try {
-    const esistenti = store.messaggi(chat)
-    if (!esistenti.length) {
+    if (!store.esisteChat(chat)) {
       store.creaChat(chat, domanda.slice(0, 40))
       claude.titoloChat(domanda).then(t => store.rinominaChat(chat, t)).catch(() => {})
     }
-    store.salvaMessaggio({ id: `u${Date.now()}`, chat, ruolo: 'u', testo: domanda })
-    const r = await claude.rispondi(domanda)
-    store.salvaMessaggio({ id: `a${Date.now()}`, chat, ruolo: 'a', testo: r.testo, fonti: r.fonti })
+    // la conversazione precedente, così i seguiti hanno senso
+    const storico = store.messaggi(chat).map(m => ({ ruolo: m.role, testo: m.text }))
+    store.salvaMessaggio({ id: idUtente, chat, ruolo: 'u', testo: domanda })
+    const r = await claude.rispondi(domanda, storico)
+    store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: r.testo, fonti: r.fonti })
     res.json({ messaggi: store.messaggi(chat) })
-  } catch (e) { errore(res, e) }
+  } catch (e) {
+    // niente domanda orfana se la risposta non arriva
+    store.togliMessaggio(idUtente)
+    errore(res, e)
+  }
 })
 
 app.post('/api/azzera', (_req, res) => { store.azzeraTutto(); res.json({ ok: true }) })
+
+// qualunque cosa sfugga ai singoli handler esce come JSON, non come stack HTML
+app.use((e: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('myynd · errore non gestito:', e instanceof Error ? e.message : e)
+  if (!res.headersSent) res.status(500).json({ errore: 'Errore interno.' })
+})
 
 app.listen(PORTA, '127.0.0.1', () => {
   console.log(`myynd · server su http://127.0.0.1:${PORTA}`)

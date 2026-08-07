@@ -16,16 +16,19 @@ function titolo(p: any): string {
 }
 
 /** Appiattisce i blocchi di una pagina in testo semplice. */
-async function testoPagina(notion: Client, pageId: string, profondita = 0): Promise<string> {
-  if (profondita > 2) return ''
+async function testoPagina(notion: Client, pageId: string, profondita = 0): Promise<{ testo: string; completo: boolean }> {
+  if (profondita > 2) return { testo: '', completo: true }
   let righe: string[] = []
+  let completo = true
   let cursore: string | undefined
   do {
     let r
     try {
       r = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursore, page_size: 100 })
     } catch {
-      break // blocco non accessibile: mi fermo qui
+      // pagina letta a metà: non deve sostituire una versione completa
+      completo = false
+      break
     }
     for (const b of r.results as any[]) {
       const t = b[b.type]
@@ -33,12 +36,13 @@ async function testoPagina(notion: Client, pageId: string, profondita = 0): Prom
       if (Array.isArray(rt) && rt.length) righe.push(rt.map((x: any) => x.plain_text).join(''))
       if (b.has_children && b.type !== 'child_page' && b.type !== 'child_database') {
         const dentro = await testoPagina(notion, b.id, profondita + 1)
-        if (dentro) righe.push(dentro)
+        if (dentro.testo) righe.push(dentro.testo)
+        if (!dentro.completo) completo = false
       }
     }
     cursore = r.has_more ? (r.next_cursor ?? undefined) : undefined
   } while (cursore)
-  return righe.join('\n').trim()
+  return { testo: righe.join('\n').trim(), completo }
 }
 
 export async function prova(c: ConfigNotion): Promise<{ ok: true; pagine: number } | { ok: false; errore: string }> {
@@ -54,26 +58,38 @@ export async function prova(c: ConfigNotion): Promise<{ ok: true; pagine: number
   }
 }
 
-export async function sincronizza(c: ConfigNotion): Promise<Documento[]> {
+export type EsitoNotion = { docs: Documento[]; parziali: number; interrotto: boolean }
+
+export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
   const notion = new Client({ auth: c.token })
   const docs: Documento[] = []
+  let parziali = 0
   let cursore: string | undefined
 
   do {
-    const r: any = await notion.search({
-      filter: { property: 'object', value: 'page' },
-      start_cursor: cursore,
-      page_size: 50
-    })
+    let r: any
+    try {
+      r = await notion.search({
+        filter: { property: 'object', value: 'page' },
+        start_cursor: cursore,
+        page_size: 50
+      })
+    } catch {
+      // un errore a metà elenco non deve buttare via quello che ho già
+      return { docs, parziali, interrotto: true }
+    }
     for (const p of r.results as any[]) {
       if (p.object !== 'page') continue
-      let corpo = ''
+      let letto: { testo: string; completo: boolean }
       try {
-        corpo = await testoPagina(notion, p.id)
+        letto = await testoPagina(notion, p.id)
       } catch {
+        parziali++
         continue
       }
-      if (!corpo) continue
+      const corpo = letto.testo
+      // una pagina letta a metà la salto: meglio tenere quella vecchia intera
+      if (!corpo || !letto.completo) { if (corpo) parziali++; continue }
       docs.push({
         id: `notion:${p.id}`,
         fonte: 'notion',
@@ -85,10 +101,10 @@ export async function sincronizza(c: ConfigNotion): Promise<Documento[]> {
         quando: p.last_edited_time ?? null,
         gruppo: 'note'
       })
-      if (docs.length >= 800) return docs
+      if (docs.length >= 800) return { docs, parziali, interrotto: false }
     }
     cursore = r.has_more ? r.next_cursor : undefined
   } while (cursore)
 
-  return docs
+  return { docs, parziali, interrotto: false }
 }

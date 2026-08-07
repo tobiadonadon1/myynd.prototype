@@ -65,14 +65,23 @@ async function estrai(percorso: string, ext: string): Promise<string> {
   return buf.toString('utf8').trim()
 }
 
-export type Esito = { docs: Documento[]; saltatiProgetti: string[]; falliti: number }
+export type Esito = {
+  docs: Documento[]
+  saltatiProgetti: string[]
+  falliti: number
+  illeggibili: string[]
+  troncato: boolean
+}
 
-async function cammina(radice: string, fuori: Esito, profondita = 0) {
-  if (fuori.docs.length >= MAX_TOTALE || profondita > 6) return
+async function cammina(radice: string, fuori: Esito, tetto: number, profondita = 0) {
+  if (fuori.docs.length >= tetto || profondita > 6) return
   let voci
   try {
     voci = await readdir(radice, { withFileTypes: true })
-  } catch {
+  } catch (e) {
+    // permessi negati (tipico con la privacy di macOS): va detto, non ingoiato
+    const code = (e as { code?: string }).code
+    if (code === 'EACCES' || code === 'EPERM') fuori.illeggibili.push(radice)
     return
   }
 
@@ -83,12 +92,12 @@ async function cammina(radice: string, fuori: Esito, profondita = 0) {
   }
 
   for (const v of voci) {
-    if (fuori.docs.length >= MAX_TOTALE) return
+    if (fuori.docs.length >= tetto) { fuori.troncato = true; return }
     if (v.name.startsWith('.') || SALTA.has(v.name)) continue
     const p = join(radice, v.name)
 
     if (v.isDirectory()) {
-      await cammina(p, fuori, profondita + 1)
+      await cammina(p, fuori, tetto, profondita + 1)
       continue
     }
     if (!v.isFile()) continue
@@ -99,7 +108,10 @@ async function cammina(radice: string, fuori: Esito, profondita = 0) {
     try {
       const s = await stat(p)
       if (s.size > MAX_FILE || s.size === 0) continue
-      const corpo = await estrai(p, ext)
+      const corpo = await Promise.race([
+        estrai(p, ext),
+        new Promise<string>((_, no) => setTimeout(() => no(new Error('troppo lento')), 25_000))
+      ])
       if (corpo.length < 20) continue     // un file vuoto non è un documento
       fuori.docs.push({
         id: `desktop:${p}`,
@@ -136,10 +148,12 @@ export async function sincronizza(
   c: ConfigDesktop,
   avanzamento?: (fatti: number) => void
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0 }
+  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false }
+  // il tetto è per cartella: una cartella enorme non deve affamare le altre
+  const perCartella = Math.max(200, Math.floor(MAX_TOTALE / Math.max(1, c.cartelle.length)))
   for (const cartella of c.cartelle) {
     const prima = esito.docs.length
-    await cammina(resolve(cartella), esito)
+    await cammina(resolve(cartella), esito, prima + perCartella)
     if (avanzamento) avanzamento(esito.docs.length - prima)
   }
   return esito

@@ -60,7 +60,11 @@ export function scrivi(c: Config) {
 }
 
 export function aggiorna(patch: Partial<Config>): Config {
-  const c = { ...leggi(), ...patch }
+  // i campi undefined non sono "cancella": sono "non toccare"
+  const puliti = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined)
+  ) as Partial<Config>
+  const c = { ...leggi(), ...puliti }
   scrivi(c)
   return c
 }

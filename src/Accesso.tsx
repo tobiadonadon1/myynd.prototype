@@ -55,14 +55,15 @@ export function Accesso({ registrato, entrato }: {
       <canvas ref={cv} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(52% 44% at 50% 50%, rgba(16,14,12,.86) 0%, rgba(16,14,12,.66) 46%, rgba(16,14,12,0) 100%)'
+        background: 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)'
       }} />
 
       <div style={{
         position: 'relative', height: '100%', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', padding: 24
+        alignItems: 'center', justifyContent: 'center', padding: 24,
+        pointerEvents: 'none'   // le particelle devono sentire il cursore
       }}>
-        <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)' }}>
+        <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto' }}>
           <div style={{ marginBottom: 44 }}>
             <Logo dim={54} testo={30} tinta={CHIARO} />
           </div>

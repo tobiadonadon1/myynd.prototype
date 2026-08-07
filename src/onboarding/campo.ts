@@ -41,8 +41,10 @@ export class Campo {
   private seme = 1
 
   private rnd() {
-    this.seme = (this.seme * 1103515245 + 12345) & 0x7fffffff
-    return this.seme / 0x7fffffff
+    // Math.imul tiene la moltiplicazione a 32 bit: senza, si supera 2^53,
+    // i bit bassi si perdono e la grana si ripete a occhio
+    this.seme = (Math.imul(this.seme, 1664525) + 1013904223) >>> 0
+    return this.seme / 4294967296
   }
 
   monta(cv: HTMLCanvasElement) {

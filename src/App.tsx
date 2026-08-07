@@ -26,11 +26,14 @@ export default function App() {
   const [errore, setErrore] = useState('')
   const [onboarding, setOnboarding] = useState(false)
   const [connessioni, setConnessioni] = useState(false)
-  const [chiave, setChiave] = useState(0)
 
   // se la sessione cade, si torna all'accesso senza schianti
   useEffect(() => {
-    alloScadere(() => { setStato(null); setAccesso(a => (a ? { ...a, entrato: false } : a)) })
+    alloScadere(() => {
+      setStato(null)
+      setConnessioni(false)
+      setAccesso(a => (a ? { ...a, entrato: false } : a))
+    })
   }, [])
 
   useEffect(() => {
@@ -44,16 +47,23 @@ export default function App() {
   }, [])
 
   const dentro = async (conto: { email: string }) => {
-    setAccesso({ registrato: true, entrato: true, account: conto })
-    const s = await api.stato()
-    setStato(s)
-    setOnboarding(!s.config.onboarding)
+    try {
+      const s = await api.stato()
+      setStato(s)
+      setOnboarding(!s.config.onboarding)
+      setAccesso({ registrato: true, entrato: true, account: conto })
+    } catch (e) {
+      // se il primo caricamento fallisce non lascio l'utente sullo splash
+      setErrore(e instanceof Error ? e.message : String(e))
+    }
   }
 
   const fuori = async () => {
-    await api.esci()
+    try { await api.esci() } catch { /* il token è comunque già stato buttato */ }
     setStato(null)
     setOnboarding(false)
+    setConnessioni(false)
+    setErrore('')
     setAccesso({ registrato: true, entrato: false, account: accesso?.account ?? null })
   }
 
@@ -77,11 +87,11 @@ export default function App() {
 
   return (
     <>
-      <Casa key={chiave} stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori} />
+      <Casa stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori} />
       {connessioni && (
         <Connessioni
           chiudi={() => setConnessioni(false)}
-          cambiato={() => api.stato().then(s => { setStato(s); setChiave(k => k + 1) })}
+          cambiato={() => { api.stato().then(setStato).catch(() => {}) }}
         />
       )}
     </>

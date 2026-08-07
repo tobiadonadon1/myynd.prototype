@@ -21,8 +21,10 @@ const MAX_NODI = 2600
 function prng(seed: number) {
   let x = seed
   return () => {
-    x = (x * 1103515245 + 12345) & 0x7fffffff
-    return x / 0x7fffffff
+    // Math.imul tiene la moltiplicazione a 32 bit: senza, si supera 2^53,
+    // i bit bassi si perdono e la sequenza si ripete dopo poche migliaia
+    x = (Math.imul(x, 1664525) + 1013904223) >>> 0
+    return x / 4294967296
   }
 }
 

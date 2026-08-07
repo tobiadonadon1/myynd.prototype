@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { costruisci } from './brain'
-import { api, type Connettore, type Stato } from './api'
+import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 
@@ -14,6 +14,9 @@ const COLORE_FONTE: Record<string, string> = {
 /** Tutto lo stato dell'app, alimentato dal server locale. */
 export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   const [stato, setStato] = useState<Stato>(iniziale)
+  // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
+  // rimontare, così schermata, chat aperta e bozza restano dove sono
+  useEffect(() => { setStato(iniziale) }, [iniziale])
   const [screen, setScreen] = useState<Screen>('myynd')
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
@@ -86,9 +89,15 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     caricaChat().catch(() => {})
   }, [caricaFeed, caricaMente, caricaChat])
 
+  // un contatore di generazione: la risposta di una richiesta vecchia non
+  // deve sovrascrivere quella nuova, né cancellare la bolla ottimistica
+  const gen = useRef(0)
   useEffect(() => {
     if (!thread) { setMessaggi([]); return }
-    api.messaggi(thread).then(setMessaggi).catch(() => setMessaggi([]))
+    const mio = ++gen.current
+    api.messaggi(thread)
+      .then(m => { if (gen.current === mio) setMessaggi(m) })
+      .catch(() => { if (gen.current === mio) setMessaggi([]) })
   }, [thread])
 
   useEffect(() => {
@@ -100,9 +109,15 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   }, [messaggi.length, screen, pensando])
 
   // aperta la ricerca senza scrivere niente, mostro gli ultimi documenti letti
+  const genCerca = useRef(0)
   useEffect(() => {
     if (!search) { setRisultati([]); return }
-    const t = setTimeout(() => { api.cerca(query).then(setRisultati).catch(() => setRisultati([])) }, query.trim() ? 180 : 0)
+    const mio = ++genCerca.current
+    const t = setTimeout(() => {
+      api.cerca(query)
+        .then(r => { if (genCerca.current === mio) setRisultati(r) })
+        .catch(() => { if (genCerca.current === mio) setRisultati([]) })
+    }, query.trim() ? 180 : 0)
     return () => clearTimeout(t)
   }, [query, search])
 
@@ -121,27 +136,32 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
 
   const chiedi = async (testo: string, chatId?: string) => {
     const id = chatId ?? thread ?? `th${Date.now()}`
+    const mio = ++gen.current
     setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
     setThread(id)
+    const bozza = draftMsg
     setDraftMsg(''); setNodeMsg('')
     setMessaggi(m => [...m, { id: `tmp${Date.now()}`, role: 'u', text: testo }])
     setPensando(true)
     try {
       const r = await api.chiedi(id, testo)
-      setMessaggi(r.messaggi)
+      if (gen.current === mio) setMessaggi(r.messaggi)
       await caricaChat()
     } catch (e) {
       mostraToast(e instanceof Error ? e.message : 'Non sono riuscito a rispondere.')
-      setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
+      if (gen.current === mio) {
+        setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
+        setDraftMsg(d => d || bozza)   // il testo scritto non si perde
+      }
     }
-    setPensando(false)
+    if (gen.current === mio) setPensando(false)
   }
 
   const sincronizza = async (fonte?: string) => {
     setSincronizzando('preparo')
     try {
       await api.sincronizza(m => {
-        if (m.fase !== 'fine') setSincronizzando(`${m.fase} · ${m.stato}`)
+        if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m))
       }, fonte)
       await Promise.all([ricaricaStato(), caricaMente(), caricaFeed()])
       mostraToast('Letto tutto quello che è cambiato.')
@@ -178,8 +198,15 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     setAperti(a => a.filter(x => x.id !== v.id))
     setFatte(f => [v, ...f])
     setHeroLong(false)
-    try { await api.segnaFeed(v.id, 'fatto') } catch { /* lo stato locale basta per ora */ }
-    mostraToast('Segnata come fatta.', true)
+    try {
+      await api.segnaFeed(v.id, 'fatto')
+      mostraToast('Segnata come fatta.', true)
+    } catch {
+      // rimetto le cose come stavano invece di mentire
+      setFatte(f => f.filter(x => x.id !== v.id))
+      setAperti(a => [v, ...a])
+      mostraToast('Non sono riuscito a segnarla.')
+    }
   }
 
   return {
@@ -273,8 +300,14 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
         setFatte(f => f.filter(x => x.id !== d.id))
         setAperti(a => [d, ...a])
         setOpenDone(null)
-        try { await api.segnaFeed(d.id, 'aperto') } catch { /* rimane comunque in cima */ }
-        mostraToast('Rimessa in cima al feed.')
+        try {
+          await api.segnaFeed(d.id, 'aperto')
+          mostraToast('Rimessa in cima al feed.')
+        } catch {
+          setAperti(a => a.filter(x => x.id !== d.id))
+          setFatte(f => [d, ...f])
+          mostraToast('Non sono riuscito a rimetterla.')
+        }
       },
       onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(`${d.titolo} — dimmi di più`) }
     })),
@@ -292,7 +325,11 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
       if (!ultima) return
       setFatte(f => f.slice(1))
       setAperti(a => [ultima, ...a])
-      api.segnaFeed(ultima.id, 'aperto').catch(() => {})
+      api.segnaFeed(ultima.id, 'aperto').catch(() => {
+        setAperti(a => a.filter(x => x.id !== ultima.id))
+        setFatte(f => [ultima, ...f])
+        mostraToast('Non sono riuscito ad annullare.')
+      })
     },
 
     // — chat —

@@ -24,6 +24,7 @@ export function useMappa(
   const vista = useRef<Vista>({ yaw: 0.5, pitch: -0.18, zoom: 1, drag: null, t: 0 })
   const proj = useRef<Proiezione[] | null>(null)
   const chiave = useRef<string>('')
+  const ultimo = useRef<HTMLCanvasElement | null>(null)
   const stato = useRef({ mapFull, filtro, sel, onPick, ball, gruppi })
   stato.current = { mapFull, filtro, sel, onPick, ball, gruppi }
 
@@ -79,6 +80,9 @@ export function useMappa(
       v.t += 1
       const cv = stato.current.mapFull ? cvB.current : cvA.current
       if (!cv) return
+      // rientrando nella Mappa il canvas è un altro, e nasce vuoto: se non
+      // azzero la cache il disegno viene saltato e resta nero
+      if (cv !== ultimo.current) { ultimo.current = cv; chiave.current = '' }
       wire(cv)
       const w = cv.clientWidth, h = cv.clientHeight
       if (!w || !h) return

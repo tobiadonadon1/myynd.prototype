@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './campo'
-import { api, type Stato } from '../api'
+import { api, rigaSincronizzazione, type Stato } from '../api'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
 import { Form, FormClaude } from '../components/forms'
@@ -62,7 +62,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
       {/* il velo: il testo deve restare leggibile qualunque cosa passi dietro */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(58% 46% at 50% 50%, rgba(16,14,12,.82) 0%, rgba(16,14,12,.62) 45%, rgba(16,14,12,0) 100%)'
+        background: 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)'
       }} />
 
       <div style={{
@@ -84,7 +84,10 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
           {passo === 'nome' && (
             <Nome
               nome={nome} setNome={setNome} ruolo={ruolo} setRuolo={setRuolo}
-              avanti={async () => { await api.profilo({ nome, ruolo }); setPasso('connetti') }}
+              avanti={async () => {
+                try { await api.profilo({ nome, ruolo }) } catch { /* riprovabile dalle preferenze */ }
+                setPasso('connetti')
+              }}
             />
           )}
           {passo === 'connetti' && (
@@ -97,7 +100,10 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
             <Genera s={s} avanti={() => setPasso('pronta')} />
           )}
           {passo === 'pronta' && (
-            <Pronta totale={s.conteggi.totale} entra={async () => { await api.profilo({ onboarding: true }); fatto() }} />
+            <Pronta totale={s.conteggi.totale} entra={async () => {
+              try { await api.profilo({ onboarding: true }) } catch { /* si riapre al prossimo avvio */ }
+              fatto()
+            }} />
           )}
         </div>
       </div>
@@ -159,7 +165,7 @@ function Risveglio({ avanti }: { avanti: () => void }) {
     <div style={{ animation: 'fadein .8s ease' }}>
       <div style={{ marginBottom: 30 }}><Logo dim={46} testo={26} tinta={CHIARO} /></div>
       <Titolo>Questa mente è vuota.</Titolo>
-      <Sotto>Riempila con quello che leggi e scrivi ogni giorno.</Sotto>
+      <Sotto>Riempila con quello che leggi e scrivi.</Sotto>
       <Primario onClick={avanti}>Cominciamo</Primario>
     </div>
   )
@@ -182,7 +188,7 @@ function PassoClaude({ collegato, ricarica, avanti }: {
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
       <Titolo>Collega Claude.</Titolo>
-      <Sotto>Serve a ragionare su quello che legge. Senza, resta solo un archivio.</Sotto>
+      <Sotto>Senza, resta solo un archivio.</Sotto>
       {collegato ? (
         <>
           <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
@@ -213,7 +219,7 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
       <Titolo>Come ti chiami?</Titolo>
-      <Sotto>Per scrivere come scriveresti tu.</Sotto>
+      <Sotto>Per scrivere come scrivi tu.</Sotto>
       <div style={{ display: 'flex', gap: 14, marginTop: 30 }}>
         <div style={{ flex: 1 }}>
           <div style={ETICHETTA}>Nome</div>
@@ -239,11 +245,7 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
   return (
     <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
       <Titolo>Cosa le fai leggere?</Titolo>
-      <Sotto>
-        Le credenziali restano in
-        <code style={{ color: CHIARO, background: 'rgba(244,239,232,.1)', padding: '1px 6px', borderRadius: 5, margin: '0 4px' }}>~/.myynd</code>
-        su questo computer.
-      </Sotto>
+<Sotto>Restano su questo computer.</Sotto>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
         {pronti.map(c => (
@@ -297,7 +299,11 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
         </div>
         {c.collegato ? (
           <Hov as="button"
-            onClick={async (e: React.MouseEvent) => { e.stopPropagation(); await api.scollega(c.id); await ricarica() }}
+            onClick={async (e: React.MouseEvent) => {
+              e.stopPropagation()
+              try { await api.scollega(c.id) } catch { /* il vero stato lo dice ricarica */ }
+              await ricarica()
+            }}
             style={{ border: 'none', background: 'none', color: 'rgba(244,239,232,.45)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
             hover={{ color: '#E08A6A' }}>Scollega</Hov>
         ) : (
@@ -330,7 +336,7 @@ function Leggi({ ricarica, avanti }: { ricarica: () => Promise<Stato>; avanti: (
         setTotale(Number(m.totale) || 0)
         setFinito(true)
       } else if (m.fase !== 'errore') {
-        setRighe(r => [...r.slice(-4), `${m.fase} · ${m.stato}${m.documenti ? ` (${m.documenti})` : ''}`])
+        setRighe(r => [...r.slice(-4), rigaSincronizzazione(m)])
       }
     }).then(ricarica).catch(e => setErr(e instanceof Error ? e.message : String(e)))
   }, [ricarica])
@@ -377,11 +383,11 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
       <Titolo>Prima lettura.</Titolo>
       <Sotto>
         {senzaClaude
-          ? 'Serve Claude. Puoi saltarla: la mente resta consultabile.'
+          ? 'Serve Claude. Puoi saltarla.'
           : quante === null
-            ? 'Guardo cosa c’è e metto da parte quello che sembra richiedere te.'
+            ? 'Metto da parte quello che sembra richiedere te.'
             : quante === 0
-              ? 'Non ho trovato niente da segnalare.'
+              ? 'Niente da segnalare.'
               : `${quante} cos${quante === 1 ? 'a' : 'e'} messe da parte.`}
       </Sotto>
       <Errore testo={err} />
@@ -409,7 +415,7 @@ function Pronta({ totale, entra }: { totale: number; entra: () => void }) {
       <Sotto>
         {totale
           ? `${totale} document${totale === 1 ? 'o' : 'i'} dentro. Chiedile qualcosa.`
-          : 'Ancora vuota. Collega una fonte quando vuoi.'}
+          : 'Ancora vuota.'}
       </Sotto>
       <Primario onClick={entra}>Entra</Primario>
     </div>

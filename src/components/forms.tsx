@@ -77,8 +77,8 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
     <div>
       <div style={nota(tema)}>
         {senzaNota
-          ? 'La chiave si prende da console.anthropic.com.'
-          : 'È quello che fa ragionare Myynd sul tuo materiale: senza, resta un archivio consultabile. La chiave si prende da console.anthropic.com.'}
+          ? 'Da console.anthropic.com.'
+          : 'La chiave da console.anthropic.com. Senza, Myynd non ragiona.'}
       </div>
       <div style={etichetta(tema)}>Chiave API</div>
       <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
@@ -96,13 +96,17 @@ export function FormPosta({ tema, ok }: Props) {
   const [password, setPassword] = useState('')
   const [giorni, setGiorni] = useState(30)
   const [err, setErr] = useState('')
+  const [avviso, setAvviso] = useState('')
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setAvviso('')
     try {
-      await api.collegaPosta({ host, porta: 993, utente, password, giorni })
+      const r = await api.collegaPosta({ host, porta: 993, utente, password, giorni })
       setPassword('')
+      if (r.certificatoAdattato) {
+        setAvviso(`Il certificato è intestato a ${r.certificatoAdattato}: normale su questo provider.`)
+      }
       ok()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
@@ -110,10 +114,7 @@ export function FormPosta({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        La password della casella la scrivi qui tu: resta su questa macchina e
-        viene usata solo per parlare con il tuo server IMAP.
-      </div>
+      <div style={nota(tema)}>La password resta su questa macchina.</div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 2 }}>
           <div style={etichetta(tema)}>Server IMAP</div>
@@ -132,6 +133,7 @@ export function FormPosta({ tema, ok }: Props) {
         autoComplete="new-password" style={campo(tema)}
         onKeyDown={e => { if (e.key === 'Enter' && utente && password) collega() }} />
       <Errore testo={err} />
+      {avviso && <div style={{ ...nota(tema), marginTop: 12 }}>{avviso}</div>}
       <Conferma onClick={collega} occupato={occupato} tema={tema}>Collega la posta</Conferma>
     </div>
   )
@@ -159,11 +161,7 @@ export function FormDesktop({ tema, ok }: Props) {
   const scuro = tema === 'scuro'
   return (
     <div>
-      <div style={nota(tema)}>
-        Legge i documenti veri — PDF, Word, testo, Markdown — solo dentro le
-        cartelle che scegli, e non modifica niente. I progetti di codice li
-        salta: dentro non c'è materiale tuo.
-      </div>
+      <div style={nota(tema)}>PDF, Word, testo. Solo lettura, solo dove dici tu.</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
         {suggeriti.map(c => {
           const on = cartelle.includes(c)
@@ -200,9 +198,8 @@ export function FormNotion({ tema, ok }: Props) {
   return (
     <div>
       <div style={nota(tema)}>
-        Crea un'integrazione interna su notion.so/my-integrations, copia il
-        token, poi condividi con l'integrazione le pagine che vuoi far leggere —
-        senza quel passaggio l'API non le vede.
+        Token da notion.so/my-integrations. Poi condividi con l'integrazione
+        le pagine da leggere, o non le vede.
       </div>
       <div style={etichetta(tema)}>Token di integrazione</div>
       <input type="password" value={token} onChange={e => setToken(e.target.value)}

@@ -2,7 +2,7 @@
 // o scollegare una fonte. Non fa ricominciare l'onboarding.
 
 import { useEffect, useState } from 'react'
-import { api, type Stato } from '../api'
+import { api, rigaSincronizzazione, type Stato } from '../api'
 import { Form } from './forms'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
@@ -22,7 +22,7 @@ export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato
   const leggi = async (fonte: string) => {
     setSincronizzando(fonte)
     try {
-      await api.sincronizza(m => { if (m.fase !== 'fine') setSincronizzando(`${m.fase} · ${m.stato}`) }, fonte)
+      await api.sincronizza(m => { if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m)) }, fonte)
       await ricarica()
       cambiato()
     } catch { /* l'errore si vede dal conteggio che non sale */ }
