@@ -5,15 +5,18 @@
 // e in tinta unita.
 
 import { useId } from 'react'
-import { ALTEZZA, TRACCIATO } from './marchio-forma'
+import { PREDEFINITA, type Forma } from './marchio-forma'
 
-export function Marchio({ dim = 40, animato = true, colore }: {
+export function Marchio({ dim = 40, animato = true, colore, forma = PREDEFINITA }: {
   dim?: number
   animato?: boolean
   /** Tinta unita al posto del gradiente. */
   colore?: string
+  /** Quale sagoma: per il confronto fra le due. */
+  forma?: Forma
 }) {
   const uid = useId().replace(/:/g, '')
+  const { tracciato: TRACCIATO, altezza: ALTEZZA } = forma
   const alt = (dim * ALTEZZA) / 100
 
   return (
@@ -43,16 +46,17 @@ export function Marchio({ dim = 40, animato = true, colore }: {
 }
 
 /** Marchio e parola, come nell'accesso e nella colonna. */
-export function Logo({ dim = 34, animato = true, colore, testo = 22, tinta = 'currentColor' }: {
+export function Logo({ dim = 34, animato = true, colore, testo = 22, tinta = 'currentColor', forma }: {
   dim?: number
   animato?: boolean
   colore?: string
   testo?: number
   tinta?: string
+  forma?: Forma
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: dim * 0.26 }}>
-      <Marchio dim={dim} animato={animato} colore={colore} />
+      <Marchio dim={dim} animato={animato} colore={colore} forma={forma} />
       <span style={{ fontSize: testo, fontWeight: 300, letterSpacing: '.02em', lineHeight: 1, color: tinta }}>
         myynd
       </span>

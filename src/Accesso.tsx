@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
 import { api } from './api'
 import { Logo } from './components/Marchio'
+import { CERVELLO, CORALLO } from './components/marchio-forma'
 
 const CHIARO = '#F4EFE8'
 
@@ -64,8 +65,10 @@ export function Accesso({ registrato, entrato }: {
         pointerEvents: 'none'   // le particelle devono sentire il cursore
       }}>
         <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto' }}>
-          <div style={{ marginBottom: 44 }}>
-            <Logo dim={38} testo={26} tinta={CHIARO} />
+          {/* le due sagome a confronto: si sceglie e poi resta quella */}
+          <div style={{ marginBottom: 40, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <Logo dim={38} testo={26} tinta={CHIARO} forma={CERVELLO} />
+            <Logo dim={38} testo={26} tinta={CHIARO} forma={CORALLO} />
           </div>
 
           <div style={ETICHETTA}>Email</div>
