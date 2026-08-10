@@ -163,7 +163,7 @@ function Passi({ corrente }: { corrente: Passo }) {
 function Risveglio({ avanti }: { avanti: () => void }) {
   return (
     <div style={{ animation: 'fadein .8s ease' }}>
-      <div style={{ marginBottom: 30 }}><Logo dim={46} testo={26} tinta={CHIARO} /></div>
+      <div style={{ marginBottom: 30 }}><Logo dim={34} testo={23} tinta={CHIARO} /></div>
       <Titolo>Questa mente è vuota.</Titolo>
       <Sotto>Riempila con quello che leggi e scrivi.</Sotto>
       <Primario onClick={avanti}>Cominciamo</Primario>

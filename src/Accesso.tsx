@@ -65,7 +65,7 @@ export function Accesso({ registrato, entrato }: {
       }}>
         <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto' }}>
           <div style={{ marginBottom: 44 }}>
-            <Logo dim={54} testo={30} tinta={CHIARO} />
+            <Logo dim={38} testo={26} tinta={CHIARO} />
           </div>
 
           <div style={ETICHETTA}>Email</div>

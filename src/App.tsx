@@ -120,7 +120,7 @@ function Casa({ stato, apriConnessioni, esci }: {
         border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 24px' }}>
-          <div style={{ flex: 1 }}><Logo dim={26} testo={21} animato={false} /></div>
+          <div style={{ flex: 1 }}><Logo dim={20} testo={20} animato={false} /></div>
           <Hov as="button" title="Cerca" onClick={v.openSearch}
             style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
             hover={{ color: '#C4623B' }}>
@@ -130,7 +130,7 @@ function Casa({ stato, apriConnessioni, esci }: {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <a href="#" onClick={v.goMyynd} style={v.navMyynd}>
-            <Marchio dim={17} animato={false} colore="currentColor" />
+            <Marchio dim={15} animato={false} colore="currentColor" />
             <span style={{ flex: 1 }}>Myynd</span>
             <span style={v.badge}>{v.apertiCount}</span>
           </a>

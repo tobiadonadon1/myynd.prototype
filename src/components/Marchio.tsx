@@ -1,8 +1,8 @@
-// Il marchio: il corallo-albero del riferimento, nei nostri colori.
+// Il marchio: il cervello-albero, nei nostri colori.
 //
-// È un tracciato solo, quindi resta nitido a ogni misura. Dove c'è spazio si
-// muove: una luce calda risale piano lungo la chioma e il tutto oscilla di
-// un grado. Nelle icone piccole sta fermo e in tinta unita.
+// Vettoriale, quindi nitido a ogni misura. Dove c'è spazio entra con una
+// piccola crescita e poi oscilla di un grado; nelle icone piccole sta fermo
+// e in tinta unita.
 
 import { useId } from 'react'
 import { ALTEZZA, TRACCIATO } from './marchio-forma'
@@ -25,20 +25,6 @@ export function Marchio({ dim = 40, animato = true, colore }: {
           <stop offset="0.78" stopColor="#D8A46E" />
           <stop offset="1" stopColor="#8FA593" />
         </linearGradient>
-        {animato && (
-          // la luce che risale: è quello che lo tiene vivo
-          <linearGradient id={`${uid}l`} x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0" stopColor="#FFE9C8" stopOpacity="0">
-              <animate attributeName="offset" values="-0.35;1" dur="5s" repeatCount="indefinite" />
-            </stop>
-            <stop offset="0.12" stopColor="#FFE9C8" stopOpacity="0.5">
-              <animate attributeName="offset" values="-0.23;1.12" dur="5s" repeatCount="indefinite" />
-            </stop>
-            <stop offset="0.24" stopColor="#FFE9C8" stopOpacity="0">
-              <animate attributeName="offset" values="-0.11;1.24" dur="5s" repeatCount="indefinite" />
-            </stop>
-          </linearGradient>
-        )}
       </defs>
 
       <g style={animato ? {
@@ -50,7 +36,6 @@ export function Marchio({ dim = 40, animato = true, colore }: {
           transformOrigin: `50px ${ALTEZZA}px`
         } : undefined}>
           <path d={TRACCIATO} fill={colore ?? `url(#${uid}g)`} />
-          {animato && <path d={TRACCIATO} fill={`url(#${uid}l)`} style={{ mixBlendMode: 'screen' }} />}
         </g>
       </g>
     </svg>
