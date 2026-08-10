@@ -3,7 +3,7 @@ import { Sfondo } from './Sfondo'
 import { Hov } from './ui'
 import {
   IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconMyynd, IconPiu, IconSpina, IconSuPiccola, IconEsci
+  IconMappa, IconPiu, IconSpina, IconSuPiccola, IconEsci
 } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
 import { Automazioni } from './screens/Automazioni'
@@ -15,7 +15,7 @@ import { Preferenze } from './screens/Preferenze'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
-import { Logo } from './components/Marchio'
+import { Logo, Marchio } from './components/Marchio'
 import { useVals } from './vals'
 import { alloScadere, api, type Accesso as TipoAccesso, type Stato } from './api'
 import { Accesso } from './Accesso'
@@ -130,7 +130,7 @@ function Casa({ stato, apriConnessioni, esci }: {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <a href="#" onClick={v.goMyynd} style={v.navMyynd}>
-            <IconMyynd style={{ flex: 'none' }} />
+            <Marchio dim={17} animato={false} colore="currentColor" />
             <span style={{ flex: 1 }}>Myynd</span>
             <span style={v.badge}>{v.apertiCount}</span>
           </a>

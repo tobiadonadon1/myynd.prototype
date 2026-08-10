@@ -61,13 +61,6 @@ export const IconEspandi = ({ size = 14 }: P) => (
   </svg>
 )
 
-export const IconMyynd = ({ size = 18, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={style}>
-    <path d="M11.35 4.1c-1.2-.9-2.9-.8-4 .3-.7.7-1 1.6-.9 2.5-1.3.4-2.2 1.6-2 3 .06.5.26 1 .56 1.4-.9.7-1.3 1.9-1 3 .3 1 1.1 1.7 2.1 2 .1 1.4 1.3 2.6 2.8 2.6.9 0 1.7-.4 2.44-1.1V4.1Z" />
-    <path d="M12.65 4.1c1.2-.9 2.9-.8 4 .3.7.7 1 1.6.9 2.5 1.3.4 2.2 1.6 2 3-.06.5-.26 1-.56 1.4.9.7 1.3 1.9 1 3-.3 1-1.1 1.7-2.1 2-.1 1.4-1.3 2.6-2.8 2.6-.9 0-1.7-.4-2.44-1.1V4.1Z" />
-  </svg>
-)
-
 export const IconChat = ({ size = 18, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" style={style}>
     <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5v6a3.5 3.5 0 0 1-3.5 3.5H10l-4.5 4v-4.4A3.5 3.5 0 0 1 4 12.5Z" />
