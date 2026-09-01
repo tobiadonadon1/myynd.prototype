@@ -100,6 +100,20 @@ test('quello che arriva dal server ha una traduzione', () => {
   for (const k of ['Da decidere', 'Da leggere', 'Scadenza', 'Già gestito']) {
     if (!definite.has(k)) manca.push(k)
   }
+  /*
+   * Le cinque domande del ritratto.
+   *
+   * Arrivano dal server dentro `descrizione` e la schermata le disegna con
+   * `t(b.descrizione)` — una chiave *calcolata*, che la prova sulle chiavi
+   * scritte a mano non può vedere. Sono le cinque righe più visibili della
+   * schermata «Come lavori»: se una manca, resta italiana sotto a un'interfaccia
+   * inglese e nessuna prova se ne accorge.
+   */
+  const memoria = readFileSync(join(RADICE, '..', 'server', 'memoria.ts'), 'utf8')
+  for (const m of memoria.matchAll(/descrizione: '((?:[^'\\]|\\.)*)'/g)) {
+    const k = vero(m[1])
+    if (!definite.has(k)) manca.push(k)
+  }
   assert.deepEqual(manca, [], `senza traduzione:\n  ${manca.join('\n  ')}`)
 })
 
