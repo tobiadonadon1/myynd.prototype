@@ -101,6 +101,11 @@ export function lingua(): string {
 
 const EN: Record<string, string> = {
 // — l'accesso con più persone: si sceglie fra entrare e crearsi un conto —
+  // «Entra» esiste già e vuol dire un'altra cosa: sull'onboarding è entrare
+  // *nell'app*, e in inglese «Enter» va bene lì. Su un bottone d'accesso no —
+  // in inglese quello si chiama «Sign in», e usare la stessa parola per le due
+  // cose faceva sembrare tradotto a macchina proprio il primo schermo.
+  'Accedi': 'Sign in',
   'Crea un account': 'Create an account',
   'La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.':
     'Your mail, your files and your automations stay yours: every account has its own memory, separate from anyone else\u2019s.',

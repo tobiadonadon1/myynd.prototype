@@ -101,7 +101,7 @@ export function Accesso({ accesso, entrato }: {
             questa pagina può avere un conto o non averlo — e lo sa lui.
           */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
-            {([['entra', 'Entra'], ['crea', 'Crea un account']] as const).map(([id, testo]) => (
+            {([['entra', 'Accedi'], ['crea', 'Crea un account']] as const).map(([id, testo]) => (
               <button key={id} type="button" onClick={() => { setModo(id); setErr('') }}
                 style={{
                   padding: '7px 15px', borderRadius: 99, border: 'none', cursor: 'pointer',
@@ -138,7 +138,7 @@ export function Accesso({ accesso, entrato }: {
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {occupato ? '…' : registrato ? t('Entra') : t('Crea l\'accesso')}
+            {occupato ? '…' : registrato ? t('Accedi') : t('Crea l\'accesso')}
           </button>
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
