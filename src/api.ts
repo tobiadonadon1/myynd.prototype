@@ -794,6 +794,31 @@ export const api = {
     json<{ ok: true; automazioni: Automazione[] }>('/api/automazioni/diSerie',
       { method: 'POST', body: JSON.stringify({ attivo }) }),
 
+  /**
+   * Scaricare il proprio Myynd. Passa da `fetch` e non da un link.
+   *
+   * Un `<a download>` non porta con sé l'intestazione con il token, quindi
+   * scaricherebbe la pagina d'accesso invece del file — con l'estensione
+   * giusta, e un file rotto che non sembra rotto.
+   */
+  async scaricaTrasloco(): Promise<{ nome: string; dati: Blob }> {
+    const r = await fetch('/api/trasloco', { headers: { authorization: `Bearer ${sessione.token()}` } })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).errore ?? 'Non ce l’ha fatta.')
+    const oggi = new Date().toISOString().slice(0, 10)
+    return { nome: `myynd-${oggi}.myynd`, dati: await r.blob() }
+  },
+
+  async caricaTrasloco(file: File): Promise<{ documenti: number; automazioni: number }> {
+    const r = await fetch('/api/trasloco', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${sessione.token()}`, 'content-type': 'application/octet-stream' },
+      body: file
+    })
+    const corpo = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(corpo.errore ?? 'Non ce l’ha fatta.')
+    return corpo
+  },
+
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
 
   /** Va a vedere adesso se il repository ne ha di nuove. */

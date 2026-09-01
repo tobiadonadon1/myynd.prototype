@@ -56,6 +56,117 @@ function CampoFuoco({ v }: { v: Vals }) {
  * Vuoto è una risposta buona e va detto: chi non sa ancora cosa gli interessa
  * non deve sentirsi davanti a un campo obbligatorio.
  */
+/**
+ * Portarsi il proprio Myynd da un'altra parte.
+ *
+ * Esiste perché la cosa più ovvia — «ce l'ho qui, lo rivoglio là» — non aveva
+ * nessuna strada che non passasse dalla riga di comando di chi ospita: una
+ * cosa che si può chiedere a chi sviluppa, non a chi usa. Un file che si
+ * scarica di qua e si carica di là non chiede di sapere niente.
+ *
+ * La riga sulle credenziali sta in alto e non in fondo. Quel file apre la
+ * casella di posta di chi l'ha fatto, e chi lo scarica deve saperlo *prima* di
+ * lasciarlo nei Download per sei mesi.
+ */
+function Trasloco() {
+  const [faccio, setFaccio] = useState<'' | 'scarico' | 'carico'>('')
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+  const [conferma, setConferma] = useState(false)
+
+  const scarica = async () => {
+    setFaccio('scarico'); setDetto(''); setGuaio('')
+    try {
+      const { nome, dati } = await api.scaricaTrasloco()
+      const url = URL.createObjectURL(dati)
+      const a = document.createElement('a')
+      a.href = url; a.download = nome; a.click()
+      URL.revokeObjectURL(url)
+      setDetto(frasi.traslocoPronto(nome))
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    setFaccio('')
+  }
+
+  const carica = async (file: File) => {
+    setFaccio('carico'); setDetto(''); setGuaio(''); setConferma(false)
+    try {
+      const r = await api.caricaTrasloco(file)
+      setDetto(frasi.traslocoArrivato(r.documenti, r.automazioni))
+      // quello che c'è a schermo adesso è di prima: si ricarica tutto
+      setTimeout(() => location.reload(), 1200)
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    setFaccio('')
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Portalo su un’altra macchina')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+        {t('Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.')}
+      </div>
+      <div style={{
+        fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
+        border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
+        maxWidth: 540, textWrap: 'pretty'
+      }}>
+        {t('Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.')}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={scarica} disabled={!!faccio} style={{
+          padding: '11px 20px', borderRadius: 99, border: 'none',
+          background: faccio ? 'rgba(34,39,31,.18)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
+          color: faccio ? 'rgba(34,39,31,.5)' : '#FFF7F0',
+          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
+          cursor: faccio ? 'default' : 'pointer'
+        }}>{faccio === 'scarico' ? t('Preparo…') : t('Scaricalo')}</button>
+
+        <label style={{
+          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer',
+          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+          color: 'rgba(34,39,31,.78)', fontSize: '13px'
+        }}>
+          {faccio === 'carico' ? t('Carico…') : t('Caricane uno')}
+          <input type="file" accept=".myynd,application/gzip" style={{ display: 'none' }}
+            onChange={e => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) { setConferma(true); pronto.current = f }
+            }} />
+        </label>
+      </div>
+
+      {/* Sostituisce, non fonde: va chiesto una volta, e va detto cosa si perde. */}
+      {conferma && (
+        <div style={{
+          marginTop: 12, padding: '12px 14px', borderRadius: 14,
+          border: '1px solid rgba(196,98,59,.35)', background: 'rgba(196,98,59,.08)',
+          fontSize: '13px', lineHeight: 1.55, color: '#8E3F1F', maxWidth: 540, textWrap: 'pretty'
+        }}>
+          {t('Quello che c’è adesso in questo account viene sostituito: documenti, lista, memoria, automazioni. Non si fondono.')}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={() => pronto.current && carica(pronto.current)} style={{
+              padding: '8px 15px', borderRadius: 99, border: 'none',
+              background: '#8E3F1F', color: '#FFF7F0', fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer'
+            }}>{t('Sostituisci')}</button>
+            <button onClick={() => setConferma(false)} style={{
+              padding: '8px 15px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+              border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+              color: 'rgba(34,39,31,.7)', fontSize: '12.5px'
+            }}>{t('Lascia stare')}</button>
+          </div>
+        </div>
+      )}
+
+      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10 }}>{t(guaio)}</div>}
+    </div>
+  )
+}
+
+/** Il file scelto, in attesa della conferma. Non è stato: non ridisegna niente. */
+const pronto: { current: File | null } = { current: null }
+
 function CampoArgomenti({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.argomenti)
   const [salvato, setSalvato] = useState(false)
@@ -318,6 +429,8 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
         <CampoArgomenti v={v} />
       </div>
+
+      <Trasloco />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Autonomia')}</div>

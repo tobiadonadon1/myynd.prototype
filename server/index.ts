@@ -37,6 +37,7 @@ import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
 import * as conti from './conti.ts'
 import * as chi from './chi.ts'
+import * as trasloco from './trasloco.ts'
 import { riflua } from './testo.ts'
 
 const app = express()
@@ -1674,6 +1675,33 @@ app.delete('/api/raccolte/:nome', (req, res) => {
  */
 app.get('/api/attrezzi', (_req, res) => {
   res.json({ attrezzi: attrezzi.catalogo(), cartelle: cfg.leggi().desktop?.cartelle ?? [] })
+})
+
+// — portare il proprio Myynd altrove —
+
+/**
+ * Il proprio Myynd, in un file.
+ *
+ * `express.raw` sulla rotta che riceve, e con un tetto alto: un indice vero
+ * pesa una decina di megabyte, e il limite di due che vale per il resto
+ * dell'API farebbe fallire l'importazione con un errore che parla di JSON.
+ */
+app.get('/api/trasloco', (_req, res) => {
+  try {
+    const pacco = trasloco.esporta()
+    const oggi = new Date().toISOString().slice(0, 10)
+    res.setHeader('content-type', 'application/gzip')
+    res.setHeader('content-disposition', `attachment; filename="myynd-${oggi}.myynd"`)
+    res.send(pacco)
+  } catch (e) { errore(res, e) }
+})
+
+app.post('/api/trasloco', express.raw({ type: '*/*', limit: '200mb' }), (req, res) => {
+  try {
+    const dati = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+    if (!dati.length) return res.status(400).json({ errore: 'Non è arrivato nessun file.' })
+    res.json({ ok: true, ...trasloco.importa(dati) })
+  } catch (e) { errore(res, e, 400) }
 })
 
 // — memoria: quello che Myynd sa di te —

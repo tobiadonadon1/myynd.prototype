@@ -100,6 +100,23 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — portare il proprio Myynd altrove —
+  'Portalo su un’altra macchina': 'Move it to another machine',
+  'Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.':
+    'Download one file with everything in it — documents, list, memory, automations and connected sources — and upload it to another Myynd to find it exactly as it was.',
+  'Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.':
+    'It also contains your mailbox passwords and source tokens: that file opens your mail. Move it, then delete it.',
+  'Scaricalo': 'Download it',
+  'Caricane uno': 'Upload one',
+  'Preparo…': 'Preparing…',
+  'Carico…': 'Uploading…',
+  'Quello che c’è adesso in questo account viene sostituito: documenti, lista, memoria, automazioni. Non si fondono.':
+    'What is in this account now gets replaced: documents, list, memory, automations. They are not merged.',
+  'Sostituisci': 'Replace',
+  'Questo file non è un Myynd da spostare.': 'This file is not a Myynd to move.',
+  'Questo file viene da una versione che non so leggere.': 'This file comes from a version I cannot read.',
+  'Non è arrivato nessun file.': 'No file arrived.',
+
   'Mostra la password': 'Show the password',
   'Nascondi la password': 'Hide the password',
 
@@ -1251,6 +1268,13 @@ export const frasi = {
    */
   nonRiuscito: (stato: number) => corrente === 'en'
     ? `I could not manage it (${stato}). Try again.` : `Non ce l’ho fatta (${stato}). Riprova.`,
+
+  traslocoPronto: (nome: string) => corrente === 'en'
+    ? `Downloaded as ${nome}. Upload it on the other Myynd.` : `Scaricato come ${nome}. Caricalo sull'altro Myynd.`,
+
+  traslocoArrivato: (documenti: number, automazioni: number) => corrente === 'en'
+    ? `Arrived: ${documenti} documents, ${automazioni} automations. Reloading…`
+    : `Arrivato: ${documenti} documenti, ${automazioni} automazioni. Ricarico…`,
 
   /** Chi ha scritto quella riga del ritratto, e quando. */
   scrittoDaMe: (quando: string) => corrente === 'en'

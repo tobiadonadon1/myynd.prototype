@@ -60,6 +60,18 @@ const db = new Proxy({} as DatabaseSync, {
   }
 })
 
+/**
+ * Riversa nel file principale quello che sta nel WAL.
+ *
+ * Serve a chi si porta via l'indice: SQLite tiene le scritture recenti in un
+ * file accanto, e copiare il solo `mente.db` senza averle riversate dentro
+ * vuol dire portarsi via una mente ferma a settimane fa — che si apre
+ * benissimo, e a cui mancano solo le ultime cose.
+ */
+export function riversaIlWal() {
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+}
+
 /** Da usare quando si finisce con una persona: chiude e libera. */
 export function chiudiIndici() {
   for (const d of aperti.values()) { try { d.close() } catch { /* già chiuso */ } }
