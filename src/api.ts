@@ -348,6 +348,8 @@ export type Accesso = {
   ospitato?: boolean
   /** Per registrarsi qui serve l'invito: senza campo sarebbe un no senza perché. */
   serveInvito?: boolean
+  /** Falso quando è ospitato e nessuno ha ancora messo un invito sul server. */
+  registrazioneAperta?: boolean
   account: { email: string } | null
 }
 

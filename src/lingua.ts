@@ -100,6 +100,11 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — ospitato, e nessuno ha ancora messo l'invito —
+  'Qui non si può ancora entrare.': 'Nobody can get in here yet.',
+  'Questo Myynd è su un indirizzo pubblico e nessuno ha ancora messo una parola d’invito sul server. Non è una parola da trovare: la scegli tu. Mettila in MYYND_INVITO fra le variabili del server, aspetta che riparta, e poi scrivila qui.':
+    'This Myynd is on a public address and nobody has set an invite word on the server yet. It is not a word to find: you choose it. Put it in MYYND_INVITO among the server variables, wait for the restart, then type it here.',
+
 // — i segnaposto dentro le caselle —
 //   Sono testo che si legge come tutto il resto, e restavano fuori perché
 //   `placeholder=` non assomiglia a una frase da tradurre: la prova che cerca

@@ -17,6 +17,13 @@ export function Accesso({ accesso, entrato }: {
 }) {
   const { registrato } = accesso
   const serveInvito = !!accesso.serveInvito
+  /*
+   * Ospitato e senza invito sul server: qui non si registra nessuno, e la cosa
+   * va detta *prima*, non dopo tre campi riempiti. La parola d'invito non si
+   * trova da nessuna parte — la sceglie chi mette su il server — e senza
+   * saperlo si resta fermi a cercarla.
+   */
+  const chiusa = accesso.registrazioneAperta === false && !registrato
   const ospitato = !!accesso.ospitato
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
@@ -85,10 +92,13 @@ export function Accesso({ accesso, entrato }: {
             chiedendo di sceglierne una. Il bottone lo diceva, in fondo, dopo.
           */}
           <div style={{ fontSize: 19, letterSpacing: '-.01em', marginBottom: 6 }}>
-            {registrato ? t('Bentornato.') : t('Crea il tuo accesso.')}
+            {chiusa ? t('Qui non si può ancora entrare.')
+              : registrato ? t('Bentornato.') : t('Crea il tuo accesso.')}
           </div>
           <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)', marginBottom: 26, textWrap: 'pretty' }}>
-            {registrato
+            {chiusa
+              ? t('Questo Myynd è su un indirizzo pubblico e nessuno ha ancora messo una parola d’invito sul server. Non è una parola da trovare: la scegli tu. Mettila in MYYND_INVITO fra le variabili del server, aspetta che riparta, e poi scrivila qui.')
+              : registrato
               ? t('Entra con l’indirizzo con cui l’hai creato.')
               : ospitato
                 /*
@@ -104,6 +114,7 @@ export function Accesso({ accesso, entrato }: {
                 : t('Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.')}
           </div>
 
+          {!chiusa && <>
           <div style={ETICHETTA}>{t('Email')}</div>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
             type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
@@ -132,7 +143,9 @@ export function Accesso({ accesso, entrato }: {
 
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
-          <button onClick={invia} disabled={!pronto || occupato} style={{
+          </>}
+
+          {!chiusa && <button onClick={invia} disabled={!pronto || occupato} style={{
             marginTop: 28, width: '100%', padding: '14px 24px', borderRadius: 99, border: 'none',
             background: pronto && !occupato ? CHIARO : 'rgba(244,239,232,.16)',
             color: pronto && !occupato ? '#141210' : 'rgba(244,239,232,.45)',
@@ -142,7 +155,7 @@ export function Accesso({ accesso, entrato }: {
             {/* su una macchina senza account non si «entra» da nessuna parte:
                 lo si crea, ed è la prima cosa che uno legge del prodotto */}
             {occupato ? '…' : registrato ? t('Entra') : t('Crea l\'accesso')}
-          </button>
+          </button>}
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
               basa tutto il prodotto: va detta solo dov'è vera. */}

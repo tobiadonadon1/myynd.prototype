@@ -171,7 +171,19 @@ app.get('/api/auth', (req, res) => {
      * altrimenti sarebbe un rifiuto senza spiegazione.
      */
     ospitato: ospitato.OSPITATO,
-    serveInvito: ospitato.OSPITATO && !auth.registrato()
+    serveInvito: ospitato.OSPITATO && !auth.registrato(),
+    /*
+     * Si può registrare qualcuno, qui e adesso?
+     *
+     * Ospitato senza invito la risposta è no, e fin qui quel no arrivava solo
+     * *dopo* aver riempito tre campi e premuto il bottone. Chi apriva la
+     * schermata vedeva una casella che chiedeva una parola d'invito e nessun
+     * posto da cui prenderla — e la cosa da sapere era che quella parola non
+     * si trova da nessuna parte: la si sceglie, e la si mette sul server. Un
+     * vicolo cieco che si scopre in fondo è peggio di una porta chiusa con
+     * scritto come si apre.
+     */
+    registrazioneAperta: !ospitato.OSPITATO || !!ospitato.INVITO
   })
 })
 
