@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
 import { api, type Accesso as TipoAccesso } from './api'
-import { t } from './lingua'
+import { lingua, ricordaLingua, t } from './lingua'
 import { Logo } from './components/Marchio'
 
 const CHIARO = '#F4EFE8'
@@ -24,6 +24,8 @@ export function Accesso({ accesso, entrato }: {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [invito, setInvito] = useState('')
+  /** Cambiare lingua non passa da React: questo lo obbliga a ridisegnare. */
+  const [, ridisegna] = useState(0)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -89,7 +91,16 @@ export function Accesso({ accesso, entrato }: {
             {registrato
               ? t('Entra con l’indirizzo con cui l’hai creato.')
               : ospitato
-                ? t('Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.')
+                /*
+                  Perché non c'è un «entra».
+                  È la domanda che si fa chiunque abbia già un Myynd sul proprio
+                  computer e apra questo indirizzo: la password non gli viene
+                  riconosciuta e sembra un guasto. Non lo è — non esiste nessun
+                  accesso centrale, e non è un pezzo che manca: ogni Myynd tiene
+                  il suo account e la sua memoria dove gira. Detto qui, prima di
+                  provare, invece che dedotto dopo tre tentativi falliti.
+                */
+                ? t('Questo indirizzo è un Myynd a parte, con una memoria sua. L’account che hai sul tuo computer qui non esiste: non c’è nessun accesso centrale, e ogni Myynd tiene il suo dove gira.')
                 : t('Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.')}
           </div>
 
@@ -129,10 +140,33 @@ export function Accesso({ accesso, entrato }: {
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
               basa tutto il prodotto: va detta solo dov'è vera. */}
-          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>
-            {ospitato
-              ? t('Questo Myynd gira su un server, non sul tuo computer.')
-              : t('Resta su questo computer.')}
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap',
+            marginTop: 22, fontSize: '11.5px', color: 'rgba(244,239,232,.34)', lineHeight: 1.6
+          }}>
+            <span style={{ flex: 1, minWidth: 180 }}>
+              {ospitato
+                ? t('Questo Myynd gira su un server, non sul tuo computer.')
+                : t('Resta su questo computer.')}
+            </span>
+            {/*
+              Le due lingue, anche qui.
+              È la prima schermata che si vede e si disegna prima che il server
+              dica quale lingua vuoi: se quella indovinata è quella sbagliata,
+              questo è l'unico posto in cui dirlo — e senza, non si può nemmeno
+              leggere la frase che lo spiegherebbe.
+            */}
+            <span style={{ display: 'flex', gap: 12, flex: 'none' }}>
+              {(['en', 'it'] as const).map(l => (
+                <button key={l} type="button" onClick={() => { ricordaLingua(l); ridisegna(n => n + 1) }}
+                  style={{
+                    border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '11.5px', letterSpacing: '.06em',
+                    textTransform: 'uppercase',
+                    color: lingua() === l ? 'rgba(244,239,232,.75)' : 'rgba(244,239,232,.3)'
+                  }}>{l === 'it' ? 'Italiano' : 'English'}</button>
+              ))}
+            </span>
           </div>
         </div>
       </div>

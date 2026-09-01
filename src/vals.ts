@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { costruisci, costruisciDaGrafo, type Ball, type Grafo } from './brain'
-import { impostaLingua, loc, t, frasi } from './lingua'
+import { loc, ricordaLingua, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
@@ -34,7 +34,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [stato, setStato] = useState<Stato>(iniziale)
   // Va impostata a ogni giro, prima di qualunque calcolo che produca testo:
   // così cambiare lingua nelle preferenze si vede subito, senza ricaricare.
-  impostaLingua(stato.config.lingua)
+  // questa viene dal profilo sul server: è una scelta, e si ricorda per le
+  // schermate che si disegnano prima che il server risponda
+  ricordaLingua(stato.config.lingua)
   // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
   // rimontare, così schermata, chat aperta e bozza restano dove sono
   useEffect(() => { setStato(iniziale) }, [iniziale])

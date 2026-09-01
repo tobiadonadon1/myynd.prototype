@@ -14,18 +14,54 @@ import type { ReactNode } from 'react'
 
 let corrente = 'en'
 
-/** La imposta chi conosce la configurazione — in pratica useVals, a ogni giro. */
+/**
+ * La chiave in cui si tiene la lingua scelta.
+ *
+ * Ha un numero in fondo, e non è pedanteria: sotto la chiave di prima c'era
+ * finito un *indovinato*, non una scelta — vedi il commento qui sotto — e su
+ * ogni browser che ha aperto Myynd prima di oggi quel valore è ancora lì.
+ * Cambiare il ripiego non sarebbe servito a niente: la riga vecchia avrebbe
+ * continuato a vincere per sempre. Cambiare chiave è l'unico modo di lasciarla
+ * indietro senza andare a cancellare roba dal browser di qualcuno.
+ */
+const CHIAVE_LINGUA = 'myynd.lingua.2'
+
+/**
+ * Quale lingua si parla adesso.
+ *
+ * **`en` per tutto quello che non è esplicitamente `it`.** Prima era il
+ * contrario — `l === 'en' ? 'en' : 'it'` — e quella riga da sola riportava
+ * tutto in italiano: bastava chiamarla con `undefined`, cioè con una
+ * configurazione non ancora arrivata dal server, ed era italiano. Cambiare il
+ * valore iniziale più in alto non serviva a niente finché restava questa.
+ *
+ * Non scrive niente su disco, ed è l'altra metà della riparazione. Prima
+ * salvava a ogni chiamata, compresa quella dell'avvio che tira a indovinare:
+ * il ripiego finiva memorizzato come se fosse stato scelto da qualcuno, e da
+ * lì in poi vinceva su tutto — comprese le correzioni fatte dopo. Una cosa
+ * indovinata non si ricorda; si ricorda una cosa scelta, e per quella c'è
+ * `ricordaLingua`.
+ */
 export function impostaLingua(l: string | undefined) {
-  corrente = l === 'en' ? 'en' : 'it'
-  // Se ne tiene una copia qui perché l'accesso e il primo avvio girano *prima*
-  // che la configurazione arrivi dal server: senza, quelle due schermate
-  // sarebbero sempre in italiano qualunque cosa tu abbia scelto.
-  try { localStorage.setItem('myynd.lingua', corrente) } catch { /* incognito */ }
+  corrente = l === 'it' ? 'it' : 'en'
   // Anche la pagina deve sapere che lingua parla: da `lang` dipendono la sintesi
   // vocale, il correttore ortografico dei campi e la barra «vuoi tradurre questa
   // pagina?» del browser — che su un'app in inglese con lang="it" compare a
   // sproposito. Era scritto a mano nell'index.html, e quindi era sempre «it».
   document.documentElement.lang = corrente
+}
+
+/**
+ * La lingua *scelta*, che si ricorda per la prossima volta.
+ *
+ * La chiamano i due posti in cui una persona decide davvero: le preferenze, e
+ * l'interruttore sulla schermata di guasto. Serve perché l'accesso e il primo
+ * avvio si disegnano prima che il server dica qualcosa, e senza una copia qui
+ * quelle schermate ripartirebbero ogni volta dalla lingua di partenza.
+ */
+export function ricordaLingua(l: string | undefined) {
+  impostaLingua(l)
+  try { localStorage.setItem(CHIAVE_LINGUA, corrente) } catch { /* incognito */ }
 }
 
 /**
@@ -40,7 +76,7 @@ export function impostaLingua(l: string | undefined) {
  */
 export function linguaSalvata(): string {
   try {
-    const l = localStorage.getItem('myynd.lingua')
+    const l = localStorage.getItem(CHIAVE_LINGUA)
     if (l === 'it' || l === 'en') return l
   } catch { /* incognito */ }
   // L'inglese, non la lingua del browser.
@@ -70,6 +106,8 @@ const EN: Record<string, string> = {
   'Entra con l’indirizzo con cui l’hai creato.': 'Sign in with the address you created it with.',
   'Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.':
     'There is no account here yet: what you type now creates it.',
+  'Questo indirizzo è un Myynd a parte, con una memoria sua. L’account che hai sul tuo computer qui non esiste: non c’è nessun accesso centrale, e ogni Myynd tiene il suo dove gira.':
+    'This address is a separate Myynd, with a memory of its own. The account on your computer does not exist here: there is no central sign-in, and each Myynd keeps its own where it runs.',
   'Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.':
     'There is no account on this computer yet: what you type now creates it.',
   'Invito': 'Invite',

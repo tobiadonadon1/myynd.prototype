@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { frasi, impostaLingua, lingua, t } from './lingua'
+import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { Sfondo } from './Sfondo'
 import { Hov, taglia, useLarghezza } from './ui'
 import {
@@ -443,7 +443,7 @@ function Guasto({ guasto, riprova }: { guasto: Guaio; riprova: () => void }) {
    * indirizzo con Chrome in italiano leggeva un guasto in italiano e basta,
    * senza nessun posto in cui dire di no.
    */
-  const cambiaLingua = (l: string) => { impostaLingua(l); ridisegna(n => n + 1) }
+  const cambiaLingua = (l: string) => { ricordaLingua(l); ridisegna(n => n + 1) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: '#F4EFE8', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", padding: 40 }}>
