@@ -1,0 +1,29 @@
+{
+  "id": "documenti-superati",
+  "nome": "Documenti che sembrano vecchi",
+  "spiega": "Una volta a settimana cerca listini, contratti e condizioni che potrebbero non valere più.",
+  "quando": {
+    "ogni": "settimana",
+    "giorno": 3,
+    "ora": 10
+  },
+  "guarda": {
+    "cerca": "listino contratto condizioni validità scadenza",
+    "limite": 10
+  },
+  "fai": "Quali di questi hanno una data di validità passata, o ne esiste una versione più recente che li rende superati? Elenca solo quelli su cui hai un dubbio vero, con il perché in mezza riga. Se sono tutti in corso, dillo.",
+  "metti": {
+    "inLista": "poi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi",
+    "desktop.leggi"
+  ],
+  "en": {
+    "nome": "Documents that look out of date",
+    "spiega": "Once a week, looks for price lists, contracts and terms that may no longer hold.",
+    "cerca": "price list contract terms valid until expiry",
+    "fai": "Which of these have a validity date already past, or a newer version that supersedes them? List only the ones you genuinely doubt, with the reason in half a line. If they are all still current, say so."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "primo-contatto",
+  "nome": "Chi ti ha scritto per la prima volta",
+  "spiega": "Quando arriva un messaggio da qualcuno di nuovo, prepara una risposta di apertura.",
+  "quando": {
+    "quandoArriva": true
+  },
+  "guarda": {
+    "cerca": "buongiorno vi contatto vorrei informazioni preventivo",
+    "soloNuovi": true,
+    "limite": 4
+  },
+  "fai": "Fra questi, qualcuno ti sta scrivendo per la prima volta? Se sì, scrivi una risposta di apertura: rispondi alla domanda che fa, e chiedi le due cose che ti servirebbero per fare un preventivo. Se sono tutti già clienti, dillo in una riga.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Someone writing for the first time",
+    "spiega": "When a message arrives from someone new, prepares an opening reply.",
+    "cerca": "hello getting in touch would like information quote enquiry",
+    "fai": "Is any of these writing to you for the first time? If so, write an opening reply: answer the question they ask, and ask for the two things you would need in order to quote. If they are all existing customers, say so in one line."
+  }
+}

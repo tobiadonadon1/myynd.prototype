@@ -58,11 +58,25 @@ export async function prova(c: ConfigNotion): Promise<{ ok: true; pagine: number
   }
 }
 
-export type EsitoNotion = { docs: Documento[]; parziali: number; interrotto: boolean }
+/**
+ * `visti` è la riga che impedisce a una lettura parziale di cancellare roba vera.
+ *
+ * Una pagina che si legge a metà si salta — giusto, e il commento più sotto lo
+ * dice: «meglio tenere quella vecchia intera». Solo che saltarla la teneva
+ * fuori da `docs`, e `docs` è esattamente l'elenco che `riconcilia` usa per
+ * decidere chi è ancora vivo. Quindi la pagina vecchia e intera non veniva
+ * tenuta affatto: veniva cancellata dall'indice, cioè l'esatto contrario di
+ * quello che c'era scritto — e in silenzio, perché una pagina che sparisce
+ * dall'indice non lascia nessuna traccia da nessuna parte.
+ *
+ * `visti` dice «questa esiste ancora, anche se stavolta non l'ho riletta».
+ */
+export type EsitoNotion = { docs: Documento[]; parziali: number; interrotto: boolean; visti: string[] }
 
 export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
   const notion = new Client({ auth: c.token })
   const docs: Documento[] = []
+  const visti: string[] = []
   let parziali = 0
   let cursore: string | undefined
 
@@ -76,10 +90,12 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
       })
     } catch {
       // un errore a metà elenco non deve buttare via quello che ho già
-      return { docs, parziali, interrotto: true }
+      return { docs, parziali, interrotto: true, visti }
     }
     for (const p of r.results as any[]) {
       if (p.object !== 'page') continue
+      // esiste: qualunque cosa succeda dopo, non è sparita da Notion
+      visti.push(`notion:${p.id}`)
       let letto: { testo: string; completo: boolean }
       try {
         letto = await testoPagina(notion, p.id)
@@ -101,10 +117,11 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
         quando: p.last_edited_time ?? null,
         gruppo: 'note'
       })
-      if (docs.length >= 800) return { docs, parziali, interrotto: false }
+      // fermarsi al tetto è una lettura parziale, non una lettura finita
+      if (docs.length >= 800) return { docs, parziali, interrotto: true, visti }
     }
     cursore = r.has_more ? r.next_cursor : undefined
   } while (cursore)
 
-  return { docs, parziali, interrotto: false }
+  return { docs, parziali, interrotto: false, visti }
 }

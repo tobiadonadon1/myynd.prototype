@@ -5,12 +5,109 @@ import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
+import { riflua } from '../testo.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
   'gmail': { host: 'imap.gmail.com', porta: 993, smtp: 'smtp.gmail.com', smtpPorta: 465 },
   'outlook': { host: 'outlook.office365.com', porta: 993, smtp: 'smtp.office365.com', smtpPorta: 587 },
   'aruba': { host: 'imaps.aruba.it', porta: 993, smtp: 'smtps.aruba.it', smtpPorta: 465 }
+}
+
+/** I domini noti, per non andare a cercare quello che già sappiamo. */
+const NOTI: Record<string, string> = {
+  'gmail.com': 'imap.gmail.com', 'googlemail.com': 'imap.gmail.com',
+  'outlook.com': 'outlook.office365.com', 'hotmail.com': 'outlook.office365.com',
+  'hotmail.it': 'outlook.office365.com', 'live.it': 'outlook.office365.com',
+  'aruba.it': 'imaps.aruba.it', 'pec.it': 'imaps.pec.aruba.it',
+  'libero.it': 'imapmail.libero.it', 'virgilio.it': 'in.virgilio.it',
+  'tiscali.it': 'imap.tiscali.it', 'alice.it': 'in.alice.it',
+  'fastwebnet.it': 'imap.fastwebnet.it', 'icloud.com': 'imap.mail.me.com',
+  'me.com': 'imap.mail.me.com', 'yahoo.it': 'imap.mail.yahoo.com',
+  'yahoo.com': 'imap.mail.yahoo.com', 'pec.aruba.it': 'imaps.pec.aruba.it'
+}
+
+/** Da un nome di server di posta al suo IMAP: chi ospita, non chi possiede. */
+const OSPITI: Record<string, string> = {
+  'register.it': 'imap.register.it',
+  'aruba.it': 'imaps.aruba.it',
+  'google.com': 'imap.gmail.com',
+  'googlemail.com': 'imap.gmail.com',
+  'outlook.com': 'outlook.office365.com',
+  'protection.outlook.com': 'outlook.office365.com',
+  'secureserver.net': 'imap.secureserver.net',
+  'ionos.it': 'imap.ionos.it',
+  'ovh.net': 'ssl0.ovh.net',
+  'zoho.com': 'imap.zoho.com',
+  'qboxmail.com': 'imap.qboxmail.com',
+  'seeweb.it': 'imap.seeweb.it'
+}
+
+/** Un server IMAP risponde su questa porta? Mezzo secondo per saperlo. */
+async function rispondeImap(host: string): Promise<boolean> {
+  const tls = await import('node:tls')
+  return new Promise(risolvi => {
+    let chiuso = false
+    const fine = (esito: boolean) => { if (!chiuso) { chiuso = true; risolvi(esito) } }
+    const s = tls.connect({ host, port: 993, servername: host, rejectUnauthorized: false }, () => {
+      // un server IMAP saluta da solo: se arriva un saluto, è lui
+      s.once('data', d => { fine(d.toString('utf8', 0, 4).startsWith('* OK')); s.destroy() })
+    })
+    s.setTimeout(3500, () => { fine(false); s.destroy() })
+    s.on('error', () => { fine(false); s.destroy() })
+  })
+}
+
+/**
+ * Trova il server IMAP partendo dall'indirizzo.
+ *
+ * Prima si doveva sapere il proprio host e scriverlo a mano, con
+ * "imap.register.it" preimpostato per tutti: chi non era su Register partiva da
+ * un valore sbagliato senza sapere con cosa sostituirlo. Qui lo si cerca.
+ *
+ * Nessun servizio esterno di configurazione: prima quello che già sappiamo, poi
+ * il record SRV che lo stesso dominio pubblica (RFC 6186), poi i nomi che i
+ * provider usano quasi sempre — provati direttamente sul server della persona,
+ * dove la sua posta sta comunque per andare. Il dominio non esce da qui.
+ */
+export async function scopri(email: string): Promise<{ host: string; come: string } | null> {
+  const dominio = email.split('@')[1]?.trim().toLowerCase()
+  if (!dominio) return null
+
+  if (NOTI[dominio]) return { host: NOTI[dominio], come: 'noto' }
+
+  // Chi ospita la posta di questo dominio? Il record MX lo dice, ed è il passo
+  // che risolve il caso più comune di tutti: un dominio aziendale su un
+  // provider. donadon.com non risponde su imap.donadon.com — il suo MX è
+  // mail.register.it, e da lì si arriva a imap.register.it.
+  try {
+    const { resolveMx } = await import('node:dns/promises')
+    const mx = (await resolveMx(dominio)).sort((a, b) => a.priority - b.priority)
+    for (const r of mx) {
+      const e = r.exchange.toLowerCase()
+      for (const [frammento, host] of Object.entries(OSPITI)) {
+        if (e.includes(frammento)) return { host, come: 'mx' }
+      }
+    }
+    // un MX su un altro dominio è comunque un indizio: mail.tizio.it → imap.tizio.it
+    const base = mx[0]?.exchange.toLowerCase().replace(/^(mx\d*|mail|smtp|in)\./, '')
+    if (base && base !== dominio && await rispondeImap(`imap.${base}`)) {
+      return { host: `imap.${base}`, come: 'mx' }
+    }
+  } catch { /* dominio senza MX: si va avanti */ }
+
+  // il dominio può dire da sé dov'è la sua posta
+  try {
+    const { resolveSrv } = await import('node:dns/promises')
+    const rec = await resolveSrv(`_imaps._tcp.${dominio}`)
+    const buono = rec.filter(r => r.name && r.port === 993).sort((a, b) => a.priority - b.priority)[0]
+    if (buono) return { host: buono.name, come: 'srv' }
+  } catch { /* quasi nessuno lo pubblica: si va avanti */ }
+
+  for (const nome of [`imap.${dominio}`, `imaps.${dominio}`, `mail.${dominio}`, `posta.${dominio}`]) {
+    if (await rispondeImap(nome)) return { host: nome, come: 'provato' }
+  }
+  return null
 }
 
 function client(c: ConfigPosta, servername?: string) {
@@ -46,7 +143,13 @@ async function nomeDalCertificato(c: ConfigPosta): Promise<string | null> {
         const concreto = nomi.find(x => !x.startsWith('*.'))
         const jolly = nomi.find(x => x.startsWith('*.'))
         s.destroy()
-        risolvi(concreto ?? (jolly ? jolly.slice(2) : null))
+        // Da «*.securemail.pro» si ricavava «securemail.pro» — cioè l'unico
+        // nome che quel jolly NON copre: un certificato jolly vale per le
+        // etichette figlie, non per il dominio nudo. Il secondo tentativo
+        // falliva quindi esattamente come il primo, e il recupero non ha mai
+        // recuperato niente. Con una qualunque etichetta al posto
+        // dell'asterisco si ricade dentro quello che il certificato copre.
+        risolvi(concreto ?? (jolly ? jolly.replace('*', 'imap') : null))
       }
     )
     s.setTimeout(12_000, () => { s.destroy(); risolvi(null) })
@@ -99,7 +202,186 @@ function messaggioErrore(e: unknown): string {
   return m
 }
 
-export type EsitoPosta = { docs: Documento[]; cartelleFallite: string[] }
+/**
+ * `troncato` esiste perché il tetto di quattrocento messaggi per cartella
+ * tagliava dentro la finestra che avevi chiesto, senza dirlo.
+ *
+ * Chiedi trenta giorni, la cartella ne ha seicento: ne leggeva gli ultimi
+ * quattrocento e riportava «Posta · 400 documenti», identico a una lettura
+ * completa. I duecento più vecchi non venivano letti allora e non lo
+ * sarebbero stati mai più, perché la lettura dopo riparte dalla stessa
+ * finestra e taglia allo stesso punto. Sparivano e basta.
+ */
+// — mandare —
+//
+// Fin qui questo file sapeva solo leggere. SMTP stava nel PRESET da sempre, e
+// non era collegato a nessuna azione: Myynd scriveva l'email perfetta e poi te
+// la faceva ricopiare a mano, il che vuol dire che il lavoro l'avevi fatto tu.
+//
+// Adesso può mandarla. Una regola non si tratta, ed è quella del brief: «non
+// agisce mai da solo. Prepara, e una persona preme il bottone». Qui dentro non
+// c'è nessuna strada che parta da sola — `invia` la chiama una rotta che la
+// chiama un bottone che hai premuto tu, dopo aver letto il testo.
+
+/**
+ * Da dove esce la posta, per questa casella.
+ *
+ * Nell'ordine: quello che hai scritto tu, quello che sappiamo del provider,
+ * e in ultima istanza lo stesso nome con smtp al posto di imap — che è come
+ * si chiama nove volte su dieci.
+ */
+export function smtpDi(c: ConfigPosta): { host: string; porta: number } {
+  if (c.smtp?.host) return { host: c.smtp.host, porta: c.smtp.porta || 465 }
+  const noto = Object.values(PRESET).find(p => p.host === c.host)
+  if (noto) return { host: noto.smtp, porta: noto.smtpPorta }
+  return { host: c.host.replace(/^imaps?\./, 'smtp.'), porta: 465 }
+}
+
+export type DaMandare = { a: string; oggetto: string; corpo: string }
+
+/**
+ * Manda un'email, e basta quella.
+ *
+ * Niente allegati per adesso: allegare vuol dire leggere un file dal disco e
+ * spedirlo fuori, ed è un passo che merita la sua conversazione invece di
+ * arrivare in coda a un'altra. Il testo va in chiaro perché è quello che hai
+ * letto sullo schermo: se partisse in HTML, quello che arriva non sarebbe più
+ * esattamente quello che hai approvato.
+ */
+export async function invia(c: ConfigPosta, m: DaMandare): Promise<{ id: string }> {
+  const dove = smtpDi(c)
+  const { createTransport } = await import('nodemailer')
+  const posta = createTransport({
+    host: dove.host,
+    port: dove.porta,
+    // 465 è TLS dal primo byte; 587 comincia in chiaro e sale con STARTTLS
+    secure: dove.porta === 465,
+    auth: { user: c.utente, pass: c.password },
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 30_000
+  })
+  try {
+    const r = await posta.sendMail({
+      from: c.utente,
+      to: m.a,
+      subject: m.oggetto,
+      text: m.corpo
+    })
+    return { id: String(r.messageId ?? '') }
+  } finally {
+    posta.close()
+  }
+}
+
+/** La prova che la casella accetta di far uscire posta, senza mandarne. */
+export async function provaInvio(c: ConfigPosta): Promise<{ ok: true } | { ok: false; errore: string }> {
+  const dove = smtpDi(c)
+  try {
+    const { createTransport } = await import('nodemailer')
+    const posta = createTransport({
+      host: dove.host, port: dove.porta, secure: dove.porta === 465,
+      auth: { user: c.utente, pass: c.password },
+      connectionTimeout: 15_000, greetingTimeout: 15_000
+    })
+    try { await posta.verify() } finally { posta.close() }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, errore: messaggioErrore(e) }
+  }
+}
+
+/**
+ * Mettere via dei messaggi. Non cancellarli.
+ *
+ * Myynd legge la posta di qualcuno, e il giorno che può *toglierla* la
+ * differenza fra spostare e cancellare non è una sfumatura: uno spostamento si
+ * annulla trascinando indietro, una cancellazione no. Quindi qui non c'è
+ * `messageDelete`, e non deve arrivarci: il cestino e l'archivio sono cartelle,
+ * e finire in una cartella è una cosa da cui si torna.
+ *
+ * La cartella di destinazione non si scrive a mano. «Trash», «Cestino»,
+ * «[Gmail]/Cestino», «Deleted Items»: ogni provider la chiama a modo suo, e
+ * indovinare vuol dire creare una cartella nuova con il nome sbagliato sulla
+ * casella di un cliente. Si chiede al server quale ha il ruolo `\Trash` — è
+ * quello che serve la RFC 6154 — e se non lo dichiara non si inventa niente: si
+ * dice che non si sa dove metterli.
+ */
+export type Mossa = { cartella: string; uid: number }
+
+/**
+ * Da `posta:cartella:uid` alla mossa che lo sposta.
+ *
+ * Il taglio è da destra e non da sinistra, ed è l'unica cosa delicata qui
+ * dentro: una cartella può contenere i due punti — `[Gmail]/Posta inviata` non
+ * ne ha, ma `INBOX:2024` sì, e certi server li usano come separatore — mentre
+ * l'uid è un numero e non ne ha mai. Tagliando dall'ultimo, la cartella resta
+ * intera comunque si chiami.
+ *
+ * Quello che non ha questa forma non diventa una mossa. Non è un caso da
+ * segnalare: un documento che non viene dalla posta non ha una casella da cui
+ * toglierlo, e va semplicemente lasciato dov'è.
+ */
+export function mosseDa(ids: string[]): Mossa[] {
+  const fuori: Mossa[] = []
+  for (const id of ids) {
+    if (!id.startsWith('posta:')) continue
+    const taglio = id.lastIndexOf(':')
+    if (taglio <= 'posta:'.length - 1) continue
+    const cartella = id.slice('posta:'.length, taglio)
+    const uid = Number(id.slice(taglio + 1))
+    if (!cartella || !Number.isInteger(uid) || uid <= 0) continue
+    fuori.push({ cartella, uid })
+  }
+  return fuori
+}
+
+async function cartellaConRuolo(cl: ImapFlow, ruolo: string): Promise<string | null> {
+  for (const c of await cl.list()) {
+    // imapflow espone il ruolo come `specialUse`: '\\Trash', '\\Archive'…
+    if ((c as { specialUse?: string }).specialUse === ruolo) return c.path
+  }
+  return null
+}
+
+export async function sposta(
+  c: ConfigPosta,
+  mosse: Mossa[],
+  ruolo: '\\Trash' | '\\Archive'
+): Promise<{ spostati: number; dove: string }> {
+  if (!mosse.length) return { spostati: 0, dove: '' }
+  const { cl } = await apri(c)
+  try {
+    const dove = await cartellaConRuolo(cl, ruolo)
+    if (!dove) {
+      throw new Error(ruolo === '\\Trash'
+        ? 'La casella non dice qual è il cestino: non so dove metterli.'
+        : 'La casella non dice qual è l\'archivio: non so dove metterli.')
+    }
+
+    // una cartella per volta: gli uid valgono dentro la loro, e mescolarli
+    // vorrebbe dire spostare il messaggio numero 42 della cartella sbagliata
+    let spostati = 0
+    const perCartella = new Map<string, number[]>()
+    for (const m of mosse) perCartella.set(m.cartella, [...(perCartella.get(m.cartella) ?? []), m.uid])
+
+    for (const [cartella, uids] of perCartella) {
+      if (cartella === dove) continue          // già lì: spostarli su sé stessi non ha senso
+      const lock = await cl.getMailboxLock(cartella)
+      try {
+        await cl.messageMove(uids, dove, { uid: true })
+        spostati += uids.length
+      } finally {
+        lock.release()
+      }
+    }
+    return { spostati, dove }
+  } finally {
+    try { await cl.logout() } catch { /* la connessione cade da sé */ }
+  }
+}
+
+export type EsitoPosta = { docs: Documento[]; cartelleFallite: string[]; troncato: boolean }
 
 export async function sincronizza(
   c: ConfigPosta,
@@ -110,6 +392,7 @@ export async function sincronizza(
   const cartelle = c.cartelle?.length ? c.cartelle : ['INBOX']
   const docs: Documento[] = []
   const cartelleFallite: string[] = []
+  let troncato = false
   const { cl } = await apri(c)
 
   try {
@@ -124,13 +407,19 @@ export async function sincronizza(
       try {
         const uids = await cl.search({ since: da }, { uid: true })
         if (!uids || !uids.length) continue
-        // le più recenti prima, con un tetto per non tirare giù anni di posta
+        // le più recenti prima, con un tetto per non tirare giù anni di posta.
+        // Se il tetto morde, va detto: quello che resta fuori è dentro la
+        // finestra che ha chiesto lei, e non verrà letto a nessun giro futuro.
+        if (uids.length > 400) troncato = true
         const scelti = uids.slice(-400)
         let fatti = 0
         for await (const msg of cl.fetch(scelti, { uid: true, source: true, envelope: true }, { uid: true })) {
           try {
             const p = await simpleParser(msg.source as Buffer)
-            const testo = (p.text || '').trim()
+            // La posta in testo semplice va a capo a settantadue caratteri per
+            // convenzione, non per volontà di chi scrive: senza ricucirla ogni
+            // frase arriva spezzata in tre.
+            const testo = riflua((p.text || '').trim())
             if (!testo) continue
             const mittente = p.from?.value?.[0]
             docs.push({
@@ -160,5 +449,5 @@ export async function sincronizza(
   } finally {
     try { await cl.logout() } catch { /* la connessione è già caduta */ }
   }
-  return { docs, cartelleFallite }
+  return { docs, cartelleFallite, troncato }
 }

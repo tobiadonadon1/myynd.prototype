@@ -1,14 +1,278 @@
-import { CARD_GLASS, LABEL } from '../ui'
+import { useCallback, useEffect, useState } from 'react'
+import { api, type Abbonamento as TipoAbbonamento } from '../api'
+import { frasi, t } from '../lingua'
+import { CARD_GLASS, LABEL, knob, track } from '../ui'
 import type { Vals } from '../vals'
 
-/** Quanta autonomia lasciare a Myynd e con che tono deve scrivere. */
+
+/**
+ * Il fondo in movimento è bello e costa: le macchie sfocate stanno dietro a
+ * pannelli con backdrop-filter, e ogni loro fotogramma obbliga a rifare la
+ * sfocatura. Su qualche macchina si vede tremolare. Chi non lo vuole lo spegne,
+ * e resta il colore — non l'ho tolto a tutti per un problema di alcuni.
+ */
+/** Il campo del fuoco: stato suo, di nessun altro. */
+function CampoFuoco({ v }: { v: Vals }) {
+  const [testo, setTesto] = useState(v.fuoco)
+  // si riallinea solo quando il valore vero cambia — cioè al caricamento e al
+  // salvataggio. Mentre scrivi, nessun caricamento in sottofondo può toccarlo.
+  useEffect(() => { setTesto(v.fuoco) }, [v.fuoco])
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
+        <input
+          value={testo}
+          onChange={e => setTesto(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') v.salvaFuoco(testo) }}
+          placeholder={t('Questa settimana solo i preventivi e i pagamenti')}
+          style={{
+            flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
+            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.75)',
+            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+          }} />
+        <button onClick={() => v.salvaFuoco(testo)} style={{
+          flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
+          background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
+        }}>{t('Salva')}</button>
+      </div>
+      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 10 }}>
+        {t('Vuoto vuol dire: guarda tutto.')}
+      </div>
+    </>
+  )
+}
+
+/**
+ * Gli argomenti della rassegna.
+ *
+ * Gemello del fuoco, e vale la pena tenerli distinti anche qui sotto gli occhi:
+ * il fuoco dice a Myynd dove guardare *dentro* — nella posta, nei file, in
+ * quello che ti riguarda — questo dice cosa cercare *fuori*, nei giornali.
+ * Mescolarli vorrebbe dire che chi si concentra sui preventivi smette di
+ * ricevere notizie dal mondo, che non è quello che ha chiesto.
+ *
+ * Vuoto è una risposta buona e va detto: chi non sa ancora cosa gli interessa
+ * non deve sentirsi davanti a un campo obbligatorio.
+ */
+function CampoArgomenti({ v }: { v: Vals }) {
+  const [testo, setTesto] = useState(v.argomenti)
+  const [salvato, setSalvato] = useState(false)
+  const [gusto, setGusto] = useState('')
+  useEffect(() => { setTesto(v.argomenti) }, [v.argomenti])
+
+  // quello che ha notato da come leggi: si chiede una volta, all'apertura
+  useEffect(() => { api.rassegna().then(r => setGusto(r.gusto)).catch(() => {}) }, [])
+
+  const salva = () => {
+    v.salvaArgomenti(testo)
+    setSalvato(true)
+    setTimeout(() => setSalvato(false), 1800)
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
+        <input
+          value={testo}
+          onChange={e => setTesto(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') salva() }}
+          placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')}
+          style={{
+            flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
+            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.75)',
+            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+          }} />
+        <button onClick={salva} style={{
+          flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
+          background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
+        }}>{salvato ? t('Salvato') : t('Salva')}</button>
+      </div>
+      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 10 }}>
+        {t('Vuoto vuol dire: dammi un po’ di tutto.')}
+      </div>
+
+      {/*
+        Quello che ha imparato guardandoti leggere.
+
+        Sta qui sotto e non dentro il campo perché non è una cosa che hai
+        scritto tu: è una cosa che ha concluso lui. Tenerle separate è quello
+        che permette di crederci — e di correggerlo scrivendo sopra nel campo,
+        che è l'unica leva che deve avere chi non è d'accordo.
+      */}
+      {gusto && (
+        <div style={{
+          marginTop: 12, padding: '10px 13px', borderRadius: 12,
+          background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.07)'
+        }}>
+          <div style={{ ...LABEL, fontSize: '10.5px', color: 'rgba(34,39,31,.45)' }}>
+            {t('Da come leggi')}
+          </div>
+          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.7)', marginTop: 5, textWrap: 'pretty' }}>
+            {gusto}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * Ragionare con il tuo abbonamento invece che a consumo.
+ *
+ * È la scelta che decide quanto costa tenere Myynd acceso. Con una chiave API si
+ * paga ogni riga che scrive; con questo il lavoro grosso passa da Claude Code —
+ * che è già installato qui e già entrato con il tuo account — e non costa niente
+ * in più di quello che già paghi.
+ *
+ * Sta spento finché non lo accendi tu, e non è timidezza: manda il lavoro sul
+ * tuo conto, e una cosa così si chiede. Se `claude` non c'è su questa macchina
+ * non compare nemmeno l'interruttore: un comando spento per un programma che non
+ * hai è solo una domanda senza risposta.
+ */
+function Abbonamento() {
+  const [s, setS] = useState<TipoAbbonamento | null>(null)
+
+  const guarda = useCallback(() => {
+    api.abbonamento().then(setS).catch(() => setS(null))
+  }, [])
+  useEffect(() => { guarda() }, [guarda])
+
+  if (!s || !s.installato) return null
+
+  const cambia = async () => {
+    setS({ ...s, acceso: !s.acceso })
+    try { await api.usaAbbonamento(!s.acceso) } finally { guarda() }
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Con il tuo abbonamento')}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15 }}>
+            {/*
+              Installato e non entrato sono due cose diverse, e prima si
+              vedevano uguali: l'interruttore era lì, si accendeva, e poi ogni
+              lavoro falliva. Adesso lo dice — e lo dice gratis, perché
+              `claude auth status` non parla con nessun modello.
+            */}
+            {!s.entrato
+              ? t('Installato, ma non ci sei ancora entrato.')
+              : s.acceso ? t('Acceso: il lavoro grosso passa da Claude Code.') : t('Spento: si paga a consumo con la chiave.')}
+          </div>
+          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 5, maxWidth: 470, textWrap: 'pretty' }}>
+            {s.entrato
+              ? t('Claude Code è su questo computer ed è già entrato con il tuo account. Acceso, le risposte e le bozze passano di lì e non costano niente oltre a quello che paghi già. Myynd non vede le tue credenziali: lancia il programma che hai tu.')
+              : t('Apri il Terminale, scrivi «claude» e fai l’accesso. Da lì in poi Myynd può ragionare con l’abbonamento che paghi già, invece che a consumo con la chiave.')}
+          </div>
+          {s.inRiposo && (
+            <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
+              {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}
+            </div>
+          )}
+        </div>
+        {/*
+          Un interruttore per una strada che fallirebbe è peggio che nessun
+          interruttore — ma toglierlo a chi l'ha già acceso lo lascerebbe senza
+          il modo di spegnerlo, se nel frattempo è uscito da Claude Code. Si
+          nasconde solo quando non c'è niente da guadagnare ad accenderlo.
+        */}
+        {(s.entrato || s.acceso) && <div onClick={cambia} style={track(s.acceso)}><div style={knob()} /></div>}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Il modello che gira su questa macchina.
+ *
+ * Sta qui e si vede, invece di succedere di nascosto. Una parte del lavoro —
+ * dare un nome a una conversazione, decidere se un testo è una bozza o una
+ * domanda, tradurre quattro righe — non ha bisogno di un modello di frontiera,
+ * e se su questo computer ce n'è uno acceso la fa lui, gratis. Ma «gratis e di
+ * nascosto» non è una combinazione accettabile in un prodotto che chiede di
+ * fidarsi: chi lo usa deve sapere che succede, e poter dire di no.
+ *
+ * Quello che *non* passa mai di qui: le risposte, le bozze che escono
+ * dall'azienda, la lettura del feed. Su quelle si paga, perché è lì che una
+ * risposta sbagliata costa.
+ */
+function ModelloDiCasa() {
+  const [s, setS] = useState<{ acceso: boolean; modello: string | null; spento: boolean } | null>(null)
+
+  const guarda = useCallback(() => {
+    api.modelloLocale().then(setS).catch(() => setS(null))
+  }, [])
+  useEffect(() => { guarda() }, [guarda])
+
+  // non c'è niente da vedere finché non si sa, e se non c'è nessun modello
+  // installato non ha senso mostrare un interruttore per una cosa che non esiste
+  if (!s || (!s.acceso && !s.spento)) return null
+
+  const cambia = async () => {
+    const attivo = !!s.spento
+    setS({ ...s, spento: !attivo })
+    try { await api.usaModelloLocale(attivo) } finally { guarda() }
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Il lavoro piccolo, su questo computer')}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15 }}>
+            {s.spento ? t('Spento: fa tutto Claude.')
+              : s.modello
+                ? `${t('Acceso')} · ${s.modello}`
+                : t('Nessun modello trovato su questa macchina.')}
+          </div>
+          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 5, maxWidth: 460, textWrap: 'pretty' }}>
+            {t('Titoli delle chat, traduzioni, e quello che si segna di te: se qui c’è un modello acceso lo fa lui e non costa niente. Le risposte e le bozze restano a Claude, perché è lì che sbagliare costa.')}
+          </div>
+        </div>
+        <div onClick={cambia} style={track(!s.spento)}><div style={knob()} /></div>
+      </div>
+    </div>
+  )
+}
+
 export function Preferenze({ v }: { v: Vals }) {
   return (
     <div style={{ width: 720, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em', padding: '12px 4px 22px' }}>Preferenze</div>
+      <div style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em', padding: '12px 4px 22px' }}>{t('Preferenze')}</div>
 
+      {/*
+        Il fuoco sta qui e non più come pastiglia sopra al feed.
+        È una preferenza a tutti gli effetti — vale per tutte le letture che
+        verranno, non per quella che stai guardando — e sopra al feed era una
+        riga di testo in mezzo al lavoro, per una cosa che si cambia una volta
+        alla settimana. Quello che scrivi qui è anche l'unica leva che hai per
+        non farti riempire la prima pagina di roba che non ti serve.
+      */}
       <div style={{ ...CARD_GLASS, flex: 'none', borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-        <div style={LABEL}>Autonomia</div>
+        <div style={LABEL}>{t('Su cosa mi concentro')}</div>
+        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
+          {t('Quello che scrivi qui viene prima di tutto il resto quando scelgo cosa metterti in prima pagina.')}
+        </div>
+        <CampoFuoco v={v} />
+      </div>
+
+      {/* Subito sotto al fuoco perché sono la stessa domanda fatta due volte —
+          dove guardo dentro, cosa cerco fuori — e leggerle vicine è l'unico
+          modo per non confonderle. */}
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Di cosa ti tengo aggiornato')}</div>
+        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
+          {t('I giornali li leggo io ogni mattina. Scrivi qui cosa ti interessa e scelgo quelle: se lasci vuoto, ti do un po’ di tutto.')}
+        </div>
+        <CampoArgomenti v={v} />
+      </div>
+
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Autonomia')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
           {v.autonomie.map(a => (
             <div key={a.id} onClick={a.onClick} style={a.row}>
@@ -22,33 +286,79 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
       </div>
 
+      {/* Il motore. Sta nelle preferenze e non nel codice perché è una scelta
+          di costo, e chi paga deve poterla fare senza chiedere a nessuno. */}
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
-        <div style={LABEL}>Tono</div>
+        <div style={LABEL}>{t('Con quale modello ragiona')}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+          {v.modelli.map(m => (
+            <div key={m.id} onClick={m.onClick} style={{
+              display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
+              background: m.scelto ? 'rgba(255,255,255,.85)' : 'transparent',
+              boxShadow: m.scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+            }}>
+              <span style={{
+                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
+                border: m.scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
+                background: m.scelto ? '#FFF7F0' : 'transparent'
+              }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15 }}>{m.nome}</div>
+                <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{m.nota}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Abbonamento />
+      <ModelloDiCasa />
+
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Lingua')}</div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('In che lingua ti risponde e scrive il feed. I documenti li legge comunque nella lingua in cui sono.')}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
+          {v.lingue.map(l => (
+            <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: l.occupato ? 'rgba(34,39,31,.4)' : '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
+              {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
+            </button>
+          ))}
+        </div>
+      </div>
+
+
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Tono')}</div>
         <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-          {v.toni.map(t => (
-            <button key={t.id} onClick={t.onClick} style={t.style}>{t.label}</button>
+          {/* `tono`, non `t`: la variabile del map copriva la funzione di
+              traduzione, e il giorno che qualcuno avesse chiamato `t` qui
+              dentro avrebbe chiamato una pastiglia invece del dizionario */}
+          {v.toni.map(tono => (
+            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
           ))}
         </div>
         <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-        <div style={LABEL}>Dove stanno i tuoi dati</div>
+        <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
         <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
-          Tutto quello che Myynd legge sta in <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code> su
-          questo computer: l'indice in <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code> e
-          le credenziali in <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>, leggibile solo da te.
-          L'unica cosa che esce sono le domande che fai a Claude, con i pezzi di
-          documento che servono a rispondere.
+          {frasi.doveStannoIDati(
+            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
+            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
+            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
+          )}
         </div>
       </div>
 
       <div style={{ flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', background: 'linear-gradient(140deg,rgba(196,98,59,.14),rgba(255,253,249,.78) 52%,rgba(126,156,130,.18))', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15 }}>Le tue fonti</div>
-          <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 3 }}>Collega o scollega quando vuoi, senza rifare tutto.</div>
+          <div style={{ fontSize: 15 }}>{t('Le tue fonti')}</div>
+          <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 3 }}>{t('Collega o scollega quando vuoi, senza rifare tutto.')}</div>
         </div>
-        <button onClick={v.apriConnessioni} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', flex: 'none' }}>Apri</button>
+        <button onClick={() => v.apriConnessioni()} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Apri')}</button>
       </div>
     </div>
   )

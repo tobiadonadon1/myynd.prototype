@@ -1,4 +1,44 @@
-import { useState, type CSSProperties, type ElementType, type ComponentPropsWithoutRef } from 'react'
+import { useEffect, useState, type CSSProperties, type ElementType, type ComponentPropsWithoutRef } from 'react'
+
+/**
+ * Quanto è larga la finestra.
+ *
+ * Gli stili qui dentro sono in linea, e una media query non li vede: l'unico
+ * modo di far reagire questa app alla larghezza è misurarla. Stava già scritta
+ * dentro `Oggi.tsx` per le sue tre colonne; adesso serve anche fuori, perché
+ * l'impaginato intero deve rimpicciolirsi invece di farsi tagliare.
+ */
+export function useLarghezza(): number {
+  const [l, setL] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
+  useEffect(() => {
+    const misura = () => setL(window.innerWidth)
+    window.addEventListener('resize', misura)
+    return () => window.removeEventListener('resize', misura)
+  }, [])
+  return l
+}
+
+/**
+ * Le tre taglie dell'impaginato.
+ *
+ * `rail` è quella che conta: sotto gli ottocentoventi pixel la colonna di
+ * sinistra perde le parole e resta una fila di icone. Prima non c'era nessuna
+ * taglia — l'impaginato aveva `minWidth: 1180` e sotto quella soglia non si
+ * ridisegnava affatto: sbordava, e quello che restava fuori era semplicemente
+ * tagliato via. Su un portatile con la finestra a metà schermo mancava un pezzo
+ * di applicazione, e non c'era modo di arrivarci.
+ */
+export type Taglia = { rail: boolean; stretta: boolean; colonna: number }
+
+export function taglia(l: number): Taglia {
+  const rail = l < 820
+  return {
+    rail,
+    stretta: l < 1100,
+    // 60 basta a un'icona con il suo respiro; 234 è la misura di sempre
+    colonna: rail ? 60 : l < 1100 ? 198 : 234
+  }
+}
 
 type HovProps<T extends ElementType> = {
   as?: T
@@ -6,14 +46,43 @@ type HovProps<T extends ElementType> = {
   hover?: CSSProperties
 } & Omit<ComponentPropsWithoutRef<T>, 'style' | 'as'>
 
+/**
+ * Il bordo scritto per esteso.
+ *
+ * Quasi ogni bottone qui dentro ha `border: '1px solid …'` e al passaggio del
+ * mouse cambia solo `borderColor`. React se ne lamenta a ogni ridisegno —
+ * «don't mix shorthand and non-shorthand properties» — e non è pedanteria: nel
+ * momento in cui toglie la proprietà lunga mentre quella corta è ancora lì, il
+ * bordo può tornare al colore di prima per un fotogramma. Con la scorciatoia
+ * aperta nelle sue tre parti, i due stati dichiarano le stesse proprietà e il
+ * problema non si pone.
+ */
+function apriBordo(s: CSSProperties): CSSProperties {
+  const b = s.border
+  if (typeof b !== 'string' || !b || b === 'none') return s
+  const [larghezza, tipo, ...colore] = b.split(' ')
+  if (!tipo || !colore.length) return s
+  const { border: _via, ...resto } = s
+  return { ...resto, borderWidth: larghezza, borderStyle: tipo, borderColor: colore.join(' ') }
+}
+
 /** Elemento con stile al passaggio del mouse — l'equivalente di `style-hover` nel design. */
 export function Hov<T extends ElementType = 'div'>({ as, style, hover, ...rest }: HovProps<T>) {
   const [on, setOn] = useState(false)
   const El = (as || 'div') as ElementType
+
+  // si apre solo quando serve davvero: se nessuno dei due tocca il bordo per
+  // pezzi, la scorciatoia resta com'era scritta
+  const mescola = () => {
+    const h = hover as CSSProperties
+    const perPezzi = h && ('borderColor' in h || 'borderStyle' in h || 'borderWidth' in h)
+    return perPezzi ? { ...apriBordo(style ?? {}), ...apriBordo(h) } : { ...style, ...h }
+  }
+
   return (
     <El
       {...rest}
-      style={on && hover ? { ...style, ...hover } : style}
+      style={on && hover ? mescola() : style}
       onMouseEnter={() => setOn(true)}
       onMouseLeave={() => setOn(false)}
     />
@@ -56,6 +125,20 @@ export function dot(c: string): CSSProperties {
 export const LABEL: CSSProperties = {
   fontSize: '11.5px', fontWeight: 500, letterSpacing: '.1em',
   textTransform: 'uppercase', color: 'rgba(34,39,31,.55)'
+}
+
+/**
+ * La pastiglia dell'accento: «questa cosa aspetta una persona».
+ *
+ * Ce n'erano tre copie con tre alfe diverse (.16/.32, .14/.32, .12/.28), due
+ * delle quali sulla stessa schermata. Sono lo stesso oggetto e devono avere lo
+ * stesso peso, altrimenti l'unico colore che il prodotto si concede smette di
+ * voler dire una cosa sola.
+ */
+export const PILL: CSSProperties = {
+  padding: '4px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+  color: '#8E3F1F', background: 'rgba(196,98,59,.14)',
+  border: '1px solid rgba(196,98,59,.32)'
 }
 
 export const CARD_GLASS: CSSProperties = {

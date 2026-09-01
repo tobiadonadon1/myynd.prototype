@@ -1,0 +1,322 @@
+// La memoria: quello che Myynd sa di *te*, separato da quello che ha letto.
+//
+// I documenti sono fatti. Qui sta il giudizio — come decidi, cosa controlli
+// prima di firmare, con chi non vuoi lo sconto. È la parte che il brief chiama
+// il modo in cui il gemello prende forma, ed è quella che nessuno costruisce.
+//
+// Tre idee prese in prestito, riscritte da zero perché i progetti da cui
+// vengono hanno licenze che qui non vogliamo:
+//
+//   · dalla forma di Honcho, la TASSONOMIA: una convinzione non è tutta uguale.
+//     Esplicita è ciò che ti ha sentito dire; dedotta è ciò che ha concluso da
+//     premesse che deve saper elencare; indotta è una regolarità che ha notato,
+//     e che vale solo quanto la sua fiducia. Confonderle è il modo in cui un
+//     assistente comincia a inventarsi le persone.
+//   · da Graphiti, la BITEMPORALITÀ: non si cancella mai una convinzione, le si
+//     mette una data di fine. «Fino a marzo pensavo X» resta rispondibile.
+//   · da Letta, i BLOCCHI con un tetto di caratteri: il tetto costringe a
+//     consolidare invece di accumulare, e tiene il prompt dentro la cache.
+//
+// Niente di tutto questo è codice altrui: sono forme di dati, e le forme si
+// possono imparare.
+
+import { leggi, nellaLingua } from './config.ts'
+import { chiediJSON } from './modello.ts'
+import * as store from './store.ts'
+
+/** I blocchi che ogni installazione ha, anche vuoti: sono le domande da riempire. */
+export const BLOCCHI_BASE: { etichetta: string; descrizione: string }[] = [
+  { etichetta: 'come_decido', descrizione: 'Come questa persona prende una decisione: cosa pesa, in che ordine.' },
+  { etichetta: 'cosa_controllo', descrizione: 'Cosa verifica sempre prima di dire di sì o di firmare.' },
+  { etichetta: 'come_scrivo', descrizione: 'Il tono e le abitudini di scrittura: come apre, come chiude, cosa non dice mai.' },
+  { etichetta: 'errori_da_evitare', descrizione: 'Gli sbagli che ha già visto fare e che non vuole rivedere.' },
+  { etichetta: 'chi_conta', descrizione: 'Le persone, i clienti e i fornitori che ricorrono, e come si sta con ciascuno.' }
+]
+
+/**
+ * La "carta" della persona: poche righe, sempre in testa al ragionamento.
+ * Compatta di proposito — se cresce senza limite smette di essere un ritratto
+ * e diventa un archivio, e il modello la legge come rumore.
+ */
+function riga(k: store.Convinzione): string {
+  const quanto = k.fiducia >= 0.8 ? 'certo' : k.fiducia >= 0.5 ? 'probabile' : 'da confermare'
+  return `— ${k.enunciato} (${k.genere}, ${quanto})`
+}
+
+/**
+ * Il ritratto: chi è, e quello che ha capito di come lavora.
+ *
+ * Qui c'era il guasto più grave di tutta l'applicazione, ed era invisibile.
+ * Questa funzione leggeva `convinzioni('persona')` e basta. Ma lo schema che
+ * detta le convinzioni chiede al modello di classificarle in tre ambiti —
+ * 'persona', 'azienda', 'cliente:<nome>' — e il modello usa moltissimo gli
+ * ultimi due, perché quasi tutto quello che si impara parlando riguarda un
+ * cliente o l'azienda, non l'individuo in astratto.
+ *
+ * Il risultato, misurato sull'indice vero di questa macchina: sette convinzioni
+ * imparate, cinque su un cliente, due sull'azienda, **zero su 'persona'**. Cioè
+ * tutto quello che Myynd aveva capito in mesi d'uso — «evita di inventare
+ * numeri o citare benchmark come se fossero dati reali del prospect», che è
+ * esattamente il tipo di giudizio per cui questo prodotto esiste — veniva
+ * scritto, indicizzato, mostrato a nessuno e letto da nessuno. Il ciclo
+ * d'apprendimento girava a vuoto e non c'era modo di accorgersene, perché
+ * scrivere funzionava benissimo.
+ *
+ * Adesso 'persona' e 'azienda' stanno tutte e due in cima a ogni ragionamento:
+ * come lavora l'azienda vale sempre, esattamente come vale come lavora lei. Le
+ * convinzioni su un cliente preciso no — quelle sono contestuali, e si tirano
+ * dentro solo quando quel cliente c'entra: le porta `cartaPerContesto`.
+ */
+export function carta(): string {
+  const c = leggi()
+  const righe: string[] = []
+
+  if (c.nome) righe.push(`Si chiama ${c.nome}${c.ruolo ? `, ${c.ruolo}` : ''}.`)
+
+  /**
+   * I blocchi sono regole, non descrizioni. E vanno presentati come tali.
+   *
+   * Prima uscivano così: «Il tono e le abitudini di scrittura: come apre, come
+   * chiude, cosa non dice mai: Chiude sempre con Un caro saluto». Due volte i
+   * due punti, la domanda incollata alla risposta, e il tutto in mezzo a un
+   * paragrafo che comincia con «Chi ti parla» — cioè letto come contorno.
+   *
+   * Ma questi non sono cose che Myynd ha *dedotto*: sono le uniche righe di
+   * tutta la memoria che ha scritto lei, a mano, sapendo che le stava
+   * scrivendo. Sono la cosa più affidabile che ci sia qui dentro, e devono
+   * pesare più di qualunque cosa lui abbia concluso da solo.
+   */
+  const regole = store.blocchi()
+    // il fuoco è una direttiva di lettura, non un pezzo del ritratto: chi lo
+    // vuole se lo prende da `timone.fuoco()`, dove ha un posto suo nel prompt
+    .filter(b => b.etichetta !== 'fuoco' && b.valore.trim())
+
+  if (regole.length) {
+    righe.push('')
+    righe.push('Queste te le ha scritte lei, a mano. Non sono contesto: sono istruzioni,')
+    righe.push('e valgono più di qualunque cosa tu abbia dedotto da solo.')
+    for (const b of regole) {
+      righe.push(`— ${b.descrizione.replace(/[.:]$/, '')} → ${b.valore.trim()}`)
+    }
+  }
+
+  const sue = store.convinzioni('persona')
+  const azienda = store.convinzioni('azienda')
+
+  if (sue.length) {
+    righe.push('')
+    righe.push('Quello che ho capito di lei, con quanta certezza:')
+    for (const k of sue.slice(0, 10)) righe.push(riga(k))
+  }
+  if (azienda.length) {
+    righe.push('')
+    righe.push('E di come lavora la sua azienda:')
+    for (const k of azienda.slice(0, 8)) righe.push(riga(k))
+  }
+
+  return righe.join('\n')
+}
+
+/** Le convinzioni che riguardano un interlocutore preciso, se lo si conosce. */
+export function cartaDi(ambito: string): string {
+  const conv = store.convinzioni(ambito)
+  if (!conv.length) return ''
+  return `Su ${ambito.replace(/^cliente:/, '')}:\n` +
+    conv.slice(0, 8).map(k => `— ${k.enunciato}`).join('\n')
+}
+
+const senzaAccenti = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+/**
+ * Quello che sa dei clienti che c'entrano con quello di cui si sta parlando.
+ *
+ * Le convinzioni su un cliente non possono stare in cima a *ogni* prompt: con
+ * venti clienti diventerebbero un muro, e il ritratto smetterebbe di essere un
+ * ritratto — è la ragione per cui `carta()` ha un tetto. Ma quando si sta
+ * scrivendo proprio a quel cliente, sapere che con lui non si fanno sconti è
+ * la cosa più utile che Myynd abbia in mano.
+ *
+ * Perciò si guarda: il nome dell'ambito compare in quello che si sta facendo?
+ * Allora quelle convinzioni entrano. È l'uso per cui `cartaDi` era stata
+ * scritta e che non ha mai avuto, perché nessuno la chiamava.
+ */
+export function cartaPerContesto(testo: string, tetto = 3): string {
+  const dove = senzaAccenti(testo)
+  if (!dove.trim()) return ''
+
+  const ambiti = new Set<string>()
+  for (const c of store.convinzioni()) {
+    if (!c.ambito.startsWith('cliente:')) continue
+    const nome = senzaAccenti(c.ambito.slice('cliente:'.length)).trim()
+    // sotto le tre lettere un nome è troppo comune per essere un indizio:
+    // «bo» o «li» comparirebbero dentro qualunque parola
+    if (nome.length < 3) continue
+    if (dove.includes(nome)) ambiti.add(c.ambito)
+  }
+  if (!ambiti.size) return ''
+
+  return [...ambiti].slice(0, tetto).map(a => cartaDi(a)).filter(Boolean).join('\n\n')
+}
+
+/**
+ * Una funzione, non una costante.
+ *
+ * `nellaLingua()` dentro un `const` di modulo si valuta una volta sola, al
+ * caricamento: cambiavi lingua nelle preferenze e questo schema continuava a
+ * chiedere convinzioni in italiano finché non riavviavi il server. Lo stesso
+ * valeva in `domande.ts` e `timone.ts`. Sono le tre righe che rendevano la
+ * lingua una cosa mezza vera.
+ */
+const schemaMemoria = () => ({
+  type: 'object',
+  properties: {
+    convinzioni: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          enunciato: { type: 'string', description: `Una frase sola, in ${nellaLingua()}, al presente, su come questa persona lavora o decide.` },
+          ambito: { type: 'string', description: "'persona' per lei, 'azienda' per l'azienda, 'cliente:<nome>' per un cliente preciso." },
+          genere: { type: 'string', enum: ['esplicita', 'dedotta', 'indotta'] },
+          fiducia: { type: 'number', description: 'Da 0 a 1. Esplicita sta sopra 0.9; indotta di rado sopra 0.6.' },
+          premesse: { type: 'array', items: { type: 'string' }, description: 'Se dedotta: da quali affermazioni. Vuoto se esplicita.' },
+          citazione: { type: 'string', description: 'Le parole sue da cui viene, alla lettera. Vuoto se non ce ne sono.' }
+        },
+        required: ['enunciato', 'ambito', 'genere', 'fiducia', 'premesse', 'citazione'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['convinzioni'],
+  additionalProperties: false
+})
+
+const istruzioni = () => `Stai tenendo la memoria di Myynd su chi lo usa.
+
+Ti do uno scambio. Tira fuori solo quello che vale la pena ricordare per mesi:
+come decide, cosa controlla, cosa evita, con chi si comporta in un certo modo.
+
+Distingui con cura, perché è la differenza fra conoscere qualcuno e inventarlo:
+— esplicita: te l'ha detto lui. Riporta le sue parole nella citazione.
+— dedotta: l'hai concluso da cose che ha detto. Elenca le premesse, sempre.
+— indotta: è una regolarità che hai notato. Tieni la fiducia bassa.
+
+Non registrare fatti che stanno già nei documenti (numeri, date, importi): quelli
+si cercano, non si ricordano. Non registrare cortesie, saluti, o cose vere di
+chiunque. Meglio nessuna convinzione che una generica: una lista vuota è una
+risposta giusta.
+
+Scrivi in ${nellaLingua()}, al presente, una frase per convinzione.`
+
+/**
+ * Distilla uno scambio in convinzioni. Gira dopo la risposta, non prima: la
+ * chat non deve aspettare la memoria.
+ */
+export async function distilla(
+  scambio: { ruolo: string; testo: string }[],
+  origine = 'conversazione'
+): Promise<number> {
+  if (!scambio.length) return 0
+
+  const conversazione = scambio
+    .map(t => `${t.ruolo === 'u' ? 'Lui' : 'Myynd'}: ${t.testo}`)
+    .join('\n\n')
+    .slice(0, 24_000)
+
+  type Grezza = { enunciato: string; ambito: string; genere: string; fiducia: number; premesse: string[]; citazione: string }
+  const out = await chiediJSON<{ convinzioni: Grezza[] }>({
+    lavoro: 'estrazione',
+    max_tokens: 4000,
+    system: istruzioni(),
+    formato: schemaMemoria(),
+    messages: [{ role: 'user', content: conversazione }]
+  })
+  // la memoria è un di più: se fallisce, la conversazione resta valida
+  if (!out?.convinzioni?.length) return 0
+
+  // una convinzione nuova che contraddice una vecchia nello stesso ambito non
+  // la cancella: le mette una data di fine, e resta leggibile
+  let scritte = 0
+  for (const c of out.convinzioni) {
+    if (!c?.enunciato?.trim()) continue
+    // Un modello piccolo, ogni tanto, restituisce una frase di cortesia al
+    // posto di una convinzione. Una riga sotto le tre parole non è un giudizio
+    // su nessuno: è rumore che poi finisce dentro ogni prompt, per sempre.
+    if (c.enunciato.trim().split(/\s+/).length < 3) continue
+    store.ricorda({
+      enunciato: c.enunciato.trim(),
+      ambito: c.ambito || 'persona',
+      genere: (['esplicita', 'dedotta', 'indotta'].includes(c.genere) ? c.genere : 'indotta') as store.Convinzione['genere'],
+      fiducia: Math.max(0, Math.min(1, Number.isFinite(c.fiducia) ? c.fiducia : 0.5)),
+      premesse: c.premesse?.length ? c.premesse : null,
+      prova: c.citazione ? { citazione: c.citazione } : null,
+      origine
+    })
+    scritte++
+  }
+  return scritte
+}
+
+/**
+ * Rimettere in ordine quello che hai scritto tu.
+ *
+ * I cinque blocchi si riempiono di getto — si butta giù come viene, con le
+ * frasi a metà e i pensieri fuori ordine, perché è così che si risponde a
+ * «come decidi». Poi però quel testo sta in cima a *ogni* ragionamento, e un
+ * ritratto scritto male si legge male anche dal modello.
+ *
+ * Questa non riscrive per conto suo: riordina quello che c'è. La regola più
+ * importante è quella negativa — non aggiunge niente. Un blocco che dice di te
+ * una cosa che non hai detto è peggio di un blocco disordinato, perché poi
+ * quella cosa la ritrovi dentro le risposte e non sai da dove sia arrivata.
+ */
+export async function riscrivi(descrizione: string, testo: string, tetto = 700): Promise<string | null> {
+  const grezzo = testo.trim()
+  if (!grezzo) return null
+
+  const r = await chiediJSON<{ testo: string }>({
+    lavoro: 'estrazione',
+    max_tokens: 1200,
+    system:
+      `Rimetti in ordine una nota che una persona ha scritto su di sé. La domanda a cui ` +
+      `stava rispondendo era: «${descrizione}»\n\n` +
+      `Regole, in ordine di importanza:\n` +
+      `— NON aggiungere niente. Nessun dettaglio, nessun esempio, nessuna conseguenza che ` +
+      `lei non abbia scritto. Se ha detto tre cose, ne escono tre.\n` +
+      `— Restano le sue parole dove si può: è un ritratto, e deve suonare come lei.\n` +
+      `— Più corto, non più lungo. Frasi intere, niente elenco puntato a meno che non stesse ` +
+      `già elencando.\n` +
+      `— Al presente, in terza persona come l'originale se lo era, altrimenti come l'ha scritta.\n` +
+      `— Massimo ${tetto} caratteri.\n` +
+      `— Scrivi in ${nellaLingua()}.\n\n` +
+      `Se la nota è già ordinata e chiara, restituiscila com'è: non toccare per il gusto di toccare.`,
+    formato: {
+      type: 'object',
+      properties: { testo: { type: 'string', description: 'La nota rimessa in ordine.' } },
+      required: ['testo'],
+      additionalProperties: false
+    },
+    messages: [{ role: 'user', content: grezzo }]
+  })
+
+  const pulito = r?.testo?.trim()
+  if (!pulito) return null
+  // se ha allungato invece di accorciare, ha aggiunto: si tiene l'originale
+  if (pulito.length > Math.max(tetto, grezzo.length * 1.4)) return null
+  return pulito.slice(0, tetto)
+}
+
+/**
+ * Il ciclo delle correzioni: quello che Myynd aveva scritto contro quello che
+ * la persona ha mandato davvero. Il brief lo chiama l'apprendimento di più alto
+ * valore del prodotto, ed è vero — è l'unico momento in cui il giudizio si
+ * manifesta senza doverlo chiedere.
+ */
+export async function imparaDallaCorrezione(bozza: string, inviato: string): Promise<number> {
+  if (bozza.trim() === inviato.trim()) return 0
+  return distilla([
+    { ruolo: 'a', testo: `Avevo preparato questo:\n\n${bozza}` },
+    { ruolo: 'u', testo: `Ho mandato invece questo:\n\n${inviato}` }
+  ], 'correzione')
+}

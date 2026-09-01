@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { frasi, t } from './lingua'
 import { Sfondo } from './Sfondo'
-import { Hov } from './ui'
+import { Hov, taglia, useLarghezza } from './ui'
 import {
   IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconPiu, IconSpina, IconSuPiccola, IconEsci
+  IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci
 } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
 import { Automazioni } from './screens/Automazioni'
@@ -11,40 +12,78 @@ import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
 import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
+import { Oggi } from './oggi/Oggi'
+import { useCompiti } from './oggi/useCompiti'
 import { Preferenze } from './screens/Preferenze'
+import { Memoria } from './screens/Memoria'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
 import { Logo, Marchio } from './components/Marchio'
 import { useVals } from './vals'
-import { alloScadere, api, type Accesso as TipoAccesso, type Stato } from './api'
+import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
 import { Accesso } from './Accesso'
 
 export default function App() {
   const [accesso, setAccesso] = useState<TipoAccesso | null>(null)
   const [stato, setStato] = useState<Stato | null>(null)
-  const [errore, setErrore] = useState('')
+  const [guasto, setGuasto] = useState<Guaio | null>(null)
   const [onboarding, setOnboarding] = useState(false)
-  const [connessioni, setConnessioni] = useState(false)
+  // null = pannello chiuso; '' = aperto su tutto; 'posta' = aperto su quella fonte
+  const [connessioni, setConnessioni] = useState<string | null>(null)
+
+  /**
+   * Il sito ascolta quello che succede nell'app.
+   *
+   * Sono due finestre sullo stesso cervello, e finora una delle due non sapeva
+   * niente dell'altra: aggiungevi una riga in Mind2Do e qui non cambiava
+   * niente — nemmeno il conto delle fonti — finché non ricaricavi. Lo stesso
+   * filo che tiene vive le deleghe serve anche a questo.
+   */
+  useEffect(() => {
+    if (!accesso?.entrato) return
+    let attesa: ReturnType<typeof setTimeout> | undefined
+    const chiudi = api.flussoCompiti(e => {
+      if (e.fase !== 'cambiato' && e.fase !== 'pronto' && e.fase !== 'chiede') return
+      clearTimeout(attesa)
+      attesa = setTimeout(() => { api.stato().then(setStato).catch(() => {}) }, 250)
+    })
+    return () => { clearTimeout(attesa); chiudi() }
+  }, [accesso?.entrato])
 
   // se la sessione cade, si torna all'accesso senza schianti
   useEffect(() => {
     alloScadere(() => {
       setStato(null)
-      setConnessioni(false)
+      setConnessioni(null)
       setAccesso(a => (a ? { ...a, entrato: false } : a))
     })
   }, [])
 
-  useEffect(() => {
-    api.accesso()
-      .then(a => {
-        setAccesso(a)
-        if (!a.entrato) return
-        return api.stato().then(s => { setStato(s); setOnboarding(!s.config.onboarding) })
-      })
-      .catch(e => setErrore(e instanceof Error ? e.message : String(e)))
+  /**
+   * Il primo caricamento — e ogni tentativo successivo.
+   *
+   * Estratto perché la schermata di guasto lo richiama: prima la prova si
+   * faceva una volta sola al montaggio, quindi riavviare il server non
+   * cambiava niente e l'unica via d'uscita era ricaricare a mano.
+   */
+  const carica = useCallback(async () => {
+    try {
+      const a = await api.accesso()
+      setAccesso(a)
+      if (a.entrato) {
+        const s = await api.stato()
+        setStato(s)
+        setOnboarding(!s.config.onboarding)
+      }
+      // è andata: se c'era un guasto, non c'è più
+      setGuasto(null)
+    } catch (e) {
+      setGuasto(guaio(e))
+    }
   }, [])
+
+  useEffect(() => { carica() }, [carica])
 
   const dentro = async (conto: { email: string }) => {
     try {
@@ -54,7 +93,7 @@ export default function App() {
       setAccesso({ registrato: true, entrato: true, account: conto })
     } catch (e) {
       // se il primo caricamento fallisce non lascio l'utente sullo splash
-      setErrore(e instanceof Error ? e.message : String(e))
+      setGuasto(guaio(e))
     }
   }
 
@@ -62,12 +101,12 @@ export default function App() {
     try { await api.esci() } catch { /* il token è comunque già stato buttato */ }
     setStato(null)
     setOnboarding(false)
-    setConnessioni(false)
-    setErrore('')
+    setConnessioni(null)
+    setGuasto(null)
     setAccesso({ registrato: true, entrato: false, account: accesso?.account ?? null })
   }
 
-  if (errore) return <Guasto errore={errore} />
+  if (guasto) return <Guasto guasto={guasto} riprova={carica} />
   if (!accesso) return <Attesa />
   if (!accesso.entrato) {
     return (
@@ -87,10 +126,11 @@ export default function App() {
 
   return (
     <>
-      <Casa stato={stato} apriConnessioni={() => setConnessioni(true)} esci={fuori} />
-      {connessioni && (
+      <Casa stato={stato} apriConnessioni={(fonte = '') => setConnessioni(fonte)} esci={fuori} />
+      {connessioni !== null && (
         <Connessioni
-          chiudi={() => setConnessioni(false)}
+          fonte={connessioni}
+          chiudi={() => setConnessioni(null)}
           cambiato={() => { api.stato().then(setStato).catch(() => {}) }}
         />
       )}
@@ -99,29 +139,86 @@ export default function App() {
 }
 
 function Casa({ stato, apriConnessioni, esci }: {
-  stato: Stato; apriConnessioni: () => void; esci: () => void
+  stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void
 }) {
   const v = useVals(stato, apriConnessioni)
+  // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
+  // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
+  const lista = useCompiti(v.mostraToast)
+
+  /**
+   * Quanto sta in larghezza.
+   *
+   * Qui c'era `minWidth: 1180` e basta: sotto quella soglia l'impaginato non
+   * si ridisegnava, sbordava — e quello che restava fuori era tagliato via,
+   * senza modo di arrivarci. Su un portatile con la finestra a metà schermo
+   * mancava un pezzo di applicazione.
+   *
+   * Adesso la colonna di sinistra si stringe, e sotto gli ottocentoventi
+   * pixel perde le parole e resta una fila di icone. Il posto va a quello
+   * che si sta guardando, che è la cosa giusta su una finestra piccola.
+   */
+  const { rail, colonna } = taglia(useLarghezza())
+
+  /** Nel rail l'icona si centra e l'etichetta sparisce: restano i titoli. */
+  const nav = (base: React.CSSProperties): React.CSSProperties =>
+    rail ? { ...base, justifyContent: 'center', padding: '10px 0', gap: 0 } : base
 
   return (
+    // La radice è fissata alla finestra, non alta 100vh dentro il documento.
+    // Con `minWidth` più larga della finestra il documento sbordava, compariva
+    // la barra di scorrimento orizzontale, questa cambiava l'altezza utile,
+    // 100vh si ricalcolava, il contenuto si rifletteva e la barra spariva —
+    // e da capo. A ogni giro il compositore ridisegnava le macchie animate e
+    // rifaceva il backdrop-filter della colonna: è quello lo sfarfallio, e si
+    // vedeva solo a finestra piccola perché a schermo intero il ciclo non parte.
     <div style={{
-      position: 'relative', display: 'flex', width: '100%', minWidth: 1180, height: '100vh', minHeight: 820,
-      boxSizing: 'border-box', background: '#F2E9DC', color: '#22271F',
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 14, overflow: 'hidden'
+      position: 'fixed', inset: 0, overflow: 'hidden',
+      background: '#F2E9DC', color: '#22271F',
+      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 14
     }}>
+      {/*
+        Alto esattamente quanto la finestra, mai di più. Il `minHeight: 820` che
+        c'era prima costringeva l'impaginato a essere più alto dello schermo su
+        ogni finestra bassa: sotto l'ultima card restava una fascia vuota di
+        fondo animato — quella che sembrava un piè di pagina che nessuno aveva
+        chiesto. In verticale non si scorre qui: scorrono le due colonne, ognuna
+        per conto suo, e il fondo finisce dove finisce lo schermo.
+      */}
+      <div style={{
+        position: 'relative', display: 'flex', width: '100%', height: '100%',
+        // 360 e non 1180: sotto si scorre, ma solo davvero in fondo alla
+        // scala, non appena la finestra scende sotto un portatile
+        minWidth: 360, boxSizing: 'border-box',
+        overflowX: 'auto', overflowY: 'hidden'
+      }}>
       <Sfondo />
 
       {/* colonna di sinistra */}
       <div style={{
-        position: 'relative', width: 234, flex: 'none', display: 'flex', flexDirection: 'column',
-        margin: '18px 0 18px 18px', padding: '22px 15px 15px', borderRadius: '26px 22px 24px 20px',
+        position: 'relative', width: colonna, flex: 'none', display: 'flex', flexDirection: 'column',
+        // `minHeight: 0` è quello che permette ai figli in overflow di scorrere
+        // dentro la colonna invece di allungarla: senza, un elenco chat lungo
+        // spingerebbe la colonna oltre lo schermo e riporterebbe la fascia vuota
+        minHeight: 0, margin: rail ? '12px 0 12px 12px' : '18px 0 18px 18px',
+        padding: rail ? '16px 7px 12px' : '22px 15px 15px',
+        borderRadius: rail ? 20 : '26px 22px 24px 20px',
         background: 'linear-gradient(180deg,rgba(255,253,249,.72),rgba(255,253,249,.5))',
         backdropFilter: 'blur(26px) saturate(1.5)', WebkitBackdropFilter: 'blur(26px) saturate(1.5)',
-        border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)'
+        border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)',
+        // un livello di composizione suo: senza, ogni fotogramma delle macchie
+        // dietro obbliga a rifare la sfocatura di tutta la colonna
+        transform: 'translateZ(0)', backfaceVisibility: 'hidden', contain: 'paint'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 24px' }}>
-          <div style={{ flex: 1 }}><Logo dim={20} testo={20} animato={false} /></div>
-          <Hov as="button" title="Cerca" onClick={v.openSearch}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          flexDirection: rail ? 'column' : 'row',
+          padding: rail ? '0 0 18px' : '0 4px 24px'
+        }}>
+          <div style={{ flex: rail ? 'none' : 1 }}>
+            {rail ? <Marchio dim={20} animato={false} /> : <Logo dim={20} testo={20} animato={false} />}
+          </div>
+          <Hov as="button" title={t('Cerca  ⌘K')} onClick={v.openSearch}
             style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
             hover={{ color: '#C4623B' }}>
             <IconCerca />
@@ -129,40 +226,50 @@ function Casa({ stato, apriConnessioni, esci }: {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <a href="#" onClick={v.goMyynd} style={v.navMyynd}>
+          <a href="#" onClick={v.goMyynd} style={nav(v.navMyynd)} title={rail ? 'Myynd' : undefined}>
             <Marchio dim={15} animato={false} colore="currentColor" />
-            <span style={{ flex: 1 }}>Myynd</span>
-            <span style={v.badge}>{v.apertiCount}</span>
+            {!rail && <span style={{ flex: 1 }}>Myynd</span>}
+            {!rail && <span style={v.badge}>{v.apertiCount}</span>}
           </a>
-          <a href="#" onClick={v.goChat} style={v.navChat}>
+          <a href="#" onClick={v.goOggi} style={nav(v.navOggi)} title={rail ? t('Da fare') : undefined}>
+            <IconSpunta size={15} style={{ flex: 'none' }} />
+            {!rail && <span style={{ flex: 1 }}>{t('Da fare')}</span>}
+            {/* l'accento qui vuol dire quello che vuol dire dappertutto:
+                qualcosa aspetta una persona */}
+            {(lista.pronte > 0 || lista.chiedono > 0) && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? '#FFF7F0' : '#C4623B' }} />}
+            {!rail && lista.pronte === 0 && lista.chiedono === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
+          </a>
+          <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             <IconChat style={{ flex: 'none' }} />
-            <span style={{ flex: 1 }}>Chat</span>
+            {!rail && <span style={{ flex: 1 }}>{t('Chat')}</span>}
           </a>
 
-          {v.isChat && (
+          {/* l'elenco delle conversazioni non ci sta in una fila di icone:
+              nel rail si raggiunge entrando in Chat */}
+          {v.isChat && !rail && (
             <div style={{ margin: '2px 0 6px', padding: 5, borderRadius: 14, background: 'rgba(34,39,31,.05)', animation: 'fadein .2s ease' }}>
               <Hov as="button" onClick={v.newChat}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 11, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.66)', color: '#8E3F1F', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
                 hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>
-                <IconPiu />Nuova chat
+                <IconPiu />{t('Nuova chat')}
               </Hov>
               <div style={{ maxHeight: 116, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
-                {v.threads.map(t => (
-                  <div key={t.id} onMouseEnter={t.onEnter} onMouseLeave={t.onLeave} onClick={t.onClick} style={t.row}>
+                {v.threads.map(ch => (
+                  <div key={ch.id} onMouseEnter={ch.onEnter} onMouseLeave={ch.onLeave} onClick={ch.onClick} style={ch.row}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.titolo}</div>
-                      <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{t.quando}</div>
+                      <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.titolo}</div>
+                      <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{ch.quando}</div>
                     </div>
-                    <button onClick={t.onDelete} title="Elimina" style={t.binStyle}><IconCestino /></button>
+                    <button onClick={ch.onDelete} title={t('Elimina')} style={ch.binStyle}><IconCestino /></button>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <a href="#" onClick={v.goAuto} style={v.navAuto}>
+          <a href="#" onClick={v.goAuto} style={nav(v.navAuto)} title={rail ? t('Automazioni') : undefined}>
             <IconFulmine style={{ flex: 'none' }} />
-            <span style={{ flex: 1 }}>Automazioni</span>
+            {!rail && <span style={{ flex: 1 }}>{t('Automazioni')}</span>}
           </a>
         </div>
 
@@ -175,13 +282,18 @@ function Casa({ stato, apriConnessioni, esci }: {
         )}
 
         <div style={{ position: 'relative' }}>
+          {/* Nel rail la colonna è larga sessanta pixel: un menù largo quanto lei
+              sarebbe cinque parole spezzate una lettera per riga. Lì si stacca
+              dalla colonna e si allarga verso destra — le voci del menù le parole
+              ce le hanno anche quando la navigazione non le ha. */}
           {v.menuOpen && (
-            <div style={{ position: 'absolute', left: -3, right: -3, bottom: 54, borderRadius: '18px 16px 18px 14px', background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
-              <a href="#" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />Preferenze</a>
-              <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />Mappa</a>
+            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: '18px 16px 18px 14px', background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
+              <a href="#" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
+              <a href="#" onClick={v.goMemoria} style={v.menuMemoria}><IconSpunta size={15} style={{ flex: 'none' }} />{t('Memoria')}</a>
+              <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>
               <a href="#" onClick={v.goConn} style={v.menuConn}>
                 <IconSpina style={{ flex: 'none' }} />
-                <span style={{ flex: 1 }}>Connettori</span>
+                <span style={{ flex: 1 }}>{t('Connettori')}</span>
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
               <div style={{ height: 1, background: 'rgba(34,39,31,.1)', margin: '5px 8px' }} />
@@ -189,29 +301,45 @@ function Casa({ stato, apriConnessioni, esci }: {
                 onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}
                 style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 12, fontSize: '13.5px', cursor: 'pointer', color: 'rgba(34,39,31,.7)' }}
                 hover={{ color: '#8E3F1F', background: 'rgba(196,98,59,.1)' }}>
-                <IconEsci style={{ flex: 'none' }} />Esci
-              </Hov>
+                <IconEsci style={{ flex: 'none' }} />{t('Esci')}</Hov>
             </div>
           )}
           <Hov onClick={v.toggleMenu}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
-            <span style={{ flex: 1, fontSize: '13.5px' }}>
-              {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
-            </span>
-            <span style={v.chevron}><IconSuPiccola /></span>
+            {!rail && (
+              <span style={{ flex: 1, fontSize: '13.5px' }}>
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
+              </span>
+            )}
+            {!rail && <span style={v.chevron}><IconSuPiccola /></span>}
           </Hov>
         </div>
       </div>
 
       {/* colonna centrale */}
-      <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center', overflowY: 'auto', padding: '22px 34px 44px 30px' }}>
-        {v.isMyynd && <Myynd v={v} />}
+      <div style={{
+        position: 'relative', flex: 1, minWidth: 0, minHeight: 0,
+        display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+        overflowY: 'auto', overscrollBehavior: 'contain',
+        padding: rail ? '16px 14px 24px 14px' : '22px 34px 30px 30px'
+      }}>
+        {v.isMyynd && <Myynd v={v} lista={lista} />}
+        {v.isOggi && (
+          <Oggi
+            l={lista}
+            oggi={v.oggi}
+            lingua={stato.config.lingua}
+            giroFatto={stato.config.giro}
+            segnaGiro={() => { api.profilo({ giro: true }).catch(() => { /* lo rifarà: pazienza */ }) }}
+          />
+        )}
         {v.isChat && <Chat v={v} />}
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
         {v.isPref && <Preferenze v={v} />}
+        {v.isMemoria && <Memoria />}
         {v.isConn && <Connettori v={v} />}
       </div>
 
@@ -219,6 +347,7 @@ function Casa({ stato, apriConnessioni, esci }: {
       {v.docOpen && <Documento v={v} />}
       {v.toastOn && <Toast v={v} />}
       {v.searchOpen && <Ricerca v={v} />}
+      </div>
     </div>
   )
 }
@@ -231,16 +360,81 @@ function Attesa() {
   )
 }
 
-function Guasto({ errore }: { errore: string }) {
+/** Ogni quanto la schermata di guasto ribussa, in secondi. */
+const RIPROVA = 3
+
+/**
+ * Quando Myynd non risponde.
+ *
+ * Questa schermata la vede chi usa Myynd, non chi lo scrive, e per tre cose si
+ * comportava come se fosse il contrario:
+ *
+ * — diceva «il server non risponde» e poi «avvialo con npm run dev». È
+ *   un'istruzione vera per chi ha il progetto aperto in un terminale e muta per
+ *   chiunque altro: chi usa Myynd ha un'app. Adesso quella riga esiste solo nel
+ *   build di sviluppo, dove è l'unica cosa utile da dire, e a chi usa l'app si
+ *   dice quello che può fare davvero — chiuderla e riaprirla.
+ * — mostrava «Errore 500» in rosso. Non è un errore del server: è il numero con
+ *   cui il proxy dello sviluppo racconta una porta chiusa. Non dice niente a chi
+ *   legge e spaventa. Il dettaglio tecnico resta, ma di là — in sviluppo e nella
+ *   console.
+ * — riprovava da sola ogni tre secondi e lo diceva a metà: un bottone «Riprova»
+ *   accanto a un «riprovo da solo…» che compariva dopo il primo giro. Sembravano
+ *   due cose in disaccordo. Adesso il tentativo si vede — c'è il conto alla
+ *   rovescia — e il bottone è quello che è sempre stato: il modo di non
+ *   aspettarlo.
+ */
+function Guasto({ guasto, riprova }: { guasto: Guaio; riprova: () => void }) {
+  const [fra, setFra] = useState(RIPROVA)
+
+  // il conto alla rovescia: un secondo alla volta, così quello che sta
+  // succedendo si vede invece di essere raccontato
+  useEffect(() => {
+    const t = setInterval(() => setFra(n => Math.max(0, n - 1)), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  // arrivato a zero si ribussa. Se il server risponde questa schermata sparisce
+  // da sola e l'app riparte da dove doveva partire.
+  useEffect(() => {
+    if (fra > 0) return
+    riprova()
+    setFra(RIPROVA)
+  }, [fra, riprova])
+
+  const adesso = () => { riprova(); setFra(RIPROVA) }
+
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: '#F4EFE8', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", padding: 40 }}>
       <div style={{ maxWidth: 480, textAlign: 'center' }}>
-        <div style={{ fontSize: 26, letterSpacing: '-.02em' }}>Il server non risponde.</div>
-        <div style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(244,239,232,.6)', marginTop: 16 }}>
-          Myynd ha bisogno del suo server locale per leggere posta, file e note.
-          Avvialo con <code style={{ background: 'rgba(244,239,232,.1)', padding: '2px 7px', borderRadius: 5 }}>npm run dev</code> e ricarica.
+        <div style={{ fontSize: 26, letterSpacing: '-.02em' }}>
+          {t(guasto.motoreGiu ? 'Myynd non risponde.' : 'Myynd non è riuscito ad avviarsi.')}
         </div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(232,144,122,.9)', marginTop: 18 }}>{errore}</div>
+        <div style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(244,239,232,.6)', marginTop: 16 }}>
+          {guasto.motoreGiu
+            ? t('Non risponde su questo computer. Sto riprovando da solo: se non torna, chiudi Myynd e riaprilo.')
+            : t(guasto.frase)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 22 }}>
+          <button onClick={adesso} style={{
+            padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(244,239,232,.3)',
+            background: 'rgba(244,239,232,.08)', color: '#F4EFE8',
+            fontSize: '13.5px', fontFamily: 'inherit', cursor: 'pointer'
+          }}>{t('Riprova adesso')}</button>
+          <span style={{ fontSize: '12px', color: 'rgba(244,239,232,.35)', minWidth: 96, textAlign: 'left' }}>
+            {fra > 0 ? frasi.riprovoFra(fra) : t('riprovo…')}
+          </span>
+        </div>
+        {/* Il numero, il percorso, la frase del browser: a chi sta sistemando
+            Myynd servono, a chi lo sta usando no. */}
+        {import.meta.env.DEV && (
+          <div style={{ fontSize: '12.5px', color: 'rgba(244,239,232,.4)', marginTop: 20, lineHeight: 1.6 }}>
+            {frasi.motoreGiuDev(
+              <code style={{ background: 'rgba(244,239,232,.1)', padding: '2px 7px', borderRadius: 5 }}>npm run dev</code>
+            )}
+            <div style={{ marginTop: 6, color: 'rgba(232,144,122,.75)' }}>{guasto.dettaglio}</div>
+          </div>
+        )}
       </div>
     </div>
   )

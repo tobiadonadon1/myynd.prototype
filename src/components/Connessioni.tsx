@@ -4,16 +4,40 @@
 import { useEffect, useState } from 'react'
 import { api, rigaSincronizzazione, type Stato } from '../api'
 import { Form } from './forms'
+import { frasi, lingua, loc, t } from '../lingua'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
 
+/**
+ * Il pallino di ogni fonte.
+ *
+ * Le tinte sono le stesse degli attrezzi in `attrezzi.ts`, e devono restare
+ * le stesse: una fonte che è verde nel pannello delle connessioni e blu sulla
+ * pastiglia di un'automazione è una fonte che sembra due cose diverse.
+ */
 const COLORE: Record<string, string> = {
-  posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A'
+  posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A',
+  google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
+  drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3'
 }
 
-export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato: () => void }) {
+export function Connessioni({ fonte, chiudi, cambiato }: {
+  /** La fonte da aprire già espansa; stringa vuota per l'elenco intero. */
+  fonte?: string
+  chiudi: () => void
+  cambiato: () => void
+}) {
   const [s, setS] = useState<Stato | null>(null)
-  const [aperto, setAperto] = useState<string | null>(null)
+  const [aperto, setAperto] = useState<string | null>(fonte || null)
+  /**
+   * Una fonte sola, quando è una fonte sola che hai chiesto.
+   *
+   * Cliccando «Posta» si apriva l'elenco intero con Posta espansa in mezzo:
+   * quattro card, tre delle quali non c'entravano niente con quello che
+   * stavi per fare. Chi clicca Posta vuole Posta. L'elenco resta a un clic,
+   * per chi lo cerca.
+   */
+  const [soloQuesta, setSoloQuesta] = useState(fonte || '')
   const [sincronizzando, setSincronizzando] = useState<string | null>(null)
 
   const ricarica = async () => { const n = await api.stato(); setS(n); return n }
@@ -29,8 +53,38 @@ export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato
     setSincronizzando(null)
   }
 
-  const pronti = s?.connettori.filter(c => c.pronto) ?? []
-  const dopo = s?.connettori.filter(c => !c.pronto) ?? []
+  const tutti = s?.connettori.filter(c => c.pronto) ?? []
+  const pronti = soloQuesta ? tutti.filter(c => c.id === soloQuesta) : tutti
+  const dopo = soloQuesta ? [] : (s?.connettori.filter(c => !c.pronto) ?? [])
+  const messaFuoco = !!soloQuesta && pronti.length === 1
+
+  // Quello che si può collegare senza chiedere niente a nessuno: le cartelle
+  // di casa, e la chiave di Claude se è già nell'ambiente. Posta e Notion no —
+  // una password e un token non si possono indovinare, e fingere che un
+  // pulsante li risolva sarebbe solo un pulsante che fallisce.
+  const [subito, setSubito] = useState<string[]>([])
+  const [collegando, setCollegando] = useState(false)
+  useEffect(() => {
+    if (!s) return
+    const puoi: string[] = []
+    const desktop = s.connettori.find(c => c.id === 'desktop')
+    if (desktop && !desktop.collegato && s.suggerimentiDesktop.length) puoi.push('desktop')
+    api.chiaveNellAmbiente().then(r => {
+      const claude = s.connettori.find(c => c.id === 'claude')
+      setSubito(r.presente && claude && !claude.collegato ? [...puoi, 'claude'] : puoi)
+    }).catch(() => setSubito(puoi))
+  }, [s])
+
+  const collegaSubito = async () => {
+    setCollegando(true)
+    try {
+      if (subito.includes('desktop') && s) await api.collegaDesktop(s.suggerimentiDesktop).catch(() => {})
+      if (subito.includes('claude')) await api.usaChiaveAmbiente().catch(() => {})
+      await ricarica()
+      cambiato()
+      if (subito.includes('desktop')) leggi('desktop')
+    } finally { setCollegando(false) }
+  }
 
   return (
     <>
@@ -47,15 +101,45 @@ export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 16px', borderBottom: '1px solid rgba(34,39,31,.08)' }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 21, letterSpacing: '-.02em' }}>Connessioni</div>
+            <div style={{ fontSize: 21, letterSpacing: '-.02em' }}>
+              {messaFuoco ? t(pronti[0].nome) : t('Connessioni')}
+            </div>
             <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 3 }}>
-              {s ? `${s.conteggi.totale.toLocaleString('it-IT')} documenti letti` : 'carico…'}
+              {messaFuoco ? (
+                <Hov as="button" onClick={() => { setSoloQuesta(''); setAperto(null) }}
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.6)' }}
+                  hover={{ color: '#8E3F1F' }}>{t('‹ tutte le fonti')}</Hov>
+              ) : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
             </div>
           </div>
           <button onClick={chiudi} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px' }}>
+          {subito.length > 0 && !messaFuoco && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, padding: '15px 18px',
+              borderRadius: 18, border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)'
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15 }}>{frasi.collegabiliOra(subito.length)}</div>
+                <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.62)', marginTop: 3, lineHeight: 1.5 }}>
+                  {subito.includes('desktop') && t('Scrivania, Documenti e Download in sola lettura')}
+                  {subito.length === 2 && t(', e ')}
+                  {subito.includes('claude') && t('la chiave di Claude che è già qui')}
+                  {t('. Le altre no: servono le tue credenziali.')}
+                </div>
+              </div>
+              <button onClick={collegaSubito} disabled={collegando} style={{
+                flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
+                background: collegando ? 'rgba(34,39,31,.18)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
+                color: collegando ? 'rgba(34,39,31,.5)' : '#FFF7F0',
+                fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
+                cursor: collegando ? 'default' : 'pointer'
+              }}>{collegando ? t('Collego…') : t('Consenti')}</button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {pronti.map(c => {
               const colore = COLORE[c.id] ?? '#C4623B'
@@ -75,30 +159,36 @@ export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato
                       boxShadow: c.collegato ? `0 0 0 5px ${colore}22` : 'none'
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15 }}>{c.nome}</div>
+                      <div style={{ fontSize: 15 }}>{t(c.nome)}</div>
                       <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.58)', marginTop: 3 }}>
-                        {c.collegato ? (c.documenti ? `${c.documenti.toLocaleString('it-IT')} documenti letti` : 'collegato') : c.nota}
+                        {c.collegato ? (c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato')) : t(c.nota)}
                       </div>
                     </div>
                     {c.collegato ? (
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 'none' }}>
-                        {c.id !== 'claude' && (
+                        {/*
+                          «Rileggi» solo dove c'è qualcosa da rileggere.
+                          Claude non è una fonte, e WhatsApp non si può
+                          chiedere: i messaggi li spinge Meta mentre arrivano.
+                          Un bottone che gira a vuoto è peggio di un bottone
+                          che non c'è — fa credere che la fonte sia rotta.
+                        */}
+                        {c.id !== 'claude' && c.id !== 'whatsapp' && (
                           <Hov as="button"
                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); leggi(c.id) }}
                             style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
                             hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                            {sincronizzando && sincronizzando.startsWith(c.id) ? 'leggo…' : 'Rileggi'}
+                            {sincronizzando && sincronizzando.startsWith(c.id) ? t('leggo…') : t('Rileggi')}
                           </Hov>
                         )}
                         <Hov as="button"
                           onClick={async (e: React.MouseEvent) => { e.stopPropagation(); await api.scollega(c.id); await ricarica(); cambiato() }}
                           style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.45)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                          hover={{ color: '#C4623B' }}>Scollega</Hov>
+                          hover={{ color: '#C4623B' }}>{t('Scollega')}</Hov>
                       </div>
                     ) : (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: '#8E3F1F', flex: 'none' }}>
-                        <IconPiu size={13} />Collega
-                      </span>
+                        <IconPiu size={13} />{t('Collega')}</span>
                     )}
                   </div>
                   {apertoQui && !c.collegato && (
@@ -116,15 +206,13 @@ export function Connessioni({ chiudi, cambiato }: { chiudi: () => void; cambiato
             })}
           </div>
 
-          <div style={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(34,39,31,.45)', margin: '26px 0 12px' }}>
-            Più avanti
-          </div>
+          {!messaFuoco && <div style={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(34,39,31,.45)', margin: '26px 0 12px' }}>{t('Più avanti')}</div>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {dopo.map(c => (
-              <span key={c.id} title={c.nota} style={{
+              <span key={c.id} title={t(c.nota)} style={{
                 padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
                 border: '1px dashed rgba(34,39,31,.18)', color: 'rgba(34,39,31,.42)'
-              }}>{c.nome}</span>
+              }}>{t(c.nome)}</span>
             ))}
           </div>
         </div>

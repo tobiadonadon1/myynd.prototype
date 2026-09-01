@@ -1,0 +1,27 @@
+{
+  "id": "chi-aspetta-risposta",
+  "nome": "Chi aspetta una risposta",
+  "spiega": "Ogni pomeriggio guarda chi ti ha scritto e non ha ancora avuto risposta.",
+  "quando": {
+    "ogni": "giorno",
+    "ora": 16
+  },
+  "guarda": {
+    "cerca": "domanda richiesta cortesemente attendo riscontro",
+    "limite": 8
+  },
+  "fai": "Chi di questi aspetta una risposta da te e non l'ha avuta? Per il più urgente, scrivi la risposta per intero, pronta da mandare. Per gli altri, una riga a testa. Se non aspetta nessuno, dillo e fermati.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Who is waiting on you",
+    "spiega": "Every afternoon, looks at who wrote to you and has not had an answer yet.",
+    "cerca": "question request kindly waiting to hear back following up",
+    "fai": "Which of these is waiting for an answer from you and has not had one? For the most urgent, write the reply in full, ready to send. For the others, one line each. If nobody is waiting, say so and stop."
+  }
+}

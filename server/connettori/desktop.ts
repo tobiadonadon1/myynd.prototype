@@ -9,11 +9,10 @@ import { join, extname, basename, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import type { ConfigDesktop } from '../config.ts'
 import type { Documento } from '../store.ts'
+import { daBuffer, LETTI, tipoDi } from './estrai.ts'
 
-/** Quello che è un documento per una persona, non per un compilatore. */
-const TESTO = ['.md', '.markdown', '.txt', '.rtf', '.csv', '.org', '.tex']
-const RICCHI = ['.pdf', '.docx']
-export const LETTI = [...RICCHI, ...TESTO]
+export { LETTI }
+
 
 /** Cartelle che non contengono mai roba tua. */
 const SALTA = new Set([
@@ -44,44 +43,45 @@ async function eProgetto(cartella: string, voci: { name: string }[]): Promise<bo
   return SEGNI_PROGETTO.some(s => nomi.has(s))
 }
 
-/** Tira fuori il testo da un PDF o da un .docx. */
-async function estrai(percorso: string, ext: string): Promise<string> {
-  const buf = await readFile(percorso)
-  if (ext === '.pdf') {
-    const { PDFParse } = await import('pdf-parse')
-    const p = new PDFParse({ data: new Uint8Array(buf) })
-    try {
-      const r = await p.getText()
-      return (r.text || '').trim()
-    } finally {
-      await p.destroy()
-    }
-  }
-  if (ext === '.docx') {
-    const { default: mammoth } = await import('mammoth')
-    const r = await mammoth.extractRawText({ buffer: buf })
-    return (r.value || '').trim()
-  }
-  return buf.toString('utf8').trim()
-}
-
 export type Esito = {
   docs: Documento[]
   saltatiProgetti: string[]
   falliti: number
   illeggibili: string[]
   troncato: boolean
+  /** Le radici percorse fino in fondo: solo queste si possono riconciliare. */
+  complete: string[]
+  /**
+   * I file che ci sono ancora ma che stavolta non abbiamo indicizzato.
+   *
+   * Esistere ed essere stato riletto sono due cose diverse, e `riconcilia`
+   * conosceva solo la seconda: un file saltato perché troppo grande o perché
+   * vuoto finiva fuori dagli id visti e veniva cancellato dall'indice — con la
+   * cartella dichiarata «completa» e zero errori, quindi senza che niente
+   * lasciasse traccia. Questo elenco tiene in vita quello che c'è ma che
+   * stavolta non abbiamo letto.
+   */
+  visti: string[]
 }
 
 async function cammina(radice: string, fuori: Esito, tetto: number, profondita = 0) {
-  if (fuori.docs.length >= tetto || profondita > 6) return
+  // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
+  // fa credere a riconcilia() che il resto della cartella non esista più
+  if (fuori.docs.length >= tetto) { fuori.troncato = true; return }
+  if (profondita > 6) { fuori.troncato = true; return }
   let voci
   try {
     voci = await readdir(radice, { withFileTypes: true })
   } catch (e) {
-    // permessi negati (tipico con la privacy di macOS): va detto, non ingoiato
+    // permessi negati (tipico con la privacy di macOS) o disco staccato:
+    // vanno detti, non ingoiati — sono la differenza fra «non c'è più» e
+    // «non sono riuscito a guardare»
     const code = (e as { code?: string }).code
-    if (code === 'EACCES' || code === 'EPERM') fuori.illeggibili.push(radice)
+    if (code === 'EACCES' || code === 'EPERM' || code === 'ENOENT' || code === 'ENOTDIR') {
+      fuori.illeggibili.push(radice)
+    } else {
+      fuori.falliti++
+    }
     return
   }
 
@@ -107,16 +107,23 @@ async function cammina(radice: string, fuori: Esito, tetto: number, profondita =
 
     try {
       const s = await stat(p)
-      if (s.size > MAX_FILE || s.size === 0) continue
+      // Un file che esiste ma che stavolta non indicizziamo va comunque
+      // dichiarato vivo. Senza questa riga finiva fuori dall'elenco dei visti,
+      // la radice veniva lo stesso dichiarata «completa» — nessun errore,
+      // nessun permesso negato — e `riconcilia` lo cancellava dall'indice.
+      // Cioè: un PDF cresciuto oltre i dodici mega spariva dalla mente, e
+      // spariva *perché era diventato grande*.
+      if (s.size > MAX_FILE || s.size === 0) { fuori.visti.push(`desktop:${p}`); continue }
       const corpo = await Promise.race([
-        estrai(p, ext),
+        readFile(p).then(b => daBuffer(b, v.name)),
         new Promise<string>((_, no) => setTimeout(() => no(new Error('troppo lento')), 25_000))
       ])
-      if (corpo.length < 20) continue     // un file vuoto non è un documento
+      // un file vuoto non è un documento — ma esiste, e va detto
+      if (corpo.length < 20) { fuori.visti.push(`desktop:${p}`); continue }
       fuori.docs.push({
         id: `desktop:${p}`,
         fonte: 'desktop',
-        tipo: ext === '.pdf' ? 'pdf' : ext === '.docx' ? 'documento' : 'file',
+        tipo: tipoDi(v.name),
         titolo: basename(p),
         corpo: corpo.slice(0, MAX_TESTO),
         autore: null,
@@ -148,12 +155,26 @@ export async function sincronizza(
   c: ConfigDesktop,
   avanzamento?: (fatti: number) => void
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false }
+  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [] }
   // il tetto è per cartella: una cartella enorme non deve affamare le altre
   const perCartella = Math.max(200, Math.floor(MAX_TOTALE / Math.max(1, c.cartelle.length)))
   for (const cartella of c.cartelle) {
     const prima = esito.docs.length
-    await cammina(resolve(cartella), esito, prima + perCartella)
+    const illeggibiliPrima = esito.illeggibili.length
+    const fallitiPrima = esito.falliti
+    const radice = resolve(cartella)
+
+    await cammina(radice, esito, prima + perCartella)
+
+    // Una radice si può riconciliare solo se è stata percorsa tutta: niente
+    // tetto raggiunto, nessuna cartella figlia illeggibile, nessun file caduto.
+    // `troncato` è appiccicoso di proposito — dopo il primo tetto nessuna
+    // radice successiva è più affidabile, perché il tetto è condiviso.
+    const pulita = !esito.troncato
+      && esito.illeggibili.length === illeggibiliPrima
+      && esito.falliti === fallitiPrima
+    if (pulita) esito.complete.push(radice)
+
     if (avanzamento) avanzamento(esito.docs.length - prima)
   }
   return esito

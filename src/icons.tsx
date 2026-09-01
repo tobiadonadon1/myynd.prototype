@@ -24,10 +24,23 @@ export const IconCestino = ({ size = 13, style }: P) => (
   </svg>
 )
 
+// Il colore lo decide chi la usa: `currentColor` la fa ereditare dal testo che
+// le sta accanto. Era fissa color ruggine, e sulla card scura in cima — dove
+// tutto il resto è bianco — restava l'unica cosa che sembrava di un'altra app.
 export const IconDoc = ({ size = 22, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#A34E2D" strokeWidth="1.5" strokeLinejoin="round" style={style}>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" style={style}>
     <path d="M6 3.2h7.4L18.6 8.4V20.8H6Z" /><path d="M13.2 3.4v5.2h5.2" />
     <path d="M8.6 12.6h7M8.6 15.4h7M8.6 18h4.4" strokeLinecap="round" />
+  </svg>
+)
+
+// Una freccia con l'asta, non un chevron: in fondo alla frase ce n'è già uno
+// che apre il testo, e due segni uguali con due significati diversi nella
+// stessa riga si leggono come lo stesso segno rotto. Questa indica la voce —
+// «questa qui» — e la riga intera ci porta sopra.
+export const IconFrecciaDx = ({ size = 13, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M4 12h14M13 7l5 5-5 5" />
   </svg>
 )
 
@@ -99,5 +112,46 @@ export const IconEsci = ({ size = 16, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={style}>
     <path d="M14.5 4.5H18a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-3.5" />
     <path d="M10 15.5 13.5 12 10 8.5M13.5 12H4.5" />
+  </svg>
+)
+
+/** Il giro: «vai a guardare di nuovo». La rassegna lo usa per ribussare ai giornali. */
+export const IconGiro = ({ size = 14, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M20 11a8 8 0 1 0-.9 4.6" /><path d="M20 5v6h-6" />
+  </svg>
+)
+
+/**
+ * La croce del «non mi interessa».
+ *
+ * Disegnata, non scritta. Il carattere «×» ha le sue metriche e nel tondo di un
+ * bottone si siede alto e a sinistra: due tratti in un riquadro sono centrati
+ * per costruzione, a qualunque misura.
+ */
+export const IconCroce = ({ size = 11, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" style={style}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+)
+
+/** Scrive: le automazioni che ti preparano un testo. */
+export const IconPenna = ({ size = 15, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="M14.5 7.5 16.5 9.5" />
+  </svg>
+)
+
+/** Segnala: quelle che ti lasciano una riga e basta. */
+export const IconOcchio = ({ size = 15, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.6" />
+  </svg>
+)
+
+/** Riordina: quelle che si offrono di mettere via qualcosa. */
+export const IconScatola = ({ size = 15, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" /><path d="M2.5 4.5h19V8h-19z" /><path d="M10 12h4" />
   </svg>
 )

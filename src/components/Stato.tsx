@@ -23,8 +23,12 @@ const CELLA = 3.4
 const PASSO = 4.6
 
 /** La griglia di pixel che sfarfalla, come nei loader di riferimento. */
-function Griglia({ tipo, dim }: { tipo: Tipo; dim: number }) {
+function Griglia({ tipo, dim, colore }: { tipo: Tipo; dim: number; colore?: string }) {
   const d = DEF[tipo]
+  // su fondo scuro l'arancione del glifo si perde: chi lo disegna può dire
+  // di che colore lo vuole, e il resto della card resta com'è
+  const tinta = colore ?? d.colore
+  const spento = colore ? 'rgba(255,247,240,.16)' : d.spento
   const celle = []
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -46,7 +50,7 @@ function Griglia({ tipo, dim }: { tipo: Tipo; dim: number }) {
           width={CELLA}
           height={CELLA}
           rx={0.7}
-          fill={d.colore}
+          fill={tinta}
           style={{ animation: `pixel 1.5s ease-in-out ${(ritardo * 1.1).toFixed(2)}s infinite` }}
         />
       )
@@ -54,7 +58,7 @@ function Griglia({ tipo, dim }: { tipo: Tipo; dim: number }) {
   }
   return (
     <svg width={dim} height={dim} viewBox={`0 0 ${N * PASSO} ${N * PASSO}`} style={{ flex: 'none', display: 'block' }}>
-      <rect x="0" y="0" width={N * PASSO} height={N * PASSO} fill={d.spento} rx={2} />
+      <rect x="0" y="0" width={N * PASSO} height={N * PASSO} fill={spento} rx={2} />
       <g transform={`translate(${(PASSO - CELLA) / 2} ${(PASSO - CELLA) / 2})`}>{celle}</g>
     </svg>
   )
@@ -89,6 +93,6 @@ export function Stato({ tipo, testo, chiaro, stile }: {
 }
 
 /** Il glifo da solo, per le etichette di sezione (come nelle card di riferimento). */
-export function Glifo({ tipo, dim = 15 }: { tipo: Tipo; dim?: number }) {
-  return <Griglia tipo={tipo} dim={dim} />
+export function Glifo({ tipo, dim = 15, colore }: { tipo: Tipo; dim?: number; colore?: string }) {
+  return <Griglia tipo={tipo} dim={dim} colore={colore} />
 }

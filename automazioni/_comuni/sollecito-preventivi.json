@@ -1,0 +1,28 @@
+{
+  "id": "sollecito-preventivi",
+  "nome": "Solleciti sui preventivi fermi",
+  "spiega": "Ogni giorno guarda i preventivi mandati e non ancora chiusi, e prepara un sollecito da rileggere.",
+  "quando": {
+    "ogni": "giorno",
+    "ora": 9
+  },
+  "guarda": {
+    "cerca": "preventivo offerta inviato",
+    "limite": 6
+  },
+  "fai": "Guarda questi preventivi. Se ce n'è uno mandato da più di dieci giorni senza risposta, scrivi un sollecito breve e cortese: ricorda la cifra e la data, chiedi se serve un chiarimento, non scusarti di scrivere. Se sono tutti recenti o già chiusi, dillo in una riga e fermati.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi",
+    "desktop.leggi"
+  ],
+  "en": {
+    "nome": "Chasing quotes that went quiet",
+    "spiega": "Every day, looks at quotes you sent and never closed, and prepares a nudge for you to read over.",
+    "cerca": "quote proposal sent offer",
+    "fai": "Look at these quotes. If one went out more than ten days ago with no reply, write a short, courteous nudge: recall the figure and the date, ask whether anything needs clarifying, do not apologise for writing. If they are all recent or already closed, say so in one line and stop."
+  }
+}

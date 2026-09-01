@@ -1,0 +1,28 @@
+{
+  "id": "riepilogo-lunedi",
+  "nome": "Cosa c’è questa settimana",
+  "spiega": "Il lunedì mattina, un riepilogo di quello che è arrivato e di cosa aspetta te.",
+  "quando": {
+    "ogni": "settimana",
+    "giorno": 1,
+    "ora": 8
+  },
+  "guarda": {
+    "soloNuovi": true,
+    "limite": 20
+  },
+  "fai": "Riassumi in dieci righe quello che è arrivato: chi aspetta una risposta, cosa ha una scadenza, cosa si può ignorare. Nomi e cifre veri, niente giri di parole. Se non è arrivato niente che conti, dillo in una riga.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi",
+    "agenda.leggi"
+  ],
+  "en": {
+    "nome": "What this week holds",
+    "spiega": "Monday morning, a recap of what came in and what is waiting for you.",
+    "fai": "Sum up in ten lines what came in: who is waiting for an answer, what has a deadline, what can be ignored. Real names and real figures, no waffle. If nothing that matters came in, say so in one line."
+  }
+}

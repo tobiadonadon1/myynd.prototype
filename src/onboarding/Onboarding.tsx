@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { frasi, t } from '../lingua'
 import { Campo } from './campo'
-import { api, rigaSincronizzazione, type Stato } from '../api'
+import { api, rigaSincronizzazione, type Abbonamento, type Stato } from '../api'
 import { Hov } from '../ui'
 import { IconPiu } from '../icons'
 import { Form, FormClaude } from '../components/forms'
@@ -117,7 +118,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
 
 function Errore({ testo }: { testo: string }) {
   if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5 }}>{testo}</div>
+  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5 }}>{t(testo)}</div>
 }
 
 function Titolo({ children }: { children: React.ReactNode }) {
@@ -164,9 +165,9 @@ function Risveglio({ avanti }: { avanti: () => void }) {
   return (
     <div style={{ animation: 'fadein .8s ease' }}>
       <div style={{ marginBottom: 30 }}><Logo dim={34} testo={23} tinta={CHIARO} /></div>
-      <Titolo>Questa mente è vuota.</Titolo>
-      <Sotto>Riempila con quello che leggi e scrivi.</Sotto>
-      <Primario onClick={avanti}>Cominciamo</Primario>
+      <Titolo>{t('Questa mente è vuota.')}</Titolo>
+      <Sotto>{t('Riempila con quello che leggi e scrivi.')}</Sotto>
+      <Primario onClick={avanti}>{t('Cominciamo')}</Primario>
     </div>
   )
 }
@@ -181,32 +182,114 @@ const ETICHETTA: React.CSSProperties = {
   fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(244,239,232,.45)'
 }
 
-/** Il primo collegamento: senza Claude, Myynd non ragiona. */
+/** Una scelta che non è quella principale: testo, non bottone. */
+function Secondario({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Hov as="button" onClick={onClick}
+      style={{
+        border: 'none', background: 'none', color: TENUE, fontSize: 14,
+        cursor: 'pointer', fontFamily: 'inherit', padding: 0
+      }}
+      hover={{ color: CHIARO }}>{children}</Hov>
+  )
+}
+
+/**
+ * Il primo collegamento: senza Claude, Myynd non ragiona.
+ *
+ * Qui c'erano una strada sola e un campo per la chiave API, e quella strada
+ * manda a chi compra Myynd una bolletta a consumo per un'app che gira tutti i
+ * giorni. Adesso ce ne sono due, e l'ordine in cui stanno è tutta la decisione:
+ * se Claude Code è su questa macchina, l'abbonamento che ha già è il bottone, e
+ * la chiave diventa la riga di testo per chi la preferisce.
+ *
+ * Se Claude Code non c'è, di scelta non ce n'è e non se ne inventa una: resta il
+ * campo di prima, senza un'offerta che rimanda a un programma che non ha. Un
+ * bivio con un ramo che non porta da nessuna parte è peggio di una strada sola.
+ */
 function PassoClaude({ collegato, ricarica, avanti }: {
   collegato: boolean; ricarica: () => Promise<Stato>; avanti: () => void
 }) {
+  const [abb, setAbb] = useState<Abbonamento | null>(null)
+  /** Ha chiesto lui la chiave: da qui in poi non gli si ripropone l'altra strada. */
+  const [conChiave, setConChiave] = useState(false)
+  const [occupato, setOccupato] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => { api.abbonamento().then(setAbb).catch(() => setAbb(null)) }, [])
+
+  const usaAbbonamento = async () => {
+    setOccupato(true); setErr('')
+    try { await api.usaAbbonamento(true); await ricarica() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  if (collegato) {
+    return (
+      <div style={{ animation: 'fadein .5s ease' }}>
+        <Titolo>{t('Collega Claude.')}</Titolo>
+        <Sotto>{t('Senza, resta solo un archivio.')}</Sotto>
+        <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FA98A' }} />
+          {/* quale delle due: l'ha appena scelto, ed è giusto vederselo confermare */}
+          <span style={{ fontSize: 14, color: CHIARO }}>
+            {abb?.acceso ? t('Con il tuo abbonamento.') : t('Collegato.')}
+          </span>
+        </div>
+        <Primario onClick={avanti}>{t('Avanti')}</Primario>
+      </div>
+    )
+  }
+
+  // installato non basta: senza l'accesso fatto, il bottone offrirebbe una
+  // strada che fallisce al primo lavoro vero. Si sa gratis, quindi si sa prima.
+  const offriAbbonamento = !!abb?.installato && !!abb.entrato && !conChiave
+
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>Collega Claude.</Titolo>
-      <Sotto>Senza, resta solo un archivio.</Sotto>
-      {collegato ? (
+      <Titolo>{t('Collega Claude.')}</Titolo>
+      <Sotto>{t('Senza, resta solo un archivio.')}</Sotto>
+
+      {offriAbbonamento ? (
         <>
-          <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FA98A' }} />
-            <span style={{ fontSize: 14, color: CHIARO }}>Collegato.</span>
+          <div style={{
+            marginTop: 26, maxWidth: 460, padding: '15px 18px', borderRadius: 16,
+            background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
+            fontSize: '13.5px', lineHeight: 1.65, color: TENUE, textWrap: 'pretty'
+          }}>
+            {t('Claude Code è su questo computer, già entrato con il tuo account. Myynd può ragionare di lì: non costa niente oltre all’abbonamento che paghi già, e le tue credenziali restano dove sono.')}
           </div>
-          <Primario onClick={avanti}>Avanti</Primario>
+          <Errore testo={err} />
+          <Primario onClick={usaAbbonamento} disabilitato={occupato}>
+            {occupato ? t('Un momento…') : t('Usa il tuo abbonamento')}
+          </Primario>
         </>
       ) : (
-        <>
-          <div style={{ marginTop: 26, maxWidth: 460 }}>
-            <FormClaude tema="scuro" senzaNota ok={async () => { await ricarica() }} />
-          </div>
-          <Hov as="button" onClick={avanti}
-            style={{ marginTop: 22, border: 'none', background: 'none', color: TENUE, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', display: 'block' }}
-            hover={{ color: CHIARO }}>Lo collego dopo</Hov>
-        </>
+        <div style={{ marginTop: 26, maxWidth: 460 }}>
+          <FormClaude tema="scuro" senzaNota ok={async () => { await ricarica() }} />
+          {/*
+            A chi ha il programma e non ha fatto l'accesso non si nasconde
+            l'altra strada: è esattamente la persona a cui conviene di più, ed è
+            a dieci secondi di distanza. Una riga, nessun comando da premere —
+            l'accesso si fa nel Terminale e non è cosa che Myynd possa fare al
+            posto suo.
+          */}
+          {abb?.installato && !abb.entrato && (
+            <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: TENUE, marginTop: 16, textWrap: 'pretty' }}>
+              {t('Hai Claude Code su questo computer. Se fai l’accesso — Terminale, scrivi «claude» — Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.')}
+            </div>
+          )}
+        </div>
       )}
+
+      {/* le altre strade, tutte alla stessa altezza: nessuna è un ripensamento */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, marginTop: 22 }}>
+        {offriAbbonamento
+          ? <Secondario onClick={() => setConChiave(true)}>{t('Ho una chiave API')}</Secondario>
+          : abb?.installato && abb.entrato && <Secondario onClick={() => setConChiave(false)}>{t('Usa il tuo abbonamento')}</Secondario>}
+        <Secondario onClick={avanti}>{t('Lo collego dopo')}</Secondario>
+      </div>
     </div>
   )
 }
@@ -218,19 +301,19 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
 }) {
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>Come ti chiami?</Titolo>
-      <Sotto>Per scrivere come scrivi tu.</Sotto>
+      <Titolo>{t('Come ti chiami?')}</Titolo>
+      <Sotto>{t('Per scrivere come scrivi tu.')}</Sotto>
       <div style={{ display: 'flex', gap: 14, marginTop: 30 }}>
         <div style={{ flex: 1 }}>
-          <div style={ETICHETTA}>Nome</div>
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Tobia" autoFocus style={CAMPO} />
+          <div style={ETICHETTA}>{t('Nome')}</div>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Tobia" autoFocus className="scuro" style={CAMPO} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={ETICHETTA}>Ruolo</div>
-          <input value={ruolo} onChange={e => setRuolo(e.target.value)} placeholder="Titolare" style={CAMPO} />
+          <div style={ETICHETTA}>{t('Ruolo')}</div>
+          <input value={ruolo} onChange={e => setRuolo(e.target.value)} placeholder={t('Titolare')} className="scuro" style={CAMPO} />
         </div>
       </div>
-      <Primario onClick={avanti} disabilitato={!nome.trim()}>Avanti</Primario>
+      <Primario onClick={avanti} disabilitato={!nome.trim()}>{t('Avanti')}</Primario>
     </div>
   )
 }
@@ -244,8 +327,8 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
 
   return (
     <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
-      <Titolo>Cosa le fai leggere?</Titolo>
-<Sotto>Restano su questo computer.</Sotto>
+      <Titolo>{t('Cosa le fai leggere?')}</Titolo>
+<Sotto>{t('Restano su questo computer.')}</Sotto>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
         {pronti.map(c => (
@@ -255,7 +338,7 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
         ))}
       </div>
 
-      <div style={{ ...ETICHETTA, marginTop: 28, marginBottom: 12 }}>Più avanti</div>
+      <div style={{ ...ETICHETTA, marginTop: 28, marginBottom: 12 }}>{t('Più avanti')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {dopo.map(c => (
           <span key={c.id} title={c.nota} style={{
@@ -266,7 +349,7 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
       </div>
 
       <Primario onClick={avanti} disabilitato={quanti === 0}>
-        {quanti === 0 ? 'Collegane almeno una' : `Avanti · ${quanti} collegate`}
+        {quanti === 0 ? t('Collegane almeno una') : frasi.avantiCollegate(quanti)}
       </Primario>
     </div>
   )
@@ -294,7 +377,7 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15 }}>{c.nome}</div>
           <div style={{ fontSize: '12.5px', color: 'rgba(244,239,232,.5)', marginTop: 3 }}>
-            {c.collegato ? (c.documenti ? `${c.documenti} documenti letti` : 'collegato') : c.nota}
+            {c.collegato ? (c.documenti ? frasi.documentiLetti(String(c.documenti)) : t('collegato')) : t(c.nota)}
           </div>
         </div>
         {c.collegato ? (
@@ -305,11 +388,10 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
               await ricarica()
             }}
             style={{ border: 'none', background: 'none', color: 'rgba(244,239,232,.45)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-            hover={{ color: '#E08A6A' }}>Scollega</Hov>
+            hover={{ color: '#E08A6A' }}>{t('Scollega')}</Hov>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: CHIARO }}>
-            <IconPiu size={13} />Collega
-          </span>
+            <IconPiu size={13} />{t('Collega')}</span>
         )}
       </div>
       {aperto && !c.collegato && (
@@ -343,24 +425,24 @@ function Leggi({ ricarica, avanti }: { ricarica: () => Promise<Stato>; avanti: (
 
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{finito ? 'Fatto.' : 'Leggo.'}</Titolo>
+      <Titolo>{finito ? t('Fatto.') : t('Leggo.')}</Titolo>
       <Sotto>
         {finito
-          ? `${totale} document${totale === 1 ? 'o' : 'i'}.`
-          : 'La prima volta è la più lunga.'}
+          ? frasi.documenti(totale)
+          : t('La prima volta è la più lunga.')}
       </Sotto>
       <div style={{ marginTop: 26 }}>
-        {!finito && <Indicatore tipo="leggo" testo={righe.at(-1) ?? 'mi collego'} chiaro />}
+        {!finito && <Indicatore tipo="leggo" testo={righe.at(-1) ?? t('mi collego')} chiaro />}
         <div style={{
           marginTop: finito ? 0 : 14, padding: '14px 18px', borderRadius: 16,
           background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
           fontSize: '12.5px', lineHeight: 1.9, color: TENUE, minHeight: 84, fontVariantNumeric: 'tabular-nums'
         }}>
-          {righe.length ? righe.map((r, i) => <div key={i}>{r}</div>) : <div>mi collego…</div>}
+          {righe.length ? righe.map((r, i) => <div key={i}>{r}</div>) : <div>{t('mi collego…')}</div>}
         </div>
       </div>
       <Errore testo={err} />
-      <Primario onClick={avanti} disabilitato={!finito && !err}>Avanti</Primario>
+      <Primario onClick={avanti} disabilitato={!finito && !err}>{t('Avanti')}</Primario>
     </div>
   )
 }
@@ -380,28 +462,28 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
 
   return (
     <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>Prima lettura.</Titolo>
+      <Titolo>{t('Prima lettura.')}</Titolo>
       <Sotto>
         {senzaClaude
-          ? 'Serve Claude. Puoi saltarla.'
+          ? t('Serve Claude. Puoi saltarla.')
           : quante === null
-            ? 'Metto da parte quello che sembra richiedere te.'
+            ? t('Metto da parte quello che sembra richiedere te.')
             : quante === 0
-              ? 'Niente da segnalare.'
-              : `${quante} cos${quante === 1 ? 'a' : 'e'} messe da parte.`}
+              ? t('Niente da segnalare.')
+              : frasi.messeDaParte(quante)}
       </Sotto>
       <Errore testo={err} />
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         {!senzaClaude && quante === null && (
           occupato
-            ? <div style={{ marginTop: 34 }}><Indicatore tipo="cerco" testo="Leggo tutto e scelgo cosa conta" chiaro /></div>
-            : <Primario onClick={genera}>Fai la prima lettura</Primario>
+            ? <div style={{ marginTop: 34 }}><Indicatore tipo="cerco" testo={t('Leggo tutto e scelgo cosa conta')} chiaro /></div>
+            : <Primario onClick={genera}>{t('Fai la prima lettura')}</Primario>
         )}
-        {(senzaClaude || quante !== null) && <Primario onClick={avanti}>Avanti</Primario>}
+        {(senzaClaude || quante !== null) && <Primario onClick={avanti}>{t('Avanti')}</Primario>}
         {!senzaClaude && quante === null && !occupato && (
           <Hov as="button" onClick={avanti}
             style={{ marginTop: 34, border: 'none', background: 'none', color: TENUE, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-            hover={{ color: CHIARO }}>Salta</Hov>
+            hover={{ color: CHIARO }}>{t('Salta')}</Hov>
         )}
       </div>
     </div>
@@ -411,13 +493,13 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
 function Pronta({ totale, entra }: { totale: number; entra: () => void }) {
   return (
     <div style={{ animation: 'fadein .6s ease' }}>
-      <Titolo>Pronta.</Titolo>
+      <Titolo>{t('Pronta.')}</Titolo>
       <Sotto>
         {totale
-          ? `${totale} document${totale === 1 ? 'o' : 'i'} dentro. Chiedile qualcosa.`
-          : 'Ancora vuota.'}
+          ? frasi.documentiDentro(String(totale))
+          : t('Ancora vuota.')}
       </Sotto>
-      <Primario onClick={entra}>Entra</Primario>
+      <Primario onClick={entra}>{t('Entra')}</Primario>
     </div>
   )
 }

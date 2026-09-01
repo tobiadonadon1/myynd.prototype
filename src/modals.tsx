@@ -1,4 +1,5 @@
 import { Hov } from './ui'
+import { frasi, lingua, loc, t } from './lingua'
 import { IconCerca } from './icons'
 import type { Vals } from './vals'
 
@@ -11,7 +12,7 @@ const VELO = (z: number, alpha: number, blur: number) => ({
 export function Documento({ v }: { v: Vals }) {
   const d = v.doc
   if (!d) return null
-  const data = d.quando ? new Date(d.quando).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' }) : ''
+  const data = d.quando ? new Date(d.quando).toLocaleString(loc(), { dateStyle: 'long', timeStyle: 'short' }) : ''
   return (
     <>
       <div onClick={v.chiudiDoc} style={VELO(48, 0.4, 4)} />
@@ -19,7 +20,7 @@ export function Documento({ v }: { v: Vals }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 12px', color: '#FFF7F0' }}>
           <span style={{ fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.titolo}</span>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{d.fonte}</span>
-          <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>Chiudi</button>
+          <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('Chiudi')}</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', background: '#FFFFFF', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
           <div style={{ paddingBottom: 20, borderBottom: '2px solid #22271F' }}>
@@ -46,10 +47,12 @@ export function Ricerca({ v }: { v: Vals }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(34,39,31,.09)' }}>
           <IconCerca size={17} style={{ flex: 'none', color: 'rgba(34,39,31,.6)' }} />
           <input value={v.query} onChange={v.onQuery}
-            placeholder={v.totaleDocumenti ? `Cerca fra ${v.totaleDocumenti.toLocaleString('it-IT')} documenti…` : 'Niente da cercare ancora'} autoFocus
+            placeholder={v.totaleDocumenti
+              ? frasi.cercaFra(v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'))
+              : t('Niente da cercare ancora')} autoFocus
             onKeyDown={e => { if (e.key === 'Escape') v.closeSearch() }}
             style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 16, color: '#22271F' }} />
-          <button onClick={v.closeSearch} style={{ border: '1px solid rgba(34,39,31,.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(34,39,31,.6)', cursor: 'pointer' }}>esc</button>
+          <button onClick={v.closeSearch} title={t('Chiudi')} style={{ border: '1px solid rgba(34,39,31,.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(34,39,31,.6)', cursor: 'pointer', flex: 'none' }}>esc</button>
         </div>
         <div style={{ maxHeight: 340, overflowY: 'auto', padding: 6 }}>
           {v.risultati.map(r => (
@@ -65,12 +68,10 @@ export function Ricerca({ v }: { v: Vals }) {
             </Hov>
           ))}
           {v.query.trim() && !v.risultati.length && (
-            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.6)' }}>Niente che corrisponda.</div>
+            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.6)' }}>{t('Niente che corrisponda.')}</div>
           )}
           {!v.query.trim() && !v.risultati.length && (
-            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.55)' }}>
-              Non c’è ancora niente da cercare.
-            </div>
+            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.55)' }}>{t('Non c\u2019è ancora niente da cercare.')}</div>
           )}
         </div>
       </div>
@@ -85,7 +86,7 @@ export function Toast({ v }: { v: Vals }) {
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', flex: 'none' }} />
       <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1 }}>{v.toastText}</span>
       {v.toastUndo && (
-        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>Annulla</button>
+        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Annulla')}</button>
       )}
     </div>
   )

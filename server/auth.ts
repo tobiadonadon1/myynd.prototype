@@ -9,9 +9,10 @@
 // Mac. Serve a evitare che chi ti passa davanti al portatile apra la tua
 // mente, non a difenderti da chi ha già la macchina.
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { aggiorna, leggi, type Account } from './config.ts'
+import * as store from './store.ts'
 
 export type { Account }
 
@@ -22,8 +23,57 @@ function impasta(password: string, sale: string): string {
   return scryptSync(password, sale, LUNGHEZZA, { N, r: 8, p: 1 }).toString('hex')
 }
 
-/** Le sessioni vivono in memoria: se riavvii il server, rientri. */
-const sessioni = new Set<string>()
+/**
+ * Le sessioni stanno nell'indice, non in memoria: prima ogni riavvio del server
+ * — e con `node --watch` ne basta un salvataggio — rimandava all'accesso, che è
+ * il motivo per cui sembrava di dover ricollegare tutto ogni volta.
+ *
+ * Nel file finisce solo l'impronta: chi legge mente.db non ottiene un token
+ * valido, e un token rubato scade comunque.
+ */
+function impronta(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+store.potaSessioni()
+
+/**
+ * Quanti tentativi falliti di fila, e da quando. Scrypt costa mezzo secondo di
+ * proposito, ma mezzo secondo per tentativo è comunque un milione di tentativi
+ * a settimana se nessuno conta: qui si conta.
+ */
+const tentativi = new Map<string, { quanti: number; ultimo: number }>()
+const ATTESA_DA = 5
+
+/** Quanto bisogna aspettare prima di riprovare, in millisecondi. */
+export function attesa(email: string): number {
+  const t = tentativi.get(email.trim().toLowerCase())
+  if (!t || t.quanti < ATTESA_DA) return 0
+  const dovuta = Math.min(2 ** (t.quanti - ATTESA_DA) * 1000, 5 * 60_000)
+  return Math.max(0, t.ultimo + dovuta - Date.now())
+}
+
+function segnaTentativo(email: string, riuscito: boolean) {
+  const k = email.trim().toLowerCase()
+  if (riuscito) { tentativi.delete(k); return }
+  const t = tentativi.get(k) ?? { quanti: 0, ultimo: 0 }
+  tentativi.set(k, { quanti: t.quanti + 1, ultimo: Date.now() })
+}
+
+export const DEV = process.env.MYYND_DEV === '1'
+
+/**
+ * Comodità di sviluppo, non una scorciatoia nella verifica: con MYYND_DEV=1
+ * apriamo in anticipo una sessione dal token noto, così non si ripassa
+ * dall'accesso a ogni riavvio. `valida` resta a un cammino solo — chi non ha
+ * il token non entra, in sviluppo come altrove.
+ */
+export const TOKEN_SVILUPPO = 'sviluppo-non-in-produzione'
+
+export function apriSessioneDiSviluppo(): string {
+  store.apriSessione(impronta(TOKEN_SVILUPPO), 1)
+  return TOKEN_SVILUPPO
+}
 
 export function registrato(): boolean {
   return !!leggi().account
@@ -55,6 +105,7 @@ export function entra(email: string, password: string):
   // confronto a tempo costante, e l'email non deve dire se esiste o no
   const passwordOk = atteso.length === dato.length && timingSafeEqual(atteso, dato)
   const emailOk = email.trim().toLowerCase() === a.email.toLowerCase()
+  segnaTentativo(email, passwordOk && emailOk)
   if (!passwordOk || !emailOk) return { ok: false, errore: 'Email o password non corrispondono.' }
 
   return { ok: true, token: apri() }
@@ -62,16 +113,16 @@ export function entra(email: string, password: string):
 
 function apri(): string {
   const t = randomBytes(32).toString('hex')
-  sessioni.add(t)
+  store.apriSessione(impronta(t))
   return t
 }
 
 export function esci(token?: string) {
-  if (token) sessioni.delete(token)
+  if (token) store.chiudiSessione(impronta(token))
 }
 
 export function valida(token?: string): boolean {
-  return !!token && sessioni.has(token)
+  return !!token && store.sessioneValida(impronta(token))
 }
 
 function estrai(req: Request): string | undefined {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AUTONOMIE, ESEMPIO_TONO, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
-import { costruisci } from './brain'
+import { AUTONOMIE, ESEMPIO_TONO, LINGUE, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { costruisci, costruisciDaGrafo, type Ball, type Grafo } from './brain'
+import { impostaLingua, loc, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
@@ -11,9 +12,29 @@ const COLORE_FONTE: Record<string, string> = {
   posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A'
 }
 
+/**
+ * La palla quando non la si sta guardando.
+ *
+ * Una costante e non `{ nodes: [], edges: [] }` scritto sul posto: la memo che
+ * la restituisce ha `ball` fra le dipendenze di chi la usa, e un oggetto nuovo
+ * a ogni giro rifarebbe partire tutto quello che questa riga serve a evitare.
+ */
+const PALLA_VUOTA: Ball = { nodes: [], edges: [] }
+
 /** Tutto lo stato dell'app, alimentato dal server locale. */
-export function useVals(iniziale: Stato, apriConnessioni: () => void) {
+/** Taglia a una lunghezza, ma su uno spazio: mai una parola spezzata a metà. */
+export function taglia(t: string, max: number): string {
+  if (t.length <= max) return t
+  const corto = t.slice(0, max)
+  const spazio = corto.lastIndexOf(' ')
+  return (spazio > max * 0.6 ? corto.slice(0, spazio) : corto).trimEnd() + '…'
+}
+
+export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void) {
   const [stato, setStato] = useState<Stato>(iniziale)
+  // Va impostata a ogni giro, prima di qualunque calcolo che produca testo:
+  // così cambiare lingua nelle preferenze si vede subito, senza ricaricare.
+  impostaLingua(stato.config.lingua)
   // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
   // rimontare, così schermata, chat aperta e bozza restano dove sono
   useEffect(() => { setStato(iniziale) }, [iniziale])
@@ -25,12 +46,31 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
 
   const [aperti, setAperti] = useState<VoceFeed[]>([])
   const [fatte, setFatte] = useState<VoceFeed[]>([])
-  const [doneOpen, setDoneOpen] = useState(true)
+  // Le cose già chiuse sono archivio, non notizie: partono ripiegate. Aperte
+  // di default si prendevano tutta la prima pagina proprio nel momento in cui
+  // non c'era più niente da fare — l'opposto di quello che serve lì.
+  const [doneOpen, setDoneOpen] = useState(false)
   const [openDone, setOpenDone] = useState<string | null>(null)
   const [heroLong, setHeroLong] = useState(false)
+  // Quali righe del resto hanno il testo aperto. Un insieme e non un id
+  // solo: aprirne una non è scegliere, è leggere — e mentre leggi la
+  // seconda non ha senso che la prima ti si richiuda sotto il dito.
+  const [restoAperti, setRestoAperti] = useState<Set<string>>(new Set())
+  const [risposta, setRisposta] = useState('')
+  const [rispondendo, setRispondendo] = useState(false)
+  const [scriviAperto, setScriviAperto] = useState(false)
+  const [menuAperto, setMenuAperto] = useState(false)
+  const [fuoco, setFuoco] = useState('')
+  const [fuocoAperto, setFuocoAperto] = useState(false)
+  const [domanda, setDomanda] = useState<{ id: string; testo: string; spunto: string[] } | null>(null)
+  const [rispostaDom, setRispostaDom] = useState('')
+  const [esitoDom, setEsitoDom] = useState('')
+  const [spuntoAperto, setSpuntoAperto] = useState(false)
+  const [cambioLingua, setCambioLingua] = useState(false)
   const [generando, setGenerando] = useState(false)
 
   const [gruppi, setGruppi] = useState<Gruppo[]>([])
+  const [grafo, setGrafo] = useState<Grafo | null>(null)
   const [sel, setSel] = useState('')
   const [filtro, setFiltro] = useState<string | null>(null)
   const [mapFull, setMapFull] = useState(false)
@@ -59,9 +99,55 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
-  const ball = useMemo(() => costruisci(gruppi), [gruppi])
+  // La tastiera. Un attrezzo che si usa tutti i giorni deve poter essere
+  // guidato senza staccare le mani: ⌘K apre la ricerca da qualunque punto,
+  // Esc chiude quello che è aperto. Il brief chiede una via rapida verso
+  // l'app; questa è la stessa idea, dentro.
+  useEffect(() => {
+    const tasti = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearch(true)
+        return
+      }
+      // Esc non deve rubare il tasto a chi sta scrivendo in un campo: lì
+      // significa «annulla questo», e ci pensa il campo stesso
+      const dentroUnCampo = (e.target as HTMLElement | null)?.tagName === 'INPUT'
+        || (e.target as HTMLElement | null)?.tagName === 'TEXTAREA'
+      if (e.key === 'Escape' && !dentroUnCampo) {
+        setSearch(false)
+        setDoc(null)
+        setMapFull(false)
+      }
+    }
+    window.addEventListener('keydown', tasti)
+    return () => window.removeEventListener('keydown', tasti)
+  }, [])
+
+  /**
+   * La palla si calcola solo quando la si guarda.
+   *
+   * `costruisciDaGrafo` assesta a molle duecentoquaranta volte su un massimo di
+   * duemilaseicento nodi: misurati, sono duecentottanta millisecondi di thread
+   * principale bloccato. Girava dentro il render *su ogni schermata*, perché
+   * `attivo` in `useMappa` ferma il disegno ma non il calcolo — quindi l'app si
+   * inchiodava all'avvio per una schermata che sta dietro a un menù e che il
+   * brief mette esplicitamente fra le cose da non fare.
+   *
+   * Adesso finché la Mappa non è in vista la palla è vuota, e non costa niente.
+   */
+  const mappaInVista = screen === 'mappa' || mapFull
+  const ball = useMemo(
+    () => (!mappaInVista ? PALLA_VUOTA
+      // Con il materiale vero la palla nasce dai legami fra i documenti; finché
+      // il grafo non è arrivato — o finché non c'è niente dentro — resta la
+      // forma costruita sui conteggi, che è una scenografia e non pretende altro.
+      : grafo && grafo.nodi.length ? costruisciDaGrafo(grafo)
+      : costruisci(gruppi)),
+    [mappaInVista, grafo, gruppi]
+  )
   const onPick = useCallback((s: string, cluster: string) => { setSel(s); setFiltro(cluster) }, [])
-  const mappa = useMappa(cvA, cvB, mapFull, filtro, sel, onPick, ball, gruppi)
+  const mappa = useMappa(cvA, cvB, mappaInVista, mapFull, filtro, sel, onPick, ball, gruppi)
 
   // — caricamento iniziale —
 
@@ -69,11 +155,26 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     const f = await api.feed()
     setAperti(f.aperti as unknown as VoceFeed[])
     setFatte(f.fatte as unknown as VoceFeed[])
+    // solo il valore vero: la bozza del campo NON si tocca da qui. Prima ogni
+    // ricaricamento del feed — una lettura, un cambio lingua, qualunque cosa —
+    // ripassava di qui e sovrascriveva quello che stavi scrivendo con il valore
+    // vecchio del server. Era il fuoco che «tornava indietro da solo».
+    api.fuoco().then(r => setFuoco(r.fuoco)).catch(() => {})
+    api.domanda().then(r => setDomanda(r.domanda)).catch(() => {})
   }, [])
 
-  const caricaMente = useCallback(async () => {
-    const m = await api.mente()
+  /**
+   * I conteggi sempre, il grafo solo se serve.
+   *
+   * Costruirlo lato server vuol dire un indice rovesciato su tutto il materiale:
+   * si chiede quando si apre la Mappa, non a ogni avvio dell'app.
+   */
+  const caricaMente = useCallback(async (conGrafo = false) => {
+    const m = await api.mente(conGrafo)
     setGruppi(m.gruppi)
+    // se non l'abbiamo chiesto non si azzera quello che c'era: chi ha la Mappa
+    // aperta durante una lettura non deve vederla sparire
+    if (m.grafo) setGrafo(m.grafo)
     setSel(s => s || m.gruppi[0]?.id || '')
   }, [])
 
@@ -88,6 +189,11 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     caricaMente().catch(() => {})
     caricaChat().catch(() => {})
   }, [caricaFeed, caricaMente, caricaChat])
+
+  // il grafo arriva quando si apre la Mappa, e una volta sola
+  useEffect(() => {
+    if (mappaInVista && !grafo) caricaMente(true).catch(() => {})
+  }, [mappaInVista, grafo, caricaMente])
 
   // un contatore di generazione: la risposta di una richiesta vecchia non
   // deve sovrascrivere quella nuova, né cancellare la bolla ottimistica
@@ -141,14 +247,28 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     setThread(id)
     const bozza = draftMsg
     setDraftMsg(''); setNodeMsg('')
-    setMessaggi(m => [...m, { id: `tmp${Date.now()}`, role: 'u', text: testo }])
+    const idScritta = `tmp${Date.now()}`
+    setMessaggi(m => [...m, { id: idScritta, role: 'u', text: testo }])
     setPensando(true)
     try {
-      const r = await api.chiedi(id, testo)
+      // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
+      // un messaggio finto che si riempie a ogni frammento, sostituito da
+      // quello vero — con le fonti — solo alla fine.
+      const idVivo = idScritta + 'a'
+      let cresciuta = ''
+      const r = await api.chiedi(id, testo, delta => {
+        if (gen.current !== mio) return
+        cresciuta += delta
+        setPensando(false)
+        setMessaggi(m => {
+          const senza = m.filter(x => x.id !== idVivo)
+          return [...senza, { id: idVivo, role: 'a', text: cresciuta }]
+        })
+      })
       if (gen.current === mio) setMessaggi(r.messaggi)
       await caricaChat()
     } catch (e) {
-      mostraToast(e instanceof Error ? e.message : 'Non sono riuscito a rispondere.')
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
       if (gen.current === mio) {
         setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
         setDraftMsg(d => d || bozza)   // il testo scritto non si perde
@@ -163,10 +283,10 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
       await api.sincronizza(m => {
         if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m))
       }, fonte)
-      await Promise.all([ricaricaStato(), caricaMente(), caricaFeed()])
-      mostraToast('Letto tutto quello che è cambiato.')
+      await Promise.all([ricaricaStato(), caricaMente(mappaInVista), caricaFeed()])
+      mostraToast(t('Letto tutto quello che è cambiato.'))
     } catch (e) {
-      mostraToast(e instanceof Error ? e.message : 'Sincronizzazione fallita.')
+      mostraToast(e instanceof Error ? t(e.message) : t('Sincronizzazione fallita.'))
     }
     setSincronizzando(null)
   }
@@ -176,9 +296,9 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     try {
       const r = await api.generaFeed()
       await caricaFeed()
-      mostraToast(r.generate ? `${r.generate} cose nuove nel feed.` : 'Non ho trovato niente da segnalare.')
+      mostraToast(r.generate ? frasi.coseNuove(r.generate) : t('Non ho trovato niente da segnalare.'))
     } catch (e) {
-      mostraToast(e instanceof Error ? e.message : 'La lettura non è riuscita.')
+      mostraToast(e instanceof Error ? t(e.message) : t('La lettura non è riuscita.'))
     }
     setGenerando(false)
   }
@@ -186,7 +306,6 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   // — valori derivati —
 
   const hero = aperti[0]
-  const resto = aperti.slice(1)
   const cl = gruppi.find(g => g.id === sel) ?? gruppi[0]
   const connettori = stato.connettori
   const connOn = connettori.filter(c => c.pronto && c.collegato)
@@ -194,38 +313,239 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
   const th = threads.find(t => t.id === thread)
   const noop = () => {}
 
+
+  /**
+   * Rispondere alla voce in cima con parole tue. Non aggiorno l'elenco a mano:
+   * il server rimanda quello vero, perché è lui che decide se «l'ho già
+   * mandato» chiude la voce o la lascia aperta.
+   */
+  /**
+   * Da una voce del feed a una riga della lista.
+   *
+   * È il ponte fra le due schermate, ed è quello che le rende un organismo solo
+   * invece di due app che condividono un database. Lui nota una cosa; tu decidi
+   * che è tua e la prendi in carico.
+   *
+   * La voce si chiude nello stesso momento — lo fa il server — perché la stessa
+   * cosa in due posti con due stati diversi diverge al primo tocco: la chiuderesti
+   * in lista e resterebbe aperta nel feed, a chiederti di nuovo la stessa cosa.
+   */
+  const mettiInLista = async (v: VoceFeed) => {
+    setMenuAperto(false)
+    // sparisce subito dal feed: aspettare il giro completo del server su un
+    // gesto così piccolo fa sembrare l'app lenta proprio dove è più veloce
+    setAperti(a => a.filter(x => x.id !== v.id))
+    try {
+      await api.aggiungiCompito({
+        id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        testo: v.titolo,
+        quando: 'oggi',
+        origine: 'feed',
+        voce: v.id,
+        ...(v.doc ? { doc: v.doc } : {})
+      })
+      mostraToast(t('Messa in lista.'))
+    } catch (e) {
+      // rimetterla dov'era è meglio che farla sparire in silenzio
+      setAperti(a => [v, ...a])
+      mostraToast(e instanceof Error ? e.message : t('Non sono riuscito a metterla in lista.'))
+    }
+  }
+
+  const mandaRisposta = async (testo: string, stato?: string) => {
+    if (!hero || !testo.trim()) return
+    setRispondendo(true)
+    try {
+      const r = await api.rispondiFeed(hero.id, testo, stato)
+      setAperti(r.aperti as unknown as VoceFeed[])
+      setFatte(r.fatte as unknown as VoceFeed[])
+      setRisposta('')
+      setScriviAperto(false)
+      setMenuAperto(false)
+      setHeroLong(false)
+      mostraToast(
+        r.fonteVecchia
+          ? t('Segnato. Il documento è indietro rispetto a te: rileggo la fonte alla prossima lettura.')
+          : r.daRicordare
+            ? frasi.segnatoRicordo(r.daRicordare)
+            : t('Segnato.')
+      )
+    } catch (e) {
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
+    }
+    setRispondendo(false)
+  }
+
+  const rispondiAlHero = () => mandaRisposta(risposta)
+
+  /**
+   * Rispondere a quello che ha chiesto lui. L'esito non finisce in un avviso
+   * che scompare: resta al posto della domanda, perché il senso di tutto il
+   * meccanismo è vedere *cosa è cambiato*. Un avviso che sfarfalla e sparisce
+   * insegnerebbe che rispondere non serve.
+   */
+  const rispondiADomanda = async () => {
+    if (!domanda || !rispostaDom.trim()) return
+    const id = domanda.id
+    const testo = rispostaDom
+    setRispostaDom('')
+    try {
+      const r = await api.rispondiDomanda(id, testo)
+      setEsitoDom(r.esito)
+      setDomanda(null)
+    } catch (e) {
+      setRispostaDom(testo)
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
+    }
+  }
+
+  const lasciaCadere = async () => {
+    if (!domanda) return
+    const id = domanda.id
+    setDomanda(null)
+    setSpuntoAperto(false)
+    // non si ripropone: lasciarla cadere è una risposta anche quella
+    try { await api.ignoraDomanda(id) } catch { /* al prossimo avvio non c'è più */ }
+  }
+
+  const salvaFuoco = async (testo: string) => {
+    setFuoco(testo)
+    setFuocoAperto(false)
+    try {
+      await api.scriviFuoco(testo)
+      mostraToast(testo.trim() ? t('Da adesso guardo prima lì.') : t('Fuoco tolto.'))
+      // il fuoco nuovo non può restare una promessa: il feed si rigenera
+      // subito, così cambiare direzione cambia la pagina che hai davanti
+      setGenerando(true)
+      api.generaFeed().then(() => caricaFeed()).catch(() => {}).finally(() => setGenerando(false))
+    } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
+  }
+
+  /**
+   * Gli argomenti della rassegna.
+   *
+   * Diverso dal fuoco in una cosa: qui non si rigenera niente. Cambiare fuoco
+   * rifà subito il feed perché il materiale è già in casa; cambiare argomenti
+   * vorrebbe dire ribussare a quindici giornali, e non è quello che uno si
+   * aspetta premendo Salva dentro le preferenze. La rassegna nuova arriva al
+   * prossimo giro, o quando la chiedi tu dalla fascia.
+   */
+  const salvaArgomenti = async (testo: string) => {
+    setStato(s => ({ ...s, config: { ...s.config, argomenti: testo } }))
+    try {
+      await api.profilo({ argomenti: testo })
+    } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
+  }
+
   const risolvi = (v: VoceFeed) => async () => {
     setAperti(a => a.filter(x => x.id !== v.id))
     setFatte(f => [v, ...f])
     setHeroLong(false)
     try {
       await api.segnaFeed(v.id, 'fatto')
-      mostraToast('Segnata come fatta.', true)
+      mostraToast(t('Segnata come fatta.'), true)
     } catch {
       // rimetto le cose come stavano invece di mentire
       setFatte(f => f.filter(x => x.id !== v.id))
       setAperti(a => [v, ...a])
-      mostraToast('Non sono riuscito a segnarla.')
+      mostraToast(t('Non sono riuscito a segnarla.'))
     }
   }
+
+  /**
+   * Le voci del feed, vestite da riga.
+   *
+   * Si mappano tutte, non solo quelle sotto la prima: quando in cima ci va una
+   * cosa della tua lista, la voce che stava lì scende fra le righe — e per
+   * scendere le serve la stessa vestizione delle altre. Chi la disegna prende
+   * `rigaHero`; chi disegna il resto prende `resto`, che è quella dopo.
+   */
+  const righe = aperti.map((i, ix) => {
+    const aperto = restoAperti.has(i.id)
+    const testo = i.testo ?? ''
+    return {
+      id: i.id, tipo: i.tipo, titolo: i.titolo, fonte: i.fonte ?? '', ora: quando(i.quando),
+      onInLista: () => mettiInLista(i as unknown as VoceFeed),
+      // Aperta è tutta; chiusa si ferma dov'è ancora una frase e non un
+      // troncone. Il chevron sta attaccato a questo punto, in fondo alle
+      // parole — è lì che ti accorgi che ne mancano, non in cima alla riga.
+      testo: aperto ? testo : taglia(testo, 150),
+      aperto,
+      // Sotto la soglia non c'è niente da aprire: il chevron non compare,
+      // invece di girare a vuoto.
+      espandibile: testo.length > 150,
+      urgenza: i.urgenza ?? '',
+      /**
+       * La freccia accanto a «Da leggere».
+       *
+       * Il pallino era decorazione: stava lì, non diceva niente, e la riga
+       * sembrava una voce di elenco puntato invece di una cosa su cui si
+       * clicca. Questa punta alla voce e alla riga che ci porta sopra — e
+       * resta ferma: quella che gira è l'altra, in fondo al testo.
+       */
+      freccia: {
+        flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center',
+        color: 'rgba(62,81,64,.6)'
+      } as CSSProperties,
+      // Il chevron in fondo alla frase: giù quando c'è altro da vedere, su
+      // quando sei già in fondo.
+      chevron: {
+        display: 'inline-flex', verticalAlign: '-2px', marginLeft: 5, padding: 0, border: 'none',
+        background: 'none', cursor: 'pointer', color: 'rgba(34,39,31,.5)',
+        transform: aperto ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform .28s cubic-bezier(.22,.61,.36,1), color .2s ease'
+      } as CSSProperties,
+      // «Da decidere», «Da leggere»: è la prima cosa che dice se la riga ti
+      // riguarda, e stava scritta come una didascalia qualsiasi accanto alla
+      // fonte. Adesso pesa quanto quello che dice — maiuscoletto spaziato,
+      // il verde dell'app, staccata dal grigio della fonte.
+      tipoStyle: {
+        fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em',
+        textTransform: 'uppercase', color: '#3E5140'
+      } as CSSProperties,
+      pill: {
+        flex: 'none', fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#8E3F1F',
+        background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
+      } as CSSProperties,
+      row: {
+        display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer',
+        borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.09)'
+      } as CSSProperties,
+      // Vedere il resto della frase e prendere in carico la voce sono due
+      // gesti diversi, e adesso hanno due bersagli diversi: il chevron in
+      // fondo al testo apre, la riga porta la voce in cima. Prima l'unico
+      // modo di leggere tutto era spostarsela sotto il naso.
+      onToggle: () => setRestoAperti(s => {
+        const n = new Set(s)
+        n.has(i.id) ? n.delete(i.id) : n.add(i.id)
+        return n
+      }),
+      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) }
+    }
+  })
 
   return {
     threadRef, cvA, cvB,
 
-    isMyynd: screen === 'myynd', isChat: screen === 'chat', isAuto: screen === 'auto',
+    isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat', isAuto: screen === 'auto',
     isMappa: screen === 'mappa', isPref: screen === 'pref', isConn: screen === 'conn',
+    isMemoria: screen === 'memoria',
     navMyynd: screen === 'myynd' ? NAV_ON : NAV_OFF,
+    navOggi: screen === 'oggi' ? NAV_ON : NAV_OFF,
+    goOggi: (e?: { preventDefault: () => void }) => { e?.preventDefault(); setScreen('oggi') },
+    mostraToast,
     navChat: screen === 'chat' ? NAV_ON : NAV_OFF,
     navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
     menuPref: screen === 'pref' ? MENU_ON : MENU_OFF,
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
     menuConn: screen === 'conn' ? MENU_ON : MENU_OFF,
+    menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
     menuOpen: menu, toggleMenu: () => setMenu(m => !m),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
     goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
-    goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'),
+    goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
 
-    nome: stato.config.nome ?? 'tu',
+    nome: stato.config.nome ?? t('tu'),
     ruolo: stato.config.ruolo ?? '',
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
     connCount: connOn.length,
@@ -237,14 +557,22 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     claudeOn,
 
     // — feed —
-    oggi: new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }),
-    ora: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+    oggi: new Date().toLocaleDateString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT', { weekday: 'long', day: 'numeric', month: 'long' }),
+    ora: new Date().toLocaleTimeString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }),
+    // Il titolone non può dire «niente che richieda te» mentre sotto lui ti sta
+    // chiedendo una cosa: la contraddizione fa sembrare che una delle due parti
+    // dell'app non sappia cosa fa l'altra.
     headline: aperti.length === 0
-      ? (stato.conteggi.totale ? 'Niente che richieda te, adesso.' : 'La tua mente è ancora vuota.')
-      : `${parole(aperti.length)}, da guardare.`,
+      ? (domanda ? t('Una cosa da chiarire.')
+        : stato.conteggi.totale ? t('Niente che richieda te, adesso.')
+        : t('La tua mente è ancora vuota.'))
+      : frasi.daGuardare(aperti.length, parole(aperti.length)),
     hasHero: !!hero,
-    feedVuoto: aperti.length === 0 && fatte.length === 0,
-    hasRest: resto.length > 0,
+    // Basta che non ci sia niente di aperto. Prima serviva anche zero fatte,
+    // quindi chi aveva appena sistemato tutto restava con un elenco di cose
+    // chiuse e nessuna indicazione su cosa succede adesso.
+    feedVuoto: aperti.length === 0,
+    haFatte: fatte.length > 0,
     generando, genera,
     heroStyle: {
       borderRadius: '28px 24px 28px 22px',
@@ -252,44 +580,98 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       border: '1px solid rgba(255,255,255,.6)',
       boxShadow: '0 30px 70px rgba(120,74,48,.34),inset 0 1px 0 rgba(255,255,255,.35)',
-      padding: '24px 26px 22px', transform: 'rotate(-.35deg)', color: '#FFF7F0', minHeight: 300, flex: 'none',
+      // Niente altezza minima: con il testo ripiegato la card restava alta 300
+      // pixel con dentro centoventi di vuoto. Adesso è alta quanto quello che
+      // contiene, e si allunga solo se apri il testo lungo.
+      padding: '22px 24px 20px', transform: 'rotate(-.35deg)', color: '#FFF7F0', flex: 'none',
       display: 'flex', flexDirection: 'column', animation: 'heroin .35s ease'
     } as CSSProperties,
     heroTipo: hero?.tipo ?? '',
     heroTitolo: hero?.titolo ?? '',
     heroFonte: hero?.fonte ?? '',
     heroOra: quando(hero?.quando),
+    // non si disegna più sulla card in cima; resta per le righe sotto
     heroUrgenza: hero?.urgenza ?? '',
-    heroTesto: hero?.testo ?? '',
+    // il modello a volte sfora il tetto che gli si chiede: qui si taglia
+    // comunque, perché la card in cima non deve mai diventare un muro di testo
+    // Chiuso di default: il titolo dice di cosa si tratta, e quasi sempre
+    // basta per decidere. Il testo lungo si apre se serve, non prima —
+    // sette righe di paragrafo per ogni voce sono un muro, non un feed.
+    heroTesto: heroLong ? (hero?.testo ?? '') : taglia(hero?.testo ?? '', 96),
+    heroTagliato: (hero?.testo ?? '').length > 96,
     heroLong,
-    heroToggle: () => setHeroLong(v => !v),
+    heroToggle: () => setHeroLong(x => !x),
     heroHaDoc: !!hero?.doc,
     heroPrimary: hero ? risolvi(hero) : noop,
-    heroAsk: hero ? () => chiedi(`${hero.titolo} — dimmi di più`) : noop,
+    heroAsk: hero ? () => chiedi(`${hero.titolo}: dimmi di più`) : noop,
     heroSkip: hero ? () => setAperti(a => [...a.slice(1), a[0]]) : noop,
-    apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => mostraToast('Non trovo più il documento.')) } : noop,
 
-    resto: resto.map((i, ix) => ({
-      id: i.id, tipo: i.tipo, titolo: i.titolo, fonte: i.fonte ?? '', ora: quando(i.quando),
-      testo: i.testo, urgenza: i.urgenza ?? '',
-      dot: dot(COLORE_FONTE[i.fonte ?? ''] ?? '#C4623B'),
-      pill: {
-        flex: 'none', fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#8E3F1F',
-        background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
-      } as CSSProperties,
-      row: {
-        display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer',
-        borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.09)'
-      } as CSSProperties,
-      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) }
-    })),
+    // — rispondere alla voce in cima, e indirizzare tutto il resto —
+    risposta,
+    setRisposta,
+    rispondendo,
+    rispondiAlHero,
+    scriviAperto,
+    apriScrivi: () => setScriviAperto(true),
+    chiudiScrivi: () => { setScriviAperto(false); setRisposta('') },
+
+    /**
+     * Le correzioni, dietro un «⋯».
+     *
+     * Prima erano quattro pastiglie sempre in vista, e una di quelle — «Già
+     * fatto» — faceva esattamente quello che fa il bottone Fatto qui accanto.
+     * Un doppione in mezzo a una fila di controlli è la definizione di
+     * ingombro: le tre che restano sono quelle che il bottone principale *non*
+     * sa dire, e stanno via finché non servono.
+     */
+    menuAperto,
+    apriMenu: () => setMenuAperto(v => !v),
+    chiudiMenu: () => setMenuAperto(false),
+    correzioni: hero ? [
+      { id: 'lista', label: t('Mettila in lista'), onClick: () => mettiInLista(hero) },
+      { id: 'altrove', label: t('Aggiornato altrove'), onClick: () => mandaRisposta(t("L'ho aggiornato altrove: il documento qui è indietro."), 'fonte_vecchia') },
+      { id: 'scarta', label: t('Non mi interessa'), onClick: () => mandaRisposta(t('Non mi interessa.'), 'scartato') },
+      { id: 'parole', label: t('Altro…'), onClick: () => { setMenuAperto(false); setScriviAperto(true) } }
+    ] : [],
+    // — la domanda che fa lui —
+    domanda,
+    rispostaDom,
+    setRispostaDom,
+    rispondiADomanda,
+    lasciaCadere,
+    esitoDom,
+    chiudiEsito: () => setEsitoDom(''),
+    spuntoAperto,
+    apriSpunto: () => setSpuntoAperto(v => !v),
+
+    fuoco,
+    fuocoAperto,
+    apriFuoco: () => setFuocoAperto(v => !v),
+    salvaFuoco,
+
+    argomenti: stato.config.argomenti ?? '',
+    salvaArgomenti,
+    /** Aprire il documento dietro una citazione, dal segno nel testo. */
+    apriFonte: (id: string) => {
+      api.documento(id).then(setDoc).catch(() => mostraToast(t('Non trovo più il documento.')))
+    },
+    apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => {
+        // il bottone sparisce insieme all'errore: invitarti a riprovare su una
+        // cosa che non c'è è il modo di far sembrare rotta tutta l'app
+        setAperti(a => a.map(v => (v.id === hero?.id ? { ...v, doc: null } : v)))
+        mostraToast(t('Non trovo più il documento.'))
+      }) } : noop,
+
+    resto: righe.slice(1),
+    // la voce in cima, pronta a scendere fra le altre se le passi davanti
+    rigaHero: righe[0] ?? null,
 
     hasDone: fatte.length > 0, doneCount: fatte.length, doneOpen,
     toggleDone: () => setDoneOpen(v => !v),
     doneChevron: { display: 'flex', transform: doneOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' } as CSSProperties,
     fatte: fatte.map((d, ix) => ({
       id: d.id, esito: d.titolo, tipo: d.tipo, fonte: d.fonte ?? '', at: quando(d.quando),
-      testo: d.testo, open: openDone === d.id, label: openDone === d.id ? 'Chiudi' : 'Vedi',
+      testo: d.testo, open: openDone === d.id, label: openDone === d.id ? t('Chiudi') : t('Vedi'),
       wrap: {
         borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.08)',
         background: openDone === d.id ? 'rgba(255,255,255,.5)' : 'transparent'
@@ -302,14 +684,14 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
         setOpenDone(null)
         try {
           await api.segnaFeed(d.id, 'aperto')
-          mostraToast('Rimessa in cima al feed.')
+          mostraToast(t('Rimessa in cima al feed.'))
         } catch {
           setAperti(a => a.filter(x => x.id !== d.id))
           setFatte(f => [d, ...f])
-          mostraToast('Non sono riuscito a rimetterla.')
+          mostraToast(t('Non sono riuscito a rimetterla.'))
         }
       },
-      onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(`${d.titolo} — dimmi di più`) }
+      onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(`${d.titolo}: dimmi di più`) }
     })),
 
     // — documento aperto —
@@ -328,32 +710,32 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
       api.segnaFeed(ultima.id, 'aperto').catch(() => {
         setAperti(a => a.filter(x => x.id !== ultima.id))
         setFatte(f => [ultima, ...f])
-        mostraToast('Non sono riuscito ad annullare.')
+        mostraToast(t('Non sono riuscito ad annullare.'))
       })
     },
 
     // — chat —
-    threads: threads.map(t => ({
-      id: t.id, titolo: t.titolo, quando: quando(t.quando),
+    threads: threads.map(ch => ({
+      id: ch.id, titolo: ch.titolo, quando: quando(ch.quando),
       row: {
         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10, cursor: 'pointer',
-        background: t.id === thread ? 'rgba(255,255,255,.92)' : t.id === hoverThread ? 'rgba(255,255,255,.6)' : 'transparent'
+        background: ch.id === thread ? 'rgba(255,255,255,.92)' : ch.id === hoverThread ? 'rgba(255,255,255,.6)' : 'transparent'
       } as CSSProperties,
       binStyle: {
         width: 22, height: 22, flex: 'none', display: 'grid', placeItems: 'center', border: 'none',
         background: 'none', padding: 0, cursor: 'pointer', color: '#C0392B',
-        opacity: t.id === hoverThread ? 1 : 0, transition: 'opacity .15s'
+        opacity: ch.id === hoverThread ? 1 : 0, transition: 'opacity .15s'
       } as CSSProperties,
-      onEnter: () => setHoverThread(t.id),
-      onLeave: () => setHoverThread(h => (h === t.id ? null : h)),
-      onClick: () => setThread(t.id),
+      onEnter: () => setHoverThread(ch.id),
+      onLeave: () => setHoverThread(h => (h === ch.id ? null : h)),
+      onClick: () => setThread(ch.id),
       onDelete: async (e: React.MouseEvent) => {
         e.stopPropagation()
-        await api.eliminaChat(t.id).catch(() => {})
-        const resto = threads.filter(x => x.id !== t.id)
+        await api.eliminaChat(ch.id).catch(() => {})
+        const resto = threads.filter(x => x.id !== ch.id)
         setThreads(resto)
-        if (thread === t.id) setThread(resto[0]?.id ?? null)
-        mostraToast('Chat eliminata.')
+        if (thread === ch.id) setThread(resto[0]?.id ?? null)
+        mostraToast(t('Chat eliminata.'))
       }
     })),
     newChat: () => { setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
@@ -361,7 +743,7 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     chatTitolo: th?.titolo ?? 'Nuova chat',
     pensando,
     messages: messaggi.map(m => ({
-      id: m.id, text: m.text,
+      id: m.id, text: m.text, mio: m.role === 'u',
       hasSources: !!(m.sources && m.sources.length), sources: m.sources ?? [],
       row: { display: 'flex', justifyContent: m.role === 'u' ? 'flex-end' : 'flex-start' } as CSSProperties,
       bubble: (m.role === 'u'
@@ -379,9 +761,11 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     })),
     prompts: stato.conteggi.totale
       ? [
-          { id: 'p1', text: 'Cosa è arrivato oggi?', onClick: () => chiedi('Cosa è arrivato oggi?') },
-          { id: 'p2', text: 'Chi aspetta una mia risposta?', onClick: () => chiedi('Chi aspetta una mia risposta?') },
-          { id: 'p3', text: 'Riassumimi la settimana', onClick: () => chiedi('Riassumimi la settimana') }
+          // il testo mandato al modello è quello tradotto: gli si parla nella
+          // lingua in cui poi deve rispondere
+          { id: 'p1', text: t('Cosa è arrivato oggi?'), onClick: () => chiedi(t('Cosa è arrivato oggi?')) },
+          { id: 'p2', text: t('Chi aspetta una mia risposta?'), onClick: () => chiedi(t('Chi aspetta una mia risposta?')) },
+          { id: 'p3', text: t('Riassumimi la settimana'), onClick: () => chiedi(t('Riassumimi la settimana')) }
         ]
       : [],
     draftMsg,
@@ -391,8 +775,8 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
 
     // — mappa —
     mappaMeta: gruppi.length
-      ? `${stato.conteggi.totale.toLocaleString('it-IT')} documenti · ${gruppi.length} gruppi`
-      : 'ancora nessun documento',
+      ? frasi.documentiEGruppi(stato.conteggi.totale.toLocaleString(loc()), gruppi.length)
+      : t('ancora nessun documento'),
     mappaVuota: !gruppi.length,
     mapFull,
     expandMap: () => setMapFull(true),
@@ -401,7 +785,7 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     legenda: gruppi.map(g => {
       const on = !filtro || filtro === g.id
       return {
-        id: g.id, nome: g.nome,
+        id: g.id, nome: t(g.nome),
         chip: {
           display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99,
           cursor: 'pointer', fontFamily: 'inherit', fontSize: '11.5px',
@@ -413,29 +797,71 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
         onClick: () => { setFiltro(f => (f === g.id ? null : g.id)); setSel(g.id) }
       }
     }),
-    selTipo: cl ? `${cl.nodi.toLocaleString('it-IT')} documenti` : '',
-    selNome: cl?.nome ?? 'Niente ancora',
+    selTipo: cl ? frasi.nDocumenti(cl.nodi.toLocaleString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT')) : '',
+    selNome: cl?.nome ?? t('Niente ancora'),
     selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
     selTesto: cl
-      ? `Tutto quello che è arrivato da ${cl.nome.toLowerCase()}. Clicca un nodo per filtrare, o chiedi qui sotto.`
-      : 'Collega una fonte e qui comparirà quello che Myynd ha letto.',
-    nodePlaceholder: cl ? `Chiedi su ${cl.nome.toLowerCase()}…` : 'Chiedi…',
+      ? frasi.tuttoDa(t(cl.nome).toLowerCase())
+      : t('Collega una fonte e qui comparirà quello che Myynd ha letto.'),
+    nodePlaceholder: cl ? frasi.chiediSu(t(cl.nome).toLowerCase()) : t('Chiedi…'),
     nodeMsg,
     onNodeType: (e: { target: { value: string } }) => setNodeMsg(e.target.value),
     onNodeKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && nodeMsg.trim()) chiedi(nodeMsg.trim()) },
     askNode: () => { if (nodeMsg.trim()) chiedi(nodeMsg.trim()) },
 
     // — preferenze —
-    toni: TONI.map(t => ({
-      ...t,
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: t.id } })); api.profilo({ tono: t.id }).catch(() => {}) },
-      style: (t.id === stato.config.tono
+    toni: TONI.map(x => ({
+      ...x, label: t(x.label),
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => {}) },
+      style: (x.id === stato.config.tono
         ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
         : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
     })),
-    tonoEsempio: ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto,
+    tonoEsempio: t(ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto),
+
+    // — il motore, la lingua, e quanto tengono le fatte —
+    modelli: MODELLI.map(m => ({
+      ...m, nota: t(m.nota),
+      scelto: (stato.config.modello ?? 'claude-sonnet-5') === m.id,
+      onClick: () => {
+        setStato(s => ({ ...s, config: { ...s.config, modello: m.id } }))
+        api.profilo({ modello: m.id }).catch(() => {})
+      }
+    })),
+    lingue: LINGUE.map(l => ({
+      ...l,
+      scelto: (stato.config.lingua ?? 'it') === l.id,
+      occupato: cambioLingua,
+      /**
+       * Cambiare lingua traduce anche il feed e la domanda in sospeso, quindi
+       * ci mette un paio di secondi. Si aspetta e poi si ricarica: mostrare
+       * subito l'interfaccia inglese sopra un feed ancora italiano sarebbe
+       * peggio dell'attesa.
+       */
+      onClick: async () => {
+        if (cambioLingua || (stato.config.lingua ?? 'it') === l.id) return
+        setCambioLingua(true)
+        try {
+          await api.profilo({ lingua: l.id })
+          setStato(s => ({ ...s, config: { ...s.config, lingua: l.id } }))
+          await Promise.all([
+            caricaFeed(),
+            api.domanda().then(r => setDomanda(r.domanda)).catch(() => {})
+          ])
+        } catch { mostraToast(t('Non sono riuscito a cambiare lingua.')) }
+        setCambioLingua(false)
+      }
+    })),
+    tenute: TENUTE.map(x => ({
+      ...x, label: t(x.label),
+      scelto: (stato.config.oreFatte ?? 48) === x.ore,
+      onClick: () => {
+        setStato(s => ({ ...s, config: { ...s.config, oreFatte: x.ore } }))
+        api.profilo({ oreFatte: x.ore }).then(() => caricaFeed()).catch(() => {})
+      }
+    })),
     autonomie: AUTONOMIE.map(a => ({
-      ...a,
+      ...a, titolo: t(a.titolo), nota: t(a.nota),
       onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => {}) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
@@ -451,17 +877,19 @@ export function useVals(iniziale: Stato, apriConnessioni: () => void) {
     apriConnessioni,
 
     // — connettori —
-    connMeta: `${connOn.length} attivi · ${connettori.filter(c => c.pronto).length - connOn.length} da collegare`,
+    connMeta: frasi.attiviDaCollegare(connOn.length, connettori.filter(c => c.pronto).length - connOn.length),
     connAttivi: connOn.map(c => ({
-      id: c.id, nome: c.nome, stato: c.documenti ? `${c.documenti} documenti` : 'collegato',
+      id: c.id, nome: c.nome, stato: frasi.statoConnettore(c.documenti),
       onClick: async () => {
         await api.scollega(c.id).catch(() => {})
-        await Promise.all([ricaricaStato(), caricaMente()])
-        mostraToast(`${c.nome} scollegato.`)
+        await Promise.all([ricaricaStato(), caricaMente(mappaInVista)])
+        mostraToast(frasi.scollegato(t(c.nome)))
       }
     })),
     connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({
-      id: c.id, nome: c.nome, nota: c.nota, onClick: apriConnessioni
+      // il pannello si apre già su questa fonte: chi clicca "Posta" vuole
+      // Posta, non l'elenco di tutto da ricominciare a cercare
+      id: c.id, nome: c.nome, nota: c.nota, onClick: () => apriConnessioni(c.id)
     })),
     connFuturi: connettori.filter(c => !c.pronto).map(c => ({ id: c.id, nome: c.nome, nota: c.nota })),
 

@@ -1,0 +1,27 @@
+{
+  "id": "coordinate-cambiate",
+  "nome": "Un fornitore che ha cambiato IBAN",
+  "spiega": "Quando arriva una fattura, controlla se le coordinate di pagamento sono diverse da quelle di prima.",
+  "quando": {
+    "quandoArriva": true
+  },
+  "guarda": {
+    "cerca": "IBAN bonifico coordinate pagamento fattura",
+    "soloNuovi": true,
+    "limite": 6
+  },
+  "fai": "Per ognuna di queste: l'IBAN o i dati di pagamento sono gli stessi che questo fornitore usava nelle fatture di prima? Se sono cambiati, dillo in cima e riporta i due IBAN uno sotto l'altro, senza commentare. È il modo in cui si rubano i bonifici, e l'unica difesa è una telefonata al numero che avevi già — non a quello scritto nella mail. Se non hai fatture precedenti di quel fornitore, dillo: non è un allarme, è una cosa che non puoi sapere.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "A supplier whose bank details changed",
+    "spiega": "When an invoice arrives, checks whether the payment details differ from the ones used before.",
+    "cerca": "IBAN bank transfer payment details invoice account number",
+    "fai": "For each of these: are the IBAN or payment details the same this supplier used on earlier invoices? If they changed, say so at the top and put the two side by side, without commentary. This is how transfers get stolen, and the only defence is a phone call to the number you already had — not the one in the email. If you have no earlier invoice from that supplier, say so: it is not an alarm, it is something you cannot know."
+  }
+}

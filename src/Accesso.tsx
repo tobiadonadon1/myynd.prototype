@@ -6,8 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
 import { api } from './api'
+import { t } from './lingua'
 import { Logo } from './components/Marchio'
-import { CERVELLO, CORALLO } from './components/marchio-forma'
 
 const CHIARO = '#F4EFE8'
 
@@ -65,22 +65,20 @@ export function Accesso({ registrato, entrato }: {
         pointerEvents: 'none'   // le particelle devono sentire il cursore
       }}>
         <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto' }}>
-          {/* le due sagome a confronto: si sceglie e poi resta quella */}
-          <div style={{ marginBottom: 40, display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <Logo dim={38} testo={26} tinta={CHIARO} forma={CERVELLO} />
-            <Logo dim={38} testo={26} tinta={CHIARO} forma={CORALLO} />
+          <div style={{ marginBottom: 44 }}>
+            <Logo dim={38} testo={26} tinta={CHIARO} />
           </div>
 
-          <div style={ETICHETTA}>Email</div>
+          <div style={ETICHETTA}>{t('Email')}</div>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
-            type="email" autoComplete="username" autoFocus placeholder="tu@tuodominio.it" style={CAMPO} />
+            type="email" autoComplete="username" autoFocus placeholder="tu@tuodominio.it" className="scuro" style={CAMPO} />
 
-          <div style={ETICHETTA}>Password</div>
+          <div style={ETICHETTA}>{t('Password')}</div>
           <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
             type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
-            placeholder={registrato ? '' : 'otto caratteri'} style={CAMPO} />
+            placeholder={registrato ? '' : 'otto caratteri'} className="scuro" style={CAMPO} />
 
-          {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{err}</div>}
+          {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
           <button onClick={invia} disabled={!pronto || occupato} style={{
             marginTop: 28, width: '100%', padding: '14px 24px', borderRadius: 99, border: 'none',
@@ -89,12 +87,12 @@ export function Accesso({ registrato, entrato }: {
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {occupato ? '…' : 'Entra'}
+            {/* su una macchina senza account non si «entra» da nessuna parte:
+                lo si crea, ed è la prima cosa che uno legge del prodotto */}
+            {occupato ? '…' : registrato ? t('Entra') : t('Crea l\'accesso')}
           </button>
 
-          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>
-            Resta su questo computer.
-          </div>
+          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>{t('Resta su questo computer.')}</div>
         </div>
       </div>
     </div>

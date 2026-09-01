@@ -1,0 +1,29 @@
+{
+  "id": "promesse-fatte",
+  "nome": "Cose che hai promesso",
+  "spiega": "Cerca le frasi in cui hai promesso qualcosa a qualcuno, e controlla se è stata fatta.",
+  "quando": {
+    "ogni": "settimana",
+    "giorno": 5,
+    "ora": 15
+  },
+  "guarda": {
+    "cerca": "ti mando ti faccio sapere entro provvedo appena",
+    "limite": 10
+  },
+  "fai": "Qui dentro dovrebbero esserci cose che hai promesso di fare o di mandare. Elenca quelle che sembrano ancora aperte, con a chi e da quanto. Niente supposizioni: solo dove la promessa è scritta.",
+  "metti": {
+    "inLista": "settimana",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi",
+    "chat.leggi"
+  ],
+  "en": {
+    "nome": "Things you promised",
+    "spiega": "Looks for the sentences where you promised something to someone, and checks whether it happened.",
+    "cerca": "I will send you I will let you know by I will get onto it as soon as",
+    "fai": "Somewhere in here are things you promised to do or to send. List the ones that still look open, with who to and how long ago. No guessing: only where the promise is in writing."
+  }
+}

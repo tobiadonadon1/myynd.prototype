@@ -4,9 +4,72 @@
 // non escono mai da questa macchina se non verso il servizio a cui servono.
 // Non finiscono mai nelle risposte dell'API né nei log.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, copyFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+
+/**
+ * I modelli fra cui si può scegliere, dal più economico al più capace.
+ *
+ * Sonnet 5 è il predefinito perché sul lavoro che fa Myynd — rispondere su
+ * documenti che ha già in mano, non ragionare nel vuoto — la differenza con
+ * Opus non si vede, e costa poco più della metà.
+ */
+export const MODELLI = [
+  { id: 'claude-haiku-4-5', nome: 'Haiku 4.5', nota: 'Il più rapido e il più economico. Va bene finché le domande sono semplici.' },
+  { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'Il predefinito: quasi la qualità di Opus sul materiale che hai, a meno della metà.' },
+  { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti, e costa cinque volte tanto.' }
+] as const
+
+/** Quello scelto nelle preferenze, o il predefinito. */
+export function modello(): string {
+  const m = leggi().modello
+  return MODELLI.some(x => x.id === m) ? m! : 'claude-sonnet-5'
+}
+
+/**
+ * Il tono e l'autonomia, con i nomi che il ragionamento conosce davvero.
+ *
+ * Per un pezzo l'interfaccia ne scriveva altri — 'cordiale', 'osservare',
+ * 'agire' — e `claude.ts`, che cerca 'caldo', 'chiedere' e 'fare', non trovava
+ * niente: la riga spariva dal prompt senza un errore, senza un log, senza
+ * niente. Due scelte su tre non facevano nulla e non c'era modo di accorgersene.
+ *
+ * L'interfaccia adesso scrive i nomi giusti, ma i config.json già scritti no:
+ * la traduzione sta qui, in un posto solo, e vale per chiunque abbia usato
+ * l'app prima di oggi. Non si riscrive il file — un valore vecchio che si legge
+ * bene è meno rischioso di una migrazione che gira a ogni avvio.
+ */
+const TONI_VECCHI: Record<string, string> = { cordiale: 'caldo' }
+const AUTONOMIE_VECCHIE: Record<string, string> = { osservare: 'chiedere', agire: 'fare' }
+
+/** I nomi che `claude.ts` sa interpretare. Fuori da qui non esiste altro. */
+export const TONI_VALIDI = ['diretto', 'caldo', 'formale']
+export const AUTONOMIE_VALIDE = ['chiedere', 'preparare', 'fare']
+
+export function tono(c: Config = leggi()): string {
+  const t = c.tono ?? 'diretto'
+  const vero = TONI_VECCHI[t] ?? t
+  return TONI_VALIDI.includes(vero) ? vero : 'diretto'
+}
+
+export function autonomia(c: Config = leggi()): string {
+  const a = c.autonomia ?? 'preparare'
+  const vera = AUTONOMIE_VECCHIE[a] ?? a
+  return AUTONOMIE_VALIDE.includes(vera) ? vera : 'preparare'
+}
+
+/**
+ * La lingua in cui il modello deve scrivere.
+ *
+ * Sta qui e non dentro un modulo solo perché la chiedono in quattro: il feed,
+ * il timone, le domande e la memoria. Ognuno aveva «in italiano» scritto a mano
+ * dentro il suo prompt — e il risultato era un'interfaccia in inglese piena di
+ * roba generata in italiano, che è esattamente quello che non deve succedere.
+ */
+export function nellaLingua(): string {
+  return leggi().lingua === 'en' ? 'inglese' : 'italiano'
+}
 
 export const DIR = join(homedir(), '.myynd')
 const FILE = join(DIR, 'config.json')
@@ -18,6 +81,15 @@ export type ConfigPosta = {
   password: string
   cartelle?: string[]
   giorni?: number
+  /**
+   * Da dove esce la posta, quando esce.
+   *
+   * Assente vuol dire «deducilo»: quasi tutti i provider tengono lo stesso
+   * nome con smtp al posto di imap, e per quelli che conosciamo c'è il
+   * PRESET. Si scrive solo quando la deduzione sbaglia — e allora è
+   * l'unica cosa che si può scrivere a mano invece di indovinare.
+   */
+  smtp?: { host: string; porta: number }
 }
 
 export type ConfigDesktop = { cartelle: string[]; estensioni?: string[] }
@@ -37,25 +109,183 @@ export type Config = {
   claude?: ConfigClaude
   tono?: string
   autonomia?: string
+  /** Il modello con cui ragiona. Vuoto = quello predefinito. */
+  modello?: string
+  /** In che lingua risponde: 'it' | 'en'. */
+  lingua?: string
+  /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */
+  oreFatte?: number
+  /**
+   * Su cosa tenerla aggiornata, con le sue parole.
+   *
+   * È il gemello del `fuoco`, e non è la stessa cosa: il fuoco dice a Myynd
+   * dove guardare *dentro* — nella posta, nei file — e questo dice cosa
+   * cercare *fuori*, nei giornali. Uno riguarda il lavoro di oggi, l'altro
+   * quello che vuole sapere del mondo, e mescolarli vorrebbe dire che chi si
+   * concentra sui preventivi smette di ricevere notizie.
+   *
+   * Vuoto è una risposta buona, non un campo da riempire: vuol dire «dammi di
+   * tutto», ed è quello che serve a chi non ha ancora idea di cosa vuole.
+   */
+  argomenti?: string
+  /** Il giro di presentazione della lista: fatto una volta, mai più. */
+  giro?: boolean
+  /**
+   * Il modello che gira su questa macchina, per il lavoro piccolo.
+   *
+   * Assente vuol dire «usalo se c'è»: chi ha già Ollama acceso non deve
+   * accendere niente, e chi non ce l'ha non deve accorgersi che esiste.
+   * `attivo: false` lo spegne di proposito — è l'unico valore che conta,
+   * perché `true` è già il comportamento di serie.
+   */
+  locale?: { attivo?: boolean; modello?: string }
+  /**
+   * Ragionare con l'abbonamento di chi usa Myynd, invece che a consumo.
+   *
+   * Assente vuol dire spento, al contrario di `locale`. Il modello di casa non
+   * costa niente a nessuno e si può accendere da sé; questo manda il lavoro sul
+   * conto di una persona, e una cosa così si chiede, non si fa e basta.
+   */
+  abbonamento?: { attivo?: boolean }
+  /**
+   * Di che azienda è questa installazione.
+   *
+   * Serve a una cosa sola: scegliere quale cartella di automazioni le
+   * appartiene. Non è un dato personale — è il nome di un cliente — e non
+   * esce mai da qui se non per chiedere «quali automazioni per questa
+   * licenza?», che è una domanda a cui si risponde senza sapere chi sia.
+   */
+  licenza?: string
+  /**
+   * Da dove arrivano le automazioni, se non solo dal pacchetto.
+   *
+   * `repo` è «proprietario/nome» su GitHub: dentro, una cartella `automazioni/`
+   * con `_comuni` e una cartella per licenza. Il `token` serve solo se il
+   * repository è privato — e privato è la scelta giusta: una ricetta non
+   * contiene dati di nessuno, ma dice come lavora un'azienda.
+   */
+  ricette?: { repo?: string; ramo?: string; token?: string }
+  /**
+   * Google: posta e calendario dalla loro API.
+   *
+   * Si conserva solo il `refresh`, che è la chiave duratura, e il client id di
+   * chi ha registrato l'app. Il token d'accesso vive un'ora e sta in memoria:
+   * scriverlo qui vorrebbe dire tenerne una copia scaduta su disco per sempre.
+   */
+  google?: { clientId: string; clientSecret?: string; refresh: string; email?: string; giorni?: number }
+  /**
+   * Slack: un token incollato, non un ballo col browser.
+   *
+   * Slack non accetta un indirizzo di ritorno su 127.0.0.1, che è l'unico che
+   * un'app installata può offrire. Il token è da utente (`xoxp-`) apposta:
+   * vede quello che vede la persona che l'ha creato, e non un canale di più.
+   */
+  slack?: { token: string; squadra?: string; utente?: string; giorni?: number }
+  /**
+   * Google Drive, separato da Gmail perché è un permesso separato.
+   *
+   * Stesso progetto su Google Cloud, stesse credenziali, consenso diverso: chi
+   * ha collegato la posta non ha collegato i suoi file, e non deve ritrovarseli
+   * collegati perché faceva comodo a noi.
+   */
+  drive?: { clientId: string; clientSecret?: string; refresh: string; email?: string; giorni?: number }
+  /**
+   * Microsoft: una registrazione su Entra ID, due metà che si concedono a parte.
+   *
+   * `parti` è quello che è stato davvero concesso — `posta` per Outlook e
+   * l'agenda, `file` per SharePoint e OneDrive. Un elenco vuoto non capita:
+   * quando si stacca l'ultima metà, tutto il blocco sparisce insieme al token.
+   */
+  microsoft?: {
+    clientId: string; tenant?: string; refresh: string
+    email?: string; nome?: string; parti: ('posta' | 'file')[]; giorni?: number
+  }
+  /** Dropbox: la chiave dell'app e il token duraturo. Il codice si incolla. */
+  dropbox?: { chiave: string; refresh: string; conto?: string; giorni?: number }
+  /**
+   * WhatsApp Business: l'unico che non si legge, ma che scrive quando arriva.
+   *
+   * `segreto` non è facoltativo travestito da tale: è quello che firma i
+   * messaggi che entrano da un indirizzo che, per forza, sta aperto al mondo.
+   */
+  whatsapp?: {
+    token: string; numero: string; segreto: string; parola: string
+    etichetta?: string; arrivati?: number
+  }
 }
 
 function assicuraDir() {
   if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true, mode: 0o700 })
 }
 
+/**
+ * Un file illeggibile non è un file vuoto.
+ *
+ * Qui c'era `catch { return {} }`, ed è la riga più costosa che questo file
+ * abbia mai avuto. Un config.json troncato — un disco pieno a metà scrittura,
+ * un riavvio nel momento sbagliato — diventava «nessun account». L'app
+ * rimandava alla registrazione, la persona si registrava, e `aggiorna()`
+ * scriveva `{...{}, ...patch}`: cioè un file nuovo con dentro solo l'account,
+ * e via per sempre la password della casella, il token di Notion e la chiave
+ * di Claude. Nessun errore, nessun avviso, e una schermata di benvenuto al
+ * posto della propria mente.
+ *
+ * Adesso il file rotto si mette da parte prima di qualunque altra cosa. Le
+ * credenziali restano lì dentro, leggibili, recuperabili a mano — e chi guarda
+ * il terminale legge dov'è finito.
+ */
+let giaMessoDaParte = false
+
+function mettiDaParte(perche: string) {
+  if (giaMessoDaParte) return
+  giaMessoDaParte = true
+  try {
+    const dove = `${FILE}.rotto-${new Date().toISOString().replace(/[:.]/g, '-')}`
+    copyFileSync(FILE, dove)
+    chmodSync(dove, 0o600)
+    console.error(
+      `myynd · config.json non è leggibile (${perche}).\n` +
+      `        Una copia intatta è in ${dove}: le credenziali sono lì, non sono perse.\n` +
+      '        Myynd riparte da vuoto per non scriverci sopra.'
+    )
+  } catch (e) {
+    console.error('myynd · config.json non è leggibile e non sono riuscito a metterlo da parte:', e)
+  }
+}
+
 export function leggi(): Config {
   assicuraDir()
   if (!existsSync(FILE)) return {}
   try {
-    return JSON.parse(readFileSync(FILE, 'utf8')) as Config
-  } catch {
+    const c = JSON.parse(readFileSync(FILE, 'utf8')) as unknown
+    // `JSON.parse('"ciao"')` e `JSON.parse('null')` non lanciano: tornano un
+    // valore che poi si comporta come una configurazione vuota senza esserlo
+    if (!c || typeof c !== 'object' || Array.isArray(c)) {
+      mettiDaParte('non è un oggetto')
+      return {}
+    }
+    return c as Config
+  } catch (e) {
+    mettiDaParte(e instanceof Error ? e.message : String(e))
     return {}
   }
 }
 
+/**
+ * La scrittura, in due tempi.
+ *
+ * `writeFileSync` sul file vero tronca prima di scrivere: se il processo muore
+ * in mezzo — o il disco è pieno — quello che resta è mezzo file, cioè il file
+ * rotto del commento qui sopra. Si scrive accanto e si rinomina: `rename` su
+ * uno stesso filesystem è atomico, quindi il file o è quello di prima o è
+ * quello nuovo, mai una via di mezzo.
+ */
 export function scrivi(c: Config) {
   assicuraDir()
-  writeFileSync(FILE, JSON.stringify(c, null, 2), { mode: 0o600 })
+  const accanto = `${FILE}.nuovo`
+  writeFileSync(accanto, JSON.stringify(c, null, 2), { mode: 0o600 })
+  chmodSync(accanto, 0o600)
+  renameSync(accanto, FILE)
   chmodSync(FILE, 0o600)
 }
 
@@ -76,11 +306,52 @@ export function pubblica(c: Config = leggi()) {
     nome: c.nome ?? null,
     ruolo: c.ruolo ?? null,
     onboarding: !!c.onboarding,
-    tono: c.tono ?? 'diretto',
-    autonomia: c.autonomia ?? 'preparare',
+    // normalizzati: l'interfaccia deve vedere accesa la casella giusta anche
+    // per un file scritto quando i nomi erano altri
+    tono: tono(c),
+    autonomia: autonomia(c),
+    modello: c.modello ?? 'claude-sonnet-5',
+    lingua: c.lingua ?? 'it',
+    oreFatte: c.oreFatte ?? 48,
+    giro: !!c.giro,
+    argomenti: c.argomenti ?? '',
+    // assente = «usalo se c'è»: il valore vero lo dice /api/modello/locale,
+    // che va a vedere se c'è davvero invece di fidarsi del file
+    locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },
+    abbonamento: { attivo: c.abbonamento?.attivo === true },
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle } : null,
     notion: c.notion ? { collegato: true } : null,
-    claude: c.claude ? { collegato: true } : null
+    claude: c.claude ? { collegato: true } : null,
+    // di questi esce solo come si chiamano: token, refresh e segreti non
+    // attraversano mai questa funzione, ed è l'unica ragione per cui esiste
+    slack: c.slack ? { collegato: true, squadra: c.slack.squadra ?? null } : null,
+    /*
+      Il client id esce, il segreto no, e la differenza non è una svista.
+
+      Su un'app che gira sul computer di qualcuno il «client id» non è una
+      credenziale: è il nome pubblico dell'app registrata, e sta in chiaro
+      dentro ogni indirizzo che si apre nel browser. Tenerlo nascosto non
+      proteggerebbe niente e costerebbe una cosa vera — chi collega Drive dopo
+      Gmail dovrebbe ricopiarlo a mano da Google Cloud, con l'unico effetto di
+      farlo sbagliare a qualcuno. Il `clientSecret` invece resta di qua, e con
+      lui il refresh: quelli sono chiavi.
+    */
+    google: c.google
+      ? { collegato: true, email: c.google.email ?? null, clientId: c.google.clientId }
+      : null,
+    drive: c.drive
+      ? { collegato: true, email: c.drive.email ?? null, clientId: c.drive.clientId }
+      : null,
+    microsoft: c.microsoft
+      ? {
+          collegato: true, email: c.microsoft.email ?? null, parti: c.microsoft.parti,
+          clientId: c.microsoft.clientId, tenant: c.microsoft.tenant ?? ''
+        }
+      : null,
+    dropbox: c.dropbox ? { collegato: true, conto: c.dropbox.conto ?? null } : null,
+    whatsapp: c.whatsapp
+      ? { collegato: true, etichetta: c.whatsapp.etichetta ?? null, arrivati: c.whatsapp.arrivati ?? 0 }
+      : null
   }
 }

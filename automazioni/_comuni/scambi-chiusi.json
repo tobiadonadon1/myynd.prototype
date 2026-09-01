@@ -1,0 +1,28 @@
+{
+  "id": "scambi-chiusi",
+  "nome": "Scambi finiti, da archiviare",
+  "spiega": "Una volta al mese propone di archiviare le conversazioni che si sono chiuse da sole.",
+  "quando": {
+    "ogni": "settimana",
+    "giorno": 1,
+    "ora": 18
+  },
+  "guarda": {
+    "cerca": "grazie perfetto ricevuto tutto ok confermo a presto",
+    "limite": 20
+  },
+  "fai": "Scambi che si sono chiusi: un grazie finale, una conferma, una cosa andata a buon fine. Archiviarli non li cancella — escono dalla casella e restano cercabili.",
+  "metti": {
+    "inLista": "poi"
+  },
+  "proponi": "posta.archivia",
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Finished threads, ready to archive",
+    "spiega": "Once a month, offers to archive the conversations that closed themselves.",
+    "cerca": "thanks perfect received all good confirming speak soon",
+    "fai": "Threads that closed: a final thank you, a confirmation, something that went through. Archiving does not delete them — they leave the inbox and stay searchable."
+  }
+}

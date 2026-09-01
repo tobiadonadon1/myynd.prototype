@@ -1,0 +1,29 @@
+{
+  "id": "posta-di-massa",
+  "nome": "Newsletter e promozioni",
+  "spiega": "Ogni venerdì guarda la posta di massa arrivata e propone di metterla nel cestino, una per una.",
+  "quando": {
+    "ogni": "settimana",
+    "giorno": 5,
+    "ora": 17
+  },
+  "guarda": {
+    "cerca": "newsletter promozione offerta disiscriviti novità sconto",
+    "soloNuovi": true,
+    "limite": 20
+  },
+  "fai": "La posta di massa arrivata questa settimana, pronta da mettere via. Ogni riga dice chi la manda e cos'è: quello che non ti convince, lascialo dov'è.",
+  "metti": {
+    "inLista": "poi"
+  },
+  "proponi": "posta.cestina",
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Newsletters and promotions",
+    "spiega": "Every Friday, looks at the bulk mail that came in and offers to bin it, one by one.",
+    "cerca": "newsletter promotion offer unsubscribe deal discount",
+    "fai": "The bulk mail that came in this week, ready to put away. Each line says who sent it and what it is: anything you are not sure about, leave where it is."
+  }
+}

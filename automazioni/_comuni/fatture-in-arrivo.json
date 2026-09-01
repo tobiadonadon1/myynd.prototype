@@ -1,0 +1,27 @@
+{
+  "id": "fatture-in-arrivo",
+  "nome": "Fatture da controllare",
+  "spiega": "Quando arriva una fattura, la mette in lista con gli importi già estratti.",
+  "quando": {
+    "quandoArriva": true
+  },
+  "guarda": {
+    "cerca": "fattura importo pagamento scadenza",
+    "soloNuovi": true,
+    "limite": 5
+  },
+  "fai": "Per ogni fattura arrivata: chi la manda, quanto, entro quando. Segnala solo quello che non torna con quello che sai — un importo diverso dal solito, una scadenza corta, un fornitore mai visto. Se torna tutto, dillo in una riga.",
+  "metti": {
+    "inLista": "settimana",
+    "modo": "bozza"
+  },
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Invoices to check",
+    "spiega": "When an invoice arrives, puts it on the list with the amounts already pulled out.",
+    "cerca": "invoice amount payment due date",
+    "fai": "For each invoice that arrived: who sent it, how much, by when. Flag only what does not match what you know — an amount out of the ordinary, a short deadline, a supplier never seen before. If it all adds up, say so in one line."
+  }
+}

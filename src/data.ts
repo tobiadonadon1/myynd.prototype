@@ -2,7 +2,9 @@
 // preferenze). Il resto — feed, chat, mappa, connettori — arriva dal server,
 // da quello che Myynd ha letto sul tuo materiale.
 
-export type Screen = 'myynd' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn'
+import { loc } from './lingua'
+
+export type Screen = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria'
 
 export type Campo = { k: string; v: string }
 export type Fonte = { id: string; label: string }
@@ -23,21 +25,52 @@ export type VoceFeed = {
 
 export type Gruppo = { id: string; nome: string; colore: string; nodi: number }
 
+/**
+ * Gli `id` sono le chiavi che il server cerca in AUTONOMIE dentro claude.ts, e
+ * devono combaciare alla lettera.
+ *
+ * Non è pignoleria: qui c'erano 'osservare' e 'agire', là 'chiedere' e 'fare'.
+ * La ricerca falliva, tornava `undefined`, e `sistema()` saltava la riga in
+ * silenzio — due scelte su tre non arrivavano mai al modello, e niente lo
+ * diceva. Se un giorno vanno rinominate si rinominano in tutti e due i posti,
+ * e `server/index.ts` rifiuta un valore che il server non conosce.
+ */
 export const AUTONOMIE = [
-  { id: 'osservare', titolo: 'Solo osservare', nota: 'Legge e indicizza. Risponde solo se le chiedi.' },
+  { id: 'chiedere', titolo: 'Solo osservare', nota: 'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.' },
   { id: 'preparare', titolo: 'Preparare e aspettare', nota: 'Scrive bozze e brief, niente esce senza il tuo Invia.' },
-  { id: 'agire', titolo: 'Agire sulla routine', nota: 'Archivia e risponde dove hai già confermato tre volte.' }
+  { id: 'fare', titolo: 'Fino all’ultimo passo', nota: 'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.' }
 ]
 
+/** I modelli fra cui scegliere. Rispecchia MODELLI in server/config.ts. */
+export const MODELLI = [
+  { id: 'claude-haiku-4-5', nome: 'Haiku 4.5', nota: 'Il più rapido e il più economico. Basta finché le domande sono semplici.' },
+  { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a meno della metà.' },
+  { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti; costa cinque volte tanto.' }
+]
+
+export const LINGUE = [
+  { id: 'it', nome: 'Italiano' },
+  { id: 'en', nome: 'English' }
+]
+
+/** Per quanto restano in pagina le cose già chiuse. */
+export const TENUTE = [
+  { ore: 24, label: 'Un giorno' },
+  { ore: 48, label: 'Due giorni' },
+  { ore: 168, label: 'Una settimana' },
+  { ore: 0, label: 'Sempre' }
+]
+
+/** Come sopra: `id` è la chiave che cerca TONI in claude.ts. «caldo», non «cordiale». */
 export const TONI = [
   { id: 'diretto', label: 'Diretto' },
-  { id: 'cordiale', label: 'Cordiale' },
+  { id: 'caldo', label: 'Cordiale' },
   { id: 'formale', label: 'Formale' }
 ]
 
 export const ESEMPIO_TONO: Record<string, string> = {
   diretto: '"Ciao Marta, ti mando il preventivo aggiornato. Consegna quattro settimane dalla conferma."',
-  cordiale: '"Ciao Marta, come promesso ti mando il preventivo aggiornato: spero sia tutto chiaro, fammi sapere."',
+  caldo: '"Ciao Marta, come promesso ti mando il preventivo aggiornato: spero sia tutto chiaro, fammi sapere."',
   formale: '"Gentile Dott.ssa Ferri, in allegato il preventivo aggiornato come da Sua richiesta. Resto a disposizione."'
 }
 
@@ -55,6 +88,6 @@ export function quando(iso?: string | null): string {
   const oggi = new Date()
   const stessoGiorno = d.toDateString() === oggi.toDateString()
   return stessoGiorno
-    ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+    ? d.toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(loc(), { day: 'numeric', month: 'short' })
 }

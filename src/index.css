@@ -1,5 +1,11 @@
 :root{--fi:1.4;--mo:running}
+/* la pagina non scorre mai: scorre l'app dentro di sé. Una barra che compare
+   sul documento cambierebbe l'altezza utile, e da lì parte lo sfarfallio. */
+html,body{height:100%;overflow:hidden}
 body{margin:0;background:#E7DFD3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+/* chi ha chiesto meno movimento al sistema lo ottiene anche qui: il fondo si
+   ferma, e con lui la ragione per cui i pannelli sfocati si ridipingono */
+@media (prefers-reduced-motion:reduce){:root{--mo:paused}}
 a{color:#3E5140;text-decoration:none}a:hover{color:#C4623B}
 button,input,textarea,select{font-family:inherit}
 @keyframes flA{0%{transform:translate(0,0) scale(1)}33%{transform:translate(3.5%,2.5%) scale(1.05)}66%{transform:translate(-2.5%,3.5%) scale(.96)}100%{transform:translate(0,0) scale(1)}}
@@ -13,8 +19,51 @@ button,input,textarea,select{font-family:inherit}
 @keyframes toastin{0%{transform:translateY(-14px) scale(.96);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}
 @keyframes heroin{0%{transform:translateY(10px) rotate(-.35deg);opacity:0}100%{transform:translateY(0) rotate(-.35deg);opacity:1}}
 @keyframes fadein{0%{opacity:0}100%{opacity:1}}
+@keyframes schedasu{0%{opacity:0;transform:translateY(10px) scale(.985)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes editoresu{0%{opacity:0;transform:translate(-50%,-46%) scale(.96)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+/* il giro della rassegna mentre bussa ai giornali */
+@keyframes gira{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
 .fl{position:absolute;border-radius:50%;will-change:transform,opacity;pointer-events:none;animation-play-state:var(--mo,running)}
 .wash{position:absolute;inset:-28%;pointer-events:none;animation:drift 70s ease-in-out infinite;animation-play-state:var(--mo,running)}
 @keyframes pixel{0%,100%{opacity:.16}45%{opacity:1}70%{opacity:.5}}
 @keyframes marchioCresci{0%{opacity:0;transform:scale(.86)}100%{opacity:1;transform:scale(1)}}
 @keyframes marchioOnda{0%,100%{transform:rotate(-.7deg)}50%{transform:rotate(.7deg)}}
+
+/* — I campi di testo —
+   Il colore del testo si può mettere inline; il placeholder no, perché è uno
+   pseudo-elemento. Senza queste righe restava quello di sistema — grigio scuro,
+   illeggibile sulle card scure. È il motivo per cui la casella in fondo alla
+   card sembrava vuota e rotta. */
+input,textarea{color:inherit}
+input::placeholder,textarea::placeholder{color:rgba(34,39,31,.45);opacity:1}
+.scuro::placeholder{color:rgba(255,247,240,.58)}
+/* Un campo spento dice comunque qualcosa di importante — «Collega Claude per
+   fare domande» è un'istruzione, non decorazione: il browser lo sbiadirebbe
+   fino a renderlo illeggibile. */
+input:disabled,textarea:disabled{-webkit-text-fill-color:currentColor;opacity:1}
+input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(34,39,31,.5);-webkit-text-fill-color:rgba(34,39,31,.5)}
+.scuro:disabled::placeholder{color:rgba(255,247,240,.55);-webkit-text-fill-color:rgba(255,247,240,.55)}
+
+/* — Il fuoco della tastiera —
+   Ogni campo aveva outline:none e niente al suo posto: chi si muove da tastiera
+   non sapeva più dov'era. Un anello morbido nel colore dell'accento costa poco
+   e rende l'app usabile senza mouse. */
+:where(input,textarea,button,a,[tabindex]):focus-visible{
+  outline:2px solid rgba(196,98,59,.55);outline-offset:2px;border-radius:inherit
+}
+.scuro:focus-visible{outline-color:rgba(255,247,240,.75)}
+
+/* La selezione, nei colori di casa invece che nel blu di sistema */
+::selection{background:rgba(196,98,59,.22)}
+
+/* Le barre di scorrimento interne: presenti quando servono, mai ingombranti */
+*{scrollbar-width:thin;scrollbar-color:rgba(34,39,31,.22) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-thumb{background:rgba(34,39,31,.2);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:rgba(34,39,31,.34);background-clip:content-box}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* la giostra della rassegna: il cursore e il fuoco, che da uno stile in linea non si scrivono */
+.giostra{cursor:grab;outline:none}
+.giostra:active{cursor:grabbing}
+.giostra:focus-visible{outline:2px solid rgba(196,98,59,.65);outline-offset:4px;border-radius:22px}

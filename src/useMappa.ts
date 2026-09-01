@@ -14,6 +14,13 @@ export type MappaCtl = { reset: () => void }
 export function useMappa(
   cvA: RefObject<HTMLCanvasElement | null>,
   cvB: RefObject<HTMLCanvasElement | null>,
+  /**
+   * Se la Mappa è davvero sullo schermo. Senza questo il ciclo di disegno
+   * girava a 60 fotogrammi al secondo su *ogni* schermata, anche dove nessun
+   * canvas era montato: la GPU restava occupata a ridipingere, e i pannelli in
+   * backdrop-filter — la colonna di sinistra — tremolavano di conseguenza.
+   */
+  attivo: boolean,
   mapFull: boolean,
   filtro: string | null,
   sel: string,
@@ -29,7 +36,14 @@ export function useMappa(
   stato.current = { mapFull, filtro, sel, onPick, ball, gruppi }
 
   useEffect(() => {
+    // fuori dalla Mappa non c'è niente da disegnare: non si parte nemmeno
+    if (!attivo) return
     let raf = 0
+    // Gli ascoltatori si attaccavano dietro un flag `__wired` e non si
+    // staccavano mai: uscendo e rientrando nella Mappa restavano appesi al
+    // canvas vecchio, con dentro la chiusura di un effetto già smontato. Un
+    // AbortController li porta via tutti insieme quando l'effetto finisce.
+    const basta = new AbortController()
 
     const pick = (cv: HTMLCanvasElement, e: PointerEvent) => {
       const P = proj.current
@@ -47,31 +61,33 @@ export function useMappa(
       }
     }
 
+    const collegati = new WeakSet<HTMLCanvasElement>()
     const wire = (cv: HTMLCanvasElement | null) => {
-      if (!cv || (cv as HTMLCanvasElement & { __wired?: boolean }).__wired) return
-      ;(cv as HTMLCanvasElement & { __wired?: boolean }).__wired = true
+      if (!cv || collegati.has(cv)) return
+      collegati.add(cv)
       const v = vista.current
+      const su = { signal: basta.signal }
       cv.addEventListener('pointerdown', e => {
         v.drag = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch, moved: 0 }
         cv.style.cursor = 'grabbing'
-      })
+      }, su)
       cv.addEventListener('pointermove', e => {
         if (!v.drag) return
         const dx = e.clientX - v.drag.x, dy = e.clientY - v.drag.y
         v.drag.moved = Math.max(v.drag.moved, Math.abs(dx) + Math.abs(dy))
         v.yaw = v.drag.yaw + dx * 0.006
         v.pitch = Math.max(-1.2, Math.min(1.2, v.drag.pitch + dy * 0.006))
-      })
+      }, su)
       cv.addEventListener('pointerup', e => {
         cv.style.cursor = 'grab'
         if (v.drag && v.drag.moved < 5) pick(cv, e)
         v.drag = null
-      })
-      cv.addEventListener('pointerleave', () => { v.drag = null; cv.style.cursor = 'grab' })
+      }, su)
+      cv.addEventListener('pointerleave', () => { v.drag = null; cv.style.cursor = 'grab' }, su)
       cv.addEventListener('wheel', e => {
         e.preventDefault()
         v.zoom = Math.max(0.6, Math.min(4.2, v.zoom * (e.deltaY > 0 ? 0.92 : 1.09)))
-      }, { passive: false })
+      }, { passive: false, signal: basta.signal })
     }
 
     const draw = () => {
@@ -165,8 +181,8 @@ export function useMappa(
     }
 
     raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
-  }, [cvA, cvB])
+    return () => { cancelAnimationFrame(raf); basta.abort() }
+  }, [cvA, cvB, attivo])
 
   return {
     reset: () => {

@@ -6,11 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:dritto": "MYYND_DEV=1 VITE_MYYND_DEV=1 npm run dev",
     "dev:server": "node --watch --disable-warning=ExperimentalWarning server/index.ts",
     "dev:web": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "test": "node --test --disable-warning=ExperimentalWarning server/*.test.ts src/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -33,6 +35,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^10.0.4",
+    "electron": "43.4.1",
     "typescript": "^5.7.3",
     "vite": "^7.3.6"
   }
