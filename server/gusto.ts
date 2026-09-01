@@ -25,6 +25,8 @@
 // modello, quando c'è, sono due elenchi di parole.
 
 import * as store from './store.ts'
+import { aggiorna, leggi, nellaLingua } from './config.ts'
+import { chiediJSON } from './modello.ts'
 
 /** Sotto questi gesti non si conclude niente: sarebbe rumore. */
 export const MINIMO = 6
@@ -189,4 +191,126 @@ export function inParole(g: Gusto, en: boolean): string {
     parti.push((en ? 'you skip: ' : 'salti: ') + g.stufa.slice(0, 4).join(', '))
   }
   return parti.join(' · ')
+}
+
+// — dagli argomenti che non scrive nessuno a quelli che si scrivono da soli —
+
+/**
+ * Perché questa parte esiste.
+ *
+ * Il campo degli argomenti è vuoto quasi sempre, e resta vuoto per sempre. Non
+ * è pigrizia di chi usa l'app: è che «su cosa vuoi essere tenuto aggiornato?»
+ * è una domanda difficile da rispondere in astratto, davanti a una casella di
+ * testo, prima di aver visto una sola rassegna. La risposta però esiste già —
+ * la scrive lui ogni mattina aprendo una notizia e buttandone via un'altra — e
+ * fin qui quella risposta serviva soltanto a inclinare l'ordine dei titoli.
+ *
+ * Da qui in poi la scrive anche nel campo, e la tiene aggiornata.
+ *
+ * **La regola che tiene in piedi la cosa: si scrive solo dove non c'è già
+ * qualcosa di suo.** Se ha scritto lui, quel campo è suo e non si tocca mai
+ * più — al massimo gli si offre un'aggiunta, che accetta con un clic. È la
+ * stessa regola di `ottimizza` sulle automazioni, e per lo stesso motivo: una
+ * cosa che riscrive quello che hai scritto tu, senza che tu l'abbia chiesto,
+ * non è un aiuto.
+ */
+
+const FORMA_ARGOMENTI = {
+  type: 'object',
+  properties: {
+    argomenti: {
+      type: 'string',
+      description:
+        'Da tre a sei argomenti separati da virgola, come li scriverebbe una persona: ' +
+        '«mercati e tassi, politica estera, intelligenza artificiale». Non parole sciolte, ' +
+        'non un elenco di nomi propri. Vuoto se da queste parole non si capisce niente.'
+    }
+  },
+  required: ['argomenti'],
+  additionalProperties: false
+} as const
+
+/**
+ * Le parole che ricorrono, dette come argomenti.
+ *
+ * Le parole crude di `piace` non si possono mettere in quel campo così come
+ * sono: sono i pezzi dei titoli che ha aperto — «tassi», «borsa», «openai» —
+ * e messe in fila descrivono le notizie di ieri, non un interesse. La
+ * differenza fra «openai, nvidia, chip» e «intelligenza artificiale e chi la
+ * fa» è che la seconda continua a valere il mese prossimo.
+ *
+ * Passa da un modello, ma dal più economico che c'è: è un lavoro di riscrittura
+ * su dodici parole, non un giudizio, e gira una volta al giorno.
+ */
+export async function inArgomenti(g: Gusto = gusto()): Promise<string> {
+  if (!g.vale || g.piace.length < 3) return ''
+  const r = await chiediJSON<{ argomenti: string }>({
+    lavoro: 'ritratto',
+    max_tokens: 300,
+    system:
+      `Scrivi in ${nellaLingua()}.\n\n` +
+      'Queste sono le parole che ricorrono nei titoli delle notizie che una persona ha ' +
+      'aperto. Non descrivere le notizie: di\' di che cosa si interessa, in modo che valga ' +
+      'anche il mese prossimo.\n\n' +
+      'Da tre a sei argomenti, separati da virgola, minuscoli, brevi. Niente nomi di ' +
+      'testate e niente nomi propri di cronaca — quelli passano, gli argomenti restano. ' +
+      'Se da queste parole non si capisce un interesse, torni una stringa vuota: è una ' +
+      'risposta buona, non un fallimento.',
+    formato: FORMA_ARGOMENTI,
+    messages: [{ role: 'user', content: `Apre notizie con dentro: ${g.piace.join(', ')}` }]
+  })
+  return (r?.argomenti ?? '').trim().slice(0, 400)
+}
+
+/** Quanto spesso ci si riprova, quando è Myynd a tenere il campo. */
+const OGNI_QUANTO = 20 * 3600_000
+
+/**
+ * Tiene il campo aggiornato, se è suo da tenere.
+ *
+ * Tre cancelli prima di spendere un token, e sono tutti e tre necessari:
+ * abbastanza gesti per concludere qualcosa, il campo libero o già suo, e non
+ * più di una volta al giorno. Senza il terzo questa funzione girerebbe a ogni
+ * rassegna — quattro volte al giorno — per riscrivere quasi sempre la stessa
+ * riga.
+ *
+ * Torna quello che ha scritto, o `null` se non ha toccato niente.
+ */
+export async function tieniAggiornati(adesso = Date.now()): Promise<string | null> {
+  const c = leggi()
+  const mio = c.argomentiDaMe === true
+  const vuoto = !(c.argomenti ?? '').trim()
+  // scritto da lei: è suo, e non si tocca. La proposta resta disponibile
+  // altrove, per chi la vuole — ma qui non si scrive niente.
+  if (!vuoto && !mio) return null
+
+  const ultima = c.imparato?.argomenti
+  if (mio && ultima && adesso - Date.parse(ultima) < OGNI_QUANTO) return null
+
+  const g = gusto()
+  if (!g.vale) return null
+
+  const testo = await inArgomenti(g)
+  if (!testo || testo === (c.argomenti ?? '').trim()) return null
+
+  aggiorna({
+    argomenti: testo,
+    argomentiDaMe: true,
+    imparato: { ...leggi().imparato, argomenti: new Date(adesso).toISOString() }
+  })
+  return testo
+}
+
+/**
+ * Cosa scriverebbe, senza scriverlo.
+ *
+ * Serve al caso opposto: il campo l'ha scritto lei, quindi non si tocca, ma
+ * quello che legge dice qualcos'altro. Qui la proposta si può mostrare accanto
+ * al campo e si accetta con un dito — che è l'unica forma in cui una macchina
+ * può correggere quello che hai scritto tu senza toglierti niente.
+ */
+export async function proposta(): Promise<string> {
+  const g = gusto()
+  if (!g.vale) return ''
+  return await inArgomenti(g)
 }

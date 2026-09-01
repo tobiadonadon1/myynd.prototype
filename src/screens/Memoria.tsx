@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Blocco, type Convinzione, type Memoria as Dati } from '../api'
-import { t, loc } from '../lingua'
+import { frasi, t, loc } from '../lingua'
 import { CARD_GLASS, Hov, LABEL } from '../ui'
 import { IconCestino, IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
@@ -92,6 +92,22 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <div style={{ flex: 1, fontSize: '13.5px', color: 'rgba(34,39,31,.72)', textWrap: 'pretty' }}>
           {t(b.descrizione)}
+          {/*
+            Chi ha scritto questa riga.
+
+            Queste cinque caselle restavano vuote per sempre — nessuno si siede
+            a scrivere un ritratto di sé stesso — e adesso le riempie Myynd da
+            quello che ha imparato lavorando. Il che rende questa mezza riga
+            obbligatoria: un ritratto scritto da una macchina che non dice di
+            averlo scritto è esattamente la cosa contro cui è fatta questa
+            schermata. Appena ci metti mano tu, sparisce: da lì in poi quelle
+            sono parole tue.
+          */}
+          {b.daMe && !cambiato && (
+            <span style={{ display: 'block', marginTop: 3, fontSize: '11.5px', color: 'rgba(34,39,31,.42)' }}>
+              {frasi.scrittoDaMe(new Date(b.daMe).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }))}
+            </span>
+          )}
         </div>
         {/* La pastiglia sta qui, in cima al riquadro che riordina: accanto al
             campo si legge come un'altra azione fra tante, qui si legge come
@@ -243,12 +259,33 @@ export function Memoria() {
   const [guasto, setGuasto] = useState('')
   const [storicheAperte, setStoricheAperte] = useState(false)
   const [nuova, setNuova] = useState('')
+  const [ordino, setOrdino] = useState(false)
+  const [dettoRitratto, setDettoRitratto] = useState('')
 
   const carica = useCallback(async () => {
     try { setD(await api.memoria()); setGuasto('') }
     catch (e) { setGuasto(e instanceof Error ? e.message : String(e)) }
   }, [])
   useEffect(() => { carica() }, [carica])
+
+  /**
+   * Rimette in ordine adesso quello che ha imparato.
+   *
+   * Dire quanti blocchi ha toccato, e dire anche quando non ne ha toccato
+   * nessuno: «non c'è niente di nuovo» è una risposta, e senza quella riga un
+   * bottone che non fa niente sembra rotto.
+   */
+  const consolida = async () => {
+    setOrdino(true); setDettoRitratto('')
+    try {
+      const r = await api.consolidaMemoria()
+      await carica()
+      setDettoRitratto(r.blocchi.length
+        ? frasi.ritrattoAggiornato(r.blocchi.length, r.guardate)
+        : t('Non c’è niente di nuovo da aggiungere.'))
+    } catch { setDettoRitratto(t('Non ce l’ha fatta.')) }
+    setOrdino(false)
+  }
 
   /**
    * Quello che ha imparato, nella lingua che stai leggendo.
@@ -304,7 +341,26 @@ export function Memoria() {
 
       {/* — i cinque blocchi — */}
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '20px 24px 18px' }}>
-        <div style={LABEL}>{t('Come lavori')}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ ...LABEL, flex: 1 }}>{t('Come lavori')}</span>
+          {/*
+            Gira già da solo ogni sei ore. Questo sta qui per il momento in cui
+            uno finisce una conversazione lunga e vuole *vedere* cosa ne è
+            uscito, invece di scoprirlo domani per caso.
+          */}
+          <Hov as="button" onClick={consolida} disabled={ordino}
+            style={{
+              flex: 'none', border: 'none', background: 'none', padding: 0,
+              fontFamily: 'inherit', fontSize: '12px', color: '#8E3F1F',
+              cursor: ordino ? 'default' : 'pointer'
+            }}
+            hover={ordino ? {} : { color: '#C4623B' }}>
+            {ordino ? t('Ci penso…') : t('Aggiorna da quello che hai imparato')}
+          </Hov>
+        </div>
+        {dettoRitratto && (
+          <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 6 }}>{dettoRitratto}</div>
+        )}
         {(d?.blocchi ?? []).map(b => <Campo key={b.etichetta} b={b} salvato={carica} />)}
         {!d && <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.45)', padding: '14px 0' }}>{t('carico…')}</div>}
       </div>

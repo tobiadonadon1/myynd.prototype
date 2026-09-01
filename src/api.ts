@@ -24,6 +24,8 @@ export type Stato = {
     giro: boolean
     /** Su cosa vuole essere tenuto aggiornato dai giornali. Vuoto = di tutto. */
     argomenti: string
+    /** Quella riga l'ha scritta Myynd da quello che apre, non lei. */
+    argomentiDaMe: boolean
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[] } | null
     notion: { collegato: boolean } | null
@@ -357,7 +359,10 @@ export type Rassegna = {
   gusto: string
 }
 
-export type Blocco = { etichetta: string; descrizione: string; valore: string; tetto: number }
+export type Blocco = { etichetta: string; descrizione: string; valore: string; tetto: number
+  /** Quando l'ha scritto Myynd. Null = l'ultima parola è tua. */
+  daMe?: string | null
+}
 
 /**
  * Un'automazione, come la vede chi la usa.
@@ -721,6 +726,14 @@ export const api = {
     json<{ ok: true; attivo: boolean }>('/api/modello/locale', { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   // — le automazioni —
+
+  /** Cosa scriverebbe negli argomenti da quello che leggi. Non lo scrive: lo propone. */
+  proponiArgomenti: () =>
+    json<{ ok: true; argomenti: string }>('/api/argomenti/proposta', { method: 'POST' }),
+
+  /** Rimettere in ordine adesso quello che ha imparato di come lavori. */
+  consolidaMemoria: () =>
+    json<{ ok: true; blocchi: string[]; guardate: number }>('/api/memoria/consolida', { method: 'POST' }),
 
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
 

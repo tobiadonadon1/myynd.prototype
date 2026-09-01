@@ -539,6 +539,25 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
       ALTER TABLE automazioni ADD COLUMN storia TEXT;
     `)
   }
+,
+
+  // 19 → 20 · chi ha scritto per ultimo un blocco della memoria.
+  //
+  //   I cinque blocchi — «come decido», «cosa controllo» — sono nati come
+  //   caselle da riempire a mano, e a mano restavano vuote: nessuno si siede a
+  //   scrivere un ritratto di sé stesso. Adesso li consolida Myynd da quello
+  //   che ha imparato, e da quel momento serve sapere chi ha parlato per
+  //   ultimo.
+  //
+  //   Non è contabilità. Un ritratto scritto da una macchina che non dice di
+  //   averlo scritto è esattamente la cosa contro cui è costruita questa
+  //   schermata: «un gemello che tiene convinzioni su di te che non puoi vedere
+  //   né correggere non è uno strumento». `daMe` è la data in cui l'ha toccato
+  //   Myynd, e torna a NULL nel momento in cui ci metti mano tu — perché da
+  //   allora quelle sono parole tue, e vanno mostrate come tali.
+  d => {
+    d.exec('ALTER TABLE blocchi ADD COLUMN daMe TEXT')
+  }
 
 ]
 
@@ -1955,21 +1974,48 @@ export function chiudiConvinzione(id: string) {
   db.prepare('UPDATE convinzioni SET al = ? WHERE id = ? AND al IS NULL').run(new Date().toISOString(), id)
 }
 
-export type Blocco = { etichetta: string; descrizione: string; valore: string; tetto: number }
-
-export function blocchi(): Blocco[] {
-  return db.prepare('SELECT etichetta, descrizione, valore, tetto FROM blocchi ORDER BY etichetta').all() as unknown as Blocco[]
+export type Blocco = {
+  etichetta: string; descrizione: string; valore: string; tetto: number
+  /** Quando l'ha scritto Myynd. Null = l'ultima parola è tua. */
+  daMe?: string | null
+  aggiornato?: string | null
 }
 
-/** Il tetto si applica qui, non a chi legge: un blocco non può sforare. */
-export function scriviBlocco(b: { etichetta: string; descrizione: string; valore: string; tetto?: number }) {
+export function blocchi(): Blocco[] {
+  return db.prepare('SELECT etichetta, descrizione, valore, tetto, daMe, aggiornato FROM blocchi ORDER BY etichetta')
+    .all() as unknown as Blocco[]
+}
+
+/**
+ * Il tetto si applica qui, non a chi legge: un blocco non può sforare.
+ *
+ * `daMe` dice chi ha parlato per ultimo, e il valore predefinito è `null`
+ * apposta: chi chiama senza dirlo sta scrivendo *per conto di una persona* —
+ * è la rotta dell'interfaccia, cioè il caso in cui l'ha scritto lei. Solo la
+ * consolidazione passa una data, e solo lei si dichiara.
+ */
+export function scriviBlocco(b: {
+  etichetta: string; descrizione: string; valore: string; tetto?: number; daMe?: string | null
+}) {
   const tetto = b.tetto ?? 700
   db.prepare(`
-    INSERT INTO blocchi (etichetta, descrizione, valore, tetto, aggiornato) VALUES (?,?,?,?,?)
+    INSERT INTO blocchi (etichetta, descrizione, valore, tetto, aggiornato, daMe) VALUES (?,?,?,?,?,?)
     ON CONFLICT(etichetta) DO UPDATE SET
       descrizione = excluded.descrizione, valore = excluded.valore,
-      tetto = excluded.tetto, aggiornato = excluded.aggiornato
-  `).run(b.etichetta, b.descrizione, b.valore.slice(0, tetto), tetto, new Date().toISOString())
+      tetto = excluded.tetto, aggiornato = excluded.aggiornato, daMe = excluded.daMe
+  `).run(b.etichetta, b.descrizione, b.valore.slice(0, tetto), tetto, new Date().toISOString(), b.daMe ?? null)
+}
+
+/**
+ * Le convinzioni nate dopo un certo momento.
+ *
+ * Serve alla consolidazione per non rifare ogni volta lo stesso lavoro sullo
+ * stesso materiale: senza, quel giro chiamerebbe un modello ogni sei ore per
+ * riscrivere cinque blocchi identici a sé stessi.
+ */
+export function convinzioniDopo(quando: string): number {
+  const r = db.prepare('SELECT COUNT(*) AS n FROM convinzioni WHERE dal > ? AND al IS NULL').get(quando) as { n: number }
+  return r.n
 }
 
 /**

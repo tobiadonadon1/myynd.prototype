@@ -225,6 +225,22 @@ app.get('/api/stato', (_req, res) => {
   })
 })
 
+/**
+ * Cosa scriverebbe negli argomenti, senza scriverlo.
+ *
+ * Serve al caso in cui quel campo l'ha scritto lei — e allora non si tocca —
+ * ma quello che legge dice qualcos'altro. La proposta si mette accanto al
+ * campo e si accetta con un dito: è l'unico modo in cui una macchina può
+ * correggere quello che hai scritto tu senza toglierti niente.
+ *
+ * Costa una chiamata al modello più economico, e per questo sta su un bottone
+ * invece che sull'apertura della schermata.
+ */
+app.post('/api/argomenti/proposta', async (_req, res) => {
+  try { res.json({ ok: true, argomenti: await gusto.proposta() }) }
+  catch (e) { errore(res, e) }
+})
+
 app.post('/api/profilo', async (req, res) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
@@ -267,7 +283,19 @@ app.post('/api/profilo', async (req, res) => {
   }
   // gli argomenti sono una riga, non un tema: un muro di testo davanti a
   // settanta titoli non li sceglie meglio, li sceglie a caso
-  if (patch.argomenti !== undefined) patch.argomenti = String(patch.argomenti).trim().slice(0, 400)
+  if (patch.argomenti !== undefined) {
+    patch.argomenti = String(patch.argomenti).trim().slice(0, 400)
+    /*
+     * Scriverli a mano vuol dire riprenderseli.
+     *
+     * Da qui in avanti quella riga è sua e Myynd non la tocca più — nemmeno
+     * quando quello che legge cambia. È la stessa regola di `ottimizza` sulle
+     * automazioni: una cosa che riscrive quello che hai scritto tu, senza che
+     * tu l'abbia chiesto, non è un aiuto. Resta la proposta, che si accetta con
+     * un dito, e quella non toglie niente a nessuno.
+     */
+    patch.argomentiDaMe = false
+  }
 
   const prima = cfg.leggi().lingua ?? 'it'
   const dopo = cfg.pubblica(cfg.aggiorna(patch))
@@ -1630,11 +1658,31 @@ app.get('/api/memoria', (_req, res) => {
     carta: memoria.carta(),
     blocchi: memoria.BLOCCHI_BASE.map(b => {
       const scritto = store.blocchi().find(x => x.etichetta === b.etichetta)
-      return { ...b, valore: scritto?.valore ?? '', tetto: scritto?.tetto ?? 700 }
+      return {
+        ...b,
+        valore: scritto?.valore ?? '', tetto: scritto?.tetto ?? 700,
+        // chi ha parlato per ultimo. Un ritratto scritto da una macchina che
+        // non dice di averlo scritto è la cosa contro cui è fatta questa
+        // schermata: si vede, e si corregge.
+        daMe: scritto?.daMe ?? null
+      }
     }),
     convinzioni: store.convinzioni(),
     storiche: store.convinzioniStoriche()
   })
+})
+
+/**
+ * Rimettere in ordine adesso quello che ha imparato.
+ *
+ * Gira già da solo ogni sei ore. Questo bottone esiste per il momento in cui
+ * uno finisce una conversazione lunga e vuole *vedere* cosa ne è uscito, invece
+ * di scoprirlo domani per caso. `forza` salta i cancelli del tempo, non quelli
+ * del materiale: se non c'è abbastanza da dire, non inventa niente.
+ */
+app.post('/api/memoria/consolida', async (_req, res) => {
+  try { res.json({ ok: true, ...await memoria.consolida(true), blocchi_ora: store.blocchi() }) }
+  catch (e) { errore(res, e) }
 })
 
 /** Mettere la memoria nella lingua dell'interfaccia. Lo chiede la schermata. */
@@ -1908,6 +1956,31 @@ const servizio = app.listen(PORTA_CHIESTA, '127.0.0.1', () => {
   const ricette = aParte('le ricette non si sono aggiornate', () => automazioni.aggiornaRicette())
   setTimeout(ricette, 20_000)
   setInterval(ricette, 6 * 3600_000)
+
+  /*
+   * Le due cose che si scrivono da sole.
+   *
+   * Sono i due campi che restavano vuoti per sempre, e per la stessa ragione:
+   * nessuno si siede a rispondere in astratto a «su cosa vuoi essere tenuto
+   * aggiornato?» o a «come decidi una cosa?». Le risposte però esistono già —
+   * una in quello che apre ogni mattina, l'altra in quello che Myynd ha
+   * imparato parlandogli — e finora nessuna delle due arrivava dove serviva.
+   *
+   * Girano in sottofondo e hanno i loro cancelli dentro: senza materiale nuovo
+   * non chiamano nessun modello, e quello che chiamano è il più economico che
+   * c'è. Tardi dopo l'avvio, apposta: aprire l'app non deve voler dire
+   * aspettare che finisca di ragionare su di te.
+   */
+  const imparaDaSolo = aParte('non sono riuscito a mettere in ordine quello che ho imparato', async () => {
+    const argomenti = await gusto.tieniAggiornati()
+    if (argomenti) console.log(`myynd · argomenti scritti da quello che leggi: ${argomenti}`)
+    const m = await memoria.consolida()
+    if (m.blocchi.length) {
+      console.log(`myynd · ritratto aggiornato: ${m.blocchi.join(', ')} (da ${m.guardate} convinzioni)`)
+    }
+  })
+  setTimeout(imparaDaSolo, 180_000)
+  setInterval(imparaDaSolo, 6 * 3600_000)
 
   /**
    * La rassegna, prima di tutto il resto.

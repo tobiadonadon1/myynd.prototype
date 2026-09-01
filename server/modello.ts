@@ -132,6 +132,7 @@ export type Lavoro =
   | 'domande'       // cosa gli serve sapere per andare avanti, con le opzioni
   | 'rassegna'      // quali titoli di giornale vale la pena leggere stamattina
   | 'ricetta'       // da una frase sua a un'automazione che gira davvero
+  | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
 
 type Profilo = {
   frontiera: boolean
@@ -175,7 +176,21 @@ const LAVORI: Record<Lavoro, Profilo> = {
   classifica: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 30_000 },
   traduzione: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 60_000 },
   estrazione: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 60_000 },
-  giudizio:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 30_000 }
+  giudizio:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 30_000 },
+  /*
+   * Il ritratto: riordinare quello che ha già capito, non capirlo.
+   *
+   * Sta fra le manovre interne per due ragioni che vanno insieme. Il giudizio
+   * l'ha già dato qualcun altro — `distilla` e `imparaDallaCorrezione`, che
+   * sono frontiera — e qui si tratta solo di riscrivere in cinque righe delle
+   * frasi già scritte. E gira da solo, ogni sei ore, per sempre: un lavoro
+   * ricorrente e senza rischio pagato al modello grande diventa la voce di
+   * spesa più stupida dell'app.
+   *
+   * Quello che produce non esce da questa macchina e nessuno lo firma: se una
+   * riga viene storta, sta in una schermata fatta apposta per correggerla.
+   */
+  ritratto:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 }
 }
 
 // — il modello di casa —

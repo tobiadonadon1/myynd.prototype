@@ -128,6 +128,26 @@ export type Config = {
    * tutto», ed è quello che serve a chi non ha ancora idea di cosa vuole.
    */
   argomenti?: string
+  /**
+   * Gli argomenti li ha scritti Myynd, non lei.
+   *
+   * È il permesso di riscriverli, e vale finché non ci mette mano lei. Nel
+   * momento in cui salva quel campo a mano diventa falso e non torna più vero
+   * da solo: da lì in avanti quelle sono parole sue, e una cosa che riscrive
+   * quello che hai scritto tu senza che tu l'abbia chiesto non è un aiuto —
+   * è una cosa di cui non ti puoi fidare.
+   */
+  argomentiDaMe?: boolean
+  /**
+   * Quando ha messo in ordine da solo, l'ultima volta. Due date, non una.
+   *
+   * Sono due giri diversi con due ritmi diversi — gli argomenti seguono quello
+   * che legge, la memoria segue quello che impara parlando — e un timestamp
+   * solo per tutti e due vorrebbe dire che il primo che gira zittisce l'altro
+   * fino al giorno dopo. Un difetto che non si vede: nessuno dei due si rompe,
+   * uno dei due semplicemente non succede quasi mai.
+   */
+  imparato?: { argomenti?: string; memoria?: string }
   /** Il giro di presentazione della lista: fatto una volta, mai più. */
   giro?: boolean
   /**
@@ -315,6 +335,9 @@ export function pubblica(c: Config = leggi()) {
     oreFatte: c.oreFatte ?? 48,
     giro: !!c.giro,
     argomenti: c.argomenti ?? '',
+    // chi ha scritto quella riga: la schermata lo dice, invece di lasciar
+    // credere a qualcuno di averla scritta lui
+    argomentiDaMe: c.argomentiDaMe === true,
     // assente = «usalo se c'è»: il valore vero lo dice /api/modello/locale,
     // che va a vedere se c'è davvero invece di fidarsi del file
     locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },

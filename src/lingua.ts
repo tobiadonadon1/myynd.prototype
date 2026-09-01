@@ -56,6 +56,17 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — quello che si scrive da solo: gli argomenti e il ritratto —
+  'Scrivilo da quello che leggo': 'Write it from what I read',
+  'L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.':
+    'I wrote this, from what you open. Change it and it stays yours.',
+  'Guarda se ti torna, poi salva.': 'See if that sounds right, then save.',
+  'Non ho ancora abbastanza per dire cosa ti interessa.':
+    'Not enough yet to say what you are interested in.',
+  'Aggiorna da quello che hai imparato': 'Update from what you have learned',
+  'Ci penso…': 'Thinking…',
+  'Non c’è niente di nuovo da aggiungere.': 'There is nothing new to add.',
+
 // — le fasi della lettura, per le fonti nuove —
   'apro le conversazioni': 'opening the conversations',
   'apro i documenti': 'opening the documents',
@@ -1138,6 +1149,14 @@ export const frasi = {
   maiTrovatoNienteLungo: (n: number) => corrente === 'en'
     ? `It has run ${n} times and never had anything to look at. Nearly always this is the search words: they have to be the words whoever wrote those documents would use, in their language.`
     : `È girata ${n} volte senza mai avere niente da guardare. Quasi sempre sono le parole della ricerca: devono essere quelle di chi ha scritto quei documenti, nella loro lingua.`,
+
+  /** Chi ha scritto quella riga del ritratto, e quando. */
+  scrittoDaMe: (quando: string) => corrente === 'en'
+    ? `Written by Myynd on ${quando}, from what it has learned` : `Scritto da Myynd il ${quando}, da quello che ha imparato`,
+
+  ritrattoAggiornato: (blocchi: number, da: number) => corrente === 'en'
+    ? `${blocchi === 1 ? '1 line' : `${blocchi} lines`} rewritten, from ${da} things it has noticed`
+    : `${blocchi === 1 ? '1 riga riscritta' : `${blocchi} righe riscritte`}, da ${da} cose che ha notato`,
 
   /** Quanti documenti guarderebbe adesso: la risposta dell'anteprima. */
   neGuarderebbe: (n: number) => corrente === 'en'

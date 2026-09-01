@@ -20,7 +20,7 @@
 // Niente di tutto questo è codice altrui: sono forme di dati, e le forme si
 // possono imparare.
 
-import { leggi, nellaLingua } from './config.ts'
+import { aggiorna, leggi, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
 
@@ -319,4 +319,149 @@ export async function imparaDallaCorrezione(bozza: string, inviato: string): Pro
     { ruolo: 'a', testo: `Avevo preparato questo:\n\n${bozza}` },
     { ruolo: 'u', testo: `Ho mandato invece questo:\n\n${inviato}` }
   ], 'correzione')
+}
+
+// — il ritratto che si scrive da solo —
+
+/**
+ * Perché i cinque blocchi restavano vuoti.
+ *
+ * Non perché nessuno li avesse notati: la schermata c'è, le caselle si
+ * scrivono, funziona tutto. Restavano vuoti perché **nessuno si siede a
+ * scrivere un ritratto di sé stesso.** «Come decidi una cosa?» è una domanda a
+ * cui non si risponde davanti a una casella di testo — si risponde lavorando,
+ * un pezzo alla volta, senza accorgersene.
+ *
+ * E infatti quelle risposte Myynd le aveva già. `distilla()` le raccoglie da
+ * ogni conversazione e `imparaDallaCorrezione()` da ogni bozza che qualcuno
+ * sistema prima di mandarla; finiscono in `convinzioni`, una frase per volta,
+ * con il loro genere e la loro fiducia. Un elenco che cresce e che nessuno
+ * rilegge — perché quaranta righe sparse non sono un ritratto.
+ *
+ * Questo giro è il passo che mancava fra le due cose: prende le convinzioni e
+ * ne fa cinque paragrafi corti. Non impara niente di nuovo — mette in ordine
+ * quello che è già stato imparato, e per questo può girare sul modello più
+ * economico che c'è.
+ *
+ * **Quello che c'è scritto da lei non si butta.** Il prompt lo dice e il codice
+ * lo rende vero: il testo che c'è arriva al modello come base da tenere, non
+ * come bozza da rifare. Un blocco che qualcuno ha corretto a mano è la cosa più
+ * preziosa in questa tabella — è l'unica riga di cui si è certi — e riscriverla
+ * sopra sarebbe il modo più veloce per far smettere qualcuno di correggere.
+ */
+
+const FORMA_BLOCCO = {
+  type: 'object',
+  properties: {
+    testo: {
+      type: 'string',
+      description: 'Il blocco riscritto. Vuoto se non c\'è abbastanza per dire qualcosa di vero.'
+    },
+    cambiato: {
+      type: 'boolean',
+      description: 'Falso se quello che c\'era già andava bene così: allora non si tocca.'
+    }
+  },
+  required: ['testo', 'cambiato'],
+  additionalProperties: false
+} as const
+
+const COME_SI_CONSOLIDA = `Stai scrivendo una riga del ritratto di una persona, per l'assistente che
+lavora al posto suo. Non lo legge lei per farsi bella: lo legge un modello,
+in cima a ogni ragionamento, per scrivere come scriverebbe lei.
+
+Regole, in ordine di quanto pesano.
+
+1. **Quello che c'è già scritto lo tieni.** Se c'è un testo, quello l'ha
+   scritto lei o l'hai già approvato insieme: è la cosa più affidabile che hai.
+   Ci aggiungi quello che le osservazioni sostengono, e non lo contraddici. Se
+   un'osservazione va contro quello che c'è scritto, vince quello che c'è
+   scritto e l'osservazione la lasci fuori.
+
+2. **Solo quello che le osservazioni dicono davvero.** Niente di plausibile,
+   niente di generico, niente che valga per chiunque abbia un'azienda. «Risponde
+   in giornata» va scritto solo se qualcosa lo dice. Un ritratto pieno di frasi
+   vere per tutti è peggio di un ritratto vuoto, perché sembra pieno.
+
+3. **Corto.** Due o tre frasi, o due o tre righe puntate. Sono regole
+   operative, non una descrizione: «Chiude sempre con "Un caro saluto"», non
+   «Ha uno stile cordiale». Se non entra in poche righe, hai messo dentro
+   qualcosa che non serve.
+
+4. **Se non hai abbastanza, torni vuoto.** È la risposta giusta, non un
+   fallimento. Meglio un blocco vuoto che una riga inventata che poi il modello
+   userà per scrivere ai suoi clienti.
+
+5. **Se quello che c'era andava già bene, dici che non è cambiato.** Riscrivere
+   con altre parole la stessa cosa fa perdere il lavoro di chi l'aveva scritta.`
+
+/** Ogni quanto si riprova, quando c'è qualcosa di nuovo da mettere in ordine. */
+const OGNI_QUANTO = 6 * 3600_000
+
+/** Sotto questo numero di convinzioni nuove non si scomoda nessun modello. */
+const ABBASTANZA = 3
+
+export type Consolidamento = { blocchi: string[]; guardate: number }
+
+/**
+ * Mette in ordine quello che ha imparato, e scrive i cinque blocchi.
+ *
+ * I tre cancelli prima di spendere un token, e servono tutti e tre: qualcosa di
+ * nuovo da dire, non più spesso di ogni sei ore, e almeno qualche convinzione
+ * in mano. Senza il primo questo giro riscriverebbe gli stessi cinque blocchi
+ * con lo stesso materiale quattro volte al giorno, per sempre.
+ */
+export async function consolida(forza = false, adesso = Date.now()): Promise<Consolidamento> {
+  const c = leggi()
+  const ultima = c.imparato?.memoria
+  const niente: Consolidamento = { blocchi: [], guardate: 0 }
+
+  if (!forza && ultima && adesso - Date.parse(ultima) < OGNI_QUANTO) return niente
+  // solo quello che è arrivato dall'ultima volta: se non è cambiato niente,
+  // rifare lo stesso lavoro sullo stesso materiale è solo una bolletta
+  if (!forza && ultima && store.convinzioniDopo(ultima) === 0) return niente
+
+  const sue = [...store.convinzioni('persona'), ...store.convinzioni('azienda')]
+  if (sue.length < ABBASTANZA) return niente
+
+  const gia = new Map(store.blocchi().map(b => [b.etichetta, b]))
+  const scritti: string[] = []
+
+  for (const base of BLOCCHI_BASE) {
+    const vecchio = gia.get(base.etichetta)?.valore?.trim() ?? ''
+    try {
+      const r = await chiediJSON<{ testo: string; cambiato: boolean }>({
+        lavoro: 'ritratto',
+        max_tokens: 700,
+        system: `${COME_SI_CONSOLIDA}\n\nScrivi in ${nellaLingua()}.`,
+        formato: FORMA_BLOCCO,
+        messages: [{
+          role: 'user',
+          content:
+            `La riga da scrivere: «${base.descrizione}»\n\n` +
+            `Quello che c'è scritto adesso:\n${vecchio || '(niente)'}\n\n` +
+            'Quello che ho osservato lavorando con lei:\n' +
+            sue.map(k => `— ${k.enunciato} (${k.genere}, fiducia ${k.fiducia})`).join('\n')
+        }]
+      })
+      const testo = (r?.testo ?? '').trim()
+      if (!r?.cambiato || !testo || testo === vecchio) continue
+      store.scriviBlocco({
+        etichetta: base.etichetta,
+        descrizione: base.descrizione,
+        valore: testo,
+        // si dichiara: da qui in poi la schermata dice che quella riga
+        // l'ha scritta Myynd, e quando
+        daMe: new Date(adesso).toISOString()
+      })
+      scritti.push(base.etichetta)
+    } catch (e) {
+      // un blocco che non riesce non ferma gli altri quattro
+      console.error(`myynd · il blocco «${base.etichetta}» non si è lasciato scrivere:`,
+        e instanceof Error ? e.message : e)
+    }
+  }
+
+  aggiorna({ imparato: { ...leggi().imparato, memoria: new Date(adesso).toISOString() } })
+  return { blocchi: scritti, guardate: sue.length }
 }

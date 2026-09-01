@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Abbonamento as TipoAbbonamento } from '../api'
 import { frasi, t } from '../lingua'
-import { CARD_GLASS, LABEL, knob, track } from '../ui'
+import { CARD_GLASS, Hov, LABEL, knob, track } from '../ui'
 import type { Vals } from '../vals'
 
 
@@ -60,6 +60,8 @@ function CampoArgomenti({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.argomenti)
   const [salvato, setSalvato] = useState(false)
   const [gusto, setGusto] = useState('')
+  const [chiedo, setChiedo] = useState(false)
+  const [detto, setDetto] = useState('')
   useEffect(() => { setTesto(v.argomenti) }, [v.argomenti])
 
   // quello che ha notato da come leggi: si chiede una volta, all'apertura
@@ -69,6 +71,23 @@ function CampoArgomenti({ v }: { v: Vals }) {
     v.salvaArgomenti(testo)
     setSalvato(true)
     setTimeout(() => setSalvato(false), 1800)
+  }
+
+  /**
+   * La proposta, che si mette nel campo e non ci si scrive da sola.
+   *
+   * Chi ha scritto quella riga se la tiene: qui si riempie la casella e basta,
+   * e a salvare ci pensa lei. La differenza fra le due cose è tutto quello che
+   * separa un aiuto da una cosa che ti riscrive addosso.
+   */
+  const proponi = async () => {
+    setChiedo(true); setDetto('')
+    try {
+      const r = await api.proponiArgomenti()
+      if (r.argomenti) { setTesto(r.argomenti); setDetto(t('Guarda se ti torna, poi salva.')) }
+      else setDetto(t('Non ho ancora abbastanza per dire cosa ti interessa.'))
+    } catch { setDetto(t('Non ce l’ha fatta.')) }
+    setChiedo(false)
   }
 
   return (
@@ -102,6 +121,35 @@ function CampoArgomenti({ v }: { v: Vals }) {
         che permette di crederci — e di correggerlo scrivendo sopra nel campo,
         che è l'unica leva che deve avere chi non è d'accordo.
       */}
+      {/*
+        Chi ha scritto quella riga.
+
+        Il campo restava vuoto per sempre, e non per distrazione: «su cosa vuoi
+        essere tenuto aggiornato?» è una domanda a cui non si risponde davanti a
+        una casella di testo. Adesso, se è vuoto, lo scrive Myynd da quello che
+        apri davvero — e lo dice, perché una riga comparsa da sola che nessuno
+        dichiara è peggio di una riga vuota.
+      */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
+        marginTop: 9, fontSize: '12px', color: 'rgba(34,39,31,.5)'
+      }}>
+        {v.argomentiDaMe && !!v.argomenti && (
+          <span style={{ textWrap: 'pretty' }}>
+            {t('L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.')}
+          </span>
+        )}
+        <Hov as="button" type="button" onClick={proponi} disabled={chiedo}
+          style={{
+            border: 'none', background: 'none', padding: 0, fontFamily: 'inherit',
+            fontSize: '12px', color: '#8E3F1F', cursor: chiedo ? 'default' : 'pointer'
+          }}
+          hover={chiedo ? {} : { color: '#C4623B' }}>
+          {chiedo ? t('Guardo…') : t('Scrivilo da quello che leggo')}
+        </Hov>
+        {detto && <span>{detto}</span>}
+      </div>
+
       {gusto && (
         <div style={{
           marginTop: 12, padding: '10px 13px', borderRadius: 12,

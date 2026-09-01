@@ -650,6 +650,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     salvaFuoco,
 
     argomenti: stato.config.argomenti ?? '',
+    // chi ha scritto quella riga: cambia cosa c'è scritto sotto il campo, e
+    // lasciarlo implicito vorrebbe dire far credere a qualcuno di averla
+    // scritta lui
+    argomentiDaMe: stato.config.argomentiDaMe === true,
     salvaArgomenti,
     /** Aprire il documento dietro una citazione, dal segno nel testo. */
     apriFonte: (id: string) => {
