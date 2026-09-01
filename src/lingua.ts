@@ -100,10 +100,14 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — l'accesso con più persone: si sceglie fra entrare e crearsi un conto —
+  'Crea un account': 'Create an account',
+  'La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.':
+    'Your mail, your files and your automations stay yours: every account has its own memory, separate from anyone else\u2019s.',
+  'C’è già un account con questo indirizzo.': 'There is already an account with this address.',
+  'Indirizzo o password non corretti.': 'Address or password is not right.',
+
 // — ospitato, e nessuno ha ancora messo l'invito —
-  'Qui non si può ancora entrare.': 'Nobody can get in here yet.',
-  'Questo Myynd è su un indirizzo pubblico e nessuno ha ancora messo una parola d’invito sul server. Non è una parola da trovare: la scegli tu. Mettila in MYYND_INVITO fra le variabili del server, aspetta che riparta, e poi scrivila qui.':
-    'This Myynd is on a public address and nobody has set an invite word on the server yet. It is not a word to find: you choose it. Put it in MYYND_INVITO among the server variables, wait for the restart, then type it here.',
 
 // — i segnaposto dentro le caselle —
 //   Sono testo che si legge come tutto il resto, e restavano fuori perché
@@ -114,8 +118,6 @@ const EN: Record<string, string> = {
   'otto caratteri': 'eight characters',
   'imap.tuodominio.it': 'imap.yourdomain.com',
   '/Users/…/Lavoro': '/Users/…/Work',
-  'La parola che hai messo in MYYND_INVITO sul server. Senza, qui non si registra nessuno — ed è voluto: su un indirizzo pubblico il primo che si registra diventerebbe il padrone della casella collegata.':
-    'The string you set as MYYND_INVITO on the server. Without one, nobody can register here — deliberately: on a public address, whoever registers first would become the owner of whatever mailbox gets connected.',
 
 // — l'accesso: quale delle due cose stai facendo, e dove sta girando —
   'Bentornato.': 'Welcome back.',
@@ -127,11 +129,8 @@ const EN: Record<string, string> = {
     'This address is a separate Myynd, with a memory of its own. The account on your computer does not exist here: there is no central sign-in, and each Myynd keeps its own where it runs.',
   'Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.':
     'There is no account on this computer yet: what you type now creates it.',
-  'Invito': 'Invite',
   'Questo Myynd gira su un server, non sul tuo computer.':
     'This Myynd runs on a server, not on your computer.',
-  'Qui non ci si può registrare.': 'You cannot register here.',
-  'Invito non valido.': 'That invite is not valid.',
 
 // — la schermata che si vede quando dietro non c'è niente —
   'Qui c’è solo l’interfaccia.': 'This is only the interface.',

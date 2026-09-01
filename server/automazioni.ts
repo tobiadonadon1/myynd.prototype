@@ -24,7 +24,7 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { DIR, leggi, nellaLingua } from './config.ts'
+import { cartella, leggi, nellaLingua } from './config.ts'
 import * as ricettario from './ricettario.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
@@ -210,7 +210,8 @@ function valida(x: unknown, da: string): Automazione {
  * stesso motore. È quello che rende vera la risposta alla domanda «posso farne
  * una io?» — sì, e non è una versione ridotta di niente.
  */
-export const MIE = join(DIR, 'automazioni')
+// una funzione e non una costante: con più persone, «le tue» sono di chi chiede
+export const MIE = () => join(cartella(), 'automazioni')
 
 /** Dove stanno le ricette: le tue, quelle di tutti, quelle di questa azienda. */
 function cartelle(): string[] {
@@ -226,7 +227,7 @@ function cartelle(): string[] {
   // punto: correggere una ricetta senza rifare l'app. Le tue vincono su tutte,
   // e in ultima fila apposta: quello che ti sei scritto tu non deve poterti
   // essere sovrascritto da un aggiornamento.
-  return [...fuori, ...ricettario.cartelleScaricate(azienda), MIE].filter(existsSync)
+  return [...fuori, ...ricettario.cartelleScaricate(azienda), MIE()].filter(existsSync)
 }
 
 let cache: Automazione[] | null = null
@@ -265,7 +266,7 @@ export function scordaLeRicette() { cache = null }
 
 /** È tua? Cioè: si può cambiare e si può buttare. */
 export function eMia(id: string): boolean {
-  return existsSync(join(MIE, `${id}.json`))
+  return existsSync(join(MIE(), `${id}.json`))
 }
 
 /**
@@ -294,8 +295,8 @@ export function idPer(nome: string, esistenti: Set<string>): string {
  */
 export function scrivi(x: unknown): Automazione {
   const a = valida(x, 'la tua automazione')
-  if (!existsSync(MIE)) mkdirSync(MIE, { recursive: true, mode: 0o700 })
-  writeFileSync(join(MIE, `${a.id}.json`), JSON.stringify(a, null, 2), { mode: 0o600 })
+  if (!existsSync(MIE())) mkdirSync(MIE(), { recursive: true, mode: 0o700 })
+  writeFileSync(join(MIE(), `${a.id}.json`), JSON.stringify(a, null, 2), { mode: 0o600 })
   // scriverne una vuol dire volerla: se una con questo nome era stata tolta di
   // mezzo, torna. Senza, il file c'è, la ricetta è valida, e in elenco non
   // compare niente — e la scrivi una seconda volta pensando di aver sbagliato.
@@ -316,7 +317,7 @@ export function scrivi(x: unknown): Automazione {
 export function butta(id: string): boolean {
   if (!ricette().some(a => a.id === id)) return false
   if (eMia(id)) {
-    rmSync(join(MIE, `${id}.json`), { force: true })
+    rmSync(join(MIE(), `${id}.json`), { force: true })
     store.scordaAutomazione(id)
   }
   // anche per una tua: se dietro c'era quella del pacchetto, togliendo il tuo
@@ -1119,7 +1120,7 @@ la sua ora, fatta meglio. Se è già scritta bene, ridammela com'è.`
  * questa macchina.
  *
  * Quindi: si riscrive comunque nella tua cartella, con lo stesso id. La tua
- * copertura vince su quella del pacchetto — `cartelle()` mette `MIE` per ultima
+ * copertura vince su quella del pacchetto — `cartelle()` mette `MIE()` per ultima
  * apposta — e un aggiornamento dell'azienda non te la porta via. Il file
  * originale resta dov'è, intatto, per tutti gli altri.
  *

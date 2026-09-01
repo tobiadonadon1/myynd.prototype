@@ -7,6 +7,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, copyFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import * as chi from './chi.ts'
+import * as conti from './conti.ts'
 
 /**
  * I modelli fra cui si può scegliere, dal più economico al più capace.
@@ -83,15 +85,51 @@ export function nellaLingua(): string {
 /**
  * Dove vive tutto: la configurazione, l'indice, le automazioni tue.
  *
- * Su un computer è `~/.myynd` e non c'è altro da dire. Su un server dev'essere
- * un disco che **sopravvive al riavvio del contenitore**, e per questo si può
- * spostare da fuori con `MYYND_DATI`. Senza quello, ogni ridistribuzione fa
- * ripartire l'installazione da vuota — nessun account, nessun documento,
- * nessuna automazione — e non lascia nessun errore da nessuna parte: è il modo
- * più silenzioso in cui questa applicazione può perdere tutto.
+ * Era una costante e adesso è una funzione, ed è il cardine su cui gira tutta
+ * la faccenda delle più persone. Ottantuno punti nel codice chiamano `leggi()`
+ * senza chiedersi di chi sia quella configurazione: se la cartella la decide
+ * questa funzione, guardando chi è dentro la richiesta in corso, quegli
+ * ottantuno punti continuano a funzionare **senza toccarne uno** e di colpo
+ * lavorano ognuno sui dati del proprio utente.
+ *
+ * Su un computer di casa non cambia niente: nessuno apre un contesto, `chi`
+ * torna null, e la cartella è `~/.myynd` come è sempre stata.
+ *
+ * Su un server ogni persona ha la sua sotto `utenti/<id>`, e non c'è nessun
+ * percorso che porti dall'una all'altra: non è una convenzione di nomi, è che
+ * il pezzo di percorso lo mette questa funzione e nient'altro.
  */
-export const DIR = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')
-const FILE = join(DIR, 'config.json')
+export const RADICE = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')
+
+export function cartella(): string {
+  const u = chi.adesso()
+  if (!u) return RADICE
+  return cartellaDi(u)
+}
+
+/**
+ * La cartella di uno preciso, anche fuori da una richiesta.
+ *
+ * La usano i giri di sfondo, che passano da tutti gli utenti uno per uno e non
+ * stanno dentro nessuna richiesta.
+ */
+export function cartellaDi(utente: string): string {
+  // quasi sempre `utenti/<id>`; l'eccezione è chi c'era prima che le persone
+  // potessero essere più di una, e ha i suoi file nella radice
+  return conti.cartellaDi(utente) ?? join(RADICE, 'utenti', utente)
+}
+
+/**
+ * Il vecchio nome, per chi lo usava come costante.
+ *
+ * Non è un alias di comodo: `DIR` compariva in tre posti che lo leggevano al
+ * caricamento del modulo — e un valore letto una volta sola all'avvio è
+ * esattamente quello che non può funzionare quando le persone sono più di una.
+ * Quei tre sono diventati funzioni; questa resta per non lasciare in giro un
+ * nome che significa una cosa diversa da prima.
+ */
+export function DIR(): string { return cartella() }
+const file = () => join(cartella(), 'config.json')
 
 export type ConfigPosta = {
   host: string
@@ -264,12 +302,13 @@ export type Config = {
  * circolo. Meglio una frase, subito, che dica cosa guardare.
  */
 function assicuraDir() {
-  if (!existsSync(DIR)) {
+  const dir = cartella()
+  if (!existsSync(dir)) {
     try {
-      mkdirSync(DIR, { recursive: true, mode: 0o700 })
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
     } catch (e) {
       throw new Error(
-        `myynd · non riesco a creare ${DIR} (${(e as { code?: string }).code ?? e}). ` +
+        `myynd · non riesco a creare ${dir} (${(e as { code?: string }).code ?? e}). ` +
         'Se è un volume montato, il processo non ha il permesso di scriverci.'
       )
     }
@@ -292,14 +331,24 @@ function assicuraDir() {
  * credenziali restano lì dentro, leggibili, recuperabili a mano — e chi guarda
  * il terminale legge dov'è finito.
  */
-let giaMessoDaParte = false
+/*
+ * Uno per cartella, non uno per processo.
+ *
+ * Era un `boolean` solo, e con una persona sola andava bene. Con più persone
+ * sullo stesso processo diventava questo: il primo config rotto veniva messo
+ * da parte, e tutti quelli dopo — di altre persone — venivano ingoiati in
+ * silenzio, perché la bandierina era già alzata. Cioè esattamente il guasto
+ * che questa funzione esiste per impedire, spostato su chi arriva secondo.
+ */
+const giaMessiDaParte = new Set<string>()
 
 function mettiDaParte(perche: string) {
-  if (giaMessoDaParte) return
-  giaMessoDaParte = true
+  const mio = file()
+  if (giaMessiDaParte.has(mio)) return
+  giaMessiDaParte.add(mio)
   try {
-    const dove = `${FILE}.rotto-${new Date().toISOString().replace(/[:.]/g, '-')}`
-    copyFileSync(FILE, dove)
+    const dove = `${file()}.rotto-${new Date().toISOString().replace(/[:.]/g, '-')}`
+    copyFileSync(file(), dove)
     chmodSync(dove, 0o600)
     console.error(
       `myynd · config.json non è leggibile (${perche}).\n` +
@@ -313,9 +362,9 @@ function mettiDaParte(perche: string) {
 
 export function leggi(): Config {
   assicuraDir()
-  if (!existsSync(FILE)) return {}
+  if (!existsSync(file())) return {}
   try {
-    const c = JSON.parse(readFileSync(FILE, 'utf8')) as unknown
+    const c = JSON.parse(readFileSync(file(), 'utf8')) as unknown
     // `JSON.parse('"ciao"')` e `JSON.parse('null')` non lanciano: tornano un
     // valore che poi si comporta come una configurazione vuota senza esserlo
     if (!c || typeof c !== 'object' || Array.isArray(c)) {
@@ -340,11 +389,11 @@ export function leggi(): Config {
  */
 export function scrivi(c: Config) {
   assicuraDir()
-  const accanto = `${FILE}.nuovo`
+  const accanto = `${file()}.nuovo`
   writeFileSync(accanto, JSON.stringify(c, null, 2), { mode: 0o600 })
   chmodSync(accanto, 0o600)
-  renameSync(accanto, FILE)
-  chmodSync(FILE, 0o600)
+  renameSync(accanto, file())
+  chmodSync(file(), 0o600)
 }
 
 export function aggiorna(patch: Partial<Config>): Config {

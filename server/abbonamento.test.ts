@@ -100,7 +100,9 @@ test('gira in una cartella vuota, non dentro un progetto', () => {
   // lanciato dentro un progetto si porterebbe dietro il CLAUDE.md di quel
   // progetto: istruzioni di qualcun altro dentro una domanda che non c'entra
   assert.match(sorgente, /cwd: VUOTA/)
-  assert.match(sorgente, /const VUOTA = join\(DIR, 'vuota'\)/)
+  // `RADICE` e non più `DIR`: la cartella dei dati adesso è per persona, ma
+  // questa è vuota apposta e non contiene niente di nessuno — sta alla radice
+  assert.match(sorgente, /const VUOTA = join\(RADICE, 'vuota'\)/)
 })
 
 test('il prompt passa dallo stdin, non dagli argomenti', () => {

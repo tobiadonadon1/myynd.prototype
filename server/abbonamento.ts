@@ -37,7 +37,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DIR, leggi, modello } from './config.ts'
+import { RADICE, leggi, modello } from './config.ts'
 import { installato } from './lavoro.ts'
 
 /**
@@ -48,7 +48,9 @@ import { installato } from './lavoro.ts'
  * progetto dentro una domanda che non c'entra niente. Da qui non c'è niente da
  * leggere, ed è il punto.
  */
-const VUOTA = join(DIR, 'vuota')
+// La stessa per tutti, e alla radice: è una cartella *vuota* apposta, non
+// contiene niente di nessuno, e non c'è motivo di farne una per persona.
+const VUOTA = join(RADICE, 'vuota')
 
 /** Gli attrezzi che non gli servono: non deve toccare niente, deve rispondere. */
 const NEGATI = [

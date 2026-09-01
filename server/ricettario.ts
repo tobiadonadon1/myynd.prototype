@@ -26,12 +26,13 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DIR } from './config.ts'
+import { cartella } from './config.ts'
 
 /** Dove finiscono. Mai dentro il pacchetto: quello è firmato. */
-export const DOVE = join(DIR, 'automazioni')
+// una funzione e non una costante: la cartella dipende da chi sta chiedendo
+export const DOVE = () => join(cartella(), 'automazioni')
 
-const INDICE = join(DOVE, 'indice.json')
+const INDICE = join(DOVE(), 'indice.json')
 
 /** Il tetto per file e per cartella: un repository ostile non riempie il disco. */
 const TETTO_FILE = 64 * 1024
@@ -69,7 +70,7 @@ function leggiIndice(): Indice {
 }
 
 function scriviIndice(i: Indice) {
-  if (!existsSync(DOVE)) mkdirSync(DOVE, { recursive: true, mode: 0o700 })
+  if (!existsSync(DOVE())) mkdirSync(DOVE(), { recursive: true, mode: 0o700 })
   writeFileSync(INDICE, JSON.stringify(i, null, 2), { mode: 0o600 })
 }
 
@@ -87,9 +88,9 @@ export function stato(): { quando: string | null; guaio: string | null } {
  * quella di tutti gli altri.
  */
 export function cartelleScaricate(licenza?: string): string[] {
-  const fuori = [join(DOVE, '_comuni')]
+  const fuori = [join(DOVE(), '_comuni')]
   const az = (licenza ?? '').trim()
-  if (az && /^[a-z0-9-]+$/i.test(az)) fuori.push(join(DOVE, az))
+  if (az && /^[a-z0-9-]+$/i.test(az)) fuori.push(join(DOVE(), az))
   return fuori.filter(existsSync)
 }
 
@@ -138,7 +139,7 @@ async function unaCartella(
     .filter(v => v.type === 'file' && NOME.test(v.name) && v.size <= TETTO_FILE)
     .slice(0, TETTO_QUANTE)
 
-  const qui = join(DOVE, cartella)
+  const qui = join(DOVE(), cartella)
   if (!existsSync(qui)) mkdirSync(qui, { recursive: true, mode: 0o700 })
   const sha = indice.sha[cartella] ?? {}
   const nuovoSha: Record<string, string> = {}

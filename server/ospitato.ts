@@ -28,12 +28,9 @@
 //     quello. Il controllo esiste contro il DNS rebinding — un dominio che si
 //     ri-risolve su 127.0.0.1 diventerebbe same-origin — e allargarlo a `*`
 //     vorrebbe dire toglierlo. Allargarlo a un nome solo lo tiene intero.
-//   · **registrarsi vuole un invito.** Su un computer di casa il primo che
-//     apre l'app è il padrone di casa. Su un indirizzo pubblico il primo che
-//     lo trova diventerebbe il padrone della posta di qualcun altro, perché
-//     `auth.registra` accetta un account solo e chiunque arrivi dopo entra in
-//     quello. Senza `MYYND_INVITO` questa modalità non lascia registrare
-//     nessuno — non è una comodità disattivabile, è la serratura.
+//   · **ognuno la sua cartella.** `DATI` è la radice, e sotto `utenti/<id>`
+//     vive una persona: la sua configurazione, il suo indice, le sue
+//     automazioni. È quello che rende sicuro lasciare aperta la registrazione.
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -106,8 +103,19 @@ export const INDIRIZZO = OSPITATO ? '0.0.0.0' : '127.0.0.1'
  */
 export const DATI = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')
 
-/** La parola che serve per registrarsi, quando si è su un indirizzo pubblico. */
-export const INVITO = (process.env.MYYND_INVITO ?? '').trim()
+/*
+ * L'invito non c'è più, e vale la pena dire perché invece di lasciare un vuoto.
+ *
+ * Serviva a tappare un buco che adesso non esiste: l'installazione aveva un
+ * conto solo, quindi su un indirizzo pubblico il primo che si registrava
+ * diventava il padrone della casella che qualcuno avrebbe collegato dopo.
+ * Era una serratura messa davanti a un difetto, e chiedeva a chi metteva su il
+ * server di inventarsi una parola e passarla a mano a ogni persona.
+ *
+ * Adesso ogni conto ha la sua cartella e il suo indice, e registrarne uno non
+ * fa vedere niente di nessuno: la porta si può lasciare aperta perché dietro
+ * non c'è più la stanza di un altro.
+ */
 
 /**
  * Gli Host che si accettano.

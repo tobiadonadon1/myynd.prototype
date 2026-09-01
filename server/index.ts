@@ -35,6 +35,8 @@ import * as whatsapp from './connettori/whatsapp.ts'
 import { CATALOGO } from './connettori/registro.ts'
 import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
+import * as conti from './conti.ts'
+import * as chi from './chi.ts'
 import { riflua } from './testo.ts'
 
 const app = express()
@@ -157,41 +159,32 @@ if (existsSync(INTERFACCIA)) {
 // — accesso —
 
 app.get('/api/auth', (req, res) => {
-  res.json({
-    registrato: auth.registrato(),
-    entrato: auth.valida(auth.tokenDi(req)),
-    account: auth.conto(),
-    /*
-     * Dove sta girando, e cosa serve per entrarci.
-     *
-     * La schermata d'accesso non può indovinarlo: da fuori un Myynd su un
-     * server e uno sul proprio computer sono identici, e le due cose vogliono
-     * due frasi diverse — «resta su questo computer» è vera su uno e una bugia
-     * sull'altro. `serveInvito` fa comparire il campo dell'invito, che
-     * altrimenti sarebbe un rifiuto senza spiegazione.
-     */
-    ospitato: ospitato.OSPITATO,
-    serveInvito: ospitato.OSPITATO && !auth.registrato(),
-    /*
-     * Si può registrare qualcuno, qui e adesso?
-     *
-     * Ospitato senza invito la risposta è no, e fin qui quel no arrivava solo
-     * *dopo* aver riempito tre campi e premuto il bottone. Chi apriva la
-     * schermata vedeva una casella che chiedeva una parola d'invito e nessun
-     * posto da cui prenderla — e la cosa da sapere era che quella parola non
-     * si trova da nessuna parte: la si sceglie, e la si mette sul server. Un
-     * vicolo cieco che si scopre in fondo è peggio di una porta chiusa con
-     * scritto come si apre.
-     */
-    registrazioneAperta: !ospitato.OSPITATO || !!ospitato.INVITO
+  /*
+   * Chi sei, non «esiste un account».
+   *
+   * Prima questa rotta diceva se sull'installazione c'era un conto, e la
+   * schermata ne ricavava se mostrare «entra» o «crea». Con più persone quella
+   * domanda non ha senso: chi apre la pagina sa se ha un conto, il server no.
+   * La schermata adesso offre tutte e due le cose e lascia scegliere.
+   */
+  const utente = auth.tokenDi(req)
+  const dentro = auth.valida(utente)
+  const rispondi = () => res.json({
+    entrato: dentro,
+    account: dentro ? auth.conto() : null,
+    ospitato: ospitato.OSPITATO
   })
+  if (!dentro) return rispondi()
+  chi.dentro(conti.utenteDelToken(utente)!, rispondi)
 })
 
 app.post('/api/auth/registra', (req, res) => {
-  const { email, password, invito } = req.body ?? {}
-  const e = auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
+  const { email, password } = req.body ?? {}
+  const e = auth.registra(String(email ?? ''), String(password ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
-  res.json({ ok: true, token: e.token, account: auth.conto() })
+  // dentro il contesto del conto appena fatto: `auth.conto()` legge da lì, e
+  // fuori non saprebbe di chi parlare
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
 app.post('/api/auth/entra', (req, res) => {
@@ -203,7 +196,7 @@ app.post('/api/auth/entra', (req, res) => {
   const { email, password } = req.body ?? {}
   const e = auth.entra(String(email ?? ''), String(password ?? ''))
   if (!e.ok) return res.status(401).json({ errore: e.errore })
-  res.json({ ok: true, token: e.token, account: auth.conto() })
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
 app.post('/api/auth/esci', (req, res) => {
@@ -1922,6 +1915,34 @@ function aParte(cosa: string, fai: () => Promise<unknown>): () => void {
 }
 
 /**
+ * Lo stesso lavoro, per ognuno.
+ *
+ * I giri di sfondo — rileggere le fonti, far girare le automazioni, mettere in
+ * ordine quello che si è imparato — sono nati quando la persona era una sola e
+ * lavoravano su «la» configurazione e «l'» indice. Fuori da una richiesta non
+ * c'è nessun contesto aperto, quindi senza questo giro lavorerebbero sulla
+ * cartella radice: cioè su nessuno, in silenzio, mentre le automazioni di tutti
+ * non girano mai.
+ *
+ * Uno per volta e non tutti insieme, di proposito: sono letture di caselle di
+ * posta e chiamate a un modello, e farne dieci in parallelo vuol dire dieci
+ * volte il carico nello stesso istante per finire tutto qualche secondo prima.
+ * E il guaio di uno non ferma gli altri — è il caso normale, non l'eccezione:
+ * basta una casella che non risponde.
+ */
+function perOgnuno(cosa: string, fai: () => Promise<unknown>): () => void {
+  return aParte(cosa, async () => {
+    for (const utente of conti.tutti()) {
+      try {
+        await chi.dentro(utente, fai)
+      } catch (e) {
+        console.error(`myynd · ${cosa} (${utente}):`, e instanceof Error ? e.message : e)
+      }
+    }
+  })
+}
+
+/**
  * La porta occupata non deve essere una traccia di stack.
  *
  * È esattamente il caso che il commento sulla porta qui sopra dice di voler
@@ -1953,27 +1974,26 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       `myynd · ospitato${ospitato.DOMINIO ? ` su ${ospitato.DOMINIO}` : ' (dominio non ancora noto)'}` +
       ` · i dati stanno in ${ospitato.DATI}`
     )
-    // senza invito non si registra nessuno, e chi ha avviato questo processo
-    // deve saperlo adesso — non quando qualcuno gli scrive che non riesce
-    if (!ospitato.INVITO) {
-      console.warn('myynd · MYYND_INVITO non c\'è: nessuno può registrarsi. È voluto? Se no, mettilo.')
-    }
   }
 
   // un compito il cui lavoro è morto insieme al processo non torna da solo:
   // senza questa riga resta «da Myynd» per sempre, e la lista mente
   // la prima rilettura non è all'avvio ma dopo un minuto: accendere l'app non
   // deve voler dire aspettare che abbia finito di leggere la posta
-  const rilettura = aParte('la rilettura automatica si è fermata', rileggiDaSola)
+  const rilettura = perOgnuno('la rilettura automatica si è fermata', rileggiDaSola)
   setTimeout(rilettura, 60_000)
   setInterval(rilettura, OGNI)
 
   // Le automazioni guardano l'orologio ogni quarto d'ora. Il primo giro dopo
   // due minuti e non subito: all'avvio c'è già la lettura delle fonti, e due
   // cose pesanti insieme si sentono proprio nel momento in cui si apre l'app.
-  const quante = automazioni.ricette().length
+  // dentro un contesto qualunque: le ricette di serie sono le stesse per
+  // tutti, e fuori da un contesto questa riga leggerebbe la cartella radice
+  const quante = conti.tutti().length
+    ? chi.dentro(conti.tutti()[0], () => automazioni.ricette().length)
+    : 0
   if (quante) console.log(`myynd · ${quante} automazion${quante === 1 ? 'e' : 'i'} in linea`)
-  const giro = aParte('il giro delle automazioni si è fermato', () => automazioni.giro())
+  const giro = perOgnuno('il giro delle automazioni si è fermato', () => automazioni.giro())
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
 
@@ -1989,14 +2009,14 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // niente: quella frase gli resta lì sotto gli occhi per sempre. Si guarda una
   // volta all'avvio, e si tocca solo se serve davvero — la prova è contare
   // parole, non chiamare un modello.
-  setTimeout(aParte('la rimessa in lingua non è riuscita', async () => {
+  setTimeout(perOgnuno('la rimessa in lingua non è riuscita', async () => {
     const l = cfg.leggi().lingua ?? 'it'
     if (!traduci.daTradurre(l) && !traduci.compitiDaTradurre(l)) return
     const n = await traduci.inLingua(l)
     if (n) console.log(`myynd · ${n} cose riscritte nella lingua dell'app`)
   }), 40_000)
 
-  const ricette = aParte('le ricette non si sono aggiornate', () => automazioni.aggiornaRicette())
+  const ricette = perOgnuno('le ricette non si sono aggiornate', () => automazioni.aggiornaRicette())
   setTimeout(ricette, 20_000)
   setInterval(ricette, 6 * 3600_000)
 
@@ -2014,7 +2034,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * c'è. Tardi dopo l'avvio, apposta: aprire l'app non deve voler dire
    * aspettare che finisca di ragionare su di te.
    */
-  const imparaDaSolo = aParte('non sono riuscito a mettere in ordine quello che ho imparato', async () => {
+  const imparaDaSolo = perOgnuno('non sono riuscito a mettere in ordine quello che ho imparato', async () => {
     const argomenti = await gusto.tieniAggiornati()
     if (argomenti) console.log(`myynd · argomenti scritti da quello che leggi: ${argomenti}`)
     const m = await memoria.consolida()
@@ -2038,12 +2058,38 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * spesso di così serve solo a essere pronti quando quelle tre ore scadono
    * mentre l'app è aperta.
    */
-  const giornali = aParte('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
+  const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
   setTimeout(giornali, 10_000)
   setInterval(giornali, 3600_000)
 
-  const appesi = compiti.riprendiAppesi()
+  /*
+   * I compiti rimasti a metà si riaprono, per ognuno.
+   *
+   * Sta dentro `chi.dentro` come tutto il resto: fuori da un contesto questa
+   * riga aprirebbe l'indice della radice — che non è di nessuno — e i compiti
+   * appesi di tutti resterebbero appesi per sempre.
+   */
+  /*
+   * Chi c'era prima che i conti fossero più di uno.
+   *
+   * Un'installazione che gira da mesi ha l'account dentro `config.json` nella
+   * radice, e accanto tutto il resto. Senza questo passaggio si riaprirebbe
+   * Myynd e si troverebbe una schermata che chiede di registrarsi, con mesi di
+   * lavoro ancora sul disco ma invisibili.
+   */
+  const vecchio = cfg.leggi().account
+  if (vecchio && !conti.quanti()) {
+    const id = conti.adotta(vecchio.email, vecchio.sale, vecchio.hash, cfg.RADICE)
+    if (id) console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
+  }
+
+  let appesi = 0
+  for (const u of conti.tutti()) {
+    try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
+  }
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
+  const quantiConti = conti.quanti()
+  console.log(`myynd · ${quantiConti} cont${quantiConti === 1 ? 'o' : 'i'} su questa installazione`)
 
   if (auth.DEV) {
     // un build vero non deve poter nascere con questa variabile accesa

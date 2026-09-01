@@ -132,7 +132,11 @@ const INTERNI = new Set([
   // parla a chi impacchetta l'app, e succede prima che esista una finestra
   'MYYND_DEV acceso in un build di produzione',
   // la risposta a una richiesta che non viene dall'app: non la disegna nessuno
-  'Origine non consentita.'
+  'Origine non consentita.',
+  // una guardia interna: se scatta è un difetto di programmazione — un giro di
+  // sfondo che gira fuori dal contesto di una persona — non una cosa che
+  // qualcuno possa leggere e correggere
+  'Non so di chi sia questa richiesta.'
 ])
 
 /** Una frase da leggere, non un'etichetta tecnica. */

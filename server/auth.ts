@@ -9,34 +9,14 @@
 // Mac. Serve a evitare che chi ti passa davanti al portatile apra la tua
 // mente, non a difenderti da chi ha già la macchina.
 
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
-import { aggiorna, leggi, type Account } from './config.ts'
-import * as store from './store.ts'
-import * as ospitato from './ospitato.ts'
 
-export type { Account }
+import * as conti from './conti.ts'
+import * as chi from './chi.ts'
 
-const N = 16384          // costo scrypt: lento quanto basta
-const LUNGHEZZA = 64
 
-function impasta(password: string, sale: string): string {
-  return scryptSync(password, sale, LUNGHEZZA, { N, r: 8, p: 1 }).toString('hex')
-}
 
-/**
- * Le sessioni stanno nell'indice, non in memoria: prima ogni riavvio del server
- * — e con `node --watch` ne basta un salvataggio — rimandava all'accesso, che è
- * il motivo per cui sembrava di dover ricollegare tutto ogni volta.
- *
- * Nel file finisce solo l'impronta: chi legge mente.db non ottiene un token
- * valido, e un token rubato scade comunque.
- */
-function impronta(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
-}
-
-store.potaSessioni()
+conti.pota()
 
 /**
  * Quanti tentativi falliti di fila, e da quando. Scrypt costa mezzo secondo di
@@ -72,82 +52,68 @@ export const DEV = process.env.MYYND_DEV === '1'
 export const TOKEN_SVILUPPO = 'sviluppo-non-in-produzione'
 
 export function apriSessioneDiSviluppo(): string {
-  store.apriSessione(impronta(TOKEN_SVILUPPO), 1)
+  // in sviluppo c'è una persona sola: se non c'è ancora un conto se ne fa uno
+  let utente = conti.tutti()[0] ?? ''
+  if (!utente) {
+    const e = conti.registra('sviluppo@myynd.local', TOKEN_SVILUPPO)
+    if (e.ok) utente = e.id
+  }
+  if (utente) conti.perProva.apriCon(TOKEN_SVILUPPO, utente)
   return TOKEN_SVILUPPO
 }
 
+/**
+ * C'è almeno un conto su questa installazione?
+ *
+ * Serve ancora a una cosa sola — la guardia, che vuole sapere se ha senso
+ * parlare di sessioni — e **non serve più a decidere cosa mostra la schermata
+ * d'accesso.** Prima decideva quello: un conto esisteva e allora si «entrava»,
+ * non esisteva e allora si «creava». Con più persone quella domanda non ha
+ * risposta: chi apre la pagina può essere uno che ha già un conto o uno che
+ * non ce l'ha, e lo sa lui, non il server. Adesso sceglie lui.
+ */
 export function registrato(): boolean {
-  return !!leggi().account
+  return conti.quanti() > 0
 }
 
+/** Chi è entrato in questa richiesta. */
 export function conto(): { email: string } | null {
-  const a = leggi().account
-  return a ? { email: a.email } : null
+  const u = chi.adesso()
+  if (!u) return null
+  const c = conti.conto(u)
+  return c ? { email: c.email } : null
 }
 
 /**
- * Registrarsi, e la serratura che serve solo quando si è raggiungibili da fuori.
+ * Un conto nuovo, per chiunque.
  *
- * Su un computer di casa il primo che apre l'app è il padrone di casa: non c'è
- * nessun altro che possa arrivarci prima. Su un indirizzo pubblico quella
- * stessa riga diventa la cosa più pericolosa di tutto il programma — il primo
- * che trova l'URL si registra, e da quel momento è **lui** l'account di questa
- * installazione: chiunque arrivi dopo entra in quello, e quello legge la posta
- * che ci è stata collegata.
- *
- * Quindi ospitato serve l'invito, e senza invito configurato non si registra
- * nessuno. Non è una comodità che si può spegnere: è la serratura, e una
- * serratura che si apre quando la chiave manca non è una serratura.
+ * Niente invito e niente «esiste già un account»: erano tutti e due la stessa
+ * toppa sullo stesso buco, cioè che l'installazione aveva un conto solo e chi
+ * arrivava secondo sarebbe finito dentro la posta del primo. Adesso ognuno ha
+ * la sua cartella e il suo indice, e registrare un estraneo non gli fa vedere
+ * niente di nessuno — che è la ragione per cui la porta si può riaprire.
  */
-export function registra(email: string, password: string, invito = ''):
-  { ok: true; token: string } | { ok: false; errore: string } {
-  if (ospitato.OSPITATO) {
-    if (!ospitato.INVITO) return { ok: false, errore: 'Qui non ci si può registrare.' }
-    // confronto a lunghezza costante: un invito che si può indovinare a
-    // tentativi cronometrati non è meglio di nessun invito
-    const dato = Buffer.from(invito.trim())
-    const atteso = Buffer.from(ospitato.INVITO)
-    if (dato.length !== atteso.length || !timingSafeEqual(dato, atteso)) {
-      return { ok: false, errore: 'Invito non valido.' }
-    }
-  }
-  if (registrato()) return { ok: false, errore: 'Un account esiste già su questa macchina.' }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, errore: 'Indirizzo non valido.' }
-  if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
-
-  const sale = randomBytes(16).toString('hex')
-  aggiorna({ account: { email: email.trim(), sale, hash: impasta(password, sale) } })
-  return { ok: true, token: apri() }
+export function registra(email: string, password: string):
+  { ok: true; token: string; utente: string } | { ok: false; errore: string } {
+  const e = conti.registra(email, password)
+  if (!e.ok) return e
+  return { ok: true, token: e.token, utente: e.id }
 }
 
 export function entra(email: string, password: string):
-  { ok: true; token: string } | { ok: false; errore: string } {
-  const a = leggi().account
-  if (!a) return { ok: false, errore: 'Nessun account su questa macchina.' }
-
-  const atteso = Buffer.from(a.hash, 'hex')
-  const dato = Buffer.from(impasta(password, a.sale), 'hex')
-  // confronto a tempo costante, e l'email non deve dire se esiste o no
-  const passwordOk = atteso.length === dato.length && timingSafeEqual(atteso, dato)
-  const emailOk = email.trim().toLowerCase() === a.email.toLowerCase()
-  segnaTentativo(email, passwordOk && emailOk)
-  if (!passwordOk || !emailOk) return { ok: false, errore: 'Email o password non corrispondono.' }
-
-  return { ok: true, token: apri() }
-}
-
-function apri(): string {
-  const t = randomBytes(32).toString('hex')
-  store.apriSessione(impronta(t))
-  return t
+  { ok: true; token: string; utente: string } | { ok: false; errore: string } {
+  const e = conti.entra(email, password)
+  segnaTentativo(email, e.ok)
+  if (!e.ok) return e
+  return { ok: true, token: e.token, utente: e.id }
 }
 
 export function esci(token?: string) {
-  if (token) store.chiudiSessione(impronta(token))
+  conti.chiudi(token)
 }
 
 export function valida(token?: string): boolean {
-  return !!token && store.sessioneValida(impronta(token))
+  return !!conti.utenteDelToken(token)
 }
 
 function estrai(req: Request): string | undefined {
@@ -158,12 +124,24 @@ function estrai(req: Request): string | undefined {
   return typeof q === 'string' && q ? q : undefined
 }
 
-/** Guardia su tutto tranne le rotte di accesso. */
+/**
+ * La guardia, che adesso fa una cosa in più: **apre il contesto**.
+ *
+ * Riconosciuto il token si sa di chi è la richiesta, e da lì in avanti tutto
+ * quello che gira dentro `chi.dentro` lavora sui dati di quella persona —
+ * `config.leggi()`, l'indice, le automazioni — senza che nessuna delle
+ * duecento funzioni sotto debba saperlo.
+ *
+ * È l'unico punto in cui quel contesto si apre, ed è voluto: un secondo posto
+ * vorrebbe dire due idee di chi sia l'utente corrente, e il giorno che
+ * divergono nessuno se ne accorge finché qualcuno non legge la posta di un
+ * altro.
+ */
 export function guardia(req: Request, res: Response, next: NextFunction) {
   if (req.path.startsWith('/api/auth')) return next()
-  if (!registrato()) return res.status(401).json({ errore: 'Nessun account.', serve: 'registrazione' })
-  if (!valida(estrai(req))) return res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' })
-  next()
+  const utente = conti.utenteDelToken(estrai(req))
+  if (!utente) return res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' })
+  chi.dentro(utente, next)
 }
 
 export const tokenDi = estrai

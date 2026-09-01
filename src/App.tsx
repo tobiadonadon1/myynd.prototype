@@ -90,7 +90,7 @@ export default function App() {
       const s = await api.stato()
       setStato(s)
       setOnboarding(!s.config.onboarding)
-      setAccesso({ registrato: true, entrato: true, account: conto })
+      setAccesso(a => ({ ...a, entrato: true, account: conto }))
     } catch (e) {
       // se il primo caricamento fallisce non lascio l'utente sullo splash
       setGuasto(guaio(e))
@@ -103,7 +103,8 @@ export default function App() {
     setOnboarding(false)
     setConnessioni(null)
     setGuasto(null)
-    setAccesso({ registrato: true, entrato: false, account: accesso?.account ?? null })
+    // l'uscita non cancella cosa sappiamo del posto — solo che non ci sei più
+    setAccesso(a => ({ ...a, entrato: false, account: null }))
   }
 
   if (guasto) return <Guasto guasto={guasto} riprova={carica} />

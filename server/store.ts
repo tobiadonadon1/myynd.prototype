@@ -4,21 +4,66 @@
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, chmodSync, copyFileSync } from 'node:fs'
-import { DIR } from './config.ts'
+import { cartella } from './config.ts'
 import { radici, radice, termini } from './lingua.ts'
 
-if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true, mode: 0o700 })
+/*
+ * Un indice per persona, aperto quando serve.
+ *
+ * Era `const db = new DatabaseSync(FILE)`: un database solo, deciso al
+ * caricamento del modulo, per tutto il processo. Con più persone quella riga è
+ * il difetto peggiore possibile — non un errore, ma la posta di qualcuno
+ * dentro l'indice di qualcun altro, in silenzio.
+ *
+ * Adesso si apre il database della persona di cui è la richiesta in corso, e
+ * si tiene aperto: SQLite regge bene qualche decina di file aperti, e
+ * riaprirlo a ogni query vorrebbe dire rifare le migrazioni ogni volta.
+ *
+ * **Il `Proxy` è quello che rende questa modifica piccola invece che enorme.**
+ * Centoventi query in questo file chiamano `db.prepare(...)` al momento di
+ * girare: con `db` che rimanda al database giusto, tutte e centoventi
+ * continuano a funzionare senza che se ne tocchi una — e non c'è nessuna
+ * possibilità che qualcuna venga dimenticata, che è il modo in cui una
+ * conversione a mano di centoventi righe fa uscire i dati dal recinto.
+ */
+const aperti = new Map<string, DatabaseSync>()
 
-const FILE = join(DIR, 'mente.db')
-const db = new DatabaseSync(FILE)
+function apri(dove: string): DatabaseSync {
+  if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
+  const file = join(dove, 'mente.db')
+  const d = new DatabaseSync(file)
+  d.exec('PRAGMA journal_mode = WAL')
+  d.exec('PRAGMA foreign_keys = ON')
 
-db.exec('PRAGMA journal_mode = WAL')
-db.exec('PRAGMA foreign_keys = ON')
+  // L'indice è una copia della casella e dei documenti: non deve essere
+  // leggibile dagli altri utenti della macchina più di quanto lo sia config.json.
+  for (const f of [file, `${file}-wal`, `${file}-shm`]) {
+    try { if (existsSync(f)) chmodSync(f, 0o600) } catch { /* il filesystem può non supportarlo */ }
+  }
+  migra(d, file)
+  return d
+}
 
-// L'indice è una copia della casella e dei documenti: non deve essere
-// leggibile dagli altri utenti della macchina più di quanto lo sia config.json.
-for (const f of [FILE, `${FILE}-wal`, `${FILE}-shm`]) {
-  try { if (existsSync(f)) chmodSync(f, 0o600) } catch { /* il filesystem può non supportarlo */ }
+function mio(): DatabaseSync {
+  const dove = cartella()
+  let d = aperti.get(dove)
+  if (!d) { d = apri(dove); aperti.set(dove, d) }
+  return d
+}
+
+/** Il database di chi sta facendo questa richiesta. */
+const db = new Proxy({} as DatabaseSync, {
+  get(_, chiave) {
+    const d = mio() as unknown as Record<string | symbol, unknown>
+    const v = d[chiave]
+    return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(d) : v
+  }
+})
+
+/** Da usare quando si finisce con una persona: chiude e libera. */
+export function chiudiIndici() {
+  for (const d of aperti.values()) { try { d.close() } catch { /* già chiuso */ } }
+  aperti.clear()
 }
 
 /**
@@ -561,19 +606,35 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
 
 ]
 
-/** Una copia del file prima di toccarlo: le migrazioni non si annullano. */
-function istantanea(da: number) {
-  const cartella = join(DIR, 'istantanee')
-  if (!existsSync(cartella)) mkdirSync(cartella, { recursive: true, mode: 0o700 })
+/**
+ * Una copia del file prima di toccarlo: le migrazioni non si annullano.
+ *
+ * Prende il database su cui sta lavorando invece di andarselo a prendere da
+ * `db`: qui si sta *aprendo* quel database, e `db` chiederebbe alla cartella
+ * corrente — che durante l'apertura non è ancora questa. Un'istantanea del
+ * database sbagliato non sarebbe servita a niente il giorno che serve.
+ */
+function istantanea(d: DatabaseSync, file: string, da: number) {
+  const dove = join(file, '..', 'istantanee')
+  if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
   // con il WAL svuotato il file principale è una copia completa
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-  const dove = join(cartella, `mente-v${da}-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
-  copyFileSync(FILE, dove)
-  chmodSync(dove, 0o600)
-  console.log(`myynd · istantanea prima della migrazione: ${dove}`)
+  d.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  const copia = join(dove, `mente-v${da}-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)
+  copyFileSync(file, copia)
+  chmodSync(copia, 0o600)
+  console.log(`myynd · istantanea prima della migrazione: ${copia}`)
 }
 
-function migra() {
+/**
+ * Le migrazioni, sul database appena aperto.
+ *
+ * Girano all'apertura di *ogni* indice invece che una volta all'avvio: con più
+ * persone i database sono tanti, nascono in momenti diversi, e ognuno arriva
+ * allo schema per conto suo. Chi si registra domani apre un indice vuoto che
+ * fa tutte le migrazioni di fila in un colpo; chi c'era già ne fa solo quelle
+ * che gli mancano.
+ */
+function migra(db: DatabaseSync, file: string) {
   const versione = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
   if (versione > MIGRAZIONI.length) {
     throw new Error(
@@ -590,7 +651,7 @@ function migra() {
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'documenti'"
   ).get() as { n: number }
   const quanti = gia.n ? (db.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }).n : 0
-  if (quanti > 0) istantanea(versione)
+  if (quanti > 0) istantanea(db, file, versione)
 
   for (let v = versione; v < MIGRAZIONI.length; v++) {
     db.exec('BEGIN')
@@ -605,8 +666,6 @@ function migra() {
   }
 }
 
-migra()
-
 export type Documento = {
   id: string
   fonte: string
@@ -619,22 +678,58 @@ export type Documento = {
   gruppo?: string | null
 }
 
-const selRid = db.prepare('SELECT rid FROM documenti WHERE id = ?')
-const selEsistente = db.prepare(
-  'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo FROM documenti WHERE id = ?'
-)
-/** C'è la riga corrispondente nell'indice full-text? Serve a non saltare un documento rotto. */
-const selFts = db.prepare('SELECT 1 FROM ricerca WHERE rowid = ?')
-const insDoc = db.prepare(`
-  INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, indicizzato)
-  VALUES (?,?,?,?,?,?,?,?,?,?)
-`)
-const updDoc = db.prepare(`
-  UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, indicizzato=?
-  WHERE rid = ?
-`)
-const delFts = db.prepare('DELETE FROM ricerca WHERE rowid = ?')
-const insFts = db.prepare('INSERT INTO ricerca (rowid, titolo, corpo, autore, radici) VALUES (?,?,?,?,?)')
+/*
+ * Le sette istruzioni della scrittura dei documenti, preparate quando servono.
+ *
+ * Erano `const … = db.prepare(…)` in cima al file, cioè **legate a un database
+ * nel momento in cui il modulo veniva caricato**. Con un utente solo era un
+ * risparmio giusto: si preparano una volta e si riusano per sempre. Con più
+ * utenti erano la falla — si sarebbero legate all'indice di chiunque avesse
+ * fatto la prima richiesta, e da lì in poi ogni documento di tutti sarebbe
+ * finito lì dentro. Nessun errore: solo la posta di uno nella mente di un
+ * altro.
+ *
+ * Restano preparate una volta *per database*, che è il vero equivalente: il
+ * risparmio si tiene, e il recinto pure. Si buttano insieme al database quando
+ * si chiude.
+ */
+type Istruzioni = {
+  selRid: ReturnType<DatabaseSync['prepare']>
+  selEsistente: ReturnType<DatabaseSync['prepare']>
+  selFts: ReturnType<DatabaseSync['prepare']>
+  insDoc: ReturnType<DatabaseSync['prepare']>
+  updDoc: ReturnType<DatabaseSync['prepare']>
+  delFts: ReturnType<DatabaseSync['prepare']>
+  insFts: ReturnType<DatabaseSync['prepare']>
+}
+
+const istruzioni = new WeakMap<DatabaseSync, Istruzioni>()
+
+function istr(): Istruzioni {
+  const d = mio()
+  let i = istruzioni.get(d)
+  if (i) return i
+  i = {
+    selRid: d.prepare('SELECT rid FROM documenti WHERE id = ?'),
+    selEsistente: d.prepare(
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo FROM documenti WHERE id = ?'
+    ),
+    /** C'è la riga corrispondente nell'indice full-text? Serve a non saltare un documento rotto. */
+    selFts: d.prepare('SELECT 1 FROM ricerca WHERE rowid = ?'),
+    insDoc: d.prepare(`
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `),
+    updDoc: d.prepare(`
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, indicizzato=?
+      WHERE rid = ?
+    `),
+    delFts: d.prepare('DELETE FROM ricerca WHERE rowid = ?'),
+    insFts: d.prepare('INSERT INTO ricerca (rowid, titolo, corpo, autore, radici) VALUES (?,?,?,?,?)')
+  }
+  istruzioni.set(d, i)
+  return i
+}
 
 /** Quanto è cambiato davvero in una lettura. */
 export type EsitoScrittura = { nuovi: number; cambiati: number; invariati: number }
@@ -662,7 +757,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
   db.exec('BEGIN')
   try {
     for (const d of docs) {
-      const gia = selEsistente.get(d.id) as {
+      const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
       } | undefined
@@ -680,18 +775,18 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         // sull'indice non è pignoleria — senza, un documento la cui riga FTS
         // fosse andata persa non tornerebbe più cercabile, e sarebbe invisibile
         // per sempre restando lì a farsi contare.
-        if (uguale && selFts.get(gia.rid)) { esito.invariati++; continue }
+        if (uguale && istr().selFts.get(gia.rid)) { esito.invariati++; continue }
 
-        updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora, gia.rid)
-        delFts.run(gia.rid)
-        insFts.run(gia.rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora, gia.rid)
+        istr().delFts.run(gia.rid)
+        istr().insFts.run(gia.rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
         esito.cambiati++
         continue
       }
 
-      const r = insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora)
+      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora)
       const rid = Number(r.lastInsertRowid)
-      insFts.run(rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
+      istr().insFts.run(rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
       esito.nuovi++
     }
     db.exec('COMMIT')
@@ -730,7 +825,7 @@ export function svuotaFonte(fonte: string) {
   const righe = db.prepare('SELECT rid, id FROM documenti WHERE fonte = ?').all(fonte) as { rid: number; id: string }[]
   db.exec('BEGIN')
   try {
-    for (const { rid } of righe) delFts.run(rid)
+    for (const { rid } of righe) istr().delFts.run(rid)
     scollegaDalFeed(righe.map(r => r.id))
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
     db.exec('COMMIT')
@@ -784,7 +879,7 @@ export function scordaDocumenti(ids: string[]): number {
     for (const id of ids) {
       const r = trova.get(id) as { rid: number } | undefined
       if (!r) continue
-      delFts.run(r.rid); del.run(r.rid); n++
+      istr().delFts.run(r.rid); del.run(r.rid); n++
     }
     db.exec('COMMIT')
   } catch (e) {
@@ -812,7 +907,7 @@ export function riconcilia(fonte: string, ambito: Ambito, idVisti: string[]): nu
   db.exec('BEGIN')
   try {
     scollegaDalFeed(morti.map(m => m.id))
-    for (const m of morti) { delFts.run(m.rid); del.run(m.rid) }
+    for (const m of morti) { istr().delFts.run(m.rid); del.run(m.rid) }
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')

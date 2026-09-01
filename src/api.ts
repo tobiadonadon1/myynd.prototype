@@ -342,14 +342,9 @@ export type EventoCompito =
   | { fase: 'cambiato' }
 
 export type Accesso = {
-  registrato: boolean
   entrato: boolean
   /** Gira su un server, non sul computer di chi lo usa: cambia cosa è vero dire. */
   ospitato?: boolean
-  /** Per registrarsi qui serve l'invito: senza campo sarebbe un no senza perché. */
-  serveInvito?: boolean
-  /** Falso quando è ospitato e nessuno ha ancora messo un invito sul server. */
-  registrazioneAperta?: boolean
   account: { email: string } | null
 }
 
@@ -519,9 +514,9 @@ export type Abbonamento = {
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string, invito = '') => {
+  registra: async (email: string, password: string) => {
     const r = await json<{ token: string; account: { email: string } }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito }) })
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password }) })
     sessione.imposta(r.token)
     return r
   },

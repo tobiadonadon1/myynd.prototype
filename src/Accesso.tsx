@@ -15,22 +15,23 @@ export function Accesso({ accesso, entrato }: {
   accesso: TipoAccesso
   entrato: (a: { email: string }) => void
 }) {
-  const { registrato } = accesso
-  const serveInvito = !!accesso.serveInvito
-  /*
-   * Ospitato e senza invito sul server: qui non si registra nessuno, e la cosa
-   * va detta *prima*, non dopo tre campi riempiti. La parola d'invito non si
-   * trova da nessuna parte — la sceglie chi mette su il server — e senza
-   * saperlo si resta fermi a cercarla.
-   */
-  const chiusa = accesso.registrazioneAperta === false && !registrato
   const ospitato = !!accesso.ospitato
+  /*
+   * Entrare o crearsi un conto: lo decide chi guarda, non il server.
+   *
+   * Prima lo decideva il server — «esiste già un account?» — e con una persona
+   * sola aveva senso. Con più persone quella domanda non ha risposta: chi apre
+   * la pagina sa se ha un conto, il server no. E non deve nemmeno poterlo
+   * dire: «esiste un account con questo indirizzo», detto a chi non è ancora
+   * entrato, è un modo di raccontare a un estraneo chi è iscritto qui.
+   */
+  const [modo, setModo] = useState<'entra' | 'crea'>('entra')
+  const registrato = modo === 'entra'
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [invito, setInvito] = useState('')
   /** Cambiare lingua non passa da React: questo lo obbliga a ridisegnare. */
   const [, ridisegna] = useState(0)
   const [err, setErr] = useState('')
@@ -47,7 +48,7 @@ export function Accesso({ accesso, entrato }: {
     try {
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password, invito)
+        : await api.registra(email, password)
       entrato(r.account)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -57,7 +58,7 @@ export function Accesso({ accesso, entrato }: {
 
   const pronto = registrato
     ? !!email.trim() && password.length > 0
-    : !!email.trim() && password.length >= 8 && (!serveInvito || !!invito.trim())
+    : !!email.trim() && password.length >= 8
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -91,30 +92,34 @@ export function Accesso({ accesso, entrato }: {
             la sua password non fosse riconosciuta, mentre gli si stava
             chiedendo di sceglierne una. Il bottone lo diceva, in fondo, dopo.
           */}
-          <div style={{ fontSize: 19, letterSpacing: '-.01em', marginBottom: 6 }}>
-            {chiusa ? t('Qui non si può ancora entrare.')
-              : registrato ? t('Bentornato.') : t('Crea il tuo accesso.')}
-          </div>
-          <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)', marginBottom: 26, textWrap: 'pretty' }}>
-            {chiusa
-              ? t('Questo Myynd è su un indirizzo pubblico e nessuno ha ancora messo una parola d’invito sul server. Non è una parola da trovare: la scegli tu. Mettila in MYYND_INVITO fra le variabili del server, aspetta che riparta, e poi scrivila qui.')
-              : registrato
-              ? t('Entra con l’indirizzo con cui l’hai creato.')
-              : ospitato
-                /*
-                  Perché non c'è un «entra».
-                  È la domanda che si fa chiunque abbia già un Myynd sul proprio
-                  computer e apra questo indirizzo: la password non gli viene
-                  riconosciuta e sembra un guasto. Non lo è — non esiste nessun
-                  accesso centrale, e non è un pezzo che manca: ogni Myynd tiene
-                  il suo account e la sua memoria dove gira. Detto qui, prima di
-                  provare, invece che dedotto dopo tre tentativi falliti.
-                */
-                ? t('Questo indirizzo è un Myynd a parte, con una memoria sua. L’account che hai sul tuo computer qui non esiste: non c’è nessun accesso centrale, e ogni Myynd tiene il suo dove gira.')
-                : t('Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.')}
+          {/*
+            Le due cose che si possono fare, tutte e due sempre lì.
+
+            Prima ce n'era una sola e la sceglieva il server: se un account
+            esisteva si «entrava», se non esisteva si «creava». Con una persona
+            per installazione filava; adesso che le persone sono tante, chi apre
+            questa pagina può avere un conto o non averlo — e lo sa lui.
+          */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
+            {([['entra', 'Entra'], ['crea', 'Crea un account']] as const).map(([id, testo]) => (
+              <button key={id} type="button" onClick={() => { setModo(id); setErr('') }}
+                style={{
+                  padding: '7px 15px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: '13px',
+                  fontWeight: modo === id ? 500 : 400,
+                  background: modo === id ? 'rgba(244,239,232,.14)' : 'transparent',
+                  color: modo === id ? CHIARO : 'rgba(244,239,232,.45)',
+                  transition: 'background .18s, color .18s'
+                }}>{t(testo)}</button>
+            ))}
           </div>
 
-          {!chiusa && <>
+          <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)', marginBottom: 24, textWrap: 'pretty' }}>
+            {registrato
+              ? t('Entra con l’indirizzo con cui l’hai creato.')
+              : t('La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.')}
+          </div>
+
           <div style={ETICHETTA}>{t('Email')}</div>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
             type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
@@ -124,38 +129,17 @@ export function Accesso({ accesso, entrato }: {
             type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
             placeholder={registrato ? '' : t('otto caratteri')} className="scuro" style={CAMPO} />
 
-          {serveInvito && (
-            <>
-              <div style={ETICHETTA}>{t('Invito')}</div>
-              <input value={invito} onChange={e => setInvito(e.target.value)} onKeyDown={tasto}
-                autoComplete="off" className="scuro" style={CAMPO} />
-              <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 8, lineHeight: 1.55 }}>
-                {/*
-                  Prima diceva solo perché quel campo esiste, e non cosa
-                  scriverci: chi lo guardava restava fermo davanti a una casella
-                  che chiedeva una parola che nessuno gli aveva detto. Il perché
-                  serve, ma dopo — la prima riga dev'essere quella che sblocca.
-                */}
-                {t('La parola che hai messo in MYYND_INVITO sul server. Senza, qui non si registra nessuno — ed è voluto: su un indirizzo pubblico il primo che si registra diventerebbe il padrone della casella collegata.')}
-              </div>
-            </>
-          )}
-
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
-          </>}
-
-          {!chiusa && <button onClick={invia} disabled={!pronto || occupato} style={{
+          <button onClick={invia} disabled={!pronto || occupato} style={{
             marginTop: 28, width: '100%', padding: '14px 24px', borderRadius: 99, border: 'none',
             background: pronto && !occupato ? CHIARO : 'rgba(244,239,232,.16)',
             color: pronto && !occupato ? '#141210' : 'rgba(244,239,232,.45)',
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {/* su una macchina senza account non si «entra» da nessuna parte:
-                lo si crea, ed è la prima cosa che uno legge del prodotto */}
             {occupato ? '…' : registrato ? t('Entra') : t('Crea l\'accesso')}
-          </button>}
+          </button>
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
               basa tutto il prodotto: va detta solo dov'è vera. */}
