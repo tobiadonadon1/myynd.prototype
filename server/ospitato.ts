@@ -7,10 +7,16 @@
 // di sì». Metterlo su un server la capovolge: le credenziali smettono di stare
 // sul computer di chi le ha scritte e cominciano a stare da qualcun altro.
 //
-// Quella scelta non si può prendere per sbaglio, e non si può prendere di
-// nascosto. Perciò non c'è nessun valore predefinito che accende questa
-// modalità: si accende scrivendo un nome di dominio in `MYYND_PUBBLICO`, e chi
-// lo scrive sa cosa sta facendo.
+// Quella scelta non si può prendere per sbaglio — ma **accorgersi di essere
+// su un server non è una scelta, è un fatto**, e va letto dai fatti. La prima
+// versione di questo file pretendeva che qualcuno scrivesse `MYYND_PUBBLICO`
+// per ammettere di essere ospitato, e senza quella riga il server si metteva in
+// ascolto su 127.0.0.1 dentro un contenitore: irraggiungibile, con un registro
+// che diceva «avviato» e un proxy che rispondeva «Application failed to
+// respond». Un'ora persa a cercare un guasto che era una variabile mancante.
+//
+// Adesso la piattaforma si annuncia da sola e le si crede. Quello che resta
+// una scelta esplicita è l'unica cosa che lo deve essere: chi può entrare.
 //
 // Quello che cambia, e perché ognuna delle tre cose è necessaria:
 //
@@ -32,12 +38,42 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-/** Il dominio pubblico da cui si arriva, se ce n'è uno. Vuoto = da casa. */
-export const DOMINIO = (process.env.MYYND_PUBBLICO ?? '').trim().toLowerCase()
+const pulisci = (x: string) => x.trim().toLowerCase()
   .replace(/^https?:\/\//, '').replace(/\/.*$/, '')
 
+/**
+ * Chi ospita si annuncia da solo, e conviene ascoltarlo.
+ *
+ * La prima versione di questo file accendeva la modalità ospitata solo con
+ * `MYYND_PUBBLICO` scritto a mano. Sembrava prudente ed era un rastrello: se
+ * quella variabile manca, il server si mette in ascolto su 127.0.0.1 *dentro
+ * un contenitore*, il proxy di chi ospita non lo trova, e quello che si legge è
+ * «Application failed to respond» — una frase che parla dell'applicazione e non
+ * dice che il problema è una variabile d'ambiente. Il registro, intanto, dice
+ * tranquillamente «server avviato».
+ *
+ * Queste variabili le mette la piattaforma, non una persona: se ce n'è una,
+ * siamo su un server, punto. Restare in ascolto solo su localhost va bene sul
+ * computer di qualcuno — dove è la prima difesa — e non ha nessun senso qui.
+ */
+const SEGNI_DI_UN_SERVER = [
+  'RAILWAY_ENVIRONMENT', 'RAILWAY_PROJECT_ID',
+  'RENDER', 'FLY_APP_NAME', 'K_SERVICE', 'DYNO', 'KUBERNETES_SERVICE_HOST'
+]
+
+/**
+ * Il dominio pubblico da cui si arriva.
+ *
+ * Scritto a mano se c'è; altrimenti quello che Railway si assegna da sé, che
+ * cambia a ogni ridistribuzione e che nessuno ha voglia di ricopiare ogni
+ * volta. Può restare vuoto anche su un server — si è ospitati lo stesso, e la
+ * guardia sull'Host userà quello che trova.
+ */
+export const DOMINIO = pulisci(process.env.MYYND_PUBBLICO ?? '')
+  || pulisci(process.env.RAILWAY_PUBLIC_DOMAIN ?? '')
+
 /** Vero quando Myynd sta girando su un server e non sul computer di qualcuno. */
-export const OSPITATO = !!DOMINIO
+export const OSPITATO = !!DOMINIO || SEGNI_DI_UN_SERVER.some(v => !!process.env[v])
 
 /**
  * La porta, e chi la decide.
@@ -87,9 +123,40 @@ export function ospitiAmmessi(portaVera: number): Set<string> {
     `127.0.0.1`, `localhost`
   ])
   if (DOMINIO) fuori.add(DOMINIO)
-  const railway = (process.env.RAILWAY_PUBLIC_DOMAIN ?? '').trim().toLowerCase()
+  const railway = pulisci(process.env.RAILWAY_PUBLIC_DOMAIN ?? '')
   if (railway) fuori.add(railway)
+  /*
+   * Ospitati senza sapere sotto quale nome.
+   *
+   * Capita davvero: un dominio appena generato che la piattaforma non ha
+   * ancora passato all'ambiente, o un proxy che riscrive l'Host. Rifiutare
+   * tutto vorrebbe dire un servizio che non risponde a nessuno per una
+   * variabile mancante — cioè esattamente il guasto muto che questo file
+   * esiste per evitare. Se non sappiamo il nostro nome non possiamo usarlo
+   * come difesa, e va detto invece di far finta.
+   */
   return fuori
+}
+
+/**
+ * Questo Host va bene?
+ *
+ * Sta qui e non dentro la guardia perché c'è un caso che una `Set.has` non sa
+ * esprimere: **ospitati senza sapere sotto quale nome.** Capita davvero — un
+ * dominio appena generato che la piattaforma non ha ancora passato
+ * all'ambiente, o un proxy che riscrive l'Host. Se non conosciamo il nostro
+ * nome non possiamo usarlo come difesa, e rifiutare tutto vorrebbe dire un
+ * servizio che non risponde a nessuno per una variabile mancante — di nuovo il
+ * guasto muto che questo file esiste per evitare.
+ *
+ * Perdere quel controllo lì non lascia scoperto niente di importante: era la
+ * difesa contro il DNS rebinding, che serve a proteggere un server *in ascolto
+ * sul computer di qualcuno*. Su un indirizzo pubblico quel bersaglio non
+ * esiste, e a difendere ci sono l'accesso e l'invito.
+ */
+export function ospiteAmmesso(host: string, portaVera: number): boolean {
+  if (ospitiAmmessi(portaVera).has(host)) return true
+  return OSPITATO && !DOMINIO
 }
 
 /**
@@ -102,6 +169,9 @@ export function ospitiAmmessi(portaVera: number): Set<string> {
 export function origineAmmessa(origin: string, portaVera: number): boolean {
   if (new RegExp(`^http://(127\\.0\\.0\\.1|localhost):(5173|${portaVera})$`).test(origin)) return true
   if (!OSPITATO) return false
+  // stesso caso di sopra: ospitati e senza nome, non c'è niente con cui
+  // confrontare, e un servizio muto è peggio di un controllo in meno
+  if (!DOMINIO) return true
   for (const d of ospitiAmmessi(portaVera)) {
     if (d.includes('localhost') || d.startsWith('127.')) continue
     if (origin === `https://${d}`) return true

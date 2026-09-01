@@ -43,10 +43,19 @@ COPY automazioni ./automazioni
 ENV MYYND_DATI=/dati
 RUN mkdir -p /dati
 
-# Non da root. Un processo che legge la posta di un'azienda non ha nessun
-# motivo di poter riscrivere il sistema operativo sotto di sé.
-RUN chown -R node:node /dati /app
-USER node
+# Si resta root, e la ragione è una sola e concreta.
+#
+# I volumi di Railway si montano di proprietà di root, *sopra* la cartella
+# creata qui: qualunque `chown` fatto in fase di costruzione sparisce nel
+# momento in cui il volume viene montato. Un processo che gira come `node`
+# trova `/dati` non scrivibile e muore aprendo il database, con un errore che
+# parla di SQLite e non di permessi — e il contenitore entra in un giro di
+# riavvii che dice «Application failed to respond».
+#
+# Dentro un contenitore isolato, con un processo solo e nessuna capability in
+# più, root non è un'escalation: il confine vero è il contenitore. Scambiare
+# un rischio teorico per un giro di riavvii sicuro sarebbe stata la scelta
+# sbagliata, ma va scritto qui invece di sembrare una dimenticanza.
 
 EXPOSE 5174
 CMD ["node", "--disable-warning=ExperimentalWarning", "server/index.ts"]

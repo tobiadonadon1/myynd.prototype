@@ -124,7 +124,7 @@ app.use((req, res, next) => {
    * un dominio che si ri-risolve su 127.0.0.1.
    */
   const host = (req.headers.host ?? '').toLowerCase()
-  if (!ospitato.ospitiAmmessi(porta).has(host)) {
+  if (!ospitato.ospiteAmmesso(host, porta)) {
     return res.status(403).json({ errore: 'Origine non consentita.' })
   }
   const origin = req.headers.origin
@@ -1937,7 +1937,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   dentroElectron.parentPort?.postMessage({ porta })
   console.log(`myynd · server su http://${ospitato.INDIRIZZO}:${porta}`)
   if (ospitato.OSPITATO) {
-    console.log(`myynd · ospitato su ${ospitato.DOMINIO} · i dati stanno in ${ospitato.DATI}`)
+    console.log(
+      `myynd · ospitato${ospitato.DOMINIO ? ` su ${ospitato.DOMINIO}` : ' (dominio non ancora noto)'}` +
+      ` · i dati stanno in ${ospitato.DATI}`
+    )
     // senza invito non si registra nessuno, e chi ha avviato questo processo
     // deve saperlo adesso — non quando qualcuno gli scrive che non riesce
     if (!ospitato.INVITO) {

@@ -253,8 +253,27 @@ export type Config = {
   }
 }
 
+/**
+ * La cartella dei dati, e un errore che si può leggere se non si può usare.
+ *
+ * Su un server questa cartella è un volume montato da fuori, e i volumi si
+ * montano di proprietà di root: se il processo non è root, qui non può
+ * scrivere. Senza questo controllo il primo segnale arriva molto più tardi e
+ * molto peggio — SQLite che non riesce ad aprire il file, con un messaggio che
+ * parla di database e non di permessi, dentro un contenitore che riparte in
+ * circolo. Meglio una frase, subito, che dica cosa guardare.
+ */
 function assicuraDir() {
-  if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true, mode: 0o700 })
+  if (!existsSync(DIR)) {
+    try {
+      mkdirSync(DIR, { recursive: true, mode: 0o700 })
+    } catch (e) {
+      throw new Error(
+        `myynd · non riesco a creare ${DIR} (${(e as { code?: string }).code ?? e}). ` +
+        'Se è un volume montato, il processo non ha il permesso di scriverci.'
+      )
+    }
+  }
 }
 
 /**
