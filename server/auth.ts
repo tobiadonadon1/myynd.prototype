@@ -13,6 +13,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import type { Request, Response, NextFunction } from 'express'
 import { aggiorna, leggi, type Account } from './config.ts'
 import * as store from './store.ts'
+import * as ospitato from './ospitato.ts'
 
 export type { Account }
 
@@ -84,8 +85,32 @@ export function conto(): { email: string } | null {
   return a ? { email: a.email } : null
 }
 
-export function registra(email: string, password: string):
+/**
+ * Registrarsi, e la serratura che serve solo quando si è raggiungibili da fuori.
+ *
+ * Su un computer di casa il primo che apre l'app è il padrone di casa: non c'è
+ * nessun altro che possa arrivarci prima. Su un indirizzo pubblico quella
+ * stessa riga diventa la cosa più pericolosa di tutto il programma — il primo
+ * che trova l'URL si registra, e da quel momento è **lui** l'account di questa
+ * installazione: chiunque arrivi dopo entra in quello, e quello legge la posta
+ * che ci è stata collegata.
+ *
+ * Quindi ospitato serve l'invito, e senza invito configurato non si registra
+ * nessuno. Non è una comodità che si può spegnere: è la serratura, e una
+ * serratura che si apre quando la chiave manca non è una serratura.
+ */
+export function registra(email: string, password: string, invito = ''):
   { ok: true; token: string } | { ok: false; errore: string } {
+  if (ospitato.OSPITATO) {
+    if (!ospitato.INVITO) return { ok: false, errore: 'Qui non ci si può registrare.' }
+    // confronto a lunghezza costante: un invito che si può indovinare a
+    // tentativi cronometrati non è meglio di nessun invito
+    const dato = Buffer.from(invito.trim())
+    const atteso = Buffer.from(ospitato.INVITO)
+    if (dato.length !== atteso.length || !timingSafeEqual(dato, atteso)) {
+      return { ok: false, errore: 'Invito non valido.' }
+    }
+  }
   if (registrato()) return { ok: false, errore: 'Un account esiste già su questa macchina.' }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, errore: 'Indirizzo non valido.' }
   if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }

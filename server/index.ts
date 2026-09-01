@@ -33,6 +33,7 @@ import * as microsoft from './connettori/microsoft.ts'
 import * as dropbox from './connettori/dropbox.ts'
 import * as whatsapp from './connettori/whatsapp.ts'
 import { CATALOGO } from './connettori/registro.ts'
+import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
 import { riflua } from './testo.ts'
 
@@ -102,7 +103,7 @@ app.use(express.json({ limit: '2mb' }))
  * libera, e quella vera si sa solo dopo `listen` — quindi il controllo
  * sull'origine non può essere una costante, va letto a ogni richiesta.
  */
-const PORTA_CHIESTA = Number(process.env.MYYND_PORT ?? 5174)
+const PORTA_CHIESTA = ospitato.PORTA
 let porta = PORTA_CHIESTA
 
 /** I tre secchi della lista. Non di più: una lista con sette scomparti è un archivio. */
@@ -114,15 +115,20 @@ const SECCHI = ['oggi', 'settimana', 'poi']
  * rebinding) diventa perfino same-origin. Due righe chiudono entrambe le porte:
  * l'Host deve essere il nostro, e un Origin, se c'è, deve venire dall'app.
  */
-const origini = () => new RegExp(`^http://(127\\.0\\.0\\.1|localhost):(5173|${porta})$`)
-
 app.use((req, res, next) => {
-  const host = req.headers.host
-  if (host !== `127.0.0.1:${porta}` && host !== `localhost:${porta}`) {
+  /*
+   * Su una macchina di casa gli Host ammessi sono due, e la difesa vera è che
+   * da fuori non ci si arriva. Ospitato ce n'è uno in più — il dominio, scritto
+   * a mano in `MYYND_PUBBLICO` — e non uno qualunque: allargare questo
+   * controllo a `*` vorrebbe dire toglierlo, perché è esattamente lui a fermare
+   * un dominio che si ri-risolve su 127.0.0.1.
+   */
+  const host = (req.headers.host ?? '').toLowerCase()
+  if (!ospitato.ospitiAmmessi(porta).has(host)) {
     return res.status(403).json({ errore: 'Origine non consentita.' })
   }
   const origin = req.headers.origin
-  if (origin && !origini().test(origin)) {
+  if (origin && !ospitato.origineAmmessa(origin, porta)) {
     return res.status(403).json({ errore: 'Origine non consentita.' })
   }
   next()
@@ -154,13 +160,24 @@ app.get('/api/auth', (req, res) => {
   res.json({
     registrato: auth.registrato(),
     entrato: auth.valida(auth.tokenDi(req)),
-    account: auth.conto()
+    account: auth.conto(),
+    /*
+     * Dove sta girando, e cosa serve per entrarci.
+     *
+     * La schermata d'accesso non può indovinarlo: da fuori un Myynd su un
+     * server e uno sul proprio computer sono identici, e le due cose vogliono
+     * due frasi diverse — «resta su questo computer» è vera su uno e una bugia
+     * sull'altro. `serveInvito` fa comparire il campo dell'invito, che
+     * altrimenti sarebbe un rifiuto senza spiegazione.
+     */
+    ospitato: ospitato.OSPITATO,
+    serveInvito: ospitato.OSPITATO && !auth.registrato()
   })
 })
 
 app.post('/api/auth/registra', (req, res) => {
-  const { email, password } = req.body ?? {}
-  const e = auth.registra(String(email ?? ''), String(password ?? ''))
+  const { email, password, invito } = req.body ?? {}
+  const e = auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   res.json({ ok: true, token: e.token, account: auth.conto() })
 })
@@ -198,7 +215,10 @@ app.get('/api/stato', (_req, res) => {
   res.json({
     config: cfg.pubblica(c),
     conteggi: n,
-    connettori: CATALOGO.map(v => ({
+    // quelli che leggono *questa macchina* non si offrono su un server: dentro
+    // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
+    // che sia rotto Myynd invece che fuori posto
+    connettori: CATALOGO.filter(v => ospitato.disponibile(v.id)).map(v => ({
       ...v,
       collegato:
         v.id === 'posta' ? !!c.posta :
@@ -1896,7 +1916,7 @@ function aParte(cosa: string, fai: () => Promise<unknown>): () => void {
  * evitare — e finora l'unica difesa era chiedere la porta 0. Se qualcuno parte
  * sulla 5174 e la trova presa, deve leggere una frase, non un errore di Node.
  */
-const servizio = app.listen(PORTA_CHIESTA, '127.0.0.1', () => {
+const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   /*
    * `address()` è `null` finché il server non è davvero in ascolto.
    *
@@ -1915,7 +1935,15 @@ const servizio = app.listen(PORTA_CHIESTA, '127.0.0.1', () => {
   // non deve essere un errore — questo file parte anche da solo con `node`.
   const dentroElectron = process as unknown as { parentPort?: { postMessage(m: unknown): void } }
   dentroElectron.parentPort?.postMessage({ porta })
-  console.log(`myynd · server su http://127.0.0.1:${porta}`)
+  console.log(`myynd · server su http://${ospitato.INDIRIZZO}:${porta}`)
+  if (ospitato.OSPITATO) {
+    console.log(`myynd · ospitato su ${ospitato.DOMINIO} · i dati stanno in ${ospitato.DATI}`)
+    // senza invito non si registra nessuno, e chi ha avviato questo processo
+    // deve saperlo adesso — non quando qualcuno gli scrive che non riesce
+    if (!ospitato.INVITO) {
+      console.warn('myynd · MYYND_INVITO non c\'è: nessuno può registrarsi. È voluto? Se no, mettilo.')
+    }
+  }
 
   // un compito il cui lavoro è morto insieme al processo non torna da solo:
   // senza questa riga resta «da Myynd» per sempre, e la lista mente

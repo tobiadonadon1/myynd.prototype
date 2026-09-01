@@ -5,21 +5,25 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
-import { api } from './api'
+import { api, type Accesso as TipoAccesso } from './api'
 import { t } from './lingua'
 import { Logo } from './components/Marchio'
 
 const CHIARO = '#F4EFE8'
 
-export function Accesso({ registrato, entrato }: {
-  registrato: boolean
+export function Accesso({ accesso, entrato }: {
+  accesso: TipoAccesso
   entrato: (a: { email: string }) => void
 }) {
+  const { registrato } = accesso
+  const serveInvito = !!accesso.serveInvito
+  const ospitato = !!accesso.ospitato
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [invito, setInvito] = useState('')
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -34,7 +38,7 @@ export function Accesso({ registrato, entrato }: {
     try {
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password)
+        : await api.registra(email, password, invito)
       entrato(r.account)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -44,7 +48,7 @@ export function Accesso({ registrato, entrato }: {
 
   const pronto = registrato
     ? !!email.trim() && password.length > 0
-    : !!email.trim() && password.length >= 8
+    : !!email.trim() && password.length >= 8 && (!serveInvito || !!invito.trim())
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -65,8 +69,28 @@ export function Accesso({ registrato, entrato }: {
         pointerEvents: 'none'   // le particelle devono sentire il cursore
       }}>
         <div style={{ width: 380, maxWidth: '100%', textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto' }}>
-          <div style={{ marginBottom: 44 }}>
+          <div style={{ marginBottom: 30 }}>
             <Logo dim={38} testo={26} tinta={CHIARO} />
+          </div>
+
+          {/*
+            Quale delle due cose si sta facendo.
+
+            Non c'era, e la mancanza costava più di quanto sembri: due campi e
+            un bottone si leggono come un accesso, sempre — è la forma che ha un
+            accesso ovunque. Chi arrivava su un'installazione nuova credeva che
+            la sua password non fosse riconosciuta, mentre gli si stava
+            chiedendo di sceglierne una. Il bottone lo diceva, in fondo, dopo.
+          */}
+          <div style={{ fontSize: 19, letterSpacing: '-.01em', marginBottom: 6 }}>
+            {registrato ? t('Bentornato.') : t('Crea il tuo accesso.')}
+          </div>
+          <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)', marginBottom: 26, textWrap: 'pretty' }}>
+            {registrato
+              ? t('Entra con l’indirizzo con cui l’hai creato.')
+              : ospitato
+                ? t('Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.')
+                : t('Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.')}
           </div>
 
           <div style={ETICHETTA}>{t('Email')}</div>
@@ -77,6 +101,17 @@ export function Accesso({ registrato, entrato }: {
           <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
             type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
             placeholder={registrato ? '' : 'otto caratteri'} className="scuro" style={CAMPO} />
+
+          {serveInvito && (
+            <>
+              <div style={ETICHETTA}>{t('Invito')}</div>
+              <input value={invito} onChange={e => setInvito(e.target.value)} onKeyDown={tasto}
+                autoComplete="off" className="scuro" style={CAMPO} />
+              <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 8, lineHeight: 1.55 }}>
+                {t('Su un indirizzo pubblico il primo che si registra diventa il padrone della casella collegata. L’invito è quello che lo impedisce.')}
+              </div>
+            </>
+          )}
 
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
@@ -92,7 +127,13 @@ export function Accesso({ registrato, entrato }: {
             {occupato ? '…' : registrato ? t('Entra') : t('Crea l\'accesso')}
           </button>
 
-          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>{t('Resta su questo computer.')}</div>
+          {/* Su un server questa frase era una bugia, ed era la frase su cui si
+              basa tutto il prodotto: va detta solo dov'è vera. */}
+          <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 22, lineHeight: 1.6 }}>
+            {ospitato
+              ? t('Questo Myynd gira su un server, non sul tuo computer.')
+              : t('Resta su questo computer.')}
+          </div>
         </div>
       </div>
     </div>

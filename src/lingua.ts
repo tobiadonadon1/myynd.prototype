@@ -12,7 +12,7 @@
 
 import type { ReactNode } from 'react'
 
-let corrente = 'it'
+let corrente = 'en'
 
 /** La imposta chi conosce la configurazione — in pratica useVals, a ogni giro. */
 export function impostaLingua(l: string | undefined) {
@@ -43,7 +43,15 @@ export function linguaSalvata(): string {
     const l = localStorage.getItem('myynd.lingua')
     if (l === 'it' || l === 'en') return l
   } catch { /* incognito */ }
-  try { return navigator.language.toLowerCase().startsWith('it') ? 'it' : 'en' } catch { return 'it' }
+  // L'inglese, non la lingua del browser.
+  //
+  // Prima si guardava `navigator.language`, che sembra premuroso e non lo è:
+  // Myynd si legge in due lingue e quella giusta è una scelta, non un dato
+  // anagrafico del computer. Chi ha Chrome in italiano perché vive in Italia
+  // ma lavora in inglese si trovava l'app in italiano *e nessun modo di dirlo*
+  // finché il server non rispondeva — cioè proprio sulle schermate in cui il
+  // server non risponde. Si parte da una, si cambia dove si vuole.
+  return 'en'
 }
 
 /** Il locale con cui si scrivono numeri e date. Uno solo, per non farlo divergere. */
@@ -56,6 +64,22 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — l'accesso: quale delle due cose stai facendo, e dove sta girando —
+  'Bentornato.': 'Welcome back.',
+  'Crea il tuo accesso.': 'Create your account.',
+  'Entra con l’indirizzo con cui l’hai creato.': 'Sign in with the address you created it with.',
+  'Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.':
+    'There is no account here yet: what you type now creates it.',
+  'Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.':
+    'There is no account on this computer yet: what you type now creates it.',
+  'Invito': 'Invite',
+  'Su un indirizzo pubblico il primo che si registra diventa il padrone della casella collegata. L’invito è quello che lo impedisce.':
+    'On a public address, whoever registers first becomes the owner of whatever mailbox gets connected. The invite is what stops that.',
+  'Questo Myynd gira su un server, non sul tuo computer.':
+    'This Myynd runs on a server, not on your computer.',
+  'Qui non ci si può registrare.': 'You cannot register here.',
+  'Invito non valido.': 'That invite is not valid.',
+
 // — la schermata che si vede quando dietro non c'è niente —
   'Qui c’è solo l’interfaccia.': 'This is only the interface.',
   'Myynd gira sul computer di chi lo usa: legge la sua posta e i suoi file, e non esce da lì. Questa pagina è solo la finestra, e da sola non ha niente a cui collegarsi.':
@@ -1155,6 +1179,16 @@ export const frasi = {
   maiTrovatoNienteLungo: (n: number) => corrente === 'en'
     ? `It has run ${n} times and never had anything to look at. Nearly always this is the search words: they have to be the words whoever wrote those documents would use, in their language.`
     : `È girata ${n} volte senza mai avere niente da guardare. Quasi sempre sono le parole della ricerca: devono essere quelle di chi ha scritto quei documenti, nella loro lingua.`,
+
+  /**
+   * Una risposta andata storta di cui il server non ha detto niente.
+   *
+   * Il numero c'è apposta. Senza, questa riga è la stessa per un 400, per un
+   * 403 di un proxy davanti e per una risposta che non era JSON — tre cose che
+   * si riparano in tre modi diversi, e nessun modo di sapere quale sia.
+   */
+  nonRiuscito: (stato: number) => corrente === 'en'
+    ? `I could not manage it (${stato}). Try again.` : `Non ce l’ho fatta (${stato}). Riprova.`,
 
   /** Chi ha scritto quella riga del ritratto, e quando. */
   scrittoDaMe: (quando: string) => corrente === 'en'

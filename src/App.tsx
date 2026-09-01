@@ -110,7 +110,7 @@ export default function App() {
   if (!accesso) return <Attesa />
   if (!accesso.entrato) {
     return (
-      <Accesso registrato={accesso.registrato} entrato={dentro} />
+      <Accesso accesso={accesso} entrato={dentro} />
     )
   }
   if (!stato) return <Attesa />

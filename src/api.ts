@@ -202,7 +202,16 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     return new SenzaMotore(`HTTP 404 · ${r.url}`)
   }
   if (r.status === 404) return new Error('Non trovato.')
-  return new Error("Non ce l'ho fatta. Riprova.")
+  /*
+   * Quando il server non ha una frase sua, il numero serve.
+   *
+   * «Non ce l'ho fatta. Riprova.» da solo è una riga che non si può indagare:
+   * l'ha vista comparire su un'installazione nuova e non c'era modo di sapere
+   * se fosse un 400, un 403 di un proxy davanti, o una risposta che non era
+   * JSON. Il numero non spaventa nessuno e fa la differenza fra un'ora persa e
+   * due minuti.
+   */
+  return new Error(frasi.nonRiuscito(r.status))
 }
 
 async function json<T>(url: string, opz?: RequestInit): Promise<T> {
@@ -335,6 +344,10 @@ export type EventoCompito =
 export type Accesso = {
   registrato: boolean
   entrato: boolean
+  /** Gira su un server, non sul computer di chi lo usa: cambia cosa è vero dire. */
+  ospitato?: boolean
+  /** Per registrarsi qui serve l'invito: senza campo sarebbe un no senza perché. */
+  serveInvito?: boolean
   account: { email: string } | null
 }
 
@@ -504,9 +517,9 @@ export type Abbonamento = {
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string) => {
+  registra: async (email: string, password: string, invito = '') => {
     const r = await json<{ token: string; account: { email: string } }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password }) })
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito }) })
     sessione.imposta(r.token)
     return r
   },

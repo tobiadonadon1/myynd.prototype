@@ -68,10 +68,29 @@ export function autonomia(c: Config = leggi()): string {
  * roba generata in italiano, che è esattamente quello che non deve succedere.
  */
 export function nellaLingua(): string {
-  return leggi().lingua === 'en' ? 'inglese' : 'italiano'
+  /*
+   * L'italiano solo se è stato scelto.
+   *
+   * Era il contrario, e produceva la cosa peggiore di tutte: metà e metà.
+   * L'interfaccia seguiva la lingua del browser e finiva in inglese, mentre
+   * tutto quello che scrive il modello — la rassegna, le righe in lista, le
+   * domande — nasceva in italiano perché nessuno aveva ancora scelto niente.
+   * Due lingue nella stessa schermata, e nessuna delle due scelta da qualcuno.
+   */
+  return leggi().lingua === 'it' ? 'italiano' : 'inglese'
 }
 
-export const DIR = join(homedir(), '.myynd')
+/**
+ * Dove vive tutto: la configurazione, l'indice, le automazioni tue.
+ *
+ * Su un computer è `~/.myynd` e non c'è altro da dire. Su un server dev'essere
+ * un disco che **sopravvive al riavvio del contenitore**, e per questo si può
+ * spostare da fuori con `MYYND_DATI`. Senza quello, ogni ridistribuzione fa
+ * ripartire l'installazione da vuota — nessun account, nessun documento,
+ * nessuna automazione — e non lascia nessun errore da nessuna parte: è il modo
+ * più silenzioso in cui questa applicazione può perdere tutto.
+ */
+export const DIR = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')
 const FILE = join(DIR, 'config.json')
 
 export type ConfigPosta = {
@@ -331,7 +350,7 @@ export function pubblica(c: Config = leggi()) {
     tono: tono(c),
     autonomia: autonomia(c),
     modello: c.modello ?? 'claude-sonnet-5',
-    lingua: c.lingua ?? 'it',
+    lingua: c.lingua ?? 'en',
     oreFatte: c.oreFatte ?? 48,
     giro: !!c.giro,
     argomenti: c.argomenti ?? '',
