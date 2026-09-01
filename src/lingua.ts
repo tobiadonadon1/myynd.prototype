@@ -56,6 +56,12 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — la schermata che si vede quando dietro non c'è niente —
+  'Qui c’è solo l’interfaccia.': 'This is only the interface.',
+  'Myynd gira sul computer di chi lo usa: legge la sua posta e i suoi file, e non esce da lì. Questa pagina è solo la finestra, e da sola non ha niente a cui collegarsi.':
+    'Myynd runs on its owner’s own computer: it reads their mail and their files, and nothing leaves that machine. This page is only the window, and on its own it has nothing to connect to.',
+  'smesso di riprovare': 'stopped trying',
+
 // — quello che si scrive da solo: gli argomenti e il ritratto —
   'Scrivilo da quello che leggo': 'Write it from what I read',
   'L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.':

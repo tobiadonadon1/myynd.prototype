@@ -137,9 +137,40 @@ export class MotoreGiu extends Error {
  * deve aggiustare. Sono due cose diverse: `frase` va sullo schermo, `dettaglio`
  * va sotto solo nel build di sviluppo.
  */
-export type Guaio = { frase: string; dettaglio: string; motoreGiu: boolean }
+/**
+ * Non c'è nessun Myynd dietro questo indirizzo.
+ *
+ * È un guasto diverso da tutti gli altri, e va tenuto diverso. `MotoreGiu`
+ * vuol dire «il motore c'era e adesso non risponde»: si riprova, e quasi
+ * sempre torna. Un 404 sull'API vuol dire l'opposto — c'è un server web che
+ * risponde benissimo, e dietro non c'è Myynd. È il caso di questa interfaccia
+ * messa online da sola, senza il computer che la fa funzionare.
+ *
+ * Confonderli non è un dettaglio di parole: porta a riprovare per sempre una
+ * cosa che non succederà mai, e a dire a chi guarda «Myynd non è riuscito ad
+ * avviarsi» quando non c'era niente da avviare.
+ */
+export class SenzaMotore extends Error {
+  dettaglio: string
+  constructor(dettaglio: string) {
+    super('Qui c’è solo l’interfaccia.')
+    this.dettaglio = dettaglio
+    this.name = 'SenzaMotore'
+  }
+}
+
+export type Guaio = {
+  frase: string
+  dettaglio: string
+  motoreGiu: boolean
+  /** Non c'è proprio niente a cui collegarsi: riprovare non serve. */
+  senzaMotore?: boolean
+}
 
 export function guaio(e: unknown): Guaio {
+  if (e instanceof SenzaMotore) {
+    return { frase: e.message, dettaglio: e.dettaglio, motoreGiu: false, senzaMotore: true }
+  }
   if (e instanceof MotoreGiu) return { frase: e.message, dettaglio: e.dettaglio, motoreGiu: true }
   const frase = e instanceof Error ? e.message : String(e)
   return { frase, dettaglio: frase, motoreGiu: false }
@@ -159,6 +190,17 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
   if (detto) return new Error(detto)
   if (r.status >= 500) return new MotoreGiu(`HTTP ${r.status} · ${r.url}`)
   if (r.status === 401 || r.status === 403) return new Error('Sessione scaduta.')
+  /*
+   * Un 404 su `/api` non è «non trovato»: è «qui non c'è Myynd».
+   *
+   * Le rotte dell'API esistono tutte, sempre, finché c'è un server di Myynd
+   * davanti. Se una risponde 404 vuol dire che a rispondere è qualcun altro —
+   * un sito statico, un proxy, questa interfaccia messa online da sola. Dirlo
+   * «non trovato» mandava a cercare una pagina mancante che non esiste.
+   */
+  if (r.status === 404 && r.url.includes('/api/')) {
+    return new SenzaMotore(`HTTP 404 · ${r.url}`)
+  }
   if (r.status === 404) return new Error('Non trovato.')
   return new Error("Non ce l'ho fatta. Riprova.")
 }

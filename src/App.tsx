@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { frasi, t } from './lingua'
+import { frasi, impostaLingua, lingua, t } from './lingua'
 import { Sfondo } from './Sfondo'
 import { Hov, taglia, useLarghezza } from './ui'
 import {
@@ -361,7 +361,20 @@ function Attesa() {
 }
 
 /** Ogni quanto la schermata di guasto ribussa, in secondi. */
-const RIPROVA = 3
+/**
+ * Quanto si aspetta prima di ribussare, tentativo dopo tentativo.
+ *
+ * Prima era un numero solo — tre secondi — e si riprovava ogni tre secondi
+ * **per sempre**. Su un motore che sta ripartendo va benissimo. Su un
+ * indirizzo dove Myynd non c'è e non ci sarà mai, sono venti richieste al
+ * minuto fino a quando qualcuno non chiude la scheda: la console si riempie di
+ * rosso, il portatile scalda, e il rumore nasconde l'unica riga che spiegava
+ * cosa fosse successo.
+ *
+ * Si allarga, e si ferma. Chi guarda ha comunque il bottone: riprovare è una
+ * cosa che si può chiedere, non una cosa che deve succedere da sola per sempre.
+ */
+const ATTESE = [3, 6, 12, 30, 60]
 
 /**
  * Quando Myynd non risponde.
@@ -385,35 +398,67 @@ const RIPROVA = 3
  *   aspettarlo.
  */
 function Guasto({ guasto, riprova }: { guasto: Guaio; riprova: () => void }) {
-  const [fra, setFra] = useState(RIPROVA)
+  const [tentativi, setTentativi] = useState(0)
+  const [fra, setFra] = useState(ATTESE[0])
+  /** Cambiare lingua non passa da React: questo lo obbliga a ridisegnare. */
+  const [, ridisegna] = useState(0)
 
-  // il conto alla rovescia: un secondo alla volta, così quello che sta
-  // succedendo si vede invece di essere raccontato
+  /*
+   * Con niente dietro non si riprova affatto.
+   *
+   * Un 404 sull'API vuol dire che a rispondere è un server che non è Myynd, e
+   * quello non diventerà Myynd fra tre secondi. Riprovare qui non è ottimismo,
+   * è rumore — e in più tiene addosso a chi guarda un conto alla rovescia che
+   * promette una cosa che non succederà.
+   */
+  const inutile = !!guasto.senzaMotore
+  const finiti = tentativi >= ATTESE.length
+
   useEffect(() => {
+    if (inutile || finiti) return
     const t = setInterval(() => setFra(n => Math.max(0, n - 1)), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [inutile, finiti])
 
-  // arrivato a zero si ribussa. Se il server risponde questa schermata sparisce
-  // da sola e l'app riparte da dove doveva partire.
+  // arrivato a zero si ribussa, e la prossima attesa è più lunga. Se il server
+  // risponde questa schermata sparisce da sola e l'app riparte da dove doveva.
   useEffect(() => {
-    if (fra > 0) return
+    if (inutile || finiti || fra > 0) return
     riprova()
-    setFra(RIPROVA)
-  }, [fra, riprova])
+    setTentativi(n => {
+      setFra(ATTESE[Math.min(n + 1, ATTESE.length - 1)])
+      return n + 1
+    })
+  }, [fra, riprova, inutile, finiti])
 
-  const adesso = () => { riprova(); setFra(RIPROVA) }
+  const adesso = () => { riprova(); setTentativi(0); setFra(ATTESE[0]) }
+
+  /**
+   * Le due lingue, proprio qui.
+   *
+   * È l'unica schermata che si disegna **prima** che il server dica qualcosa,
+   * quindi è l'unica in cui la lingua scelta nelle preferenze non si può
+   * sapere: si tira a indovinare da quella del browser. Indovinare va bene
+   * finché si può correggere, e fin qui non si poteva — chi apriva questo
+   * indirizzo con Chrome in italiano leggeva un guasto in italiano e basta,
+   * senza nessun posto in cui dire di no.
+   */
+  const cambiaLingua = (l: string) => { impostaLingua(l); ridisegna(n => n + 1) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: '#F4EFE8', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", padding: 40 }}>
       <div style={{ maxWidth: 480, textAlign: 'center' }}>
-        <div style={{ fontSize: 26, letterSpacing: '-.02em' }}>
-          {t(guasto.motoreGiu ? 'Myynd non risponde.' : 'Myynd non è riuscito ad avviarsi.')}
+        <div style={{ fontSize: 26, letterSpacing: '-.02em', textWrap: 'balance' }}>
+          {t(inutile ? 'Qui c’è solo l’interfaccia.'
+            : guasto.motoreGiu ? 'Myynd non risponde.'
+            : 'Myynd non è riuscito ad avviarsi.')}
         </div>
-        <div style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(244,239,232,.6)', marginTop: 16 }}>
-          {guasto.motoreGiu
-            ? t('Non risponde su questo computer. Sto riprovando da solo: se non torna, chiudi Myynd e riaprilo.')
-            : t(guasto.frase)}
+        <div style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(244,239,232,.6)', marginTop: 16, textWrap: 'pretty' }}>
+          {inutile
+            ? t('Myynd gira sul computer di chi lo usa: legge la sua posta e i suoi file, e non esce da lì. Questa pagina è solo la finestra, e da sola non ha niente a cui collegarsi.')
+            : guasto.motoreGiu
+              ? t('Non risponde su questo computer. Sto riprovando da solo: se non torna, chiudi Myynd e riaprilo.')
+              : t(guasto.frase)}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 22 }}>
           <button onClick={adesso} style={{
@@ -421,9 +466,24 @@ function Guasto({ guasto, riprova }: { guasto: Guaio; riprova: () => void }) {
             background: 'rgba(244,239,232,.08)', color: '#F4EFE8',
             fontSize: '13.5px', fontFamily: 'inherit', cursor: 'pointer'
           }}>{t('Riprova adesso')}</button>
-          <span style={{ fontSize: '12px', color: 'rgba(244,239,232,.35)', minWidth: 96, textAlign: 'left' }}>
-            {fra > 0 ? frasi.riprovoFra(fra) : t('riprovo…')}
-          </span>
+          {!inutile && (
+            <span style={{ fontSize: '12px', color: 'rgba(244,239,232,.35)', minWidth: 96, textAlign: 'left' }}>
+              {finiti ? t('smesso di riprovare') : fra > 0 ? frasi.riprovoFra(fra) : t('riprovo…')}
+            </span>
+          )}
+        </div>
+
+        {/* Le due lingue: qui, perché è l'unica schermata in cui il server non
+            può dire quale sia quella giusta. */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 26 }}>
+          {(['it', 'en'] as const).map(l => (
+            <button key={l} onClick={() => cambiaLingua(l)} style={{
+              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '12px', letterSpacing: '.08em',
+              textTransform: 'uppercase',
+              color: lingua() === l ? 'rgba(244,239,232,.8)' : 'rgba(244,239,232,.3)'
+            }}>{l === 'it' ? 'Italiano' : 'English'}</button>
+          ))}
         </div>
         {/* Il numero, il percorso, la frase del browser: a chi sta sistemando
             Myynd servono, a chi lo sta usando no. */}
