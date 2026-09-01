@@ -2,7 +2,7 @@
 // dall'indice e risponde solo su quelli, citando le fonti.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta } from './config.ts'
+import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
 import { chiedi, chiediJSON, cliente, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, parametri } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
@@ -33,7 +33,7 @@ const client = cliente
  */
 /** Il locale con cui si scrivono le date che legge il modello. */
 function locale(): string {
-  return leggi().lingua === 'en' ? 'en-GB' : 'it-IT'
+  return cfgLingua() === 'en' ? 'en-GB' : 'it-IT'
 }
 
 /**
@@ -185,7 +185,7 @@ export function sistema(discorso = ''): string {
   // La lingua sta in cima perché è la prima cosa che deve decidere, e perché
   // sotto ci sono le convinzioni — scritte nella lingua in cui gliele hai dette,
   // che può essere un'altra.
-  pezzi.push(c.lingua === 'en'
+  pezzi.push(cfgLingua(c) === 'en'
     ? '\nAnswer in English, even when the material is in another language.'
     : '\nRispondi in italiano, anche quando il materiale è in un\'altra lingua.')
 
@@ -251,7 +251,7 @@ function materiale(domanda: string, storico: Turno[]) {
 function senzaMateriale(): { testo: string; fonti: Fonte[] } {
   // in inglese anche questa: era l'unica frase dell'app che restava in
   // italiano *dentro la chat*, ed è pure quella che si legge più spesso
-  const en = leggi().lingua === 'en'
+  const en = cfgLingua() === 'en'
   return {
     testo: recenti(1).length
       ? (en ? 'I found nothing on this.' : 'Non ho trovato niente su questo.')

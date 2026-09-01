@@ -223,6 +223,31 @@ export function adotta(email: string, sale: string, hash: string, dove: string):
   return id
 }
 
+/**
+ * Una password nuova, e le vecchie chiavi buttate.
+ *
+ * Non esiste un modo di *recuperare* quella di prima: nel database c'è uno
+ * scrypt del suo sale, ed è la proprietà per cui la si scrive così. Questo è
+ * l'unico gesto possibile, e si può fare solo da dove sta il database.
+ *
+ * Le sessioni aperte si chiudono tutte. Chi cambia una password quasi sempre
+ * lo fa perché qualcosa non gli torna, e lasciare in piedi quelle di prima
+ * vorrebbe dire cambiare la serratura lasciando le chiavi in giro.
+ */
+export function cambiaPassword(id: string, nuova: string):
+  { ok: true; sessioniChiuse: number } | { ok: false; errore: string } {
+  if (nuova.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
+  if (!conto(id)) return { ok: false, errore: 'Questo conto non esiste.' }
+
+  // sale nuovo insieme alla password nuova: riusare quello vecchio vorrebbe
+  // dire che due hash dello stesso conto si possono confrontare fra loro
+  const sale = randomBytes(16).toString('hex')
+  db.prepare('UPDATE utenti SET sale = ?, hash = ? WHERE id = ?')
+    .run(sale, impasta(nuova, sale), id)
+  const via = db.prepare('DELETE FROM sessioni WHERE utente = ?').run(id).changes
+  return { ok: true, sessioniChiuse: Number(via) }
+}
+
 /** Le sessioni scadute, via. Si chiama all'avvio: non serve un timer per questo. */
 export function pota() {
   db.prepare('DELETE FROM sessioni WHERE quando < ?')

@@ -136,7 +136,10 @@ const INTERNI = new Set([
   // una guardia interna: se scatta è un difetto di programmazione — un giro di
   // sfondo che gira fuori dal contesto di una persona — non una cosa che
   // qualcuno possa leggere e correggere
-  'Non so di chi sia questa richiesta.'
+  'Non so di chi sia questa richiesta.',
+  // lo può vedere solo chi cambia una password da riga di comando, su questa
+  // macchina, passando un id che non esiste: non è una schermata
+  'Questo conto non esiste.'
 ])
 
 /** Una frase da leggere, non un'etichetta tecnica. */

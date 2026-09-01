@@ -65,7 +65,7 @@ const SPIA_ITALIANO = /\b(che|non|una|per|con|della|nella|sono|come|quando|perch
  * una domanda in italiano ferma lì, e il controllo che diceva «tutto a posto».
  */
 function compitiStorti(lingua: string) {
-  if (lingua !== 'en') return []
+  if (lingua === 'it') return []
   return store.elencoCompiti()
     .filter(c => (c.risultato ?? '').trim().length > 15 && SPIA_ITALIANO.test(c.risultato!))
 }
@@ -85,7 +85,7 @@ export function daTradurre(lingua: string): boolean {
   // in inglese: se più di un terzo sembra italiano, c'è da tradurre.
   // in italiano non si guarda: una convinzione inglese in un'app italiana
   // è possibile ma rara, e tradurre a vuoto costerebbe senza servire.
-  return lingua === 'en' && italiane / righe.length > 0.34
+  return lingua !== 'it' && italiane / righe.length > 0.34
 }
 
 /** La sola memoria, su richiesta: la chiama la schermata quando serve. */

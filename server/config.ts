@@ -69,6 +69,25 @@ export function autonomia(c: Config = leggi()): string {
  * dentro il suo prompt — e il risultato era un'interfaccia in inglese piena di
  * roba generata in italiano, che è esattamente quello che non deve succedere.
  */
+/**
+ * In che lingua è questa installazione. Una funzione sola, per tutti.
+ *
+ * Undici punti nel server scrivevano da soli `leggi().lingua === 'en'`, o il
+ * suo gemello cattivo `!== 'en'`, e tutti e undici finivano nello stesso
+ * posto: **su un conto nuovo `lingua` non c'è**, quindi non è `'en'`, quindi
+ * italiano. Il risultato è la cosa che si vede peggio di tutte — un'interfaccia
+ * inglese con dentro roba italiana: le automazioni di serie, le voci del feed,
+ * le domande, il ritratto.
+ *
+ * Non era un difetto in undici posti: era lo stesso difetto scritto undici
+ * volte, perché la domanda «che lingua parliamo» non aveva un posto dove
+ * stare. Adesso ce l'ha, e la risposta di partenza è l'inglese: l'italiano si
+ * sceglie, non si eredita dal silenzio.
+ */
+export function lingua(c: Config = leggi()): 'it' | 'en' {
+  return c.lingua === 'it' ? 'it' : 'en'
+}
+
 export function nellaLingua(): string {
   /*
    * L'italiano solo se è stato scelto.
@@ -79,7 +98,7 @@ export function nellaLingua(): string {
    * domande — nasceva in italiano perché nessuno aveva ancora scelto niente.
    * Due lingue nella stessa schermata, e nessuna delle due scelta da qualcuno.
    */
-  return leggi().lingua === 'it' ? 'italiano' : 'inglese'
+  return lingua() === 'it' ? 'italiano' : 'inglese'
 }
 
 /**
@@ -195,6 +214,19 @@ export type Config = {
    * è una cosa di cui non ti puoi fidare.
    */
   argomentiDaMe?: boolean
+  /**
+   * Le undici automazioni che arrivano con il pacchetto: le vuole?
+   *
+   * Assente vuol dire no, ed è il verso giusto. Erano sempre accese per tutti:
+   * chi si faceva un conto nuovo trovava undici cose che non aveva scritto, che
+   * non aveva chiesto, e che parlano di fatture e preventivi di qualcun altro —
+   * e la prima cosa che faceva era cancellarle una per una. Un prodotto che
+   * comincia dandoti da buttare via undici righe comincia male.
+   *
+   * Restano disponibili: sono un buon punto di partenza per chi le vuole, e si
+   * accendono da una riga sola nella schermata delle automazioni.
+   */
+  diSerie?: boolean
   /**
    * Quando ha messo in ordine da solo, l'ultima volta. Due date, non una.
    *
@@ -425,6 +457,7 @@ export function pubblica(c: Config = leggi()) {
     // chi ha scritto quella riga: la schermata lo dice, invece di lasciar
     // credere a qualcuno di averla scritta lui
     argomentiDaMe: c.argomentiDaMe === true,
+    diSerie: c.diSerie === true,
     // assente = «usalo se c'è»: il valore vero lo dice /api/modello/locale,
     // che va a vedere se c'è davvero invece di fidarsi del file
     locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },

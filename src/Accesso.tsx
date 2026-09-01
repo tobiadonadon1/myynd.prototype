@@ -34,6 +34,16 @@ export function Accesso({ accesso, entrato }: {
   const [password, setPassword] = useState('')
   /** Cambiare lingua non passa da React: questo lo obbliga a ridisegnare. */
   const [, ridisegna] = useState(0)
+  /**
+   * Far vedere la password che si sta scrivendo.
+   *
+   * Su un campo d'accesso i pallini sono la cosa giusta finché si scrive una
+   * password che si conosce. Quando non torna — e capita esattamente lì, sulla
+   * riga che dice «non è corretta» — l'unica domanda utile è «l'ho scritta
+   * bene?», e senza un modo di guardarla si riprova alla cieca tre volte prima
+   * di dubitare della password invece che delle dita.
+   */
+  const [vedi, setVedi] = useState(false)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -125,9 +135,24 @@ export function Accesso({ accesso, entrato }: {
             type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
 
           <div style={ETICHETTA}>{t('Password')}</div>
-          <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
-            type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
-            placeholder={registrato ? '' : t('otto caratteri')} className="scuro" style={CAMPO} />
+          <div style={{ position: 'relative' }}>
+            <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
+              type={vedi ? 'text' : 'password'}
+              autoComplete={registrato ? 'current-password' : 'new-password'}
+              placeholder={registrato ? '' : t('otto caratteri')} className="scuro"
+              style={{ ...CAMPO, paddingRight: 52 }} />
+            <button type="button" onClick={() => setVedi(v => !v)}
+              aria-label={vedi ? t('Nascondi la password') : t('Mostra la password')}
+              title={vedi ? t('Nascondi la password') : t('Mostra la password')}
+              style={{
+                position: 'absolute', right: 6, top: 8, bottom: 0, width: 40,
+                display: 'grid', placeItems: 'center',
+                border: 'none', background: 'none', cursor: 'pointer', padding: 0,
+                color: vedi ? 'rgba(244,239,232,.8)' : 'rgba(244,239,232,.4)'
+              }}>
+              <Occhio aperto={vedi} />
+            </button>
+          </div>
 
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
@@ -174,6 +199,24 @@ export function Accesso({ accesso, entrato }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * L'occhio: aperto quando la password si vede, sbarrato quando no.
+ *
+ * La sbarra è quello che rende leggibile lo stato a colpo d'occhio. Un occhio
+ * che cambia solo un po' di forma fra i due stati lascia sempre il dubbio su
+ * quale dei due sia quello attivo, e allora si preme due volte per capirlo.
+ */
+function Occhio({ aperto }: { aperto: boolean }) {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1.6 12S5.2 5.4 12 5.4 22.4 12 22.4 12 18.8 18.6 12 18.6 1.6 12 1.6 12Z" />
+      <circle cx="12" cy="12" r="3.1" />
+      {!aperto && <path d="M3.5 20.5 20.5 3.5" />}
+    </svg>
   )
 }
 

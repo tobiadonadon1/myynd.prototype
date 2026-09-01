@@ -26,6 +26,8 @@ export type Stato = {
     argomenti: string
     /** Quella riga l'ha scritta Myynd da quello che apre, non lei. */
     argomentiDaMe: boolean
+    /** Ha chiesto le undici automazioni che arrivano col pacchetto. */
+    diSerie: boolean
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[] } | null
     notion: { collegato: boolean } | null
@@ -786,6 +788,11 @@ export const api = {
   /** Rimettere in ordine adesso quello che ha imparato di come lavori. */
   consolidaMemoria: () =>
     json<{ ok: true; blocchi: string[]; guardate: number }>('/api/memoria/consolida', { method: 'POST' }),
+
+  /** Le undici del pacchetto: prenderle, o rimandarle indietro. */
+  automazioniDiSerie: (attivo: boolean) =>
+    json<{ ok: true; automazioni: Automazione[] }>('/api/automazioni/diSerie',
+      { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
 

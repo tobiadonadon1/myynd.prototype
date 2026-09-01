@@ -485,9 +485,30 @@ export function Automazioni({ v }: { v: Vals }) {
           {tutte && !elenco.length && (
             <div style={{
               fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.55)',
-              padding: '18px 4px 0', maxWidth: 460, textWrap: 'pretty'
+              padding: '18px 4px 0', maxWidth: 480, textWrap: 'pretty'
             }}>
               {t('Non ce n’è ancora nessuna. Scrivine una a parole: dille quando guardare e cosa può aprire.')}
+              {/*
+                Le undici del pacchetto, offerte invece che imposte.
+                Arrivavano accese su ogni conto nuovo: undici cose che nessuno
+                aveva scritto, su fatture e clienti di un'azienda immaginaria, e
+                la prima cosa che si faceva era cancellarle una per una. Sono un
+                buon punto di partenza per chi le vuole — e per chi le vuole
+                basta una riga.
+              */}
+              <div style={{ marginTop: 12 }}>
+                <Hov as="button" onClick={async () => {
+                  try { setTutte((await api.automazioniDiSerie(true)).automazioni) } catch { carica() }
+                }}
+                  style={{
+                    padding: '8px 15px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '12.5px', border: '1px solid rgba(34,39,31,.18)',
+                    background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.75)'
+                  }}
+                  hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                  {t('Oppure parti da undici già pronte')}
+                </Hov>
+              </div>
             </div>
           )}
           {/*

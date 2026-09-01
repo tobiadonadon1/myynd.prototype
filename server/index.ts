@@ -322,7 +322,7 @@ app.post('/api/profilo', async (req, res) => {
     patch.argomentiDaMe = false
   }
 
-  const prima = cfg.leggi().lingua ?? 'it'
+  const prima = cfg.lingua()
   const dopo = cfg.pubblica(cfg.aggiorna(patch))
 
   // Cambiare lingua non basta a cambiare quello che ti ha già scritto: il feed
@@ -956,13 +956,13 @@ app.post('/api/feed/:id/:stato', (req, res) => {
 
 app.get('/api/rassegna', (_req, res) => {
   const e = rassegna.elenco()
-  res.json({ ...e, argomenti: rassegna.interessi(), gusto: gusto.inParole(gusto.gusto(), cfg.leggi().lingua === 'en') })
+  res.json({ ...e, argomenti: rassegna.interessi(), gusto: gusto.inParole(gusto.gusto(), cfg.lingua() === 'en') })
 })
 
 app.post('/api/rassegna/aggiorna', async (req, res) => {
   try {
     const e = await rassegna.aggiorna(req.body?.forza !== false)
-    res.json({ ...e, argomenti: rassegna.interessi(), gusto: gusto.inParole(gusto.gusto(), cfg.leggi().lingua === 'en') })
+    res.json({ ...e, argomenti: rassegna.interessi(), gusto: gusto.inParole(gusto.gusto(), cfg.lingua() === 'en') })
   } catch (e) { errore(res, e) }
 })
 
@@ -1520,6 +1520,13 @@ app.get('/api/automazioni', (_req, res) => {
  * davvero: si è al telefono con un cliente, gli si è appena scritta
  * un'automazione, e la si vuole vedere comparire adesso invece che stasera.
  */
+/** Le undici del pacchetto: prenderle, o rimandarle indietro. */
+app.post('/api/automazioni/diSerie', (req, res) => {
+  cfg.aggiorna({ diSerie: req.body?.attivo === true })
+  automazioni.scordaLeRicette()
+  res.json({ ok: true, automazioni: automazioni.elenco() })
+})
+
 app.post('/api/automazioni/aggiorna', async (_req, res) => {
   try {
     const e = await automazioni.aggiornaRicette()
@@ -1679,7 +1686,7 @@ app.get('/api/memoria', (_req, res) => {
   res.json({
     // quello che ha imparato è nella lingua in cui gliel'hai detto, e può
     // non essere quella che stai leggendo: la schermata lo scopre da qui
-    daTradurre: traduci.daTradurre(cfg.leggi().lingua ?? 'it'),
+    daTradurre: traduci.daTradurre(cfg.lingua()),
     carta: memoria.carta(),
     blocchi: memoria.BLOCCHI_BASE.map(b => {
       const scritto = store.blocchi().find(x => x.etichetta === b.etichetta)
@@ -1713,7 +1720,7 @@ app.post('/api/memoria/consolida', async (_req, res) => {
 /** Mettere la memoria nella lingua dell'interfaccia. Lo chiede la schermata. */
 app.post('/api/memoria/traduci', async (_req, res) => {
   try {
-    const n = await traduci.soloMemoria(cfg.leggi().lingua ?? 'it')
+    const n = await traduci.soloMemoria(cfg.lingua())
     res.json({ ok: true, tradotte: n })
   } catch (e) { errore(res, e) }
 })
@@ -2010,7 +2017,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // volta all'avvio, e si tocca solo se serve davvero — la prova è contare
   // parole, non chiamare un modello.
   setTimeout(perOgnuno('la rimessa in lingua non è riuscita', async () => {
-    const l = cfg.leggi().lingua ?? 'it'
+    const l = cfg.lingua()
     if (!traduci.daTradurre(l) && !traduci.compitiDaTradurre(l)) return
     const n = await traduci.inLingua(l)
     if (n) console.log(`myynd · ${n} cose riscritte nella lingua dell'app`)
@@ -2080,7 +2087,12 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const vecchio = cfg.leggi().account
   if (vecchio && !conti.quanti()) {
     const id = conti.adotta(vecchio.email, vecchio.sale, vecchio.hash, cfg.RADICE)
-    if (id) console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
+    if (id) {
+      // chi c'era già le aveva, con la loro storia di quante volte sono girate:
+      // toglierle in un aggiornamento sarebbe stato peggio che non averle mai date
+      cfg.aggiorna({ diSerie: true })
+      console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
+    }
   }
 
   let appesi = 0

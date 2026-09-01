@@ -21,7 +21,7 @@
 // una pagina.
 
 import { createHash } from 'node:crypto'
-import { leggi, nellaLingua } from './config.ts'
+import { leggi, nellaLingua , lingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
@@ -265,7 +265,7 @@ async function prendi(f: Fonte): Promise<Grezza[]> {
 
 /** Le fonti che valgono per la lingua dell'app. */
 export function fontiPer(lingua: string): Fonte[] {
-  const l = lingua === 'en' ? 'en' : 'it'
+  const l = lingua === 'it' ? 'it' : 'en'
   return FONTI.filter(f => f.lingua === '*' || f.lingua === l)
 }
 
@@ -568,7 +568,7 @@ export async function aggiorna(forza = false): Promise<Esito> {
 let inCorso: Promise<Esito> | null = null
 
 async function giro(): Promise<Esito> {
-  const fonti = fontiPer(leggi().lingua ?? 'it')
+  const fonti = fontiPer(lingua())
   const tutte = (await Promise.all(fonti.map(prendi))).flat()
   if (!tutte.length) {
     // nessun giornale ha risposto: non si azzera quello che c'era. Una rassegna

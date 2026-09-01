@@ -188,3 +188,32 @@ test('fuori da una richiesta non si indovina nessuno', () => {
   assert.equal(chi.adesso(), null)
   assert.throws(() => chi.serve(), /Non so di chi/)
 })
+
+// — cambiare una password, che è l'unica cosa che si può fare a una password —
+
+test('una password nuova sostituisce la vecchia, e la vecchia non entra più', () => {
+  /*
+   * Non esiste un modo di *recuperare* una password: nel database c'è uno
+   * scrypt del suo sale. Questa è l'unica strada, e va provata da tutte e due
+   * le parti — che la nuova apra, e soprattutto che la vecchia non apra più.
+   * Metà di questa prova è quella che si dimentica di scrivere.
+   */
+  const e = conti.cambiaPassword(anna, 'unapasswordnuova')
+  assert.ok(e.ok)
+  assert.equal(conti.entra('anna@esempio.it', 'passwordlunga1').ok, false, 'la vecchia apre ancora')
+  assert.equal(conti.entra('anna@esempio.it', 'unapasswordnuova').ok, true)
+})
+
+test('cambiarla butta fuori le sessioni aperte', () => {
+  // cambiare la serratura lasciando le chiavi in giro non è cambiare la
+  // serratura: chi cambia una password quasi sempre lo fa per questo
+  const t = conti.perProva.apri(bruno)
+  assert.equal(conti.utenteDelToken(t), bruno)
+  conti.cambiaPassword(bruno, 'ancoraunaltrapass')
+  assert.equal(conti.utenteDelToken(t), null, 'la sessione di prima è rimasta valida')
+})
+
+test('non si tocca il conto di un altro, né una password troppo corta', () => {
+  assert.equal(conti.cambiaPassword(anna, 'corta').ok, false)
+  assert.equal(conti.cambiaPassword('uinesistente', 'unapasswordlunga').ok, false)
+})

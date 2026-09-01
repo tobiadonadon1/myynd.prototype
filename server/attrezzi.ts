@@ -312,7 +312,7 @@ export function collegato(n: Nome): boolean {
 
 /** Il catalogo come lo vede la schermata: cosa c'è, e cosa è pronto all'uso. */
 export function catalogo(lingua = leggi().lingua) {
-  const en = lingua === 'en'
+  const en = lingua !== 'it'
   return ATTREZZI.map(a => ({
     nome: a.nome,
     etichetta: en ? a.etichetta.en : a.etichetta.it,

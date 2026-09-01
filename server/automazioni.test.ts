@@ -23,6 +23,26 @@ mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
 
+/*
+ * Quelle del pacchetto, accese apposta.
+ *
+ * Su un conto nuovo non arrivano più — undici automazioni che nessuno ha
+ * scritto sono un ingombro, non un regalo — ma metà di queste prove parla
+ * proprio di come si leggono e si validano quelle del pacchetto. Qui si
+ * chiedono, come le chiederebbe qualcuno dalla schermata.
+ */
+/*
+ * E in italiano, perché è quello che queste prove misurano.
+ *
+ * Metà del file parla di come una ricetta esce nella lingua dell'installazione
+ * e di come le righe già in lista si riscrivono quando la lingua cambia: sono
+ * prove che partono da italiano e guardano il passaggio all'inglese. Adesso la
+ * lingua di partenza è l'inglese — l'italiano si sceglie — quindi qui si
+ * sceglie.
+ */
+writeFileSync(join(CASA, '.myynd', 'config.json'),
+  JSON.stringify({ diSerie: true, lingua: 'it' }), { mode: 0o600 })
+
 const store = await import('./store.ts')
 const auto = await import('./automazioni.ts')
 

@@ -100,6 +100,11 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+  'Mostra la password': 'Show the password',
+  'Nascondi la password': 'Hide the password',
+
+  'Oppure parti da undici già pronte': 'Or start from eleven ready-made ones',
+
 // — l'accesso con più persone: si sceglie fra entrare e crearsi un conto —
   // «Entra» esiste già e vuol dire un'altra cosa: sull'onboarding è entrare
   // *nell'app*, e in inglese «Enter» va bene lì. Su un bottone d'accesso no —

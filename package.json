@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test": "node --test --disable-warning=ExperimentalWarning server/*.test.ts src/*.test.ts",
-    "start": "node --disable-warning=ExperimentalWarning server/index.ts"
+    "start": "node --disable-warning=ExperimentalWarning server/index.ts",
+    "password": "node --disable-warning=ExperimentalWarning server/password.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

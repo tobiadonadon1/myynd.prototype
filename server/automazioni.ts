@@ -24,7 +24,7 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella, leggi, nellaLingua } from './config.ts'
+import { cartella, leggi, nellaLingua , lingua as cfgLingua } from './config.ts'
 import * as ricettario from './ricettario.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
@@ -217,6 +217,17 @@ export const MIE = () => join(cartella(), 'automazioni')
 function cartelle(): string[] {
   const radice = join(import.meta.dirname, '..', 'automazioni')
   if (!existsSync(radice)) return []
+  /*
+   * Quelle del pacchetto solo se le ha chieste.
+   *
+   * Prima si caricavano sempre, e su un conto nuovo volevano dire undici
+   * automazioni che nessuno aveva scritto — su fatture, preventivi e clienti
+   * di un'azienda immaginaria. Chi apriva Myynd per la prima volta cominciava
+   * cancellandole. Sono un buon punto di partenza per chi le vuole e un
+   * ingombro per tutti gli altri, e la differenza fra le due cose è una riga
+   * che si accende.
+   */
+  if (!leggi().diSerie) return [MIE()].filter(existsSync)
   const fuori = [join(radice, '_comuni')]
   // La licenza dice di che azienda è questa installazione, e quindi quali
   // ricette le appartengono. Non è un dato personale: è il nome di un cliente,
@@ -462,7 +473,9 @@ export function statoRicette() {
  * ricetta esce dal file — una volta, per tutti quelli che la useranno.
  */
 export function nella(a: Automazione, lingua = leggi().lingua): Automazione {
-  if (lingua !== 'en') return a
+  // l'italiano solo se è stato scelto: su un conto nuovo `lingua` non c'è, e
+  // con il confronto al contrario le ricette di serie uscivano tutte italiane
+  if (lingua === 'it') return a
   return {
     ...a,
     nome: a.en.nome,
@@ -486,7 +499,7 @@ export function nella(a: Automazione, lingua = leggi().lingua): Automazione {
  * scritta nella ricetta.
  */
 export function rinominaInLista(lingua: string): number {
-  const daltra = lingua === 'en' ? 'it' : 'en'
+  const daltra = lingua === 'it' ? 'en' : 'it'
   const perId = new Map(ricette().map(r => [r.id, r]))
   let n = 0
   for (const c of store.elencoCompiti()) {
@@ -682,7 +695,7 @@ async function cernita(a: Automazione, docs: store.Documento[]): Promise<store.P
 
 /** Quello che si legge sulla riga prima di aprirla: un conto e un verbo. */
 function riassunto(p: store.Proposta): string {
-  const en = leggi().lingua === 'en'
+  const en = cfgLingua() === 'en'
   if (p.azione === 'agenda.aggiungi') {
     const n = p.eventi.length
     return en

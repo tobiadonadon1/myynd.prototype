@@ -559,8 +559,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     claudeOn,
 
     // — feed —
-    oggi: new Date().toLocaleDateString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT', { weekday: 'long', day: 'numeric', month: 'long' }),
-    ora: new Date().toLocaleTimeString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }),
+    oggi: new Date().toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' }),
+    ora: new Date().toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' }),
     // Il titolone non può dire «niente che richieda te» mentre sotto lui ti sta
     // chiedendo una cosa: la contraddizione fa sembrare che una delle due parti
     // dell'app non sappia cosa fa l'altra.
@@ -803,7 +803,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         onClick: () => { setFiltro(f => (f === g.id ? null : g.id)); setSel(g.id) }
       }
     }),
-    selTipo: cl ? frasi.nDocumenti(cl.nodi.toLocaleString(stato.config.lingua === 'en' ? 'en-GB' : 'it-IT')) : '',
+    selTipo: cl ? frasi.nDocumenti(cl.nodi.toLocaleString(loc())) : '',
     selNome: cl?.nome ?? t('Niente ancora'),
     selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
     selTesto: cl
@@ -836,7 +836,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     })),
     lingue: LINGUE.map(l => ({
       ...l,
-      scelto: (stato.config.lingua ?? 'it') === l.id,
+      scelto: (stato.config.lingua ?? 'en') === l.id,
       occupato: cambioLingua,
       /**
        * Cambiare lingua traduce anche il feed e la domanda in sospeso, quindi
@@ -845,7 +845,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
        * peggio dell'attesa.
        */
       onClick: async () => {
-        if (cambioLingua || (stato.config.lingua ?? 'it') === l.id) return
+        if (cambioLingua || (stato.config.lingua ?? 'en') === l.id) return
         setCambioLingua(true)
         try {
           await api.profilo({ lingua: l.id })
