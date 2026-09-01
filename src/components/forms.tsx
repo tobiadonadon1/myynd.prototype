@@ -183,7 +183,7 @@ export function FormPosta({ tema, ok }: Props) {
 
       <div style={etichetta(tema)}>{t('Indirizzo')}</div>
       <input value={utente} onChange={e => { setUtente(e.target.value); setTrovato(false) }}
-        placeholder="tu@tuodominio.it" autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
+        placeholder={t('tu@tuodominio.it')} autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
 
       <div style={etichetta(tema)}>{t('Password della casella')}</div>
       <input type="password" value={password} onChange={e => setPassword(e.target.value)}
@@ -207,7 +207,7 @@ export function FormPosta({ tema, ok }: Props) {
           <div style={{ flex: 2 }}>
             <div style={etichetta(tema)}>{t('Server IMAP')}</div>
             <input value={host} onChange={e => setHost(e.target.value)}
-              placeholder="imap.tuodominio.it" className={classeCampo(tema)} style={campo(tema)} />
+              placeholder={t('imap.tuodominio.it')} className={classeCampo(tema)} style={campo(tema)} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={etichetta(tema)}>{t('Giorni')}</div>
@@ -268,7 +268,7 @@ export function FormDesktop({ tema, ok }: Props) {
         })}
       </div>
       <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
-      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder="/Users/…/Lavoro" className={classeCampo(tema)} style={campo(tema)} />
+      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega il desktop')}</Conferma>
     </div>

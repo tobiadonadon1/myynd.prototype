@@ -106,12 +106,12 @@ export function Accesso({ accesso, entrato }: {
 
           <div style={ETICHETTA}>{t('Email')}</div>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
-            type="email" autoComplete="username" autoFocus placeholder="tu@tuodominio.it" className="scuro" style={CAMPO} />
+            type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
 
           <div style={ETICHETTA}>{t('Password')}</div>
           <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
             type="password" autoComplete={registrato ? 'current-password' : 'new-password'}
-            placeholder={registrato ? '' : 'otto caratteri'} className="scuro" style={CAMPO} />
+            placeholder={registrato ? '' : t('otto caratteri')} className="scuro" style={CAMPO} />
 
           {serveInvito && (
             <>
@@ -119,7 +119,13 @@ export function Accesso({ accesso, entrato }: {
               <input value={invito} onChange={e => setInvito(e.target.value)} onKeyDown={tasto}
                 autoComplete="off" className="scuro" style={CAMPO} />
               <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 8, lineHeight: 1.55 }}>
-                {t('Su un indirizzo pubblico il primo che si registra diventa il padrone della casella collegata. L’invito è quello che lo impedisce.')}
+                {/*
+                  Prima diceva solo perché quel campo esiste, e non cosa
+                  scriverci: chi lo guardava restava fermo davanti a una casella
+                  che chiedeva una parola che nessuno gli aveva detto. Il perché
+                  serve, ma dopo — la prima riga dev'essere quella che sblocca.
+                */}
+                {t('La parola che hai messo in MYYND_INVITO sul server. Senza, qui non si registra nessuno — ed è voluto: su un indirizzo pubblico il primo che si registra diventerebbe il padrone della casella collegata.')}
               </div>
             </>
           )}

@@ -135,3 +135,47 @@ test('nessuna frase da leggere resta fuori da t()', () => {
     `    Passale da t() e aggiungi la chiave al dizionario, oppure — se davvero\n` +
     `    non sono testo da leggere — mettile in AMMESSE con la ragione.\n\n    ${elenco}\n`)
 })
+
+/**
+ * I segnaposto dentro le caselle.
+ *
+ * La prova qui sopra cerca l'italiano che *sembra* prosa, e i segnaposto le
+ * passano sotto il naso: «otto caratteri» non contiene nessuna parola spia, e
+ * «tu@tuodominio.it» non ha nemmeno uno spazio. Sono rimasti in italiano sotto
+ * a un'interfaccia inglese finché qualcuno non li ha visti con gli occhi — cioè
+ * il modo peggiore in cui si trova un difetto, e su una schermata d'accesso che
+ * è la prima cosa che si vede di questo prodotto.
+ *
+ * Qui la regola è secca invece che euristica: **un segnaposto o passa da `t()`,
+ * o sta scritto nell'elenco qui sotto con la ragione per cui non serve
+ * tradurlo.** Aggiungerne uno nuovo costa una riga; dimenticarne uno costa una
+ * frase italiana in mezzo a una pagina inglese.
+ */
+const SEGNAPOSTO_TECNICI = new Set([
+  // sono forme di chiavi e di identificativi: non c'è niente da tradurre, e
+  // tradurli vorrebbe dire mostrare un esempio che non assomiglia a quello vero
+  'sk-ant-…',
+  'ntn_…',
+  'xoxp-…',
+  '…apps.googleusercontent.com',
+  '00000000-0000-0000-0000-000000000000',
+  // un nome proprio come esempio: si legge uguale nelle due lingue
+  'Tobia'
+])
+
+test('ogni segnaposto o si traduce o è un formato', () => {
+  const colpevoli: string[] = []
+  for (const f of tuttiIFile(RADICE)) {
+    const testo = readFileSync(f, 'utf8')
+    // solo i segnaposto scritti come stringa: quelli fra graffe sono già
+    // un'espressione, e lì ci pensa la prova delle chiavi
+    for (const m of testo.matchAll(/placeholder="([^"]*)"/g)) {
+      const v = m[1]
+      if (!v.trim() || SEGNAPOSTO_TECNICI.has(v)) continue
+      colpevoli.push(`${f.split('/').slice(-2).join('/')} · «${v}»`)
+    }
+  }
+  assert.deepEqual(colpevoli, [],
+    'questi segnaposto non passano da t(): o li traduci, o li metti fra i formati con una ragione.\n  '
+    + colpevoli.join('\n  '))
+})

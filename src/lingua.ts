@@ -100,6 +100,18 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+// — i segnaposto dentro le caselle —
+//   Sono testo che si legge come tutto il resto, e restavano fuori perché
+//   `placeholder=` non assomiglia a una frase da tradurre: la prova che cerca
+//   l'italiano dimenticato guarda le stringhe che *sembrano* prosa, e
+//   «otto caratteri» non ha nessuna delle parole spia.
+  'tu@tuodominio.it': 'you@yourdomain.com',
+  'otto caratteri': 'eight characters',
+  'imap.tuodominio.it': 'imap.yourdomain.com',
+  '/Users/…/Lavoro': '/Users/…/Work',
+  'La parola che hai messo in MYYND_INVITO sul server. Senza, qui non si registra nessuno — ed è voluto: su un indirizzo pubblico il primo che si registra diventerebbe il padrone della casella collegata.':
+    'The string you set as MYYND_INVITO on the server. Without one, nobody can register here — deliberately: on a public address, whoever registers first would become the owner of whatever mailbox gets connected.',
+
 // — l'accesso: quale delle due cose stai facendo, e dove sta girando —
   'Bentornato.': 'Welcome back.',
   'Crea il tuo accesso.': 'Create your account.',
@@ -111,8 +123,6 @@ const EN: Record<string, string> = {
   'Non c’è ancora nessun account su questo computer: quello che scrivi adesso lo crea.':
     'There is no account on this computer yet: what you type now creates it.',
   'Invito': 'Invite',
-  'Su un indirizzo pubblico il primo che si registra diventa il padrone della casella collegata. L’invito è quello che lo impedisce.':
-    'On a public address, whoever registers first becomes the owner of whatever mailbox gets connected. The invite is what stops that.',
   'Questo Myynd gira su un server, non sul tuo computer.':
     'This Myynd runs on a server, not on your computer.',
   'Qui non ci si può registrare.': 'You cannot register here.',
