@@ -100,6 +100,11 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
+  'Ho già un Myynd: portalo qui': 'I already have a Myynd: bring it here',
+  'Il file che hai scaricato da un altro Myynd, con dentro i tuoi documenti e le tue fonti.':
+    'The file you downloaded from another Myynd, with your documents and sources in it.',
+  "Crea l'accesso e portalo qui": 'Create the account and bring it over',
+
 // — portare il proprio Myynd altrove —
   'Portalo su un’altra macchina': 'Move it to another machine',
   'Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.':

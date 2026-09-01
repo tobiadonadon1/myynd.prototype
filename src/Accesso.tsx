@@ -44,6 +44,16 @@ export function Accesso({ accesso, entrato }: {
    * di dubitare della password invece che delle dita.
    */
   const [vedi, setVedi] = useState(false)
+  /**
+   * Il proprio Myynd, portato dentro mentre ci si registra.
+   *
+   * Stava nelle preferenze, ed era il passo di troppo: chi arriva su un
+   * indirizzo nuovo con il suo file in mano deve prima farsi un conto, poi
+   * trovare le preferenze, poi cercare la riga giusta. Sono tre schermate per
+   * una cosa che è una sola — «questo sono io, e questa è la mia roba» — ed è
+   * proprio il momento in cui uno ha il file sul desktop.
+   */
+  const [pacco, setPacco] = useState<File | null>(null)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -59,6 +69,9 @@ export function Accesso({ accesso, entrato }: {
       const r = registrato
         ? await api.entra(email, password)
         : await api.registra(email, password)
+      // il conto è fatto: se si è portato dietro il suo Myynd, entra adesso —
+      // prima che la schermata si apra su un account vuoto che non è il suo
+      if (!registrato && pacco) await api.caricaTrasloco(pacco)
       entrato(r.account)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -154,6 +167,27 @@ export function Accesso({ accesso, entrato }: {
             </button>
           </div>
 
+          {!registrato && (
+            <div style={{ marginTop: 18 }}>
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9, cursor: 'pointer',
+                fontSize: '12.5px', color: pacco ? CHIARO : 'rgba(244,239,232,.5)'
+              }}>
+                <span style={{
+                  display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 7,
+                  border: `1px solid ${pacco ? 'rgba(244,239,232,.5)' : 'rgba(244,239,232,.25)'}`,
+                  fontSize: 13, lineHeight: 1
+                }}>{pacco ? '✓' : '+'}</span>
+                {pacco ? pacco.name : t('Ho già un Myynd: portalo qui')}
+                <input type="file" accept=".myynd,application/gzip" style={{ display: 'none' }}
+                  onChange={e => setPacco(e.target.files?.[0] ?? null)} />
+              </label>
+              <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 7, lineHeight: 1.55 }}>
+                {t('Il file che hai scaricato da un altro Myynd, con dentro i tuoi documenti e le tue fonti.')}
+              </div>
+            </div>
+          )}
+
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
 
           <button onClick={invia} disabled={!pronto || occupato} style={{
@@ -163,7 +197,7 @@ export function Accesso({ accesso, entrato }: {
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {occupato ? '…' : registrato ? t('Accedi') : t('Crea l\'accesso')}
+            {occupato ? '…' : registrato ? t('Accedi') : pacco ? t('Crea l\'accesso e portalo qui') : t('Crea l\'accesso')}
           </button>
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
