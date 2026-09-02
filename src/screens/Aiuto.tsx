@@ -153,7 +153,7 @@ const SEZIONI: Sezione[] = [
       {
         voci: [
           {
-            nome: { it: 'Posta', en: 'Email' },
+            nome: { it: 'Posta', en: 'Mail' },
             testo: {
               it: 'IMAP: indirizzo e password della casella. Il server lo trova Myynd dall’indirizzo; se non ci riesce, scrivi tu l’host IMAP (porta 993, SSL). Gmail e iCloud non accettano la password dell’account: serve una «password per le app» — per Google la crei su [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), per iCloud su [appleid.apple.com](https://appleid.apple.com) sotto «Password per le app». Le caselle Outlook e Microsoft 365 collegale con la fonte Microsoft. Da questa casella partono anche le email che approvi in lista.',
               en: 'IMAP: the address and the mailbox password. Myynd finds the server from the address; if it cannot, type the IMAP host yourself (port 993, SSL). Gmail and iCloud do not accept the account password: you need an “app password” — for Google create one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), for iCloud at [appleid.apple.com](https://appleid.apple.com) under “App-Specific Passwords”. Connect Outlook and Microsoft 365 mailboxes through the Microsoft source instead. The emails you approve in the list are sent from this mailbox.'

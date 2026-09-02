@@ -125,10 +125,17 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                 <Hov as="button" onClick={() => { setSoloQuesta(''); setAperto(null) }}
                   style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.6)' }}
                   hover={{ color: '#8E3F1F' }}>{t('‹ tutte le fonti')}</Hov>
-              ) : guaio
-                ? <span style={{ color: '#8E3F1F', overflowWrap: 'anywhere' }}>{guaio}</span>
-                : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
+              ) : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
             </div>
+            {/* Una riga sua, e non il posto del ritorno «‹ tutte le fonti»:
+                aperto su una fonte sola — che è come ci si arriva dallo schermo
+                dei connettori — il guasto della rilettura non compariva, cioè
+                proprio nel caso per cui era stato scritto. */}
+            {guaio && (
+              <div role="status" style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 4, overflowWrap: 'anywhere' }}>
+                {guaio}
+              </div>
+            )}
           </div>
           <button onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
         </div>

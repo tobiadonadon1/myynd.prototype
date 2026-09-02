@@ -65,7 +65,9 @@ function Sopra({ v }: { v: Vals }) {
     position: 'absolute' as const, inset: 0, display: 'grid', placeItems: 'center',
     color: 'rgba(255,247,240,.5)', fontSize: 14, textAlign: 'center' as const, padding: 30
   }
-  if (v.mappaVuota) return <div style={stile}>{t('Niente da mostrare: collega una fonte e fai leggere qualcosa a Myynd.')}</div>
+  // prima il guasto: se anche i conteggi non sono arrivati, `mappaVuota` è
+  // vera per un motivo che non è «non hai collegato niente», e chi ha
+  // documenti si vedeva dire di collegare una fonte, senza il bottone per riprovare
   if (v.guastoMappa) {
     return (
       <div style={{ ...stile, color: 'rgba(255,247,240,.7)' }}>
@@ -81,6 +83,7 @@ function Sopra({ v }: { v: Vals }) {
     )
   }
   if (v.costruendoMappa) return <div role="status" style={stile}>{t('Costruisco la mappa…')}</div>
+  if (v.mappaVuota) return <div style={stile}>{t('Niente da mostrare: collega una fonte e fai leggere qualcosa a Myynd.')}</div>
   return null
 }
 
@@ -89,7 +92,7 @@ export function Mappa({ v }: { v: Vals }) {
   // affiancati: 308 fissi per il pannello lasciavano al disegno una fetta
   // sempre più stretta finché la palla non era più leggibile. Si impilano.
   const stretta = useLarghezza() < 1000
-  const disegnata = !v.mappaVuota && !v.guastoMappa && !v.costruendoMappa
+  const disegnata = !v.guastoMappa && !v.costruendoMappa && !v.mappaVuota
   return (
     <div style={{ width: 1010, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 18px' }}>

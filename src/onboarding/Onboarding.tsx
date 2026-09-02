@@ -317,22 +317,51 @@ function PassoClaude({ collegato, ricarica, avanti }: {
 function Ritratto({ avanti }: { avanti: () => void }) {
   const [blocchi, setBlocchi] = useState<{ etichetta: string; descrizione: string }[]>([])
   const [testi, setTesti] = useState<Record<string, string>>({})
+  /** Quello che c'era già, per non riscrivere quello che non è cambiato. */
+  const [prima, setPrima] = useState<Record<string, string>>({})
   const [occupato, setOccupato] = useState(false)
+  const [guaio, setGuaio] = useState('')
   useEffect(() => {
     api.memoria()
-      .then(m => setBlocchi(m.blocchi.map(b => ({ etichetta: b.etichetta, descrizione: b.descrizione }))))
+      .then(m => {
+        setBlocchi(m.blocchi.map(b => ({ etichetta: b.etichetta, descrizione: b.descrizione })))
+        /*
+         * Le risposte che ci sono già si rimettono nei riquadri.
+         *
+         * L'onboarding si può chiudere a metà — `onboarding: true` si scrive
+         * solo alla fine — e alla riapertura questa schermata ripartiva vuota
+         * su risposte già date: riscriverne una sopra le cancellava tutte,
+         * comprese quelle che ci aveva messo Myynd da solo.
+         */
+        const gia = Object.fromEntries(m.blocchi.map(b => [b.etichetta, b.valore ?? '']))
+        setPrima(gia)
+        setTesti(gia)
+      })
       .catch(() => { /* senza domande si va avanti: la memoria è un di più */ })
   }, [])
   const scritti = Object.values(testi).filter(v => v.trim()).length
 
+  /*
+   * Quello che non si è salvato non si perde in silenzio.
+   *
+   * Le risposte stanno solo qui dentro finché non partono, e `avanti()` smonta
+   * questa schermata: andare avanti dopo una scrittura fallita voleva dire
+   * buttarle senza dirlo. Se qualcosa non passa si resta, con quello che è
+   * stato scritto ancora nei riquadri — così riprovare non costa niente.
+   */
   const salva = async () => {
-    setOccupato(true)
+    setOccupato(true); setGuaio('')
+    let male = 0
     for (const b of blocchi) {
       const v = (testi[b.etichetta] ?? '').trim()
-      if (!v) continue
-      try { await api.scriviBlocco(b.etichetta, v) } catch { /* si ritrova nella memoria, e si riscrive */ }
+      if (v === (prima[b.etichetta] ?? '').trim()) continue
+      try {
+        await api.scriviBlocco(b.etichetta, v)
+        setPrima(p => ({ ...p, [b.etichetta]: v }))
+      } catch { male++ }
     }
     setOccupato(false)
+    if (male) { setGuaio(t('Non sono riuscito a salvare le tue risposte. Riprova.')); return }
     avanti()
   }
 
@@ -360,9 +389,10 @@ function Ritratto({ avanti }: { avanti: () => void }) {
           })}
         </div>
       </div>
+      <Errore testo={guaio} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center', flex: 'none' }}>
         <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>
-        <Secondario onClick={avanti}>{scritti ? t('Il resto dopo') : t('Rispondo più tardi')}</Secondario>
+        <Secondario onClick={() => { if (!occupato) avanti() }}>{scritti ? t('Il resto dopo') : t('Rispondo più tardi')}</Secondario>
       </div>
     </div>
   )

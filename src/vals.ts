@@ -693,7 +693,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     heroToggle: () => setHeroLong(x => !x),
     heroHaDoc: !!hero?.doc,
     heroPrimary: hero ? risolvi(hero) : noop,
-    heroAsk: hero ? () => chiedi(`${hero.titolo}: dimmi di più`) : noop,
+    // la coda è testo che finisce nella *sua* bolla e resta scritto nella
+    // chat: va nella lingua dell'app come tutto il resto
+    heroAsk: hero ? () => chiedi(frasi.dimmiDiPiu(hero.titolo)) : noop,
     heroSkip: hero ? () => setAperti(a => [...a.slice(1), a[0]]) : noop,
 
     // — rispondere alla voce in cima, e indirizzare tutto il resto —
@@ -785,7 +787,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
           mostraToast(t('Non sono riuscito a rimetterla.'))
         }
       },
-      onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(`${d.titolo}: dimmi di più`) }
+      onAsk: (e: React.MouseEvent) => { e.stopPropagation(); chiedi(frasi.dimmiDiPiu(d.titolo)) }
     })),
 
     // — documento aperto —
@@ -916,7 +918,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — preferenze —
     toni: TONI.map(x => ({
       ...x, label: t(x.label),
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.'))) },
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
       style: (x.id === stato.config.tono
         ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
         : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
@@ -941,7 +943,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       scelto: (stato.config.modello ?? 'claude-sonnet-5') === m.id,
       onClick: () => {
         setStato(s => ({ ...s, config: { ...s.config, modello: m.id } }))
-        api.profilo({ modello: m.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.')))
+        api.profilo({ modello: m.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
       }
     })),
     lingue: LINGUE.map(l => ({
@@ -973,13 +975,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       scelto: (stato.config.oreFatte ?? 48) === x.ore,
       onClick: () => {
         setStato(s => ({ ...s, config: { ...s.config, oreFatte: x.ore } }))
-        api.profilo({ oreFatte: x.ore }).then(() => caricaFeed()).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.')))
+        api.profilo({ oreFatte: x.ore }).then(() => caricaFeed()).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
       }
     })),
     autonomie: AUTONOMIE.map(a => ({
       ...a, titolo: t(a.titolo), nota: t(a.nota),
       scelto: stato.config.autonomia === a.id,
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.'))) },
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
         background: stato.config.autonomia === a.id ? 'rgba(255,255,255,.85)' : 'transparent',

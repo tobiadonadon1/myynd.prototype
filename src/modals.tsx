@@ -96,7 +96,7 @@ export function Toast({ v }: { v: Vals }) {
     // una notizia che compare da sola va anche letta da sola, senza rubare il fuoco
     <div role="status" aria-live="polite" style={{ position: 'absolute', top: 22, right: 26, zIndex: 50, display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', flex: 'none' }} />
-      <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1 }}>{v.toastText}</span>
+      <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{v.toastText}</span>
       {v.toastUndo && (
         <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Annulla')}</button>
       )}

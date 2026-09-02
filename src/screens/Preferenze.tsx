@@ -93,7 +93,11 @@ function Uso() {
   const [salvo, setSalvo] = useState(false)
   const [guaio, setGuaio] = useState('')
   useEffect(() => {
-    api.uso().then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') }).catch(() => {})
+    // un errore qui faceva sparire la carta intera, senza dire niente: è la
+    // stessa distinzione fra «vuoto» e «guasto» che vale per il feed e la mappa
+    api.uso()
+      .then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') })
+      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
   }, [])
 
   const salva = async () => {
@@ -104,7 +108,15 @@ function Uso() {
     setSalvo(false)
   }
 
-  if (!u) return null
+  if (!u) {
+    if (!guaio) return null
+    return (
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Quanto ha ragionato')}</div>
+        <div style={{ fontSize: '13.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>
+      </div>
+    )
+  }
   const mila = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n)
   const giorni = u.giorni.slice(-7)
   const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
@@ -741,7 +753,9 @@ export function Preferenze({ v }: { v: Vals }) {
 
       {/* l'abbonamento è un modo di pagare Claude di meno: con un altro motore
           non c'entra, e un interruttore che non fa niente è peggio di nessuno */}
-      {v.motore === 'claude' && <Abbonamento />}
+      {/* anche con un altro motore scelto: chi l'aveva acceso deve poterlo
+          spegnere, e la carta si nasconde da sola quando non c'è niente da dire */}
+      <Abbonamento />
       <ModelloDiCasa />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>

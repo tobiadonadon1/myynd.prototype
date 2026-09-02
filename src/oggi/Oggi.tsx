@@ -280,7 +280,7 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
           )}
 
           {c.guaio && (
-            <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 3 }}>{t(c.guaio)}</div>
+            <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
           )}
 
           {/* cosa sta facendo, finché ci lavora: una riga sola, smorzata, che

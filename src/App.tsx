@@ -52,6 +52,24 @@ export default function App() {
     return () => { clearTimeout(attesa); chiudi() }
   }, [accesso?.entrato])
 
+  /*
+   * Chi torna dal consenso di Google o Microsoft, a onboarding già fatto.
+   *
+   * La pagina del ritorno rimanda a `/?torno=connetti`, e finora quel segno lo
+   * leggeva solo l'onboarding: chi collega Gmail dalle connessioni atterrava
+   * sulla prima pagina, senza conferma, con il segno appeso all'indirizzo per
+   * sempre. Qui si riaprono le connessioni e si pulisce l'indirizzo.
+   */
+  useEffect(() => {
+    if (!accesso?.entrato || onboarding) return
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('torno') !== 'connetti') return
+    q.delete('torno')
+    const resto = q.toString()
+    window.history.replaceState(null, '', window.location.pathname + (resto ? `?${resto}` : ''))
+    setConnessioni('')
+  }, [accesso?.entrato, onboarding])
+
   // se la sessione cade, si torna all'accesso senza schianti
   useEffect(() => {
     alloScadere(() => {
@@ -309,7 +327,7 @@ function Casa({ stato, apriConnessioni, esci }: {
                 lungo mandava a capo dopo il separatore, e restava lì appeso */}
             {!rail && (
               <span style={{ flex: 1, minWidth: 0, fontSize: '13.5px', overflowWrap: 'anywhere' }}>
-                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)', whiteSpace: 'nowrap' }}>{' · '}{v.ruolo}</span>}
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}>{' · '}{v.ruolo}</span>}
               </span>
             )}
             {!rail && <span style={v.chevron}><IconSuPiccola /></span>}

@@ -234,7 +234,9 @@ function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) =>
       {aperta && (
         <div style={{
           marginTop: 9, padding: '10px 13px', borderRadius: 11,
-          background: 'rgba(34,39,31,.04)', fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.7)'
+          background: 'rgba(34,39,31,.04)', fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.7)',
+          // la citazione è copiata da un documento: può essere un indirizzo lungo
+          overflowWrap: 'anywhere'
         }}>
           {c.prova?.citazione && <div style={{ fontStyle: 'italic' }}>«{c.prova.citazione}»</div>}
           {c.premesse?.length ? (

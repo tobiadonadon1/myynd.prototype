@@ -434,6 +434,7 @@ const EN: Record<string, string> = {
   "Nessuna chiave nell'ambiente.": 'No key in the environment.',
   'Servono host, indirizzo e password.': 'Host, address and password are needed.',
   'Scegli almeno una cartella.': 'Pick at least one folder.',
+  'Non sono riuscito a salvare le tue risposte. Riprova.': 'I could not save your answers. Try again.',
   'Quello che leggono resta nel tuo spazio. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.': 'What they read stays in your space. An automation only describes what to look at and what to do with it: it contains nothing of yours.',
   'Quello che sai tu e non sta scritto da nessuna parte. Due righe bastano.': 'What you know and nobody wrote down. Two lines are enough.',
   'Il resto dopo': 'The rest later',
@@ -1338,6 +1339,9 @@ export function t(s: string): string {
  * «Due cose, da guardare» e «Two things to look at» no.
  */
 export const frasi = {
+  // la domanda che parte da una carta: la coda è testo suo, e resta scritta
+  dimmiDiPiu: (titolo: string) => corrente === 'en' ? `${titolo}: tell me more` : `${titolo}: dimmi di più`,
+
   // — quanto ha ragionato oggi —
   usoOggi: (chiamate: number, token: string, cache: string) => corrente === 'en'
     ? `${chiamate} call${chiamate === 1 ? '' : 's'} today · ${token} tokens${cache !== '0' ? ` (${cache} from cache)` : ''}`
@@ -1560,8 +1564,8 @@ export const frasi = {
 
   statoConnettore: (docs: number) =>
     corrente === 'en'
-      ? (docs ? `${docs} documents` : 'connected')
-      : (docs ? `${docs} documenti` : 'collegato'),
+      ? (docs ? `${docs} document${docs === 1 ? '' : 's'}` : 'connected')
+      : (docs ? `${docs} document${docs === 1 ? 'o' : 'i'}` : 'collegato'),
 
   nDocumenti: (n: string) => corrente === 'en'
     ? `${n} document${n === '1' ? '' : 's'}` : `${n} document${n === '1' ? 'o' : 'i'}`,
