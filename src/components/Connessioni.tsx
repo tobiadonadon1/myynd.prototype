@@ -1,11 +1,11 @@
 // Il pannello Connessioni: si apre da qualsiasi punto dell'app per collegare
 // o scollegare una fonte. Non fa ricominciare l'onboarding.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, rigaSincronizzazione, type Stato } from '../api'
 import { Form } from './forms'
 import { frasi, lingua, loc, t } from '../lingua'
-import { Hov } from '../ui'
+import { BottoneSicuro, Hov, daTastiera, useFocoDialogo } from '../ui'
 import { IconPiu } from '../icons'
 
 /**
@@ -46,6 +46,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   // una password IMAP scaduta, dopo «Rileggi», prima non produceva niente:
   // il conteggio non saliva, e basta
   const [guaio, setGuaio] = useState<string | null>(null)
+  // il fuoco entra con il pannello, Esc lo chiude, e alla chiusura torna a chi l'ha aperto
+  const finestra = useRef<HTMLDivElement>(null)
+  useFocoDialogo(finestra, chiudi)
 
   const ricarica = async () => { const n = await api.stato(); setS(n); return n }
   useEffect(() => { ricarica().catch(() => {}) }, [])
@@ -105,7 +108,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
         position: 'absolute', inset: 0, background: 'rgba(40,30,22,.34)',
         backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 60
       }} />
-      <div style={{
+      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="connessioni-titolo" style={{
         position: 'absolute', top: 60, bottom: 60, left: '50%', transform: 'translateX(-50%)',
         width: 620, maxWidth: '88%', zIndex: 61, display: 'flex', flexDirection: 'column',
         borderRadius: '26px 22px 26px 20px', background: 'rgba(255,253,249,.97)',
@@ -114,7 +117,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 16px', borderBottom: '1px solid rgba(34,39,31,.08)' }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 21, letterSpacing: '-.02em' }}>
+            <div id="connessioni-titolo" style={{ fontSize: 21, letterSpacing: '-.02em' }}>
               {messaFuoco ? t(pronti[0].nome) : t('Connessioni')}
             </div>
             <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 3 }}>
@@ -127,7 +130,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                 : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
             </div>
           </div>
-          <button onClick={chiudi} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
+          <button onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px' }}>
@@ -166,7 +169,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                   background: c.collegato ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.4)',
                   overflow: 'hidden'
                 }}>
-                  <div onClick={() => setAperto(apertoQui ? null : c.id)}
+                  <div role="button" tabIndex={0} aria-expanded={apertoQui}
+                    onClick={() => setAperto(apertoQui ? null : c.id)}
+                    onKeyDown={daTastiera(() => setAperto(apertoQui ? null : c.id))}
                     style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', cursor: 'pointer' }}>
                     <span style={{
                       width: 9, height: 9, borderRadius: '50%', flex: 'none',
@@ -210,10 +215,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                             {t('Cambia')}
                           </Hov>
                         )}
-                        <Hov as="button"
-                          onClick={async (e: React.MouseEvent) => { e.stopPropagation(); await api.scollega(c.id); await ricarica(); cambiato() }}
-                          style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.45)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                          hover={{ color: '#C4623B' }}>{t('Scollega')}</Hov>
+                        {/* scollegare chiede una volta: le automazioni che aprono questa fonte si fermano */}
+                        <BottoneSicuro titolo={t('Scollega')}
+                          fai={async () => { await api.scollega(c.id); await ricarica(); cambiato() }}>
+                          {t('Scollega')}
+                        </BottoneSicuro>
                       </div>
                     ) : (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: '#8E3F1F', flex: 'none' }}>

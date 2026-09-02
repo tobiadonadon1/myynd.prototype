@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { Sfondo } from './Sfondo'
-import { Hov, taglia, useLarghezza } from './ui'
+import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
-  IconAiuto, IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
+  IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
   IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci
 } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
@@ -21,7 +21,7 @@ import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
 import { Logo, Marchio } from './components/Marchio'
-import { useVals } from './vals'
+import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
 import { Accesso } from './Accesso'
 
@@ -256,15 +256,7 @@ function Casa({ stato, apriConnessioni, esci }: {
                 <IconPiu />{t('Nuova chat')}
               </Hov>
               <div style={{ maxHeight: 116, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
-                {v.threads.map(ch => (
-                  <div key={ch.id} onMouseEnter={ch.onEnter} onMouseLeave={ch.onLeave} onClick={ch.onClick} style={ch.row}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.titolo}</div>
-                      <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{ch.quando}</div>
-                    </div>
-                    <button onClick={ch.onDelete} title={t('Elimina')} style={ch.binStyle}><IconCestino /></button>
-                  </div>
-                ))}
+                {v.threads.map(ch => <RigaChat key={ch.id} ch={ch} />)}
               </div>
             </div>
           )}
@@ -355,6 +347,32 @@ function Casa({ stato, apriConnessioni, esci }: {
       {v.toastOn && <Toast v={v} />}
       {v.searchOpen && <Ricerca v={v} />}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Una conversazione nell'elenco.
+ *
+ * La riga si apre con un clic o con Invio; il cestino compare quando la riga è
+ * sotto mano — mouse, tastiera o dito — e chiede una volta prima di buttare.
+ * Prima buttava al primo clic, e da tastiera non si arrivava né alla riga né
+ * al cestino.
+ */
+function RigaChat({ ch }: { ch: Vals['threads'][number] }) {
+  const { attiva, props } = useAttiva()
+  return (
+    <div role="button" tabIndex={0} aria-current={ch.aperta || undefined}
+      onClick={ch.onClick} onKeyDown={daTastiera(ch.onClick)}
+      {...props}
+      onMouseEnter={() => { props.onMouseEnter(); ch.onEnter() }}
+      onMouseLeave={() => { props.onMouseLeave(); ch.onLeave() }}
+      style={ch.row}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.titolo}</div>
+        <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{ch.quando}</div>
+      </div>
+      <Cestino fai={ch.onDelete} titolo={t('Elimina')} visibile={attiva || ch.sopra} icona={13} />
     </div>
   )
 }

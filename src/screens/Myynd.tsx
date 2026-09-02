@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
-import { Hov } from '../ui'
+import { BottoneSicuro, Hov, daTastiera, useAttiva } from '../ui'
 import { IconDoc, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
@@ -17,6 +17,27 @@ const PUNTINO: CSSProperties = {
 }
 
 /**
+ * I due pesi dei bottoni sulla card scura: uno pieno, gli altri di contorno.
+ * Il bordo c'è in tutti e due — bianco su bianco nel pieno — così passare
+ * dall'uno all'altro non sposta di un pixel quello che sta accanto.
+ */
+const PIENO_SCURO: CSSProperties = {
+  padding: '12px 26px', borderRadius: 99, border: '1px solid #FFF7F0', background: '#FFF7F0', color: '#22271F',
+  fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit'
+}
+const CONTORNO_SCURO: CSSProperties = {
+  ...PIENO_SCURO, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', boxShadow: 'none'
+}
+/** Un solo bottone pieno per card: quando si apre un rigo per scrivere, il pieno passa a «Manda». */
+const primario = (pieno: boolean) => (pieno ? PIENO_SCURO : CONTORNO_SCURO)
+
+/** Una voce di menù: un bottone largo quanto il menù, senza vestito suo. */
+const VOCE_MENU: CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10,
+  border: 'none', background: 'none', cursor: 'pointer', fontSize: '13.5px', fontFamily: 'inherit', color: '#22271F'
+}
+
+/**
  * Una riga del resto.
  *
  * La riga intera porta la voce in cima; il chevron in fondo alla frase apre il
@@ -25,10 +46,10 @@ const PUNTINO: CSSProperties = {
  * distinti e non due interpretazioni dello stesso.
  */
 function Riga({ riga }: { riga: Vals['resto'][number] }) {
-  const [sopra, setSopra] = useState(false)
+  const { attiva, props } = useAttiva()
   return (
-    <div onClick={riga.onPromote} style={{ ...riga.row, borderTop: 'none' }}
-      onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}>
+    <div role="button" tabIndex={0} onClick={riga.onPromote} onKeyDown={daTastiera(riga.onPromote)}
+      style={{ ...riga.row, borderTop: 'none' }} {...props}>
       <span style={riga.freccia}>
         {riga.aperto ? <span style={PUNTINO} /> : <IconFrecciaDx size={13} />}
       </span>
@@ -60,7 +81,7 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
           flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
           background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
           fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          opacity: sopra ? 1 : 0, pointerEvents: sopra ? 'auto' : 'none', transition: 'opacity .15s'
+          opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
         }}
         hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('in lista')}</Hov>
 
@@ -110,14 +131,14 @@ function attesaDi(c: Compito): string {
  * ci stava davvero.
  */
 function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void }) {
-  const [sopra, setSopra] = useState(false)
+  const { attiva, props } = useAttiva()
   const attesa = attesaDi(c)
   const testo = corpo(c)
 
   return (
-    <div onClick={apri}
+    <div role="button" tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)}
       style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer' }}
-      onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}>
+      {...props}>
       <span style={{ flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center', color: 'rgba(62,81,64,.6)' }}>
         {c.stato === 'delegato'
           ? <Glifo tipo="penso" dim={13} colore="#C4623B" />
@@ -146,7 +167,7 @@ function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void })
           flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
           background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
           fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          opacity: sopra ? 1 : 0, pointerEvents: sopra ? 'auto' : 'none', transition: 'opacity .15s'
+          opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
         }}
         hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('fatta')}</Hov>
 
@@ -218,10 +239,11 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         {/* quello che si fa quasi sempre. Su una bozza pronta «Fatto» sarebbe
             una bugia: quello che chiudi lì è il testo che hai davanti, e va
             tenuto — è da lì che impara come scrivi */}
+        {/* uno solo pieno per card: quando lui ti chiede una cosa, il pieno è «Manda» qui sotto */}
         <Hov as="button"
           onClick={() => (pronto ? l.chiudi(c.id, t('Va bene così.'), testo) : l.chiudi(c.id))}
-          style={{ padding: '12px 26px', borderRadius: 99, border: 'none', background: '#FFF7F0', color: '#22271F', fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit' }}
-          hover={{ background: '#FFFFFF' }}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
+          style={primario(!chiede)}
+          hover={chiede ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
 
         <Hov as="button"
           onClick={() => (pronto ? l.delega(c.id, c.modo) : delegato ? l.richiama(c.id) : l.delega(c.id, 'tutto'))}
@@ -232,22 +254,22 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
 
         {altro.length > 0 && (
           <div style={{ position: 'relative' }}>
-            <Hov as="button" onClick={() => setMenu(m => !m)} title={t('Altro')}
+            <Hov as="button" onClick={() => setMenu(m => !m)} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
               style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: menu ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
               hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
 
             {menu && (
               <>
                 <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div style={{
+                <div role="menu" style={{
                   position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 210,
                   borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
                   boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
                   animation: 'fadein .14s ease'
                 }}>
                   {altro.map(a => (
-                    <Hov key={a.id} onClick={() => { setMenu(false); a.fai() }}
-                      style={{ display: 'block', padding: '9px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '13.5px', color: '#22271F', whiteSpace: 'nowrap' }}
+                    <Hov key={a.id} as="button" type="button" role="menuitem" onClick={() => { setMenu(false); a.fai() }}
+                      style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
                       hover={{ background: 'rgba(196,98,59,.09)' }}>{a.label}</Hov>
                   ))}
                 </div>
@@ -257,9 +279,8 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         )}
 
         <div style={{ flex: 1 }} />
-        <Hov as="button" onClick={() => l.elimina(c.id)} title={t('Toglila')}
-          style={{ padding: '12px 4px', border: 'none', background: 'none', color: 'rgba(255,247,240,.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-          hover={{ color: '#FFFFFF' }}>{t('Toglila')}</Hov>
+        <BottoneSicuro fai={() => l.elimina(c.id)} titolo={t('Toglila')} chiaro
+          style={{ padding: '12px 4px', fontSize: 13 }}>{t('Toglila')}</BottoneSicuro>
       </div>
 
       {/* una domanda senza il rigo per rispondere è un vicolo cieco: qui sotto
@@ -380,8 +401,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           </div>
 
           {v.heroHaDoc && (
-            <Hov onClick={v.apriDoc}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(255,247,240,.75)', alignSelf: 'flex-start' }}
+            <Hov as="button" type="button" onClick={v.apriDoc}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(255,247,240,.75)', alignSelf: 'flex-start', fontFamily: 'inherit' }}
               hover={{ color: '#FFF7F0' }}>
               <IconDoc size={16} style={{ flex: 'none', color: '#FFF7F0' }} />
               <span style={{ fontSize: '13px' }}>{t('Apri il documento')}</span>
@@ -397,14 +418,15 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             quello che si fa quasi sempre, e un «⋯» per il resto.
           */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, position: 'relative' }}>
+            {/* uno solo pieno: con il rigo aperto il pieno è «Manda», e «Fatto» si fa di contorno */}
             <Hov as="button" onClick={v.heroPrimary}
-              style={{ padding: '12px 26px', borderRadius: 99, border: 'none', background: '#FFF7F0', color: '#22271F', fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit' }}
-              hover={{ background: '#FFFFFF' }}>{t('Fatto')}</Hov>
+              style={primario(!v.scriviAperto)}
+              hover={v.scriviAperto ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{t('Fatto')}</Hov>
             <Hov as="button" onClick={v.heroAsk}
               style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
               hover={{ background: 'rgba(255,247,240,.16)' }}>{t('Chiedi a Myynd')}</Hov>
 
-            <Hov as="button" onClick={v.apriMenu} title={t('Altro')}
+            <Hov as="button" onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
               style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: v.menuAperto ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
               hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
 
@@ -416,15 +438,15 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             {v.menuAperto && (
               <>
                 <div onClick={v.chiudiMenu} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div style={{
+                <div role="menu" style={{
                   position: 'absolute', bottom: 'calc(100% + 8px)', left: 178, zIndex: 21, minWidth: 190,
                   borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
                   boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
                   animation: 'fadein .14s ease'
                 }}>
                   {v.correzioni.map(c => (
-                    <Hov key={c.id} onClick={c.onClick}
-                      style={{ display: 'block', padding: '9px 12px', borderRadius: 10, cursor: 'pointer', fontSize: '13.5px', color: '#22271F' }}
+                    <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
+                      style={VOCE_MENU}
                       hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
                   ))}
                 </div>
@@ -456,7 +478,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
                 cursor: v.risposta.trim() && !v.rispondendo ? 'pointer' : 'default'
               }}>{v.rispondendo ? t('Segno…') : t('Manda')}</button>
-              <Hov as="button" onClick={v.chiudiScrivi} title={t('Annulla (Esc)')}
+              <Hov as="button" onClick={v.chiudiScrivi} title={t('Annulla (Esc)')} aria-label={t('Annulla')}
                 style={{ flex: 'none', padding: '11px 6px', border: 'none', background: 'none', color: 'rgba(255,247,240,.55)', fontSize: 18, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
                 hover={{ color: '#FFF7F0' }}>×</Hov>
             </div>
@@ -515,7 +537,7 @@ function Domanda({ v }: { v: Vals }) {
         <div style={{ flex: 1, minWidth: 0, fontSize: '15px', lineHeight: 1.55, color: '#22271F', textWrap: 'pretty' }}>
           {t(v.esitoDom)}
         </div>
-        <Hov as="button" onClick={v.chiudiEsito} title={t('Chiudi')}
+        <Hov as="button" onClick={v.chiudiEsito} title={t('Chiudi')} aria-label={t('Chiudi')}
           style={{ flex: 'none', border: 'none', background: 'none', color: 'rgba(34,39,31,.4)', fontSize: 17, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
           hover={{ color: '#22271F' }}>×</Hov>
       </div>
@@ -577,7 +599,7 @@ function Domanda({ v }: { v: Vals }) {
           color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
         }} />
 
-      <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')}
+      <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')} aria-label={t('Rispondi')}
         style={{
           flex: 'none', border: 'none', background: 'none', padding: '4px 2px',
           fontFamily: 'inherit', fontSize: 16, lineHeight: 1,
@@ -586,11 +608,11 @@ function Domanda({ v }: { v: Vals }) {
         }}
         hover={v.rispostaDom.trim() ? { color: '#C4623B' } : {}}>→</Hov>
 
-      <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')}
+      <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
         style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(34,39,31,.34)', cursor: 'pointer' }}
         hover={{ color: '#8E3F1F' }}>?</Hov>
 
-      <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')}
+      <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')} aria-label={t('Lascia perdere: non te lo richiedo')}
         style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', color: 'rgba(34,39,31,.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
         hover={{ color: '#22271F' }}>×</Hov>
 

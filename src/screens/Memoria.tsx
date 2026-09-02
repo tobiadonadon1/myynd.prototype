@@ -23,8 +23,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Blocco, type Convinzione, type Memoria as Dati } from '../api'
 import { frasi, t, loc } from '../lingua'
-import { CARD_GLASS, Hov, LABEL } from '../ui'
-import { IconCestino, IconGiu } from '../icons'
+import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
+import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
@@ -172,13 +172,13 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
 
 /** Una riga di quello che ha capito, con da dove viene e quanto ci crede. */
 function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) => void; storica?: boolean }) {
-  const [sopra, setSopra] = useState(false)
+  const { attiva, props } = useAttiva()
   const [aperta, setAperta] = useState(false)
   const haProva = !!(c.prova?.citazione || c.premesse?.length)
 
   return (
     <div
-      onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}
+      {...props}
       style={{
         padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)',
         opacity: storica ? 0.6 : 1
@@ -222,16 +222,8 @@ function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) =>
           </div>
         </div>
 
-        {scorda && (
-          <Hov as="button" onClick={() => scorda(c.id)}
-            title={t('Scordala')} aria-label={t('Scordala')}
-            style={{
-              flex: 'none', width: 22, height: 22, display: 'grid', placeItems: 'center', border: 'none',
-              background: 'none', padding: 0, cursor: 'pointer', color: 'rgba(34,39,31,.35)',
-              opacity: sopra ? 1 : 0, pointerEvents: sopra ? 'auto' : 'none', transition: 'opacity .15s'
-            }}
-            hover={{ color: '#8E3F1F' }}><IconCestino size={12} /></Hov>
-        )}
+        {/* scordare chiede una volta: è la sua testa, ma è una cosa che non torna */}
+        {scorda && <Cestino fai={() => scorda(c.id)} titolo={t('Scordala')} visibile={attiva} />}
       </div>
 
       {aperta && (

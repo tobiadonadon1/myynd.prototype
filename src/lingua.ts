@@ -1293,6 +1293,9 @@ const EN: Record<string, string> = {
   'Apri la memoria': 'Open memory',
   'Apri le preferenze': 'Open preferences',
   'Scrivi a Tobia': 'Write to Tobia',
+  'Cerca': 'Search',
+  'Costruisco la mappa…': 'Building the map…',
+  'Non sono riuscito a costruire la mappa.': 'I could not build the map.',
 }
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */

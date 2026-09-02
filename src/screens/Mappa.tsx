@@ -1,4 +1,5 @@
-import { Hov, LABEL, useLarghezza } from '../ui'
+import { useRef } from 'react'
+import { Hov, LABEL, useFocoDialogo, useLarghezza } from '../ui'
 import { t } from '../lingua'
 import { IconEspandi, IconSu } from '../icons'
 import type { Vals } from '../vals'
@@ -44,11 +45,43 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
         className={scuro ? 'scuro' : undefined}
         disabled={!v.claudeOn}
         style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : '#22271F' }} />
-      <button onClick={v.askNode} disabled={!v.claudeOn} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(120,110,100,.35)', color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
+      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(120,110,100,.35)', color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
         <IconSu size={14} />
       </button>
     </div>
   )
+}
+
+/**
+ * Quello che si scrive sopra al disegno quando il disegno non c'è.
+ *
+ * Tre casi, e vanno detti tutti e tre: non c'è niente da mostrare; il grafo
+ * sta arrivando; il grafo non è arrivato. Prima il terzo non esisteva — se la
+ * chiamata falliva si disegnava in silenzio la palla costruita sui conteggi,
+ * che è una scenografia, e chi guardava credeva di guardare i propri documenti.
+ */
+function Sopra({ v }: { v: Vals }) {
+  const stile = {
+    position: 'absolute' as const, inset: 0, display: 'grid', placeItems: 'center',
+    color: 'rgba(255,247,240,.5)', fontSize: 14, textAlign: 'center' as const, padding: 30
+  }
+  if (v.mappaVuota) return <div style={stile}>{t('Niente da mostrare: collega una fonte e fai leggere qualcosa a Myynd.')}</div>
+  if (v.guastoMappa) {
+    return (
+      <div style={{ ...stile, color: 'rgba(255,247,240,.7)' }}>
+        <div style={{ maxWidth: 380, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+          {v.guastoMappa}
+          <div style={{ marginTop: 14 }}>
+            <Hov as="button" type="button" onClick={v.ricaricaMappa}
+              style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.4)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}
+              hover={{ background: 'rgba(255,255,255,.12)' }}>{t('Riprova')}</Hov>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  if (v.costruendoMappa) return <div role="status" style={stile}>{t('Costruisco la mappa…')}</div>
+  return null
 }
 
 export function Mappa({ v }: { v: Vals }) {
@@ -56,6 +89,7 @@ export function Mappa({ v }: { v: Vals }) {
   // affiancati: 308 fissi per il pannello lasciavano al disegno una fetta
   // sempre più stretta finché la palla non era più leggibile. Si impilano.
   const stretta = useLarghezza() < 1000
+  const disegnata = !v.mappaVuota && !v.guastoMappa && !v.costruendoMappa
   return (
     <div style={{ width: 1010, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 18px' }}>
@@ -65,10 +99,8 @@ export function Mappa({ v }: { v: Vals }) {
       <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexDirection: stretta ? 'column' : 'row' }}>
         <div style={{ flex: 1, minWidth: 0, borderRadius: '24px 20px 24px 20px', background: '#1B1917', border: '1px solid rgba(255,247,240,.14)', boxShadow: '0 30px 70px rgba(50,36,24,.32)', overflow: 'hidden', position: 'relative' }}>
           <canvas ref={v.cvA} style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
-          {v.mappaVuota && (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'rgba(255,247,240,.5)', fontSize: 14, textAlign: 'center', padding: 30 }}>{t('Niente da mostrare: collega una fonte e fai leggere qualcosa a Myynd.')}</div>
-          )}
-          {!v.mappaVuota && (
+          <Sopra v={v} />
+          {disegnata && (
             <>
               <Hov as="button" onClick={v.expandMap}
                 style={{ position: 'absolute', top: 14, right: 14, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.55)', background: 'rgba(255,255,255,.14)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}
@@ -93,10 +125,13 @@ export function Mappa({ v }: { v: Vals }) {
 }
 
 export function MappaPiena({ v }: { v: Vals }) {
+  const finestra = useRef<HTMLDivElement>(null)
+  useFocoDialogo(finestra, v.closeMap)
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#191715', display: 'flex', flexDirection: 'column', animation: 'fadein .22s ease' }}>
+    <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="mappa-piena-titolo"
+      style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#191715', display: 'flex', flexDirection: 'column', animation: 'fadein .22s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 22px', flex: 'none' }}>
-        <span style={{ fontSize: 15, color: 'rgba(255,247,240,.9)' }}>{t('Mappa')}</span>
+        <span id="mappa-piena-titolo" style={{ fontSize: 15, color: 'rgba(255,247,240,.9)' }}>{t('Mappa')}</span>
         <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.5)' }}>{v.mappaMeta} · {t('trascina per girare, rotella per lo zoom')}</span>
         <div style={{ flex: 1 }} />
         <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.34)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
@@ -104,6 +139,7 @@ export function MappaPiena({ v }: { v: Vals }) {
       </div>
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <canvas ref={v.cvB} style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }} />
+        <Sopra v={v} />
         <div style={{ position: 'absolute', left: 22, bottom: 20, display: 'flex', flexWrap: 'wrap', gap: 7, maxWidth: 520 }}>
           <Legenda v={v} />
         </div>

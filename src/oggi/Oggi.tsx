@@ -9,9 +9,9 @@
 // è una lista che non stai leggendo.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Hov, LABEL, PILL, useLarghezza } from '../ui'
+import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
 import { frasi, t } from '../lingua'
-import { IconCestino, IconGiu, IconSpunta } from '../icons'
+import { IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Testo } from '../Testo'
 import { SECCHI, type Lista, type Secchio } from './useCompiti'
@@ -48,6 +48,22 @@ function griglia(stretta: boolean): CSSProperties {
  */
 const SPOSTA: CSSProperties = {}
 const FERMO: CSSProperties = {}
+
+/**
+ * Il bottone pieno e quello di contorno. Il bordo c'è in tutti e due —
+ * trasparente nel pieno — così passare dall'uno all'altro non sposta niente.
+ */
+const PIENO: CSSProperties = {
+  padding: '8px 17px', borderRadius: 99, border: '1px solid transparent',
+  background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+  fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
+}
+const CONTORNO: CSSProperties = {
+  ...PIENO, border: '1px solid rgba(34,39,31,.18)', background: 'none', color: '#22271F'
+}
+
+/** Un pannello sotto la bozza: sa se è aperto, e lo dice alla bozza che lo apre e lo chiude. */
+type Pannello = { aperto: boolean; apri: () => void; chiudi: () => void }
 
 /**
  * Di che colore è una riga.
@@ -169,8 +185,8 @@ function Modifica({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () => void }
  * solo la tinta, che è quello che le distingue davvero.
  */
 function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
-  const [sopra, setSopra] = useState(false)
-  const [dentro, setDentro] = useState(false)
+  // sotto mano: il mouse sopra, il fuoco dentro, o un dito — che non sa passare sopra a niente
+  const { attiva: mostra, props: sottoMano } = useAttiva()
   const [modifico, setModifico] = useState(false)
   /** Vera solo mentre tieni premuta la striscia: vedi il commento lì sotto. */
   const [afferrata, setAfferrata] = useState(false)
@@ -179,7 +195,6 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
   const chiede = c.stato === 'chiede'
   const delegato = c.stato === 'delegato'
   const aspetta = pronto || chiede
-  const mostra = sopra || dentro
   const col = tinta(c)
 
   return (
@@ -205,10 +220,7 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
         transform: mostra ? 'translateY(-1px)' : 'none',
         transition: 'background .18s ease, border-color .18s ease, box-shadow .24s ease, transform .24s ease'
       }}
-      onMouseEnter={() => setSopra(true)}
-      onMouseLeave={() => setSopra(false)}
-      onFocus={() => setDentro(true)}
-      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDentro(false) }}>
+      {...sottoMano}>
 
       {/*
         La striscia del colore, che è anche l'appiglio.
@@ -279,14 +291,8 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
           </Hov>
         )}
 
-        <Hov as="button" type="button" onClick={() => l.elimina(c.id)}
-          title={t('Toglila')} aria-label={t('Toglila')}
-          style={{
-            flex: 'none', width: 20, height: 20, display: 'grid', placeItems: 'center', border: 'none',
-            background: 'none', padding: 0, cursor: 'pointer', color: 'rgba(34,39,31,.35)',
-            opacity: mostra ? 1 : 0, pointerEvents: mostra ? 'auto' : 'none', transition: 'opacity .15s'
-          }}
-          hover={{ color: '#8E3F1F' }}><IconCestino size={11} /></Hov>
+        {/* toglierla chiede una volta, sul posto: la stessa regola di ogni cestino qui dentro */}
+        <Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} visibile={mostra} dim={20} icona={11} />
       </div>
 
       <div role="radiogroup" aria-label={c.testo} style={{ display: 'contents' }}>
@@ -510,6 +516,12 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
   const [testo, setTesto] = useState(c.risultato ?? '')
   const [modifico, setModifico] = useState(false)
+  /**
+   * Quale dei tre pannelli sotto è aperto: mandare, salvare, far lavorare.
+   * Uno alla volta, e lo sa la bozza: finché uno è aperto il bottone pieno è
+   * il suo, e «Va bene» si fa di contorno — un solo gesto principale per volta.
+   */
+  const [pannello, setPannello] = useState<'' | 'manda' | 'salva' | 'lavora'>('')
   const area = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => { setTesto(c.risultato ?? '') }, [c.risultato])
@@ -566,12 +578,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13 }}>
         <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
-          style={{
-            padding: '8px 17px', borderRadius: 99, border: 'none',
-            background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
-            fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
-          }}
-          hover={{ opacity: 0.92 }}>{t('Va bene')}</Hov>
+          style={pannello ? CONTORNO : PIENO}
+          hover={pannello ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
 
         <Hov as="button" type="button" onClick={() => setModifico(m => !m)}
           style={{
@@ -591,9 +599,9 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           hover={{ color: '#22271F' }}>{t('Rifallo')}</Hov>
       </div>
 
-      <Manda c={c} l={l} />
-      <Salva c={c} l={l} testo={testo} />
-      <Lavora c={c} l={l} />
+      <Manda c={c} l={l} aperto={pannello === 'manda'} apri={() => setPannello('manda')} chiudi={() => setPannello('')} />
+      <Salva c={c} l={l} testo={testo} aperto={pannello === 'salva'} apri={() => setPannello('salva')} chiudi={() => setPannello('')} />
+      <Lavora c={c} l={l} aperto={pannello === 'lavora'} apri={() => setPannello('lavora')} chiudi={() => setPannello('')} />
     </div>
   )
 }
@@ -609,9 +617,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
  * decorativa: fra i due passi ci va una persona che ha letto, ed è l'unica cosa
  * che rende accettabile lasciare un agente dentro una cartella di lavoro.
  */
-function Lavora({ c, l }: { c: Compito; l: Lista }) {
+function Lavora({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
   const [pronto, setPronto] = useState<{ pronto: boolean; cartelle: string[] } | null>(null)
-  const [aperto, setAperto] = useState(false)
   const [cartella, setCartella] = useState('')
   const [gira, setGira] = useState<'' | 'piano' | 'fai'>('')
   const [guaio, setGuaio] = useState('')
@@ -642,7 +649,7 @@ function Lavora({ c, l }: { c: Compito; l: Lista }) {
   if (!aperto) {
     return (
       <div style={{ marginTop: 4 }}>
-        <Hov as="button" type="button" onClick={() => setAperto(true)}
+        <Hov as="button" type="button" onClick={apri}
           style={{
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
@@ -698,7 +705,7 @@ function Lavora({ c, l }: { c: Compito; l: Lista }) {
               }}>{gira === 'fai' ? t('Lo sto facendo…') : t('Fallo davvero')}</button>
             )}
 
-            <Hov as="button" type="button" onClick={() => { setAperto(false); setGuaio('') }}
+            <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
               style={{
                 border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'
@@ -723,8 +730,7 @@ function Lavora({ c, l }: { c: Compito; l: Lista }) {
  * Non è una restrizione tecnica, è la stessa promessa detta due volte: quello
  * che tocca è quello che gli hai mostrato.
  */
-function Salva({ c, l, testo }: { c: Compito; l: Lista; testo: string }) {
-  const [aperto, setAperto] = useState(false)
+function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; testo: string } & Pannello) {
   const [nome, setNome] = useState(c.testo)
   const [formato, setFormato] = useState('.rtf')
   const [cartella, setCartella] = useState('')
@@ -754,7 +760,7 @@ function Salva({ c, l, testo }: { c: Compito; l: Lista; testo: string }) {
   if (!aperto) {
     return (
       <div style={{ marginTop: 4 }}>
-        <Hov as="button" type="button" onClick={() => setAperto(true)}
+        <Hov as="button" type="button" onClick={apri}
           style={{
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
@@ -798,7 +804,7 @@ function Salva({ c, l, testo }: { c: Compito; l: Lista; testo: string }) {
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: salvo ? 'default' : 'pointer'
         }}>{salvo ? t('Salvo…') : t('Salva e apri')}</button>
-        <Hov as="button" type="button" onClick={() => { setAperto(false); setGuaio('') }}
+        <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'
@@ -833,8 +839,7 @@ function Salva({ c, l, testo }: { c: Compito; l: Lista; testo: string }) {
  * nome nella tua posta non c'è mai stato, che è esattamente il momento in cui
  * vale la pena guardarlo due volte invece di una.
  */
-function Manda({ c, l }: { c: Compito; l: Lista }) {
-  const [aperto, setAperto] = useState(false)
+function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
   const [preparo, setPreparo] = useState(false)
   const [mando, setMando] = useState(false)
   const [guaio, setGuaio] = useState('')
@@ -842,7 +847,7 @@ function Manda({ c, l }: { c: Compito; l: Lista }) {
 
   const prepara = async () => {
     setPreparo(true); setGuaio('')
-    try { setM(await api.preparaEmail(c.id)); setAperto(true) }
+    try { setM(await api.preparaEmail(c.id)); apri() }
     catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setPreparo(false)
   }
@@ -917,7 +922,7 @@ function Manda({ c, l }: { c: Compito; l: Lista }) {
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: mando ? 'default' : 'pointer'
         }}>{mando ? t('Mando…') : t('Manda')}</button>
-        <Hov as="button" type="button" onClick={() => { setAperto(false); setGuaio('') }}
+        <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'

@@ -28,8 +28,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Attrezzo, type Automazione, type Raccolta, type StatoRicette } from '../api'
 import { frasi, loc, t } from '../lingua'
-import { Hov, LABEL, useLarghezza } from '../ui'
-import { IconCroce, IconPenna, IconPiu } from '../icons'
+import { Cestino, Hov, LABEL, daTastiera, useAttiva, useLarghezza } from '../ui'
+import { IconPenna, IconPiu } from '../icons'
 import { Scheda, Vuota } from '../automazioni/Scheda'
 import { Editor, Nuova } from '../automazioni/Editor'
 import type { Vals } from '../vals'
@@ -74,7 +74,7 @@ function Cartella({ nome, etichetta, quante, scelta, vai, cadi, sopraCon, rinomi
   butta?: () => void
 }) {
   const [dentro, setDentro] = useState(false)
-  const [sopra, setSopra] = useState(false)
+  const { attiva, passa, props: sottoMano } = useAttiva()
   const [scrivo, setScrivo] = useState(false)
   const [testo, setTesto] = useState(nome ?? '')
 
@@ -100,11 +100,15 @@ function Cartella({ nome, etichetta, quante, scelta, vai, cadi, sopraCon, rinomi
     )
   }
 
+  // i due gesti compaiono quando la riga è sotto mano; su un dito ci sono
+  // sempre, e allora il conto resta accanto invece di sparire
+  const controlli = attiva && !!nome && !!rinomina && !!butta
+
   return (
     <div
-      onClick={vai}
-      onMouseEnter={() => setSopra(true)}
-      onMouseLeave={() => setSopra(false)}
+      role="button" tabIndex={0} aria-pressed={scelta}
+      onClick={vai} onKeyDown={daTastiera(vai)}
+      {...sottoMano}
       onDragOver={e => { if (cadi) { e.preventDefault(); setDentro(true) } }}
       onDragLeave={() => setDentro(false)}
       onDrop={e => {
@@ -127,18 +131,18 @@ function Cartella({ nome, etichetta, quante, scelta, vai, cadi, sopraCon, rinomi
         fontWeight: scelta ? 500 : 400
       }}>{nome ?? etichetta ?? t('Tutte')}</span>
 
-      {sopra && nome && rinomina && butta ? (
-        <span style={{ display: 'flex', gap: 2, flex: 'none' }}>
-          <Hov as="span" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setTesto(nome); setScrivo(true) }}
-            title={t('Rinominala')}
-            style={{ display: 'grid', placeItems: 'center', width: 19, height: 19, borderRadius: 6, color: 'rgba(34,39,31,.4)' }}
+      {controlli && (
+        <span style={{ display: 'flex', gap: 2, flex: 'none', alignItems: 'center' }}>
+          <Hov as="button" type="button"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setTesto(nome!); setScrivo(true) }}
+            title={t('Rinominala')} aria-label={t('Rinominala')}
+            style={{ display: 'grid', placeItems: 'center', width: 19, height: 19, borderRadius: 6, border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'rgba(34,39,31,.4)' }}
             hover={{ background: 'rgba(34,39,31,.09)', color: '#22271F' }}><IconPenna size={11} /></Hov>
-          <Hov as="span" onClick={(e: React.MouseEvent) => { e.stopPropagation(); butta() }}
-            title={t('Butta la cartella')}
-            style={{ display: 'grid', placeItems: 'center', width: 19, height: 19, borderRadius: 6, color: 'rgba(34,39,31,.4)' }}
-            hover={{ background: 'rgba(142,63,31,.12)', color: '#8E3F1F' }}><IconCroce size={9} /></Hov>
+          {/* buttarla chiede una volta, come ogni cestino qui dentro */}
+          <Cestino fai={butta!} titolo={t('Butta la cartella')} dim={19} icona={10} />
         </span>
-      ) : (
+      )}
+      {(!controlli || !passa) && (
         <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.36)', flex: 'none' }}>{quante || ''}</span>
       )}
     </div>
@@ -381,9 +385,10 @@ export function Automazioni({ v }: { v: Vals }) {
                   color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none', marginTop: 4
                 }} />
             ) : (
-              <Hov onClick={() => setNuovaCartella(true)}
+              <Hov as="button" type="button" onClick={() => setNuovaCartella(true)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 12,
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 11px', borderRadius: 12,
+                  border: 'none', background: 'none', fontFamily: 'inherit', textAlign: 'left',
                   cursor: 'pointer', marginTop: 4, color: 'rgba(34,39,31,.45)', fontSize: '12.5px'
                 }}
                 hover={{ background: 'rgba(34,39,31,.05)', color: '#22271F' }}>
@@ -404,10 +409,11 @@ export function Automazioni({ v }: { v: Vals }) {
                 {inUso.map(({ x, quante }) => {
                   const on = uguali(vivo, { che: 'attrezzo', nome: x.nome })
                   return (
-                    <Hov key={x.nome} onClick={() => setFiltro(on ? { che: 'tutte' } : { che: 'attrezzo', nome: x.nome })}
+                    <Hov key={x.nome} as="button" type="button" aria-pressed={on}
+                      onClick={() => setFiltro(on ? { che: 'tutte' } : { che: 'attrezzo', nome: x.nome })}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px',
-                        borderRadius: 12, cursor: 'pointer', marginBottom: 2,
+                        display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 11px',
+                        borderRadius: 12, cursor: 'pointer', marginBottom: 2, fontFamily: 'inherit', textAlign: 'left',
                         background: on ? `${x.tinta}14` : 'transparent',
                         border: `1px solid ${on ? `${x.tinta}38` : 'transparent'}`
                       }}
@@ -444,9 +450,9 @@ export function Automazioni({ v }: { v: Vals }) {
                   : f.che === 'attrezzo' ? (catalogo.find(x => x.nome === f.nome)?.etichetta ?? f.nome)
                     : 'nome' in f ? f.nome : ''
                 return (
-                  <Hov key={`${f.che}:${'nome' in f ? f.nome : ''}`} onClick={() => setFiltro(f)}
+                  <Hov key={`${f.che}:${'nome' in f ? f.nome : ''}`} as="button" type="button" aria-pressed={on} onClick={() => setFiltro(f)}
                     style={{
-                      padding: '6px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12.5px',
+                      padding: '6px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12.5px', fontFamily: 'inherit',
                       border: `1px solid ${on ? `${tinta}66` : 'rgba(34,39,31,.14)'}`,
                       background: on ? `${tinta}1A` : 'rgba(255,255,255,.5)',
                       color: on ? tinta : 'rgba(34,39,31,.65)'
@@ -477,8 +483,7 @@ export function Automazioni({ v }: { v: Vals }) {
                   e.stopPropagation()
                   try { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) } catch { carica() }
                 }}
-                butta={async e => {
-                  e.stopPropagation()
+                butta={async () => {
                   try { setTutte((await api.buttaAutomazione(a.id)).automazioni) } catch { carica() }
                 }} />
             ))}
