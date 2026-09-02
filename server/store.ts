@@ -1198,6 +1198,17 @@ export function recenti(limite = 40): Documento[] {
   return db.prepare('SELECT * FROM documenti ORDER BY quando DESC LIMIT ?').all(limite) as unknown as Documento[]
 }
 
+/**
+ * Gli id che cominciano così — «posta:INBOX:» — per sapere cosa c'è già.
+ *
+ * Un intervallo sull'indice unico degli id, non un LIKE: su una casella
+ * grossa la differenza è fra un millisecondo e una lettura intera.
+ */
+export function idsConPrefisso(prefisso: string): string[] {
+  return (db.prepare('SELECT id FROM documenti WHERE id >= ? AND id < ?')
+    .all(prefisso, prefisso + '\uffff') as { id: string }[]).map(r => r.id)
+}
+
 export function documento(id: string): Documento | null {
   return (db.prepare('SELECT * FROM documenti WHERE id = ?').get(id) as unknown as Documento) ?? null
 }

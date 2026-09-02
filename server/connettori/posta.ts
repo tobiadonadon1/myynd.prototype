@@ -406,7 +406,15 @@ export async function sposta(
   }
 }
 
-export type EsitoPosta = { docs: Documento[]; cartelleFallite: string[]; troncato: boolean }
+export type EsitoPosta = {
+  docs: Documento[]
+  cartelleFallite: string[]
+  troncato: boolean
+  /** L'UIDVALIDITY vista in ogni cartella, da conservare per la prossima lettura. */
+  validita: Record<string, string>
+  /** Quanti messaggi c'erano già e non sono stati riscaricati. */
+  saltati: number
+}
 
 /**
  * I nomi con cui le caselle chiamano la posta inviata, quando non dichiarano
@@ -435,15 +443,29 @@ export async function cartellaInviata(cl: ImapFlow): Promise<string | null> {
   return perNome?.path ?? null
 }
 
+/**
+ * Legge la casella, e riscarica solo quello che non ha già.
+ *
+ * Fino a ieri ogni sei ore si tiravano giù di nuovo tutti i messaggi della
+ * finestra, allegati compresi, per poi scoprire in `salvaDocumenti` che erano
+ * uguali: trenta giorni di posta scaricati quattro volte al giorno per non
+ * cambiare niente. Adesso chi chiama passa `giaIndicizzati` — gli uid già
+ * nell'indice, cartella per cartella — e quelli si saltano, purché la cartella
+ * abbia la stessa UIDVALIDITY dell'ultima volta: se il server l'ha rinumerata,
+ * gli uid vecchi non valgono più e si rilegge tutto.
+ */
 export async function sincronizza(
   c: ConfigPosta,
-  avanzamento?: (fatti: number, totale: number) => void
+  avanzamento?: (fatti: number, totale: number) => void,
+  giaIndicizzati?: (cartella: string) => Set<number>
 ): Promise<EsitoPosta> {
   const giorni = c.giorni ?? 30
   const da = new Date(Date.now() - giorni * 86400_000)
   let cartelle = c.cartelle?.length ? c.cartelle : ['INBOX']
   const docs: Documento[] = []
   const cartelleFallite: string[] = []
+  const validita: Record<string, string> = { ...(c.validita ?? {}) }
+  let saltati = 0
   let troncato = false
   const { cl } = await apri(c)
 
@@ -485,8 +507,19 @@ export async function sincronizza(
         // finestra che ha chiesto lei, e non verrà letto a nessun giro futuro.
         if (uids.length > 400) troncato = true
         const scelti = uids.slice(-400)
+
+        // stessa cartella di prima? allora gli uid già indicizzati sono gli stessi messaggi
+        const box = cl.mailbox as false | { uidValidity?: bigint }
+        const adesso = box && box.uidValidity !== undefined ? String(box.uidValidity) : ''
+        const stessa = !!adesso && c.validita?.[cartella] === adesso
+        const noti = stessa && giaIndicizzati ? giaIndicizzati(cartella) : new Set<number>()
+        const daScaricare = noti.size ? scelti.filter(u => !noti.has(u)) : scelti
+        saltati += scelti.length - daScaricare.length
+        if (adesso) validita[cartella] = adesso
+        if (!daScaricare.length) continue
+
         let fatti = 0
-        for await (const msg of cl.fetch(scelti, { uid: true, source: true, envelope: true }, { uid: true })) {
+        for await (const msg of cl.fetch(daScaricare, { uid: true, source: true, envelope: true }, { uid: true })) {
           try {
             const p = await simpleParser(msg.source as Buffer)
             // La posta in testo semplice va a capo a settantadue caratteri per
@@ -512,7 +545,7 @@ export async function sincronizza(
             // un messaggio illeggibile non deve fermare la sincronizzazione
           }
           fatti++
-          if (avanzamento && fatti % 20 === 0) avanzamento(fatti, scelti.length)
+          if (avanzamento && fatti % 20 === 0) avanzamento(fatti, daScaricare.length)
         }
       } catch {
         // una cartella che va storta non deve far perdere quelle già lette
@@ -524,5 +557,5 @@ export async function sincronizza(
   } finally {
     try { await cl.logout() } catch { /* la connessione è già caduta */ }
   }
-  return { docs, cartelleFallite, troncato }
+  return { docs, cartelleFallite, troncato, validita, saltati }
 }

@@ -158,6 +158,14 @@ export type ConfigPosta = {
   cartelle?: string[]
   giorni?: number
   /**
+   * L'UIDVALIDITY di ogni cartella all'ultima lettura.
+   *
+   * Finché non cambia, gli uid già nell'indice sono gli stessi messaggi, e non
+   * si riscaricano. Se cambia — il server ha rinumerato la cartella — si
+   * rilegge tutto, perché gli uid vecchi non vogliono più dire niente.
+   */
+  validita?: Record<string, string>
+  /**
    * Da dove esce la posta, quando esce.
    *
    * Assente vuol dire «deducilo»: quasi tutti i provider tengono lo stesso

@@ -885,12 +885,20 @@ async function leggiTutto(
   }
   if (!fermo() && c.posta && (!soloFonte || soloFonte === 'posta')) {
     avvisa({ fase: 'posta', stato: 'mi collego alla casella' })
+    // gli uid già nell'indice, cartella per cartella: quelli non si riscaricano
+    const giaIndicizzati = (cartella: string) => new Set(
+      store.idsConPrefisso(`posta:${cartella}:`).map(id => Number(id.slice(id.lastIndexOf(':') + 1))).filter(n => n > 0)
+    )
     const e = await posta.sincronizza(c.posta, (fatti, tot) =>
-      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi` }))
+      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi` }), giaIndicizzati)
     store.salvaDocumenti(e.docs)
     totale += e.docs.length
+    // l'UIDVALIDITY vista si conserva: è quello che rende possibile saltare la prossima volta
+    if (JSON.stringify(e.validita) !== JSON.stringify(c.posta.validita ?? {})) {
+      cfg.aggiorna({ posta: { ...c.posta, validita: e.validita } })
+    }
     avvisa({
-      fase: 'posta', stato: 'fatto', documenti: e.docs.length,
+      fase: 'posta', stato: 'fatto', documenti: e.docs.length, saltati: e.saltati,
       cartelleFallite: e.cartelleFallite, troncato: e.troncato
     })
   }
