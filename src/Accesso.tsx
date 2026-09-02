@@ -77,7 +77,11 @@ export function Accesso({ accesso, entrato }: {
       if (!registrato && pacco) await api.caricaTrasloco(pacco)
       entrato(r.account)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setErr(msg)
+      // chi si registra con un indirizzo che c'è già vuole quasi sempre entrare:
+      // lo si porta sulla scheda giusta, con l'indirizzo già scritto
+      if (!registrato && /già un account/i.test(msg)) setModo('entra')
     }
     setOccupato(false)
   }

@@ -136,7 +136,9 @@ const EN: Record<string, string> = {
   'Crea un account': 'Create an account',
   'La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.':
     'Your mail, your files and your automations stay yours: every account has its own memory, separate from anyone else\u2019s.',
-  'C’è già un account con questo indirizzo.': 'There is already an account with this address.',
+  'C’è già un account con questo indirizzo: entra con la tua password.': 'There is already an account with this address: sign in with your password.',
+  'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.': 'You have reached today’s token limit. It resets tomorrow, or raise it in Preferences.',
+  'Il tetto è un numero di token al giorno, o zero per nessun tetto.': 'The limit is a number of tokens per day, or zero for no limit.',
   'Indirizzo o password non corretti.': 'Address or password is not right.',
 
 // — ospitato, e nessuno ha ancora messo l'invito —

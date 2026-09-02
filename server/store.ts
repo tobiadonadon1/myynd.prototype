@@ -715,6 +715,27 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   tabella più grossa che c'è — per ogni persona, ogni quarto d'ora.
   d => {
     d.exec('CREATE INDEX IF NOT EXISTS idx_doc_indicizzato ON documenti(indicizzato DESC)')
+  },
+
+  // 21 → 22 · quanto è costato ragionare, chiamata per chiamata.
+  //
+  //   Senza questa tabella «perché ho speso sei dollari in tre giorni» non
+  //   aveva nessun posto in cui trovare risposta, e un tetto giornaliero non
+  //   aveva niente su cui appoggiarsi. Si scrive a ogni chiamata a un modello
+  //   di frontiera: il lavoro, il motore, i token entrati, quelli dalla cache,
+  //   quelli usciti.
+  d => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS uso (
+        quando  TEXT NOT NULL,
+        lavoro  TEXT NOT NULL,
+        motore  TEXT NOT NULL,
+        entrata INTEGER NOT NULL,
+        cache   INTEGER NOT NULL DEFAULT 0,
+        uscita  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_uso_quando ON uso(quando);
+    `)
   }
 
 ]
@@ -1140,6 +1161,34 @@ export function recenti(limite = 40): Documento[] {
 
 export function documento(id: string): Documento | null {
   return (db.prepare('SELECT * FROM documenti WHERE id = ?').get(id) as unknown as Documento) ?? null
+}
+
+// — quanto è costato —
+
+export type Uso = { lavoro: string; motore: string; entrata: number; cache: number; uscita: number }
+
+export function segnaUso(u: Uso) {
+  db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
+    .run(new Date().toISOString(), u.lavoro, u.motore, u.entrata, u.cache, u.uscita)
+}
+
+export type Totale = { chiamate: number; entrata: number; cache: number; uscita: number }
+
+/** I token spesi da un istante in qua: serve al tetto di oggi. */
+export function usoDal(quando: string): Totale {
+  const r = db.prepare(
+    'SELECT COUNT(*) AS n, COALESCE(SUM(entrata),0) AS e, COALESCE(SUM(cache),0) AS c, COALESCE(SUM(uscita),0) AS u FROM uso WHERE quando >= ?'
+  ).get(quando) as { n: number; e: number; c: number; u: number }
+  return { chiamate: r.n, entrata: r.e, cache: r.c, uscita: r.u }
+}
+
+/** Giorno per giorno, per la riga nelle preferenze. */
+export function usoPerGiorno(giorni: number): (Totale & { giorno: string })[] {
+  const da = new Date(Date.now() - giorni * 86_400_000).toISOString().slice(0, 10)
+  return db.prepare(
+    'SELECT substr(quando, 1, 10) AS giorno, COUNT(*) AS chiamate, SUM(entrata) AS entrata, SUM(cache) AS cache, SUM(uscita) AS uscita ' +
+    'FROM uso WHERE quando >= ? GROUP BY giorno ORDER BY giorno'
+  ).all(da) as (Totale & { giorno: string })[]
 }
 
 export function conteggi() {

@@ -15,6 +15,33 @@ function titolo(p: any): string {
   return '(senza titolo)'
 }
 
+/**
+ * Notion concede circa tre richieste al secondo per integrazione, e oltre
+ * risponde 429. Prima non c'era nessun freno: una pagina con molti blocchi
+ * annidati partiva a raffica, il 429 finiva nel `catch` che segna la pagina
+ * come letta a metà, e la pagina veniva saltata — in silenzio, a ogni giro.
+ * Qui si tiene un passo minimo fra le chiamate e, sul 429, si aspetta quanto
+ * dice Notion e si riprova una volta.
+ */
+let ultimaChiamata = 0
+const PASSO = 350
+
+async function conCalma<T>(f: () => Promise<T>): Promise<T> {
+  const attesa = ultimaChiamata + PASSO - Date.now()
+  if (attesa > 0) await new Promise(r => setTimeout(r, attesa))
+  ultimaChiamata = Date.now()
+  try {
+    return await f()
+  } catch (e) {
+    const err = e as { status?: number; code?: string; headers?: Record<string, string> }
+    if (err?.status !== 429 && err?.code !== 'rate_limited') throw e
+    const dopo = Math.min(10, Number(err.headers?.['retry-after']) || 1)
+    await new Promise(r => setTimeout(r, dopo * 1000))
+    ultimaChiamata = Date.now()
+    return await f()
+  }
+}
+
 /** Appiattisce i blocchi di una pagina in testo semplice. */
 async function testoPagina(notion: Client, pageId: string, profondita = 0): Promise<{ testo: string; completo: boolean }> {
   if (profondita > 2) return { testo: '', completo: true }
@@ -24,7 +51,7 @@ async function testoPagina(notion: Client, pageId: string, profondita = 0): Prom
   do {
     let r
     try {
-      r = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursore, page_size: 100 })
+      r = await conCalma(() => notion.blocks.children.list({ block_id: pageId, start_cursor: cursore, page_size: 100 }))
     } catch {
       // pagina letta a metà: non deve sostituire una versione completa
       completo = false
@@ -83,11 +110,11 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
   do {
     let r: any
     try {
-      r = await notion.search({
+      r = await conCalma(() => notion.search({
         filter: { property: 'object', value: 'page' },
         start_cursor: cursore,
         page_size: 50
-      })
+      }))
     } catch {
       // un errore a metà elenco non deve buttare via quello che ho già
       return { docs, parziali, interrotto: true, visti }

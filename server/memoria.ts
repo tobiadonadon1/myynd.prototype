@@ -181,9 +181,10 @@ const schemaMemoria = () => ({
           genere: { type: 'string', enum: ['esplicita', 'dedotta', 'indotta'] },
           fiducia: { type: 'number', description: 'Da 0 a 1. Esplicita sta sopra 0.9; indotta di rado sopra 0.6.' },
           premesse: { type: 'array', items: { type: 'string' }, description: 'Se dedotta: da quali affermazioni. Vuoto se esplicita.' },
-          citazione: { type: 'string', description: 'Le parole sue da cui viene, alla lettera. Vuoto se non ce ne sono.' }
+          citazione: { type: 'string', description: 'Le parole sue da cui viene, alla lettera. Vuoto se non ce ne sono.' },
+          sostituisce: { type: 'string', description: 'Se questa convinzione corregge o supera una di quelle che Myynd già crede (te le elenco), ricopia qui quella vecchia alla lettera. Vuoto altrimenti.' }
         },
-        required: ['enunciato', 'ambito', 'genere', 'fiducia', 'premesse', 'citazione'],
+        required: ['enunciato', 'ambito', 'genere', 'fiducia', 'premesse', 'citazione', 'sostituisce'],
         additionalProperties: false
       }
     }
@@ -207,6 +208,11 @@ si cercano, non si ricordano. Non registrare cortesie, saluti, o cose vere di
 chiunque. Meglio nessuna convinzione che una generica: una lista vuota è una
 risposta giusta.
 
+In fondo ti elenco quello che Myynd già crede. Se lo scambio mostra che una di
+quelle convinzioni non vale più — ha cambiato idea, o era sbagliata — scrivi la
+convinzione nuova e ricopia in «sostituisce» quella vecchia, alla lettera. Non
+ripetere quelle che valgono ancora.
+
 Scrivi in ${nellaLingua()}, al presente, una frase per convinzione.`
 
 /**
@@ -224,13 +230,26 @@ export async function distilla(
     .join('\n\n')
     .slice(0, 24_000)
 
-  type Grezza = { enunciato: string; ambito: string; genere: string; fiducia: number; premesse: string[]; citazione: string }
+  type Grezza = { enunciato: string; ambito: string; genere: string; fiducia: number; premesse: string[]; citazione: string; sostituisce?: string }
+  /*
+   * Quello che già crede, perché possa dire cosa non vale più.
+   *
+   * La bitemporalità c'era già nel database — una convinzione superata prende
+   * una data di fine e resta leggibile — ma nessuno la faceva scattare:
+   * `distilla` non passava mai `sostituisce`, e le contraddizioni si
+   * accumulavano tutte vive. Il modello può dirlo solo se sa cosa c'è già.
+   */
+  const note = store.convinzioni().slice(0, 40)
+  const giaNote = note.length
+    ? '\n\n---\nQuello che Myynd già crede di questa persona:\n' +
+      note.map(n => `— [${n.ambito}] ${n.enunciato}`).join('\n')
+    : ''
   const out = await chiediJSON<{ convinzioni: Grezza[] }>({
     lavoro: 'estrazione',
     max_tokens: 4000,
     system: istruzioni(),
     formato: schemaMemoria(),
-    messages: [{ role: 'user', content: conversazione }]
+    messages: [{ role: 'user', content: conversazione + giaNote }]
   })
   // la memoria è un di più: se fallisce, la conversazione resta valida
   if (!out?.convinzioni?.length) return 0
@@ -244,7 +263,12 @@ export async function distilla(
     // posto di una convinzione. Una riga sotto le tre parole non è un giudizio
     // su nessuno: è rumore che poi finisce dentro ogni prompt, per sempre.
     if (c.enunciato.trim().split(/\s+/).length < 3) continue
+    // la vecchia, se il modello l'ha nominata alla lettera: le si mette una
+    // data di fine, e resta nello storico
+    const detta = (c.sostituisce ?? '').trim().toLowerCase()
+    const vecchia = detta ? note.find(n => n.enunciato.trim().toLowerCase() === detta) : undefined
     store.ricorda({
+      ...(vecchia && vecchia.enunciato.trim() !== c.enunciato.trim() ? { sostituisce: vecchia.id } : {}),
       enunciato: c.enunciato.trim(),
       ambito: c.ambito || 'persona',
       genere: (['esplicita', 'dedotta', 'indotta'].includes(c.genere) ? c.genere : 'indotta') as store.Convinzione['genere'],

@@ -212,7 +212,7 @@ export async function registra(email: string, password: string):
   const e = email.trim().toLowerCase()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, errore: 'Indirizzo non valido.' }
   if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
-  if (esiste(e)) return { ok: false, errore: 'C’è già un account con questo indirizzo.' }
+  if (esiste(e)) return { ok: false, errore: 'C’è già un account con questo indirizzo: entra con la tua password.' }
 
   const id = nuovoId()
   const sale = randomBytes(16).toString('hex')

@@ -191,6 +191,8 @@ export type Config = {
   lingua?: string
   /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */
   oreFatte?: number
+  /** Il tetto di token al giorno per il lavoro di frontiera. Zero o assente: nessuno. */
+  tetto?: number
   /**
    * Su cosa tenerla aggiornata, con le sue parole.
    *
@@ -471,6 +473,7 @@ export function pubblica(c: Config = leggi()) {
     modello: c.modello ?? 'claude-sonnet-5',
     lingua: c.lingua ?? 'en',
     oreFatte: c.oreFatte ?? 48,
+    tetto: c.tetto ?? 0,
     giro: !!c.giro,
     argomenti: c.argomenti ?? '',
     // chi ha scritto quella riga: la schermata lo dice, invece di lasciar

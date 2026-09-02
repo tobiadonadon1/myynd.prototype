@@ -21,6 +21,8 @@ export type Stato = {
     modello: string
     lingua: string
     oreFatte: number
+    /** Token al giorno oltre i quali Myynd smette di chiamare il modello. Zero = nessun tetto. */
+    tetto: number
     giro: boolean
     /** Su cosa vuole essere tenuto aggiornato dai giornali. Vuoto = di tutto. */
     argomenti: string
@@ -879,6 +881,12 @@ export const api = {
     return r
   },
   esciOvunque: () => json<{ ok: true; chiuse: number }>('/api/conto/esci-ovunque', { method: 'POST', body: '{}' }),
+
+  /** Quanto è costato ragionare: oggi, e giorno per giorno. */
+  uso: () => json<{
+    oggi: { chiamate: number; entrata: number; cache: number; uscita: number; tetto: number; raggiunto: boolean }
+    giorni: { giorno: string; chiamate: number; entrata: number; cache: number; uscita: number }[]
+  }>('/api/uso'),
 
   /** Portarsi via tutto chiede la password: dentro ci sono le credenziali di ogni fonte. */
   async scaricaTrasloco(password: string): Promise<{ nome: string; dati: Blob }> {

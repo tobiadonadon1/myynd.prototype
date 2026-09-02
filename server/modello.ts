@@ -33,6 +33,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
+import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
 
 // — chi c'è —
@@ -344,6 +345,11 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
   if (!u) return
   const cache = u.cache_read_input_tokens ?? 0
   const scritti = u.cache_creation_input_tokens ?? 0
+  // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
+  // chi sviluppa, la tabella la legge la schermata delle preferenze
+  try {
+    store.segnaUso({ lavoro, motore: nomeMotore(), entrata: u.input_tokens + scritti, cache, uscita: u.output_tokens })
+  } catch { /* contare non deve mai rompere la chiamata contata */ }
   console.log(
     `myynd · uso · ${lavoro}${nota ? ` · ${nota}` : ''} · entrata ${u.input_tokens}` +
     `${cache ? ` (+${cache} dalla cache)` : ''}${scritti ? ` (+${scritti} messi in cache)` : ''}` +
@@ -469,10 +475,12 @@ export function motore(): Motore | null {
     return {
       tipo: 'compatibile',
       nome: f.nome || f.modello,
-      crea: (p, attesa) => compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }),
-      flusso: (p, onTesto, attesa) =>
-        compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX)
+      crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }) },
+      flusso: (p, onTesto, attesa) => {
+        controllaIlTetto()
+        return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX)
           .catch(e => { throw tradotto(e) })
+      }
     }
   }
   const a = cliente()
@@ -481,6 +489,7 @@ export function motore(): Motore | null {
     tipo: 'claude',
     nome: modello(),
     crea: async (p, attesa) => {
+      controllaIlTetto()
       try {
         return await a.messages.create(p, attesa ? { timeout: attesa } : undefined)
       } catch (e) {
@@ -488,6 +497,7 @@ export function motore(): Motore | null {
       }
     },
     flusso: async (p, onTesto, attesa) => {
+      controllaIlTetto()
       try {
         const s = a.messages.stream(p, attesa ? { timeout: attesa } : undefined)
         s.on('text', onTesto)
@@ -497,6 +507,46 @@ export function motore(): Motore | null {
       }
     }
   }
+}
+
+// — il tetto di oggi —
+
+/** Il nome del motore che risponde adesso, per il registro dell'uso. */
+function nomeMotore(): string {
+  const f = fornitore()
+  return f ? (f.nome || f.modello) : modello()
+}
+
+/** Da mezzanotte UTC: un giorno solare semplice, uguale per tutti i server. */
+function inizioDiOggi(): string {
+  return new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z'
+}
+
+/** Il tetto giornaliero in token (entrata + uscita, la cache non conta). Zero = nessuno. */
+export function tetto(): number {
+  const t = Number(leggi().tetto ?? 0)
+  return Number.isFinite(t) && t > 0 ? Math.floor(t) : 0
+}
+
+/** Quanto si è speso oggi, e se il tetto è stato raggiunto. */
+export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean } {
+  const t = tetto()
+  let oggi: store.Totale = { chiamate: 0, entrata: 0, cache: 0, uscita: 0 }
+  try { oggi = store.usoDal(inizioDiOggi()) } catch { /* senza indice non si conta */ }
+  return { ...oggi, tetto: t, raggiunto: t > 0 && oggi.entrata + oggi.uscita >= t }
+}
+
+const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.'
+
+/**
+ * Prima di ogni chiamata di frontiera: se il tetto è raggiunto non si parte.
+ *
+ * Il tetto è una scelta sua e sta nelle preferenze; zero vuol dire nessuno.
+ * Si controlla qui, nell'unico posto da cui partono le chiamate che costano,
+ * così vale per la chat, le bozze, il feed e le automazioni insieme.
+ */
+function controllaIlTetto() {
+  if (usoDiOggi().raggiunto) throw tradotto(new Error(TETTO_RAGGIUNTO))
 }
 
 // — la richiesta —

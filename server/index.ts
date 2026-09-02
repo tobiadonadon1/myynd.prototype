@@ -389,7 +389,7 @@ app.post('/api/profilo', async (req, res) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti', 'tetto'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
 
@@ -424,6 +424,13 @@ app.post('/api/profilo', async (req, res) => {
       return res.status(400).json({ errore: 'Le ore devono essere un numero fra 0 e un anno.' })
     }
     patch.oreFatte = n
+  }
+  if (patch.tetto !== undefined) {
+    const n = Math.floor(Number(patch.tetto))
+    if (!Number.isFinite(n) || n < 0 || n > 100_000_000) {
+      return res.status(400).json({ errore: 'Il tetto è un numero di token al giorno, o zero per nessun tetto.' })
+    }
+    patch.tetto = n
   }
   // gli argomenti sono una riga, non un tema: un muro di testo davanti a
   // settanta titoli non li sceglie meglio, li sceglie a caso
@@ -476,6 +483,13 @@ app.get('/api/connettori/posta/scopri', async (req, res) => {
  * di quello che c'è scritto nel file: chi accende Ollama a metà giornata deve
  * vederlo comparire senza riavviare niente.
  */
+/** Quanto ha speso oggi e negli ultimi giorni, e dove sta il tetto. */
+app.get('/api/uso', (_req, res) => {
+  try {
+    res.json({ oggi: mod.usoDiOggi(), giorni: store.usoPerGiorno(14) })
+  } catch (e) { errore(res, e) }
+})
+
 app.get('/api/modello/locale', async (_req, res) => {
   try { res.json(await mod.statoLocale()) } catch (e) { errore(res, e) }
 })
