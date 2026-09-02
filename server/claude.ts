@@ -6,7 +6,7 @@ import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomia
 import * as attrezzi from './attrezzi.ts'
 import { chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motore, parametri, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
-import { cerca, documento, recenti, type Documento } from './store.ts'
+import { cerca, documento, recenti, stessoFilo, type Documento } from './store.ts'
 import { riflua } from './testo.ts'
 import { carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
@@ -120,7 +120,7 @@ export async function prova(apiKey: string): Promise<{ ok: true; avviso?: string
  * `tetto` perché un documento aperto apposta va letto più a fondo di uno
  * pescato dalla ricerca: sono due gesti diversi e meritano due porzioni diverse.
  */
-function contesto(docs: Documento[], da = 1, tetto = 4000): string {
+export function contesto(docs: Documento[], da = 1, tetto = 4000): string {
   // Per esteso, e nella lingua di chi legge. Con `27/07/2026` il modello
   // ricopia le cifre così come le trova, e in una risposta inglese arrivava
   // una data che si legge al contrario — «07/27» o «27/07», nessuno lo sa.
@@ -248,8 +248,50 @@ export type Fonte = { id: string; label: string }
 
 export type Turno = { ruolo: string; testo: string }
 
+/** Quanti documenti al massimo partono col primo messaggio, fratelli compresi. */
+const MATERIALE_MAX = 16
+/** Quanti fili si allargano, e quanti fratelli per filo. Pochi: è una query per filo. */
+const FILI_MAX = 4
+const FRATELLI_MAX = 5
+
+/**
+ * I fratelli di conversazione dei risultati, dietro ai risultati.
+ *
+ * La ricerca trova il messaggio con le parole giuste, e quasi mai basta da
+ * solo: la cifra che Rossi aveva chiesto sta due messaggi prima, e quello che
+ * gli si era già promesso sta nella risposta che aveva mandato lei. Qui, per
+ * ogni email trovata, si tirano su gli altri messaggi dello stesso filo — i più
+ * recenti prima — e si mettono *dopo* i risultati veri, così la numerazione
+ * delle citazioni dei risultati non si sposta e il modello legge prima quello
+ * che ha cercato e poi il contorno.
+ *
+ * Costa poco per costruzione: una query per filo, al massimo quattro fili, e il
+ * totale non supera i sedici documenti — che è quello che il primo messaggio
+ * reggeva già.
+ */
+export function conIlFilo(docs: Documento[]): Documento[] {
+  const presenti = new Set(docs.map(d => d.id))
+  const fili: string[] = []
+  for (const d of docs) {
+    if (d.tipo !== 'email' || !d.filo || fili.includes(d.filo)) continue
+    fili.push(d.filo)
+    if (fili.length >= FILI_MAX) break
+  }
+  const fuori = [...docs]
+  for (const filo of fili) {
+    if (fuori.length >= MATERIALE_MAX) break
+    const posto = Math.min(FRATELLI_MAX, MATERIALE_MAX - fuori.length)
+    for (const f of stessoFilo(filo, [...presenti], posto)) {
+      if (presenti.has(f.id)) continue
+      presenti.add(f.id)
+      fuori.push(f)
+    }
+  }
+  return fuori
+}
+
 /** Il materiale su cui rispondere, o niente se non c'è nulla di pertinente. */
-function materiale(domanda: string, storico: Turno[]) {
+export function materiale(domanda: string, storico: Turno[]) {
   // Cerco anche con le parole dell'ultima domanda *dell'utente*: i seguiti tipo
   // "e la seconda?" da soli non troverebbero niente. Mai con il testo generato
   // da me — cercare sulle proprie parole amplifica la deriva a ogni giro.
@@ -259,7 +301,8 @@ function materiale(domanda: string, storico: Turno[]) {
     const visti = new Set(docs.map(d => d.id))
     for (const d of cerca(`${domanda} ${coda}`, 12)) if (!visti.has(d.id)) docs.push(d)
   }
-  return docs
+  // e il resto della conversazione, per le email trovate
+  return conIlFilo(docs)
 }
 
 /**
@@ -292,7 +335,7 @@ function senzaMateriale(): { testo: string; fonti: Fonte[] } {
  * prima si ripiegava sui primi tre documenti, cioè si attaccavano tre fonti
  * inventate proprio sotto un «non ho trovato niente».
  */
-function fontiCitate(testo: string, docs: Documento[]): Fonte[] {
+export function fontiCitate(testo: string, docs: Documento[]): Fonte[] {
   const citati = new Set<number>()
   // tre cifre, non due: svolgendo un compito il modello può cercare più volte,
   // e l'elenco di quello che ha letto supera i novantanove più facilmente di
@@ -305,7 +348,7 @@ function fontiCitate(testo: string, docs: Documento[]): Fonte[] {
 }
 
 /** Il testo di un contenuto, che sia una stringa o dei blocchi. */
-function testoDi(c: unknown): string {
+export function testoDi(c: unknown): string {
   if (typeof c === 'string') return c
   if (!Array.isArray(c)) return ''
   return c
@@ -901,7 +944,7 @@ const MODI: Record<string, string> = {
  * una mail bellissima che non partirà mai — e la riga dice «pronta». Sapendolo,
  * la risposta giusta diventa «collegami la casella e te la scrivo».
  */
-function inMano(): string {
+export function inMano(): string {
   const c = leggi()
   // La posta è collegata anche via Gmail o Outlook, non solo via IMAP. Con la
   // riga vecchia a chi aveva Gmail si diceva «la posta NON è collegata», e il
@@ -1002,6 +1045,16 @@ function conQuali(concessi: attrezzi.Nome[]): string {
 /** Quanti giri di ricerca concede ciascun modo. «Tutto» vuol dire anche cercare di più. */
 const GIRI = { bozza: 4, tutto: 7 } as const
 
+/**
+ * Un passo del lavoro, detto a chi guarda.
+ *
+ * Strutturato e non una frase, apposta: la frase la compone il client nella
+ * sua lingua. Se partisse da qui in italiano, sotto una riga inglese
+ * comparirebbe «Cerco «listino»» e nessun dizionario potrebbe recuperarla —
+ * `dettaglio` cambia a ogni giro, e una chiave che cambia non è una chiave.
+ */
+export type Passo = { passo: 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+
 export async function svolgi(
   compito: string,
   nota?: string | null,
@@ -1016,13 +1069,25 @@ export async function svolgi(
    */
   concessi: attrezzi.Nome[] = [],
   /** In che cartella lavora `claude.lavora`, se c'è. */
-  cartella?: string | null
+  cartella?: string | null,
+  /**
+   * A chi vuole sapere cosa sta facendo, passo per passo.
+   *
+   * Una bozza dura mezzo minuto, e per tutto quel tempo la riga mostrava solo
+   * una rotella: non si capiva se stesse cercando, leggendo o scrivendo — né
+   * se fosse viva. Qui si dice, a ogni attrezzo: «cerco listino», «apro il
+   * preventivo di marzo», «scrivo». Chi ascolta non deve poter fermare il
+   * lavoro: se esplode, si ignora.
+   */
+  onPasso?: (p: Passo) => void
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   const m = motore()
   // Non `{ testo: '' }`: quello faceva finire il compito fra i «pronti» con una
   // bozza vuota sotto — cioè l'app diceva di aver fatto un lavoro che non aveva
   // fatto. È l'unico modo di sbagliare che questo prodotto non si può permettere.
   if (!m) throw new Error('Collega Claude e potrò lavorarci.')
+
+  const passo = (p: Passo) => { try { onPasso?.(p) } catch { /* chi guarda si arrangia */ } }
 
   const domanda = nota?.trim() ? `${compito}\n\nDettaglio: ${nota.trim()}` : compito
   // Niente materiale non è più un errore: è il caso più comune di «devo
@@ -1085,6 +1150,11 @@ export async function svolgi(
     // ancora cercando finirebbe il budget senza consegnare niente, e il compito
     // tornerebbe indietro vuoto dopo cinque minuti di lavoro vero.
     const ultimo = giro === tettoGiri - 1
+    // All'ultimo giro non può che scrivere; negli altri lo si dice appena
+    // arriva del testo — il modello scrive anche prima di chiamare un attrezzo,
+    // e «scrivo» seguito da «cerco listino» è esattamente quello che sta facendo
+    if (ultimo) passo({ passo: 'scrivo' })
+    let dettoScrivo = ultimo
     // In streaming, anche se nessuno guarda: con sedicimila token di tetto una
     // richiesta non-streaming rischia il timeout HTTP, e il motore ci mette
     // sopra la guardia sul silenzio — taglia un filo morto senza tagliare una
@@ -1096,7 +1166,11 @@ export async function svolgi(
       system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
       messages: messaggi,
       ...(ultimo ? {} : { tools: ferri })
-    } as Anthropic.MessageStreamParams, () => {})
+    } as Anthropic.MessageStreamParams, delta => {
+      if (dettoScrivo || !delta.trim()) return
+      dettoScrivo = true
+      passo({ passo: 'scrivo' })
+    })
     segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') throw new Error('Su questo compito non posso lavorare.')
@@ -1124,6 +1198,9 @@ export async function svolgi(
     for (const c of chiamate) {
       const dichiarato = attrezzi.daNomeTool(c.name)
       if (dichiarato) {
+        // un attrezzo dichiarato con una `query` è comunque una ricerca, e si dice
+        const q = (c.input as { query?: unknown } | null)?.query
+        if (typeof q === 'string' && q.trim()) passo({ passo: 'cerco', dettaglio: q.trim() })
         const e = await attrezzi.esegui(
           dichiarato, (c.input ?? {}) as Record<string, unknown>, concessi, { cartella }
         )
@@ -1153,6 +1230,7 @@ export async function svolgi(
         if (c.name === 'cerca') {
           const q = String((c.input as { query?: string }).query ?? '').trim()
           if (!q) throw new Error('manca la query')
+          passo({ passo: 'cerco', dettaglio: q })
           const { freschi, da } = nuoviDa(cerca(q, 8))
           return {
             type: 'tool_result' as const, tool_use_id: c.id,
@@ -1170,6 +1248,7 @@ export async function svolgi(
               content: 'Non esiste nessun documento con questo id. Usa la riga «id:» di uno che ti ho già dato.'
             }
           }
+          passo({ passo: 'apro', dettaglio: d.titolo })
           const gia = visti.findIndex(v => v.id === d.id)
           if (gia >= 0) {
             // già in elenco: si rilegge più a fondo senza prendersi un numero nuovo
@@ -1376,8 +1455,25 @@ const SCHEMA_EMAIL = {
 
 export type Email = { a: string; oggetto: string; corpo: string }
 
-export async function preparaEmail(compito: string, bozza: string): Promise<Email | null> {
-  const docs = materiale(compito, [])
+export async function preparaEmail(
+  compito: string,
+  bozza: string,
+  /**
+   * Le fonti che la bozza ha citato davvero, salvate sulla riga.
+   *
+   * Prima qui si rifaceva la ricerca con le parole del compito, e non era la
+   * stessa cosa: la bozza era nata da tre giri di `cerca` e `apri`, e la
+   * ricerca secca poteva pescare *altri* documenti — con dentro un altro
+   * indirizzo. Il destinatario deve uscire da quello che la bozza ha letto,
+   * non da quello che una ricerca nuova trova adesso. La ricerca resta solo
+   * come ripiego per le righe senza fonti, cioè quelle scritte prima di oggi.
+   */
+  fonti?: Fonte[] | null
+): Promise<Email | null> {
+  const dalleFonti = (fonti ?? [])
+    .map(f => documento(f.id))
+    .filter((d): d is Documento => !!d)
+  const docs = dalleFonti.length ? dalleFonti : materiale(compito, [])
   const e = await chiediJSON<Email>({
     lavoro: 'classifica',
     max_tokens: 4000,

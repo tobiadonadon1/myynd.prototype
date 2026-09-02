@@ -593,3 +593,31 @@ test('l’anteprima non scrive niente e non fa girare l’automazione', () => {
   assert.equal(dopo?.quante ?? 0, prima?.quante ?? 0, 'guardare è stato contato come un giro')
   auto.butta('muta-anteprima')
 })
+
+// — il tetto del giorno per quelle che fanno scrivere —
+
+test('una ricetta che fa scrivere si ferma al tetto del giorno, a mano no, e domani riparte', async () => {
+  const ricetta = { ...RICETTA, id: 'tetto', metti: { inLista: 'oggi' as const, modo: 'bozza' as const } }
+  const oggi = new Date()
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.automazioneGirata('tetto', 'fatta', undefined, 1)
+  assert.equal(auto.bozzeOggi(store.statoAutomazione('tetto'), oggi), auto.BOZZE_AL_GIORNO)
+
+  // le bozze sono l'unica spesa che si ripete da sola: oltre il tetto non si
+  // guarda nemmeno il materiale, e non è un guasto
+  assert.equal(await auto.fai(ricetta, { adesso: oggi }), 'saltata')
+  const s = store.statoAutomazione('tetto')!
+  assert.equal(s.esito, 'saltata')
+  assert.equal(s.guaio, null, 'un tetto raggiunto non è un guaio: la scheda lo mostrerebbe in rosso')
+  assert.equal(auto.salute(ricetta, s).stato, 'bene')
+
+  // un dito che preme non è una spesa ricorrente
+  assert.notEqual(await auto.fai(ricetta, { aMano: true, adesso: oggi }), 'saltata')
+  // e domani il conto ricomincia
+  assert.notEqual(await auto.fai(ricetta, { adesso: new Date(oggi.getTime() + 86_400_000) }), 'saltata')
+})
+
+test('il tetto non tocca chi scrive una riga e basta, né chi propone', async () => {
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO + 2; i++) store.automazioneGirata('io-solo', 'fatta', undefined, 1)
+  const soloRiga = { ...RICETTA, id: 'io-solo', metti: { inLista: 'oggi' as const, modo: 'io' as const } }
+  assert.notEqual(await auto.fai(soloRiga), 'saltata')
+})

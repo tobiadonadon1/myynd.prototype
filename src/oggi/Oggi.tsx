@@ -18,7 +18,7 @@ import { SECCHI, type Lista, type Secchio } from './useCompiti'
 import { Barra } from './Barra'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
-import { api, type Compito } from '../api'
+import { api, type Compito, type PassoCompito } from '../api'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -93,6 +93,13 @@ function Cerchio({ c, onClick }: { c: Compito; onClick: () => void }) {
       }}
       hover={{ borderColor: '#22271F' }} />
   )
+}
+
+/** Il passo, detto nella lingua di chi legge: il server manda la struttura, non la frase. */
+function frasePasso(p: PassoCompito): string {
+  if (p.passo === 'cerco') return frasi.passoCerco(p.dettaglio ?? '')
+  if (p.passo === 'apro') return frasi.passoApro(p.dettaglio ?? '')
+  return t('Scrivo…')
 }
 
 /**
@@ -262,6 +269,15 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
 
           {c.guaio && (
             <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 3 }}>{t(c.guaio)}</div>
+          )}
+
+          {/* cosa sta facendo, finché ci lavora: una riga sola, smorzata, che
+              non può sforare — un titolo di documento può essere lungo quanto vuole */}
+          {delegato && l.passi[c.id] && (
+            <div style={{
+              fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 3,
+              overflowWrap: 'anywhere', overflow: 'hidden'
+            }}>{frasePasso(l.passi[c.id])}</div>
           )}
         </div>
 

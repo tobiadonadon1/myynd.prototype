@@ -391,10 +391,20 @@ export type Compito = {
 
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
 
+/**
+ * Un passo del lavoro su una riga: cerca, apre, scrive.
+ *
+ * Arriva strutturato e la frase la compone il client — così «Cerco «listino»»
+ * esce in inglese sotto una riga inglese, cosa che una frase già scritta dal
+ * server non potrebbe fare.
+ */
+export type PassoCompito = { passo: 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+
 /** Come va un compito affidato a Myynd, mentre ci lavora. */
 export type EventoCompito =
   | { fase: 'aperto' }
   | { fase: 'preso'; id: string }
+  | { fase: 'lavoro'; id: string; passo: PassoCompito }
   | { fase: 'pronto'; id: string; compito: Compito }
   | { fase: 'chiede'; id: string; compito: Compito }
   | { fase: 'guaio'; id: string; guaio: string }

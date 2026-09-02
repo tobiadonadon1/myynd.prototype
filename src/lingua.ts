@@ -1293,6 +1293,8 @@ const EN: Record<string, string> = {
   'Apri la memoria': 'Open memory',
   'Apri le preferenze': 'Open preferences',
   'Scrivi a Tobia': 'Write to Tobia',
+// — la lista: cosa sta facendo Myynd su una riga affidata —
+  'Scrivo…': 'Writing…',
 }
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */
@@ -1522,5 +1524,10 @@ export const frasi = {
   nDocumenti: (n: string) => corrente === 'en' ? `${n} documents` : `${n} documenti`,
 
   cercaFra: (n: string) =>
-    corrente === 'en' ? `Search ${n} documents…` : `Cerca fra ${n} documenti…`
+    corrente === 'en' ? `Search ${n} documents…` : `Cerca fra ${n} documenti…`,
+
+  // — la lista: i passi del lavoro su una riga affidata. Il server manda
+  //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —
+  passoCerco: (q: string) => corrente === 'en' ? `Searching “${q}”` : `Cerco «${q}»`,
+  passoApro: (titolo: string) => corrente === 'en' ? `Opening “${titolo}”` : `Apro «${titolo}»`
 }

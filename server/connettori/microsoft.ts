@@ -24,6 +24,7 @@
 
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
+import { filoDi } from '../filo.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { APP_MICROSOFT } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
@@ -247,6 +248,14 @@ type Messaggio = {
   toRecipients?: { emailAddress?: { name?: string; address?: string } }[]
   body?: { contentType?: string; content?: string }
   parentFolderId?: string
+  /** Le intestazioni vere del messaggio: servono a ricavare il filo. */
+  internetMessageHeaders?: { name?: string; value?: string }[]
+}
+
+/** Un'intestazione per nome, se Graph l'ha mandata. */
+function intestazione(m: Messaggio, nome: string): string {
+  const h = m.internetMessageHeaders?.find(x => (x.name ?? '').toLowerCase() === nome.toLowerCase())
+  return h?.value ?? ''
 }
 
 /**
@@ -286,7 +295,10 @@ export async function sincronizzaPosta(
   const u = new URL(`${GRAFO}/me/messages`)
   u.searchParams.set('$filter', `receivedDateTime ge ${dal}`)
   u.searchParams.set('$orderby', 'receivedDateTime desc')
-  u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft')
+  // `internetMessageHeaders` per il filo della conversazione: Message-ID,
+  // In-Reply-To e References sono lì, e sono la stessa chiave che usano gli
+  // altri due connettori di posta
+  u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft,internetMessageHeaders')
   u.searchParams.set('$top', '50')
 
   const docs: Documento[] = []
@@ -313,7 +325,13 @@ export async function sincronizzaPosta(
         autore: da ? (da.name ? `${da.name} <${da.address ?? ''}>` : da.address ?? null) : null,
         percorso: 'Posta in arrivo',
         quando: m.receivedDateTime ?? null,
-        gruppo: 'posta'
+        gruppo: 'posta',
+        filo: filoDi({
+          messageId: intestazione(m, 'Message-ID'),
+          inReplyTo: intestazione(m, 'In-Reply-To'),
+          references: intestazione(m, 'References'),
+          oggetto: m.subject
+        })
       })
       avanzamento?.(++fatti, MAX_MESSAGGI)
       if (docs.length >= MAX_MESSAGGI) { troncato = true; return { docs, troncato } }

@@ -6,6 +6,7 @@ import { simpleParser } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
+import { filoDi } from '../filo.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
@@ -407,19 +408,67 @@ export async function sposta(
 
 export type EsitoPosta = { docs: Documento[]; cartelleFallite: string[]; troncato: boolean }
 
+/**
+ * I nomi con cui le caselle chiamano la posta inviata, quando non dichiarano
+ * il ruolo. Minuscoli: si confrontano con il percorso e con l'ultimo pezzo.
+ */
+const NOMI_INVIATA = [
+  'sent', 'sent messages', 'sent items', 'sent mail',
+  'posta inviata', 'inviata', 'inviati',
+  '[gmail]/sent mail', '[gmail]/posta inviata'
+]
+
+/**
+ * La cartella della posta inviata, se la casella ce l'ha.
+ *
+ * Prima il ruolo che il server dichiara — `\Sent`, RFC 6154, che imapflow
+ * espone come `specialUse` — e solo dopo i nomi: «Sent», «Posta inviata»,
+ * «[Gmail]/Sent Mail»… ogni provider la chiama a modo suo, e il ruolo è
+ * l'unico nome che non cambia. Null se non c'è o se la lista non arriva.
+ */
+export async function cartellaInviata(cl: ImapFlow): Promise<string | null> {
+  const lista = await cl.list()
+  const conRuolo = lista.find(l => l.specialUse === '\\Sent')
+  if (conRuolo) return conRuolo.path
+  const perNome = lista.find(l =>
+    NOMI_INVIATA.includes(l.path.toLowerCase()) || NOMI_INVIATA.includes(l.name.toLowerCase()))
+  return perNome?.path ?? null
+}
+
 export async function sincronizza(
   c: ConfigPosta,
   avanzamento?: (fatti: number, totale: number) => void
 ): Promise<EsitoPosta> {
   const giorni = c.giorni ?? 30
   const da = new Date(Date.now() - giorni * 86400_000)
-  const cartelle = c.cartelle?.length ? c.cartelle : ['INBOX']
+  let cartelle = c.cartelle?.length ? c.cartelle : ['INBOX']
   const docs: Documento[] = []
   const cartelleFallite: string[] = []
   let troncato = false
   const { cl } = await apri(c)
 
   try {
+    /*
+     * Anche la posta inviata, se non ha scelto lei le cartelle.
+     *
+     * Fin qui si leggeva la sola casella d'arrivo, e mancava esattamente la
+     * metà che serve a scrivere «nella sua voce»: quello che ha scritto *lei*.
+     * Il modello imparava il tono di Rossi e dei fornitori — cioè di chiunque
+     * tranne la persona per cui scrive — e le bozze uscivano educate e
+     * anonime. Le sue email mandate sono l'unico esempio vero di come scrive:
+     * le formule con cui apre, quanto è secca, come chiude. E sono anche
+     * l'altra metà di ogni conversazione: senza, di un filo con un cliente si
+     * vede solo quello che il cliente ha detto.
+     *
+     * Gli id restano `posta:cartella:uid`, quindi due cartelle non si pestano
+     * i piedi; `fonte` resta `posta` per tutte e due, perché è la stessa
+     * casella. Chi ha scelto le cartelle a mano tiene le sue.
+     */
+    if (!c.cartelle?.length) {
+      const inviata = await cartellaInviata(cl).catch(() => null)
+      if (inviata && !cartelle.includes(inviata)) cartelle = [...cartelle, inviata]
+    }
+
     for (const cartella of cartelle) {
       let lock
       try {
@@ -455,7 +504,9 @@ export async function sincronizza(
               autore: mittente ? `${mittente.name || ''} <${mittente.address || ''}>`.trim() : null,
               percorso: cartella,
               quando: (p.date || msg.envelope?.date || new Date()).toISOString(),
-              gruppo: 'posta'
+              gruppo: 'posta',
+              // la conversazione: la radice della catena degli id, o l'oggetto
+              filo: filoDi({ messageId: p.messageId, inReplyTo: p.inReplyTo, references: p.references, oggetto: p.subject })
             })
           } catch {
             // un messaggio illeggibile non deve fermare la sincronizzazione

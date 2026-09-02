@@ -31,6 +31,7 @@ import * as chi from '../chi.ts'
 import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
+import { filoDi } from '../filo.ts'
 import { riflua } from '../testo.ts'
 
 const esegui = promisify(execFile)
@@ -367,9 +368,21 @@ export async function sincronizza(
         titolo: intestazione(m, 'Subject') || '(senza oggetto)',
         corpo: testo.slice(0, 20_000),
         autore: intestazione(m, 'From') || null,
+        // Gmail legge già anche la posta inviata: la ricerca non esclude
+        // l'etichetta SENT, ed è voluto — le sue email sono l'unico esempio
+        // vero di come scrive lei, e senza di quelle una bozza «nella sua voce»
+        // è nella voce di chiunque altro
         percorso: (m.labelIds ?? []).includes('SENT') ? 'Inviata' : 'Posta in arrivo',
         quando: new Date(Number(m.internalDate ?? Date.now())).toISOString(),
-        gruppo: 'posta'
+        gruppo: 'posta',
+        // la conversazione, dalle stesse intestazioni che userebbe un client di
+        // posta: così un filo letto via Gmail e uno letto via IMAP combaciano
+        filo: filoDi({
+          messageId: intestazione(m, 'Message-ID'),
+          inReplyTo: intestazione(m, 'In-Reply-To'),
+          references: intestazione(m, 'References'),
+          oggetto: intestazione(m, 'Subject')
+        })
       })
     } catch { /* un messaggio illeggibile non ferma la lettura degli altri */ }
     avanzamento?.(++fatti, ids.length)
