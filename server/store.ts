@@ -775,30 +775,6 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     `)
   },
 
-  // 22 → 23 · quello che ha scritto lei, segnato come tale.
-  //
-  //   La posta inviata entra nell'indice da oggi, e per «appena arrivato» si
-  //   intende quello che è entrato nell'indice, non quello che è stato scritto:
-  //   senza questa colonna la prima lettura dopo l'aggiornamento avrebbe messo
-  //   in cima alla prima pagina le email che ha mandato lei, e le automazioni
-  //   «quando arriva una fattura» avrebbero preparato risposte alla sua posta.
-  d => {
-    d.exec('ALTER TABLE documenti ADD COLUMN inviato INTEGER NOT NULL DEFAULT 0')
-  },
-
-  // 23 → 24 · quante bozze ha fatto fare oggi un'automazione.
-  //
-  //   Si contava dalla `storia`, che tiene gli ultimi venti giri e basta: una
-  //   ricetta che gira ogni quarto d'ora faceva scorrere via le tre «fatta»
-  //   del mattino nel giro di poche ore, e il tetto del giorno si azzerava da
-  //   solo. Un contatore con accanto il giorno a cui si riferisce non scorre.
-  d => {
-    d.exec(`
-      ALTER TABLE automazioni ADD COLUMN giorno TEXT;
-      ALTER TABLE automazioni ADD COLUMN bozze INTEGER NOT NULL DEFAULT 0;
-    `)
-  },
-
   // 22 → 23 · quanto è costato ragionare, chiamata per chiamata.
   //
   //   Senza questa tabella «perché ho speso sei dollari in tre giorni» non
@@ -818,6 +794,42 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_uso_quando ON uso(quando);
     `)
+  },
+
+  /*
+   * 23 → 24 · quello che ha scritto lei, segnato come tale.
+   *
+   * La posta inviata entra nell'indice da oggi, e per «appena arrivato» si
+   * intende quello che è entrato nell'indice, non quello che è stato scritto:
+   * senza questa colonna la prima lettura dopo l'aggiornamento avrebbe messo in
+   * cima alla prima pagina le email che ha mandato lei, e le automazioni
+   * «quando arriva una fattura» avrebbero preparato risposte alla sua posta.
+   *
+   * **Sta in fondo, e questa è la regola che vale per tutte.** Era stata
+   * scritta in mezzo, accanto alla migrazione del filo perché parlano della
+   * stessa cosa — e infilarla lì sposta di uno tutte quelle che vengono dopo:
+   * un database già arrivato a quel numero le salta senza dire niente, e la
+   * colonna non compare mai. Verificato: `user_version` a 25 e `inviato`
+   * assente. Le migrazioni si accodano, sempre, anche quando starebbero meglio
+   * altrove.
+   */
+  d => {
+    d.exec('ALTER TABLE documenti ADD COLUMN inviato INTEGER NOT NULL DEFAULT 0')
+  },
+
+  // 24 → 25 · quante bozze ha fatto fare oggi un'automazione.
+  //
+  //   Si contava dalla `storia`, che tiene gli ultimi venti giri e basta: una
+  //   ricetta che gira ogni quarto d'ora faceva scorrere via le tre «fatta»
+  //   del mattino nel giro di poche ore, e il tetto del giorno si azzerava da
+  //   solo. Un contatore con accanto il giorno a cui si riferisce non scorre.
+  //
+  //   Le due colonne si aggiungono una per volta: `ALTER TABLE` non si può
+  //   ripetere in un solo `exec` su ogni versione di SQLite, e una migrazione
+  //   che fallisce a metà è il modo peggiore di scoprirlo.
+  d => {
+    d.exec('ALTER TABLE automazioni ADD COLUMN giorno TEXT')
+    d.exec('ALTER TABLE automazioni ADD COLUMN bozze INTEGER NOT NULL DEFAULT 0')
   }
 
 ]
@@ -868,6 +880,44 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
 }
 
 /**
+ * Le colonne che il codice dà per scontate, rimesse se non ci sono.
+ *
+ * Non sostituisce le migrazioni: gira prima, e quasi sempre non fa niente.
+ * Esiste per l'unico modo in cui una migrazione può non essere mai girata pur
+ * essendo scritta — qualcuno ne infila una **in mezzo** alla lista, e su ogni
+ * database già arrivato a quel numero tutte quelle dopo slittano di uno e ne
+ * salta una. Il segnale è il peggiore possibile: `user_version` è giusta,
+ * nessun errore, e una colonna non c'è. È già successo, e la volta buona la si
+ * è scoperta guardando il database a mano.
+ *
+ * Aggiungere una colonna che manca è sicuro e costa una lettura di schema;
+ * scoprire fra sei mesi perché una query dice «no such column» costa un
+ * pomeriggio. Le colonne stanno scritte qui *e* nella loro migrazione, e le
+ * due cose devono dire la stessa cosa — `store.test.ts` lo controlla.
+ */
+const COLONNE: Record<string, [string, string][]> = {
+  documenti: [['filo', 'TEXT'], ['inviato', 'INTEGER NOT NULL DEFAULT 0']],
+  automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']]
+}
+
+function rimetti(db: DatabaseSync) {
+  for (const [tabella, colonne] of Object.entries(COLONNE)) {
+    let ci: { name: string }[]
+    try { ci = db.prepare(`PRAGMA table_info(${tabella})`).all() as { name: string }[] } catch { continue }
+    if (!ci.length) continue   // la tabella non c'è ancora: la farà una migrazione
+    for (const [nome, tipo] of colonne) {
+      if (ci.some(c => c.name === nome)) continue
+      try {
+        db.exec(`ALTER TABLE ${tabella} ADD COLUMN ${nome} ${tipo}`)
+        console.log(`myynd · rimessa la colonna ${tabella}.${nome}, che una migrazione saltata non aveva scritto`)
+      } catch (e) {
+        console.error(`myynd · non riesco a rimettere ${tabella}.${nome}:`, e instanceof Error ? e.message : e)
+      }
+    }
+  }
+}
+
+/**
  * Le migrazioni, sul database appena aperto.
  *
  * Girano all'apertura di *ogni* indice invece che una volta all'avvio: con più
@@ -884,6 +934,15 @@ function migra(db: DatabaseSync, file: string) {
       'Stai aprendo un indice scritto da una versione più nuova: aggiorna Myynd invece di aprirlo.'
     )
   }
+  /*
+   * Prima dell'uscita anticipata, e non dopo.
+   *
+   * Un database «già alla versione giusta» è esattamente quello che può avere
+   * un buco: se una migrazione è stata infilata in mezzo alla lista, la sua
+   * versione è giusta e la colonna non c'è. Mettere la riparazione dopo questo
+   * return voleva dire non ripararlo mai.
+   */
+  rimetti(db)
   if (versione === MIGRAZIONI.length) return
 
   // Un'istantanea se c'è qualcosa da perdere. La condizione non è «versione > 0»:

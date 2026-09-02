@@ -811,3 +811,58 @@ test('compattare non fa niente quando non c’è niente da riprendersi', () => {
   // e l'indice continua a rispondere
   assert.ok(store.conteggi().totale > 0)
 })
+
+// — le migrazioni si accodano, e un database vecchio arriva in fondo —
+
+test('ogni migrazione ha davvero lasciato la sua colonna', () => {
+  /*
+   * La prova che serviva.
+   *
+   * Una migrazione infilata *in mezzo* alla lista sposta di uno tutte quelle
+   * che vengono dopo: un database già arrivato a quel numero le salta senza
+   * dire niente — `user_version` avanza, la colonna non compare, e non c'è
+   * nessun errore da nessuna parte. È già successo due volte in questo file.
+   * Qui non si guarda la lista: si guarda il database, e si chiede se c'è
+   * quello che ogni migrazione dice di aver messo.
+   */
+  const colonne = (tabella: string) =>
+    (store.default.prepare(`PRAGMA table_info(${tabella})`).all() as { name: string }[]).map(c => c.name)
+
+  const documenti = colonne('documenti')
+  for (const c of ['rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore', 'percorso',
+    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato']) {
+    assert.ok(documenti.includes(c), `documenti non ha «${c}»: una migrazione è stata saltata`)
+  }
+
+  const automazioni = colonne('automazioni')
+  for (const c of ['id', 'spenta', 'ultima', 'quante', 'esito', 'guaio', 'storia', 'giorno', 'bozze']) {
+    assert.ok(automazioni.includes(c), `automazioni non ha «${c}»: una migrazione è stata saltata`)
+  }
+
+  const tabelle = (store.default.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table'"
+  ).all() as { name: string }[]).map(t => t.name)
+  for (const t of ['documenti', 'ricerca', 'chat', 'messaggi', 'feed', 'convinzioni', 'blocchi',
+    'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso']) {
+    assert.ok(tabelle.includes(t), `manca la tabella «${t}»`)
+  }
+})
+
+test('la posta inviata non conta come appena arrivata', () => {
+  const ora = new Date().toISOString()
+  store.salvaDocumenti([
+    { id: 'arr:1', fonte: 'posta', tipo: 'email', titolo: 'Arrivata da Rossi',
+      corpo: 'il testo della email che è arrivata da fuori', autore: 'Rossi', percorso: 'INBOX',
+      quando: ora, gruppo: 'posta' },
+    { id: 'inv:1', fonte: 'posta', tipo: 'email', titolo: 'Che ho mandato io',
+      corpo: 'il testo della email che ho scritto io a qualcuno', autore: 'Anna', percorso: 'Inviata',
+      quando: ora, gruppo: 'posta', inviato: true }
+  ])
+  const arrivati = store.appenaArrivati('2000-01-01T00:00:00.000Z', 50).map(d => d.id)
+  assert.ok(arrivati.includes('arr:1'), 'quella arrivata non c’è')
+  assert.ok(!arrivati.includes('inv:1'),
+    'quella che ha scritto lei conta come arrivata: la prima pagina si riempirebbe della sua stessa posta')
+
+  // ma resta cercabile, che è tutto il motivo per cui la si legge
+  assert.ok(store.cerca('mandato', 5).some(d => d.id === 'inv:1'), 'la posta inviata non si trova')
+})
