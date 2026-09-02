@@ -99,7 +99,10 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
           )}
           {passo === 'ritratto' && <Ritratto avanti={() => setPasso('connetti')} />}
           {passo === 'connetti' && (
-            <Connetti s={s} ricarica={ricarica} avanti={() => setPasso('leggi')} />
+            <Connetti s={s} ricarica={ricarica} avanti={() => setPasso('leggi')}
+              // senza niente collegato, leggere e generare sono due schermate
+              // che girano a vuoto: si va dove si può andare davvero
+              salta={() => setPasso('pronta')} />
           )}
           {passo === 'leggi' && (
             <Leggi ricarica={ricarica} avanti={() => setPasso('genera')} />
@@ -310,6 +313,23 @@ function PassoClaude({ collegato, ricarica, avanti }: {
  * chiedono — due righe per domanda bastano — e si possono saltare: «più
  * tardi» è una risposta, non un rifiuto, e la schermata della memoria resta lì.
  */
+/*
+ * Le domande, come si fanno a una persona.
+ *
+ * I cinque blocchi hanno già una descrizione, ma è scritta *per il modello* —
+ * «come questa persona prende una decisione» — e messa davanti a chi risponde
+ * suona come se parlasse di qualcun altro. Qui la stessa cosa in seconda
+ * persona, con sotto un esempio: davanti a un riquadro vuoto la domanda vera
+ * è «cosa vi scrivo?», e un esempio la toglie di mezzo meglio di una spiegazione.
+ */
+const DOMANDE: Record<string, { domanda: string; esempio: string }> = {
+  come_decido: { domanda: 'Come decidi?', esempio: 'es. guardo prima il margine, poi se il cliente paga puntuale' },
+  cosa_controllo: { domanda: 'Cosa controlli sempre, prima di dire di sì?', esempio: 'es. che le date siano fattibili, e chi firma dall’altra parte' },
+  come_scrivo: { domanda: 'Come scrivi?', esempio: 'es. corta, niente «gentilissimo», chiudo con «a presto»' },
+  errori_da_evitare: { domanda: 'Quali errori non vuoi rivedere?', esempio: 'es. promettere consegne senza sentire la produzione' },
+  chi_conta: { domanda: 'Chi conta, e come stai con loro?', esempio: 'es. Rossi è il cliente più grosso, ma tratta sempre sul prezzo' }
+}
+
 function Ritratto({ avanti }: { avanti: () => void }) {
   const [blocchi, setBlocchi] = useState<{ etichetta: string; descrizione: string }[]>([])
   const [testi, setTesti] = useState<Record<string, string>>({})
@@ -333,22 +353,32 @@ function Ritratto({ avanti }: { avanti: () => void }) {
   }
 
   return (
-    <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
+    <div style={{ animation: 'fadein .5s ease', display: 'flex', flexDirection: 'column', maxHeight: '76vh' }}>
       <Titolo>{t('Cinque domande.')}</Titolo>
-      <Sotto>{t('Come decidi, cosa controlli, come scrivi. Due righe bastano, e puoi rispondere dopo.')}</Sotto>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 26, maxWidth: 640 }}>
-        {blocchi.map(b => (
-          <div key={b.etichetta}>
-            <div style={ETICHETTA}>{t(b.descrizione)}</div>
-            <textarea value={testi[b.etichetta] ?? ''} rows={2} className="scuro"
-              onChange={e => setTesti(x => ({ ...x, [b.etichetta]: e.target.value }))}
-              style={{ ...CAMPO, resize: 'vertical', minHeight: 56, lineHeight: 1.5, fontFamily: 'inherit' }} />
-          </div>
-        ))}
+      <Sotto>{t('Quello che sai tu e non sta scritto da nessuna parte. Due righe bastano.')}</Sotto>
+      {/* solo le domande scorrono: i due bottoni restano dove si possono premere */}
+      {/* base automatica, non zero: dentro un contenitore alto quanto il suo
+          contenuto una base a zero non ha spazio libero da cui crescere, e le
+          domande sparivano — restavano i due bottoni sotto un titolo solo */}
+      <div style={{ flex: '0 1 auto', overflowY: 'auto', minHeight: 0, paddingRight: 6, marginTop: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 620 }}>
+          {blocchi.map(b => {
+            const d = DOMANDE[b.etichetta]
+            return (
+              <div key={b.etichetta}>
+                <div style={{ fontSize: '14.5px', color: CHIARO, marginBottom: 7 }}>{t(d?.domanda ?? b.descrizione)}</div>
+                <textarea value={testi[b.etichetta] ?? ''} rows={2} className="scuro"
+                  placeholder={d ? t(d.esempio) : ''}
+                  onChange={e => setTesti(x => ({ ...x, [b.etichetta]: e.target.value }))}
+                  style={{ ...CAMPO, marginTop: 0, resize: 'vertical', minHeight: 54, lineHeight: 1.5, fontFamily: 'inherit' }} />
+              </div>
+            )
+          })}
+        </div>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center', flex: 'none' }}>
         <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>
-        <Secondario onClick={avanti}>{t('Rispondo più tardi')}</Secondario>
+        <Secondario onClick={avanti}>{scritti ? t('Il resto dopo') : t('Rispondo più tardi')}</Secondario>
       </div>
     </div>
   )
@@ -378,7 +408,9 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
   )
 }
 
-function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<Stato>; avanti: () => void }) {
+function Connetti({ s, ricarica, avanti, salta }: {
+  s: Stato; ricarica: () => Promise<Stato>; avanti: () => void; salta: () => void
+}) {
   const [aperto, setAperto] = useState<string | null>(null)
   // Claude l'ha già chiesto il passo prima; il fornitore compatibile è un
   // motore, non una fonte, e si collega dalle preferenze
@@ -417,7 +449,7 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
         </Primario>
         {/* chi non ha niente sotto mano non deve restare bloccato qui: la chat
             funziona anche senza fonti, e le fonti si collegano quando si vuole */}
-        {quanti === 0 && <Secondario onClick={avanti}>{t('Le collego dopo')}</Secondario>}
+        {quanti === 0 && <Secondario onClick={salta}>{t('Le collego dopo')}</Secondario>}
       </div>
     </div>
   )
