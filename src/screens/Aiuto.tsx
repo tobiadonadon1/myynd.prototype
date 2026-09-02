@@ -162,29 +162,29 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Gmail e Calendario (Google)', en: 'Gmail and Calendar (Google)' },
             testo: {
-              it: 'Legge posta e agenda dall’API di Google. Vuole un’app registrata su [console.cloud.google.com](https://console.cloud.google.com): crea un progetto, attiva Gmail API e Calendar API, poi Credenziali › ID client OAuth › Applicazione desktop. Incolla in Myynd l’ID client e il segreto; Google chiede il consenso nel browser.',
-              en: 'Reads mail and calendar through Google’s API. It needs an app registered at [console.cloud.google.com](https://console.cloud.google.com): create a project, enable Gmail API and Calendar API, then Credentials › OAuth client ID › Desktop app. Paste the client ID and secret into Myynd; Google asks for consent in the browser.'
+              it: 'Legge posta e agenda dall’API di Google. Su un server: premi «Collega Google», di’ di sì a Google e torni su Myynd da solo. Se la scheda dice «Non ancora disponibile su questo server», chi lo ospita non ha ancora registrato l’app: usa «Posta» con una password per le app. Sul tuo Mac: serve un’app tua su [console.cloud.google.com](https://console.cloud.google.com) — crea un progetto, attiva Gmail API e Calendar API, poi Credenziali › ID client OAuth › Applicazione desktop — e incolli l’ID client e il segreto.',
+              en: 'Reads mail and calendar through Google’s API. On a server: press “Connect Google”, say yes to Google, and you come back to Myynd on your own. If the card says “Not available on this server yet”, whoever hosts it has not registered the app: use “Mail” with an app password. On your own Mac: you need your own app at [console.cloud.google.com](https://console.cloud.google.com) — create a project, enable Gmail API and Calendar API, then Credentials › OAuth client ID › Desktop app — and paste the client ID and secret.'
             }
           },
           {
             nome: { it: 'Outlook e Calendario (Microsoft)', en: 'Outlook and Calendar (Microsoft)' },
             testo: {
-              it: 'Microsoft 365: posta e agenda. Vuole un’app registrata su [entra.microsoft.com](https://entra.microsoft.com): Registrazioni app › Nuova registrazione, piattaforma «App per dispositivi mobili e desktop», URI di reindirizzamento `http://localhost`. Incolla l’ID applicazione; Microsoft chiede il consenso, solo in lettura.',
-              en: 'Microsoft 365: mail and calendar. It needs an app registered at [entra.microsoft.com](https://entra.microsoft.com): App registrations › New registration, platform “Mobile and desktop applications”, redirect URI `http://localhost`. Paste the Application ID; Microsoft asks for consent, read-only.'
+              it: 'Microsoft 365: posta e agenda, solo in lettura. Su un server: premi «Collega Microsoft» e di’ di sì; se la scheda dice «Non ancora disponibile su questo server», chi lo ospita non ha ancora registrato l’app. Sul tuo Mac: serve un’app tua su [entra.microsoft.com](https://entra.microsoft.com) — Registrazioni app › Nuova registrazione, piattaforma «App per dispositivi mobili e desktop», URI di reindirizzamento `http://localhost` — e incolli l’ID applicazione. Gli indirizzi outlook.com e hotmail non entrano più con la password via IMAP: passa da qui.',
+              en: 'Microsoft 365: mail and calendar, read-only. On a server: press “Connect Microsoft” and say yes; if the card says “Not available on this server yet”, whoever hosts it has not registered the app. On your own Mac: you need your own app at [entra.microsoft.com](https://entra.microsoft.com) — App registrations › New registration, platform “Mobile and desktop applications”, redirect URI `http://localhost` — and paste the Application ID. Outlook.com and Hotmail addresses no longer sign in with a password over IMAP: use this card.'
             }
           },
           {
             nome: { it: 'SharePoint e OneDrive', en: 'SharePoint and OneDrive' },
             testo: {
-              it: 'I file dei siti che segui e il tuo OneDrive. Stessa app di Outlook: l’ID è già lì, ma il consenso si rifà perché stavolta riguarda i file.',
-              en: 'Files from the sites you follow and your OneDrive. Same app as Outlook: the ID is already there, but consent is asked again because this time it is about files.'
+              it: 'I file dei siti che segui e il tuo OneDrive. Stessa app di Outlook; il consenso si rifà perché stavolta riguarda i file.',
+              en: 'Files from the sites you follow and your OneDrive. Same app as Outlook; consent is asked again because this time it is about files.'
             }
           },
           {
             nome: { it: 'Google Drive', en: 'Google Drive' },
             testo: {
-              it: 'I tuoi documenti su Drive, in sola lettura. Stesso progetto di Gmail: riusa l’ID client e attiva anche Google Drive API. Il consenso si rifà.',
-              en: 'Your documents on Drive, read-only. Same project as Gmail: reuse the client ID and enable Google Drive API too. Consent is asked again.'
+              it: 'I tuoi documenti su Drive, in sola lettura. Su un server basta «Collega Google Drive». Sul tuo Mac è lo stesso progetto di Gmail: riusa l’ID client e attiva anche Google Drive API. Il consenso si rifà.',
+              en: 'Your documents on Drive, read-only. On a server, “Connect Google Drive” is enough. On your own Mac it is the same project as Gmail: reuse the client ID and enable Google Drive API too. Consent is asked again.'
             }
           },
           {
