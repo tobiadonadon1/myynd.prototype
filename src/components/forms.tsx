@@ -61,19 +61,28 @@ function Errore({ testo }: { testo: string }) {
   return <div style={{ fontSize: '12.5px', color: '#D4674A', marginTop: 12, lineHeight: 1.5 }}>{t(testo)}</div>
 }
 
-function Conferma({ onClick, occupato, tema, children }: {
-  onClick: () => void; occupato: boolean; tema: Tema; children: React.ReactNode
+/**
+ * «Provo…» si legge solo mentre si prova davvero.
+ *
+ * Prima `occupato` faceva due cose — spegnere il bottone e cambiargli il
+ * nome — e i moduli lo passavano anche per «il campo è ancora vuoto»: un
+ * bottone che diceva «Provo…» su una casella vuota, prima di aver premuto
+ * niente. Adesso «non ancora» e «sto lavorando» sono due cose diverse.
+ */
+function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
+  onClick: () => void; occupato: boolean; disabilitato?: boolean; tema: Tema; children: React.ReactNode
 }) {
   const scuro = tema === 'scuro'
+  const spento = occupato || disabilitato
   return (
-    <button onClick={onClick} disabled={occupato} style={{
+    <button onClick={onClick} disabled={spento} style={{
       marginTop: 18, padding: '11px 22px', borderRadius: 99, border: 'none',
-      background: occupato
+      background: spento
         ? (scuro ? 'rgba(244,239,232,.2)' : 'rgba(34,39,31,.18)')
         : (scuro ? CHIARO : 'linear-gradient(120deg,#C4623B,#7E9C82)'),
-      color: occupato ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.5)') : (scuro ? '#191715' : '#FFF7F0'),
+      color: spento ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.5)') : (scuro ? '#191715' : '#FFF7F0'),
       fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
-      cursor: occupato ? 'default' : 'pointer'
+      cursor: spento ? 'default' : 'pointer'
     }}>{occupato ? t('Provo…') : children}</button>
   )
 }
@@ -138,7 +147,7 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
         placeholder="sk-ant-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
         onKeyDown={e => { if (e.key === 'Enter' && apiKey) collega() }} />
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !apiKey} tema={tema}>{t('Collega Claude')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!apiKey} tema={tema}>{t('Collega Claude')}</Conferma>
     </div>
   )
 }
@@ -245,7 +254,7 @@ export function FormCompatibile({ tema, ok }: Props) {
       <input value={nome} onChange={e => setNome(e.target.value)}
         placeholder={t('il mio Ollama')} autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
     </div>
   )
 }
@@ -328,7 +337,7 @@ export function FormPosta({ tema, ok }: Props) {
 
       {trovato && !aMano && (
         <div style={{ ...nota(tema), marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ overflowWrap: 'anywhere' }}>{t('Server trovato:')}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
+          <span style={{ overflowWrap: 'anywhere' }}>{t('Server trovato:')}{' '}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
           <button onClick={() => setAMano(true)} style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F', textDecoration: 'underline'
@@ -352,7 +361,7 @@ export function FormPosta({ tema, ok }: Props) {
 
       <Errore testo={err} />
       {avviso && <div style={{ ...nota(tema), marginTop: 12 }}>{avviso}</div>}
-      <Conferma onClick={collega} occupato={occupato || !pronto} tema={tema}>{t('Collega la posta')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega la posta')}</Conferma>
     </div>
   )
 }
@@ -550,7 +559,7 @@ export function FormSlack({ tema, ok }: Props) {
         {t('Legge solo i canali di cui fai già parte: non è un permesso in più di quelli che hai.')}
       </div>
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !token} tema={tema}>{t('Collega Slack')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega Slack')}</Conferma>
     </div>
   )
 }
@@ -606,7 +615,7 @@ export function FormDrive({ tema, ok }: Props) {
         className={classeCampo(tema)} style={campo(tema)}
         onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !id} tema={tema}>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Drive')}
       </Conferma>
     </div>
@@ -675,7 +684,7 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
           : t('Chiederà di poter leggere i file dei siti che segui. Niente altro, e niente in scrittura.')}
       </div>
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !id} tema={tema}>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Microsoft')}
       </Conferma>
     </div>
@@ -724,7 +733,7 @@ export function FormDropbox({ tema, ok }: Props) {
       {!dove ? (
         <>
           <Errore testo={err} />
-          <Conferma onClick={inizia} occupato={occupato || !chiave} tema={tema}>{t('Apri Dropbox')}</Conferma>
+          <Conferma onClick={inizia} occupato={occupato} disabilitato={!chiave} tema={tema}>{t('Apri Dropbox')}</Conferma>
         </>
       ) : (
         <>
@@ -741,7 +750,7 @@ export function FormDropbox({ tema, ok }: Props) {
               style={{ color: '#C4623B' }}>{t('apri la pagina a mano')}</a>
           </div>
           <Errore testo={err} />
-          <Conferma onClick={finisci} occupato={occupato || !codice} tema={tema}>{t('Collega Dropbox')}</Conferma>
+          <Conferma onClick={finisci} occupato={occupato} disabilitato={!codice} tema={tema}>{t('Collega Dropbox')}</Conferma>
         </>
       )}
     </div>
@@ -814,7 +823,7 @@ export function FormWhatsapp({ tema, ok }: Props) {
       </div>
 
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato || !pronto} tema={tema}>{t('Collega WhatsApp')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega WhatsApp')}</Conferma>
     </div>
   )
 }
