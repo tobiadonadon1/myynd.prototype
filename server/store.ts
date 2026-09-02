@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync } from 'node:fs'
 import { cartella } from './config.ts'
+import * as chi from './chi.ts'
+import { OSPITATO } from './ospitato.ts'
 import { radici, radice, termini } from './lingua.ts'
 
 /*
@@ -1264,6 +1266,17 @@ export function documento(id: string): Documento | null {
 export type Uso = { lavoro: string; motore: string; entrata: number; cache: number; uscita: number }
 
 export function segnaUso(u: Uso) {
+  /*
+   * Fuori da una richiesta, su un server, non si scrive.
+   *
+   * Senza contesto `cartella()` torna la radice — che su un computer di casa è
+   * giusta, perché lì la persona è una — ma su un server è di nessuno: la prima
+   * chiamata *crea* un `mente.db` alla radice, ci scrive dentro il conto di
+   * qualcuno, e quel file resta lì per sempre senza appartenere a niente. È il
+   * tipo di guasto che non dà errore: si scopre guardando la cartella dei dati.
+   * Contare è accessorio; scrivere in un indice orfano no.
+   */
+  if (OSPITATO && !chi.adesso()) return
   db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
     .run(new Date().toISOString(), u.lavoro, u.motore, u.entrata, u.cache, u.uscita)
 }

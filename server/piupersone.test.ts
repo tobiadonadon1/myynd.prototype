@@ -25,6 +25,9 @@ import { join } from 'node:path'
 
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-multi-'))
 process.env.MYYND_DATI = CASA
+// Più persone sulla stessa installazione *è* il caso ospitato: le prove qui
+// dentro valgono per un server, e qualche difesa si accende solo lì.
+process.env.RAILWAY_ENVIRONMENT = 'prova'
 
 const conti = await import('./conti.ts')
 const chi = await import('./chi.ts')
@@ -216,4 +219,32 @@ test('cambiarla butta fuori le sessioni aperte', async () => {
 test('non si tocca il conto di un altro, né una password troppo corta', async () => {
   assert.equal((await conti.cambiaPassword(anna, 'corta')).ok, false)
   assert.equal((await conti.cambiaPassword('uinesistente', 'unapasswordlunga')).ok, false)
+})
+
+// — quello che si conta, si conta a qualcuno —
+
+test('l’uso scritto fuori da una richiesta non finisce in un indice di nessuno', () => {
+  // Su un server, senza contesto, `cartella()` torna la radice: scriverci
+  // dentro creerebbe un `mente.db` che non appartiene a nessuno, e nessuno se
+  // ne accorgerebbe. `segnaUso` è la sola scrittura che può capitare da un
+  // giro di sfondo scritto male, quindi è la sola che si difende da sé.
+  const prima = chi.dentro(anna, () => store.usoDal('2000-01-01T00:00:00.000Z').chiamate)
+
+  store.segnaUso({ lavoro: 'prova', motore: 'niente', entrata: 10, cache: 0, uscita: 5 })
+
+  // niente è finito nell'indice di Anna…
+  assert.equal(chi.dentro(anna, () => store.usoDal('2000-01-01T00:00:00.000Z').chiamate), prima)
+  // …né in quello di Bruno
+  assert.equal(chi.dentro(bruno, () => store.usoDal('2000-01-01T00:00:00.000Z').chiamate), 0)
+  // …e alla radice non è nato nessun indice
+  assert.equal(existsSync(join(CASA, 'mente.db')), false, 'è nato un indice alla radice')
+})
+
+test('dentro una richiesta si conta, e solo per chi ha chiesto', () => {
+  chi.dentro(anna, () => store.segnaUso({ lavoro: 'risposta', motore: 'claude-sonnet-5', entrata: 900, cache: 100, uscita: 150 }))
+  const a = chi.dentro(anna, () => store.usoDal('2000-01-01T00:00:00.000Z'))
+  assert.equal(a.chiamate, 1)
+  assert.equal(a.entrata, 900)
+  assert.equal(a.cache, 100)
+  assert.equal(chi.dentro(bruno, () => store.usoDal('2000-01-01T00:00:00.000Z').chiamate), 0)
 })
