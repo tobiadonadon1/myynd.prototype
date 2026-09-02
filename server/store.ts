@@ -168,6 +168,27 @@ export function controlla(file: string) {
   } finally { try { d.close() } catch { /* già chiuso */ } }
 }
 
+/**
+ * Riprendersi lo spazio che le cancellazioni hanno lasciato libero.
+ *
+ * SQLite non restituisce mai da solo le pagine di quello che si cancella: le
+ * tiene in una lista libera e le riusa. Va bene finché si cancella poco, e
+ * qui non si cancella poco — una fonte scollegata, una rilettura che
+ * riconcilia, l'indice di ricerca rifatto da una migrazione. Su un volume che
+ * si paga a gigabyte, un file grosso il doppio del suo contenuto è una bolletta.
+ *
+ * Si guarda prima quanto c'è da riprendersi, perché `VACUUM` riscrive il file
+ * intero: farlo per due pagine è tutto costo e nessun guadagno. Sopra un
+ * quarto del file, e almeno cinquemila pagine, vale la pena.
+ */
+export function compatta(): { fatto: boolean; liberate: number } {
+  const libere = (db.prepare('PRAGMA freelist_count').get() as { freelist_count: number }).freelist_count
+  const totali = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count
+  if (libere < 5000 || libere < totali / 4) return { fatto: false, liberate: libere }
+  db.exec('VACUUM')
+  return { fatto: true, liberate: libere }
+}
+
 /** Da usare quando si finisce con una persona: chiude e libera. */
 export function chiudiIndici() {
   for (const d of aperti.values()) { try { d.close() } catch { /* già chiuso */ } }
@@ -928,6 +949,31 @@ export type EsitoScrittura = { nuovi: number; cambiati: number; invariati: numbe
  * perché il feed si aggiorni da solo quando compare un file nuovo sul Mac.
  * Adesso `indicizzato` è una data di nascita o di modifica, e ci si può contare.
  */
+/**
+ * Gli stessi documenti, ma senza tenere fermo il processo.
+ *
+ * `salvaDocumenti` è tutta dentro una transazione sincrona: con la prima
+ * lettura di una casella grossa sono migliaia di righe più lo stemming di
+ * ognuna, e per tutto quel tempo il server non risponde a nessun altro — non
+ * alle altre schermate di chi sta leggendo, e su un server non agli altri
+ * conti. A pezzi di duecento, con un respiro in mezzo, il lavoro è lo stesso e
+ * il tempo pure; quello che cambia è che fra un pezzo e l'altro le altre
+ * richieste passano.
+ *
+ * Ogni pezzo è la sua transazione: un guasto a metà lascia dentro i pezzi
+ * finiti invece di buttare via tutto. Per la lettura di una casella è la cosa
+ * giusta — quello che è entrato è entrato, e il giro dopo riprende da lì.
+ */
+export async function salvaDocumentiAPezzi(docs: Documento[], pezzo = 200): Promise<EsitoScrittura> {
+  const tot: EsitoScrittura = { nuovi: 0, cambiati: 0, invariati: 0 }
+  for (let i = 0; i < docs.length; i += pezzo) {
+    const e = salvaDocumenti(docs.slice(i, i + pezzo))
+    tot.nuovi += e.nuovi; tot.cambiati += e.cambiati; tot.invariati += e.invariati
+    if (i + pezzo < docs.length) await new Promise(r => setImmediate(r))
+  }
+  return tot
+}
+
 export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
   const esito: EsitoScrittura = { nuovi: 0, cambiati: 0, invariati: 0 }
   if (!docs.length) return esito

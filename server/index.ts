@@ -860,7 +860,7 @@ async function leggiTutto(
   if (c.desktop && (!soloFonte || soloFonte === 'desktop')) {
     avvisa({ fase: 'desktop', stato: 'apro le cartelle' })
     const e = await desktop.sincronizza(c.desktop, n => avvisa({ fase: 'desktop', stato: `${n} documenti` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
     // silenzio non prova niente
     // gli id visti contano quanto quelli indicizzati: un file che c'è ma che
@@ -877,7 +877,7 @@ async function leggiTutto(
   if (!fermo() && c.notion && (!soloFonte || soloFonte === 'notion')) {
     avvisa({ fase: 'notion', stato: 'leggo le pagine' })
     const e = await notion.sincronizza(c.notion)
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('notion', { completo: !e.interrotto },
       [...e.docs.map(d => d.id), ...e.visti])
     totale += e.docs.length
@@ -891,7 +891,7 @@ async function leggiTutto(
     )
     const e = await posta.sincronizza(c.posta, (fatti, tot) =>
       avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi` }), giaIndicizzati)
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     totale += e.docs.length
     // l'UIDVALIDITY vista si conserva: è quello che rende possibile saltare la prossima volta
     if (JSON.stringify(e.validita) !== JSON.stringify(c.posta.validita ?? {})) {
@@ -906,7 +906,7 @@ async function leggiTutto(
     avvisa({ fase: 'google', stato: 'mi collego alla casella' })
     const e = await google.sincronizza(c.google, (fatti, tot) =>
       avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     totale += e.docs.length
     avvisa({ fase: 'google', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
   }
@@ -914,7 +914,7 @@ async function leggiTutto(
     avvisa({ fase: 'microsoft', stato: 'mi collego alla casella' })
     const e = await microsoft.sincronizzaPosta(c.microsoft, (fatti, tot) =>
       avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     totale += e.docs.length
     avvisa({ fase: 'microsoft', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
   }
@@ -922,7 +922,7 @@ async function leggiTutto(
     avvisa({ fase: 'slack', stato: 'apro le conversazioni' })
     const e = await slack.sincronizza(c.slack, (fatti, tot) =>
       avvisa({ fase: 'slack', stato: `${fatti} di ${tot} canali` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     /*
       Si riconcilia solo se nessun canale è caduto e non si è toccato il tetto.
       Un canale che non risponde non prova che le sue conversazioni siano
@@ -938,7 +938,7 @@ async function leggiTutto(
     avvisa({ fase: 'drive', stato: 'apro i documenti' })
     const e = await drive.sincronizza(c.drive, (fatti, tot) =>
       avvisa({ fase: 'drive', stato: `${fatti} di ${tot} file` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('drive', { completo: !e.troncato && !e.falliti },
       [...e.docs.map(d => d.id), ...e.visti])
     totale += e.docs.length
@@ -948,7 +948,7 @@ async function leggiTutto(
     avvisa({ fase: 'sharepoint', stato: 'apro i siti' })
     const e = await microsoft.sincronizzaFile(c.microsoft, (fatti, tot) =>
       avvisa({ fase: 'sharepoint', stato: `${fatti} di ${tot} file` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('sharepoint', { completo: e.completo },
       [...e.docs.map(d => d.id), ...e.visti])
     totale += e.docs.length
@@ -958,7 +958,7 @@ async function leggiTutto(
     avvisa({ fase: 'dropbox', stato: 'apro la cartella' })
     const e = await dropbox.sincronizza(c.dropbox, (fatti, tot) =>
       avvisa({ fase: 'dropbox', stato: `${fatti} di ${tot} file` }))
-    store.salvaDocumenti(e.docs)
+    await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('dropbox', { completo: e.completo && !e.falliti },
       [...e.docs.map(d => d.id), ...e.visti])
     totale += e.docs.length
@@ -2355,6 +2355,22 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
   setTimeout(giornali, 10_000)
   setInterval(giornali, 3600_000)
+
+  /*
+   * La compattazione, una volta al giorno e per ognuno.
+   *
+   * Non è manutenzione per il gusto di farla: quello che si cancella — una
+   * fonte scollegata, una riconciliazione, un indice di ricerca rifatto da una
+   * migrazione — resta a occupare il file finché qualcuno non lo riscrive.
+   * `compatta()` guarda prima se ne vale la pena, quindi quasi tutti i giorni
+   * non fa niente e non costa niente.
+   */
+  const compattazione = perOgnuno('la compattazione si è fermata', async () => {
+    const e = store.compatta()
+    if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
+  })
+  setTimeout(compattazione, 10 * 60_000)
+  setInterval(compattazione, 24 * 3600_000)
 
   /*
    * I compiti rimasti a metà si riaprono, per ognuno.

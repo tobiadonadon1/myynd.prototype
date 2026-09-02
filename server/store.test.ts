@@ -783,3 +783,31 @@ test('la potatura tiene le scartate più a lungo delle altre', () => {
   assert.ok(store.notizieScartate().includes('buttata'),
     'la scartata è stata potata: fra otto giorni quella notizia può tornare')
 })
+
+// — scrivere a pezzi, e riprendersi lo spazio —
+
+test('a pezzi si scrive quello che si scriverebbe in un colpo solo', async () => {
+  const tanti = Array.from({ length: 450 }, (_, i) => ({
+    id: `pezzi:${i}`, fonte: 'desktop', tipo: 'nota',
+    titolo: `Nota numero ${i}`, corpo: `il contenuto della nota ${i}, con abbastanza parole da indicizzare`,
+    autore: null, percorso: null, quando: '2026-02-01T00:00:00.000Z', gruppo: 'documenti'
+  }))
+  const e = await store.salvaDocumentiAPezzi(tanti, 100)
+  assert.equal(e.nuovi, 450)
+  assert.equal(store.documento('pezzi:449')?.titolo, 'Nota numero 449')
+  // e sono cercabili: l'indice FTS è stato scritto in ogni pezzo, non solo nell'ultimo
+  assert.ok(store.cerca('nota numero 7', 5).some(d => d.id === 'pezzi:7'))
+
+  // rifarlo non duplica niente e non cambia niente
+  const due = await store.salvaDocumentiAPezzi(tanti, 100)
+  assert.equal(due.nuovi, 0)
+  assert.equal(due.invariati, 450)
+})
+
+test('compattare non fa niente quando non c’è niente da riprendersi', () => {
+  // il file di prova è piccolo: la soglia non si raggiunge, e VACUUM non parte
+  const e = store.compatta()
+  assert.equal(e.fatto, false)
+  // e l'indice continua a rispondere
+  assert.ok(store.conteggi().totale > 0)
+})
