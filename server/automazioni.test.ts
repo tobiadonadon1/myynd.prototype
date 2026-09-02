@@ -599,8 +599,12 @@ test('l’anteprima non scrive niente e non fa girare l’automazione', () => {
 test('una ricetta che fa scrivere si ferma al tetto del giorno, a mano no, e domani riparte', async () => {
   const ricetta = { ...RICETTA, id: 'tetto', metti: { inLista: 'oggi' as const, modo: 'bozza' as const } }
   const oggi = new Date()
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.automazioneGirata('tetto', 'fatta', undefined, 1)
+  // il conto sta su una colonna sua, non nella storia: la storia tiene venti
+  // giri e una ricetta che gira ogni quarto d'ora ci faceva scorrere via le
+  // bozze del mattino, azzerando il tetto da sola prima di sera
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza('tetto', auto.giornoDi(oggi))
   assert.equal(auto.bozzeOggi(store.statoAutomazione('tetto'), oggi), auto.BOZZE_AL_GIORNO)
+
 
   // le bozze sono l'unica spesa che si ripete da sola: oltre il tetto non si
   // guarda nemmeno il materiale, e non è un guasto
@@ -616,8 +620,23 @@ test('una ricetta che fa scrivere si ferma al tetto del giorno, a mano no, e dom
   assert.notEqual(await auto.fai(ricetta, { adesso: new Date(oggi.getTime() + 86_400_000) }), 'saltata')
 })
 
+test('il conto delle bozze non scorre via con la storia', () => {
+  // La storia tiene gli ultimi venti giri. Contando le bozze da lì, una
+  // ricetta che gira ogni quarto d'ora si azzerava il tetto da sola prima di
+  // sera — proprio quelle che il tetto lo raggiungono.
+  const oggi = new Date()
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza('scorre', auto.giornoDi(oggi))
+  for (let i = 0; i < 25; i++) store.automazioneGirata('scorre', 'niente', undefined, 0)
+
+  assert.equal(store.storiaDi(store.statoAutomazione('scorre')).some(g => g.esito === 'fatta'), false,
+    'la prova non prova niente se le «fatta» sono ancora nella storia')
+  assert.equal(auto.bozzeOggi(store.statoAutomazione('scorre'), oggi), auto.BOZZE_AL_GIORNO)
+  // e il giorno dopo riparte da zero senza che nessuno azzeri niente
+  assert.equal(auto.bozzeOggi(store.statoAutomazione('scorre'), new Date(oggi.getTime() + 86_400_000)), 0)
+})
+
 test('il tetto non tocca chi scrive una riga e basta, né chi propone', async () => {
-  for (let i = 0; i < auto.BOZZE_AL_GIORNO + 2; i++) store.automazioneGirata('io-solo', 'fatta', undefined, 1)
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO + 2; i++) store.segnaBozza('io-solo', auto.giornoDi(new Date()))
   const soloRiga = { ...RICETTA, id: 'io-solo', metti: { inLista: 'oggi' as const, modo: 'io' as const } }
   assert.notEqual(await auto.fai(soloRiga), 'saltata')
 })

@@ -257,7 +257,14 @@ export async function completaWeb(stato: string, codice: string | null, errore: 
 }
 
 /** La pagina che vede chi torna da Google o Microsoft. Nelle due lingue: qui non si sa ancora quale. */
-export function paginaWeb(bene: boolean, nome: string, messaggio = ''): string {
+/** Il testo che finisce dentro l'HTML non deve poterlo cambiare. */
+function senzaTag(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+}
+
+export function paginaWeb(bene: boolean, nomeGrezzo: string, messaggioGrezzo = ''): string {
+  const nome = senzaTag(nomeGrezzo)
+  const messaggio = senzaTag(messaggioGrezzo)
   const testo = bene
     ? `<b>Fatto.</b> ${nome} è collegato. Torno su Myynd…<br><span style="opacity:.6">Done. ${nome} is connected. Taking you back to Myynd…</span>`
     : `<b>Non è andata.</b> ${messaggio}<br><span style="opacity:.6">It didn't work. Go back to Myynd and try again.</span>`

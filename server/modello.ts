@@ -33,6 +33,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
+import * as chi from './chi.ts'
 import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
 
@@ -253,8 +254,15 @@ const LOCALI_BUONI = [
   'mistral-nemo', 'gemma2:9b', 'phi4', 'qwen2.5:3b', 'llama3.2:3b'
 ]
 
+/*
+ * Per persona, come tutto il resto.
+ *
+ * Il modello preferito sta nella configurazione di chi chiede: con una sonda
+ * sola, dentro il minuto di validità, la scelta della prima persona valeva per
+ * la seconda. Non è la posta di qualcun altro, ma è la stessa specie di errore.
+ */
 type Sonda = { modello: string | null; quando: number }
-let sonda: Sonda = { modello: null, quando: 0 }
+const sonde = new Map<string, Sonda>()
 const SONDA_VALE = 60_000
 
 /**
@@ -270,7 +278,8 @@ async function localeDisponibile(): Promise<string | null> {
   if (scelto?.attivo === false) return null
 
   const ora = Date.now()
-  if (ora - sonda.quando < SONDA_VALE) return sonda.modello
+  const mia = sonde.get(chi.adesso() ?? '')
+  if (mia && ora - mia.quando < SONDA_VALE) return mia.modello
 
   let trovato: string | null = null
   try {
@@ -288,15 +297,15 @@ async function localeDisponibile(): Promise<string | null> {
     }
   } catch { /* non c'è, o non risponde: si va da Claude */ }
 
-  sonda = { modello: trovato, quando: ora }
+  sonde.set(chi.adesso() ?? '', { modello: trovato, quando: ora })
   return trovato
 }
 
 /** Cosa c'è in mano, per dirlo nelle preferenze invece di farlo di nascosto. */
 export async function statoLocale(): Promise<{ acceso: boolean; modello: string | null; spento: boolean }> {
   const spento = leggi().locale?.attivo === false
-  // la sonda si azzera apposta: chi apre le preferenze vuole lo stato di adesso
-  sonda = { modello: null, quando: 0 }
+  // la sua sonda si azzera apposta: chi apre le preferenze vuole lo stato di adesso
+  sonde.delete(chi.adesso() ?? '')
   const m = spento ? null : await localeDisponibile()
   return { acceso: !!m, modello: m, spento }
 }

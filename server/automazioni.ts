@@ -747,8 +747,19 @@ function riassunto(p: store.Proposta): string {
 export const BOZZE_AL_GIORNO = 3
 
 /** Quante volte oggi ha scritto una riga davvero, dalla sua storia. */
+/** Il giorno solare, come lo scrive il database. */
+export const giornoDi = (d: Date) => d.toISOString().slice(0, 10)
+
+/**
+ * Quante bozze ha già fatto fare oggi.
+ *
+ * Si legge dal contatore e non dalla storia: la storia tiene gli ultimi venti
+ * giri, e una ricetta che gira ogni quarto d'ora ci faceva scorrere fuori le
+ * tre del mattino prima di sera — il tetto si azzerava da solo, in silenzio,
+ * proprio sulle ricette che lo raggiungono.
+ */
 export function bozzeOggi(s: store.StatoAutomazione | null, adesso = new Date()): number {
-  return store.storiaDi(s).filter(g => g.esito === 'fatta' && stessoGiorno(new Date(g.quando), adesso)).length
+  return s?.giorno === giornoDi(adesso) ? Number(s.bozze ?? 0) : 0
 }
 
 export async function fai(
@@ -851,7 +862,11 @@ export async function fai(
     compiti.annunciaPronto(id)
   } else {
     const modo = a.metti.modo ?? 'io'
-    if (modo === 'bozza' || modo === 'tutto') compiti.affida(id, modo)
+    if (modo === 'bozza' || modo === 'tutto') {
+      compiti.affida(id, modo)
+      // il tetto del giorno si conta qui, dove la bozza parte davvero
+      store.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
+    }
   }
 
   store.automazioneGirata(a.id, 'fatta', undefined, docs.length)

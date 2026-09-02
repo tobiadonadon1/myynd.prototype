@@ -171,6 +171,9 @@ export function importa(dati: Buffer): Esito {
     // solo nomi di file, mai percorsi: un `../../` qui dentro scriverebbe
     // fuori dalla cartella di chi sta importando
     if (!/^[\w.-]+\.json$/.test(nome)) continue
+    // e dev'essere testo: un valore che non lo è faceva esplodere la scrittura
+    // *dopo* che l'indice era già stato sostituito, lasciando il conto a metà
+    if (typeof testo !== 'string') continue
     writeFileSync(join(auto, nome), testo, { mode: 0o600 })
     quante++
   }

@@ -1365,11 +1365,17 @@ app.post('/api/compiti/:id/delega', (req, res) => {
   if (!claude.collegato()) {
     return res.status(400).json({ errore: 'Collega Claude e potrò lavorarci.' })
   }
-  // Le bozze passano dalla chiave: `svolgi` cerca e apre documenti a più
-  // giri, e quella strada l'abbonamento non la fa. Meglio dirlo qui, prima di
-  // affidare, che con una rotella e poi «Collega Claude» a chi l'ha appena fatto.
-  if (!mod.cliente()) {
-    return res.status(400).json({ errore: 'Per le bozze serve una chiave API di Claude: l’abbonamento basta per la chat.' })
+  /*
+   * Le bozze vogliono un motore vero, non l'abbonamento.
+   *
+   * `svolgi` cerca e apre documenti a più giri, e quella strada Claude Code non
+   * la fa. Ma «un motore vero» è la chiave di Claude *oppure* il fornitore
+   * compatibile: chiedere `cliente()` — che è solo Anthropic — vietava le bozze
+   * proprio a chi aveva appena collegato OpenAI, mentre chat, feed e automazioni
+   * gli funzionavano. Meglio dirlo qui, prima di affidare, che con una rotella.
+   */
+  if (!mod.motore()) {
+    return res.status(400).json({ errore: 'Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.' })
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
   compiti.affida(c.id, modo)
@@ -2287,7 +2293,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     ? chi.dentro(conti.tutti()[0], () => automazioni.ricette().length)
     : 0
   if (quante) console.log(`myynd · ${quante} automazion${quante === 1 ? 'e' : 'i'} in linea`)
-  const giro = perOgnuno('il giro delle automazioni si è fermato', () => automazioni.giro())
+  // il giro non conta come «questa persona sta usando Myynd»: vedi senzaToccare
+  const giro = perOgnuno('il giro delle automazioni si è fermato', () => store.senzaToccare(() => automazioni.giro()))
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
 

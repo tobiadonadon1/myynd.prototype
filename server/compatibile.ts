@@ -411,7 +411,10 @@ export function ritocca(c: Record<string, unknown>, messaggio: string): boolean 
     return true
   }
   const formato = c.response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined
-  if (formato?.type === 'json_schema') {
+  // solo se è dello schema che si lamenta: senza questo controllo un 400 su
+  // `tool_choice` bruciava il primo tentativo togliendo il vincolo sull'uscita,
+  // che con quel rifiuto non c'entrava niente
+  if (formato?.type === 'json_schema' && /response_format|json[_ ]?schema|schema|structured|format/i.test(messaggio)) {
     const schema = formato.json_schema?.schema
     c.response_format = { type: 'json_object' }
     const righe = c.messages as MessaggioOA[]
@@ -611,10 +614,25 @@ export function indirizzoAmmesso(url: string, ospitato: boolean): string | null 
   try { u = new URL(base(url)) } catch { return 'L’indirizzo del fornitore non è valido.' }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'L’indirizzo del fornitore non è valido.'
   const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  /*
+   * Quello che non si raggiunge da un server.
+   *
+   * Oltre alle reti private ci sono due cose che qui pesano di più:
+   * `169.254.169.254`, che su ogni fornitore di hosting è il servizio che
+   * racconta le credenziali della macchina, e i nomi `.internal` che le
+   * piattaforme danno ai servizi vicini — su Railway un database si chiama
+   * così. Senza queste due righe un indirizzo `https://…​.internal/v1` passava,
+   * e chiunque si fosse registrato poteva far parlare il server con la rete di
+   * chi lo ospita e leggersi la risposta. `ospitato.hostRaggiungibile` fa lo
+   * stesso per la posta: le due difese devono dire la stessa cosa.
+   */
   const inCasa =
-    host === 'localhost' || host.endsWith('.local') || host === '::1' ||
+    host === 'localhost' || host.endsWith('.localhost') ||
+    host.endsWith('.local') || host.endsWith('.internal') ||
+    host === '::1' || /^fe80:/i.test(host) || /^fd/i.test(host) ||
     /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^0\.0\.0\.0$/.test(host)
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^169\.254\./.test(host) ||
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || /^0\./.test(host)
   if (ospitato && (inCasa || u.protocol === 'http:')) {
     return 'Su un server il fornitore deve stare su https, fuori dalla rete interna.'
   }

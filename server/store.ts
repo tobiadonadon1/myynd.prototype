@@ -3,7 +3,7 @@
 
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { cartella } from './config.ts'
 import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
@@ -90,9 +90,25 @@ function chiudiGliInattivi() {
 }
 setInterval(chiudiGliInattivi, 10 * 60_000).unref()
 
+/*
+ * I giri di sfondo non contano come «usato».
+ *
+ * Il giro delle automazioni passa da ogni conto ogni quarto d'ora e tocca il
+ * database anche per chi non ha nessuna ricetta: con quello che segna l'uso,
+ * la mezz'ora di inattività non scadeva mai per nessuno e gli indici restavano
+ * aperti tutti, per sempre — cioè esattamente quello che questa cache doveva
+ * evitare. Dentro `senzaToccare` si legge e si scrive come sempre, ma
+ * l'orologio dell'inattività non si riarma.
+ */
+let disImpegnato = 0
+export function senzaToccare<T>(f: () => T): T {
+  disImpegnato++
+  try { return f() } finally { disImpegnato-- }
+}
+
 function mio(): DatabaseSync {
   const dove = cartella()
-  ultimoUso.set(dove, Date.now())
+  if (!disImpegnato) ultimoUso.set(dove, Date.now())
   let d = aperti.get(dove)
   if (!d) {
     const guasto = guasti.get(dove)
@@ -759,6 +775,30 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     `)
   },
 
+  // 22 → 23 · quello che ha scritto lei, segnato come tale.
+  //
+  //   La posta inviata entra nell'indice da oggi, e per «appena arrivato» si
+  //   intende quello che è entrato nell'indice, non quello che è stato scritto:
+  //   senza questa colonna la prima lettura dopo l'aggiornamento avrebbe messo
+  //   in cima alla prima pagina le email che ha mandato lei, e le automazioni
+  //   «quando arriva una fattura» avrebbero preparato risposte alla sua posta.
+  d => {
+    d.exec('ALTER TABLE documenti ADD COLUMN inviato INTEGER NOT NULL DEFAULT 0')
+  },
+
+  // 23 → 24 · quante bozze ha fatto fare oggi un'automazione.
+  //
+  //   Si contava dalla `storia`, che tiene gli ultimi venti giri e basta: una
+  //   ricetta che gira ogni quarto d'ora faceva scorrere via le tre «fatta»
+  //   del mattino nel giro di poche ore, e il tetto del giorno si azzerava da
+  //   solo. Un contatore con accanto il giorno a cui si riferisce non scorre.
+  d => {
+    d.exec(`
+      ALTER TABLE automazioni ADD COLUMN giorno TEXT;
+      ALTER TABLE automazioni ADD COLUMN bozze INTEGER NOT NULL DEFAULT 0;
+    `)
+  },
+
   // 22 → 23 · quanto è costato ragionare, chiamata per chiamata.
   //
   //   Senza questa tabella «perché ho speso sei dollari in tre giorni» non
@@ -807,9 +847,23 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
   console.log(`myynd · istantanea prima della migrazione: ${copia}`)
   // Le due più recenti bastano a tornare indietro. Le altre sono copie intere
   // dell'indice che nessuno riaprirà: a ogni cambio di schema il disco raddoppiava.
+  /*
+   * Le due più recenti, e solo fra le istantanee delle migrazioni.
+   *
+   * Due trappole in una riga sola. La prima: i nomi sono `mente-v<N>-<data>`,
+   * e ordinarli come stringhe mette `v9` dopo `v22` — «le ultime due» sarebbero
+   * state la più nuova e la più vecchia. La seconda, peggiore: la copia messa
+   * da parte prima di un'importazione si chiama `mente-prima-del-trasloco-…`,
+   * che con quel filtro entrava nel mucchio e, ordinata per nome, veniva
+   * cancellata per prima — cioè la copia esisteva finché non serviva. Qui si
+   * guarda la data del file, e si toccano solo le istantanee delle migrazioni.
+   */
   try {
-    const vecchie = readdirSync(dove).filter(n => /^mente-.*\.db$/.test(n)).sort()
-    for (const n of vecchie.slice(0, Math.max(0, vecchie.length - 2))) rmSync(join(dove, n), { force: true })
+    const vecchie = readdirSync(dove)
+      .filter(n => /^mente-v\d+-.*\.db$/.test(n))
+      .map(n => ({ n, quando: statSync(join(dove, n)).mtimeMs }))
+      .sort((a, b) => a.quando - b.quando)
+    for (const v of vecchie.slice(0, Math.max(0, vecchie.length - 2))) rmSync(join(dove, v.n), { force: true })
   } catch { /* le istantanee sono un aiuto, non un requisito */ }
 }
 
@@ -866,6 +920,15 @@ export type Documento = {
   gruppo?: string | null
   /** La conversazione di cui fa parte, se è una email. Si legge con `stessoFilo`. */
   filo?: string | null
+  /**
+   * L'ha scritta lei, non le è arrivata.
+   *
+   * Serve a `appenaArrivati`, che è quello che alimenta la prima pagina e le
+   * automazioni «quando arriva»: la posta inviata entra nell'indice — è l'unico
+   * esempio vero di come scrive — ma non «arriva», e trattarla come un arrivo
+   * vorrebbe dire una prima pagina fatta delle sue stesse email.
+   */
+  inviato?: boolean
 }
 
 /*
@@ -903,16 +966,16 @@ function istr(): Istruzioni {
   i = {
     selRid: d.prepare('SELECT rid FROM documenti WHERE id = ?'),
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato FROM documenti WHERE id = ?'
     ),
     /** C'è la riga corrispondente nell'indice full-text? Serve a non saltare un documento rotto. */
     selFts: d.prepare('SELECT 1 FROM ricerca WHERE rowid = ?'),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
-      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, indicizzato=?
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, indicizzato=?
       WHERE rid = ?
     `),
     /**
@@ -924,7 +987,7 @@ function istr(): Istruzioni {
      * il feed e le automazioni «guarda cos'è arrivato» vedrebbero tremila
      * email nuove che nuove non sono. Una chiave in più non è un arrivo.
      */
-    updFilo: d.prepare('UPDATE documenti SET filo = ? WHERE rid = ?'),
+    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ? WHERE rid = ?'),
     delFts: d.prepare('DELETE FROM ricerca WHERE rowid = ?'),
     insFts: d.prepare('INSERT INTO ricerca (rowid, titolo, corpo, autore, radici) VALUES (?,?,?,?,?)')
   }
@@ -986,7 +1049,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
       const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
-        filo: string | null
+        filo: string | null; inviato: number | null
       } | undefined
 
       if (gia) {
@@ -1005,19 +1068,23 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         if (uguale && istr().selFts.get(gia.rid)) {
           // il filo non è contenuto: si aggiorna senza far passare il documento
           // per «cambiato» (vedi `updFilo`)
-          if (gia.filo !== (d.filo ?? null)) istr().updFilo.run(d.filo ?? null, gia.rid)
+          // il filo e «l'ho scritta io» arrivano tutti e due dopo, e nessuno dei
+          // due è un contenuto: si scrivono senza far contare il documento come cambiato
+          if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato) {
+            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, gia.rid)
+          }
           esito.invariati++
           continue
         }
 
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, ora, gia.rid)
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, ora, gia.rid)
         istr().delFts.run(gia.rid)
         istr().insFts.run(gia.rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
         esito.cambiati++
         continue
       }
 
-      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, ora)
+      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, ora)
       const rid = Number(r.lastInsertRowid)
       istr().insFts.run(rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
       esito.nuovi++
@@ -1039,9 +1106,20 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
  * Qui si ordina per quando è entrato nell'indice, che è la domanda giusta da
  * fare quando ci si chiede «cos'è cambiato mentre non guardavo».
  */
+/**
+ * Quello che è entrato da un certo momento in qua.
+ *
+ * **Meno quello che ha scritto lei.** Da quando si legge anche la posta
+ * inviata, la prima lettura dopo l'aggiornamento la indicizza tutta insieme —
+ * e siccome «appena arrivato» si misura da quando è entrata nell'indice, non
+ * da quando è stata scritta, quelle finivano in cima. Il risultato sarebbe
+ * stato una prima pagina fatta delle email che ha mandato lei, e delle
+ * automazioni «quando arriva una fattura» che si mettono a preparare risposte
+ * alle sue stesse mail. Arrivare vuol dire arrivare da fuori.
+ */
 export function appenaArrivati(dal: string, limite = 30): Documento[] {
   return db.prepare(`
-    SELECT * FROM documenti WHERE indicizzato >= ?
+    SELECT * FROM documenti WHERE indicizzato >= ? AND (inviato IS NULL OR inviato = 0)
     ORDER BY indicizzato DESC, quando DESC LIMIT ?
   `).all(dal, limite) as unknown as Documento[]
 }
@@ -2444,6 +2522,26 @@ export type StatoAutomazione = {
   dal?: string | null
   /** Le ultime volte, in JSON. Si legge con `storiaDi`. */
   storia?: string | null
+  /** Il giorno a cui si riferisce `bozze`, come AAAA-MM-GG. */
+  giorno?: string | null
+  /** Quante bozze ha fatto fare in quel giorno. Il tetto si legge da qui. */
+  bozze?: number | null
+}
+
+/**
+ * Una bozza in più oggi, per questa automazione.
+ *
+ * Il giorno sta accanto al numero: quando cambia, il numero riparte da uno
+ * senza che nessuno debba passare a mezzanotte ad azzerare niente.
+ */
+export function segnaBozza(id: string, giorno: string): number {
+  const s = statoAutomazione(id)
+  const quante = s?.giorno === giorno ? Number(s.bozze ?? 0) + 1 : 1
+  db.prepare(`
+    INSERT INTO automazioni (id, giorno, bozze) VALUES (?,?,?)
+    ON CONFLICT(id) DO UPDATE SET giorno = excluded.giorno, bozze = excluded.bozze
+  `).run(id, giorno, quante)
+  return quante
 }
 
 /** Un giro, com'è andato. */

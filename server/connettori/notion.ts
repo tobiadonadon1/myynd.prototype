@@ -2,6 +2,7 @@
 // essere condivise con l'integrazione, altrimenti l'API non le vede.
 
 import { Client } from '@notionhq/client'
+import * as chi from '../chi.ts'
 import type { ConfigNotion } from '../config.ts'
 import type { Documento } from '../store.ts'
 
@@ -23,13 +24,17 @@ function titolo(p: any): string {
  * Qui si tiene un passo minimo fra le chiamate e, sul 429, si aspetta quanto
  * dice Notion e si riprova una volta.
  */
-let ultimaChiamata = 0
+// per persona: il limite di Notion è per token di integrazione, cioè per
+// conto. Con un contatore solo, N persone che leggono Notion si rallentavano
+// a vicenda per un limite che nessuna delle due stava raggiungendo.
+const ultimaChiamata = new Map<string, number>()
 const PASSO = 350
 
 async function conCalma<T>(f: () => Promise<T>): Promise<T> {
-  const attesa = ultimaChiamata + PASSO - Date.now()
+  const di = chi.adesso() ?? ''
+  const attesa = (ultimaChiamata.get(di) ?? 0) + PASSO - Date.now()
   if (attesa > 0) await new Promise(r => setTimeout(r, attesa))
-  ultimaChiamata = Date.now()
+  ultimaChiamata.set(di, Date.now())
   try {
     return await f()
   } catch (e) {
@@ -37,7 +42,7 @@ async function conCalma<T>(f: () => Promise<T>): Promise<T> {
     if (err?.status !== 429 && err?.code !== 'rate_limited') throw e
     const dopo = Math.min(10, Number(err.headers?.['retry-after']) || 1)
     await new Promise(r => setTimeout(r, dopo * 1000))
-    ultimaChiamata = Date.now()
+    ultimaChiamata.set(di, Date.now())
     return await f()
   }
 }

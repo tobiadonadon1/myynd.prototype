@@ -507,7 +507,7 @@ const EN: Record<string, string> = {
   'Riprova': 'Try again',
   'Il tuo conto': 'Your account',
   'Errore.': 'Error.',
-  'Per le bozze serve una chiave API di Claude: l’abbonamento basta per la chat.': 'Drafts need a Claude API key: the subscription covers chat only.',
+  'Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.': 'Drafts need an API key or a provider: the subscription covers chat only.',
   'Troppi tentativi. Riprova fra un minuto.': 'Too many attempts. Try again in a minute.',
   'Quell’host non si può raggiungere da qui.': 'That host cannot be reached from here.',
   'Il file dentro il pacco non è un indice di Myynd.': 'The file inside the bundle is not a Myynd index.',

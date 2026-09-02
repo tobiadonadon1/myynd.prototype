@@ -486,8 +486,9 @@ export async function sincronizza(
      * i piedi; `fonte` resta `posta` per tutte e due, perché è la stessa
      * casella. Chi ha scelto le cartelle a mano tiene le sue.
      */
+    let inviata: string | null = null
     if (!c.cartelle?.length) {
-      const inviata = await cartellaInviata(cl).catch(() => null)
+      inviata = await cartellaInviata(cl).catch(() => null)
       if (inviata && !cartelle.includes(inviata)) cartelle = [...cartelle, inviata]
     }
 
@@ -539,7 +540,9 @@ export async function sincronizza(
               quando: (p.date || msg.envelope?.date || new Date()).toISOString(),
               gruppo: 'posta',
               // la conversazione: la radice della catena degli id, o l'oggetto
-              filo: filoDi({ messageId: p.messageId, inReplyTo: p.inReplyTo, references: p.references, oggetto: p.subject })
+              filo: filoDi({ messageId: p.messageId, inReplyTo: p.inReplyTo, references: p.references, oggetto: p.subject }),
+              // scritta da lei: cercabile e utile alla voce, ma non «arrivata»
+              inviato: cartella === inviata
             })
           } catch {
             // un messaggio illeggibile non deve fermare la sincronizzazione
