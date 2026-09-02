@@ -12,7 +12,7 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Compito, type EventoCompito } from '../api'
+import { api, type Compito, type EventoCompito, type PassoCompito } from '../api'
 import { frasi, t } from '../lingua'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
@@ -32,6 +32,15 @@ export function useCompiti(mostraToast: (t: string) => void) {
   const [guasto, setGuasto] = useState('')
   // quali righe hanno la bozza aperta sotto
   const [aperti, setAperti] = useState<Set<string>>(new Set())
+  /**
+   * L'ultimo passo di ogni riga su cui Myynd sta lavorando.
+   *
+   * Solo l'ultimo: la riga ha spazio per una frase, e «cerco listino» che
+   * diventa «apro il preventivo» è tutto quello che serve per sapere che è
+   * vivo e cosa sta facendo. Si toglie appena la riga finisce, in qualunque
+   * modo finisca: una frase di lavoro sotto una bozza pronta sarebbe una bugia.
+   */
+  const [passi, setPassi] = useState<Record<string, PassoCompito>>({})
 
   const compitiRef = useRef<Compito[]>([])
   compitiRef.current = compiti
@@ -89,6 +98,17 @@ export function useCompiti(mostraToast: (t: string) => void) {
       }
       if (e.fase === 'preso') {
         setCompiti(cs => cs.map(c => (c.id === e.id ? { ...c, stato: 'delegato', guaio: null } : c)))
+      }
+      if (e.fase === 'lavoro') {
+        setPassi(p => ({ ...p, [e.id]: e.passo }))
+      }
+      // finito, in qualunque modo: la frase di lavoro non ha più niente da dire
+      if (e.fase === 'pronto' || e.fase === 'chiede' || e.fase === 'guaio' || e.fase === 'richiamato') {
+        setPassi(p => {
+          if (!(e.id in p)) return p
+          const { [e.id]: _via, ...resto } = p
+          return resto
+        })
       }
       // una domanda si apre da sola come una bozza: in tutti e due i casi
       // c'è qualcosa che aspetta te
@@ -333,7 +353,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
 
   return {
     esegui, salvaDocumento, lavora,
-    compiti, chiusi, fuoco, caricato, guasto, aperti,
+    compiti, chiusi, fuoco, caricato, guasto, aperti, passi,
     perSecchio,
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima

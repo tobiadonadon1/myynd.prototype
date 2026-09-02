@@ -721,7 +721,22 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     d.exec('CREATE INDEX IF NOT EXISTS idx_doc_indicizzato ON documenti(indicizzato DESC)')
   },
 
-  // 21 → 22 · quanto è costato ragionare, chiamata per chiamata.
+  // 21 → 22 · il filo di ogni email.
+  //
+  //   Una ricerca trova il messaggio con le parole giuste, e quasi mai basta
+  //   da solo: la cifra chiesta sta due messaggi prima, e quello che le si era
+  //   già promesso sta nella risposta che aveva mandato lei. `filo` è la chiave
+  //   della conversazione — la radice della catena degli identificativi, o
+  //   l'oggetto ripulito — e con l'indice si tirano su i fratelli di un
+  //   risultato in una query sola. Vuoto per tutto quello che non è posta.
+  d => {
+    d.exec(`
+      ALTER TABLE documenti ADD COLUMN filo TEXT;
+      CREATE INDEX IF NOT EXISTS idx_doc_filo ON documenti(filo);
+    `)
+  },
+
+  // 22 → 23 · quanto è costato ragionare, chiamata per chiamata.
   //
   //   Senza questa tabella «perché ho speso sei dollari in tre giorni» non
   //   aveva nessun posto in cui trovare risposta, e un tetto giornaliero non
@@ -826,6 +841,8 @@ export type Documento = {
   percorso?: string | null
   quando?: string | null
   gruppo?: string | null
+  /** La conversazione di cui fa parte, se è una email. Si legge con `stessoFilo`. */
+  filo?: string | null
 }
 
 /*
@@ -849,6 +866,7 @@ type Istruzioni = {
   selFts: ReturnType<DatabaseSync['prepare']>
   insDoc: ReturnType<DatabaseSync['prepare']>
   updDoc: ReturnType<DatabaseSync['prepare']>
+  updFilo: ReturnType<DatabaseSync['prepare']>
   delFts: ReturnType<DatabaseSync['prepare']>
   insFts: ReturnType<DatabaseSync['prepare']>
 }
@@ -862,18 +880,28 @@ function istr(): Istruzioni {
   i = {
     selRid: d.prepare('SELECT rid FROM documenti WHERE id = ?'),
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo FROM documenti WHERE id = ?'
     ),
     /** C'è la riga corrispondente nell'indice full-text? Serve a non saltare un documento rotto. */
     selFts: d.prepare('SELECT 1 FROM ricerca WHERE rowid = ?'),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
-      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, indicizzato=?
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, indicizzato=?
       WHERE rid = ?
     `),
+    /**
+     * Solo il filo, e niente altro.
+     *
+     * Il filo è arrivato dopo, e la prima lettura successiva lo scrive su ogni
+     * email che c'era già. Se passasse da `updDoc` ogni messaggio conterebbe
+     * come «cambiato»: `indicizzato` si sposterebbe a oggi e la mattina dopo
+     * il feed e le automazioni «guarda cos'è arrivato» vedrebbero tremila
+     * email nuove che nuove non sono. Una chiave in più non è un arrivo.
+     */
+    updFilo: d.prepare('UPDATE documenti SET filo = ? WHERE rid = ?'),
     delFts: d.prepare('DELETE FROM ricerca WHERE rowid = ?'),
     insFts: d.prepare('INSERT INTO ricerca (rowid, titolo, corpo, autore, radici) VALUES (?,?,?,?,?)')
   }
@@ -910,6 +938,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
       const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
+        filo: string | null
       } | undefined
 
       if (gia) {
@@ -925,16 +954,22 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         // sull'indice non è pignoleria — senza, un documento la cui riga FTS
         // fosse andata persa non tornerebbe più cercabile, e sarebbe invisibile
         // per sempre restando lì a farsi contare.
-        if (uguale && istr().selFts.get(gia.rid)) { esito.invariati++; continue }
+        if (uguale && istr().selFts.get(gia.rid)) {
+          // il filo non è contenuto: si aggiorna senza far passare il documento
+          // per «cambiato» (vedi `updFilo`)
+          if (gia.filo !== (d.filo ?? null)) istr().updFilo.run(d.filo ?? null, gia.rid)
+          esito.invariati++
+          continue
+        }
 
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora, gia.rid)
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, ora, gia.rid)
         istr().delFts.run(gia.rid)
         istr().insFts.run(gia.rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
         esito.cambiati++
         continue
       }
 
-      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, ora)
+      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, ora)
       const rid = Number(r.lastInsertRowid)
       istr().insFts.run(rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
       esito.nuovi++
@@ -1193,6 +1228,23 @@ export function usoPerGiorno(giorni: number): (Totale & { giorno: string })[] {
     'SELECT substr(quando, 1, 10) AS giorno, COUNT(*) AS chiamate, SUM(entrata) AS entrata, SUM(cache) AS cache, SUM(uscita) AS uscita ' +
     'FROM uso WHERE quando >= ? GROUP BY giorno ORDER BY giorno'
   ).all(da) as (Totale & { giorno: string })[]
+}
+
+/**
+ * Gli altri messaggi della stessa conversazione, i più recenti prima.
+ *
+ * `escludi` sono quelli che chi chiama ha già in mano: la ricerca ne ha trovato
+ * uno, e qui si vogliono i fratelli, non lui un'altra volta. Si esclude
+ * nell'SQL e non dopo, altrimenti un limite di cinque riempito dai già visti
+ * riporterebbe indietro una lista vuota su un filo pieno.
+ */
+export function stessoFilo(filo: string, escludi: string[] = [], limite = 5): Documento[] {
+  if (!filo) return []
+  const fuori = escludi.length ? ` AND id NOT IN (${escludi.map(() => '?').join(',')})` : ''
+  return db.prepare(`
+    SELECT * FROM documenti WHERE filo = ?${fuori}
+    ORDER BY quando DESC LIMIT ?
+  `).all(filo, ...escludi, limite) as unknown as Documento[]
 }
 
 export function conteggi() {
@@ -2506,6 +2558,21 @@ export function automazioneRimandata(id: string) {
   db.prepare(`
     INSERT INTO automazioni (id, esito) VALUES (?, 'gia')
     ON CONFLICT(id) DO UPDATE SET esito = 'gia'
+  `).run(id)
+}
+
+/**
+ * Saltata: aveva già scritto le sue bozze di oggi, e non si è guardato niente.
+ *
+ * Vale quello che vale per `automazioneRimandata`: `ultima` non si tocca,
+ * perché è il paletto da cui «guarda cos'è arrivato» riparte, e qui non si è
+ * guardato niente. E `guaio` resta com'è: la scheda lo mostra in rosso, e un
+ * tetto raggiunto non è un guasto — è la ricetta che funziona fin troppo.
+ */
+export function automazioneSaltata(id: string) {
+  db.prepare(`
+    INSERT INTO automazioni (id, esito) VALUES (?, 'saltata')
+    ON CONFLICT(id) DO UPDATE SET esito = 'saltata'
   `).run(id)
 }
 

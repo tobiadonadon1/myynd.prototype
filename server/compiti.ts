@@ -26,6 +26,8 @@ import * as chi from './chi.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
+  /** Cosa sta facendo adesso su quella riga: cerca, apre, scrive. */
+  | { fase: 'lavoro'; id: string; passo: claude.Passo }
   | { fase: 'pronto'; id: string; compito: store.Compito }
   | { fase: 'chiede'; id: string; compito: store.Compito }
   | { fase: 'guaio'; id: string; guaio: string }
@@ -180,6 +182,32 @@ async function gira() {
   }
 }
 
+/**
+ * Le mani con cui lavora, sostituibili solo nelle prove.
+ *
+ * `svolgiUno` è il pezzo che tiene insieme coda, richiami e annunci, ed è
+ * proprio quello che vale la pena provare — ma in mezzo chiama un modello, e
+ * una prova che chiama un modello non è una prova. Qui le tre chiamate passano
+ * da un oggetto che le prove possono sostituire; in produzione è sempre quello
+ * vero, e non c'è nessun'altra strada per cambiarlo.
+ */
+type Ferri = {
+  svolgi: typeof claude.svolgi
+  chiedeAiuto: typeof claude.chiedeAiuto
+  domandeDaFare: typeof claude.domandeDaFare
+}
+const VERI: Ferri = {
+  svolgi: (...a) => claude.svolgi(...a),
+  chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
+  domandeDaFare: (...a) => claude.domandeDaFare(...a)
+}
+let ferri: Ferri = VERI
+
+/** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
+export function perProva(f: Partial<Ferri> | null) {
+  ferri = f ? { ...VERI, ...f } : VERI
+}
+
 async function svolgiUno(id: string) {
   // tutto dentro il try, compresa la lettura: `compito()` può fallire come
   // qualunque altra query, e se fallisce fuori di qui si porta via la coda
@@ -200,10 +228,14 @@ async function svolgiUno(id: string) {
     // usa quello che c'era scritto quando la riga è nata. Un compito scritto a
     // mano non ne ha, e lavora come ha sempre lavorato.
     const dato = c.attrezzi
-    const { testo, fonti } = await claude.svolgi(
+    const { testo, fonti } = await ferri.svolgi(
       c.testo, c.nota, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
-      dato?.cartella ?? null
+      dato?.cartella ?? null,
+      // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
+      // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
+      // richiamo si tace: quella riga non è più sua
+      p => { if (!richiamati.has(chiave(id))) annuncia({ fase: 'lavoro', id, passo: p }) }
     )
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano
@@ -212,7 +244,7 @@ async function svolgiUno(id: string) {
     // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
     // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
     // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
-    const { chiede } = await claude.chiedeAiuto(c.testo, testo)
+    const { chiede } = await ferri.chiedeAiuto(c.testo, testo)
     if (richiamati.has(chiave(id))) return
 
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
@@ -223,7 +255,7 @@ async function svolgiUno(id: string) {
     // con le risposte da toccare. Se non ci riesce resta il paragrafo di prima,
     // che funzionava già — non vale la pena bloccare una riga per delle opzioni.
     if (chiede) {
-      const righe = await claude.domandeDaFare(c.testo, testo).catch(() => [])
+      const righe = await ferri.domandeDaFare(c.testo, testo).catch(() => [])
       if (righe.length && !richiamati.has(chiave(id))) store.chiediSuCompito(id, righe)
     }
 

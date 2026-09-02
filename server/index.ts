@@ -1438,7 +1438,9 @@ app.post('/api/compiti/:id/prepara-email', async (req, res) => {
   if (!cfg.leggi().posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
 
   try {
-    const e = await claude.preparaEmail(c.testo, c.risultato)
+    // dalle fonti che la bozza ha citato, non da una ricerca nuova: il
+    // destinatario deve venire da quello che ha letto lei
+    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti)
     if (!e) return res.status(400).json({ errore: 'Non sono riuscito a ricavarne un\'email.' })
     res.json({ ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false })
   } catch (e) { errore(res, e) }
@@ -1816,7 +1818,9 @@ app.post('/api/automazioni/:id/adesso', async (req, res) => {
   const a = automazioni.ricette().find(x => x.id === req.params.id)
   if (!a) return res.status(404).json({ errore: 'Non conosco questa automazione.' })
   try {
-    const esito = await automazioni.fai(a)
+    // a mano: un dito che preme non è la spesa ricorrente che il tetto del
+    // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
+    const esito = await automazioni.fai(a, { aMano: true })
     res.json({ ok: true, esito, automazioni: automazioni.elenco(), compiti: store.elencoCompiti() })
   } catch (e) { errore(res, e) }
 })

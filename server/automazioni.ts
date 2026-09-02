@@ -732,7 +732,29 @@ function riassunto(p: store.Proposta): string {
  * un suo modo di fare le cose: ha bisogno di scrivere la riga giusta al momento
  * giusto, e di lasciare fare al resto.
  */
-export async function fai(ricetta: Automazione): Promise<'fatta' | 'niente' | 'gia'> {
+/**
+ * Quante bozze al giorno può far scrivere una ricetta.
+ *
+ * Le bozze sono l'unica spesa che in quest'app si ripete da sola. Tutto il
+ * resto — la chat, il feed, le domande — succede quando qualcuno preme; una
+ * ricetta con `modo: bozza` che aspetta l'arrivo di roba nuova gira dopo ogni
+ * lettura della posta, e ogni giro è un lavoro da modello grande a più passate:
+ * cerca, apre, scrive. Tre al giorno bastano a chiunque le legga davvero; la
+ * quarta è quasi sempre una ricetta scritta troppo larga che sta consumando
+ * il conto di qualcuno mentre non guarda. A mano non c'è tetto: un dito che
+ * preme non è una spesa ricorrente.
+ */
+export const BOZZE_AL_GIORNO = 3
+
+/** Quante volte oggi ha scritto una riga davvero, dalla sua storia. */
+export function bozzeOggi(s: store.StatoAutomazione | null, adesso = new Date()): number {
+  return store.storiaDi(s).filter(g => g.esito === 'fatta' && stessoGiorno(new Date(g.quando), adesso)).length
+}
+
+export async function fai(
+  ricetta: Automazione,
+  opzioni: { aMano?: boolean; adesso?: Date } = {}
+): Promise<'fatta' | 'niente' | 'gia' | 'saltata'> {
   // da qui in giù si lavora sulla ricetta nella lingua dell'installazione: il
   // testo che si scrive adesso lo leggerà una persona, e resta scritto
   const a = nella(ricetta)
@@ -752,6 +774,27 @@ export async function fai(ricetta: Automazione): Promise<'fatta' | 'niente' | 'g
   if (store.compitoVivoDa(a.id)) {
     store.automazioneRimandata(a.id)
     return 'gia'
+  }
+
+  /*
+   * Il tetto del giorno, per quelle che fanno scrivere.
+   *
+   * Vale solo per chi affida la riga al modello (`bozza` o `tutto`) senza
+   * proporre: quelle che propongono fanno una cernita, non una bozza, e quelle
+   * con `io` scrivono una riga e basta. Si esce *prima* di guardare il
+   * materiale, e come per `gia` non si sposta `ultima`: qui non si è letto
+   * niente, e quello che arriva oggi dev'essere ancora lì domani.
+   *
+   * Non è un errore e non finisce in `guaio`: la scheda lo mostrerebbe in rosso,
+   * e una ricetta che ha già scritto tre bozze oggi sta funzionando. Si segna
+   * come esito e si dice nel registro del server.
+   */
+  const modoScelto = a.metti.modo ?? 'io'
+  const scrive = (modoScelto === 'bozza' || modoScelto === 'tutto') && !a.proponi
+  if (scrive && !opzioni.aMano && bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
+    store.automazioneSaltata(a.id)
+    console.log(`myynd · automazione «${a.nome}»: tetto del giorno raggiunto (${BOZZE_AL_GIORNO} bozze), riprende domani`)
+    return 'saltata'
   }
 
   const docs = materiale(a, s)
