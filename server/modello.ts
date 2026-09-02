@@ -32,12 +32,28 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
+import * as compatibile from './compatibile.ts'
 
 // — chi c'è —
 
 /** C'è una chiave a consumo su cui appoggiarsi? */
 function conLaChiave(): boolean {
   return !!(leggi().claude?.apiKey || process.env.ANTHROPIC_API_KEY)
+}
+
+/**
+ * Il fornitore compatibile con OpenAI, se è lui che deve fare il lavoro grosso.
+ *
+ * Due condizioni, tutte e due necessarie: che sia stato *scelto* come motore, e
+ * che ci sia davvero — indirizzo e modello. Una scelta rimasta nel file dopo
+ * uno scollega non deve mandare le richieste nel vuoto: torna `null`, e si va
+ * da Claude come se niente fosse.
+ */
+function fornitore(): compatibile.Fornitore | null {
+  const c = leggi()
+  if (c.motore !== 'compatibile') return null
+  const f = c.compatibile
+  return f?.url && f.modello ? f : null
 }
 
 /**
@@ -53,8 +69,23 @@ function conLaChiave(): boolean {
  * schermata a dirgli di collegare Claude — mentre Claude rispondeva. Cambiare
  * qui le sistema tutte insieme: sono tre i posti che lo chiedono, e nessuno di
  * loro ha mai voluto sapere *come* ragiona, solo *se*.
+ *
+ * E da quando le strade sono tre, la terza è un fornitore compatibile con
+ * OpenAI scelto come motore: anche lui fa ragionare Myynd per intero.
  */
 export function collegato(): boolean {
+  return conClaude() || !!fornitore()
+}
+
+/**
+ * Claude, nello specifico: la chiave o l'abbonamento.
+ *
+ * Serve alla scheda «Claude» del pannello delle connessioni, che deve dire di
+ * Claude e non di Myynd: accendersi perché è collegato un altro fornitore
+ * sarebbe una scheda che mente. Tutto il resto dell'app chiede `collegato()`,
+ * che è la domanda giusta per chi vuole solo sapere se può ragionare.
+ */
+export function conClaude(): boolean {
   return conLaChiave() || abbonamento.pronto()
 }
 
@@ -288,7 +319,31 @@ async function chiediAlLocale(
 
 // — gli errori, come li direbbe lui —
 
+/**
+ * Gli errori già scritti in italiano.
+ *
+ * `inItaliano` giudica un messaggio dalla forma — «comincia con una maiuscola
+ * e una parola inglese» — e una frase italiana che comincia con «La» o «Non»
+ * gli somiglia abbastanza da venire sostituita con quella generica. Finché la
+ * si chiamava una volta sola sugli errori dell'SDK non si vedeva. Adesso che
+ * il fornitore compatibile parla italiano da sé, e che la stessa eccezione
+ * può attraversare due strati, un errore tradotto va riconosciuto e lasciato
+ * stare: si segna qui, e il segno non si perde per strada.
+ */
+const TRADOTTI = new WeakSet<Error>()
+
+export function tradotto(e: unknown): Error {
+  const err = e instanceof Error ? e : new Error(String(e))
+  TRADOTTI.add(err)
+  return err
+}
+
 export function inItaliano(e: unknown): Error {
+  if (e instanceof Error && TRADOTTI.has(e)) return e
+  return tradotto(traduci(e))
+}
+
+function traduci(e: unknown): Error {
   if (e instanceof Anthropic.AuthenticationError) return new Error('La chiave di Claude non è più valida.')
   if (e instanceof Anthropic.PermissionDeniedError) return new Error('La chiave non ha accesso a questo modello.')
   if (e instanceof Anthropic.RateLimitError) return new Error('Claude è sotto sforzo in questo momento. Riprova fra poco.')
@@ -313,9 +368,106 @@ export function inItaliano(e: unknown): Error {
   return e instanceof Error && /^[A-Z][a-z]+ /.test(e.message) === false ? e : new Error('Non ce l\'ho fatta. Riprova.')
 }
 
+// — il motore —
+
+/**
+ * Chi fa il lavoro grosso, dietro una porta sola.
+ *
+ * `claude.ts` ha quattro giri di strumenti scritti contro l'SDK di Anthropic:
+ * leggono `tool_use`, rispondono con `tool_result`, guardano `stop_reason`.
+ * Funzionano, e non vale la pena scriverli due volte. Quindi il fornitore
+ * compatibile con OpenAI non si vede da lì: si vede da qui, e quello che esce
+ * da `crea` e `flusso` è un `Anthropic.Message` in tutti e due i casi. La
+ * traduzione la fa `compatibile.ts`; la scelta la fa questa funzione, da
+ * quello che c'è scritto nelle preferenze.
+ *
+ * `null` vuol dire che non c'è niente con cui ragionare: né una chiave, né un
+ * fornitore scelto e configurato. L'abbonamento non passa di qui — ha una
+ * strada sua, senza strumenti, e chi la vuole la chiede prima.
+ */
+export type Motore = {
+  tipo: 'claude' | 'compatibile'
+  /** Come si chiama, per i registri: il modello di Claude, o il nome dato al fornitore. */
+  nome: string
+  crea(p: Anthropic.MessageCreateParamsNonStreaming, attesa?: number): Promise<Anthropic.Message>
+  flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number): Promise<Anthropic.Message>
+}
+
+/**
+ * Il filo che si spegne senza dirlo.
+ *
+ * Il `timeout` dell'SDK copre solo l'attesa della *prima* risposta del server:
+ * appena arrivano le intestazioni, il tempo smette di correre. Se il flusso si
+ * pianta dopo — connessione caduta senza FIN, un intermediario che tiene aperto
+ * un socket morto — `finalMessage()` non torna mai, e non torna mai *davvero*:
+ * non c'è nessuna sveglia sotto che lo interrompa. È la chat che resta a
+ * «cerco tra le fonti» finché non ricarichi la pagina.
+ *
+ * Qui la sveglia c'è, e si riarma a ogni evento che arriva — anche un `ping`,
+ * anche un pezzo di ragionamento. Quindi non taglia una risposta lenta: taglia
+ * solo una che ha smesso di arrivare. Il fornitore compatibile ha la stessa
+ * guardia dentro `compatibile.flusso`, con lo stesso numero.
+ */
+export const SILENZIO_MAX = 45_000
+
+function senzaSilenzi(f: ReturnType<Anthropic['messages']['stream']>): Promise<Anthropic.Message> {
+  return new Promise<Anthropic.Message>((risolvi, rifiuta) => {
+    let sveglia: ReturnType<typeof setTimeout>
+    const riarma = () => {
+      clearTimeout(sveglia)
+      sveglia = setTimeout(() => {
+        f.abort()
+        rifiuta(tradotto(new Error('La risposta si è interrotta a metà. Riprova.')))
+      }, SILENZIO_MAX)
+    }
+    f.on('streamEvent', riarma)
+    riarma()
+    f.finalMessage().then(
+      (m: Anthropic.Message) => { clearTimeout(sveglia); risolvi(m) },
+      (e: unknown) => { clearTimeout(sveglia); rifiuta(e) }
+    )
+  })
+}
+
+export function motore(): Motore | null {
+  const f = fornitore()
+  if (f) {
+    return {
+      tipo: 'compatibile',
+      nome: f.nome || f.modello,
+      crea: (p, attesa) => compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }),
+      flusso: (p, onTesto, attesa) =>
+        compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX)
+          .catch(e => { throw tradotto(e) })
+    }
+  }
+  const a = cliente()
+  if (!a) return null
+  return {
+    tipo: 'claude',
+    nome: modello(),
+    crea: async (p, attesa) => {
+      try {
+        return await a.messages.create(p, attesa ? { timeout: attesa } : undefined)
+      } catch (e) {
+        throw inItaliano(e)
+      }
+    },
+    flusso: async (p, onTesto, attesa) => {
+      try {
+        const s = a.messages.stream(p, attesa ? { timeout: attesa } : undefined)
+        s.on('text', onTesto)
+        return await senzaSilenzi(s)
+      } catch (e) {
+        throw inItaliano(e)
+      }
+    }
+  }
+}
+
 // — la richiesta —
 
-export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'locale' | 'abbonamento' }
+export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'locale' | 'abbonamento' | 'compatibile' }
 
 /**
  * I parametri giusti per il modello che ci si trova in mano.
@@ -444,8 +596,12 @@ export async function chiedi(o: {
    * accendendo l'interruttore.
    *
    * Se non risponde non è un guasto: è il motivo per cui adesso si va da Claude.
+   *
+   * E se il motore scelto è un altro fornitore, di qui non si passa: ha detto
+   * lui chi deve fare il lavoro grosso, e l'abbonamento è un modo di pagare
+   * Claude di meno, non un motore in più.
    */
-  if (abbonamento.disponibile() && (p.frontiera || !conLaChiave())) {
+  if (abbonamento.disponibile() && !fornitore() && (p.frontiera || !conLaChiave())) {
     try {
       const testo = await abbonamento.chiedi({ ...o, attesa })
       return { testo, rifiutata: false, da: 'abbonamento' }
@@ -456,8 +612,12 @@ export async function chiedi(o: {
     }
   }
 
-  const a = cliente()
-  if (!a) {
+  // Il motore scelto: Claude con la chiave, o il fornitore compatibile. I
+  // parametri restano quelli di Claude — `parametri()` sa cosa accetta il
+  // modello scelto — e se dall'altra parte c'è un altro fornitore è
+  // `compatibile.ts` a tradurli, non chi chiama.
+  const m = motore()
+  if (!m) {
     // Due situazioni diverse, e mandare la seconda a collegare Claude sarebbe
     // mandarla a fare l'unica cosa che ha già fatto.
     throw new Error(abbonamento.scelto()
@@ -465,24 +625,20 @@ export async function chiedi(o: {
       : 'Collega Claude e potrò ragionare sul tuo materiale.')
   }
 
-  let r: Anthropic.Message
-  try {
-    r = await a.messages.create({
-      ...parametri(o.lavoro, o.max_tokens, o.formato),
-      system: o.system,
-      messages: o.messages
-    } as Anthropic.MessageCreateParamsNonStreaming, { timeout: attesa })
-  } catch (e) {
-    throw inItaliano(e)
-  }
+  // gli errori arrivano già in italiano: li traduce il motore
+  const r = await m.crea({
+    ...parametri(o.lavoro, o.max_tokens, o.formato),
+    system: o.system,
+    messages: o.messages
+  } as Anthropic.MessageCreateParamsNonStreaming, attesa)
 
-  if (r.stop_reason === 'refusal') return { testo: '', rifiutata: true, da: 'claude' }
+  if (r.stop_reason === 'refusal') return { testo: '', rifiutata: true, da: m.tipo }
 
   const testo = r.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text)
     .join('')
-  return { testo, rifiutata: false, da: 'claude' }
+  return { testo, rifiutata: false, da: m.tipo }
 }
 
 /**

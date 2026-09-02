@@ -32,6 +32,10 @@ export type Stato = {
     desktop: { cartelle: string[] } | null
     notion: { collegato: boolean } | null
     claude: { collegato: boolean } | null
+    /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
+    motore: 'claude' | 'compatibile'
+    /** Il fornitore compatibile, senza la chiave: quella non esce mai. */
+    compatibile: { collegato: boolean; url: string; modello: string; nome: string | null } | null
     /*
       Il `clientId` c'è perché serve a riempire un campo, non a autenticare:
       è il nome pubblico dell'app registrata, e sta già in chiaro in ogni
@@ -659,6 +663,20 @@ export const api = {
   collegaClaude: (apiKey: string) =>
     json<{ ok: true }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),
 
+  /**
+   * Un fornitore compatibile con OpenAI, al posto di Claude per il lavoro grosso.
+   *
+   * Collegarlo lo sceglie anche come motore: il server lo prova con un token
+   * prima di scriverlo, e se non risponde l'errore arriva qui in italiano.
+   */
+  collegaCompatibile: (p: { url: string; chiave?: string; modello: string; nome?: string }) =>
+    json<{ ok: true; motore: string }>('/api/connettori/compatibile', { method: 'POST', body: JSON.stringify(p) }),
+
+  /** I modelli che il fornitore dice di avere. Vuoto se non risponde: non è un errore. */
+  modelliCompatibili: (url: string, chiave: string) =>
+    json<{ modelli: string[] }>(
+      `/api/connettori/compatibile/modelli?url=${encodeURIComponent(url)}&chiave=${encodeURIComponent(chiave)}`),
+
   collegaSlack: (token: string) =>
     json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
 
@@ -778,6 +796,10 @@ export const api = {
   modelloLocale: () => json<{ acceso: boolean; modello: string | null; spento: boolean }>('/api/modello/locale'),
   usaModelloLocale: (attivo: boolean) =>
     json<{ ok: true; attivo: boolean }>('/api/modello/locale', { method: 'POST', body: JSON.stringify({ attivo }) }),
+
+  /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile collegato. */
+  scegliMotore: (motore: 'claude' | 'compatibile') =>
+    json<{ ok: true; motore: string }>('/api/modello/motore', { method: 'POST', body: JSON.stringify({ motore }) }),
 
   // — le automazioni —
 

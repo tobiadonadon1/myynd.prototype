@@ -9,6 +9,7 @@ import * as cfg from './config.ts'
 import * as store from './store.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
+import * as compatibile from './compatibile.ts'
 import * as abbonamento from './abbonamento.ts'
 import * as memoria from './memoria.ts'
 import * as timone from './timone.ts'
@@ -230,7 +231,11 @@ app.get('/api/stato', (_req, res) => {
         v.id === 'posta' ? !!c.posta :
         v.id === 'desktop' ? !!c.desktop :
         v.id === 'notion' ? !!c.notion :
-        v.id === 'claude' ? claude.collegato() :
+        // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
+        // può ragionare», che da quando c'è un altro fornitore non coincide più
+        v.id === 'claude' ? mod.conClaude() :
+        // collegato vuol dire «c'è», non «è lui che lavora»: quello lo dice il motore
+        v.id === 'compatibile' ? !!c.compatibile :
         v.id === 'google' ? google.collegato() :
         v.id === 'slack' ? slack.collegato(c) :
         v.id === 'drive' ? drive.collegato() :
@@ -447,6 +452,65 @@ app.post('/api/connettori/claude', async (req, res) => {
 })
 
 /**
+ * Un fornitore compatibile con OpenAI al posto di Claude, per il lavoro grosso.
+ *
+ * Si prova prima di scrivere, come per tutti gli altri: un token basta a
+ * scoprire chiave, modello e indirizzo sbagliati mentre la persona ha ancora
+ * le mani sulla tastiera. E collegarlo lo *sceglie* anche come motore — è per
+ * quello che lo si collega — mentre scollegarlo rimette Claude: la scelta e il
+ * collegamento vanno insieme, e la schermata delle preferenze dice sempre
+ * quale dei due sta lavorando.
+ *
+ * L'indirizzo passa da `indirizzoAmmesso`: `http` solo verso questa macchina o
+ * la rete di casa, e su un server nemmeno quella. Non è pignoleria: un URL
+ * scritto da una persona che il server va a chiamare è la definizione di una
+ * porta aperta verso dentro, e va tenuta stretta.
+ */
+app.post('/api/connettori/compatibile', async (req, res) => {
+  const url = compatibile.base(String(req.body?.url ?? ''))
+  const chiave = String(req.body?.chiave ?? '').trim()
+  const modello = String(req.body?.modello ?? '').trim()
+  const nome = String(req.body?.nome ?? '').trim()
+  if (!url || !modello) return res.status(400).json({ errore: 'Servono l’indirizzo e il nome del modello.' })
+  const perche = compatibile.indirizzoAmmesso(url, ospitato.OSPITATO)
+  if (perche) return res.status(400).json({ errore: perche })
+  const f: compatibile.Fornitore = {
+    url, modello,
+    ...(chiave ? { chiave } : {}),
+    ...(nome ? { nome } : {})
+  }
+  try {
+    const esito = await compatibile.prova(f)
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    cfg.aggiorna({ compatibile: f, motore: 'compatibile' })
+    res.json({ ok: true, motore: 'compatibile' })
+  } catch (e) { errore(res, e) }
+})
+
+/** I modelli che il fornitore dice di avere, per il menu del modulo. Vuoto se non risponde. */
+app.get('/api/connettori/compatibile/modelli', async (req, res) => {
+  const url = compatibile.base(String(req.query.url ?? ''))
+  const chiave = String(req.query.chiave ?? '').trim()
+  if (!url || compatibile.indirizzoAmmesso(url, ospitato.OSPITATO)) return res.json({ modelli: [] })
+  res.json({ modelli: await compatibile.modelli({ url, ...(chiave ? { chiave } : {}) }) })
+})
+
+/**
+ * Chi fa il lavoro grosso: Claude, o il fornitore collegato.
+ *
+ * Si può scegliere il fornitore solo se c'è: una scelta senza niente dietro
+ * si rifiuta qui, invece di lasciare che ogni chiamata vada a vuoto.
+ */
+app.post('/api/modello/motore', (req, res) => {
+  const scelto = req.body?.motore === 'compatibile' ? 'compatibile' : 'claude'
+  if (scelto === 'compatibile' && !cfg.leggi().compatibile) {
+    return res.status(400).json({ errore: 'Prima collega un fornitore compatibile.' })
+  }
+  cfg.aggiorna({ motore: scelto })
+  res.json({ ok: true, motore: scelto })
+})
+
+/**
  * Google: si apre il browser e si aspetta il sì.
  *
  * La chiamata resta appesa finché la persona non ha finito di dire di sì a
@@ -586,6 +650,8 @@ app.delete('/api/connettori/:id', (req, res) => {
     il posto dove quella distinzione ha senso.
   */
   else if (id === 'claude') { delete c.claude; c.abbonamento = { attivo: false } }
+  // via il fornitore, e via anche la scelta: il lavoro grosso torna a Claude
+  else if (id === 'compatibile') { delete c.compatibile; delete c.motore }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
   else if (id === 'slack') delete c.slack
   else if (id === 'drive') { delete c.drive; drive.scordaIlToken() }
@@ -604,7 +670,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   }
   else return res.status(400).json({ errore: 'Connettore sconosciuto.' })
   cfg.scrivi(c)
-  if (id !== 'claude') store.svuotaFonte(id)
+  if (id !== 'claude' && id !== 'compatibile') store.svuotaFonte(id)
   res.json({ ok: true })
 })
 

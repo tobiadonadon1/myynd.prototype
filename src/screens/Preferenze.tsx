@@ -394,6 +394,100 @@ function ModelloDiCasa() {
         </div>
         <div onClick={cambia} style={track(!s.spento)}><div style={knob()} /></div>
       </div>
+      {/*
+        La strada per farlo fare tutto a un modello di casa esiste, e va detta
+        qui — con il prezzo scritto accanto. Non si nasconde perché è una scelta
+        legittima per chi non vuole mandare fuori niente; non si consiglia
+        perché un modello piccolo sbaglia di più, e su una bozza che esce
+        dall'azienda si vede.
+      */}
+      <div style={{ fontSize: '12px', lineHeight: 1.55, color: 'rgba(34,39,31,.55)', marginTop: 12, maxWidth: 560, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+        {t('Può fare anche il lavoro grosso: collega un fornitore compatibile con OpenAI puntandolo a http://127.0.0.1:11434/v1, con un modello come qwen2.5:14b. Ma sappi cosa scegli: un modello piccolo sbaglia di più e inventa più volentieri, e sulle bozze e sulle fonti si vede.')}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Chi fa il lavoro grosso: Claude, o un fornitore compatibile con OpenAI.
+ *
+ * Due scelte e non tre, perché l'abbonamento e il modello di casa non sono
+ * motori alternativi: sono modi di pagare Claude di meno, e hanno le loro
+ * schede. Qui si decide *chi* ragiona — e siccome Myynd è stato messo a punto
+ * su Claude, scegliere l'altro si può, ma con l'avviso scritto sotto e non in
+ * una nota a piè di pagina: la qualità non deve calare in silenzio.
+ *
+ * Il fornitore non collegato si collega da qui: scegliendolo si apre la scheda,
+ * e collegarlo lo sceglie. Collegato, si vede cosa è — nome, modello, indirizzo
+ * — e «Cambia» riapre la stessa scheda.
+ */
+function Motore({ v }: { v: Vals }) {
+  const f = v.compatibile
+  const scelte: { id: 'claude' | 'compatibile'; titolo: string; nota: string }[] = [
+    {
+      id: 'claude', titolo: 'Claude',
+      nota: t('Il predefinito. Myynd è stato messo a punto su Claude: le risposte, le bozze e il feed passano di lì, con la chiave o con il tuo abbonamento.')
+    },
+    {
+      id: 'compatibile', titolo: t('Un fornitore compatibile con OpenAI'),
+      nota: t('OpenAI, OpenRouter, Groq, Mistral — o un modello in casa con Ollama o LM Studio. Lo colleghi con un indirizzo e il nome di un modello.')
+    }
+  ]
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Con quale motore lavora')}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        {scelte.map(s => {
+          const scelto = v.motore === s.id
+          return (
+            <div key={s.id} onClick={() => v.scegliMotore(s.id)} style={{
+              display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
+              background: scelto ? 'rgba(255,255,255,.85)' : 'transparent',
+              boxShadow: scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+            }}>
+              <span style={{
+                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
+                border: scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
+                background: scelto ? '#FFF7F0' : 'transparent'
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15 }}>{s.titolo}</div>
+                <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{s.nota}</div>
+
+                {s.id === 'compatibile' && f && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
+                    {/* l'indirizzo può essere lungo: si spezza, non sfora */}
+                    <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.78)', overflowWrap: 'anywhere' }}>
+                      {[f.nome, f.modello, f.url].filter(Boolean).join(' · ')}
+                    </div>
+                    <Hov as="button" type="button"
+                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); v.apriConnessioni('compatibile') }}
+                      style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
+                      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                      {t('Cambia')}
+                    </Hov>
+                  </div>
+                )}
+                {s.id === 'compatibile' && !f && (
+                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
+                    {t('Non ancora collegato: scegliendolo si apre la scheda per collegarlo.')}
+                  </div>
+                )}
+                {s.id === 'compatibile' && scelto && (
+                  <div style={{
+                    fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
+                    border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
+                    textWrap: 'pretty'
+                  }}>
+                    {t('Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise — soprattutto le bozze e le fonti citate: rileggile prima di fidarti.')}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -447,9 +541,14 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
       </div>
 
-      {/* Il motore. Sta nelle preferenze e non nel codice perché è una scelta
-          di costo, e chi paga deve poterla fare senza chiedere a nessuno. */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      {/* Chi ragiona: Claude, o un fornitore compatibile con OpenAI. */}
+      <Motore v={v} />
+
+      {/* Il modello di Claude. Sta nelle preferenze e non nel codice perché è
+          una scelta di costo, e chi paga deve poterla fare senza chiedere a
+          nessuno. Si vede solo quando è Claude a lavorare: con un altro
+          motore il modello lo dice la sua scheda. */}
+      {v.motore === 'claude' && <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Con quale modello ragiona')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
           {v.modelli.map(m => (
@@ -470,9 +569,11 @@ export function Preferenze({ v }: { v: Vals }) {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <Abbonamento />
+      {/* l'abbonamento è un modo di pagare Claude di meno: con un altro motore
+          non c'entra, e un interruttore che non fa niente è peggio di nessuno */}
+      {v.motore === 'claude' && <Abbonamento />}
       <ModelloDiCasa />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>

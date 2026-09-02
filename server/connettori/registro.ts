@@ -28,6 +28,10 @@ export const CATALOGO: VoceConnettore[] = [
   { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, nota: 'La chiave dell’app, e un codice da incollare una volta sola.' },
   { id: 'notion', nome: 'Notion', gruppo: 'Note', pronto: true, nota: 'Token di integrazione interna, pagine condivise con l’integrazione.' },
   { id: 'claude', nome: 'Claude', gruppo: 'Ragionamento', pronto: true, nota: 'La chiave API che fa ragionare Myynd sul tuo materiale.' },
+  // Un'altra testa al posto di Claude, non un'altra fonte: OpenAI e chi parla
+  // come lei, compresi i modelli che girano su questa macchina. Sta nel
+  // catalogo perché si collega da qui come tutto il resto, con una scheda.
+  { id: 'compatibile', nome: 'Fornitore compatibile con OpenAI', gruppo: 'Ragionamento', pronto: true, nota: 'OpenAI, OpenRouter, Groq, Mistral — o Ollama e LM Studio in casa. Un indirizzo e un modello.' },
   // La lista è una fonte come le altre: quello che decidi di fare dice di te
   // quanto un documento — e sta qui perché chi guarda le fonti si aspetta di
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.
@@ -43,12 +47,12 @@ export const PRONTI = CATALOGO.filter(c => c.pronto).map(c => c.id)
  * Le fonti che portano documenti nell'indice.
  *
  * Non è lo stesso elenco dei connettori pronti, e la differenza conta: `claude`
- * non porta niente — è il ragionamento, non una fonte — e `mind2do` è la lista,
- * che vive in un'altra tabella. Chi ha bisogno di sapere «da dove può arrivare
- * un documento» — la riconciliazione, il recinto delle automazioni, i conteggi
- * — deve chiederlo qui e non dedurlo, perché dedurlo è come si finisce con una
- * fonte nuova che nessuno ha aggiunto al recinto.
+ * e `compatibile` non portano niente — sono il ragionamento, non una fonte — e
+ * `mind2do` è la lista, che vive in un'altra tabella. Chi ha bisogno di sapere
+ * «da dove può arrivare un documento» — la riconciliazione, il recinto delle
+ * automazioni, i conteggi — deve chiederlo qui e non dedurlo, perché dedurlo è
+ * come si finisce con una fonte nuova che nessuno ha aggiunto al recinto.
  */
 export const FONTI = CATALOGO
-  .filter(c => c.pronto && c.id !== 'claude' && c.id !== 'mind2do')
+  .filter(c => c.pronto && c.gruppo !== 'Ragionamento' && c.id !== 'mind2do')
   .map(c => c.id)

@@ -320,8 +320,9 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
 
 function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<Stato>; avanti: () => void }) {
   const [aperto, setAperto] = useState<string | null>(null)
-  // Claude l'ha già chiesto il passo prima
-  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude')
+  // Claude l'ha già chiesto il passo prima; il fornitore compatibile è un
+  // motore, non una fonte, e si collega dalle preferenze
+  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude' && c.id !== 'compatibile')
   const dopo = s.connettori.filter(c => !c.pronto)
   const quanti = pronti.filter(c => c.collegato).length
 

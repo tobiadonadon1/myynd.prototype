@@ -18,8 +18,12 @@ import { IconPiu } from '../icons'
 const COLORE: Record<string, string> = {
   posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A',
   google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
-  drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3'
+  drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3',
+  compatibile: '#6B7FB3'
 }
+
+/** Quelli che ragionano e non leggono: niente da rileggere, niente da contare. */
+const MOTORI = ['claude', 'compatibile']
 
 export function Connessioni({ fonte, chiudi, cambiato }: {
   /** La fonte da aprire già espansa; stringa vuota per l'elenco intero. */
@@ -160,8 +164,13 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15 }}>{t(c.nome)}</div>
-                      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.58)', marginTop: 3 }}>
-                        {c.collegato ? (c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato')) : t(c.nota)}
+                      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.58)', marginTop: 3, overflowWrap: 'anywhere' }}>
+                        {c.collegato
+                          // per il fornitore compatibile la riga utile è quale: nome e modello, non «collegato»
+                          ? (c.id === 'compatibile' && s?.config.compatibile
+                            ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
+                            : c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato'))
+                          : t(c.nota)}
                       </div>
                     </div>
                     {c.collegato ? (
@@ -173,12 +182,21 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                           Un bottone che gira a vuoto è peggio di un bottone
                           che non c'è — fa credere che la fonte sia rotta.
                         */}
-                        {c.id !== 'claude' && c.id !== 'whatsapp' && (
+                        {!MOTORI.includes(c.id) && c.id !== 'whatsapp' && (
                           <Hov as="button"
                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); leggi(c.id) }}
                             style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
                             hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
                             {sincronizzando && sincronizzando.startsWith(c.id) ? t('leggo…') : t('Rileggi')}
+                          </Hov>
+                        )}
+                        {/* il fornitore si può cambiare senza scollegarlo: indirizzo, modello o chiave */}
+                        {c.id === 'compatibile' && (
+                          <Hov as="button"
+                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAperto(apertoQui ? null : c.id) }}
+                            style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
+                            hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                            {t('Cambia')}
                           </Hov>
                         )}
                         <Hov as="button"
@@ -191,13 +209,13 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                         <IconPiu size={13} />{t('Collega')}</span>
                     )}
                   </div>
-                  {apertoQui && !c.collegato && (
+                  {apertoQui && (!c.collegato || c.id === 'compatibile') && (
                     <div style={{ padding: '2px 18px 18px', animation: 'fadein .2s ease' }}>
                       <Form id={c.id} tema="chiaro" ok={async () => {
                         await ricarica()
                         setAperto(null)
                         cambiato()
-                        if (c.id !== 'claude') leggi(c.id)
+                        if (!MOTORI.includes(c.id)) leggi(c.id)
                       }} />
                     </div>
                   )}
