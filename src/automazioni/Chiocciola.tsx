@@ -145,7 +145,8 @@ export function Casella({
       if (e.key === 'ArrowDown') { e.preventDefault(); return setScelto(i => (i + 1) % liberi.length) }
       if (e.key === 'ArrowUp') { e.preventDefault(); return setScelto(i => (i - 1 + liberi.length) % liberi.length) }
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return prendi(liberi[scelto]) }
-      if (e.key === 'Escape') { e.preventDefault(); return setDa(-1) }
+      // e ferma qui: chiudere il menù non è chiudere la finestra che lo contiene
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return setDa(-1) }
     }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && invio) { e.preventDefault(); invio() }
   }

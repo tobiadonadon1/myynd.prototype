@@ -339,7 +339,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         setDraftMsg(d => d || bozza)   // il testo scritto non si perde
       }
     }
-    if (gen.current === mio) setPensando(false)
+    /*
+     * Sempre, non solo se è ancora la mia generazione.
+     *
+     * Aprire un'altra chat mentre la risposta non è ancora cominciata faceva
+     * avanzare la generazione, e questa riga veniva saltata: `pensando`
+     * restava acceso per il resto della sessione. Con il bottone disabilitato
+     * e l'Invio ora guardato dallo stesso flag, la chat smetteva di poter
+     * mandare — in tutti i fili, fino a un ricaricamento.
+     */
+    setPensando(false)
   }
 
   const sincronizza = async (fonte?: string) => {

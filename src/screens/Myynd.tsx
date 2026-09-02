@@ -463,7 +463,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 onChange={e => v.setRisposta(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); v.rispondiAlHero() }
-                  if (e.key === 'Escape') v.chiudiScrivi()
+                  if (e.key === 'Escape') { e.stopPropagation(); v.chiudiScrivi() }
                 }}
                 placeholder={t("L'ho mandato lunedì col listino nuovo")}
                 style={{
@@ -590,7 +590,7 @@ function Domanda({ v }: { v: Vals }) {
         onChange={e => v.setRispostaDom(e.target.value)}
         onKeyDown={e => {
           if (e.key === 'Enter') v.rispondiADomanda()
-          if (e.key === 'Escape') v.lasciaCadere()
+          if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
         }}
         placeholder={t('Bastano cinque parole')}
         style={{

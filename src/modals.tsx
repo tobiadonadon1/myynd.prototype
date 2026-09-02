@@ -60,7 +60,7 @@ export function Ricerca({ v }: { v: Vals }) {
               ? frasi.cercaFra(v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'))
               : t('Niente da cercare ancora')} autoFocus
             aria-label={t('Cerca')}
-            onKeyDown={e => { if (e.key === 'Escape') v.closeSearch() }}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); v.closeSearch() } }}
             style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 16, color: '#22271F' }} />
           <button onClick={v.closeSearch} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: '1px solid rgba(34,39,31,.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(34,39,31,.6)', cursor: 'pointer', flex: 'none' }}>esc</button>
         </div>

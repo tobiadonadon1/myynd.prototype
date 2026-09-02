@@ -902,7 +902,7 @@ const EN: Record<string, string> = {
 
   // — le opzioni delle preferenze —
   'Solo osservare': 'Watch only',
-  'Legge e indicizza. Risponde solo se le chiedi.': 'Reads and indexes. Answers only when asked.',
+  'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.': 'Reads and indexes. Before suggesting anything to act on, it asks.',
   'Preparare e aspettare': 'Prepare and wait',
   'Scrive bozze e brief, niente esce senza il tuo Invia.': 'Writes drafts and briefs; nothing goes out without your Send.',
   'Agire sulla routine': 'Act on the routine',

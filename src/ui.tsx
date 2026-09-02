@@ -311,17 +311,37 @@ export function useFocoDialogo(ref: RefObject<HTMLElement | null>, chiudi?: () =
   // riferimento, e l'effetto gira una volta sola
   const chiudiRef = useRef(chiudi)
   chiudiRef.current = chiudi
+  /*
+   * Chi ha aperto la finestra si legge *durante il disegno*, non dentro
+   * l'effetto: React applica `autoFocus` quando monta il nodo, cioè prima che
+   * gli effetti girino. Letto nell'effetto, «chi ha aperto» risultava essere
+   * il campo dentro la finestra — che chiudendo non esiste più, e il fuoco
+   * finiva sul corpo della pagina invece che sul bottone di partenza.
+   */
+  const apertoDa = useRef<HTMLElement | null>(null)
+  if (!apertoDa.current) apertoDa.current = document.activeElement as HTMLElement | null
   useEffect(() => {
-    const prima = document.activeElement as HTMLElement | null
+    const prima = apertoDa.current
     const el = ref.current
     if (el && !el.contains(document.activeElement)) {
       const primo = el.querySelector<HTMLElement>(FOCALIZZABILE)
       ;(primo ?? el).focus()
     }
+    /*
+     * Esc chiude, anche con il cursore in un campo.
+     *
+     * Prima si usciva subito su INPUT/TEXTAREA/SELECT, «ci pensa il campo» —
+     * ma nelle due finestre delle automazioni il fuoco *parte* dentro un'area
+     * di testo che di Esc non fa niente, e quelle finestre non si potevano
+     * chiudere da tastiera affatto. Un campo che vuole Esc per sé lo ferma con
+     * `stopPropagation`, ed è quello che fa la casella con la chiocciola
+     * aperta; per tutti gli altri Esc vuol dire «chiudi questa finestra».
+     */
     const tasti = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape' || !chiudiRef.current) return
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const el2 = e.target as HTMLElement | null
+      // un menu a tendina aperto se lo prende lui: chiuderlo non è chiudere la finestra
+      if (el2 instanceof HTMLSelectElement) return
       chiudiRef.current()
     }
     document.addEventListener('keydown', tasti)

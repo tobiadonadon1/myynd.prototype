@@ -749,9 +749,13 @@ export const api = {
     json<{ ok: true; motore: string }>('/api/connettori/compatibile', { method: 'POST', body: JSON.stringify(p) }),
 
   /** I modelli che il fornitore dice di avere. Vuoto se non risponde: non è un errore. */
+  // POST e non GET: la chiave sta nel corpo. È la stessa ragione per cui il
+  // token della sessione non viaggia più nell'indirizzo — quello che sta nella
+  // riga di richiesta finisce nei registri del proxy e nella cronologia, e qui
+  // si scrive a ogni battuta di tasto mentre la si incolla.
   modelliCompatibili: (url: string, chiave: string) =>
-    json<{ modelli: string[] }>(
-      `/api/connettori/compatibile/modelli?url=${encodeURIComponent(url)}&chiave=${encodeURIComponent(chiave)}`),
+    json<{ modelli: string[] }>('/api/connettori/compatibile/modelli',
+      { method: 'POST', body: JSON.stringify({ url, chiave }) }),
 
   collegaSlack: (token: string) =>
     json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),

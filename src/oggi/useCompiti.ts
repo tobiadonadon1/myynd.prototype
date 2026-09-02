@@ -92,6 +92,20 @@ export function useCompiti(mostraToast: (t: string) => void) {
     // che finiscano invece di rileggere sei volte
     let attesa: ReturnType<typeof setTimeout> | undefined
     const chiudi = api.flussoCompiti((e: EventoCompito) => {
+      /*
+       * Il filo si è (ri)aperto.
+       *
+       * Il filo si riapre da solo quando cade, e quello che è successo mentre
+       * era giù non lo racconta nessuno: una riga affidata poteva restare
+       * «da Myynd» con l'ultimo passo scritto sotto, per sempre, mentre il
+       * server l'aveva già riaperta. Si rilegge, e i passi si buttano perché
+       * appartengono a un lavoro di prima.
+       */
+      if (e.fase === 'aperto') {
+        setPassi({})
+        clearTimeout(attesa)
+        attesa = setTimeout(rileggi, 160)
+      }
       if (e.fase === 'cambiato') {
         clearTimeout(attesa)
         attesa = setTimeout(rileggi, 160)
@@ -173,8 +187,22 @@ export function useCompiti(mostraToast: (t: string) => void) {
     }
   }, [indietro])
 
-  /** Toglie una riga dall'insieme di quelle aperte: senza, l'insieme cresce e basta. */
-  const scorda = (id: string) => setAperti(a => (a.has(id) ? new Set([...a].filter(x => x !== id)) : a))
+  /**
+   * Toglie una riga dall'insieme di quelle aperte, e con lei il suo ultimo passo.
+   *
+   * Chiudere o buttare una riga mentre Myynd ci lavorava non produce nessun
+   * evento finale — il server scarta il risultato in arrivo e tace — quindi il
+   * passo restava scritto. Riaperta e riaffidata più tardi, la riga mostrava
+   * per un istante quello che stava facendo *l'altra volta*.
+   */
+  const scorda = (id: string) => {
+    setAperti(a => (a.has(id) ? new Set([...a].filter(x => x !== id)) : a))
+    setPassi(p => {
+      if (!(id in p)) return p
+      const { [id]: _via, ...resto } = p
+      return resto
+    })
+  }
 
   const chiudi = useCallback(async (id: string, esito?: string, tenuto?: string) => {
     const prima = compitiRef.current

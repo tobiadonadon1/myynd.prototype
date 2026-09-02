@@ -627,9 +627,10 @@ app.post('/api/connettori/compatibile', async (req, res) => {
 })
 
 /** I modelli che il fornitore dice di avere, per il menu del modulo. Vuoto se non risponde. */
-app.get('/api/connettori/compatibile/modelli', async (req, res) => {
-  const url = compatibile.base(String(req.query.url ?? ''))
-  const chiave = String(req.query.chiave ?? '').trim()
+// POST perché porta una chiave: nell'indirizzo finirebbe nei registri
+app.post('/api/connettori/compatibile/modelli', async (req, res) => {
+  const url = compatibile.base(String(req.body?.url ?? ''))
+  const chiave = String(req.body?.chiave ?? '').trim()
   if (!url || compatibile.indirizzoAmmesso(url, ospitato.OSPITATO)) return res.json({ modelli: [] })
   res.json({ modelli: await compatibile.modelli({ url, ...(chiave ? { chiave } : {}) }) })
 })

@@ -90,7 +90,7 @@ function Cartella({ nome, etichetta, quante, scelta, vai, cadi, sopraCon, rinomi
         onBlur={conferma}
         onKeyDown={e => {
           if (e.key === 'Enter') conferma()
-          if (e.key === 'Escape') { setTesto(nome ?? ''); setScrivo(false) }
+          if (e.key === 'Escape') { e.stopPropagation(); setTesto(nome ?? ''); setScrivo(false) }
         }}
         style={{
           width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 12,
@@ -376,7 +376,7 @@ export function Automazioni({ v }: { v: Vals }) {
                 onBlur={creaCartella}
                 onKeyDown={e => {
                   if (e.key === 'Enter') creaCartella()
-                  if (e.key === 'Escape') { setNuovaCartella(false); setNome('') }
+                  if (e.key === 'Escape') { e.stopPropagation(); setNuovaCartella(false); setNome('') }
                 }}
                 placeholder={t('come si chiama')}
                 style={{
