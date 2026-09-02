@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { Campo } from './campo'
+import { DOMANDE } from '../data'
 import { api, rigaSincronizzazione, type Abbonamento, type Stato } from '../api'
 import { BottoneSicuro, Hov, daTastiera } from '../ui'
 import { IconPiu } from '../icons'
@@ -313,23 +314,6 @@ function PassoClaude({ collegato, ricarica, avanti }: {
  * chiedono — due righe per domanda bastano — e si possono saltare: «più
  * tardi» è una risposta, non un rifiuto, e la schermata della memoria resta lì.
  */
-/*
- * Le domande, come si fanno a una persona.
- *
- * I cinque blocchi hanno già una descrizione, ma è scritta *per il modello* —
- * «come questa persona prende una decisione» — e messa davanti a chi risponde
- * suona come se parlasse di qualcun altro. Qui la stessa cosa in seconda
- * persona, con sotto un esempio: davanti a un riquadro vuoto la domanda vera
- * è «cosa vi scrivo?», e un esempio la toglie di mezzo meglio di una spiegazione.
- */
-const DOMANDE: Record<string, { domanda: string; esempio: string }> = {
-  come_decido: { domanda: 'Come decidi?', esempio: 'es. guardo prima il margine, poi se il cliente paga puntuale' },
-  cosa_controllo: { domanda: 'Cosa controlli sempre, prima di dire di sì?', esempio: 'es. che le date siano fattibili, e chi firma dall’altra parte' },
-  come_scrivo: { domanda: 'Come scrivi?', esempio: 'es. corta, niente «gentilissimo», chiudo con «a presto»' },
-  errori_da_evitare: { domanda: 'Quali errori non vuoi rivedere?', esempio: 'es. promettere consegne senza sentire la produzione' },
-  chi_conta: { domanda: 'Chi conta, e come stai con loro?', esempio: 'es. Rossi è il cliente più grosso, ma tratta sempre sul prezzo' }
-}
-
 function Ritratto({ avanti }: { avanti: () => void }) {
   const [blocchi, setBlocchi] = useState<{ etichetta: string; descrizione: string }[]>([])
   const [testi, setTesti] = useState<Record<string, string>>({})

@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Blocco, type Convinzione, type Memoria as Dati } from '../api'
 import { frasi, t, loc } from '../lingua'
+import { DOMANDE } from '../data'
 import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
@@ -91,7 +92,9 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
     <div style={{ padding: '15px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <div style={{ flex: 1, fontSize: '13.5px', color: 'rgba(34,39,31,.72)', textWrap: 'pretty' }}>
-          {t(b.descrizione)}
+          {/* la domanda in seconda persona, la stessa dell'onboarding: qui la
+              legge la stessa persona che l'ha già letta là */}
+          {t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}
           {/*
             Chi ha scritto questa riga.
 
@@ -142,7 +145,9 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
         onChange={e => setTesto(e.target.value.slice(0, b.tetto))}
         onBlur={salva}
         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
-        placeholder={t('Non gliel’hai ancora detto.')}
+        // l'esempio, come nell'onboarding: davanti a un riquadro vuoto vale più
+        // di una spiegazione
+        placeholder={t(DOMANDE[b.etichetta]?.esempio ?? 'Non gliel’hai ancora detto.')}
         rows={testo.length > 90 ? 3 : 2}
         style={{
           width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 12,

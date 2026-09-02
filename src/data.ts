@@ -93,3 +93,24 @@ export function quando(iso?: string | null): string {
     ? d.toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString(loc(), { day: 'numeric', month: 'short' })
 }
+
+/*
+ * Le cinque domande del ritratto, come si fanno a una persona.
+ *
+ * I blocchi hanno già una `descrizione`, ma è scritta **per il modello** —
+ * «come questa persona prende una decisione» — e messa davanti a chi risponde
+ * suona come se parlasse di qualcun altro. Stanno qui e non in una schermata
+ * perché le schermate sono due, l'onboarding e la memoria, e devono chiedere
+ * la stessa cosa con le stesse parole: se divergono, uno risponde a una
+ * domanda e si rilegge un'altra.
+ *
+ * L'esempio non è decorazione: davanti a un riquadro vuoto la domanda vera è
+ * «cosa ci scrivo?», e un esempio la toglie di mezzo meglio di una spiegazione.
+ */
+export const DOMANDE: Record<string, { domanda: string; esempio: string }> = {
+  come_decido: { domanda: 'Come decidi?', esempio: 'es. guardo prima il margine, poi se il cliente paga puntuale' },
+  cosa_controllo: { domanda: 'Cosa controlli sempre, prima di dire di sì?', esempio: 'es. che le date siano fattibili, e chi firma dall’altra parte' },
+  come_scrivo: { domanda: 'Come scrivi?', esempio: 'es. corta, niente «gentilissimo», chiudo con «a presto»' },
+  errori_da_evitare: { domanda: 'Quali errori non vuoi rivedere?', esempio: 'es. promettere consegne senza sentire la produzione' },
+  chi_conta: { domanda: 'Chi conta, e come stai con loro?', esempio: 'es. Rossi è il cliente più grosso, ma tratta sempre sul prezzo' }
+}
