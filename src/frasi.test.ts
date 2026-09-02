@@ -83,3 +83,21 @@ test('quello che ha ragionato oggi, con e senza cache', () => {
   assert.equal(in_('it', () => frasi.usoOggi(1, '5.6k', '0')), '1 chiamata oggi · 5.6k token')
   assert.match(in_('it', () => frasi.usoOggi(4, '20k', '9k')), /4 chiamate oggi/)
 })
+
+test('la password che non è una password per le app, nelle due lingue', () => {
+  // il numero è quello che ha appena scritto: è l'unica cosa che le fa vedere
+  // la differenza fra quello che ha in mano e quello che serve
+  assert.match(in_('en', () => frasi.nonSembraPerLeApp(8)), /8 characters\).*16 letters/)
+  assert.match(in_('it', () => frasi.nonSembraPerLeApp(8)), /8 caratteri\).*16 lettere/)
+  assert.match(in_('en', () => frasi.nonSembraPerLeApp(1)), /1 character\)/)
+  assert.match(in_('it', () => frasi.nonSembraPerLeApp(1)), /1 carattere\)/)
+})
+
+test('quanti eventi ha letto il calendario', () => {
+  assert.equal(in_('en', () => frasi.eventiLetti(1)), 'Connected: 1 event read.')
+  assert.equal(in_('en', () => frasi.eventiLetti(9)), 'Connected: 9 events read.')
+  assert.match(in_('it', () => frasi.eventiLetti(1)), /1 evento letto/)
+  assert.match(in_('it', () => frasi.eventiLetti(9)), /9 eventi letti/)
+  assert.match(in_('en', () => frasi.agendaLetta('Work', 3)), /“Work” is connected: 3 events read\./)
+  assert.match(in_('it', () => frasi.agendaLetta('Lavoro', 3)), /«Lavoro» è collegata: 3 eventi letti\./)
+})

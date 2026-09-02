@@ -63,13 +63,44 @@ La tabella `LAVORI` in `server/modello.ts` decide quale lavoro è di frontiera.
 | Connettore | Cosa serve |
 | ---------- | ---------- |
 | **Posta** (IMAP) | Indirizzo e password della casella: il server lo trova da solo. Gmail, iCloud e Yahoo vogliono una «password per le app»; Outlook.com non accetta più password via IMAP e passa dal connettore Microsoft. Legge anche la posta inviata. |
-| **Gmail e Calendario**, **Google Drive** | Sul tuo computer: la tua app su Google Cloud (client ID). Su un server: un bottone, con l'app di chi ospita. |
-| **Outlook e Calendario**, **SharePoint e OneDrive** | Idem, con Entra ID. |
+| **Calendario** | Un indirizzo da incollare: l'indirizzo segreto in formato iCal della propria agenda. Nessuna app da registrare, nessun consenso da dare. |
+| **Gmail e Calendario**, **Google Drive** | Non offerti. Vedi qui sotto. |
+| **Outlook e Calendario**, **SharePoint e OneDrive** | Non offerti. Vedi qui sotto. |
 | **Notion** | Token di integrazione interna, e le pagine condivise con l'integrazione. |
 | **Slack** | Un token utente `xoxp-…` con gli ambiti di lettura. |
 | **Dropbox** | La chiave dell'app e un codice da incollare una volta. |
 | **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
 | **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
+
+### Perché Google e Microsoft non si offrono, e cosa si fa invece
+
+Il codice c'è ed è provato: `connettori/google.ts`, `connettori/microsoft.ts`,
+`connettori/drive.ts`, e il ballo del consenso in `connettori/oauth.ts`. Quello
+che manca non è il codice — è il permesso.
+
+**Google.** Leggere la posta con l'API di Gmail vuol dire uno *scope
+ristretto*. Google lo concede solo dopo una verifica dell'app e un controllo di
+sicurezza fatto da terzi (CASA), a pagamento e da rinnovare ogni anno.
+Senza, si resta in modalità Testing: cento utenti al massimo, una schermata di
+consenso che dice «app non verificata», e — la cosa che lo rende inutilizzabile
+— token che scadono ogni sette giorni. Quindi **la posta di Gmail si collega da
+«Posta», con IMAP e una password per le app**: Google non chiede nessuna
+verifica per quella strada, ed è la stessa casella.
+
+**Il calendario di Google** non passa da nessuna verifica: ogni agenda ha un
+*indirizzo segreto in formato iCal*, e leggerlo è leggere un indirizzo. È il
+connettore **Calendario**, e vale per Google, Outlook, iCloud e Fastmail
+insieme, perché quel formato lo esporta chiunque.
+
+**Microsoft** è tutt'altra storia, e molto più semplice: basta registrare
+un'app su Entra ID, dichiararla multi-tenant, e ogni persona dà il consenso per
+sé. Nessun controllo di sicurezza, nessun costo, nessuna attesa. La verifica
+dell'editore è facoltativa e serve solo a togliere la scritta «non verificata».
+**Resta un'opzione aperta, rimandata per scelta**: chi usa Outlook è la
+minoranza dei clienti, e finché è così la posta la fa IMAP e l'agenda la fa
+l'indirizzo iCal. Il giorno che serve, il lavoro è la registrazione dell'app e
+tre variabili d'ambiente — `MYYND_MICROSOFT_CLIENT_ID`,
+`MYYND_MICROSOFT_CLIENT_SECRET`, `MYYND_MICROSOFT_TENANT` — non una riga di codice nuova.
 
 ## Com'è fatto
 
@@ -86,7 +117,7 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   claude.ts             il ragionamento: recupero, prompt, strumenti, bozze
   compiti.ts            la coda delle cose affidate a Myynd
   automazioni.ts        le ricette che girano da sole
-  connettori/           posta · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop
+  connettori/           posta · calendario · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop
                         oauth.ts: il ballo su 127.0.0.1 in casa, via web ospitati
 
 src/

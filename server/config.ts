@@ -178,6 +178,15 @@ export type ConfigPosta = {
 
 export type ConfigDesktop = { cartelle: string[]; estensioni?: string[] }
 export type ConfigNotion = { token: string }
+
+/**
+ * Il calendario, letto da un indirizzo invece che da un'API.
+ *
+ * `url` è l'indirizzo segreto in formato iCal della propria agenda. **È una
+ * credenziale**: chi ce l'ha legge il calendario, senza password e senza
+ * scadenza. Sta qui insieme alle altre e non esce mai da `pubblica()`.
+ */
+export type ConfigCalendario = { url: string; nome?: string; giorni?: number }
 export type ConfigClaude = { apiKey: string }
 
 export type Account = { email: string; sale: string; hash: string }
@@ -190,6 +199,7 @@ export type Config = {
   posta?: ConfigPosta
   desktop?: ConfigDesktop
   notion?: ConfigNotion
+  calendario?: ConfigCalendario
   claude?: ConfigClaude
   tono?: string
   autonomia?: string
@@ -502,6 +512,8 @@ export function pubblica(c: Config = leggi()) {
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle } : null,
     notion: c.notion ? { collegato: true } : null,
+    // il nome dell'agenda esce, l'indirizzo no: quello è la chiave di casa
+    calendario: c.calendario ? { collegato: true, nome: c.calendario.nome ?? null, giorni: c.calendario.giorni ?? 30 } : null,
     claude: c.claude ? { collegato: true } : null,
     // di questi esce solo come si chiamano: token, refresh e segreti non
     // attraversano mai questa funzione, ed è l'unica ragione per cui esiste

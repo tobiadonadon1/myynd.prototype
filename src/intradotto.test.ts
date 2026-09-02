@@ -179,6 +179,9 @@ const SEGNAPOSTO_TECNICI = new Set([
   'https://api.openai.com/v1',
   'sk-…',
   'gpt-4.1 · qwen2.5:14b',
+  // l'indirizzo iCal di un'agenda, come lo scrive Google: è la forma esatta di
+  // quello che va incollato, e mostrarne una tradotta sarebbe mostrarne una falsa
+  'https://calendar.google.com/calendar/ical/…/basic.ics',
   // un nome proprio come esempio: si legge uguale nelle due lingue
   'Tobia'
 ])

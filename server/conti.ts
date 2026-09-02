@@ -31,33 +31,7 @@ import { DATI } from './ospitato.ts'
  * nessun altro, e uno script con indirizzi a caso lo fermava per tutti. Adesso
  * è asincrono e costa il doppio (32 MB di memoria per tentativo, che è quello
  * che lo rende caro a chi prova a indovinare). Gli hash di prima restano
- * leggibili — il costo si legge dal prefisso `s<N>// I conti: chi esiste, e chi è chi.
-//
-// **Perché questo file non poteva stare dentro `store.ts`.** Le sessioni
-// stavano nell'indice, cioè nel database di una persona — e finché la persona
-// era una sola andava benissimo. Con più persone diventa un giro impossibile:
-// per sapere di chi è un token bisogna aprire il suo database, ma per sapere
-// quale database aprire bisogna già sapere di chi è il token. Il conto e la
-// sessione devono stare *sopra* le persone, non dentro una.
-//
-// Quindi un database piccolo e condiviso, accanto alle cartelle di tutti, con
-// dentro le due sole cose che non appartengono a nessuno in particolare: chi
-// ha un conto, e quale token è di chi. Tutto il resto — i documenti, la lista,
-// la memoria, le automazioni, le credenziali delle fonti — resta nella
-// cartella della singola persona e non si mescola mai.
-//
-// **Della password non si tiene la password.** Scrypt con un sale per conto:
-// chi legge questo file non può entrare in nessun account, e non può nemmeno
-// dire se due persone hanno scelto la stessa password. Dei token si tiene solo
-// l'impronta, per la stessa ragione.
-
-import { DatabaseSync } from 'node:sqlite'
-import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, chmodSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { DATI } from './ospitato.ts'
-
-, e chi non ce l'ha è a
+ * leggibili — il costo si legge dal prefisso `s<N>$`, e chi non ce l'ha è a
  * 16384 — e si riscrivono con il costo nuovo al primo accesso riuscito, che è
  * l'unico momento in cui la password la conosciamo.
  */

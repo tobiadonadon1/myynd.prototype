@@ -496,11 +496,38 @@ const EN: Record<string, string> = {
   'Torna qui. Non c’è niente da ricollegare: riparte da sola.': 'Come back here. There is nothing to reconnect: it starts again on its own.',
   'Apri Billing': 'Open Billing',
   'Chiudo…': 'Closing…',
+  // — il calendario, da un indirizzo iCal —
+  'Un indirizzo da incollare: quello segreto in formato iCal della tua agenda. Google, Outlook, iCloud.': 'One address to paste: the secret iCal address of your calendar. Google, Outlook, iCloud.',
+  'Arriva presto. Intanto la posta si collega da «Posta» e l’agenda da «Calendario».': 'Coming soon. Meanwhile email connects through “Email” and your calendar through “Calendar”.',
+  'Nessuna app da registrare e nessun consenso da dare: la tua agenda ha già un indirizzo, e Myynd lo legge.': 'No app to register and no consent to give: your calendar already has an address, and Myynd reads it.',
+  'Su Google Calendar: apri le impostazioni, clicca il nome della tua agenda nella colonna a sinistra, scendi fino in fondo a «Integra il calendario» e copia l’indirizzo privato in formato iCal.': 'In Google Calendar: open Settings, click your calendar’s name in the left column, scroll to the bottom to “Integrate calendar” and copy the secret address in iCal format.',
+  'Su Outlook e iCloud si chiama «pubblica calendario»: va bene lo stesso link.': 'In Outlook and iCloud it is called “publish calendar”: the same link works.',
+  'Gmail non accetta la password dell’account: serve una «password per le app», sedici lettere, con la verifica in due passaggi attiva.': 'Gmail does not accept your account password: you need an app password, sixteen letters, with 2-step verification on.',
+  'Creane una': 'Create one',
+  'Gmail ha rifiutato questa password. Se sono meno di sedici lettere è quella del tuo account Google, e via IMAP non funziona mai: creane una su myaccount.google.com/apppasswords e incolla quella.': 'Gmail refused this password. If it is fewer than sixteen letters it is your Google account password, and over IMAP that never works: create one at myaccount.google.com/apppasswords and paste that instead.',
+  'iCloud ha rifiutato questa password. Ne serve una specifica per le app, sedici lettere, da appleid.apple.com.': 'iCloud refused this password. It needs an app-specific one, sixteen letters, from appleid.apple.com.',
+  'Yahoo ha rifiutato questa password. Ne serve una per le app, dalle impostazioni di sicurezza dell’account.': 'Yahoo refused this password. It needs an app password, from the account’s security settings.',
+  'Indirizzo del calendario': 'Calendar address',
+  'Quel link apre la tua agenda senza chiedere niente a nessuno: tienilo per te, come una password. Se lo giri per sbaglio, rigeneralo dalla stessa schermata e il vecchio smette di funzionare.': 'That link opens your calendar without asking anyone for anything: keep it to yourself, like a password. If you share it by mistake, reset it from the same screen and the old one stops working.',
+  'Quanti giorni indietro': 'How many days back',
+  'Avanti guarda sempre sei mesi: è indietro che si sceglie, perché è lì che sta quello che è già successo.': 'Ahead it always looks six months: back is the part you choose, because that is where what already happened sits.',
+  'Collega il calendario': 'Connect the calendar',
+  'apro l’agenda': 'opening the calendar',
+  'Serve l’indirizzo del calendario.': 'The calendar address is needed.',
+  'Quello non è un indirizzo. Incolla il link intero, comincia con https.': 'That is not an address. Paste the whole link, it starts with https.',
+  'Quell’indirizzo non si può raggiungere da qui.': 'That address cannot be reached from here.',
+  'Il calendario ci ha messo troppo a rispondere. Riprova.': 'The calendar took too long to answer. Try again.',
+  'Non riesco a raggiungere quell’indirizzo. Controlla che sia intero.': 'I cannot reach that address. Check that it is complete.',
+  'Quell’indirizzo non è più valido: rigeneralo nelle impostazioni del calendario e incollalo di nuovo.': 'That address is no longer valid: reset it in your calendar settings and paste it again.',
+  'A quell’indirizzo non c’è nessun calendario. Controlla di aver copiato il link in formato iCal.': 'There is no calendar at that address. Check that you copied the link in iCal format.',
+  'Il calendario ha risposto con un errore. Riprova fra poco.': 'The calendar answered with an error. Try again shortly.',
+  'Quel calendario è troppo grande da leggere.': 'That calendar is too big to read.',
+  'A quell’indirizzo non c’è un calendario. Su Google è «Indirizzo privato in formato iCal», in fondo alle impostazioni dell’agenda.': 'There is no calendar at that address. In Google it is “Secret address in iCal format”, at the bottom of the calendar’s settings.',
+
   'Il modello scelto non esiste per questa chiave. Scegli Sonnet nelle preferenze e riprova.': 'The chosen model does not exist for this key. Pick Sonnet in Preferences and try again.',
   'Da console.anthropic.com. Il conto deve avere credito (Billing).': 'From console.anthropic.com. The account needs credit (Billing).',
   'La chiave da console.anthropic.com, con credito sul conto (Billing). Senza, Myynd non ragiona.': 'The key from console.anthropic.com, with credit on the account (Billing). Without it, Myynd cannot reason.',
   'Basta indirizzo e password: il server lo trovo io.': 'Address and password are enough: I will find the server.',
-  'Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.': 'Gmail does not accept your account password: you need an “app password” from myaccount.google.com/apppasswords, with 2-step verification on.',
   'iCloud vuole una password specifica per le app, da appleid.apple.com.': 'iCloud needs an app-specific password, from appleid.apple.com.',
   'Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.': 'Yahoo needs an app password, from the account security settings.',
   'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.': 'Outlook no longer accepts a password over IMAP: connect “Outlook and Calendar” instead of this card.',
@@ -1367,6 +1394,23 @@ export const frasi = {
     ? `${nome} opens in this tab: say yes, and you come back here on your own.`
     : `Si apre la pagina di ${nome} in questa scheda: di' di sì, e torni qui da solo.`,
   collega: (nome: string) => corrente === 'en' ? `Connect ${nome}` : `Collega ${nome}`,
+
+  // — il calendario —
+  agendaLetta: (nome: string, n: number) => corrente === 'en'
+    ? `“${nome}” is connected: ${n} event${n === 1 ? '' : 's'} read.`
+    : `«${nome}» è collegata: ${n} event${n === 1 ? 'o letto' : 'i letti'}.`,
+  // — la posta —
+  //
+  // Il numero è quello che ha appena scritto lei: è l'unico modo di far vedere
+  // la differenza fra quello che ha in mano e quello che serve, senza chiederle
+  // di contare le lettere.
+  nonSembraPerLeApp: (n: number) => corrente === 'en'
+    ? `That looks like your account password (${n} character${n === 1 ? '' : 's'}). An app password is 16 letters. Connecting with this one will not work.`
+    : `Questa sembra la password del tuo account (${n} caratter${n === 1 ? 'e' : 'i'}). Una password per le app è di 16 lettere. Con questa non si collegherà.`,
+
+  eventiLetti: (n: number) => corrente === 'en'
+    ? `Connected: ${n} event${n === 1 ? '' : 's'} read.`
+    : `Collegata: ${n} event${n === 1 ? 'o letto' : 'i letti'}.`,
 
   // — la rassegna —
   //

@@ -74,6 +74,9 @@ const FONTI: Partial<Record<Nome, string[]>> = {
   // tre protocolli, una cosa sola: chi dice «guarda nella posta» non sta
   // chiedendo se quella casella parli IMAP, Gmail o Graph
   'posta.leggi': ['posta', 'google', 'microsoft'],
+  // legge il calendario collegato con un indirizzo iCal, ma non cercandoci
+  // dentro: vedi l'ordine dei rami dentro `esegui`
+  'agenda.leggi': ['calendario'],
   'desktop.leggi': ['desktop'],
   'notion.leggi': ['notion'],
   'slack.leggi': ['slack'],
@@ -305,7 +308,7 @@ export function collegato(n: Nome): boolean {
       evento. Adesso o c'è un Mac, o c'è Outlook, o l'attrezzo si dichiara
       scollegato, che è la risposta vera.
     */
-    case 'agenda': return process.platform === 'darwin' || !!c.microsoft?.parti.includes('posta')
+    case 'agenda': return !!c.calendario || process.platform === 'darwin' || !!c.microsoft?.parti.includes('posta')
     default: return true
   }
 }
@@ -361,11 +364,30 @@ export type Esito = {
  */
 async function prossimiOvunque(giorni: number): Promise<agenda.Evento[]> {
   const pezzi: agenda.Evento[][] = []
+  const c = leggi()
   if (process.platform === 'darwin') {
     pezzi.push(await agenda.prossimi(giorni).catch(() => []))
   }
-  if (leggi().microsoft?.parti.includes('posta')) {
+  if (c.microsoft?.parti.includes('posta')) {
     pezzi.push(await microsoft.prossimi(giorni).catch(() => []))
+  }
+  /*
+   * E il terzo, che è l'unico che funziona su un server.
+   *
+   * Il Calendario del Mac vuole un Mac e Outlook vuole Microsoft; l'agenda
+   * collegata con un indirizzo iCal sta già nell'indice, letta all'ultimo giro,
+   * e si guarda da lì. È anche il motivo per cui l'evento porta il posto in
+   * `percorso`: da qui si legge senza rileggere il testo.
+   */
+  if (c.calendario) {
+    const ora = new Date()
+    const fine = new Date(ora.getTime() + giorni * 864e5)
+    pezzi.push(store.eventi(ora.toISOString(), fine.toISOString()).map(d => ({
+      titolo: d.titolo,
+      inizio: (d.quando ?? '').slice(0, 16),
+      dove: d.percorso ?? undefined,
+      calendario: c.calendario?.nome || undefined
+    })))
   }
   return pezzi.flat().sort((a, b) => a.inizio.localeCompare(b.inizio)).slice(0, 60)
 }
@@ -396,17 +418,15 @@ export async function esegui(
     }
   }
 
-  const fonti = FONTI[nome]
-  if (fonti) {
-    const q = String(input.query ?? '').trim()
-    if (!q) return { testo: 'Manca la query.', docs: [], male: true }
-    const docs = store.cerca(q, 8, fonti)
-    return {
-      testo: docs.length ? '' : 'Niente con queste parole. Provane altre, o di’ che non c’è.',
-      docs
-    }
-  }
-
+  /*
+   * L'agenda prima della ricerca, e l'ordine è la cosa importante.
+   *
+   * `agenda.leggi` sta in `FONTI` perché *apre* la fonte «calendario» — serve
+   * al recinto delle automazioni, che deve sapere quali fonti tocca. Ma non ci
+   * cerca dentro: guarda i prossimi giorni e li racconta in ordine. Sotto il
+   * ramo della ricerca chiederebbe una `query` che nessuno gli manda mai, e
+   * l'attrezzo risponderebbe «manca la query» per sempre.
+   */
   if (nome === 'agenda.leggi') {
     const giorni = Math.min(30, Math.max(1, Math.round(Number(input.giorni) || 7)))
     try {
@@ -421,6 +441,18 @@ export async function esegui(
       }
     } catch (e) {
       return { testo: e instanceof Error ? e.message : 'Il calendario non ha risposto.', docs: [], male: true }
+    }
+  }
+
+
+  const fonti = FONTI[nome]
+  if (fonti) {
+    const q = String(input.query ?? '').trim()
+    if (!q) return { testo: 'Manca la query.', docs: [], male: true }
+    const docs = store.cerca(q, 8, fonti)
+    return {
+      testo: docs.length ? '' : 'Niente con queste parole. Provane altre, o di’ che non c’è.',
+      docs
     }
   }
 

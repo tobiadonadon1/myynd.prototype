@@ -1209,6 +1209,22 @@ export function appenaArrivati(dal: string, limite = 30): Documento[] {
   `).all(dal, limite) as unknown as Documento[]
 }
 
+/**
+ * Gli impegni fra due date, in ordine di quando succedono.
+ *
+ * L'unica query dell'indice ordinata per `quando` invece che per «quando l'ho
+ * letto». Per tutto il resto le due cose si somigliano abbastanza; per
+ * un'agenda no — un impegno di domani indicizzato ieri viene prima di uno di
+ * lunedì scorso indicizzato stamattina, e chiedere «cosa ho questa settimana»
+ * ordinando per lettura risponde con le cose sbagliate nell'ordine sbagliato.
+ */
+export function eventi(da: string, a: string, limite = 60): Documento[] {
+  return db.prepare(`
+    SELECT * FROM documenti WHERE fonte = 'calendario' AND quando >= ? AND quando <= ?
+    ORDER BY quando ASC LIMIT ?
+  `).all(da, a, limite) as unknown as Documento[]
+}
+
 /** Toglie tutto quello che è arrivato da una fonte (quando la scolleghi). */
 /** Le voci del feed che puntavano a un documento sparito smettono di prometterlo. */
 function scollegaDalFeed(ids: string[]) {

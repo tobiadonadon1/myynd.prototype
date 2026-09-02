@@ -28,6 +28,7 @@ import * as lavoro from './lavoro.ts'
 import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as notion from './connettori/notion.ts'
+import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
 import * as drive from './connettori/drive.ts'
 import * as microsoft from './connettori/microsoft.ts'
@@ -342,6 +343,7 @@ app.get('/api/stato', (_req, res) => {
         v.id === 'posta' ? !!c.posta :
         v.id === 'desktop' ? !!c.desktop :
         v.id === 'notion' ? !!c.notion :
+        v.id === 'calendario' ? !!c.calendario :
         // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
         // può ragionare», che da quando c'è un altro fornitore non coincide più
         v.id === 'claude' ? mod.conClaude() :
@@ -560,7 +562,14 @@ app.post('/api/connettori/posta', async (req, res) => {
   const { host, porta, utente, password, giorni, cartelle } = req.body ?? {}
   if (!host || !utente || !password) return res.status(400).json({ errore: 'Servono host, indirizzo e password.' })
   if (!ospitato.hostRaggiungibile(String(host))) return res.status(400).json({ errore: 'Quell’host non si può raggiungere da qui.' })
-  const c: cfg.ConfigPosta = { host, porta: Number(porta) || 993, utente, password, giorni: Number(giorni) || 30, cartelle }
+  // gli spazi con cui Google mostra la password per le app non fanno parte
+  // della password: toglierli qui evita un «utente o password non accettati»
+  // che non è vero e che non si può indovinare
+  const c: cfg.ConfigPosta = {
+    host, porta: Number(porta) || 993, utente,
+    password: posta.normalizza(String(password), String(host)),
+    giorni: Number(giorni) || 30, cartelle
+  }
   try {
     const esito = await posta.prova(c)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
@@ -594,6 +603,28 @@ app.post('/api/connettori/notion', async (req, res) => {
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ notion: { token } })
     res.json({ ok: true, pagine: esito.pagine })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Il calendario: un indirizzo, e basta.
+ *
+ * La prova è già una lettura vera — si scarica il file e si contano gli eventi
+ * — perché su questa fonte «collegato» e «funziona» sono la stessa cosa, e
+ * perché il numero che torna è l'unica conferma che chi incolla può capire:
+ * «142 eventi» vuol dire che ha copiato il link giusto.
+ */
+app.post('/api/connettori/calendario', async (req, res) => {
+  const url: string = req.body?.url ?? ''
+  const nome: string = req.body?.nome ?? ''
+  const giorni = Number(req.body?.giorni) || 30
+  if (!url.trim()) return res.status(400).json({ errore: 'Serve l’indirizzo del calendario.' })
+  try {
+    const c: cfg.ConfigCalendario = { url: url.trim(), nome: nome.trim() || undefined, giorni }
+    const esito = await calendario.prova(c)
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    cfg.aggiorna({ calendario: { ...c, nome: esito.nome || undefined } })
+    res.json({ ok: true, nome: esito.nome, eventi: esito.eventi })
   } catch (e) { errore(res, e) }
 })
 
@@ -817,6 +848,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   if (id === 'posta') delete c.posta
   else if (id === 'desktop') delete c.desktop
   else if (id === 'notion') delete c.notion
+  else if (id === 'calendario') delete c.calendario
   /*
     «Scollega» su Claude vuol dire che Myynd deve smettere di ragionare, e da
     quando le strade sono due toglierne una sola non lo fa: chi ha collegato il
@@ -903,6 +935,25 @@ async function leggiTutto(
       [...e.docs.map(d => d.id), ...e.visti])
     totale += e.docs.length
     avvisa({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti })
+  }
+  if (!fermo() && c.calendario && (!soloFonte || soloFonte === 'calendario')) {
+    avvisa({ fase: 'calendario', stato: 'apro l’agenda' })
+    try {
+      const e = await calendario.sincronizza(c.calendario)
+      await store.salvaDocumentiAPezzi(e.docs)
+      /*
+        Si riconcilia, ed è il caso in cui serve di più: un impegno spostato o
+        annullato deve *sparire*, altrimenti Myynd continua a ragionare su una
+        riunione che non c'è più — che è peggio che non saperne niente. Il file
+        iCal è sempre completo, quindi quello che non c'è dentro non c'è.
+      */
+      const tolti = store.riconcilia('calendario', { completo: !e.troncato }, e.docs.map(d => d.id))
+      totale += e.docs.length
+      avvisa({ fase: 'calendario', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
+    } catch (err) {
+      // un indirizzo scaduto non deve fermare la lettura di tutto il resto
+      avvisa({ fase: 'calendario', stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
+    }
   }
   if (!fermo() && c.posta && (!soloFonte || soloFonte === 'posta')) {
     avvisa({ fase: 'posta', stato: 'mi collego alla casella' })

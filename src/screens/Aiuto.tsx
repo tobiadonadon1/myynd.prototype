@@ -160,10 +160,17 @@ const SEZIONI: Sezione[] = [
             }
           },
           {
+            nome: { it: 'Calendario', en: 'Calendar' },
+            testo: {
+              it: 'Un indirizzo da incollare, e nient’altro: nessuna app da registrare, nessun consenso da dare. Su Google Calendar apri le impostazioni, clicca il nome della tua agenda nella colonna a sinistra, scendi fino a «Integra il calendario» e copia l’**indirizzo privato in formato iCal**. Su Outlook e iCloud si chiama «pubblica calendario» e il link va bene lo stesso. Myynd legge gli impegni dei sei mesi che vengono e dei giorni indietro che scegli, e li tiene aggiornati a ogni lettura: quello che sposti o annulli sparisce anche da qui. Quel link apre la tua agenda a chiunque ce l’abbia: tienilo come una password, e se lo giri per sbaglio rigeneralo dalla stessa schermata.',
+              en: 'One address to paste, nothing else: no app to register, no consent to give. In Google Calendar open Settings, click your calendar’s name in the left column, scroll to “Integrate calendar” and copy the **secret address in iCal format**. In Outlook and iCloud it is called “publish calendar” and the link works the same. Myynd reads the next six months and the days back you choose, and keeps them current at every read: what you move or cancel disappears here too. That link opens your calendar to anyone holding it: keep it like a password, and if you share it by mistake, reset it from the same screen.'
+            }
+          },
+          {
             nome: { it: 'Gmail e Calendario (Google)', en: 'Gmail and Calendar (Google)' },
             testo: {
-              it: 'Arriva presto. Legge posta e agenda dall’API di Google, e funziona già: quello che manca è la registrazione di Myynd presso Google, che per leggere la posta chiede una loro verifica. Intanto la casella Gmail si collega da «Posta», con una password per le app.',
-              en: 'Coming soon. It reads mail and calendar through Google’s API, and it already works: what is missing is registering Myynd with Google, which for reading mail needs their review. In the meantime a Gmail mailbox connects from “Mail”, with an app password.'
+              it: 'Arriva presto. Legge posta e agenda dall’API di Google, e funziona già: quello che manca è la registrazione di Myynd presso Google, che per leggere la posta chiede una loro verifica. Intanto la casella Gmail si collega da «Posta» con una password per le app, e l’agenda da «Calendario» con un indirizzo.',
+              en: 'Coming soon. It reads mail and calendar through Google’s API, and it already works: what is missing is registering Myynd with Google, which for reading mail needs their review. In the meantime a Gmail mailbox connects from “Mail” with an app password, and the calendar from “Calendar” with an address.'
             }
           },
           {
@@ -531,8 +538,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'La posta non si collega', en: 'Email will not connect' },
             testo: {
-              it: 'Con Gmail e iCloud serve la password per le app, non quella dell’account. Controlla l’host IMAP — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — e la porta, che è 993 con SSL. Le caselle Outlook e Microsoft 365 di solito rifiutano la password semplice: collegale con la fonte Microsoft.',
-              en: 'With Gmail and iCloud you need the app password, not the account one. Check the IMAP host — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — and the port, which is 993 with SSL. Outlook and Microsoft 365 mailboxes usually refuse a plain password: connect them through the Microsoft source.'
+              it: 'Con Gmail, iCloud e Yahoo serve la **password per le app**, non quella dell’account: sono sedici lettere. Su Google si creano da [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) — e la voce compare solo se hai attivo l’accesso in due passaggi: se non la trovi, è quello che manca. Copiala pure con gli spazi, li tolgo io. Controlla l’host IMAP — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — e la porta, che è 993 con SSL. Le caselle Outlook e Microsoft 365 rifiutano qualsiasi password via IMAP.',
+              en: 'With Gmail, iCloud and Yahoo you need an **app password**, not your account one: it is sixteen letters. On Google you create it at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) — and that page only appears if 2-step verification is on: if you cannot find it, that is what is missing. Copy it with the spaces if you like, I strip them. Check the IMAP host — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — and the port, which is 993 with SSL. Outlook and Microsoft 365 mailboxes refuse any password over IMAP.'
             }
           },
           {

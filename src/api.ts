@@ -33,6 +33,8 @@ export type Stato = {
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[] } | null
     notion: { collegato: boolean } | null
+    /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
+    calendario: { collegato: boolean; nome: string | null; giorni: number } | null
     claude: { collegato: boolean } | null
     /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
     motore: 'claude' | 'compatibile'
@@ -736,6 +738,9 @@ export const api = {
 
   collegaNotion: (token: string) =>
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  collegaCalendario: (p: { url: string; giorni: number }) =>
+    json<{ ok: true; nome: string; eventi: number }>('/api/connettori/calendario', { method: 'POST', body: JSON.stringify(p) }),
 
   collegaClaude: (apiKey: string) =>
     json<{ ok: true; avviso?: string; dettaglio?: string }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),

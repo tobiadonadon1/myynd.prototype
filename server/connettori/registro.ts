@@ -39,7 +39,15 @@ export type VoceConnettore = {
 
 export const CATALOGO: VoceConnettore[] = [
   { id: 'posta', nome: 'Posta', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'IMAP: host, indirizzo e password della casella.' },
-  { id: 'google', nome: 'Gmail e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto. Intanto la posta si collega da «Posta», con una password per le app.' },
+  /*
+   * L'agenda prima di Gmail, e non è un ordine casuale.
+   *
+   * È l'unica fonte che si collega incollando una cosa sola, senza registrare
+   * niente da nessuna parte: sta accanto a «Posta» perché insieme fanno il
+   * novanta per cento di quello che una persona voleva da Google.
+   */
+  { id: 'calendario', nome: 'Calendario', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Un indirizzo da incollare: quello segreto in formato iCal della tua agenda. Google, Outlook, iCloud.' },
+  { id: 'google', nome: 'Gmail e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto. Intanto la posta si collega da «Posta» e l’agenda da «Calendario».' },
   { id: 'microsoft', nome: 'Outlook e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto: posta e agenda di Microsoft 365.' },
   { id: 'slack', nome: 'Slack', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Un token da utente: legge i canali di cui fai già parte.' },
   { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Cloud API. Riceve i messaggi mentre arrivano: serve un indirizzo pubblico.' },

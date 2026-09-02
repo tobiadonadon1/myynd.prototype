@@ -194,6 +194,40 @@ export async function prova(c: ConfigPosta): Promise<
 }
 
 /**
+ * Quali server vogliono una «password per le app», e non la tua.
+ *
+ * Gmail, iCloud e Yahoo la chiedono, e la fanno lunga sedici lettere. Outlook
+ * non accetta più nessuna password via IMAP e sta in un elenco a parte, perché
+ * per lui non c'è niente da generare: c'è un'altra scheda.
+ */
+export function vuolePasswordPerLeApp(host: string): 'google' | 'apple' | 'yahoo' | null {
+  const h = host.toLowerCase()
+  if (/gmail|googlemail/.test(h)) return 'google'
+  if (/mail\.me\.com|icloud/.test(h)) return 'apple'
+  if (/yahoo/.test(h)) return 'yahoo'
+  return null
+}
+
+/**
+ * La password, senza gli spazi che ci ha messo chi la mostra.
+ *
+ * Google scrive la password per le app a gruppi di quattro — «abcd efgh ijkl
+ * mnop» — e chi la copia si porta dietro gli spazi. IMAP la rifiuta, e il
+ * messaggio che torna è lo stesso di una password sbagliata: nessun modo di
+ * capire che erano tre spazi. Apple fa lo stesso con i trattini.
+ *
+ * Si tolgono **solo** quando quello che resta ha esattamente la forma di una
+ * password per le app — sedici lettere — e solo su quei tre server. Una
+ * password vera può contenere spazi, e toglierli a tutti vorrebbe dire
+ * rompere le caselle di chi ne ha una.
+ */
+export function normalizza(password: string, host: string): string {
+  if (!vuolePasswordPerLeApp(host)) return password
+  const nudo = password.replace(/[\s-]/g, '')
+  return /^[a-z]{16}$/i.test(nudo) ? nudo : password
+}
+
+/**
  * «Password non accettata» è vero e non serve a niente, se il server è Gmail:
  * Gmail non accetta *mai* la password dell'account via IMAP, vuole una
  * «password per le app». Lo stesso iCloud e Yahoo. E Outlook.com da un pezzo
@@ -212,9 +246,9 @@ function messaggioErrore(e: unknown, host = ''): string {
     .filter(Boolean).join(' ') || String(e)
   const h = host.toLowerCase()
   if (err.authenticationFailed || /auth|invalid credentials|login failed|password/i.test(m)) {
-    if (/gmail|googlemail/.test(h)) return 'Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.'
-    if (/mail\.me\.com|icloud/.test(h)) return 'iCloud vuole una password specifica per le app, da appleid.apple.com.'
-    if (/yahoo/.test(h)) return 'Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.'
+    if (/gmail|googlemail/.test(h)) return 'Gmail ha rifiutato questa password. Se sono meno di sedici lettere è quella del tuo account Google, e via IMAP non funziona mai: creane una su myaccount.google.com/apppasswords e incolla quella.'
+    if (/mail\.me\.com|icloud/.test(h)) return 'iCloud ha rifiutato questa password. Ne serve una specifica per le app, sedici lettere, da appleid.apple.com.'
+    if (/yahoo/.test(h)) return 'Yahoo ha rifiutato questa password. Ne serve una per le app, dalle impostazioni di sicurezza dell’account.'
     if (/office365|outlook|hotmail|live\./.test(h)) return 'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.'
     return 'Utente o password non accettati dal server.'
   }

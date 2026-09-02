@@ -337,12 +337,32 @@ export function FormPosta({ tema, ok }: Props) {
   // Gmail, iCloud e Yahoo non accettano la password dell'account via IMAP:
   // vogliono una «password per le app». Dirlo prima che fallisca.
   const h = host.toLowerCase()
-  const consiglio = /gmail|googlemail/.test(h)
-    ? t('Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.')
-    : /mail\.me\.com|icloud/.test(h) ? t('iCloud vuole una password specifica per le app, da appleid.apple.com.')
-    : /yahoo/.test(h) ? t('Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.')
+  const perLeApp = /gmail|googlemail/.test(h) ? 'google'
+    : /mail\.me\.com|icloud/.test(h) ? 'apple'
+    : /yahoo/.test(h) ? 'yahoo' : ''
+  const consiglio = perLeApp === 'google'
+    ? t('Gmail non accetta la password dell’account: serve una «password per le app», sedici lettere, con la verifica in due passaggi attiva.')
+    : perLeApp === 'apple' ? t('iCloud vuole una password specifica per le app, da appleid.apple.com.')
+    : perLeApp === 'yahoo' ? t('Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.')
     : /office365|outlook|hotmail|live\./.test(h) ? t('Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.')
     : ''
+  const dove = perLeApp === 'google' ? 'https://myaccount.google.com/apppasswords'
+    : perLeApp === 'apple' ? 'https://appleid.apple.com' : ''
+
+  /*
+   * La password che *non* è una password per le app, riconosciuta mentre la scrive.
+   *
+   * Una password per le app è sedici lettere, sempre, su tutti e tre. Otto
+   * caratteri su Gmail sono la password del suo account Google, e via IMAP non
+   * funzioneranno mai: si può dire subito invece di farglielo scoprire da un
+   * errore che arriva dopo dieci secondi e che assomiglia troppo al consiglio
+   * scritto qui sopra. Una cliente ci si è fermata il 2 settembre 2026.
+   *
+   * Dice e non blocca. Un dominio Google aziendale può avere regole sue, e una
+   * regola nostra che impedisce di provare sarebbe peggio del problema.
+   */
+  const nudo = password.replace(/[\s-]/g, '')
+  const formaSbagliata = !!perLeApp && password.length > 0 && !/^[a-z]{16}$/i.test(nudo)
   return (
     <div>
       <div style={nota(tema)}>{t('Basta indirizzo e password: il server lo trovo io.')}</div>
@@ -358,7 +378,32 @@ export function FormPosta({ tema, ok }: Props) {
 
       {cerco && <div style={{ ...nota(tema), marginTop: 12 }}>{t('Cerco il tuo server…')}</div>}
 
-      {consiglio && <div style={{ ...nota(tema), marginTop: 12, overflowWrap: 'anywhere' }}>{consiglio}</div>}
+      {consiglio && (
+        <div style={{ ...nota(tema), marginTop: 12, overflowWrap: 'anywhere' }}>
+          {consiglio}
+          {dove && (
+            <>
+              {' '}
+              <a href={dove} target="_blank" rel="noreferrer" style={{
+                color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F'
+              }}>{t('Creane una')}</a>.
+            </>
+          )}
+        </div>
+      )}
+
+      {/*
+        Non è un errore e non sta in rosso: è un'osservazione su quello che ha
+        appena scritto, e arriva prima di premere qualsiasi cosa.
+      */}
+      {formaSbagliata && (
+        <div style={{
+          marginTop: 10, padding: '9px 11px', borderRadius: 10,
+          background: tema === 'scuro' ? 'rgba(232,168,124,.12)' : 'rgba(196,98,59,.09)',
+          fontSize: '12.5px', lineHeight: 1.5,
+          color: tema === 'scuro' ? 'rgba(244,239,232,.8)' : 'rgba(34,39,31,.75)'
+        }}>{frasi.nonSembraPerLeApp(nudo.length)}</div>
+      )}
 
       {trovato && !aMano && (
         <div style={{ ...nota(tema), marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
@@ -466,6 +511,82 @@ export function FormNotion({ tema, ok }: Props) {
         onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Notion')}</Conferma>
+    </div>
+  )
+}
+
+/**
+ * Il calendario: un campo solo, e tre righe che dicono dove trovare cosa.
+ *
+ * È la fonte con meno attrito di tutte, e l'unica cosa che può andare storta è
+ * che qualcuno copi l'indirizzo sbagliato — Google ne mostra tre, uno accanto
+ * all'altro, e due non servono. Per questo le istruzioni sono numerate e
+ * nominano la voce esatta da cercare: qui una nota generica costerebbe più di
+ * quanto costerebbe un campo in più.
+ *
+ * Dopo, si dice quanti eventi ha letto. È l'unica conferma che chi ha incollato
+ * può capire da solo di aver incollato la cosa giusta.
+ */
+export function FormCalendario({ tema, ok }: Props) {
+  const [url, setUrl] = useState('')
+  const [giorni, setGiorni] = useState(30)
+  const [err, setErr] = useState('')
+  const [fatto, setFatto] = useState<{ nome: string; eventi: number } | null>(null)
+  const [occupato, setOccupato] = useState(false)
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      const r = await api.collegaCalendario({ url: url.trim(), giorni })
+      setUrl('')
+      setFatto({ nome: r.nome, eventi: r.eventi })
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  if (fatto) {
+    return (
+      <div>
+        <div style={nota(tema)}>
+          {fatto.nome ? frasi.agendaLetta(fatto.nome, fatto.eventi) : frasi.eventiLetti(fatto.eventi)}
+        </div>
+        <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Nessuna app da registrare e nessun consenso da dare: la tua agenda ha già un indirizzo, e Myynd lo legge.')}
+      </div>
+
+      <div style={{ ...nota(tema), marginTop: 12, lineHeight: 1.7 }}>
+        {t('Su Google Calendar: apri le impostazioni, clicca il nome della tua agenda nella colonna a sinistra, scendi fino in fondo a «Integra il calendario» e copia l’indirizzo privato in formato iCal.')}
+      </div>
+      <div style={{ ...nota(tema), marginTop: 8 }}>
+        {t('Su Outlook e iCloud si chiama «pubblica calendario»: va bene lo stesso link.')}
+      </div>
+
+      <div style={etichetta(tema)}>{t('Indirizzo del calendario')}</div>
+      <input value={url} onChange={e => setUrl(e.target.value)}
+        placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+        autoComplete="off" spellCheck={false} className={classeCampo(tema)} style={campo(tema)}
+        onKeyDown={e => { if (e.key === 'Enter' && url.trim()) collega() }} />
+      <div style={{ ...nota(tema), marginTop: 6 }}>
+        {t('Quel link apre la tua agenda senza chiedere niente a nessuno: tienilo per te, come una password. Se lo giri per sbaglio, rigeneralo dalla stessa schermata e il vecchio smette di funzionare.')}
+      </div>
+
+      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Quanti giorni indietro')}</div>
+      <input type="number" min={1} max={365} value={giorni}
+        onChange={e => setGiorni(Math.max(1, Math.min(365, Number(e.target.value) || 30)))}
+        className={classeCampo(tema)} style={{ ...campo(tema), width: 110 }} />
+      <div style={{ ...nota(tema), marginTop: 6 }}>
+        {t('Avanti guarda sempre sei mesi: è indietro che si sceglie, perché è lì che sta quello che è già successo.')}
+      </div>
+
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!url.trim()} tema={tema}>{t('Collega il calendario')}</Conferma>
     </div>
   )
 }
@@ -860,6 +981,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
+  if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} />
   // due schede diverse, lo stesso modulo con dentro una parola diversa: sono

@@ -16,7 +16,7 @@ import { IconPiu } from '../icons'
  * pastiglia di un'automazione è una fonte che sembra due cose diverse.
  */
 const COLORE: Record<string, string> = {
-  posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A',
+  posta: '#C4553C', calendario: '#A8763F', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A',
   google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
   drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3',
   compatibile: '#6B7FB3'

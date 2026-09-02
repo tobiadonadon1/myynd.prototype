@@ -188,6 +188,25 @@ function Casa({ stato, apriConnessioni, esci }: {
   const lista = useCompiti(v.mostraToast)
 
   /**
+   * Il giro è stato chiuso *adesso*, prima che il server lo racconti.
+   *
+   * Senza questa riga il giro ripartiva a ogni ritorno sulla lista. Chiuderlo
+   * scriveva `giro: true` nel profilo e nient'altro: `stato` è quello che
+   * arriva da `api.stato()`, e finché nessuno lo richiede resta quello di
+   * prima — cioè `giro: false`. `Oggi` si monta solo quando la si guarda, e
+   * decide se aprire il giro nell'inizializzatore del suo `useState`: si
+   * usciva sulla chat, si tornava, il componente si rimontava e rileggeva il
+   * `false` di prima. Il giro era «fatto una volta, mai più» sul server e
+   * «ogni volta» sullo schermo.
+   *
+   * Tenerlo qui e non dentro `Oggi` è il punto: `Casa` resta montata mentre si
+   * cambia schermata, `Oggi` no. È lo stesso aggiornamento ottimista che fanno
+   * le altre preferenze in `vals.ts` — si segna quello che si è appena fatto e
+   * non si aspetta il giro completo del server.
+   */
+  const [giroSegnato, setGiroSegnato] = useState(false)
+
+  /**
    * Quanto sta in larghezza.
    *
    * Qui c'era `minWidth: 1180` e basta: sotto quella soglia l'impaginato non
@@ -369,8 +388,11 @@ function Casa({ stato, apriConnessioni, esci }: {
             l={lista}
             oggi={v.oggi}
             lingua={stato.config.lingua}
-            giroFatto={stato.config.giro}
-            segnaGiro={() => { api.profilo({ giro: true }).catch(() => { /* lo rifarà: pazienza */ }) }}
+            giroFatto={stato.config.giro || giroSegnato}
+            segnaGiro={() => {
+              setGiroSegnato(true)
+              api.profilo({ giro: true }).catch(() => { /* lo rifarà: pazienza */ })
+            }}
             apriGuida={v.goAiuto}
           />
         )}
