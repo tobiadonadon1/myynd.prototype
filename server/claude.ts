@@ -4,7 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
-import { chiedi, chiediJSON, cliente, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, parametri, segnaUso } from './modello.ts'
+import { chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motore, parametri, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { cerca, documento, recenti, type Documento } from './store.ts'
 import { riflua } from './testo.ts'
@@ -20,8 +20,13 @@ import { convinzioni, feedGiaVisto, compitiPerIlModello } from './store.ts'
  * altri moduli senza nessuna delle due cose. Adesso ce n'è una sola, e sa
  * anche quali parametri accetta il modello che si è scelto: è quello che
  * permette a Haiku di funzionare invece di rispondere 400 a tutto.
+ *
+ * E da quando il lavoro grosso può farlo anche un fornitore compatibile con
+ * OpenAI, questo file non tocca più nemmeno il client: chiede a `motore()` chi
+ * c'è, e parla con lui come parlerebbe con l'SDK. I giri degli strumenti qui
+ * sotto non sanno con chi stanno parlando, ed è il motivo per cui funzionano
+ * con tutti e due.
  */
-const client = cliente
 
 /**
  * La lingua in cui si scrive, per le istruzioni al modello.
@@ -347,13 +352,13 @@ export async function rispondi(
   domanda: string,
   storico: Turno[] = []
 ): Promise<{ testo: string; fonti: Fonte[] }> {
-  const a = client()
-  if (!a) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
+  const m = motore()
+  if (!m) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
 
   const docs = materiale(domanda, storico)
   if (!docs.length) return senzaMateriale()
 
-  const risposta = await a.messages.create(corpoRichiesta(domanda, storico, docs))
+  const risposta = await m.crea(corpoRichiesta(domanda, storico, docs))
   if (risposta.stop_reason === 'refusal') {
     // il corpo di un messaggio non passa da `t()`: qui la lingua la sceglie chi scrive
     return { testo: leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', fonti: [] }
@@ -373,40 +378,12 @@ export async function rispondi(
  * fermo, ed è il difetto che il brief chiama fatale. Il tempo totale non
  * cambia; cambia che comincia subito, e quello è tutto.
  */
-/**
- * Il filo che si spegne senza dirlo.
- *
- * Il `timeout` dell'SDK copre solo l'attesa della *prima* risposta del server:
- * appena arrivano le intestazioni, il tempo smette di correre. Se il flusso si
- * pianta dopo — connessione caduta senza FIN, un intermediario che tiene aperto
- * un socket morto — `finalMessage()` non torna mai, e non torna mai *davvero*:
- * non c'è nessuna sveglia sotto che lo interrompa. È la chat che resta a
- * «cerco tra le fonti» finché non ricarichi la pagina.
- *
- * Qui la sveglia c'è, e si riarma a ogni evento che arriva — anche un `ping`,
- * anche un pezzo di ragionamento. Quindi non taglia una risposta lenta: taglia
- * solo una che ha smesso di arrivare.
+/*
+ * La guardia sul filo che si spegne senza dirlo — `senzaSilenzi`, con i suoi
+ * quarantacinque secondi — sta in `modello.ts`, dentro `motore().flusso`: vale
+ * per Claude e per il fornitore compatibile allo stesso modo, e qui basta
+ * sapere che una risposta che smette di arrivare si interrompe con una frase.
  */
-const SILENZIO_MAX = 45_000
-
-function senzaSilenzi(flusso: ReturnType<Anthropic['messages']['stream']>) {
-  return new Promise<Anthropic.Message>((risolvi, rifiuta) => {
-    let sveglia: ReturnType<typeof setTimeout>
-    const riarma = () => {
-      clearTimeout(sveglia)
-      sveglia = setTimeout(() => {
-        flusso.abort()
-        rifiuta(new Error('La risposta si è interrotta a metà. Riprova.'))
-      }, SILENZIO_MAX)
-    }
-    flusso.on('streamEvent', riarma)
-    riarma()
-    flusso.finalMessage().then(
-      (m: Anthropic.Message) => { clearTimeout(sveglia); risolvi(m) },
-      (e: unknown) => { clearTimeout(sveglia); rifiuta(e) }
-    )
-  })
-}
 
 /**
  * Quello che la chat sa fare oltre a rispondere.
@@ -547,9 +524,11 @@ export async function rispondiInStreaming(
   onTesto: (delta: string) => void,
   attrezzi?: Attrezzi
 ): Promise<{ testo: string; fonti: Fonte[] }> {
-  const a = client()
-  const suoAbbonamento = abbonamento.disponibile()
-  if (!a && !suoAbbonamento) {
+  const m = motore()
+  // l'abbonamento è un modo di pagare Claude di meno: se ha scelto un altro
+  // fornitore come motore, il lavoro va a lui e basta
+  const suoAbbonamento = abbonamento.disponibile() && m?.tipo !== 'compatibile'
+  if (!m && !suoAbbonamento) {
     return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
   }
 
@@ -599,17 +578,17 @@ export async function rispondiInStreaming(
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
-      // Con una chiave in tasca si va avanti e non se ne accorge nessuno. Senza,
+      // Con un motore in tasca si va avanti e non se ne accorge nessuno. Senza,
       // l'errore è la risposta: `index.ts` lo manda come `fase: errore` e toglie
       // la domanda rimasta orfana.
-      if (!a) throw e instanceof Error ? e : new Error(String(e))
+      if (!m) throw e instanceof Error ? e : new Error(String(e))
     }
   }
 
-  // Arrivati qui la chiave c'è di sicuro: senza, il ramo qui sopra ha già
+  // Arrivati qui il motore c'è di sicuro: senza, il ramo qui sopra ha già
   // risposto o lanciato. Il compilatore non può saperlo, e una riga che dice
   // una cosa vera costa meno di un `!` che la dà per scontata.
-  if (!a) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
+  if (!m) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
 
   /**
    * Quello che ha letto, in ordine: la numerazione delle citazioni è la sua
@@ -638,10 +617,10 @@ export async function rispondiInStreaming(
   let testoTotale = ''
 
   for (let giro = 0; giro < 4; giro++) {
-    const flusso = a.messages.stream({ ...richiesta, messages: messaggi })
-    flusso.on('text', onTesto)
-    const finale = await senzaSilenzi(flusso)
-    segnaUso('risposta', finale.usage, `giro ${giro + 1}`)
+    // In streaming e con la guardia sul silenzio, su qualunque motore ci sia:
+    // il testo arriva a pezzi a `onTesto`, e in fondo torna il messaggio intero.
+    const finale = await m.flusso({ ...richiesta, messages: messaggi }, onTesto)
+    segnaUso('risposta', finale.usage, `giro ${giro + 1} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') {
       return { testo: 'Su questa richiesta non posso rispondere.', fonti: [] }
@@ -754,8 +733,8 @@ export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: s
  * concentrarti, e cosa hai già liquidato e perché.
  */
 export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
-  const a = client()
-  if (!a) return []
+  const m = motore()
+  if (!m) return []
   // Quello che è appena arrivato viene prima di quello che è soltanto recente.
   // Sono due cose diverse e per un pezzo l'app conosceva solo la seconda: un
   // contratto del 2023 messo nella cartella stamattina non è «recente», ma è
@@ -789,7 +768,7 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
       : ''
   ].filter(Boolean).join('\n')
 
-  const risposta = await a.messages.create({
+  const risposta = await m.crea({
     ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
     system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori
 da tre a sei cose che meritano la sua attenzione oggi.
@@ -1039,11 +1018,11 @@ export async function svolgi(
   /** In che cartella lavora `claude.lavora`, se c'è. */
   cartella?: string | null
 ): Promise<{ testo: string; fonti: Fonte[] }> {
-  const a = client()
+  const m = motore()
   // Non `{ testo: '' }`: quello faceva finire il compito fra i «pronti» con una
   // bozza vuota sotto — cioè l'app diceva di aver fatto un lavoro che non aveva
   // fatto. È l'unico modo di sbagliare che questo prodotto non si può permettere.
-  if (!a) throw new Error('Collega Claude e potrò lavorarci.')
+  if (!m) throw new Error('Collega Claude e potrò lavorarci.')
 
   const domanda = nota?.trim() ? `${compito}\n\nDettaglio: ${nota.trim()}` : compito
   // Niente materiale non è più un errore: è il caso più comune di «devo
@@ -1106,23 +1085,19 @@ export async function svolgi(
     // ancora cercando finirebbe il budget senza consegnare niente, e il compito
     // tornerebbe indietro vuoto dopo cinque minuti di lavoro vero.
     const ultimo = giro === tettoGiri - 1
-    let finale: Anthropic.Message
-    try {
-      // In streaming, anche se nessuno guarda: con sedicimila token di tetto una
-      // richiesta non-streaming rischia il timeout HTTP, e `senzaSilenzi` ci
-      // mette sopra una sveglia che si riarma a ogni evento — taglia un filo
-      // morto senza tagliare una risposta lenta.
-      const flusso = a.messages.stream({
-        ...parametri('bozza', 16000),
-        system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
-        messages: messaggi,
-        ...(ultimo ? {} : { tools: ferri })
-      } as Anthropic.MessageStreamParams)
-      finale = await senzaSilenzi(flusso)
-      segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri}`)
-    } catch (e) {
-      throw inItaliano(e)
-    }
+    // In streaming, anche se nessuno guarda: con sedicimila token di tetto una
+    // richiesta non-streaming rischia il timeout HTTP, e il motore ci mette
+    // sopra la guardia sul silenzio — taglia un filo morto senza tagliare una
+    // risposta lenta. Gli errori arrivano già in italiano: li traduce lui. Il
+    // blocco di sistema è segnato per la cache: su Claude si rilegge a un
+    // decimo dal secondo giro, e il fornitore compatibile lo appiattisce.
+    const finale = await m.flusso({
+      ...parametri('bozza', 16000),
+      system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
+      messages: messaggi,
+      ...(ultimo ? {} : { tools: ferri })
+    } as Anthropic.MessageStreamParams, () => {})
+    segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') throw new Error('Su questo compito non posso lavorare.')
 

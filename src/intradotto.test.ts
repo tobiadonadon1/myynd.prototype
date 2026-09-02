@@ -159,6 +159,12 @@ const SEGNAPOSTO_TECNICI = new Set([
   'xoxp-…',
   '…apps.googleusercontent.com',
   '00000000-0000-0000-0000-000000000000',
+  // l'indirizzo di un fornitore, la forma della sua chiave e due nomi di
+  // modello: si scrivono uguali in tutte le lingue, e tradurli vorrebbe dire
+  // mostrare un esempio che non somiglia a quello vero
+  'https://api.openai.com/v1',
+  'sk-…',
+  'gpt-4.1 · qwen2.5:14b',
   // un nome proprio come esempio: si legge uguale nelle due lingue
   'Tobia'
 ])

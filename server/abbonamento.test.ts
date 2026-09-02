@@ -74,7 +74,10 @@ test('«pronto» non diventa «no» perché una chiamata è andata storta', () =
  */
 test('il lavoro piccolo passa dall’abbonamento solo se non c’è una chiave', () => {
   const m = readFileSync(join(QUI, 'modello.ts'), 'utf8')
-  assert.match(m, /if \(abbonamento\.disponibile\(\) && \(p\.frontiera \|\| !conLaChiave\(\)\)\)/,
+  // la terza condizione — `!fornitore()` — è arrivata con il fornitore
+  // compatibile con OpenAI: se è lui il motore scelto, l'abbonamento non
+  // c'entra, perché è un modo di pagare Claude di meno e non un motore in più
+  assert.match(m, /if \(abbonamento\.disponibile\(\) && !fornitore\(\) && \(p\.frontiera \|\| !conLaChiave\(\)\)\)/,
     'la catena è cambiata: rileggere perché prima di riscriverla')
   assert.match(m, /return conLaChiave\(\) \|\| abbonamento\.pronto\(\)/,
     '«Claude è collegato?» è tornata a voler dire «c’è una chiave»: chi collega solo l’abbonamento si rivede dire di collegare Claude')

@@ -143,6 +143,113 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
   )
 }
 
+/**
+ * Gli indirizzi dei fornitori che conosciamo: un bottone riempie il campo.
+ *
+ * Gli ultimi due sono in casa — Ollama e LM Studio sulla loro porta di serie —
+ * ed è la ragione per cui questo modulo esiste anche per chi non vuole
+ * pagare nessuno: lo stesso campo, un indirizzo diverso.
+ */
+const FORNITORI = [
+  { nome: 'OpenAI', url: 'https://api.openai.com/v1' },
+  { nome: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+  { nome: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { nome: 'Mistral', url: 'https://api.mistral.ai/v1' },
+  { nome: 'Ollama', url: 'http://127.0.0.1:11434/v1' },
+  { nome: 'LM Studio', url: 'http://127.0.0.1:1234/v1' }
+]
+
+/**
+ * Un fornitore compatibile con OpenAI, al posto di Claude per il lavoro grosso.
+ *
+ * Quattro campi, e solo due obbligatori: l'indirizzo e il modello. La chiave
+ * manca quando il fornitore è in casa; il nome è come lo si vuole leggere nelle
+ * preferenze. L'elenco dei modelli si chiede al fornitore appena l'indirizzo
+ * sembra un indirizzo — su Ollama è la lista di quello che c'è installato, che
+ * è esattamente quello che uno non ricorda mai come si scrive.
+ */
+export function FormCompatibile({ tema, ok }: Props) {
+  const [url, setUrl] = useState('')
+  const [chiave, setChiave] = useState('')
+  const [modello, setModello] = useState('')
+  const [nome, setNome] = useState('')
+  const [modelli, setModelli] = useState<string[]>([])
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+
+  // se è già collegato si parte da com'è: cambiare un campo non deve voler
+  // dire riscriverli tutti e quattro
+  useEffect(() => {
+    api.stato().then(s => {
+      const f = s.config.compatibile
+      if (f) { setUrl(f.url); setModello(f.modello); setNome(f.nome ?? '') }
+    }).catch(() => {})
+  }, [])
+
+  // i modelli del fornitore, con un po' di calma: non a ogni tasto
+  useEffect(() => {
+    if (!/^https?:\/\/\S+/.test(url)) { setModelli([]); return }
+    const sveglia = setTimeout(() => {
+      api.modelliCompatibili(url, chiave).then(r => setModelli(r.modelli)).catch(() => setModelli([]))
+    }, 600)
+    return () => clearTimeout(sveglia)
+  }, [url, chiave])
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      await api.collegaCompatibile({
+        url: url.trim(), modello: modello.trim(),
+        ...(chiave.trim() ? { chiave: chiave.trim() } : {}),
+        ...(nome.trim() ? { nome: nome.trim() } : {})
+      })
+      ok()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  const scuro = tema === 'scuro'
+  const pastiglia = (attiva: boolean): CSSProperties => ({
+    padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer',
+    border: `1px solid ${attiva ? '#C4623B' : (scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.18)')}`,
+    background: attiva ? 'rgba(196,98,59,.1)' : (scuro ? 'rgba(244,239,232,.06)' : 'rgba(255,255,255,.6)'),
+    color: attiva ? '#8E3F1F' : (scuro ? CHIARO : '#22271F')
+  })
+  const pronto = !!url.trim() && !!modello.trim()
+
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Al posto di Claude, per le risposte, le bozze e il feed. Serve un indirizzo che parli come OpenAI e il nome di un modello; la chiave solo se il fornitore la vuole.')}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+        {FORNITORI.map(f => (
+          <button key={f.nome} type="button" style={pastiglia(url === f.url)}
+            onClick={() => { setUrl(f.url); if (!nome) setNome(f.nome) }}>{f.nome}</button>
+        ))}
+      </div>
+      <div style={etichetta(tema)}>{t('Indirizzo')}</div>
+      <input value={url} onChange={e => setUrl(e.target.value)}
+        placeholder="https://api.openai.com/v1" autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      <div style={etichetta(tema)}>{t('Chiave API (se serve)')}</div>
+      <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
+        placeholder="sk-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      <div style={etichetta(tema)}>{t('Modello')}</div>
+      <input list="modelli-compatibili" value={modello} onChange={e => setModello(e.target.value)}
+        placeholder="gpt-4.1 · qwen2.5:14b" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
+        onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+      <datalist id="modelli-compatibili">
+        {modelli.map(m => <option key={m} value={m} />)}
+      </datalist>
+      <div style={etichetta(tema)}>{t('Come lo chiami (facoltativo)')}</div>
+      <input value={nome} onChange={e => setNome(e.target.value)}
+        placeholder={t('il mio Ollama')} autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato || !pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
+    </div>
+  )
+}
+
 export function FormPosta({ tema, ok }: Props) {
   const [utente, setUtente] = useState('')
   const [password, setPassword] = useState('')
@@ -715,6 +822,7 @@ export function FormWhatsapp({ tema, ok }: Props) {
 export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} />
   if (id === 'claude') return <FormClaude tema={tema} ok={ok} />
+  if (id === 'compatibile') return <FormCompatibile tema={tema} ok={ok} />
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />

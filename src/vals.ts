@@ -329,7 +329,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const cl = gruppi.find(g => g.id === sel) ?? gruppi[0]
   const connettori = stato.connettori
   const connOn = connettori.filter(c => c.pronto && c.collegato)
-  const claudeOn = !!connettori.find(c => c.id === 'claude')?.collegato
+  // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
+  // motore la chat e le domande funzionano uguale, e devono aprirsi
+  const claudeOn = !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
   const th = threads.find(t => t.id === thread)
   const noop = () => {}
 
@@ -861,7 +863,19 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     })),
     tonoEsempio: t(ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto),
 
-    // — il motore, la lingua, e quanto tengono le fatte —
+    // — chi fa il lavoro grosso: Claude, o un fornitore compatibile con OpenAI —
+    motore: stato.config.motore ?? 'claude',
+    compatibile: stato.config.compatibile,
+    scegliMotore: async (m: 'claude' | 'compatibile') => {
+      if ((stato.config.motore ?? 'claude') === m) return
+      // senza un fornitore collegato non c'è niente da scegliere: si apre la
+      // scheda per collegarlo, e collegarlo lo sceglie da sé
+      if (m === 'compatibile' && !stato.config.compatibile) { apriConnessioni('compatibile'); return }
+      setStato(s => ({ ...s, config: { ...s.config, motore: m } }))
+      try { await api.scegliMotore(m) } catch { mostraToast(t('Non sono riuscito a cambiare motore.')); ricaricaStato() }
+    },
+
+    // — il modello di Claude, la lingua, e quanto tengono le fatte —
     modelli: MODELLI.map(m => ({
       ...m, nota: t(m.nota),
       scelto: (stato.config.modello ?? 'claude-sonnet-5') === m.id,

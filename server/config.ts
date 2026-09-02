@@ -257,6 +257,25 @@ export type Config = {
    */
   abbonamento?: { attivo?: boolean }
   /**
+   * Chi fa il lavoro grosso: le risposte, le bozze, il feed.
+   *
+   * Assente vuol dire Claude, ed è il verso giusto: Myynd è stato messo a
+   * punto su Claude, e chi non sceglie niente deve trovarsi la qualità su cui
+   * è stato costruito. `compatibile` manda quel lavoro al fornitore qui sotto
+   * — e vale solo se il fornitore c'è davvero: una scelta senza un indirizzo
+   * dietro torna a Claude senza dirlo due volte.
+   */
+  motore?: 'claude' | 'compatibile'
+  /**
+   * Un fornitore che parla la lingua di OpenAI: OpenAI stessa, OpenRouter,
+   * Groq, Mistral — o Ollama e LM Studio su questa macchina.
+   *
+   * `url` è la base, fino a `/v1` compreso. La `chiave` manca quando il
+   * fornitore è in casa e non ne vuole una. `nome` è come lo chiama lei nelle
+   * preferenze: «il mio Ollama», non un indirizzo.
+   */
+  compatibile?: { url: string; chiave?: string; modello: string; nome?: string }
+  /**
    * Di che azienda è questa installazione.
    *
    * Serve a una cosa sola: scegliere quale cartella di automazioni le
@@ -462,6 +481,13 @@ export function pubblica(c: Config = leggi()) {
     // che va a vedere se c'è davvero invece di fidarsi del file
     locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },
     abbonamento: { attivo: c.abbonamento?.attivo === true },
+    // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo
+    // uno scollega non deve far credere alla schermata che ci sia un motore
+    motore: c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
+    // l'indirizzo e il modello escono, la chiave no
+    compatibile: c.compatibile
+      ? { collegato: true, url: c.compatibile.url, modello: c.compatibile.modello, nome: c.compatibile.nome ?? null }
+      : null,
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle } : null,
     notion: c.notion ? { collegato: true } : null,
