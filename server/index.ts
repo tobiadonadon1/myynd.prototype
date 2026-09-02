@@ -335,7 +335,9 @@ app.get('/api/stato', (_req, res) => {
     // non può girare: la scheda lo dice invece di chiedere un client ID e fallire
     connettori: CATALOGO.filter(v => ospitato.disponibile(v.id)).map(v => ({
       ...v,
-      ...(ospitato.fermoSulServer(v.id) ? { pronto: false, nota: 'Non ancora disponibile su questo server.' } : {}),
+      // solo su una scheda che *sarebbe* offerta: se il catalogo la dà già per
+      // «arriva presto», la sua nota dice qualcosa di più utile di questa
+      ...(v.pronto && ospitato.fermoSulServer(v.id) ? { pronto: false, nota: 'Non ancora disponibile su questo server.' } : {}),
       collegato:
         v.id === 'posta' ? !!c.posta :
         v.id === 'desktop' ? !!c.desktop :

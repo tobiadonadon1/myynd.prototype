@@ -66,9 +66,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
     setSincronizzando(null)
   }
 
-  const tutti = s?.connettori.filter(c => c.pronto) ?? []
+  const tutti = s?.connettori.filter(c => c.pronto || c.collegato) ?? []
   const pronti = soloQuesta ? tutti.filter(c => c.id === soloQuesta) : tutti
-  const dopo = soloQuesta ? [] : (s?.connettori.filter(c => !c.pronto) ?? [])
+  const dopo = soloQuesta ? [] : (s?.connettori.filter(c => !c.pronto && !c.collegato) ?? [])
   const messaFuoco = !!soloQuesta && pronti.length === 1
 
   // Quello che si può collegare senza chiedere niente a nessuno: le cartelle

@@ -385,7 +385,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // «Da fare» è dentro l'app e si dichiara collegato sempre: contarlo fra le
   // fonti diceva «1 fonte» a chi non aveva collegato niente, e la stessa
   // schermata sotto diceva «non hai collegato niente»
-  const connOn = connettori.filter(c => c.pronto && c.collegato && c.id !== 'mind2do')
+  const connOn = connettori.filter(c => c.collegato && c.id !== 'mind2do')
   // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
   // motore la chat e le domande funzionano uguale, e devono aprirsi
   const claudeOn = !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
@@ -1010,7 +1010,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // Posta, non l'elenco di tutto da ricominciare a cercare
       id: c.id, nome: c.nome, nota: c.nota, onClick: () => apriConnessioni(c.id)
     })),
-    connFuturi: connettori.filter(c => !c.pronto).map(c => ({ id: c.id, nome: c.nome, nota: c.nota })),
+    // una che arriva presto ma è già collegata sta fra le attive, non fra le future
+    connFuturi: connettori.filter(c => !c.pronto && !c.collegato).map(c => ({ id: c.id, nome: c.nome, nota: c.nota })),
 
     // — ricerca —
     searchOpen: search, query,

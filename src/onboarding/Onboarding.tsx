@@ -34,7 +34,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
   const [nome, setNome] = useState(stato.config.nome ?? '')
   const [ruolo, setRuolo] = useState(stato.config.ruolo ?? '')
 
-  const collegati = s.connettori.filter(c => c.pronto && c.collegato)
+  const collegati = s.connettori.filter(c => c.collegato)
   const colori = collegati.length ? collegati.map(c => COLORI[c.id] ?? '#C4623B') : ['#8A7A6A']
 
   useEffect(() => {
@@ -430,8 +430,9 @@ function Connetti({ s, ricarica, avanti, salta }: {
   // motore, non una fonte, e si collega dalle preferenze
   // «Da fare» è collegato da solo, sempre: contarlo qui rendeva vero
   // «1 collegata» a chi non aveva collegato niente
-  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude' && c.id !== 'compatibile' && c.id !== 'mind2do')
-  const dopo = s.connettori.filter(c => !c.pronto)
+  const pronti = s.connettori.filter(c =>
+    (c.pronto || c.collegato) && c.id !== 'claude' && c.id !== 'compatibile' && c.id !== 'mind2do')
+  const dopo = s.connettori.filter(c => !c.pronto && !c.collegato)
   const quanti = pronti.filter(c => c.collegato).length
 
   return (
