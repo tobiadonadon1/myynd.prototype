@@ -1427,16 +1427,16 @@ export const frasi = {
     ? `Downloaded as ${nome}. Upload it on the other Myynd.` : `Scaricato come ${nome}. Caricalo sull'altro Myynd.`,
 
   traslocoArrivato: (documenti: number, automazioni: number) => corrente === 'en'
-    ? `Arrived: ${documenti} documents, ${automazioni} automations. Reloading…`
-    : `Arrivato: ${documenti} documenti, ${automazioni} automazioni. Ricarico…`,
+    ? `Arrived: ${documenti} document${documenti === 1 ? '' : 's'}, ${automazioni} automation${automazioni === 1 ? '' : 's'}. Reloading…`
+    : `Arrivato: ${documenti} document${documenti === 1 ? 'o' : 'i'}, ${automazioni} automazion${automazioni === 1 ? 'e' : 'i'}. Ricarico…`,
 
   /** Chi ha scritto quella riga del ritratto, e quando. */
   scrittoDaMe: (quando: string) => corrente === 'en'
     ? `Written by Myynd on ${quando}, from what it has learned` : `Scritto da Myynd il ${quando}, da quello che ha imparato`,
 
   ritrattoAggiornato: (blocchi: number, da: number) => corrente === 'en'
-    ? `${blocchi === 1 ? '1 line' : `${blocchi} lines`} rewritten, from ${da} things it has noticed`
-    : `${blocchi === 1 ? '1 riga riscritta' : `${blocchi} righe riscritte`}, da ${da} cose che ha notato`,
+    ? `${blocchi === 1 ? '1 line' : `${blocchi} lines`} rewritten, from ${da} thing${da === 1 ? '' : 's'} it has noticed`
+    : `${blocchi === 1 ? '1 riga riscritta' : `${blocchi} righe riscritte`}, da ${da} cos${da === 1 ? 'a' : 'e'} che ha notato`,
 
   /** Quanti documenti guarderebbe adesso: la risposta dell'anteprima. */
   neGuarderebbe: (n: number) => corrente === 'en'
@@ -1470,7 +1470,8 @@ export const frasi = {
   segnatoRicordo: (cosa: string) => corrente === 'en'
     ? `Noted. And I will remember: ${cosa}` : `Segnato. E me lo ricordo: ${cosa}`,
   documentiEGruppi: (docs: string, gruppi: number) => corrente === 'en'
-    ? `${docs} documents · ${gruppi} groups` : `${docs} documenti · ${gruppi} gruppi`,
+    ? `${docs} document${docs === '1' ? '' : 's'} · ${gruppi} group${gruppi === 1 ? '' : 's'}`
+    : `${docs} document${docs === '1' ? 'o' : 'i'} · ${gruppi} grupp${gruppi === 1 ? 'o' : 'i'}`,
   tuttoDa: (fonte: string) => corrente === 'en'
     ? `Everything that came from ${fonte}. Click a node to filter, or ask below.`
     : `Tutto quello che è arrivato da ${fonte}. Clicca un nodo per filtrare, o chiedi qui sotto.`,
@@ -1480,7 +1481,8 @@ export const frasi = {
     : `Il certificato è intestato a ${nome}: normale su questo provider.`,
   collegabiliOra: (n: number) => corrente === 'en'
     ? (n === 1 ? 'I can connect one right now' : `I can connect ${n} right now`)
-    : (n === 1 ? 'Posso collegarne uno adesso' : 'Posso collegarne due adesso'),
+    // «due» era scritto a mano, e usciva anche con tre o con cinque
+    : (n === 1 ? 'Posso collegarne uno adesso' : `Posso collegarne ${n} adesso`),
   avantiCollegate: (n: number) => corrente === 'en'
     ? (n === 1 ? 'Next · 1 connected' : `Next · ${n} connected`)
     : (n === 1 ? 'Avanti · 1 collegata' : `Avanti · ${n} collegate`),
@@ -1488,15 +1490,18 @@ export const frasi = {
     ? (n === 1 ? '1 document.' : `${n} documents.`)
     : (n === 1 ? '1 documento.' : `${n} documenti.`),
   documentiDentro: (n: string) => corrente === 'en'
-    ? `${n} documents inside. Ask it something.` : `${n} documenti dentro. Chiedile qualcosa.`,
+    ? `${n} document${n === '1' ? '' : 's'} inside. Ask it something.`
+    : `${n} document${n === '1' ? 'o' : 'i'} dentro. Chiedile qualcosa.`,
   messeDaParte: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 thing set aside.' : `${n} things set aside.`)
     : (n === 1 ? '1 cosa messa da parte.' : `${n} cose messe da parte.`),
 
-  documentiLetti: (n: string) => corrente === 'en' ? `${n} documents read` : `${n} documenti letti`,
+  documentiLetti: (n: string) => corrente === 'en'
+    ? `${n} document${n === '1' ? '' : 's'} read` : `${n} document${n === '1' ? 'o letto' : 'i letti'}`,
 
   attiviDaCollegare: (attivi: number, da: number) =>
-    corrente === 'en' ? `${attivi} active · ${da} to connect` : `${attivi} attivi · ${da} da collegare`,
+    corrente === 'en'
+      ? `${attivi} active · ${da} to connect` : `${attivi} attiv${attivi === 1 ? 'o' : 'i'} · ${da} da collegare`,
 
   /** Frasi che contengono un pezzo di interfaccia — un percorso, un comando. */
   doveStannoIDati: (dir: ReactNode, db: ReactNode, cfg: ReactNode): ReactNode[] =>
@@ -1557,10 +1562,12 @@ export const frasi = {
       ? (docs ? `${docs} documents` : 'connected')
       : (docs ? `${docs} documenti` : 'collegato'),
 
-  nDocumenti: (n: string) => corrente === 'en' ? `${n} documents` : `${n} documenti`,
+  nDocumenti: (n: string) => corrente === 'en'
+    ? `${n} document${n === '1' ? '' : 's'}` : `${n} document${n === '1' ? 'o' : 'i'}`,
 
   cercaFra: (n: string) =>
-    corrente === 'en' ? `Search ${n} documents…` : `Cerca fra ${n} documenti…`,
+    corrente === 'en'
+      ? `Search ${n} document${n === '1' ? '' : 's'}…` : `Cerca fra ${n} document${n === '1' ? 'o' : 'i'}…`,
 
   // — la lista: i passi del lavoro su una riga affidata. Il server manda
   //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —
