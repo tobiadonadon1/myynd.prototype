@@ -363,6 +363,16 @@ app.get('/api/stato', (_req, res) => {
     })),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
+    /*
+     * Il conto a secco, se risulta.
+     *
+     * Non è una domanda ad Anthropic — costerebbe una chiamata a ogni apertura
+     * di schermata. È quello che si è già scoperto: l'ultima volta che una
+     * richiesta è stata respinta per soldi, e non ne è ancora passata una buona.
+     * Serve alla schermata per dirlo con un cartellino invece che con una riga
+     * rossa dentro una chat, che è dove finora si perdeva.
+     */
+    credito: mod.mancaIlCredito(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
@@ -537,6 +547,12 @@ app.post('/api/connettori/claude/ambiente', async (_req, res) => {
   const e = await claude.prova(k)
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   cfg.aggiorna({ claude: { apiKey: k } })
+  res.json({ ok: true, ...(e.avviso ? { avviso: e.avviso } : {}), ...(e.dettaglio ? { dettaglio: e.dettaglio } : {}) })
+})
+
+/** «Ho capito»: il cartellino del credito si chiude finché non ricapita. */
+app.post('/api/credito/visto', (_req, res) => {
+  mod.scordaIlCredito()
   res.json({ ok: true })
 })
 
@@ -588,7 +604,9 @@ app.post('/api/connettori/claude', async (req, res) => {
     const esito = await claude.prova(apiKey)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ claude: { apiKey } })
-    res.json({ ok: true, ...(esito.avviso ? { avviso: esito.avviso } : {}) })
+    // `avviso` è una frase nostra e passa dal dizionario; `dettaglio` è la frase
+    // di Anthropic, e va riportata com'è — è quella che dice cosa fare
+    res.json({ ok: true, ...(esito.avviso ? { avviso: esito.avviso } : {}), ...(esito.dettaglio ? { dettaglio: esito.dettaglio } : {}) })
   } catch (e) { errore(res, e) }
 })
 

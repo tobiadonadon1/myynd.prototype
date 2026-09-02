@@ -522,10 +522,10 @@ const SEZIONI: Sezione[] = [
             }
           },
           {
-            nome: { it: '«Il modello … non accetta questa richiesta»', en: '“The model … does not accept this request”' },
+            nome: { it: '«Il modello ha rifiutato la richiesta»', en: '“The model refused the request”' },
             testo: {
-              it: 'Il modello scelto ha rifiutato la richiesta. In {{preferenze}}, sotto {{modello}}, scegli Sonnet 5 e riprova.',
-              en: 'The chosen model refused the request. In {{preferenze}}, under {{modello}}, pick Sonnet 5 and try again.'
+              it: 'La chiave va bene: è il modello scelto che non accetta le richieste che fa Myynd. In {{preferenze}}, sotto {{modello}}, scegli Sonnet 5 e riprova. Collegare la chiave non è mai bloccato da questo: si salva lo stesso.',
+              en: 'The key is fine: it is the chosen model that does not accept the requests Myynd makes. In {{preferenze}}, under {{modello}}, pick Sonnet 5 and try again. Connecting the key is never blocked by this: it is saved anyway.'
             }
           },
           {

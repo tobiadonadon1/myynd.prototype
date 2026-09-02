@@ -95,6 +95,10 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
   // la chiave è buona ma il conto non ha credito: si salva, e prima di andare
   // avanti lo si dice — altrimenti la prima risposta che non arriva sembra un guasto
   const [avviso, setAvviso] = useState('')
+  // la frase con cui Anthropic ha detto di no, testuale: è l'unica che dice
+  // *cosa* è successo, e riassumerla è esattamente l'errore che ha fermato una
+  // cliente due volte sulla stessa schermata
+  const [dettaglio, setDettaglio] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [nellAmbiente, setNellAmbiente] = useState(false)
 
@@ -105,7 +109,10 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
 
   const usaAmbiente = async () => {
     setOccupato(true); setErr('')
-    try { await api.usaChiaveAmbiente(); ok() }
+    try {
+      const r = await api.usaChiaveAmbiente()
+      if (r.avviso) { setAvviso(r.avviso); setDettaglio(r.dettaglio ?? '') } else ok()
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -115,16 +122,34 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
     try {
       const r = await api.collegaClaude(apiKey)
       setApiKey('')
-      if (r.avviso) setAvviso(r.avviso); else ok()
+      if (r.avviso) { setAvviso(r.avviso); setDettaglio(r.dettaglio ?? '') } else ok()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
 
+  /*
+   * La chiave è salvata, ma c'è qualcosa da sapere.
+   *
+   * Il bottone dice «Avanti» e non «Riprova»: da qui non si torna indietro e
+   * non si è sbagliato niente. Il credito si aggiunge su un altro sito, il
+   * modello si cambia in un'altra schermata, e in tutti e due i casi il posto
+   * giusto in cui trovarsi *adesso* è il passo successivo. Fermare qui chi ha
+   * appena incollato una chiave che funziona è il difetto che stiamo correggendo.
+   */
   if (avviso) {
     return (
       <div>
         <div style={{ ...nota(tema), overflowWrap: 'anywhere' }}>{t(avviso)}</div>
-        <Conferma onClick={ok} occupato={false} tema={tema}>{t('Ho capito')}</Conferma>
+        {dettaglio && (
+          <div style={{
+            marginTop: 10, padding: '9px 11px', borderRadius: 10,
+            background: tema === 'scuro' ? 'rgba(255,255,255,.06)' : 'rgba(34,39,31,.05)',
+            fontSize: '12px', lineHeight: 1.5,
+            color: tema === 'scuro' ? 'rgba(244,239,232,.55)' : 'rgba(34,39,31,.6)',
+            maxHeight: 96, overflowY: 'auto', overflowWrap: 'anywhere'
+          }}>{dettaglio}</div>
+        )}
+        <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
       </div>
     )
   }

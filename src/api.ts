@@ -60,6 +60,13 @@ export type Stato = {
     perGruppo: { gruppo: string; n: number }[]
   }
   connettori: Connettore[]
+  /**
+   * La frase con cui il fornitore ha detto «niente credito», o `null`.
+   *
+   * È sua e resta nella sua lingua: è una citazione, non una riga dell'app. Le
+   * nostre parole attorno stanno nel cartellino e passano dal dizionario.
+   */
+  credito: string | null
   suggerimentiDesktop: string[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
@@ -731,7 +738,7 @@ export const api = {
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
 
   collegaClaude: (apiKey: string) =>
-    json<{ ok: true; avviso?: string }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),
+    json<{ ok: true; avviso?: string; dettaglio?: string }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),
 
   /** Ospitati: l'indirizzo a cui andare a dire di sì. Si torna da soli. */
   avviaGoogle: () => json<{ dove: string }>('/api/connettori/google/avvia', { method: 'POST', body: '{}' }),
@@ -1014,7 +1021,10 @@ export const api = {
   scopriPosta: (email: string) =>
     json<{ host: string | null; come?: string }>(`/api/connettori/posta/scopri?email=${encodeURIComponent(email)}`),
   chiaveNellAmbiente: () => json<{ presente: boolean }>('/api/connettori/claude/ambiente'),
-  usaChiaveAmbiente: () => json<{ ok: true }>('/api/connettori/claude/ambiente', { method: 'POST' }),
+  usaChiaveAmbiente: () => json<{ ok: true; avviso?: string; dettaglio?: string }>('/api/connettori/claude/ambiente', { method: 'POST' }),
+
+  /** «Ho capito»: il cartellino del credito si chiude finché non ricapita. */
+  creditoVisto: () => json<{ ok: true }>('/api/credito/visto', { method: 'POST' }),
 
   /**
    * Cosa c'è dentro. Il grafo arriva solo se lo si chiede: costruirlo costa,

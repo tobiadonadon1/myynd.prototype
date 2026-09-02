@@ -214,6 +214,26 @@ export function chiudiIndici() {
 }
 
 /**
+ * Una colonna aggiunta solo se non c'è già.
+ *
+ * Serve alle quattro colonne che anche `rimetti()` sa rimettere. Le due cose
+ * possono incontrarsi, ed è già successo: `rimetti()` gira all'apertura, vede
+ * che `documenti.filo` manca su un database fermo alla 20, e la aggiunge —
+ * poi tocca alla migrazione 21 → 22, che la aggiunge di nuovo e muore su
+ * «duplicate column name: filo». Da lì l'indice non si apre più.
+ *
+ * La lezione è che una riparazione automatica e una migrazione parlano della
+ * stessa colonna, e allora devono essere tutte e due indifferenti a chi è
+ * arrivato prima. `rimetti()` lo era già; questa lo rende vero anche
+ * dall'altra parte.
+ */
+function colonna(d: DatabaseSync, tabella: string, nome: string, tipo: string) {
+  const ci = d.prepare(`PRAGMA table_info(${tabella})`).all() as { name: string }[]
+  if (ci.some(c => c.name === nome)) return
+  d.exec(`ALTER TABLE ${tabella} ADD COLUMN ${nome} ${tipo}`)
+}
+
+/**
  * Le migrazioni, in ordine: l'indice i porta dallo schema i allo schema i+1.
  * `PRAGMA user_version` dice dove siamo. Aggiungere uno schema significa
  * aggiungere una voce in fondo, mai modificarne una già uscita — quella l'ha
@@ -760,6 +780,7 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     d.exec('CREATE INDEX IF NOT EXISTS idx_doc_indicizzato ON documenti(indicizzato DESC)')
   },
 
+
   // 21 → 22 · il filo di ogni email.
   //
   //   Una ricerca trova il messaggio con le parole giuste, e quasi mai basta
@@ -769,10 +790,8 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   l'oggetto ripulito — e con l'indice si tirano su i fratelli di un
   //   risultato in una query sola. Vuoto per tutto quello che non è posta.
   d => {
-    d.exec(`
-      ALTER TABLE documenti ADD COLUMN filo TEXT;
-      CREATE INDEX IF NOT EXISTS idx_doc_filo ON documenti(filo);
-    `)
+    colonna(d, 'documenti', 'filo', 'TEXT')
+    d.exec('CREATE INDEX IF NOT EXISTS idx_doc_filo ON documenti(filo)')
   },
 
   // 22 → 23 · quanto è costato ragionare, chiamata per chiamata.
@@ -814,7 +833,7 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
    * altrove.
    */
   d => {
-    d.exec('ALTER TABLE documenti ADD COLUMN inviato INTEGER NOT NULL DEFAULT 0')
+    colonna(d, 'documenti', 'inviato', 'INTEGER NOT NULL DEFAULT 0')
   },
 
   // 24 → 25 · quante bozze ha fatto fare oggi un'automazione.
@@ -828,8 +847,8 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   ripetere in un solo `exec` su ogni versione di SQLite, e una migrazione
   //   che fallisce a metà è il modo peggiore di scoprirlo.
   d => {
-    d.exec('ALTER TABLE automazioni ADD COLUMN giorno TEXT')
-    d.exec('ALTER TABLE automazioni ADD COLUMN bozze INTEGER NOT NULL DEFAULT 0')
+    colonna(d, 'automazioni', 'giorno', 'TEXT')
+    colonna(d, 'automazioni', 'bozze', 'INTEGER NOT NULL DEFAULT 0')
   }
 
 ]
@@ -934,37 +953,44 @@ function migra(db: DatabaseSync, file: string) {
       'Stai aprendo un indice scritto da una versione più nuova: aggiorna Myynd invece di aprirlo.'
     )
   }
-  /*
-   * Prima dell'uscita anticipata, e non dopo.
-   *
-   * Un database «già alla versione giusta» è esattamente quello che può avere
-   * un buco: se una migrazione è stata infilata in mezzo alla lista, la sua
-   * versione è giusta e la colonna non c'è. Mettere la riparazione dopo questo
-   * return voleva dire non ripararlo mai.
-   */
-  rimetti(db)
-  if (versione === MIGRAZIONI.length) return
+  if (versione < MIGRAZIONI.length) {
+    // Un'istantanea se c'è qualcosa da perdere. La condizione non è «versione > 0»:
+    // proprio i database più vecchi stanno a user_version 0, e sono quelli che
+    // hanno più bisogno della copia.
+    const gia = db.prepare(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'documenti'"
+    ).get() as { n: number }
+    const quanti = gia.n ? (db.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }).n : 0
+    if (quanti > 0) istantanea(db, file, versione)
 
-  // Un'istantanea se c'è qualcosa da perdere. La condizione non è «versione > 0»:
-  // proprio i database più vecchi stanno a user_version 0, e sono quelli che
-  // hanno più bisogno della copia.
-  const gia = db.prepare(
-    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'documenti'"
-  ).get() as { n: number }
-  const quanti = gia.n ? (db.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }).n : 0
-  if (quanti > 0) istantanea(db, file, versione)
-
-  for (let v = versione; v < MIGRAZIONI.length; v++) {
-    db.exec('BEGIN')
-    try {
-      MIGRAZIONI[v](db)
-      db.exec(`PRAGMA user_version = ${v + 1}`)
-      db.exec('COMMIT')
-    } catch (e) {
-      db.exec('ROLLBACK')
-      throw new Error(`migrazione ${v} → ${v + 1} fallita: ${e instanceof Error ? e.message : e}`)
+    for (let v = versione; v < MIGRAZIONI.length; v++) {
+      db.exec('BEGIN')
+      try {
+        MIGRAZIONI[v](db)
+        db.exec(`PRAGMA user_version = ${v + 1}`)
+        db.exec('COMMIT')
+      } catch (e) {
+        db.exec('ROLLBACK')
+        throw new Error(`migrazione ${v} → ${v + 1} fallita: ${e instanceof Error ? e.message : e}`)
+      }
     }
   }
+
+  /*
+   * Dopo le migrazioni, e mai prima.
+   *
+   * Prima stava sopra, con il ragionamento che un database «già alla versione
+   * giusta» è proprio quello che può avere un buco — vero, e infatti qui sotto
+   * il buco lo ripara comunque, perché a questo punto ogni database è alla
+   * versione giusta.
+   *
+   * Sopra, invece, faceva un danno. Su un indice fermo a una versione vecchia
+   * aggiungeva le colonne che le migrazioni ancora da fare avrebbero aggiunto
+   * loro, e quelle morivano su «duplicate column name». Provato su un indice
+   * vero fermo alla 20: non si apriva più. Una riparazione che si mette davanti
+   * al lavoro che deve riparare non è una rete di sicurezza, è un ostacolo.
+   */
+  rimetti(db)
 }
 
 export type Documento = {

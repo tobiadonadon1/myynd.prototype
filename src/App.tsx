@@ -20,6 +20,7 @@ import { Memoria } from './screens/Memoria'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
+import { Credito } from './components/Credito'
 import { Logo, Marchio } from './components/Marchio'
 import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
@@ -32,6 +33,15 @@ export default function App() {
   const [onboarding, setOnboarding] = useState(false)
   // null = pannello chiuso; '' = aperto su tutto; 'posta' = aperto su quella fonte
   const [connessioni, setConnessioni] = useState<string | null>(null)
+  /*
+   * Il cartellino del credito, già chiuso.
+   *
+   * Si tiene *quale* frase è stata chiusa, non un sì o un no: se domani il
+   * fornitore dice un'altra cosa — un tetto di spesa invece di un conto vuoto —
+   * quella è una notizia nuova e va data. Chiudere l'avviso di ieri non deve
+   * zittire quello di domani.
+   */
+  const [creditoVisto, setCreditoVisto] = useState<string | null>(null)
 
   /**
    * Il sito ascolta quello che succede nell'app.
@@ -152,6 +162,17 @@ export default function App() {
           fonte={connessioni}
           chiudi={() => setConnessioni(null)}
           cambiato={() => { api.stato().then(setStato).catch(() => {}) }}
+        />
+      )}
+      {/*
+        Sopra tutto il resto, perché è l'unica cosa che spiega perché il resto
+        non risponde. Sotto le connessioni no: ci si arriva anche da lì.
+      */}
+      {stato.credito && stato.credito !== creditoVisto && (
+        <Credito
+          motivo={stato.credito}
+          claude={stato.config.motore !== 'compatibile'}
+          chiudi={() => setCreditoVisto(stato.credito)}
         />
       )}
     </>

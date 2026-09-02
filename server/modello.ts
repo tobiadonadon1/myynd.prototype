@@ -352,6 +352,9 @@ async function chiediAlLocale(
  */
 export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, nota = '') {
   if (!u) return
+  // ha risposto: se risultava a secco, non risulta più. Il cartellino si spegne
+  // da solo appena si ricarica, senza che nessuno debba dire «ho ricaricato».
+  scordaIlCredito()
   const cache = u.cache_read_input_tokens ?? 0
   const scritti = u.cache_creation_input_tokens ?? 0
   // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
@@ -364,6 +367,97 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
     `${cache ? ` (+${cache} dalla cache)` : ''}${scritti ? ` (+${scritti} messi in cache)` : ''}` +
     ` · uscita ${u.output_tokens}`
   )
+}
+
+// — il conto senza credito —
+
+/**
+ * Perché questo pezzo esiste, e perché sta qui e non in `claude.ts`.
+ *
+ * Il credito finito non arriva come «manca il credito». Arriva come un 400,
+ * cioè come «richiesta sbagliata», dentro un errore dell'SDK il cui `message`
+ * è la riga di stato più il corpo JSON appiccicato. Chi lo legge con una
+ * regola sola sul `message` indovina finché il corpo ci sta dentro, e sbaglia
+ * il giorno che non ci sta — e allora dice all'ultima persona al mondo che ha
+ * bisogno di sentirselo dire che «il modello non accetta questa richiesta».
+ *
+ * È successo due volte alla stessa persona, il 2 settembre 2026, la seconda
+ * volta con la correzione già installata. Quindi qui non si indovina più: si
+ * apre il corpo dell'errore, si guarda la frase che ha scritto Anthropic, e
+ * *si tiene*. La frase vera vale più di qualsiasi parafrasi nostra, perché è
+ * l'unica che dice cosa fare.
+ */
+
+/** La frase che ha scritto il fornitore, non la riga che l'SDK ne fa. */
+export function motivo(e: unknown): string {
+  const corpo = (e as { error?: unknown } | null)?.error
+  if (corpo && typeof corpo === 'object') {
+    const dentro = (corpo as { error?: { message?: unknown }; message?: unknown })
+    const m = dentro.error?.message ?? dentro.message
+    if (typeof m === 'string' && m.trim()) return m.trim()
+  }
+  if (e instanceof Error) {
+    // «400 {"type":"error",…}» — se il corpo è lì dentro, si prende da lì
+    const j = e.message.indexOf('{')
+    if (j >= 0) {
+      try {
+        const b = JSON.parse(e.message.slice(j)) as { error?: { message?: unknown } }
+        const m = b.error?.message
+        if (typeof m === 'string' && m.trim()) return m.trim()
+      } catch { /* non era JSON: vale il messaggio così com'è */ }
+    }
+    return e.message
+  }
+  return String(e)
+}
+
+/**
+ * È una questione di soldi?
+ *
+ * Larga apposta. Sbagliare per eccesso qui costa una frase un po' generica;
+ * sbagliare per difetto costa un pomeriggio a chi ha appena pagato.
+ */
+const SOLDI = /credit|billing|fondi|payment|purchase|quota|spend(?:ing)? limit|top ?up|insufficient|too low|prepaid|plans ?&/i
+
+export function perIlCredito(e: unknown): boolean {
+  return SOLDI.test(motivo(e))
+}
+
+/**
+ * Che il conto sia a secco lo si scopre mentre si sta facendo altro.
+ *
+ * Chi sbatte contro il muro è quasi sempre dentro una risposta, o un'automazione
+ * che gira da sola alle sette del mattino: posti dove l'errore diventa una riga
+ * rossa che sparisce, o niente del tutto. Allora il fatto si segna qui, e la
+ * schermata lo chiede a `/api/stato` e lo dice per bene, una volta, con un
+ * cartellino invece che con una riga.
+ *
+ * Per persona, come tutto il resto: su un server due conti diversi hanno due
+ * chiavi diverse e due saldi diversi, e un `let` qui sopra sarebbe il cartellino
+ * di qualcun altro sullo schermo di chi non ha nessun problema.
+ */
+const aSecco = new Map<string, string>()
+
+export function segnaSenzaCredito(perche: string) {
+  aSecco.set(chi.adesso() ?? '', perche)
+}
+
+/**
+ * Il segno si toglie.
+ *
+ * Due chiamano: una chiamata al modello andata a buon fine — vuol dire che il
+ * credito c'è — e il cartellino chiuso a mano. Il secondo caso non è «ho
+ * pagato», è «ho capito»: se non ha pagato davvero, la prima richiesta che
+ * viene respinta lo rimette, e il cartellino torna. Un avviso che non si può
+ * chiudere è un avviso che si impara a ignorare.
+ */
+export function scordaIlCredito() {
+  aSecco.delete(chi.adesso() ?? '')
+}
+
+/** La frase da mostrare, o `null` se non risulta niente. */
+export function mancaIlCredito(): string | null {
+  return aSecco.get(chi.adesso() ?? '') ?? null
 }
 
 // — gli errori, come li direbbe lui —
@@ -388,6 +482,13 @@ export function tradotto(e: unknown): Error {
 }
 
 export function inItaliano(e: unknown): Error {
+  /*
+   * L'unica porta da cui passano tutti gli errori del modello, quindi l'unico
+   * posto onesto in cui segnare che il conto è a secco. Segnarlo dentro
+   * `traduci()` avrebbe coperto solo Claude: gli errori del fornitore
+   * compatibile arrivano già in italiano e lì non entrano nemmeno.
+   */
+  if (perIlCredito(e)) segnaSenzaCredito(motivo(e))
   if (e instanceof Error && TRADOTTI.has(e)) return e
   return tradotto(traduci(e))
 }
@@ -408,9 +509,16 @@ function traduci(e: unknown): Error {
    * righe di distanza dall'essere detto bene.
    */
   if (e instanceof Anthropic.BadRequestError) {
-    return /credit balance|billing|quota/i.test(e.message)
-      ? new Error('La chiave di Claude è senza credito. Ricaricala su console.anthropic.com.')
-      : new Error('Il modello ha rifiutato la richiesta. Prova a cambiarlo nelle preferenze.')
+    if (perIlCredito(e)) return new Error('La chiave di Claude è senza credito. Ricaricala su console.anthropic.com.')
+    /*
+     * Qui il consiglio è quello giusto: a questo punto la chiave ha già
+     * funzionato almeno una volta, quindi un 400 che non parla di soldi parla
+     * di parametri — cioè del modello scelto. Ma la ragione vera va comunque
+     * scritta nel registro: la parafrasi serve a chi guarda lo schermo, la
+     * frase di Anthropic serve a chi dovrà capirci qualcosa dopo.
+     */
+    console.warn('myynd · Claude ha rifiutato la richiesta:', motivo(e))
+    return new Error('Il modello ha rifiutato la richiesta. Prova a cambiarlo nelle preferenze.')
   }
   // un messaggio dell'SDK è in inglese, e la colonna dove finisce dice
   // «in italiano»: meglio una frase generica che una riga di libreria

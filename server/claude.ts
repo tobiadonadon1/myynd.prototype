@@ -4,7 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
-import { chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motore, parametri, segnaUso, SILENZIO_MAX } from './modello.ts'
+import { chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { cerca, documento, recenti, stessoFilo, type Documento } from './store.ts'
 import { riflua } from './testo.ts'
@@ -61,48 +61,76 @@ function ripulisci(t: string): string {
 export const collegato = claudeCollegato
 
 /**
- * La prova della chiave, fatta come la fa l'app davvero.
+ * Le tre frasi che può dire la prova, e che sono nostre.
  *
- * Prima mandava `model` e `max_tokens` e basta — nessuno dei parametri che poi
- * usa ogni singola chiamata vera. Il risultato era la peggiore specie di
- * successo: sceglievi Haiku, la prova passava perché non le mandava niente di
- * ciò che Haiku rifiuta, e da lì in avanti non funzionava più nulla senza che
- * niente avesse mai detto di no.
- *
- * Adesso la prova usa gli stessi `parametri()` del lavoro più esigente. Se il
- * modello scelto non li accetta, si scopre qui — con una frase — invece che
- * dieci minuti dopo, dentro una bozza che non arriverà mai.
+ * Fisse apposta. Quello che dice Anthropic viaggia a parte, in `dettaglio`,
+ * ed è una citazione: resta nella sua lingua perché è sua. Quello che diciamo
+ * noi passa dal dizionario come ogni altra riga dell'app — una frase costruita
+ * con dentro un pezzo di errore non ci passa, e diventa l'unica riga inglese
+ * dentro un'app in italiano, o il contrario.
  */
-export async function prova(apiKey: string): Promise<{ ok: true; avviso?: string } | { ok: false; errore: string }> {
+const SENZA_CREDITO = 'La chiave è valida, ma il conto Anthropic non ha ancora credito: aggiungilo su console.anthropic.com alla voce Billing, poi Myynd potrà ragionare.'
+const MODELLO_STRETTO = 'La chiave è valida, ma il modello scelto non accetta le richieste che fa Myynd. Cambialo nelle preferenze.'
+const RISPOSTA_STRANA = 'La chiave è valida, ma Claude ha risposto con un errore.'
+
+type Esito = { ok: true; avviso?: string; dettaglio?: string } | { ok: false; errore: string }
+
+/**
+ * La prova della chiave, in due domande invece che in una.
+ *
+ * La prima è quella vera: gli stessi `parametri()` del lavoro più esigente, così
+ * che un modello che non li accetta si scopra qui e non dieci minuti dopo dentro
+ * una bozza che non arriverà mai.
+ *
+ * La seconda si fa solo se la prima prende un 400, e serve a non buttare via una
+ * chiave buona. **Una chiave si rifiuta solo quando Anthropic dice che è
+ * sbagliata** — 401, 403, 404. Tutto il resto è un problema che si risolve
+ * altrove: il credito si ricarica, il modello si cambia. In nessuno dei due casi
+ * ha senso rimandare via chi ha appena incollato la chiave giusta.
+ */
+export async function prova(apiKey: string): Promise<Esito> {
+  const a = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 })
+  const uno = [{ role: 'user' as const, content: 'ok' }]
+
   try {
-    const a = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 })
     await a.messages.create({
       ...parametri('risposta', 2048),
-      messages: [{ role: 'user', content: 'ok' }]
+      messages: uno
     } as Anthropic.MessageCreateParamsNonStreaming)
     return { ok: true }
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return { ok: false, errore: 'Chiave API non valida.' }
     if (e instanceof Anthropic.PermissionDeniedError) return { ok: false, errore: 'La chiave non ha accesso a questo modello.' }
-    /*
-     * Il credito finito arriva come un 400, cioè come «richiesta sbagliata».
-     *
-     * Chi ha appena creato la chiave su un conto Anthropic nuovo — che nasce
-     * senza credito — finiva qui, e si vedeva dire che «il modello non accetta
-     * questa richiesta, provane un altro»: cioè l'unica cosa che di sicuro non
-     * serve, detta in italiano dentro un'app in inglese. Una cliente si è
-     * fermata esattamente su quella riga il 2 settembre 2026. La chiave è
-     * valida — l'autenticazione è passata — quindi si tiene, e si dice cosa
-     * manca davvero.
-     */
-    if (e instanceof Anthropic.BadRequestError) {
-      if (/credit balance|billing|quota/i.test(e.message)) {
-        return { ok: true, avviso: 'La chiave è valida, ma il conto Anthropic non ha ancora credito: aggiungilo su console.anthropic.com alla voce Billing, poi Myynd potrà ragionare.' }
-      }
-      return { ok: false, errore: 'Il modello scelto non accetta questa richiesta. Riprova, o cambia modello nelle preferenze.' }
-    }
     if (e instanceof Anthropic.NotFoundError) {
       return { ok: false, errore: 'Il modello scelto non esiste per questa chiave. Scegli Sonnet nelle preferenze e riprova.' }
+    }
+    if (senzaCredito(e)) { segnaSenzaCredito(motivo(e)); return { ok: true, avviso: SENZA_CREDITO, dettaglio: motivo(e) } }
+
+    /*
+     * Un 400 qualunque. E qui sta la lezione del 2 settembre 2026.
+     *
+     * Un 400 vuol dire che il server ha *letto* la richiesta — quindi la chiave
+     * è passata, quindi è buona. Rifiutarla è sbagliato in ogni caso possibile:
+     * la persona ha in mano una chiave che funziona e le stiamo dicendo di no.
+     *
+     * Cosa non andava allora si scopre con una seconda domanda, la più piccola
+     * che esista: un token, nessun parametro facoltativo. Se quella passa, il
+     * problema erano i *nostri* parametri su *quel* modello — si dice, e si
+     * manda alle preferenze, che stavolta è il consiglio giusto. Se non passa,
+     * si riporta quello che ha detto Anthropic senza reinterpretarlo: la sua
+     * frase dice cosa fare, la nostra parafrasi no. La cliente che si è fermata
+     * due volte sulla stessa schermata si era fermata proprio su una parafrasi.
+     */
+    if (e instanceof Anthropic.BadRequestError) {
+      console.warn('myynd · la prova della chiave ha preso un 400:', motivo(e))
+      try {
+        await a.messages.create({ model: modello(), max_tokens: 1, messages: uno })
+        return { ok: true, avviso: MODELLO_STRETTO, dettaglio: motivo(e) }
+      } catch (e2) {
+        if (e2 instanceof Anthropic.AuthenticationError) return { ok: false, errore: 'Chiave API non valida.' }
+        if (senzaCredito(e2)) { segnaSenzaCredito(motivo(e2)); return { ok: true, avviso: SENZA_CREDITO, dettaglio: motivo(e2) } }
+        return { ok: true, avviso: RISPOSTA_STRANA, dettaglio: motivo(e2) }
+      }
     }
     return { ok: false, errore: inItaliano(e).message }
   }
