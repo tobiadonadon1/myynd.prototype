@@ -21,7 +21,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { api, type Notizia } from '../api'
 import { frasi, loc, t } from '../lingua'
 import { Hov, LABEL } from '../ui'
-import { IconApri, IconCroce, IconGiro } from '../icons'
+import { IconApri, IconCroce, IconGiro, IconSpunta } from '../icons'
 import { Giostra } from './Giostra'
 
 /** Cosa vuol dire «oggi» per una notizia: da quante ore è entrata in rassegna. */
@@ -254,8 +254,9 @@ function Carta({ n, colore, centrata, uscendo, letta, scarta }: {
             title={t('Letta')}
             style={{ ...VETRO, height: 22, padding: '0 9px', borderRadius: 99, fontSize: '10.5px', fontWeight: 500, gap: 4 }}
             hover={{ background: 'rgba(255,255,255,.32)' }}>
+            {/* una spunta, non un emoji: la regola vale anche qui, e qui si vedeva */}
             <span>{t('Letta')}</span>
-            <span aria-hidden style={{ fontSize: 9.5 }}>📖</span>
+            <IconSpunta size={11} />
           </Hov>
         </div>
       </div>
