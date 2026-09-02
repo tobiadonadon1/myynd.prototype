@@ -21,7 +21,7 @@
 // una pagina.
 
 import { createHash } from 'node:crypto'
-import { leggi, nellaLingua , lingua } from './config.ts'
+import { cartella, leggi, nellaLingua, lingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
@@ -30,7 +30,11 @@ import * as store from './store.ts'
 const QUANTE = 8
 
 /** Quanto vale una rassegna prima di rifarla. */
-export const ORE_VALIDA = 3
+// Sei ore: quattro rassegne al giorno, che è quello che `modello.ts` dà per
+// scontato quando decide che il lavoro non è di frontiera. Con tre ore, su un
+// server acceso di notte, erano otto — e ospitati, senza un modello di casa,
+// ognuna è una chiamata pagata.
+export const ORE_VALIDA = 6
 
 /** Quanto indietro si guarda per chiamarla «di oggi». */
 const ORE_FRESCHE = 36
@@ -561,11 +565,21 @@ export async function aggiorna(forza = false): Promise<Esito> {
   // Il bottone e l'orologio possono cadere insieme: due giri in parallelo
   // vorrebbero dire trenta richieste ai giornali e due chiamate al modello per
   // una rassegna sola. Chi arriva secondo aspetta il primo e ne prende l'esito.
-  if (!inCorso) inCorso = giro().finally(() => { inCorso = null })
-  return inCorso
+  const chiave = cartella()
+  let giroInCorso = inCorso.get(chiave)
+  if (!giroInCorso) {
+    giroInCorso = giro().finally(() => { inCorso.delete(chiave) })
+    inCorso.set(chiave, giroInCorso)
+  }
+  return giroInCorso
 }
 
-let inCorso: Promise<Esito> | null = null
+/*
+ * Uno per persona. Con una variabile sola il giro di A, partito un attimo
+ * prima, diventava la risposta a B: le notizie scelte sul gusto di A, con i
+ * suoi «perché», salvate nell'indice di A e mostrate a B.
+ */
+const inCorso = new Map<string, Promise<Esito>>()
 
 async function giro(): Promise<Esito> {
   const fonti = fontiPer(lingua())

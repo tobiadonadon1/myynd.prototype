@@ -39,17 +39,23 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
    */
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
   const [sincronizzando, setSincronizzando] = useState<string | null>(null)
+  // una password IMAP scaduta, dopo «Rileggi», prima non produceva niente:
+  // il conteggio non saliva, e basta
+  const [guaio, setGuaio] = useState<string | null>(null)
 
   const ricarica = async () => { const n = await api.stato(); setS(n); return n }
   useEffect(() => { ricarica().catch(() => {}) }, [])
 
   const leggi = async (fonte: string) => {
     setSincronizzando(fonte)
+    setGuaio(null)
     try {
       await api.sincronizza(m => { if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m)) }, fonte)
       await ricarica()
       cambiato()
-    } catch { /* l'errore si vede dal conteggio che non sale */ }
+    } catch (e) {
+      setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.'))
+    }
     setSincronizzando(null)
   }
 
@@ -77,12 +83,15 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
 
   const collegaSubito = async () => {
     setCollegando(true)
+    setGuaio(null)
     try {
-      if (subito.includes('desktop') && s) await api.collegaDesktop(s.suggerimentiDesktop).catch(() => {})
-      if (subito.includes('claude')) await api.usaChiaveAmbiente().catch(() => {})
+      if (subito.includes('desktop') && s) await api.collegaDesktop(s.suggerimentiDesktop)
+      if (subito.includes('claude')) await api.usaChiaveAmbiente()
       await ricarica()
       cambiato()
       if (subito.includes('desktop')) leggi('desktop')
+    } catch (e) {
+      setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.'))
     } finally { setCollegando(false) }
   }
 
@@ -109,7 +118,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                 <Hov as="button" onClick={() => { setSoloQuesta(''); setAperto(null) }}
                   style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.6)' }}
                   hover={{ color: '#8E3F1F' }}>{t('‹ tutte le fonti')}</Hov>
-              ) : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
+              ) : guaio
+                ? <span style={{ color: '#8E3F1F', overflowWrap: 'anywhere' }}>{guaio}</span>
+                : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
             </div>
           </div>
           <button onClick={chiudi} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>

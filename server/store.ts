@@ -3,7 +3,7 @@
 
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, chmodSync, copyFileSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync } from 'node:fs'
 import { cartella } from './config.ts'
 import { radici, radice, termini } from './lingua.ts'
 
@@ -28,26 +28,61 @@ import { radici, radice, termini } from './lingua.ts'
  */
 const aperti = new Map<string, DatabaseSync>()
 
+/*
+ * Le cartelle che non si sono aperte, e quando.
+ *
+ * Un indice che non passa le migrazioni non va riprovato a ogni richiesta:
+ * ogni tentativo riapriva il file, ne faceva una copia intera in `istantanee/`
+ * e lasciava il descrittore aperto — con una scheda che interroga il server
+ * ogni pochi secondi, un disco pieno in pochi minuti. Un minuto di memoria
+ * basta a spezzare il giro e lascia riprovare quando la causa è passata.
+ */
+const guasti = new Map<string, { errore: Error; quando: number }>()
+const GUASTO_VALE = 60_000
+
 function apri(dove: string): DatabaseSync {
   if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
   const file = join(dove, 'mente.db')
   const d = new DatabaseSync(file)
   d.exec('PRAGMA journal_mode = WAL')
   d.exec('PRAGMA foreign_keys = ON')
+  // un altro processo sullo stesso file — un ridistribuzione che si sovrappone,
+  // `password.ts` lanciato sul volume vivo — non deve far esplodere la prima
+  // scrittura: si aspetta un po', poi si dice
+  d.exec('PRAGMA busy_timeout = 5000')
 
   // L'indice è una copia della casella e dei documenti: non deve essere
   // leggibile dagli altri utenti della macchina più di quanto lo sia config.json.
   for (const f of [file, `${file}-wal`, `${file}-shm`]) {
     try { if (existsSync(f)) chmodSync(f, 0o600) } catch { /* il filesystem può non supportarlo */ }
   }
-  migra(d, file)
+  try {
+    migra(d, file)
+  } catch (e) {
+    // il descrittore non deve restare appeso a un file che non useremo
+    try { d.close() } catch { /* già chiuso */ }
+    throw e
+  }
   return d
 }
 
 function mio(): DatabaseSync {
   const dove = cartella()
   let d = aperti.get(dove)
-  if (!d) { d = apri(dove); aperti.set(dove, d) }
+  if (!d) {
+    const guasto = guasti.get(dove)
+    if (guasto && Date.now() - guasto.quando < GUASTO_VALE) throw guasto.errore
+    try {
+      d = apri(dove)
+    } catch (e) {
+      const errore = e instanceof Error ? e : new Error(String(e))
+      guasti.set(dove, { errore, quando: Date.now() })
+      console.error(`myynd · non riesco ad aprire ${join(dove, 'mente.db')}:`, errore.message)
+      throw errore
+    }
+    guasti.delete(dove)
+    aperti.set(dove, d)
+  }
   return d
 }
 
@@ -70,6 +105,40 @@ const db = new Proxy({} as DatabaseSync, {
  */
 export function riversaIlWal() {
   db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+}
+
+/** Chiude e libera l'indice di una cartella sola: quello di chi sta importando, non di tutti. */
+export function chiudiIndice(dove: string) {
+  const d = aperti.get(dove)
+  if (!d) return
+  try { d.close() } catch { /* già chiuso */ }
+  aperti.delete(dove)
+}
+
+/**
+ * Questo file è un indice che sappiamo aprire?
+ *
+ * Si guarda *prima* di metterlo al posto di quello che c'è: l'intestazione di
+ * SQLite, il controllo d'integrità, e uno schema non più nuovo di questa
+ * versione. Senza, un pacco storto sostituiva una mente sana con un file che
+ * non si apre più — e la vecchia era già stata cancellata.
+ */
+export function controlla(file: string) {
+  const testa = Buffer.alloc(16)
+  const fd = openSync(file, 'r')
+  try { readSync(fd, testa, 0, 16, 0) } finally { closeSync(fd) }
+  if (testa.toString('latin1') !== 'SQLite format 3\0') {
+    throw new Error('Il file dentro il pacco non è un indice di Myynd.')
+  }
+  const d = new DatabaseSync(file, { readOnly: true })
+  try {
+    const esito = (d.prepare('PRAGMA quick_check').get() as { quick_check: string }).quick_check
+    if (esito !== 'ok') throw new Error('L’indice dentro il pacco è danneggiato.')
+    const v = (d.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+    if (v > MIGRAZIONI.length) {
+      throw new Error('L’indice dentro il pacco viene da una versione più nuova di Myynd: aggiorna prima.')
+    }
+  } finally { d.close() }
 }
 
 /** Da usare quando si finisce con una persona: chiude e libera. */
@@ -614,6 +683,15 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   //   allora quelle sono parole tue, e vanno mostrate come tali.
   d => {
     d.exec('ALTER TABLE blocchi ADD COLUMN daMe TEXT')
+  },
+
+  // 20 → 21 · un indice su «quando l'ho indicizzato».
+  //
+  //   `appenaArrivati` chiede «cos'è entrato da ieri» a ogni giro delle
+  //   automazioni e a ogni rilettura: senza indice è una lettura intera della
+  //   tabella più grossa che c'è — per ogni persona, ogni quarto d'ora.
+  d => {
+    d.exec('CREATE INDEX IF NOT EXISTS idx_doc_indicizzato ON documenti(indicizzato DESC)')
   }
 
 ]
@@ -626,7 +704,13 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
  * corrente — che durante l'apertura non è ancora questa. Un'istantanea del
  * database sbagliato non sarebbe servita a niente il giorno che serve.
  */
+/** Le copie già fatte in questo processo: una per file e versione, non una per tentativo. */
+const istantaneeFatte = new Set<string>()
+
 function istantanea(d: DatabaseSync, file: string, da: number) {
+  const segno = `${file}@${da}`
+  if (istantaneeFatte.has(segno)) return
+  istantaneeFatte.add(segno)
   const dove = join(file, '..', 'istantanee')
   if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
   // con il WAL svuotato il file principale è una copia completa

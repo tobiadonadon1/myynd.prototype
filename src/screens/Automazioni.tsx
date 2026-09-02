@@ -212,6 +212,9 @@ const uguali = (a: Filtro, b: Filtro): boolean =>
 
 export function Automazioni({ v }: { v: Vals }) {
   const [tutte, setTutte] = useState<Automazione[] | null>(null)
+  // «non sono riuscito a leggerle» è diverso da «non ce n'è nessuna»: prima
+  // un errore del server mostrava la griglia vuota e l'invito a scriverne una
+  const [guastoElenco, setGuastoElenco] = useState<string | null>(null)
   const [ricette, setRicette] = useState<StatoRicette | null>(null)
   const [raccolte, setRaccolte] = useState<Raccolta[]>([])
   const [catalogo, setCatalogo] = useState<Attrezzo[]>([])
@@ -228,8 +231,8 @@ export function Automazioni({ v }: { v: Vals }) {
 
   const carica = useCallback(() => {
     api.automazioni()
-      .then(r => { setTutte(r.automazioni); setRicette(r.ricette) })
-      .catch(() => setTutte([]))
+      .then(r => { setTutte(r.automazioni); setRicette(r.ricette); setGuastoElenco(null) })
+      .catch(e => { setTutte(null); setGuastoElenco(e instanceof Error ? t(e.message) : t('Non riesco a leggere le automazioni.')) })
     api.raccolte().then(r => setRaccolte(r.raccolte)).catch(() => { /* niente cartelle: pazienza */ })
     api.attrezzi().then(r => { setCatalogo(r.attrezzi); setCartelle(r.cartelle) })
       .catch(() => { /* il menù della chiocciola resta vuoto, il resto funziona */ })
@@ -539,7 +542,14 @@ export function Automazioni({ v }: { v: Vals }) {
             </div>
           )}
           {!tutte && (
-            <div style={{ padding: '18px 4px', fontSize: 14, color: 'rgba(34,39,31,.45)' }}>{t('carico…')}</div>
+            <div style={{ padding: '18px 4px', fontSize: 14, color: guastoElenco ? '#8E3F1F' : 'rgba(34,39,31,.45)', overflowWrap: 'anywhere' }}>
+              {guastoElenco ?? t('carico…')}
+              {guastoElenco && (
+                <Hov as="button" onClick={carica}
+                  style={{ marginLeft: 10, padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}
+                  hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Riprova')}</Hov>
+              )}
+            </div>
           )}
 
           {ricette?.repo && <Ricette stato={ricette} arrivate={(a, r) => { setTutte(a); setRicette(r) }} />}

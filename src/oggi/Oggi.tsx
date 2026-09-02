@@ -550,7 +550,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           }}
           onKeyDown={e => {
             if (e.key === 'Escape') { e.stopPropagation(); setTesto(c.risultato ?? ''); setModifico(false) }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Mandata.'), testo)
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), testo)
           }}
           aria-label={t('La bozza')}
           style={{
@@ -568,7 +568,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13 }}>
-        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Mandata.'), testo)}
+        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
           style={{
             padding: '8px 17px', borderRadius: 99, border: 'none',
             background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',

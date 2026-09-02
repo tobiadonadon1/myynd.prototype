@@ -20,6 +20,7 @@
 // si scrive un file, e non perché ci si sia ricordati di non farlo.
 
 import { randomBytes, createHash } from 'node:crypto'
+import * as chi from '../chi.ts'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { apriIlBrowser, chiediGettoni, Vivo, type Sportello } from './oauth.ts'
@@ -64,7 +65,9 @@ function sportello(chiave: string): Sportello {
  * una scadenza sua perché una finestra del browser chiusa a metà non deve
  * lasciare questo processo con un segreto vivo in pancia.
  */
-let inCorso: { chiave: string; verifica: string; scade: number } | null = null
+// per persona: due collegamenti avviati insieme da due conti non devono
+// scambiarsi il verificatore, né la chiave dell'app
+const inCorso = new Map<string, { chiave: string; verifica: string; scade: number }>()
 
 export function collegato(): boolean {
   return !!leggi().dropbox?.refresh
@@ -76,7 +79,7 @@ export async function inizia(chiave: string): Promise<{ dove: string }> {
   if (!k) throw new Error('Serve la chiave dell’app Dropbox.')
   const verifica = randomBytes(48).toString('base64url')
   const sfida = createHash('sha256').update(verifica).digest('base64url')
-  inCorso = { chiave: k, verifica, scade: Date.now() + 10 * 60_000 }
+  inCorso.set(chi.adesso() ?? '', { chiave: k, verifica, scade: Date.now() + 10 * 60_000 })
 
   const u = new URL('https://www.dropbox.com/oauth2/authorize')
   u.searchParams.set('client_id', k)
@@ -97,18 +100,20 @@ export async function inizia(chiave: string): Promise<{ dove: string }> {
 export async function finisci(codice: string): Promise<{ conto: string }> {
   const c = codice.trim()
   if (!c) throw new Error('Incolla il codice che ti ha dato Dropbox.')
-  if (!inCorso || inCorso.scade < Date.now()) {
-    inCorso = null
+  const di = chi.adesso() ?? ''
+  const avviato = inCorso.get(di)
+  if (!avviato || avviato.scade < Date.now()) {
+    inCorso.delete(di)
     throw new Error('È passato troppo tempo: ricomincia il collegamento.')
   }
-  const { chiave, verifica } = inCorso
+  const { chiave, verifica } = avviato
 
   const t = await chiediGettoni(sportello(chiave), {
     code: c,
     grant_type: 'authorization_code',
     code_verifier: verifica
   })
-  inCorso = null
+  inCorso.delete(chi.adesso() ?? '')
   if (!t.refresh_token) throw new Error('Dropbox non ha dato il permesso duraturo: riprova.')
 
   scriviConfig({ ...leggi(), dropbox: { chiave, refresh: t.refresh_token, giorni: 90 } })
@@ -124,7 +129,7 @@ export async function finisci(codice: string): Promise<{ conto: string }> {
 export function scollega() {
   const { dropbox: _via, ...resto } = leggi()
   scriviConfig(resto)
-  inCorso = null
+  inCorso.delete(chi.adesso() ?? '')
   vivo.scorda()
 }
 

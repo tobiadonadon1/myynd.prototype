@@ -28,6 +28,7 @@ import { existsSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { ConfigDesktop } from './config.ts'
+import { OSPITATO } from './ospitato.ts'
 
 /** Dove sta `claude`. Non si cerca nella PATH: un'app impacchettata non ce l'ha. */
 const DOVE = [
@@ -36,7 +37,19 @@ const DOVE = [
   '/usr/local/bin/claude'
 ]
 
+/**
+ * Su un server la risposta è «no» prima ancora di guardare.
+ *
+ * Dentro un contenitore l'eseguibile non c'è. Ma se ci fosse — chi ospita che
+ * lo installa per sé — sarebbe *il suo* account a rispondere per tutte le
+ * persone registrate, e a lavorare dentro cartelle del server, non loro. È la
+ * stessa ragione per cui il desktop non si offre ospitato (`ospitato.ts`):
+ * qui è più grave, perché non legge soltanto, agisce. Da questa riga
+ * discendono `abbonamento.pronto()`, `/api/lavoro/pronto` e `fai()`: un
+ * posto solo, e tutte e tre le strade si chiudono insieme.
+ */
 export function installato(): string | null {
+  if (OSPITATO) return null
   return DOVE.find(p => existsSync(p)) ?? null
 }
 

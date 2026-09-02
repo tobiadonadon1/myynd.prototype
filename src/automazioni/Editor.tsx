@@ -236,6 +236,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [penso, setPenso] = useState<'' | 'ottimizzo' | 'riscrivo'>('')
   const [detto, setDetto] = useState('')
   const [guaio, setGuaio] = useState('')
+  // il cestino chiede una volta: la scheda in griglia lo fa già, e due porte
+  // sulla stessa azione non devono avere due regole
+  const [sicuro, setSicuro] = useState(false)
 
   const ogni = 'quandoArriva' in quando ? 'arrivo' : quando.ogni
   const ora = 'quandoArriva' in quando ? 8 : quando.ora
@@ -570,12 +573,14 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
           <div style={{ flex: 1, minWidth: 20 }} />
 
-          <Hov as="button" onClick={butta} title={t('Buttala')} aria-label={t('Buttala')}
+          <Hov as="button" onClick={() => (sicuro ? butta() : setSicuro(true))} onMouseLeave={() => setSicuro(false)}
+            title={sicuro ? t('Sicuro?') : t('Buttala')} aria-label={sicuro ? t('Sicuro?') : t('Buttala')}
             style={{
-              display: 'grid', placeItems: 'center', width: 32, height: 32, padding: 0,
-              border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(34,39,31,.32)'
+              display: 'grid', placeItems: 'center', height: 32, width: sicuro ? 'auto' : 32, padding: sicuro ? '0 12px' : 0,
+              border: 'none', borderRadius: 99, background: sicuro ? 'rgba(196,98,59,.12)' : 'none', cursor: 'pointer',
+              color: sicuro ? '#8E3F1F' : 'rgba(34,39,31,.32)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500
             }}
-            hover={{ color: '#8E3F1F' }}><IconCestino /></Hov>
+            hover={{ color: '#8E3F1F' }}>{sicuro ? t('Sicuro?') : <IconCestino />}</Hov>
         </div>
 
         {/*

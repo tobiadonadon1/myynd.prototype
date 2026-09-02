@@ -35,10 +35,12 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <span style={riga.tipoStyle}>{t(riga.tipo)}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)' }}>{riga.fonte}{riga.ora ? ` · ${riga.ora}` : ''}</span>
+          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0, overflowWrap: 'anywhere' }}>{riga.fonte}{riga.ora ? ` · ${riga.ora}` : ''}</span>
         </div>
-        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6 }}>{riga.titolo}</div>
-        <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty' }}>
+        {/* titoli e testi li scrive il modello da oggetti di email e nomi di
+            file: una parola senza spazi non deve poter uscire dalla riga */}
+        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{riga.titolo}</div>
+        <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
           {riga.testo}
           {riga.espandibile && (
             <Hov as="button" onClick={(e: MouseEvent) => { e.stopPropagation(); riga.onToggle() }}
@@ -217,7 +219,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             una bugia: quello che chiudi lì è il testo che hai davanti, e va
             tenuto — è da lì che impara come scrivi */}
         <Hov as="button"
-          onClick={() => (pronto ? l.chiudi(c.id, t('Mandata.'), testo) : l.chiudi(c.id))}
+          onClick={() => (pronto ? l.chiudi(c.id, t('Va bene così.'), testo) : l.chiudi(c.id))}
           style={{ padding: '12px 26px', borderRadius: 99, border: 'none', background: '#FFF7F0', color: '#22271F', fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit' }}
           hover={{ background: '#FFFFFF' }}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
 
@@ -367,8 +369,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{v.heroFonte}{v.heroOra ? ` · ${v.heroOra}` : ''}</span>
           </div>
 
-          <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500 }}>{v.heroTitolo}</div>
-          <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>
+          <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
+          <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
             {v.heroTesto}
             {v.heroTagliato && (
               <Hov as="button" onClick={v.heroToggle}
@@ -623,6 +625,19 @@ function Domanda({ v }: { v: Vals }) {
 function Vuoto({ v }: { v: Vals }) {
   const senzaFonti = v.connCount === 0
   const senzaDocumenti = v.totaleDocumenti === 0
+  // Prima della risposta non si dice niente; dopo un errore si dice l'errore.
+  // Prima questa carta diceva «La tua mente è ancora vuota» anche a un 500.
+  if (!v.feedCaricato) return null
+  if (v.guastoFeed) {
+    return (
+      <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '32px 28px' }}>
+        <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(34,39,31,.82)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.guastoFeed}</div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+          <button onClick={v.ricaricaFeed} style={BOTTONE}>{t('Riprova')}</button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '32px 28px' }}>
       {/* Una riga, non tre. Quello che c'era prima spiegava anche come funziona

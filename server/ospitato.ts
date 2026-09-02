@@ -200,6 +200,29 @@ export function origineAmmessa(origin: string, portaVera: number): boolean {
  */
 export const SOLO_IN_CASA = ['desktop']
 
+/**
+ * Un host di posta che ha senso raggiungere da qui.
+ *
+ * Su un server, «collega la tua casella» con un host libero è anche «fai una
+ * richiesta di rete a quello che dico io»: la rete interna di chi ospita, il
+ * server stesso. Si escludono i nomi e gli indirizzi che di sicuro non sono un
+ * fornitore di posta. Non è una difesa completa — un nome pubblico può
+ * risolversi dove vuole — ma toglie i casi che si scrivono a mano.
+ */
+export function hostRaggiungibile(host: string): boolean {
+  if (!OSPITATO) return true
+  const h = host.trim().toLowerCase()
+  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return false
+  if (h.startsWith('[') || h.includes(':')) return false // IPv6 letterale
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h)
+  if (m) {
+    const a = Number(m[1]), b = Number(m[2])
+    if (a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
+        (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return false
+  }
+  return true
+}
+
 export function disponibile(connettore: string): boolean {
   return !OSPITATO || !SOLO_IN_CASA.includes(connettore)
 }

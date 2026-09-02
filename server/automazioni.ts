@@ -241,10 +241,22 @@ function cartelle(): string[] {
   return [...fuori, ...ricettario.cartelleScaricate(azienda), MIE()].filter(existsSync)
 }
 
-let cache: Automazione[] | null = null
+/*
+ * Una cache per cartella, non una sola.
+ *
+ * Le ricette dipendono da chi chiede: `cartelle()` passa da `cartella()` e da
+ * `leggi()`, che con più persone sullo stesso server rispondono ognuna per la
+ * sua. Con una variabile sola chi la riempiva per primo — all'avvio, il primo
+ * conto dell'elenco — decideva l'elenco per tutti: le automazioni personali di
+ * A comparivano a B, e il giro delle sette le faceva girare sull'indice di B,
+ * mentre quelle di B non giravano mai. Senza un errore da nessuna parte.
+ */
+const cache = new Map<string, Automazione[]>()
 
 export function ricette(): Automazione[] {
-  if (cache) return cache
+  const chiave = cartella()
+  const pronte = cache.get(chiave)
+  if (pronte) return pronte
   const fuori: Automazione[] = []
   const visti = new Set<string>()
   for (const c of cartelle()) {
@@ -266,12 +278,12 @@ export function ricette(): Automazione[] {
       }
     }
   }
-  cache = fuori
+  cache.set(chiave, fuori)
   return fuori
 }
 
-/** Rileggerle dal disco: serve in sviluppo, e dopo un aggiornamento. */
-export function scordaLeRicette() { cache = null }
+/** Rileggerle dal disco, per tutti: serve in sviluppo, e dopo un aggiornamento. */
+export function scordaLeRicette() { cache.clear() }
 
 // — le tue —
 

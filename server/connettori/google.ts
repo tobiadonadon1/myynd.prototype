@@ -27,6 +27,7 @@ import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
+import * as chi from '../chi.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
 
@@ -191,25 +192,33 @@ export function scollega() {
 
 // — parlare con le API —
 
-/** Un token d'accesso vivo. Dura un'ora: si tiene in memoria, non su disco. */
-let inCorso: { token: string; scade: number } | null = null
+/**
+ * Un token d'accesso vivo, per persona. Dura un'ora: si tiene in memoria, non
+ * su disco. La chiave è chi chiede: con una variabile sola, il giro di sfondo
+ * che passa da un conto all'altro usava il token di A per leggere la casella
+ * «di B» — cioè leggeva quella di A, e la metteva nell'indice di B.
+ */
+const inCorso = new Map<string, { token: string; scade: number }>()
 
 async function token(): Promise<string> {
   const g = leggi().google
   if (!g?.refresh) throw new Error('Collega Google e potrò farlo.')
-  if (inCorso && inCorso.scade > Date.now() + 60_000) return inCorso.token
+  const di = chi.adesso() ?? ''
+  const vivo = inCorso.get(di)
+  if (vivo && vivo.scade > Date.now() + 60_000) return vivo.token
   const t = await chiediToken({
     client_id: g.clientId,
     ...(g.clientSecret ? { client_secret: g.clientSecret } : {}),
     refresh_token: g.refresh,
     grant_type: 'refresh_token'
   })
-  inCorso = { token: t.access_token, scade: Date.now() + Number(t.expires_in ?? 3600) * 1000 }
-  return inCorso.token
+  const nuovo = { token: t.access_token, scade: Date.now() + Number(t.expires_in ?? 3600) * 1000 }
+  inCorso.set(di, nuovo)
+  return nuovo.token
 }
 
-/** Da usare nei test: dimentica il token in memoria. */
-export function scordaIlToken() { inCorso = null }
+/** Quando si scollega, e nei test: dimentica il token di chi sta chiedendo. */
+export function scordaIlToken() { inCorso.delete(chi.adesso() ?? '') }
 
 async function api<T>(url: string, opz: RequestInit = {}): Promise<T> {
   const r = await fetch(url, {

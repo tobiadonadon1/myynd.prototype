@@ -22,6 +22,7 @@ import * as store from './store.ts'
 import * as claude from './claude.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as memoria from './memoria.ts'
+import * as chi from './chi.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -31,12 +32,23 @@ export type Evento =
   | { fase: 'richiamato'; id: string }
   | { fase: 'cambiato' }
 
-const ascoltatori = new Set<(e: Evento) => void>()
+/*
+ * Ogni ascoltatore sa di chi vuole sentire.
+ *
+ * Il filo dei compiti è uno per finestra aperta, e le finestre aperte sono di
+ * persone diverse: senza questa chiave un `pronto` — con dentro la bozza, che
+ * di solito è una email — partiva verso *tutti* i browser collegati, e ognuno
+ * lo scartava solo perché non riconosceva l'id. Il testo però era già uscito.
+ * Si consegna soltanto a chi ha lo stesso nome di chi sta annunciando.
+ */
+type Ascoltatore = { f: (e: Evento) => void; di: string | null }
+const ascoltatori = new Set<Ascoltatore>()
 
-/** Chi vuole sapere come vanno i compiti affidati. Torna come smettere. */
-export function ascolta(f: (e: Evento) => void): () => void {
-  ascoltatori.add(f)
-  return () => { ascoltatori.delete(f) }
+/** Chi vuole sapere come vanno i compiti affidati — i suoi. Torna come smettere. */
+export function ascolta(f: (e: Evento) => void, di: string | null = chi.adesso()): () => void {
+  const a: Ascoltatore = { f, di }
+  ascoltatori.add(a)
+  return () => { ascoltatori.delete(a) }
 }
 
 /**
@@ -70,14 +82,32 @@ export function annunciaPronto(id: string) {
 }
 
 function annuncia(e: Evento) {
-  // un ascoltatore che esplode non deve fermare gli altri né il lavoro
-  for (const f of ascoltatori) { try { f(e) } catch { /* chi ascolta si arrangia */ } }
+  const di = chi.adesso()
+  for (const a of ascoltatori) {
+    if (a.di !== di) continue
+    // un ascoltatore che esplode non deve fermare gli altri né il lavoro
+    try { a.f(e) } catch { /* chi ascolta si arrangia */ }
+  }
 }
 
-const coda: string[] = []
+/*
+ * Ogni voce porta con sé di chi è.
+ *
+ * La coda è una sola per tutto il processo, ma i compiti no: con più persone
+ * sullo stesso server il giro parte nel contesto di chi ha affidato per primo,
+ * e una riga di B messa in fila mentre A stava girando veniva cercata
+ * nell'indice di A — non trovata, e lasciata «da Myynd» fino al prossimo
+ * riavvio. Qui la persona si segna quando la riga entra, e si rimette prima di
+ * lavorarla. Gli id li fa il client, quindi da soli non bastano a distinguere.
+ */
+type Voce = { utente: string | null; id: string }
+const coda: Voce[] = []
 let allOpera = false
 /** Quello su cui il modello sta lavorando *adesso*. Non è in coda: è già uscito. */
 let inCorso: string | null = null
+
+/** La chiave di una riga: la persona e l'id insieme. */
+const chiave = (id: string, utente: string | null = chi.adesso()) => `${utente ?? ''}·${id}`
 
 /**
  * I compiti che hai richiamato indietro mentre Myynd ci lavorava.
@@ -105,17 +135,19 @@ export function affida(id: string, modo: string) {
   // occupi tutto lui — allora bisogna rifarlo. Prima si usciva e basta, e la
   // colonna nuova si accendeva per un istante per poi tornare indietro da sola:
   // era questo il «a volte non funziona».
-  if (c.modo === modo && (coda.includes(id) || inCorso === id)) return
+  const utente = chi.adesso()
+  const k = chiave(id, utente)
+  if (c.modo === modo && (coda.some(v => v.id === id && v.utente === utente) || inCorso === k)) return
 
   // quello che sta girando adesso non serve più: si butta invece di lasciarlo
   // scrivere una bozza del modo vecchio sopra a quella che stai per chiedere
-  if (inCorso === id) richiamati.add(id)
+  if (inCorso === k) richiamati.add(k)
 
-  const dove = coda.indexOf(id)
+  const dove = coda.findIndex(v => v.id === id && v.utente === utente)
   if (dove >= 0) coda.splice(dove, 1)
 
   store.affidaCompito(id, modo)
-  coda.push(id)
+  coda.push({ utente, id })
   // il giro va avanti da solo: se esplode non deve portarsi dietro il processo,
   // e soprattutto non deve lasciare in mezzo alla strada quelli ancora in fila
   void gira().catch(e => console.error('myynd · la coda dei compiti si è fermata:', e))
@@ -126,17 +158,20 @@ async function gira() {
   allOpera = true
   try {
     for (;;) {
-      const id = coda.shift()
-      if (!id) break
-      inCorso = id
+      const voce = coda.shift()
+      if (!voce) break
+      const k = chiave(voce.id, voce.utente)
+      inCorso = k
       try {
-        await svolgiUno(id)
+        // si lavora come la persona che l'ha affidato, non come chi ha
+        // acceso il giro: è la differenza fra il suo indice e quello di un altro
+        await (voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id)) : svolgiUno(voce.id))
       } catch (e) {
         // un compito che esplode non deve fermare quelli dietro di lui
-        console.error('myynd · compito', id, e)
+        console.error('myynd · compito', voce.id, e)
       } finally {
         inCorso = null
-        richiamati.delete(id)
+        richiamati.delete(k)
       }
     }
   } finally {
@@ -156,7 +191,7 @@ async function svolgiUno(id: string) {
     return
   }
   // può essere stato tolto o richiamato mentre era in fila: non è un errore
-  if (!c || c.stato !== 'delegato' || richiamati.has(id)) return
+  if (!c || c.stato !== 'delegato' || richiamati.has(chiave(id))) return
 
   annuncia({ fase: 'preso', id })
 
@@ -172,13 +207,13 @@ async function svolgiUno(id: string) {
     )
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano
-    if (richiamati.has(id)) return
+    if (richiamati.has(chiave(id))) return
 
     // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
     // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
     // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
     const { chiede } = await claude.chiedeAiuto(c.testo, testo)
-    if (richiamati.has(id)) return
+    if (richiamati.has(chiave(id))) return
 
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
@@ -189,13 +224,13 @@ async function svolgiUno(id: string) {
     // che funzionava già — non vale la pena bloccare una riga per delle opzioni.
     if (chiede) {
       const righe = await claude.domandeDaFare(c.testo, testo).catch(() => [])
-      if (righe.length && !richiamati.has(id)) store.chiediSuCompito(id, righe)
+      if (righe.length && !richiamati.has(chiave(id))) store.chiediSuCompito(id, righe)
     }
 
     const fatto = store.compito(id)
     if (fatto) annuncia({ fase: chiede ? 'chiede' : 'pronto', id, compito: fatto })
   } catch (e) {
-    if (richiamati.has(id)) return
+    if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
     try {
       if (!store.guaioCompito(id, guaio)) return
@@ -215,12 +250,14 @@ async function svolgiUno(id: string) {
  * risultato non lo scrive più nessuno.
  */
 export function richiama(id: string) {
-  const dove = coda.indexOf(id)
+  const utente = chi.adesso()
+  const dove = coda.findIndex(v => v.id === id && v.utente === utente)
   if (dove >= 0) coda.splice(dove, 1)
   // si segna solo quello che sta girando davvero: segnare anche gli altri
   // lasciava id nell'insieme per sempre, e — peggio — un riaffido subito dopo
   // ripuliva il segno di un lavoro ancora in volo, che quindi tornava a scrivere
-  if (inCorso === id) richiamati.add(id)
+  const k = chiave(id, utente)
+  if (inCorso === k) richiamati.add(k)
   const c = store.compito(id)
   // 'chiede' mancava, ed è lo stato in cui si preme «richiama» più spesso:
   // la riga ti fa una domanda, tu decidi di fartela da solo, e la riga

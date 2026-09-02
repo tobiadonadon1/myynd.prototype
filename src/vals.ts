@@ -153,8 +153,26 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   // — caricamento iniziale —
 
+  /*
+   * «Vuoto» e «non sono riuscito a leggerlo» sono due cose diverse, e la prima
+   * pagina le mostrava uguali: un server che rispondeva 500 dava «La tua mente è
+   * ancora vuota». Qui si tiene il guasto, e si tiene anche se il primo giro è
+   * finito — prima della risposta il titolone non deve dire niente di falso.
+   */
+  const [guastoFeed, setGuastoFeed] = useState<string | null>(null)
+  const [feedCaricato, setFeedCaricato] = useState(false)
+
   const caricaFeed = useCallback(async () => {
-    const f = await api.feed()
+    let f: Awaited<ReturnType<typeof api.feed>>
+    try {
+      f = await api.feed()
+      setGuastoFeed(null)
+    } catch (e) {
+      setGuastoFeed(e instanceof Error ? e.message : String(e))
+      throw e
+    } finally {
+      setFeedCaricato(true)
+    }
     setAperti(f.aperti as unknown as VoceFeed[])
     setFatte(f.fatte as unknown as VoceFeed[])
     // solo il valore vero: la bozza del campo NON si tocca da qui. Prima ogni
@@ -350,7 +368,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } catch (e) {
       // rimetterla dov'era è meglio che farla sparire in silenzio
       setAperti(a => [v, ...a])
-      mostraToast(e instanceof Error ? e.message : t('Non sono riuscito a metterla in lista.'))
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a metterla in lista.'))
     }
   }
 
@@ -564,11 +582,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // Il titolone non può dire «niente che richieda te» mentre sotto lui ti sta
     // chiedendo una cosa: la contraddizione fa sembrare che una delle due parti
     // dell'app non sappia cosa fa l'altra.
-    headline: aperti.length === 0
+    headline: guastoFeed ? t('Non riesco a leggere il feed.')
+      : !feedCaricato ? t('Un momento…')
+      : aperti.length === 0
       ? (domanda ? t('Una cosa da chiarire.')
         : stato.conteggi.totale ? t('Niente che richieda te, adesso.')
         : t('La tua mente è ancora vuota.'))
       : frasi.daGuardare(aperti.length, parole(aperti.length)),
+    guastoFeed: guastoFeed ? t(guastoFeed) : null,
+    feedCaricato,
+    ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },
     hasHero: !!hero,
     // Basta che non ci sia niente di aperto. Prima serviva anche zero fatte,
     // quindi chi aveva appena sistemato tutto restava con un elenco di cose
@@ -586,7 +609,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // pixel con dentro centoventi di vuoto. Adesso è alta quanto quello che
       // contiene, e si allunga solo se apri il testo lungo.
       padding: '22px 24px 20px', transform: 'rotate(-.35deg)', color: '#FFF7F0', flex: 'none',
-      display: 'flex', flexDirection: 'column', animation: 'heroin .35s ease'
+      display: 'flex', flexDirection: 'column', animation: 'heroin .35s ease',
+      // il confine del testo è la carta: un titolo scritto dal modello a partire
+      // da un nome di file senza spazi non deve poterne uscire
+      overflow: 'hidden', overflowWrap: 'anywhere'
     } as CSSProperties,
     heroTipo: hero?.tipo ?? '',
     heroTitolo: hero?.titolo ?? '',
@@ -737,7 +763,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       onClick: () => setThread(ch.id),
       onDelete: async (e: React.MouseEvent) => {
         e.stopPropagation()
-        await api.eliminaChat(ch.id).catch(() => {})
+        try {
+          await api.eliminaChat(ch.id)
+        } catch (e) {
+          mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a eliminare la chat.'))
+          return
+        }
         const resto = threads.filter(x => x.id !== ch.id)
         setThreads(resto)
         if (thread === ch.id) setThread(resto[0]?.id ?? null)
@@ -756,13 +787,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         ? {
             maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
             background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
-            color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap'
+            color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere', minWidth: 0
           }
         : {
             maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
             background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
-            color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap'
+            color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere', minWidth: 0
           }) as CSSProperties
     })),
     prompts: stato.conteggi.totale
@@ -776,8 +809,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       : [],
     draftMsg,
     onType: (e: { target: { value: string } }) => setDraftMsg(e.target.value),
-    onKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && draftMsg.trim()) chiedi(draftMsg.trim()) },
-    send: () => { if (draftMsg.trim()) chiedi(draftMsg.trim()) },
+    // il bottone era già disabilitato mentre risponde; Invio no, e mandava due volte
+    onKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !pensando && draftMsg.trim()) chiedi(draftMsg.trim()) },
+    send: () => { if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim()) },
 
     // — mappa —
     mappaMeta: gruppi.length
@@ -818,7 +852,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — preferenze —
     toni: TONI.map(x => ({
       ...x, label: t(x.label),
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => {}) },
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.'))) },
       style: (x.id === stato.config.tono
         ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
         : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
@@ -831,7 +865,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       scelto: (stato.config.modello ?? 'claude-sonnet-5') === m.id,
       onClick: () => {
         setStato(s => ({ ...s, config: { ...s.config, modello: m.id } }))
-        api.profilo({ modello: m.id }).catch(() => {})
+        api.profilo({ modello: m.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.')))
       }
     })),
     lingue: LINGUE.map(l => ({
@@ -863,12 +897,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       scelto: (stato.config.oreFatte ?? 48) === x.ore,
       onClick: () => {
         setStato(s => ({ ...s, config: { ...s.config, oreFatte: x.ore } }))
-        api.profilo({ oreFatte: x.ore }).then(() => caricaFeed()).catch(() => {})
+        api.profilo({ oreFatte: x.ore }).then(() => caricaFeed()).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.')))
       }
     })),
     autonomie: AUTONOMIE.map(a => ({
       ...a, titolo: t(a.titolo), nota: t(a.nota),
-      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => {}) },
+      onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.'))) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
         background: stato.config.autonomia === a.id ? 'rgba(255,255,255,.85)' : 'transparent',

@@ -182,7 +182,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
       const r = await api.delegaCompito(id, modo)
       setCompiti(r.compiti)
     } catch (e) {
-      indietro(prima, id, e instanceof Error ? e.message : t('Non sono riuscito ad affidarlo.'))
+      indietro(prima, id, e instanceof Error ? t(e.message) : t('Non sono riuscito ad affidarlo.'))
     }
   }, [indietro])
 

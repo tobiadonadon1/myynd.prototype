@@ -32,12 +32,26 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
+import { OSPITATO } from './ospitato.ts'
 
 // — chi c'è —
 
+/**
+ * La chiave nell'ambiente, se è lecito usarla.
+ *
+ * Sul computer di una persona è la sua: l'ha messa lei, e un clic basta a
+ * usarla. Su un server è di chi ospita, e con la registrazione aperta darla a
+ * chiunque entri vorrebbe dire una bolletta pagata da uno e spesa da tutti —
+ * e, passando per l'esportazione, anche leggibile in chiaro. Ospitati, ognuno
+ * ragiona con la propria.
+ */
+function chiaveDiCasa(): string | undefined {
+  return OSPITATO ? undefined : process.env.ANTHROPIC_API_KEY
+}
+
 /** C'è una chiave a consumo su cui appoggiarsi? */
 function conLaChiave(): boolean {
-  return !!(leggi().claude?.apiKey || process.env.ANTHROPIC_API_KEY)
+  return !!(leggi().claude?.apiKey || chiaveDiCasa())
 }
 
 /**
@@ -70,7 +84,7 @@ export function collegato(): boolean {
  * lo chiede per la singola chiamata.
  */
 export function cliente(): Anthropic | null {
-  const chiave = leggi().claude?.apiKey || process.env.ANTHROPIC_API_KEY
+  const chiave = leggi().claude?.apiKey || chiaveDiCasa()
   return chiave ? new Anthropic({ apiKey: chiave, timeout: 60_000, maxRetries: 1 }) : null
 }
 
@@ -286,6 +300,26 @@ async function chiediAlLocale(
   return testo
 }
 
+// — quanto è costato —
+
+/**
+ * Una riga nel registro per ogni chiamata: il lavoro, i token entrati e usciti,
+ * quanti sono arrivati dalla cache. Non è contabilità per l'utente — è il modo
+ * di rispondere a «perché ho speso sei dollari in tre giorni» guardando il
+ * registro invece di tirare a indovinare. Finché non c'era, quella domanda non
+ * aveva nessun posto in cui trovare risposta.
+ */
+export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, nota = '') {
+  if (!u) return
+  const cache = u.cache_read_input_tokens ?? 0
+  const scritti = u.cache_creation_input_tokens ?? 0
+  console.log(
+    `myynd · uso · ${lavoro}${nota ? ` · ${nota}` : ''} · entrata ${u.input_tokens}` +
+    `${cache ? ` (+${cache} dalla cache)` : ''}${scritti ? ` (+${scritti} messi in cache)` : ''}` +
+    ` · uscita ${u.output_tokens}`
+  )
+}
+
 // — gli errori, come li direbbe lui —
 
 export function inItaliano(e: unknown): Error {
@@ -476,6 +510,7 @@ export async function chiedi(o: {
     throw inItaliano(e)
   }
 
+  segnaUso(o.lavoro, r.usage)
   if (r.stop_reason === 'refusal') return { testo: '', rifiutata: true, da: 'claude' }
 
   const testo = r.content

@@ -4,7 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
-import { chiedi, chiediJSON, cliente, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, parametri } from './modello.ts'
+import { chiedi, chiediJSON, cliente, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, parametri, segnaUso } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { cerca, documento, recenti, type Documento } from './store.ts'
 import { riflua } from './testo.ts'
@@ -282,12 +282,24 @@ function fontiCitate(testo: string, docs: Documento[]): Fonte[] {
     .map(({ n: _n, ...f }) => f)
 }
 
+/** Il testo di un contenuto, che sia una stringa o dei blocchi. */
+function testoDi(c: unknown): string {
+  if (typeof c === 'string') return c
+  if (!Array.isArray(c)) return ''
+  return c
+    .filter((b): b is { type: 'text'; text: string } => !!b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string')
+    .map(b => b.text).join('\n')
+}
+
 function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[]): Anthropic.MessageCreateParamsNonStreaming {
   return {
     // i parametri li decide `modello.ts`: sa quali accetta il modello scelto
     ...parametri('risposta', 16000),
-    // il discorso serve a capire di quale cliente si sta parlando
-    system: conLaLingua(sistema([domanda, ...docs.map(d => d.titolo)].join(' '))),
+    // Il discorso serve a capire di quale cliente si sta parlando. Il blocco
+    // è segnato da tenere in cache: nel giro degli strumenti si rimanda tale e
+    // quale a ogni giro, e fra un messaggio e l'altro della stessa chat cambia
+    // solo il materiale — riletto dalla cache costa un decimo.
+    system: [{ type: 'text', text: conLaLingua(sistema([domanda, ...docs.map(d => d.titolo)].join(' '))), cache_control: { type: 'ephemeral' } }],
     messages: [
       ...storico.slice(-8).map(t => ({
         role: (t.ruolo === 'u' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -295,14 +307,20 @@ function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[]): A
       })),
       {
         role: 'user' as const,
-        content: docs.length
-          ? `Materiale:\n\n${contesto(docs)}\n\n---\n\nDomanda: ${domanda}`
-          // niente al primo colpo non vuol dire niente: prima si cerca, e solo
-          // dopo si conclude. Detto qui, perché è qui che il modello decide se
-          // rispondere «non ho trovato niente» prima ancora di aver provato.
-          : `La prima ricerca con le sue parole non ha trovato niente. NON dire ancora ` +
-            `che non c'è: usa \`cerca\` con parole diverse, e se può essere scritto in ` +
-            `un'altra lingua, con quelle.\n\n---\n\nDomanda: ${domanda}`
+        // anche il materiale in cache: è la parte più grossa, e nei giri degli
+        // strumenti non cambia
+        content: [{
+          type: 'text' as const,
+          text: docs.length
+            ? `Materiale:\n\n${contesto(docs)}\n\n---\n\nDomanda: ${domanda}`
+            // niente al primo colpo non vuol dire niente: prima si cerca, e solo
+            // dopo si conclude. Detto qui, perché è qui che il modello decide se
+            // rispondere «non ho trovato niente» prima ancora di aver provato.
+            : `La prima ricerca con le sue parole non ha trovato niente. NON dire ancora ` +
+              `che non c'è: usa \`cerca\` con parole diverse, e se può essere scritto in ` +
+              `un'altra lingua, con quelle.\n\n---\n\nDomanda: ${domanda}`,
+          cache_control: { type: 'ephemeral' as const }
+        }]
       }
     ]
   } as Anthropic.MessageCreateParamsNonStreaming
@@ -549,13 +567,13 @@ export async function rispondiInStreaming(
         // L'ha già avvolto `corpoRichiesta`, e si riavvolge qui: la funzione è
         // idempotente apposta, e una garanzia sulla lingua deve vedersi dove il
         // prompt parte, non due funzioni più in là.
-        system: conLaLingua(typeof b.system === 'string' ? b.system : ''),
-        // solo i turni veri e solo il testo: `MessageParam` ammette anche
-        // `system` e i blocchi, che di là non hanno dove andare
-        messages: b.messages.flatMap(m =>
-          (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content
-            ? [{ role: m.role, content: m.content }]
-            : []),
+        system: conLaLingua(testoDi(b.system)),
+        // solo i turni veri e solo il testo: i blocchi servono alla cache
+        // dell'SDK, e di là non hanno dove andare
+        messages: b.messages.flatMap(m => {
+          const testo = testoDi(m.content)
+          return (m.role === 'user' || m.role === 'assistant') && testo ? [{ role: m.role, content: testo }] : []
+        }),
         silenzio: SILENZIO_MAX,
         onTesto
       })
@@ -606,6 +624,7 @@ export async function rispondiInStreaming(
     const flusso = a.messages.stream({ ...richiesta, messages: messaggi })
     flusso.on('text', onTesto)
     const finale = await senzaSilenzi(flusso)
+    segnaUso('risposta', finale.usage, `giro ${giro + 1}`)
 
     if (finale.stop_reason === 'refusal') {
       return { testo: 'Su questa richiesta non posso rispondere.', fonti: [] }
@@ -783,6 +802,7 @@ Scrivi in ${nellaLingua()}.`),
       ).join('\n\n---\n\n')
     }]
   })
+  segnaUso('lettura', risposta.usage)
 
   if (risposta.stop_reason === 'refusal') return []
   const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
@@ -887,8 +907,22 @@ const MODI: Record<string, string> = {
  */
 function inMano(): string {
   const c = leggi()
-  const ho = [c.posta && 'la posta', c.desktop && 'i file sul disco', c.notion && 'Notion'].filter(Boolean)
-  const manca = [!c.posta && 'la posta', !c.desktop && 'i file sul disco', !c.notion && 'Notion'].filter(Boolean)
+  // La posta è collegata anche via Gmail o Outlook, non solo via IMAP. Con la
+  // riga vecchia a chi aveva Gmail si diceva «la posta NON è collegata», e il
+  // modello — obbediente — rispondeva «collegami la casella» invece di scrivere.
+  const fonti: [boolean, string][] = [
+    [!!(c.posta || c.google || c.microsoft?.parti.includes('posta')), 'la posta'],
+    [!!c.desktop?.cartelle?.length, 'i file sul disco'],
+    [!!c.notion, 'Notion'],
+    [!!c.slack, 'Slack'],
+    [!!c.drive, 'Google Drive'],
+    [!!c.microsoft?.parti.includes('file'), 'SharePoint'],
+    [!!c.dropbox, 'Dropbox'],
+    [!!c.whatsapp, 'WhatsApp']
+  ]
+  const ho = fonti.filter(([si]) => si).map(([, nome]) => nome)
+  // come mancanti si nominano solo le tre di base: otto assenze sono rumore
+  const manca = fonti.slice(0, 3).filter(([si]) => !si).map(([, nome]) => nome)
   const righe = [
     ho.length ? `Quello che puoi leggere: ${ho.join(', ')}.` : 'Non hai nessuna fonte collegata.',
     manca.length ? `Quello che NON è collegato, e che quindi non puoi né leggere né usare: ${manca.join(', ')}.` : ''
@@ -1019,10 +1053,16 @@ export async function svolgi(
 
   const messaggi: Anthropic.MessageParam[] = [{
     role: 'user',
-    content: partenza.length
-      ? `Materiale:\n\n${contesto(partenza)}\n\n---\n\nIl compito: ${domanda}`
-      : `Non ho trovato niente di pertinente nel materiale con le parole del compito. ` +
-        `Prova a cercare con altre parole prima di dire che non c'è.\n\n---\n\nIl compito: ${domanda}`
+    // in cache: fra un giro e l'altro questo blocco non cambia, ed è il più
+    // grosso — riletto costa un decimo di quel che costava rimandarlo
+    content: [{
+      type: 'text',
+      text: partenza.length
+        ? `Materiale:\n\n${contesto(partenza)}\n\n---\n\nIl compito: ${domanda}`
+        : `Non ho trovato niente di pertinente nel materiale con le parole del compito. ` +
+          `Prova a cercare con altre parole prima di dire che non c'è.\n\n---\n\nIl compito: ${domanda}`,
+      cache_control: { type: 'ephemeral' }
+    }]
   }]
 
   /**
@@ -1057,11 +1097,12 @@ export async function svolgi(
       // morto senza tagliare una risposta lenta.
       const flusso = a.messages.stream({
         ...parametri('bozza', 16000),
-        system: conLaLingua(sistemaLavoro),
+        system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
         messages: messaggi,
         ...(ultimo ? {} : { tools: ferri })
       } as Anthropic.MessageStreamParams)
       finale = await senzaSilenzi(flusso)
+      segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri}`)
     } catch (e) {
       throw inItaliano(e)
     }

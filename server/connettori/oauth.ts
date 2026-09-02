@@ -28,6 +28,7 @@
 //     risponde solo la radice, e tutto il resto prende un 404 e viene ignorato.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import * as chi from '../chi.ts'
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -202,9 +203,18 @@ export async function consenso(s: Sportello): Promise<Gettoni> {
  * 401 assomiglia in tutto a «ricollega l'account» — cioè al messaggio
  * sbagliato, dato a chi non ha fatto niente di male.
  */
+/*
+ * Per persona, non per processo.
+ *
+ * Con più conti sullo stesso server il giro di sfondo li legge uno dopo
+ * l'altro, e un token tenuto in una variabile sola sopravviveva al cambio di
+ * persona: `rinnova()` controllava che *questa* avesse un refresh token, poi
+ * restituiva il token d'accesso di quella prima — e la casella di A finiva
+ * nell'indice di B, con le proposte di B che archiviavano la posta di A. Qui
+ * la chiave è chi sta chiedendo, e fuori da una richiesta è la stringa vuota.
+ */
 export class Vivo {
-  private token: string | null = null
-  private scade = 0
+  private vivi = new Map<string, { token: string; scade: number }>()
   private rinnova: () => Promise<Gettoni>
 
   // il campo si dichiara e si assegna a mano, invece che con la scorciatoia
@@ -215,13 +225,15 @@ export class Vivo {
   }
 
   async dammi(): Promise<string> {
-    if (this.token && this.scade > Date.now() + 60_000) return this.token
+    const di = chi.adesso() ?? ''
+    const v = this.vivi.get(di)
+    if (v && v.scade > Date.now() + 60_000) return v.token
     const g = await this.rinnova()
-    this.token = g.access_token
-    this.scade = Date.now() + Number(g.expires_in ?? 3600) * 1000
-    return this.token
+    const nuovo = { token: g.access_token, scade: Date.now() + Number(g.expires_in ?? 3600) * 1000 }
+    this.vivi.set(di, nuovo)
+    return nuovo.token
   }
 
-  /** Da usare quando si scollega, e nei test. */
-  scorda() { this.token = null; this.scade = 0 }
+  /** Da usare quando si scollega, e nei test: dimentica quello di chi sta chiedendo. */
+  scorda() { this.vivi.delete(chi.adesso() ?? '') }
 }

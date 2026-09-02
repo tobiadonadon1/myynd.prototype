@@ -159,6 +159,32 @@ if (existsSync(INTERFACCIA)) {
 
 // — accesso —
 
+/*
+ * Un freno per indirizzo, su tutto quello che sta prima dell'accesso.
+ *
+ * Il conto dei tentativi per email c'è già (`auth.attesa`), ma da solo ha due
+ * buchi: la registrazione non lo passa, e chi bombarda con email sempre
+ * diverse non lo incontra mai — mentre ogni chiamata costa uno scrypt intero,
+ * cioè mezzo secondo di processore fermo per tutti. Trenta al minuto per
+ * indirizzo bastano a una persona che sbaglia la password e non bastano a uno
+ * script. Dietro il proxy di chi ospita l'indirizzo vero sta in
+ * `X-Forwarded-For`, e Express lo legge solo se glielo si dice.
+ */
+if (ospitato.OSPITATO) app.set('trust proxy', 1)
+const colpi = new Map<string, { n: number; da: number }>()
+const COLPI_AL_MINUTO = 30
+app.use('/api/auth', (req, res, next) => {
+  if (req.method !== 'POST') return next()
+  const ip = req.ip ?? 'ignoto'
+  const ora = Date.now()
+  if (colpi.size > 5000) for (const [k, v] of colpi) if (ora - v.da > 60_000) colpi.delete(k)
+  const c = colpi.get(ip)
+  if (!c || ora - c.da > 60_000) { colpi.set(ip, { n: 1, da: ora }); return next() }
+  c.n++
+  if (c.n > COLPI_AL_MINUTO) return res.status(429).json({ errore: 'Troppi tentativi. Riprova fra un minuto.' })
+  next()
+})
+
 app.get('/api/auth', (req, res) => {
   /*
    * Chi sei, non «esiste un account».
@@ -245,9 +271,11 @@ app.get('/api/stato', (_req, res) => {
       // sembrava — giustamente — finto
       documenti: n.perFonte.find(f => f.fonte === v.id)?.n ?? 0
     })),
-    suggerimentiDesktop: desktop.suggerimenti(),
+    // su un server sarebbero le cartelle di root dentro il contenitore: non
+    // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
+    suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     presetPosta: posta.PRESET,
-    home: homedir()
+    home: ospitato.OSPITATO ? '' : homedir()
   })
 })
 
@@ -375,6 +403,9 @@ app.get('/api/modello/abbonamento', async (_req, res) => {
 })
 
 app.post('/api/modello/abbonamento', async (req, res) => {
+  if (ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Su un server l’abbonamento non si può usare: qui ragiona con una chiave API.' })
+  }
   const attivo = req.body?.attivo === true
   cfg.aggiorna({ abbonamento: { attivo } })
   try { res.json({ ok: true, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
@@ -389,11 +420,13 @@ app.post('/api/modello/locale', (req, res) => {
 
 /** La chiave di Claude può già essere nell'ambiente: se c'è, un clic basta. */
 app.get('/api/connettori/claude/ambiente', (_req, res) => {
-  res.json({ presente: !!process.env.ANTHROPIC_API_KEY })
+  // su un server la chiave nell'ambiente è di chi ospita, non di chi è
+  // entrato: non si offre e non si copia dentro il suo conto
+  res.json({ presente: !ospitato.OSPITATO && !!process.env.ANTHROPIC_API_KEY })
 })
 
 app.post('/api/connettori/claude/ambiente', async (_req, res) => {
-  const k = process.env.ANTHROPIC_API_KEY
+  const k = ospitato.OSPITATO ? undefined : process.env.ANTHROPIC_API_KEY
   if (!k) return res.status(400).json({ errore: 'Nessuna chiave nell\'ambiente.' })
   const e = await claude.prova(k)
   if (!e.ok) return res.status(400).json({ errore: e.errore })
@@ -404,6 +437,7 @@ app.post('/api/connettori/claude/ambiente', async (_req, res) => {
 app.post('/api/connettori/posta', async (req, res) => {
   const { host, porta, utente, password, giorni, cartelle } = req.body ?? {}
   if (!host || !utente || !password) return res.status(400).json({ errore: 'Servono host, indirizzo e password.' })
+  if (!ospitato.hostRaggiungibile(String(host))) return res.status(400).json({ errore: 'Quell’host non si può raggiungere da qui.' })
   const c: cfg.ConfigPosta = { host, porta: Number(porta) || 993, utente, password, giorni: Number(giorni) || 30, cartelle }
   try {
     const esito = await posta.prova(c)
@@ -414,6 +448,12 @@ app.post('/api/connettori/posta', async (req, res) => {
 })
 
 app.post('/api/connettori/desktop', async (req, res) => {
+  // Il catalogo lo nasconde già; ma una rotta che accetta un percorso qualunque
+  // *del server* — `/etc`, la cartella dei dati — non può fidarsi di un elenco
+  // che sta in un'altra schermata. Provato: rispondeva «ok» con `/etc`.
+  if (!ospitato.disponibile('desktop')) {
+    return res.status(400).json({ errore: 'Su un server non ci sono cartelle da leggere: le fonti sono quelle collegate in rete.' })
+  }
   const cartelle: string[] = req.body?.cartelle ?? []
   if (!cartelle.length) return res.status(400).json({ errore: 'Scegli almeno una cartella.' })
   try {
@@ -610,7 +650,13 @@ app.delete('/api/connettori/:id', (req, res) => {
 
 // — sincronizzazione, in streaming —
 
-let sincronizzazioneInCorso = false
+/*
+ * Chi sta leggendo le sue fonti adesso. Un solo booleano per tutto il server
+ * voleva dire che mentre A leggeva la posta, B riceveva «sto già leggendo» e
+ * il suo giro di sfondo veniva saltato: per persona, come tutto il resto.
+ */
+const sincronizzazioniInCorso = new Set<string>()
+const sincronizzazioneInCorso = () => sincronizzazioniInCorso.has(chi.adesso() ?? '')
 
 /**
  * Rileggere le fonti. Una funzione sola, usata da due strade.
@@ -741,10 +787,10 @@ async function leggiTutto(
 }
 
 app.get('/api/sincronizza', async (req, res) => {
-  if (sincronizzazioneInCorso) {
+  if (sincronizzazioneInCorso()) {
     return res.status(409).json({ errore: 'Una lettura è già in corso.' })
   }
-  sincronizzazioneInCorso = true
+  sincronizzazioniInCorso.add(chi.adesso() ?? '')
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -764,7 +810,7 @@ app.get('/api/sincronizza', async (req, res) => {
   } catch (e) {
     invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
   } finally {
-    sincronizzazioneInCorso = false
+    sincronizzazioniInCorso.delete(chi.adesso() ?? '')
     if (!res.writableEnded) res.end()
   }
 })
@@ -797,13 +843,13 @@ const OGNI = 6 * 60 * 60 * 1000
  * chiama nessun modello: una rilettura a vuoto non deve costare.
  */
 async function rileggiDaSola() {
-  if (sincronizzazioneInCorso) return
+  if (sincronizzazioneInCorso()) return
   const c = cfg.leggi()
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
     && !c.drive && !c.microsoft && !c.dropbox) return
-  sincronizzazioneInCorso = true
+  sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {
     const totale = await leggiTutto(null, () => {})
@@ -827,7 +873,7 @@ async function rileggiDaSola() {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
   } finally {
-    sincronizzazioneInCorso = false
+    sincronizzazioniInCorso.delete(chi.adesso() ?? '')
   }
 }
 
@@ -1129,6 +1175,12 @@ app.post('/api/compiti/:id/delega', (req, res) => {
   if (!claude.collegato()) {
     return res.status(400).json({ errore: 'Collega Claude e potrò lavorarci.' })
   }
+  // Le bozze passano dalla chiave: `svolgi` cerca e apre documenti a più
+  // giri, e quella strada l'abbonamento non la fa. Meglio dirlo qui, prima di
+  // affidare, che con una rotella e poi «Collega Claude» a chi l'ha appena fatto.
+  if (!mod.cliente()) {
+    return res.status(400).json({ errore: 'Per le bozze serve una chiave API di Claude: l’abbonamento basta per la chat.' })
+  }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
   compiti.affida(c.id, modo)
   res.json({ ok: true, compiti: store.elencoCompiti() })
@@ -1408,6 +1460,9 @@ app.post('/api/compiti/:id/documento', async (req, res) => {
  * schermata sua — ha bisogno di consegnare dove consegnano gli altri.
  */
 app.post('/api/compiti/:id/lavora', async (req, res) => {
+  if (ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Su un server non posso lavorare in una cartella: serve Myynd sul tuo computer.' })
+  }
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   const conf = cfg.leggi()

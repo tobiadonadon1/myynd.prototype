@@ -305,8 +305,10 @@ function Casa({ stato, apriConnessioni, esci }: {
                 <IconEsci style={{ flex: 'none' }} />{t('Esci')}</Hov>
             </div>
           )}
-          <Hov onClick={v.toggleMenu}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer' }}
+          {/* un bottone, non un div: dietro ci stanno Preferenze, Memoria, le fonti e
+              «Esci», e da tastiera un div non si raggiunge */}
+          <Hov as="button" type="button" onClick={v.toggleMenu} aria-haspopup="menu" aria-label={t('Il tuo conto')}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
             {!rail && (

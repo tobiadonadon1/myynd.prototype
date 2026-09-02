@@ -97,7 +97,7 @@ export function MappaPiena({ v }: { v: Vals }) {
     <div style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#191715', display: 'flex', flexDirection: 'column', animation: 'fadein .22s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 22px', flex: 'none' }}>
         <span style={{ fontSize: 15, color: 'rgba(255,247,240,.9)' }}>{t('Mappa')}</span>
-        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.5)' }}>{v.mappaMeta} · trascina per girare, rotella per lo zoom</span>
+        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.5)' }}>{v.mappaMeta} · {t('trascina per girare, rotella per lo zoom')}</span>
         <div style={{ flex: 1 }} />
         <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.34)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
         <button onClick={v.closeMap} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.55)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>{t('Chiudi')}</button>

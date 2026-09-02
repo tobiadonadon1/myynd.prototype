@@ -24,14 +24,15 @@ export function Documento({ v }: { v: Vals }) {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', background: '#FFFFFF', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
           <div style={{ paddingBottom: 20, borderBottom: '2px solid #22271F' }}>
-            <div style={{ fontSize: 21, fontWeight: 500, letterSpacing: '-.015em', lineHeight: 1.3 }}>{d.titolo}</div>
+            <div style={{ fontSize: 21, fontWeight: 500, letterSpacing: '-.015em', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.titolo}</div>
             <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.7 }}>
               {d.autore && <>{d.autore}<br /></>}
               {data}
               {d.percorso && <><br /><span style={{ wordBreak: 'break-all' }}>{d.percorso}</span></>}
             </div>
           </div>
-          <div style={{ fontSize: 14, lineHeight: 1.75, color: 'rgba(34,39,31,.86)', marginTop: 26, whiteSpace: 'pre-wrap', textWrap: 'pretty' }}>{d.corpo}</div>
+          {/* le email grezze sono piene di indirizzi lunghi senza spazi: il foglio non deve scorrere di lato */}
+          <div style={{ fontSize: 14, lineHeight: 1.75, color: 'rgba(34,39,31,.86)', marginTop: 26, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{d.corpo}</div>
         </div>
       </div>
     </>

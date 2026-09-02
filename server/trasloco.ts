@@ -20,9 +20,10 @@
 // pesano dieci volte quello che pesa la mente vera.
 
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella } from './config.ts'
+import { OSPITATO } from './ospitato.ts'
 import * as store from './store.ts'
 import * as automazioni from './automazioni.ts'
 
@@ -89,10 +90,18 @@ export type Esito = { documenti: number; automazioni: number }
  * pacco non le porta con sé. Altrimenti importare vorrebbe dire cambiarsi
  * l'accesso sotto i piedi, e chi lo fa da un telefono resta fuori.
  */
+/**
+ * Quanto può diventare un pacco una volta aperto. La base64 di un indice non si
+ * comprime quasi, quindi un pacco legittimo è poco più grande del file che
+ * arriva; un file costruito apposta per gonfiarsi, invece, senza questo tetto
+ * riempiva la memoria del processo — cioè di tutti.
+ */
+const TETTO_APERTO = 400 * 1024 * 1024
+
 export function importa(dati: Buffer): Esito {
   let pacco: Pacco
   try {
-    pacco = JSON.parse(gunzipSync(dati).toString('utf8')) as Pacco
+    pacco = JSON.parse(gunzipSync(dati, { maxOutputLength: TETTO_APERTO }).toString('utf8')) as Pacco
   } catch {
     throw new Error('Questo file non è un Myynd da spostare.')
   }
@@ -111,16 +120,49 @@ export function importa(dati: Buffer): Esito {
    * quello che segue non è un errore — è un database che risponde cose che non
    * ci sono più.
    */
-  store.chiudiIndici()
+  // Prima si guarda cosa è arrivato, e solo dopo si tocca quello che c'è.
+  const mente = join(dove, 'mente.db')
+  const inArrivo = join(dove, 'mente.in-arrivo.db')
+  if (pacco.mente) {
+    writeFileSync(inArrivo, Buffer.from(pacco.mente, 'base64'), { mode: 0o600 })
+    try {
+      store.controlla(inArrivo)
+    } catch (e) {
+      rmSync(inArrivo, { force: true })
+      throw e
+    } finally {
+      // aprirlo per controllarlo gli mette accanto i file di lavoro di SQLite:
+      // vuoti, e con un nome che dopo il rinomino non apparterrebbe più a niente
+      for (const coda of ["-wal", "-shm"]) rmSync(`${inArrivo}${coda}`, { force: true })
+    }
+  }
+
+  // solo l'indice di questo conto: chiuderli tutti, com'era prima, faceva
+  // cadere le richieste in volo di tutti gli altri
+  store.chiudiIndice(dove)
   for (const coda of ['-wal', '-shm']) {
     const f = join(dove, `mente.db${coda}`)
     if (existsSync(f)) rmSync(f, { force: true })
   }
   if (pacco.mente) {
-    writeFileSync(join(dove, 'mente.db'), Buffer.from(pacco.mente, 'base64'), { mode: 0o600 })
+    // quello che c'era si mette da parte invece di sparire: «sostituisce»
+    // deve voler dire che si può tornare indietro, se il pacco era quello sbagliato
+    if (existsSync(mente)) {
+      const prima = join(dove, 'istantanee')
+      if (!existsSync(prima)) mkdirSync(prima, { recursive: true, mode: 0o700 })
+      renameSync(mente, join(prima, `mente-prima-del-trasloco-${new Date().toISOString().replace(/[:.]/g, '-')}.db`))
+    }
+    renameSync(inArrivo, mente)
   }
 
-  writeFileSync(join(dove, 'config.json'), JSON.stringify(pacco.config ?? {}, null, 2), { mode: 0o600 })
+  // Non tutto quello che c'è nel pacco vale qui. `account` era il conto di là
+  // — qui si entra con il proprio — e `desktop` sono cartelle di un altro
+  // disco: su un server sarebbero cartelle del server.
+  const config: Record<string, unknown> =
+    typeof pacco.config === 'object' && pacco.config ? { ...(pacco.config as Record<string, unknown>) } : {}
+  delete config.account
+  if (OSPITATO) delete config.desktop
+  writeFileSync(join(dove, 'config.json'), JSON.stringify(config, null, 2), { mode: 0o600 })
 
   const auto = join(dove, 'automazioni')
   if (!existsSync(auto)) mkdirSync(auto, { recursive: true, mode: 0o700 })

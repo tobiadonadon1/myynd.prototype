@@ -20,7 +20,7 @@
 
 import { DatabaseSync } from 'node:sqlite'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, chmodSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DATI } from './ospitato.ts'
 
@@ -37,6 +37,7 @@ try { chmodSync(FILE, 0o600) } catch { /* su alcuni volumi non si può, pazienza
 
 db.exec(`
   PRAGMA journal_mode = WAL;
+  PRAGMA busy_timeout = 5000;
   CREATE TABLE IF NOT EXISTS utenti (
     id     TEXT PRIMARY KEY,
     email  TEXT NOT NULL UNIQUE,
@@ -141,8 +142,18 @@ export function registra(email: string, password: string):
 
   const id = nuovoId()
   const sale = randomBytes(16).toString('hex')
+  const creato = new Date().toISOString()
   db.prepare('INSERT INTO utenti (id, email, sale, hash, creato) VALUES (?,?,?,?,?)')
-    .run(id, e, sale, impasta(password, sale), new Date().toISOString())
+    .run(id, e, sale, impasta(password, sale), creato)
+  // La cartella si presenta da sola. `conti.db` è l'unico legame fra un
+  // indirizzo e una cartella: se si perdesse, i dati sarebbero tutti sul disco
+  // e nessuno saprebbe di chi sono. Un aiuto per chi dovrà rimettere insieme i
+  // pezzi, non un requisito: se non si riesce a scriverlo, il conto nasce lo stesso.
+  try {
+    const dove = join(DATI, 'utenti', id)
+    mkdirSync(dove, { recursive: true, mode: 0o700 })
+    writeFileSync(join(dove, 'chi.json'), JSON.stringify({ email: e, creato }, null, 2), { mode: 0o600 })
+  } catch { /* vedi sopra */ }
   return { ok: true, id, token: apri(id) }
 }
 

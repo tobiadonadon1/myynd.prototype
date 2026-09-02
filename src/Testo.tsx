@@ -74,7 +74,7 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string) => void): R
       pezzi.push(<em key={m.index}>{inline(m[2], fonti, onApri)}</em>)
     } else if (m[3] !== undefined) {
       pezzi.push(
-        <code key={m.index} style={{ background: 'rgba(34,39,31,.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em' }}>{m[3]}</code>
+        <code key={m.index} style={{ background: 'rgba(34,39,31,.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
       )
     } else {
       const n = Number(m[4])
@@ -128,7 +128,7 @@ export function Testo({ testo, fonti = [], onApri }: {
           return (
             <El key={i} style={{ margin: i ? '10px 0 0' : 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {righe.map((r, j) => (
-                <li key={j} style={{ lineHeight: 1.6 }}>
+                <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>
                   {inline(r.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, ''), fonti, onApri)}
                 </li>
               ))}
@@ -136,7 +136,7 @@ export function Testo({ testo, fonti = [], onApri }: {
           )
         }
         return (
-          <p key={i} style={{ margin: i ? '10px 0 0' : 0, lineHeight: 1.6, textWrap: 'pretty' }}>
+          <p key={i} style={{ margin: i ? '10px 0 0' : 0, lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
             {inline(b.replace(/\n/g, ' '), fonti, onApri)}
           </p>
         )
