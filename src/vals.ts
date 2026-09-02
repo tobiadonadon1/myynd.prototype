@@ -248,8 +248,19 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // un contatore di generazione: la risposta di una richiesta vecchia non
   // deve sovrascrivere quella nuova, né cancellare la bolla ottimistica
   const gen = useRef(0)
+  /*
+   * Il filo che `chiedi` ha appena creato.
+   *
+   * La prima domanda senza una chat aperta creava il filo e lo apriva; questo
+   * effetto, vedendo un thread nuovo, andava a leggerne i messaggi — che non
+   * esistono — e nel farlo avanzava `gen`. Da lì la risposta in streaming
+   * apparteneva a una generazione vecchia e veniva scartata: la prima domanda
+   * di una persona nuova restava senza risposta finché non ricaricava.
+   */
+  const filoNuovo = useRef<string | null>(null)
   useEffect(() => {
     if (!thread) { setMessaggi([]); setMessaggiPronti(true); return }
+    if (filoNuovo.current === thread) { filoNuovo.current = null; setMessaggiPronti(true); return }
     const mio = ++gen.current
     setMessaggiPronti(false)
     api.messaggi(thread)
@@ -294,6 +305,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   const chiedi = async (testo: string, chatId?: string) => {
     const id = chatId ?? thread ?? `th${Date.now()}`
+    // nato adesso: non c'è niente da caricare, e caricare farebbe perdere la risposta
+    if (!chatId && !thread) filoNuovo.current = id
     const mio = ++gen.current
     setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
     setThread(id)

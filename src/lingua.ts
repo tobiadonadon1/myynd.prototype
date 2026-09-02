@@ -434,6 +434,16 @@ const EN: Record<string, string> = {
   "Nessuna chiave nell'ambiente.": 'No key in the environment.',
   'Servono host, indirizzo e password.': 'Host, address and password are needed.',
   'Scegli almeno una cartella.': 'Pick at least one folder.',
+  'Cinque domande.': 'Five questions.',
+  'Come decidi, cosa controlli, come scrivi. Due righe bastano, e puoi rispondere dopo.': 'How you decide, what you check, how you write. Two lines are enough, and you can answer later.',
+  'Rispondo più tardi': 'I will answer later',
+  'Le collego dopo': 'I will connect them later',
+  'Quanto ha ragionato': 'How much it has reasoned',
+  'Oggi ancora niente.': 'Nothing yet today.',
+  'Tetto raggiunto: si riparte domani.': 'Limit reached: it resets tomorrow.',
+  'Tetto al giorno, in token': 'Daily limit, in tokens',
+  'nessuno': 'none',
+  'Vuoto vuol dire: nessun tetto. Mille token sono circa una pagina.': 'Empty means no limit. A thousand tokens is about a page.',
   'il tuo nome': 'your name',
   'La password attuale non è corretta.': 'The current password is not correct.',
   'La password non è corretta.': 'The password is not correct.',
@@ -1315,6 +1325,11 @@ export function t(s: string): string {
  * «Due cose, da guardare» e «Two things to look at» no.
  */
 export const frasi = {
+  // — quanto ha ragionato oggi —
+  usoOggi: (chiamate: number, token: string, cache: string) => corrente === 'en'
+    ? `${chiamate} call${chiamate === 1 ? '' : 's'} today · ${token} tokens${cache !== '0' ? ` (${cache} from cache)` : ''}`
+    : `${chiamate} chiamat${chiamate === 1 ? 'a' : 'e'} oggi · ${token} token${cache !== '0' ? ` (${cache} dalla cache)` : ''}`,
+
   // — il ballo via web, ospitati —
   viaWeb: (nome: string) => corrente === 'en'
     ? `${nome} opens in this tab: say yes, and you come back here on your own.`

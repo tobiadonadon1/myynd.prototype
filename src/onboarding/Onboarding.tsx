@@ -15,7 +15,7 @@ const COLORI: Record<string, string> = {
   claude: '#7FA98A'
 }
 
-type Passo = 'risveglio' | 'claude' | 'nome' | 'connetti' | 'leggi' | 'genera' | 'pronta'
+type Passo = 'risveglio' | 'claude' | 'nome' | 'ritratto' | 'connetti' | 'leggi' | 'genera' | 'pronta'
 
 const CHIARO = '#F4EFE8'
 const TENUE = 'rgba(244,239,232,.62)'
@@ -46,6 +46,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
       passo === 'risveglio' ? 0 :
       passo === 'claude' ? 0.12 :
       passo === 'nome' ? 0.22 :
+      passo === 'ritratto' ? 0.24 :
       passo === 'connetti' ? 0.2 + Math.min(0.55, collegati.length * 0.16) :
       passo === 'leggi' ? 0.86 : 1
     campo.imposta({
@@ -92,10 +93,11 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
               nome={nome} setNome={setNome} ruolo={ruolo} setRuolo={setRuolo}
               avanti={async () => {
                 try { await api.profilo({ nome, ruolo }) } catch { /* riprovabile dalle preferenze */ }
-                setPasso('connetti')
+                setPasso('ritratto')
               }}
             />
           )}
+          {passo === 'ritratto' && <Ritratto avanti={() => setPasso('connetti')} />}
           {passo === 'connetti' && (
             <Connetti s={s} ricarica={ricarica} avanti={() => setPasso('leggi')} />
           )}
@@ -149,7 +151,7 @@ function Primario({ onClick, children, disabilitato }: { onClick: () => void; ch
 }
 
 function Passi({ corrente }: { corrente: Passo }) {
-  const tutti: Passo[] = ['risveglio', 'claude', 'nome', 'connetti', 'leggi', 'genera', 'pronta']
+  const tutti: Passo[] = ['risveglio', 'claude', 'nome', 'ritratto', 'connetti', 'leggi', 'genera', 'pronta']
   const i = tutti.indexOf(corrente)
   return (
     <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 7 }}>
@@ -299,6 +301,59 @@ function PassoClaude({ collegato, ricarica, avanti }: {
   )
 }
 
+/**
+ * Le cinque domande, al primo avvio.
+ *
+ * Il brief chiama «il punto» la conversazione in cui Myynd impara come questa
+ * persona decide. Finora quelle cinque righe stavano solo nella schermata
+ * della memoria, e nessuno le chiedeva: si scoprivano per caso, o mai. Qui si
+ * chiedono — due righe per domanda bastano — e si possono saltare: «più
+ * tardi» è una risposta, non un rifiuto, e la schermata della memoria resta lì.
+ */
+function Ritratto({ avanti }: { avanti: () => void }) {
+  const [blocchi, setBlocchi] = useState<{ etichetta: string; descrizione: string }[]>([])
+  const [testi, setTesti] = useState<Record<string, string>>({})
+  const [occupato, setOccupato] = useState(false)
+  useEffect(() => {
+    api.memoria()
+      .then(m => setBlocchi(m.blocchi.map(b => ({ etichetta: b.etichetta, descrizione: b.descrizione }))))
+      .catch(() => { /* senza domande si va avanti: la memoria è un di più */ })
+  }, [])
+  const scritti = Object.values(testi).filter(v => v.trim()).length
+
+  const salva = async () => {
+    setOccupato(true)
+    for (const b of blocchi) {
+      const v = (testi[b.etichetta] ?? '').trim()
+      if (!v) continue
+      try { await api.scriviBlocco(b.etichetta, v) } catch { /* si ritrova nella memoria, e si riscrive */ }
+    }
+    setOccupato(false)
+    avanti()
+  }
+
+  return (
+    <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
+      <Titolo>{t('Cinque domande.')}</Titolo>
+      <Sotto>{t('Come decidi, cosa controlli, come scrivi. Due righe bastano, e puoi rispondere dopo.')}</Sotto>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 26, maxWidth: 640 }}>
+        {blocchi.map(b => (
+          <div key={b.etichetta}>
+            <div style={ETICHETTA}>{t(b.descrizione)}</div>
+            <textarea value={testi[b.etichetta] ?? ''} rows={2} className="scuro"
+              onChange={e => setTesti(x => ({ ...x, [b.etichetta]: e.target.value }))}
+              style={{ ...CAMPO, resize: 'vertical', minHeight: 56, lineHeight: 1.5, fontFamily: 'inherit' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center' }}>
+        <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>
+        <Secondario onClick={avanti}>{t('Rispondo più tardi')}</Secondario>
+      </div>
+    </div>
+  )
+}
+
 function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
   nome: string; setNome: (v: string) => void
   ruolo: string; setRuolo: (v: string) => void
@@ -327,7 +382,9 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
   const [aperto, setAperto] = useState<string | null>(null)
   // Claude l'ha già chiesto il passo prima; il fornitore compatibile è un
   // motore, non una fonte, e si collega dalle preferenze
-  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude' && c.id !== 'compatibile')
+  // «Da fare» è collegato da solo, sempre: contarlo qui rendeva vero
+  // «1 collegata» a chi non aveva collegato niente
+  const pronti = s.connettori.filter(c => c.pronto && c.id !== 'claude' && c.id !== 'compatibile' && c.id !== 'mind2do')
   const dopo = s.connettori.filter(c => !c.pronto)
   const quanti = pronti.filter(c => c.collegato).length
 
@@ -347,16 +404,21 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
       <div style={{ ...ETICHETTA, marginTop: 28, marginBottom: 12 }}>{t('Più avanti')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {dopo.map(c => (
-          <span key={c.id} title={c.nota} style={{
+          <span key={c.id} title={t(c.nota)} style={{
             padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
             border: '1px dashed rgba(244,239,232,.2)', color: 'rgba(244,239,232,.42)'
-          }}>{c.nome}</span>
+          }}>{t(c.nome)}</span>
         ))}
       </div>
 
-      <Primario onClick={avanti} disabilitato={quanti === 0}>
-        {quanti === 0 ? t('Collegane almeno una') : frasi.avantiCollegate(quanti)}
-      </Primario>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center' }}>
+        <Primario onClick={avanti} disabilitato={quanti === 0}>
+          {quanti === 0 ? t('Collegane almeno una') : frasi.avantiCollegate(quanti)}
+        </Primario>
+        {/* chi non ha niente sotto mano non deve restare bloccato qui: la chat
+            funziona anche senza fonti, e le fonti si collegano quando si vuole */}
+        {quanti === 0 && <Secondario onClick={avanti}>{t('Le collego dopo')}</Secondario>}
+      </div>
     </div>
   )
 }
@@ -382,7 +444,7 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
           boxShadow: c.collegato ? `0 0 0 5px ${colore}22` : 'none'
         }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15 }}>{c.nome}</div>
+          <div style={{ fontSize: 15 }}>{t(c.nome)}</div>
           <div style={{ fontSize: '12.5px', color: 'rgba(244,239,232,.5)', marginTop: 3 }}>
             {c.collegato ? (c.documenti ? frasi.documentiLetti(String(c.documenti)) : t('collegato')) : t(c.nota)}
           </div>

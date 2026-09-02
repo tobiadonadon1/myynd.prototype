@@ -79,6 +79,74 @@ function CampoFuoco({ v }: { v: Vals }) {
  * Prima l'unica strada era la riga di comando di chi ospita — cioè nessuna,
  * per chi usa.
  */
+/**
+ * Quanto è costato ragionare, e dove sta il tetto.
+ *
+ * Prima «perché ho speso sei dollari in tre giorni» non aveva un posto in
+ * cui trovare risposta. Qui si vede oggi e gli ultimi giorni, in token — che
+ * è quello che si paga — e si mette un tetto oltre il quale Myynd smette di
+ * chiamare il modello fino a domani.
+ */
+function Uso() {
+  const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
+  const [tetto, setTetto] = useState('')
+  const [salvo, setSalvo] = useState(false)
+  const [guaio, setGuaio] = useState('')
+  useEffect(() => {
+    api.uso().then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') }).catch(() => {})
+  }, [])
+
+  const salva = async () => {
+    const n = Math.max(0, Math.floor(Number(tetto) || 0))
+    setSalvo(true); setGuaio('')
+    try { await api.profilo({ tetto: n }); setU(await api.uso()) }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setSalvo(false)
+  }
+
+  if (!u) return null
+  const mila = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n)
+  const giorni = u.giorni.slice(-7)
+  const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Quanto ha ragionato')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+        {u.oggi.chiamate
+          ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
+          : t('Oggi ancora niente.')}
+        {u.oggi.raggiunto && <span style={{ color: '#8E3F1F' }}> {t('Tetto raggiunto: si riparte domani.')}</span>}
+      </div>
+      {giorni.length > 1 && (
+        <div aria-hidden="true" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 44, marginTop: 14, maxWidth: 320 }}>
+          {giorni.map(g => {
+            const tot = g.entrata + g.uscita
+            return <div key={g.giorno} title={`${g.giorno} · ${mila(tot)}`} style={{
+              flex: 1, height: `${Math.max(8, Math.round(100 * tot / max))}%`, borderRadius: 3, background: 'rgba(196,98,59,.55)'
+            }} />
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Tetto al giorno, in token')}</div>
+          <input inputMode="numeric" value={tetto} placeholder={t('nessuno')}
+            onChange={e => setTetto(e.target.value.replace(/[^\d]/g, ''))}
+            onKeyDown={e => { if (e.key === 'Enter') salva() }}
+            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 160 }} />
+        </div>
+        <button onClick={salva} disabled={salvo} style={{
+          padding: '10px 18px', borderRadius: 99, border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+          color: 'rgba(34,39,31,.78)', fontSize: '13px', fontFamily: 'inherit', cursor: salvo ? 'default' : 'pointer'
+        }}>{salvo ? t('Un momento…') : t('Salva')}</button>
+      </div>
+      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 8 }}>{t('Vuoto vuol dire: nessun tetto. Mille token sono circa una pagina.')}</div>
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
+}
+
 function Conto() {
   const [attuale, setAttuale] = useState('')
   const [nuova, setNuova] = useState('')
@@ -703,6 +771,8 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
         <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
+
+      <Uso />
 
       <Conto />
 
