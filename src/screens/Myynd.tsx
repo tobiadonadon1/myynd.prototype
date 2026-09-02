@@ -361,7 +361,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#2F4A33', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
           hover={{ background: '#FFFFFF' }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
-          {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'))}
+          {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
         </Hov>
       </div>
 

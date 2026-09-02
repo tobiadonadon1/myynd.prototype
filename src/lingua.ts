@@ -1374,8 +1374,12 @@ export const frasi = {
     ? (n === 1 ? 'one draft is waiting for you' : `${n} drafts are waiting for you`)
     : (n === 1 ? 'una bozza aspetta te' : `${n} bozze aspettano te`),
 
-  fontiEDocumenti: (fonti: number, docs: string) =>
-    corrente === 'en' ? `${fonti} sources · ${docs} documents` : `${fonti} fonti · ${docs} documenti`,
+  // il singolare esiste, ed è il caso più comune al primo giorno: «1 sources»
+  // è il genere di sciatteria che si nota subito e non si dimentica
+  fontiEDocumenti: (fonti: number, docs: string, uno: boolean) =>
+    corrente === 'en'
+      ? `${fonti} source${fonti === 1 ? '' : 's'} · ${docs} document${uno ? '' : 's'}`
+      : `${fonti} font${fonti === 1 ? 'e' : 'i'} · ${docs} document${uno ? 'o' : 'i'}`,
 
   daGuardare: (n: number, parola: string) =>
     corrente === 'en'
