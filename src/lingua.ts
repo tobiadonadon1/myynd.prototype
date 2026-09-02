@@ -1188,6 +1188,19 @@ const EN: Record<string, string> = {
   'Sicuro?': 'Sure?',
   'per cosa aprono': 'by what they open',
   'Ogni lunedì dimmi quali preventivi in @ sono ancora senza risposta': 'Every Monday tell me which quotes in @ are still unanswered',
+
+// — l'aiuto: la guida dentro l'app. Il testo lungo sta in Aiuto.tsx nelle due
+//   lingue; qui ci sono solo le etichette che compaiono anche altrove —
+  'Aiuto': 'Help',
+  'In questa pagina': 'On this page',
+  'Apri le connessioni': 'Open connections',
+  'Apri la lista': 'Open the list',
+  'Apri la chat': 'Open the chat',
+  'Vai alla prima pagina': 'Go to the front page',
+  'Apri le automazioni': 'Open automations',
+  'Apri la memoria': 'Open memory',
+  'Apri le preferenze': 'Open preferences',
+  'Scrivi a Tobia': 'Write to Tobia',
 }
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */

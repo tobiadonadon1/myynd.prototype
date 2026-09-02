@@ -4,7 +4,7 @@
 
 import { loc } from './lingua'
 
-export type Screen = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria'
+export type Screen = 'myynd' | 'oggi' | 'chat' | 'auto' | 'mappa' | 'pref' | 'conn' | 'memoria' | 'aiuto'
 
 export type Campo = { k: string; v: string }
 export type Fonte = { id: string; label: string }
@@ -38,7 +38,9 @@ export type Gruppo = { id: string; nome: string; colore: string; nodi: number }
 export const AUTONOMIE = [
   { id: 'chiedere', titolo: 'Solo osservare', nota: 'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.' },
   { id: 'preparare', titolo: 'Preparare e aspettare', nota: 'Scrive bozze e brief, niente esce senza il tuo Invia.' },
-  { id: 'fare', titolo: 'Fino all’ultimo passo', nota: 'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.' }
+  // l'apostrofo è quello dritto perché è quello della chiave nel dizionario:
+  // con quello tipografico la ricerca falliva e il titolo restava in italiano
+  { id: 'fare', titolo: "Fino all'ultimo passo", nota: 'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.' }
 ]
 
 /** I modelli fra cui scegliere. Rispecchia MODELLI in server/config.ts. */

@@ -155,3 +155,12 @@ export const IconScatola = ({ size = 15, style }: P) => (
     <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" /><path d="M2.5 4.5h19V8h-19z" /><path d="M10 12h4" />
   </svg>
 )
+
+/** L'aiuto: una domanda nel suo cerchio. Sta nel menù accanto alle preferenze. */
+export const IconAiuto = ({ size = 16, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <circle cx="12" cy="12" r="8.6" />
+    <path d="M9.6 9.7a2.5 2.5 0 0 1 4.85.7c0 1.6-2.45 2-2.45 3.4" />
+    <path d="M12 17.1h.01" />
+  </svg>
+)
