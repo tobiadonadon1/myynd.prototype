@@ -1,11 +1,14 @@
 # Myynd
 
 Il secondo cervello dell'azienda. Legge le fonti che le colleghi — posta, file,
-note — e da lì risponde alle tue domande citando da dove viene la risposta.
+note, chat — e da lì risponde alle tue domande citando da dove viene la
+risposta, prepara bozze, e tiene una lista di cose da fare che sa svolgere.
 
-Gira tutto in locale: l'indice e le credenziali stanno in `~/.myynd` su questa
-macchina. L'unica cosa che esce sono le domande che fai a Claude, insieme ai
-pezzi di documento che servono a rispondere.
+Gira in due modi. **Sul tuo computer**: l'indice e le credenziali stanno in
+`~/.myynd`, e l'unica cosa che esce sono le domande al modello con i pezzi di
+documento che servono. **Su un server** (Docker, Railway): ogni persona ha la
+sua cartella e il suo indice sotto `MYYND_DATI/utenti/<id>`, e nessuno vede
+quello di un altro.
 
 ## Avvio
 
@@ -14,59 +17,85 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-Partono due cose: il server locale su `127.0.0.1:5174` (legge posta, file e
-note) e l'interfaccia su `5173`. Al primo avvio si apre l'onboarding.
+Partono due cose: il server su `127.0.0.1:5174` e l'interfaccia su `5173`. Al
+primo avvio si crea l'accesso e si apre l'onboarding.
+
+## Su un server
+
+Un'immagine sola (`Dockerfile`): costruisce l'interfaccia e la serve dallo
+stesso processo che tiene l'API. Il server si accorge da solo di essere
+ospitato (`RAILWAY_ENVIRONMENT`, `RENDER`, `FLY_APP_NAME`, `K_SERVICE`, `DYNO`,
+`KUBERNETES_SERVICE_HOST`) e si mette in ascolto su `0.0.0.0`.
+
+| Variabile | Serve a |
+| --------- | ------- |
+| `MYYND_DATI` | Dove vive tutto. **Va montato un volume**, o ogni ridistribuzione riparte vuota. Il Dockerfile la mette a `/dati`. |
+| `PORT` | La porta che il proxy di chi ospita chiama. Railway la imposta da sé. |
+| `MYYND_PUBBLICO` | Il dominio pubblico, es. `myynd.tuodominio.it`. Serve alla guardia sull'Host e al ritorno OAuth. Senza, Railway usa il suo. |
+| `MYYND_REGISTRAZIONE` | `aperta` (predefinito), `invito` o `chiusa`. |
+| `MYYND_INVITO` | La parola da dare a chi si registra, con `invito`. |
+| `MYYND_DOMINI` | Domini email ammessi alla registrazione, separati da virgola. Vuoto = tutti. |
+| `MYYND_GOOGLE_CLIENT_ID`, `MYYND_GOOGLE_CLIENT_SECRET` | L'app OAuth di chi ospita, per Gmail, Calendario e Drive. Tipo «Applicazione web», URI di ritorno **esattamente** `https://<dominio>/api/oauth/ritorno`. Senza, quelle schede si dichiarano non disponibili. |
+| `MYYND_MICROSOFT_CLIENT_ID`, `MYYND_MICROSOFT_CLIENT_SECRET`, `MYYND_MICROSOFT_TENANT` | Idem per Outlook, Calendario e SharePoint (Entra ID, piattaforma «Web», stesso URI di ritorno; tenant predefinito `common`). |
+
+Su un server **non** si usano: le cartelle del desktop, Claude Code, e la
+chiave `ANTHROPIC_API_KEY` dell'ambiente (sarebbe di chi ospita, spesa da
+tutti). Ognuno collega la propria chiave, o un fornitore compatibile con
+OpenAI, dalle preferenze.
+
+## Il modello
+
+Tre strade, in quest'ordine di preferenza e di costo:
+
+1. **Un modello di casa** (Ollama) per i lavori piccoli — titoli, traduzioni,
+   memoria, rassegna — se c'è, e solo sul tuo computer.
+2. **L'abbonamento Claude** di chi usa, attraverso Claude Code, solo sul tuo
+   computer e solo per la chat.
+3. **Una chiave API**: Anthropic, oppure un fornitore compatibile con OpenAI
+   (OpenAI, OpenRouter, Groq, Mistral, o Ollama e LM Studio in casa) per tutto
+   il lavoro grosso. Si sceglie nelle preferenze, che mostrano anche quanto si
+   è speso oggi e permettono un tetto giornaliero di token.
+
+La tabella `LAVORI` in `server/modello.ts` decide quale lavoro è di frontiera.
 
 ## Connettori
 
-| Connettore | Stato | Cosa serve |
-| ---------- | ----- | ---------- |
-| **Posta** | funziona | Host IMAP, indirizzo, password della casella |
-| **Desktop** | funziona | Le cartelle che scegli — solo lettura, solo file di testo |
-| **Notion** | funziona | Token di integrazione interna + pagine condivise con l'integrazione |
-| **Claude** | funziona | Una chiave API da console.anthropic.com |
-| WhatsApp, Teams, Slack, Calendario, Drive, SharePoint, Dropbox, Fatture in Cloud | da fare | App registrata o OAuth |
-
-### Posta su Register.it
-
-Il dominio `donadon.com` è su Register.it, che dà IMAP e SMTP normali: niente
-OAuth, basta la password della casella.
-
-```
-IMAP   imap.register.it : 993   (SSL)
-SMTP   smtp.register.it : 465   (SSL)
-utente il tuo indirizzo completo
-```
-
-Gmail, Outlook e Aruba sono precompilati nel server (`server/connettori/posta.ts`);
-per Gmail serve una password per le app, non quella dell'account.
-
-### Notion
-
-Crea un'integrazione interna su notion.so/my-integrations, copia il token, poi
-**condividi con l'integrazione le pagine che vuoi far leggere** — senza quel
-passaggio l'API non le vede, anche col token giusto.
+| Connettore | Cosa serve |
+| ---------- | ---------- |
+| **Posta** (IMAP) | Indirizzo e password della casella: il server lo trova da solo. Gmail, iCloud e Yahoo vogliono una «password per le app»; Outlook.com non accetta più password via IMAP e passa dal connettore Microsoft. Legge anche la posta inviata. |
+| **Gmail e Calendario**, **Google Drive** | Sul tuo computer: la tua app su Google Cloud (client ID). Su un server: un bottone, con l'app di chi ospita. |
+| **Outlook e Calendario**, **SharePoint e OneDrive** | Idem, con Entra ID. |
+| **Notion** | Token di integrazione interna, e le pagine condivise con l'integrazione. |
+| **Slack** | Un token utente `xoxp-…` con gli ambiti di lettura. |
+| **Dropbox** | La chiave dell'app e un codice da incollare una volta. |
+| **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
+| **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
 
 ## Com'è fatto
 
 ```
-server/                 Node, solo su 127.0.0.1
+server/                 Node 24+, TypeScript eseguito direttamente (solo type stripping)
   index.ts              le API
-  config.ts             ~/.myynd/config.json, 0600 — i segreti non escono mai di qui
-  store.ts              ~/.myynd/mente.db — SQLite + FTS5, dal modulo node:sqlite
-  claude.ts             il ragionamento: recupera dall'indice, poi chiede a Claude
-  connettori/           posta (IMAP) · desktop (file) · notion (API) · registro
+  ospitato.ts           cosa cambia su un server, e le variabili di chi ospita
+  auth.ts · conti.ts    accesso, sessioni, più persone sulla stessa installazione
+  chi.ts                di chi è questa richiesta (AsyncLocalStorage)
+  config.ts             config.json per persona, 0600
+  store.ts              mente.db per persona — SQLite + FTS5 da node:sqlite, migrazioni
+  modello.ts            chi ragiona: locale → abbonamento → chiave; il tetto e il registro dell'uso
+  compatibile.ts        il fornitore compatibile con OpenAI, tradotto in forma Anthropic
+  claude.ts             il ragionamento: recupero, prompt, strumenti, bozze
+  compiti.ts            la coda delle cose affidate a Myynd
+  automazioni.ts        le ricette che girano da sole
+  connettori/           posta · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop
+                        oauth.ts: il ballo su 127.0.0.1 in casa, via web ospitati
 
 src/
-  onboarding/           il primo avvio: campo.ts è il campo di particelle
-  screens/              una schermata per file
-  vals.ts               tutto lo stato dell'app, alimentato dalle API
-  brain.ts              la palla della Mappa, costruita sui gruppi veri
-  useMappa.ts           il disegno del grafo su canvas
+  Accesso.tsx           entrare e registrarsi
+  onboarding/           il primo avvio
+  screens/              una schermata per file (Myynd, Oggi, Chat, Automazioni, Memoria, Mappa, Preferenze, Aiuto)
+  lingua.ts             il dizionario: chiavi in italiano, valori in inglese
+  vals.ts               lo stato dell'app
 ```
-
-Niente dati finti: se non hai collegato niente, le schermate lo dicono invece
-di mostrare un'azienda inventata.
 
 ## Comandi
 
@@ -74,13 +103,12 @@ di mostrare un'azienda inventata.
 | ------- | ------- |
 | `npm run dev` | Server + interfaccia |
 | `npm run typecheck` | Controlla i tipi di entrambi |
+| `npm test` | Le prove (`server/*.test.ts`, `src/*.test.ts`); quelle che chiamano un modello vero solo con `MYYND_VIVO=1` |
 | `npm run build` | Typecheck + bundle |
+| `npm run password` | Cambia la password di un conto dalla riga di comando |
 
-## Stato
-
-Funzionano: onboarding, i quattro connettori, indicizzazione, ricerca
-full-text, mappa, chat con citazione delle fonti, feed generato da Claude.
-
-Non ci sono ancora: le automazioni (la schermata lo dice), l'invio di email
-(SMTP è configurato ma non collegato a un'azione), e i connettori che
-richiedono OAuth.
+Due regole del codice che non si vedono dal typecheck: node esegue il
+TypeScript togliendo i tipi e basta, quindi niente `enum`, parameter
+properties, namespace o decoratori; e ogni frase che il server può mostrare a
+una persona deve avere la sua riga inglese in `src/lingua.ts` — una prova lo
+controlla.
