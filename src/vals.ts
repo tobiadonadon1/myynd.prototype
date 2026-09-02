@@ -141,10 +141,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const mappaInVista = screen === 'mappa' || mapFull
   const ball = useMemo(
     () => (!mappaInVista ? PALLA_VUOTA
-      // Con il materiale vero la palla nasce dai legami fra i documenti; finché
-      // il grafo non è arrivato — o finché non c'è niente dentro — resta la
-      // forma costruita sui conteggi, che è una scenografia e non pretende altro.
-      : grafo && grafo.nodi.length ? costruisciDaGrafo(grafo)
+      // Con il materiale vero la palla nasce dai legami fra i documenti. Finché
+      // il grafo non è arrivato — o se non è arrivato affatto — non si disegna
+      // niente e lo si dice: prima al suo posto compariva la forma costruita
+      // sui conteggi, una scenografia che chi guardava prendeva per i propri
+      // documenti. Quella resta solo per un grafo arrivato e vuoto.
+      : !grafo ? PALLA_VUOTA
+      : grafo.nodi.length ? costruisciDaGrafo(grafo)
       : costruisci(gruppi)),
     [mappaInVista, grafo, gruppi]
   )
@@ -189,8 +192,24 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * Costruirlo lato server vuol dire un indice rovesciato su tutto il materiale:
    * si chiede quando si apre la Mappa, non a ogni avvio dell'app.
    */
+  /*
+   * Il grafo che non arriva si dice, non si finge. `costruendoMappa` copre il
+   * tempo della chiamata; `guastoMappa` resta finché qualcuno non riprova.
+   */
+  const [guastoMappa, setGuastoMappa] = useState<string | null>(null)
+  const [costruendoMappa, setCostruendoMappa] = useState(false)
+
   const caricaMente = useCallback(async (conGrafo = false) => {
-    const m = await api.mente(conGrafo)
+    if (conGrafo) { setCostruendoMappa(true); setGuastoMappa(null) }
+    let m: Awaited<ReturnType<typeof api.mente>>
+    try {
+      m = await api.mente(conGrafo)
+    } catch (e) {
+      if (conGrafo) setGuastoMappa(e instanceof Error ? t(e.message) : t('Non sono riuscito a costruire la mappa.'))
+      throw e
+    } finally {
+      if (conGrafo) setCostruendoMappa(false)
+    }
     setGruppi(m.gruppi)
     // se non l'abbiamo chiesto non si azzera quello che c'era: chi ha la Mappa
     // aperta durante una lettura non deve vederla sparire
@@ -198,10 +217,21 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     setSel(s => s || m.gruppi[0]?.id || '')
   }, [])
 
+  /*
+   * La chat non deve dire «Cosa vuoi sapere?» prima di sapere se è vuota.
+   * Due attese: l'elenco delle conversazioni, e i messaggi di quella aperta.
+   */
+  const [elencoChatPronto, setElencoChatPronto] = useState(false)
+  const [messaggiPronti, setMessaggiPronti] = useState(true)
+
   const caricaChat = useCallback(async () => {
-    const c = await api.chat()
-    setThreads(c)
-    setThread(t => t ?? c[0]?.id ?? null)
+    try {
+      const c = await api.chat()
+      setThreads(c)
+      setThread(t => t ?? c[0]?.id ?? null)
+    } finally {
+      setElencoChatPronto(true)
+    }
   }, [])
 
   useEffect(() => {
@@ -219,11 +249,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // deve sovrascrivere quella nuova, né cancellare la bolla ottimistica
   const gen = useRef(0)
   useEffect(() => {
-    if (!thread) { setMessaggi([]); return }
+    if (!thread) { setMessaggi([]); setMessaggiPronti(true); return }
     const mio = ++gen.current
+    setMessaggiPronti(false)
     api.messaggi(thread)
       .then(m => { if (gen.current === mio) setMessaggi(m) })
       .catch(() => { if (gen.current === mio) setMessaggi([]) })
+      .finally(() => { if (gen.current === mio) setMessaggiPronti(true) })
   }, [thread])
 
   useEffect(() => {
@@ -754,20 +786,17 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — chat —
     threads: threads.map(ch => ({
       id: ch.id, titolo: ch.titolo, quando: quando(ch.quando),
+      aperta: ch.id === thread,
+      sopra: ch.id === hoverThread,
       row: {
         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10, cursor: 'pointer',
         background: ch.id === thread ? 'rgba(255,255,255,.92)' : ch.id === hoverThread ? 'rgba(255,255,255,.6)' : 'transparent'
       } as CSSProperties,
-      binStyle: {
-        width: 22, height: 22, flex: 'none', display: 'grid', placeItems: 'center', border: 'none',
-        background: 'none', padding: 0, cursor: 'pointer', color: '#C0392B',
-        opacity: ch.id === hoverThread ? 1 : 0, transition: 'opacity .15s'
-      } as CSSProperties,
       onEnter: () => setHoverThread(ch.id),
       onLeave: () => setHoverThread(h => (h === ch.id ? null : h)),
       onClick: () => setThread(ch.id),
-      onDelete: async (e: React.MouseEvent) => {
-        e.stopPropagation()
+      // chiede una volta, sul posto: il cestino della riga se ne occupa
+      onDelete: async () => {
         try {
           await api.eliminaChat(ch.id)
         } catch (e) {
@@ -782,6 +811,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     })),
     newChat: () => { setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
     chatEmpty: messaggi.length === 0,
+    chatCaricata: elencoChatPronto && messaggiPronti,
     chatTitolo: th?.titolo ?? 'Nuova chat',
     pensando,
     messages: messaggi.map(m => ({
@@ -823,6 +853,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       ? frasi.documentiEGruppi(stato.conteggi.totale.toLocaleString(loc()), gruppi.length)
       : t('ancora nessun documento'),
     mappaVuota: !gruppi.length,
+    guastoMappa,
+    // «costruisco» solo finché non c'è niente: sopra a una mappa che c'è già si rilegge in silenzio
+    costruendoMappa: costruendoMappa && !grafo,
+    ricaricaMappa: () => { caricaMente(true).catch(() => {}) },
     mapFull,
     expandMap: () => setMapFull(true),
     closeMap: () => setMapFull(false),
@@ -919,6 +953,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     })),
     autonomie: AUTONOMIE.map(a => ({
       ...a, titolo: t(a.titolo), nota: t(a.nota),
+      scelto: stato.config.autonomia === a.id,
       onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => mostraToast(t('Non sono riuscito a salvare la preferenza.'))) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',

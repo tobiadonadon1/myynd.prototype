@@ -73,7 +73,8 @@ export function Stato({ tipo, testo, chiaro, stile }: {
 }) {
   const d = DEF[tipo]
   return (
-    <div style={{
+    // uno stato è una notizia: chi legge con lo schermo la sente senza doverla cercare
+    <div role="status" style={{
       display: 'inline-flex', alignItems: 'center', gap: 11,
       padding: '9px 15px 9px 11px', borderRadius: 14,
       background: chiaro ? 'rgba(244,239,232,.06)' : 'rgba(34,39,31,.05)',

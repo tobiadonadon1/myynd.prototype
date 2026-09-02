@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { Campo } from './campo'
 import { api, rigaSincronizzazione, type Abbonamento, type Stato } from '../api'
-import { Hov } from '../ui'
+import { BottoneSicuro, Hov, daTastiera } from '../ui'
 import { IconPiu } from '../icons'
 import { Form, FormClaude } from '../components/forms'
 import { Stato as Indicatore } from '../components/Stato'
@@ -374,7 +374,8 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
       borderRadius: 18, border: `1px solid ${c.collegato ? 'rgba(244,239,232,.3)' : 'rgba(244,239,232,.14)'}`,
       background: c.collegato ? 'rgba(244,239,232,.08)' : 'rgba(244,239,232,.03)', overflow: 'hidden'
     }}>
-      <div onClick={apri} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', cursor: 'pointer' }}>
+      <div role="button" tabIndex={0} aria-expanded={aperto} onClick={apri} onKeyDown={daTastiera(apri)}
+        style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', cursor: 'pointer' }}>
         <span style={{
           width: 9, height: 9, borderRadius: '50%', flex: 'none',
           background: c.collegato ? colore : 'rgba(244,239,232,.25)',
@@ -387,14 +388,13 @@ function Scheda({ c, aperto, apri, ricarica, chiudi }: {
           </div>
         </div>
         {c.collegato ? (
-          <Hov as="button"
-            onClick={async (e: React.MouseEvent) => {
-              e.stopPropagation()
+          <BottoneSicuro chiaro titolo={t('Scollega')}
+            fai={async () => {
               try { await api.scollega(c.id) } catch { /* il vero stato lo dice ricarica */ }
               await ricarica()
-            }}
-            style={{ border: 'none', background: 'none', color: 'rgba(244,239,232,.45)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-            hover={{ color: '#E08A6A' }}>{t('Scollega')}</Hov>
+            }}>
+            {t('Scollega')}
+          </BottoneSicuro>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: CHIARO }}>
             <IconPiu size={13} />{t('Collega')}</span>

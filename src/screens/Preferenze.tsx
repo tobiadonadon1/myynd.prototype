@@ -2,8 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, sessione, type Abbonamento as TipoAbbonamento } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
-import { CARD_GLASS, Hov, LABEL, knob, track } from '../ui'
+import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
 import type { Vals } from '../vals'
+
+/** Una riga che si sceglie, scritta come bottone: perde il vestito del bottone e tiene il suo. */
+const RIGA_BOTTONE: React.CSSProperties = {
+  border: 'none', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left', width: '100%'
+}
 
 
 /**
@@ -193,10 +198,12 @@ function Trasloco() {
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* uno solo pieno: mentre «Sostituisci?» è aperto qui sotto, il pieno è quello */}
         <button onClick={scarica} disabled={!!faccio} style={{
-          padding: '11px 20px', borderRadius: 99, border: 'none',
-          background: faccio ? 'rgba(34,39,31,.18)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
-          color: faccio ? 'rgba(34,39,31,.5)' : '#FFF7F0',
+          padding: '11px 20px', borderRadius: 99,
+          border: conferma && !faccio ? '1px solid rgba(34,39,31,.18)' : '1px solid transparent',
+          background: faccio ? 'rgba(34,39,31,.18)' : conferma ? 'rgba(255,255,255,.6)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
+          color: faccio ? 'rgba(34,39,31,.5)' : conferma ? 'rgba(34,39,31,.78)' : '#FFF7F0',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
         }}>{faccio === 'scarico' ? t('Preparo…') : chiedoPassword ? t('Conferma') : t('Scaricalo')}</button>
@@ -425,7 +432,10 @@ function Abbonamento() {
           il modo di spegnerlo, se nel frattempo è uscito da Claude Code. Si
           nasconde solo quando non c'è niente da guadagnare ad accenderlo.
         */}
-        {(s.entrato || s.acceso) && <div onClick={cambia} style={track(s.acceso)}><div style={knob()} /></div>}
+        {(s.entrato || s.acceso) && (
+          <button type="button" role="switch" aria-checked={s.acceso} aria-label={t('Con il tuo abbonamento')}
+            onClick={cambia} style={track(s.acceso)}><span style={knob()} /></button>
+        )}
       </div>
     </div>
   )
@@ -478,7 +488,8 @@ function ModelloDiCasa() {
             {t('Titoli delle chat, traduzioni, e quello che si segna di te: se qui c’è un modello acceso lo fa lui e non costa niente. Le risposte e le bozze restano a Claude, perché è lì che sbagliare costa.')}
           </div>
         </div>
-        <div onClick={cambia} style={track(!s.spento)}><div style={knob()} /></div>
+        <button type="button" role="switch" aria-checked={!s.spento} aria-label={t('Il lavoro piccolo, su questo computer')}
+          onClick={cambia} style={track(!s.spento)}><span style={knob()} /></button>
       </div>
       {/*
         La strada per farlo fare tutto a un modello di casa esiste, e va detta
@@ -523,11 +534,13 @@ function Motore({ v }: { v: Vals }) {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
       <div style={LABEL}>{t('Con quale motore lavora')}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
         {scelte.map(s => {
           const scelto = v.motore === s.id
           return (
-            <div key={s.id} onClick={() => v.scegliMotore(s.id)} style={{
+            // dentro c'è il bottone «Cambia»: la riga tiene il ruolo, non il tag
+            <div key={s.id} role="radio" aria-checked={scelto} tabIndex={0}
+              onClick={() => v.scegliMotore(s.id)} onKeyDown={daTastiera(() => v.scegliMotore(s.id))} style={{
               display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
               background: scelto ? 'rgba(255,255,255,.85)' : 'transparent',
               boxShadow: scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
@@ -614,15 +627,15 @@ export function Preferenze({ v }: { v: Vals }) {
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Autonomia')}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
           {v.autonomie.map(a => (
-            <div key={a.id} onClick={a.onClick} style={a.row}>
+            <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick} style={{ ...a.row, ...RIGA_BOTTONE }}>
               <span style={a.radio} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 15 }}>{a.titolo}</div>
                 <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3 }}>{a.nota}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -636,9 +649,10 @@ export function Preferenze({ v }: { v: Vals }) {
           motore il modello lo dice la sua scheda. */}
       {v.motore === 'claude' && <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Con quale modello ragiona')}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        <div role="radiogroup" aria-label={t('Con quale modello ragiona')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
           {v.modelli.map(m => (
-            <div key={m.id} onClick={m.onClick} style={{
+            <button key={m.id} type="button" role="radio" aria-checked={m.scelto} onClick={m.onClick} style={{
+              ...RIGA_BOTTONE,
               display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
               background: m.scelto ? 'rgba(255,255,255,.85)' : 'transparent',
               boxShadow: m.scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
@@ -652,7 +666,7 @@ export function Preferenze({ v }: { v: Vals }) {
                 <div style={{ fontSize: 15 }}>{m.nome}</div>
                 <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{m.nota}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>}

@@ -1297,6 +1297,9 @@ const EN: Record<string, string> = {
   'Scrivi a Tobia': 'Write to Tobia',
 // — la lista: cosa sta facendo Myynd su una riga affidata —
   'Scrivo…': 'Writing…',
+  'Cerca': 'Search',
+  'Costruisco la mappa…': 'Building the map…',
+  'Non sono riuscito a costruire la mappa.': 'I could not build the map.',
 }
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */

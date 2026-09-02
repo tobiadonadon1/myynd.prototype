@@ -31,8 +31,7 @@
 import { useState } from 'react'
 import type { Attrezzo, Automazione } from '../api'
 import { frasi, loc, t } from '../lingua'
-import { Hov } from '../ui'
-import { IconCestino } from '../icons'
+import { Cestino, Hov, daTastiera, useAttiva } from '../ui'
 import { Pastiglia } from './Chiocciola'
 
 const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato']
@@ -99,15 +98,16 @@ function Interruttore({ on, onClick, titolo }: {
   on: boolean; onClick: (e: React.MouseEvent) => void; titolo: string
 }) {
   return (
-    <div onClick={onClick} title={titolo} role="switch" aria-checked={on} aria-label={titolo}
+    // un bottone, non un div: da tastiera un div non si raggiunge
+    <button type="button" onClick={onClick} title={titolo} role="switch" aria-checked={on} aria-label={titolo}
       style={{
-        width: 32, height: 19, flex: 'none', borderRadius: 99, padding: 2, boxSizing: 'border-box',
+        width: 32, height: 19, flex: 'none', borderRadius: 99, padding: 2, boxSizing: 'border-box', border: 'none',
         cursor: 'pointer', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start',
         background: on ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.17)',
         transition: 'background .2s'
       }}>
-      <div style={{ width: 15, height: 15, borderRadius: '50%', background: '#FFFDF9', boxShadow: '0 1px 4px rgba(30,20,14,.28)' }} />
-    </div>
+      <span style={{ width: 15, height: 15, borderRadius: '50%', background: '#FFFDF9', boxShadow: '0 1px 4px rgba(30,20,14,.28)' }} />
+    </button>
   )
 }
 
@@ -118,26 +118,27 @@ export function Scheda({ a, catalogo, apri, accendi, butta, prendi, ritardo }: {
   accendi: (e: React.MouseEvent) => void
   /** Buttala. Compare passandoci sopra: sta lì e non dentro, perché toglierne
       una è un gesto che si fa guardando la griglia, non aprendo la scheda. */
-  butta: (e: React.MouseEvent) => void
+  butta: () => void
   /** Comincia a trascinarla verso una cartella. */
   prendi: (e: React.DragEvent) => void
   /** Un filo di ritardo sull'entrata: le schede compaiono a cascata, non in blocco. */
   ritardo: number
 }) {
-  const [sopra, setSopra] = useState(false)
+  // `sopra` alza la scheda al passaggio; `attiva` — anche con il fuoco dentro, o
+  // su un dito — è quello che fa comparire il cestino
+  const { attiva, sopra, props: sottoMano } = useAttiva()
   const [presa, setPresa] = useState(false)
-  const [chiedo, setChiedo] = useState(false)
   const suoi = a.attrezzi.map(n => catalogo.find(x => x.nome === n)).filter((x): x is Attrezzo => !!x)
   const fondo = statoInFondo(a)
 
   return (
     <div
+      role="button" tabIndex={0}
       draggable
       onDragStart={e => { setPresa(true); prendi(e) }}
       onDragEnd={() => setPresa(false)}
-      onClick={apri}
-      onMouseEnter={() => setSopra(true)}
-      onMouseLeave={() => { setSopra(false); setChiedo(false) }}
+      onClick={apri} onKeyDown={daTastiera(apri)}
+      {...sottoMano}
       style={{
         position: 'relative', display: 'flex', flexDirection: 'column',
         minHeight: 186, padding: '16px 17px 14px', borderRadius: 22,
@@ -173,34 +174,11 @@ export function Scheda({ a, catalogo, apri, accendi, butta, prendi, ritardo }: {
         }}>{a.nome}</div>
 
         {/*
-          Il cestino compare solo passandoci sopra, e chiede una volta.
+          Il cestino compare quando la scheda è sotto mano, e chiede una volta.
           Non un dialogo in mezzo allo schermo: il bottone stesso diventa la
           domanda, e mollare il mouse è già la risposta «no».
         */}
-        {sopra && (
-          chiedo ? (
-            <Hov as="button"
-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); butta(e) }}
-              title={t('Buttala')}
-              style={{
-                flex: 'none', padding: '3px 9px', borderRadius: 99, cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '11px', fontWeight: 500,
-                border: '1px solid rgba(142,63,31,.4)', background: 'rgba(142,63,31,.12)',
-                color: '#8E3F1F', animation: 'fadein .12s ease'
-              }}
-              hover={{ background: 'rgba(142,63,31,.2)' }}>{t('Sicuro?')}</Hov>
-          ) : (
-            <Hov as="span"
-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); setChiedo(true) }}
-              title={t('Buttala')} aria-label={t('Buttala')}
-              style={{
-                display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none',
-                borderRadius: 7, cursor: 'pointer', color: 'rgba(34,39,31,.32)',
-                animation: 'fadein .12s ease'
-              }}
-              hover={{ background: 'rgba(142,63,31,.11)', color: '#8E3F1F' }}><IconCestino size={12} /></Hov>
-          )
-        )}
+        <Cestino fai={butta} titolo={t('Buttala')} visibile={attiva} />
       </div>
 
       <div style={{
@@ -252,11 +230,11 @@ export function Scheda({ a, catalogo, apri, accendi, butta, prendi, ritardo }: {
 /** Il riquadro tratteggiato che invita a scrivertene una. Sta in griglia con le altre. */
 export function Vuota({ apri }: { apri: () => void }) {
   return (
-    <Hov onClick={apri}
+    <Hov as="button" type="button" onClick={apri}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 7, minHeight: 186, borderRadius: 22, cursor: 'pointer', textAlign: 'center',
-        padding: '15px 18px', boxSizing: 'border-box',
+        padding: '15px 18px', boxSizing: 'border-box', width: '100%', fontFamily: 'inherit',
         border: '1px dashed rgba(34,39,31,.2)', background: 'rgba(255,253,249,.3)',
         color: 'rgba(34,39,31,.5)', transition: 'border-color .2s, color .2s, background .2s'
       }}

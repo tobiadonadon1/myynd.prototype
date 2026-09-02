@@ -10,7 +10,9 @@ export function Chat({ v }: { v: Vals }) {
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div ref={v.threadRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 2px 8px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {v.chatEmpty && !v.pensando && (
+        {/* «Cosa vuoi sapere?» solo quando è vero: per un attimo, mentre i
+            messaggi arrivavano, la chat piena si presentava vuota */}
+        {v.chatEmpty && v.chatCaricata && !v.pensando && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 4px 40px' }}>
             {/* Il conto dei documenti letti stava qui sotto la domanda. Ma
                 che abbia letto le tue cose è il presupposto del prodotto, non
@@ -41,7 +43,7 @@ export function Chat({ v }: { v: Vals }) {
         )}
       </div>
 
-      {v.prompts.length > 0 && v.chatEmpty && (
+      {v.prompts.length > 0 && v.chatEmpty && v.chatCaricata && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '6px 2px 12px' }}>
           {v.prompts.map(p => (
             <Hov key={p.id} as="button" onClick={p.onClick}
@@ -56,7 +58,7 @@ export function Chat({ v }: { v: Vals }) {
           placeholder={v.claudeOn ? t('Chiedi qualcosa al tuo materiale…') : t('Collega Claude per fare domande')}
           disabled={!v.claudeOn}
           style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 15, color: '#22271F' }} />
-        <button onClick={v.send} disabled={!v.claudeOn || v.pensando} style={{
+        <button onClick={v.send} disabled={!v.claudeOn || v.pensando} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
           background: v.claudeOn ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
           color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default'

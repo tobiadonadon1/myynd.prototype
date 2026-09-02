@@ -22,12 +22,12 @@
 // su un bottone e non succede da sola, apposta: una cosa che riscrive quello
 // che hai scritto tu senza che tu l'abbia chiesto non è un aiuto.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta } from '../api'
 import { frasi, loc, t } from '../lingua'
-import { Hov, LABEL } from '../ui'
+import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
 import { Glifo } from '../components/Stato'
-import { IconCestino, IconCroce, IconGiro } from '../icons'
+import { IconCroce, IconGiro } from '../icons'
 import { Casella, Pastiglia, RIGO } from './Chiocciola'
 import { quandoData, quandoGira } from './Scheda'
 
@@ -64,20 +64,21 @@ function Campo({ etichetta, children, nota }: {
 /** Le due linguette. Sono due modi di dire la stessa cosa, non due schermate. */
 function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' | 'campi') => void }) {
   return (
-    <div style={{
+    <div role="tablist" style={{
       display: 'inline-flex', gap: 2, padding: 3, borderRadius: 99, flex: 'none',
       background: 'rgba(34,39,31,.055)'
     }}>
       {([['parole', 'A parole'], ['campi', 'I campi']] as const).map(([id, testo]) => (
-        <div key={id} onClick={() => vai(id)}
+        <button key={id} type="button" role="tab" aria-selected={dove === id} onClick={() => vai(id)}
           style={{
             padding: '5px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12px',
+            border: 'none', fontFamily: 'inherit',
             fontWeight: dove === id ? 500 : 400,
             background: dove === id ? 'rgba(255,255,255,.95)' : 'transparent',
             color: dove === id ? '#22271F' : 'rgba(34,39,31,.55)',
             boxShadow: dove === id ? '0 2px 6px -2px rgba(84,64,44,.28)' : 'none',
             transition: 'background .18s, color .18s'
-          }}>{t(testo)}</div>
+          }}>{t(testo)}</button>
       ))}
     </div>
   )
@@ -236,9 +237,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [penso, setPenso] = useState<'' | 'ottimizzo' | 'riscrivo'>('')
   const [detto, setDetto] = useState('')
   const [guaio, setGuaio] = useState('')
-  // il cestino chiede una volta: la scheda in griglia lo fa già, e due porte
-  // sulla stessa azione non devono avere due regole
-  const [sicuro, setSicuro] = useState(false)
+  // il fuoco entra con la finestra, Esc la chiude, e alla chiusura torna alla scheda
+  const finestra = useRef<HTMLDivElement>(null)
+  useFocoDialogo(finestra, chiudi)
 
   const ogni = 'quandoArriva' in quando ? 'arrivo' : quando.ogni
   const ora = 'quandoArriva' in quando ? 8 : quando.ora
@@ -320,7 +321,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
 
-      <div role="dialog" aria-label={a.nome} style={{
+      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="editor-titolo" style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%',
         transform: 'translate(-50%,-50%)',
         width: 600, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100vh - 64px)',
@@ -338,7 +339,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
           borderBottom: '1px solid rgba(34,39,31,.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
+            <div id="editor-titolo" style={{
               fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>{nome || a.nome}</div>
@@ -573,14 +574,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
           <div style={{ flex: 1, minWidth: 20 }} />
 
-          <Hov as="button" onClick={() => (sicuro ? butta() : setSicuro(true))} onMouseLeave={() => setSicuro(false)}
-            title={sicuro ? t('Sicuro?') : t('Buttala')} aria-label={sicuro ? t('Sicuro?') : t('Buttala')}
-            style={{
-              display: 'grid', placeItems: 'center', height: 32, width: sicuro ? 'auto' : 32, padding: sicuro ? '0 12px' : 0,
-              border: 'none', borderRadius: 99, background: sicuro ? 'rgba(196,98,59,.12)' : 'none', cursor: 'pointer',
-              color: sicuro ? '#8E3F1F' : 'rgba(34,39,31,.32)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500
-            }}
-            hover={{ color: '#8E3F1F' }}>{sicuro ? t('Sicuro?') : <IconCestino />}</Hov>
+          {/* il cestino chiede una volta: la scheda in griglia lo fa già, e due
+              porte sulla stessa azione non devono avere due regole */}
+          <Cestino fai={butta} titolo={t('Buttala')} dim={32} icona={13} />
         </div>
 
         {/*
@@ -656,6 +652,9 @@ export function Nuova({ catalogo, chiudi, fatta }: {
   const [suoi, setSuoi] = useState<string[]>([])
   const [faccio, setFaccio] = useState(false)
   const [guaio, setGuaio] = useState('')
+  // la casella ha già il fuoco con `autoFocus`; qui Esc chiude e il fuoco torna a chi ha aperto
+  const finestra = useRef<HTMLDivElement>(null)
+  useFocoDialogo(finestra, chiudi)
 
   const crea = async () => {
     if (testo.trim().length < 8) return
@@ -682,7 +681,7 @@ export function Nuova({ catalogo, chiudi, fatta }: {
         position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
-      <div role="dialog" aria-label={t('Scrivine una tua')} style={{
+      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="nuova-titolo" style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         width: 560, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100vh - 64px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
@@ -697,7 +696,7 @@ export function Nuova({ catalogo, chiudi, fatta }: {
           borderBottom: '1px solid rgba(34,39,31,.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>
+            <div id="nuova-titolo" style={{ fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>
               {t('Scrivine una tua')}
             </div>
             <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>
