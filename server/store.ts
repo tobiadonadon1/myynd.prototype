@@ -153,15 +153,19 @@ export function controlla(file: string) {
   if (testa.toString('latin1') !== 'SQLite format 3\0') {
     throw new Error('Il file dentro il pacco non è un indice di Myynd.')
   }
-  const d = new DatabaseSync(file, { readOnly: true })
+  // un file con l'intestazione giusta e dentro niente di sensato non si apre
+  // nemmeno: l'errore di SQLite («file is not a database») diventa la frase nostra
+  let d: DatabaseSync
+  try { d = new DatabaseSync(file, { readOnly: true }) } catch { throw new Error('L’indice dentro il pacco è danneggiato.') }
   try {
-    const esito = (d.prepare('PRAGMA quick_check').get() as { quick_check: string }).quick_check
+    let esito = ''
+    try { esito = (d.prepare('PRAGMA quick_check').get() as { quick_check: string }).quick_check } catch { esito = 'guasto' }
     if (esito !== 'ok') throw new Error('L’indice dentro il pacco è danneggiato.')
     const v = (d.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
     if (v > MIGRAZIONI.length) {
       throw new Error('L’indice dentro il pacco viene da una versione più nuova di Myynd: aggiorna prima.')
     }
-  } finally { d.close() }
+  } finally { try { d.close() } catch { /* già chiuso */ } }
 }
 
 /** Da usare quando si finisce con una persona: chiude e libera. */
