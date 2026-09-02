@@ -563,7 +563,11 @@ export function Automazioni({ v }: { v: Vals }) {
             ...LABEL, color: 'rgba(34,39,31,.4)', padding: '18px 4px 0', maxWidth: 560,
             letterSpacing: '.06em', textTransform: 'none', fontSize: '11.5px', lineHeight: 1.6
           }}>
-            {t('Quello che leggono resta su questo computer. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.')}
+            {/* «su questo computer» su un server è falso, ed è la frase su cui
+                si basa la fiducia: va detta solo dov'è vera */}
+            {v.ospitato
+              ? t('Quello che leggono resta nel tuo spazio. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.')
+              : t('Quello che leggono resta su questo computer. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.')}
           </div>
         </div>
       </div>

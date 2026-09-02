@@ -434,6 +434,7 @@ const EN: Record<string, string> = {
   "Nessuna chiave nell'ambiente.": 'No key in the environment.',
   'Servono host, indirizzo e password.': 'Host, address and password are needed.',
   'Scegli almeno una cartella.': 'Pick at least one folder.',
+  'Quello che leggono resta nel tuo spazio. Le automazioni descrivono solo cosa guardare e cosa farne: non contengono niente di tuo.': 'What they read stays in your space. An automation only describes what to look at and what to do with it: it contains nothing of yours.',
   'Quello che sai tu e non sta scritto da nessuna parte. Due righe bastano.': 'What you know and nobody wrote down. Two lines are enough.',
   'Il resto dopo': 'The rest later',
   'Come decidi?': 'How do you decide?',
