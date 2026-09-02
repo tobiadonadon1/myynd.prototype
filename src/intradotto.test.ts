@@ -112,12 +112,26 @@ function intradotte(): Trovata[] {
       const senzaCoda = r.replace(/\/\/.*$/, '')
       const senzaT = senzaCoda.replace(/\bt\(\s*(['"`])(?:[^\\]|\\.)*?\1\s*\)/g, 't(_)')
 
+      /*
+       * La metà italiana di una coppia `{ it, en }`.
+       *
+       * L'aiuto è scritto così: ogni paragrafo porta le due lingue affiancate,
+       * perché un testo lungo non sta nel dizionario. L'italiano che viene
+       * subito dopo `it:` non è una frase sfuggita a `t()` — è la sorgente
+       * della traduzione, e la sua metà inglese sta sulla riga accanto. Si
+       * salta quella e si guarda comunque l'altra: se la metà `en` è italiana,
+       * è proprio il difetto che questa prova esiste per trovare.
+       */
+      const sorgenti = new Set<string>()
+      for (const m of senzaT.matchAll(/\bit:\s*(['"`])((?:[^\\\n]|\\.)*?)\1/g)) sorgenti.add(m[2])
+
       const candidate: string[] = []
       for (const m of senzaT.matchAll(/(['"`])((?:[^\\\n]|\\.)*?)\1/g)) candidate.push(m[2])
       // il testo scritto fra due tag: >Ciao come stai<
       for (const m of senzaT.matchAll(/>([^<>{}\n]{12,})</g)) candidate.push(m[1].trim())
 
       for (const grezza of candidate) {
+        if (sorgenti.has(grezza)) continue
         const s = grezza.replace(/\\(['"`\\])/g, '$1').trim()
         if (!sembraUnaFrase(s) || AMMESSE.has(s) || tradotte.has(s)) continue
         fuori.push({ file: f.replace(RADICE, 'src/'), riga: i + 1, testo: s })

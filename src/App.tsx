@@ -3,10 +3,11 @@ import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { Sfondo } from './Sfondo'
 import { Hov, taglia, useLarghezza } from './ui'
 import {
-  IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
+  IconAiuto, IconCerca, IconCestino, IconChat, IconFulmine, IconIngranaggio,
   IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci
 } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
+import { Aiuto } from './screens/Aiuto'
 import { Automazioni } from './screens/Automazioni'
 import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
@@ -297,6 +298,7 @@ function Casa({ stato, apriConnessioni, esci }: {
                 <span style={{ flex: 1 }}>{t('Connettori')}</span>
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
+              <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>
               <div style={{ height: 1, background: 'rgba(34,39,31,.1)', margin: '5px 8px' }} />
               <Hov as="a" href="#"
                 onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}
@@ -336,6 +338,7 @@ function Casa({ stato, apriConnessioni, esci }: {
             lingua={stato.config.lingua}
             giroFatto={stato.config.giro}
             segnaGiro={() => { api.profilo({ giro: true }).catch(() => { /* lo rifarà: pazienza */ }) }}
+            apriGuida={v.goAiuto}
           />
         )}
         {v.isChat && <Chat v={v} />}
@@ -344,6 +347,7 @@ function Casa({ stato, apriConnessioni, esci }: {
         {v.isPref && <Preferenze v={v} />}
         {v.isMemoria && <Memoria />}
         {v.isConn && <Connettori v={v} />}
+        {v.isAiuto && <Aiuto v={v} />}
       </div>
 
       {v.mapFull && <MappaPiena v={v} />}

@@ -22,9 +22,6 @@ import { api, type Compito } from '../api'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
-/** La guida, per chi la cerca. Si apre nel browser, non dentro la finestra. */
-const GUIDA = 'https://claude.ai/code/artifact/101d7d6e-5755-4149-a88a-cb53ac516b1b'
-
 /** I tre modi, in colonna. L'ordine è quanto lavoro passa a lui. */
 const MODI = [
   { id: 'io', nome: 'io' },
@@ -1112,8 +1109,10 @@ function Finito({ l }: { l: Lista }) {
   )
 }
 
-export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro }: {
+export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   l: Lista; oggi: string; lingua: string; giroFatto: boolean; segnaGiro: () => void
+  /** La guida sta dentro l'app: era un indirizzo privato su claude.ai, e non si apriva a nessuno. */
+  apriGuida: () => void
 }) {
   const [fatteAperte, setFatteAperte] = useState(false)
   const larghezza = useLarghezza()
@@ -1224,7 +1223,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro }: {
             fontSize: '11.5px', color: 'rgba(34,39,31,.3)'
           }}
           hover={{ color: '#8E3F1F' }}>{t('Come funziona')}</Hov>
-        <Hov as="a" href={GUIDA} target="_blank" rel="noreferrer"
+        <Hov as="a" href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); apriGuida() }}
           style={{ marginLeft: 14, fontSize: '11.5px', color: 'rgba(34,39,31,.3)', textDecoration: 'none' }}
           hover={{ color: '#8E3F1F' }}>{t('La guida')}</Hov>
       </div>

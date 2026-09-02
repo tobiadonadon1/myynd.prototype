@@ -552,6 +552,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     isMyynd: screen === 'myynd', isOggi: screen === 'oggi', isChat: screen === 'chat', isAuto: screen === 'auto',
     isMappa: screen === 'mappa', isPref: screen === 'pref', isConn: screen === 'conn',
     isMemoria: screen === 'memoria',
+    isAiuto: screen === 'aiuto', menuAiuto: screen === 'aiuto' ? MENU_ON : MENU_OFF, goAiuto: go('aiuto'),
     navMyynd: screen === 'myynd' ? NAV_ON : NAV_OFF,
     navOggi: screen === 'oggi' ? NAV_ON : NAV_OFF,
     goOggi: (e?: { preventDefault: () => void }) => { e?.preventDefault(); setScreen('oggi') },

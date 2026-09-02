@@ -1281,6 +1281,18 @@ const EN: Record<string, string> = {
   'Come lo chiami (facoltativo)': 'What you call it (optional)',
   'il mio Ollama': 'my Ollama',
   'Collega il fornitore': 'Connect the provider',
+// — l'aiuto: la guida dentro l'app. Il testo lungo sta in Aiuto.tsx nelle due
+//   lingue; qui ci sono solo le etichette che compaiono anche altrove —
+  'Aiuto': 'Help',
+  'In questa pagina': 'On this page',
+  'Apri le connessioni': 'Open connections',
+  'Apri la lista': 'Open the list',
+  'Apri la chat': 'Open the chat',
+  'Vai alla prima pagina': 'Go to the front page',
+  'Apri le automazioni': 'Open automations',
+  'Apri la memoria': 'Open memory',
+  'Apri le preferenze': 'Open preferences',
+  'Scrivi a Tobia': 'Write to Tobia',
 }
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */
