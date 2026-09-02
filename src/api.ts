@@ -324,6 +324,8 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   if (m.stato !== 'fatto') return `${fonte} · ${t(String(m.stato ?? ''))}`
   const parti = [`${Number(m.documenti ?? 0)} ${en ? 'documents' : 'documenti'}`]
   if (Number(m.tolti)) parti.push(`${Number(m.tolti)} ${en ? 'gone' : 'spariti'}`)
+  // la posta che c'era già e non è stata riscaricata: è quello che rende la rilettura leggera
+  if (Number(m.giaLetti)) parti.push(`${Number(m.giaLetti)} ${en ? 'already read' : 'già letti'}`)
   if (Number(m.saltati)) parti.push(`${Number(m.saltati)} ${en ? 'code projects skipped' : 'progetti saltati'}`)
   if (Number(m.falliti)) parti.push(`${Number(m.falliti)} ${en ? 'unreadable' : 'illeggibili'}`)
   if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)

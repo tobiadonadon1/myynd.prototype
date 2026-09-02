@@ -898,7 +898,7 @@ async function leggiTutto(
       cfg.aggiorna({ posta: { ...c.posta, validita: e.validita } })
     }
     avvisa({
-      fase: 'posta', stato: 'fatto', documenti: e.docs.length, saltati: e.saltati,
+      fase: 'posta', stato: 'fatto', documenti: e.docs.length, giaLetti: e.saltati,
       cartelleFallite: e.cartelleFallite, troncato: e.troncato
     })
   }
