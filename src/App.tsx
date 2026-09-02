@@ -305,9 +305,11 @@ function Casa({ stato, apriConnessioni, esci }: {
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
             hover={{ background: 'rgba(255,255,255,.72)' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
+            {/* il punto sta con il ruolo, non da solo in fondo alla riga: un nome
+                lungo mandava a capo dopo il separatore, e restava lì appeso */}
             {!rail && (
-              <span style={{ flex: 1, fontSize: '13.5px' }}>
-                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}> · {v.ruolo}</span>}
+              <span style={{ flex: 1, minWidth: 0, fontSize: '13.5px', overflowWrap: 'anywhere' }}>
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)', whiteSpace: 'nowrap' }}>{' · '}{v.ruolo}</span>}
               </span>
             )}
             {!rail && <span style={v.chevron}><IconSuPiccola /></span>}
