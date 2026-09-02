@@ -87,7 +87,7 @@ if (nuova !== ancora) {
   process.exit(1)
 }
 
-const e = conti.cambiaPassword(scelto.id, nuova)
+const e = await conti.cambiaPassword(scelto.id, nuova)
 rl.close()
 if (!e.ok) {
   console.error(e.errore)

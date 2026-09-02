@@ -3,7 +3,7 @@
 
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, closeSync, readdirSync, rmSync } from 'node:fs'
 import { cartella } from './config.ts'
 import { radici, radice, termini } from './lingua.ts'
 
@@ -66,8 +66,31 @@ function apri(dove: string): DatabaseSync {
   return d
 }
 
+/*
+ * Quando è stato usato l'ultima volta ogni indice aperto.
+ *
+ * Con più persone i database aperti crescono con le persone e non si
+ * chiudevano mai: ognuno tiene descrittori, WAL, cache di pagine. Chi non
+ * apre Myynd da un'ora non ha bisogno del suo indice in memoria — riaprirlo
+ * costa niente, le migrazioni a schema fermo sono un confronto di un numero.
+ */
+const ultimoUso = new Map<string, number>()
+const INATTIVO = 30 * 60_000
+
+function chiudiGliInattivi() {
+  const ora = Date.now()
+  for (const [dove, d] of aperti) {
+    if (ora - (ultimoUso.get(dove) ?? 0) < INATTIVO) continue
+    try { d.exec('PRAGMA optimize'); d.close() } catch { /* già chiuso */ }
+    aperti.delete(dove)
+    ultimoUso.delete(dove)
+  }
+}
+setInterval(chiudiGliInattivi, 10 * 60_000).unref()
+
 function mio(): DatabaseSync {
   const dove = cartella()
+  ultimoUso.set(dove, Date.now())
   let d = aperti.get(dove)
   if (!d) {
     const guasto = guasti.get(dove)
@@ -719,6 +742,12 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
   copyFileSync(file, copia)
   chmodSync(copia, 0o600)
   console.log(`myynd · istantanea prima della migrazione: ${copia}`)
+  // Le due più recenti bastano a tornare indietro. Le altre sono copie intere
+  // dell'indice che nessuno riaprirà: a ogni cambio di schema il disco raddoppiava.
+  try {
+    const vecchie = readdirSync(dove).filter(n => /^mente-.*\.db$/.test(n)).sort()
+    for (const n of vecchie.slice(0, Math.max(0, vecchie.length - 2))) rmSync(join(dove, n), { force: true })
+  } catch { /* le istantanee sono un aiuto, non un requisito */ }
 }
 
 /**

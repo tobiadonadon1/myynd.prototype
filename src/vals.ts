@@ -567,6 +567,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
     nome: stato.config.nome ?? t('tu'),
     ruolo: stato.config.ruolo ?? '',
+    /** Su un server, non sul suo computer: cambia cosa è vero dire sui dati. */
+    ospitato: !!stato.ospitato,
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
     connCount: connOn.length,
     apertiCount: aperti.length,

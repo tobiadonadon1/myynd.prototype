@@ -68,7 +68,7 @@ export const collegato = claudeCollegato
  * modello scelto non li accetta, si scopre qui — con una frase — invece che
  * dieci minuti dopo, dentro una bozza che non arriverà mai.
  */
-export async function prova(apiKey: string): Promise<{ ok: true } | { ok: false; errore: string }> {
+export async function prova(apiKey: string): Promise<{ ok: true; avviso?: string } | { ok: false; errore: string }> {
   try {
     const a = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 })
     await a.messages.create({
@@ -79,8 +79,25 @@ export async function prova(apiKey: string): Promise<{ ok: true } | { ok: false;
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return { ok: false, errore: 'Chiave API non valida.' }
     if (e instanceof Anthropic.PermissionDeniedError) return { ok: false, errore: 'La chiave non ha accesso a questo modello.' }
+    /*
+     * Il credito finito arriva come un 400, cioè come «richiesta sbagliata».
+     *
+     * Chi ha appena creato la chiave su un conto Anthropic nuovo — che nasce
+     * senza credito — finiva qui, e si vedeva dire che «il modello non accetta
+     * questa richiesta, provane un altro»: cioè l'unica cosa che di sicuro non
+     * serve, detta in italiano dentro un'app in inglese. Una cliente si è
+     * fermata esattamente su quella riga il 2 settembre 2026. La chiave è
+     * valida — l'autenticazione è passata — quindi si tiene, e si dice cosa
+     * manca davvero.
+     */
     if (e instanceof Anthropic.BadRequestError) {
-      return { ok: false, errore: `Il modello ${modello()} non accetta questa richiesta. Provane un altro nelle preferenze.` }
+      if (/credit balance|billing|quota/i.test(e.message)) {
+        return { ok: true, avviso: 'La chiave è valida, ma il conto Anthropic non ha ancora credito: aggiungilo su console.anthropic.com alla voce Billing, poi Myynd potrà ragionare.' }
+      }
+      return { ok: false, errore: 'Il modello scelto non accetta questa richiesta. Riprova, o cambia modello nelle preferenze.' }
+    }
+    if (e instanceof Anthropic.NotFoundError) {
+      return { ok: false, errore: 'Il modello scelto non esiste per questa chiave. Scegli Sonnet nelle preferenze e riprova.' }
     }
     return { ok: false, errore: inItaliano(e).message }
   }

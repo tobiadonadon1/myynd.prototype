@@ -11,8 +11,10 @@
 
 import type { Request, Response, NextFunction } from 'express'
 
+import { timingSafeEqual } from 'node:crypto'
 import * as conti from './conti.ts'
 import * as chi from './chi.ts'
+import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI } from './ospitato.ts'
 
 
 
@@ -51,11 +53,11 @@ export const DEV = process.env.MYYND_DEV === '1'
  */
 export const TOKEN_SVILUPPO = 'sviluppo-non-in-produzione'
 
-export function apriSessioneDiSviluppo(): string {
+export async function apriSessioneDiSviluppo(): Promise<string> {
   // in sviluppo c'è una persona sola: se non c'è ancora un conto se ne fa uno
   let utente = conti.tutti()[0] ?? ''
   if (!utente) {
-    const e = conti.registra('sviluppo@myynd.local', TOKEN_SVILUPPO)
+    const e = await conti.registra('sviluppo@myynd.local', TOKEN_SVILUPPO)
     if (e.ok) utente = e.id
   }
   if (utente) conti.perProva.apriCon(TOKEN_SVILUPPO, utente)
@@ -93,19 +95,51 @@ export function conto(): { email: string } | null {
  * la sua cartella e il suo indice, e registrare un estraneo non gli fa vedere
  * niente di nessuno — che è la ragione per cui la porta si può riaprire.
  */
-export function registra(email: string, password: string):
-  { ok: true; token: string; utente: string } | { ok: false; errore: string } {
-  const e = conti.registra(email, password)
+export async function registra(email: string, password: string, invito = ''):
+  Promise<{ ok: true; token: string; utente: string } | { ok: false; errore: string }> {
+  // il cancello di chi ospita, prima di toccare il database
+  if (REGISTRAZIONE === 'chiusa') return { ok: false, errore: 'Le registrazioni sono chiuse su questo server.' }
+  if (REGISTRAZIONE === 'invito') {
+    const a = Buffer.from(invito.trim()), b = Buffer.from(INVITO)
+    if (!INVITO || a.length !== b.length || !timingSafeEqual(a, b)) {
+      return { ok: false, errore: 'Serve il codice d’invito per registrarsi qui.' }
+    }
+  }
+  if (DOMINI_AMMESSI.length) {
+    const dominio = email.trim().toLowerCase().split('@')[1] ?? ''
+    if (!DOMINI_AMMESSI.includes(dominio)) return { ok: false, errore: 'Questo server accetta solo indirizzi dell’azienda.' }
+  }
+  const e = await conti.registra(email, password)
   if (!e.ok) return e
   return { ok: true, token: e.token, utente: e.id }
 }
 
-export function entra(email: string, password: string):
-  { ok: true; token: string; utente: string } | { ok: false; errore: string } {
-  const e = conti.entra(email, password)
+export async function entra(email: string, password: string):
+  Promise<{ ok: true; token: string; utente: string } | { ok: false; errore: string }> {
+  const e = await conti.entra(email, password)
   segnaTentativo(email, e.ok)
   if (!e.ok) return e
   return { ok: true, token: e.token, utente: e.id }
+}
+
+/**
+ * Cambiare la password dall'app, con quella vecchia in mano.
+ *
+ * Chiude tutte le sessioni — è quello che vuole chi la cambia — e ne riapre
+ * una per chi ha appena premuto, così non si ritrova fuori dalla porta che ha
+ * appena chiuso a chiave.
+ */
+export async function cambiaPassword(utente: string, attuale: string, nuova: string):
+  Promise<{ ok: true; token: string } | { ok: false; errore: string }> {
+  if (!await conti.verifica(utente, attuale)) return { ok: false, errore: 'La password attuale non è corretta.' }
+  const e = await conti.cambiaPassword(utente, nuova)
+  if (!e.ok) return e
+  return { ok: true, token: conti.apri(utente) }
+}
+
+/** «Esci da tutti i dispositivi», compreso questo. */
+export function esciOvunque(utente: string): number {
+  return conti.chiudiTutte(utente)
 }
 
 export function esci(token?: string) {
@@ -119,10 +153,15 @@ export function valida(token?: string): boolean {
 function estrai(req: Request): string | undefined {
   const h = req.headers.authorization
   if (h?.startsWith('Bearer ')) return h.slice(7)
-  // EventSource non manda intestazioni: per lo stream il token viaggia in query
-  const q = req.query?.t
-  return typeof q === 'string' && q ? q : undefined
+  // Solo l'intestazione. Prima i due flussi (compiti, sincronizzazione) lo
+  // portavano nell'indirizzo, perché EventSource non manda intestazioni: un
+  // token di trenta giorni finiva nei registri del proxy e nella cronologia.
+  // Il client adesso legge quei flussi con fetch, e l'intestazione c'è.
+  return undefined
 }
+
+/** Le porte che stanno prima dell'accesso: queste e nessun'altra. */
+const PRIMA_DELL_ACCESSO = new Set(['/api/auth', '/api/auth/registra', '/api/auth/entra', '/api/auth/esci'])
 
 /**
  * La guardia, che adesso fa una cosa in più: **apre il contesto**.
@@ -138,7 +177,7 @@ function estrai(req: Request): string | undefined {
  * altro.
  */
 export function guardia(req: Request, res: Response, next: NextFunction) {
-  if (req.path.startsWith('/api/auth')) return next()
+  if (PRIMA_DELL_ACCESSO.has(req.path)) return next()
   const utente = conti.utenteDelToken(estrai(req))
   if (!utente) return res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' })
   chi.dentro(utente, next)

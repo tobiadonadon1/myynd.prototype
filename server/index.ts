@@ -38,6 +38,7 @@ import * as auth from './auth.ts'
 import * as conti from './conti.ts'
 import * as chi from './chi.ts'
 import * as trasloco from './trasloco.ts'
+import * as oauth from './connettori/oauth.ts'
 import { riflua } from './testo.ts'
 
 const app = express()
@@ -66,17 +67,36 @@ const app = express()
  * firma non torna più, e questo controllo finisce disattivato «perché non
  * funzionava».
  */
+/**
+ * Di chi è questa bussata di Meta.
+ *
+ * Il webhook arriva senza nessun token nostro, e finora leggeva la
+ * configurazione della *radice* — cioè di nessuno, su un server con più conti.
+ * Si prova ogni conto: quello la cui parola d'ordine (o il cui segreto) fa
+ * combaciare la richiesta è quello a cui appartiene. I confronti restano a
+ * tempo costante: si scorre l'elenco, non si indovina.
+ */
+function contoDelWebhook(combacia: () => boolean): string | null {
+  for (const u of conti.tutti()) {
+    try { if (chi.dentro(u, combacia)) return u } catch { /* il prossimo */ }
+  }
+  return null
+}
+
 app.get('/api/whatsapp/webhook', (req, res) => {
-  const e = whatsapp.verifica(req.query as Record<string, unknown>)
+  const q = req.query as Record<string, unknown>
+  const u = contoDelWebhook(() => whatsapp.verifica(q).ok)
+  if (!u) return res.status(403).end()
+  const e = chi.dentro(u, () => whatsapp.verifica(q))
   if (!e.ok) return res.status(403).end()
   res.type('text/plain').send(e.sfida)
 })
 
 app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), (req, res) => {
   const corpo = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
-  if (!whatsapp.firmaBuona(corpo, req.headers['x-hub-signature-256'] as string | undefined)) {
-    return res.status(403).end()
-  }
+  const firma = req.headers['x-hub-signature-256'] as string | undefined
+  const u = contoDelWebhook(() => whatsapp.firmaBuona(corpo, firma))
+  if (!u) return res.status(403).end()
   /*
    * Il 200 si dà comunque, e non è sciatteria.
    *
@@ -87,7 +107,7 @@ app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), (r
    * collegamento per colpa di quell'uno.
    */
   try {
-    const quanti = whatsapp.incassa(JSON.parse(corpo.toString('utf8')))
+    const quanti = chi.dentro(u, () => whatsapp.incassa(JSON.parse(corpo.toString('utf8'))))
     if (quanti) console.log(`myynd · whatsapp: ${quanti} messagg${quanti === 1 ? 'io' : 'i'} arrivat${quanti === 1 ? 'o' : 'i'}`)
   } catch (e) {
     console.error('myynd · un messaggio di WhatsApp non si è lasciato leggere:', e instanceof Error ? e.message : e)
@@ -134,6 +154,26 @@ app.use((req, res, next) => {
   if (origin && !ospitato.origineAmmessa(origin, porta)) {
     return res.status(403).json({ errore: 'Origine non consentita.' })
   }
+  next()
+})
+
+/**
+ * Le intestazioni che costano niente e chiudono qualcosa.
+ *
+ * L'interfaccia è un bundle nostro, gli stili sono inline (React), le
+ * immagini dei giornali arrivano da fuori in https: la regola dice questo e
+ * nient'altro. Niente iframe che ci incornicia, niente MIME indovinato, e su
+ * un server il browser si ricorda che qui si parla solo https.
+ */
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; " +
+    "font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'")
+  if (ospitato.OSPITATO) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
   next()
 })
 
@@ -185,6 +225,27 @@ app.use('/api/auth', (req, res, next) => {
   next()
 })
 
+/**
+ * Il ritorno del consenso, ospitati.
+ *
+ * Google e Microsoft rimandano il browser qui con un codice e lo `state`, e
+ * senza nessun token nostro: questa rotta sta *prima* della guardia, e di chi
+ * sia il consenso lo dice lo `state` — un segreto che conosce solo il browser
+ * che l'ha ricevuto avviando il ballo dentro il suo conto.
+ */
+app.get('/api/oauth/ritorno', async (req, res) => {
+  const stato = String(req.query.state ?? '')
+  const codice = req.query.code ? String(req.query.code) : null
+  const guaio = req.query.error ? String(req.query.error) : null
+  res.setHeader('content-type', 'text/html; charset=utf-8')
+  try {
+    const { nome } = await oauth.completaWeb(stato, codice, guaio)
+    res.send(oauth.paginaWeb(true, nome))
+  } catch (e) {
+    res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
+  }
+})
+
 app.get('/api/auth', (req, res) => {
   /*
    * Chi sei, non «esiste un account».
@@ -199,29 +260,32 @@ app.get('/api/auth', (req, res) => {
   const rispondi = () => res.json({
     entrato: dentro,
     account: dentro ? auth.conto() : null,
-    ospitato: ospitato.OSPITATO
+    ospitato: ospitato.OSPITATO,
+    // come ci si registra qui: la schermata mostra il campo dell'invito, o
+    // toglie la scheda «crea», invece di scoprirlo dopo aver scritto la password
+    registrazione: ospitato.REGISTRAZIONE
   })
   if (!dentro) return rispondi()
   chi.dentro(conti.utenteDelToken(utente)!, rispondi)
 })
 
-app.post('/api/auth/registra', (req, res) => {
-  const { email, password } = req.body ?? {}
-  const e = auth.registra(String(email ?? ''), String(password ?? ''))
+app.post('/api/auth/registra', async (req, res) => {
+  const { email, password, invito } = req.body ?? {}
+  const e = await auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   // dentro il contesto del conto appena fatto: `auth.conto()` legge da lì, e
   // fuori non saprebbe di chi parlare
   chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
-app.post('/api/auth/entra', (req, res) => {
+app.post('/api/auth/entra', async (req, res) => {
   const attesa = auth.attesa(String(req.body?.email ?? ''))
   if (attesa > 0) {
     const secondi = Math.ceil(attesa / 1000)
     return res.status(429).json({ errore: `Troppi tentativi. Riprova fra ${secondi} second${secondi === 1 ? 'o' : 'i'}.` })
   }
   const { email, password } = req.body ?? {}
-  const e = auth.entra(String(email ?? ''), String(password ?? ''))
+  const e = await auth.entra(String(email ?? ''), String(password ?? ''))
   if (!e.ok) return res.status(401).json({ errore: e.errore })
   chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
@@ -241,6 +305,22 @@ function errore(res: express.Response, e: unknown, stato = 500) {
 
 // — stato generale —
 
+// — il conto —
+
+app.post('/api/conto/password', async (req, res) => {
+  const attuale = String(req.body?.attuale ?? '')
+  const nuova = String(req.body?.nuova ?? '')
+  try {
+    const e = await auth.cambiaPassword(chi.serve(), attuale, nuova)
+    if (!e.ok) return res.status(400).json({ errore: e.errore })
+    res.json({ ok: true, token: e.token })
+  } catch (e) { errore(res, e) }
+})
+
+app.post('/api/conto/esci-ovunque', (_req, res) => {
+  try { res.json({ ok: true, chiuse: auth.esciOvunque(chi.serve()) }) } catch (e) { errore(res, e) }
+})
+
 app.get('/api/stato', (_req, res) => {
   const c = cfg.leggi()
   const n = store.conteggi()
@@ -250,8 +330,11 @@ app.get('/api/stato', (_req, res) => {
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
     // che sia rotto Myynd invece che fuori posto
+    // su un server, e senza l'app di chi ospita, il ballo di Google e Microsoft
+    // non può girare: la scheda lo dice invece di chiedere un client ID e fallire
     connettori: CATALOGO.filter(v => ospitato.disponibile(v.id)).map(v => ({
       ...v,
+      ...(ospitato.fermoSulServer(v.id) ? { pronto: false, nota: 'Non ancora disponibile su questo server.' } : {}),
       collegato:
         v.id === 'posta' ? !!c.posta :
         v.id === 'desktop' ? !!c.desktop :
@@ -275,7 +358,9 @@ app.get('/api/stato', (_req, res) => {
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     presetPosta: posta.PRESET,
-    home: ospitato.OSPITATO ? '' : homedir()
+    home: ospitato.OSPITATO ? '' : homedir(),
+    ospitato: ospitato.OSPITATO,
+    oauth: ospitato.oauthWeb()
   })
 })
 
@@ -482,7 +567,7 @@ app.post('/api/connettori/claude', async (req, res) => {
     const esito = await claude.prova(apiKey)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ claude: { apiKey } })
-    res.json({ ok: true })
+    res.json({ ok: true, ...(esito.avviso ? { avviso: esito.avviso } : {}) })
   } catch (e) { errore(res, e) }
 })
 
@@ -531,6 +616,23 @@ app.post('/api/connettori/slack', async (req, res) => {
  * che non si riusa è il *sì*: quello si chiede di nuovo, perché riguarda i
  * file e non la posta.
  */
+/**
+ * Il primo tempo del ballo, via web: torna l'indirizzo, e il browser della
+ * persona ci va. Ospitati soltanto — in casa il ballo passa da 127.0.0.1 e
+ * l'app è la sua.
+ */
+app.post('/api/connettori/google/avvia', (_req, res) => {
+  try { res.json(google.avvia()) } catch (e) { errore(res, e, 400) }
+})
+app.post('/api/connettori/drive/avvia', (_req, res) => {
+  try { res.json(drive.avvia()) } catch (e) { errore(res, e, 400) }
+})
+app.post('/api/connettori/microsoft/avvia', (req, res) => {
+  const parte = String(req.body?.parte ?? 'posta')
+  if (parte !== 'posta' && parte !== 'file') return res.status(400).json({ errore: 'Non so cosa collegare di Microsoft.' })
+  try { res.json(microsoft.avvia(parte)) } catch (e) { errore(res, e, 400) }
+})
+
 app.post('/api/connettori/drive', async (req, res) => {
   const clientId = String(req.body?.clientId ?? '').trim()
   const clientSecret = String(req.body?.clientSecret ?? '').trim()
@@ -1741,8 +1843,18 @@ app.get('/api/attrezzi', (_req, res) => {
  * pesa una decina di megabyte, e il limite di due che vale per il resto
  * dell'API farebbe fallire l'importazione con un errore che parla di JSON.
  */
-app.get('/api/trasloco', (_req, res) => {
+/**
+ * Portarsi via tutto chiede la password, adesso.
+ *
+ * Nel pacco ci sono la password della casella e i token di ogni fonte: con
+ * una sessione rubata — una scheda lasciata aperta, un token copiato — si
+ * portava via tutto in una richiesta. La password la sa solo lei.
+ */
+app.post('/api/trasloco/esporta', async (req, res) => {
   try {
+    if (!await conti.verifica(chi.serve(), String(req.body?.password ?? ''))) {
+      return res.status(403).json({ errore: 'La password non è corretta.' })
+    }
     const pacco = trasloco.esporta()
     const oggi = new Date().toISOString().slice(0, 10)
     res.setHeader('content-type', 'application/gzip')
@@ -2179,6 +2291,17 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
 
   let appesi = 0
+  /*
+   * Gli indici si aprono — e si migrano — adesso, per tutti, invece che dentro
+   * la prima richiesta di ognuno. Una migrazione che rilegge il corpus intero
+   * dentro una richiesta è una pagina che gira per un minuto senza dire perché.
+   * Qui invece è una riga nel registro, prima che qualcuno bussi.
+   */
+  for (const u of conti.tutti()) {
+    try { chi.dentro(u, () => store.conteggi()) } catch (e) {
+      console.error(`myynd · l'indice di ${u} non si apre:`, e instanceof Error ? e.message : e)
+    }
+  }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
   }
@@ -2189,7 +2312,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   if (auth.DEV) {
     // un build vero non deve poter nascere con questa variabile accesa
     if (process.env.NODE_ENV === 'production') throw new Error('MYYND_DEV acceso in un build di produzione')
-    auth.apriSessioneDiSviluppo()
+    void auth.apriSessioneDiSviluppo()
     console.log('myynd · MYYND_DEV=1 — sessione di sviluppo aperta, l\'accesso è già fatto')
   }
 })

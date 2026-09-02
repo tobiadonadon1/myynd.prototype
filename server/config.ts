@@ -306,7 +306,7 @@ export type Config = {
    * quando si stacca l'ultima metà, tutto il blocco sparisce insieme al token.
    */
   microsoft?: {
-    clientId: string; tenant?: string; refresh: string
+    clientId: string; clientSecret?: string; tenant?: string; refresh: string
     email?: string; nome?: string; parti: ('posta' | 'file')[]; giorni?: number
   }
   /** Dropbox: la chiave dell'app e il token duraturo. Il codice si incolla. */

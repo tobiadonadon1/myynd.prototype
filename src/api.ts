@@ -57,6 +57,10 @@ export type Stato = {
   suggerimentiDesktop: string[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
+  /** Gira su un server: le fonti che leggono «questa macchina» non ci sono, e il ballo OAuth passa dal web. */
+  ospitato: boolean
+  /** Quali balli via web sono possibili qui, cioè per quali fornitori chi ospita ha registrato l'app. */
+  oauth: { google: boolean; microsoft: boolean; ritorno: string | null }
 }
 
 import { frasi, lingua, t } from './lingua'
@@ -94,27 +98,77 @@ export function alloScadere(f: () => void) { suScaduta = f }
  * firma è la stessa di prima.
  */
 const ascoltatoriDelFilo = new Set<(e: EventoCompito) => void>()
-let filoCompiti: EventSource | null = null
 
-function apriIlFilo() {
-  if (filoCompiti) return
-  const q = new URLSearchParams({ t: sessione.token() })
-  const es = new EventSource(`/api/compiti/flusso?${q}`)
-  es.onmessage = e => {
-    let ev: EventoCompito
-    // una riga illeggibile non chiude il filo, e soprattutto non deve
-    // impedire agli altri di ricevere quelle buone
-    try { ev = JSON.parse(e.data) as EventoCompito } catch { return }
-    for (const f of [...ascoltatoriDelFilo]) {
-      try { f(ev) } catch { /* chi ascolta si arrangia */ }
+/**
+ * Un flusso di eventi letto con fetch, non con EventSource.
+ *
+ * EventSource non manda intestazioni, e per questo il token finiva
+ * nell'indirizzo — cioè nei registri del proxy e nella cronologia. Con fetch
+ * l'intestazione c'è, lo stato HTTP si vede (un 401 riporta all'accesso
+ * invece di diventare un generico «interrotto»), e le righe di battito che
+ * cominciano con «:» si saltano come farebbe il browser. Torna quando il
+ * server chiude; lancia se non si è nemmeno aperto.
+ */
+async function flusso(url: string, su: (m: Record<string, unknown>) => void, segnale?: AbortSignal): Promise<void> {
+  const tok = sessione.token()
+  let r: Response
+  try {
+    r = await fetch(url, { headers: tok ? { authorization: `Bearer ${tok}` } : {}, signal: segnale })
+  } catch (e) {
+    if (segnale?.aborted) return
+    throw new MotoreGiu(e instanceof Error ? e.message : String(e))
+  }
+  if (r.status === 401) { sessione.pulisci(); suScaduta() }
+  if (!r.ok || !r.body) throw guastoDellaRisposta(r, await r.json().catch(() => ({})))
+
+  const lettore = r.body.getReader()
+  const dec = new TextDecoder()
+  let resto = ''
+  for (;;) {
+    let pezzo: ReadableStreamReadResult<Uint8Array>
+    try { pezzo = await lettore.read() } catch { if (segnale?.aborted) return; throw new Error('Lettura interrotta.') }
+    if (pezzo.done) break
+    resto += dec.decode(pezzo.value, { stream: true })
+    const eventi = resto.split('\n\n')
+    resto = eventi.pop() ?? ''
+    for (const e of eventi) {
+      for (const riga of e.split('\n')) {
+        if (!riga.startsWith('data: ')) continue
+        let m: Record<string, unknown>
+        try { m = JSON.parse(riga.slice(6)) } catch { continue }
+        su(m)
+      }
     }
   }
-  filoCompiti = es
+}
+
+let filoVivo = false
+let filoCtrl: AbortController | null = null
+
+/** Il filo dei compiti: uno solo, si riapre da sé se cade, si spegne quando nessuno ascolta. */
+function apriIlFilo() {
+  if (filoVivo) return
+  filoVivo = true
+  void (async () => {
+    while (filoVivo) {
+      filoCtrl = new AbortController()
+      try {
+        await flusso('/api/compiti/flusso', m => {
+          for (const f of [...ascoltatoriDelFilo]) {
+            try { f(m as EventoCompito) } catch { /* chi ascolta si arrangia */ }
+          }
+        }, filoCtrl.signal)
+      } catch { /* caduto: si riapre fra poco */ }
+      if (!filoVivo) break
+      await new Promise(r => setTimeout(r, 3000))
+    }
+  })()
 }
 
 function chiudiIlFilo() {
-  filoCompiti?.close()
-  filoCompiti = null
+  filoVivo = false
+  filoCtrl?.abort()
+  filoCtrl = null
 }
 
 /**
@@ -347,6 +401,8 @@ export type Accesso = {
   entrato: boolean
   /** Gira su un server, non sul computer di chi lo usa: cambia cosa è vero dire. */
   ospitato?: boolean
+  /** Come ci si registra qui: liberi, con un codice, o per niente. */
+  registrazione?: 'aperta' | 'invito' | 'chiusa'
   account: { email: string } | null
 }
 
@@ -516,9 +572,9 @@ export type Abbonamento = {
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string) => {
+  registra: async (email: string, password: string, invito = '') => {
     const r = await json<{ token: string; account: { email: string } }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password }) })
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito }) })
     sessione.imposta(r.token)
     return r
   },
@@ -657,7 +713,13 @@ export const api = {
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
 
   collegaClaude: (apiKey: string) =>
-    json<{ ok: true }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),
+    json<{ ok: true; avviso?: string }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),
+
+  /** Ospitati: l'indirizzo a cui andare a dire di sì. Si torna da soli. */
+  avviaGoogle: () => json<{ dove: string }>('/api/connettori/google/avvia', { method: 'POST', body: '{}' }),
+  avviaDrive: () => json<{ dove: string }>('/api/connettori/drive/avvia', { method: 'POST', body: '{}' }),
+  avviaMicrosoft: (parte: 'posta' | 'file') =>
+    json<{ dove: string }>('/api/connettori/microsoft/avvia', { method: 'POST', body: JSON.stringify({ parte }) }),
 
   collegaSlack: (token: string) =>
     json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
@@ -695,30 +757,16 @@ export const api = {
 
   /** La sincronizzazione arriva a pezzi: ogni riga è un avanzamento. */
   async sincronizza(su: (m: Record<string, unknown>) => void, fonte?: string): Promise<void> {
-    // EventSource non porta intestazioni e non espone lo stato HTTP: prima
-    // controllo la sessione, così una scadenza riporta all'accesso invece di
-    // diventare un generico "interrotta"
-    await json('/api/stato')
-
-    return new Promise((risolvi, rifiuta) => {
-      const q = new URLSearchParams({ t: sessione.token(), ...(fonte ? { fonte } : {}) })
-      const es = new EventSource(`/api/sincronizza?${q}`)
-      let finita = false
-      const chiudi = (f: () => void) => { if (!finita) { finita = true; es.close(); f() } }
-
-      es.onmessage = e => {
-        let m: Record<string, unknown>
-        try {
-          m = JSON.parse(e.data)
-        } catch {
-          return chiudi(() => rifiuta(new Error('Risposta illeggibile dal server.')))
-        }
-        su(m)
-        if (m.fase === 'fine') chiudi(risolvi)
-        else if (m.fase === 'errore') chiudi(() => rifiuta(new Error(String(m.errore))))
-      }
-      es.onerror = () => chiudi(() => rifiuta(new Error('Lettura interrotta.')))
+    const q = fonte ? `?${new URLSearchParams({ fonte })}` : ''
+    let esito: 'fine' | 'errore' | null = null
+    let guaio = ''
+    await flusso(`/api/sincronizza${q}`, m => {
+      su(m)
+      if (m.fase === 'fine') esito = 'fine'
+      else if (m.fase === 'errore') { esito = 'errore'; guaio = String(m.errore) }
     })
+    if (esito === 'errore') throw new Error(guaio)
+    if (esito !== 'fine') throw new Error('Lettura interrotta.')
   },
 
   /** `stato` presente = risposta pronta, non passa dal modello. */
@@ -801,8 +849,22 @@ export const api = {
    * scaricherebbe la pagina d'accesso invece del file — con l'estensione
    * giusta, e un file rotto che non sembra rotto.
    */
-  async scaricaTrasloco(): Promise<{ nome: string; dati: Blob }> {
-    const r = await fetch('/api/trasloco', { headers: { authorization: `Bearer ${sessione.token()}` } })
+  /** Il conto: la password si cambia da qui, e chiudere tutte le sessioni pure. */
+  cambiaPassword: async (attuale: string, nuova: string) => {
+    const r = await json<{ ok: true; token: string }>('/api/conto/password',
+      { method: 'POST', body: JSON.stringify({ attuale, nuova }) })
+    sessione.imposta(r.token)
+    return r
+  },
+  esciOvunque: () => json<{ ok: true; chiuse: number }>('/api/conto/esci-ovunque', { method: 'POST', body: '{}' }),
+
+  /** Portarsi via tutto chiede la password: dentro ci sono le credenziali di ogni fonte. */
+  async scaricaTrasloco(password: string): Promise<{ nome: string; dati: Blob }> {
+    const r = await fetch('/api/trasloco/esporta', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${sessione.token()}` },
+      body: JSON.stringify({ password })
+    })
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).errore ?? 'Non ce l’ha fatta.')
     const oggi = new Date().toISOString().slice(0, 10)
     return { nome: `myynd-${oggi}.myynd`, dati: await r.blob() }

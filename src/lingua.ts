@@ -432,6 +432,44 @@ const EN: Record<string, string> = {
   "Nessuna chiave nell'ambiente.": 'No key in the environment.',
   'Servono host, indirizzo e password.': 'Host, address and password are needed.',
   'Scegli almeno una cartella.': 'Pick at least one folder.',
+  'il tuo nome': 'your name',
+  'La password attuale non è corretta.': 'The current password is not correct.',
+  'La password non è corretta.': 'The password is not correct.',
+  'Le due password nuove non coincidono.': 'The two new passwords do not match.',
+  'Password cambiata. Gli altri dispositivi dovranno rientrare.': 'Password changed. Other devices will need to sign in again.',
+  'Il tuo accesso': 'Your sign-in',
+  'Password attuale': 'Current password',
+  'Password nuova': 'New password',
+  'Ripeti la nuova': 'Repeat the new one',
+  'Cambia la password': 'Change password',
+  'Esci da tutti i dispositivi': 'Sign out of all devices',
+  'la tua password': 'your password',
+  'Conferma': 'Confirm',
+  'Codice d’invito': 'Invite code',
+  'te lo dà chi ti ha invitato': 'from whoever invited you',
+  'Le registrazioni sono chiuse su questo server.': 'Sign-ups are closed on this server.',
+  'Serve il codice d’invito per registrarsi qui.': 'You need the invite code to sign up here.',
+  'Questo server accetta solo indirizzi dell’azienda.': 'This server only accepts company addresses.',
+  'Il server rifiuta la connessione sulla porta 993.': 'The server refuses the connection on port 993.',
+  'Il server di posta ha rifiutato la connessione.': 'The mail server refused the connection.',
+  'Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.': 'I was not expecting this connection, or too much time has passed: try again from Myynd.',
+  'La chiave è valida, ma il conto Anthropic non ha ancora credito: aggiungilo su console.anthropic.com alla voce Billing, poi Myynd potrà ragionare.': 'The key is valid, but the Anthropic account has no credit yet: add some at console.anthropic.com under Billing, then Myynd can reason.',
+  'Il modello scelto non accetta questa richiesta. Riprova, o cambia modello nelle preferenze.': 'The chosen model does not accept this request. Try again, or pick another model in Preferences.',
+  'Il modello scelto non esiste per questa chiave. Scegli Sonnet nelle preferenze e riprova.': 'The chosen model does not exist for this key. Pick Sonnet in Preferences and try again.',
+  'Da console.anthropic.com. Il conto deve avere credito (Billing).': 'From console.anthropic.com. The account needs credit (Billing).',
+  'La chiave da console.anthropic.com, con credito sul conto (Billing). Senza, Myynd non ragiona.': 'The key from console.anthropic.com, with credit on the account (Billing). Without it, Myynd cannot reason.',
+  'Basta indirizzo e password: il server lo trovo io.': 'Address and password are enough: I will find the server.',
+  'Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.': 'Gmail does not accept your account password: you need an “app password” from myaccount.google.com/apppasswords, with 2-step verification on.',
+  'iCloud vuole una password specifica per le app, da appleid.apple.com.': 'iCloud needs an app-specific password, from appleid.apple.com.',
+  'Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.': 'Yahoo needs an app password, from the account security settings.',
+  'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.': 'Outlook no longer accepts a password over IMAP: connect “Outlook and Calendar” instead of this card.',
+  'Non ancora disponibile su questo server. Per la posta usa «Posta», con una password per le app.': 'Not available on this server yet. For mail, use “Mail” with an app password.',
+  'Non ancora disponibile su questo server.': 'Not available on this server yet.',
+  'Restano nel tuo spazio, e non escono di lì.': 'They stay in your space, and never leave it.',
+  'Google non è ancora disponibile su questo server.': 'Google is not available on this server yet.',
+  'Google Drive non è ancora disponibile su questo server.': 'Google Drive is not available on this server yet.',
+  'Microsoft non è ancora disponibile su questo server.': 'Microsoft is not available on this server yet.',
+  'Il server non conosce il proprio dominio: chi lo ospita deve impostare MYYND_PUBBLICO.': 'The server does not know its own domain: whoever hosts it must set MYYND_PUBBLICO.',
   'Non riesco a leggere le automazioni.': 'I cannot read the automations.',
   'Non sono riuscito a rileggere questa fonte.': 'I could not re-read this source.',
   'Non sono riuscito a collegare.': 'I could not connect.',
@@ -533,6 +571,7 @@ const EN: Record<string, string> = {
   'La scrive lui, la mandi tu': 'He writes it, you send it',
   'Falla fare a lui': 'Let him do it',
   "Fino all'ultimo passo": 'Right up to the last step',
+  'Fino all’ultimo passo': 'Right up to the last step',
   'Le fatte': 'The done ones',
   'Mostra o nascondi': 'Show or hide',
   'io': 'me',
@@ -1224,6 +1263,12 @@ export function t(s: string): string {
  * «Due cose, da guardare» e «Two things to look at» no.
  */
 export const frasi = {
+  // — il ballo via web, ospitati —
+  viaWeb: (nome: string) => corrente === 'en'
+    ? `${nome} opens in this tab: say yes, and you come back here on your own.`
+    : `Si apre la pagina di ${nome} in questa scheda: di' di sì, e torni qui da solo.`,
+  collega: (nome: string) => corrente === 'en' ? `Connect ${nome}` : `Collega ${nome}`,
+
   // — la rassegna —
   //
   // Le età stanno corte apposta: sono la seconda cosa su una riga di testata,
@@ -1379,6 +1424,13 @@ export const frasi = {
       : ['Tutto quello che Myynd legge sta in ', dir, " su questo computer: l'indice in ", db,
          ' e le credenziali in ', cfg, ', leggibile solo da te. ' +
          "L'unica cosa che esce sono le domande che fai a Claude, con i pezzi di documento che servono a rispondere."],
+
+  // su un server la frase di sopra sarebbe falsa: i dati non stanno «su questo computer»
+  doveStannoIDatiServer: (): string => corrente === 'en'
+    ? 'Everything Myynd reads for you lives on this server, in a folder that is yours alone: the index, your sources and their credentials. ' +
+      'Nobody else who uses this server can reach it. The only thing that leaves are the questions you ask the model, with the pieces of document needed to answer.'
+    : 'Tutto quello che Myynd legge per te sta su questo server, in una cartella che è solo tua: l’indice, le fonti e le loro credenziali. ' +
+      'Nessun altro che usa questo server ci arriva. L’unica cosa che esce sono le domande che fai al modello, con i pezzi di documento che servono a rispondere.',
 
   riprovoFra: (s: number) => corrente === 'en' ? `Trying again in ${s}s` : `Riprovo fra ${s}s`,
 

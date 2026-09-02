@@ -188,18 +188,42 @@ export async function prova(c: ConfigPosta): Promise<
     return { ok: true, cartelle: lista.map(l => l.path).slice(0, 40), certificatoAdattato: a.adattato }
   } catch (e) {
     if (cl) { try { await cl.close() } catch { /* già chiusa */ } }
-    return { ok: false, errore: messaggioErrore(e) }
+    return { ok: false, errore: messaggioErrore(e, c.host) }
   }
 }
 
-function messaggioErrore(e: unknown): string {
-  const m = e instanceof Error ? e.message : String(e)
-  if (/auth/i.test(m)) return 'Utente o password non accettati dal server.'
+/**
+ * «Password non accettata» è vero e non serve a niente, se il server è Gmail:
+ * Gmail non accetta *mai* la password dell'account via IMAP, vuole una
+ * «password per le app». Lo stesso iCloud e Yahoo. E Outlook.com da un pezzo
+ * non accetta più nessuna password via IMAP. Dirlo qui è la differenza fra
+ * una persona che riprova la stessa password tre volte e una che sa dove andare.
+ */
+function messaggioErrore(e: unknown, host = ''): string {
+  // imapflow dice «Command failed» nel message e mette il perché altrove:
+  // `authenticationFailed`, `responseText`, `serverResponseCode`. Guardando il
+  // solo message, la password sbagliata su Gmail usciva come «Command failed».
+  const err = (e && typeof e === 'object' ? e : {}) as {
+    message?: string; responseText?: string; response?: string
+    serverResponseCode?: string; authenticationFailed?: boolean; code?: string
+  }
+  const m = [err.message, err.responseText, err.response, err.serverResponseCode, err.code]
+    .filter(Boolean).join(' ') || String(e)
+  const h = host.toLowerCase()
+  if (err.authenticationFailed || /auth|invalid credentials|login failed|password/i.test(m)) {
+    if (/gmail|googlemail/.test(h)) return 'Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.'
+    if (/mail\.me\.com|icloud/.test(h)) return 'iCloud vuole una password specifica per le app, da appleid.apple.com.'
+    if (/yahoo/.test(h)) return 'Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.'
+    if (/office365|outlook|hotmail|live\./.test(h)) return 'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.'
+    return 'Utente o password non accettati dal server.'
+  }
   if (/ENOTFOUND|EAI_AGAIN/i.test(m)) return 'Host IMAP non trovato: controlla il nome del server.'
   if (/ETIMEDOUT|timeout/i.test(m)) return 'Il server non risponde. Controlla host e porta.'
   if (/altnames/i.test(m)) return 'Il certificato del server è intestato a un altro nome e non sono riuscito a combaciarlo.'
   if (/certificate/i.test(m)) return 'Certificato TLS non valido sul server.'
-  return m
+  if (/ECONNREFUSED/i.test(m)) return 'Il server rifiuta la connessione sulla porta 993.'
+  if (/Command failed/i.test(m)) return 'Il server di posta ha rifiutato la connessione.'
+  return err.message || m
 }
 
 /**
@@ -287,7 +311,7 @@ export async function provaInvio(c: ConfigPosta): Promise<{ ok: true } | { ok: f
     try { await posta.verify() } finally { posta.close() }
     return { ok: true }
   } catch (e) {
-    return { ok: false, errore: messaggioErrore(e) }
+    return { ok: false, errore: messaggioErrore(e, c.host) }
   }
 }
 

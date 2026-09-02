@@ -24,7 +24,8 @@
 
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
-import { consenso, chiediGettoni, Vivo, type Sportello } from './oauth.ts'
+import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
+import { APP_MICROSOFT } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riflua } from '../testo.ts'
 
@@ -41,6 +42,8 @@ const SEMPRE = ['offline_access', 'User.Read']
 
 export type ConfigMicrosoft = {
   clientId: string
+  /** Solo con l'app di chi ospita, che su Entra ID è «Web» e vuole il segreto anche per rinfrescare. */
+  clientSecret?: string
   /** `common`, `organizations`, o l'id del tenant. Vuoto = common. */
   tenant?: string
   refresh: string
@@ -74,12 +77,12 @@ function traduci(j: Record<string, unknown>, _stato: number): string | null {
   return null
 }
 
-function sportello(clientId: string, tenant: string, parti: Parte[]): Sportello {
+function sportello(clientId: string, tenant: string, parti: Parte[], clientSecret?: string): Sportello {
   const base = `https://login.microsoftonline.com/${encodeURIComponent(tenant || 'common')}/oauth2/v2.0`
   return {
     nome: 'Microsoft',
     gettoni: `${base}/token`,
-    campi: { client_id: clientId },
+    campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
     traduci,
     autorizza: ({ redirect, sfida, stato }) => {
       const u = new URL(`${base}/authorize`)
@@ -109,6 +112,22 @@ export function collegato(p?: Parte): boolean {
   const m = leggi().microsoft
   if (!m?.refresh) return false
   return p ? m.parti.includes(p) : m.parti.length > 0
+}
+
+/** Ospitati: l'app di chi ospita, il browser della persona, il ritorno dal nostro dominio. */
+export function avvia(parte: Parte): { dove: string } {
+  const app = APP_MICROSOFT
+  if (!app.clientId) throw new Error('Microsoft non è ancora disponibile su questo server.')
+  const gia = leggi().microsoft
+  const tutte = [...new Set([...(gia?.parti ?? []), parte])] as Parte[]
+  return avviaWeb(sportello(app.clientId, app.tenant, tutte, app.clientSecret), async g => {
+    if (!g.refresh_token) throw new Error('Microsoft non ha dato il permesso duraturo: riprova.')
+    scriviConfig({
+      ...leggi(),
+      microsoft: { clientId: app.clientId, clientSecret: app.clientSecret, tenant: app.tenant, refresh: g.refresh_token, parti: tutte, giorni: gia?.giorni ?? 30 }
+    })
+    vivo.scorda()
+  })
 }
 
 /**
@@ -168,7 +187,7 @@ export function scollega(parte?: Parte) {
 const vivo = new Vivo(async () => {
   const m = leggi().microsoft
   if (!m?.refresh) throw new Error('Collega Microsoft e potrò farlo.')
-  return chiediGettoni(sportello(m.clientId, m.tenant ?? 'common', m.parti), {
+  return chiediGettoni(sportello(m.clientId, m.tenant ?? 'common', m.parti, m.clientSecret), {
     refresh_token: m.refresh,
     grant_type: 'refresh_token',
     scope: ambiti(m.parti).join(' ')

@@ -23,7 +23,12 @@ const TENUE = 'rgba(244,239,232,.62)'
 export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }) {
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
-  const [passo, setPasso] = useState<Passo>('risveglio')
+  // chi torna dal consenso di Google o Microsoft riprende dalle fonti, non da capo
+  const [passo, setPasso] = useState<Passo>(() => {
+    const torno = new URLSearchParams(window.location.search).get('torno') === 'connetti'
+    if (torno) window.history.replaceState(null, '', '/')
+    return torno ? 'connetti' : 'risveglio'
+  })
   const [s, setS] = useState(stato)
   const [nome, setNome] = useState(stato.config.nome ?? '')
   const [ruolo, setRuolo] = useState(stato.config.ruolo ?? '')
@@ -306,7 +311,7 @@ function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
       <div style={{ display: 'flex', gap: 14, marginTop: 30 }}>
         <div style={{ flex: 1 }}>
           <div style={ETICHETTA}>{t('Nome')}</div>
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Tobia" autoFocus className="scuro" style={CAMPO} />
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder={t('il tuo nome')} autoFocus className="scuro" style={CAMPO} />
         </div>
         <div style={{ flex: 1 }}>
           <div style={ETICHETTA}>{t('Ruolo')}</div>
@@ -328,7 +333,7 @@ function Connetti({ s, ricarica, avanti }: { s: Stato; ricarica: () => Promise<S
   return (
     <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
       <Titolo>{t('Cosa le fai leggere?')}</Titolo>
-<Sotto>{t('Restano su questo computer.')}</Sotto>
+      <Sotto>{s.ospitato ? t('Restano nel tuo spazio, e non escono di lì.') : t('Restano su questo computer.')}</Sotto>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
         {pronti.map(c => (

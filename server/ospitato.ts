@@ -201,6 +201,71 @@ export function origineAmmessa(origin: string, portaVera: number): boolean {
 export const SOLO_IN_CASA = ['desktop']
 
 /**
+ * Le app OAuth di chi ospita.
+ *
+ * Sul computer di una persona ognuno registra la propria app su Google Cloud o
+ * Entra ID e incolla il client ID: è quello che il ballo su 127.0.0.1 richiede,
+ * ed è già molto da chiedere. Su un server quel ballo non può girare affatto —
+ * il browser si aprirebbe *sul server*, e il ritorno busserebbe a un 127.0.0.1
+ * che non è quello di nessuno. Quindi ospitati il ritorno passa dal nostro
+ * dominio, e l'app la registra chi ospita, una volta per tutti, con queste
+ * variabili. Chi entra preme un bottone e dice di sì a Google: niente da
+ * incollare. Senza queste variabili Gmail, Calendario, Drive, Outlook e
+ * SharePoint si dichiarano «non ancora disponibili su questo server» invece di
+ * offrire un modulo che chiede un client ID e poi fallisce.
+ *
+ * Indirizzo di ritorno da registrare presso il fornitore, esattamente:
+ *   https://<dominio>/api/oauth/ritorno
+ */
+export const APP_GOOGLE = {
+  clientId: (process.env.MYYND_GOOGLE_CLIENT_ID ?? '').trim(),
+  clientSecret: (process.env.MYYND_GOOGLE_CLIENT_SECRET ?? '').trim() || undefined
+}
+export const APP_MICROSOFT = {
+  clientId: (process.env.MYYND_MICROSOFT_CLIENT_ID ?? '').trim(),
+  clientSecret: (process.env.MYYND_MICROSOFT_CLIENT_SECRET ?? '').trim() || undefined,
+  tenant: (process.env.MYYND_MICROSOFT_TENANT ?? '').trim() || 'common'
+}
+
+/** Cosa può fare il ballo via web, qui. */
+export function oauthWeb(): { google: boolean; microsoft: boolean; ritorno: string | null } {
+  const ritorno = DOMINIO ? `https://${DOMINIO}/api/oauth/ritorno` : null
+  return {
+    google: !!(ritorno && APP_GOOGLE.clientId),
+    microsoft: !!(ritorno && APP_MICROSOFT.clientId),
+    ritorno
+  }
+}
+
+/**
+ * Chi può registrarsi.
+ *
+ * Ognuno ha la sua cartella, quindi un estraneo che si registra non vede
+ * niente di nessuno — ma occupa disco, un posto nei giri di sfondo, e se chi
+ * ospita ha messo una chiave nell'ambiente… no, quella ospitati non si usa più.
+ * Resta comunque una scelta di chi ospita, e si fa con una variabile:
+ *   MYYND_REGISTRAZIONE = aperta (predefinito) | invito | chiusa
+ *   MYYND_INVITO        = la parola da dare a chi si registra, con «invito»
+ *   MYYND_DOMINI        = domini email ammessi, separati da virgola (opzionale)
+ */
+export type Registrazione = 'aperta' | 'invito' | 'chiusa'
+export const REGISTRAZIONE: Registrazione = (() => {
+  const v = (process.env.MYYND_REGISTRAZIONE ?? '').trim().toLowerCase()
+  return v === 'invito' || v === 'chiusa' ? v : 'aperta'
+})()
+export const INVITO = (process.env.MYYND_INVITO ?? '').trim()
+export const DOMINI_AMMESSI = (process.env.MYYND_DOMINI ?? '').split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
+
+/** Un connettore che ospitati non può funzionare finché chi ospita non registra l'app. */
+export function fermoSulServer(connettore: string): boolean {
+  if (!OSPITATO) return false
+  const web = oauthWeb()
+  if (connettore === 'google' || connettore === 'drive') return !web.google
+  if (connettore === 'microsoft' || connettore === 'sharepoint') return !web.microsoft
+  return false
+}
+
+/**
  * Un host di posta che ha senso raggiungere da qui.
  *
  * Su un server, «collega la tua casella» con un host libero è anche «fai una

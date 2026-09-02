@@ -54,6 +54,9 @@ export function Accesso({ accesso, entrato }: {
    * proprio il momento in cui uno ha il file sul desktop.
    */
   const [pacco, setPacco] = useState<File | null>(null)
+  // il codice che chi ospita dà a chi può registrarsi, se ha scelto così
+  const [invito, setInvito] = useState('')
+  const registrazione = accesso.registrazione ?? 'aperta'
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -68,7 +71,7 @@ export function Accesso({ accesso, entrato }: {
     try {
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password)
+        : await api.registra(email, password, invito)
       // il conto è fatto: se si è portato dietro il suo Myynd, entra adesso —
       // prima che la schermata si apra su un account vuoto che non è il suo
       if (!registrato && pacco) await api.caricaTrasloco(pacco)
@@ -81,7 +84,7 @@ export function Accesso({ accesso, entrato }: {
 
   const pronto = registrato
     ? !!email.trim() && password.length > 0
-    : !!email.trim() && password.length >= 8
+    : !!email.trim() && password.length >= 8 && (registrazione !== 'invito' || !!invito.trim())
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -124,7 +127,9 @@ export function Accesso({ accesso, entrato }: {
             questa pagina può avere un conto o non averlo — e lo sa lui.
           */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
-            {([['entra', 'Accedi'], ['crea', 'Crea un account']] as const).map(([id, testo]) => (
+            {([['entra', 'Accedi'], ['crea', 'Crea un account']] as const)
+              .filter(([id]) => id === 'entra' || registrazione !== 'chiusa')
+              .map(([id, testo]) => (
               <button key={id} type="button" onClick={() => { setModo(id); setErr('') }}
                 style={{
                   padding: '7px 15px', borderRadius: 99, border: 'none', cursor: 'pointer',
@@ -166,6 +171,14 @@ export function Accesso({ accesso, entrato }: {
               <Occhio aperto={vedi} />
             </button>
           </div>
+
+          {!registrato && registrazione === 'invito' && (
+            <>
+              <div style={ETICHETTA}>{t('Codice d’invito')}</div>
+              <input value={invito} onChange={e => setInvito(e.target.value)} onKeyDown={tasto}
+                autoComplete="off" placeholder={t('te lo dà chi ti ha invitato')} className="scuro" style={CAMPO} />
+            </>
+          )}
 
           {!registrato && (
             <div style={{ marginTop: 18 }}>

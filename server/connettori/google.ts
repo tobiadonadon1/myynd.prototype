@@ -28,6 +28,8 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import * as chi from '../chi.ts'
+import { avviaWeb, type Sportello } from './oauth.ts'
+import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
 
@@ -173,6 +175,44 @@ export async function collega(clientId: string, clientSecret?: string): Promise<
   } finally {
     chiudi()
   }
+}
+
+/**
+ * Lo stesso ballo, ospitati: il browser è quello della persona e il ritorno
+ * passa dal nostro dominio. L'app è quella di chi ospita, quindi non c'è
+ * niente da incollare — un bottone e un sì.
+ */
+function sportello(clientId: string, clientSecret?: string): Sportello {
+  return {
+    nome: 'Google',
+    gettoni: 'https://oauth2.googleapis.com/token',
+    campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
+    traduci: j => j.error === 'invalid_grant' ? 'Il collegamento con Google è scaduto: rifallo.' : null,
+    autorizza: ({ redirect, sfida, stato }) => {
+      const u = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+      u.searchParams.set('client_id', clientId)
+      u.searchParams.set('redirect_uri', redirect)
+      u.searchParams.set('response_type', 'code')
+      u.searchParams.set('scope', AMBITI.join(' '))
+      u.searchParams.set('access_type', 'offline')
+      u.searchParams.set('prompt', 'consent')
+      u.searchParams.set('state', stato)
+      u.searchParams.set('code_challenge', sfida)
+      u.searchParams.set('code_challenge_method', 'S256')
+      return u.toString()
+    }
+  }
+}
+
+export function avvia(): { dove: string } {
+  const app = APP_GOOGLE
+  if (!app.clientId) throw new Error('Google non è ancora disponibile su questo server.')
+  return avviaWeb(sportello(app.clientId, app.clientSecret), async t => {
+    if (!t.refresh_token) throw new Error('Google non ha dato il permesso duraturo: riprova.')
+    const email = await chiEra(t.access_token).catch(() => '')
+    scriviConfig({ ...leggi(), google: { clientId: app.clientId, clientSecret: app.clientSecret, refresh: t.refresh_token, email, giorni: 30 } })
+    scordaIlToken()
+  })
 }
 
 async function chiEra(token: string): Promise<string> {

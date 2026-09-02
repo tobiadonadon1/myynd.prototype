@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Abbonamento as TipoAbbonamento } from '../api'
+import { api, sessione, type Abbonamento as TipoAbbonamento } from '../api'
+import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, knob, track } from '../ui'
 import type { Vals } from '../vals'
@@ -68,16 +69,95 @@ function CampoFuoco({ v }: { v: Vals }) {
  * casella di posta di chi l'ha fatto, e chi lo scarica deve saperlo *prima* di
  * lasciarlo nei Download per sei mesi.
  */
+/**
+ * Il conto: la password si cambia da qui, e le sessioni si chiudono da qui.
+ * Prima l'unica strada era la riga di comando di chi ospita — cioè nessuna,
+ * per chi usa.
+ */
+function Conto() {
+  const [attuale, setAttuale] = useState('')
+  const [nuova, setNuova] = useState('')
+  const [ripeti, setRipeti] = useState('')
+  const [faccio, setFaccio] = useState<'' | 'cambio' | 'esco'>('')
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  const cambia = async () => {
+    if (nuova !== ripeti) { setGuaio(t('Le due password nuove non coincidono.')); return }
+    setFaccio('cambio'); setDetto(''); setGuaio('')
+    try {
+      await api.cambiaPassword(attuale, nuova)
+      setAttuale(''); setNuova(''); setRipeti('')
+      setDetto(t('Password cambiata. Gli altri dispositivi dovranno rientrare.'))
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setFaccio('')
+  }
+
+  const esciOvunque = async () => {
+    setFaccio('esco'); setGuaio('')
+    try { await api.esciOvunque(); sessione.pulisci(); location.reload() }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio('') }
+  }
+
+  const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
+  const BOTTONE = (acceso: boolean): React.CSSProperties => ({
+    padding: '11px 20px', borderRadius: 99, border: 'none',
+    background: acceso ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
+    color: acceso ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+    fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: acceso ? 'pointer' : 'default'
+  })
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Il tuo accesso')}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 6, maxWidth: 640 }}>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Password attuale')}</div>
+          <input type="password" value={attuale} onChange={e => setAttuale(e.target.value)} autoComplete="current-password"
+            className={classeCampo('chiaro')} style={campo('chiaro')} />
+        </div>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Password nuova')}</div>
+          <input type="password" value={nuova} onChange={e => setNuova(e.target.value)} autoComplete="new-password"
+            placeholder={t('otto caratteri')} className={classeCampo('chiaro')} style={campo('chiaro')} />
+        </div>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Ripeti la nuova')}</div>
+          <input type="password" value={ripeti} onChange={e => setRipeti(e.target.value)} autoComplete="new-password"
+            onKeyDown={e => { if (e.key === 'Enter' && pronto) cambia() }}
+            className={classeCampo('chiaro')} style={campo('chiaro')} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={cambia} disabled={!pronto} style={BOTTONE(pronto)}>
+          {faccio === 'cambio' ? t('Un momento…') : t('Cambia la password')}
+        </button>
+        <button onClick={esciOvunque} disabled={!!faccio} style={{
+          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
+          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.78)', fontSize: '13px'
+        }}>{faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}</button>
+      </div>
+      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
+}
+
 function Trasloco() {
   const [faccio, setFaccio] = useState<'' | 'scarico' | 'carico'>('')
   const [detto, setDetto] = useState('')
   const [guaio, setGuaio] = useState('')
   const [conferma, setConferma] = useState(false)
+  // la password, prima di scaricare: nel file ci sono le credenziali di ogni fonte
+  const [chiedoPassword, setChiedoPassword] = useState(false)
+  const [password, setPassword] = useState('')
 
   const scarica = async () => {
+    if (!password) { setChiedoPassword(true); return }
     setFaccio('scarico'); setDetto(''); setGuaio('')
     try {
-      const { nome, dati } = await api.scaricaTrasloco()
+      const { nome, dati } = await api.scaricaTrasloco(password)
+      setPassword(''); setChiedoPassword(false)
       const url = URL.createObjectURL(dati)
       const a = document.createElement('a')
       a.href = url; a.download = nome; a.click()
@@ -119,7 +199,13 @@ function Trasloco() {
           color: faccio ? 'rgba(34,39,31,.5)' : '#FFF7F0',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
-        }}>{faccio === 'scarico' ? t('Preparo…') : t('Scaricalo')}</button>
+        }}>{faccio === 'scarico' ? t('Preparo…') : chiedoPassword ? t('Conferma') : t('Scaricalo')}</button>
+        {chiedoPassword && (
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password" placeholder={t('la tua password')}
+            onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }}
+            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 220, marginTop: 0 }} />
+        )}
 
         <label style={{
           padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer',
@@ -503,10 +589,12 @@ export function Preferenze({ v }: { v: Vals }) {
         <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
 
+      <Conto />
+
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
         <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
-          {frasi.doveStannoIDati(
+          {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(
             <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
             <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
             <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>

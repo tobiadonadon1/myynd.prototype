@@ -5,6 +5,7 @@
 
 import { useEffect, useState, type CSSProperties } from 'react'
 import { api } from '../api'
+import type { Stato } from '../api'
 import { frasi, t } from '../lingua'
 
 export type Tema = 'scuro' | 'chiaro'
@@ -82,6 +83,9 @@ type Props = { tema: Tema; ok: () => void }
 export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolean }) {
   const [apiKey, setApiKey] = useState('')
   const [err, setErr] = useState('')
+  // la chiave è buona ma il conto non ha credito: si salva, e prima di andare
+  // avanti lo si dice — altrimenti la prima risposta che non arriva sembra un guasto
+  const [avviso, setAvviso] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [nellAmbiente, setNellAmbiente] = useState(false)
 
@@ -99,17 +103,29 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaClaude(apiKey); setApiKey(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    try {
+      const r = await api.collegaClaude(apiKey)
+      setApiKey('')
+      if (r.avviso) setAvviso(r.avviso); else ok()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
+  }
+
+  if (avviso) {
+    return (
+      <div>
+        <div style={{ ...nota(tema), overflowWrap: 'anywhere' }}>{t(avviso)}</div>
+        <Conferma onClick={ok} occupato={false} tema={tema}>{t('Ho capito')}</Conferma>
+      </div>
+    )
   }
 
   return (
     <div>
       <div style={nota(tema)}>
         {senzaNota
-          ? t('Da console.anthropic.com.')
-          : t('La chiave da console.anthropic.com. Senza, Myynd non ragiona.')}
+          ? t('Da console.anthropic.com. Il conto deve avere credito (Billing).')
+          : t('La chiave da console.anthropic.com, con credito sul conto (Billing). Senza, Myynd non ragiona.')}
       </div>
       {nellAmbiente && (
         <div style={{ marginTop: 14 }}>
@@ -177,9 +193,18 @@ export function FormPosta({ tema, ok }: Props) {
   }
 
   const pronto = !!host && !!utente && !!password
+  // Gmail, iCloud e Yahoo non accettano la password dell'account via IMAP:
+  // vogliono una «password per le app». Dirlo prima che fallisca.
+  const h = host.toLowerCase()
+  const consiglio = /gmail|googlemail/.test(h)
+    ? t('Gmail non accetta la password dell’account: serve una «password per le app», da myaccount.google.com/apppasswords, con la verifica in due passaggi attiva.')
+    : /mail\.me\.com|icloud/.test(h) ? t('iCloud vuole una password specifica per le app, da appleid.apple.com.')
+    : /yahoo/.test(h) ? t('Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.')
+    : /office365|outlook|hotmail|live\./.test(h) ? t('Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.')
+    : ''
   return (
     <div>
-      <div style={nota(tema)}>{t('La password resta su questa macchina.')}</div>
+      <div style={nota(tema)}>{t('Basta indirizzo e password: il server lo trovo io.')}</div>
 
       <div style={etichetta(tema)}>{t('Indirizzo')}</div>
       <input value={utente} onChange={e => { setUtente(e.target.value); setTrovato(false) }}
@@ -192,9 +217,11 @@ export function FormPosta({ tema, ok }: Props) {
 
       {cerco && <div style={{ ...nota(tema), marginTop: 12 }}>{t('Cerco il tuo server…')}</div>}
 
+      {consiglio && <div style={{ ...nota(tema), marginTop: 12, overflowWrap: 'anywhere' }}>{consiglio}</div>}
+
       {trovato && !aMano && (
-        <div style={{ ...nota(tema), marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span>{t('Server trovato:')}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
+        <div style={{ ...nota(tema), marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ overflowWrap: 'anywhere' }}>{t('Server trovato:')}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
           <button onClick={() => setAMano(true)} style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F', textDecoration: 'underline'
@@ -313,11 +340,44 @@ export function FormNotion({ tema, ok }: Props) {
  * Il resto è normale: si preme, si apre il browser, si dice di sì a Google, e
  * quando la finestra si chiude la casella è collegata.
  */
+/**
+ * Ospitati il ballo è un bottone: l'app è di chi ospita e il browser è il tuo.
+ * Si va da Google e si torna da soli. In casa resta il modulo con il client ID.
+ */
+function ViaWeb({ tema, disponibile, avvia, nome }: {
+  tema: Tema; disponibile: boolean; avvia: () => Promise<{ dove: string }>; nome: string
+}) {
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  const vai = async () => {
+    setOccupato(true); setErr('')
+    try { const { dove } = await avvia(); window.location.assign(dove) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setOccupato(false) }
+  }
+  return (
+    <div>
+      <div style={{ ...nota(tema), overflowWrap: 'anywhere' }}>
+        {disponibile
+          ? frasi.viaWeb(nome)
+          : t('Non ancora disponibile su questo server. Per la posta usa «Posta», con una password per le app.')}
+      </div>
+      <Errore testo={err} />
+      {disponibile && (
+        <Conferma onClick={vai} occupato={occupato} tema={tema}>
+          {occupato ? t('Un momento…') : frasi.collega(nome)}
+        </Conferma>
+      )}
+    </div>
+  )
+}
+
 export function FormGoogle({ tema, ok }: Props) {
   const [id, setId] = useState('')
   const [segreto, setSegreto] = useState('')
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
+  const [s, setS] = useState<Stato | null>(null)
+  useEffect(() => { api.stato().then(setS).catch(() => {}) }, [])
 
   const collega = async () => {
     setOccupato(true); setErr('')
@@ -325,6 +385,8 @@ export function FormGoogle({ tema, ok }: Props) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
+
+  if (s?.ospitato) return <ViaWeb tema={tema} disponibile={!!s.oauth?.google} avvia={api.avviaGoogle} nome="Google" />
 
   return (
     <div>
@@ -400,9 +462,11 @@ export function FormDrive({ tema, ok }: Props) {
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [daGmail, setDaGmail] = useState(false)
+  const [s, setS] = useState<Stato | null>(null)
 
   useEffect(() => {
     api.stato().then(s => {
+      setS(s)
       // stesso progetto su Google Cloud: se Gmail è collegato, il suo id è
       // quello che serve anche qui
       if (s.config.google?.clientId) { setId(s.config.google.clientId); setDaGmail(true) }
@@ -415,6 +479,8 @@ export function FormDrive({ tema, ok }: Props) {
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
+
+  if (s?.ospitato) return <ViaWeb tema={tema} disponibile={!!s.oauth?.google} avvia={api.avviaDrive} nome="Google Drive" />
 
   return (
     <div>
@@ -454,9 +520,11 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [gia, setGia] = useState<string[]>([])
+  const [s, setS] = useState<Stato | null>(null)
 
   useEffect(() => {
     api.stato().then(s => {
+      setS(s)
       setGia(s.config.microsoft?.parti ?? [])
       // l'app su Entra ID è la stessa per tutte e due le metà: se una c'è già,
       // il suo id è quello giusto e farlo ricopiare a mano è solo un modo di
@@ -471,6 +539,11 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
     try { await api.collegaMicrosoft(id.trim(), tenant.trim(), parte); setId(''); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
+  }
+
+  if (s?.ospitato) {
+    return <ViaWeb tema={tema} disponibile={!!s.oauth?.microsoft} nome="Microsoft"
+      avvia={() => api.avviaMicrosoft(parte)} />
   }
 
   return (

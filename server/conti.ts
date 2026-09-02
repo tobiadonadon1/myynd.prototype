@@ -19,20 +19,73 @@
 // l'impronta, per la stessa ragione.
 
 import { DatabaseSync } from 'node:sqlite'
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, chmodSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DATI } from './ospitato.ts'
 
-const N = 16384          // costo scrypt: lento quanto basta
+/*
+ * Il costo di scrypt, e perché è scritto dentro l'hash.
+ *
+ * Era 16384 e sincrono: mezzo secondo in cui il processo non rispondeva a
+ * nessun altro, e uno script con indirizzi a caso lo fermava per tutti. Adesso
+ * è asincrono e costa il doppio (32 MB di memoria per tentativo, che è quello
+ * che lo rende caro a chi prova a indovinare). Gli hash di prima restano
+ * leggibili — il costo si legge dal prefisso `s<N>// I conti: chi esiste, e chi è chi.
+//
+// **Perché questo file non poteva stare dentro `store.ts`.** Le sessioni
+// stavano nell'indice, cioè nel database di una persona — e finché la persona
+// era una sola andava benissimo. Con più persone diventa un giro impossibile:
+// per sapere di chi è un token bisogna aprire il suo database, ma per sapere
+// quale database aprire bisogna già sapere di chi è il token. Il conto e la
+// sessione devono stare *sopra* le persone, non dentro una.
+//
+// Quindi un database piccolo e condiviso, accanto alle cartelle di tutti, con
+// dentro le due sole cose che non appartengono a nessuno in particolare: chi
+// ha un conto, e quale token è di chi. Tutto il resto — i documenti, la lista,
+// la memoria, le automazioni, le credenziali delle fonti — resta nella
+// cartella della singola persona e non si mescola mai.
+//
+// **Della password non si tiene la password.** Scrypt con un sale per conto:
+// chi legge questo file non può entrare in nessun account, e non può nemmeno
+// dire se due persone hanno scelto la stessa password. Dei token si tiene solo
+// l'impronta, per la stessa ragione.
+
+import { DatabaseSync } from 'node:sqlite'
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { existsSync, mkdirSync, chmodSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { DATI } from './ospitato.ts'
+
+, e chi non ce l'ha è a
+ * 16384 — e si riscrivono con il costo nuovo al primo accesso riuscito, che è
+ * l'unico momento in cui la password la conosciamo.
+ */
+const N = 32768
 const LUNGHEZZA = 64
 
 /** Quanto dura una sessione senza farsi rivedere. */
 const DURA = 30 * 86_400_000
 
-if (!existsSync(DATI)) mkdirSync(DATI, { recursive: true, mode: 0o700 })
 const FILE = join(DATI, 'conti.db')
-const db = new DatabaseSync(FILE)
+/**
+ * Se qui non si apre, nulla si apre: e l'errore di serie parla di SQLite,
+ * mentre quasi sempre la causa è la cartella — un volume non montato, o
+ * montato in sola lettura. Va detto quello, con il percorso, prima di morire.
+ */
+function apriIConti(): DatabaseSync {
+  try {
+    if (!existsSync(DATI)) mkdirSync(DATI, { recursive: true, mode: 0o700 })
+    return new DatabaseSync(FILE)
+  } catch (e) {
+    console.error(
+      `myynd · non riesco ad aprire i conti in ${FILE}: ${e instanceof Error ? e.message : e}\n` +
+      `  La cartella dei dati è ${DATI}. Esiste, e si può scrivere? Su un server: il volume è montato lì?`
+    )
+    process.exit(1)
+  }
+}
+const db = apriIConti()
 try { chmodSync(FILE, 0o600) } catch { /* su alcuni volumi non si può, pazienza */ }
 
 db.exec(`
@@ -57,6 +110,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS sessioni_utente ON sessioni (utente);
 `)
 
+function impastaCon(password: string, sale: string, n: number): Promise<string> {
+  return new Promise((ok, no) => {
+    scrypt(password, sale, LUNGHEZZA, { N: n, r: 8, p: 1, maxmem: 128 * 1024 * 1024 },
+      (e, k) => e ? no(e) : ok(k.toString('hex')))
+  })
+}
+
+/** L'hash com'è scritto oggi: il costo davanti, così domani si può alzare ancora. */
+async function impasta(password: string, sale: string): Promise<string> {
+  return `s${N}$${await impastaCon(password, sale, N)}`
+}
+
+function leggiHash(h: string): { n: number; hex: string } {
+  const m = /^s(\d+)\$([0-9a-f]+)$/.exec(h)
+  return m ? { n: Number(m[1]), hex: m[2] } : { n: 16384, hex: h }
+}
+
+async function combacia(password: string, sale: string, salvato: string): Promise<boolean> {
+  const { n, hex } = leggiHash(salvato)
+  const a = Buffer.from(await impastaCon(password, sale, n))
+  const b = Buffer.from(hex)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 /**
  * Le colonne che arrivano dopo.
  *
@@ -73,9 +150,6 @@ function assicuraColonna(tabella: string, colonna: string, tipo: string) {
 
 assicuraColonna('utenti', 'cartella', 'TEXT')
 
-function impasta(password: string, sale: string): string {
-  return scryptSync(password, sale, LUNGHEZZA, { N, r: 8, p: 1 }).toString('hex')
-}
 
 function impronta(token: string): string {
   return createHash('sha256').update(token).digest('hex')
@@ -133,8 +207,8 @@ export function esiste(email: string): boolean {
  * nell'account del primo — dentro la sua posta. Adesso ognuno ha la sua
  * cartella, e aprirne una a un estraneo non gli fa vedere niente di nessuno.
  */
-export function registra(email: string, password: string):
-  { ok: true; id: string; token: string } | { ok: false; errore: string } {
+export async function registra(email: string, password: string):
+  Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string }> {
   const e = email.trim().toLowerCase()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, errore: 'Indirizzo non valido.' }
   if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
@@ -144,7 +218,7 @@ export function registra(email: string, password: string):
   const sale = randomBytes(16).toString('hex')
   const creato = new Date().toISOString()
   db.prepare('INSERT INTO utenti (id, email, sale, hash, creato) VALUES (?,?,?,?,?)')
-    .run(id, e, sale, impasta(password, sale), creato)
+    .run(id, e, sale, await impasta(password, sale), creato)
   // La cartella si presenta da sola. `conti.db` è l'unico legame fra un
   // indirizzo e una cartella: se si perdesse, i dati sarebbero tutti sul disco
   // e nessuno saprebbe di chi sono. Un aiuto per chi dovrà rimettere insieme i
@@ -157,8 +231,8 @@ export function registra(email: string, password: string):
   return { ok: true, id, token: apri(id) }
 }
 
-export function entra(email: string, password: string):
-  { ok: true; id: string; token: string } | { ok: false; errore: string } {
+export async function entra(email: string, password: string):
+  Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string }> {
   const e = email.trim().toLowerCase()
   const u = db.prepare('SELECT id, sale, hash FROM utenti WHERE email = ?').get(e) as
     { id: string; sale: string; hash: string } | undefined
@@ -172,15 +246,27 @@ export function entra(email: string, password: string):
    * un sale finto il tempo è lo stesso, e la risposta pure.
    */
   const sale = u?.sale ?? 'nessuno'
-  const hash = impasta(password, sale)
-  if (!u) return { ok: false, errore: 'Indirizzo o password non corretti.' }
+  const buona = u ? await combacia(password, sale, u.hash) : (await impastaCon(password, sale, N), false)
+  if (!u || !buona) return { ok: false, errore: 'Indirizzo o password non corretti.' }
 
-  const a = Buffer.from(hash)
-  const b = Buffer.from(u.hash)
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return { ok: false, errore: 'Indirizzo o password non corretti.' }
+  // un hash scritto con il costo di prima si riscrive con quello di adesso:
+  // è l'unico momento in cui la password la conosciamo
+  if (leggiHash(u.hash).n !== N) {
+    db.prepare('UPDATE utenti SET hash = ? WHERE id = ?').run(await impasta(password, sale), u.id)
   }
   return { ok: true, id: u.id, token: apri(u.id) }
+}
+
+/** È davvero la sua password? Per i gesti che pesano: cambiarla, portarsi via tutto. */
+export async function verifica(id: string, password: string): Promise<boolean> {
+  const u = db.prepare('SELECT sale, hash FROM utenti WHERE id = ?').get(id) as { sale: string; hash: string } | undefined
+  if (!u) return false
+  return combacia(password, u.sale, u.hash)
+}
+
+/** Tutte le sessioni di una persona, chiuse: «esci da tutti i dispositivi». */
+export function chiudiTutte(utente: string): number {
+  return Number(db.prepare('DELETE FROM sessioni WHERE utente = ?').run(utente).changes)
 }
 
 export function apri(utente: string): string {
@@ -245,8 +331,8 @@ export function adotta(email: string, sale: string, hash: string, dove: string):
  * lo fa perché qualcosa non gli torna, e lasciare in piedi quelle di prima
  * vorrebbe dire cambiare la serratura lasciando le chiavi in giro.
  */
-export function cambiaPassword(id: string, nuova: string):
-  { ok: true; sessioniChiuse: number } | { ok: false; errore: string } {
+export async function cambiaPassword(id: string, nuova: string):
+  Promise<{ ok: true; sessioniChiuse: number } | { ok: false; errore: string }> {
   if (nuova.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
   if (!conto(id)) return { ok: false, errore: 'Questo conto non esiste.' }
 
@@ -254,7 +340,7 @@ export function cambiaPassword(id: string, nuova: string):
   // dire che due hash dello stesso conto si possono confrontare fra loro
   const sale = randomBytes(16).toString('hex')
   db.prepare('UPDATE utenti SET sale = ?, hash = ? WHERE id = ?')
-    .run(sale, impasta(nuova, sale), id)
+    .run(sale, await impasta(nuova, sale), id)
   const via = db.prepare('DELETE FROM sessioni WHERE utente = ?').run(id).changes
   return { ok: true, sessioniChiuse: Number(via) }
 }

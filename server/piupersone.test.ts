@@ -34,9 +34,9 @@ const store = await import('./store.ts')
 let anna = ''
 let bruno = ''
 
-before(() => {
-  const a = conti.registra('anna@esempio.it', 'passwordlunga1')
-  const b = conti.registra('bruno@esempio.it', 'passwordlunga2')
+before(async () => {
+  const a = await conti.registra('anna@esempio.it', 'passwordlunga1')
+  const b = await conti.registra('bruno@esempio.it', 'passwordlunga2')
   assert.ok(a.ok && b.ok, 'i due conti non si sono creati')
   anna = a.ok ? a.id : ''
   bruno = b.ok ? b.id : ''
@@ -62,22 +62,22 @@ test('due persone diverse si registrano sulla stessa installazione', () => {
   assert.notEqual(anna, bruno)
 })
 
-test('lo stesso indirizzo non si registra due volte', () => {
-  const e = conti.registra('anna@esempio.it', 'unaltrapassword')
+test('lo stesso indirizzo non si registra due volte', async () => {
+  const e = await conti.registra('anna@esempio.it', 'unaltrapassword')
   assert.equal(e.ok, false)
 })
 
-test('la password di uno non apre il conto dell’altro', () => {
-  const e = conti.entra('anna@esempio.it', 'passwordlunga2')
+test('la password di uno non apre il conto dell’altro', async () => {
+  const e = await conti.entra('anna@esempio.it', 'passwordlunga2')
   assert.equal(e.ok, false)
-  const giusta = conti.entra('anna@esempio.it', 'passwordlunga1')
+  const giusta = await conti.entra('anna@esempio.it', 'passwordlunga1')
   assert.equal(giusta.ok && giusta.id, anna)
 })
 
-test('un indirizzo che non esiste non si distingue da una password sbagliata', () => {
+test('un indirizzo che non esiste non si distingue da una password sbagliata', async () => {
   // due risposte diverse vorrebbero dire un modo per sapere chi ha un conto qui
-  const a = conti.entra('nessuno@esempio.it', 'qualsiasi1234')
-  const b = conti.entra('anna@esempio.it', 'sbagliata1234')
+  const a = await conti.entra('nessuno@esempio.it', 'qualsiasi1234')
+  const b = await conti.entra('anna@esempio.it', 'sbagliata1234')
   assert.equal(a.ok, false)
   assert.equal(b.ok, false)
   assert.equal(a.ok === false && a.errore, b.ok === false && b.errore)
@@ -191,29 +191,29 @@ test('fuori da una richiesta non si indovina nessuno', () => {
 
 // — cambiare una password, che è l'unica cosa che si può fare a una password —
 
-test('una password nuova sostituisce la vecchia, e la vecchia non entra più', () => {
+test('una password nuova sostituisce la vecchia, e la vecchia non entra più', async () => {
   /*
    * Non esiste un modo di *recuperare* una password: nel database c'è uno
    * scrypt del suo sale. Questa è l'unica strada, e va provata da tutte e due
    * le parti — che la nuova apra, e soprattutto che la vecchia non apra più.
    * Metà di questa prova è quella che si dimentica di scrivere.
    */
-  const e = conti.cambiaPassword(anna, 'unapasswordnuova')
+  const e = await conti.cambiaPassword(anna, 'unapasswordnuova')
   assert.ok(e.ok)
-  assert.equal(conti.entra('anna@esempio.it', 'passwordlunga1').ok, false, 'la vecchia apre ancora')
-  assert.equal(conti.entra('anna@esempio.it', 'unapasswordnuova').ok, true)
+  assert.equal((await conti.entra('anna@esempio.it', 'passwordlunga1')).ok, false, 'la vecchia apre ancora')
+  assert.equal((await conti.entra('anna@esempio.it', 'unapasswordnuova')).ok, true)
 })
 
-test('cambiarla butta fuori le sessioni aperte', () => {
+test('cambiarla butta fuori le sessioni aperte', async () => {
   // cambiare la serratura lasciando le chiavi in giro non è cambiare la
   // serratura: chi cambia una password quasi sempre lo fa per questo
   const t = conti.perProva.apri(bruno)
   assert.equal(conti.utenteDelToken(t), bruno)
-  conti.cambiaPassword(bruno, 'ancoraunaltrapass')
+  await conti.cambiaPassword(bruno, 'ancoraunaltrapass')
   assert.equal(conti.utenteDelToken(t), null, 'la sessione di prima è rimasta valida')
 })
 
-test('non si tocca il conto di un altro, né una password troppo corta', () => {
-  assert.equal(conti.cambiaPassword(anna, 'corta').ok, false)
-  assert.equal(conti.cambiaPassword('uinesistente', 'unapasswordlunga').ok, false)
+test('non si tocca il conto di un altro, né una password troppo corta', async () => {
+  assert.equal((await conti.cambiaPassword(anna, 'corta')).ok, false)
+  assert.equal((await conti.cambiaPassword('uinesistente', 'unapasswordlunga')).ok, false)
 })

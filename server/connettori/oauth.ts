@@ -29,6 +29,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import * as chi from '../chi.ts'
+import { oauthWeb } from '../ospitato.ts'
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -192,6 +193,80 @@ export async function consenso(s: Sportello): Promise<Gettoni> {
   } finally {
     chiudi()
   }
+}
+
+// — ospitati: il ritorno passa dal nostro dominio, non da 127.0.0.1 —
+
+type Sospeso = {
+  utente: string | null
+  sportello: Sportello
+  verifica: string
+  scade: number
+  /** Cosa fare dei token: lo decide il connettore, dentro il contesto della persona. */
+  dopo: (g: Gettoni) => Promise<void>
+}
+
+/**
+ * I consensi avviati e non ancora tornati, per `state`.
+ *
+ * È una mappa del processo, e va bene così: la chiave è un segreto di 24 byte
+ * che conosce solo il browser che l'ha ricevuto, e dentro c'è scritto *di chi*
+ * è il consenso — così il ritorno, che arriva da Google senza nessun token
+ * nostro, sa in quale conto scrivere. Dieci minuti, poi si butta.
+ */
+const sospesi = new Map<string, Sospeso>()
+
+/**
+ * Primo tempo, via web: l'indirizzo a cui mandare la persona.
+ *
+ * Il browser è il *suo*, non quello del server, quindi non si apre niente da
+ * qui: si torna l'indirizzo e il client ci va. Il ritorno bussa a
+ * `/api/oauth/ritorno` con lo `state`, e da lì si finisce.
+ */
+export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { dove: string } {
+  const redirect = oauthWeb().ritorno
+  if (!redirect) throw new Error('Il server non conosce il proprio dominio: chi lo ospita deve impostare MYYND_PUBBLICO.')
+  const { verifica, sfida } = pkce()
+  const stato = randomBytes(24).toString('base64url')
+  const ora = Date.now()
+  for (const [k, v] of sospesi) if (v.scade < ora) sospesi.delete(k)
+  sospesi.set(stato, { utente: chi.adesso(), sportello: s, verifica, scade: ora + 10 * 60_000, dopo })
+  return { dove: s.autorizza({ redirect, sfida, stato }) }
+}
+
+/** Secondo tempo: il codice è tornato. Lancia con una frase da mostrare. */
+export async function completaWeb(stato: string, codice: string | null, errore: string | null): Promise<{ nome: string }> {
+  const s = sospesi.get(stato)
+  if (!s) throw new Error('Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.')
+  sospesi.delete(stato)
+  if (s.scade < Date.now()) throw new Error(`Nessuna risposta da ${s.sportello.nome} in tempo: riprova.`)
+  if (!codice) {
+    throw new Error(errore === 'access_denied'
+      ? `Hai detto di no a ${s.sportello.nome}.`
+      : `${s.sportello.nome} non ha mandato il codice.`)
+  }
+  const g = await chiediGettoni(s.sportello, {
+    code: codice,
+    redirect_uri: oauthWeb().ritorno!,
+    grant_type: 'authorization_code',
+    code_verifier: s.verifica
+  })
+  const salva = () => s.dopo(g)
+  await (s.utente ? chi.dentro(s.utente, salva) : salva())
+  return { nome: s.sportello.nome }
+}
+
+/** La pagina che vede chi torna da Google o Microsoft. Nelle due lingue: qui non si sa ancora quale. */
+export function paginaWeb(bene: boolean, nome: string, messaggio = ''): string {
+  const testo = bene
+    ? `<b>Fatto.</b> ${nome} è collegato. Torno su Myynd…<br><span style="opacity:.6">Done. ${nome} is connected. Taking you back to Myynd…</span>`
+    : `<b>Non è andata.</b> ${messaggio}<br><span style="opacity:.6">It didn't work. Go back to Myynd and try again.</span>`
+  return '<!doctype html><meta charset="utf-8"><title>Myynd</title>' +
+    (bene ? '<meta http-equiv="refresh" content="2;url=/?torno=connetti">' : '') +
+    '<body style="font:16px -apple-system,Helvetica,sans-serif;background:#191715;color:#F4EFE8;' +
+    'display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:0 24px">' +
+    `<div style="max-width:420px;line-height:1.6;overflow-wrap:anywhere">${testo}<br><br>` +
+    '<a href="/?torno=connetti" style="color:#E8A87C">Myynd</a></div>'
 }
 
 /**

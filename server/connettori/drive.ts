@@ -23,7 +23,8 @@
 
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
-import { consenso, chiediGettoni, Vivo, type Sportello } from './oauth.ts'
+import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
+import { APP_GOOGLE } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 
 export const AMBITI = [
@@ -82,6 +83,18 @@ function sportello(clientId: string, clientSecret?: string): Sportello {
 
 export function collegato(): boolean {
   return !!leggi().drive?.refresh
+}
+
+/** Ospitati: l'app di chi ospita, il browser della persona, il ritorno dal nostro dominio. */
+export function avvia(): { dove: string } {
+  const app = APP_GOOGLE
+  if (!app.clientId) throw new Error('Google Drive non è ancora disponibile su questo server.')
+  return avviaWeb(sportello(app.clientId, app.clientSecret), async t => {
+    if (!t.refresh_token) throw new Error('Google non ha dato il permesso duraturo: riprova.')
+    const email = await chiEra(t.access_token).catch(() => '')
+    scriviConfig({ ...leggi(), drive: { clientId: app.clientId, clientSecret: app.clientSecret, refresh: t.refresh_token, email, giorni: 90 } })
+    vivo.scorda()
+  })
 }
 
 export async function collega(clientId: string, clientSecret?: string): Promise<{ email: string }> {
