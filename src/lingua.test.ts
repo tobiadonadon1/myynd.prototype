@@ -153,7 +153,14 @@ const INTERNI = new Set([
   'Non so di chi sia questa richiesta.',
   // lo può vedere solo chi cambia una password da riga di comando, su questa
   // macchina, passando un id che non esiste: non è una schermata
-  'Questo conto non esiste.'
+  'Questo conto non esiste.',
+  // parlano a chi mette su il server, nel registro, prima che esista una
+  // finestra: una variabile che manca, una chiamata fuori ordine, un blob
+  // scritto da un'altra versione. Nessuno li legge dentro l'app.
+  'Postgres non è configurato: manca MYYND_POSTGRES.',
+  'MYYND_CHIAVE manca o è più corta di sedici caratteri.',
+  'Configurazione cifrata in un formato che non conosco.',
+  'I conti non sono ancora pronti: manca `await conti.avvia()`.'
 ])
 
 /** Una frase da leggere, non un'etichetta tecnica. */

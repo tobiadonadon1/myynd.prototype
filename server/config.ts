@@ -9,6 +9,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as chi from './chi.ts'
 import * as conti from './conti.ts'
+import * as postgres from './postgres.ts'
 
 /**
  * I modelli fra cui si può scegliere, dal più economico al più capace.
@@ -149,6 +150,129 @@ export function cartellaDi(utente: string): string {
  */
 export function DIR(): string { return cartella() }
 const file = () => join(cartella(), 'config.json')
+
+// ——— su Postgres: in memoria, e il database la tiene ———
+
+/*
+ * Perché una copia in memoria e non una lettura dal database.
+ *
+ * `leggi()` è sincrona e la chiamano novantasette punti in venticinque file,
+ * nessuno dei quali potrebbe aspettare. Postgres è asincrono. L'unico modo di
+ * tenere insieme le due cose è che la configurazione di ogni persona stia qui,
+ * già letta: si carica all'avvio, si aggiorna a ogni scrittura, e ogni tanto si
+ * rilegge per vedere quello che un'altra replica ha scritto nel frattempo.
+ *
+ * La scrittura va nell'altro verso: `scrivi()` aggiorna la copia e torna
+ * subito, e il database si allinea un attimo dopo. Dieci `aggiorna()` di fila
+ * — che è quello che fa una lettura della posta — diventano una scrittura
+ * sola. Se il database non risponde lo si dice nel registro e si riprova: la
+ * copia in memoria resta quella giusta, e a `scaricato()` — che `index.ts`
+ * chiama prima di spegnersi — non si va via finché non è tutto sul database.
+ *
+ * Il file `config.json` alla radice, quello senza contesto, resta un file: è
+ * il caso di chi c'era prima che le persone fossero più di una, e su un
+ * server con Postgres non esiste.
+ */
+const inMemoria = new Map<string, Config>()
+const sporchi = new Set<string>()
+let scaricoInCorso: Promise<void> | null = null
+let scaricoProgrammato: ReturnType<typeof setTimeout> | null = null
+/** L'`aggiornato` più recente che abbiamo visto: da lì in poi si chiede cosa c'è di nuovo. */
+let ultimoAggiornato = ''
+
+function segnaSporco(utente: string) {
+  sporchi.add(utente)
+  if (!scaricoProgrammato) {
+    scaricoProgrammato = setTimeout(() => { scaricoProgrammato = null; void scarica() }, 50)
+  }
+}
+
+async function scarica(): Promise<void> {
+  if (scaricoInCorso) return scaricoInCorso
+  scaricoInCorso = (async () => {
+    while (sporchi.size) {
+      const utente = sporchi.values().next().value as string
+      sporchi.delete(utente)
+      const quando = new Date().toISOString()
+      try {
+        await postgres.q(
+          'INSERT INTO myynd_configurazioni (utente, cifrato, aggiornato) VALUES ($1,$2,$3) ' +
+          'ON CONFLICT (utente) DO UPDATE SET cifrato = EXCLUDED.cifrato, aggiornato = EXCLUDED.aggiornato',
+          [utente, postgres.cifra(JSON.stringify(inMemoria.get(utente) ?? {})), quando])
+        if (quando > ultimoAggiornato) ultimoAggiornato = quando
+      } catch (e) {
+        console.error(
+          `myynd · la configurazione di ${utente} non è arrivata su Postgres ` +
+          `(${e instanceof Error ? e.message : e}): riprovo fra cinque secondi`)
+        sporchi.add(utente)
+        setTimeout(() => void scarica(), 5000).unref()
+        break
+      }
+    }
+  })().finally(() => { scaricoInCorso = null })
+  return scaricoInCorso
+}
+
+/** Tutto quello che è in memoria e non ancora sul database, scritto adesso. */
+export async function scaricato(): Promise<void> {
+  if (!postgres.ATTIVO) return
+  if (scaricoProgrammato) { clearTimeout(scaricoProgrammato); scaricoProgrammato = null }
+  await scarica()
+}
+
+type Riga = { utente: string; cifrato: string; aggiornato: string }
+
+function accogli(r: Riga) {
+  // quello che è in memoria e non è ancora partito è più nuovo di qualunque
+  // cosa stia sul database: non lo si sovrascrive
+  if (!sporchi.has(r.utente)) inMemoria.set(r.utente, JSON.parse(postgres.decifra(r.cifrato)) as Config)
+  if (r.aggiornato > ultimoAggiornato) ultimoAggiornato = r.aggiornato
+}
+
+async function caricaUno(utente: string): Promise<void> {
+  const { rows } = await postgres.q('SELECT utente, cifrato, aggiornato FROM myynd_configurazioni WHERE utente = $1', [utente])
+  if (rows[0]) accogli(rows[0] as Riga)
+}
+
+async function caricaLeNuove(): Promise<void> {
+  const { rows } = await postgres.q(
+    'SELECT utente, cifrato, aggiornato FROM myynd_configurazioni WHERE aggiornato > $1', [ultimoAggiornato])
+  for (const r of rows) accogli(r as Riga)
+}
+
+/**
+ * Prima di tutto il resto, dopo `conti.avvia()`.
+ *
+ * Senza la chiave non si parte: la configurazione contiene la password della
+ * casella e i token delle fonti, e scriverli in chiaro su un database
+ * ospitato perché una variabile mancava sarebbe la cosa peggiore che questo
+ * file possa fare. Meglio un server che non si accende e lo dice.
+ */
+export async function avvia(): Promise<void> {
+  if (!postgres.ATTIVO) return
+  if (!postgres.chiavePronta()) {
+    throw new Error(
+      'MYYND_POSTGRES è impostata ma MYYND_CHIAVE no, o è più corta di sedici caratteri. ' +
+      'Serve a cifrare le credenziali prima di scriverle sul database: scegline una lunga e a caso.')
+  }
+  await caricaLeNuove()
+  conti.quandoArrivaUnUtente(id => {
+    caricaUno(id).catch(e => console.error(`myynd · non riesco a leggere la configurazione di ${id}:`, e instanceof Error ? e.message : e))
+  })
+  setInterval(() => {
+    caricaLeNuove().catch(e => console.error('myynd · non riesco a rileggere le configurazioni:', e instanceof Error ? e.message : e))
+  }, 5 * 60_000).unref()
+}
+
+/** Da usare nei test. */
+export const perProva = {
+  /** Come se il processo fosse appena ripartito: la memoria vuota, il database intatto. */
+  dimentica() {
+    inMemoria.clear()
+    sporchi.clear()
+    ultimoAggiornato = ''
+  }
+}
 
 export type ConfigPosta = {
   host: string
@@ -432,6 +556,10 @@ function mettiDaParte(perche: string) {
 }
 
 export function leggi(): Config {
+  const u = chi.adesso()
+  // una copia, non l'oggetto in memoria: chi lo modificasse senza passare da
+  // `scrivi()` cambierebbe la configurazione senza che il database lo sappia
+  if (postgres.ATTIVO && u) return structuredClone(inMemoria.get(u) ?? {})
   assicuraDir()
   if (!existsSync(file())) return {}
   try {
@@ -459,6 +587,12 @@ export function leggi(): Config {
  * quello nuovo, mai una via di mezzo.
  */
 export function scrivi(c: Config) {
+  const u = chi.adesso()
+  if (postgres.ATTIVO && u) {
+    inMemoria.set(u, structuredClone(c))
+    segnaSporco(u)
+    return
+  }
   assicuraDir()
   const accanto = `${file()}.nuovo`
   writeFileSync(accanto, JSON.stringify(c, null, 2), { mode: 0o600 })

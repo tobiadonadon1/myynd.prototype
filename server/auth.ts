@@ -18,7 +18,9 @@ import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI } from './ospitato.ts'
 
 
 
-conti.pota()
+// Le sessioni scadute si potano in `conti.avvia()`, che `index.ts` aspetta
+// prima di mettersi in ascolto: su Postgres non c'è niente da potare finché
+// il database non ha risposto.
 
 /**
  * Quanti tentativi falliti di fila, e da quando. Scrypt costa mezzo secondo di
@@ -60,7 +62,7 @@ export async function apriSessioneDiSviluppo(): Promise<string> {
     const e = await conti.registra('sviluppo@myynd.local', TOKEN_SVILUPPO)
     if (e.ok) utente = e.id
   }
-  if (utente) conti.perProva.apriCon(TOKEN_SVILUPPO, utente)
+  if (utente) await conti.perProva.apriCon(TOKEN_SVILUPPO, utente)
   return TOKEN_SVILUPPO
 }
 
@@ -134,20 +136,20 @@ export async function cambiaPassword(utente: string, attuale: string, nuova: str
   if (!await conti.verifica(utente, attuale)) return { ok: false, errore: 'La password attuale non è corretta.' }
   const e = await conti.cambiaPassword(utente, nuova)
   if (!e.ok) return e
-  return { ok: true, token: conti.apri(utente) }
+  return { ok: true, token: await conti.apri(utente) }
 }
 
 /** «Esci da tutti i dispositivi», compreso questo. */
-export function esciOvunque(utente: string): number {
+export async function esciOvunque(utente: string): Promise<number> {
   return conti.chiudiTutte(utente)
 }
 
-export function esci(token?: string) {
-  conti.chiudi(token)
+export async function esci(token?: string): Promise<void> {
+  await conti.chiudi(token)
 }
 
-export function valida(token?: string): boolean {
-  return !!conti.utenteDelToken(token)
+export async function valida(token?: string): Promise<boolean> {
+  return !!(await conti.utenteDelToken(token))
 }
 
 function estrai(req: Request): string | undefined {
@@ -176,10 +178,12 @@ const PRIMA_DELL_ACCESSO = new Set(['/api/auth', '/api/auth/registra', '/api/aut
  * divergono nessuno se ne accorge finché qualcuno non legge la posta di un
  * altro.
  */
-export function guardia(req: Request, res: Response, next: NextFunction) {
+export async function guardia(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (PRIMA_DELL_ACCESSO.has(req.path)) return next()
-  const utente = conti.utenteDelToken(estrai(req))
-  if (!utente) return res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' })
+  // asincrona perché su Postgres il token si chiede al database: Express 5
+  // aspetta una promessa, e se si rompe la passa al gestore degli errori
+  const utente = await conti.utenteDelToken(estrai(req))
+  if (!utente) { res.status(401).json({ errore: 'Sessione scaduta.', serve: 'accesso' }); return }
   chi.dentro(utente, next)
 }
 

@@ -88,24 +88,24 @@ test('un indirizzo che non esiste non si distingue da una password sbagliata', a
 
 // — il token dice di chi è, e non di più —
 
-test('ogni token porta al suo utente e a nessun altro', () => {
-  const t = conti.perProva.apri(anna)
-  assert.equal(conti.utenteDelToken(t), anna)
-  assert.notEqual(conti.utenteDelToken(t), bruno)
+test('ogni token porta al suo utente e a nessun altro', async () => {
+  const t = await conti.perProva.apri(anna)
+  assert.equal(await conti.utenteDelToken(t), anna)
+  assert.notEqual(await conti.utenteDelToken(t), bruno)
 })
 
-test('un token inventato non porta a nessuno', () => {
-  assert.equal(conti.utenteDelToken('a'.repeat(64)), null)
-  assert.equal(conti.utenteDelToken(''), null)
-  assert.equal(conti.utenteDelToken(undefined), null)
+test('un token inventato non porta a nessuno', async () => {
+  assert.equal(await conti.utenteDelToken('a'.repeat(64)), null)
+  assert.equal(await conti.utenteDelToken(''), null)
+  assert.equal(await conti.utenteDelToken(undefined), null)
 })
 
-test('uscire chiude quella sessione e non le altre', () => {
-  const uno = conti.perProva.apri(anna)
-  const due = conti.perProva.apri(anna)
-  conti.chiudi(uno)
-  assert.equal(conti.utenteDelToken(uno), null)
-  assert.equal(conti.utenteDelToken(due), anna, 'uscire da un posto ha buttato fuori da tutti')
+test('uscire chiude quella sessione e non le altre', async () => {
+  const uno = await conti.perProva.apri(anna)
+  const due = await conti.perProva.apri(anna)
+  await conti.chiudi(uno)
+  assert.equal(await conti.utenteDelToken(uno), null)
+  assert.equal(await conti.utenteDelToken(due), anna, 'uscire da un posto ha buttato fuori da tutti')
 })
 
 // — la configurazione: ognuno la sua —
@@ -210,10 +210,10 @@ test('una password nuova sostituisce la vecchia, e la vecchia non entra più', a
 test('cambiarla butta fuori le sessioni aperte', async () => {
   // cambiare la serratura lasciando le chiavi in giro non è cambiare la
   // serratura: chi cambia una password quasi sempre lo fa per questo
-  const t = conti.perProva.apri(bruno)
-  assert.equal(conti.utenteDelToken(t), bruno)
+  const t = await conti.perProva.apri(bruno)
+  assert.equal(await conti.utenteDelToken(t), bruno)
   await conti.cambiaPassword(bruno, 'ancoraunaltrapass')
-  assert.equal(conti.utenteDelToken(t), null, 'la sessione di prima è rimasta valida')
+  assert.equal(await conti.utenteDelToken(t), null, 'la sessione di prima è rimasta valida')
 })
 
 test('non si tocca il conto di un altro, né una password troppo corta', async () => {

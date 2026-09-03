@@ -38,6 +38,7 @@ import { CATALOGO } from './connettori/registro.ts'
 import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
 import * as conti from './conti.ts'
+import * as postgres from './postgres.ts'
 import * as chi from './chi.ts'
 import * as trasloco from './trasloco.ts'
 import * as oauth from './connettori/oauth.ts'
@@ -248,7 +249,7 @@ app.get('/api/oauth/ritorno', async (req, res) => {
   }
 })
 
-app.get('/api/auth', (req, res) => {
+app.get('/api/auth', async (req, res) => {
   /*
    * Chi sei, non «esiste un account».
    *
@@ -258,7 +259,7 @@ app.get('/api/auth', (req, res) => {
    * La schermata adesso offre tutte e due le cose e lascia scegliere.
    */
   const utente = auth.tokenDi(req)
-  const dentro = auth.valida(utente)
+  const dentro = await auth.valida(utente)
   const rispondi = () => res.json({
     entrato: dentro,
     account: dentro ? auth.conto() : null,
@@ -268,7 +269,7 @@ app.get('/api/auth', (req, res) => {
     registrazione: ospitato.REGISTRAZIONE
   })
   if (!dentro) return rispondi()
-  chi.dentro(conti.utenteDelToken(utente)!, rispondi)
+  chi.dentro((await conti.utenteDelToken(utente))!, rispondi)
 })
 
 app.post('/api/auth/registra', async (req, res) => {
@@ -292,8 +293,8 @@ app.post('/api/auth/entra', async (req, res) => {
   chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
-app.post('/api/auth/esci', (req, res) => {
-  auth.esci(auth.tokenDi(req))
+app.post('/api/auth/esci', async (req, res) => {
+  await auth.esci(auth.tokenDi(req))
   res.json({ ok: true })
 })
 
@@ -319,8 +320,8 @@ app.post('/api/conto/password', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
-app.post('/api/conto/esci-ovunque', (_req, res) => {
-  try { res.json({ ok: true, chiuse: auth.esciOvunque(chi.serve()) }) } catch (e) { errore(res, e) }
+app.post('/api/conto/esci-ovunque', async (_req, res) => {
+  try { res.json({ ok: true, chiuse: await auth.esciOvunque(chi.serve()) }) } catch (e) { errore(res, e) }
 })
 
 app.get('/api/stato', (_req, res) => {
@@ -2314,6 +2315,55 @@ function perOgnuno(cosa: string, fai: () => Promise<unknown>): () => void {
   })
 }
 
+/*
+ * Prima di ascoltare: i conti, e le configurazioni.
+ *
+ * In casa è un attimo. Su Postgres è la creazione delle tabelle e la lettura
+ * di tutto quello che c'è — e finché non è fatto la guardia non saprebbe di
+ * chi è nessun token. Quindi si aspetta, e si ascolta dopo. Un server che
+ * risponde «sessione scaduta» a tutti per due secondi all'avvio è un server
+ * che sembra rotto.
+ */
+await conti.avvia()
+await cfg.avvia()
+
+/*
+ * Chi c'era prima che i conti fossero più di uno.
+ *
+ * Un'installazione che gira da mesi ha l'account dentro `config.json` nella
+ * radice, e accanto tutto il resto. Senza questo passaggio si riaprirebbe
+ * Myynd e si troverebbe una schermata che chiede di registrarsi, con mesi di
+ * lavoro ancora sul disco ma invisibili.
+ */
+{
+  const vecchio = cfg.leggi().account
+  if (vecchio && !conti.quanti()) {
+    const id = await conti.adotta(vecchio.email, vecchio.sale, vecchio.hash, cfg.RADICE)
+    if (id) {
+      // chi c'era già le aveva, con la loro storia di quante volte sono girate:
+      // toglierle in un aggiornamento sarebbe stato peggio che non averle mai date
+      cfg.aggiorna({ diSerie: true })
+      console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
+    }
+  }
+}
+
+/*
+ * Spegnersi per bene.
+ *
+ * Railway manda SIGTERM a ogni redeploy. Su Postgres le configurazioni
+ * partono un attimo dopo la scrittura: chiudere il processo in quell'attimo
+ * vorrebbe dire perdere l'ultima cosa che qualcuno ha salvato — una password
+ * di posta appena scritta, per dire. Prima si finisce di scrivere, poi si esce.
+ */
+for (const segnale of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(segnale, () => {
+    cfg.scaricato()
+      .catch(e => console.error('myynd · spegnendomi non sono riuscito a scrivere tutto:', e instanceof Error ? e.message : e))
+      .finally(() => process.exit(0))
+  })
+}
+
 /**
  * La porta occupata non deve essere una traccia di stack.
  *
@@ -2346,6 +2396,30 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       `myynd · ospitato${ospitato.DOMINIO ? ` su ${ospitato.DOMINIO}` : ' (dominio non ancora noto)'}` +
       ` · i dati stanno in ${ospitato.DATI}`
     )
+    /*
+     * E quei dati sopravvivono al prossimo redeploy, o no?
+     *
+     * Senza un volume montato la risposta è no, e il modo in cui lo si scopre
+     * è il peggiore possibile: tutto funziona finché non si ridistribuisce,
+     * poi i conti non ci sono più e chi prova a entrare con la password giusta
+     * si sente rispondere che è sbagliata. Nessun errore, da nessuna parte,
+     * dice cos'è successo — il database è integro, semplicemente è nuovo.
+     *
+     * Va detto adesso, all'avvio, mentre c'è ancora tempo per montarlo.
+     */
+    if (ospitato.suUnVolume() === false) {
+      // con Postgres i conti e le configurazioni restano: a rifarsi è solo
+      // l'indice, e va detto con il peso giusto — non è più «hai perso tutto»
+      console.error(postgres.ATTIVO
+        ? `myynd · ${ospitato.DATI} non sta su un volume: l'indice si rifà a ogni ridistribuzione, ` +
+          'rileggendo le fonti. I conti e le configurazioni sono su Postgres e restano.'
+        : `myynd · ATTENZIONE: ${ospitato.DATI} non sta su un volume.\n` +
+          '  È il disco del contenitore: a ogni ridistribuzione riparte vuoto —\n' +
+          '  nessun conto, nessun documento, nessuna automazione. Chi si era\n' +
+          '  registrato troverà «indirizzo o password non corretti» con la password giusta.\n' +
+          `  Su Railway: Volume → Mount path ${ospitato.DATI}, poi ridistribuisci — ` +
+          'oppure MYYND_POSTGRES, e i conti non dipendono più dal disco.')
+    }
   }
 
   // un compito il cui lavoro è morto insieme al processo non torna da solo:
@@ -2458,24 +2532,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * riga aprirebbe l'indice della radice — che non è di nessuno — e i compiti
    * appesi di tutti resterebbero appesi per sempre.
    */
-  /*
-   * Chi c'era prima che i conti fossero più di uno.
-   *
-   * Un'installazione che gira da mesi ha l'account dentro `config.json` nella
-   * radice, e accanto tutto il resto. Senza questo passaggio si riaprirebbe
-   * Myynd e si troverebbe una schermata che chiede di registrarsi, con mesi di
-   * lavoro ancora sul disco ma invisibili.
-   */
-  const vecchio = cfg.leggi().account
-  if (vecchio && !conti.quanti()) {
-    const id = conti.adotta(vecchio.email, vecchio.sale, vecchio.hash, cfg.RADICE)
-    if (id) {
-      // chi c'era già le aveva, con la loro storia di quante volte sono girate:
-      // toglierle in un aggiornamento sarebbe stato peggio che non averle mai date
-      cfg.aggiorna({ diSerie: true })
-      console.log(`myynd · l'account che c'era già è adesso un conto: ${vecchio.email}`)
-    }
-  }
+  // l'adozione del conto che c'era prima è più su, prima di mettersi in
+  // ascolto: su Postgres è una scrittura da aspettare, e qui non si può
 
   let appesi = 0
   /*

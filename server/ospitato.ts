@@ -34,6 +34,7 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { statSync } from 'node:fs'
 
 const pulisci = (x: string) => x.trim().toLowerCase()
   .replace(/^https?:\/\//, '').replace(/\/.*$/, '')
@@ -102,6 +103,32 @@ export const INDIRIZZO = OSPITATO ? '0.0.0.0' : '127.0.0.1'
  * cui questa installazione può perdere tutto, e capita al primo redeploy.
  */
 export const DATI = (process.env.MYYND_DATI ?? '').trim() || join(homedir(), '.myynd')
+
+/**
+ * I dati stanno su un disco che sopravvive, oppure dentro il contenitore?
+ *
+ * Il commento qui sopra dice da sempre che senza un volume si perde tutto al
+ * primo redeploy. Diceva, e basta: **non lo controllava nessuno**, e un avviso
+ * che vive solo in un commento lo legge chi sta già bene. Il modo in cui la
+ * cosa si presenta davvero è un conto che sparisce e una schermata che
+ * risponde «indirizzo o password non corretti» a una password giusta.
+ *
+ * Un volume montato è un altro filesystem, quindi ha un altro numero di
+ * dispositivo dalla radice. Il confronto è con `/` e non con la cartella
+ * padre di proposito: chi monta il volume su `/dati` e poi punta `MYYND_DATI`
+ * a `/dati/myynd` starebbe facendo la cosa giusta, e un controllo sul padre
+ * glielo direbbe sbagliato. Gridare al lupo su una configurazione corretta è
+ * il modo più rapido di insegnare a ignorare gli avvisi.
+ *
+ * `null` vuol dire «non lo so»: si tace, invece di inventare una diagnosi.
+ */
+export function suUnVolume(dove: string = DATI): boolean | null {
+  try {
+    return statSync(dove).dev !== statSync('/').dev
+  } catch {
+    return null
+  }
+}
 
 /*
  * L'invito non c'è più, e vale la pena dire perché invece di lasciare un vuoto.

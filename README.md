@@ -29,7 +29,10 @@ ospitato (`RAILWAY_ENVIRONMENT`, `RENDER`, `FLY_APP_NAME`, `K_SERVICE`, `DYNO`,
 
 | Variabile | Serve a |
 | --------- | ------- |
-| `MYYND_DATI` | Dove vive tutto. **Va montato un volume**, o ogni ridistribuzione riparte vuota. Il Dockerfile la mette a `/dati`. |
+| `MYYND_POSTGRES` | La stringa di connessione a un Postgres — su Supabase: *Connect → Transaction pooler*, la `postgresql://…:6543/postgres`. Con questa, **i conti, le sessioni e la configurazione di ognuno** (profilo e credenziali delle fonti) stanno lì e sopravvivono a qualunque redeploy. Senza, stanno su disco. |
+| `MYYND_CHIAVE` | Obbligatoria con `MYYND_POSTGRES`: una frase lunga e a caso con cui si cifrano le credenziali prima di scriverle sul database. Non cambiarla dopo: quello che è cifrato con la vecchia non si legge più. |
+| `MYYND_POSTGRES_CA` | Facoltativa: il percorso del certificato che Supabase dà da scaricare, per verificare il server oltre che cifrare. Senza, si cifra e basta. |
+| `MYYND_DATI` | Dove vive l'indice — `mente.db`, i documenti, la ricerca — che resta su disco anche con Postgres, perché è una copia delle fonti e si rifà rileggendole. Su un disco effimero si rifà a ogni redeploy: **un volume qui è ancora la cosa giusta**, ma senza non si perde nessun conto. Il Dockerfile la mette a `/dati`. |
 | `PORT` | La porta che il proxy di chi ospita chiama. Railway la imposta da sé. |
 | `MYYND_PUBBLICO` | Il dominio pubblico, es. `myynd.tuodominio.it`. Serve alla guardia sull'Host e al ritorno OAuth. Senza, Railway usa il suo. |
 | `MYYND_REGISTRAZIONE` | `aperta` (predefinito), `invito` o `chiusa`. |
@@ -109,6 +112,7 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   index.ts              le API
   ospitato.ts           cosa cambia su un server, e le variabili di chi ospita
   auth.ts · conti.ts    accesso, sessioni, più persone sulla stessa installazione
+  postgres.ts           conti e configurazioni su Postgres (Supabase) con MYYND_POSTGRES; le credenziali cifrate
   chi.ts                di chi è questa richiesta (AsyncLocalStorage)
   config.ts             config.json per persona, 0600
   store.ts              mente.db per persona — SQLite + FTS5 da node:sqlite, migrazioni

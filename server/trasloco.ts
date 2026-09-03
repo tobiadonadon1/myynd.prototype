@@ -22,7 +22,7 @@
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella } from './config.ts'
+import { cartella, leggi, scrivi, type Config } from './config.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as store from './store.ts'
 import * as automazioni from './automazioni.ts'
@@ -66,9 +66,9 @@ export function esporta(): Buffer {
   const pacco: Pacco = {
     versione: VERSIONE,
     quando: new Date().toISOString(),
-    config: existsSync(join(dove, 'config.json'))
-      ? JSON.parse(readFileSync(join(dove, 'config.json'), 'utf8'))
-      : {},
+    // da `leggi()` e non dal file: su Postgres il file non c'è, e la
+    // configurazione sta dove `config.ts` sa trovarla
+    config: leggi(),
     mente: existsSync(mente) ? readFileSync(mente).toString('base64') : '',
     automazioni
   }
@@ -162,7 +162,9 @@ export function importa(dati: Buffer): Esito {
     typeof pacco.config === 'object' && pacco.config ? { ...(pacco.config as Record<string, unknown>) } : {}
   delete config.account
   if (OSPITATO) delete config.desktop
-  writeFileSync(join(dove, 'config.json'), JSON.stringify(config, null, 2), { mode: 0o600 })
+  // `scrivi()` e non un `writeFileSync`: sceglie lei se è un file o Postgres,
+  // e sul file scrive in due tempi invece di troncarlo
+  scrivi(config as Config)
 
   const auto = join(dove, 'automazioni')
   if (!existsSync(auto)) mkdirSync(auto, { recursive: true, mode: 0o700 })

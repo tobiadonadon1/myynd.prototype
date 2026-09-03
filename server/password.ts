@@ -14,6 +14,11 @@
 import { createInterface } from 'node:readline'
 import * as conti from './conti.ts'
 
+// su Postgres i conti si leggono dal database: senza questo, `tutti()` non
+// avrebbe ancora niente da dire. Serve lo stesso ambiente del server
+// (`MYYND_POSTGRES`): `npm run password` lo legge da `.env.local` se c'è.
+await conti.avvia()
+
 const utenti = conti.tutti().map(id => conti.conto(id)!).filter(Boolean)
 
 if (!utenti.length) {
