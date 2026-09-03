@@ -199,3 +199,43 @@ test('fuori da una richiesta la configurazione resta quella del file, non di qua
   // cercarla sul database
   assert.deepEqual(cfg.leggi(), {})
 })
+
+// — la stringa di connessione, con una password vera dentro —
+
+test('una password con una barra dentro non spacca la lettura', () => {
+  /*
+   * Questo è esattamente quello che ha fermato il server su Railway: `new
+   * URL()` su una stringa con una `/` nella password lancia, e lo fa con un
+   * messaggio che nasconde il valore — quindi sembrava un guasto di rete e
+   * invece era una password vera, scritta com'è, senza percent-encoding.
+   */
+  const p = postgres.perProva.analizza(
+    'postgresql://postgres:Prova9.10/x/y.20!@db.esempio.supabase.co:5432/postgres')
+  assert.equal(p.user, 'postgres')
+  assert.equal(p.password, 'Prova9.10/x/y.20!')
+  assert.equal(p.host, 'db.esempio.supabase.co')
+  assert.equal(p.port, 5432)
+  assert.equal(p.database, 'postgres')
+})
+
+test('la stessa password, percent-encoded, arriva allo stesso risultato', () => {
+  const p = postgres.perProva.analizza(
+    'postgresql://postgres:Prova9.10%2Fx%2Fy.20!@db.esempio.supabase.co:5432/postgres')
+  assert.equal(p.password, 'Prova9.10/x/y.20!')
+})
+
+test('senza porta si usa 5432, e postgres:// vale quanto postgresql://', () => {
+  const p = postgres.perProva.analizza('postgres://u:p@host.esempio.com/miodb')
+  assert.equal(p.host, 'host.esempio.com')
+  assert.equal(p.port, 5432)
+  assert.equal(p.database, 'miodb')
+})
+
+test('una query string dopo il nome del database non ci finisce dentro', () => {
+  const p = postgres.perProva.analizza('postgresql://u:p@host.esempio.com:6543/postgres?pgbouncer=true')
+  assert.equal(p.database, 'postgres')
+})
+
+test('una stringa senza «@» si rifiuta con una frase, non con uno stack di Node', () => {
+  assert.throws(() => postgres.perProva.analizza('non-e-una-stringa-di-connessione'), /non sembra una stringa/)
+})

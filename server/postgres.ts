@@ -54,6 +54,56 @@ export function usa(e: Esecutore) { esecutore = e }
  * di Supabase stessi — e chi vuole la verifica intera mette in
  * `MYYND_POSTGRES_CA` il percorso del certificato che Supabase dà da scaricare.
  */
+type Pezzi = { user: string; password: string; host: string; port: number; database: string }
+
+/**
+ * La stringa di connessione, spaccata a mano — non da `new URL()`.
+ *
+ * `pg` la farebbe passare da lì, e quella non perdona: una password con
+ * dentro una `/` — e la password di un database Postgres può contenere
+ * qualunque cosa, Supabase non impone niente — la spezza in un modo che
+ * sembra un errore di rete, e invece è un errore di sintassi. Il server non
+ * partiva, e il messaggio lo nascondeva dietro un «Invalid URL» senza il
+ * valore: Node lo redige da sé, di proposito, per lo stesso motivo per cui
+ * anche qui non si stampa mai la stringa intera.
+ *
+ * Si spacca dai bordi verso dentro. L'unico carattere che conta è l'ultima
+ * `@`: quello separa le credenziali dall'host, e in un indirizzo vero non è
+ * mai dentro una password — le password possono contenere una `/`, ma
+ * un dominio o un IP non contengono mai una `@`.
+ *
+ * Funziona sia con la password scritta com'è — con la `/` e il resto veri —
+ * sia con quella con `%2F` al posto della `/`: `decodeURIComponent` su un
+ * carattere che non è già una sequenza `%XX` non fa niente, quindi le due
+ * strade arrivano allo stesso posto.
+ */
+function analizza(stringa: string): Pezzi {
+  const senzaSchema = stringa.replace(/^postgres(ql)?:\/\//, '')
+  const chiocciola = senzaSchema.lastIndexOf('@')
+  if (chiocciola < 0) {
+    throw new Error('MYYND_POSTGRES non sembra una stringa postgresql://utente:password@host:porta/database.')
+  }
+  const credenziali = senzaSchema.slice(0, chiocciola)
+  const resto = senzaSchema.slice(chiocciola + 1)
+
+  const decodifica = (s: string) => { try { return decodeURIComponent(s) } catch { return s } }
+  const duePunti = credenziali.indexOf(':')
+  const user = decodifica(duePunti < 0 ? credenziali : credenziali.slice(0, duePunti))
+  const password = decodifica(duePunti < 0 ? '' : credenziali.slice(duePunti + 1))
+
+  const barra = resto.indexOf('/')
+  const hostPorta = barra < 0 ? resto : resto.slice(0, barra)
+  const database = ((barra < 0 ? '' : resto.slice(barra + 1)).split('?')[0] || 'postgres')
+  const dueP = hostPorta.lastIndexOf(':')
+  const host = dueP < 0 ? hostPorta : hostPorta.slice(0, dueP)
+  const port = dueP < 0 ? 5432 : (Number(hostPorta.slice(dueP + 1)) || 5432)
+
+  return { user, password, host, port, database }
+}
+
+/** Da usare nelle prove: la stessa lettura che fa `apri()`, senza aprire niente. */
+export const perProva = { analizza }
+
 function tls(): false | { rejectUnauthorized: boolean; ca?: string } {
   const inCasa = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(URL)
   if (inCasa) return false
@@ -82,7 +132,7 @@ async function apri(): Promise<Esecutore> {
   // caricato qui e non in cima: chi gira in casa, su SQLite, non deve nemmeno
   // avere `pg` in memoria
   const { default: pg } = await import('pg')
-  const pool = new pg.Pool({ connectionString: URL, ssl: tls(), max: 5, idleTimeoutMillis: 30_000 })
+  const pool = new pg.Pool({ ...analizza(URL), ssl: tls(), max: 5, idleTimeoutMillis: 30_000 })
   // un client caduto nel pool non deve buttare giù il processo: si scrive, e
   // il pool ne apre un altro alla prossima query
   pool.on('error', e => console.error('myynd · postgres:', e.message))
