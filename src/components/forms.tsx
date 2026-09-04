@@ -511,7 +511,10 @@ function FormDesktopBrowser({ tema, ok }: Props) {
       }
       setFatti(documenti)
       setStato('fatto')
-      ok()
+      // `ok()` chiude la scheda: per un token digitato ha senso subito, qui
+      // no — c'è un «N documenti sincronizzati» da lasciar leggere, o l'unica
+      // conferma che ha funzionato sparisce nello stesso istante in cui appare
+      setTimeout(ok, 1800)
     } catch (er) {
       setErr(er instanceof Error ? er.message : String(er))
       setStato('guaio')
