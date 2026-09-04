@@ -173,12 +173,42 @@ const file = () => join(cartella(), 'config.json')
  * il caso di chi c'era prima che le persone fossero più di una, e su un
  * server con Postgres non esiste.
  */
-const inMemoria = new Map<string, Config>()
+/*
+ * Quello che si tiene per ognuno, e perché non basta la configurazione.
+ *
+ * `versione` è la versione della riga sul database da cui questa discende, e
+ * `base` è com'era quella riga. Senza le due, due repliche si mangiavano a
+ * vicenda in silenzio: A scriveva la posta di Ugo, B scriveva il nome di Vera
+ * un secondo dopo, e la scrittura di B — che portava con sé *tutta* la
+ * configurazione di Vera com'era prima — non poteva sapere di essere partita
+ * da una copia vecchia. Nessun errore, nessun log: la password della casella
+ * appena salvata semplicemente non c'era più.
+ *
+ * Con la versione, chi parte da una copia vecchia perde la scrittura invece di
+ * vincerla; con `base` si sa *cosa abbiamo cambiato noi*, e allora quando si
+ * perde si può rimettere solo quello sopra la riga nuova, invece di buttare la
+ * modifica di qualcuno.
+ */
+type Tenuta = {
+  config: Config
+  versione: number
+  base: Config
+  /** L'`aggiornato` della riga che abbiamo visto: serve solo a riconoscere un cambio. */
+  aggiornato: string
+}
+const inMemoria = new Map<string, Tenuta>()
 const sporchi = new Set<string>()
 let scaricoInCorso: Promise<void> | null = null
 let scaricoProgrammato: ReturnType<typeof setTimeout> | null = null
-/** L'`aggiornato` più recente che abbiamo visto: da lì in poi si chiede cosa c'è di nuovo. */
-let ultimoAggiornato = ''
+
+function tenuta(utente: string): Tenuta {
+  let t = inMemoria.get(utente)
+  if (!t) {
+    t = { config: {}, versione: 0, base: {}, aggiornato: '' }
+    inMemoria.set(utente, t)
+  }
+  return t
+}
 
 function segnaSporco(utente: string) {
   sporchi.add(utente)
@@ -187,19 +217,91 @@ function segnaSporco(utente: string) {
   }
 }
 
+/**
+ * Le tre configurazioni messe insieme: quella da cui siamo partiti, la nostra,
+ * e quella che nel frattempo ha scritto un'altra replica.
+ *
+ * Si fonde per chiave di primo livello, e non è una semplificazione: quelle
+ * chiavi sono le sezioni della configurazione — `posta`, `google`, `tono`,
+ * `argomenti` — e sono indipendenti fra loro. Chi ha collegato la posta su una
+ * replica e ha cambiato tono sull'altra deve ritrovarsi tutt'e due, che è
+ * quello che è successo davvero; scendere più in fondo vorrebbe dire decidere
+ * chi vince dentro `posta`, e lì una risposta giusta non c'è.
+ *
+ * Quello che noi non abbiamo toccato lo prende da loro. Quello che abbiamo
+ * toccato noi vince, perché è la modifica che una persona ha appena fatto e
+ * che sta guardando sullo schermo.
+ */
+function fondi(base: Config, nostro: Config, loro: Config): Config {
+  const fuso = { ...loro } as Record<string, unknown>
+  const b = base as Record<string, unknown>
+  const n = nostro as Record<string, unknown>
+  for (const k of new Set([...Object.keys(b), ...Object.keys(n)])) {
+    const prima = JSON.stringify(b[k])
+    const adesso = JSON.stringify(n[k])
+    if (prima === adesso) continue          // non l'abbiamo toccata noi: vale la loro
+    if (adesso === undefined) delete fuso[k]  // l'abbiamo tolta noi
+    else fuso[k] = n[k]
+  }
+  return fuso as Config
+}
+
 async function scarica(): Promise<void> {
   if (scaricoInCorso) return scaricoInCorso
   scaricoInCorso = (async () => {
     while (sporchi.size) {
       const utente = sporchi.values().next().value as string
       sporchi.delete(utente)
+      const t = inMemoria.get(utente)
+      if (!t) continue
       const quando = new Date().toISOString()
+      const nuova = t.versione + 1
+      const cifrato = postgres.cifra(JSON.stringify(t.config))
       try {
-        await postgres.q(
-          'INSERT INTO myynd_configurazioni (utente, cifrato, aggiornato) VALUES ($1,$2,$3) ' +
-          'ON CONFLICT (utente) DO UPDATE SET cifrato = EXCLUDED.cifrato, aggiornato = EXCLUDED.aggiornato',
-          [utente, postgres.cifra(JSON.stringify(inMemoria.get(utente) ?? {})), quando])
-        if (quando > ultimoAggiornato) ultimoAggiornato = quando
+        /*
+         * Si scrive **solo se la riga è ancora quella da cui siamo partiti.**
+         *
+         * L'`ON CONFLICT DO UPDATE` di prima vinceva sempre, ed è esattamente
+         * il modo in cui una replica cancellava il lavoro dell'altra. Qui la
+         * `WHERE` sulla versione fa decidere al database, che è l'unico posto
+         * da cui si vede l'ordine vero delle due scritture.
+         */
+        const { rows } = await postgres.q(
+          'UPDATE myynd_configurazioni SET cifrato = $2, aggiornato = $3, versione = $4 ' +
+          'WHERE utente = $1 AND versione = $5 RETURNING versione',
+          [utente, cifrato, quando, nuova, t.versione])
+        let vinto = rows.length > 0
+        if (!vinto && t.versione === 0) {
+          // la riga può non esserci proprio: è la prima volta per questa persona
+          const nato = await postgres.q(
+            'INSERT INTO myynd_configurazioni (utente, cifrato, aggiornato, versione) VALUES ($1,$2,$3,$4) ' +
+            'ON CONFLICT (utente) DO NOTHING RETURNING versione',
+            [utente, cifrato, quando, nuova])
+          vinto = nato.rows.length > 0
+        }
+        if (vinto) {
+          t.versione = nuova
+          t.aggiornato = quando
+          t.base = structuredClone(t.config)
+          continue
+        }
+        /*
+         * Persa. Si rilegge quello che c'è adesso e ci si rimette sopra solo
+         * quello che abbiamo cambiato noi — poi si riprova. Buttare la nostra
+         * scrittura sarebbe la stessa perdita silenziosa vista dall'altro lato.
+         */
+        const { rows: viste } = await postgres.q(
+          'SELECT cifrato, aggiornato, versione FROM myynd_configurazioni WHERE utente = $1', [utente])
+        const r = viste[0] as { cifrato: string; aggiornato: string; versione: number } | undefined
+        if (!r) { sporchi.add(utente); continue }
+        const loro = JSON.parse(postgres.decifra(r.cifrato)) as Config
+        // `t.config` e non una copia presa prima dell'await: fra le due c'è
+        // stato un giro di eventi, e in mezzo può esserci una `scrivi()`
+        t.config = fondi(t.base, t.config, loro)
+        t.base = loro
+        t.versione = Number(r.versione)
+        t.aggiornato = r.aggiornato
+        sporchi.add(utente)
       } catch (e) {
         console.error(
           `myynd · la configurazione di ${utente} non è arrivata su Postgres ` +
@@ -213,31 +315,76 @@ async function scarica(): Promise<void> {
   return scaricoInCorso
 }
 
-/** Tutto quello che è in memoria e non ancora sul database, scritto adesso. */
-export async function scaricato(): Promise<void> {
+/**
+ * Tutto quello che è in memoria e non ancora sul database, scritto adesso.
+ *
+ * Con un limite, si insiste: `scarica()` al primo errore si ferma e si
+ * riprogramma fra cinque secondi, che va bene a processo vivo e non va bene
+ * mentre ci si sta spegnendo — la promessa tornava, si usciva, e la password
+ * di posta salvata durante un singhiozzo di Supabase restava in memoria di un
+ * processo che non c'era più. Qui si riprova finché c'è tempo.
+ */
+export async function scaricato(limite = 0): Promise<void> {
   if (!postgres.ATTIVO) return
   if (scaricoProgrammato) { clearTimeout(scaricoProgrammato); scaricoProgrammato = null }
+  const entro = Date.now() + limite
   await scarica()
+  while (sporchi.size && Date.now() < entro) {
+    await new Promise(r => setTimeout(r, 500))
+    if (scaricoProgrammato) { clearTimeout(scaricoProgrammato); scaricoProgrammato = null }
+    await scarica()
+  }
 }
 
-type Riga = { utente: string; cifrato: string; aggiornato: string }
+type Riga = { utente: string; cifrato: string; aggiornato: string; versione: number }
 
 function accogli(r: Riga) {
-  // quello che è in memoria e non è ancora partito è più nuovo di qualunque
-  // cosa stia sul database: non lo si sovrascrive
-  if (!sporchi.has(r.utente)) inMemoria.set(r.utente, JSON.parse(postgres.decifra(r.cifrato)) as Config)
-  if (r.aggiornato > ultimoAggiornato) ultimoAggiornato = r.aggiornato
+  /*
+   * Quello che è in memoria e non è ancora partito è più nuovo di qualunque
+   * cosa stia sul database: non lo si sovrascrive — e nemmeno si aggiorna la
+   * versione. Alzarla qui sarebbe la seconda metà del guasto: la nostra
+   * scrittura, ancora in coda con un blob vecchio, si troverebbe la versione
+   * giusta in mano e vincerebbe sopra la modifica appena letta. Lasciandola
+   * com'è, quella scrittura perde e passa dalla fusione, che è il posto in cui
+   * quel conflitto si risolve senza perdere niente.
+   */
+  if (sporchi.has(r.utente)) return
+  const config = JSON.parse(postgres.decifra(r.cifrato)) as Config
+  inMemoria.set(r.utente, {
+    config,
+    base: structuredClone(config),
+    versione: Number(r.versione),
+    aggiornato: r.aggiornato
+  })
 }
 
 async function caricaUno(utente: string): Promise<void> {
-  const { rows } = await postgres.q('SELECT utente, cifrato, aggiornato FROM myynd_configurazioni WHERE utente = $1', [utente])
+  const { rows } = await postgres.q(
+    'SELECT utente, cifrato, aggiornato, versione FROM myynd_configurazioni WHERE utente = $1', [utente])
   if (rows[0]) accogli(rows[0] as Riga)
 }
 
+/**
+ * Cosa è cambiato sul database da quando l'abbiamo guardato.
+ *
+ * Prima c'era una data sola per tutti — «dammi tutto quello che è più recente
+ * di questa» — e quella data la alzavano anche le *nostre* scritture. Bastava
+ * che questa replica scrivesse la configurazione di Vera perché la scrittura
+ * che un'altra replica aveva fatto un istante prima su quella di Ugo restasse
+ * indietro alla data e non venisse mai letta. Non per un giro: per sempre.
+ *
+ * Adesso si chiede l'elenco delle versioni — due colonne, una riga per
+ * persona — e si va a prendere per intero solo quello che non combacia con
+ * quello che abbiamo. Nessuna data da confrontare, quindi nessun orologio di
+ * due macchine diverse da mettere d'accordo.
+ */
 async function caricaLeNuove(): Promise<void> {
-  const { rows } = await postgres.q(
-    'SELECT utente, cifrato, aggiornato FROM myynd_configurazioni WHERE aggiornato > $1', [ultimoAggiornato])
-  for (const r of rows) accogli(r as Riga)
+  const { rows } = await postgres.q('SELECT utente, aggiornato, versione FROM myynd_configurazioni')
+  const cambiati = (rows as { utente: string; aggiornato: string; versione: number }[]).filter(r => {
+    const t = inMemoria.get(r.utente)
+    return !t || t.versione !== Number(r.versione) || t.aggiornato !== r.aggiornato
+  })
+  for (const r of cambiati) await caricaUno(r.utente)
 }
 
 /**
@@ -256,6 +403,7 @@ export async function avvia(): Promise<void> {
       'Serve a cifrare le credenziali prima di scriverle sul database: scegline una lunga e a caso.')
   }
   await caricaLeNuove()
+  await ruotaLaChiave()
   conti.quandoArrivaUnUtente(id => {
     caricaUno(id).catch(e => console.error(`myynd · non riesco a leggere la configurazione di ${id}:`, e instanceof Error ? e.message : e))
   })
@@ -264,13 +412,91 @@ export async function avvia(): Promise<void> {
   }, 5 * 60_000).unref()
 }
 
+/**
+ * La chiave si può cambiare, e il cambio finisce da solo.
+ *
+ * `MYYND_CHIAVE` cifra ogni credenziale sul database, e il README diceva da
+ * sempre «non cambiarla»: una promessa che non si può mantenere, perché una
+ * chiave si può scoprire, si può essere incollata nel posto sbagliato, o
+ * semplicemente cambia chi ospita. Senza una strada, l'unica risposta era
+ * «ricollegate tutte le fonti, tutti quanti».
+ *
+ * Con `MYYND_CHIAVE_VECCHIA` la strada c'è: si passa su tutte le righe una
+ * volta sola, all'avvio, e quelle che si aprono con la vecchia si riscrivono
+ * con la nuova. Passa dalla scrittura normale — quindi anche qui la versione
+ * decide, e una riscrittura non può passare sopra a un cambio fatto da
+ * un'altra replica un istante prima.
+ *
+ * Si dice quante ne restano mentre si va, e si dice quando è finita: il
+ * momento in cui la variabile vecchia si può togliere dev'essere un fatto che
+ * qualcuno ha letto, non una speranza.
+ */
+export async function ruotaLaChiave(): Promise<{ riscritte: number; giaAPosto: number; illeggibili: number }> {
+  const esito = { riscritte: 0, giaAPosto: 0, illeggibili: 0 }
+  if (!postgres.ATTIVO || !postgres.cambioDiChiaveInCorso()) return esito
+
+  const { rows } = await postgres.q('SELECT utente FROM myynd_configurazioni')
+  const quanti = rows.length
+  console.log(`myynd · MYYND_CHIAVE_VECCHIA c’è: guardo ${quanti} configurazion${quanti === 1 ? 'e' : 'i'} e riscrivo quelle ancora sulla chiave di prima.`)
+
+  for (const [i, riga] of rows.entries()) {
+    const utente = String(riga.utente)
+    try {
+      const { rows: r } = await postgres.q(
+        'SELECT utente, cifrato, aggiornato, versione FROM myynd_configurazioni WHERE utente = $1', [utente])
+      if (!r[0]) continue
+      const { conLaVecchia } = postgres.apriCifrato(String(r[0].cifrato))
+      if (!conLaVecchia) { esito.giaAPosto++; continue }
+      accogli(r[0] as Riga)
+      // rimarcata sporca senza cambiare niente: `scarica()` la riscrive, e la
+      // riscrive cifrata con la chiave di adesso
+      segnaSporco(utente)
+      await scaricato(30_000)
+      esito.riscritte++
+    } catch (e) {
+      /*
+       * Non si apre con nessuna delle due. Non si tocca — riscriverla sarebbe
+       * cancellare le credenziali di qualcuno — e si dice di chi è, perché la
+       * risposta è che quella persona deve ricollegare le sue fonti.
+       */
+      esito.illeggibili++
+      console.error(`myynd · la configurazione di ${utente} non si apre con nessuna delle due chiavi:`, e instanceof Error ? e.message : e)
+    }
+    if (quanti > 20 && (i + 1) % 20 === 0) console.log(`myynd · rotazione della chiave: ${i + 1} di ${quanti}.`)
+  }
+
+  if (esito.illeggibili) {
+    console.error(
+      `myynd · rotazione finita a metà: ${esito.riscritte} riscritte, ${esito.giaAPosto} già a posto, ` +
+      `${esito.illeggibili} illeggibili. **Non togliere MYYND_CHIAVE_VECCHIA**: quelle righe sono cifrate con una terza chiave.`)
+  } else {
+    console.log(
+      `myynd · rotazione finita: ${esito.riscritte} riscritte, ${esito.giaAPosto} erano già sulla chiave nuova. ` +
+      'Adesso MYYND_CHIAVE_VECCHIA si può togliere.')
+  }
+  return esito
+}
+
+/**
+ * Il conto se n'è andato: la sua configurazione non deve restare.
+ *
+ * Anche dalla memoria, e anche da `sporchi`: una scrittura in coda che partisse
+ * dopo la cancellazione ricreerebbe la riga di una persona che non esiste più
+ * — con dentro le sue credenziali.
+ */
+export async function cancella(utente: string): Promise<void> {
+  sporchi.delete(utente)
+  inMemoria.delete(utente)
+  giaMessiDaParte.delete(join(cartellaDi(utente), 'config.json'))
+  if (postgres.ATTIVO) await postgres.q('DELETE FROM myynd_configurazioni WHERE utente = $1', [utente])
+}
+
 /** Da usare nei test. */
 export const perProva = {
   /** Come se il processo fosse appena ripartito: la memoria vuota, il database intatto. */
   dimentica() {
     inMemoria.clear()
     sporchi.clear()
-    ultimoAggiornato = ''
   }
 }
 
@@ -331,6 +557,8 @@ export type Config = {
   modello?: string
   /** In che lingua risponde: 'it' | 'en'. */
   lingua?: string
+  /** Il fuso di chi usa (IANA, es. Europe/Rome): lo manda il browser. Senza, quello della macchina. */
+  fuso?: string
   /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */
   oreFatte?: number
   /** Il tetto di token al giorno per il lavoro di frontiera. Zero o assente: nessuno. */
@@ -559,7 +787,7 @@ export function leggi(): Config {
   const u = chi.adesso()
   // una copia, non l'oggetto in memoria: chi lo modificasse senza passare da
   // `scrivi()` cambierebbe la configurazione senza che il database lo sappia
-  if (postgres.ATTIVO && u) return structuredClone(inMemoria.get(u) ?? {})
+  if (postgres.ATTIVO && u) return structuredClone(inMemoria.get(u)?.config ?? {})
   assicuraDir()
   if (!existsSync(file())) return {}
   try {
@@ -589,7 +817,7 @@ export function leggi(): Config {
 export function scrivi(c: Config) {
   const u = chi.adesso()
   if (postgres.ATTIVO && u) {
-    inMemoria.set(u, structuredClone(c))
+    tenuta(u).config = structuredClone(c)
     segnaSporco(u)
     return
   }
@@ -624,6 +852,7 @@ export function pubblica(c: Config = leggi()) {
     autonomia: autonomia(c),
     modello: c.modello ?? 'claude-sonnet-5',
     lingua: c.lingua ?? 'en',
+    fuso: c.fuso ?? null,
     oreFatte: c.oreFatte ?? 48,
     tetto: c.tetto ?? 0,
     giro: !!c.giro,

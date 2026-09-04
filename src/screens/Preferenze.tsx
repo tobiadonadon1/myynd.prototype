@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, sessione, type Abbonamento as TipoAbbonamento } from '../api'
+import { api, sessione, type Abbonamento as TipoAbbonamento, type Gettone } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
@@ -228,6 +228,76 @@ function Conto() {
   )
 }
 
+/**
+ * Come ti chiami, e cosa fai.
+ *
+ * `/api/profilo` li accetta da sempre e li chiedeva **solo l'onboarding**: una
+ * scrittura andata storta là dentro — la rete che salta, una scheda chiusa a
+ * metà — e da lì in avanti Myynd ti chiamava «tu» per sempre, senza nessuna
+ * schermata da cui rimediare. Due campi non sono una funzione nuova: sono la
+ * via d'uscita che mancava a una cosa che si può scrivere una volta sola.
+ *
+ * Si va a prendere il valore vero invece di leggerlo da `v.nome`, che porta già
+ * il ripiego: un campo precompilato con «tu» chiede di cancellare una parola
+ * che nessuno ha scritto.
+ */
+function Identita() {
+  const [nome, setNome] = useState('')
+  const [ruolo, setRuolo] = useState('')
+  const [caricato, setCaricato] = useState(false)
+  const [salvo, setSalvo] = useState(false)
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  useEffect(() => {
+    api.stato()
+      .then(s => { setNome(s.config.nome ?? ''); setRuolo(s.config.ruolo ?? ''); setCaricato(true) })
+      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+  }, [])
+
+  const salva = async () => {
+    setSalvo(true); setDetto(''); setGuaio('')
+    try {
+      await api.profilo({ nome: nome.trim(), ruolo: ruolo.trim() })
+      setDetto(t('Salvato.'))
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setSalvo(false)
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Chi sei')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
+        {t('Come ti chiamo, e che lavoro fai. Entrano in ogni risposta e in ogni bozza: è la differenza fra una mail scritta per te e una scritta per nessuno.')}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12, maxWidth: 520 }}>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Nome')}</div>
+          <input value={nome} onChange={e => setNome(e.target.value)} disabled={!caricato}
+            onKeyDown={e => { if (e.key === 'Enter' && caricato) salva() }}
+            placeholder={t('come ti chiamano al lavoro')} className={classeCampo('chiaro')} style={campo('chiaro')} />
+        </div>
+        <div>
+          <div style={etichetta('chiaro')}>{t('Ruolo')}</div>
+          <input value={ruolo} onChange={e => setRuolo(e.target.value)} disabled={!caricato}
+            onKeyDown={e => { if (e.key === 'Enter' && caricato) salva() }}
+            placeholder={t('titolare, responsabile vendite, …')} className={classeCampo('chiaro')} style={campo('chiaro')} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={salva} disabled={!caricato || salvo} style={{
+          padding: '11px 20px', borderRadius: 99, border: 'none',
+          background: caricato && !salvo ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
+          color: caricato && !salvo ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: caricato && !salvo ? 'pointer' : 'default'
+        }}>{salvo ? t('Un momento…') : t('Salva')}</button>
+        {detto && <span style={{ fontSize: '12.5px', color: '#3E5140' }}>{detto}</span>}
+      </div>
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
+}
+
 function Trasloco() {
   const [faccio, setFaccio] = useState<'' | 'scarico' | 'carico'>('')
   const [detto, setDetto] = useState('')
@@ -339,6 +409,258 @@ function Trasloco() {
 
 /** Il file scelto, in attesa della conferma. Non è stato: non ridisegna niente. */
 const pronto: { current: File | null } = { current: null }
+
+/**
+ * I gettoni per le macchine.
+ *
+ * Serve a una cosa sola oggi — il Mac di casa che spinge i documenti letti
+ * verso un Myynd ospitato — e prima quel lavoro si faceva incollando in
+ * `MYYND_DESKTOP_REMOTO_TOKEN` un normale token di sessione: trenta giorni di
+ * vita, e la morte a ogni cambio di password. Quando moriva, la spinta
+ * falliva in silenzio e per sempre.
+ *
+ * Il gettone si vede **una volta sola**, adesso, quando nasce: sul server ce
+ * n'è l'impronta e da quella non si torna indietro. Quindi la carta lo mostra
+ * grosso, con accanto le due righe già pronte da incollare — perché il momento
+ * in cui va copiato è questo e non ce ne sarà un altro.
+ */
+function Gettoni({ ospitato }: { ospitato: boolean }) {
+  const [lista, setLista] = useState<Gettone[] | null>(null)
+  const [nome, setNome] = useState('')
+  const [nato, setNato] = useState('')
+  const [faccio, setFaccio] = useState(false)
+  const [guaio, setGuaio] = useState('')
+
+  const carica = useCallback(() => {
+    api.gettoni()
+      .then(r => setLista(r.gettoni))
+      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+  }, [])
+  useEffect(carica, [carica])
+
+  const crea = async () => {
+    setFaccio(true); setGuaio(''); setNato('')
+    try {
+      const r = await api.creaGettone(nome, 'desktop')
+      setNato(r.gettone)
+      setLista(r.gettoni)
+      setNome('')
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setFaccio(false)
+  }
+
+  const revoca = async (id: string) => {
+    setGuaio('')
+    try { setLista((await api.revocaGettone(id)).gettoni) }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+  }
+
+  // le due righe da incollare: l'indirizzo di questo Myynd è quello da cui si
+  // sta guardando, e chiederlo a mano sarebbe un modo di farlo sbagliare
+  const righe = `MYYND_DESKTOP_REMOTO=${window.location.origin}\nMYYND_DESKTOP_REMOTO_TOKEN=${nato}`
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Gettoni per le macchine')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+        {ospitato
+          ? t('Servono al Myynd di casa per spingere qui i documenti che ha letto dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro: con uno di questi non si entra nell’app e non si tocca il conto.')
+          : t('Servono a un altro Myynd — quello su un server — per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.')}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input value={nome} onChange={e => setNome(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && nome.trim() && !faccio) crea() }}
+          placeholder={t('il MacBook dell’ufficio')} className={classeCampo('chiaro')}
+          style={{ ...campo('chiaro'), width: 240, marginTop: 0 }} />
+        <button onClick={crea} disabled={!nome.trim() || faccio} style={{
+          padding: '11px 20px', borderRadius: 99, border: 'none',
+          background: nome.trim() && !faccio ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
+          color: nome.trim() && !faccio ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: nome.trim() && !faccio ? 'pointer' : 'default'
+        }}>{faccio ? t('Un momento…') : t('Creane uno')}</button>
+      </div>
+
+      {/* una volta sola: non c'è nessun modo di rivederlo, e va detto qui */}
+      {nato && (
+        <div style={{
+          marginTop: 12, padding: '13px 15px', borderRadius: 14,
+          border: '1px solid rgba(126,156,130,.4)', background: 'rgba(126,156,130,.1)', maxWidth: 540
+        }}>
+          <div style={{ fontSize: '12.5px', color: '#3E5140', lineHeight: 1.55, textWrap: 'pretty' }}>
+            {t('Copialo adesso: questa è l’unica volta che si vede. Incolla queste due righe nel Myynd di casa.')}
+          </div>
+          <pre style={{
+            margin: '10px 0 0', padding: '10px 12px', borderRadius: 10, background: 'rgba(34,39,31,.06)',
+            fontSize: '11.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre', userSelect: 'all'
+          }}>{righe}</pre>
+        </div>
+      )}
+
+      {lista && lista.length > 0 && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 540 }}>
+          {lista.map(g => (
+            <div key={g.id} style={{
+              display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px', borderRadius: 12,
+              background: 'rgba(255,255,255,.55)'
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '14px', overflowWrap: 'anywhere' }}>{g.nome}</div>
+                <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.55)', marginTop: 2 }}>
+                  {g.ambito} · {g.usato ? `${t('ultimo uso')} ${new Date(g.usato).toLocaleDateString()}` : t('mai usato')}
+                </div>
+              </div>
+              <button onClick={() => revoca(g.id)} style={{
+                flex: 'none', padding: '7px 14px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+                border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+                color: '#8E3F1F', fontSize: '12.5px'
+              }}>{t('Revoca')}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {lista && lista.length === 0 && (
+        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 12 }}>{t('Non ne hai ancora nessuno.')}</div>
+      )}
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
+}
+
+/**
+ * «Dammi tutto quello che avete su di me».
+ *
+ * Accanto al pacco del trasloco e non dentro, perché sono due cose diverse e
+ * confonderle costa: quello sposta un'installazione e **dentro ha le
+ * credenziali vere** — apre la casella di posta di chi l'ha fatto — questo si
+ * legge, si stampa, si manda a un consulente, e le credenziali non ce le ha.
+ * La password si chiede lo stesso: dentro non ci sono chiavi, ma c'è tutta la
+ * posta letta.
+ */
+function Fascicolo() {
+  const [password, setPassword] = useState('')
+  const [chiedo, setChiedo] = useState(false)
+  const [faccio, setFaccio] = useState(false)
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  const scarica = async () => {
+    if (!password) { setChiedo(true); return }
+    setFaccio(true); setDetto(''); setGuaio('')
+    try {
+      const { nome, dati } = await api.scaricaDati(password)
+      setPassword(''); setChiedo(false)
+      const url = URL.createObjectURL(dati)
+      const a = document.createElement('a')
+      a.href = url; a.download = nome; a.click()
+      URL.revokeObjectURL(url)
+      setDetto(t('Scaricato: è nella cartella dei download.'))
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setFaccio(false)
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Tutto quello che tengo su di te')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+        {t('Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.')}
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={scarica} disabled={faccio} style={{
+          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
+          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+          color: 'rgba(34,39,31,.78)', fontSize: '13px'
+        }}>{faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica i miei dati')}</button>
+        {chiedo && (
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password" placeholder={t('la tua password')}
+            onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }}
+            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 220, marginTop: 0 }} />
+        )}
+      </div>
+      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
+}
+
+/**
+ * Andarsene.
+ *
+ * Due cose insieme, e non è una cerimonia: la password dice che è lei, e il
+ * proprio indirizzo ricopiato a mano la obbliga a fermarsi un secondo davanti a
+ * un gesto che non ha un annulla. Un bottone rosso con «sei sicuro?» si preme
+ * per riflesso; ricopiare il proprio indirizzo no.
+ *
+ * E sopra ai due campi c'è scritto **cosa sparisce**, per esteso. Chi cancella
+ * un conto quasi sempre non sa che se ne va anche l'indice — mesi di posta
+ * letta — e scoprirlo dopo non serve a niente.
+ */
+function Cancella() {
+  const [aperto, setAperto] = useState(false)
+  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
+  const [faccio, setFaccio] = useState(false)
+  const [guaio, setGuaio] = useState('')
+
+  const cancella = async () => {
+    setFaccio(true); setGuaio('')
+    try {
+      await api.cancellaConto(password, email)
+      sessione.pulisci()
+      location.reload()
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio(false) }
+  }
+
+  const puo = !!password && !!email.trim() && !faccio
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Cancella il conto')}</div>
+      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+        {t('Sparisce tutto: i documenti che ho letto, la lista, le chat, quello che ho imparato su di te, le automazioni e le fonti collegate. Non si torna indietro, e non ne tengo una copia. Se vuoi portarti via qualcosa, fallo prima da qui sopra.')}
+      </div>
+
+      {!aperto ? (
+        <button onClick={() => setAperto(true)} style={{
+          marginTop: 14, padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+          border: '1px solid rgba(142,63,31,.35)', background: 'rgba(255,255,255,.6)', color: '#8E3F1F', fontSize: '13px'
+        }}>{t('Voglio cancellare il conto')}</button>
+      ) : (
+        <div style={{
+          marginTop: 12, padding: '14px 15px', borderRadius: 14,
+          border: '1px solid rgba(196,98,59,.35)', background: 'rgba(196,98,59,.08)', maxWidth: 540
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+            <div>
+              <div style={etichetta('chiaro')}>{t('La tua password')}</div>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                autoComplete="current-password" className={classeCampo('chiaro')} style={campo('chiaro')} />
+            </div>
+            <div>
+              <div style={etichetta('chiaro')}>{t('Il tuo indirizzo, per conferma')}</div>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"
+                placeholder={t('tu@tuodominio.it')} className={classeCampo('chiaro')} style={campo('chiaro')} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button onClick={cancella} disabled={!puo} style={{
+              padding: '9px 17px', borderRadius: 99, border: 'none', fontFamily: 'inherit', fontSize: '12.5px',
+              background: puo ? '#8E3F1F' : 'rgba(34,39,31,.18)', color: puo ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+              cursor: puo ? 'pointer' : 'default'
+            }}>{faccio ? t('Un momento…') : t('Cancella tutto, per sempre')}</button>
+            <button onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }} style={{
+              padding: '9px 17px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+              border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
+              color: 'rgba(34,39,31,.7)', fontSize: '12.5px'
+            }}>{t('Lascia stare')}</button>
+          </div>
+          {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function CampoArgomenti({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.argomenti)
@@ -464,7 +786,7 @@ function CampoArgomenti({ v }: { v: Vals }) {
  * non compare nemmeno l'interruttore: un comando spento per un programma che non
  * hai è solo una domanda senza risposta.
  */
-function Abbonamento() {
+function Abbonamento({ avvisa }: { avvisa: (testo: string) => void }) {
   const [s, setS] = useState<TipoAbbonamento | null>(null)
 
   const guarda = useCallback(() => {
@@ -476,7 +798,10 @@ function Abbonamento() {
 
   const cambia = async () => {
     setS({ ...s, acceso: !s.acceso })
-    try { await api.usaAbbonamento(!s.acceso) } finally { guarda() }
+    // l'interruttore tornava indietro da solo, senza dire perché
+    try { await api.usaAbbonamento(!s.acceso) }
+    catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
+    finally { guarda() }
   }
 
   return (
@@ -535,7 +860,7 @@ function Abbonamento() {
  * dall'azienda, la lettura del feed. Su quelle si paga, perché è lì che una
  * risposta sbagliata costa.
  */
-function ModelloDiCasa() {
+function ModelloDiCasa({ avvisa }: { avvisa: (testo: string) => void }) {
   const [s, setS] = useState<{ acceso: boolean; modello: string | null; spento: boolean } | null>(null)
 
   const guarda = useCallback(() => {
@@ -550,7 +875,9 @@ function ModelloDiCasa() {
   const cambia = async () => {
     const attivo = !!s.spento
     setS({ ...s, spento: !attivo })
-    try { await api.usaModelloLocale(attivo) } finally { guarda() }
+    try { await api.usaModelloLocale(attivo) }
+    catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
+    finally { guarda() }
   }
 
   return (
@@ -705,6 +1032,8 @@ export function Preferenze({ v }: { v: Vals }) {
 
       <Trasloco />
 
+      <Fascicolo />
+
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Autonomia')}</div>
         <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
@@ -755,8 +1084,8 @@ export function Preferenze({ v }: { v: Vals }) {
           non c'entra, e un interruttore che non fa niente è peggio di nessuno */}
       {/* anche con un altro motore scelto: chi l'aveva acceso deve poterlo
           spegnere, e la carta si nasconde da sola quando non c'è niente da dire */}
-      <Abbonamento />
-      <ModelloDiCasa />
+      <Abbonamento avvisa={v.mostraToast} />
+      <ModelloDiCasa avvisa={v.mostraToast} />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Lingua')}</div>
@@ -788,7 +1117,11 @@ export function Preferenze({ v }: { v: Vals }) {
 
       <Uso />
 
+      <Identita />
+
       <Conto />
+
+      <Gettoni ospitato={v.ospitato} />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
@@ -808,6 +1141,11 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
         <button onClick={() => v.apriConnessioni()} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Apri')}</button>
       </div>
+
+      {/* ultimo di tutti, e non per pudore: è l'unica cosa in questa schermata
+          che non si può annullare, e non deve stare accanto a niente che si
+          preme di fretta */}
+      <Cancella />
     </div>
   )
 }

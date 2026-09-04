@@ -54,10 +54,19 @@ export function Chat({ v }: { v: Vals }) {
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 18px', borderRadius: '22px 20px 22px 18px', background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
-        <input value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey}
-          placeholder={v.claudeOn ? t('Chiedi qualcosa al tuo materiale…') : t('Collega Claude per fare domande')}
-          disabled={!v.claudeOn}
-          style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 15, color: '#22271F' }} />
+        {v.claudeOn ? (
+          <input value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey}
+            placeholder={t('Chiedi qualcosa al tuo materiale…')}
+            style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 15, color: '#22271F' }} />
+        ) : (
+          // un campo spento che dice «collega Claude» senza un posto dove farlo
+          // è una porta chiusa: la riga stessa apre le connessioni su Claude
+          <Hov as="button" type="button" onClick={() => v.apriConnessioni('claude')}
+            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: 15, color: 'rgba(34,39,31,.55)', cursor: 'pointer', overflowWrap: 'anywhere' }}
+            hover={{ color: '#8E3F1F' }}>
+            {t('Collega Claude per fare domande')}
+          </Hov>
+        )}
         <button onClick={v.send} disabled={!v.claudeOn || v.pensando} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
           background: v.claudeOn ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',

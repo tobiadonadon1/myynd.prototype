@@ -360,7 +360,7 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
   // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
   // chi sviluppa, la tabella la legge la schermata delle preferenze
   try {
-    store.segnaUso({ lavoro, motore: nomeMotore(), entrata: u.input_tokens + scritti, cache, uscita: u.output_tokens })
+    store.segnaUso({ lavoro, motore: nomeMotore(lavoro), entrata: u.input_tokens + scritti, cache, uscita: u.output_tokens })
   } catch { /* contare non deve mai rompere la chiamata contata */ }
   console.log(
     `myynd · uso · ${lavoro}${nota ? ` · ${nota}` : ''} · entrata ${u.input_tokens}` +
@@ -497,6 +497,9 @@ function traduci(e: unknown): Error {
   if (e instanceof Anthropic.AuthenticationError) return new Error('La chiave di Claude non è più valida.')
   if (e instanceof Anthropic.PermissionDeniedError) return new Error('La chiave non ha accesso a questo modello.')
   if (e instanceof Anthropic.RateLimitError) return new Error('Claude è sotto sforzo in questo momento. Riprova fra poco.')
+  // 500 e 529 («overloaded») arrivano con il corpo JSON nel messaggio, che
+  // comincia con una cifra e passava intero fino allo schermo
+  if (e instanceof Anthropic.InternalServerError) return new Error('Claude ha un problema in questo momento. Riprova fra poco.')
   if (e instanceof Anthropic.APIConnectionTimeoutError) return new Error('Ci ha messo troppo e ho lasciato perdere. Riprova.')
   if (e instanceof Anthropic.APIConnectionError) return new Error('Non riesco a raggiungere Claude. Controlla la rete.')
   /**
@@ -547,7 +550,7 @@ export type Motore = {
   /** Come si chiama, per i registri: il modello di Claude, o il nome dato al fornitore. */
   nome: string
   crea(p: Anthropic.MessageCreateParamsNonStreaming, attesa?: number): Promise<Anthropic.Message>
-  flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number): Promise<Anthropic.Message>
+  flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number, segnale?: AbortSignal): Promise<Anthropic.Message>
 }
 
 /**
@@ -593,9 +596,9 @@ export function motore(): Motore | null {
       tipo: 'compatibile',
       nome: f.nome || f.modello,
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }) },
-      flusso: (p, onTesto, attesa) => {
+      flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
-        return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX)
+        return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
           .catch(e => { throw tradotto(e) })
       }
     }
@@ -613,10 +616,11 @@ export function motore(): Motore | null {
         throw inItaliano(e)
       }
     },
-    flusso: async (p, onTesto, attesa) => {
+    flusso: async (p, onTesto, attesa, segnale) => {
       controllaIlTetto()
       try {
-        const s = a.messages.stream(p, attesa ? { timeout: attesa } : undefined)
+        // il segnale è di chi ascolta: se se n'è andato, si smette di pagare
+        const s = a.messages.stream(p, { ...(attesa ? { timeout: attesa } : {}), ...(segnale ? { signal: segnale } : {}) })
         s.on('text', onTesto)
         return await senzaSilenzi(s)
       } catch (e) {
@@ -629,9 +633,9 @@ export function motore(): Motore | null {
 // — il tetto di oggi —
 
 /** Il nome del motore che risponde adesso, per il registro dell'uso. */
-function nomeMotore(): string {
+function nomeMotore(lavoro = ''): string {
   const f = fornitore()
-  return f ? (f.nome || f.modello) : modello()
+  return f ? (f.nome || f.modello) : modelloPer(lavoro)
 }
 
 /** Da mezzanotte UTC: un giorno solare semplice, uguale per tutti i server. */
@@ -680,10 +684,31 @@ export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'locale'
 /** Tutto quello che serve a una richiesta tranne cosa le si sta chiedendo. */
 export type Parametri = Omit<Anthropic.MessageCreateParamsNonStreaming, 'messages' | 'system'>
 
+/**
+ * Il modello per il lavoro piccolo, quando quello di casa non c'è.
+ *
+ * La tabella dice che un titolo o una cernita non hanno bisogno di un modello
+ * di frontiera — e finora, senza Ollama, ci andavano lo stesso: ospitati
+ * ogni traduzione, ogni ritratto delle sei ore e ogni «è una domanda o un
+ * fatto?» passava da Sonnet. Il più piccolo della famiglia fa lo stesso lavoro
+ * a un decimo, ed è più capace di qualunque cosa giri su un portatile.
+ */
+const ECONOMICO = 'claude-haiku-4-5'
+
+export function modelloPer(lavoro: string): string {
+  return LAVORI[lavoro as Lavoro]?.frontiera === false ? ECONOMICO : modello()
+}
+
+/** Quanto si aspetta questo lavoro, per chi chiama il motore da sé. */
+export function attesaDi(lavoro: Lavoro): number {
+  return LAVORI[lavoro].attesa
+}
+
 export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object): Parametri {
   const p = LAVORI[lavoro]
-  const cap = capacita()
-  const fuori: Record<string, unknown> = { model: modello(), max_tokens }
+  const m = modelloPer(lavoro)
+  const cap = capacita(m)
+  const fuori: Record<string, unknown> = { model: m, max_tokens }
 
   if (p.ragiona) {
     if (cap.adattivo) {
@@ -763,6 +788,9 @@ export async function chiedi(o: {
     if (nome) {
       try {
         const testo = await chiediAlLocale(nome, { ...o, formato: o.formato, attesa })
+        // vincolato o no, un oggetto che non si legge non è una risposta: si
+        // passa a Claude adesso, non si torna un `null` due funzioni più in là
+        if (o.formato) JSON.parse(estraiJSON(testo))
         return { testo, rifiutata: false, da: 'locale' }
       } catch (e) {
         console.warn(`myynd · il modello locale non ce l'ha fatta su «${o.lavoro}», passo a Claude:`,
@@ -858,9 +886,23 @@ export async function chiediJSON<T>(o: {
   max_tokens: number
   formato: object
   attesa?: number
+  /**
+   * Con `severo`, un guaio del motore — tetto raggiunto, chiave a secco,
+   * fornitore giù — si rilancia invece di diventare `null`. Serve a chi non
+   * può fare finta: una cernita che torna «niente» durante un'interruzione
+   * scrive «tutto bene» su una casella che non ha letto.
+   */
+  severo?: boolean
 }): Promise<T | null> {
+  let r: Esito
   try {
-    const r = await chiedi(o)
+    r = await chiedi(o)
+  } catch (e) {
+    if (o.severo) throw e
+    console.warn(`myynd · «${o.lavoro}» non ha risposto:`, e instanceof Error ? e.message : e)
+    return null
+  }
+  try {
     if (r.rifiutata || !r.testo.trim()) return null
     return JSON.parse(estraiJSON(r.testo)) as T
   } catch (e) {

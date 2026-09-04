@@ -152,7 +152,7 @@ function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void })
         </div>
         <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{c.testo}</div>
         {testo && (
-          <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty' }}>
+          <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
             {taglia(testo, 150)}
           </div>
         )}

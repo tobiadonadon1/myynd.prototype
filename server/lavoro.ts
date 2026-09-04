@@ -95,6 +95,47 @@ const TETTO_TESTO = 200_000
  * credenziali — ma senza la chiave API di Myynd: sono due conti diversi, e
  * quello che spende l'uno non deve finire sull'altro.
  */
+/**
+ * Gli argomenti della riga di comando, staccati apposta.
+ *
+ * Stanno in una funzione loro perché quello che c'è qui dentro è una superficie
+ * di sicurezza — cosa può toccare un agente che parte da solo alle sette di
+ * mattina — e una superficie di sicurezza va provata, non guardata. Una prova
+ * la legge; un array in mezzo a `fai` no.
+ */
+export function argomentiDi(passo: Passo, richiesta = ''): string[] {
+  return [
+    '-p', richiesta,
+    '--permission-mode', passo === 'piano' ? 'plan' : 'acceptEdits',
+    '--output-format', 'text',
+
+    /*
+     * Le impostazioni del progetto non sono le sue.
+     *
+     * Dentro una cartella collegata può esserci un `.claude/settings.json` che
+     * dichiara degli hook — comandi che partono da soli, prima e dopo ogni
+     * attrezzo, in modalità piano come in qualunque altra — e un `.mcp.json`
+     * che dichiara server a cui il modello può parlare. Li ha scritti chi ha
+     * fatto quel progetto: una cartella clonata da internet, un repository di
+     * un cliente. Chi ha collegato la cartella non li ha letti e non sa che
+     * esistono.
+     *
+     * Quindi si caricano solo le impostazioni della persona (`user`), mai
+     * quelle del progetto, e nessun server MCP: `--strict-mcp-config` senza
+     * nessun `--mcp-config` vuol dire nessuno. Vale per tutti e due i passi —
+     * chi preme «fallo» ha approvato delle modifiche a dei file, non un
+     * comando che parte da sé.
+     */
+    '--setting-sources', 'user',
+    '--strict-mcp-config',
+
+    // In modalità piano legge e ragiona, e basta: niente shell, niente rete.
+    // È il passo che un'automazione fa alle sette di mattina con nessuno a
+    // guardare, e la richiesta può portarsi dietro un'email scritta apposta.
+    ...(passo === 'piano' ? ['--disallowedTools', 'Bash', 'WebFetch', 'WebSearch'] : [])
+  ]
+}
+
 export async function fai(
   desktop: ConfigDesktop | null | undefined,
   o: { cartella: string; richiesta: string; passo: Passo }
@@ -108,11 +149,8 @@ export async function fai(
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è installato su questo computer.')
 
-  const args = [
-    '-p', o.richiesta,
-    '--permission-mode', o.passo === 'piano' ? 'plan' : 'acceptEdits',
-    '--output-format', 'text'
-  ]
+  const args = argomentiDi(o.passo, o.richiesta)
+
 
   const { ANTHROPIC_API_KEY: _mia, ...ambiente } = process.env
 

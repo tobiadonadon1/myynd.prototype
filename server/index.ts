@@ -39,10 +39,14 @@ import * as whatsapp from './connettori/whatsapp.ts'
 import { CATALOGO } from './connettori/registro.ts'
 import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
+import * as gettoni from './gettoni.ts'
+import * as addio from './addio.ts'
+import * as fascicolo from './fascicolo.ts'
 import * as conti from './conti.ts'
 import * as postgres from './postgres.ts'
 import * as chi from './chi.ts'
 import * as trasloco from './trasloco.ts'
+import * as fuso from './fuso.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua } from './testo.ts'
 
@@ -120,7 +124,21 @@ app.post('/api/whatsapp/webhook', express.raw({ type: '*/*', limit: '2mb' }), (r
   res.status(200).end()
 })
 
-app.use(express.json({ limit: '2mb' }))
+/*
+ * Il tetto del corpo dipende da dove bussa.
+ *
+ * Due mega bastano a tutta l'API — una chat, una preferenza, una chiave — e
+ * sono un tetto giusto: un tetto largo ovunque è un modo di farsi riempire la
+ * memoria da chiunque abbia un token. Ma due rotte ricevono *documenti*: il
+ * Mac che spinge migliaia di file già letti, e il browser che manda un PDF in
+ * base64. Con due mega la prima cadeva alla prima cartella vera, e la seconda
+ * al primo PDF da tre mega — con un 413 che la schermata leggeva come «non
+ * sono riuscito a collegare».
+ */
+const CORPO_GRANDE = new Set(['/api/connettori/desktop/carica', '/api/connettori/desktop/carica-file'])
+const jsonNormale = express.json({ limit: '2mb' })
+const jsonGrande = express.json({ limit: '50mb' })
+app.use((req, res, next) => (CORPO_GRANDE.has(req.path) ? jsonGrande : jsonNormale)(req, res, next))
 
 /**
  * La porta.
@@ -238,13 +256,28 @@ app.use('/api/auth', (req, res, next) => {
  * sia il consenso lo dice lo `state` — un segreto che conosce solo il browser
  * che l'ha ricevuto avviando il ballo dentro il suo conto.
  */
+const BIGLIETTO = 'myynd_oauth'
+/** Il biglietto del consenso, dal cookie: vedi `oauth.biglietto`. */
+function bigliettoPortato(req: express.Request): string {
+  for (const pezzo of (req.headers.cookie ?? '').split(';')) {
+    const [k, ...v] = pezzo.trim().split('=')
+    if (k === BIGLIETTO) return v.join('=')
+  }
+  return ''
+}
+/** Al browser che parte per il consenso: dieci minuti, solo su questa strada di ritorno. */
+function consegnaIlBiglietto(res: express.Response, b: string) {
+  res.setHeader('Set-Cookie', `${BIGLIETTO}=${b}; Path=/api/oauth/ritorno; Max-Age=600; HttpOnly; Secure; SameSite=Lax`)
+}
+
 app.get('/api/oauth/ritorno', async (req, res) => {
   const stato = String(req.query.state ?? '')
   const codice = req.query.code ? String(req.query.code) : null
   const guaio = req.query.error ? String(req.query.error) : null
   res.setHeader('content-type', 'text/html; charset=utf-8')
+  res.setHeader('Set-Cookie', `${BIGLIETTO}=; Path=/api/oauth/ritorno; Max-Age=0; HttpOnly; Secure; SameSite=Lax`)
   try {
-    const { nome } = await oauth.completaWeb(stato, codice, guaio)
+    const { nome } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req))
     res.send(oauth.paginaWeb(true, nome))
   } catch (e) {
     res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
@@ -268,7 +301,17 @@ app.get('/api/auth', async (req, res) => {
     ospitato: ospitato.OSPITATO,
     // come ci si registra qui: la schermata mostra il campo dell'invito, o
     // toglie la scheda «crea», invece di scoprirlo dopo aver scritto la password
-    registrazione: ospitato.REGISTRAZIONE
+    registrazione: auth.registrazione(),
+    /*
+     * Cosa può fare la posta di questo server, se c'è.
+     *
+     * Senza, la schermata non deve offrire «ho dimenticato la password»: un
+     * bottone che porta a una richiesta che risponde sempre «ok» e non manda
+     * niente è peggio di nessun bottone — chi ci prova aspetta una mail che
+     * non arriverà mai, e non ha modo di saperlo.
+     */
+    verifica: auth.verificaAttiva(),
+    reimpostazione: auth.reimpostazionePossibile()
   })
   if (!dentro) return rispondi()
   chi.dentro((await conti.utenteDelToken(utente))!, rispondi)
@@ -278,26 +321,78 @@ app.post('/api/auth/registra', async (req, res) => {
   const { email, password, invito } = req.body ?? {}
   const e = await auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
-  // dentro il contesto del conto appena fatto: `auth.conto()` legge da lì, e
-  // fuori non saprebbe di chi parlare
-  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
+  /*
+   * Senza token, quando l'indirizzo va confermato.
+   *
+   * Il conto c'è ma non si entra: la schermata legge `daVerificare` e dice di
+   * guardare la posta invece di aprirsi su una mente vuota. Restituire una
+   * sessione e poi chiederle di confermare farebbe della conferma una
+   * formalità che si può ignorare — cioè niente.
+   */
+  chi.dentro(e.utente, () => res.json({
+    ok: true, token: e.token, account: auth.conto(), daVerificare: e.daVerificare === true,
+    // «guarda la posta» si dice solo se la posta è partita davvero
+    mailPartita: e.mailPartita !== false
+  }))
 })
 
 app.post('/api/auth/entra', async (req, res) => {
-  const attesa = auth.attesa(String(req.body?.email ?? ''))
-  if (attesa > 0) {
-    const secondi = Math.ceil(attesa / 1000)
-    return res.status(429).json({ errore: `Troppi tentativi. Riprova fra ${secondi} second${secondi === 1 ? 'o' : 'i'}.` })
-  }
+  const da = req.ip ?? ''
+  const attesa = auth.attesa(String(req.body?.email ?? ''), da)
+  if (attesa > 0) return res.status(429).json({ errore: auth.fraTroppi(attesa) })
   const { email, password } = req.body ?? {}
-  const e = await auth.entra(String(email ?? ''), String(password ?? ''))
-  if (!e.ok) return res.status(401).json({ errore: e.errore })
+  const e = await auth.entra(String(email ?? ''), String(password ?? ''), da)
+  if (!e.ok) return res.status(401).json({ errore: e.errore, daVerificare: e.daVerificare === true })
   chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
 app.post('/api/auth/esci', async (req, res) => {
   await auth.esci(auth.tokenDi(req))
   res.json({ ok: true })
+})
+
+// — l'indirizzo confermato, e la password dimenticata —
+//
+// Stanno qui sopra la guardia perché chi le usa una sessione non ce l'ha: è il
+// motivo per cui le usa. E stanno sotto `/api/auth`, dove il freno per
+// indirizzo qui in cima le prende insieme alle altre — una rotta che rimette
+// una password senza freno sarebbe un modo di provare gettoni a raffica.
+
+app.post('/api/auth/verifica', async (req, res) => {
+  const e = await auth.confermaIndirizzo(String(req.body?.gettone ?? ''))
+  if (!e.ok) return res.status(400).json({ errore: e.errore })
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
+})
+
+/**
+ * «Non mi è arrivata».
+ *
+ * Risponde ok comunque, come la richiesta qui sotto e per la stessa ragione:
+ * un «questo indirizzo non c'è» detto a chi non è entrato è un modo di farsi
+ * raccontare chi lavora in quest'azienda.
+ */
+app.post('/api/auth/verifica/manda', async (req, res) => {
+  const { mailPartita } = await auth.rimandaLaConferma(String(req.body?.email ?? ''))
+  res.json({ ok: true, mailPartita })
+})
+
+/**
+ * «Ho dimenticato la password»: sempre ok, esista o no quell'indirizzo.
+ *
+ * Non è pigrizia ed è la parte che va guardata due volte prima di
+ * «migliorarla»: rispondere «non c'è nessun conto con questo indirizzo»
+ * sembra gentile, e in mezz'ora consegna a chiunque l'elenco di chi è iscritto
+ * qui. La schermata dice «se quell'indirizzo è qui, ti abbiamo scritto».
+ */
+app.post('/api/auth/reimposta/chiedi', async (req, res) => {
+  await auth.chiediReimpostazione(String(req.body?.email ?? ''))
+  res.json({ ok: true })
+})
+
+app.post('/api/auth/reimposta', async (req, res) => {
+  const e = await auth.reimposta(String(req.body?.gettone ?? ''), String(req.body?.password ?? ''))
+  if (!e.ok) return res.status(400).json({ errore: e.errore })
+  chi.dentro(e.utente, () => res.json({ ok: true, token: e.token, account: auth.conto() }))
 })
 
 // da qui in giù serve essere dentro
@@ -324,6 +419,106 @@ app.post('/api/conto/password', async (req, res) => {
 
 app.post('/api/conto/esci-ovunque', async (_req, res) => {
   try { res.json({ ok: true, chiuse: await auth.esciOvunque(chi.serve()) }) } catch (e) { errore(res, e) }
+})
+
+/**
+ * La password di chi è già dentro, per i gesti che non tornano indietro.
+ *
+ * Passa da `auth.verificaPassword`, che conta i tentativi per conto: chiederla
+ * senza contare vorrebbe dire che una sessione rubata può provarle tutte a
+ * otto al secondo, e in fondo a quel corridoio c'è la cancellazione del conto.
+ */
+async function chiediLaPassword(req: express.Request, res: express.Response): Promise<boolean> {
+  const v = await auth.verificaPassword(chi.serve(), String(req.body?.password ?? ''))
+  if (v.ok) return true
+  if (v.attesa > 0) res.status(429).json({ errore: auth.fraTroppi(v.attesa) })
+  else res.status(403).json({ errore: 'La password non è corretta.' })
+  return false
+}
+
+/**
+ * Il conto, cancellato.
+ *
+ * Due cose insieme e non una: la password **e** il proprio indirizzo scritto a
+ * mano. La password dice che è lei; l'indirizzo la obbliga a fermarsi un
+ * secondo davanti a un gesto che non ha un annulla. Un bottone rosso con
+ * «sei sicuro?» si preme per riflesso; ricopiare il proprio indirizzo no.
+ */
+app.post('/api/conto/cancella', async (req, res) => {
+  try {
+    const mio = auth.conto()
+    const scritto = String(req.body?.email ?? '').trim().toLowerCase()
+    if (!mio || scritto !== mio.email.toLowerCase()) {
+      return res.status(400).json({ errore: 'Scrivi il tuo indirizzo esattamente com’è, per confermare.' })
+    }
+    if (!await chiediLaPassword(req, res)) return
+    const utente = chi.serve()
+    const e = await addio.cancella(utente)
+    res.json({ ok: true, ...e })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * «Dammi tutto quello che avete su di me», in un file che si legge.
+ *
+ * Accanto al `.myynd` e non al posto suo: quello serve a spostare
+ * un'installazione e contiene le credenziali vere, questo serve a leggere e a
+ * inoltrare e le credenziali non ce le ha. Stessa password e stesso freno
+ * dell'altro — dentro non ci sono chiavi, ma c'è tutta la posta letta.
+ *
+ * Si scrive a pezzi mentre esce, invece di costruirlo tutto e poi mandarlo:
+ * un indice vero sono decine di migliaia di documenti, e tenerne una seconda
+ * copia in memoria vorrebbe dire prendersi la memoria di tutti per il tempo
+ * di una richiesta.
+ */
+app.post('/api/conto/dati', async (req, res) => {
+  try {
+    if (!await chiediLaPassword(req, res)) return
+    const miei = await gettoni.elenco(chi.serve())
+    const oggi = new Date().toISOString().slice(0, 10)
+    res.setHeader('content-type', 'application/json; charset=utf-8')
+    res.setHeader('content-disposition', `attachment; filename="myynd-dati-${oggi}.json"`)
+    for (const pezzo of fascicolo.scrivi(miei)) {
+      // se il client legge più piano di quanto scriviamo si aspetta, invece di
+      // riempire la memoria del processo con quello che non è ancora partito
+      if (!res.write(pezzo)) await new Promise(f => res.once('drain', f))
+    }
+    res.end()
+  } catch (e) {
+    // a intestazioni già mandate un JSON d'errore non arriverebbe: si tronca,
+    // e un JSON troncato si vede subito che è troncato
+    if (res.headersSent) res.destroy()
+    else errore(res, e)
+  }
+})
+
+// — i gettoni con un ambito —
+//
+// Vedi `gettoni.ts`: sono la risposta a un credenziale che una persona incolla
+// in una variabile d'ambiente e poi non guarda più. Non scadono, si revocano, e
+// arrivano solo dove il loro ambito dice.
+
+app.get('/api/conto/gettoni', async (_req, res) => {
+  try { res.json({ gettoni: await gettoni.elenco(chi.serve()), ambiti: gettoni.AMBITI }) }
+  catch (e) { errore(res, e) }
+})
+
+app.post('/api/conto/gettoni', async (req, res) => {
+  try {
+    const e = await gettoni.crea(chi.serve(), String(req.body?.nome ?? ''), String(req.body?.ambito ?? 'desktop'))
+    if (!e.ok) return res.status(400).json({ errore: e.errore })
+    // il gettone in chiaro esce **una volta sola**, adesso: sul database c'è
+    // la sua impronta, e da quella non si torna indietro
+    res.json({ ok: true, id: e.id, gettone: e.gettone, gettoni: await gettoni.elenco(chi.serve()) })
+  } catch (e) { errore(res, e) }
+})
+
+app.delete('/api/conto/gettoni/:id', async (req, res) => {
+  try {
+    const tolto = await gettoni.revoca(chi.serve(), String(req.params.id))
+    if (!tolto) return res.status(404).json({ errore: 'Questo gettone non c’è più.' })
+    res.json({ ok: true, gettoni: await gettoni.elenco(chi.serve()) })
+  } catch (e) { errore(res, e) }
 })
 
 app.get('/api/stato', (_req, res) => {
@@ -406,8 +601,12 @@ app.post('/api/profilo', async (req, res) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti', 'tetto'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
+  }
+  // il fuso è un nome IANA o niente: uno storto farebbe esplodere ogni conto sulle ore
+  if (patch.fuso !== undefined && (typeof patch.fuso !== 'string' || !fuso.fusoValido(patch.fuso))) {
+    return res.status(400).json({ errore: 'Non conosco questo fuso orario.' })
   }
 
   /**
@@ -565,11 +764,23 @@ app.post('/api/connettori/posta', async (req, res) => {
   const { host, porta, utente, password, giorni, cartelle } = req.body ?? {}
   if (!host || !utente || !password) return res.status(400).json({ errore: 'Servono host, indirizzo e password.' })
   if (!ospitato.hostRaggiungibile(String(host))) return res.status(400).json({ errore: 'Quell’host non si può raggiungere da qui.' })
+  const portaScelta = Number(porta) || 993
+  // su un server anche la porta fa parte di «dove bussare»: IMAP sta su 993 o
+  // 143, e un'altra porta è un servizio interno di chi ospita — la stessa
+  // regola che `trasloco.ts` applica a un pacco importato
+  if (ospitato.OSPITATO && ![993, 143].includes(portaScelta)) {
+    return res.status(400).json({ errore: 'Su un server la posta si legge solo sulle porte 993 o 143.' })
+  }
+  // e il nome si risolve prima di collegarsi: un nome pubblico può puntare
+  // alla rete interna, e il controllo sulla stringa non lo vede
+  if (!(await ospitato.hostRaggiungibileDavvero(String(host)))) {
+    return res.status(400).json({ errore: 'Quell’host non si può raggiungere da qui.' })
+  }
   // gli spazi con cui Google mostra la password per le app non fanno parte
   // della password: toglierli qui evita un «utente o password non accettati»
   // che non è vero e che non si può indovinare
   const c: cfg.ConfigPosta = {
-    host, porta: Number(porta) || 993, utente,
+    host, porta: portaScelta, utente,
     password: posta.normalizza(String(password), String(host)),
     giorni: Number(giorni) || 30, cartelle
   }
@@ -637,14 +848,37 @@ app.post('/api/connettori/desktop/carica', async (req, res) => {
       quando: d.quando == null ? null : String(d.quando),
       gruppo: 'documenti'
     }))
-    .filter(d => d.id && d.titolo)
+  /*
+   * Gli id li scrive il lettore in casa, ma la forma è nostra. Un id fuori
+   * dal prefisso `desktop:` finirebbe sopra un documento di un'altra fonte —
+   * e `riconcilia` non lo toglierebbe mai, perché guarda solo la sua. Una
+   * radice vuota o relativa farebbe cancellare quello che non ha mai visto:
+   * `''` è prefisso di tutto.
+   */
+  if (docs.some(d => !d.id.startsWith('desktop:'))) {
+    return res.status(400).json({ errore: 'Gli id dei documenti del desktop cominciano con «desktop:».' })
+  }
   const complete: string[] = Array.isArray(req.body?.complete) ? req.body.complete.map(String) : []
+  if (complete.some(r => !r.trim() || !r.startsWith('/'))) {
+    return res.status(400).json({ errore: 'Le cartelle lette fino in fondo vanno indicate con un percorso assoluto.' })
+  }
   const visti: string[] = Array.isArray(req.body?.visti) ? req.body.visti.map(String) : []
+  // senza titolo non si indicizza, ma l'id conta comunque come visto
+  const buoni = docs.filter(d => d.titolo)
   try {
-    await store.salvaDocumentiAPezzi(docs)
+    await store.salvaDocumentiAPezzi(buoni)
     const tolti = store.riconcilia('desktop', { completo: !!complete.length, radiciViste: complete },
       [...docs.map(d => d.id), ...visti])
-    res.json({ ok: true, documenti: docs.length, tolti })
+    // ospitati, la scheda «Desktop» si accende da qui: il server non legge
+    // nessuna cartella (vedi `leggiTutto`), ma quello che il Mac ha spinto è
+    // collegato a tutti gli effetti, e senza questa riga l'app diceva «non hai
+    // collegato niente» con i documenti già dentro
+    if (ospitato.OSPITATO && complete.length) {
+      const c = cfg.leggi()
+      const radici = [...new Set([...(c.desktop?.cartelle ?? []), ...complete])]
+      if (radici.length !== (c.desktop?.cartelle ?? []).length) cfg.aggiorna({ desktop: { ...(c.desktop ?? {}), cartelle: radici } })
+    }
+    res.json({ ok: true, documenti: buoni.length, tolti })
   } catch (e) { errore(res, e) }
 })
 
@@ -700,6 +934,18 @@ app.post('/api/connettori/desktop/carica-file', async (req, res) => {
     await store.salvaDocumentiAPezzi(docs)
     const tolti = store.riconcilia('desktop', { completo, radiciViste: radice ? [radice] : [] },
       [...docs.map(d => d.id), ...visti])
+    /*
+     * E il desktop risulta collegato. `/api/stato` guarda `cfg.desktop`, e
+     * senza questa riga l'indice si riempiva mentre la scheda diceva ancora
+     * «da collegare» e il primo avvio non andava avanti. La radice è il nome
+     * della cartella scelta, non un percorso: nessuno la percorre, perché su
+     * un server `leggiTutto` il desktop lo salta — arriva da qui, non dal disco.
+     */
+    if (radice) {
+      const c = cfg.leggi()
+      const cartelle = c.desktop?.cartelle ?? []
+      if (!cartelle.includes(radice)) cfg.aggiorna({ desktop: { ...(c.desktop ?? {}), cartelle: [...cartelle, radice] } })
+    }
     res.json({ ok: true, documenti: docs.length, tolti })
   } catch (e) { errore(res, e) }
 })
@@ -860,16 +1106,20 @@ app.post('/api/connettori/slack', async (req, res) => {
  * persona ci va. Ospitati soltanto — in casa il ballo passa da 127.0.0.1 e
  * l'app è la sua.
  */
+function partiPerIlConsenso(res: express.Response, a: { dove: string; biglietto: string }) {
+  consegnaIlBiglietto(res, a.biglietto)
+  res.json({ dove: a.dove })
+}
 app.post('/api/connettori/google/avvia', (_req, res) => {
-  try { res.json(google.avvia()) } catch (e) { errore(res, e, 400) }
+  try { partiPerIlConsenso(res, google.avvia()) } catch (e) { errore(res, e, 400) }
 })
 app.post('/api/connettori/drive/avvia', (_req, res) => {
-  try { res.json(drive.avvia()) } catch (e) { errore(res, e, 400) }
+  try { partiPerIlConsenso(res, drive.avvia()) } catch (e) { errore(res, e, 400) }
 })
 app.post('/api/connettori/microsoft/avvia', (req, res) => {
   const parte = String(req.body?.parte ?? 'posta')
   if (parte !== 'posta' && parte !== 'file') return res.status(400).json({ errore: 'Non so cosa collegare di Microsoft.' })
-  try { res.json(microsoft.avvia(parte)) } catch (e) { errore(res, e, 400) }
+  try { partiPerIlConsenso(res, microsoft.avvia(parte)) } catch (e) { errore(res, e, 400) }
 })
 
 app.post('/api/connettori/drive', async (req, res) => {
@@ -1019,9 +1269,30 @@ async function leggiTutto(
   const c = cfg.leggi()
   let totale = 0
 
-  if (c.desktop && (!soloFonte || soloFonte === 'desktop')) {
+  /*
+   * Ogni fonte per conto suo.
+   *
+   * Prima solo il calendario stava dentro un try: un token di Slack scaduto
+   * fermava la lettura lì, e Drive, SharePoint e Dropbox — che vengono dopo —
+   * restavano indietro per sei ore senza che nessuno l'avesse chiesto. Il
+   * guaio si dice, con la fonte accanto, e si passa alla successiva; il totale
+   * conta solo quello che è arrivato davvero.
+   */
+  const fonte = async (nome: string, leggi: () => Promise<number>) => {
+    if (fermo() || (soloFonte && soloFonte !== nome)) return
+    try {
+      totale += await leggi()
+    } catch (err) {
+      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  // su un server il desktop non si legge da qui: arriva dal browser o da un
+  // Myynd in casa, e le «cartelle» in configurazione sono nomi, non percorsi
+  const desk = c.desktop
+  if (desk && !ospitato.OSPITATO) await fonte('desktop', async () => {
     avvisa({ fase: 'desktop', stato: 'apro le cartelle' })
-    const e = await desktop.sincronizza(c.desktop, n => avvisa({ fase: 'desktop', stato: `${n} documenti` }))
+    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }))
     await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
     // silenzio non prova niente
@@ -1029,7 +1300,6 @@ async function leggiTutto(
     // non abbiamo riletto non è un file cancellato
     const tolti = store.riconcilia('desktop', { completo: !!e.complete.length, radiciViste: e.complete },
       [...e.docs.map(d => d.id), ...e.visti])
-    totale += e.docs.length
     avvisa({
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
@@ -1046,73 +1316,88 @@ async function leggiTutto(
         avvisa({ fase: 'desktop-remoto', stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
       }
     }
-  }
-  if (!fermo() && c.notion && (!soloFonte || soloFonte === 'notion')) {
+    return e.docs.length
+  })
+  const ntn = c.notion
+  if (ntn) await fonte('notion', async () => {
     avvisa({ fase: 'notion', stato: 'leggo le pagine' })
-    const e = await notion.sincronizza(c.notion)
+    const e = await notion.sincronizza(ntn)
     await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('notion', { completo: !e.interrotto },
       [...e.docs.map(d => d.id), ...e.visti])
-    totale += e.docs.length
-    avvisa({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti })
-  }
-  if (!fermo() && c.calendario && (!soloFonte || soloFonte === 'calendario')) {
+    avvisa({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti, invariate: e.invariate, resto: e.resto })
+    return e.docs.length
+  })
+  const cal = c.calendario
+  if (cal) await fonte('calendario', async () => {
     avvisa({ fase: 'calendario', stato: 'apro l’agenda' })
-    try {
-      const e = await calendario.sincronizza(c.calendario)
-      await store.salvaDocumentiAPezzi(e.docs)
-      /*
-        Si riconcilia, ed è il caso in cui serve di più: un impegno spostato o
-        annullato deve *sparire*, altrimenti Myynd continua a ragionare su una
-        riunione che non c'è più — che è peggio che non saperne niente. Il file
-        iCal è sempre completo, quindi quello che non c'è dentro non c'è.
-      */
-      const tolti = store.riconcilia('calendario', { completo: !e.troncato }, e.docs.map(d => d.id))
-      totale += e.docs.length
-      avvisa({ fase: 'calendario', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
-    } catch (err) {
-      // un indirizzo scaduto non deve fermare la lettura di tutto il resto
-      avvisa({ fase: 'calendario', stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
-    }
-  }
-  if (!fermo() && c.posta && (!soloFonte || soloFonte === 'posta')) {
+    const e = await calendario.sincronizza(cal)
+    await store.salvaDocumentiAPezzi(e.docs)
+    /*
+      Si riconcilia, ed è il caso in cui serve di più: un impegno spostato o
+      annullato deve *sparire*, altrimenti Myynd continua a ragionare su una
+      riunione che non c'è più — che è peggio che non saperne niente. Il file
+      iCal è sempre completo, quindi quello che non c'è dentro non c'è.
+    */
+    const tolti = store.riconcilia('calendario', { completo: !e.troncato }, e.docs.map(d => d.id))
+    avvisa({ fase: 'calendario', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
+    return e.docs.length
+  })
+  const pst = c.posta
+  if (pst) await fonte('posta', async () => {
     avvisa({ fase: 'posta', stato: 'mi collego alla casella' })
     // gli uid già nell'indice, cartella per cartella: quelli non si riscaricano
     const giaIndicizzati = (cartella: string) => new Set(
       store.idsConPrefisso(`posta:${cartella}:`).map(id => Number(id.slice(id.lastIndexOf(':') + 1))).filter(n => n > 0)
     )
-    const e = await posta.sincronizza(c.posta, (fatti, tot) =>
-      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi` }), giaIndicizzati)
+    const e = await posta.sincronizza(pst, (fatti, tot) =>
+      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi`, fatti, tot }), giaIndicizzati)
     await store.salvaDocumentiAPezzi(e.docs)
-    totale += e.docs.length
+    /*
+     * Quello che sul server non c'è più esce anche da qui.
+     *
+     * Finora nessuno riconciliava la posta: un messaggio cancellato o spostato
+     * restava nell'indice per sempre, veniva citato in una risposta, e
+     * alimentava le proposte di archiviazione — cioè Myynd proponeva di mettere
+     * via una cosa che non esisteva. Si tocca solo dentro le finestre che
+     * `sincronizza` dichiara lette fino in fondo: una cartella che ha fallito,
+     * o che si è fermata al tetto, non ne produce nessuna, e lì non si cancella
+     * niente. Sbagliare per eccesso qui vuol dire buttare via la posta di
+     * qualcuno.
+     */
+    const tolti = store.riconciliaPosta(e.finestre, [...e.docs.map(d => d.id), ...e.visti])
     // l'UIDVALIDITY vista si conserva: è quello che rende possibile saltare la prossima volta
-    if (JSON.stringify(e.validita) !== JSON.stringify(c.posta.validita ?? {})) {
-      cfg.aggiorna({ posta: { ...c.posta, validita: e.validita } })
+    if (JSON.stringify(e.validita) !== JSON.stringify(pst.validita ?? {})) {
+      cfg.aggiorna({ posta: { ...pst, validita: e.validita } })
     }
     avvisa({
-      fase: 'posta', stato: 'fatto', documenti: e.docs.length, giaLetti: e.saltati,
-      cartelleFallite: e.cartelleFallite, troncato: e.troncato
+      fase: 'posta', stato: 'fatto', documenti: e.docs.length, giaLetti: e.saltati, tolti,
+      cartelleFallite: e.cartelleFallite, troncato: e.troncato, resto: e.resto
     })
-  }
-  if (!fermo() && c.google && (!soloFonte || soloFonte === 'google')) {
+    return e.docs.length
+  })
+  const ggl = c.google
+  if (ggl) await fonte('google', async () => {
     avvisa({ fase: 'google', stato: 'mi collego alla casella' })
-    const e = await google.sincronizza(c.google, (fatti, tot) =>
-      avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi` }))
+    const e = await google.sincronizza(ggl, (fatti, tot) =>
+      avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
     await store.salvaDocumentiAPezzi(e.docs)
-    totale += e.docs.length
     avvisa({ fase: 'google', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
-  }
-  if (!fermo() && c.microsoft?.parti.includes('posta') && (!soloFonte || soloFonte === 'microsoft')) {
+    return e.docs.length
+  })
+  const ms = c.microsoft
+  if (ms?.parti.includes('posta')) await fonte('microsoft', async () => {
     avvisa({ fase: 'microsoft', stato: 'mi collego alla casella' })
-    const e = await microsoft.sincronizzaPosta(c.microsoft, (fatti, tot) =>
-      avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi` }))
+    const e = await microsoft.sincronizzaPosta(ms, (fatti, tot) =>
+      avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
     await store.salvaDocumentiAPezzi(e.docs)
-    totale += e.docs.length
     avvisa({ fase: 'microsoft', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
-  }
-  if (!fermo() && c.slack && (!soloFonte || soloFonte === 'slack')) {
+    return e.docs.length
+  })
+  const slk = c.slack
+  if (slk) await fonte('slack', async () => {
     avvisa({ fase: 'slack', stato: 'apro le conversazioni' })
-    const e = await slack.sincronizza(c.slack, (fatti, tot) =>
+    const e = await slack.sincronizza(slk, (fatti, tot) =>
       avvisa({ fase: 'slack', stato: `${fatti} di ${tot} canali` }))
     await store.salvaDocumentiAPezzi(e.docs)
     /*
@@ -1123,39 +1408,41 @@ async function leggiTutto(
     */
     const tolti = store.riconcilia('slack', { completo: !e.falliti.length && !e.troncato },
       e.docs.map(d => d.id))
-    totale += e.docs.length
-    avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti })
-  }
-  if (!fermo() && c.drive && (!soloFonte || soloFonte === 'drive')) {
+    avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
+    return e.docs.length
+  })
+  const drv = c.drive
+  if (drv) await fonte('drive', async () => {
     avvisa({ fase: 'drive', stato: 'apro i documenti' })
-    const e = await drive.sincronizza(c.drive, (fatti, tot) =>
+    const e = await drive.sincronizza(drv, (fatti, tot) =>
       avvisa({ fase: 'drive', stato: `${fatti} di ${tot} file` }))
     await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('drive', { completo: !e.troncato && !e.falliti },
       [...e.docs.map(d => d.id), ...e.visti])
-    totale += e.docs.length
-    avvisa({ fase: 'drive', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti })
-  }
-  if (!fermo() && c.microsoft?.parti.includes('file') && (!soloFonte || soloFonte === 'sharepoint')) {
+    avvisa({ fase: 'drive', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
+    return e.docs.length
+  })
+  if (ms?.parti.includes('file')) await fonte('sharepoint', async () => {
     avvisa({ fase: 'sharepoint', stato: 'apro i siti' })
-    const e = await microsoft.sincronizzaFile(c.microsoft, (fatti, tot) =>
+    const e = await microsoft.sincronizzaFile(ms, (fatti, tot) =>
       avvisa({ fase: 'sharepoint', stato: `${fatti} di ${tot} file` }))
     await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('sharepoint', { completo: e.completo },
       [...e.docs.map(d => d.id), ...e.visti])
-    totale += e.docs.length
-    avvisa({ fase: 'sharepoint', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti })
-  }
-  if (!fermo() && c.dropbox && (!soloFonte || soloFonte === 'dropbox')) {
+    avvisa({ fase: 'sharepoint', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
+    return e.docs.length
+  })
+  const dbx = c.dropbox
+  if (dbx) await fonte('dropbox', async () => {
     avvisa({ fase: 'dropbox', stato: 'apro la cartella' })
-    const e = await dropbox.sincronizza(c.dropbox, (fatti, tot) =>
+    const e = await dropbox.sincronizza(dbx, (fatti, tot) =>
       avvisa({ fase: 'dropbox', stato: `${fatti} di ${tot} file` }))
     await store.salvaDocumentiAPezzi(e.docs)
     const tolti = store.riconcilia('dropbox', { completo: e.completo && !e.falliti },
       [...e.docs.map(d => d.id), ...e.visti])
-    totale += e.docs.length
-    avvisa({ fase: 'dropbox', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti })
-  }
+    avvisa({ fase: 'dropbox', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
+    return e.docs.length
+  })
   /*
     WhatsApp non compare qui, e non è una dimenticanza.
 
@@ -1181,6 +1468,9 @@ app.get('/api/sincronizza', async (req, res) => {
 
   let annullata = false
   req.on('close', () => { annullata = true })
+  // lo stesso battito della chat: fra «mi collego alla casella» e il primo
+  // messaggio il filo tace, e un proxy che lo vede tacere lo chiude
+  const battito = setInterval(() => { if (!res.writableEnded) res.write(': vivo\n\n') }, 15_000)
 
   try {
     const totale = await leggiTutto(
@@ -1189,9 +1479,18 @@ app.get('/api/sincronizza', async (req, res) => {
       () => annullata
     )
     invia({ fase: 'fine', totale, conteggi: store.conteggi() })
+    // «quando arriva» vale anche per quello che è arrivato premendo il bottone,
+    // non solo per il giro delle sei ore
+    if (totale > 0 && claude.collegato()) {
+      const utente = chi.adesso()
+      const gira = () => automazioni.quandoArriva()
+      void (utente ? chi.dentro(utente, gira) : gira())
+        .catch(e => console.error('myynd · le automazioni «quando arriva» non sono partite:', e instanceof Error ? e.message : e))
+    }
   } catch (e) {
     invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
   } finally {
+    clearInterval(battito)
     sincronizzazioniInCorso.delete(chi.adesso() ?? '')
     if (!res.writableEnded) res.end()
   }
@@ -1230,11 +1529,17 @@ async function rileggiDaSola() {
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox) return
+    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {
-    const totale = await leggiTutto(null, () => {})
+    const totale = await leggiTutto(null, d => {
+      // il giro silenzioso resta silenzioso, ma un guaio no: un token del
+      // desktop remoto scaduto era un 401 che nessuno vedeva mai, e ogni giro
+      // fallito in silenzio sembrava un giro andato bene
+      const x = d as { fase?: string; stato?: string; errore?: string }
+      if (x.stato === 'guaio') console.error(`myynd · ${x.fase === 'desktop-remoto' ? 'desktop remoto' : x.fase}: ${x.errore}`)
+    })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
 
@@ -2142,7 +2447,9 @@ app.get('/api/attrezzi', (_req, res) => {
  */
 app.post('/api/trasloco/esporta', async (req, res) => {
   try {
-    if (!await conti.verifica(chi.serve(), String(req.body?.password ?? ''))) {
+    const v = await auth.verificaPassword(chi.serve(), String(req.body?.password ?? ''))
+    if (!v.ok) {
+      if (v.attesa > 0) return res.status(429).json({ errore: auth.fraTroppi(v.attesa) })
       return res.status(403).json({ errore: 'La password non è corretta.' })
     }
     const pacco = trasloco.esporta()
@@ -2153,11 +2460,25 @@ app.post('/api/trasloco/esporta', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
-app.post('/api/trasloco', express.raw({ type: '*/*', limit: '200mb' }), (req, res) => {
+/*
+ * Cento megabyte e non duecento: il pacco si apre in memoria, in un colpo
+ * solo, e quello che si apre pesa il doppio di quello che arriva. Un file
+ * costruito apposta teneva fermo il processo — di tutti — per il tempo di
+ * gonfiarsi. E non mentre una lettura è in corso: l'indice si sostituisce
+ * sotto i piedi di chi ci sta scrivendo, e quel lavoro finisce in un file che
+ * non esiste più.
+ */
+app.post('/api/trasloco', express.raw({ type: '*/*', limit: '100mb' }), async (req, res) => {
   try {
     const dati = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
     if (!dati.length) return res.status(400).json({ errore: 'Non è arrivato nessun file.' })
-    res.json({ ok: true, ...trasloco.importa(dati) })
+    if (sincronizzazioneInCorso()) return res.status(409).json({ errore: 'Una lettura è già in corso.' })
+    sincronizzazioniInCorso.add(chi.adesso() ?? '')
+    try {
+      res.json({ ok: true, ...await trasloco.importa(dati) })
+    } finally {
+      sincronizzazioniInCorso.delete(chi.adesso() ?? '')
+    }
   } catch (e) { errore(res, e, 400) }
 })
 
@@ -2260,6 +2581,20 @@ app.delete('/api/memoria/convinzione/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+/**
+ * «Tienila»: una convinzione indotta comincia a contare.
+ *
+ * Finché nessuno l'ha guardata non entra in nessun prompt — vedi
+ * `memoria.attendibile`. È l'unico gesto che la fa passare da una cosa che
+ * Myynd ha creduto di notare a una cosa su cui può ragionare.
+ */
+app.post('/api/memoria/convinzione/:id/conferma', (req, res) => {
+  if (!store.confermaConvinzione(req.params.id)) {
+    return res.status(404).json({ errore: 'Questa convinzione non c’è più.' })
+  }
+  res.json({ ok: true })
+})
+
 /** Quello che avevi preparato contro quello che ha mandato davvero. */
 app.post('/api/memoria/correzione', async (req, res) => {
   const { bozza, inviato } = req.body ?? {}
@@ -2305,7 +2640,10 @@ app.post('/api/chat/:id', async (req, res) => {
   // sente autorizzato a chiudere. Due punti e un a capo non sono un evento —
   // chi legge li salta — ma tengono la linea viva.
   const battito = setInterval(() => { if (!res.writableEnded) res.write(': vivo\n\n') }, 15_000)
-  res.on('close', () => clearInterval(battito))
+  // Se il browser se ne va a metà, si ferma anche il modello: una risposta a
+  // quattro giri che nessuno legge costa come una che si legge.
+  const controllo = new AbortController()
+  res.on('close', () => { clearInterval(battito); if (!res.writableEnded) controllo.abort() })
 
   try {
     if (!store.esisteChat(chat)) {
@@ -2328,14 +2666,21 @@ app.post('/api/chat/:id', async (req, res) => {
         compiti.annunciaCambio()
         return { id }
       }
-    })
+      // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
+      // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
+      // invece di vedersela accodare a quella intera.
+    }, controllo.signal, () => invia({ fase: 'ricomincio' }))
     store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: r.testo, fonti: r.fonti })
     invia({ fase: 'fine', messaggi: store.messaggi(chat) })
 
     // La memoria si aggiorna dopo aver risposto, mai prima: chi scrive non deve
     // aspettare che Myynd rifletta su di lui. Se fallisce, la chat resta valida.
-    memoria.distilla([{ ruolo: 'u', testo: domanda }, { ruolo: 'a', testo: r.testo }])
-      .catch(() => {})
+    // E se se n'è andato prima della fine, non si riflette su una risposta che
+    // non ha letto.
+    if (!controllo.signal.aborted) {
+      memoria.distilla([{ ruolo: 'u', testo: domanda }, { ruolo: 'a', testo: r.testo }])
+        .catch(() => {})
+    }
   } catch (e) {
     // niente domanda orfana se la risposta non arriva
     store.togliMessaggio(idUtente)
@@ -2477,7 +2822,7 @@ await cfg.avvia()
  */
 for (const segnale of ['SIGTERM', 'SIGINT'] as const) {
   process.once(segnale, () => {
-    cfg.scaricato()
+    cfg.scaricato(10_000)
       .catch(e => console.error('myynd · spegnendomi non sono riuscito a scrivere tutto:', e instanceof Error ? e.message : e))
       .finally(() => process.exit(0))
   })
@@ -2530,8 +2875,9 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       // con Postgres i conti e le configurazioni restano: a rifarsi è solo
       // l'indice, e va detto con il peso giusto — non è più «hai perso tutto»
       console.error(postgres.ATTIVO
-        ? `myynd · ${ospitato.DATI} non sta su un volume: l'indice si rifà a ogni ridistribuzione, ` +
-          'rileggendo le fonti. I conti e le configurazioni sono su Postgres e restano.'
+        ? `myynd · ATTENZIONE: ${ospitato.DATI} non sta su un volume. I conti e le credenziali sono su Postgres ` +
+          'e restano; ma a ogni ridistribuzione spariscono i compiti, la memoria, le chat, le automazioni scritte ' +
+          `qui e il registro dell'uso — non si rifanno rileggendo le fonti. Su Railway: Volume → Mount path ${ospitato.DATI}.`
         : `myynd · ATTENZIONE: ${ospitato.DATI} non sta su un volume.\n` +
           '  È il disco del contenitore: a ogni ridistribuzione riparte vuoto —\n' +
           '  nessun conto, nessun documento, nessuna automazione. Chi si era\n' +
@@ -2638,6 +2984,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    * non fa niente e non costa niente.
    */
   const compattazione = perOgnuno('la compattazione si è fermata', async () => {
+    // prima che si guardi lo spazio: un indice di ricerca marcio non si vede
+    // da nessuna parte — i documenti ci sono e non si trovano — e l'unico modo
+    // di accorgersene è chiederglielo
+    const i = store.verificaLIndice()
+    if (i.rifatto) console.log('myynd · indice di ricerca rifatto: i documenti erano lì, l’indice no')
     const e = store.compatta()
     if (e.fatto) console.log(`myynd · compattato l'indice: ${e.liberate} pagine riprese`)
   })
@@ -2672,10 +3023,18 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
   const quantiConti = conti.quanti()
   console.log(`myynd · ${quantiConti} cont${quantiConti === 1 ? 'o' : 'i'} su questa installazione`)
+  if (ospitato.OSPITATO && !ospitato.REGISTRAZIONE_SCELTA) {
+    const r = auth.registrazione()
+    console.log(r === 'aperta'
+      ? 'myynd · registrazione aperta finché non c\'è il primo conto; poi si chiude (MYYND_REGISTRAZIONE per decidere)'
+      : `myynd · registrazione ${r === 'invito' ? 'a invito (MYYND_INVITO)' : 'chiusa'}: MYYND_REGISTRAZIONE=aperta per riaprirla`)
+  }
 
   if (auth.DEV) {
-    // un build vero non deve poter nascere con questa variabile accesa
-    if (process.env.NODE_ENV === 'production') throw new Error('MYYND_DEV acceso in un build di produzione')
+    // un build vero non deve poter nascere con questa variabile accesa — e un
+    // server nemmeno: `npm start` su una macchina remota non mette NODE_ENV,
+    // e una sessione dal token noto sarebbe una porta aperta sul primo conto
+    if (process.env.NODE_ENV === 'production' || ospitato.OSPITATO) throw new Error('MYYND_DEV acceso in un build di produzione')
     void auth.apriSessioneDiSviluppo()
     console.log('myynd · MYYND_DEV=1 — sessione di sviluppo aperta, l\'accesso è già fatto')
   }

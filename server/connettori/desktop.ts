@@ -114,6 +114,17 @@ async function cammina(radice: string, fuori: Esito, tetto: number, profondita =
       // Cioè: un PDF cresciuto oltre i dodici mega spariva dalla mente, e
       // spariva *perché era diventato grande*.
       if (s.size > MAX_FILE || s.size === 0) { fuori.visti.push(`desktop:${p}`); continue }
+      /*
+       * La corsa resta, ma adesso è una rete e non *la* rete.
+       *
+       * Fin qui era l'unico riparo contro un PDF che manda pdfjs in bambola, e
+       * non poteva funzionare: l'estrazione girava su questo stesso filo, quindi
+       * il timer per suonare avrebbe avuto bisogno del giro degli eventi che
+       * quell'estrazione teneva bloccato. Adesso il cronometro vero sta dentro
+       * `estrai`, dall'altra parte di un filo a parte. Questo qui copre quello
+       * che resta di questo lato: la lettura dal disco, che su una cartella di
+       * rete staccata può restare appesa da sola.
+       */
       const corpo = await Promise.race([
         readFile(p).then(b => daBuffer(b, v.name)),
         new Promise<string>((_, no) => setTimeout(() => no(new Error('troppo lento')), 25_000))

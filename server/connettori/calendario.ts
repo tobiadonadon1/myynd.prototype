@@ -20,8 +20,10 @@
 // trappole vere), capire le date con il loro fuso, e srotolare le ricorrenze.
 
 import type { Documento } from '../store.ts'
-import { hostRaggiungibile } from '../ospitato.ts'
+import { OSPITATO, hostRaggiungibile, hostRaggiungibileDavvero } from '../ospitato.ts'
 import { lingua } from '../config.ts'
+import { fusoDi } from '../fuso.ts'
+import { zonaDi, zonaIana, ZONA_UTC, leggiVtimezone, type Zona } from './fusiIcal.ts'
 
 export type ConfigCalendario = {
   /** L'indirizzo segreto in formato iCal. È una credenziale: non esce mai. */
@@ -105,58 +107,46 @@ function spezza(r: string): Riga | null {
 // — le date —
 
 /**
+ * Quello che serve sapere per leggere le date di *questo* file.
+ *
+ * `dalFile` sono i fusi che il .ics si porta dietro nei suoi VTIMEZONE; `nuda`
+ * è il fuso in cui leggere un'ora scritta senza dire dove — che non è quello
+ * della macchina. Su un contenitore in UTC «locale» vuol dire Greenwich, e una
+ * riunione delle 15 a Roma diventa una riunione delle 15 UTC: due ore avanti,
+ * senza un errore da nessuna parte.
+ */
+export type Contesto = { dalFile?: Map<string, Zona>; nuda?: Zona }
+
+type Istante = { quando: Date; tuttoIlGiorno: boolean; zona: Zona }
+
+/**
  * Da un'ora scritta in un fuso al momento vero.
  *
  * Terza trappola, e la più insidiosa perché sbaglia in silenzio: `DTSTART` può
- * arrivare in tre forme — con la Z finale (UTC), con `TZID=Europe/Rome` (ora
- * locale di quel posto), o nuda (ora locale di chi legge). Trattarle tutte
- * come UTC sposta ogni riunione italiana di due ore in estate e di una in
- * inverno: nessun errore, solo un'agenda che dice cose false.
+ * arrivare in tre forme — con la Z finale (UTC), con un `TZID` (ora locale di
+ * quel posto), o nuda. Trattarle tutte come UTC sposta ogni riunione italiana
+ * di due ore in estate e di una in inverno.
  *
- * Per il caso con il fuso non serve una libreria: si prova un istante, lo si
- * riscrive con `Intl` in quel fuso, si guarda di quanto si è sbagliato e si
- * corregge. Due giri bastano anche a cavallo di un cambio d'ora.
+ * Il `TZID` non è per forza un nome IANA: Outlook ci scrive «W. Europe Standard
+ * Time», e il vecchio controllo — chiedere a `Intl` se quel fuso esiste —
+ * rispondeva no e mandava l'ora nel ramo «nuda». Da chi cerca quel nome, e in
+ * che ordine, si occupa `fusiIcal.ts`.
+ *
+ * Il fuso torna insieme all'istante, e non è un di più: senza, chi srotola «ogni
+ * giorno alle 9» non sa in quale orologio sono quelle 9, e finisce per sommare
+ * ventiquattro ore — che la notte del cambio d'ora sono un'ora di troppo.
  */
-function nelFuso(anno: number, mese: number, giorno: number, ore: number, minuti: number, secondi: number, zona: string): Date {
-  const voluto = Date.UTC(anno, mese - 1, giorno, ore, minuti, secondi)
-  let t = voluto
-  for (let giro = 0; giro < 2; giro++) {
-    const letto = leggiNelFuso(new Date(t), zona)
-    const scarto = voluto - letto
-    if (!scarto) break
-    t += scarto
-  }
-  return new Date(t)
-}
-
-/** Che ora fa in quel fuso, in quell'istante, espressa come se fosse UTC. */
-function leggiNelFuso(d: Date, zona: string): number {
-  const f = new Intl.DateTimeFormat('en-US', {
-    timeZone: zona, hour12: false,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  })
-  const p: Record<string, string> = {}
-  for (const x of f.formatToParts(d)) p[x.type] = x.value
-  // en-US con hour12 falso può dare «24» a mezzanotte
-  const h = Number(p.hour) % 24
-  return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), h, Number(p.minute), Number(p.second))
-}
-
-/** Un fuso che Intl conosce davvero: quelli inventati fanno lanciare. */
-function fusoValido(zona: string): boolean {
-  try { new Intl.DateTimeFormat('en-US', { timeZone: zona }); return true } catch { return false }
-}
-
-type Istante = { quando: Date; tuttoIlGiorno: boolean }
-
-export function data(r: Riga): Istante | null {
+export function data(r: Riga, ctx?: Contesto): Istante | null {
   const v = r.valore.trim()
   const giorno = /^(\d{4})(\d{2})(\d{2})$/.exec(v)
   if (giorno) {
+    // un giorno intero non ha un'ora, quindi non ha nemmeno un fuso: resta a
+    // mezzanotte UTC, e va anche scritto in UTC — altrimenti «10 settembre»
+    // letto a New York diventa il 9
     return {
       quando: new Date(Date.UTC(Number(giorno[1]), Number(giorno[2]) - 1, Number(giorno[3]))),
-      tuttoIlGiorno: true
+      tuttoIlGiorno: true,
+      zona: ZONA_UTC
     }
   }
   const pieno = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/.exec(v)
@@ -164,14 +154,18 @@ export function data(r: Riga): Istante | null {
   const [, a, m, g, o, mi, s, z] = pieno as unknown as string[]
   const n = (x: string) => Number(x)
   if (z === 'Z') {
-    return { quando: new Date(Date.UTC(n(a), n(m) - 1, n(g), n(o), n(mi), n(s))), tuttoIlGiorno: false }
+    return {
+      quando: new Date(Date.UTC(n(a), n(m) - 1, n(g), n(o), n(mi), n(s))),
+      tuttoIlGiorno: false,
+      zona: ZONA_UTC
+    }
   }
-  const zona = r.parametri.TZID
-  if (zona && fusoValido(zona)) {
-    return { quando: nelFuso(n(a), n(m), n(g), n(o), n(mi), n(s), zona), tuttoIlGiorno: false }
+  const zona = zonaDi(r.parametri.TZID, ctx?.dalFile) ?? ctx?.nuda ?? zonaIana(fusoDi())
+  return {
+    quando: zona.istante(n(a), n(m), n(g), n(o), n(mi), n(s)),
+    tuttoIlGiorno: false,
+    zona
   }
-  // nuda: ora locale di chi legge, che è la lettura giusta secondo il formato
-  return { quando: new Date(n(a), n(m) - 1, n(g), n(o), n(mi), n(s)), tuttoIlGiorno: false }
 }
 
 // — le ricorrenze —
@@ -189,8 +183,21 @@ const GIORNI = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
  * Quello che non si sa srotolare non sparisce: torna la prima data e basta,
  * cioè l'evento compare una volta invece di dieci. Una riunione in meno è un
  * difetto; una riunione inventata ogni martedì per sei mesi sarebbe peggio.
+ *
+ * **`zona` è l'orologio su cui si contano i giorni, e cambia il risultato.**
+ * «Ogni giorno alle 9» era «più ventiquattro ore tonde»: giusto per
+ * trecentosessantatré giorni l'anno e sbagliato negli altri due. La notte in
+ * cui l'Europa torna all'ora solare ne dura venticinque, e da quella mattina in
+ * poi tutta la serie scivolava — la riunione delle 9 diventava delle 8 fino al
+ * cambio dopo. Lo stesso «ogni lunedì», che rimetteva l'ora con `setHours`:
+ * quella è l'ora della macchina, e su un contenitore in UTC non è l'ora di
+ * nessuno.
+ *
+ * Adesso si conta sull'orologio dell'evento: si legge che ora segna lì, si
+ * aggiunge un giorno *di calendario*, e si torna all'istante. Il giorno può
+ * sforare il mese e il mese l'anno — `Date.UTC` normalizza da sé.
  */
-export function ripetizioni(inizio: Date, regola: string, da: Date, a: Date, escluse: Set<number>): Date[] {
+export function ripetizioni(inizio: Date, regola: string, da: Date, a: Date, escluse: Set<number>, zona?: Zona): Date[] {
   const p: Record<string, string> = {}
   for (const pezzo of regola.split(';')) {
     const i = pezzo.indexOf('=')
@@ -199,11 +206,13 @@ export function ripetizioni(inizio: Date, regola: string, da: Date, a: Date, esc
   const freq = p.FREQ
   if (!freq || !['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return [inizio]
 
+  const z = zona ?? ZONA_UTC
+  const o = z.orologio(inizio)
   const passo = Math.max(1, Number(p.INTERVAL) || 1)
   const quante = Number(p.COUNT) || 0
   let fine = a
   if (p.UNTIL) {
-    const u = data({ nome: 'UNTIL', parametri: {}, valore: p.UNTIL })
+    const u = data({ nome: 'UNTIL', parametri: {}, valore: p.UNTIL }, { nuda: z })
     if (u && u.quando < fine) fine = u.quando
   }
 
@@ -225,41 +234,36 @@ export function ripetizioni(inizio: Date, regola: string, da: Date, a: Date, esc
     return true
   }
 
+  /** Lo stesso orario dell'evento, tanti giorni di calendario più in là. */
+  const fraGiorni = (quanti: number) => z.istante(o.anno, o.mese, o.giorno + quanti, o.ore, o.minuti, o.secondi)
+
   if (freq === 'DAILY') {
-    for (let d = new Date(inizio); visti < GIRI_MAX; d = new Date(d.getTime() + passo * 864e5)) {
-      if (!forse(d)) break
+    for (let k = 0; visti < GIRI_MAX && k < GIRI_MAX; k++) {
+      if (!forse(fraGiorni(k * passo))) break
     }
   } else if (freq === 'WEEKLY') {
-    const giorni = giorniSettimana.length ? giorniSettimana : [inizio.getDay()]
-    // la settimana dell'evento, dalla domenica
-    const partenza = new Date(inizio)
-    partenza.setDate(partenza.getDate() - partenza.getDay())
-    for (let s = 0; visti < GIRI_MAX; s++) {
-      const settimana = new Date(partenza.getTime() + s * passo * 7 * 864e5)
-      if (settimana > fine) break
-      let dentro = false
+    const giorni = giorniSettimana.length ? giorniSettimana : [o.settimana]
+    // la domenica della settimana in cui comincia, contata sul suo calendario
+    const domenica = o.giorno - o.settimana
+    for (let s = 0; visti < GIRI_MAX && s < GIRI_MAX; s++) {
+      const inizioSettimana = domenica + s * passo * 7 - o.giorno
+      if (fraGiorni(inizioSettimana) > fine) break
       for (const g of giorni) {
-        const d = new Date(settimana)
-        d.setDate(d.getDate() + g)
-        d.setHours(inizio.getHours(), inizio.getMinutes(), inizio.getSeconds(), 0)
+        const d = fraGiorni(inizioSettimana + g)
         if (d < inizio) continue
-        if (forse(d)) dentro = true
+        forse(d)
       }
-      if (!dentro && settimana > inizio && settimana > fine) break
     }
   } else if (freq === 'MONTHLY') {
-    for (let k = 0; visti < GIRI_MAX; k++) {
-      const d = new Date(inizio)
-      d.setMonth(d.getMonth() + k * passo)
+    for (let k = 0; visti < GIRI_MAX && k < GIRI_MAX; k++) {
+      const d = z.istante(o.anno, o.mese + k * passo, o.giorno, o.ore, o.minuti, o.secondi)
       // il 31 di un mese che non ce l'ha: si salta invece di scivolare al mese dopo
-      if (d.getDate() !== inizio.getDate()) continue
+      if (z.orologio(d).giorno !== o.giorno) continue
       if (!forse(d)) break
     }
   } else {
-    for (let k = 0; visti < GIRI_MAX; k++) {
-      const d = new Date(inizio)
-      d.setFullYear(d.getFullYear() + k * passo)
-      if (!forse(d)) break
+    for (let k = 0; visti < GIRI_MAX && k < GIRI_MAX; k++) {
+      if (!forse(z.istante(o.anno + k * passo, o.mese, o.giorno, o.ore, o.minuti, o.secondi))) break
     }
   }
 
@@ -306,7 +310,21 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
   let invitati: string[] = []
   let troncato = false
 
-  for (const grezza of righe(testo)) {
+  /*
+   * I fusi prima degli eventi, e il fuso di chi legge una volta sola.
+   *
+   * Il VTIMEZONE sta quasi sempre in cima al file, ma «quasi» non basta: si
+   * passa sulle righe due volte, che su otto mega di testo già ricucito costa
+   * niente, e da lì in poi ogni data del file può chiedere il suo fuso senza
+   * dipendere dall'ordine in cui è scritto.
+   *
+   * `fusoDi()` legge la configurazione dal disco: chiamarlo una volta per
+   * evento vorrebbe dire duemila letture di file per un'agenda piena.
+   */
+  const tutte = righe(testo)
+  const ctx: Contesto = { dalFile: leggiVtimezone(tutte), nuda: zonaIana(fusoDi()) }
+
+  for (const grezza of tutte) {
     const r = spezza(grezza)
     if (!r) continue
 
@@ -329,7 +347,7 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
 
     if (r.nome === 'EXDATE') {
       for (const v of r.valore.split(',')) {
-        const d = data({ ...r, valore: v })
+        const d = data({ ...r, valore: v }, ctx)
         if (d) esclusi.push(d.quando.getTime())
       }
       continue
@@ -341,12 +359,12 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
   function chiudiEvento(v: Record<string, Riga>, esclusi: number[], invitati: string[]) {
     if (troncato) return
     const uid = v.UID?.valore.trim()
-    const dt = v.DTSTART ? data(v.DTSTART) : null
+    const dt = v.DTSTART ? data(v.DTSTART, ctx) : null
     if (!uid || !dt) return
     // annullato non vuol dire successo: sta nell'agenda ma non succede
     if ((v.STATUS?.valore ?? '').toUpperCase() === 'CANCELLED') return
 
-    const dtFine = v.DTEND ? data(v.DTEND) : null
+    const dtFine = v.DTEND ? data(v.DTEND, ctx) : null
     const durata = dtFine ? dtFine.quando.getTime() - dt.quando.getTime() : null
 
     const base = {
@@ -360,7 +378,7 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
       stato: (v.STATUS?.valore ?? '').toUpperCase()
     }
 
-    const ricorrenza = v['RECURRENCE-ID'] ? data(v['RECURRENCE-ID']) : null
+    const ricorrenza = v['RECURRENCE-ID'] ? data(v['RECURRENCE-ID'], ctx) : null
     if (ricorrenza) {
       eccezioni.set(`${uid}@${ricorrenza.quando.getTime()}`, {
         ...base, inizio: dt.quando, fine: durata == null ? null : new Date(dt.quando.getTime() + durata)
@@ -369,7 +387,7 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
     }
 
     const quando = v.RRULE
-      ? ripetizioni(dt.quando, v.RRULE.valore, da, a, new Set(esclusi))
+      ? ripetizioni(dt.quando, v.RRULE.valore, da, a, new Set(esclusi), dt.zona)
       : (dt.quando >= da && dt.quando <= a ? [dt.quando] : [])
 
     for (const i of quando) {
@@ -403,7 +421,10 @@ export function indirizzo(grezzo: string): { ok: true; url: string } | { ok: fal
   const pulito = grezzo.trim().replace(/^webcal:\/\//i, 'https://')
   let u: URL
   try { u = new URL(pulito) } catch { return { ok: false, errore: 'Quello non è un indirizzo. Incolla il link intero, comincia con https.' } }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+  // in casa http passa — un calendario su una NAS, per dire; su un server no:
+  // là un indirizzo in chiaro è anche una richiesta che chiunque in mezzo può
+  // dirottare, e la credenziale sta dentro l'indirizzo stesso
+  if (u.protocol !== 'https:' && (u.protocol !== 'http:' || OSPITATO)) {
     return { ok: false, errore: 'Quello non è un indirizzo. Incolla il link intero, comincia con https.' }
   }
   if (!hostRaggiungibile(u.hostname)) {
@@ -416,18 +437,43 @@ export function indirizzo(grezzo: string): { ok: true; url: string } | { ok: fal
 let rete: typeof fetch = (...a) => fetch(...a)
 export function usaRete(f: typeof fetch | null) { rete = f ?? ((...a) => fetch(...a)) }
 
+/** Quanti rimandi si seguono. Google ne fa uno; tre bastano a chiunque. */
+const SALTI_MAX = 3
+
 async function scarica(url: string): Promise<string> {
   let r: Response
-  try {
-    r = await rete(url, {
-      redirect: 'follow',
-      headers: { accept: 'text/calendar, text/plain;q=0.9, */*;q=0.5' },
-      signal: AbortSignal.timeout(30_000)
-    })
-  } catch (e) {
-    const nome = e instanceof Error ? e.name : ''
-    if (nome === 'TimeoutError' || nome === 'AbortError') throw new Error('Il calendario ci ha messo troppo a rispondere. Riprova.')
-    throw new Error('Non riesco a raggiungere quell’indirizzo. Controlla che sia intero.')
+  let dove = url
+  for (let salto = 0; ; salto++) {
+    /*
+     * Ogni passaggio si controlla da capo, e i rimandi si seguono a mano.
+     *
+     * Con `redirect: 'follow'` il controllo sull'host valeva solo per il
+     * primo indirizzo: un calendario buono che rispondeva «vai a
+     * http://10.0.0.5/» portava la richiesta dentro la rete di chi ospita
+     * senza che nessuno guardasse. E il nome si risolve prima di bussare,
+     * perché un nome pubblico può puntare dove vuole.
+     */
+    const i = indirizzo(dove)
+    if (!i.ok) throw new Error(i.errore)
+    if (!(await hostRaggiungibileDavvero(new URL(i.url).hostname))) {
+      throw new Error('Quell’indirizzo non si può raggiungere da qui.')
+    }
+    try {
+      r = await rete(i.url, {
+        redirect: 'manual',
+        headers: { accept: 'text/calendar, text/plain;q=0.9, */*;q=0.5' },
+        signal: AbortSignal.timeout(30_000)
+      })
+    } catch (e) {
+      const nome = e instanceof Error ? e.name : ''
+      if (nome === 'TimeoutError' || nome === 'AbortError') throw new Error('Il calendario ci ha messo troppo a rispondere. Riprova.')
+      throw new Error('Non riesco a raggiungere quell’indirizzo. Controlla che sia intero.')
+    }
+    if (r.status < 300 || r.status >= 400) break
+    const verso = r.headers.get('location')
+    void r.body?.cancel().catch(() => {})
+    if (!verso || salto >= SALTI_MAX) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
+    try { dove = new URL(verso, i.url).toString() } catch { throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.') }
   }
   if (r.status === 401 || r.status === 403) {
     throw new Error('Quell’indirizzo non è più valido: rigeneralo nelle impostazioni del calendario e incollalo di nuovo.')
@@ -521,9 +567,22 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
   const { eventi, nome, troncato } = leggiIcal(testo, da, a)
 
   const p = parole()
-  const quando = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full', timeStyle: 'short' })
-  const giorno = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full' })
-  const ora = new Intl.DateTimeFormat(p.loc, { hour: '2-digit', minute: '2-digit' })
+  /*
+   * L'ora nel corpo è quella di chi legge, dichiarata.
+   *
+   * Senza `timeZone` questi tre formattatori scrivono nell'ora della macchina,
+   * e la macchina di un server sta in UTC: il testo di una riunione delle 15 a
+   * Roma diceva «13:00». Quel testo non è una decorazione — è quello che finisce
+   * nell'indice, quello su cui si cerca, e quello che il modello legge e cita.
+   * L'agenda diceva un'ora e il cervello ne ripeteva un'altra.
+   *
+   * Il giorno intero fa eccezione e va in UTC: non ha un'ora, sta a mezzanotte
+   * UTC, e riscritto a New York diventerebbe il giorno prima.
+   */
+  const mio = fusoDi()
+  const quando = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full', timeStyle: 'short', timeZone: mio })
+  const giorno = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full', timeZone: 'UTC' })
+  const ora = new Intl.DateTimeFormat(p.loc, { hour: '2-digit', minute: '2-digit', timeZone: mio })
 
   const docs: Documento[] = eventi.map(e => ({
     /*

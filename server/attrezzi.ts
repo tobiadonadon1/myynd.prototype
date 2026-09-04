@@ -19,6 +19,17 @@
 // trova» — quella riga non ci sarebbe, e nessuno saprebbe cosa quell'automazione
 // apre alle sette di mattina mentre dorme.
 //
+// E il permesso vale fino in fondo, non solo per l'attrezzo che porta il nome.
+// Per un po' `cerca` e `apri` — i due attrezzi che ogni bozza ha comunque —
+// hanno guardato l'indice intero anche dentro un'automazione che dichiarava
+// una fonte sola. Il ragionamento era difendibile: se non può leggere il
+// listino, inventa un prezzo. Ma la conclusione non seguiva, perché fra
+// «leggi anche quello che non ti è stato concesso» e «inventa» c'è la terza
+// strada — **dire che non puoi** — ed è quella che adesso gli si insegna
+// (`conQuali` in `claude.ts`). Il recinto lo costruisce `recintoDi` da questa
+// stessa tabella `FONTI`, così la riga che una persona legge sulla scheda è
+// esattamente quello che succede alle sette di mattina.
+//
 // **Tutti leggono, nessuno scrive.** Non è una fase di sviluppo: è la regola.
 // L'unico che si avvicina a fare qualcosa è `claude.lavora`, e ci si avvicina
 // in modalità piano — Claude Code legge il progetto e scrive cosa farebbe,
@@ -33,6 +44,7 @@ import * as store from './store.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
 import * as microsoft from './connettori/microsoft.ts'
+import { oraIn } from './fuso.ts'
 
 /** Il nome di un attrezzo. Fuori da questo elenco non esiste niente. */
 export type Nome =
@@ -268,6 +280,27 @@ export function fontiDi(n: Nome): string[] {
   return FONTI[n] ?? []
 }
 
+/**
+ * Il recinto: le fonti dell'indice che questi attrezzi aprono, o `null`.
+ *
+ * `null` vuol dire «nessun recinto», e sono due casi diversi che devono dare la
+ * stessa risposta. Nessun attrezzo dichiarato — un compito scritto a mano — non
+ * ha mai promesso niente a nessuno. E attrezzi dichiarati che *non leggono
+ * l'indice* (`chat.leggi`, `claude.lavora`) non sono una dichiarazione sulle
+ * fonti: restringere a zero un'automazione che ha chiesto solo di far lavorare
+ * Claude Code vorrebbe dire spegnerla.
+ *
+ * Un elenco vuol dire quello e solo quello — per la pescata iniziale
+ * (`automazioni.ts`) come per `cerca` e `apri` (`claude.ts`). Le due strade
+ * chiamano questa funzione invece di tenere ciascuna la sua copia della
+ * tabella: due elenchi della stessa cosa divergono sempre, e qui divergere vuol
+ * dire una scheda che dichiara una fonte sola mentre ne apre otto.
+ */
+export function recinto(nomi: Nome[]): string[] | null {
+  const fonti = new Set(nomi.flatMap(n => fontiDi(n)))
+  return fonti.size ? [...fonti] : null
+}
+
 export function esiste(n: string): n is Nome {
   return PER_NOME.has(n as Nome)
 }
@@ -384,7 +417,8 @@ async function prossimiOvunque(giorni: number): Promise<agenda.Evento[]> {
     const fine = new Date(ora.getTime() + giorni * 864e5)
     pezzi.push(store.eventi(ora.toISOString(), fine.toISOString()).map(d => ({
       titolo: d.titolo,
-      inizio: (d.quando ?? '').slice(0, 16),
+      // com'è sull'agenda, non com'è nel database: il modello legge l'ora e la ripete
+      inizio: oraIn(d.quando ?? ''),
       dove: d.percorso ?? undefined,
       calendario: c.calendario?.nome || undefined
     })))

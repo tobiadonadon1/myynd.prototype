@@ -176,10 +176,23 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
 }
 
 /** Una riga di quello che ha capito, con da dove viene e quanto ci crede. */
-function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) => void; storica?: boolean }) {
+/**
+ * Una convinzione che aspetta.
+ *
+ * *Indotta* vuol dire che nessuno gliel'ha detta: l'ha notata lui, da una
+ * regolarità. Quelle non pesano su nessuna bozza finché una persona non le
+ * guarda — è la regola scritta in `server/memoria.ts` — e questa schermata è
+ * il posto dove si guardano. Si tengono con un dito, o si buttano con quello
+ * che c'era già.
+ */
+const inAttesa = (c: Convinzione) => c.genere === 'indotta' && !c.confermata
+
+function Riga({ c, scorda, tieni, storica }:
+  { c: Convinzione; scorda?: (id: string) => void; tieni?: (id: string) => void; storica?: boolean }) {
   const { attiva, props } = useAttiva()
   const [aperta, setAperta] = useState(false)
   const haProva = !!(c.prova?.citazione || c.premesse?.length)
+  const aspetta = inAttesa(c) && !storica
 
   return (
     <div
@@ -196,6 +209,9 @@ function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) =>
           }}>{c.enunciato}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
             <Etichetta genere={c.genere} />
+            {aspetta && (
+              <span style={{ fontSize: '11.5px', color: '#8E3F1F' }}>{t('non la sto usando')}</span>
+            )}
             <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)' }}>{quanto(c.fiducia)}</span>
             {c.ambito !== 'persona' && (
               // «cliente:Nick» è come sta scritto nel database, non come si legge
@@ -227,6 +243,15 @@ function Riga({ c, scorda, storica }: { c: Convinzione; scorda?: (id: string) =>
           </div>
         </div>
 
+        {/* «tienila» non chiede conferma: è il gesto leggero dei due, e si può sempre scordare dopo */}
+        {aspetta && tieni && (
+          <Hov as="button" onClick={() => tieni(c.id)}
+            style={{
+              flex: 'none', border: '1px solid rgba(34,39,31,.16)', background: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '12px', color: '#22271F', padding: '4px 11px', borderRadius: 7
+            }}
+            hover={{ borderColor: 'rgba(34,39,31,.4)' }}>{t('Tienila')}</Hov>
+        )}
         {/* scordare chiede una volta: è la sua testa, ma è una cosa che non torna */}
         {scorda && <Cestino fai={() => scorda(c.id)} titolo={t('Scordala')} visibile={attiva} />}
       </div>
@@ -313,6 +338,16 @@ export function Memoria() {
     try { await api.scordaConvinzione(id) } finally { carica() }
   }
 
+  const tieni = async (id: string) => {
+    const quando = new Date().toISOString()
+    setD(v => (v ? { ...v, convinzioni: v.convinzioni.map(c => c.id === id ? { ...c, confermata: quando } : c) } : v))
+    try { await api.confermaConvinzione(id) } finally { carica() }
+  }
+
+  /** Prima quelle che aspettano una risposta, poi il resto nell'ordine di prima. */
+  const ordinate = (d?.convinzioni ?? []).slice().sort((a, b) => Number(inAttesa(b)) - Number(inAttesa(a)))
+  const quanteInAttesa = ordinate.filter(inAttesa).length
+
   const aggiungi = async () => {
     const testo = nuova.trim()
     if (!testo) return
@@ -381,7 +416,18 @@ export function Memoria() {
           </div>
         )}
 
-        {(d?.convinzioni ?? []).map(c => <Riga key={c.id} c={c} scorda={scorda} />)}
+        {/*
+          * Quelle che aspettano stanno in cima, e con una riga che dice perché.
+          * Senza, «non la sto usando» sarebbe una scritta senza spiegazione in
+          * mezzo a un elenco — e la cosa da capire è che Myynd non le sta usando.
+          */}
+        {!!quanteInAttesa && (
+          <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
+            {frasi.inAttesa(quanteInAttesa)} {t('Le ha notate da solo: non le usa per scrivere finché non gliele confermi.')}
+          </div>
+        )}
+
+        {ordinate.map(c => <Riga key={c.id} c={c} scorda={scorda} tieni={tieni} />)}
 
         {/* scriverne una a mano: è la sua testa, deve poterci mettere le mani */}
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

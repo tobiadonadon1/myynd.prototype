@@ -35,6 +35,8 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { statSync } from 'node:fs'
+import { isIP } from 'node:net'
+import { lookup } from 'node:dns/promises'
 
 const pulisci = (x: string) => x.trim().toLowerCase()
   .replace(/^https?:\/\//, '').replace(/\/.*$/, '')
@@ -284,10 +286,16 @@ export function oauthWeb(): { google: boolean; microsoft: boolean; ritorno: stri
  *   MYYND_DOMINI        = domini email ammessi, separati da virgola (opzionale)
  */
 export type Registrazione = 'aperta' | 'invito' | 'chiusa'
-export const REGISTRAZIONE: Registrazione = (() => {
-  const v = (process.env.MYYND_REGISTRAZIONE ?? '').trim().toLowerCase()
-  return v === 'invito' || v === 'chiusa' ? v : 'aperta'
-})()
+const REGISTRAZIONE_SCRITTA = (process.env.MYYND_REGISTRAZIONE ?? '').trim().toLowerCase()
+export const REGISTRAZIONE: Registrazione =
+  REGISTRAZIONE_SCRITTA === 'invito' || REGISTRAZIONE_SCRITTA === 'chiusa' ? REGISTRAZIONE_SCRITTA : 'aperta'
+/**
+ * Chi ospita l'ha scritta davvero? Se no, ospitati, la regola la decide
+ * `auth.registrazione()`: aperta per il primo conto, poi chiusa o a invito.
+ * Un server pubblico lasciato aperto a chiunque per una variabile dimenticata
+ * è un errore che nessun messaggio d'errore avrebbe mai segnalato.
+ */
+export const REGISTRAZIONE_SCELTA = ['aperta', 'invito', 'chiusa'].includes(REGISTRAZIONE_SCRITTA)
 export const INVITO = (process.env.MYYND_INVITO ?? '').trim()
 export const DOMINI_AMMESSI = (process.env.MYYND_DOMINI ?? '').split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
 
@@ -301,26 +309,117 @@ export function fermoSulServer(connettore: string): boolean {
 }
 
 /**
+ * Un IPv4 che non è di nessuno fuori: loopback, reti private, link-local,
+ * CGNAT, i metadati del cloud (169.254.169.254 sta nel link-local), multicast.
+ */
+function v4Privato(ip: string): boolean {
+  const p = ip.split('.').map(Number)
+  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true
+  const [a, b] = p as [number, number, number, number]
+  return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+    || a >= 224
+}
+
+/** Gli otto gruppi di un IPv6 valido, con `::` srotolato e la coda puntata convertita. */
+function gruppiV6(ip: string): number[] {
+  let h = ip.replace(/^\[|\]$/g, '').split('%')[0]!.toLowerCase()
+  const coda = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h)
+  if (coda) {
+    const [a, b, c, d] = coda.slice(1).map(Number) as [number, number, number, number]
+    h = h.slice(0, coda.index) + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16)
+  }
+  const doppio = h.includes('::')
+  const [sinistra = '', destra = ''] = h.split('::')
+  const s = sinistra ? sinistra.split(':') : []
+  const d = doppio && destra ? destra.split(':') : []
+  const mezzo = doppio ? Array<string>(Math.max(0, 8 - s.length - d.length)).fill('0') : []
+  return [...s, ...mezzo, ...d].map(g => parseInt(g || '0', 16))
+}
+
+/**
+ * Un IPv6 che non è di nessuno fuori — compreso un IPv4 privato travestito:
+ * `::ffff:10.0.0.1` e `64:ff9b::10.0.0.1` arrivano dove arriva 10.0.0.1.
+ */
+function v6Privato(ip: string): boolean {
+  const g = gruppiV6(ip)
+  const g0 = g[0] ?? 0
+  const v4Dentro = () => v4Privato(`${g[6]! >> 8}.${g[6]! & 255}.${g[7]! >> 8}.${g[7]! & 255}`)
+  if (g.every(x => x === 0)) return true                                 // ::
+  if (g.slice(0, 7).every(x => x === 0) && g[7] === 1) return true       // ::1
+  if (g.slice(0, 5).every(x => x === 0) && g[5] === 0xffff) return v4Dentro()  // ::ffff:a.b.c.d
+  if (g0 === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every(x => x === 0)) return v4Dentro() // NAT64
+  if ((g0 & 0xfe00) === 0xfc00) return true                              // fc00::/7
+  if ((g0 & 0xffc0) === 0xfe80) return true                              // fe80::/10
+  if ((g0 & 0xff00) === 0xff00) return true                              // multicast
+  return false
+}
+
+/** Un indirizzo IP che da un server non si deve andare a bussare. Chi non è un IP conta come tale. */
+export function indirizzoPrivato(ip: string): boolean {
+  const nudo = ip.trim().replace(/^\[|\]$/g, '')
+  const v = isIP(nudo)
+  if (v === 4) return v4Privato(nudo)
+  if (v === 6) return v6Privato(nudo)
+  return true
+}
+
+/**
  * Un host di posta che ha senso raggiungere da qui.
  *
  * Su un server, «collega la tua casella» con un host libero è anche «fai una
  * richiesta di rete a quello che dico io»: la rete interna di chi ospita, il
  * server stesso. Si escludono i nomi e gli indirizzi che di sicuro non sono un
- * fornitore di posta. Non è una difesa completa — un nome pubblico può
- * risolversi dove vuole — ma toglie i casi che si scrivono a mano.
+ * fornitore di posta.
+ *
+ * Si guarda com'è scritto *e* come lo leggerebbe la rete: `127.1`,
+ * `2130706433` e `0x7f000001` sono tutti 127.0.0.1, e la prima versione di
+ * questo controllo — che cercava solo quattro numeri con i punti — li lasciava
+ * passare tutti. `new URL` li normalizza come farebbe il resolver; se dopo la
+ * normalizzazione resta qualcosa oltre al nome (una porta, un utente, un
+ * percorso) non era un host e si rifiuta.
+ *
+ * È il controllo sincrono, per i moduli. Non è una difesa completa — un nome
+ * pubblico può risolversi dove vuole — e per quello c'è `hostRaggiungibileDavvero`.
  */
 export function hostRaggiungibile(host: string): boolean {
   if (!OSPITATO) return true
   const h = host.trim().toLowerCase()
   if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return false
   if (h.startsWith('[') || h.includes(':')) return false // IPv6 letterale
-  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h)
-  if (m) {
-    const a = Number(m[1]), b = Number(m[2])
-    if (a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return false
+  let nome: string
+  try {
+    const u = new URL(`http://${h}`)
+    if (u.href !== `http://${u.hostname}/`) return false
+    nome = u.hostname
+  } catch {
+    return false
   }
+  if (isIP(nome)) return !indirizzoPrivato(nome)
   return true
+}
+
+/**
+ * Lo stesso controllo, ma chiedendo al DNS dove porta davvero.
+ *
+ * Un nome pubblico può risolversi su 10.0.0.5 — è il modo classico di far
+ * bussare un server alla propria rete interna — e nessun controllo sulla
+ * stringa lo vede. Si risolve prima di collegarsi, e basta un indirizzo
+ * privato fra quelli restituiti per dire di no: un client sceglie a caso.
+ * In casa non si controlla niente, come per la versione sincrona.
+ */
+export async function hostRaggiungibileDavvero(host: string): Promise<boolean> {
+  if (!hostRaggiungibile(host)) return false
+  if (!OSPITATO) return true
+  const nome = new URL(`http://${host.trim().toLowerCase()}`).hostname
+  if (isIP(nome)) return !indirizzoPrivato(nome)
+  let indirizzi: { address: string }[]
+  try {
+    indirizzi = await lookup(nome, { all: true })
+  } catch {
+    return false
+  }
+  return indirizzi.length > 0 && indirizzi.every(i => !indirizzoPrivato(i.address))
 }
 
 export function disponibile(connettore: string): boolean {

@@ -23,7 +23,8 @@ import { gzipSync, gunzipSync } from 'node:zlib'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { cartella, leggi, scrivi, type Config } from './config.ts'
-import { OSPITATO } from './ospitato.ts'
+import { OSPITATO, APP_GOOGLE, APP_MICROSOFT, hostRaggiungibile } from './ospitato.ts'
+import { indirizzoAmmesso } from './compatibile.ts'
 import * as store from './store.ts'
 import * as automazioni from './automazioni.ts'
 
@@ -68,7 +69,7 @@ export function esporta(): Buffer {
     quando: new Date().toISOString(),
     // da `leggi()` e non dal file: su Postgres il file non c'è, e la
     // configurazione sta dove `config.ts` sa trovarla
-    config: leggi(),
+    config: senzaISegretiDiChiOspita(leggi()),
     mente: existsSync(mente) ? readFileSync(mente).toString('base64') : '',
     automazioni
   }
@@ -76,6 +77,40 @@ export function esporta(): Buffer {
 }
 
 export type Esito = { documenti: number; automazioni: number }
+
+/**
+ * Il pacco è della persona, e dentro ci va quello che è suo. Il segreto
+ * dell'app OAuth di chi ospita non lo è: le versioni vecchie lo scrivevano
+ * nella configurazione di ognuno, e da lì usciva con questo file.
+ */
+function senzaISegretiDiChiOspita(c: Config): Config {
+  if (!OSPITATO) return c
+  const pulito = { ...c } as Record<string, unknown>
+  for (const [nome, app] of [['google', APP_GOOGLE], ['drive', APP_GOOGLE], ['microsoft', APP_MICROSOFT]] as const) {
+    const v = pulito[nome] as { clientId?: string; clientSecret?: string } | undefined
+    if (v?.clientSecret && (v.clientId === app.clientId || v.clientSecret === app.clientSecret)) {
+      const { clientSecret: _via, ...resto } = v
+      pulito[nome] = resto
+    }
+  }
+  return pulito as Config
+}
+
+/**
+ * Quello che arriva passa dagli stessi controlli di quello che si scrive a
+ * mano. Le rotte li fanno sul modulo; un pacco li saltava tutti, e su un
+ * server «importa» diventava «fai parlare il server con la rete interna».
+ * Quello che non passa si toglie, e la persona ricollega la fonte.
+ */
+function ricontrolla(config: Record<string, unknown>): void {
+  if (!OSPITATO) return
+  const posta = config.posta as { host?: string; porta?: number } | undefined
+  if (posta && (!hostRaggiungibile(String(posta.host ?? '')) || ![993, 143].includes(Number(posta.porta)))) delete config.posta
+  const comp = config.compatibile as { url?: string } | undefined
+  if (comp && indirizzoAmmesso(String(comp.url ?? ''), true)) { delete config.compatibile; if (config.motore === 'compatibile') delete config.motore }
+  delete config.desktop
+  delete config.desktopRemoto
+}
 
 /**
  * Il pacco, scaricato dentro questo conto.
@@ -161,7 +196,7 @@ export function importa(dati: Buffer): Esito {
   const config: Record<string, unknown> =
     typeof pacco.config === 'object' && pacco.config ? { ...(pacco.config as Record<string, unknown>) } : {}
   delete config.account
-  if (OSPITATO) delete config.desktop
+  ricontrolla(config)
   // `scrivi()` e non un `writeFileSync`: sceglie lei se è un file o Postgres,
   // e sul file scrive in due tempi invece di troncarlo
   scrivi(config as Config)

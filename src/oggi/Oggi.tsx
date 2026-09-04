@@ -399,7 +399,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
 
       {chieste.map((q, i) => (
         <div key={i} style={{ marginTop: 14 }}>
-          <div style={{ fontSize: '13.5px', color: '#22271F', marginBottom: 7 }}>{q.domanda}</div>
+          <div style={{ fontSize: '13.5px', color: '#22271F', marginBottom: 7, overflowWrap: 'anywhere' }}>{q.domanda}</div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             {q.opzioni.map(o => {
               const presa = scelte[i]?.has(o)
@@ -407,7 +407,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
                 <Hov as="button" key={o} type="button" onClick={() => tocca(i, o, q.multipla)}
                   style={{
                     padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
-                    cursor: 'pointer',
+                    cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
                     border: `1px solid ${presa ? 'transparent' : 'rgba(34,39,31,.18)'}`,
                     background: presa ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(255,255,255,.7)',
                     color: presa ? '#FFF7F0' : '#22271F'
@@ -504,7 +504,7 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
             <span style={{ color: 'rgba(34,39,31,.3)', fontSize: 11, flex: 'none' }}>—</span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '13.5px', color: '#22271F', overflowWrap: 'anywhere' }}>{v.titolo}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 1 }}>{v.perche}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>
             </div>
           </div>
         ))}

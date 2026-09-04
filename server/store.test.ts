@@ -38,11 +38,18 @@ const doc = (id: string, sopra: Partial<Documento> = {}): Documento => ({
   ...sopra
 })
 
-/** Le due tabelle devono restare allineate: l'FTS è un indice, non un archivio. */
+/**
+ * Le due tabelle devono restare allineate: l'FTS è un indice, non un archivio.
+ *
+ * E non `SELECT COUNT(*) FROM ricerca`, che è quello che c'era scritto qui:
+ * da quando l'indice è a contenuto esterno quella conta le righe di
+ * `documenti` — cioè risponde «allineate» sempre, anche con l'indice a pezzi.
+ * Un controllo che non può fallire è peggio di nessun controllo, perché uno
+ * ci si fida. `documentiNellIndice()` guarda dentro l'indice vero.
+ */
 function conteggi() {
   const d = store.default.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }
-  const r = store.default.prepare('SELECT COUNT(*) AS n FROM ricerca').get() as { n: number }
-  return { documenti: d.n, ricerca: r.n }
+  return { documenti: d.n, ricerca: store.perProva.documentiNellIndice() }
 }
 
 before(() => store.azzeraTutto())
@@ -108,6 +115,52 @@ test('svuotare una fonte lascia le due tabelle allineate', () => {
   assert.equal(c.documenti, 1)
 })
 
+/*
+ * L'indice a contenuto esterno, per un giro intero.
+ *
+ * Da quando `ricerca` non tiene più il testo ma se lo rilegge da `documenti`,
+ * togliere una riga dall'indice vuol dire passargli i *vecchi* valori. Un
+ * `DELETE FROM ricerca` non lo fa e non dà nessun errore: lascia i termini
+ * attaccati a un rowid che non esiste più, e da lì in poi la ricerca risponde
+ * con righe che non si aprono. È il difetto peggiore possibile qui dentro,
+ * perché si vede solo dopo, e da fuori sembra che l'app abbia le allucinazioni.
+ */
+test('scritture, modifiche e cancellazioni lasciano l’indice pulito', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('a', { corpo: 'il preventivo per il capannone' }),
+    doc('b', { corpo: 'la fattura del cliente Rossi' }),
+    doc('c', { corpo: 'il collaudo del ponteggio' }),
+    doc('d', { corpo: 'il verbale della riunione' })
+  ])
+  assert.deepEqual(conteggi(), { documenti: 4, ricerca: 4 })
+
+  store.salvaDocumenti([doc('a', { corpo: 'il preventivo per la tettoia' })])
+  store.scordaDocumenti(['b'])
+  store.riconcilia('desktop', { completo: true }, ['a', 'c'])   // porta via la d
+
+  assert.deepEqual(conteggi(), { documenti: 2, ricerca: 2 })
+  for (const sparito of ['capannone', 'fattura', 'verbale']) {
+    assert.deepEqual(store.cerca(sparito), [], `«${sparito}» è rimasto nell’indice`)
+  }
+  assert.deepEqual(store.cerca('tettoia').map(d => d.id), ['a'])
+  assert.deepEqual(store.cerca('collaudo').map(d => d.id), ['c'])
+})
+
+test('scrivere il filo non fa rifare l’indice, e non lo rompe', () => {
+  // il filo e «l'ho scritta io» arrivano dopo su email che non sono cambiate:
+  // migliaia di righe alla prima lettura. Il trigger deve stare fermo, ma
+  // quello che c'è nell'indice deve restare al suo posto
+  store.azzeraTutto()
+  const email = { fonte: 'posta', tipo: 'email', corpo: 'la fattura di settembre, da saldare' }
+  store.salvaDocumenti([doc('e', email)])
+  const e = store.salvaDocumenti([doc('e', { ...email, filo: 'f1', inviato: true })])
+  assert.deepEqual(e, { nuovi: 0, cambiati: 0, invariati: 1 }, 'una chiave in più è passata per un arrivo')
+  assert.equal(store.documento('e')!.filo, 'f1')
+  assert.equal(store.cerca('fatture').length, 1, 'l’indice si è perso il documento')
+  assert.deepEqual(conteggi(), { documenti: 1, ricerca: 1 })
+})
+
 test('una domanda di sola punteggiatura non fa esplodere la ricerca', () => {
   store.azzeraTutto()
   store.salvaDocumenti([doc('a')])
@@ -143,6 +196,65 @@ test('le parole vanno in AND: una parola in comune non basta a farsi trovare', (
   ])
   const trovati = store.cerca('preventivo Rossi')
   assert.equal(trovati[0].id, 'giusto', 'il documento che contiene entrambe le parole non è primo')
+})
+
+/*
+ * Il ripiego della ricerca: quello che l'FTS da solo non prende.
+ *
+ * Qui c'era `titolo LIKE '%…%' OR corpo LIKE '%…%'`, cioè la lettura di ogni
+ * corpo di ogni documento — su un indice grosso, secondi di server fermo per
+ * tutti a ogni domanda che l'FTS non aveva capito. Adesso la stessa domanda si
+ * fa al vocabolario dell'indice. Questi test sono la prova che il ripiego è
+ * cambiato di *strada* e non di *risposte*: quello che si trovava prima si
+ * deve trovare ancora, altrimenti si è tolto un costo e con lui una risposta.
+ */
+
+test('un pezzo preso in mezzo a un codice si trova ancora', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('iban', { titolo: 'Bonifico di settembre', corpo: 'Accreditare su IT60X0542811101000000123456 entro venerdì.' }),
+    doc('altro', { titolo: 'Verbale', corpo: 'Riunione di reparto, nessun allegato.' })
+  ])
+  // per il tokenizzatore l'IBAN è una parola sola: né la radice né il prefisso
+  // ci arrivano, e chi cerca ha in mano un pezzo di carta e copia quello che vede
+  assert.deepEqual(store.cerca('0542811101').map(d => d.id), ['iban'])
+  assert.deepEqual(store.cerca('123456').map(d => d.id), ['iban'])
+})
+
+test('la coda di una parola si trova ancora', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('f', { titolo: 'Amministrazione', corpo: 'la fattura del cliente Rossi, da saldare.' }),
+    doc('x', { titolo: 'Verbale', corpo: 'Riunione di reparto.' })
+  ])
+  // «ttura» non è né la radice né il prefisso di «fattura»: senza ripiego, zero
+  assert.deepEqual(store.cerca('ttura').map(d => d.id), ['f'])
+})
+
+test('anche il ripiego resta dentro il recinto delle fonti', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('p', { fonte: 'posta', corpo: 'Bonifico su IT60X0542811101000000123456.' }),
+    doc('d', { fonte: 'desktop', corpo: 'Bonifico su IT60X0542811101000000123456.' })
+  ])
+  assert.deepEqual(store.cerca('0542811101', 20, ['posta']).map(d => d.id), ['p'],
+    'un attrezzo che può guardare solo la posta si è portato indietro un file del disco')
+})
+
+test('un pezzo che non c’è non tira su mezzo indice', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('a'), doc('b'), doc('c')])
+  assert.deepEqual(store.cerca('zqzqzq'), [])
+})
+
+test('il ripiego non torna alle righe cancellate', () => {
+  // il pezzo di parola si cerca nell'indice: se l'indice tiene i termini di un
+  // documento che non c'è più, questa ricerca lo ripesca e non si apre
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('iban', { corpo: 'IT60X0542811101000000123456' })])
+  assert.equal(store.cerca('0542811101').length, 1)
+  store.scordaDocumenti(['iban'])
+  assert.deepEqual(store.cerca('0542811101'), [])
 })
 
 test('idFeed è stabile e rigenerare il feed non riapre quello che hai chiuso', () => {
@@ -216,6 +328,44 @@ test('le convinzioni si possono cancellare a mano', () => {
   const id = store.ricorda({ enunciato: 'Sbagliata.', ambito: 'persona', genere: 'indotta', fiducia: .3, origine: 'conversazione' })
   store.scordaConvinzione(id)
   assert.equal(store.convinzioni('persona').length, 0)
+})
+
+test('confermare una convinzione due volte non le sposta la data', () => {
+  store.azzeraTutto()
+  const id = store.ricorda({
+    enunciato: 'Fattura a trenta giorni.', ambito: 'azienda', genere: 'indotta', fiducia: .5, origine: 'conversazione'
+  })
+  assert.equal(store.convinzioni('azienda')[0].confermata, null, 'nasce già confermata da sola')
+
+  assert.equal(store.confermaConvinzione(id), true)
+  const quando = store.convinzioni('azienda')[0].confermata
+  assert.ok(quando, 'confermarla non ha scritto niente')
+
+  assert.equal(store.confermaConvinzione(id), true, 'la seconda volta ha risposto «non c’è»')
+  assert.equal(store.convinzioni('azienda')[0].confermata, quando,
+    'la data si è spostata: era il momento in cui qualcuno l’ha guardata, e adesso non lo è più')
+
+  assert.equal(store.confermaConvinzione('mai-esistita'), false)
+  store.chiudiConvinzione(id)
+  assert.equal(store.confermaConvinzione(id), false, 'ha confermato una convinzione che non vale più')
+})
+
+test('chi vuole solo quello che è stato detto non si porta dietro le ipotesi', () => {
+  store.azzeraTutto()
+  const detta = store.ricorda({ enunciato: 'Non lavora il venerdì.', ambito: 'persona', genere: 'esplicita', fiducia: 1, origine: 'onboarding' })
+  const dedotta = store.ricorda({ enunciato: 'Risponde di mattina.', ambito: 'persona', genere: 'dedotta', fiducia: .7, origine: 'conversazione' })
+  const ipotesi = store.ricorda({ enunciato: 'Preferisce le mail corte.', ambito: 'persona', genere: 'indotta', fiducia: .4, origine: 'conversazione' })
+  const guardata = store.ricorda({ enunciato: 'Firma solo di lunedì.', ambito: 'persona', genere: 'indotta', fiducia: .4, origine: 'conversazione' })
+  store.confermaConvinzione(guardata)
+
+  // la chiamata di sempre non cambia di una virgola: la schermata della
+  // memoria le vuole tutte, comprese quelle da guardare — sono il lavoro da fare
+  assert.equal(store.convinzioni('persona').length, 4)
+  assert.equal(store.convinzioni().length, 4)
+
+  const solide = store.convinzioni('persona', { indotteSoloSeConfermate: true }).map(c => c.id)
+  assert.ok(!solide.includes(ipotesi), 'un’ipotesi che nessuno ha guardato è passata per un fatto')
+  assert.deepEqual([...solide].sort(), [detta, dedotta, guardata].sort())
 })
 
 // — la mappa —
@@ -680,6 +830,94 @@ test('scordare un documento che non c’è non è un errore', () => {
   store.azzeraTutto()
   assert.equal(store.scordaDocumenti(['posta:INBOX:99']), 0)
   assert.equal(store.scordaDocumenti([]), 0)
+})
+
+// — la posta cancellata di là —
+//
+// `riconcilia` cancella quello che una lettura *completa* non ha più visto, e
+// una casella non si legge mai tutta: si leggono gli ultimi messaggi. Quindi
+// una mail buttata via dal telefono restava qui per sempre, cercabile, e
+// finiva fra le fonti che Claude cita — una risposta costruita su una mail che
+// aprendola non c'è.
+//
+// Il permesso di cancellare è ristretto a mano, finestra per finestra. Questi
+// test guardano soprattutto il verso che fa male: quello che *non* si deve
+// toccare. Lasciare una riga vecchia è un difetto; cancellare la posta di
+// qualcuno è un'altra cosa.
+
+const email = (cartella: string, uid: number) =>
+  doc(`posta:${cartella}:${uid}`, { fonte: 'posta', tipo: 'email', percorso: cartella })
+
+test('la posta sparita dalla casella se ne va dall’indice', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([email('INBOX', 10), email('INBOX', 11), email('INBOX', 12)])
+  // ho riletto INBOX dal 10 al 12 e il messaggio 11 non c'era più
+  const tolti = store.riconciliaPosta(
+    [{ cartella: 'INBOX', daUid: 10, aUid: 12 }],
+    ['posta:INBOX:10', 'posta:INBOX:12']
+  )
+  assert.equal(tolti, 1)
+  assert.equal(store.documento('posta:INBOX:11'), null)
+  assert.deepEqual(conteggi(), { documenti: 2, ricerca: 2 }, 'l’indice si è tenuto la riga cancellata')
+})
+
+test('fuori dalla finestra letta non si tocca niente', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    email('INBOX', 10), email('INBOX', 11), email('INBOX', 40),   // 40 è fuori
+    email('INBOX:2024', 11),   // una cartella che comincia uguale
+    email('Inviata', 11),      // un'altra cartella
+    doc('desktop:11', { fonte: 'desktop' })
+  ])
+  const tolti = store.riconciliaPosta([{ cartella: 'INBOX', daUid: 10, aUid: 12 }], ['posta:INBOX:10'])
+  assert.equal(tolti, 1)
+  assert.equal(store.documento('posta:INBOX:11'), null)
+  assert.ok(store.documento('posta:INBOX:40'), 'ha cancellato un uid fuori dalla finestra letta')
+  assert.ok(store.documento('posta:INBOX:2024:11'), 'una cartella che comincia uguale non è la stessa cartella')
+  assert.ok(store.documento('posta:Inviata:11'), 'ha cancellato in una cartella di cui non gli era stato detto niente')
+  assert.ok(store.documento('desktop:11'), 'ha cancellato un documento che non è nemmeno posta')
+})
+
+test('senza finestre, o con una al contrario, non si cancella niente', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([email('INBOX', 10), email('INBOX', 11)])
+  assert.equal(store.riconciliaPosta([], []), 0)
+  assert.equal(store.riconciliaPosta([{ cartella: 'INBOX', daUid: 12, aUid: 10 }], []), 0,
+    'una finestra al contrario è stata letta come «tutto»')
+  assert.equal(store.riconciliaPosta([{ cartella: '', daUid: 1, aUid: 99 }], []), 0)
+  assert.equal(store.riconciliaPosta([{ cartella: 'INBOX', daUid: NaN, aUid: 99 }], []), 0)
+  assert.equal(conteggi().documenti, 2)
+})
+
+test('una finestra in cui non manca niente non tocca niente', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([email('INBOX', 10), email('INBOX', 11)])
+  const tolti = store.riconciliaPosta(
+    [{ cartella: 'INBOX', daUid: 10, aUid: 11 }],
+    ['posta:INBOX:10', 'posta:INBOX:11']
+  )
+  assert.equal(tolti, 0)
+  assert.equal(conteggi().documenti, 2)
+})
+
+// — dove si era fermato un connettore —
+
+test('il cursore di una fonte si ricorda, e non si mescola con le altre', () => {
+  store.azzeraTutto()
+  assert.equal(store.cursore('posta:INBOX'), null, 'una fonte mai vista ha già un paletto')
+  store.segnaCursore('posta:INBOX', '812')
+  store.segnaCursore('posta:Inviata', '19')
+  assert.equal(store.cursore('posta:INBOX'), '812')
+  assert.equal(store.cursore('posta:Inviata'), '19')
+
+  store.segnaCursore('posta:INBOX', '900')
+  assert.equal(store.cursore('posta:INBOX'), '900', 'il paletto non si è mosso')
+  assert.equal(store.cursore('posta:Inviata'), '19', 'due fonti si sono pestate i piedi')
+
+  // la casella ricreata: il vecchio paletto indica un posto che non esiste più
+  store.segnaCursore('posta:INBOX', null)
+  assert.equal(store.cursore('posta:INBOX'), null)
+  assert.equal(store.cursore('posta:Inviata'), '19')
 })
 
 // — quello che gli serve sapere —

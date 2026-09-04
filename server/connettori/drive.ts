@@ -26,6 +26,7 @@ import type { Documento } from '../store.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
+import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 
 export const AMBITI = [
   'https://www.googleapis.com/auth/drive.readonly',
@@ -43,6 +44,20 @@ export type ConfigDrive = {
 
 const MAX_FILE = 12_000_000
 const MAX_DOCUMENTI = 1200
+
+/**
+ * Quanti file si elencano, che è un'altra cosa da quanti se ne aprono.
+ *
+ * Elencare costa una chiamata ogni mille nomi; aprire costa uno scaricamento e
+ * un'estrazione a testa. Erano confusi in un tetto solo, e la confusione
+ * costava caro: al milleduecentesimo nome si smetteva pure di *guardare*, e da
+ * fuori un Drive da cinquemila file era indistinguibile da uno da
+ * milleduecento. Adesso si guarda tutto — venti chiamate — e si aprono
+ * milleduecento file per giro, riprendendo dove il giro prima si era fermato.
+ * Da lì viene il «tremilaquattrocento di cinquemila» che si può finalmente
+ * scrivere sullo schermo.
+ */
+const MAX_ELENCO = 20_000
 
 /** Cosa diventa un documento di Google quando lo si chiede in testo. */
 const ESPORTA: Record<string, { come: string; ext: string }> = {
@@ -86,13 +101,24 @@ export function collegato(): boolean {
 }
 
 /** Ospitati: l'app di chi ospita, il browser della persona, il ritorno dal nostro dominio. */
-export function avvia(): { dove: string } {
+/**
+ * Il segreto con cui rinnovare: quello scritto dalla persona (l'app sua, in
+ * casa), o quello di chi ospita quando il clientId è il suo. Non si scrive
+ * più nella configurazione di ognuno — usciva con l'esportazione.
+ */
+function segretoDi(g: { clientId: string; clientSecret?: string }): string | undefined {
+  if (g.clientSecret) return g.clientSecret
+  return g.clientId === APP_GOOGLE.clientId ? APP_GOOGLE.clientSecret || undefined : undefined
+}
+
+export function avvia(): { dove: string; biglietto: string } {
   const app = APP_GOOGLE
   if (!app.clientId) throw new Error('Google Drive non è ancora disponibile su questo server.')
   return avviaWeb(sportello(app.clientId, app.clientSecret), async t => {
     if (!t.refresh_token) throw new Error('Google non ha dato il permesso duraturo: riprova.')
     const email = await chiEra(t.access_token).catch(() => '')
-    scriviConfig({ ...leggi(), drive: { clientId: app.clientId, clientSecret: app.clientSecret, refresh: t.refresh_token, email, giorni: 90 } })
+    // il segreto dell'app resta nell'ambiente di chi ospita, non nella configurazione della persona
+    scriviConfig({ ...leggi(), drive: { clientId: app.clientId, refresh: t.refresh_token, email, giorni: 90 } })
     vivo.scorda()
   })
 }
@@ -128,7 +154,7 @@ export function scollega() {
 const vivo = new Vivo(async () => {
   const d = leggi().drive
   if (!d?.refresh) throw new Error('Collega Google Drive e potrò farlo.')
-  return chiediGettoni(sportello(d.clientId, d.clientSecret), {
+  return chiediGettoni(sportello(d.clientId, segretoDi(d)), {
     refresh_token: d.refresh,
     grant_type: 'refresh_token'
   })
@@ -176,7 +202,14 @@ type File = {
   trashed?: boolean
 }
 
-export type EsitoDrive = { docs: Documento[]; falliti: number; troncato: boolean; visti: string[] }
+export type EsitoDrive = {
+  docs: Documento[]
+  falliti: number
+  troncato: boolean
+  visti: string[]
+  /** Quanti file ci sono, quanti sono passati, quanti mancano. */
+  resto: Resto
+}
 
 /**
  * Legge i file, i più mossi per primi.
@@ -199,13 +232,13 @@ export async function sincronizza(
     `modifiedTime > '${dal}'`
   ].join(' and ')
 
-  const file: File[] = []
+  const tutti: File[] = []
   let pagina: string | undefined
-  let troncato = false
+  let elencoTroncato = false
   do {
     const u = new URL('https://www.googleapis.com/drive/v3/files')
     u.searchParams.set('q', q)
-    u.searchParams.set('pageSize', '200')
+    u.searchParams.set('pageSize', '1000')
     u.searchParams.set('orderBy', 'modifiedTime desc')
     u.searchParams.set('fields', 'nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink,owners(displayName,emailAddress))')
     // i file dei Drive condivisi sono file di lavoro come gli altri: escluderli
@@ -215,10 +248,28 @@ export async function sincronizza(
     if (pagina) u.searchParams.set('pageToken', pagina)
 
     const r = await json<{ files?: File[]; nextPageToken?: string }>(u.toString())
-    file.push(...(r.files ?? []))
+    tutti.push(...(r.files ?? []))
     pagina = r.nextPageToken
-    if (file.length >= MAX_DOCUMENTI) { troncato = true; break }
+    if (tutti.length >= MAX_ELENCO) { elencoTroncato = true; break }
   } while (pagina)
+
+  /*
+   * Il segno è la data di modifica più l'id, e non la posizione nell'elenco.
+   *
+   * Fra un giro e l'altro qualcuno salva un documento: l'elenco è ordinato dal
+   * più recente, quindi tutto scala di uno, e una posizione salvata come numero
+   * ripartirebbe da un file diverso — cioè ne salterebbe uno, per sempre, senza
+   * che nessuno lo veda.
+   */
+  const segnoDi = (f: File) => `${f.modifiedTime ?? ''}|${f.id}`
+  const { da, ripreso } = riprendi('drive', tutti, segnoDi,
+    (f, s) => (f.modifiedTime ?? '') < (s.split('|')[0] ?? ''))
+  const file = tutti.slice(da, da + MAX_DOCUMENTI)
+  const arrivati = da + file.length
+  // ne restano fuori, o l'elenco stesso non era intero: in tutti e due i casi
+  // questa non è una fotografia da cui si possa cancellare niente
+  const troncato = elencoTroncato || ripreso || arrivati < tutti.length
+  segna('drive', arrivati < tutti.length && file.length ? segnoDi(file[file.length - 1]!) : null)
 
   const docs: Documento[] = []
   const visti: string[] = []
@@ -267,5 +318,5 @@ export async function sincronizza(
     avanzamento?.(++fatti, file.length)
   }
 
-  return { docs, falliti, troncato, visti }
+  return { docs, falliti, troncato, visti, resto: resto(arrivati, tutti.length) }
 }

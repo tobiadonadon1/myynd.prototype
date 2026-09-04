@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { Campo } from './campo'
 import { DOMANDE } from '../data'
@@ -21,14 +21,34 @@ type Passo = 'risveglio' | 'claude' | 'nome' | 'ritratto' | 'connetti' | 'leggi'
 const CHIARO = '#F4EFE8'
 const TENUE = 'rgba(244,239,232,.62)'
 
+/** Quelli che non sono fonti: un motore, e la lista che è collegata da sola. */
+const NON_FONTI = ['claude', 'compatibile', 'mind2do']
+
+/**
+ * Da dove si riparte, se il primo avvio si è chiuso a metà.
+ *
+ * Il passo stava solo nella memoria di React: un ricaricamento riportava alla
+ * prima schermata, con la chiave già data e il nome già scritto. Lo stato del
+ * server dice cosa è già fatto, e ogni cosa fatta è un passo da non rifare.
+ */
+function passoDaRiprendere(s: Stato): Passo {
+  const collegato = (id: string) => !!s.connettori.find(c => c.id === id)?.collegato
+  const fonti = s.connettori.filter(c => c.collegato && !NON_FONTI.includes(c.id))
+  if (fonti.some(c => c.documenti > 0)) return 'genera'
+  if (fonti.length) return 'connetti'
+  if (s.config.nome) return 'ritratto'
+  if (collegato('claude') || collegato('compatibile')) return 'nome'
+  return 'risveglio'
+}
+
 export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }) {
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
-  // chi torna dal consenso di Google o Microsoft riprende dalle fonti, non da capo
   const [passo, setPasso] = useState<Passo>(() => {
+    // chi torna dal consenso di Google o Microsoft riprende dalle fonti, non da capo
     const torno = new URLSearchParams(window.location.search).get('torno') === 'connetti'
     if (torno) window.history.replaceState(null, '', '/')
-    return torno ? 'connetti' : 'risveglio'
+    return torno ? 'connetti' : passoDaRiprendere(stato)
   })
   const [s, setS] = useState(stato)
   const [nome, setNome] = useState(stato.config.nome ?? '')
@@ -129,7 +149,7 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
 
 function Errore({ testo }: { testo: string }) {
   if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5 }}>{t(testo)}</div>
+  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{t(testo)}</div>
 }
 
 function Titolo({ children }: { children: React.ReactNode }) {
@@ -231,7 +251,8 @@ function PassoClaude({ collegato, ricarica, avanti }: {
 
   const usaAbbonamento = async () => {
     setOccupato(true); setErr('')
-    try { await api.usaAbbonamento(true); await ricarica() }
+    // la risposta dice com'è andata, «acceso» compreso: è quella che la conferma legge
+    try { setAbb(await api.usaAbbonamento(true)); await ricarica() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -321,7 +342,10 @@ function Ritratto({ avanti }: { avanti: () => void }) {
   const [prima, setPrima] = useState<Record<string, string>>({})
   const [occupato, setOccupato] = useState(false)
   const [guaio, setGuaio] = useState('')
-  useEffect(() => {
+  /** Le domande non sono arrivate: si può riprovare, o andare avanti lo stesso. */
+  const [senzaDomande, setSenzaDomande] = useState(false)
+  const carica = useCallback(() => {
+    setGuaio(''); setSenzaDomande(false)
     api.memoria()
       .then(m => {
         setBlocchi(m.blocchi.map(b => ({ etichetta: b.etichetta, descrizione: b.descrizione })))
@@ -337,8 +361,13 @@ function Ritratto({ avanti }: { avanti: () => void }) {
         setPrima(gia)
         setTesti(gia)
       })
-      .catch(() => { /* senza domande si va avanti: la memoria è un di più */ })
+      .catch(e => {
+        // prima moriva qui in silenzio: zero domande e un «Avanti» spento, senza una parola
+        setSenzaDomande(true)
+        setGuaio(e instanceof Error ? e.message : String(e))
+      })
   }, [])
+  useEffect(() => { carica() }, [carica])
   const scritti = Object.values(testi).filter(v => v.trim()).length
 
   /*
@@ -391,7 +420,9 @@ function Ritratto({ avanti }: { avanti: () => void }) {
       </div>
       <Errore testo={guaio} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center', flex: 'none' }}>
-        <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>
+        {senzaDomande
+          ? <Primario onClick={carica}>{t('Riprova')}</Primario>
+          : <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>}
         <Secondario onClick={() => { if (!occupato) avanti() }}>{scritti ? t('Il resto dopo') : t('Rispondo più tardi')}</Secondario>
       </div>
     </div>
@@ -605,7 +636,10 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
   )
 }
 
-function Pronta({ totale, entra }: { totale: number; entra: () => void }) {
+function Pronta({ totale, entra }: { totale: number; entra: () => Promise<void> }) {
+  // «Entra» aspetta due chiamate: premuto due volte le faceva partire due volte
+  const [occupato, setOccupato] = useState(false)
+  const vai = async () => { setOccupato(true); try { await entra() } finally { setOccupato(false) } }
   return (
     <div style={{ animation: 'fadein .6s ease' }}>
       <Titolo>{t('Pronta.')}</Titolo>
@@ -614,7 +648,7 @@ function Pronta({ totale, entra }: { totale: number; entra: () => void }) {
           ? frasi.documentiDentro(String(totale))
           : t('Ancora vuota.')}
       </Sotto>
-      <Primario onClick={entra}>{t('Entra')}</Primario>
+      <Primario onClick={vai} disabilitato={occupato}>{occupato ? t('Un momento…') : t('Entra')}</Primario>
     </div>
   )
 }

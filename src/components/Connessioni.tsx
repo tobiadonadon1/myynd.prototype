@@ -42,7 +42,15 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
    * per chi lo cerca.
    */
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
-  const [sincronizzando, setSincronizzando] = useState<string | null>(null)
+  /**
+   * La fonte che si sta rileggendo, e a parte la riga che racconta come va.
+   *
+   * Erano una variabile sola: l'id, poi sovrascritto dalla riga — e il bottone,
+   * che cercava l'id, tornava a dire «Rileggi» a metà lettura; la riga non la
+   * mostrava nessuno, e un secondo clic chiedeva al server una seconda lettura.
+   */
+  const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
+  const [avanzamento, setAvanzamento] = useState<string | null>(null)
   // una password IMAP scaduta, dopo «Rileggi», prima non produceva niente:
   // il conteggio non saliva, e basta
   const [guaio, setGuaio] = useState<string | null>(null)
@@ -54,16 +62,19 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   useEffect(() => { ricarica().catch(() => {}) }, [])
 
   const leggi = async (fonte: string) => {
-    setSincronizzando(fonte)
+    if (fonteInLettura) return
+    setFonteInLettura(fonte)
+    setAvanzamento(null)
     setGuaio(null)
     try {
-      await api.sincronizza(m => { if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m)) }, fonte)
+      await api.sincronizza(m => { if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m)) }, fonte)
       await ricarica()
       cambiato()
     } catch (e) {
       setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.'))
     }
-    setSincronizzando(null)
+    setFonteInLettura(null)
+    setAvanzamento(null)
   }
 
   const tutti = s?.connettori.filter(c => c.pronto || c.collegato) ?? []
@@ -142,6 +153,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                 {guaio}
               </div>
             )}
+            {avanzamento && (
+              <div role="status" style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 4, overflowWrap: 'anywhere' }}>
+                {avanzamento}
+              </div>
+            )}
           </div>
           <button onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
         </div>
@@ -216,7 +232,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); leggi(c.id) }}
                             style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
                             hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                            {sincronizzando && sincronizzando.startsWith(c.id) ? t('leggo…') : t('Rileggi')}
+                            {fonteInLettura === c.id ? t('leggo…') : t('Rileggi')}
                           </Hov>
                         )}
                         {/* il fornitore si può cambiare senza scollegarlo: indirizzo, modello o chiave */}
@@ -230,6 +246,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                         )}
                         {/* scollegare chiede una volta: le automazioni che aprono questa fonte si fermano */}
                         <BottoneSicuro titolo={t('Scollega')}
+                          guaio={m => setGuaio(t(m))}
                           fai={async () => { await api.scollega(c.id); await ricarica(); cambiato() }}>
                           {t('Scollega')}
                         </BottoneSicuro>

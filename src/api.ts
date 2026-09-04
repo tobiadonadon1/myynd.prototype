@@ -20,6 +20,8 @@ export type Stato = {
     autonomia: string
     modello: string
     lingua: string
+    /** Il fuso in cui ragiona il server per questa persona; `null` finché il browser non glielo dice. */
+    fuso?: string | null
     oreFatte: number
     /** Token al giorno oltre i quali Myynd smette di chiamare il modello. Zero = nessun tetto. */
     tetto: number
@@ -88,11 +90,16 @@ const TOKEN_SVILUPPO = import.meta.env.VITE_MYYND_DEV === '1' ? 'sviluppo-non-in
 
 export const sessione = {
   token: () => localStorage.getItem(CHIAVE) || TOKEN_SVILUPPO,
-  // Il filo dei compiti porta il token nell'indirizzo, perché EventSource non
-  // manda intestazioni: quando il token cambia, quel filo sta parlando con una
-  // sessione che non esiste più. Si chiude, e chi ascolta lo riapre con quello
-  // nuovo — altrimenti dopo un rientro la lista resterebbe muta per sempre.
-  imposta: (t: string) => { localStorage.setItem(CHIAVE, t); chiudiIlFilo() },
+  // Il filo dei compiti porta il token con sé: quando il token cambia, quel
+  // filo sta parlando con una sessione che non esiste più. Si chiude e, se
+  // qualcuno lo stava ascoltando, si riapre subito con quello nuovo — prima
+  // nessuno lo riapriva, e dopo un cambio di password le deleghe non
+  // diventavano più «pronte» finché non si ricaricava la pagina.
+  imposta: (t: string) => {
+    localStorage.setItem(CHIAVE, t)
+    chiudiIlFilo()
+    if (ascoltatoriDelFilo.size) apriIlFilo()
+  },
   pulisci: () => { localStorage.removeItem(CHIAVE); chiudiIlFilo() }
 }
 
@@ -159,13 +166,18 @@ async function flusso(url: string, su: (m: Record<string, unknown>) => void, seg
 
 let filoVivo = false
 let filoCtrl: AbortController | null = null
+// Il numero del giro. Chiudere e riaprire nello stesso istante non deve
+// lasciare vivo il giro vecchio: si sarebbe svegliato dopo la sua pausa,
+// avrebbe trovato `filoVivo` di nuovo acceso e aperto un secondo filo.
+let filoGiro = 0
 
 /** Il filo dei compiti: uno solo, si riapre da sé se cade, si spegne quando nessuno ascolta. */
 function apriIlFilo() {
   if (filoVivo) return
   filoVivo = true
+  const mio = ++filoGiro
   void (async () => {
-    while (filoVivo) {
+    while (filoVivo && filoGiro === mio) {
       filoCtrl = new AbortController()
       try {
         await flusso('/api/compiti/flusso', m => {
@@ -174,7 +186,7 @@ function apriIlFilo() {
           }
         }, filoCtrl.signal)
       } catch { /* caduto: si riapre fra poco */ }
-      if (!filoVivo) break
+      if (!filoVivo || filoGiro !== mio) break
       await new Promise(r => setTimeout(r, 3000))
     }
   })()
@@ -182,6 +194,7 @@ function apriIlFilo() {
 
 function chiudiIlFilo() {
   filoVivo = false
+  filoGiro++
   filoCtrl?.abort()
   filoCtrl = null
 }
@@ -256,9 +269,19 @@ export function guaio(e: unknown): Guaio {
  * vince la sua — la sa più precisa di qui; quando non ce l'ha, il codice
  * diventa una frase, e il numero resta nella console dove serve.
  */
+/**
+ * La password è giusta, e manca solo la conferma dell'indirizzo.
+ *
+ * Una classe e non una frase da riconoscere: la schermata deve poter offrire
+ * «rimandamela» solo in questo caso, e distinguerlo confrontando il testo del
+ * messaggio vorrebbe dire che il giorno che qualcuno riscrive quella frase — o
+ * la traduce — il bottone sparisce senza che nessun test se ne accorga.
+ */
+export class DaVerificare extends Error {}
+
 function guastoDellaRisposta(r: Response, corpo: unknown): Error {
   const detto = (corpo as { errore?: string })?.errore
-  if (detto) return new Error(detto)
+  if (detto) return (corpo as { daVerificare?: boolean }).daVerificare ? new DaVerificare(detto) : new Error(detto)
   if (r.status >= 500) return new MotoreGiu(`HTTP ${r.status} · ${r.url}`)
   if (r.status === 401 || r.status === 403) return new Error('Sessione scaduta.')
   /*
@@ -307,12 +330,20 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
     suScaduta()
   }
   if (!r.ok) throw guastoDellaRisposta(r, corpo)
+  /*
+   * Un 200 che non è JSON non è una risposta: è un sito statico, o un proxy
+   * che serve l'index.html a qualunque indirizzo. Prima passava come corpo
+   * vuoto, e le schermate ragionavano su `{}` come se il server avesse detto
+   * «niente». È lo stesso guasto del 404 sull'API, e si dice allo stesso modo.
+   */
+  const tipo = r.headers.get('content-type') ?? ''
+  if (!tipo.includes('application/json')) throw new SenzaMotore(`HTTP ${r.status} · ${tipo || '(no content-type)'} · ${r.url}`)
   return corpo as T
 }
 
 /** Il nome della fonte, non il suo identificativo. */
 const NOME_FONTE: Record<string, string> = {
-  posta: 'Posta', desktop: 'Desktop', notion: 'Notion', claude: 'Claude', mind2do: 'Mind2Do',
+  posta: 'Posta', calendario: 'Calendario', desktop: 'Desktop', notion: 'Notion', claude: 'Claude', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
   whatsapp: 'WhatsApp Business'
@@ -330,6 +361,13 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   const en = lingua() === 'en'
   const id = String(m.fase ?? '')
   const fonte = t(NOME_FONTE[id] ?? id)
+  // una fonte andata storta porta la sua frase: «calendario · guaio» non diceva niente
+  if (m.stato === 'guaio') return `${fonte} · ${t(String(m.errore ?? 'Non ce l’ha fatta.'))}`
+  // con i numeri si compone qui: «40 di 120 messaggi» scritto dal server non si traduce
+  if (m.stato !== 'fatto' && typeof m.fatti === 'number') {
+    if (typeof m.tot === 'number') return `${fonte} · ${m.fatti} ${en ? 'of' : 'di'} ${m.tot} ${en ? 'messages' : 'messaggi'}`
+    return `${fonte} · ${m.fatti} ${en ? 'documents' : 'documenti'}`
+  }
   if (m.stato !== 'fatto') return `${fonte} · ${t(String(m.stato ?? ''))}`
   const parti = [`${Number(m.documenti ?? 0)} ${en ? 'documents' : 'documenti'}`]
   if (Number(m.tolti)) parti.push(`${Number(m.tolti)} ${en ? 'gone' : 'spariti'}`)
@@ -338,7 +376,24 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   if (Number(m.saltati)) parti.push(`${Number(m.saltati)} ${en ? 'code projects skipped' : 'progetti saltati'}`)
   if (Number(m.falliti)) parti.push(`${Number(m.falliti)} ${en ? 'unreadable' : 'illeggibili'}`)
   if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)
-  if (m.troncato) parti.push(en ? 'cap reached' : 'tetto raggiunto')
+  // le pagine di Notion che non sono cambiate e non si sono riscaricate
+  if (Number(m.invariate)) parti.push(`${Number(m.invariate)} ${en ? 'unchanged' : 'invariate'}`)
+  /*
+   * «Tetto raggiunto» non diceva la cosa che serve sapere.
+   *
+   * Ogni giro legge al massimo un tot per fonte, e prima quella riga era tutto
+   * quello che si sapeva: chi la leggeva non poteva distinguere «ne mancano
+   * dieci» da «ne mancano quattromila», né sapere che il giro dopo riprende da
+   * dove si era fermato. Adesso il connettore dice a che punto è, e questa riga
+   * lo ripete con i numeri suoi.
+   */
+  const resto = m.resto as { letti?: number; totale?: number; aGiorno?: boolean } | undefined
+  if (resto?.aGiorno) parti.push(en ? 'all in' : 'è tutto dentro')
+  else if (typeof resto?.letti === 'number') {
+    parti.push(typeof resto.totale === 'number'
+      ? `${resto.letti} ${en ? 'of' : 'di'} ${resto.totale} ${en ? 'read so far' : 'letti finora'}`
+      : `${resto.letti} ${en ? 'read so far' : 'letti finora'}`)
+  } else if (m.troncato) parti.push(en ? 'cap reached' : 'tetto raggiunto')
   if (m.interrotto) parti.push(en ? 'interrupted by Notion' : 'interrotto da Notion')
   const dirs = (m.illeggibili as string[] | undefined) ?? []
   if (dirs.length) parti.push(`${dirs.length} ${en ? 'folders without permission' : 'cartelle senza permessi'}`)
@@ -430,6 +485,20 @@ export type Accesso = {
   ospitato?: boolean
   /** Come ci si registra qui: liberi, con un codice, o per niente. */
   registrazione?: 'aperta' | 'invito' | 'chiusa'
+  /**
+   * Qui l'indirizzo va confermato prima di entrare. Serve alla schermata per
+   * dire cosa aspettarsi dopo aver premuto «crea», invece di lasciarla ferma.
+   */
+  verifica?: boolean
+  /**
+   * Qui si può rimettere una password da soli.
+   *
+   * Senza la posta del server non si può, e allora la schermata **non deve
+   * offrirlo**: un «ho dimenticato la password» che porta a una richiesta che
+   * risponde sempre ok e non manda niente è peggio di nessun bottone — si
+   * aspetta una mail che non arriverà mai, senza modo di saperlo.
+   */
+  reimpostazione?: boolean
   account: { email: string } | null
 }
 
@@ -457,6 +526,11 @@ export type Convinzione = {
   origine: string
   dal: string
   al?: string | null
+  /**
+   * Quando l'hai tenuta. Solo le *indotte* ne hanno bisogno: finché è nulla,
+   * Myynd non ci ragiona sopra — sta scritta, e aspetta che tu la guardi.
+   */
+  confermata?: string | null
 }
 
 /**
@@ -589,6 +663,21 @@ export type Memoria = {
   storiche: Convinzione[]
 }
 
+/**
+ * Un gettone con un ambito: ha un nome, non scade, si revoca.
+ *
+ * Il gettone in sé non c'è e non ci sarà mai: si vede una volta quando nasce,
+ * e sul server ne resta l'impronta. Qui c'è quello che serve a decidere quale
+ * revocare — come si chiama, cosa apre, e se è ancora vivo.
+ */
+export type Gettone = {
+  id: string
+  nome: string
+  ambito: string
+  creato: string
+  usato: string | null
+}
+
 export type Abbonamento = {
   installato: boolean
   entrato: boolean
@@ -600,8 +689,39 @@ export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
   registra: async (email: string, password: string, invito = '') => {
-    const r = await json<{ token: string; account: { email: string } }>(
+    const r = await json<{ token: string; account: { email: string }; daVerificare?: boolean; mailPartita?: boolean }>(
       '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito }) })
+    // dove l'indirizzo va confermato il server non manda nessun token: il conto
+    // c'è e non si entra ancora, e scrivere una sessione vuota qui vorrebbe
+    // dire un'app che si crede dentro e prende 401 a ogni schermata
+    if (r.token) sessione.imposta(r.token)
+    return r
+  },
+
+  /** Il gettone arrivato per posta: l'indirizzo è confermato, e da qui si entra. */
+  confermaIndirizzo: async (gettone: string) => {
+    const r = await json<{ token: string; account: { email: string } }>(
+      '/api/auth/verifica', { method: 'POST', body: JSON.stringify({ gettone }) })
+    sessione.imposta(r.token)
+    return r
+  },
+
+  /** «Non mi è arrivata». Risponde ok comunque: vedi la rotta. */
+  rimandaConferma: (email: string) =>
+    json<{ ok: true; mailPartita: boolean }>('/api/auth/verifica/manda',
+      { method: 'POST', body: JSON.stringify({ email }) }),
+
+  /**
+   * «Ho dimenticato la password». Risponde ok anche se quell'indirizzo non c'è,
+   * e la schermata dice «se è qui, ti abbiamo scritto»: il contrario sarebbe un
+   * modo di farsi dire dal server chi è iscritto.
+   */
+  chiediReimpostazione: (email: string) =>
+    json<{ ok: true }>('/api/auth/reimposta/chiedi', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  reimposta: async (gettone: string, password: string) => {
+    const r = await json<{ token: string; account: { email: string } }>(
+      '/api/auth/reimposta', { method: 'POST', body: JSON.stringify({ gettone, password }) })
     sessione.imposta(r.token)
     return r
   },
@@ -865,6 +985,10 @@ export const api = {
   scordaConvinzione: (id: string) =>
     json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  /** «Tienila»: da qui in poi Myynd può ragionarci sopra. */
+  confermaConvinzione: (id: string) =>
+    json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/conferma`, { method: 'POST', body: '{}' }),
+
   /**
    * Il suo abbonamento: c'è `claude` su questa macchina, ci è entrato, ed è acceso?
    *
@@ -916,6 +1040,47 @@ export const api = {
     return r
   },
   esciOvunque: () => json<{ ok: true; chiuse: number }>('/api/conto/esci-ovunque', { method: 'POST', body: '{}' }),
+
+  /**
+   * Il conto, cancellato. La password **e** il proprio indirizzo.
+   *
+   * Due cose e non una: la password dice che è lei, l'indirizzo scritto a mano
+   * la obbliga a fermarsi un secondo davanti a un gesto che non ha un annulla.
+   */
+  cancellaConto: (password: string, email: string) =>
+    json<{ ok: true; file: boolean }>('/api/conto/cancella',
+      { method: 'POST', body: JSON.stringify({ password, email }) }),
+
+  /**
+   * «Dammi tutto quello che avete su di me», in un file che si legge.
+   *
+   * Accanto al `.myynd` e non al posto suo: quello sposta un'installazione e
+   * dentro ha le credenziali vere, questo si legge e si inoltra e le
+   * credenziali non ce le ha. Passa da `fetch` e non da un link per la stessa
+   * ragione dell'altro: un `<a download>` non porta l'intestazione col token.
+   */
+  async scaricaDati(password: string): Promise<{ nome: string; dati: Blob }> {
+    const r = await fetch('/api/conto/dati', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${sessione.token()}` },
+      body: JSON.stringify({ password })
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).errore ?? 'Non ce l’ha fatta.')
+    const oggi = new Date().toISOString().slice(0, 10)
+    return { nome: `myynd-dati-${oggi}.json`, dati: await r.blob() }
+  },
+
+  // — i gettoni con un ambito: quello che va in MYYND_DESKTOP_REMOTO_TOKEN —
+
+  gettoni: () => json<{ gettoni: Gettone[]; ambiti: string[] }>('/api/conto/gettoni'),
+
+  /** Il gettone in chiaro torna **una volta sola**: sul server c'è la sua impronta. */
+  creaGettone: (nome: string, ambito: string) =>
+    json<{ ok: true; id: string; gettone: string; gettoni: Gettone[] }>('/api/conto/gettoni',
+      { method: 'POST', body: JSON.stringify({ nome, ambito }) }),
+
+  revocaGettone: (id: string) =>
+    json<{ ok: true; gettoni: Gettone[] }>(`/api/conto/gettoni/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   /** Quanto è costato ragionare: oggi, e giorno per giorno. */
   uso: () => json<{
@@ -1071,7 +1236,9 @@ export const api = {
   chiedi: async (
     chat: string,
     testo: string,
-    onDelta: (delta: string) => void
+    onDelta: (delta: string) => void,
+    /** «Butta quello che ti ho detto finora»: il motore è cambiato a metà risposta. */
+    onRicomincia?: () => void
   ): Promise<{ messaggi: Messaggio[] }> => {
     const t = sessione.token()
     let r: Response
@@ -1112,6 +1279,9 @@ export const api = {
         let m: { fase: string; delta?: string; errore?: string; messaggi?: Messaggio[] }
         try { m = JSON.parse(p.slice(6)) } catch { continue }
         if (m.fase === 'testo' && m.delta) onDelta(m.delta)
+        // il motore è cambiato a metà — Claude Code è caduto e riprende la
+        // chiave — e la risposta riparte da capo: quello mostrato finora si butta
+        if (m.fase === 'ricomincio') onRicomincia?.()
         if (m.fase === 'errore') throw new Error(m.errore || 'Errore.')
         if (m.fase === 'fine') fine = { messaggi: m.messaggi ?? [] }
       }

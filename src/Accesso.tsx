@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Campo } from './onboarding/campo'
-import { api, type Accesso as TipoAccesso } from './api'
+import { api, DaVerificare, type Accesso as TipoAccesso } from './api'
 import { lingua, ricordaLingua, t } from './lingua'
 import { Logo } from './components/Marchio'
 
@@ -13,7 +13,8 @@ const CHIARO = '#F4EFE8'
 
 export function Accesso({ accesso, entrato }: {
   accesso: TipoAccesso
-  entrato: (a: { email: string }) => void
+  /** `avviso` è una cosa andata storta dopo che il conto c'era già: si entra, e la si dice dentro. */
+  entrato: (a: { email: string }, avviso?: string) => void
 }) {
   const ospitato = !!accesso.ospitato
   /*
@@ -25,7 +26,14 @@ export function Accesso({ accesso, entrato }: {
    * dire: «esiste un account con questo indirizzo», detto a chi non è ancora
    * entrato, è un modo di raccontare a un estraneo chi è iscritto qui.
    */
-  const [modo, setModo] = useState<'entra' | 'crea'>('entra')
+  /*
+   * Quattro cose e non due, e le ultime due non le sceglie lei.
+   *
+   * `scordata` la si chiede; `nuova` ci si arriva **solo** da un collegamento
+   * arrivato per posta, che è quello che rende sicuro cambiare una password
+   * senza sapere quella di prima.
+   */
+  const [modo, setModo] = useState<'entra' | 'crea' | 'scordata' | 'nuova'>('entra')
   const registrato = modo === 'entra'
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
@@ -59,6 +67,14 @@ export function Accesso({ accesso, entrato }: {
   const registrazione = accesso.registrazione ?? 'aperta'
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
+  /** Una cosa andata bene, da dire qui: «guarda la posta», «te l'ho rimandata». */
+  const [detto, setDetto] = useState('')
+  /** La password nuova, dopo un collegamento: si chiede due volte come dappertutto. */
+  const [ripeti, setRipeti] = useState('')
+  /** Il gettone arrivato per posta. Sta qui e non nell'indirizzo: vedi sotto. */
+  const [gettone, setGettone] = useState('')
+  /** L'indirizzo esiste ma non è confermato: si può chiedere di rimandarla. */
+  const [daConfermare, setDaConfermare] = useState(false)
 
   useEffect(() => {
     if (cv.current) campo.monta(cv.current)
@@ -66,19 +82,102 @@ export function Accesso({ accesso, entrato }: {
     return () => campo.smonta()
   }, [campo])
 
+  /*
+   * I due collegamenti che arrivano per posta.
+   *
+   * **La prima cosa che si fa è togliere il gettone dall'indirizzo**, prima
+   * ancora di usarlo. Un gettone che apre un conto non deve restare nella barra
+   * degli indirizzi — dove lo legge chi passa e chi guarda lo schermo condiviso
+   * — né nella cronologia del browser, né nel Referer verso qualunque immagine
+   * la pagina caricasse. `replaceState` lo toglie da tutte e tre insieme.
+   */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const daVerificare = q.get('verifica')
+    const daRimettere = q.get('reimposta')
+    if (!daVerificare && !daRimettere) return
+    q.delete('verifica'); q.delete('reimposta')
+    const resto = q.toString()
+    window.history.replaceState(null, '', window.location.pathname + (resto ? `?${resto}` : ''))
+
+    if (daRimettere) { setGettone(daRimettere); setModo('nuova'); return }
+    setOccupato(true)
+    api.confermaIndirizzo(daVerificare!)
+      .then(r => entrato(r.account))
+      .catch(e => { setErr(e instanceof Error ? e.message : String(e)); setModo('entra') })
+      .finally(() => setOccupato(false))
+    // una volta sola, all'apertura: il gettone non è più nell'indirizzo, e
+    // rileggerlo a ogni ridisegno non troverebbe più niente
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const invia = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setDetto(''); setDaConfermare(false)
     try {
+      if (modo === 'scordata') {
+        await api.chiediReimpostazione(email)
+        // la stessa frase sempre, che l'indirizzo esista o no: è la stessa
+        // ragione per cui il server risponde sempre ok
+        setDetto(t('Se quell’indirizzo è qui, ti abbiamo scritto: guarda la posta.'))
+        setOccupato(false)
+        return
+      }
+      if (modo === 'nuova') {
+        if (password !== ripeti) { setErr(t('Le due password non coincidono.')); setOccupato(false); return }
+        const r = await api.reimposta(gettone, password)
+        entrato(r.account)
+        setOccupato(false)
+        return
+      }
       const r = registrato
         ? await api.entra(email, password)
         : await api.registra(email, password, invito)
+      /*
+       * Registrato, e non ancora dentro.
+       *
+       * Dove l'indirizzo va confermato il server non manda nessun token: qui si
+       * resta, e si dice di guardare la posta. Il file del trasloco, se ce n'è
+       * uno, non si carica adesso — non c'è nessuna sessione con cui caricarlo
+       * — e la schermata lo dice invece di lasciar credere che sia entrato.
+       */
+      // `in` su una proprietà facoltativa restringe il tipo e si porta via le
+      // altre: quello che serve qui è la risposta della registrazione, letta intera
+      const nuovo = registrato ? null : (r as { daVerificare?: boolean; mailPartita?: boolean })
+      if (nuovo?.daVerificare) {
+        setDaConfermare(true)
+        // il conto c'è comunque, ma «guarda la posta» a chi non riceverà niente
+        // è la bugia peggiore che una schermata d'accesso possa dire
+        if (nuovo.mailPartita === false) {
+          setDetto('')
+          setErr(t('Il conto è fatto, ma la mail di conferma non è partita: la posta di questo server non funziona. Riprova a farsela mandare, o dillo a chi lo gestisce.'))
+        } else {
+          setDetto(pacco
+            ? t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo. Il tuo Myynd lo porti dentro dalle preferenze, appena entri.')
+            : t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo.'))
+        }
+        setPassword('')
+        setOccupato(false)
+        return
+      }
       // il conto è fatto: se si è portato dietro il suo Myynd, entra adesso —
       // prima che la schermata si apra su un account vuoto che non è il suo
-      if (!registrato && pacco) await api.caricaTrasloco(pacco)
-      entrato(r.account)
+      let avviso: string | undefined
+      if (!registrato && pacco) {
+        /*
+         * Se il file non entra, il conto c'è lo stesso, e il token pure.
+         * Restare qui con l'errore voleva dire un secondo tentativo che
+         * rispondeva «esiste già»: si entra, e lo si dice dentro — il file si
+         * può riportare dalle preferenze.
+         */
+        try { await api.caricaTrasloco(pacco) }
+        catch (e) { avviso = `${t('Il conto è pronto, ma il tuo Myynd non è entrato:')} ${t(e instanceof Error ? e.message : String(e))}` }
+      }
+      entrato(r.account, avviso)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setErr(msg)
+      // la password è giusta e manca solo la conferma: si offre di rimandarla
+      if (e instanceof DaVerificare) setDaConfermare(true)
       // chi si registra con un indirizzo che c'è già vuole quasi sempre entrare:
       // lo si porta sulla scheda giusta, con l'indirizzo già scritto
       if (!registrato && /già un account/i.test(msg)) setModo('entra')
@@ -86,9 +185,29 @@ export function Accesso({ accesso, entrato }: {
     setOccupato(false)
   }
 
-  const pronto = registrato
-    ? !!email.trim() && password.length > 0
-    : !!email.trim() && password.length >= 8 && (registrazione !== 'invito' || !!invito.trim())
+  const rimanda = async () => {
+    setOccupato(true); setErr('')
+    try {
+      const r = await api.rimandaConferma(email)
+      if (r.mailPartita === false) {
+        setDetto('')
+        setErr(t('Non è partita: la posta di questo server non funziona. Dillo a chi lo gestisce.'))
+      } else {
+        setDetto(t('Te l’abbiamo rimandata: guarda la posta.'))
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  /** Da qui si passa fra le quattro schermate senza portarsi dietro un errore vecchio. */
+  const vaiA = (m: typeof modo) => { setModo(m); setErr(''); setDetto(''); setDaConfermare(false) }
+
+  const pronto =
+    modo === 'scordata' ? !!email.trim() :
+    modo === 'nuova' ? password.length >= 8 && ripeti.length >= 8 :
+    registrato
+      ? !!email.trim() && password.length > 0
+      : !!email.trim() && password.length >= 8 && (registrazione !== 'invito' || !!invito.trim())
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -130,11 +249,14 @@ export function Accesso({ accesso, entrato }: {
             per installazione filava; adesso che le persone sono tante, chi apre
             questa pagina può avere un conto o non averlo — e lo sa lui.
           */}
+          {/* le due strade che arrivano da una mail non sono schede: ci si è
+              dentro, e l'unica altra cosa che si può fare è tornare indietro */}
+          {modo !== 'nuova' && (
           <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
             {([['entra', 'Accedi'], ['crea', 'Crea un account']] as const)
               .filter(([id]) => id === 'entra' || registrazione !== 'chiusa')
               .map(([id, testo]) => (
-              <button key={id} type="button" onClick={() => { setModo(id); setErr('') }}
+              <button key={id} type="button" onClick={() => vaiA(id)}
                 style={{
                   padding: '7px 15px', borderRadius: 99, border: 'none', cursor: 'pointer',
                   fontFamily: 'inherit', fontSize: '13px',
@@ -145,22 +267,34 @@ export function Accesso({ accesso, entrato }: {
                 }}>{t(testo)}</button>
             ))}
           </div>
+          )}
 
           <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)', marginBottom: 24, textWrap: 'pretty' }}>
-            {registrato
-              ? t('Entra con l’indirizzo con cui l’hai creato.')
-              : t('La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.')}
+            {modo === 'scordata'
+              ? t('Scrivi il tuo indirizzo: se è qui, ti mandiamo un collegamento per scegliere una password nuova.')
+              : modo === 'nuova'
+                ? t('Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.')
+                : registrato
+                  ? t('Entra con l’indirizzo con cui l’hai creato.')
+                  : t('La tua posta, i tuoi file e le tue automazioni restano tuoi: ogni account ha la sua memoria, separata da quella di chiunque altro.')}
           </div>
 
-          <div style={ETICHETTA}>{t('Email')}</div>
-          <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
-            type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
+          {modo !== 'nuova' && (
+            <>
+              <div style={ETICHETTA}>{t('Email')}</div>
+              <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={tasto}
+                type="email" autoComplete="username" autoFocus placeholder={t('tu@tuodominio.it')} className="scuro" style={CAMPO} />
+            </>
+          )}
 
-          <div style={ETICHETTA}>{t('Password')}</div>
+          {modo !== 'scordata' && (
+          <>
+          <div style={ETICHETTA}>{modo === 'nuova' ? t('Password nuova') : t('Password')}</div>
           <div style={{ position: 'relative' }}>
             <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={tasto}
               type={vedi ? 'text' : 'password'}
               autoComplete={registrato ? 'current-password' : 'new-password'}
+              autoFocus={modo === 'nuova'}
               placeholder={registrato ? '' : t('otto caratteri')} className="scuro"
               style={{ ...CAMPO, paddingRight: 52 }} />
             <button type="button" onClick={() => setVedi(v => !v)}
@@ -175,8 +309,18 @@ export function Accesso({ accesso, entrato }: {
               <Occhio aperto={vedi} />
             </button>
           </div>
+          </>
+          )}
 
-          {!registrato && registrazione === 'invito' && (
+          {modo === 'nuova' && (
+            <>
+              <div style={ETICHETTA}>{t('Ripeti la password')}</div>
+              <input value={ripeti} onChange={e => setRipeti(e.target.value)} onKeyDown={tasto}
+                type={vedi ? 'text' : 'password'} autoComplete="new-password" className="scuro" style={CAMPO} />
+            </>
+          )}
+
+          {!registrato && registrazione === 'invito' && modo === 'crea' && (
             <>
               <div style={ETICHETTA}>{t('Codice d’invito')}</div>
               <input value={invito} onChange={e => setInvito(e.target.value)} onKeyDown={tasto}
@@ -184,10 +328,10 @@ export function Accesso({ accesso, entrato }: {
             </>
           )}
 
-          {!registrato && (
+          {modo === 'crea' && (
             <div style={{ marginTop: 18 }}>
               <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: 9, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 9, cursor: 'pointer', maxWidth: '100%',
                 fontSize: '12.5px', color: pacco ? CHIARO : 'rgba(244,239,232,.5)'
               }}>
                 <span style={{
@@ -195,7 +339,8 @@ export function Accesso({ accesso, entrato }: {
                   border: `1px solid ${pacco ? 'rgba(244,239,232,.5)' : 'rgba(244,239,232,.25)'}`,
                   fontSize: 13, lineHeight: 1
                 }}>{pacco ? '✓' : '+'}</span>
-                {pacco ? pacco.name : t('Ho già un Myynd: portalo qui')}
+                {/* il nome di un file lo sceglie chi lo salva: può essere lungo quanto vuole */}
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{pacco ? pacco.name : t('Ho già un Myynd: portalo qui')}</span>
                 <input type="file" accept=".myynd,application/gzip" style={{ display: 'none' }}
                   onChange={e => setPacco(e.target.files?.[0] ?? null)} />
               </label>
@@ -206,6 +351,7 @@ export function Accesso({ accesso, entrato }: {
           )}
 
           {err && <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 14, lineHeight: 1.5 }}>{t(err)}</div>}
+          {detto && <div style={{ fontSize: '12.5px', color: '#9DBF9F', marginTop: 14, lineHeight: 1.5, textWrap: 'pretty' }}>{detto}</div>}
 
           <button onClick={invia} disabled={!pronto || occupato} style={{
             marginTop: 28, width: '100%', padding: '14px 24px', borderRadius: 99, border: 'none',
@@ -214,8 +360,38 @@ export function Accesso({ accesso, entrato }: {
             fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
             cursor: pronto && !occupato ? 'pointer' : 'default', transition: 'background .2s'
           }}>
-            {occupato ? '…' : registrato ? t('Accedi') : pacco ? t('Crea l\'accesso e portalo qui') : t('Crea l\'accesso')}
+            {occupato ? '…'
+              : modo === 'scordata' ? t('Mandami il collegamento')
+              : modo === 'nuova' ? t('Salva ed entra')
+              : registrato ? t('Accedi')
+              : pacco ? t('Crea l\'accesso e portalo qui') : t('Crea l\'accesso')}
           </button>
+
+          {/*
+            Le due vie di scampo, sotto al bottone e non fra i campi.
+
+            «Ho dimenticato la password» si vede solo dove serve a qualcosa: in
+            casa, e su un server senza posta configurata, non c'è nessun modo di
+            mandare quel collegamento — e un bottone che porta a una mail che non
+            arriverà mai è peggio di nessun bottone.
+          */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
+            {registrato && accesso.reimpostazione && (
+              <button type="button" onClick={() => vaiA('scordata')} style={SOTTILE}>
+                {t('Ho dimenticato la password')}
+              </button>
+            )}
+            {daConfermare && (
+              <button type="button" onClick={rimanda} disabled={occupato || !email.trim()} style={SOTTILE}>
+                {t('Non è arrivata? Rimandamela')}
+              </button>
+            )}
+            {(modo === 'scordata' || modo === 'nuova') && (
+              <button type="button" onClick={() => vaiA('entra')} style={SOTTILE}>
+                {t('Torna all’accesso')}
+              </button>
+            )}
+          </div>
 
           {/* Su un server questa frase era una bugia, ed era la frase su cui si
               basa tutto il prodotto: va detta solo dov'è vera. */}
@@ -275,6 +451,13 @@ const CAMPO: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', marginTop: 8, padding: '13px 16px',
   borderRadius: 14, border: '1px solid rgba(244,239,232,.22)', background: 'rgba(244,239,232,.06)',
   color: CHIARO, fontSize: 15, fontFamily: 'inherit', outline: 'none'
+}
+
+/** Una via di scampo: si legge, non si preme per sbaglio. */
+const SOTTILE: React.CSSProperties = {
+  border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+  fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(244,239,232,.55)',
+  textDecoration: 'underline', textUnderlineOffset: 3
 }
 
 const ETICHETTA: React.CSSProperties = {

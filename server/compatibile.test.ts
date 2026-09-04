@@ -156,7 +156,9 @@ test('un testo diventa un blocco e finisce con end_turn', () => {
   assert.equal(m.role, 'assistant')
   assert.deepEqual(m.content, [{ type: 'text', text: 'Ciao.', citations: null }])
   assert.equal(m.stop_reason, 'end_turn')
-  assert.equal(m.usage.input_tokens, 10)
+  // OpenAI conta i 7 dalla cache dentro i 10; Anthropic li tiene fuori, e il
+  // registro dell'uso parla la forma di Anthropic: 3 entrati, 7 dalla cache
+  assert.equal(m.usage.input_tokens, 3)
   assert.equal(m.usage.output_tokens, 3)
   assert.equal(m.usage.cache_read_input_tokens, 7)
 })

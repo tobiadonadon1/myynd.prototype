@@ -45,8 +45,14 @@ const doc = (id: string, sopra: Partial<Documento> = {}): Documento => ({
 const quandoIndicizzato = (id: string): string =>
   (store.default.prepare('SELECT indicizzato FROM documenti WHERE id = ?').get(id) as { indicizzato: string }).indicizzato
 
-const righeFts = (): number =>
-  (store.default.prepare('SELECT COUNT(*) AS n FROM ricerca').get() as { n: number }).n
+/*
+ * Quanti documenti l'indice full-text conosce davvero.
+ *
+ * Non `SELECT COUNT(*) FROM ricerca`: da quando l'indice è a contenuto esterno
+ * quella conta le righe di `documenti`, quindi risponde sempre che è tutto a
+ * posto — cioè proprio quello che questa prova deve poter smentire.
+ */
+const righeFts = (): number => store.perProva.documentiNellIndice()
 
 const righeDoc = (): number =>
   (store.default.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }).n
@@ -93,17 +99,49 @@ test('saltare i documenti invariati non sfasa l\'indice full-text', () => {
     'le due tabelle si sono disallineate: l\'indice è una copia, non un archivio')
 })
 
-test('un documento sparito dall\'indice si reindicizza anche se identico', () => {
+test('un documento mai indicizzato torna cercabile alla prossima lettura', () => {
   // La condizione più insidiosa: se `salvaDocumenti` si fidasse solo del
-  // confronto dei campi, un documento la cui riga FTS fosse andata persa non
+  // confronto dei campi, un documento entrato senza la sua riga di indice non
   // tornerebbe cercabile mai più — resterebbe lì a farsi contare, invisibile.
-  const rid = (store.default.prepare('SELECT rid FROM documenti WHERE id = ?').get('b1') as { rid: number }).rid
-  store.default.prepare('DELETE FROM ricerca WHERE rowid = ?').run(rid)
-  assert.notEqual(righeFts(), righeDoc(), 'la premessa del test non regge')
+  // Il segno che dice «questo non è indicizzato» sono le radici vuote.
+  store.default.prepare('UPDATE documenti SET radici = NULL WHERE id = ?').run('b1')
 
   const e = store.salvaDocumenti([doc('b1')])
   assert.equal(e.cambiati, 1, 'ha saltato un documento che non era più cercabile')
-  assert.equal(righeFts(), righeDoc(), 'non l\'ha rimesso nell\'indice')
+  assert.ok(
+    (store.default.prepare('SELECT radici FROM documenti WHERE id = ?').get('b1') as { radici: string | null }).radici,
+    'non l\'ha rimesso nell\'indice'
+  )
+})
+
+test('un indice di ricerca danneggiato si rifà da solo, e quello che c’era torna', () => {
+  /*
+   * L'altro guasto, e non è lo stesso.
+   *
+   * Da quando l'indice è a contenuto esterno, i trigger lo tengono allineato ai
+   * documenti: scrivendo non può più sfasarsi. Ma un file danneggiato o una
+   * riga tolta a mano lasciano documenti che ci sono e non si trovano — e
+   * quello non somiglia a un guasto, somiglia a «Myynd non sa niente di quel
+   * cliente». Qui si toglie una riga dall'indice lasciando il documento al suo
+   * posto, e si controlla che la manutenzione la rimetta.
+   */
+  const d = doc('cercabile', { titolo: 'Preventivo per il capannone di Vicenza' })
+  store.salvaDocumenti([d])
+  assert.equal(store.cerca('capannone Vicenza', 5).length, 1, 'la premessa: prima si trovava')
+
+  const riga = store.default.prepare(
+    'SELECT rid, titolo, corpo, autore, radici FROM documenti WHERE id = ?'
+  ).get('cercabile') as { rid: number; titolo: string; corpo: string; autore: string | null; radici: string | null }
+  // il comando 'delete' è l'unico modo di togliere una riga da un indice a
+  // contenuto esterno: un `DELETE FROM ricerca` non fa niente e non dà errore
+  store.default.prepare(
+    "INSERT INTO ricerca(ricerca, rowid, titolo, corpo, autore, radici) VALUES('delete', ?, ?, ?, ?, ?)"
+  ).run(riga.rid, riga.titolo, riga.corpo, riga.autore ?? '', riga.radici ?? '')
+  assert.equal(store.cerca('capannone Vicenza', 5).length, 0, 'la premessa: adesso non si trova più')
+
+  const esito = store.verificaLIndice()
+  assert.equal(esito.rifatto, true, 'se n’è accorto e l’ha rifatto')
+  assert.equal(store.cerca('capannone Vicenza', 5).length, 1, 'e il documento si ritrova')
 })
 
 test('appenaArrivati vede quello che è entrato, non quello che ha una data recente', async () => {

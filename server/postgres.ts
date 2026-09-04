@@ -104,11 +104,22 @@ function analizza(stringa: string): Pezzi {
 /** Da usare nelle prove: la stessa lettura che fa `apri()`, senza aprire niente. */
 export const perProva = { analizza }
 
+/**
+ * `MYYND_POSTGRES_CA`: il percorso del certificato di chi ospita il database,
+ * oppure la parola `sistema` per fidarsi delle autorità che il sistema
+ * conosce già. Senza, si cifra e basta — il server non si verifica, e chi
+ * sta in mezzo fra qui e il database potrebbe rispondere al posto suo. Va
+ * detto all'avvio, non taciuto.
+ */
 function tls(): false | { rejectUnauthorized: boolean; ca?: string } {
   const inCasa = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(URL)
   if (inCasa) return false
   const ca = (process.env.MYYND_POSTGRES_CA ?? '').trim()
+  if (ca === 'sistema' || ca === 'system') return { rejectUnauthorized: true }
   if (ca) return { rejectUnauthorized: true, ca: readFileSync(ca, 'utf8') }
+  console.error(
+    'myynd · Postgres: la connessione è cifrata ma il server non si verifica. ' +
+    'MYYND_POSTGRES_CA=<certificato scaricato da Supabase>, o =sistema se il certificato è pubblico.')
   return { rejectUnauthorized: false }
 }
 
@@ -180,6 +191,57 @@ export async function schema(): Promise<void> {
       cifrato    TEXT NOT NULL,
       aggiornato TEXT NOT NULL
     )`)
+  /*
+   * Le colonne che arrivano dopo — stesso discorso che `conti.ts` fa per
+   * SQLite: `CREATE TABLE IF NOT EXISTS` non tocca una tabella che c'è già, e
+   * il primo segnale sarebbe un «column does not exist» in faccia a qualcuno
+   * che stava solo aprendo l'app.
+   *
+   * `verificato` è la data in cui ha confermato il suo indirizzo, e `NULL` è
+   * «non l'ha fatto». I conti che c'erano prima che la verifica esistesse
+   * restano a NULL: `auth.ts` chiede la conferma solo dove la posta del server
+   * è configurata, e su un'installazione che l'accende adesso è giusto che chi
+   * c'era già continui a entrare — l'ha già fatto per mesi.
+   *
+   * `versione` conta le scritture della configurazione, e serve a due repliche
+   * che scrivono la stessa riga: chi scrive dichiara da quale versione parte, e
+   * chi parte da una vecchia perde invece di sovrascrivere.
+   */
+  await q('ALTER TABLE myynd_utenti ADD COLUMN IF NOT EXISTS verificato TEXT')
+  await q('ALTER TABLE myynd_configurazioni ADD COLUMN IF NOT EXISTS versione INTEGER NOT NULL DEFAULT 0')
+  /*
+   * I gettoni della posta: conferma dell'indirizzo e password dimenticata.
+   *
+   * Stessa forma delle sessioni — l'impronta e non il gettone — per la stessa
+   * ragione: chi legge questa tabella non deve poter aprire niente. `usato` è
+   * la data in cui è stato speso, e c'è perché questi valgono **una volta
+   * sola**: un collegamento che rimette la password e resta buono per un'ora
+   * dopo essere stato usato è un collegamento che vive in una casella di posta.
+   */
+  await q(`
+    CREATE TABLE IF NOT EXISTS myynd_gettoni_email (
+      impronta TEXT PRIMARY KEY,
+      utente   TEXT NOT NULL REFERENCES myynd_utenti (id) ON DELETE CASCADE,
+      scopo    TEXT NOT NULL,
+      scade    TEXT NOT NULL,
+      usato    TEXT
+    )`)
+  await q('CREATE INDEX IF NOT EXISTS myynd_gettoni_email_utente ON myynd_gettoni_email (utente)')
+  /*
+   * I gettoni con un ambito: non scadono, si revocano, e arrivano a poche
+   * rotte. Vedi `gettoni.ts` per il perché.
+   */
+  await q(`
+    CREATE TABLE IF NOT EXISTS myynd_gettoni (
+      id       TEXT PRIMARY KEY,
+      utente   TEXT NOT NULL REFERENCES myynd_utenti (id) ON DELETE CASCADE,
+      nome     TEXT NOT NULL,
+      ambito   TEXT NOT NULL,
+      impronta TEXT NOT NULL UNIQUE,
+      creato   TEXT NOT NULL,
+      usato    TEXT
+    )`)
+  await q('CREATE INDEX IF NOT EXISTS myynd_gettoni_utente ON myynd_gettoni (utente)')
 }
 
 // — la cifratura della configurazione —
@@ -196,16 +258,55 @@ export async function schema(): Promise<void> {
 const FRASE = (process.env.MYYND_CHIAVE ?? '').trim()
 let chiave: Buffer | null = null
 
+function distendi(frase: string): Buffer {
+  return scryptSync(frase, 'myynd/configurazione', 32, { N: 16384, r: 8, p: 1 })
+}
+
 function laChiave(): Buffer {
   if (chiave) return chiave
   if (FRASE.length < 16) throw new Error('MYYND_CHIAVE manca o è più corta di sedici caratteri.')
-  chiave = scryptSync(FRASE, 'myynd/configurazione', 32, { N: 16384, r: 8, p: 1 })
+  chiave = distendi(FRASE)
   return chiave
+}
+
+/**
+ * La chiave di prima, per il tempo di cambiarla.
+ *
+ * Il README diceva «non cambiarla mai», ed era una promessa che non si può
+ * mantenere: una chiave si può scoprire, la si può aver messa in un posto
+ * sbagliato, o semplicemente chi ospita cambia. Senza una strada, l'unica
+ * risposta era «ricollega tutte le fonti, di tutti» — cioè perdere le
+ * credenziali di ogni persona per una variabile.
+ *
+ * Con `MYYND_CHIAVE_VECCHIA` la strada c'è ed è di sola andata: si legge con la
+ * nuova, e quello che non si apre si prova con la vecchia; quello che si è
+ * aperto con la vecchia si riscrive con la nuova. All'avvio si passa su tutte
+ * le righe, così la rotazione finisce da sé invece di trascinarsi finché
+ * qualcuno non tocca ogni conto — e quando è finita lo dice, perché il momento
+ * in cui la vecchia si può togliere dev'essere un fatto, non una speranza.
+ */
+const FRASE_VECCHIA = (process.env.MYYND_CHIAVE_VECCHIA ?? '').trim()
+let chiaveVecchia: Buffer | null = null
+
+function laVecchia(): Buffer | null {
+  if (chiaveVecchia) return chiaveVecchia
+  if (FRASE_VECCHIA.length < 16) return null
+  chiaveVecchia = distendi(FRASE_VECCHIA)
+  return chiaveVecchia
+}
+
+export function cambioDiChiaveInCorso(): boolean {
+  return !!laVecchia()
 }
 
 /** Da usare nelle prove: una chiave decisa da fuori, senza passare dall'ambiente. */
 export function usaChiave(frase: string) {
-  chiave = scryptSync(frase, 'myynd/configurazione', 32, { N: 16384, r: 8, p: 1 })
+  chiave = distendi(frase)
+}
+
+/** Da usare nelle prove: la chiave di prima, come se fosse nell'ambiente. */
+export function usaChiaveVecchia(frase: string | null) {
+  chiaveVecchia = frase ? distendi(frase) : null
 }
 
 export function chiavePronta(): boolean {
@@ -225,10 +326,31 @@ export function cifra(testo: string): string {
   return ['v1', iv.toString('base64url'), c.getAuthTag().toString('base64url'), dati.toString('base64url')].join('.')
 }
 
-export function decifra(blob: string): string {
-  const [versione, iv, tag, dati] = blob.split('.')
-  if (versione !== 'v1' || !iv || !tag || !dati) throw new Error('Configurazione cifrata in un formato che non conosco.')
-  const d = createDecipheriv('aes-256-gcm', laChiave(), Buffer.from(iv, 'base64url'))
+function conQuesta(k: Buffer, iv: string, tag: string, dati: string): string {
+  const d = createDecipheriv('aes-256-gcm', k, Buffer.from(iv, 'base64url'))
   d.setAuthTag(Buffer.from(tag, 'base64url'))
   return Buffer.concat([d.update(Buffer.from(dati, 'base64url')), d.final()]).toString('utf8')
+}
+
+/**
+ * Aprire, e dire con quale chiave si è aperto.
+ *
+ * La seconda metà è il punto: GCM autentica, quindi «non si apre con questa»
+ * non è un dubbio ma un fatto, e provare la vecchia dopo la nuova non è
+ * indovinare. Chi chiama sa così se quella riga va riscritta.
+ */
+export function apriCifrato(blob: string): { testo: string; conLaVecchia: boolean } {
+  const [versione, iv, tag, dati] = blob.split('.')
+  if (versione !== 'v1' || !iv || !tag || !dati) throw new Error('Configurazione cifrata in un formato che non conosco.')
+  try {
+    return { testo: conQuesta(laChiave(), iv, tag, dati), conLaVecchia: false }
+  } catch (e) {
+    const vecchia = laVecchia()
+    if (!vecchia) throw e
+    return { testo: conQuesta(vecchia, iv, tag, dati), conLaVecchia: true }
+  }
+}
+
+export function decifra(blob: string): string {
+  return apriCifrato(blob).testo
 }

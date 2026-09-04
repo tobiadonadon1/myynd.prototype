@@ -140,7 +140,7 @@ function Anteprima({ id, catalogo, chiave }: {
         {guardo ? t('Guardo…') : t('Cosa troverebbe adesso')}
       </Hov>
 
-      {guaio && <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 8 }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
       {dati && (
         <div style={{

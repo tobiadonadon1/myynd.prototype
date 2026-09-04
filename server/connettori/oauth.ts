@@ -223,7 +223,21 @@ const sospesi = new Map<string, Sospeso>()
  * qui: si torna l'indirizzo e il client ci va. Il ritorno bussa a
  * `/api/oauth/ritorno` con lo `state`, e da lì si finisce.
  */
-export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { dove: string } {
+/**
+ * Il biglietto: la prova che il browser che torna è quello che è partito.
+ *
+ * Lo `state` dice *di chi* è il consenso, ma viaggia nell'indirizzo: chi
+ * avvia il ballo può passare quell'indirizzo a un'altra persona, che dà il
+ * suo consenso a Google e viene rimandata qui — e il suo token finiva nel
+ * conto di chi aveva avviato. Il biglietto sta in un cookie che il browser
+ * di partenza riceve con l'indirizzo e riporta al ritorno; chi torna con lo
+ * `state` di un altro non ce l'ha.
+ */
+export function biglietto(stato: string): string {
+  return createHash('sha256').update(stato).digest('hex')
+}
+
+export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { dove: string; biglietto: string } {
   const redirect = oauthWeb().ritorno
   if (!redirect) throw new Error('Il server non conosce il proprio dominio: chi lo ospita deve impostare MYYND_PUBBLICO.')
   const { verifica, sfida } = pkce()
@@ -231,13 +245,17 @@ export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { d
   const ora = Date.now()
   for (const [k, v] of sospesi) if (v.scade < ora) sospesi.delete(k)
   sospesi.set(stato, { utente: chi.adesso(), sportello: s, verifica, scade: ora + 10 * 60_000, dopo })
-  return { dove: s.autorizza({ redirect, sfida, stato }) }
+  return { dove: s.autorizza({ redirect, sfida, stato }), biglietto: biglietto(stato) }
 }
 
 /** Secondo tempo: il codice è tornato. Lancia con una frase da mostrare. */
-export async function completaWeb(stato: string, codice: string | null, errore: string | null): Promise<{ nome: string }> {
+export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = ''): Promise<{ nome: string }> {
   const s = sospesi.get(stato)
   if (!s) throw new Error('Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.')
+  const atteso = Buffer.from(biglietto(stato)), avuto = Buffer.from(portato)
+  if (atteso.length !== avuto.length || !timingSafeEqual(atteso, avuto)) {
+    throw new Error('Questo collegamento è partito da un altro browser: riprova da Myynd, dallo stesso.')
+  }
   sospesi.delete(stato)
   if (s.scade < Date.now()) throw new Error(`Nessuna risposta da ${s.sportello.nome} in tempo: riprova.`)
   if (!codice) {

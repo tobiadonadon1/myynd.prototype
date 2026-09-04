@@ -329,9 +329,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
           const senza = m.filter(x => x.id !== idVivo)
           return [...senza, { id: idVivo, role: 'a', text: cresciuta }]
         })
+      }, () => {
+        // il motore è cambiato a metà e la risposta riparte da capo: quello
+        // che si è già letto non è un pezzo di questa, e sotto tornerebbe due volte
+        if (gen.current !== mio) return
+        cresciuta = ''
+        setPensando(true)
+        setMessaggi(m => m.filter(x => x.id !== idVivo))
       })
       if (gen.current === mio) setMessaggi(r.messaggi)
-      await caricaChat()
     } catch (e) {
       mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
       if (gen.current === mio) {
@@ -339,6 +345,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         setDraftMsg(d => d || bozza)   // il testo scritto non si perde
       }
     }
+    // l'elenco delle chat si rinfresca fuori dal try: un elenco che non torna
+    // faceva dire «non sono riuscito a rispondere» di una risposta arrivata intera
+    caricaChat().catch(() => {})
     /*
      * Sempre, non solo se è ancora la mia generazione.
      *
@@ -1000,10 +1009,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     connAttivi: connOn.map(c => ({
       id: c.id, nome: c.nome, stato: frasi.statoConnettore(c.documenti),
       onClick: async () => {
-        await api.scollega(c.id).catch(() => {})
+        // «scollegato» si dice solo se è vero: prima usciva anche quando il server aveva detto di no
+        try { await api.scollega(c.id) }
+        catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a scollegare.')); return }
         await Promise.all([ricaricaStato(), caricaMente(mappaInVista)])
         mostraToast(frasi.scollegato(t(c.nome)))
       }
+
     })),
     connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({
       // il pannello si apre già su questa fonte: chi clicca "Posta" vuole

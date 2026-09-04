@@ -205,13 +205,25 @@ function sportello(clientId: string, clientSecret?: string): Sportello {
   }
 }
 
-export function avvia(): { dove: string } {
+/**
+ * Il segreto con cui rinnovare: quello scritto dalla persona (l'app sua, in
+ * casa), o quello di chi ospita quando il clientId è il suo. Non si scrive
+ * più nella configurazione di ognuno — usciva con l'esportazione.
+ */
+function segretoDi(g: { clientId: string; clientSecret?: string }): string | undefined {
+  if (g.clientSecret) return g.clientSecret
+  return g.clientId === APP_GOOGLE.clientId ? APP_GOOGLE.clientSecret || undefined : undefined
+}
+
+export function avvia(): { dove: string; biglietto: string } {
   const app = APP_GOOGLE
   if (!app.clientId) throw new Error('Google non è ancora disponibile su questo server.')
   return avviaWeb(sportello(app.clientId, app.clientSecret), async t => {
     if (!t.refresh_token) throw new Error('Google non ha dato il permesso duraturo: riprova.')
     const email = await chiEra(t.access_token).catch(() => '')
-    scriviConfig({ ...leggi(), google: { clientId: app.clientId, clientSecret: app.clientSecret, refresh: t.refresh_token, email, giorni: 30 } })
+    // il segreto dell'app è di chi ospita: resta nell'ambiente, e si legge da lì al
+    // rinnovo. Scritto qui finiva nel pacco che ognuno può scaricarsi
+    scriviConfig({ ...leggi(), google: { clientId: app.clientId, refresh: t.refresh_token, email, giorni: 30 } })
     scordaIlToken()
   })
 }
@@ -249,7 +261,7 @@ async function token(): Promise<string> {
   if (vivo && vivo.scade > Date.now() + 60_000) return vivo.token
   const t = await chiediToken({
     client_id: g.clientId,
-    ...(g.clientSecret ? { client_secret: g.clientSecret } : {}),
+    ...(segretoDi(g) ? { client_secret: segretoDi(g) } : {}),
     refresh_token: g.refresh,
     grant_type: 'refresh_token'
   })

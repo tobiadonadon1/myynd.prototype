@@ -28,6 +28,7 @@
 
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
+import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 
 export type ConfigSlack = {
   token: string
@@ -55,7 +56,7 @@ type Risposta = { ok: boolean; error?: string; response_metadata?: { next_cursor
  * avanti con una lista vuota — che da fuori è indistinguibile da «non c'era
  * niente». I due casi vanno separati qui, dove si sa ancora quale sia quale.
  */
-async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> = {}): Promise<T & Risposta> {
+async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> = {}, tentativo = 0): Promise<T & Risposta> {
   const u = new URL(metodo, API)
   for (const [k, v] of Object.entries(q)) if (v) u.searchParams.set(k, v)
 
@@ -64,11 +65,14 @@ async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> 
     signal: AbortSignal.timeout(30_000)
   })
 
-  // 429: Slack dice quanti secondi aspettare, e ha ragione lui
+  // 429: Slack dice quanti secondi aspettare, e ha ragione lui — ma non per
+  // sempre: al quinto no si smette, o un limite che non passa tiene il giro
+  // appeso per ore e tutte le fonti dopo restano ad aspettare
   if (r.status === 429) {
+    if (tentativo >= 4) throw new Error(spiega('ratelimited'))
     const aspetta = Math.min(30, Number(r.headers.get('retry-after') ?? 5))
     await new Promise(f => setTimeout(f, aspetta * 1000))
-    return api<T>(c, metodo, q)
+    return api<T>(c, metodo, q, tentativo + 1)
   }
 
   const j = await r.json().catch(() => ({ ok: false, error: 'risposta_illeggibile' })) as T & Risposta
@@ -200,6 +204,8 @@ export type EsitoSlack = {
   /** I canali che non si sono lasciati leggere: si dice, non si ingoia. */
   falliti: string[]
   troncato: boolean
+  /** Quanti canali ci sono, quanti ne ha fatti, quanti ne restano. */
+  resto: Resto
 }
 
 /**
@@ -220,10 +226,28 @@ export async function sincronizza(
   const elenco = await canali(c)
   const docs: Documento[] = []
   const falliti: string[] = []
-  let troncato = false
   let fatti = 0
 
-  for (const ch of elenco) {
+  /*
+   * Si riprende dal canale dopo quello dove ci si era fermati.
+   *
+   * Il tetto dei novecento documenti tagliava sempre nello stesso punto: con
+   * sessanta canali vivi, gli ultimi venti non li leggeva nessun giro — e da
+   * fuori sembrava che lì dentro non si fosse detto niente. Il segno è l'id del
+   * canale, non la sua posizione, perché fra un giro e l'altro qualcuno ne apre
+   * uno e tutto scala.
+   *
+   * Un giro ripreso è per forza incompleto: `docs` copre solo la coda
+   * dell'elenco, e chi riconcilia guarda `troncato` proprio per non cancellare
+   * i mesi di conversazioni che stanno nella metà non riletta.
+   */
+  const { da: dalCanale, ripreso } = riprendi('slack', elenco, ch => ch.id)
+  let troncato = ripreso
+  let fatteCanali = dalCanale
+  let ultimo: string | null = null
+
+  for (let i = dalCanale; i < elenco.length; i++) {
+    const ch = elenco[i]!
     if (docs.length >= MAX_DOCUMENTI) { troncato = true; break }
     const dove = comeSiChiama(ch, chi)
     let messaggi: Messaggio[] = []
@@ -244,6 +268,10 @@ export async function sincronizza(
       // nemmeno in silenzio: chi guarda deve poter sapere che manca
       falliti.push(dove)
       avanzamento?.(++fatti, elenco.length)
+      // avanti lo stesso: riprovarlo al prossimo giro terrebbe fermi anche
+      // tutti quelli dopo, e `falliti` già impedisce di riconciliare
+      ultimo = ch.id
+      fatteCanali = i + 1
       continue
     }
 
@@ -262,10 +290,11 @@ export async function sincronizza(
       perGiorno.set(chiave, g)
     }
 
+    let pieno = false
     for (const [chiave, g] of perGiorno) {
       // due righe vere: sotto, è un «ok» che non è una conversazione
       if (g.righe.length < 2) continue
-      if (docs.length >= MAX_DOCUMENTI) { troncato = true; break }
+      if (docs.length >= MAX_DOCUMENTI) { troncato = true; pieno = true; break }
       docs.push({
         id: `slack:${ch.id}:${chiave}`,
         fonte: 'slack',
@@ -280,7 +309,13 @@ export async function sincronizza(
       })
     }
     avanzamento?.(++fatti, elenco.length)
+    // un canale lasciato a metà non si segna come fatto: al giro dopo si
+    // riparte da lui, o le sue giornate rimaste fuori non entrerebbero mai
+    if (pieno) break
+    ultimo = ch.id
+    fatteCanali = i + 1
   }
 
-  return { docs, falliti, troncato }
+  segna('slack', fatteCanali < elenco.length ? ultimo : null)
+  return { docs, falliti, troncato, resto: resto(fatteCanali, elenco.length) }
 }

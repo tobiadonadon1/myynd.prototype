@@ -25,6 +25,7 @@ import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { apriIlBrowser, chiediGettoni, Vivo, type Sportello } from './oauth.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
+import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 
 export const AMBITI = ['account_info.read', 'files.metadata.read', 'files.content.read']
 
@@ -38,6 +39,16 @@ export type ConfigDropbox = {
 
 const MAX_FILE = 12_000_000
 const MAX_DOCUMENTI = 1200
+/**
+ * Quanti nomi si elencano, che è un'altra cosa da quanti file si aprono.
+ *
+ * Erano legati — quattro volte il tetto dei documenti — e a quel punto si
+ * smetteva anche di *guardare*: una cartella da seimila file era
+ * indistinguibile da una da milleduecento, e i nomi oltre il quattromilaottocento
+ * non li vedeva nessun giro. Elencare costa una chiamata ogni duemila nomi;
+ * aprire costa uno scaricamento e un'estrazione a testa.
+ */
+const MAX_ELENCO = 20_000
 
 function traduci(j: Record<string, unknown>, _stato: number): string | null {
   const e = String(j.error ?? '')
@@ -221,6 +232,8 @@ export type EsitoDropbox = {
   visti: string[]
   /** Vero solo se l'elenco è una fotografia intera: solo allora si riconcilia. */
   completo: boolean
+  /** Quanti file ci sono nella finestra, quanti sono passati, quanti mancano. */
+  resto: Resto
 }
 
 export async function sincronizza(
@@ -240,7 +253,7 @@ export async function sincronizza(
     })
     voci.push(...r.entries)
     while (r.has_more) {
-      if (voci.length >= MAX_DOCUMENTI * 4) { troncato = true; completo = false; break }
+      if (voci.length >= MAX_ELENCO) { troncato = true; completo = false; break }
       r = await api<{ entries: Voce[]; cursor: string; has_more: boolean }>('files/list_folder/continue', { cursor: r.cursor })
       voci.push(...r.entries)
     }
@@ -251,14 +264,25 @@ export async function sincronizza(
     if (!voci.length) throw e
   }
 
-  const file = voci
+  const tutti = voci
     .filter(v => v['.tag'] === 'file')
     .filter(v => !v.server_modified || Date.parse(v.server_modified) >= dal)
     .sort((a, b) => (b.server_modified ?? '').localeCompare(a.server_modified ?? ''))
 
-  // oltre il tetto non è una fotografia intera: dirlo qui, non dopo
-  if (file.length > MAX_DOCUMENTI) { troncato = true; completo = false }
-  const scelti = file.slice(0, MAX_DOCUMENTI)
+  /*
+   * Oltre il tetto non è una fotografia intera — ma da oggi i file di sotto non
+   * sono più persi: il giro dopo riparte da qui. Il segno è data più id, così
+   * un file salvato nel frattempo fa scalare l'elenco senza far saltare la riga.
+   */
+  const segnoDi = (v: Voce) => `${v.server_modified ?? ''}|${v.id ?? v.path_lower ?? v.name}`
+  const { da, ripreso } = riprendi('dropbox', tutti, segnoDi,
+    (v, s) => (v.server_modified ?? '') < (s.split('|')[0] ?? ''))
+  const scelti = tutti.slice(da, da + MAX_DOCUMENTI)
+  const arrivati = da + scelti.length
+  // ripreso a metà vuol dire che `visti` copre solo la coda: riconciliare
+  // adesso cancellerebbe tutto quello che sta sopra
+  if (ripreso || arrivati < tutti.length) { troncato = true; completo = false }
+  segna('dropbox', arrivati < tutti.length && scelti.length ? segnoDi(scelti[scelti.length - 1]!) : null)
 
   const docs: Documento[] = []
   const visti: string[] = []
@@ -296,5 +320,5 @@ export async function sincronizza(
     avanzamento?.(++fatti, scelti.length)
   }
 
-  return { docs, falliti, troncato, visti, completo: completo && !troncato }
+  return { docs, falliti, troncato, visti, completo: completo && !troncato, resto: resto(arrivati, tutti.length) }
 }

@@ -272,10 +272,13 @@ function motivo(finish: string | null | undefined, rifiuto: boolean, conAttrezzi
 }
 
 function uso(u: UsoOA | null | undefined): Anthropic.Usage {
+  // `prompt_tokens` comprende anche quelli letti dalla cache; Anthropic li
+  // tiene fuori. Si tolgono, o il tetto del giorno li contava due volte
+  const cache = u?.prompt_tokens_details?.cached_tokens ?? 0
   return {
-    input_tokens: u?.prompt_tokens ?? 0,
+    input_tokens: Math.max(0, (u?.prompt_tokens ?? 0) - cache),
     output_tokens: u?.completion_tokens ?? 0,
-    cache_read_input_tokens: u?.prompt_tokens_details?.cached_tokens ?? 0,
+    cache_read_input_tokens: cache,
     cache_creation_input_tokens: 0,
     cache_creation: null,
     inference_geo: null,
@@ -495,10 +498,14 @@ export async function flusso(
   p: Richiesta,
   onTesto: (delta: string) => void,
   attesa = 60_000,
-  silenzio = 45_000
+  silenzio = 45_000,
+  segnale?: AbortSignal
 ): Promise<Anthropic.Message> {
   const controllo = new AbortController()
   let perche: 'attesa' | 'silenzio' | null = null
+  // chi ascoltava se n'è andato: si chiude il rubinetto, non si finisce di pagare
+  if (segnale?.aborted) controllo.abort()
+  segnale?.addEventListener('abort', () => controllo.abort(), { once: true })
   let sveglia = setTimeout(() => { perche = 'attesa'; controllo.abort() }, attesa)
   const riarma = () => {
     clearTimeout(sveglia)
@@ -533,7 +540,9 @@ export async function flusso(
       if (pezzo) { testo += pezzo; onTesto(pezzo) }
       if (d.refusal) rifiuto = true
       for (const tc of d.tool_calls ?? []) {
-        const i = tc.index ?? 0
+        // per indice quando c'è; altrimenti per id, e un id mai visto è una
+        // chiamata nuova — due chiamate parallele senza indice si fondevano in una
+        const i = tc.index ?? (tc.id ? ([...chiamate].find(([, v]) => v.id === tc.id)?.[0] ?? chiamate.size) : 0)
         const voce = chiamate.get(i) ?? { id: '', name: '', arguments: '' }
         if (tc.id) voce.id = tc.id
         // si assegna e non si accoda: qualche server rimanda il nome intero a

@@ -4,7 +4,42 @@
 import { Client } from '@notionhq/client'
 import * as chi from '../chi.ts'
 import type { ConfigNotion } from '../config.ts'
+import * as store from '../store.ts'
 import type { Documento } from '../store.ts'
+import { daDove, segna, type Resto } from './ripresa.ts'
+
+/** Quante pagine si rileggono per giro. Oltre, si riprende al giro dopo. */
+const TETTO = 800
+
+/**
+ * Il cliente, da una parte sola, così le prove possono metterne uno finto.
+ *
+ * Senza questo, provare che una pagina non toccata non viene riletta vorrebbe
+ * dire un vero spazio Notion e una vera chiave — cioè non provarlo.
+ */
+let fabbrica: ((c: ConfigNotion) => Client) | null = null
+export function usaCliente(f: ((c: ConfigNotion) => Client) | null) { fabbrica = f }
+function cliente(c: ConfigNotion): Client {
+  return fabbrica ? fabbrica(c) : new Client({ auth: c.token })
+}
+
+/**
+ * Quando avevamo letto questa pagina l'ultima volta.
+ *
+ * È il perno di tutto il risparmio qui sotto. Notion dice per ogni pagina il
+ * suo `last_edited_time`; se non si è mosso da quello che abbiamo in casa, i
+ * blocchi sono gli stessi di sei ore fa e rileggerli è tempo buttato — non
+ * poco: uno spazio da ottocento pagine sono decine di minuti di chiamate, ogni
+ * sei ore, e per tutto quel tempo una lettura chiesta a mano si becca un 409
+ * «ne sta già girando una».
+ *
+ * Un guaio nel leggere l'indice torna `null`, cioè «rileggila»: sbagliare per
+ * eccesso qui costa una chiamata, sbagliare per difetto costa una pagina
+ * vecchia tenuta per buona.
+ */
+function quandoLAvevamoLetta(id: string): string | null {
+  try { return store.documento(id)?.quando ?? null } catch { return null }
+}
 
 function titolo(p: any): string {
   const props = p.properties ?? {}
@@ -79,7 +114,7 @@ async function testoPagina(notion: Client, pageId: string, profondita = 0): Prom
 
 export async function prova(c: ConfigNotion): Promise<{ ok: true; pagine: number } | { ok: false; errore: string }> {
   try {
-    const notion = new Client({ auth: c.token })
+    const notion = cliente(c)
     const r = await notion.search({ page_size: 5 })
     return { ok: true, pagine: r.results.length }
   } catch (e) {
@@ -101,16 +136,43 @@ export async function prova(c: ConfigNotion): Promise<{ ok: true; pagine: number
  * quello che c'era scritto — e in silenzio, perché una pagina che sparisce
  * dall'indice non lascia nessuna traccia da nessuna parte.
  *
- * `visti` dice «questa esiste ancora, anche se stavolta non l'ho riletta».
+ * `visti` dice «questa esiste ancora, anche se stavolta non l'ho riletta». Da
+ * quando si saltano anche le pagine non toccate, è la maggioranza di loro.
  */
-export type EsitoNotion = { docs: Documento[]; parziali: number; interrotto: boolean; visti: string[] }
+export type EsitoNotion = {
+  docs: Documento[]
+  parziali: number
+  interrotto: boolean
+  visti: string[]
+  /** Quante pagine erano identiche a quelle in casa e non si sono riaperte. */
+  invariate: number
+  /** Dove è arrivata questa lettura, e se è arrivata in fondo. */
+  resto: Resto
+}
 
 export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
-  const notion = new Client({ auth: c.token })
+  const notion = cliente(c)
   const docs: Documento[] = []
   const visti: string[] = []
   let parziali = 0
-  let cursore: string | undefined
+  let invariate = 0
+
+  /*
+   * Si riparte da dove ci si era fermati.
+   *
+   * Il cursore che Notion dà è opaco e vale per la sua paginazione, non per
+   * uno stato nostro: se sei ore dopo non gli piace più, lo dice con un errore
+   * e si ricomincia dall'inizio — che è un giro sprecato, non un danno.
+   *
+   * `ripresa` è vero per tutto il giro quando siamo entrati a metà elenco, e
+   * serve a una cosa sola ma importante: `visti` copre solo la coda dello
+   * spazio, quindi **riconciliare qui cancellerebbe tutte le pagine
+   * dell'inizio**. Un giro ripreso non è mai completo, per definizione.
+   */
+  const ripresa = daDove('notion')
+  let cursore: string | undefined = ripresa ?? undefined
+  let interrotto = !!ripresa
+  let primoGiro = true
 
   do {
     let r: any
@@ -120,14 +182,37 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
         start_cursor: cursore,
         page_size: 50
       }))
-    } catch {
+    } catch (e) {
+      // un cursore vecchio che Notion non riconosce più non è un guaio da
+      // raccontare: si butta e si ricomincia da capo al giro dopo
+      if (primoGiro && cursore) {
+        segna('notion', null)
+        return { docs, parziali, interrotto: true, visti, invariate, resto: { aGiorno: false, letti: 0 } }
+      }
       // un errore a metà elenco non deve buttare via quello che ho già
-      return { docs, parziali, interrotto: true, visti }
+      return { docs, parziali, interrotto: true, visti, invariate, resto: { aGiorno: false, letti: visti.length } }
     }
+    primoGiro = false
     for (const p of r.results as any[]) {
       if (p.object !== 'page') continue
+      const id = `notion:${p.id}`
       // esiste: qualunque cosa succeda dopo, non è sparita da Notion
-      visti.push(`notion:${p.id}`)
+      visti.push(id)
+
+      /*
+       * La pagina non si è mossa: si lascia stare, e si conta come vista.
+       *
+       * Il confronto è fra istanti e non fra stringhe: Notion scrive
+       * `2026-09-04T11:22:00.000Z` e noi riscriviamo quello che ci ha dato, ma
+       * basta un giro di normalizzazione da qualche parte perché due scritture
+       * dello stesso momento non combacino più — e allora il risparmio
+       * sparisce senza che nessuno se ne accorga, perché tutto continua a
+       * funzionare, solo lento come prima.
+       */
+      const mosso = p.last_edited_time ? Date.parse(p.last_edited_time) : NaN
+      const nostro = Date.parse(quandoLAvevamoLetta(id) ?? '')
+      if (!Number.isNaN(mosso) && !Number.isNaN(nostro) && mosso <= nostro) { invariate++; continue }
+
       let letto: { testo: string; completo: boolean }
       try {
         letto = await testoPagina(notion, p.id)
@@ -139,7 +224,7 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
       // una pagina letta a metà la salto: meglio tenere quella vecchia intera
       if (!corpo || !letto.completo) { if (corpo) parziali++; continue }
       docs.push({
-        id: `notion:${p.id}`,
+        id,
         fonte: 'notion',
         tipo: 'pagina',
         titolo: titolo(p),
@@ -149,11 +234,36 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
         quando: p.last_edited_time ?? null,
         gruppo: 'note'
       })
-      // fermarsi al tetto è una lettura parziale, non una lettura finita
-      if (docs.length >= 800) return { docs, parziali, interrotto: true, visti }
+      /*
+       * Fermarsi al tetto è una lettura parziale, non una lettura finita — ma
+       * adesso lascia un segno. Prima il giro dopo ricominciava dalla stessa
+       * pagina e le ottocentouno in poi non le leggeva **nessun giro, mai**.
+       *
+       * Il segno è il cursore della pagina di elenco in cui ci si è fermati, non
+       * di quella dopo: si rifanno cinquanta pagine già viste, che adesso
+       * costano un confronto di date a testa invece di una lettura di blocchi.
+       */
+      if (docs.length >= TETTO) {
+        segna('notion', (r.next_cursor as string | null) ?? null)
+        return { docs, parziali, interrotto: true, visti, invariate, resto: { aGiorno: false, letti: visti.length } }
+      }
     }
     cursore = r.has_more ? r.next_cursor : undefined
   } while (cursore)
 
-  return { docs, parziali, interrotto: false, visti }
+  /*
+   * In fondo davvero: il segno si toglie, e il giro dopo riparte dall'inizio.
+   *
+   * `aGiorno` e `interrotto` qui dicono due cose diverse, e nessuna delle due è
+   * l'altra: arrivati in fondo non è rimasto niente indietro — quindi `aGiorno`
+   * — ma se si era entrati a metà elenco, `visti` copre solo da lì in poi e
+   * riconciliare cancellerebbe l'inizio dello spazio. Quello lo dice
+   * `interrotto`, e resta vero fino al primo giro che parte da capo.
+   */
+  segna('notion', null)
+  return {
+    docs, parziali, visti, invariate,
+    interrotto,
+    resto: { aGiorno: true, letti: visti.length, restano: 0 }
+  }
 }

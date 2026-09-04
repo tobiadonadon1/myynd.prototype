@@ -33,9 +33,10 @@ test('uno state sconosciuto non completa niente', async () => {
 test('il no della persona si legge come tale, e lo state si consuma', async () => {
   const { dove } = chi.dentro('u1', () => oauth.avviaWeb(sportello, async () => {}))
   const stato = new URL(dove).searchParams.get('state')!
-  await assert.rejects(() => oauth.completaWeb(stato, null, 'access_denied'), /Hai detto di no a Prova/)
+  const b = oauth.biglietto(stato)
+  await assert.rejects(() => oauth.completaWeb(stato, null, 'access_denied', b), /Hai detto di no a Prova/)
   // consumato: la seconda volta non c'è più
-  await assert.rejects(() => oauth.completaWeb(stato, 'codice', null), /non lo stavo aspettando/)
+  await assert.rejects(() => oauth.completaWeb(stato, 'codice', null, b), /non lo stavo aspettando/)
 })
 
 test('il ritorno scambia il codice e salva dentro il conto di chi aveva avviato', async () => {
@@ -56,8 +57,10 @@ test('il ritorno scambia il codice e salva dentro il conto di chi aveva avviato'
     })
   }) as typeof fetch
   try {
-    // il ritorno arriva senza nessun contesto: è lo state a dire di chi è
-    const { nome } = await oauth.completaWeb(stato, 'il-codice', null)
+    // il ritorno arriva senza nessun contesto: è lo state a dire di chi è,
+    // e il biglietto nel cookie a dire che è lo stesso browser
+    await assert.rejects(() => oauth.completaWeb(stato, 'il-codice', null, ''), /un altro browser/)
+    const { nome } = await oauth.completaWeb(stato, 'il-codice', null, oauth.biglietto(stato))
     assert.equal(nome, 'Prova')
   } finally {
     globalThis.fetch = veraFetch

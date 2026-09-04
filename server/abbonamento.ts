@@ -217,6 +217,10 @@ function argomenti(system: string, uscita: 'json' | 'stream-json'): string[] {
     // difetto per cui questa strada esiste
     ...(uscita === 'stream-json' ? ['--include-partial-messages', '--verbose'] : []),
     '--model', alias(),
+    // la cartella di lavoro è vuota apposta, ma dirlo esplicitamente costa una
+    // riga: nessuna impostazione di progetto, nessun server MCP. Vedi `lavoro.ts`
+    '--setting-sources', 'user',
+    '--strict-mcp-config',
     '--system-prompt', system,
     // per ultimo: è variadico e si mangerebbe quello che gli viene dopo
     '--disallowed-tools', ...NEGATI

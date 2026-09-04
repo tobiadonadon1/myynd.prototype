@@ -131,3 +131,55 @@ test('una stringa passa com’è, i blocchi si appiattiscono, il resto è vuoto'
   assert.equal(claude.testoDi({ type: 'text', text: 'non è una lista' }), '')
   assert.equal(claude.testoDi([null, { type: 'text' }, { type: 'text', text: 'ok' }]), 'ok')
 })
+
+/*
+ * Il recinto delle automazioni.
+ *
+ * Una ricetta dichiara cosa può aprire, e quella riga si legge sulla sua scheda.
+ * Fino a ieri valeva per la pescata iniziale e non per `cerca`, quindi era una
+ * scritta: la ricerca generale apriva tutto lo stesso. Queste prove sono
+ * quelle che tengono in piedi la promessa, e la cosa che devono impedire è che
+ * qualcuno «semplifichi» togliendo il terzo argomento.
+ */
+test('il recinto: si vede solo quello che l’automazione ha il permesso di aprire', () => {
+  store.salvaDocumenti([
+    doc('posta:INBOX:900', 'Preventivo per il capannone'),
+    doc('desktop:/listino.pdf', 'Listino prezzi capannone',
+      { fonte: 'desktop', tipo: 'pdf', gruppo: 'documenti', percorso: '/listino.pdf' })
+  ])
+
+  // senza recinto, il comportamento di sempre: si guarda tutto
+  const tutto = claude.materiale('capannone', [])
+  assert.ok(tutto.some(d => d.fonte === 'posta'), 'la posta c’è')
+  assert.ok(tutto.some(d => d.fonte === 'desktop'), 'il desktop c’è')
+
+  // con il recinto, solo le fonti concesse — e non è un filtro dopo il limite:
+  // il documento della posta si trova anche se il listino gli stava davanti
+  const soloPosta = claude.materiale('capannone', [], ['posta'])
+  assert.ok(soloPosta.length > 0, 'dentro il recinto qualcosa si trova')
+  assert.ok(soloPosta.every(d => d.fonte === 'posta'), 'e non esce dal recinto')
+
+  // un elenco vuoto è un permesso vuoto, non «tutto»: è la differenza fra
+  // un’automazione che può leggere niente e una senza restrizioni
+  assert.deepEqual(claude.materiale('capannone', [], []), [], 'nessuna fonte concessa, niente materiale')
+})
+
+test('il recinto lo decide una funzione sola, e gli attrezzi che non leggono non restringono', async () => {
+  const attrezzi = await import('./attrezzi.ts')
+  // dichiarare la posta restringe alla posta
+  assert.deepEqual(attrezzi.recinto(['posta.leggi']), ['posta', 'google', 'microsoft'])
+  // due attrezzi si sommano, senza ripetizioni
+  assert.deepEqual(attrezzi.recinto(['posta.leggi', 'desktop.leggi']),
+    ['posta', 'google', 'microsoft', 'desktop'])
+  // niente di dichiarato: nessun recinto, cioè il compito scritto a mano
+  assert.equal(attrezzi.recinto([]), null)
+  /*
+   * E il caso che conta: un'automazione che chiede solo di far lavorare Claude
+   * Code non ha dichiarato nessuna fonte, quindi non ne ha ristretta nessuna.
+   * Restringerla a zero la spegnerebbe — ed è quello che faceva una prima
+   * versione di questa modifica.
+   */
+  assert.equal(attrezzi.recinto(['claude.lavora']), null)
+  assert.equal(attrezzi.recinto(['chat.leggi']), null)
+})
+

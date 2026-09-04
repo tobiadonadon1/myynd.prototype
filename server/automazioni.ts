@@ -31,6 +31,7 @@ import * as store from './store.ts'
 import * as compiti from './compiti.ts'
 import * as ordine from './ordine.ts'
 import * as attrezzi from './attrezzi.ts'
+import { fusoDi, parti, istante, giornoIn } from './fuso.ts'
 
 // — la forma di una ricetta —
 
@@ -414,19 +415,19 @@ export function scadenza(a: Automazione, s: store.StatoAutomazione | null, adess
   const dopoLUltima = !!s?.ultima
   const passato = (x: Date) => dopoLUltima ? x <= base : x < base
 
-  const d = new Date(base)
-  d.setMinutes(0, 0, 0)
-  d.setHours(q.ora)
+  // le ore sono le sue, nel suo fuso: su un server la macchina sta in UTC e
+  // «alle 7» sarebbero le 9 di Roma d'estate
+  const fuso = fusoDi()
+  const b = parti(base, fuso)
 
   if (q.ogni === 'giorno') {
-    if (passato(d)) d.setDate(d.getDate() + 1)
-    return d
+    const oggi = istante(b.anno, b.mese, b.giorno, q.ora, fuso)
+    return passato(oggi) ? istante(b.anno, b.mese, b.giorno + 1, q.ora, fuso) : oggi
   }
   // il prossimo giorno giusto della settimana dopo la base
-  const manca = (q.giorno - d.getDay() + 7) % 7
-  d.setDate(d.getDate() + manca)
-  if (passato(d)) d.setDate(d.getDate() + 7)
-  return d
+  const manca = (q.giorno - b.settimana + 7) % 7
+  const d = istante(b.anno, b.mese, b.giorno + manca, q.ora, fuso)
+  return passato(d) ? istante(b.anno, b.mese, b.giorno + manca + 7, q.ora, fuso) : d
 }
 
 /**
@@ -579,7 +580,9 @@ function materiale(a: Automazione, s: store.StatoAutomazione | null) {
   const dentro = fontiDi(a)
 
   if (a.guarda.soloNuovi) {
-    const dal = s?.ultima ?? new Date(Date.now() - 7 * 86_400_000).toISOString()
+    // da dove ha guardato l'ultima volta che ce l'ha fatta — non da quando è
+    // partita l'ultima volta: un giro fallito non deve nascondere niente
+    const dal = s?.vista ?? s?.ultima ?? new Date(Date.now() - 7 * 86_400_000).toISOString()
     const nuovi = store.appenaArrivati(dal, limite * 3)
       .filter(d => !dentro || dentro.includes(d.fonte))
       .slice(0, limite)
@@ -601,8 +604,6 @@ function materiale(a: Automazione, s: store.StatoAutomazione | null) {
  * cui qui si torna `undefined` e non `[]`.
  */
 function fontiDi(a: Automazione): string[] | undefined {
-  const suoi = attrezzi.ripulisci(a.attrezzi)
-  if (!suoi.length) return undefined
   /*
    * La tabella sta in `attrezzi.ts`, e non è una comodità.
    *
@@ -612,11 +613,10 @@ function fontiDi(a: Automazione): string[] | undefined {
    * qui **non restringe niente**, cioè l'automazione che dichiara «guardo solo
    * Slack» riceve in pasto tutta la posta e tutto il disco. Nessun errore, e la
    * dichiarazione sulla scheda diventa una decorazione. Un elenco solo, letto
-   * da tutti e due, non può divergere.
+   * da tutti e due, non può divergere — e adesso lo legge anche `claude.ts`,
+   * per `cerca` e `apri`.
    */
-  const fonti = new Set(suoi.flatMap(n => attrezzi.fontiDi(n)))
-  // solo attrezzi che non leggono l'indice: la pescata resta quella di sempre
-  return fonti.size ? [...fonti] : undefined
+  return attrezzi.recinto(attrezzi.ripulisci(a.attrezzi)) ?? undefined
 }
 
 // — le automazioni che propongono invece di scrivere —
@@ -664,6 +664,7 @@ async function cernita(a: Automazione, docs: store.Documento[]): Promise<store.P
 
   const cestino = a.proponi === 'posta.cestina'
   const out = await chiediJSON<{ voci: { id: string; perche: string }[] }>({
+    severo: true,
     lavoro: 'cernita',
     max_tokens: 2000,
     system:
@@ -748,7 +749,7 @@ export const BOZZE_AL_GIORNO = 3
 
 /** Quante volte oggi ha scritto una riga davvero, dalla sua storia. */
 /** Il giorno solare, come lo scrive il database. */
-export const giornoDi = (d: Date) => d.toISOString().slice(0, 10)
+export const giornoDi = (d: Date) => giornoIn(d)
 
 /**
  * Quante bozze ha già fatto fare oggi.
@@ -895,7 +896,11 @@ export async function giro(adesso = new Date()) {
   // turno è passato mentre il computer era spento
   for (const a of ricette()) store.vediAutomazione(a.id)
   const stati = store.statiAutomazioni()
+  // una tolta dall'elenco è tolta anche dall'orologio: quelle arrivate con
+  // l'azienda restano su disco, e senza questa riga giravano lo stesso
+  const tolte = store.automazioniTolte()
   for (const a of ricette()) {
+    if (tolte.has(a.id)) continue
     if (!tocca(a, stati[a.id] ?? null, adesso)) continue
     try {
       const esito = await fai(a)
@@ -912,7 +917,9 @@ export async function giro(adesso = new Date()) {
 /** Quelle che aspettano l'arrivo di roba nuova, chiamate dopo una lettura. */
 export async function quandoArriva() {
   const stati = store.statiAutomazioni()
+  const tolte = store.automazioniTolte()
   for (const a of ricette()) {
+    if (tolte.has(a.id)) continue
     if (!('quandoArriva' in a.quando)) continue
     if (a.spenta || stati[a.id]?.spenta) continue
     try {
@@ -1042,6 +1049,7 @@ export async function daUnaFrase(descrizione: string): Promise<Automazione> {
   if (detto.length < 8) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
 
   const r = await chiediJSON<{
+    severo: true,
     nome: string; spiega: string; ogni: string; giorno?: number; ora: number
     cerca: string; soloNuovi: boolean; fai: string; inLista: string; modo: string
     attrezzi?: string[]; cartella?: string
@@ -1101,6 +1109,7 @@ export async function riscrivi(id: string, richiesta: string): Promise<Automazio
   if (detto.length < 3) throw new Error('Dimmi cosa vuoi cambiare.')
 
   const r = await chiediJSON<{
+    severo: true,
     nome: string; spiega: string; ogni: string; giorno?: number; ora: number
     cerca: string; soloNuovi: boolean; fai: string; inLista: string; modo: string
     attrezzi?: string[]; cartella?: string

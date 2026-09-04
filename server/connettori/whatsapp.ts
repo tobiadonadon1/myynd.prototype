@@ -37,6 +37,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import * as store from '../store.ts'
+import * as chi from '../chi.ts'
 import { riflua } from '../testo.ts'
 
 export type ConfigWhatsapp = {
@@ -189,6 +190,34 @@ function giornoDi(ts: string): { chiave: string; data: Date } {
  * qui si costruisce **un messaggio alla volta**, perché arrivano così: si
  * rilegge quello che c'è e ci si scrive sotto.
  */
+/**
+ * Gli id già scritti, per persona.
+ *
+ * Meta ripete un messaggio finché non riceve un 200 — e a volte anche dopo
+ * averlo ricevuto, se la risposta è arrivata tardi. Lo stesso id arrivava due
+ * volte e finiva due volte in fondo alla stessa giornata. Per persona, come
+ * ogni stato di questo server: una Map per utente, non una variabile di
+ * modulo. Con un tetto, perché un elenco che cresce per sempre è una perdita
+ * di memoria travestita da cautela: il Set tiene l'ordine d'arrivo, e si
+ * butta il più vecchio.
+ */
+const VISTI_MAX = 2000
+const vistiPerPersona = new Map<string, Set<string>>()
+function visti(): Set<string> {
+  const u = chi.adesso() ?? ''
+  let s = vistiPerPersona.get(u)
+  if (!s) { s = new Set(); vistiPerPersona.set(u, s) }
+  return s
+}
+function segnaVisto(id: string) {
+  const s = visti()
+  s.add(id)
+  if (s.size > VISTI_MAX) {
+    const primo = s.values().next().value
+    if (primo !== undefined) s.delete(primo)
+  }
+}
+
 export function incassa(corpo: unknown): number {
   const b = corpo as { entry?: { changes?: Cambio[] }[] }
   let quanti = 0
@@ -203,6 +232,7 @@ export function incassa(corpo: unknown): number {
       for (const x of c.value?.contacts ?? []) if (x.wa_id) chi.set(x.wa_id, x.profile?.name ?? x.wa_id)
 
       for (const m of messaggi) {
+        if (m.id && visti().has(m.id)) continue
         const testo = testoDi(m).trim()
         if (!testo || !m.from) continue
         const nome = chi.get(m.from) ?? m.from
@@ -226,6 +256,7 @@ export function incassa(corpo: unknown): number {
           quando: data.toISOString(),
           gruppo: 'conversazioni'
         }])
+        if (m.id) segnaVisto(m.id)
         quanti++
       }
     }

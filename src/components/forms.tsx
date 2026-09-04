@@ -58,7 +58,7 @@ function nota(tema: Tema): CSSProperties {
  */
 function Errore({ testo }: { testo: string }) {
   if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#D4674A', marginTop: 12, lineHeight: 1.5 }}>{t(testo)}</div>
+  return <div style={{ fontSize: '12.5px', color: '#D4674A', marginTop: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{t(testo)}</div>
 }
 
 /**

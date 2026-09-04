@@ -7,6 +7,7 @@ import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
 import { filoDi } from '../filo.ts'
+import { resto, type Resto } from './ripresa.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
@@ -111,7 +112,19 @@ export async function scopri(email: string): Promise<{ host: string; come: strin
   return null
 }
 
+/**
+ * La connessione, sostituibile nelle prove.
+ *
+ * Le finestre di riconciliazione decidono cosa **cancellare** dall'indice, e
+ * una regola sbagliata lì non si vede da nessuna parte finché non manca una
+ * email. Provarle contro una casella vera vorrebbe dire non provarle: qui si
+ * mette una casella finta e si guarda esattamente cosa dichiara.
+ */
+let fabbrica: ((c: ConfigPosta, servername?: string) => ImapFlow) | null = null
+export function usaClient(f: ((c: ConfigPosta, servername?: string) => ImapFlow) | null) { fabbrica = f }
+
 function client(c: ConfigPosta, servername?: string) {
+  if (fabbrica) return fabbrica(c, servername)
   return new ImapFlow({
     host: c.host,
     port: c.porta || 993,
@@ -424,6 +437,28 @@ export async function sposta(
     const perCartella = new Map<string, number[]>()
     for (const m of mosse) perCartella.set(m.cartella, [...(perCartella.get(m.cartella) ?? []), m.uid])
 
+    /*
+     * E valgono solo dentro la stessa UIDVALIDITY. Se la casella l'ha
+     * cambiata — un ripristino, una migrazione, certi provider lo fanno da
+     * soli — il numero 42 di oggi è un altro messaggio di quello indicizzato,
+     * e spostarlo vorrebbe dire cestinare una cosa mai vista. Si controlla
+     * tutto *prima* di muovere qualcosa: un no a metà lascerebbe la prima
+     * cartella spostata e l'indice convinto che lo siano tutte.
+     */
+    for (const cartella of perCartella.keys()) {
+      if (cartella === dove) continue
+      const lock = await cl.getMailboxLock(cartella)
+      try {
+        const box = cl.mailbox as false | { uidValidity?: bigint }
+        const adesso = box && box.uidValidity !== undefined ? String(box.uidValidity) : ''
+        const nota = c.validita?.[cartella]
+        if (adesso && !nota) throw new Error('Non ho ancora letto questa cartella: fai una lettura prima di spostare i messaggi.')
+        if (adesso && nota !== adesso) throw new Error('La casella ha rinumerato i messaggi da quando li ho letti: rifai una lettura prima di spostarli.')
+      } finally {
+        lock.release()
+      }
+    }
+
     for (const [cartella, uids] of perCartella) {
       if (cartella === dove) continue          // già lì: spostarli su sé stessi non ha senso
       const lock = await cl.getMailboxLock(cartella)
@@ -440,6 +475,25 @@ export async function sposta(
   }
 }
 
+/**
+ * La fetta di casella che una lettura ha davvero coperto.
+ *
+ * Serve a `store.riconciliaPosta`, ed è la risposta a una domanda che nessuno
+ * si era mai posto: **come si toglie dall'indice un'email che sulla casella non
+ * c'è più?** Fin qui, in nessun modo. Un messaggio cestinato o spostato in una
+ * cartella che non leggiamo restava indicizzato per sempre — veniva citato in
+ * una risposta come se fosse ancora lì, e finiva dentro le proposte «archivia
+ * questi», che è la parte peggiore: Myynd proponeva di archiviare roba già
+ * archiviata da mesi.
+ *
+ * Non basta però l'elenco di quello che si è visto: sulla posta non si legge
+ * mai tutto, si legge una finestra di trenta giorni. Cancellare «tutto quello
+ * che non ho visto» vorrebbe dire svuotare l'indice di ogni email più vecchia
+ * della finestra. Quindi si dice anche **dove si è guardato**: da quale uid a
+ * quale, in quale cartella. Fuori da lì il silenzio non prova niente.
+ */
+export type Finestra = { cartella: string; daUid: number; aUid: number }
+
 export type EsitoPosta = {
   docs: Documento[]
   cartelleFallite: string[]
@@ -448,6 +502,19 @@ export type EsitoPosta = {
   validita: Record<string, string>
   /** Quanti messaggi c'erano già e non sono stati riscaricati. */
   saltati: number
+  /**
+   * Le fette coperte per intero, e solo quelle: una cartella caduta o lasciata
+   * a metà non ne produce nessuna, o la riconciliazione cancellerebbe posta vera.
+   */
+  finestre: Finestra[]
+  /**
+   * Gli id di tutti i messaggi che la casella dice di avere là dentro, anche
+   * quelli che stavolta non si sono riscaricati perché erano già nell'indice.
+   * Senza, riconciliare cancellerebbe proprio quelli.
+   */
+  visti: string[]
+  /** Quanti messaggi della finestra sono dentro, e quanti restano da leggere. */
+  resto: Resto
 }
 
 /**
@@ -499,8 +566,14 @@ export async function sincronizza(
   const docs: Documento[] = []
   const cartelleFallite: string[] = []
   const validita: Record<string, string> = { ...(c.validita ?? {}) }
+  const finestre: Finestra[] = []
+  const visti: string[] = []
   let saltati = 0
   let troncato = false
+  /** Quanti messaggi ci sono nella finestra di giorni, in tutte le cartelle. */
+  let dentroLaFinestra = 0
+  /** Quanti di quelli restano da leggere dopo questo giro. */
+  let arretrato = 0
   const { cl } = await apri(c)
 
   try {
@@ -536,25 +609,65 @@ export async function sincronizza(
       }
       try {
         const uids = await cl.search({ since: da }, { uid: true })
+        /*
+         * Cartella vuota nella finestra: nessuna finestra, e non è pigrizia.
+         *
+         * Senza uid non c'è nessun intervallo da dichiarare, e dichiararne uno
+         * largo — «tutta la cartella» — vorrebbe dire che una ricerca che torna
+         * vuota per un raffreddore del server svuota l'indice di quella
+         * cartella. Un'email tolta di mezzo per sbaglio non torna: meglio
+         * riconciliare al giro dopo.
+         */
         if (!uids || !uids.length) continue
-        // le più recenti prima, con un tetto per non tirare giù anni di posta.
-        // Se il tetto morde, va detto: quello che resta fuori è dentro la
-        // finestra che ha chiesto lei, e non verrà letto a nessun giro futuro.
-        if (uids.length > 400) troncato = true
-        const scelti = uids.slice(-400)
 
         // stessa cartella di prima? allora gli uid già indicizzati sono gli stessi messaggi
         const box = cl.mailbox as false | { uidValidity?: bigint }
         const adesso = box && box.uidValidity !== undefined ? String(box.uidValidity) : ''
         const stessa = !!adesso && c.validita?.[cartella] === adesso
         const noti = stessa && giaIndicizzati ? giaIndicizzati(cartella) : new Set<number>()
-        const daScaricare = noti.size ? scelti.filter(u => !noti.has(u)) : scelti
-        saltati += scelti.length - daScaricare.length
         if (adesso) validita[cartella] = adesso
-        if (!daScaricare.length) continue
+
+        /*
+         * Prima quelli che mancano, *poi* il tetto — l'ordine è la differenza.
+         * Prima si prendevano i quattrocento più recenti e da quelli si
+         * toglievano i già letti: una casella con più di quattrocento
+         * messaggi nella finestra restituiva ogni volta gli stessi
+         * quattrocento, tutti noti, e quelli sotto non arrivavano a nessun
+         * giro. Adesso il tetto morde su quelli ancora da leggere, i più
+         * recenti per primi (gli uid crescono col tempo): ogni giro ne
+         * finisce quattrocento e il prossimo prende i successivi, finché la
+         * finestra è tutta dentro. `troncato` dice che ne restano, non che
+         * si perdono.
+         */
+        const mancanti = (noti.size ? uids.filter(u => !noti.has(u)) : uids).sort((a, b) => a - b)
+        saltati += uids.length - mancanti.length
+        dentroLaFinestra += uids.length
+        /*
+         * Il segno di dove riprendere non si scrive da nessuna parte, e per la
+         * posta è giusto così: **il segno è l'indice stesso.** `noti` sono gli
+         * uid già dentro, quindi ogni giro ricomincia esattamente dove il
+         * precedente si era fermato, senza niente da conservare e senza niente
+         * da tenere allineato. Le altre fonti un cursore ce l'hanno perché non
+         * hanno questo.
+         */
+        const troppi = Math.max(0, mancanti.length - 400)
+        arretrato += troppi
+        if (troppi) troncato = true
+        const daScaricare = mancanti.slice(-400)
 
         let fatti = 0
-        for await (const msg of cl.fetch(daScaricare, { uid: true, source: true, envelope: true }, { uid: true })) {
+        // esistono, e vanno detti vivi tutti: quelli che riscarichiamo adesso e
+        // quelli che erano già dentro. Senza i secondi, riconciliare la
+        // finestra cancellerebbe proprio la posta che avevamo già letto bene.
+        for (const u of uids) visti.push(`posta:${cartella}:${u}`)
+
+        // nessuno da scaricare è il caso normale del secondo giro in poi, e non
+        // è una scorciatoia: è proprio lì che serve la finestra qui sotto,
+        // perché è il giro in cui l'unica novità può essere una email sparita
+        const nessuno: AsyncIterable<never> = { async *[Symbol.asyncIterator]() {} }
+        for await (const msg of daScaricare.length
+          ? cl.fetch(daScaricare, { uid: true, source: true, envelope: true }, { uid: true })
+          : nessuno) {
           try {
             const p = await simpleParser(msg.source as Buffer)
             // La posta in testo semplice va a capo a settantadue caratteri per
@@ -584,6 +697,27 @@ export async function sincronizza(
           fatti++
           if (avanzamento && fatti % 20 === 0) avanzamento(fatti, daScaricare.length)
         }
+
+        /*
+         * La finestra si dichiara qui, in fondo, e solo se si è arrivati fino
+         * in fondo.
+         *
+         * Sotto ci sono tre modi di non arrivarci, e tutti e tre devono lasciare
+         * la cartella fuori: la serratura che non si apre e l'errore a metà
+         * scaricamento cadono nel `catch` senza mai passare di qui, e il tetto
+         * dei quattrocento lo dice `troppi`. Il perché è sempre lo stesso: una
+         * finestra dichiarata su una lettura incompleta è un permesso a
+         * cancellare posta che c'è. Dirla una volta di meno costa che una email
+         * cestinata resta nell'indice fino al giro dopo; dirla una volta di
+         * troppo costa un'email vera.
+         */
+        if (!troppi) {
+          // a mano e non con `Math.min(...uids)`: su una casella con decine di
+          // migliaia di messaggi quello spread è una pila che scoppia
+          let daUid = uids[0]!, aUid = uids[0]!
+          for (const u of uids) { if (u < daUid) daUid = u; if (u > aUid) aUid = u }
+          finestre.push({ cartella, daUid, aUid })
+        }
       } catch {
         // una cartella che va storta non deve far perdere quelle già lette
         cartelleFallite.push(cartella)
@@ -594,5 +728,13 @@ export async function sincronizza(
   } finally {
     try { await cl.logout() } catch { /* la connessione è già caduta */ }
   }
-  return { docs, cartelleFallite, troncato, validita, saltati }
+  return {
+    docs, cartelleFallite, troncato, validita, saltati, finestre, visti,
+    // «tremila di cinquemila», non «non ho finito»: chi guarda deve poter
+    // vedere quanto manca, o smette di guardare
+    resto: {
+      ...resto(dentroLaFinestra - arretrato, dentroLaFinestra),
+      aGiorno: arretrato === 0 && !cartelleFallite.length
+    }
+  }
 }

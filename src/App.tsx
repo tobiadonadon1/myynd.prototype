@@ -26,6 +26,22 @@ import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
 import { Accesso } from './Accesso'
 
+
+/**
+ * Il fuso di chi usa, detto al server una volta.
+ *
+ * «Ogni giorno alle 7» è un'ora del suo orologio, e il server — su Railway —
+ * sta in UTC. Il browser lo sa e il server no: glielo si dice quando non
+ * coincide, e da lì in poi le automazioni e il conto delle bozze del giorno
+ * ragionano nella sua ora. Se non riesce, pazienza: lo ridirà al prossimo avvio.
+ */
+function dilloIlFuso(suoSulServer: string | null | undefined) {
+  let mio = ''
+  try { mio = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '' } catch { /* browser senza Intl: il server usa il suo */ }
+  if (!mio || mio === suoSulServer) return
+  api.profilo({ fuso: mio }).catch(() => {})
+}
+
 export default function App() {
   const [accesso, setAccesso] = useState<TipoAccesso | null>(null)
   const [stato, setStato] = useState<Stato | null>(null)
@@ -42,6 +58,15 @@ export default function App() {
    * zittire quello di domani.
    */
   const [creditoVisto, setCreditoVisto] = useState<string | null>(null)
+  /**
+   * Una cosa andata storta mentre si entrava, da dire dentro.
+   *
+   * È il file del trasloco che non è entrato: il conto c'è, e la schermata
+   * dell'accesso se n'è già andata. Il toast dell'app vive in `Casa`, che
+   * dopo una registrazione non c'è ancora — c'è il primo avvio.
+   */
+  const [avviso, setAvviso] = useState<string | null>(null)
+  const chiudiAvviso = useCallback(() => setAvviso(null), [])
 
   /**
    * Il sito ascolta quello che succede nell'app.
@@ -80,6 +105,24 @@ export default function App() {
     setConnessioni('')
   }, [accesso?.entrato, onboarding])
 
+  /*
+   * Un collegamento della posta aperto da chi è già dentro.
+   *
+   * Capita: si conferma l'indirizzo su un dispositivo, e il giorno dopo si apre
+   * la stessa mail su quello dove la sessione c'è già. `Accesso` — che quei
+   * segni li legge e li pulisce — qui non si disegna nemmeno, e il gettone
+   * resterebbe nella barra degli indirizzi e nella cronologia. Non serve a
+   * niente e non deve restare lì: si toglie e basta.
+   */
+  useEffect(() => {
+    if (!accesso?.entrato) return
+    const q = new URLSearchParams(window.location.search)
+    if (!q.has('verifica') && !q.has('reimposta')) return
+    q.delete('verifica'); q.delete('reimposta')
+    const resto = q.toString()
+    window.history.replaceState(null, '', window.location.pathname + (resto ? `?${resto}` : ''))
+  }, [accesso?.entrato])
+
   // se la sessione cade, si torna all'accesso senza schianti
   useEffect(() => {
     alloScadere(() => {
@@ -104,6 +147,7 @@ export default function App() {
         const s = await api.stato()
         setStato(s)
         setOnboarding(!s.config.onboarding)
+        dilloIlFuso(s.config.fuso)
       }
       // è andata: se c'era un guasto, non c'è più
       setGuasto(null)
@@ -114,11 +158,13 @@ export default function App() {
 
   useEffect(() => { carica() }, [carica])
 
-  const dentro = async (conto: { email: string }) => {
+  const dentro = async (conto: { email: string }, detto?: string) => {
+    if (detto) setAvviso(detto)
     try {
       const s = await api.stato()
       setStato(s)
       setOnboarding(!s.config.onboarding)
+      dilloIlFuso(s.config.fuso)
       setAccesso(a => ({ ...a, entrato: true, account: conto }))
     } catch (e) {
       // se il primo caricamento fallisce non lascio l'utente sullo splash
@@ -147,10 +193,15 @@ export default function App() {
 
   if (onboarding) {
     return (
-      <Onboarding
-        stato={stato}
-        fatto={() => { api.stato().then(s => { setStato(s); setOnboarding(false) }) }}
-      />
+      <>
+        <Onboarding
+          stato={stato}
+          // se lo stato non torna, la schermata di guasto lo dice e riprova da sé:
+          // prima «Entra» restava lì, premuto, e non succedeva niente
+          fatto={() => { api.stato().then(s => { setStato(s); setOnboarding(false) }).catch(e => setGuasto(guaio(e))) }}
+        />
+        {avviso && <Avviso testo={avviso} chiudi={chiudiAvviso} />}
+      </>
     )
   }
 
@@ -175,7 +226,24 @@ export default function App() {
           chiudi={() => setCreditoVisto(stato.credito)}
         />
       )}
+      {avviso && <Avviso testo={avviso} chiudi={chiudiAvviso} />}
     </>
+  )
+}
+
+/** Una riga che compare sopra qualunque schermata e se ne va da sola, o a un clic. */
+function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
+  useEffect(() => { const t = setTimeout(chiudi, 12000); return () => clearTimeout(t) }, [chiudi])
+  return (
+    <div role="status" aria-live="polite" onClick={chiudi} style={{
+      position: 'fixed', top: 22, right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
+      padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)',
+      color: '#22271F', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)',
+      fontSize: '13.5px', lineHeight: 1.45, overflowWrap: 'anywhere', cursor: 'pointer',
+      animation: 'toastin .3s ease', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif"
+    }}>
+      {testo}
+    </div>
   )
 }
 

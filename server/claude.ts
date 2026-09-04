@@ -4,11 +4,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
-import { chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
+import { attesaDi, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { cerca, documento, recenti, stessoFilo, type Documento } from './store.ts'
 import { riflua } from './testo.ts'
-import { carta, cartaPerContesto } from './memoria.ts'
+import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { convinzioni, feedGiaVisto, compitiPerIlModello } from './store.ts'
 
@@ -319,15 +319,19 @@ export function conIlFilo(docs: Documento[]): Documento[] {
 }
 
 /** Il materiale su cui rispondere, o niente se non c'è nulla di pertinente. */
-export function materiale(domanda: string, storico: Turno[]) {
+export function materiale(domanda: string, storico: Turno[], recinto?: string[] | null) {
   // Cerco anche con le parole dell'ultima domanda *dell'utente*: i seguiti tipo
   // "e la seconda?" da soli non troverebbero niente. Mai con il testo generato
   // da me — cercare sulle proprie parole amplifica la deriva a ogni giro.
   const coda = storico.filter(t => t.ruolo === 'u').slice(-1).map(t => t.testo).join(' ')
-  const docs = cerca(domanda, 12)
+  // il recinto, quando c'è, è quello che l'automazione ha il permesso di aprire:
+  // un elenco vuoto vuol dire «nessuna fonte», e allora non si cerca affatto
+  if (recinto && !recinto.length) return []
+  const fonti = recinto ?? undefined
+  const docs = cerca(domanda, 12, fonti)
   if (docs.length < 4 && coda) {
     const visti = new Set(docs.map(d => d.id))
-    for (const d of cerca(`${domanda} ${coda}`, 12)) if (!visti.has(d.id)) docs.push(d)
+    for (const d of cerca(`${domanda} ${coda}`, 12, fonti)) if (!visti.has(d.id)) docs.push(d)
   }
   // e il resto della conversazione, per le email trovate
   return conIlFilo(docs)
@@ -593,7 +597,18 @@ export async function rispondiInStreaming(
   domanda: string,
   storico: Turno[],
   onTesto: (delta: string) => void,
-  attrezzi?: Attrezzi
+  attrezzi?: Attrezzi,
+  segnale?: AbortSignal,
+  /**
+   * «Butta via quello che ti ho detto finora e riparti da capo.»
+   *
+   * Serve a un caso solo, ma è un caso che si vede: la chat sull'abbonamento
+   * ha già mandato mezza risposta e poi Claude Code muore. Si passa al motore
+   * a chiave, che ricomincia da zero — e chi guardava si trovava mezza
+   * risposta seguita dalla stessa risposta intera. Chi ascolta questo lo
+   * traduce in un evento e il testo mostrato si azzera.
+   */
+  onRicomincia?: () => void
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   const m = motore()
   // l'abbonamento è un modo di pagare Claude di meno: se ha scelto un altro
@@ -628,6 +643,10 @@ export async function rispondiInStreaming(
    */
   if (suoAbbonamento) {
     if (!docs.length) return senzaMateriale()
+    // quanto ne è già uscito: serve solo a sapere se, cadendo, bisogna dire a
+    // chi guarda di azzerare quello che ha già visto
+    let detto = 0
+    const conta = (pezzo: string) => { detto += pezzo.length; onTesto(pezzo) }
     try {
       const b = corpoRichiesta(domanda, storico, docs)
       const testo = await abbonamento.inStreaming({
@@ -642,13 +661,16 @@ export async function rispondiInStreaming(
           return (m.role === 'user' || m.role === 'assistant') && testo ? [{ role: m.role, content: testo }] : []
         }),
         silenzio: SILENZIO_MAX,
-        onTesto
+        onTesto: conta
       })
       return { testo, fonti: fontiCitate(testo, docs) }
     } catch (e) {
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
+      // è caduto dopo aver già scritto qualcosa: il motore qui sotto ricomincia
+      // da capo, e senza questa riga le due risposte si accodavano
+      if (detto > 0) { try { onRicomincia?.() } catch { /* chi guarda si arrangia */ } }
       // Con un motore in tasca si va avanti e non se ne accorge nessuno. Senza,
       // l'errore è la risposta: `index.ts` lo manda come `fase: errore` e toglie
       // la domanda rimasta orfana.
@@ -688,13 +710,16 @@ export async function rispondiInStreaming(
   let testoTotale = ''
 
   for (let giro = 0; giro < 4; giro++) {
+    // chi ha chiuso la scheda non aspetta il secondo giro: e il secondo giro
+    // costa quanto il primo
+    if (segnale?.aborted) throw new Error('Nessuno sta più ascoltando.')
     // In streaming e con la guardia sul silenzio, su qualunque motore ci sia:
     // il testo arriva a pezzi a `onTesto`, e in fondo torna il messaggio intero.
-    const finale = await m.flusso({ ...richiesta, messages: messaggi }, onTesto)
+    const finale = await m.flusso({ ...richiesta, messages: messaggi }, onTesto, undefined, segnale)
     segnaUso('risposta', finale.usage, `giro ${giro + 1} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') {
-      return { testo: 'Su questa richiesta non posso rispondere.', fonti: [] }
+      return { testo: leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', fonti: [] }
     }
 
     testoTotale += finale.content
@@ -818,7 +843,7 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const f = fuoco()
   const gia = feedGiaVisto(60)
   const lista = compitiPerIlModello()
-  const regole = convinzioni('persona').slice(0, 8)
+  const regole = convinzioni('persona').filter(attendibile).slice(0, 8)
 
   const indicazioni = [
     carta() ? `Chi è:\n${carta()}` : '',
@@ -868,7 +893,7 @@ Scrivi in ${nellaLingua()}.`),
         `${arrivati.has(d.id) ? '\nAPPENA ARRIVATO' : ''}\n${d.corpo.slice(0, 1500)}`
       ).join('\n\n---\n\n')
     }]
-  })
+  }, attesaDi('lettura'))
   segnaUso('lettura', risposta.usage)
 
   if (risposta.stop_reason === 'refusal') return []
@@ -1062,12 +1087,62 @@ function conQuali(concessi: attrezzi.Nome[]): string {
     .map(n => attrezzi.ATTREZZI.find(a => a.nome === n))
     .filter((a): a is attrezzi.Attrezzo => !!a)
     .map(a => `— \`${a.tool.name}\`: ${a.spiega.it}${attrezzi.collegato(a.nome) ? '' : ' — NON È COLLEGATO: non puoi usarlo, e devi dirlo.'}`)
-  return '\n\nQuesta riga viene da un\'automazione che ti mette in mano degli attrezzi suoi, ' +
-    'oltre alla ricerca di sempre:\n' + righe.join('\n') +
+
+  const testa =
+    '\n\nQuesta riga viene da un\'automazione, e un\'automazione dichiara cosa può aprire. ' +
+    'Questi sono i tuoi attrezzi:\n' + righe.join('\n') +
     '\n\nUsali: sono il motivo per cui questa automazione esiste. Se il compito parla di ' +
     'qualcosa che uno di questi apre, aprilo — non rispondere con quello che hai già sotto ' +
     'gli occhi sperando che basti. E non dare mai per buona una cosa che avresti potuto ' +
     'controllare con un attrezzo che hai.'
+
+  /*
+   * Il recinto si spiega solo quando c'è.
+   *
+   * Un'automazione che dichiara solo `claude.lavora` non ha ristretto nessuna
+   * fonte, e dirle «vedi soltanto queste: nessuna» sarebbe una bugia che le
+   * fa rifiutare un lavoro che può fare.
+   */
+  const fonti = recintoDi(concessi)
+  if (!fonti) return testa
+
+  return testa +
+    `\n\nAnche \`cerca\` e \`apri\` vedono soltanto queste fonti: ${fonti.join(', ')}. Il resto ` +
+    'dell\'indice non c\'è, per te, in questa riga. Se per fare il compito ti servirebbe ' +
+    'qualcosa che sta fuori, **dillo e fermati**: scrivi cosa ti manca e da dove verrebbe, ' +
+    'così chi legge può concedertelo. Non tirare a indovinare un prezzo, una data o un nome ' +
+    'che non hai potuto leggere — una cifra plausibile e sbagliata costa più di una riga che ' +
+    'dice «mi serve il listino».'
+}
+
+/**
+ * Le fonti dell'indice che questa riga ha il permesso di aprire.
+ *
+ * `null` vuol dire «tutto», che è il comportamento di sempre: un compito
+ * scritto a mano, o un'automazione i cui attrezzi non leggono l'indice. Un
+ * elenco vuol dire quello e solo quello, **anche per `cerca` e `apri`**. La
+ * regola sta in `attrezzi.recinto`, che è lo stesso posto da cui la legge la
+ * pescata iniziale delle automazioni.
+ *
+ * Qui c'era la decisione opposta, e va detto perché è cambiata. Il ragionamento
+ * di prima: se un'automazione con `posta.leggi` non può vedere il listino sul
+ * disco, scriverà una bozza con dentro un prezzo inventato — e una cifra
+ * plausibile e falsa è il difetto che questo prodotto non si può permettere.
+ * Vero, ma la conclusione non seguiva: fra «leggi anche quello che non ti è
+ * stato concesso» e «inventa» c'è la terza strada, che è **dire che non puoi**.
+ * Quella la insegna `conQuali` qui sopra.
+ *
+ * E dall'altra parte c'era una promessa rotta. Sulla scheda dell'automazione
+ * una persona legge quali fonti apre alle sette di mattina, e può toglierne
+ * una. Se poi la ricerca generale le apriva tutte, quella riga non era un
+ * permesso: era una decorazione. Un attrezzo è un permesso — è la regola di
+ * `attrezzi.ts`, ed è quella che vale.
+ */
+const recintoDi = (concessi: attrezzi.Nome[]): string[] | null => attrezzi.recinto(concessi)
+
+/** «fra la posta e il desktop», per una frase che il modello legge. */
+function dentroIlRecinto(fonti: string[]): string {
+  return fonti.length ? `fra ${fonti.join(', ')}` : 'da nessuna parte'
 }
 
 /** Quanti giri di ricerca concede ciascun modo. «Tutto» vuol dire anche cercare di più. */
@@ -1121,7 +1196,8 @@ export async function svolgi(
   // Niente materiale non è più un errore: è il caso più comune di «devo
   // chiederti qualcosa». Prima si lanciava, e il compito tornava indietro con
   // un guaio rosso invece che con la domanda che serviva davvero.
-  const partenza = materiale(domanda, [])
+  const recinto = recintoDi(concessi)
+  const partenza = materiale(domanda, [], recinto)
 
   /**
    * Tutto quello che ha letto, in ordine di apparizione.
@@ -1157,14 +1233,11 @@ export async function svolgi(
   /**
    * Gli attrezzi di questo giro: i due di sempre più quelli concessi.
    *
-   * `cerca` resta anche quando l'automazione ne dichiara di suoi, e non è una
-   * svista. Gli attrezzi dichiarati dicono *dove* guardare in modo mirato;
-   * togliergli la ricerca generale vorrebbe dire che un'automazione con
-   * `posta.leggi` non può più vedere il listino sul disco nemmeno quando il
-   * compito lo nomina — e il risultato sarebbe una bozza con dentro un prezzo
-   * plausibile e inventato, cioè il difetto che questo prodotto non si può
-   * permettere. Il recinto stretto serve a chi propone di *toccare* qualcosa,
-   * e quello sta altrove.
+   * `cerca` e `apri` restano sempre — sono il modo in cui si legge un documento
+   * di cui si conosce l'id — ma dentro il recinto: vedi `recintoDi`. Gli
+   * attrezzi dichiarati dicono *dove* guardare in modo mirato; il recinto dice
+   * dove si può guardare affatto, e i due devono dire la stessa cosa, o la
+   * riga scritta sulla scheda non vuol dire niente.
    */
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi)]
 
@@ -1174,9 +1247,11 @@ export async function svolgi(
   let testo = ''
 
   for (let giro = 0; giro < tettoGiri; giro++) {
-    // All'ultimo giro gli attrezzi spariscono: senza questo un modello che sta
+    // All'ultimo giro può solo scrivere: senza questo un modello che sta
     // ancora cercando finirebbe il budget senza consegnare niente, e il compito
-    // tornerebbe indietro vuoto dopo cinque minuti di lavoro vero.
+    // tornerebbe indietro vuoto dopo cinque minuti di lavoro vero. Gli attrezzi
+    // però restano nel prompt — toglierli cambiava il prefisso e buttava via la
+    // cache del blocco di sistema proprio al giro con più materiale dentro.
     const ultimo = giro === tettoGiri - 1
     // All'ultimo giro non può che scrivere; negli altri lo si dice appena
     // arriva del testo — il modello scrive anche prima di chiamare un attrezzo,
@@ -1193,7 +1268,8 @@ export async function svolgi(
       ...parametri('bozza', 16000),
       system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
       messages: messaggi,
-      ...(ultimo ? {} : { tools: ferri })
+      tools: ferri,
+      ...(ultimo ? { tool_choice: { type: 'none' } } : {})
     } as Anthropic.MessageStreamParams, delta => {
       if (dettoScrivo || !delta.trim()) return
       dettoScrivo = true
@@ -1259,12 +1335,15 @@ export async function svolgi(
           const q = String((c.input as { query?: string }).query ?? '').trim()
           if (!q) throw new Error('manca la query')
           passo({ passo: 'cerco', dettaglio: q })
-          const { freschi, da } = nuoviDa(cerca(q, 8))
+          const { freschi, da } = nuoviDa(cerca(q, 8, recinto ?? undefined))
           return {
             type: 'tool_result' as const, tool_use_id: c.id,
             content: freschi.length
               ? `Trovati ${freschi.length}:\n\n${contesto(freschi, da)}`
-              : 'Niente di nuovo con queste parole. Provane altre, o di\' che non c\'è.'
+              : recinto
+                ? `Niente con queste parole ${dentroIlRecinto(recinto)}. Provane altre; se ` +
+                  'quello che cerchi sta da un\'altra parte, dillo invece di tirare a indovinare.'
+                : 'Niente di nuovo con queste parole. Provane altre, o di\' che non c\'è.'
           }
         }
         if (c.name === 'apri') {
@@ -1274,6 +1353,17 @@ export async function svolgi(
             return {
               type: 'tool_result' as const, tool_use_id: c.id, is_error: true,
               content: 'Non esiste nessun documento con questo id. Usa la riga «id:» di uno che ti ho già dato.'
+            }
+          }
+          // esiste, ma sta fuori da quello che questa automazione può aprire: si
+          // dice *quello*, non «non esiste» — la differenza è ciò che permette a
+          // chi legge la bozza di concedere il permesso che manca
+          if (recinto && !recinto.includes(d.fonte)) {
+            return {
+              type: 'tool_result' as const, tool_use_id: c.id, is_error: true,
+              content: `Questo documento sta in «${d.fonte}», e questa automazione può aprire ` +
+                `soltanto ${recinto.join(', ')}. Non posso dartelo. ` +
+                'Scrivi che ti servirebbe e da dove viene.'
             }
           }
           passo({ passo: 'apro', dettaglio: d.titolo })

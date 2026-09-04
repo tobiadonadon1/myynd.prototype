@@ -431,6 +431,76 @@ const EN: Record<string, string> = {
   'Email o password non corrispondono.': 'Email and password do not match.',
   'Nessun account.': 'No account.',
   'Sessione scaduta.': 'Session expired.',
+
+  // — confermare l'indirizzo, e rimettere la password —
+  'Ho dimenticato la password': 'I forgot my password',
+  'Scrivi il tuo indirizzo: se è qui, ti mandiamo un collegamento per scegliere una password nuova.':
+    'Type your address: if it is here, we will send you a link to choose a new password.',
+  'Mandami il collegamento': 'Send me the link',
+  'Se quell’indirizzo è qui, ti abbiamo scritto: guarda la posta.':
+    'If that address is here, we have written to you: check your mail.',
+  'Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.':
+    'Choose a new password. Every session open elsewhere will be closed.',
+  'Ripeti la password': 'Repeat the password',
+  'Le due password non coincidono.': 'The two passwords do not match.',
+  'Salva ed entra': 'Save and sign in',
+  'Torna all’accesso': 'Back to sign in',
+  'Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo.':
+    'Check your mail: we have sent you a link to confirm your address.',
+  'Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo. Il tuo Myynd lo porti dentro dalle preferenze, appena entri.':
+    'Check your mail: we have sent you a link to confirm your address. You can bring your Myynd in from the preferences as soon as you are in.',
+  'Non è arrivata? Rimandamela': 'Did it not arrive? Send it again',
+  'Te l’abbiamo rimandata: guarda la posta.': 'We have sent it again: check your mail.',
+  'Prima conferma il tuo indirizzo: ti abbiamo scritto quando ti sei registrato.':
+    'Confirm your address first: we wrote to you when you signed up.',
+  'Questo collegamento non vale più: chiedine un altro dalla schermata d’accesso.':
+    'This link is no longer valid: ask for another one from the sign-in screen.',
+  'La posta di questo server non è configurata.': 'This server has no outgoing mail configured.',
+
+  // — chi sei: nome e ruolo, che prima li chiedeva solo il primo avvio —
+  'Chi sei': 'Who you are',
+  'Come ti chiamo, e che lavoro fai. Entrano in ogni risposta e in ogni bozza: è la differenza fra una mail scritta per te e una scritta per nessuno.':
+    'What I call you, and what you do. They go into every answer and every draft: it is the difference between a mail written for you and one written for nobody.',
+  'come ti chiamano al lavoro': 'what they call you at work',
+  'titolare, responsabile vendite, …': 'owner, head of sales, …',
+  'Salvato.': 'Saved.',
+
+  // — i gettoni con un ambito —
+  'Gettoni per le macchine': 'Tokens for machines',
+  'Servono al Myynd di casa per spingere qui i documenti che ha letto dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro: con uno di questi non si entra nell’app e non si tocca il conto.':
+    'They let the Myynd at home push here the documents it has read from your folders. They do not expire, you revoke them from here, and they open nothing else: one of these cannot sign in to the app and cannot touch the account.',
+  'Servono a un altro Myynd — quello su un server — per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.':
+    'They let another Myynd — the one on a server — receive the documents this one reads from your folders. They do not expire, you revoke them from here, and they open nothing else.',
+  'il MacBook dell’ufficio': 'the office MacBook',
+  'Creane uno': 'Create one',
+  'Copialo adesso: questa è l’unica volta che si vede. Incolla queste due righe nel Myynd di casa.':
+    'Copy it now: this is the only time it is shown. Paste these two lines into the Myynd at home.',
+  'Revoca': 'Revoke',
+  'mai usato': 'never used',
+  'ultimo uso': 'last used',
+  'Non ne hai ancora nessuno.': 'You have none yet.',
+  'Dai un nome a questo gettone: senza, non saprai quale revocare.':
+    'Give this token a name: without one you will not know which to revoke.',
+  'Non conosco questo ambito.': 'I do not know this scope.',
+  'Questo gettone non c’è più.': 'This token is gone.',
+  'Questo gettone non arriva qui: ha un ambito, e questa rotta non ci sta dentro.':
+    'This token does not reach here: it has a scope, and this route is not inside it.',
+
+  // — portarsi via tutto, e andarsene —
+  'Tutto quello che tengo su di te': 'Everything I hold about you',
+  'Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.':
+    'A file you can read, with your account, the documents, the list, what I have learned about you, the chats, the automations and what it has cost. Passwords and tokens are not in it: to move an installation you need the file above.',
+  'Scarica i miei dati': 'Download my data',
+  'Scaricato: è nella cartella dei download.': 'Downloaded: it is in your downloads folder.',
+  'Cancella il conto': 'Delete the account',
+  'Sparisce tutto: i documenti che ho letto, la lista, le chat, quello che ho imparato su di te, le automazioni e le fonti collegate. Non si torna indietro, e non ne tengo una copia. Se vuoi portarti via qualcosa, fallo prima da qui sopra.':
+    'Everything goes: the documents I have read, the list, the chats, what I have learned about you, the automations and the connected sources. There is no going back, and I keep no copy. If you want to take anything with you, do it above first.',
+  'Voglio cancellare il conto': 'I want to delete the account',
+  'La tua password': 'Your password',
+  'Il tuo indirizzo, per conferma': 'Your address, to confirm',
+  'Cancella tutto, per sempre': 'Delete everything, for good',
+  'Scrivi il tuo indirizzo esattamente com’è, per confermare.': 'Type your address exactly as it is, to confirm.',
+  'Origine non consentita.': 'Origin not allowed.',
   "Nessuna chiave nell'ambiente.": 'No key in the environment.',
   'Servono host, indirizzo e password.': 'Host, address and password are needed.',
   'Scegli almeno una cartella.': 'Pick at least one folder.',
@@ -483,6 +553,10 @@ const EN: Record<string, string> = {
   'Il server rifiuta la connessione sulla porta 993.': 'The server refuses the connection on port 993.',
   'Il server di posta ha rifiutato la connessione.': 'The mail server refused the connection.',
   'Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.': 'I was not expecting this connection, or too much time has passed: try again from Myynd.',
+  'Questo collegamento è partito da un altro browser: riprova da Myynd, dallo stesso.': 'This connection was started from another browser: try again from Myynd, in the same one.',
+  'Claude ha un problema in questo momento. Riprova fra poco.': 'Claude is having trouble right now. Try again shortly.',
+  'Non conosco questo fuso orario.': 'I do not know this time zone.',
+  'Nessuno sta più ascoltando.': 'Nobody is listening any more.',
   'La chiave è valida, ma il conto Anthropic non ha ancora credito: aggiungilo su console.anthropic.com alla voce Billing, poi Myynd potrà ragionare.': 'The key is valid, but the Anthropic account has no credit yet: add some at console.anthropic.com under Billing, then Myynd can reason.',
   'La chiave è valida, ma il modello scelto non accetta le richieste che fa Myynd. Cambialo nelle preferenze.': 'The key is valid, but the chosen model does not accept the requests Myynd makes. Change it in Preferences.',
   'La chiave è valida, ma Claude ha risposto con un errore.': 'The key is valid, but Claude answered with an error.',
@@ -553,6 +627,11 @@ const EN: Record<string, string> = {
   'Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.': 'Drafts need an API key or a provider: the subscription covers chat only.',
   'Troppi tentativi. Riprova fra un minuto.': 'Too many attempts. Try again in a minute.',
   'Quell’host non si può raggiungere da qui.': 'That host cannot be reached from here.',
+  'Su un server la posta si legge solo sulle porte 993 o 143.': 'On a server, mail is only read on ports 993 or 143.',
+  'Gli id dei documenti del desktop cominciano con «desktop:».': 'Desktop document ids start with “desktop:”.',
+  'Le cartelle lette fino in fondo vanno indicate con un percorso assoluto.': 'Folders read all the way through must be given as an absolute path.',
+  'Non ho ancora letto questa cartella: fai una lettura prima di spostare i messaggi.': 'I have not read this folder yet: run a sync before moving messages.',
+  'La casella ha rinumerato i messaggi da quando li ho letti: rifai una lettura prima di spostarli.': 'The mailbox has renumbered its messages since I read them: run a sync again before moving them.',
   'Il file dentro il pacco non è un indice di Myynd.': 'The file inside the bundle is not a Myynd index.',
   'L’indice dentro il pacco è danneggiato.': 'The index inside the bundle is damaged.',
   'L’indice dentro il pacco viene da una versione più nuova di Myynd: aggiorna prima.': 'The index inside the bundle comes from a newer Myynd: update first.',
@@ -620,6 +699,15 @@ const EN: Record<string, string> = {
   'Su questo compito non posso lavorare.': 'I cannot work on this one.',
   'È tornata una risposta vuota. Riprova.': 'An empty answer came back. Try again.',
   'La chiave di Claude non è più valida.': 'The Claude key is no longer valid.',
+  'non la sto usando': 'not using it yet',
+  'Il conto è fatto, ma la mail di conferma non è partita: la posta di questo server non funziona. Riprova a farsela mandare, o dillo a chi lo gestisce.':
+    'The account exists, but the confirmation email did not go out: this server’s mail is not working. Try asking for it again, or tell whoever runs it.',
+  'Non è partita: la posta di questo server non funziona. Dillo a chi lo gestisce.':
+    'It did not go out: this server’s mail is not working. Tell whoever runs it.',
+  'Questa convinzione non c’è più.': 'That belief is gone.',
+  'Tienila': 'Keep it',
+  'Le ha notate da solo: non le usa per scrivere finché non gliele confermi.':
+    'It noticed these on its own: it will not write with them until you confirm.',
   'La chiave non ha accesso a questo modello.': 'The key has no access to this model.',
   'Claude è sotto sforzo in questo momento. Riprova fra poco.': 'Claude is under strain right now. Try again shortly.',
   'Ci ha messo troppo e ho lasciato perdere. Riprova.': 'It took too long and I gave up. Try again.',
@@ -1133,6 +1221,9 @@ const EN: Record<string, string> = {
   'Ce n’è già una in lista da questa.': 'There is already one in your list from this.',
   'Ha guardato, e non c’era niente.': 'It looked, and there was nothing.',
   'Non ce l’ha fatta.': 'It could not.',
+// — quanto ne ha letto, delle fonti che non stanno in un giro solo —
+  'letti finora': 'read so far',
+  'è tutto dentro': 'everything is in',
   'Su questa installazione non ce n’è nessuna.': 'There are none on this installation.',
   'Le automazioni arrivano insieme all’app, disegnate sul lavoro della tua azienda. Se qui è vuoto, chiedile a chi te l’ha installata.':
     'Automations come with the app, designed around your company\u2019s work. If this is empty, ask whoever installed it for you.',
@@ -1370,7 +1461,12 @@ const EN: Record<string, string> = {
   'Cerca': 'Search',
   'Costruisco la mappa…': 'Building the map…',
   'Non sono riuscito a costruire la mappa.': 'I could not build the map.',
+  'Non sono riuscito a scollegare.': 'I could not disconnect it.',
+  'Non sono riuscito a cambiare.': 'I could not change it.',
+  'Il conto è pronto, ma il tuo Myynd non è entrato:': 'The account is ready, but your Myynd did not come in:',
 }
+
+
 
 /** La frase nella lingua scelta. Se manca la traduzione resta l'italiano. */
 export function t(s: string): string {
@@ -1387,6 +1483,11 @@ export function t(s: string): string {
 export const frasi = {
   // la domanda che parte da una carta: la coda è testo suo, e resta scritta
   dimmiDiPiu: (titolo: string) => corrente === 'en' ? `${titolo}: tell me more` : `${titolo}: dimmi di più`,
+
+  // — le convinzioni che aspettano un sì —
+  inAttesa: (n: number) => corrente === 'en'
+    ? `${n} of these ${n === 1 ? 'is' : 'are'} waiting for you.`
+    : `${n} di queste aspett${n === 1 ? 'a' : 'ano'} te.`,
 
   // — quanto ha ragionato oggi —
   usoOggi: (chiamate: number, token: string, cache: string) => corrente === 'en'

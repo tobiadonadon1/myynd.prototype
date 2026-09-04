@@ -103,7 +103,13 @@ setInterval(chiudiGliInattivi, 10 * 60_000).unref()
 let disImpegnato = 0
 export function senzaToccare<T>(f: () => T): T {
   disImpegnato++
-  try { return f() } finally { disImpegnato-- }
+  let r: T
+  try { r = f() } catch (e) { disImpegnato--; throw e }
+  // il giro delle automazioni è asincrono: il conto si chiude quando finisce
+  // lui, non al primo `await` — altrimenti restava tutto aperto lo stesso
+  if (r instanceof Promise) return (r as Promise<unknown>).finally(() => { disImpegnato-- }) as unknown as T
+  disImpegnato--
+  return r
 }
 
 function mio(): DatabaseSync {
@@ -199,6 +205,54 @@ export function controlla(file: string) {
  * intero: farlo per due pagine è tutto costo e nessun guadagno. Sopra un
  * quarto del file, e almeno cinquemila pagine, vale la pena.
  */
+/**
+ * L'indice di ricerca dice ancora la verità?
+ *
+ * `rimettiLIndice` guarda la *forma* — la tabella è a contenuto esterno, i tre
+ * trigger ci sono — e questo guarda il *contenuto*. Sono due guasti diversi:
+ * con i trigger al loro posto l'indice non può più sfasarsi scrivendo, ma un
+ * file danneggiato, un disco pieno a metà scrittura o una riga tolta a mano
+ * lasciano documenti che ci sono e non si trovano. È il guasto peggiore che
+ * questo prodotto possa avere, perché non somiglia a un guasto: somiglia a
+ * «Myynd non sa niente di quel cliente».
+ *
+ * `integrity-check` e `rebuild` sono i due comandi che FTS5 offre apposta. Il
+ * primo costa poco e gira una volta al giorno; il secondo rifà l'indice dai
+ * documenti, che restano la verità.
+ */
+export function verificaLIndice(): { sano: boolean; rifatto: boolean } {
+  try {
+    /*
+     * `rank` a 1, e non `integrity-check` liscio.
+     *
+     * Senza quell'uno il comando verifica che l'indice sia coerente **con sé
+     * stesso**, e un indice a cui manca un documento intero lo è: non trova
+     * niente di storto e risponde che va tutto bene. Con l'uno confronta anche
+     * con la tabella dei contenuti, che è l'unica domanda che ci interessa —
+     * «i documenti che ho si trovano tutti?». Provato a mano su SQLite 3.53.1:
+     * liscio non se ne accorge, con l'uno sì.
+     */
+    db.exec("INSERT INTO ricerca(ricerca, rank) VALUES('integrity-check', 1)")
+    return { sano: true, rifatto: false }
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e)
+    // un SQLite che non conosce quella forma non è un indice rotto: si dice e
+    // si lascia stare, invece di rifare l'indice tutti i giorni per niente
+    if (/no such column|misuse|syntax/i.test(m)) {
+      console.warn('myynd · questo SQLite non sa confrontare l’indice con i documenti: salto il controllo')
+      return { sano: true, rifatto: false }
+    }
+    console.error('myynd · l’indice di ricerca non è integro, lo rifaccio:', m)
+  }
+  try {
+    db.exec("INSERT INTO ricerca(ricerca) VALUES('rebuild')")
+    return { sano: false, rifatto: true }
+  } catch (e) {
+    console.error('myynd · non riesco a rifare l’indice di ricerca:', e instanceof Error ? e.message : e)
+    return { sano: false, rifatto: false }
+  }
+}
+
 export function compatta(): { fatto: boolean; liberate: number } {
   const libere = (db.prepare('PRAGMA freelist_count').get() as { freelist_count: number }).freelist_count
   const totali = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count
@@ -231,6 +285,151 @@ function colonna(d: DatabaseSync, tabella: string, nome: string, tipo: string) {
   const ci = d.prepare(`PRAGMA table_info(${tabella})`).all() as { name: string }[]
   if (ci.some(c => c.name === nome)) return
   d.exec(`ALTER TABLE ${tabella} ADD COLUMN ${nome} ${tipo}`)
+}
+
+/**
+ * L'indirizzo dentro «Mario Rossi <mario@esempio.it>», in minuscolo.
+ *
+ * Si calcola quando il documento entra, non quando lo si cerca. La domanda
+ * «questo indirizzo l'ho già visto?» si fa ogni volta che si prepara una mail,
+ * e prima era `LOWER(autore) LIKE '%…%'`: una lettura di tutto l'indice, con
+ * il server fermo, per rispondere sì o no.
+ */
+function indirizzoDi(autore: string | null | undefined): string | null {
+  if (!autore) return null
+  const m = autore.match(/[^\s<>()[\],;:"']+@[^\s<>()[\],;:"']+/)
+  return m ? m[0].toLowerCase() : null
+}
+
+/*
+ * L'indice full-text che non tiene una seconda copia del testo.
+ *
+ * `content = 'documenti'` dice a FTS5 di andarsi a rileggere le colonne da
+ * `documenti` quando gli servono, invece di conservarsele. Prima il corpo di
+ * ogni documento stava scritto tre volte — nella tabella, dentro l'FTS, e una
+ * quarta come radici — cioè quattro o cinque gigabyte per ogni gigabyte di
+ * testo vero, su un volume che si paga a gigabyte.
+ *
+ * Il prezzo è che l'FTS non sa più cosa c'era scritto prima: per togliere una
+ * riga dall'indice bisogna passargli i **vecchi** valori con il comando
+ * 'delete'. Un `DELETE FROM ricerca` non lo fa e non dà errore — lascia i
+ * termini vecchi attaccati a quel rowid, e da lì in poi la ricerca riporta
+ * indietro righe che non esistono più. Per questo la manutenzione non sta
+ * nelle chiamate ma in tre trigger sulla tabella: sono una dozzina di posti
+ * che scrivono su `documenti`, e basta dimenticarne uno perché l'indice
+ * marcisca in silenzio.
+ */
+const RICERCA = `
+  CREATE VIRTUAL TABLE ricerca USING fts5(
+    titolo, corpo, autore, radici,
+    content = 'documenti', content_rowid = 'rid',
+    tokenize = "unicode61 remove_diacritics 2"
+  );
+
+  -- Il vocabolario dell'indice: i termini, senza i documenti. Non occupa
+  -- niente (è una vista sull'indice) ed è quello che permette di cercare un
+  -- pezzo di parola — «5428» dentro un IBAN — senza leggere nessun corpo.
+  CREATE VIRTUAL TABLE ricerca_termini USING fts5vocab('ricerca', 'row');
+`
+
+const TRIGGER_RICERCA = `
+  CREATE TRIGGER ricerca_dopo_inserimento AFTER INSERT ON documenti BEGIN
+    INSERT INTO ricerca (rowid, titolo, corpo, autore, radici)
+    VALUES (new.rid, new.titolo, new.corpo, new.autore, new.radici);
+  END;
+
+  CREATE TRIGGER ricerca_dopo_cancellazione AFTER DELETE ON documenti BEGIN
+    INSERT INTO ricerca (ricerca, rowid, titolo, corpo, autore, radici)
+    VALUES ('delete', old.rid, old.titolo, old.corpo, old.autore, old.radici);
+  END;
+
+  /*
+   * Il WHEN non è un risparmio da poco. Il filo e «l'ho scritta io» si
+   * scrivono su email che non sono cambiate — la prima lettura dopo un
+   * aggiornamento ne tocca migliaia — e senza questa condizione ognuna
+   * rifarebbe l'indice di tutto il suo corpo per una chiave che nell'indice
+   * non c'è nemmeno.
+   */
+  CREATE TRIGGER ricerca_dopo_modifica AFTER UPDATE ON documenti
+  WHEN old.titolo IS NOT new.titolo OR old.corpo IS NOT new.corpo
+    OR old.autore IS NOT new.autore OR old.radici IS NOT new.radici
+  BEGIN
+    INSERT INTO ricerca (ricerca, rowid, titolo, corpo, autore, radici)
+    VALUES ('delete', old.rid, old.titolo, old.corpo, old.autore, old.radici);
+    INSERT INTO ricerca (rowid, titolo, corpo, autore, radici)
+    VALUES (new.rid, new.titolo, new.corpo, new.autore, new.radici);
+  END;
+`
+
+/** Quante righe per volta, quando si rifà l'indice da capo. */
+const PEZZO_INDICE = 400
+/** Sotto questo numero di documenti nessuno si accorge di niente: si tace. */
+const VALE_DIRLO = 20_000
+
+/**
+ * `documenti.radici` e l'indice full-text, rifatti da capo.
+ *
+ * A pezzi, e dicendo a che punto è. Non è cosmetica: su una casella di
+ * qualche gigabyte questa è l'unica migrazione che dura minuti, e minuti di
+ * silenzio all'avvio non si distinguono da un blocco — chi ospita riavvia il
+ * processo a metà, e allora sì che diventa un guaio. A pezzi il lavoro è lo
+ * stesso; quello che cambia è che si vede.
+ *
+ * Le radici si calcolano qui in JavaScript (è `lingua.ts` che sa l'italiano),
+ * quindi ogni corpo passa una volta dal processo; l'indice invece si versa in
+ * SQL, senza far uscire il testo dal database.
+ */
+function rifaiLIndice(d: DatabaseSync) {
+  const quanti = (d.prepare('SELECT COUNT(*) AS n FROM documenti').get() as { n: number }).n
+  const grosso = quanti >= VALE_DIRLO
+  if (grosso) console.log(`myynd · rifaccio l'indice di ricerca su ${quanti} documenti: ci vuole un po'`)
+
+  const conta = (cosa: string) => {
+    let prossimo = VALE_DIRLO
+    return (fatti: number) => {
+      if (!grosso || fatti < prossimo) return
+      console.log(`myynd · ${cosa}: ${fatti} di ${quanti}`)
+      prossimo += VALE_DIRLO
+    }
+  }
+
+  // 1. le radici, e l'indirizzo dell'autore. Nessun trigger è ancora in piedi
+  //    e la vecchia tabella FTS non c'è più: queste UPDATE non costano indice.
+  const leggi = d.prepare('SELECT rid, titolo, corpo, autore FROM documenti WHERE rid > ? ORDER BY rid LIMIT ?')
+  const scrivi = d.prepare('UPDATE documenti SET radici = ?, autoreIndirizzo = ? WHERE rid = ?')
+  const dilloRadici = conta('radici')
+  let da = 0
+  let fatti = 0
+  for (;;) {
+    const righe = leggi.all(da, PEZZO_INDICE) as
+      { rid: number; titolo: string; corpo: string; autore: string | null }[]
+    if (!righe.length) break
+    for (const r of righe) {
+      scrivi.run(radici(`${r.titolo} ${r.corpo} ${r.autore ?? ''}`), indirizzoDi(r.autore), r.rid)
+      da = r.rid
+    }
+    fatti += righe.length
+    dilloRadici(fatti)
+  }
+
+  // 2. l'indice, versato dal database senza passare da qui
+  d.exec(RICERCA)
+  const versa = d.prepare(`
+    INSERT INTO ricerca (rowid, titolo, corpo, autore, radici)
+    SELECT rid, titolo, corpo, autore, radici FROM documenti WHERE rid > ? AND rid <= ?
+  `)
+  const finePezzo = d.prepare('SELECT MAX(rid) AS m FROM (SELECT rid FROM documenti WHERE rid > ? ORDER BY rid LIMIT ?)')
+  const dilloIndice = conta('indice di ricerca')
+  da = 0
+  fatti = 0
+  for (;;) {
+    const fine = (finePezzo.get(da, PEZZO_INDICE) as { m: number | null }).m
+    if (fine === null) break
+    fatti += Number(versa.run(da, fine).changes ?? 0)
+    da = fine
+    dilloIndice(fatti)
+  }
+  if (grosso) console.log(`myynd · indice di ricerca rifatto: ${fatti} documenti`)
 }
 
 /**
@@ -849,6 +1048,83 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => {
     colonna(d, 'automazioni', 'giorno', 'TEXT')
     colonna(d, 'automazioni', 'bozze', 'INTEGER NOT NULL DEFAULT 0')
+  },
+
+  // 25 → 26 · fin dove un'automazione ha guardato davvero.
+  //
+  //   `ultima` è l'ultima volta che è *partita*, e serve all'orologio. Ma era
+  //   anche il paletto da cui `soloNuovi` riparte, e un giro finito in guaio la
+  //   spostava lo stesso: quello che era arrivato durante il guasto finiva
+  //   dietro al paletto — non rimandato, saltato. `vista` la muove solo un giro
+  //   che il materiale l'ha guardato. Parte uguale a `ultima`.
+  d => {
+    colonna(d, 'automazioni', 'vista', 'TEXT')
+    d.exec('UPDATE automazioni SET vista = ultima WHERE vista IS NULL')
+  },
+
+  // 26 → 27 · «questa è vera, gliel'ho detto io».
+  //
+  //   `genere` dice da dove viene una convinzione — te l'ha sentita dire, l'ha
+  //   dedotta, l'ha indotta — e non dice niente su cosa ne pensi tu. Una
+  //   indotta è un'ipotesi: plausibile, mai passata sotto gli occhi di
+  //   nessuno, e trattata come un fatto dal momento in cui entra nel prompt.
+  //
+  //   `confermata` è il momento in cui una persona l'ha guardata e ha detto di
+  //   sì. Nulla vuol dire «nessuno l'ha ancora guardata», non «è falsa»: chi
+  //   la ritiene falsa la chiude o la cancella, e sono due gesti diversi.
+  d => {
+    colonna(d, 'convinzioni', 'confermata', 'TEXT')
+  },
+
+  // 27 → 28 · fin dove è arrivato un connettore.
+  //
+  //   Una casella con più di quattrocento messaggi nuovi ne prende
+  //   quattrocento per giro. Va bene solo se il giro dopo riparte da dove si
+  //   era fermato: senza un posto dove scriverlo, ogni lettura ricominciava
+  //   dalla stessa finestra e la casella restava parziale per sempre —
+  //   parziale in silenzio, che è il modo peggiore.
+  //
+  //   Una riga per fonte, e il valore è del connettore: un uid, una data, un
+  //   `pageToken`. Qui dentro non si interpreta, si tiene.
+  d => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS cursori (
+        fonte  TEXT PRIMARY KEY,
+        valore TEXT NOT NULL,
+        quando TEXT NOT NULL
+      );
+    `)
+  },
+
+  /*
+   * 28 → 29 · il testo smette di stare scritto quattro volte.
+   *
+   * `ricerca` teneva la sua copia di titolo, corpo e autore, più le radici che
+   * non stavano da nessun'altra parte. Con `content = 'documenti'` l'indice
+   * non conserva più niente: si rilegge le colonne da `documenti` quando gli
+   * servono. Perché possa farlo, `radici` deve diventare una colonna vera —
+   * ed è anche il momento giusto per `autoreIndirizzo`, che toglie di mezzo
+   * l'ultima lettura completa rimasta.
+   *
+   * È l'unica migrazione di questo file che su un indice grosso dura minuti.
+   * Sta in fondo, come tutte, e l'istantanea l'ha già presa `migra()`.
+   */
+  d => {
+    colonna(d, 'documenti', 'radici', 'TEXT')
+    colonna(d, 'documenti', 'autoreIndirizzo', 'TEXT')
+    d.exec('CREATE INDEX IF NOT EXISTS idx_doc_autore_indirizzo ON documenti(autoreIndirizzo)')
+
+    // prima si butta la vecchia — è lei che tiene la copia del testo — poi si
+    // riempiono le radici, e solo alla fine si accendono i trigger: mentre si
+    // scrive riga per riga non devono esserci
+    for (const t of ['ricerca_dopo_inserimento', 'ricerca_dopo_cancellazione', 'ricerca_dopo_modifica']) {
+      d.exec(`DROP TRIGGER IF EXISTS ${t}`)
+    }
+    d.exec('DROP TABLE IF EXISTS ricerca_termini')
+    d.exec('DROP TABLE IF EXISTS ricerca')
+
+    rifaiLIndice(d)
+    d.exec(TRIGGER_RICERCA)
   }
 
 ]
@@ -876,25 +1152,30 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
   copyFileSync(file, copia)
   chmodSync(copia, 0o600)
   console.log(`myynd · istantanea prima della migrazione: ${copia}`)
-  // Le due più recenti bastano a tornare indietro. Le altre sono copie intere
-  // dell'indice che nessuno riaprirà: a ogni cambio di schema il disco raddoppiava.
   /*
-   * Le due più recenti, e solo fra le istantanee delle migrazioni.
+   * L'ultima, e solo fra le istantanee delle migrazioni.
    *
-   * Due trappole in una riga sola. La prima: i nomi sono `mente-v<N>-<data>`,
-   * e ordinarli come stringhe mette `v9` dopo `v22` — «le ultime due» sarebbero
-   * state la più nuova e la più vecchia. La seconda, peggiore: la copia messa
-   * da parte prima di un'importazione si chiama `mente-prima-del-trasloco-…`,
-   * che con quel filtro entrava nel mucchio e, ordinata per nome, veniva
-   * cancellata per prima — cioè la copia esisteva finché non serviva. Qui si
-   * guarda la data del file, e si toccano solo le istantanee delle migrazioni.
+   * Erano due, e la seconda non serviva a niente: si torna indietro allo stato
+   * *prima dell'aggiornamento che ha fatto danno*, cioè al più recente, e
+   * nessuno è mai tornato di due schemi. Intanto ogni copia è l'indice intero —
+   * su una casella grossa sono gigabyte su un volume che si paga a gigabyte, e
+   * si pagavano due volte.
+   *
+   * Due trappole nella riga che sceglie quali buttare. La prima: i nomi sono
+   * `mente-v<N>-<data>`, e ordinarli come stringhe mette `v9` dopo `v22` —
+   * «l'ultima» sarebbe stata la più vecchia. La seconda, peggiore: la copia
+   * messa da parte prima di un'importazione si chiama
+   * `mente-prima-del-trasloco-…`, che con quel filtro entrava nel mucchio e,
+   * ordinata per nome, veniva cancellata per prima — cioè la copia esisteva
+   * finché non serviva. Qui si guarda la data del file, e si toccano solo le
+   * istantanee delle migrazioni.
    */
   try {
     const vecchie = readdirSync(dove)
       .filter(n => /^mente-v\d+-.*\.db$/.test(n))
       .map(n => ({ n, quando: statSync(join(dove, n)).mtimeMs }))
       .sort((a, b) => a.quando - b.quando)
-    for (const v of vecchie.slice(0, Math.max(0, vecchie.length - 2))) rmSync(join(dove, v.n), { force: true })
+    for (const v of vecchie.slice(0, Math.max(0, vecchie.length - 1))) rmSync(join(dove, v.n), { force: true })
   } catch { /* le istantanee sono un aiuto, non un requisito */ }
 }
 
@@ -915,8 +1196,15 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
  * due cose devono dire la stessa cosa — `store.test.ts` lo controlla.
  */
 const COLONNE: Record<string, [string, string][]> = {
-  documenti: [['filo', 'TEXT'], ['inviato', 'INTEGER NOT NULL DEFAULT 0']],
-  automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']]
+  documenti: [
+    ['filo', 'TEXT'], ['inviato', 'INTEGER NOT NULL DEFAULT 0'],
+    // `radici` è la colonna che l'indice full-text legge da qui invece di
+    // tenersene una copia: senza, ogni ricerca in italiano smette di piegare
+    // i plurali, e in silenzio
+    ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT']
+  ],
+  automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
+  convinzioni: [['confermata', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -933,6 +1221,53 @@ function rimetti(db: DatabaseSync) {
         console.error(`myynd · non riesco a rimettere ${tabella}.${nome}:`, e instanceof Error ? e.message : e)
       }
     }
+  }
+}
+
+/**
+ * La stessa rete di sicurezza, per l'indice di ricerca.
+ *
+ * `rimetti()` sa rimettere una colonna; qui si guarda l'altra metà, che è
+ * quella che si romperebbe più in silenzio di tutte. Se un giorno una
+ * migrazione venisse infilata in mezzo alla lista, il database di chi era già
+ * a quel numero salterebbe proprio quella che ha rifatto l'indice: `ricerca`
+ * resterebbe la vecchia tabella con dentro la sua copia del testo, e i trigger
+ * non esisterebbero. Da lì in poi nessun documento nuovo entra nell'indice —
+ * nessun errore, nessuna riga rossa, solo una ricerca che smette
+ * lentamente di trovare le cose di questa settimana.
+ *
+ * Due domande allo schema, che quasi sempre rispondono «tutto a posto». Quando
+ * non lo fanno, l'indice si rifà: dura, ma l'alternativa è una ricerca che
+ * mente.
+ */
+function rimettiLIndice(d: DatabaseSync) {
+  let sql: string | undefined
+  try {
+    sql = (d.prepare("SELECT sql FROM sqlite_master WHERE name = 'ricerca'").get() as { sql: string } | undefined)?.sql
+  } catch { return }
+  if (!sql) return   // niente `ricerca`: il database non è ancora arrivato lì, e ci pensa la migrazione
+  const trigger = (d.prepare(`
+    SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger'
+      AND name IN ('ricerca_dopo_inserimento', 'ricerca_dopo_cancellazione', 'ricerca_dopo_modifica')
+  `).get() as { n: number }).n
+  if (/content\s*=/.test(sql) && trigger === 3) return
+
+  console.log('myynd · l’indice di ricerca non è quello che dovrebbe: lo rifaccio')
+  d.exec('BEGIN')
+  try {
+    for (const t of ['ricerca_dopo_inserimento', 'ricerca_dopo_cancellazione', 'ricerca_dopo_modifica']) {
+      d.exec(`DROP TRIGGER IF EXISTS ${t}`)
+    }
+    d.exec('DROP TABLE IF EXISTS ricerca_istanze')
+    d.exec('DROP TABLE IF EXISTS ricerca_termini')
+    d.exec('DROP TABLE IF EXISTS ricerca')
+    rifaiLIndice(d)
+    d.exec(TRIGGER_RICERCA)
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    // meglio un indice vecchio che un indice a metà: si dice, e si va avanti
+    console.error('myynd · non riesco a rifare l’indice di ricerca:', e instanceof Error ? e.message : e)
   }
 }
 
@@ -991,6 +1326,9 @@ function migra(db: DatabaseSync, file: string) {
    * al lavoro che deve riparare non è una rete di sicurezza, è un ostacolo.
    */
   rimetti(db)
+  // e dopo `rimetti()`, che è quello che ha rimesso le colonne su cui l'indice
+  // si appoggia: rifarlo prima vorrebbe dire rifarlo senza `radici`
+  rimettiLIndice(db)
 }
 
 export type Documento = {
@@ -1016,8 +1354,27 @@ export type Documento = {
   inviato?: boolean
 }
 
+/**
+ * Le colonne di un documento, scritte per nome invece che con un asterisco.
+ *
+ * `SELECT *` andava bene finché in `documenti` c'era solo roba da leggere.
+ * Adesso ci sono anche `radici` — il testo ridotto a radici, che pesa quasi
+ * quanto il corpo — e `autoreIndirizzo`: due colonne di servizio, che l'indice
+ * legge e che nessuno deve vedere. Con l'asterisco uscivano da qui attaccate a
+ * ogni documento, e da qui finiscono in un JSON che va al browser: un elenco
+ * di trenta email diventava il doppio, per portare al client delle parole
+ * mozzate che non gli servono a niente.
+ */
+const CAMPI_DOC = [
+  'rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore',
+  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato'
+]
+const CAMPI = CAMPI_DOC.join(', ')
+/** Gli stessi, per la ricerca, dove `documenti` sta in una giunzione. */
+const CAMPI_D = CAMPI_DOC.map(c => `d.${c}`).join(', ')
+
 /*
- * Le sette istruzioni della scrittura dei documenti, preparate quando servono.
+ * Le quattro istruzioni della scrittura dei documenti, preparate quando servono.
  *
  * Erano `const … = db.prepare(…)` in cima al file, cioè **legate a un database
  * nel momento in cui il modulo veniva caricato**. Con un utente solo era un
@@ -1032,14 +1389,10 @@ export type Documento = {
  * si chiude.
  */
 type Istruzioni = {
-  selRid: ReturnType<DatabaseSync['prepare']>
   selEsistente: ReturnType<DatabaseSync['prepare']>
-  selFts: ReturnType<DatabaseSync['prepare']>
   insDoc: ReturnType<DatabaseSync['prepare']>
   updDoc: ReturnType<DatabaseSync['prepare']>
   updFilo: ReturnType<DatabaseSync['prepare']>
-  delFts: ReturnType<DatabaseSync['prepare']>
-  insFts: ReturnType<DatabaseSync['prepare']>
 }
 
 const istruzioni = new WeakMap<DatabaseSync, Istruzioni>()
@@ -1049,18 +1402,26 @@ function istr(): Istruzioni {
   let i = istruzioni.get(d)
   if (i) return i
   i = {
-    selRid: d.prepare('SELECT rid FROM documenti WHERE id = ?'),
+    /*
+     * `radici` sta qui dentro apposta: dice se questo documento è indicizzato.
+     *
+     * Prima la domanda si faceva all'FTS — `SELECT 1 FROM ricerca WHERE rowid
+     * = ?` — e adesso quella risposta non vuol dire più niente: su una tabella
+     * a contenuto esterno la ricerca per rowid passa dal *contenuto*, quindi
+     * risponde di sì anche per una riga che nell'indice non c'è. La colonna,
+     * invece, è la cosa vera: è quella che l'indice legge, e vuota significa
+     * un documento che nessuna ricerca troverà mai.
+     */
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, radici FROM documenti WHERE id = ?'
     ),
-    /** C'è la riga corrispondente nell'indice full-text? Serve a non saltare un documento rotto. */
-    selFts: d.prepare('SELECT 1 FROM ricerca WHERE rowid = ?'),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, radici, autoreIndirizzo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
-      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, indicizzato=?
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?,
+        radici=?, autoreIndirizzo=?, indicizzato=?
       WHERE rid = ?
     `),
     /**
@@ -1071,10 +1432,11 @@ function istr(): Istruzioni {
      * come «cambiato»: `indicizzato` si sposterebbe a oggi e la mattina dopo
      * il feed e le automazioni «guarda cos'è arrivato» vedrebbero tremila
      * email nuove che nuove non sono. Una chiave in più non è un arrivo.
+     *
+     * E non tocca `radici`: il trigger sull'indice guarda proprio quelle
+     * quattro colonne, quindi una riga scritta di qui non fa rifare niente.
      */
-    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ? WHERE rid = ?'),
-    delFts: d.prepare('DELETE FROM ricerca WHERE rowid = ?'),
-    insFts: d.prepare('INSERT INTO ricerca (rowid, titolo, corpo, autore, radici) VALUES (?,?,?,?,?)')
+    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ? WHERE rid = ?')
   }
   istruzioni.set(d, i)
   return i
@@ -1087,10 +1449,10 @@ export type EsitoScrittura = { nuovi: number; cambiati: number; invariati: numbe
  * Scrive i documenti, e tocca solo quelli che sono cambiati davvero.
  *
  * Prima riscriveva tutto, sempre. Ogni rilettura — e ce n'è una ogni sei ore —
- * aggiornava ogni riga e rifaceva l'indice full-text di ogni documento:
- * `delFts` più `insFts` su tutto il corpo di tutti i file, anche quando sul
- * disco non si era mosso niente. Su duemilaseicento documenti è un lavoro
- * inutile che si ripete quattro volte al giorno.
+ * aggiornava ogni riga e rifaceva l'indice full-text di ogni documento — tutto
+ * il corpo di tutti i file, anche quando sul disco non si era mosso niente. Su
+ * duemilaseicento documenti è un lavoro inutile che si ripete quattro volte al
+ * giorno.
  *
  * Ma il danno vero non era la fatica: era che `indicizzato` finiva per dire
  * «l'ultima volta che ho guardato» invece di «l'ultima volta che è cambiato».
@@ -1134,7 +1496,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
       const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
-        filo: string | null; inviato: number | null
+        filo: string | null; inviato: number | null; radici: string | null
       } | undefined
 
       if (gia) {
@@ -1147,12 +1509,10 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
           gia.gruppo === (d.gruppo ?? null)
 
         // Identico *e* già indicizzato: non c'è niente da fare. Il controllo
-        // sull'indice non è pignoleria — senza, un documento la cui riga FTS
-        // fosse andata persa non tornerebbe più cercabile, e sarebbe invisibile
+        // sulle radici non è pignoleria — senza, un documento entrato senza la
+        // sua riga di indice non tornerebbe più cercabile, e sarebbe invisibile
         // per sempre restando lì a farsi contare.
-        if (uguale && istr().selFts.get(gia.rid)) {
-          // il filo non è contenuto: si aggiorna senza far passare il documento
-          // per «cambiato» (vedi `updFilo`)
+        if (uguale && gia.radici !== null) {
           // il filo e «l'ho scritta io» arrivano tutti e due dopo, e nessuno dei
           // due è un contenuto: si scrivono senza far contare il documento come cambiato
           if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato) {
@@ -1162,16 +1522,14 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
           continue
         }
 
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, ora, gia.rid)
-        istr().delFts.run(gia.rid)
-        istr().insFts.run(gia.rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
+        // l'indice full-text si aggiorna da solo: legge queste stesse colonne,
+        // e i trigger su `documenti` gli dicono quando sono cambiate
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
         esito.cambiati++
         continue
       }
 
-      const r = istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, ora)
-      const rid = Number(r.lastInsertRowid)
-      istr().insFts.run(rid, d.titolo, d.corpo, d.autore ?? '', radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`))
+      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
       esito.nuovi++
     }
     db.exec('COMMIT')
@@ -1204,7 +1562,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
  */
 export function appenaArrivati(dal: string, limite = 30): Documento[] {
   return db.prepare(`
-    SELECT * FROM documenti WHERE indicizzato >= ? AND (inviato IS NULL OR inviato = 0)
+    SELECT ${CAMPI} FROM documenti WHERE indicizzato >= ? AND (inviato IS NULL OR inviato = 0)
     ORDER BY indicizzato DESC, quando DESC LIMIT ?
   `).all(dal, limite) as unknown as Documento[]
 }
@@ -1220,7 +1578,7 @@ export function appenaArrivati(dal: string, limite = 30): Documento[] {
  */
 export function eventi(da: string, a: string, limite = 60): Documento[] {
   return db.prepare(`
-    SELECT * FROM documenti WHERE fonte = 'calendario' AND quando >= ? AND quando <= ?
+    SELECT ${CAMPI} FROM documenti WHERE fonte = 'calendario' AND quando >= ? AND quando <= ?
     ORDER BY quando ASC LIMIT ?
   `).all(da, a, limite) as unknown as Documento[]
 }
@@ -1234,11 +1592,12 @@ function scollegaDalFeed(ids: string[]) {
 }
 
 export function svuotaFonte(fonte: string) {
-  const righe = db.prepare('SELECT rid, id FROM documenti WHERE fonte = ?').all(fonte) as { rid: number; id: string }[]
+  const righe = db.prepare('SELECT id FROM documenti WHERE fonte = ?').all(fonte) as { id: string }[]
   db.exec('BEGIN')
   try {
-    for (const { rid } of righe) istr().delFts.run(rid)
     scollegaDalFeed(righe.map(r => r.id))
+    // niente da togliere a mano dall'indice: la cancellazione fa scattare il
+    // trigger, che è l'unico posto che sa passargli i vecchi valori
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
     db.exec('COMMIT')
   } catch (e) {
@@ -1282,17 +1641,12 @@ export type Ambito = {
  */
 export function scordaDocumenti(ids: string[]): number {
   if (!ids.length) return 0
-  const trova = db.prepare('SELECT rid FROM documenti WHERE id = ?')
-  const del = db.prepare('DELETE FROM documenti WHERE rid = ?')
+  const del = db.prepare('DELETE FROM documenti WHERE id = ?')
   let n = 0
   db.exec('BEGIN')
   try {
     scollegaDalFeed(ids)
-    for (const id of ids) {
-      const r = trova.get(id) as { rid: number } | undefined
-      if (!r) continue
-      istr().delFts.run(r.rid); del.run(r.rid); n++
-    }
+    for (const id of ids) n += Number(del.run(id).changes ?? 0)
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
@@ -1319,13 +1673,149 @@ export function riconcilia(fonte: string, ambito: Ambito, idVisti: string[]): nu
   db.exec('BEGIN')
   try {
     scollegaDalFeed(morti.map(m => m.id))
-    for (const m of morti) { istr().delFts.run(m.rid); del.run(m.rid) }
+    for (const m of morti) del.run(m.rid)
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
     throw e
   }
   return morti.length
+}
+
+/**
+ * Una fetta di casella letta fino in fondo: dal primo uid all'ultimo, compresi.
+ *
+ * `aUid` è l'ultimo uid *guardato*, non l'ultimo esistente. Una lettura che si
+ * ferma al tetto dei quattrocento messaggi dichiara la finestra che ha finito
+ * davvero, e fuori da lì non si tocca niente.
+ */
+export type FinestraPosta = { cartella: string; daUid: number; aUid: number }
+
+/**
+ * La posta cancellata dal telefono se ne va anche da qui.
+ *
+ * Finora non se ne andava mai: `riconcilia` cancella quello che una lettura
+ * completa non ha più visto, e una casella non si legge mai tutta — si leggono
+ * gli ultimi messaggi. Con quella regola, un'email buttata via un mese fa
+ * restava nell'indice per sempre, veniva cercata, e finiva fra le fonti che
+ * Claude cita: una risposta costruita su una mail che la persona ha
+ * cancellato, e che aprendola non c'è.
+ *
+ * Qui il permesso di cancellare è ristretto a mano: solo dentro le finestre di
+ * uid che il connettore dichiara di aver letto pulite, cartella per cartella.
+ * Fuori da lì non si tocca niente — mai, in nessun caso, nemmeno per una
+ * cartella che sembra la stessa. Un uid è un numero e non contiene i due
+ * punti, quindi la cartella si ricava tagliando dall'*ultimo* separatore:
+ * `posta:INBOX:2024:812` è la cartella «INBOX:2024», non «INBOX». Confrontarla
+ * per intero è quello che impedisce a una finestra su INBOX di cancellare la
+ * posta di un'altra cartella che comincia allo stesso modo.
+ *
+ * Sbagliare per difetto lascia una riga vecchia; sbagliare per eccesso
+ * cancella la posta di qualcuno. Le due cose non si somigliano.
+ */
+export function riconciliaPosta(finestre: FinestraPosta[], idVisti: string[]): number {
+  if (!finestre.length) return 0
+  const vivi = new Set(idVisti)
+  const nella = db.prepare(
+    "SELECT id FROM documenti WHERE fonte = 'posta' AND id >= ? AND id < ?"
+  )
+
+  const morti = new Set<string>()
+  for (const f of finestre) {
+    const da = Number(f.daUid)
+    const a = Number(f.aUid)
+    // una finestra senza cartella, o al contrario, o con dentro qualcosa che
+    // non è un numero, non è una finestra: si salta invece di indovinare
+    if (!f.cartella || !Number.isInteger(da) || !Number.isInteger(a) || da > a || da < 1) continue
+    const prefisso = `posta:${f.cartella}:`
+    for (const r of nella.all(prefisso, prefisso + '\uffff') as { id: string }[]) {
+      const taglio = r.id.lastIndexOf(':')
+      if (r.id.slice('posta:'.length, taglio) !== f.cartella) continue
+      const uid = Number(r.id.slice(taglio + 1))
+      if (!Number.isInteger(uid) || uid < da || uid > a) continue
+      if (vivi.has(r.id)) continue
+      morti.add(r.id)
+    }
+  }
+  if (!morti.size) return 0
+
+  const del = db.prepare('DELETE FROM documenti WHERE id = ?')
+  db.exec('BEGIN')
+  try {
+    scollegaDalFeed([...morti])
+    for (const id of morti) del.run(id)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+  return morti.size
+}
+
+// — fin dove è arrivato un connettore —
+//
+// Una casella con più di quattrocento messaggi nuovi ne prende quattrocento
+// per giro, e va bene: quello che non va bene è ricominciare ogni volta dalla
+// stessa finestra, perché allora la casella resta parziale per sempre e non lo
+// dice nessuno. Qui si scrive dove ci si era fermati.
+//
+// Il valore è del connettore e qui non si interpreta: un uid, una data, un
+// `pageToken` di Google. Per persona, come tutto il resto di questo file.
+
+/** Dove si era fermato l'ultimo giro di questa fonte, o niente se non c'è mai stato. */
+export function cursore(fonte: string): string | null {
+  const r = db.prepare('SELECT valore FROM cursori WHERE fonte = ?').get(fonte) as { valore: string } | undefined
+  return r?.valore ?? null
+}
+
+/**
+ * Segna dove si è arrivati. `null` cancella il segno.
+ *
+ * Cancellare non è «azzera e rileggi tutto per sbaglio»: è quello che serve
+ * quando la fonte cambia sotto — una casella ricreata, un `uidValidity`
+ * diverso — e il vecchio paletto adesso indica un posto che non esiste.
+ * Tenerlo sarebbe peggio che non averlo.
+ */
+export function segnaCursore(fonte: string, valore: string | null): void {
+  if (valore === null) {
+    db.prepare('DELETE FROM cursori WHERE fonte = ?').run(fonte)
+    return
+  }
+  db.prepare(`
+    INSERT INTO cursori (fonte, valore, quando) VALUES (?,?,?)
+    ON CONFLICT(fonte) DO UPDATE SET valore = excluded.valore, quando = excluded.quando
+  `).run(fonte, valore, new Date().toISOString())
+}
+
+/**
+ * Quanti termini dell'indice si guardano prima di accontentarsi.
+ *
+ * Il `LIMIT` non è solo per non scrivere una query FTS lunga un chilometro:
+ * è quello che ferma la lettura del vocabolario appena ha abbastanza, così un
+ * pezzo comune — «anno», «2026» — non la fa arrivare in fondo.
+ */
+const TERMINI_SIMILI = 40
+
+/**
+ * I termini che l'indice conosce e che contengono questo pezzo di parola.
+ *
+ * Il vocabolario di FTS5 è una vista sull'indice: una riga per termine
+ * distinto, senza i documenti. Leggerlo tutto costa quanto le *parole* che ci
+ * sono, non quanto il testo — su una casella vera è la differenza fra qualche
+ * decina di megabyte e dieci gigabyte.
+ */
+function terminiCheContengono(pezzo: string, tetto = TERMINI_SIMILI): string[] {
+  if (pezzo.length < 3) return []
+  const like = '%' + pezzo.replace(/[\\%_]/g, c => '\\' + c) + '%'
+  try {
+    return (db.prepare(
+      `SELECT term FROM ricerca_termini WHERE term LIKE ? ESCAPE '\\' LIMIT ?`
+    ).all(like, tetto) as { term: string }[]).map(r => r.term)
+  } catch {
+    // un indice fermo a uno schema vecchio non ha il vocabolario: la ricerca
+    // resta quella dell'FTS, che è la parte che conta
+    return []
+  }
 }
 
 /**
@@ -1357,18 +1847,6 @@ export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
   const dentro = fonti?.length ? fonti : []
   /** Per la query FTS, dove i segnaposto sono tutti anonimi e in fila. */
   const recinto = dentro.length ? ` AND d.fonte IN (${dentro.map(() => '?').join(',')})` : ''
-  /**
-   * Per la query di ripiego, dove i segnaposto sono numerati.
-   *
-   * Numerati e anonimi non si mescolano: `?1` due volte e poi un `?` fa
-   * ripartire il conto da dove crede SQLite, e i valori finiscono nei posti
-   * sbagliati — o, come è successo qui, la prepare muore con «column index out
-   * of range». Il testo cercato compare due volte (titolo e corpo) e per quello
-   * serve `?1`; da lì in poi si numera tutto a mano.
-   */
-  const recintoN = dentro.length
-    ? ` AND d.fonte IN (${dentro.map((_, i) => `?${i + 3}`).join(',')})`
-    : ''
 
   // ogni parola vale se compare come radice o come prefisso letterale: la
   // radice prende il plurale, il prefisso prende i nomi propri e i codici
@@ -1378,7 +1856,7 @@ export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
   const conQuery = (match: string): (Documento & { punti: number })[] => {
     try {
       return db.prepare(`
-        SELECT d.*, ${pesi} AS punti FROM ricerca r JOIN documenti d ON d.rid = r.rowid
+        SELECT ${CAMPI_D}, ${pesi} AS punti FROM ricerca r JOIN documenti d ON d.rid = r.rowid
         WHERE ricerca MATCH ?${recinto} ORDER BY punti LIMIT ?
       `).all(match, ...dentro, limite * 3) as unknown as (Documento & { punti: number })[]
     } catch {
@@ -1396,14 +1874,32 @@ export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
   }
 
   if (!trovati.length) {
-    // FTS non ha capito la domanda: un ultimo tentativo letterale, con i
-    // jolly del testo cercato neutralizzati
-    const like = '%' + q.replace(/[\\%_]/g, c => '\\' + c) + '%'
-    return db.prepare(`
-      SELECT * FROM documenti d
-      WHERE (d.titolo LIKE ?1 ESCAPE '\\' OR d.corpo LIKE ?1 ESCAPE '\\')${recintoN}
-      LIMIT ?2
-    `).all(like, limite, ...dentro) as unknown as Documento[]
+    /*
+     * L'ultimo tentativo: un pezzo di parola, cercato nel vocabolario.
+     *
+     * Qui prima c'era `titolo LIKE '%…%' OR corpo LIKE '%…%'`, cioè la lettura
+     * di ogni corpo di ogni documento — su un indice da dieci gigabyte, secondi
+     * di server fermo *per tutti* a ogni domanda che l'FTS non aveva capito.
+     *
+     * Ma serviva a qualcosa di vero, e quel qualcosa non si può togliere:
+     * l'FTS trova la radice e il prefisso, quindi «fatture» trova «fattura» e
+     * «collau» trova «collaudo», e non trova un pezzo preso in mezzo a una
+     * parola — «5428» dentro un IBAN, quattro cifre di un numero d'ordine, la
+     * coda di un codice. Chi cerca così ha in mano un pezzo di carta e copia
+     * quello che vede.
+     *
+     * La stessa risposta si prende dall'indice invece che dai documenti:
+     * `ricerca_termini` è l'elenco dei termini che l'indice conosce — parole,
+     * non testi — e trovare quelli che contengono il pezzo costa una lettura
+     * di quell'elenco, che è ordini di grandezza più piccolo del testo. Poi si
+     * torna a chiedere all'FTS, con i termini veri, e il risultato passa dal
+     * solito ordinamento invece di arrivare come capita.
+     */
+    const perParola = parole.map(t => terminiCheContengono(t))
+    if (perParola.every(l => l.length)) {
+      const uno = (t: string) => `"${t.replace(/"/g, '""')}"`
+      trovati = conQuery(perParola.map(l => `(${l.map(uno).join(' OR ')})`).join(' AND '))
+    }
   }
 
   // il riordino per data sta qui e non nell'SQL apposta: è una scelta di
@@ -1422,7 +1918,7 @@ export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
 }
 
 export function recenti(limite = 40): Documento[] {
-  return db.prepare('SELECT * FROM documenti ORDER BY quando DESC LIMIT ?').all(limite) as unknown as Documento[]
+  return db.prepare(`SELECT ${CAMPI} FROM documenti ORDER BY quando DESC LIMIT ?`).all(limite) as unknown as Documento[]
 }
 
 /**
@@ -1437,7 +1933,7 @@ export function idsConPrefisso(prefisso: string): string[] {
 }
 
 export function documento(id: string): Documento | null {
-  return (db.prepare('SELECT * FROM documenti WHERE id = ?').get(id) as unknown as Documento) ?? null
+  return (db.prepare(`SELECT ${CAMPI} FROM documenti WHERE id = ?`).get(id) as unknown as Documento) ?? null
 }
 
 // — quanto è costato —
@@ -1491,7 +1987,7 @@ export function stessoFilo(filo: string, escludi: string[] = [], limite = 5): Do
   if (!filo) return []
   const fuori = escludi.length ? ` AND id NOT IN (${escludi.map(() => '?').join(',')})` : ''
   return db.prepare(`
-    SELECT * FROM documenti WHERE filo = ?${fuori}
+    SELECT ${CAMPI} FROM documenti WHERE filo = ?${fuori}
     ORDER BY quando DESC LIMIT ?
   `).all(filo, ...escludi, limite) as unknown as Documento[]
 }
@@ -1545,6 +2041,9 @@ export function esisteChat(id: string): boolean {
   return !!db.prepare('SELECT 1 FROM chat WHERE id = ?').get(id)
 }
 
+/** Quante righe indietro si fruga: oltre non è cronologia recente, è archeologia. */
+const MESSAGGI_FRUGATI = 20_000
+
 /**
  * Frugare nelle conversazioni passate.
  *
@@ -1562,6 +2061,13 @@ export function esisteChat(id: string): boolean {
  * `LIKE` e non FTS: i messaggi non sono nella tabella di ricerca, sono poche
  * migliaia di righe, e costruirci sopra un secondo indice full-text per una
  * cosa che si chiede di rado sarebbe pagare tutti i giorni per un caso raro.
+ *
+ * «Poche migliaia» però è un'affermazione con una data di scadenza: fra due
+ * anni di conversazioni tutti i giorni non è più vera, e da lì in poi questa
+ * riga diventa quello che era il ripiego della ricerca — una lettura intera
+ * con il server fermo. Il paletto sul rowid la tiene nel presente: i messaggi
+ * si scrivono in ordine, quindi gli ultimi rowid sono gli ultimi messaggi, e
+ * più indietro di così si smette di guardare.
  */
 export function cercaChat(q: string, limite = 12): {
   chat: string; titolo: string; ruolo: string; testo: string; quando: string
@@ -1574,9 +2080,10 @@ export function cercaChat(q: string, limite = 12): {
   return db.prepare(`
     SELECT m.chat, c.titolo, m.ruolo, m.testo, m.quando
     FROM messaggi m JOIN chat c ON c.id = m.chat
-    WHERE ${dove}
+    WHERE m.rowid > COALESCE((SELECT MAX(rowid) FROM messaggi), 0) - ?
+      AND ${dove}
     ORDER BY m.quando DESC LIMIT ?
-  `).all(...valori, limite) as { chat: string; titolo: string; ruolo: string; testo: string; quando: string }[]
+  `).all(MESSAGGI_FRUGATI, ...valori, limite) as { chat: string; titolo: string; ruolo: string; testo: string; quando: string }[]
 }
 
 // — feed —
@@ -1837,6 +2344,20 @@ export const perProva = {
   invecchiaNotizie(giorni: number) {
     const quando = new Date(Date.now() - giorni * 86_400_000).toISOString()
     db.prepare('UPDATE notizie SET presa = ?').run(quando)
+  },
+
+  /**
+   * Quanti documenti stanno *davvero* dentro l'indice full-text.
+   *
+   * `SELECT COUNT(*) FROM ricerca` non lo dice più: da quando l'indice è a
+   * contenuto esterno quella conta le righe di `documenti`, quindi risponde
+   * sempre che tutto è a posto — che è esattamente il modo in cui un indice
+   * marcio passerebbe inosservato. Il vocabolario per istanze conta i rowid
+   * che l'indice conosce, e quello sì che si può confrontare.
+   */
+  documentiNellIndice(): number {
+    db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS ricerca_istanze USING fts5vocab('ricerca', 'instance')")
+    return (db.prepare('SELECT COUNT(DISTINCT doc) AS n FROM ricerca_istanze').get() as { n: number }).n
   }
 }
 
@@ -2273,9 +2794,11 @@ export type ArcoMappa = [number, number, number]   // i, j, quante radici in com
  * significato sta in mezzo.
  */
 export function mappa(tetto = 2600): { nodi: NodoMappa[]; archi: ArcoMappa[] } {
+  // le radici si leggono da `documenti`, che è dove stanno: la giunzione con
+  // l'FTS era l'unico modo di arrivarci finché erano una colonna solo sua
   const righe = db.prepare(`
-    SELECT d.rid, d.id, d.titolo, d.gruppo, d.fonte, d.quando, r.radici
-    FROM documenti d JOIN ricerca r ON r.rowid = d.rid
+    SELECT d.rid, d.id, d.titolo, d.gruppo, d.fonte, d.quando, d.radici
+    FROM documenti d
     ORDER BY d.quando DESC LIMIT ?
   `).all(tetto) as { id: string; titolo: string; gruppo: string | null; fonte: string; quando: string | null; radici: string }[]
 
@@ -2450,6 +2973,12 @@ export type Convinzione = {
   dal: string
   al?: string | null
   sostituisce?: string | null
+  /**
+   * Quando una persona l'ha guardata e ha detto di sì. Null = nessuno l'ha
+   * ancora guardata, che non è la stessa cosa di «è sbagliata»: quella si
+   * chiude o si cancella.
+   */
+  confermata?: string | null
 }
 
 function idConvinzione(enunciato: string, ambito: string): string {
@@ -2524,13 +3053,48 @@ function daRigaConvinzione(r: Record<string, unknown>): Convinzione {
   } as unknown as Convinzione
 }
 
+/**
+ * Cosa lasciare fuori da `convinzioni()`.
+ *
+ * Una sola voce, e serve a una distinzione che vale la pena tenere netta: una
+ * convinzione *indotta* è una generalizzazione fatta da una macchina su tre
+ * episodi — plausibile, mai passata sotto gli occhi di nessuno, e trattata
+ * come un fatto dal momento in cui entra in un prompt. Chi scrive una mail per
+ * conto di qualcuno può volere solo quello che è stato detto o confermato;
+ * chi disegna la schermata della memoria le vuole tutte, comprese quelle da
+ * guardare — sono proprio quelle il lavoro da fare.
+ */
+export type FiltroConvinzioni = {
+  /** Le indotte entrano solo se qualcuno le ha confermate. */
+  indotteSoloSeConfermate?: boolean
+}
+
 /** Quello che vale adesso, il più solido per primo. */
-export function convinzioni(ambito?: string): Convinzione[] {
-  const righe = (ambito
-    ? db.prepare('SELECT * FROM convinzioni WHERE al IS NULL AND ambito = ? ORDER BY fiducia DESC, creata DESC').all(ambito)
-    : db.prepare('SELECT * FROM convinzioni WHERE al IS NULL ORDER BY fiducia DESC, creata DESC').all()
-  ) as Record<string, unknown>[]
+export function convinzioni(ambito?: string, filtro?: FiltroConvinzioni): Convinzione[] {
+  const dove = ['al IS NULL']
+  const valori: string[] = []
+  if (ambito) { dove.push('ambito = ?'); valori.push(ambito) }
+  if (filtro?.indotteSoloSeConfermate) dove.push("(genere <> 'indotta' OR confermata IS NOT NULL)")
+  const righe = db.prepare(
+    `SELECT * FROM convinzioni WHERE ${dove.join(' AND ')} ORDER BY fiducia DESC, creata DESC`
+  ).all(...valori) as Record<string, unknown>[]
   return righe.map(daRigaConvinzione)
+}
+
+/**
+ * «Sì, questa è vera»: la data in cui l'ha detto una persona.
+ *
+ * Torna vero se la convinzione esiste, vale ancora, ed è confermata quando
+ * questa chiamata finisce — anche se lo era già. Confermarla due volte non
+ * sposta la data: quella dice quand'è stata guardata la prima volta, e
+ * riscriverla vorrebbe dire perdere l'unica informazione che porta. Falso
+ * significa una sola cosa: non c'è, o è scaduta.
+ */
+export function confermaConvinzione(id: string): boolean {
+  const r = db.prepare('UPDATE convinzioni SET confermata = ? WHERE id = ? AND al IS NULL AND confermata IS NULL')
+    .run(new Date().toISOString(), id)
+  if (Number(r.changes ?? 0) > 0) return true
+  return !!db.prepare('SELECT 1 FROM convinzioni WHERE id = ? AND al IS NULL AND confermata IS NOT NULL').get(id)
 }
 
 /** Anche quelle scadute: serve a rispondere «da quando hai cambiato idea?». */
@@ -2627,6 +3191,8 @@ export type StatoAutomazione = {
   giorno?: string | null
   /** Quante bozze ha fatto fare in quel giorno. Il tetto si legge da qui. */
   bozze?: number | null
+  /** Fin dove ha guardato il materiale: si muove solo con un giro riuscito. */
+  vista?: string | null
 }
 
 /**
@@ -2797,15 +3363,19 @@ export function automazioneGirata(id: string, esito: string, guaio?: string, qua
   const ora = new Date().toISOString()
   const prima = storiaDi(statoAutomazione(id))
   const storia = JSON.stringify([...prima, { quando: ora, esito, quanti }].slice(-GIRI))
+  // un guaio muove l'orologio (`ultima`) ma non il paletto (`vista`): quello
+  // che è arrivato mentre falliva dev'essere ancora lì al prossimo giro
+  const vista = esito === 'guaio' ? null : ora
   db.prepare(`
-    INSERT INTO automazioni (id, ultima, quante, esito, guaio, storia) VALUES (?,?,1,?,?,?)
+    INSERT INTO automazioni (id, ultima, vista, quante, esito, guaio, storia) VALUES (?,?,?,1,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       ultima = excluded.ultima,
+      vista  = COALESCE(excluded.vista, automazioni.vista),
       quante = automazioni.quante + 1,
       esito  = excluded.esito,
       guaio  = excluded.guaio,
       storia = excluded.storia
-  `).run(id, ora, esito, guaio ?? null, storia)
+  `).run(id, ora, vista, esito, guaio ?? null, storia)
 }
 
 /**
@@ -2939,16 +3509,36 @@ export function azioni(limite = 100): Azione[] {
  *
  * Non blocca — quello lo decide chi legge. Dice soltanto se l'ha già visto, e
  * l'interfaccia lo mostra in chiaro accanto al campo.
+ *
+ * Erano due `LIKE '%…%'`, uno sull'autore e uno sul corpo: una lettura di ogni
+ * riga e di ogni corpo dell'indice, sincrona, ogni volta che si prepara una
+ * mail. Adesso sono due domande a due indici. Chi ha scritto è una colonna
+ * normalizzata con sopra un vero indice — l'indirizzo si estrae quando il
+ * documento entra, non quando lo si cerca. Chi è *citato* dentro un testo lo
+ * sa l'FTS: un indirizzo, per il tokenizzatore, è la sequenza «rossi esempio
+ * it», e cercarla come frase nelle colonne del corpo e dell'autore è la stessa
+ * domanda fatta all'indice invece che al disco.
+ *
+ * Cambia una cosa, in piccolo: un testo che contenesse quelle tre parole di
+ * fila senza la chiocciola adesso conta come «già visto». Per un segnale che
+ * non blocca niente è un prezzo onesto — l'alternativa è tenere il server
+ * fermo per secondi a ogni bozza.
  */
 export function indirizzoConosciuto(indirizzo: string): boolean {
   const pulito = indirizzo.trim().toLowerCase()
   if (!pulito.includes('@')) return false
-  const r = db.prepare(`
-    SELECT 1 FROM documenti
-    WHERE LOWER(autore) LIKE ?1 OR LOWER(corpo) LIKE ?1
-    LIMIT 1
-  `).get(`%${pulito}%`)
-  return !!r
+  if (db.prepare('SELECT 1 FROM documenti WHERE autoreIndirizzo = ? LIMIT 1').get(pulito)) return true
+
+  // gli stessi pezzi in cui lo taglia il tokenizzatore dell'indice: lettere e
+  // cifre, il resto separa
+  const pezzi = pulito.normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  if (!pezzi.length) return false
+  try {
+    return !!db.prepare('SELECT 1 FROM ricerca WHERE ricerca MATCH ? LIMIT 1')
+      .get(`{corpo autore} : "${pezzi.join(' ')}"`)
+  } catch {
+    return false
+  }
 }
 
 // — sessioni —
@@ -2991,11 +3581,22 @@ export function potaSessioni() {
  */
 export function azzeraTutto() {
   db.exec(`
-    DELETE FROM documenti; DELETE FROM ricerca; DELETE FROM feed;
+    DELETE FROM documenti; DELETE FROM feed;
     DELETE FROM messaggi; DELETE FROM chat;
     DELETE FROM convinzioni; DELETE FROM blocchi; DELETE FROM domande;
-    DELETE FROM compiti;
+    DELETE FROM compiti; DELETE FROM cursori;
   `)
+  /*
+   * E non `DELETE FROM ricerca`.
+   *
+   * Su una tabella a contenuto esterno quella riga non svuota niente di
+   * sensato: l'FTS non ha più il testo con cui togliere i termini, e il
+   * contenuto da cui rileggerlo l'abbiamo appena cancellato. I trigger hanno
+   * già fatto il lavoro riga per riga; 'delete-all' è il comando fatto per
+   * questo, e chiude anche il caso di un indice rimasto con dentro qualcosa
+   * che nel contenuto non c'era.
+   */
+  db.exec("INSERT INTO ricerca (ricerca) VALUES ('delete-all')")
 }
 
 export default db

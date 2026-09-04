@@ -28,6 +28,7 @@ import { filoDi } from '../filo.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { APP_MICROSOFT } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
+import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 import { riflua } from '../testo.ts'
 
 /** Le due metà, e cosa chiede ciascuna. */
@@ -60,6 +61,8 @@ const GRAFO = 'https://graph.microsoft.com/v1.0'
 const MAX_FILE = 12_000_000
 const MAX_MESSAGGI = 400
 const MAX_FILE_TOTALI = 900
+/** Quanti nomi si elencano per drive. Elencare è a buon mercato: aprire no. */
+const MAX_ELENCO = 20_000
 
 function ambiti(parti: Parte[]): string[] {
   const fuori = new Set(SEMPRE)
@@ -116,7 +119,13 @@ export function collegato(p?: Parte): boolean {
 }
 
 /** Ospitati: l'app di chi ospita, il browser della persona, il ritorno dal nostro dominio. */
-export function avvia(parte: Parte): { dove: string } {
+/** Il segreto con cui rinnovare: della persona, o di chi ospita se l'app è la sua. */
+function segretoDi(m: { clientId: string; clientSecret?: string }): string | undefined {
+  if (m.clientSecret) return m.clientSecret
+  return m.clientId === APP_MICROSOFT.clientId ? APP_MICROSOFT.clientSecret || undefined : undefined
+}
+
+export function avvia(parte: Parte): { dove: string; biglietto: string } {
   const app = APP_MICROSOFT
   if (!app.clientId) throw new Error('Microsoft non è ancora disponibile su questo server.')
   const gia = leggi().microsoft
@@ -125,7 +134,8 @@ export function avvia(parte: Parte): { dove: string } {
     if (!g.refresh_token) throw new Error('Microsoft non ha dato il permesso duraturo: riprova.')
     scriviConfig({
       ...leggi(),
-      microsoft: { clientId: app.clientId, clientSecret: app.clientSecret, tenant: app.tenant, refresh: g.refresh_token, parti: tutte, giorni: gia?.giorni ?? 30 }
+      // il segreto dell'app resta nell'ambiente di chi ospita, non nella configurazione della persona
+      microsoft: { clientId: app.clientId, tenant: app.tenant, refresh: g.refresh_token, parti: tutte, giorni: gia?.giorni ?? 30 }
     })
     vivo.scorda()
   })
@@ -188,7 +198,7 @@ export function scollega(parte?: Parte) {
 const vivo = new Vivo(async () => {
   const m = leggi().microsoft
   if (!m?.refresh) throw new Error('Collega Microsoft e potrò farlo.')
-  return chiediGettoni(sportello(m.clientId, m.tenant ?? 'common', m.parti, m.clientSecret), {
+  return chiediGettoni(sportello(m.clientId, m.tenant ?? 'common', m.parti, segretoDi(m)), {
     refresh_token: m.refresh,
     grant_type: 'refresh_token',
     scope: ambiti(m.parti).join(' ')
@@ -433,8 +443,22 @@ export type EsitoFile = {
   visti: string[]
   /** Vero solo se tutti i drive si sono lasciati percorrere fino in fondo. */
   completo: boolean
+  /** Quanti file ci sono, quanti sono passati, quanti mancano. */
+  resto: Resto
 }
 
+/**
+ * Prima si guarda tutto, poi si sceglie cosa aprire.
+ *
+ * Erano la stessa cosa, e la confusione costava: al novecentesimo file si
+ * smetteva anche di *elencare*, quindi non si sapeva nemmeno quanti fossero, e
+ * i file dal novecentouno in poi non li apriva **nessun giro, mai**. Elencare
+ * costa una chiamata ogni duecento nomi; aprire costa uno scaricamento e
+ * un'estrazione a testa. Adesso l'elenco si fa intero — su tutti i drive
+ * insieme, perché novecento file spalmati su otto siti vanno scelti guardando
+ * le date di tutti — e per giro se ne aprono novecento, riprendendo dal punto
+ * in cui il giro prima si era fermato.
+ */
 export async function sincronizzaFile(
   c: ConfigMicrosoft,
   avanzamento?: (fatti: number, totale: number) => void
@@ -444,12 +468,13 @@ export async function sincronizzaFile(
   const docs: Documento[] = []
   const visti: string[] = []
   let falliti = 0
-  let troncato = false
   let completo = true
   let fatti = 0
 
+  type Riga = { drive: { id: string; dove: string }; v: Voce }
+  const tutti: Riga[] = []
+
   for (const d of await drive()) {
-    if (docs.length >= MAX_FILE_TOTALI) { troncato = true; completo = false; break }
     const voci: Voce[] = []
     try {
       // `delta` percorre tutto l'albero senza doverlo scendere a mano, ed è
@@ -459,7 +484,7 @@ export async function sincronizzaFile(
         const r: { value?: Voce[]; '@odata.nextLink'?: string } = await api(prossima)
         voci.push(...(r.value ?? []))
         prossima = r['@odata.nextLink']
-        if (voci.length >= MAX_FILE_TOTALI * 3) { troncato = true; completo = false; break }
+        if (voci.length >= MAX_ELENCO) { completo = false; break }
       }
     } catch {
       // un drive che non risponde non prova che i suoi file siano spariti
@@ -467,43 +492,57 @@ export async function sincronizzaFile(
       falliti++
       continue
     }
-
-    const file = voci
-      .filter(v => v.file && !v.folder)
-      .filter(v => !v.lastModifiedDateTime || Date.parse(v.lastModifiedDateTime) >= dal)
-      .sort((a, b) => (b.lastModifiedDateTime ?? '').localeCompare(a.lastModifiedDateTime ?? ''))
-
-    for (const v of file) {
-      if (docs.length >= MAX_FILE_TOTALI) { troncato = true; completo = false; break }
-      const id = `sharepoint:${d.id}:${v.id}`
-      if (!leggibile(v.name) || (v.size ?? 0) > MAX_FILE || (v.size ?? 0) === 0) {
-        // c'è, non l'abbiamo letto: le due cose insieme, o `riconcilia` lo
-        // cancella dall'indice senza che nessuno abbia sbagliato niente
-        visti.push(id)
-        continue
-      }
-      try {
-        const buf = Buffer.from(await (await chiama(`/drives/${d.id}/items/${v.id}/content`)).arrayBuffer())
-        const corpo = await daBuffer(buf, v.name)
-        if (corpo.trim().length < 20) { visti.push(id); continue }
-        docs.push({
-          id,
-          fonte: 'sharepoint',
-          tipo: tipoDi(v.name),
-          titolo: v.name,
-          corpo: corpo.slice(0, 20_000),
-          autore: v.lastModifiedBy?.user?.displayName ?? null,
-          percorso: v.webUrl ?? d.dove,
-          quando: v.lastModifiedDateTime ?? null,
-          gruppo: 'documenti'
-        })
-      } catch {
-        falliti++
-        visti.push(id)
-      }
-      avanzamento?.(++fatti, file.length)
+    for (const v of voci) {
+      if (!v.file || v.folder) continue
+      if (v.lastModifiedDateTime && Date.parse(v.lastModifiedDateTime) < dal) continue
+      tutti.push({ drive: d, v })
     }
   }
 
-  return { docs, falliti, troncato, visti, completo: completo && !troncato }
+  tutti.sort((a, b) => (b.v.lastModifiedDateTime ?? '').localeCompare(a.v.lastModifiedDateTime ?? ''))
+
+  // il segno è data più drive più id: la posizione nell'elenco no, perché un
+  // file salvato nel frattempo fa scalare tutto e ne farebbe saltare uno
+  const segnoDi = (x: Riga) => `${x.v.lastModifiedDateTime ?? ''}|${x.drive.id}:${x.v.id}`
+  const { da, ripreso } = riprendi('sharepoint', tutti, segnoDi,
+    (x, s) => (x.v.lastModifiedDateTime ?? '') < (s.split('|')[0] ?? ''))
+  const scelti = tutti.slice(da, da + MAX_FILE_TOTALI)
+  const arrivati = da + scelti.length
+  // ripreso a metà vuol dire che `visti` copre solo la coda dell'elenco:
+  // riconciliare adesso cancellerebbe tutto quello che sta sopra
+  const troncato = ripreso || arrivati < tutti.length
+  if (troncato) completo = false
+  segna('sharepoint', arrivati < tutti.length && scelti.length ? segnoDi(scelti[scelti.length - 1]!) : null)
+
+  for (const { drive: d, v } of scelti) {
+    const id = `sharepoint:${d.id}:${v.id}`
+    if (!leggibile(v.name) || (v.size ?? 0) > MAX_FILE || (v.size ?? 0) === 0) {
+      // c'è, non l'abbiamo letto: le due cose insieme, o `riconcilia` lo
+      // cancella dall'indice senza che nessuno abbia sbagliato niente
+      visti.push(id)
+      continue
+    }
+    try {
+      const buf = Buffer.from(await (await chiama(`/drives/${d.id}/items/${v.id}/content`)).arrayBuffer())
+      const corpo = await daBuffer(buf, v.name)
+      if (corpo.trim().length < 20) { visti.push(id); continue }
+      docs.push({
+        id,
+        fonte: 'sharepoint',
+        tipo: tipoDi(v.name),
+        titolo: v.name,
+        corpo: corpo.slice(0, 20_000),
+        autore: v.lastModifiedBy?.user?.displayName ?? null,
+        percorso: v.webUrl ?? d.dove,
+        quando: v.lastModifiedDateTime ?? null,
+        gruppo: 'documenti'
+      })
+    } catch {
+      falliti++
+      visti.push(id)
+    }
+    avanzamento?.(++fatti, scelti.length)
+  }
+
+  return { docs, falliti, troncato, visti, completo: completo && !troncato, resto: resto(arrivati, tutti.length) }
 }

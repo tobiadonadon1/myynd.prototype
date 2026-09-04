@@ -30,14 +30,16 @@ ospitato (`RAILWAY_ENVIRONMENT`, `RENDER`, `FLY_APP_NAME`, `K_SERVICE`, `DYNO`,
 | Variabile | Serve a |
 | --------- | ------- |
 | `MYYND_POSTGRES` | La stringa di connessione a un Postgres — su Supabase: *Connect → Transaction pooler*, la `postgresql://…:6543/postgres`. Con questa, **i conti, le sessioni e la configurazione di ognuno** (profilo e credenziali delle fonti) stanno lì e sopravvivono a qualunque redeploy. Senza, stanno su disco. |
-| `MYYND_CHIAVE` | Obbligatoria con `MYYND_POSTGRES`: una frase lunga e a caso con cui si cifrano le credenziali prima di scriverle sul database. Non cambiarla dopo: quello che è cifrato con la vecchia non si legge più. |
-| `MYYND_POSTGRES_CA` | Facoltativa: il percorso del certificato che Supabase dà da scaricare, per verificare il server oltre che cifrare. Senza, si cifra e basta. |
+| `MYYND_CHIAVE` | Obbligatoria con `MYYND_POSTGRES`: una frase lunga e a caso con cui si cifrano le credenziali prima di scriverle sul database. Si cambia solo passando da `MYYND_CHIAVE_VECCHIA`, mai da sola. |
+| `MYYND_CHIAVE_VECCHIA` | Per **cambiare** `MYYND_CHIAVE` senza perdere le credenziali di nessuno: si mette qui quella di prima e la nuova in `MYYND_CHIAVE`. All'avvio si legge con la nuova, quello che non si apre si prova con la vecchia, e si riscrive con la nuova. Il registro dice quante ne restano e quando ha finito: **da quel momento questa variabile si toglie**. Lasciarla non fa danni, ma tiene in giro una chiave che non serve più. |
+| `MYYND_POSTGRES_CA` | Il percorso del certificato che Supabase dà da scaricare, o la parola `sistema` se il certificato del database è di un'autorità pubblica: verifica il server oltre che cifrare. Senza, si cifra e basta, e il server lo dice all'avvio. |
 | `MYYND_DATI` | Dove vive l'indice — `mente.db`, i documenti, la ricerca — che resta su disco anche con Postgres, perché è una copia delle fonti e si rifà rileggendole. Su un disco effimero si rifà a ogni redeploy: **un volume qui è ancora la cosa giusta**, ma senza non si perde nessun conto. Il Dockerfile la mette a `/dati`. |
 | `PORT` | La porta che il proxy di chi ospita chiama. Railway la imposta da sé. |
 | `MYYND_PUBBLICO` | Il dominio pubblico, es. `myynd.tuodominio.it`. Serve alla guardia sull'Host e al ritorno OAuth. Senza, Railway usa il suo. |
-| `MYYND_REGISTRAZIONE` | `aperta` (predefinito), `invito` o `chiusa`. |
+| `MYYND_REGISTRAZIONE` | `aperta`, `invito` o `chiusa`. **Senza**, su un server la porta è aperta finché non entra il primo conto — chi lo ha messo su — e poi passa a `invito` se c'è `MYYND_INVITO`, altrimenti a `chiusa`. Un server pubblico aperto a chiunque per una variabile dimenticata non è un errore che si vede. |
 | `MYYND_INVITO` | La parola da dare a chi si registra, con `invito`. |
-| `MYYND_DOMINI` | Domini email ammessi alla registrazione, separati da virgola. Vuoto = tutti. |
+| `MYYND_DOMINI` | Domini email ammessi alla registrazione, separati da virgola. Vuoto = tutti. **Vale davvero solo con l'SMTP qui sotto**: senza, chiunque può scrivere un indirizzo di quel dominio senza averlo, e questa riga filtra quello che uno digita, non chi è. |
+| `MYYND_SMTP_HOST`, `MYYND_SMTP_PORTA`, `MYYND_SMTP_UTENTE`, `MYYND_SMTP_PASSWORD`, `MYYND_SMTP_DA` | La casella da cui il server manda due sole cose: la conferma dell'indirizzo di chi si registra, e il collegamento per rimettere una password dimenticata. Porta 587 se non si dice; utente e password solo se il server di posta le chiede; `MYYND_SMTP_DA` è il mittente, e senza è l'utente. **Con queste, su un server, un conto nuovo deve confermare il proprio indirizzo prima di entrare** — il primo conto no, è chi ha messo su il server e non c'è nessuno che possa farlo entrare. Senza queste, non cambia niente rispetto a prima: si entra subito, e il «ho dimenticato la password» non si offre nemmeno. |
 | `MYYND_GOOGLE_CLIENT_ID`, `MYYND_GOOGLE_CLIENT_SECRET` | L'app OAuth di chi ospita, per Gmail, Calendario e Drive. Tipo «Applicazione web», URI di ritorno **esattamente** `https://<dominio>/api/oauth/ritorno`. Senza, quelle schede si dichiarano non disponibili. |
 | `MYYND_MICROSOFT_CLIENT_ID`, `MYYND_MICROSOFT_CLIENT_SECRET`, `MYYND_MICROSOFT_TENANT` | Idem per Outlook, Calendario e SharePoint (Entra ID, piattaforma «Web», stesso URI di ritorno; tenant predefinito `common`). |
 
@@ -60,6 +62,13 @@ Tre strade, in quest'ordine di preferenza e di costo:
    è speso oggi e permettono un tetto giornaliero di token.
 
 La tabella `LAVORI` in `server/modello.ts` decide quale lavoro è di frontiera.
+Con la chiave Anthropic, i lavori che non lo sono vanno a Haiku — il più
+piccolo della famiglia — anche quando il modello scelto è un altro: sono le
+chiamate più frequenti, e non escono dall'azienda.
+
+Le ore delle automazioni («ogni giorno alle 7») e il conto delle bozze del
+giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
+configurazione: su un server la macchina sta in UTC.
 
 ## Connettori
 
@@ -74,6 +83,20 @@ La tabella `LAVORI` in `server/modello.ts` decide quale lavoro è di frontiera.
 | **Dropbox** | La chiave dell'app e un codice da incollare una volta. |
 | **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
 | **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
+
+### Il desktop di casa che spinge verso il server
+
+Un server non ha le tue cartelle. Quello che può fare è ricevere quello che un
+Myynd in casa ha già letto: si mettono `MYYND_DESKTOP_REMOTO` (l'indirizzo del
+Myynd ospitato) e `MYYND_DESKTOP_REMOTO_TOKEN` **sul Myynd di casa**.
+
+Quel token si crea dal Myynd ospitato, in *Preferenze → Gettoni per le
+macchine*: si vede una volta sola, insieme alle due righe già pronte da
+incollare. Non è un token di sessione — quelli durano trenta giorni e muoiono a
+ogni cambio di password, e quando muoiono la spinta fallisce in silenzio per
+sempre. Questo non scade, si revoca da quella stessa schermata, e arriva **solo**
+alle due rotte che ricevono i documenti: con uno di questi non si entra
+nell'app, non si cambia la password e non si scarica niente.
 
 ### Perché Google e Microsoft non si offrono, e cosa si fa invece
 
@@ -112,6 +135,11 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   index.ts              le API
   ospitato.ts           cosa cambia su un server, e le variabili di chi ospita
   auth.ts · conti.ts    accesso, sessioni, più persone sulla stessa installazione
+  postaUscita.ts        la casella del server: conferma dell'indirizzo, password dimenticata
+  gettoniEmail.ts       i gettoni che viaggiano in quelle due mail: una volta sola, e scadono
+  gettoni.ts            i gettoni con un ambito, per le macchine: non scadono, si revocano
+  addio.ts              cancellare un conto: sessioni, indice, cartella, configurazione, riga
+  fascicolo.ts          «cosa tenete su di me», in JSON e senza credenziali
   postgres.ts           conti e configurazioni su Postgres (Supabase) con MYYND_POSTGRES; le credenziali cifrate
   chi.ts                di chi è questa richiesta (AsyncLocalStorage)
   config.ts             config.json per persona, 0600

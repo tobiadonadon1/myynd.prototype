@@ -163,8 +163,20 @@ export function useConferma(attesa = 3000) {
     setArmato(false)
   }, [])
 
-  const chiedi = useCallback((fai: () => void) => {
-    if (armatoRef.current) { disarma(); fai(); return }
+  const chiedi = useCallback((fai: () => void | Promise<void>, suGuaio?: (e: unknown) => void) => {
+    if (armatoRef.current) {
+      disarma()
+      // un `fai` che aspetta il server e fallisce moriva qui senza dirlo a nessuno:
+      // chi passa `suGuaio` lo vede; chi non lo passa se lo gestisce da sé
+      try {
+        const r = fai()
+        if (r instanceof Promise && suGuaio) r.catch(suGuaio)
+      } catch (e) {
+        if (!suGuaio) throw e
+        suGuaio(e)
+      }
+      return
+    }
     clearTimeout(timer.current)
     armatoRef.current = true
     setArmato(true)
@@ -199,8 +211,10 @@ function Sicuro({ armato, children }: { armato: boolean; children: ReactNode }) 
  * una volta. Armato prende il colore dell'accento e dice «Sicuro?» nello stesso
  * spazio; mollare il mouse o uscire con il tab lo disarma.
  */
-export function BottoneSicuro({ fai, titolo, chiaro, style, children }: {
-  fai: () => void
+export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
+  fai: () => void | Promise<void>
+  /** Dove dire che `fai` non ce l'ha fatta. Senza, il guasto resta a chi ha scritto `fai`. */
+  guaio?: (frase: string) => void
   titolo?: string
   /** Su fondo scuro. */
   chiaro?: boolean
@@ -212,7 +226,7 @@ export function BottoneSicuro({ fai, titolo, chiaro, style, children }: {
   const acceso = chiaro ? '#FFFFFF' : '#8E3F1F'
   return (
     <Hov as="button" type="button"
-      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai) }}
+      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai, guaio && (x => guaio(x instanceof Error ? x.message : String(x)))) }}
       onMouseLeave={disarma} onBlur={disarma}
       title={titolo} aria-label={armato ? t('Sicuro?') : titolo}
       style={{
@@ -237,8 +251,10 @@ export function BottoneSicuro({ fai, titolo, chiaro, style, children }: {
  * titolo accanto. Il bottone resta al suo posto, trasparente, finché la riga
  * non è sotto mano: così non salta niente né quando compare né quando chiede.
  */
-export function Cestino({ fai, titolo, visibile = true, dim = 22, icona = 12, chiaro, style }: {
-  fai: () => void
+export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona = 12, chiaro, style }: {
+  fai: () => void | Promise<void>
+  /** Come in `BottoneSicuro`: dove dire che `fai` non ce l'ha fatta. */
+  guaio?: (frase: string) => void
   titolo: string
   /** Falso finché la riga non è sotto mano: il bottone c'è, trasparente, e non prende clic. */
   visibile?: boolean
@@ -254,7 +270,7 @@ export function Cestino({ fai, titolo, visibile = true, dim = 22, icona = 12, ch
   const mostra = visibile || armato
   return (
     <Hov as="button" type="button"
-      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai) }}
+      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai, guaio && (x => guaio(x instanceof Error ? x.message : String(x)))) }}
       onKeyDown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
       onMouseLeave={disarma} onBlur={disarma}
       title={armato ? t('Sicuro?') : titolo} aria-label={armato ? t('Sicuro?') : titolo}

@@ -104,12 +104,19 @@ function annuncia(e: Evento) {
  */
 type Voce = { utente: string | null; id: string }
 const coda: Voce[] = []
-let allOpera = false
-/** Quello su cui il modello sta lavorando *adesso*. Non è in coda: è già uscito. */
-let inCorso: string | null = null
+/**
+ * Su cosa sta lavorando adesso, per persona. Una riga alla volta per ciascuno
+ * — due bozze della stessa persona insieme si pestano i piedi sul suo indice —
+ * ma persone diverse non si aspettano: con una fila sola per tutto il server,
+ * la delega di B restava «da Myynd» per i cinque minuti del lavoro di A.
+ */
+const inCorsoDi = new Map<string, string>()
+/** Quanti lavori insieme, in tutto il processo: ogni lavoro è un modello che scrive. */
+const LAVORANTI = 2
 
 /** La chiave di una riga: la persona e l'id insieme. */
 const chiave = (id: string, utente: string | null = chi.adesso()) => `${utente ?? ''}·${id}`
+const inLavoro = (k: string, utente: string | null) => inCorsoDi.get(utente ?? '') === k
 
 /**
  * I compiti che hai richiamato indietro mentre Myynd ci lavorava.
@@ -139,48 +146,54 @@ export function affida(id: string, modo: string) {
   // era questo il «a volte non funziona».
   const utente = chi.adesso()
   const k = chiave(id, utente)
-  if (c.modo === modo && (coda.some(v => v.id === id && v.utente === utente) || inCorso === k)) return
+  if (c.modo === modo && (coda.some(v => v.id === id && v.utente === utente) || inLavoro(k, utente))) return
 
   // quello che sta girando adesso non serve più: si butta invece di lasciarlo
   // scrivere una bozza del modo vecchio sopra a quella che stai per chiedere
-  if (inCorso === k) richiamati.add(k)
+  if (inLavoro(k, utente)) richiamati.add(k)
 
   const dove = coda.findIndex(v => v.id === id && v.utente === utente)
   if (dove >= 0) coda.splice(dove, 1)
 
   store.affidaCompito(id, modo)
   coda.push({ utente, id })
-  // il giro va avanti da solo: se esplode non deve portarsi dietro il processo,
-  // e soprattutto non deve lasciare in mezzo alla strada quelli ancora in fila
-  void gira().catch(e => console.error('myynd · la coda dei compiti si è fermata:', e))
+  gira()
 }
 
-async function gira() {
-  if (allOpera) return
-  allOpera = true
-  try {
-    for (;;) {
-      const voce = coda.shift()
-      if (!voce) break
-      const k = chiave(voce.id, voce.utente)
-      inCorso = k
-      try {
-        // si lavora come la persona che l'ha affidato, non come chi ha
-        // acceso il giro: è la differenza fra il suo indice e quello di un altro
-        await (voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id)) : svolgiUno(voce.id))
-      } catch (e) {
-        // un compito che esplode non deve fermare quelli dietro di lui
-        console.error('myynd · compito', voce.id, e)
-      } finally {
-        inCorso = null
+/**
+ * Il giro: prende dalla fila la prima riga di una persona che non ha già un
+ * lavoro in corso, finché c'è posto. Non lancia mai — un compito che esplode
+ * non deve fermare quelli dietro di lui — e si richiama da solo quando uno
+ * finisce.
+ */
+function gira() {
+  while (inCorsoDi.size < LAVORANTI) {
+    const dove = coda.findIndex(v => !inCorsoDi.has(v.utente ?? ''))
+    if (dove < 0) break
+    const [voce] = coda.splice(dove, 1)
+    const k = chiave(voce.id, voce.utente)
+    inCorsoDi.set(voce.utente ?? '', k)
+    // si lavora come la persona che l'ha affidato, non come chi ha acceso il
+    // giro: è la differenza fra il suo indice e quello di un altro
+    void Promise.resolve()
+      .then(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id)) : svolgiUno(voce.id))
+      .catch(e => console.error('myynd · compito', voce.id, e))
+      .finally(() => {
+        inCorsoDi.delete(voce.utente ?? '')
         richiamati.delete(k)
-      }
-    }
-  } finally {
-    allOpera = false
-    inCorso = null
+        gira()
+      })
   }
 }
+
+/**
+ * Un guaio che passa da solo — il modello sotto sforzo, la rete, un flusso
+ * caduto — non merita una riga rossa in lista alle sette di mattina: si
+ * riprova una volta, fra due minuti, in silenzio. Alla seconda si dice.
+ */
+const PASSEGGERO = /sotto sforzo|ha un problema in questo momento|Ci ha messo troppo|Non riesco a raggiungere|interrotta a metà|Non ce l’ho fatta|Non ce l'ho fatta/
+const RIPROVA_FRA = 2 * 60_000
+const ritentati = new Set<string>()
 
 /**
  * Le mani con cui lavora, sostituibili solo nelle prove.
@@ -250,6 +263,7 @@ async function svolgiUno(id: string) {
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
     if (!store.risultatoCompito(id, testo, fonti, chiede ? 'chiede' : 'pronto')) return
+    ritentati.delete(chiave(id))
 
     // Se si è fermato, le stesse cose dette come si dicono a voce: tre domande
     // con le risposte da toccare. Se non ci riesce resta il paragrafo di prima,
@@ -264,6 +278,19 @@ async function svolgiUno(id: string) {
   } catch (e) {
     if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
+    const k = chiave(id)
+    if (PASSEGGERO.test(guaio) && !ritentati.has(k)) {
+      ritentati.add(k)
+      console.warn(`myynd · compito ${id}: ${guaio} — riprovo fra due minuti`)
+      const utente = chi.adesso()
+      setTimeout(() => {
+        const ancora = () => store.compito(id)?.stato === 'delegato'
+        if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id }); gira() }
+        else ritentati.delete(k)
+      }, RIPROVA_FRA).unref()
+      return
+    }
+    ritentati.delete(k)
     try {
       if (!store.guaioCompito(id, guaio)) return
     } catch (ancora) {
@@ -289,7 +316,7 @@ export function richiama(id: string) {
   // lasciava id nell'insieme per sempre, e — peggio — un riaffido subito dopo
   // ripuliva il segno di un lavoro ancora in volo, che quindi tornava a scrivere
   const k = chiave(id, utente)
-  if (inCorso === k) richiamati.add(k)
+  if (inLavoro(k, utente)) richiamati.add(k)
   const c = store.compito(id)
   // 'chiede' mancava, ed è lo stato in cui si preme «richiama» più spesso:
   // la riga ti fa una domanda, tu decidi di fartela da solo, e la riga

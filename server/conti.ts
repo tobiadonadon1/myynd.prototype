@@ -50,9 +50,23 @@ const LUNGHEZZA = 64
 
 /** Quanto dura una sessione senza farsi rivedere. */
 const DURA = 30 * 86_400_000
+/**
+ * Ogni quanto si segna che la sessione è stata rivista. «Senza farsi rivedere»
+ * vuol dire dall'ultimo uso, non dalla nascita: prima `quando` era la
+ * creazione e basta, e chi usava Myynd tutti i giorni si trovava fuori al
+ * trentesimo esatto. Una scrittura al giorno per sessione basta a dire «vista».
+ */
+const RIVEDI_OGNI = 86_400_000
 
-type Utente = { id: string; email: string; sale: string; hash: string; creato: string; cartella: string | null }
-type Credenziali = { id: string; sale: string; hash: string }
+type Utente = {
+  id: string; email: string; sale: string; hash: string; creato: string; cartella: string | null
+  /**
+   * Quando ha confermato di essere lui a quell'indirizzo. `null` = non l'ha
+   * fatto — e conta solo dove la posta del server c'è: vedi `postaUscita.ts`.
+   */
+  verificato: string | null
+}
+type Credenziali = { id: string; sale: string; hash: string; verificato: string | null }
 
 // ——— SQLite: in casa ———
 
@@ -100,6 +114,29 @@ if (db) {
       quando   TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessioni_utente ON sessioni (utente);
+    -- I gettoni della posta (conferma dell'indirizzo, password dimenticata) e
+    -- quelli con un ambito. Le regole stanno in gettoniEmail.ts e gettoni.ts:
+    -- le tabelle stanno qui perché sono della stessa natura delle sessioni —
+    -- dicono di chi è una chiave — e perché cancella(), qui sotto, le deve
+    -- poter svuotare anche in un processo che quei due file non li ha aperti.
+    CREATE TABLE IF NOT EXISTS gettoni_email (
+      impronta TEXT PRIMARY KEY,
+      utente   TEXT NOT NULL,
+      scopo    TEXT NOT NULL,
+      scade    TEXT NOT NULL,
+      usato    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS gettoni_email_utente ON gettoni_email (utente);
+    CREATE TABLE IF NOT EXISTS gettoni (
+      id       TEXT PRIMARY KEY,
+      utente   TEXT NOT NULL,
+      nome     TEXT NOT NULL,
+      ambito   TEXT NOT NULL,
+      impronta TEXT NOT NULL UNIQUE,
+      creato   TEXT NOT NULL,
+      usato    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS gettoni_utente ON gettoni (utente);
   `)
   /*
    * Le colonne che arrivano dopo.
@@ -109,8 +146,25 @@ if (db) {
    * segnale è un «no such column» in faccia a qualcuno che stava solo aprendo
    * l'app. Qui si guarda cosa c'è davvero e si aggiunge quello che manca.
    */
-  const gia = (db.prepare('PRAGMA table_info(utenti)').all() as { name: string }[]).some(c => c.name === 'cartella')
-  if (!gia) db.exec('ALTER TABLE utenti ADD COLUMN cartella TEXT')
+  const colonne = new Set((db.prepare('PRAGMA table_info(utenti)').all() as { name: string }[]).map(c => c.name))
+  if (!colonne.has('cartella')) db.exec('ALTER TABLE utenti ADD COLUMN cartella TEXT')
+  // I conti che c'erano prima che la verifica esistesse restano a NULL, e va
+  // bene: la conferma la chiede `auth.ts` solo dove la posta del server è
+  // configurata, e chi entra da mesi non deve trovarsi la porta chiusa perché
+  // qualcuno ha aggiunto una variabile.
+  if (!colonne.has('verificato')) db.exec('ALTER TABLE utenti ADD COLUMN verificato TEXT')
+}
+
+/**
+ * Il database dei conti, per chi tiene le sue tabelle qui accanto.
+ *
+ * Lo chiedono `gettoni.ts` e `gettoniEmail.ts`: quello che tengono — a chi
+ * appartiene un gettone — è esattamente della stessa natura di una sessione, e
+ * deve stare *sopra* le persone e non dentro l'indice di una. `null` vuol dire
+ * che i conti stanno su Postgres, e allora le tabelle le fa `postgres.schema()`.
+ */
+export function suDisco(): DatabaseSync | null {
+  return db
 }
 
 // ——— Postgres: la copia in memoria ———
@@ -161,12 +215,12 @@ function tieni(u: Utente) {
 }
 
 async function ricarica(): Promise<void> {
-  const { rows } = await postgres.q('SELECT id, email, sale, hash, creato, cartella FROM myynd_utenti')
+  const { rows } = await postgres.q('SELECT id, email, sale, hash, creato, cartella, verificato FROM myynd_utenti')
   for (const r of rows) tieni(r as Utente)
 }
 
 async function caricaUtente(id: string): Promise<void> {
-  const { rows } = await postgres.q('SELECT id, email, sale, hash, creato, cartella FROM myynd_utenti WHERE id = $1', [id])
+  const { rows } = await postgres.q('SELECT id, email, sale, hash, creato, cartella, verificato FROM myynd_utenti WHERE id = $1', [id])
   if (rows[0]) tieni(rows[0] as Utente)
 }
 
@@ -313,7 +367,16 @@ function presentaLaCartella(id: string, email: string, creato: string) {
  * nell'account del primo — dentro la sua posta. Adesso ognuno ha la sua
  * cartella, e aprirne una a un estraneo non gli fa vedere niente di nessuno.
  */
-export async function registra(email: string, password: string):
+/**
+ * `verificato` lo decide chi chiama, non questo file.
+ *
+ * Qui non si sa se su questa installazione la posta del server esiste, e non è
+ * affar suo: `auth.registra()` lo sa e lo dice. Falso vuol dire due cose
+ * insieme — la colonna resta vuota, e **non si apre nessuna sessione**: chi
+ * deve ancora confermare il proprio indirizzo non entra, e un conto che nasce
+ * già dentro renderebbe la conferma una formalità da ignorare.
+ */
+export async function registra(email: string, password: string, verificato = true):
   Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string }> {
   const e = normale(email)
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, errore: 'Indirizzo non valido.' }
@@ -325,29 +388,53 @@ export async function registra(email: string, password: string):
   const sale = randomBytes(16).toString('hex')
   const creato = new Date().toISOString()
   const hash = await impasta(password, sale)
+  const quandoVerificato = verificato ? creato : null
   if (db) {
-    db.prepare('INSERT INTO utenti (id, email, sale, hash, creato) VALUES (?,?,?,?,?)').run(id, e, sale, hash, creato)
+    // due registrazioni dello stesso indirizzo nello stesso istante: `esiste()`
+    // ha detto no a tutt'e due, e vince il vincolo, non un 500
+    const r = db.prepare('INSERT OR IGNORE INTO utenti (id, email, sale, hash, creato, verificato) VALUES (?,?,?,?,?,?)')
+      .run(id, e, sale, hash, creato, quandoVerificato)
+    if (!r.changes) return giaPreso
   } else {
     // la copia in memoria può non sapere di un conto nato un attimo fa su
     // un'altra replica: l'ultima parola ce l'ha il vincolo sul database
     const { rows } = await postgres.q(
-      'INSERT INTO myynd_utenti (id, email, sale, hash, creato) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (email) DO NOTHING RETURNING id',
-      [id, e, sale, hash, creato])
+      'INSERT INTO myynd_utenti (id, email, sale, hash, creato, verificato) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (email) DO NOTHING RETURNING id',
+      [id, e, sale, hash, creato, quandoVerificato])
     if (!rows.length) return giaPreso
-    tieni({ id, email: e, sale, hash, creato, cartella: null })
+    tieni({ id, email: e, sale, hash, creato, cartella: null, verificato: quandoVerificato })
   }
   presentaLaCartella(id, e, creato)
-  return { ok: true, id, token: await apri(id) }
+  return { ok: true, id, token: verificato ? await apri(id) : '' }
 }
 
 async function credenziali(email: string): Promise<Credenziali | undefined> {
-  if (db) return db.prepare('SELECT id, sale, hash FROM utenti WHERE email = ?').get(email) as Credenziali | undefined
-  const { rows } = await postgres.q('SELECT id, sale, hash FROM myynd_utenti WHERE email = $1', [email])
+  if (db) return db.prepare('SELECT id, sale, hash, verificato FROM utenti WHERE email = ?').get(email) as Credenziali | undefined
+  const { rows } = await postgres.q('SELECT id, sale, hash, verificato FROM myynd_utenti WHERE email = $1', [email])
   return rows[0] as Credenziali | undefined
 }
 
-export async function entra(email: string, password: string):
-  Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string }> {
+/**
+ * Chi c'è a questo indirizzo, chiesto al database e non alla memoria.
+ *
+ * Serve alle due strade che partono da un indirizzo scritto da chi non è
+ * ancora entrato — «rimettimi la password» e «rimandami la conferma» — e su
+ * quelle la copia in memoria non basta: una replica appena accesa direbbe che
+ * non c'è nessuno, e la persona resterebbe fuori senza sapere perché.
+ */
+export async function aQuestoIndirizzo(email: string): Promise<{ id: string; verificato: string | null } | null> {
+  const u = await credenziali(normale(email))
+  return u ? { id: u.id, verificato: u.verificato ?? null } : null
+}
+
+/**
+ * `esigiVerifica` arriva da fuori, e non ha un valore di serie che chiuda la
+ * porta: `auth.ts` lo accende solo dove esiste un modo di aprirla — cioè dove
+ * la posta del server c'è. Chiuderla qui di serie vorrebbe dire un'installazione
+ * di casa in cui nessuno entra più.
+ */
+export async function entra(email: string, password: string, esigiVerifica = false):
+  Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string; daVerificare?: boolean }> {
   const e = normale(email)
   const u = await credenziali(e)
 
@@ -362,6 +449,20 @@ export async function entra(email: string, password: string):
   const sale = u?.sale ?? 'nessuno'
   const buona = u ? await combacia(password, sale, u.hash) : (await impastaCon(password, sale, N), false)
   if (!u || !buona) return { ok: false, errore: 'Indirizzo o password non corretti.' }
+
+  /*
+   * La password è quella giusta, ma l'indirizzo non è ancora confermato.
+   *
+   * Si esce **prima** di aprire una sessione, che è tutto il punto: se la
+   * sessione nascesse e poi la si buttasse, ci sarebbe un istante in cui un
+   * conto non confermato ha un token valido sul database. E si dice quale
+   * delle due cose non va — non «indirizzo o password non corretti» — perché
+   * qui non c'è niente da nascondere: chi arriva qui ha già dimostrato di
+   * conoscere la password.
+   */
+  if (esigiVerifica && !u.verificato) {
+    return { ok: false, errore: 'Prima conferma il tuo indirizzo: ti abbiamo scritto quando ti sei registrato.', daVerificare: true }
+  }
 
   // un hash scritto con il costo di prima si riscrive con quello di adesso:
   // è l'unico momento in cui la password la conosciamo
@@ -419,6 +520,9 @@ export async function utenteDelToken(token?: string): Promise<string | null> {
       db.prepare('DELETE FROM sessioni WHERE impronta = ?').run(imp)
       return null
     }
+    if (Date.now() - Date.parse(r.quando) > RIVEDI_OGNI) {
+      db.prepare('UPDATE sessioni SET quando = ? WHERE impronta = ?').run(new Date().toISOString(), imp)
+    }
     return r.utente
   }
   esigi()
@@ -434,6 +538,10 @@ export async function utenteDelToken(token?: string): Promise<string | null> {
     await postgres.q('DELETE FROM myynd_sessioni WHERE impronta = $1', [imp])
     sessioni.delete(imp)
     return null
+  }
+  if (Date.now() - Date.parse(r.quando) > RIVEDI_OGNI) {
+    r.quando = new Date().toISOString()
+    await postgres.q('UPDATE myynd_sessioni SET quando = $1 WHERE impronta = $2', [r.quando, imp])
   }
   sessioni.set(imp, { utente: r.utente, quando: r.quando, visto: Date.now() })
   // una sessione aperta su un'altra replica appartiene a qualcuno che qui
@@ -460,11 +568,27 @@ export async function chiudiTutte(utente: string): Promise<number> {
   return rows.length
 }
 
-/** Le sessioni scadute, via. Si chiama all'avvio: non serve un timer per questo. */
+/**
+ * Le chiavi che non aprono più, via. Si chiama all'avvio: non serve un timer.
+ *
+ * Anche i gettoni della posta, che sono di `gettoniEmail.ts`: la potatura sta
+ * qui e non lì perché quel file importa questo, e chiamarlo dall'altro verso
+ * chiuderebbe un giro fra i due. Non è fare spazio — sono righe da cento byte
+ * — è non tenere in giro l'impronta di una chiave che non apre più niente.
+ * `ieri` e non `adesso`: un gettone appena speso vale la pena tenerlo un
+ * giorno, così chi riapre lo stesso collegamento trova «non vale più» invece
+ * di «non l'ho mai visto».
+ */
 export async function pota(): Promise<void> {
   const limite = new Date(Date.now() - DURA).toISOString()
-  if (db) { db.prepare('DELETE FROM sessioni WHERE quando < ?').run(limite); return }
+  const ieri = new Date(Date.now() - 86_400_000).toISOString()
+  if (db) {
+    db.prepare('DELETE FROM sessioni WHERE quando < ?').run(limite)
+    db.prepare('DELETE FROM gettoni_email WHERE scade < ? OR usato < ?').run(ieri, ieri)
+    return
+  }
   await postgres.q('DELETE FROM myynd_sessioni WHERE quando < $1', [limite])
+  await postgres.q('DELETE FROM myynd_gettoni_email WHERE scade < $1 OR usato < $1', [ieri])
 }
 
 // ——— i gesti rari ———
@@ -493,13 +617,66 @@ export async function adotta(email: string, sale: string, hash: string, dove: st
   const id = nuovoId()
   const e = normale(email)
   const creato = new Date().toISOString()
+  // già verificato, e non è una scorciatoia: è la persona che usa questa
+  // installazione da mesi, e l'indirizzo è quello con cui è sempre entrata
   if (db) {
-    db.prepare('INSERT INTO utenti (id, email, sale, hash, creato, cartella) VALUES (?,?,?,?,?,?)').run(id, e, sale, hash, creato, dove)
+    db.prepare('INSERT INTO utenti (id, email, sale, hash, creato, cartella, verificato) VALUES (?,?,?,?,?,?,?)').run(id, e, sale, hash, creato, dove, creato)
   } else {
-    await postgres.q('INSERT INTO myynd_utenti (id, email, sale, hash, creato, cartella) VALUES ($1,$2,$3,$4,$5,$6)', [id, e, sale, hash, creato, dove])
-    tieni({ id, email: e, sale, hash, creato, cartella: dove })
+    await postgres.q('INSERT INTO myynd_utenti (id, email, sale, hash, creato, cartella, verificato) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, e, sale, hash, creato, dove, creato])
+    tieni({ id, email: e, sale, hash, creato, cartella: dove, verificato: creato })
   }
   return id
+}
+
+/**
+ * Ha confermato: da adesso entra.
+ *
+ * Non è idempotente per caso — lo è di proposito. Un collegamento aperto due
+ * volte (un client di posta che li visita per controllarli, una persona che
+ * torna indietro col browser) non deve diventare un errore: la seconda volta
+ * non cambia niente e va bene così. Il gettone, quello sì, vale una volta sola,
+ * ed è `gettoniEmail.ts` a tenerne conto.
+ */
+export async function segnaVerificato(id: string): Promise<void> {
+  const quando = new Date().toISOString()
+  if (db) {
+    db.prepare('UPDATE utenti SET verificato = ? WHERE id = ? AND verificato IS NULL').run(quando, id)
+    return
+  }
+  await postgres.q('UPDATE myynd_utenti SET verificato = $1 WHERE id = $2 AND verificato IS NULL', [quando, id])
+  const c = utenti.get(id)
+  if (c && !c.verificato) c.verificato = quando
+}
+
+/**
+ * Il conto, via — riga, sessioni, gettoni.
+ *
+ * **Non tocca i file di nessuno**: la cartella con l'indice e i documenti la
+ * cancella `addio.ts`, che sa anche quale indice va chiuso prima. Qui c'è solo
+ * quello che vive nel database dei conti.
+ *
+ * Le figlie si cancellano a mano anche dove il `ON DELETE CASCADE` c'è. Non è
+ * cintura e bretelle: quel vincolo lo mette `postgres.schema()` alla creazione
+ * della tabella, e `CREATE TABLE IF NOT EXISTS` non lo aggiunge a un database
+ * nato prima. Una cancellazione che lascia dietro le sessioni di un conto che
+ * non esiste più è esattamente la cosa che non deve poter succedere in nessuna
+ * delle due installazioni.
+ */
+export async function cancella(id: string): Promise<boolean> {
+  if (db) {
+    db.prepare('DELETE FROM sessioni WHERE utente = ?').run(id)
+    db.prepare('DELETE FROM gettoni WHERE utente = ?').run(id)
+    db.prepare('DELETE FROM gettoni_email WHERE utente = ?').run(id)
+    return Number(db.prepare('DELETE FROM utenti WHERE id = ?').run(id).changes) > 0
+  }
+  esigi()
+  for (const [imp, s] of sessioni) if (s.utente === id) sessioni.delete(imp)
+  await postgres.q('DELETE FROM myynd_sessioni WHERE utente = $1', [id])
+  await postgres.q('DELETE FROM myynd_gettoni WHERE utente = $1', [id])
+  await postgres.q('DELETE FROM myynd_gettoni_email WHERE utente = $1', [id])
+  const { rows } = await postgres.q('DELETE FROM myynd_utenti WHERE id = $1 RETURNING id', [id])
+  utenti.delete(id)
+  return rows.length > 0
 }
 
 /**
@@ -556,7 +733,9 @@ export const perProva = {
     sessioni.set(imp, { utente, quando, visto: Date.now() })
   },
   async svuota(): Promise<void> {
-    if (db) { db.exec('DELETE FROM sessioni; DELETE FROM utenti'); return }
+    if (db) { db.exec('DELETE FROM gettoni; DELETE FROM gettoni_email; DELETE FROM sessioni; DELETE FROM utenti'); return }
+    await postgres.q('DELETE FROM myynd_gettoni')
+    await postgres.q('DELETE FROM myynd_gettoni_email')
     await postgres.q('DELETE FROM myynd_sessioni')
     await postgres.q('DELETE FROM myynd_utenti')
     sessioni.clear()
