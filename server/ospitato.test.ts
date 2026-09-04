@@ -41,8 +41,8 @@ test('Google si offre perché chi ospita ha registrato l’app; Microsoft no', (
   assert.equal(o.fermoSulServer('posta'), false)
 })
 
-test('il desktop non si offre su un server', () => {
-  assert.equal(o.disponibile('desktop'), false)
+test('il desktop si offre anche su un server — legge dal browser, non dal disco', () => {
+  assert.equal(o.disponibile('desktop'), true)
   assert.equal(o.disponibile('posta'), true)
 })
 

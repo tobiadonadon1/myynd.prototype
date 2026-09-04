@@ -160,7 +160,8 @@ const INTERNI = new Set([
   'Postgres non è configurato: manca MYYND_POSTGRES.',
   'MYYND_CHIAVE manca o è più corta di sedici caratteri.',
   'Configurazione cifrata in un formato che non conosco.',
-  'I conti non sono ancora pronti: manca `await conti.avvia()`.'
+  'I conti non sono ancora pronti: manca `await conti.avvia()`.',
+  'MYYND_POSTGRES non sembra una stringa postgresql://utente:password@host:porta/database.'
 ])
 
 /** Una frase da leggere, non un'etichetta tecnica. */

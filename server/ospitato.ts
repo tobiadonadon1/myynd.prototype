@@ -218,14 +218,22 @@ export function origineAmmessa(origin: string, portaVera: number): boolean {
  * Quello che su un server non può funzionare, e che va detto invece che
  * lasciato fallire.
  *
- * Sono le tre cose che leggono *questa macchina*: le cartelle del disco, il
- * Calendario del Mac, e Claude Code. Dentro un contenitore la prima trova una
- * cartella vuota, la seconda non trova AppleScript, la terza non trova
- * l'eseguibile. Offrirle lo stesso vorrebbe dire tre schede che si possono
+ * Il Calendario del Mac e Claude Code leggono *questa macchina*: dentro un
+ * contenitore il primo non trova AppleScript, il secondo non trova
+ * l'eseguibile. Offrirli lo stesso vorrebbe dire schede che si possono
  * premere e che non porteranno mai niente — e chi le prova pensa che sia
  * rotto Myynd, non che siano fuori posto.
+ *
+ * Il desktop **non è più in questa lista**. Era qui perché la vecchia scheda
+ * chiedeva un percorso sul disco — e quello, dentro un contenitore, è sempre
+ * una cartella vuota. Ma la stessa scheda adesso, ospitati, chiede al browser
+ * di scegliere una cartella: legge lì, non sul server, e quella strada
+ * funziona ovunque. La rotta che chiede *un percorso* (`/api/connettori/
+ * desktop`, quella vecchia) resta rifiutata su un server — ha ancora senso
+ * rifiutarla, perché un percorso è sempre e solo quello del server — ma il
+ * connettore nel suo insieme sì.
  */
-export const SOLO_IN_CASA = ['desktop']
+export const SOLO_IN_CASA: string[] = []
 
 /**
  * Le app OAuth di chi ospita.

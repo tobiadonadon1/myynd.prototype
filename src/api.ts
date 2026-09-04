@@ -725,6 +725,13 @@ export const api = {
   collegaDesktop: (cartelle: string[]) =>
     json<{ ok: true; cartelle: string[] }>('/api/connettori/desktop', { method: 'POST', body: JSON.stringify({ cartelle }) }),
 
+  /** Un pezzo della cartella scelta nel browser, letta lì e mandata qui. */
+  caricaFileDesktop: (p: {
+    file: { percorso: string; base64: string; quando: number }[]
+    radice: string; completo: boolean; visti: string[]
+  }) => json<{ ok: true; documenti: number; tolti: number }>(
+    '/api/connettori/desktop/carica-file', { method: 'POST', body: JSON.stringify(p) }),
+
   /**
    * Google: la chiamata resta appesa finché non hai finito nel browser.
    *

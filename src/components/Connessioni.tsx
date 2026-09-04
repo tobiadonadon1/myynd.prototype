@@ -109,7 +109,13 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
         backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 60
       }} />
       <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="connessioni-titolo" style={{
-        position: 'absolute', top: 60, bottom: 60, left: '50%', transform: 'translateX(-50%)',
+        // `top`/`bottom` fissi obbligavano la finestra all'altezza dello
+        // schermo anche con dentro una scheda sola — poche righe in alto e il
+        // resto vuoto, fino in fondo. Centrata e alta quanto il contenuto, con
+        // un tetto: la scheda singola si stringe, l'elenco intero delle fonti
+        // ci sbatte contro e scorre come ha sempre fatto.
+        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        maxHeight: 'calc(100% - 120px)',
         width: 620, maxWidth: '88%', zIndex: 61, display: 'flex', flexDirection: 'column',
         borderRadius: '26px 22px 26px 20px', background: 'rgba(255,253,249,.97)',
         border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)',

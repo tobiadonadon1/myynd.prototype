@@ -3,7 +3,7 @@
 //
 // Le credenziali le digiti tu, nella tua app, e vanno al tuo server locale.
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
 import type { Stato } from '../api'
 import { frasi, t } from '../lingua'
@@ -436,10 +436,117 @@ export function FormPosta({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Le estensioni che sappiamo leggere, ripetute qui.
+ *
+ * La stessa lista sta in `server/connettori/estrai.ts`, e non c'è modo pulito
+ * di condividerla: quel file importa `pdf-parse` e `mammoth`, pacchetti Node
+ * che un browser non sa cosa farsene. È un elenco di sette estensioni — il
+ * doppio mantenimento costa meno del bundle che servirebbe a evitarlo.
+ */
+const LETTI_NEL_BROWSER = ['.pdf', '.docx', '.md', '.markdown', '.txt', '.rtf', '.csv', '.org', '.tex']
+
+/** Fino a dove si guarda dentro una cartella scelta nel browser, prima di fermarsi. */
+const MASSIMO_FILE_BROWSER = 1200
+
+function base64Di(buf: ArrayBuffer): string {
+  const byte = new Uint8Array(buf)
+  let binario = ''
+  // a pezzi: passare centomila caratteri in un colpo solo a
+  // `String.fromCharCode` supera lo stack di qualche browser
+  const pezzo = 0x8000
+  for (let i = 0; i < byte.length; i += pezzo) binario += String.fromCharCode(...byte.subarray(i, i + pezzo))
+  return btoa(binario)
+}
+
+/**
+ * Il desktop, scelto nel browser — la scheda che si vede ospitati.
+ *
+ * Non chiede un percorso: un percorso scritto qui sarebbe il percorso del
+ * server, che non ha le tue cartelle. Chiede al browser di aprire il
+ * selettore vero del sistema — lo stesso che apre qualunque sito quando
+ * carichi una foto — e da lì legge e manda i file uno a pezzi, senza che
+ * nessun dato resti da qualche parte finché non lo mandi tu.
+ */
+function FormDesktopBrowser({ tema, ok }: Props) {
+  const input = useRef<HTMLInputElement>(null)
+  const [stato, setStato] = useState<'fermo' | 'carico' | 'fatto' | 'guaio'>('fermo')
+  const [avanzamento, setAvanzamento] = useState({ fatti: 0, totale: 0 })
+  const [fatti, setFatti] = useState<number | null>(null)
+  const [err, setErr] = useState('')
+
+  const scegli = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const lista = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (!lista.length) return
+
+    const conPercorso = (f: File) => (f as unknown as { webkitRelativePath?: string }).webkitRelativePath || f.name
+    const radice = conPercorso(lista[0]).split('/')[0]
+
+    setStato('carico'); setErr(''); setFatti(null)
+    const utili: { file: File; percorso: string }[] = []
+    const visti: string[] = []
+    for (const f of lista) {
+      const percorso = conPercorso(f)
+      const punto = percorso.lastIndexOf('.')
+      if (!LETTI_NEL_BROWSER.includes(punto < 0 ? '' : percorso.slice(punto).toLowerCase())) continue
+      if (!f.size || f.size > 12_000_000) { visti.push(`desktop:${percorso}`); continue }
+      if (utili.length < MASSIMO_FILE_BROWSER) utili.push({ file: f, percorso })
+    }
+    setAvanzamento({ fatti: 0, totale: utili.length })
+
+    try {
+      const PEZZO = 15
+      const gruppi = Math.max(1, Math.ceil(utili.length / PEZZO))
+      let documenti = 0
+      for (let g = 0; g < gruppi; g++) {
+        const fetta = utili.slice(g * PEZZO, g * PEZZO + PEZZO)
+        const file = await Promise.all(fetta.map(async ({ file: f, percorso }) => ({
+          percorso, base64: base64Di(await f.arrayBuffer()), quando: f.lastModified
+        })))
+        const ultimo = g === gruppi - 1
+        const r = await api.caricaFileDesktop({ file, radice, completo: ultimo, visti: ultimo ? visti : [] })
+        documenti += r.documenti
+        setAvanzamento({ fatti: Math.min((g + 1) * PEZZO, utili.length), totale: utili.length })
+      }
+      setFatti(documenti)
+      setStato('fatto')
+      ok()
+    } catch (er) {
+      setErr(er instanceof Error ? er.message : String(er))
+      setStato('guaio')
+    }
+  }
+
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.')}
+      </div>
+      <input ref={input} type="file" multiple
+        {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
+        style={{ display: 'none' }} onChange={scegli} />
+      <div style={{ marginTop: 12 }}>
+        <Conferma onClick={() => input.current?.click()} occupato={stato === 'carico'} tema={tema}>
+          {stato === 'carico' ? t('Sto leggendo…') : t('Scegli una cartella')}
+        </Conferma>
+      </div>
+      {stato === 'carico' && avanzamento.totale > 0 && (
+        <div style={{ ...nota(tema), marginTop: 10 }}>{frasi.fileLettiDiTotale(avanzamento.fatti, avanzamento.totale)}</div>
+      )}
+      {stato === 'fatto' && fatti !== null && (
+        <div style={{ ...nota(tema), marginTop: 10 }}>{frasi.cartellaSincronizzata(fatti)}</div>
+      )}
+      <Errore testo={err} />
+    </div>
+  )
+}
+
 export function FormDesktop({ tema, ok }: Props) {
   const [cartelle, setCartelle] = useState<string[]>([])
   const [manuale, setManuale] = useState('')
   const [suggeriti, setSuggeriti] = useState<string[]>([])
+  const [ospitato, setOspitato] = useState<boolean | null>(null)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -448,10 +555,18 @@ export function FormDesktop({ tema, ok }: Props) {
   // sceglierle tutte era tre.
   useEffect(() => {
     api.stato().then(s => {
+      setOspitato(s.ospitato)
       setSuggeriti(s.suggerimentiDesktop)
       setCartelle(c => (c.length ? c : s.suggerimentiDesktop))
     }).catch(() => {})
   }, [])
+
+  // Ospitati non c'è nessun percorso da chiedere: il server non ha le tue
+  // cartelle, e la scheda che le chiederebbe lo direbbe a chi la guarda per
+  // primo. `null` finché non si sa: un lampo della scheda sbagliata mentre
+  // arriva la risposta è peggio di un attimo vuoto.
+  if (ospitato === null) return null
+  if (ospitato) return <FormDesktopBrowser tema={tema} ok={ok} />
 
   const alterna = (c: string) => setCartelle(v => (v.includes(c) ? v.filter(x => x !== c) : [...v, c]))
 

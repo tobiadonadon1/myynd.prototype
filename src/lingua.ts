@@ -847,6 +847,10 @@ const EN: Record<string, string> = {
     'PDF, Word, plain text. Read-only, and only where you say.',
   'Oppure un percorso': 'Or a path',
   'Collega il desktop': 'Connect the desktop',
+  'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.':
+    'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime — it does not happen on its own.',
+  'Scegli una cartella': 'Choose a folder',
+  'Sto leggendo…': 'Reading…',
   'Token da notion.so/my-integrations. Poi condividi con l\'integrazione le pagine da leggere.':
     'Token from notion.so/my-integrations. Then share the pages to read with the integration.',
   'Token di integrazione': 'Integration token',
@@ -1562,6 +1566,14 @@ export const frasi = {
 
   documentiLetti: (n: string) => corrente === 'en'
     ? `${n} document${n === '1' ? '' : 's'} read` : `${n} document${n === '1' ? 'o letto' : 'i letti'}`,
+
+  /** Il caricamento della cartella scelta nel browser, un pezzo alla volta. */
+  fileLettiDiTotale: (fatti: number, totale: number) => corrente === 'en'
+    ? `${fatti} of ${totale} file${totale === 1 ? '' : 's'} read`
+    : `${fatti} di ${totale} file lett${totale === 1 ? 'o' : 'i'}`,
+  cartellaSincronizzata: (n: number) => corrente === 'en'
+    ? (n === 1 ? '1 document synced.' : `${n} documents synced.`)
+    : (n === 1 ? '1 documento sincronizzato.' : `${n} documenti sincronizzati.`),
 
   attiviDaCollegare: (attivi: number, da: number) =>
     corrente === 'en'

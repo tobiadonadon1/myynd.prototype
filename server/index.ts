@@ -27,6 +27,8 @@ import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
 import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
+import * as desktopRemoto from './connettori/desktopRemoto.ts'
+import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -580,10 +582,18 @@ app.post('/api/connettori/posta', async (req, res) => {
 })
 
 app.post('/api/connettori/desktop', async (req, res) => {
-  // Il catalogo lo nasconde già; ma una rotta che accetta un percorso qualunque
-  // *del server* — `/etc`, la cartella dei dati — non può fidarsi di un elenco
-  // che sta in un'altra schermata. Provato: rispondeva «ok» con `/etc`.
-  if (!ospitato.disponibile('desktop')) {
+  /*
+   * Un percorso è sempre e solo un percorso *del server*.
+   *
+   * `ospitato.disponibile('desktop')` non basta più qui: il connettore nel
+   * suo insieme è offerto anche ospitati, dalla scheda che chiede al browser
+   * una cartella — ma questa rotta è quella vecchia, quella che chiede *un
+   * percorso*, e un percorso scritto qui non è mai una cartella di chi la
+   * scrive: è sempre una cartella del server. `/etc`, la cartella dei dati —
+   * provato, rispondeva «ok». Quindi qui si guarda `OSPITATO` direttamente,
+   * non il catalogo.
+   */
+  if (ospitato.OSPITATO) {
     return res.status(400).json({ errore: 'Su un server non ci sono cartelle da leggere: le fonti sono quelle collegate in rete.' })
   }
   const cartelle: string[] = req.body?.cartelle ?? []
@@ -593,6 +603,104 @@ app.post('/api/connettori/desktop', async (req, res) => {
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ desktop: { cartelle: esito.cartelle } })
     res.json({ ok: true, cartelle: esito.cartelle })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Il desktop, spinto da fuori — non letto qui.
+ *
+ * Questa rotta esiste apposta *per* un server: quello che riceve l'ha già
+ * letto un Myynd in casa, con `MYYND_DESKTOP_REMOTO` puntata qui — vedi
+ * `connettori/desktopRemoto.ts`. Per questo non passa da
+ * `ospitato.disponibile('desktop')`: quel controllo dice «non c'è niente da
+ * *sfogliare* qui», e qui non si sfoglia niente, si riceve.
+ *
+ * Fonte e gruppo li decide questa rotta, non chi manda: sono la chiave con
+ * cui `riconcilia()` sa cosa toccare, e fidarsi di un valore arrivato da fuori
+ * vorrebbe dire lasciare che una richiesta imprevista cancelli documenti di
+ * un'altra fonte. Chi può chiamarla è già dentro la guardia — lo stesso
+ * token di sempre — quindi questi documenti finiscono nell'indice di chi ha
+ * mandato la richiesta e di nessun altro.
+ */
+app.post('/api/connettori/desktop/carica', async (req, res) => {
+  const grezzi: unknown[] = Array.isArray(req.body?.docs) ? req.body.docs : []
+  const docs: store.Documento[] = grezzi
+    .filter((d): d is Record<string, unknown> => !!d && typeof d === 'object')
+    .map(d => ({
+      id: String(d.id ?? ''),
+      fonte: 'desktop',
+      tipo: String(d.tipo ?? 'testo'),
+      titolo: String(d.titolo ?? ''),
+      corpo: String(d.corpo ?? ''),
+      autore: d.autore == null ? null : String(d.autore),
+      percorso: d.percorso == null ? null : String(d.percorso),
+      quando: d.quando == null ? null : String(d.quando),
+      gruppo: 'documenti'
+    }))
+    .filter(d => d.id && d.titolo)
+  const complete: string[] = Array.isArray(req.body?.complete) ? req.body.complete.map(String) : []
+  const visti: string[] = Array.isArray(req.body?.visti) ? req.body.visti.map(String) : []
+  try {
+    await store.salvaDocumentiAPezzi(docs)
+    const tolti = store.riconcilia('desktop', { completo: !!complete.length, radiciViste: complete },
+      [...docs.map(d => d.id), ...visti])
+    res.json({ ok: true, documenti: docs.length, tolti })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Il desktop, scelto nel browser — senza installare niente.
+ *
+ * Un server ospitato non può leggere le tue cartelle, ma un browser sì: chi
+ * preme «scegli una cartella» ottiene il selettore vero del sistema, e da lì
+ * in avanti è la pagina — non il server — a leggere i file e a spedirli qui,
+ * un pezzo alla volta. Quello che arriva è testo, non documenti già letti:
+ * l'estrazione da PDF e Word (`estrai.daBuffer`) gira su questi byte esattamente
+ * come girerebbe su un file aperto dal disco — è la stessa funzione, e non
+ * poteva che esserlo, o un PDF letto da qui e uno letto in casa avrebbero
+ * raccontato due mondi diversi dello stesso file.
+ *
+ * `radice` è il nome della cartella scelta, non un percorso: sul disco di chi
+ * ha caricato non esiste nessun `/Users/...` che il server possa verificare, e
+ * non ne serve uno — `radice` serve solo a `riconcilia`, per sapere quali id
+ * appartengono a *questo* giro e quali a un altro caricamento fatto ieri.
+ */
+app.post('/api/connettori/desktop/carica-file', async (req, res) => {
+  const grezzi: unknown[] = Array.isArray(req.body?.file) ? req.body.file : []
+  const radice = String(req.body?.radice ?? '').trim()
+  const completo = !!req.body?.completo
+  const visti: string[] = Array.isArray(req.body?.visti) ? req.body.visti.map(String) : []
+
+  const docs: store.Documento[] = []
+  for (const grezzo of grezzi) {
+    if (!grezzo || typeof grezzo !== 'object') continue
+    const f = grezzo as Record<string, unknown>
+    const percorso = String(f.percorso ?? '')
+    const nome = percorso.split('/').pop() ?? percorso
+    if (!percorso || !estrai.leggibile(nome)) continue
+
+    let buf: Buffer
+    try { buf = Buffer.from(String(f.base64 ?? ''), 'base64') } catch { continue }
+    // stesso tetto della lettura in casa: un file più grande di dodici mega
+    // è quasi sempre un video o un archivio finito nella cartella sbagliata
+    if (!buf.length || buf.length > 12_000_000) continue
+
+    try {
+      const corpo = (await estrai.daBuffer(buf, nome)).slice(0, 20_000)
+      if (corpo.length < 20) continue
+      const quando = typeof f.quando === 'number' ? new Date(f.quando).toISOString() : null
+      docs.push({
+        id: `desktop:${percorso}`, fonte: 'desktop', tipo: estrai.tipoDi(nome),
+        titolo: nome, corpo, autore: null, percorso, quando, gruppo: 'documenti'
+      })
+    } catch { /* un file che non si estrae non ferma gli altri */ }
+  }
+
+  try {
+    await store.salvaDocumentiAPezzi(docs)
+    const tolti = store.riconcilia('desktop', { completo, radiciViste: radice ? [radice] : [] },
+      [...docs.map(d => d.id), ...visti])
+    res.json({ ok: true, documenti: docs.length, tolti })
   } catch (e) { errore(res, e) }
 })
 
@@ -927,6 +1035,17 @@ async function leggiTutto(
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
       illeggibili: e.illeggibili, troncato: e.troncato, tolti
     })
+    // Verso un server ospitato, se qualcuno l'ha impostato: la stessa lettura
+    // appena fatta, mandata anche là. Un guaio qui non deve fermare le altre
+    // fonti — la posta non aspetta che il desktop sia arrivato a destinazione.
+    if (desktopRemoto.ATTIVO) {
+      try {
+        const spinto = await desktopRemoto.spingi(e)
+        if (spinto) avvisa({ fase: 'desktop-remoto', stato: 'fatto', documenti: spinto.documenti, tolti: spinto.tolti })
+      } catch (err) {
+        avvisa({ fase: 'desktop-remoto', stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
+      }
+    }
   }
   if (!fermo() && c.notion && (!soloFonte || soloFonte === 'notion')) {
     avvisa({ fase: 'notion', stato: 'leggo le pagine' })
