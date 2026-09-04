@@ -74,7 +74,10 @@ function alias(): string {
  * del genere non si fa di nascosto nemmeno quando conviene a lui.
  */
 export function scelto(): boolean {
-  return leggi().abbonamento?.attivo === true
+  const c = leggi()
+  // la scelta esplicita vince; senza, vale il vecchio interruttore
+  if (c.claudeCon) return c.claudeCon === 'abbonamento'
+  return c.abbonamento?.attivo === true
 }
 
 /**
@@ -164,6 +167,19 @@ export async function stato(): Promise<{
     acceso: scelto(),
     inRiposo: Date.now() <= spento
   }
+}
+
+/**
+ * Può lavorare adesso, a prescindere da chi è stato scelto.
+ *
+ * Serve alla schermata, che deve poter mostrare **tutte e due** le strade —
+ * quella accesa e quella spenta — con lo stato vero di ciascuna. `pronto()`
+ * risponde no a una strada perfettamente funzionante solo perché non è quella
+ * scelta, ed è la risposta giusta per il motore e quella sbagliata per chi
+ * guarda un interruttore e vuole sapere cosa succede se lo gira.
+ */
+export function utilizzabile(): boolean {
+  return !!installato()
 }
 
 type Messaggio = { role: 'user' | 'assistant'; content: string }

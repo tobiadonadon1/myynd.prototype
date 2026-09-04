@@ -93,7 +93,12 @@ Tre strade, in quest'ordine di preferenza e di costo:
 1. **Un modello di casa** (Ollama) per i lavori piccoli — titoli, traduzioni,
    memoria, rassegna — se c'è, e solo sul tuo computer.
 2. **L'abbonamento Claude** di chi usa, attraverso Claude Code, solo sul tuo
-   computer e solo per la chat.
+   computer. Si sceglie in Preferenze, «Con quale dei due paghi Claude», e si
+   cambia idea quando si vuole: scelto lui, ci passa **tutto** il lavoro — chat,
+   feed, bozze — e non arriva nessuna bolletta. Le bozze fanno una passata sola
+   sul materiale già trovato invece di poter cercare ancora, perché Claude Code
+   da riga di comando non sa fare il giro degli attrezzi: un po' meno accurate,
+   e gratis. La scheda lo dice a chi sceglie.
 3. **Una chiave API**: Anthropic, oppure un fornitore compatibile con OpenAI
    (OpenAI, OpenRouter, Groq, Mistral, o Ollama e LM Studio in casa) per tutto
    il lavoro grosso. Si sceglie nelle preferenze, che mostrano anche quanto si

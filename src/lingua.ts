@@ -700,6 +700,25 @@ const EN: Record<string, string> = {
   'È tornata una risposta vuota. Riprova.': 'An empty answer came back. Try again.',
   'La chiave di Claude non è più valida.': 'The Claude key is no longer valid.',
   'non la sto usando': 'not using it yet',
+
+  // — con quale dei due si paga Claude —
+  'Con quale dei due paghi Claude': 'Which of the two pays for Claude',
+  'L’abbonamento che paghi già': 'The subscription you already pay for',
+  'Una chiave API, a consumo': 'An API key, pay as you go',
+  'Oppure con l’abbonamento che paghi già': 'Or with the subscription you already pay for',
+  'Usa il mio abbonamento': 'Use my subscription',
+  'Manca la chiave: collegala dalla scheda di Claude.': 'No key yet: connect one from the Claude card.',
+  'Claude Code non è su questo computer.': 'Claude Code is not on this computer.',
+  'Apri il Terminale, scrivi «claude» e fai l’accesso.': 'Open Terminal, type “claude” and sign in.',
+  'Passa da Claude Code, che gira qui con il tuo account: non costa niente oltre a quello che paghi ogni mese. Myynd non vede le tue credenziali. Le bozze fanno una passata sola sul materiale che ha già trovato, invece di poter cercare ancora: un po’ meno accurate, e gratis.':
+    'It goes through Claude Code, running here under your own account: nothing beyond what you already pay each month. Myynd never sees your credentials. Drafts make a single pass over the material already found, rather than being able to search again: a little less thorough, and free.',
+  'Si paga ogni riga che scrive, e in cambio le bozze possono cercare più volte prima di scrivere. È l’unica strada su un server, dove Claude Code non c’è.':
+    'You pay for every line it writes, and in exchange drafts can search several times before writing. It is the only way on a server, where Claude Code does not exist.',
+  'Claude Code è su questo computer ed è già entrato con il tuo account: Myynd può ragionare di lì, senza chiave e senza costi in più. Si cambia idea dalle preferenze quando vuoi.':
+    'Claude Code is on this computer and already signed in with your account: Myynd can reason through it, with no key and no extra cost. You can change your mind in preferences whenever you like.',
+  'Claude Code è su questo computer ma non ci sei ancora entrato. Apri il Terminale, scrivi «claude», fai l’accesso, e potrai ragionare senza chiave.':
+    'Claude Code is on this computer but you have not signed in yet. Open Terminal, type “claude”, sign in, and you can reason without a key.',
+  'Non so con quale dei due far lavorare Claude.': 'I do not know which of the two should run Claude.',
   'Il conto è fatto, ma la mail di conferma non è partita: la posta di questo server non funziona. Riprova a farsela mandare, o dillo a chi lo gestisce.':
     'The account exists, but the confirmation email did not go out: this server’s mail is not working. Try asking for it again, or tell whoever runs it.',
   'Non è partita: la posta di questo server non funziona. Dillo a chi lo gestisce.':

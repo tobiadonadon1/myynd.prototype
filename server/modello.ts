@@ -800,37 +800,32 @@ export async function chiedi(o: {
   }
 
   /**
-   * L'abbonamento suo, prima della chiave nostra.
+   * L'abbonamento, quando è quello che ha scelto.
    *
    * Qui sta la differenza fra un prodotto che si può vendere e uno che no: chi
    * lo compra non deve trovarsi una bolletta a fine mese per un'app che gira
    * tutti i giorni. Se ha Claude Code sul computer ed è entrato con il suo
    * account, il lavoro passa di lì e non costa niente in più a nessuno.
    *
-   * Le due condizioni, e perché sono due.
+   * `disponibile()` contiene già la scelta — vedi `abbonamento.scelto()` — e per
+   * questo qui non si guarda più *quale* lavoro sia. Prima c'era
+   * `p.frontiera || !conLaChiave()`, e la ragione era buona: una chiamata a
+   * Claude Code si porta dietro 5.650 token di preambolo che non si ammortizzano
+   * (misurati in `abbonamento.ts`: ogni chiamata li riscrive), e spenderli per il
+   * titolo di una chat è caro. Ma quella riga rispondeva a «cosa conviene»,
+   * quando adesso c'è una persona che ha detto cosa vuole: mandarle sulla chiave
+   * i lavori piccoli — che sono i più frequenti — vorrebbe dire una bolletta che
+   * ha appena chiesto di non avere.
    *
-   * `frontiera` è il lavoro che vale la spesa: una risposta, una bozza, la
-   * lettura del feed. Lì si passa di qui sempre, perché sono le chiamate grosse
-   * e rade, ed è esattamente il loro profilo che rende conveniente il preambolo
-   * da 5.650 token che Claude Code si porta dietro a ogni avvio (misurato in
-   * `abbonamento.ts`: non si ammortizza, ogni chiamata li riscrive).
+   * Chi le vuole tutt'e due installa un modello di casa: il ramo qui sopra lo
+   * prende prima, il lavoro piccolo non costa niente e non tocca né la chiave né
+   * il tetto dell'abbonamento.
    *
-   * `!conLaChiave()` è la seconda, ed è quella che mancava. Il lavoro piccolo —
-   * un titolo, una traduzione di quattro righe — al modello di casa costa zero e
-   * qui costerebbe 5.650 token del suo tetto: se il modello di casa c'è, questa
-   * riga non la raggiunge nemmeno. Ma se non c'è, prima si finiva dritti sulla
-   * chiave, cioè a pagare in denaro le sei cose che Myynd fa più spesso — la
-   * rassegna gira quattro volte al giorno. Fra spendergli il tetto e mandargli
-   * una bolletta, si spende il tetto: è la stessa scelta che ha fatto lui
-   * accendendo l'interruttore.
-   *
-   * Se non risponde non è un guasto: è il motivo per cui adesso si va da Claude.
-   *
-   * E se il motore scelto è un altro fornitore, di qui non si passa: ha detto
-   * lui chi deve fare il lavoro grosso, e l'abbonamento è un modo di pagare
-   * Claude di meno, non un motore in più.
+   * Se non risponde non è un guasto: è il motivo per cui si passa alla chiave.
+   * E se il motore scelto è un altro fornitore, di qui non si passa: l'abbonamento
+   * è un modo di pagare Claude di meno, non un motore in più.
    */
-  if (abbonamento.disponibile() && !fornitore() && (p.frontiera || !conLaChiave())) {
+  if (abbonamento.disponibile() && !fornitore()) {
     try {
       const testo = await abbonamento.chiedi({ ...o, attesa })
       return { testo, rifiutata: false, da: 'abbonamento' }

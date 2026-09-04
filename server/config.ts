@@ -629,6 +629,15 @@ export type Config = {
    */
   abbonamento?: { attivo?: boolean }
   /**
+   * Con quale dei due si paga Claude: l'abbonamento che hai già, o la chiave a
+   * consumo. Si sceglie, si cambia idea, e vale per tutto il lavoro.
+   *
+   * Assente si legge dal vecchio `abbonamento.attivo`, che era un
+   * interruttore: acceso voleva dire l'abbonamento. Chi aggiorna non trova
+   * niente cambiato sotto i piedi.
+   */
+  claudeCon?: 'abbonamento' | 'chiave'
+  /**
    * Chi fa il lavoro grosso: le risposte, le bozze, il feed.
    *
    * Assente vuol dire Claude, ed è il verso giusto: Myynd è stato messo a
@@ -865,6 +874,7 @@ export function pubblica(c: Config = leggi()) {
     // che va a vedere se c'è davvero invece di fidarsi del file
     locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },
     abbonamento: { attivo: c.abbonamento?.attivo === true },
+    claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo
     // uno scollega non deve far credere alla schermata che ci sia un motore
     motore: c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
@@ -877,6 +887,17 @@ export function pubblica(c: Config = leggi()) {
     notion: c.notion ? { collegato: true } : null,
     // il nome dell'agenda esce, l'indirizzo no: quello è la chiave di casa
     calendario: c.calendario ? { collegato: true, nome: c.calendario.nome ?? null, giorni: c.calendario.giorni ?? 30 } : null,
+    /*
+     * Solo la chiave, e non «Myynd può ragionare con Claude».
+     *
+     * Sembra la stessa cosa e non lo è da quando le strade sono due: chi ha
+     * collegato l'abbonamento e nessuna chiave leggerebbe `null` qui. La
+     * risposta vera la sa `modello.conClaude()`, che questo file non può
+     * chiamare — `modello.ts` importa `config.ts`, non il contrario — e per
+     * questo `index.ts` la sovrascrive nella rotta `/api/stato`. Se un giorno
+     * qualcuno legge questo campo senza passare di lì, deve trovare scritto
+     * cosa vuol dire davvero.
+     */
     claude: c.claude ? { collegato: true } : null,
     // di questi esce solo come si chiamano: token, refresh e segreti non
     // attraversano mai questa funzione, ed è l'unica ragione per cui esiste

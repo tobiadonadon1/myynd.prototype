@@ -525,7 +525,10 @@ app.get('/api/stato', (_req, res) => {
   const c = cfg.leggi()
   const n = store.conteggi()
   res.json({
-    config: cfg.pubblica(c),
+    // `pubblica()` guarda solo la chiave, perché da lì non si può chiedere a
+    // `modello.ts` senza girare in tondo: la risposta vera — chiave *o*
+    // abbonamento — si mette qui sopra, dove le due si conoscono entrambe
+    config: { ...cfg.pubblica(c), claude: mod.conClaude() ? { collegato: true } : null },
     conteggi: n,
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
@@ -727,8 +730,56 @@ app.post('/api/modello/abbonamento', async (req, res) => {
     return res.status(400).json({ errore: 'Su un server l’abbonamento non si può usare: qui ragiona con una chiave API.' })
   }
   const attivo = req.body?.attivo === true
-  cfg.aggiorna({ abbonamento: { attivo } })
+  // le due scritture stanno insieme: `claudeCon` è quella che conta, `attivo`
+  // resta per chi legge una configurazione vecchia senza sapere della scelta
+  cfg.aggiorna({ abbonamento: { attivo }, claudeCon: attivo ? 'abbonamento' : 'chiave' })
   try { res.json({ ok: true, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
+})
+
+/**
+ * Con quale dei due si paga Claude.
+ *
+ * Sono due strade per lo stesso modello, non due modelli: l'abbonamento che uno
+ * paga già, e la chiave a consumo. Si collegano tutt'e due, si sceglie quale
+ * lavora, e si cambia idea quando si vuole — è la stessa richiesta di
+ * `/api/modello/motore`, un piano più sotto.
+ *
+ * Si può scegliere anche quella che adesso non è pronta: chi collega la chiave
+ * stasera e farà l'accesso a Claude Code domani deve poterlo dire stasera. Cosa
+ * manca lo dice `/api/modello/claude`, e la scheda lo scrive.
+ */
+app.post('/api/modello/claude-con', async (req, res) => {
+  const con = String(req.body?.con ?? '')
+  if (con !== 'abbonamento' && con !== 'chiave') {
+    return res.status(400).json({ errore: 'Non so con quale dei due far lavorare Claude.' })
+  }
+  if (con === 'abbonamento' && ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Su un server l’abbonamento non si può usare: qui ragiona con una chiave API.' })
+  }
+  cfg.aggiorna({ claudeCon: con, abbonamento: { attivo: con === 'abbonamento' } })
+  try { res.json({ ok: true, con, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
+})
+
+/**
+ * Le due strade di Claude, com'è messa ciascuna.
+ *
+ * La schermata deve mostrarle tutt'e due insieme — quella scelta e l'altra —
+ * con lo stato vero di ognuna, o non si capisce cosa succede girando
+ * l'interruttore. `abbonamento.utilizzabile()` esiste per questo: `pronto()`
+ * risponderebbe no a una strada che funziona benissimo, solo perché non è
+ * quella scelta adesso.
+ */
+app.get('/api/modello/claude', async (_req, res) => {
+  const c = cfg.leggi()
+  try {
+    res.json({
+      con: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
+      // ospitati l'abbonamento non esiste: la scheda mostra solo la chiave
+      abbonamentoPossibile: !ospitato.OSPITATO,
+      abbonamento: await abbonamento.stato(),
+      chiave: { collegata: !!c.claude?.apiKey }
+    })
+  } catch (e) { errore(res, e) }
 })
 
 app.post('/api/modello/locale', (req, res) => {

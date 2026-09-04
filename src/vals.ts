@@ -937,6 +937,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — chi fa il lavoro grosso: Claude, o un fornitore compatibile con OpenAI —
     motore: stato.config.motore ?? 'claude',
     compatibile: stato.config.compatibile,
+    /*
+     * Rileggere lo stato dal server, da un pannello che ha appena cambiato
+     * qualcosa fuori dal suo giardino.
+     *
+     * Scegliere fra abbonamento e chiave può cambiare la risposta a «Myynd può
+     * ragionare?» — chi passa alla chiave senza averne una la fa diventare no —
+     * e quella risposta la mostrano schermate che il pannello non conosce.
+     */
+    ricaricaStato,
+
     scegliMotore: async (m: 'claude' | 'compatibile') => {
       if ((stato.config.motore ?? 'claude') === m) return
       // senza un fornitore collegato non c'è niente da scegliere: si apre la

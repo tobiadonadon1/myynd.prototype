@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
-import type { Stato } from '../api'
+import type { ClaudeCon, Stato } from '../api'
 import { frasi, t } from '../lingua'
 
 export type Tema = 'scuro' | 'chiaro'
@@ -173,6 +173,47 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
         onKeyDown={e => { if (e.key === 'Enter' && apiKey) collega() }} />
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!apiKey} tema={tema}>{t('Collega Claude')}</Conferma>
+      <ConAbbonamento tema={tema} ok={ok} />
+    </div>
+  )
+}
+
+/**
+ * L'altra strada, detta dove si collega la prima.
+ *
+ * Chi apre questa scheda ha in testa «collego Claude», e fino a ieri l'unica
+ * risposta era «incolla una chiave» — mentre sul suo computer c'era Claude Code
+ * già installato e già entrato, cioè un modo di far lavorare Myynd senza pagare
+ * niente in più. Non dirglielo qui vuol dire fargli incollare una chiave che
+ * poteva non servirgli.
+ *
+ * Compare solo quando c'è davvero: su un server non esiste, e su un computer
+ * senza Claude Code sarebbe l'offerta di una cosa che non si può prendere.
+ */
+function ConAbbonamento({ tema, ok }: Props) {
+  const [s, setS] = useState<ClaudeCon | null>(null)
+  const [occupato, setOccupato] = useState(false)
+  useEffect(() => { api.claude().then(setS).catch(() => {}) }, [])
+
+  if (!s || !s.abbonamentoPossibile || !s.abbonamento.installato) return null
+
+  const scegli = async () => {
+    setOccupato(true)
+    try { await api.claudeCon('abbonamento'); ok() } catch { /* resta la chiave */ }
+    setOccupato(false)
+  }
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${tema === 'scuro' ? 'rgba(255,255,255,.12)' : 'rgba(34,39,31,.1)'}` }}>
+      <div style={etichetta(tema)}>{t('Oppure con l’abbonamento che paghi già')}</div>
+      <div style={{ ...nota(tema), marginTop: 6 }}>
+        {s.abbonamento.entrato
+          ? t('Claude Code è su questo computer ed è già entrato con il tuo account: Myynd può ragionare di lì, senza chiave e senza costi in più. Si cambia idea dalle preferenze quando vuoi.')
+          : t('Claude Code è su questo computer ma non ci sei ancora entrato. Apri il Terminale, scrivi «claude», fai l’accesso, e potrai ragionare senza chiave.')}
+      </div>
+      {s.abbonamento.entrato && (
+        <Conferma onClick={scegli} occupato={occupato} tema={tema}>{t('Usa il mio abbonamento')}</Conferma>
+      )}
     </div>
   )
 }

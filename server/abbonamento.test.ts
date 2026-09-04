@@ -65,22 +65,56 @@ test('«pronto» non diventa «no» perché una chiamata è andata storta', () =
 /**
  * Il posto dell'abbonamento nella catena, che è la ragione per cui esiste.
  *
- * Prima la riga diceva `p.frontiera && abbonamento.disponibile()`, e il lavoro
- * piccolo di chi non ha un modello di casa finiva dritto sulla chiave: cioè a
- * pagare in denaro le sei cose che Myynd fa più spesso. La condizione giusta ha
- * due metà e servono tutte e due — la prima manda di qui il lavoro grosso
- * sempre, la seconda manda di qui anche quello piccolo, ma solo quando
- * l'alternativa è una bolletta.
+ * Qui c'era `p.frontiera || !conLaChiave()`: il lavoro grosso passava di qui
+ * sempre, quello piccolo solo quando l'alternativa era una bolletta. Era una
+ * risposta a «cosa conviene», e valeva finché l'abbonamento era un interruttore.
+ *
+ * Adesso è una scelta: due strade per pagare lo stesso Claude, e una persona che
+ * dice quale. `disponibile()` contiene già quella scelta, quindi la condizione
+ * non guarda più *quale* lavoro sia — chi sceglie l'abbonamento sta chiedendo di
+ * non avere una bolletta, e mandargli sulla chiave i lavori più frequenti
+ * sarebbe rispondere a una domanda che non ha fatto. Chi vuole tutt'e due
+ * installa un modello di casa, che viene prima di questo ramo.
  */
-test('il lavoro piccolo passa dall’abbonamento solo se non c’è una chiave', () => {
+test('scelto l’abbonamento, ci passa tutto il lavoro e non solo quello grosso', () => {
   const m = readFileSync(join(QUI, 'modello.ts'), 'utf8')
-  // la terza condizione — `!fornitore()` — è arrivata con il fornitore
+  // la seconda condizione — `!fornitore()` — è arrivata con il fornitore
   // compatibile con OpenAI: se è lui il motore scelto, l'abbonamento non
   // c'entra, perché è un modo di pagare Claude di meno e non un motore in più
-  assert.match(m, /if \(abbonamento\.disponibile\(\) && !fornitore\(\) && \(p\.frontiera \|\| !conLaChiave\(\)\)\)/,
+  assert.match(m, /if \(abbonamento\.disponibile\(\) && !fornitore\(\)\) \{/,
     'la catena è cambiata: rileggere perché prima di riscriverla')
+  // sull'`if`, non su tutto il file: il commento qui sopra la vecchia regola la
+  // cita apposta, e una prova che legge i commenti non prova niente
+  assert.ok(!/if \([^\n]*p\.frontiera \|\| !conLaChiave\(\)/.test(m),
+    'è tornata la vecchia regola: chi ha scelto l’abbonamento si ritrova i lavori piccoli sulla chiave')
   assert.match(m, /return conLaChiave\(\) \|\| abbonamento\.pronto\(\)/,
     '«Claude è collegato?» è tornata a voler dire «c’è una chiave»: chi collega solo l’abbonamento si rivede dire di collegare Claude')
+})
+
+/**
+ * La scelta è esplicita, e si può cambiare idea.
+ *
+ * `claudeCon` è quella che comanda; il vecchio `abbonamento.attivo` resta letto
+ * perché una configurazione scritta prima di oggi non deve cambiare
+ * comportamento sotto i piedi di nessuno.
+ */
+test('con quale dei due si paga Claude lo dice `claudeCon`, e il vecchio interruttore vale ancora', () => {
+  assert.match(sorgente, /if \(c\.claudeCon\) return c\.claudeCon === 'abbonamento'/,
+    'la scelta esplicita non comanda più')
+  assert.match(sorgente, /return c\.abbonamento\?\.attivo === true/,
+    'una configurazione vecchia non si legge più: chi aggiorna si ritrova l’abbonamento spento')
+})
+
+test('le bozze passano dall’abbonamento quando è quello scelto', () => {
+  // finché non lo facevano, «lavora con l'abbonamento» non valeva per la cosa
+  // che l'app fa di più — e nessuna schermata lo diceva
+  const c = readFileSync(join(QUI, 'claude.ts'), 'utf8')
+  assert.match(c, /const soloAbbonamento = abbonamento\.disponibile\(\)/,
+    'le bozze non guardano più l’abbonamento: tornano tutte sulla chiave')
+  // senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice che
+  // quello che ha davanti è tutto quello che avrà
+  assert.match(c, /non puoi cercarne altro/,
+    'gli si chiede una bozza con gli attrezzi che non ha: cercherà, non troverà, e lo dirà come un guasto')
 })
 
 test('anche la chat passa dall’abbonamento, non solo il resto', () => {

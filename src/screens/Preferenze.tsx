@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, sessione, type Abbonamento as TipoAbbonamento, type Gettone } from '../api'
+import { api, sessione, type ClaudeCon, type Gettone } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
@@ -774,73 +774,97 @@ function CampoArgomenti({ v }: { v: Vals }) {
 }
 
 /**
- * Ragionare con il tuo abbonamento invece che a consumo.
+ * Con quale dei due paghi Claude.
  *
- * È la scelta che decide quanto costa tenere Myynd acceso. Con una chiave API si
- * paga ogni riga che scrive; con questo il lavoro grosso passa da Claude Code —
- * che è già installato qui e già entrato con il tuo account — e non costa niente
- * in più di quello che già paghi.
+ * Sono due strade per lo stesso modello, non due modelli: l'abbonamento che
+ * paghi già — attraverso Claude Code, che gira su questo computer con il tuo
+ * account — e una chiave a consumo. Prima qui c'era un interruttore
+ * «con il tuo abbonamento», acceso o spento, e diceva metà della cosa: chi
+ * aveva tutti e due collegati non trovava scritto da nessuna parte chi stesse
+ * lavorando, né un posto dove dirlo.
  *
- * Sta spento finché non lo accendi tu, e non è timidezza: manda il lavoro sul
- * tuo conto, e una cosa così si chiede. Se `claude` non c'è su questa macchina
- * non compare nemmeno l'interruttore: un comando spento per un programma che non
- * hai è solo una domanda senza risposta.
+ * Adesso si vedono tutte e due, con lo stato vero di ciascuna, e si sceglie.
+ * Anche quella che adesso non è pronta: chi collega la chiave stasera e farà
+ * l'accesso a Claude Code domani deve poterlo dire stasera, e la riga sotto gli
+ * dice cosa manca.
  */
-function Abbonamento({ avvisa }: { avvisa: (testo: string) => void }) {
-  const [s, setS] = useState<TipoAbbonamento | null>(null)
-
-  const guarda = useCallback(() => {
-    api.abbonamento().then(setS).catch(() => setS(null))
-  }, [])
+function ConQuale({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
+  const [s, setS] = useState<ClaudeCon | null>(null)
+  const guarda = useCallback(() => { api.claude().then(setS).catch(() => setS(null)) }, [])
   useEffect(() => { guarda() }, [guarda])
 
-  if (!s || !s.installato) return null
+  // ospitati c'è una strada sola: una scelta fra una cosa non è una scelta
+  if (!s || !s.abbonamentoPossibile) return null
 
-  const cambia = async () => {
-    setS({ ...s, acceso: !s.acceso })
-    // l'interruttore tornava indietro da solo, senza dire perché
-    try { await api.usaAbbonamento(!s.acceso) }
+  const scegli = async (con: 'abbonamento' | 'chiave') => {
+    if (con === s.con) return
+    setS({ ...s, con })
+    try { await api.claudeCon(con) }
     catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
-    finally { guarda() }
+    finally { guarda(); v.ricaricaStato() }
   }
+
+  /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
+  const manca = (id: 'abbonamento' | 'chiave'): string => {
+    if (id === 'chiave') return s.chiave.collegata ? '' : t('Manca la chiave: collegala dalla scheda di Claude.')
+    if (!s.abbonamento.installato) return t('Claude Code non è su questo computer.')
+    if (!s.abbonamento.entrato) return t('Apri il Terminale, scrivi «claude» e fai l’accesso.')
+    return ''
+  }
+
+  const scelte: { id: 'abbonamento' | 'chiave'; titolo: string; nota: string }[] = [
+    {
+      id: 'abbonamento', titolo: t('L’abbonamento che paghi già'),
+      nota: t('Passa da Claude Code, che gira qui con il tuo account: non costa niente oltre a quello che paghi ogni mese. Myynd non vede le tue credenziali. Le bozze fanno una passata sola sul materiale che ha già trovato, invece di poter cercare ancora: un po’ meno accurate, e gratis.')
+    },
+    {
+      id: 'chiave', titolo: t('Una chiave API, a consumo'),
+      nota: t('Si paga ogni riga che scrive, e in cambio le bozze possono cercare più volte prima di scrivere. È l’unica strada su un server, dove Claude Code non c’è.')
+    }
+  ]
 
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Con il tuo abbonamento')}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15 }}>
-            {/*
-              Installato e non entrato sono due cose diverse, e prima si
-              vedevano uguali: l'interruttore era lì, si accendeva, e poi ogni
-              lavoro falliva. Adesso lo dice — e lo dice gratis, perché
-              `claude auth status` non parla con nessun modello.
-            */}
-            {!s.entrato
-              ? t('Installato, ma non ci sei ancora entrato.')
-              : s.acceso ? t('Acceso: il lavoro grosso passa da Claude Code.') : t('Spento: si paga a consumo con la chiave.')}
-          </div>
-          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 5, maxWidth: 470, textWrap: 'pretty' }}>
-            {s.entrato
-              ? t('Claude Code è su questo computer ed è già entrato con il tuo account. Acceso, le risposte e le bozze passano di lì e non costano niente oltre a quello che paghi già. Myynd non vede le tue credenziali: lancia il programma che hai tu.')
-              : t('Apri il Terminale, scrivi «claude» e fai l’accesso. Da lì in poi Myynd può ragionare con l’abbonamento che paghi già, invece che a consumo con la chiave.')}
-          </div>
-          {s.inRiposo && (
-            <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
-              {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}
+      <div style={LABEL}>{t('Con quale dei due paghi Claude')}</div>
+      <div role="radiogroup" aria-label={t('Con quale dei due paghi Claude')}
+        style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        {scelte.map(x => {
+          const scelto = s.con === x.id
+          const guaio = manca(x.id)
+          return (
+            <div key={x.id} role="radio" aria-checked={scelto} tabIndex={0}
+              onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))} style={{
+                display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
+                background: scelto ? 'rgba(255,255,255,.85)' : 'transparent',
+                boxShadow: scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+              }}>
+              <span style={{
+                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
+                border: scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
+                background: scelto ? '#FFF7F0' : 'transparent'
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{x.titolo}</div>
+                <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty' }}>
+                  {x.nota}
+                </div>
+                {/*
+                  Quello che manca si dice sotto la scelta che l'ha scelta, non
+                  in cima alla scheda: è di quella riga che parla, e chi legge
+                  deve poter capire quale delle due non è pronta.
+                */}
+                {!!guaio && (
+                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, textWrap: 'pretty' }}>{guaio}</div>
+                )}
+                {scelto && x.id === 'abbonamento' && s.abbonamento.inRiposo && (
+                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
+                    {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-        {/*
-          Un interruttore per una strada che fallirebbe è peggio che nessun
-          interruttore — ma toglierlo a chi l'ha già acceso lo lascerebbe senza
-          il modo di spegnerlo, se nel frattempo è uscito da Claude Code. Si
-          nasconde solo quando non c'è niente da guadagnare ad accenderlo.
-        */}
-        {(s.entrato || s.acceso) && (
-          <button type="button" role="switch" aria-checked={s.acceso} aria-label={t('Con il tuo abbonamento')}
-            onClick={cambia} style={track(s.acceso)}><span style={knob()} /></button>
-        )}
+          )
+        })}
       </div>
     </div>
   )
@@ -1084,7 +1108,7 @@ export function Preferenze({ v }: { v: Vals }) {
           non c'entra, e un interruttore che non fa niente è peggio di nessuno */}
       {/* anche con un altro motore scelto: chi l'aveva acceso deve poterlo
           spegnere, e la carta si nasconde da sola quando non c'è niente da dire */}
-      <Abbonamento avvisa={v.mostraToast} />
+      <ConQuale v={v} avvisa={v.mostraToast} />
       <ModelloDiCasa avvisa={v.mostraToast} />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>

@@ -989,6 +989,14 @@ export const api = {
   confermaConvinzione: (id: string) =>
     json<{ ok: true }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/conferma`, { method: 'POST', body: '{}' }),
 
+  /** Le due strade di Claude — l'abbonamento e la chiave — con lo stato di ciascuna. */
+  claude: () => json<ClaudeCon>('/api/modello/claude'),
+
+  /** Con quale dei due lavora. Si cambia idea quando si vuole. */
+  claudeCon: (con: 'abbonamento' | 'chiave') =>
+    json<{ ok: true; con: string }>('/api/modello/claude-con',
+      { method: 'POST', body: JSON.stringify({ con }) }),
+
   /**
    * Il suo abbonamento: c'è `claude` su questa macchina, ci è entrato, ed è acceso?
    *
@@ -1289,6 +1297,21 @@ export const api = {
     if (!fine) throw new Error('La risposta si è interrotta.')
     return fine
   }
+}
+
+/**
+ * Le due strade per far ragionare Claude, e quale sta lavorando.
+ *
+ * Non sono due modelli: sono due modi di pagare lo stesso. L'abbonamento che
+ * uno paga già, attraverso Claude Code su questo computer, e la chiave a
+ * consumo. Si collegano tutt'e due e si sceglie quale lavora.
+ */
+export type ClaudeCon = {
+  con: 'abbonamento' | 'chiave'
+  /** Ospitati l'abbonamento non esiste: la scheda mostra solo la chiave. */
+  abbonamentoPossibile: boolean
+  abbonamento: { installato: boolean; entrato: boolean; acceso: boolean; inRiposo: boolean }
+  chiave: { collegata: boolean }
 }
 
 export type Messaggio = { id: string; role: string; text: string; sources?: { id: string; label: string }[] }

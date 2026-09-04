@@ -1185,10 +1185,26 @@ export async function svolgi(
   onPasso?: (p: Passo) => void
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   const m = motore()
+  /*
+   * Le bozze sull'abbonamento, quando è quello che ha scelto.
+   *
+   * Finora una bozza passava sempre dalla chiave, anche a chi aveva acceso
+   * l'abbonamento — e non era una svista: il giro degli attrezzi ha bisogno di
+   * un modello che chiami `cerca` e `apri` e riceva indietro il risultato, e
+   * Claude Code da riga di comando quel giro non lo sa fare. Ma il risultato era
+   * che «lavora con l'abbonamento» non valeva per la cosa che l'app fa di più.
+   *
+   * Quello che si può fare, e che si fa qui: il materiale lo trova Myynd —
+   * `materiale()` cerca nell'indice prima di chiamare chiunque — e all'abbonamento
+   * si chiede una passata sola su quello. Meno accurato di quattro giri di
+   * ricerca, e la scheda lo dice a chi sceglie. Molto meglio di «questa cosa non
+   * funziona con l'abbonamento».
+   */
+  const soloAbbonamento = abbonamento.disponibile() && m?.tipo !== 'compatibile'
   // Non `{ testo: '' }`: quello faceva finire il compito fra i «pronti» con una
   // bozza vuota sotto — cioè l'app diceva di aver fatto un lavoro che non aveva
   // fatto. È l'unico modo di sbagliare che questo prodotto non si può permettere.
-  if (!m) throw new Error('Collega Claude e potrò lavorarci.')
+  if (!m && !soloAbbonamento) throw new Error('Collega Claude e potrò lavorarci.')
 
   const passo = (p: Passo) => { try { onPasso?.(p) } catch { /* chi guarda si arrangia */ } }
 
@@ -1245,6 +1261,39 @@ export async function svolgi(
   const sistemaLavoro = sistema([domanda, ...partenza.map(d => d.titolo)].join(' ')) + SVOLGERE +
     (MODI[modo] ?? MODI.bozza) + inMano() + conQuali(concessi)
   let testo = ''
+
+  /*
+   * La passata sola sull'abbonamento.
+   *
+   * Senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice quello
+   * che è vero, cioè che ha davanti tutto quello che avrà. Se non basta, la
+   * risposta giusta è chiedere — che è la stessa cosa che farebbe con gli
+   * attrezzi dopo aver cercato invano, e `chiedeAiuto` la riconosce uguale.
+   */
+  if (soloAbbonamento) {
+    passo({ passo: 'scrivo' })
+    const senzaAttrezzi = sistemaLavoro +
+      '\n\nQuesto è tutto il materiale che avrai: non puoi cercarne altro. Se per fare il ' +
+      'compito ti serve qualcosa che qui non c\'è, dillo in una riga invece di inventarlo.'
+    try {
+      const uscito = await abbonamento.chiedi({
+        system: conLaLingua(senzaAttrezzi),
+        messages: [{ role: 'user', content: testoDi(messaggi[0].content) }],
+        attesa: attesaDi('bozza')
+      })
+      return { testo: uscito, fonti: fontiCitate(uscito, visti) }
+    } catch (e) {
+      abbonamento.nonRisponde()
+      console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
+      // senza una chiave di riserva l'errore è la risposta: il compito torna
+      // indietro con il suo guaio invece che con una bozza vuota
+      if (!m) throw e instanceof Error ? e : new Error(String(e))
+    }
+  }
+
+  // Arrivati qui il motore c'è: o non si è passati di sopra, o di sopra è
+  // andata male e c'è la chiave a raccogliere.
+  if (!m) throw new Error('Collega Claude e potrò lavorarci.')
 
   for (let giro = 0; giro < tettoGiri; giro++) {
     // All'ultimo giro può solo scrivere: senza questo un modello che sta
