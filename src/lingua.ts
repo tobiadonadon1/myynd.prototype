@@ -701,6 +701,11 @@ const EN: Record<string, string> = {
   'La chiave di Claude non è più valida.': 'The Claude key is no longer valid.',
   'non la sto usando': 'not using it yet',
 
+  // — togliersi una voce dal feed —
+  'Toglila dal feed': 'Take it off the feed',
+  'Via. Non te la rimetto davanti.': 'Gone. I will not put it in front of you again.',
+  'Non sono riuscito a toglierla.': 'I could not take it off.',
+
   // — con quale dei due si paga Claude —
   'Con quale dei due paghi Claude': 'Which of the two pays for Claude',
   'L’abbonamento che paghi già': 'The subscription you already pay for',
@@ -1502,6 +1507,17 @@ export function t(s: string): string {
 export const frasi = {
   // la domanda che parte da una carta: la coda è testo suo, e resta scritta
   dimmiDiPiu: (titolo: string) => corrente === 'en' ? `${titolo}: tell me more` : `${titolo}: dimmi di più`,
+
+  /**
+   * «Annulla» dell'avviso, che in inglese non è «Cancel».
+   *
+   * In italiano la stessa parola fa tutte e due le cose — fermare un gesto che
+   * stai facendo, e disfare uno che hai già fatto — e infatti la chiave
+   * «Annulla» è la stessa in cinque punti. In inglese sono due parole diverse:
+   * lì è «Cancel», qui è «Undo», e «Cancel» sotto una cosa già successa si
+   * legge come «lascia perdere», cioè il contrario di quello che fa.
+   */
+  annullaGesto: () => corrente === 'en' ? 'Undo' : 'Annulla',
 
   // — le convinzioni che aspettano un sì —
   inAttesa: (n: number) => corrente === 'en'

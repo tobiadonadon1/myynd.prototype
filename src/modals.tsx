@@ -98,7 +98,7 @@ export function Toast({ v }: { v: Vals }) {
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', flex: 'none' }} />
       <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{v.toastText}</span>
       {v.toastUndo && (
-        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Annulla')}</button>
+        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{frasi.annullaGesto()}</button>
       )}
     </div>
   )

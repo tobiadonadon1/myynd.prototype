@@ -57,6 +57,25 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <span style={riga.tipoStyle}>{t(riga.tipo)}</span>
           <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0, overflowWrap: 'anywhere' }}>{riga.fonte}{riga.ora ? ` · ${riga.ora}` : ''}</span>
+          {/*
+            Lo stesso gesto della carta grande, nello stesso angolo. Qui però si
+            fa vedere quando la riga è sotto il dito — come «in lista» qui
+            accanto: sempre acceso su otto righe sarebbe una colonna di
+            «non mi interessa», cioè il contrario di humble. `useAttiva` lo
+            accende anche col tocco e con la tastiera, quindi non è un gesto
+            che esiste solo per chi ha un mouse.
+          */}
+          <div style={{ flex: 1 }} />
+          <Hov as="button" type="button"
+            onClick={(e: MouseEvent) => { e.stopPropagation(); riga.onScarta() }}
+            title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
+            style={{
+              flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
+              color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+            }}
+            hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
         </div>
         {/* titoli e testi li scrive il modello da oggetti di email e nomi di
             file: una parola senza spazi non deve poter uscire dalla riga */}
@@ -387,7 +406,26 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Glifo tipo="penso" dim={15} colore="#FFF7F0" />
             <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t(v.heroTipo)}</span>
-            <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{v.heroFonte}{v.heroOra ? ` · ${v.heroOra}` : ''}</span>
+            <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)', minWidth: 0, overflowWrap: 'anywhere' }}>{v.heroFonte}{v.heroOra ? ` · ${v.heroOra}` : ''}</span>
+            {/*
+              «Non mi interessa», in alto a destra e scritto piccolo.
+              Stava dentro il «⋯» in fondo, e lì non lo trovava nessuno: è il
+              gesto che tiene pulito il feed, e un feed che non si può pulire in
+              un attimo si riempie di roba che non riguarda più niente. Qui è in
+              chiaro e fuori strada — lontano dai bottoni che *fanno* qualcosa,
+              nell'angolo dove si guarda solo quando si è deciso di lasciar
+              perdere. L'avviso che segue porta «Annulla»: è l'unico gesto del
+              feed che non lascia traccia da nessun'altra parte.
+            */}
+            <div style={{ flex: 1 }} />
+            <Hov as="button" type="button" onClick={v.scartaHero}
+              title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
+              style={{
+                flex: 'none', padding: '3px 2px', border: 'none', background: 'none',
+                color: 'rgba(255,247,240,.55)', fontSize: '12.5px', fontFamily: 'inherit',
+                cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+              hover={{ color: '#FFF7F0' }}>{t('Non mi interessa')}</Hov>
           </div>
 
           <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>

@@ -48,6 +48,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   const [aperti, setAperti] = useState<VoceFeed[]>([])
   const [fatte, setFatte] = useState<VoceFeed[]>([])
+  /**
+   * L'ultima voce buttata via, e dov'era.
+   *
+   * Scartare è l'unico gesto del feed che non lascia traccia da nessuna parte:
+   * una voce «fatta» resta fra le fatte, una messa in lista si vede in lista,
+   * questa sparisce e basta. Senza un modo di rimetterla, un dito storto costa
+   * una cosa che non si ritrova più — e la sola difesa sarebbe non premere,
+   * cioè un bottone che non si usa. Vive quanto l'avviso: dopo, è andata.
+   */
+  const [scartata, setScartata] = useState<{ voce: VoceFeed; dove: number } | null>(null)
   // Le cose già chiuse sono archivio, non notizie: partono ripiegate. Aperte
   // di default si prendevano tutta la prima pagina proprio nel momento in cui
   // non c'era più niente da fare — l'opposto di quello che serve lì.
@@ -418,6 +428,37 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * cosa in due posti con due stati diversi diverge al primo tocco: la chiuderesti
    * in lista e resterebbe aperta nel feed, a chiederti di nuovo la stessa cosa.
    */
+  /**
+   * «Non mi interessa»: via dal feed, e non torna domani.
+   *
+   * Stava dentro il menù «⋯», che è il posto dove si mettono le cose che non si
+   * vuole far vedere. Ma questo è il gesto che tiene pulito il feed — se costa
+   * due clic e una scoperta, non lo fa nessuno, e dopo una settimana la
+   * schermata è piena di roba che non interessa a nessuno. Adesso sta in
+   * chiaro, in un angolo, scritto piccolo.
+   *
+   * Sparisce subito e si scusa dopo: aspettare il server su un gesto così
+   * piccolo fa sembrare lenta l'app proprio dove è più veloce.
+   */
+  const scarta = async (v: VoceFeed) => {
+    setMenuAperto(false)
+    const dove = aperti.findIndex(x => x.id === v.id)
+    setAperti(a => a.filter(x => x.id !== v.id))
+    setScartata({ voce: v, dove: dove < 0 ? 0 : dove })
+    try {
+      await api.rispondiFeed(v.id, t('Non mi interessa.'), 'scartato')
+      mostraToast(t('Via. Non te la rimetto davanti.'), true)
+    } catch (e) {
+      // rimetterla dov'era è meglio che farla sparire in silenzio
+      setAperti(a => {
+        const senza = a.filter(x => x.id !== v.id)
+        return [...senza.slice(0, dove), v, ...senza.slice(dove)]
+      })
+      setScartata(null)
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a toglierla.'))
+    }
+  }
+
   const mettiInLista = async (v: VoceFeed) => {
     setMenuAperto(false)
     // sparisce subito dal feed: aspettare il giro completo del server su un
@@ -608,7 +649,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         n.has(i.id) ? n.delete(i.id) : n.add(i.id)
         return n
       }),
-      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) }
+      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) },
+      onScarta: () => void scarta(i as unknown as VoceFeed)
     }
   })
 
@@ -728,10 +770,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     menuAperto,
     apriMenu: () => setMenuAperto(v => !v),
     chiudiMenu: () => setMenuAperto(false),
+    /** Il gesto della carta grande: la stessa funzione delle righe. */
+    scartaHero: () => { if (hero) void scarta(hero) },
     correzioni: hero ? [
       { id: 'lista', label: t('Mettila in lista'), onClick: () => mettiInLista(hero) },
       { id: 'altrove', label: t('Aggiornato altrove'), onClick: () => mandaRisposta(t("L'ho aggiornato altrove: il documento qui è indietro."), 'fonte_vecchia') },
-      { id: 'scarta', label: t('Non mi interessa'), onClick: () => mandaRisposta(t('Non mi interessa.'), 'scartato') },
       { id: 'parole', label: t('Altro…'), onClick: () => { setMenuAperto(false); setScriviAperto(true) } }
     ] : [],
     // — la domanda che fa lui —
@@ -807,6 +850,24 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — toast —
     toastOn: !!toast, toastText: toast?.text ?? '', toastUndo: !!toast?.undo,
     undo: () => {
+      /*
+       * Prima lo scarto, poi la fatta.
+       *
+       * Sono due gesti diversi che finiscono nello stesso avviso, e quello da
+       * annullare è sempre l'ultimo fatto: `scartata` esiste solo finché
+       * l'avviso è in piedi, quindi se c'è è lei.
+       */
+      if (scartata) {
+        const { voce, dove } = scartata
+        setToast(null)
+        setScartata(null)
+        setAperti(a => [...a.slice(0, dove), voce, ...a.slice(dove)])
+        api.segnaFeed(voce.id, 'aperto').catch(() => {
+          setAperti(a => a.filter(x => x.id !== voce.id))
+          mostraToast(t('Non sono riuscito ad annullare.'))
+        })
+        return
+      }
       const ultima = fatte[0]
       setToast(null)
       if (!ultima) return
