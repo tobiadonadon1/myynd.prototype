@@ -48,6 +48,44 @@ chiave `ANTHROPIC_API_KEY` dell'ambiente (sarebbe di chi ospita, spesa da
 tutti). Ognuno collega la propria chiave, o un fornitore compatibile con
 OpenAI, dalle preferenze.
 
+### Le due cose da mettere a mano, in parole semplici
+
+Sono le uniche due che il codice non può fare da solo, perché vogliono un conto
+che esiste fuori di qui. Nessuna delle due serve per provare Myynd sul proprio
+computer: là funziona già tutto.
+
+**Un conto solo fra il tuo Mac e il server.** Senza, sono due mondi separati:
+un conto in `~/.myynd` e un altro su Railway, e ogni redeploy senza volume si
+porta via il secondo. Con `MYYND_POSTGRES` e `MYYND_CHIAVE` uguali di qua e di
+là sono lo stesso conto — stessa email, stessa password, stesse fonti — e non si
+perde più niente. La stringa si prende da Supabase (*Connect → Transaction
+pooler*) e contiene la password del database: va in `.env.local`, che git
+ignora, e in nessun altro posto. La chiave si fa così, e **dev'essere la stessa
+nei due posti**, o quello che è cifrato di là non si legge di qua:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**La posta che manda il server.** Serve a due cose sole, e tutte e due valgono
+solo ospitati: confermare l'indirizzo di chi si registra, e rimettere una
+password dimenticata. Due strade:
+
+| Da dove | Cosa serve | Quando va bene |
+| ------- | ---------- | -------------- |
+| **Gmail** | Verifica in due passaggi accesa, poi una «password per le app» dal proprio account Google — non la password vera. `smtp.gmail.com`, porta 587. | Per cominciare, e per pochi conti. Gmail dopo un certo numero di messaggi al giorno si ferma. |
+| **Un servizio di invio** (Resend, Brevo, Postmark) | Host, utente e password che danno loro. | Se si scrive a clienti: è quello che i loro provider si aspettano di vedere, e non si ferma. |
+
+Finché quelle variabili non ci sono **non cambia assolutamente niente**: si
+entra subito, come sempre, e il «ho dimenticato la password» non compare. Il
+momento in cui ci sono, `MYYND_DOMINI` smette di essere un confronto fra
+stringhe e diventa un controllo vero — prima, chiunque poteva registrarsi come
+`capo@tuazienda.it` senza che niente lo smentisse.
+
+Il giro intero è stato provato con un server di posta finto: registrazione,
+mail ricevuta, collegamento aperto, conto confermato, e lo stesso collegamento
+che la seconda volta non vale più.
+
 ## Il modello
 
 Tre strade, in quest'ordine di preferenza e di costo:
