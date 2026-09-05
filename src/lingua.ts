@@ -236,8 +236,6 @@ const EN: Record<string, string> = {
     'Microsoft 365: mail and calendar. Needs an app registered on Entra ID.',
   'Un token da utente: legge i canali di cui fai già parte.':
     'A user token: it reads the channels you are already in.',
-  'Cloud API. Riceve i messaggi mentre arrivano: serve un indirizzo pubblico.':
-    'Cloud API. Receives messages as they arrive: needs a public address.',
   'I tuoi documenti su Drive, in sola lettura.': 'Your documents on Drive, read-only.',
   'I file dei siti che segui, e il tuo OneDrive. Stessa app di Outlook.':
     'Files from the sites you follow, and your OneDrive. Same app as Outlook.',
@@ -402,6 +400,29 @@ const EN: Record<string, string> = {
   'Richiede una app registrata su Entra ID.': 'Needs an app registered on Entra ID.',
   'Richiede una app Slack con OAuth.': 'Needs a Slack app with OAuth.',
   'CalDAV o Google Calendar.': 'CalDAV or Google Calendar.',
+// — Granola —
+  'Le note delle tue riunioni, lette da Granola su questo Mac. Niente da incollare.':
+    'Your meeting notes, read from Granola on this Mac. Nothing to paste.',
+  'Non trovo le note di Granola su questo computer. Apri Granola una volta e riprova.':
+    'I cannot find Granola’s notes on this computer. Open Granola once and try again.',
+  'Non ho il permesso di leggere le note di Granola.': 'I do not have permission to read Granola’s notes.',
+  'Non riesco a leggere le note di Granola.': 'I cannot read Granola’s notes.',
+  'Granola ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.':
+    'Granola has changed the way it saves notes: this connection needs an update.',
+  'Granola è un’app per Mac: su questo computer non c’è niente da leggere.':
+    'Granola is a Mac app: there is nothing to read on this computer.',
+  'Granola si legge dal computer dove gira, e qui Myynd gira su un server.':
+    'Granola is read from the computer it runs on, and here Myynd runs on a server.',
+  'Cloud API: un numero registrato su WhatsApp Business, non quello personale. Serve un indirizzo pubblico.':
+    'Cloud API: a number registered on WhatsApp Business, not your personal one. Needs a public address.',
+  'Serve un numero registrato su WhatsApp Business, quello della piattaforma di Meta per le aziende: con un numero personale non c’è niente da collegare.':
+    'You need a number registered on WhatsApp Business, Meta’s platform for companies: with a personal number there is nothing to connect.',
+  'Collega Granola': 'Connect Granola',
+  'Legge le note che Granola ha già scritto su questo Mac: le riunioni, con quello che si è detto e deciso.':
+    'Reads the notes Granola has already written on this Mac: your meetings, with what was said and decided.',
+  'Niente da incollare. Serve solo che Granola sia installato qui e che tu l’abbia aperto almeno una volta.':
+    'Nothing to paste. Granola just needs to be installed here, and opened at least once.',
+  'leggo le riunioni': 'reading the meetings',
   'Richiede OAuth Google.': 'Needs Google OAuth.',
   'Richiede OAuth Dropbox.': 'Needs Dropbox OAuth.',
   'Richiede OAuth Fatture in Cloud.': 'Needs Fatture in Cloud OAuth.',
@@ -425,6 +446,9 @@ const EN: Record<string, string> = {
   'richiamare lo studio': 'call the office back',
   'Non ho la sua email e non so cosa vuoi dirgli. E la posta non è ancora collegata: collegamela e te la scrivo.':
     'I do not have his email and I do not know what you want to say. And mail is not connected yet: connect it and I will write it.',
+  'Come funziona: il giro di prova': 'How it works: the walkthrough',
+  'Un esempio, per provarlo: niente di quello che scrivi qui finisce nella tua lista.':
+    'An example, to try it out: nothing you type here goes into your list.',
   'Indietro': 'Back',
   'Avanti': 'Next',
   'Ho capito': 'Got it',
@@ -615,7 +639,6 @@ const EN: Record<string, string> = {
   'Quell’indirizzo non è più valido: rigeneralo nelle impostazioni del calendario e incollalo di nuovo.': 'That address is no longer valid: reset it in your calendar settings and paste it again.',
   'A quell’indirizzo non c’è nessun calendario. Controlla di aver copiato il link in formato iCal.': 'There is no calendar at that address. Check that you copied the link in iCal format.',
   'Il calendario ha risposto con un errore. Riprova fra poco.': 'The calendar answered with an error. Try again shortly.',
-  'Quel calendario è troppo grande da leggere.': 'That calendar is too big to read.',
   'A quell’indirizzo non c’è un calendario. Su Google è «Indirizzo privato in formato iCal», in fondo alle impostazioni dell’agenda.': 'There is no calendar at that address. In Google it is “Secret address in iCal format”, at the bottom of the calendar’s settings.',
 
   'Il modello scelto non esiste per questa chiave. Scegli Sonnet nelle preferenze e riprova.': 'The chosen model does not exist for this key. Pick Sonnet in Preferences and try again.',
@@ -1538,6 +1561,18 @@ export const frasi = {
    * legge come «lascia perdere», cioè il contrario di quello che fa.
    */
   annullaGesto: () => corrente === 'en' ? 'Undo' : 'Annulla',
+
+  /*
+   * «Tutorial · 2 di 5», sopra il titolo del giro.
+   *
+   * Il numero non è una decorazione ed è metà del lavoro che fa questa riga:
+   * «tutorial» dice che è finto, «2 di 5» dice che è una cosa che finisce.
+   * Chi legge solo la prima resta con il dubbio di essere finito dentro una
+   * modalità da cui bisogna uscire.
+   */
+  passoDelGiro: (i: number, quanti: number) => corrente === 'en'
+    ? `Tutorial · ${i} of ${quanti}`
+    : `Tutorial · ${i} di ${quanti}`,
 
   // — le convinzioni che aspettano un sì —
   inAttesa: (n: number) => corrente === 'en'

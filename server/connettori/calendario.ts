@@ -41,8 +41,43 @@ const INDIETRO = 30
 /** Il tetto di eventi. Un'agenda condivisa di un'azienda può averne migliaia. */
 const TETTO = 2000
 
-/** Quanto può pesare un file iCal. Le agende grosse stanno sotto il megabyte. */
-const PESO_MAX = 8 * 1024 * 1024
+/*
+ * Quanto si legge, e perché non è più un solo numero.
+ *
+ * Prima era uno: otto mega di file, e sopra quelli un errore — «quel
+ * calendario è troppo grande da leggere», con il bottone che non faceva più
+ * niente. È il muro contro cui è finito il primo calendario di lavoro vero
+ * che abbiamo provato a collegare, e il messaggio non lasciava nessuna strada:
+ * l'indirizzo era giusto, l'agenda era la sua, e Myynd diceva di no.
+ *
+ * Il numero non era sbagliato per prudenza, era sbagliato per posto. Un export
+ * iCal di Google contiene *tutto* — dieci anni di riunioni, e dentro ogni
+ * riunione il blocco di HTML di Meet, la lista degli invitati e le proprietà
+ * `X-` di Google — mentre di quel file qui si legge un semestre avanti e un
+ * mese indietro. Si pesava la scatola per decidere se guardarci dentro.
+ *
+ * Adesso il file si legge mentre arriva e si butta subito quello che nessuno
+ * leggerà: i tre numeri sono il tetto della rete, il tetto di quello che
+ * resta in mano dopo aver buttato, e i due tagli che fanno buttare. Il primo
+ * non si tocca mai in pratica; il secondo, se si tocca, non è più un errore —
+ * si tiene quello che si è letto e si dice `troncato`, che è la parola che
+ * impedisce a `riconcilia` di cancellare il resto.
+ */
+const SCARICATO_MAX = 256 * 1024 * 1024
+const TENUTO_MAX = 48 * 1024 * 1024
+
+/** Quanti invitati si tengono per evento. `chiudiEvento` ne scrive quaranta. */
+const INVITATI_TENUTI = 60
+
+/**
+ * Quanto può essere lunga la riga delle note prima del taglio.
+ *
+ * Il doppio dei quattromila caratteri che finiscono nel documento, e il doppio
+ * non è un margine a caso: `ripulisci` può solo accorciare — `\\n` diventa un
+ * a capo, due caratteri che diventano uno — quindi ottomila di riga grezza non
+ * potranno mai diventare meno di quattromila di testo pulito.
+ */
+const NOTE_MAX = 8000
 
 // — leggere il file —
 
@@ -300,7 +335,7 @@ function chi(r: Riga): string {
  * parte e vincono sull'istanza srotolata, altrimenti l'agenda mostra due volte
  * la stessa riunione a due ore diverse.
  */
-export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[]; nome: string; troncato: boolean } {
+export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi: Evento[]; nome: string; troncato: boolean } {
   const eventi: Evento[] = []
   const eccezioni = new Map<string, Evento>()
   let nome = ''
@@ -309,24 +344,58 @@ export function leggiIcal(testo: string, da: Date, a: Date): { eventi: Evento[];
   let esclusi: number[] = []
   let invitati: string[] = []
   let troncato = false
+  /** Dentro quale blocco annidato dell'evento siamo: un VALARM, di solito. */
+  let sotto = ''
 
   /*
    * I fusi prima degli eventi, e il fuso di chi legge una volta sola.
    *
    * Il VTIMEZONE sta quasi sempre in cima al file, ma «quasi» non basta: si
-   * passa sulle righe due volte, che su otto mega di testo già ricucito costa
-   * niente, e da lì in poi ogni data del file può chiedere il suo fuso senza
-   * dipendere dall'ordine in cui è scritto.
+   * passa sulle righe due volte — sulle righe, che sono già ricucite e già
+   * sfoltite: costa un giro in più su un elenco, non una copia del file — e da
+   * lì in poi ogni data può chiedere il suo fuso senza dipendere dall'ordine
+   * in cui è scritto.
    *
    * `fusoDi()` legge la configurazione dal disco: chiamarlo una volta per
    * evento vorrebbe dire duemila letture di file per un'agenda piena.
    */
-  const tutte = righe(testo)
+  /*
+   * Le righe arrivano già ricucite quando vengono dalla rete.
+   *
+   * `scarica()` le ricuce mentre il file scorre, perché tenere in mano un
+   * export da venti mega per poi farne altre tre copie qui dentro è il modo
+   * in cui questa funzione finiva la memoria. Chi passa una stringa — i test,
+   * un file su disco — trova `righe()` dov'era.
+   */
+  const tutte = Array.isArray(testo) ? testo : righe(testo)
   const ctx: Contesto = { dalFile: leggiVtimezone(tutte), nuda: zonaIana(fusoDi()) }
 
   for (const grezza of tutte) {
     const r = spezza(grezza)
     if (!r) continue
+
+    /*
+     * Un blocco dentro l'evento non è l'evento, e crederci costava le note.
+     *
+     * Dentro un VEVENT ci può stare un VALARM — il promemoria — e le sue
+     * proprietà finivano in `corrente` come se fossero dell'evento. Google
+     * scrive in ogni promemoria `DESCRIPTION:This is an event reminder`, che
+     * arriva *dopo* la descrizione vera: ogni riunione con una notifica
+     * perdeva le proprie note e nell'indice ci finiva quella frase, uguale per
+     * tutte. Nessun errore da nessuna parte, e una ricerca sulle note che non
+     * trovava più niente.
+     *
+     * Si salta per nome, non per «VALARM»: qualunque cosa cominci qui dentro
+     * non è roba dell'evento, e vale anche per quello che arriverà domani.
+     */
+    if (sotto) {
+      if (r.nome === 'END' && r.valore.trim().toUpperCase() === sotto) sotto = ''
+      continue
+    }
+    if (dentro && r.nome === 'BEGIN' && r.valore.trim().toUpperCase() !== 'VEVENT') {
+      sotto = r.valore.trim().toUpperCase()
+      continue
+    }
 
     if (r.nome === 'BEGIN' && r.valore.toUpperCase() === 'VEVENT') {
       dentro = true; corrente = {}; esclusi = []; invitati = []
@@ -440,7 +509,34 @@ export function usaRete(f: typeof fetch | null) { rete = f ?? ((...a) => fetch(.
 /** Quanti rimandi si seguono. Google ne fa uno; tre bastano a chiunque. */
 const SALTI_MAX = 3
 
-async function scarica(url: string): Promise<string> {
+/**
+ * Il file, letto mentre arriva e ridotto a quello che si legge davvero.
+ *
+ * Torna le righe **già ricucite**, non il testo: è la stessa cosa che
+ * `leggiIcal` si costruirebbe da sola, fatta però una volta sola e senza mai
+ * tenere in mano il file intero. Su un'agenda grossa la differenza non è un
+ * risparmio, è la differenza fra funzionare e no — `righe()` normalizza gli a
+ * capo e poi spezza, cioè fa tre copie del testo, e tre copie di un export da
+ * venti mega sono mezzo giga di memoria per leggere un semestre.
+ *
+ * Quello che si butta mentre passa, e perché si può:
+ *
+ *   · **i VALARM.** Sono i promemoria, e qui non li guarda nessuno. Buttarli
+ *     ripara anche un guasto vero: il loro `DESCRIPTION` — «This is an event
+ *     reminder», che Google mette in ogni evento con una notifica — finiva
+ *     sopra le note dell'evento. Vedi `leggiIcal`, che se ne difende comunque.
+ *   · **le proprietà `X-` dentro un evento.** Sono le estensioni private di
+ *     chi ha scritto il file, e nessuna riga di questo modulo le legge.
+ *     `X-ALT-DESC` da sola — la versione HTML delle note — pesa spesso più di
+ *     tutto il resto dell'evento. Fuori dagli eventi restano tutte, perché lì
+ *     ci vive `X-WR-CALNAME`, che è il nome dell'agenda.
+ *   · **gli invitati oltre il sessantesimo e le note oltre gli ottomila
+ *     caratteri.** Non è una scelta nuova: sono già i tagli che fa
+ *     `chiudiEvento` quando scrive il documento. Farli qui vuol dire non
+ *     portarsi in memoria una lista di seicento indirizzi per scriverne
+ *     quaranta.
+ */
+async function scarica(url: string): Promise<{ righe: string[]; troncato: boolean }> {
   let r: Response
   let dove = url
   for (let salto = 0; ; salto++) {
@@ -462,7 +558,16 @@ async function scarica(url: string): Promise<string> {
       r = await rete(i.url, {
         redirect: 'manual',
         headers: { accept: 'text/calendar, text/plain;q=0.9, */*;q=0.5' },
-        signal: AbortSignal.timeout(30_000)
+        /*
+         * Un minuto, non trenta secondi.
+         *
+         * Il tempo copre anche lo scaricamento del corpo, non solo la
+         * risposta: su un export da parecchi mega e una linea lenta i trenta
+         * secondi scadevano *a metà file*, e quello che si leggeva era «il
+         * calendario ci ha messo troppo a rispondere» — cioè un guasto di
+         * rete, per un calendario che stava rispondendo benissimo.
+         */
+        signal: AbortSignal.timeout(60_000)
       })
     } catch (e) {
       const nome = e instanceof Error ? e.name : ''
@@ -481,14 +586,128 @@ async function scarica(url: string): Promise<string> {
   if (r.status === 404) throw new Error('A quell’indirizzo non c’è nessun calendario. Controlla di aver copiato il link in formato iCal.')
   if (!r.ok) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
 
-  const peso = Number(r.headers.get('content-length') ?? 0)
-  if (peso > PESO_MAX) throw new Error('Quel calendario è troppo grande da leggere.')
-  const testo = await r.text()
-  if (testo.length > PESO_MAX) throw new Error('Quel calendario è troppo grande da leggere.')
-  if (!/BEGIN:VCALENDAR/i.test(testo)) {
+  /*
+   * `content-length` non si guarda più, ed è la riga che rifiutava l'agenda.
+   *
+   * Quando c'era, misurava il file *compresso* — Google lo serve in gzip — e
+   * quindi non era il numero che si credeva di leggere; quando non c'era, e
+   * con la codifica a pezzi non c'è mai, valeva zero e non guardava niente.
+   * Un controllo che sbaglia in un verso e dorme nell'altro. Il tetto vero
+   * adesso è sul testo che si tiene, dove si può contare davvero.
+   */
+  if (!r.body) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
+
+  const fuori: string[] = []
+  let troncato = false
+  let tenuto = 0
+  let scaricato = 0
+  let eUnCalendario = false
+
+  // dentro quale parte del file siamo: un evento, e dentro l'evento un
+  // sotto-blocco (un VALARM) di cui non si tiene niente
+  let dentroEvento = false
+  let sotto = ''
+  let invitati = 0
+
+  /** La riga che si sta ancora ricucendo: finisce quando ne comincia un'altra. */
+  let corrente: string | null = null
+
+  const nomeDi = (r: string) => {
+    const i = r.search(/[;:]/)
+    return (i < 0 ? r : r.slice(0, i)).toUpperCase()
+  }
+
+  const tieni = (riga: string) => {
+    tenuto += riga.length + 1
+    if (tenuto > TENUTO_MAX) { troncato = true; return }
+    fuori.push(riga)
+  }
+
+  /** La riga ricucita è finita: si decide se serve, e si tiene. */
+  const emetti = () => {
+    if (corrente === null) return
+    let riga = corrente
+    corrente = null
+    const nome = nomeDi(riga)
+    const duePunti = riga.indexOf(':')
+    const valore = duePunti < 0 ? '' : riga.slice(duePunti + 1).trim().toUpperCase()
+
+    if (sotto) {
+      // dentro un VALARM non si tiene niente: si aspetta solo la sua fine
+      if (nome === 'END' && valore === sotto) sotto = ''
+      return
+    }
+    if (nome === 'BEGIN') {
+      if (valore === 'VCALENDAR') eUnCalendario = true
+      else if (valore === 'VEVENT') { dentroEvento = true; invitati = 0 }
+      else if (dentroEvento) { sotto = valore; return }
+    } else if (nome === 'END' && valore === 'VEVENT') {
+      dentroEvento = false
+    } else if (dentroEvento) {
+      if (nome.startsWith('X-')) return
+      if (nome === 'ATTENDEE' && ++invitati > INVITATI_TENUTI) return
+      if (nome === 'DESCRIPTION' && riga.length > NOTE_MAX) riga = riga.slice(0, NOTE_MAX)
+    }
+    tieni(riga)
+  }
+
+  /*
+   * Una riga arrivata, ancora da ricucire.
+   *
+   * È la stessa regola di `righe()`, applicata mentre il file scorre: una riga
+   * che comincia con uno spazio o un tab è la continuazione di quella prima —
+   * il formato spezza a settantacinque ottetti — e una riga vuota non esiste.
+   * Le due cose insieme vogliono dire che una riga è finita solo quando ne
+   * comincia un'altra vera, ed è per questo che `corrente` sopravvive ai pezzi
+   * in cui la rete taglia il file.
+   */
+  const arrivata = (riga: string) => {
+    if (!riga.length) return
+    if ((riga.startsWith(' ') || riga.startsWith('\t')) && corrente !== null) {
+      corrente += riga.slice(1)
+      return
+    }
+    emetti()
+    corrente = riga
+  }
+
+  const lettore = r.body.getReader()
+  const decodifica = new TextDecoder('utf-8')
+  let coda = ''
+  try {
+    for (;;) {
+      const { done, value } = await lettore.read()
+      if (done) break
+      scaricato += value.byteLength
+      // il tetto della rete: qui non si tiene niente, si smette proprio di
+      // leggere — è la difesa contro un indirizzo che versa per sempre
+      if (scaricato > SCARICATO_MAX) { troncato = true; break }
+
+      /*
+       * Un `\r` in fondo al pezzo non si tocca: può essere la prima metà di un
+       * `\r\n` che arriva nel pezzo dopo, e normalizzarlo adesso spezzerebbe
+       * una riga in due nel punto in cui la rete ha tagliato il file.
+       */
+      const grezzo = coda + decodifica.decode(value, { stream: true })
+      const piene = grezzo.endsWith('\r') ? grezzo.length - 1 : grezzo.length
+      const pezzi = grezzo.slice(0, piene).replace(/\r\n?/g, '\n').split('\n')
+      coda = (pezzi.pop() ?? '') + grezzo.slice(piene)
+      for (const pezzo of pezzi) arrivata(pezzo)
+      if (troncato) break
+    }
+  } finally {
+    void lettore.cancel().catch(() => {})
+  }
+  if (!troncato) {
+    coda += decodifica.decode()
+    for (const pezzo of coda.replace(/\r\n?/g, '\n').split('\n')) arrivata(pezzo)
+  }
+  emetti()
+
+  if (!eUnCalendario) {
     throw new Error('A quell’indirizzo non c’è un calendario. Su Google è «Indirizzo privato in formato iCal», in fondo alle impostazioni dell’agenda.')
   }
-  return testo
+  return { righe: fuori, troncato }
 }
 
 /** La prova, che è già una lettura vera: se passa, il collegamento funziona. */
@@ -496,8 +715,8 @@ export async function prova(c: ConfigCalendario): Promise<{ ok: true; nome: stri
   const i = indirizzo(c.url)
   if (!i.ok) return { ok: false, errore: i.errore }
   try {
-    const testo = await scarica(i.url)
-    const { eventi, nome } = leggiIcal(testo, finestra(c).da, finestra(c).a)
+    const { righe: lette } = await scarica(i.url)
+    const { eventi, nome } = leggiIcal(lette, finestra(c).da, finestra(c).a)
     return { ok: true, nome: c.nome?.trim() || nome, eventi: eventi.length }
   } catch (e) {
     return { ok: false, errore: e instanceof Error ? e.message : String(e) }
@@ -563,8 +782,8 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
   const i = indirizzo(c.url)
   if (!i.ok) throw new Error(i.errore)
   const { da, a } = finestra(c)
-  const testo = await scarica(i.url)
-  const { eventi, nome, troncato } = leggiIcal(testo, da, a)
+  const { righe: lette, troncato: tagliato } = await scarica(i.url)
+  const { eventi, nome, troncato } = leggiIcal(lette, da, a)
 
   const p = parole()
   /*
@@ -606,7 +825,17 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
     gruppo: 'agenda'
   }))
 
-  return { docs, nome: c.nome?.trim() || nome, troncato }
+  /*
+   * Le due mezze verità si sommano, e la somma è quella che conta.
+   *
+   * `troncato` qui vuol dire una cosa sola — «non ho visto tutto» — e ci si
+   * può arrivare da due parti: il tetto degli eventi dentro `leggiIcal`, o il
+   * file che non è stato letto fino in fondo. Tenerne una sola vorrebbe dire
+   * dichiarare completa una lettura che non lo è, e `riconcilia` cancellerebbe
+   * dall'indice ogni impegno che non è arrivato — cioè il grosso di un'agenda
+   * grande, sparito senza che niente lo dica.
+   */
+  return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato }
 }
 
 /** Le occorrenze che non ci sono più: si tolgono solo se la lettura è arrivata in fondo. */

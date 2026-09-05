@@ -647,6 +647,41 @@ export function FormDesktop({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Granola: una scheda senza un solo campo.
+ *
+ * È l'unico collegamento che non chiede niente — non un token, non un
+ * indirizzo, non una cartella — e la scheda deve *sembrare* quello che è,
+ * altrimenti chi la apre si mette a cercare la casella che non c'è. Quindi
+ * due righe e un bottone: la prima dice cosa legge, la seconda dice le due
+ * condizioni vere, che sono avere Granola su questo Mac e averlo aperto
+ * almeno una volta.
+ */
+export function FormGranola({ tema, ok }: Props) {
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try { await api.collegaGranola(); ok() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Legge le note che Granola ha già scritto su questo Mac: le riunioni, con quello che si è detto e deciso.')}
+      </div>
+      <div style={{ ...nota(tema), marginTop: 8 }}>
+        {t('Niente da incollare. Serve solo che Granola sia installato qui e che tu l’abbia aperto almeno una volta.')}
+      </div>
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Granola')}</Conferma>
+    </div>
+  )
+}
+
 export function FormNotion({ tema, ok }: Props) {
   const [token, setToken] = useState('')
   const [err, setErr] = useState('')
@@ -1093,6 +1128,16 @@ export function FormWhatsapp({ tema, ok }: Props) {
 
   return (
     <div>
+      {/*
+        La condizione prima del prezzo, perché senza di quella il prezzo non si
+        paga nemmeno. «Business» nel nome della scheda si legge come il nome di
+        un'app; qui si dice che è un numero registrato sulla piattaforma di
+        Meta, e che con il proprio non c'è niente da collegare — prima dei
+        quattro campi, non dentro l'errore che arriverebbe dopo averli riempiti.
+      */}
+      <div style={{ ...nota(tema), marginBottom: 10 }}>
+        {t('Serve un numero registrato su WhatsApp Business, quello della piattaforma di Meta per le aziende: con un numero personale non c’è niente da collegare.')}
+      </div>
       <div style={{
         ...nota(tema), padding: '11px 13px', borderRadius: 12, marginBottom: 4,
         border: '1px solid rgba(196,98,59,.3)', background: 'rgba(196,98,59,.08)'
@@ -1140,6 +1185,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
+  if (id === 'granola') return <FormGranola tema={tema} ok={ok} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} />

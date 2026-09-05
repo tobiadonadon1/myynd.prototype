@@ -235,7 +235,17 @@ export function origineAmmessa(origin: string, portaVera: number): boolean {
  * rifiutarla, perché un percorso è sempre e solo quello del server — ma il
  * connettore nel suo insieme sì.
  */
-export const SOLO_IN_CASA: string[] = []
+export const SOLO_IN_CASA: string[] = [
+  /*
+   * Granola scrive le sue note in `~/Library/Application Support` **del Mac di
+   * chi la usa**. Dentro un contenitore quella cartella o non c'è o è quella
+   * del server, e in nessuno dei due casi ci sono le riunioni di qualcuno:
+   * offrire la scheda lì vorrebbe dire un bottone che si preme, che risponde
+   * «non trovo le note di Granola», e una persona che va a cercare il guasto
+   * nella sua installazione di Granola invece che nel posto in cui gira Myynd.
+   */
+  'granola'
+]
 
 /**
  * Le app OAuth di chi ospita.

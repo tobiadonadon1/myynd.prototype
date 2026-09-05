@@ -165,9 +165,18 @@ test('un attrezzo su una connessione che non c’è lo dice, e non cerca lo stes
 // — le chat —
 
 test('le chat si cercano, e solo con tutte le parole', () => {
+  /*
+   * `u` e `a`, che è quello che scrive l'app.
+   *
+   * Qui c'era scritto `'user'` e `'assistant'`, e non era un dettaglio della
+   * prova: era la convenzione sbagliata scritta nero su bianco, ed è il motivo
+   * per cui nessuno si è accorto che `chat.leggi` confrontava con `'user'`.
+   * Una prova che si inventa i propri dati non prova il codice vero — prova sé
+   * stessa. Vedi la prova sull'attribuzione, qui sotto.
+   */
   store.creaChat('c1', 'Il preventivo per Rossi')
-  store.salvaMessaggio({ id: 'm1', chat: 'c1', ruolo: 'user', testo: 'Facciamo il preventivo a Rossi da tremila' })
-  store.salvaMessaggio({ id: 'm2', chat: 'c1', ruolo: 'assistant', testo: 'Va bene, lo preparo per domani' })
+  store.salvaMessaggio({ id: 'm1', chat: 'c1', ruolo: 'u', testo: 'Facciamo il preventivo a Rossi da tremila' })
+  store.salvaMessaggio({ id: 'm2', chat: 'c1', ruolo: 'a', testo: 'Va bene, lo preparo per domani' })
 
   assert.equal(store.cercaChat('preventivo Rossi').length, 1)
   // una parola sola in comune non basta: riporterebbe indietro mezza cronologia
@@ -215,4 +224,32 @@ test('il compito si porta dietro il permesso, cartella compresa', () => {
 test('un compito scritto a mano non porta nessun permesso', () => {
   store.scriviCompito({ id: 'k2', testo: 'Richiamare Rossi', ordine: 'a1' })
   assert.equal(store.compito('k2')?.attrezzi, null)
+})
+
+test('quello che ha detto lei torna attribuito a lei, non a Myynd', async () => {
+  /*
+   * Il guasto peggiore di questo attrezzo, perché non somiglia a un guasto.
+   *
+   * Il ruolo nel database è una lettera — `u` e `a` — e qui si confrontava con
+   * `'user'`, che non è mai uguale a niente: ogni riga usciva firmata «Myynd»,
+   * comprese le sue. La descrizione dell'attrezzo dice al modello che quello
+   * che trova qui l'ha scritto lei e vale come una sua indicazione; con tutto
+   * attribuito a Myynd, «per Rossi scrivo sempre formale» tornava indietro
+   * come una cosa che si era detta Myynd da sola.
+   *
+   * Nessun errore, nessuna riga rossa: la frase giusta, in bocca a chi non
+   * l'ha detta — e un'istruzione della persona degradata ad appunto del
+   * programma.
+   */
+  store.creaChat('c2', 'Come scrivere a Rossi')
+  store.salvaMessaggio({ id: 'm3', chat: 'c2', ruolo: 'u', testo: 'A Rossi scrivi sempre formale, mai confidenziale.' })
+  store.salvaMessaggio({ id: 'm4', chat: 'c2', ruolo: 'a', testo: 'Va bene, con Rossi resto sul formale.' })
+
+  const e = await attrezzi.esegui('chat.leggi', { query: 'Rossi formale' }, ['chat.leggi'])
+  const suo = e.testo.split('\n\n').find(r => r.includes('mai confidenziale'))
+  const mio = e.testo.split('\n\n').find(r => r.includes('resto sul formale'))
+  assert.ok(suo, 'la riga scritta da lei non è tornata')
+  assert.match(suo!, /\] lei,/, 'quello che ha detto lei risulta detto da Myynd')
+  assert.ok(mio, 'la riga di Myynd non è tornata')
+  assert.match(mio!, /\] Myynd,/)
 })

@@ -211,8 +211,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'WhatsApp Business', en: 'WhatsApp Business' },
             testo: {
-              it: 'Cloud API: Meta manda i messaggi mentre arrivano, non li fa chiedere. Quindi quello che è arrivato prima non c’è, e la macchina su cui gira Myynd deve essere raggiungibile da internet. Servono l’ID del numero, un token permanente, il segreto dell’app e una parola d’ordine per il webhook, il cui indirizzo è il tuo indirizzo pubblico seguito da `/api/whatsapp/webhook`.',
-              en: 'Cloud API: Meta pushes messages as they arrive, they cannot be fetched. So what arrived before is not there, and the machine running Myynd must be reachable from the internet. You need the phone number ID, a permanent token, the app secret and a verify word for the webhook, whose address is your public address followed by `/api/whatsapp/webhook`.'
+              it: 'Serve un numero registrato su WhatsApp Business, la piattaforma di Meta per le aziende: con un numero personale non c’è niente da collegare, perché la Cloud API a quel numero non risponde. Cloud API: Meta manda i messaggi mentre arrivano, non li fa chiedere. Quindi quello che è arrivato prima non c’è, e la macchina su cui gira Myynd deve essere raggiungibile da internet. Servono l’ID del numero, un token permanente, il segreto dell’app e una parola d’ordine per il webhook, il cui indirizzo è il tuo indirizzo pubblico seguito da `/api/whatsapp/webhook`.',
+              en: 'You need a number registered on WhatsApp Business, Meta’s platform for companies: with a personal number there is nothing to connect, because the Cloud API does not answer for that number. Cloud API: Meta pushes messages as they arrive, they cannot be fetched. So what arrived before is not there, and the machine running Myynd must be reachable from the internet. You need the phone number ID, a permanent token, the app secret and a verify word for the webhook, whose address is your public address followed by `/api/whatsapp/webhook`.'
             }
           },
           {
@@ -220,6 +220,13 @@ const SEZIONI: Sezione[] = [
             testo: {
               it: 'Crea un’integrazione interna su [notion.so/my-integrations](https://www.notion.so/my-integrations) e incolla il token. Poi condividi con l’integrazione ogni pagina che deve leggere: senza quel passaggio l’API non le vede, anche col token giusto.',
               en: 'Create an internal integration at [notion.so/my-integrations](https://www.notion.so/my-integrations) and paste the token. Then share each page it should read with the integration: without that step the API does not see them, even with the right token.'
+            }
+          },
+          {
+            nome: { it: 'Granola', en: 'Granola' },
+            testo: {
+              it: 'Le note delle tue riunioni, lette da Granola su questo Mac. Non c’è niente da incollare: Granola scrive quello che ascolta in un file su questo disco, e Myynd lo legge — il riassunto che ha scritto lei e gli appunti che hai preso tu, tutti e due. Serve che Granola sia installato qui e che tu l’abbia aperto almeno una volta. C’è solo quando Myynd gira sul tuo computer, e solo su Mac: su un server quella cartella non è di nessuno.',
+              en: 'Your meeting notes, read from Granola on this Mac. There is nothing to paste: Granola writes what it hears into a file on this disk, and Myynd reads it — both the summary it wrote and the notes you took. Granola needs to be installed here and opened at least once. It is available only when Myynd runs on your own computer, and only on a Mac: on a server that folder belongs to no one.'
             }
           },
           {
@@ -377,8 +384,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Cosa può leggere', en: 'What it may read' },
             testo: {
-              it: 'Solo gli attrezzi che le hai dato: la posta, il desktop, Notion, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’automazione lo dice e non trova niente.',
-              en: 'Only the tools you gave it: mail, desktop, Notion, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the automation says so and finds nothing.'
+              it: 'Solo gli attrezzi che le hai dato: la posta, il desktop, Notion, Granola, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’automazione lo dice e non trova niente.',
+              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the automation says so and finds nothing.'
             }
           },
           {

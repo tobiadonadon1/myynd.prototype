@@ -30,6 +30,7 @@ import * as desktop from './connettori/desktop.ts'
 import * as desktopRemoto from './connettori/desktopRemoto.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
+import * as granola from './connettori/granola.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
 import * as drive from './connettori/drive.ts'
@@ -544,6 +545,7 @@ app.get('/api/stato', (_req, res) => {
         v.id === 'posta' ? !!c.posta :
         v.id === 'desktop' ? !!c.desktop :
         v.id === 'notion' ? !!c.notion :
+        v.id === 'granola' ? granola.collegato(c) :
         v.id === 'calendario' ? !!c.calendario :
         // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
         // può ragionare», che da quando c'è un altro fornitore non coincide più
@@ -1001,6 +1003,27 @@ app.post('/api/connettori/desktop/carica-file', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
+/**
+ * Granola: si preme e basta, e la prova è già la lettura.
+ *
+ * Non riceve niente — non c'è un token, e soprattutto non c'è un percorso: il
+ * file sta dove sta, e farselo dire da fuori sarebbe una casella in cui
+ * scrivere il nome di un file qualunque di questo disco. Per la stessa
+ * ragione non passa da `ospitato.disponibile`: quel controllo tiene la scheda
+ * fuori dalla vetrina di un server, e questa rotta si difende da sola.
+ */
+app.post('/api/connettori/granola', async (_req, res) => {
+  if (ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Granola si legge dal computer dove gira, e qui Myynd gira su un server.' })
+  }
+  try {
+    const esito = await granola.prova()
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    cfg.aggiorna({ granola: { note: esito.note } })
+    res.json({ ok: true, note: esito.note })
+  } catch (e) { errore(res, e) }
+})
+
 app.post('/api/connettori/notion', async (req, res) => {
   const token: string = req.body?.token ?? ''
   if (!token) return res.status(400).json({ errore: 'Serve il token di integrazione.' })
@@ -1258,6 +1281,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   if (id === 'posta') delete c.posta
   else if (id === 'desktop') delete c.desktop
   else if (id === 'notion') delete c.notion
+  else if (id === 'granola') delete c.granola
   else if (id === 'calendario') delete c.calendario
   /*
     «Scollega» su Claude vuol dire che Myynd deve smettere di ragionare, e da
@@ -1377,6 +1401,22 @@ async function leggiTutto(
     const tolti = store.riconcilia('notion', { completo: !e.interrotto },
       [...e.docs.map(d => d.id), ...e.visti])
     avvisa({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti, invariate: e.invariate, resto: e.resto })
+    return e.docs.length
+  })
+  /*
+   * Granola solo in casa, come il desktop e per la stessa ragione: legge un
+   * file di *questo* computer. Su un server il ramo non parte proprio, invece
+   * di partire e non trovare niente.
+   */
+  if (c.granola && !ospitato.OSPITATO) await fonte('granola', async () => {
+    avvisa({ fase: 'granola', stato: 'leggo le riunioni' })
+    const e = await granola.sincronizza()
+    await store.salvaDocumentiAPezzi(e.docs)
+    // una nota cancellata in Granola deve sparire anche di qui: il file è
+    // sempre intero, quindi quello che non c'è dentro non c'è più
+    const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
+    cfg.aggiorna({ granola: { note: e.docs.length } })
+    avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
     return e.docs.length
   })
   const cal = c.calendario
@@ -1580,7 +1620,7 @@ async function rileggiDaSola() {
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario) return
+    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {

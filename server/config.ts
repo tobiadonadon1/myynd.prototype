@@ -530,6 +530,16 @@ export type ConfigDesktop = { cartelle: string[]; estensioni?: string[] }
 export type ConfigNotion = { token: string }
 
 /**
+ * Granola: un collegamento senza niente dentro.
+ *
+ * Non c'è un token, non c'è un indirizzo, non c'è un percorso — si legge un
+ * file che sta sempre nello stesso posto sul Mac di chi collega. Quello che
+ * resta scritto è solo che il collegamento c'è, e quante note aveva l'ultima
+ * volta: serve alla scheda, non alla lettura.
+ */
+export type ConfigGranola = { note?: number }
+
+/**
  * Il calendario, letto da un indirizzo invece che da un'API.
  *
  * `url` è l'indirizzo segreto in formato iCal della propria agenda. **È una
@@ -549,6 +559,7 @@ export type Config = {
   posta?: ConfigPosta
   desktop?: ConfigDesktop
   notion?: ConfigNotion
+  granola?: ConfigGranola
   calendario?: ConfigCalendario
   claude?: ConfigClaude
   tono?: string
@@ -885,6 +896,8 @@ export function pubblica(c: Config = leggi()) {
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle } : null,
     notion: c.notion ? { collegato: true } : null,
+    // non ha niente da nascondere: non c'è nessuna credenziale, esce intera
+    granola: c.granola ? { collegato: true, note: c.granola.note ?? 0 } : null,
     // il nome dell'agenda esce, l'indirizzo no: quello è la chiave di casa
     calendario: c.calendario ? { collegato: true, nome: c.calendario.nome ?? null, giorni: c.calendario.giorni ?? 30 } : null,
     /*

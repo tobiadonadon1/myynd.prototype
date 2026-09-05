@@ -9,7 +9,7 @@
 
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Hov } from '../ui'
-import { t } from '../lingua'
+import { t, frasi } from '../lingua'
 import { IconPiu, IconSpunta } from '../icons'
 
 const CARTA: CSSProperties = {
@@ -228,15 +228,35 @@ export function Giro({ lingua, chiudi, festa }: { lingua: string; chiudi: () => 
         background: 'rgba(40,30,22,.34)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         WebkitAppRegion: 'no-drag', padding: 24
       } as CSSProperties}>
-      <div role="dialog" aria-label={t('Come funziona')} style={{
+      <div role="dialog" aria-label={t('Come funziona: il giro di prova')} style={{
         width: 480, maxWidth: '100%', borderRadius: 20, padding: '26px 26px 20px',
         background: 'rgba(250,246,239,.98)', border: '1px solid rgba(255,255,255,.9)',
-        boxShadow: '0 40px 90px rgba(60,44,30,.34)', animation: 'toastin .3s ease'
+        boxShadow: '0 40px 90px rgba(60,44,30,.34)', animation: 'toastin .3s ease',
+        // il riquadro è centrato e non ha un'altezza: su una finestra bassa —
+        // un portatile con la barra degli strumenti aperta — quello che sfora
+        // esce di sopra e di sotto, e «Avanti» diventa irraggiungibile
+        maxHeight: 'calc(100vh - 48px)', overflowY: 'auto'
       }}>
+        {/*
+          Che è un tutorial va scritto, perché guardandolo non si vede.
+          I pezzi qui dentro sono i pezzi veri — si scrive nel campo vero, si
+          preme il pallino vero, si spunta la riga vera — ed è quello che li fa
+          imparare. Ma è anche quello che li rende indistinguibili dall'app: chi
+          apriva questa finestra scriveva la sua prima cosa da fare qui dentro,
+          la vedeva sparire alla schermata dopo, e concludeva che l'app perde le
+          cose. Il rimedio non è rendere finto l'esempio: è dirlo.
+        */}
+        <div style={{
+          fontSize: '9.5px', fontWeight: 600, letterSpacing: '.14em',
+          textTransform: 'uppercase', color: 'rgba(142,63,31,.75)', marginBottom: 9
+        }}>{frasi.passoDelGiro(i + 1, PASSI.length)}</div>
         <div style={{ fontSize: 21, letterSpacing: '-.02em', fontWeight: 500 }}>{t(p.titolo)}</div>
         <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.6)', marginTop: 6, lineHeight: 1.5 }}>{t(p.riga)}</div>
 
         <div style={{ marginTop: 18 }}>{p.corpo({ lingua, festa })}</div>
+        <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.45)', marginTop: 10, lineHeight: 1.5, textWrap: 'pretty' }}>
+          {t('Un esempio, per provarlo: niente di quello che scrivi qui finisce nella tua lista.')}
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22 }}>
           <div style={{ display: 'flex', gap: 5, flex: 1 }}>

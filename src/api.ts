@@ -35,6 +35,8 @@ export type Stato = {
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[] } | null
     notion: { collegato: boolean } | null
+    /** Granola sul Mac: non c'è nessuna credenziale, solo quante note ha letto. */
+    granola: { collegato: boolean; note: number } | null
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
     calendario: { collegato: boolean; nome: string | null; giorni: number } | null
     claude: { collegato: boolean } | null
@@ -343,7 +345,8 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
 
 /** Il nome della fonte, non il suo identificativo. */
 const NOME_FONTE: Record<string, string> = {
-  posta: 'Posta', calendario: 'Calendario', desktop: 'Desktop', notion: 'Notion', claude: 'Claude', mind2do: 'Mind2Do',
+  posta: 'Posta', calendario: 'Calendario', desktop: 'Desktop', notion: 'Notion', granola: 'Granola',
+  claude: 'Claude', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
   whatsapp: 'WhatsApp Business'
@@ -378,6 +381,15 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)
   // le pagine di Notion che non sono cambiate e non si sono riscaricate
   if (Number(m.invariate)) parti.push(`${Number(m.invariate)} ${en ? 'unchanged' : 'invariate'}`)
+  /*
+   * Le riunioni di Granola senza una parola dentro.
+   *
+   * Una riunione che parte e finisce senza che nessuno scriva niente resta
+   * nel file di Granola, e qui non diventa un documento — giusto, perché non
+   * c'è niente da indicizzare. Ma senza questa riga chi ha quaranta riunioni e
+   * legge «Granola · 12 documenti» conclude che il collegamento perde roba.
+   */
+  if (Number(m.vuote)) parti.push(`${Number(m.vuote)} ${en ? 'with no notes' : 'senza note'}`)
   /*
    * «Tetto raggiunto» non diceva la cosa che serve sapere.
    *
@@ -862,6 +874,10 @@ export const api = {
   collegaGoogle: (clientId: string, clientSecret: string) =>
     json<{ ok: true; email: string }>('/api/connettori/google',
       { method: 'POST', body: JSON.stringify({ clientId, clientSecret }) }),
+
+  // niente da mandare: il file sta dove sta, e il percorso non si prende da qui
+  collegaGranola: () =>
+    json<{ ok: true; note: number }>('/api/connettori/granola', { method: 'POST', body: '{}' }),
 
   collegaNotion: (token: string) =>
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),

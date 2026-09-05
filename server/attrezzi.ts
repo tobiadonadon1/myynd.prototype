@@ -51,6 +51,7 @@ export type Nome =
   | 'posta.leggi'
   | 'desktop.leggi'
   | 'notion.leggi'
+  | 'granola.leggi'
   | 'slack.leggi'
   | 'drive.leggi'
   | 'sharepoint.leggi'
@@ -67,7 +68,7 @@ export type Attrezzo = {
   /** Una riga che dice cosa apre, per chi legge la scheda. */
   spiega: { it: string; en: string }
   /** Quale connessione gli serve. Null = non gliene serve nessuna. */
-  serve: 'posta' | 'desktop' | 'notion' | 'slack' | 'drive' | 'sharepoint'
+  serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'slack' | 'drive' | 'sharepoint'
     | 'dropbox' | 'whatsapp' | 'agenda' | null
   /** Il colore con cui compare, che è quello della sua fonte. */
   tinta: string
@@ -91,6 +92,7 @@ const FONTI: Partial<Record<Nome, string[]>> = {
   'agenda.leggi': ['calendario'],
   'desktop.leggi': ['desktop'],
   'notion.leggi': ['notion'],
+  'granola.leggi': ['granola'],
   'slack.leggi': ['slack'],
   'drive.leggi': ['drive'],
   // SharePoint e OneDrive stanno insieme per lo stesso motivo: da fuori sono
@@ -141,6 +143,22 @@ export const ATTREZZI: Attrezzo[] = [
     serve: 'notion',
     tinta: '#4A3D9E',
     tool: cercaIn('notion.leggi', 'le pagine del suo Notion', 'una pagina')
+  },
+  {
+    /*
+     * «Cosa ci siamo detti» è una domanda a cui prima non rispondeva nessuno.
+     *
+     * Sta accanto a Notion perché sono la stessa famiglia — roba scritta, non
+     * roba arrivata — ma è la fonte che dice le cose che non stanno da nessuna
+     * altra parte: quello che si è deciso a voce non è in nessuna email e in
+     * nessun file.
+     */
+    nome: 'granola.leggi',
+    etichetta: { it: 'Granola', en: 'Granola' },
+    spiega: { it: 'Legge le note delle tue riunioni su Granola.', en: 'Reads your meeting notes in Granola.' },
+    serve: 'granola',
+    tinta: '#8A6A3C',
+    tool: cercaIn('granola.leggi', 'le note delle sue riunioni su Granola', 'una riunione')
   },
   {
     nome: 'slack.leggi',
@@ -328,6 +346,7 @@ export function collegato(n: Nome): boolean {
     case 'posta': return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
     case 'desktop': return !!c.desktop?.cartelle?.length
     case 'notion': return !!c.notion
+    case 'granola': return !!c.granola
     case 'slack': return !!c.slack
     case 'drive': return !!c.drive
     case 'sharepoint': return !!c.microsoft?.parti.includes('file')
@@ -495,9 +514,26 @@ export async function esegui(
     if (!q) return { testo: 'Manca la query.', docs: [], male: true }
     const righe = store.cercaChat(q, 10)
     if (!righe.length) return { testo: 'Non ne avete mai parlato con queste parole.', docs: [] }
+    /*
+     * `'u'`, non `'user'`, ed è la differenza fra due cose opposte.
+     *
+     * Nel database il ruolo si scrive con una lettera — `u` e `a`, come in
+     * `claude.ts` e `memoria.ts` — e qui si confrontava con `'user'`, che non
+     * è mai uguale a niente. Quindi **ogni riga usciva firmata «Myynd»**,
+     * comprese quelle scritte da lei.
+     *
+     * Non era un'etichetta storta: la descrizione di questo attrezzo dice al
+     * modello che quello che trova qui l'ha scritto lei e «vale come una sua
+     * indicazione». Con tutto attribuito a Myynd, un «per Rossi scrivo sempre
+     * formale» detto da lei tornava indietro come una cosa che si era detta
+     * Myynd da sola — cioè un'istruzione della persona degradata a un appunto
+     * del programma, che è esattamente il contrario del perché questo attrezzo
+     * esiste. E senza nessun errore: la frase giusta, attribuita a chi non
+     * l'ha detta.
+     */
     return {
       testo: righe.map(r =>
-        `— [${r.titolo}] ${r.ruolo === 'user' ? 'lei' : 'Myynd'}, ` +
+        `— [${r.titolo}] ${r.ruolo === 'u' ? 'lei' : 'Myynd'}, ` +
         `${new Date(r.quando).toLocaleDateString('it-IT')}: ${r.testo.slice(0, 500)}`
       ).join('\n\n'),
       docs: []

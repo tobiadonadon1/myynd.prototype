@@ -220,3 +220,95 @@ test('un indirizzo scaduto manda a rigenerarlo, non a riprovare', async () => {
   assert.equal(r.ok, false)
   assert.match(r.ok ? '' : r.errore, /rigeneralo/)
 })
+
+// — l'agenda grossa, che prima si rifiutava di leggere —
+
+/** Un file servito a pezzi come farebbe la rete: i tagli cadono in mezzo alle righe. */
+const aPezzi = (testo: string, quanto = 64 * 1024) => {
+  const b = Buffer.from(testo)
+  let i = 0
+  return new Response(new ReadableStream({
+    pull(c) {
+      if (i >= b.length) return c.close()
+      c.enqueue(new Uint8Array(b.subarray(i, i + quanto)))
+      i += quanto
+    }
+  }), { status: 200, headers: { 'content-type': 'text/calendar' } })
+}
+
+test('un promemoria dentro l’evento non gli mangia le note', () => {
+  /*
+   * Il guasto era invisibile e valeva per quasi ogni evento vero.
+   *
+   * Google mette in ogni evento con una notifica un VALARM che contiene
+   * `DESCRIPTION:This is an event reminder`, e quella riga arriva *dopo* la
+   * descrizione dell'evento: finiva sopra le note vere. Nell'indice ci
+   * andava la stessa frase per ogni riunione, e le note di tutte sparivano
+   * senza che niente lo dicesse.
+   */
+  const f = evento(
+    'UID:x\r\nDTSTART:20260907T080000Z\r\nSUMMARY:Punto\r\n' +
+    'DESCRIPTION:Le note vere della riunione\r\n' +
+    'BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:This is an event reminder\r\nTRIGGER:-P0DT0H30M0S\r\nEND:VALARM'
+  )
+  const { eventi } = cal.leggiIcal(f, ...Object.values(attorno('2026-09-07')) as [Date, Date])
+  assert.equal(eventi.length, 1)
+  assert.equal(eventi[0]!.note, 'Le note vere della riunione')
+})
+
+test('un’agenda più grossa del vecchio tetto si legge, invece di essere rifiutata', async () => {
+  /*
+   * È il guasto vero: un calendario di lavoro con qualche anno di storia
+   * dentro superava gli otto mega e rispondeva «quel calendario è troppo
+   * grande da leggere» — con l'indirizzo giusto e l'agenda sua. Si pesava la
+   * scatola invece di guardarci dentro, e di quel file qui si legge un
+   * semestre.
+   */
+  const giorno = new Date(Date.now() + 864e5).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z')
+  let dentro = ''
+  for (let i = 0; i < 4000; i++) {
+    dentro += `BEGIN:VEVENT\r\nUID:e${i}\r\nDTSTART:${giorno}\r\nSUMMARY:Riunione ${i}\r\n` +
+      `DESCRIPTION:${'nota lunga '.repeat(120)}\r\n` +
+      `X-ALT-DESC;FMTTYPE=text/html:${'<b>ciao</b>'.repeat(300)}\r\n` +
+      'END:VEVENT\r\n'
+  }
+  const file = ics(dentro)
+  assert.ok(Buffer.byteLength(file) > 8 * 1024 * 1024, 'la prova non prova niente se il file sta sotto il vecchio tetto')
+
+  cal.usaRete((async () => aPezzi(file)) as typeof fetch)
+  const r = await cal.prova({ url: 'https://esempio.test/grande.ics' })
+  assert.equal(r.ok, true, r.ok ? '' : r.errore)
+  assert.equal(r.ok && r.nome, 'Agenda di prova')
+  assert.ok(r.ok && r.eventi > 0)
+})
+
+test('una riga spezzata dal formato resta intera anche se la rete taglia lì in mezzo', () => {
+  /*
+   * Due tagli diversi che cadono nello stesso punto: il formato spezza le
+   * righe lunghe a settantacinque ottetti, e la rete spezza il file dove
+   * capita. Chi ricuce mentre legge deve sopravvivere al secondo taglio senza
+   * perdere il primo, altrimenti la descrizione di una riunione arriva a metà
+   * e nessuno se ne accorge.
+   */
+  const f = evento('UID:x\r\nDTSTART:20260907T080000Z\r\nSUMMARY:Punto\r\nDESCRIPTION:Prima parte\r\n  e seconda parte')
+  const { eventi } = cal.leggiIcal(f, ...Object.values(attorno('2026-09-07')) as [Date, Date])
+  assert.equal(eventi[0]!.note, 'Prima parte e seconda parte')
+})
+
+test('una lettura fermata a metà si dichiara troncata, e non cancella l’agenda', async () => {
+  /*
+   * `troncato` è la parola che tiene in vita l'indice: `riconcilia` cancella
+   * quello che non ha rivisto, e una lettura incompleta dichiarata completa
+   * vuol dire un'agenda che sparisce in silenzio. Qui il tetto degli eventi
+   * morde, ed è l'unica cosa che conta che arrivi fino in fondo.
+   */
+  const giorno = new Date(Date.now() + 864e5).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z/, 'Z')
+  let dentro = ''
+  for (let i = 0; i < 2400; i++) {
+    dentro += `BEGIN:VEVENT\r\nUID:t${i}\r\nDTSTART:${giorno}\r\nSUMMARY:R${i}\r\nEND:VEVENT\r\n`
+  }
+  cal.usaRete((async () => aPezzi(ics(dentro))) as typeof fetch)
+  const e = await cal.sincronizza({ url: 'https://esempio.test/tanti.ics' })
+  assert.equal(e.troncato, true)
+  assert.ok(e.docs.length > 0)
+})

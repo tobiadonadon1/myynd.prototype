@@ -42,6 +42,8 @@ writeFileSync(join(CASA, '.myynd', 'config.json'), JSON.stringify({
 }), { mode: 0o600 })
 
 const whatsapp = await import('./connettori/whatsapp.ts')
+const granola = await import('./connettori/granola.ts')
+const ospitato = await import('./ospitato.ts')
 const slack = await import('./connettori/slack.ts')
 const microsoft = await import('./connettori/microsoft.ts')
 const estrai = await import('./connettori/estrai.ts')
@@ -196,4 +198,134 @@ test('gli attrezzi non hanno due volte lo stesso nome né la stessa tinta', () =
   // dire due fonti che sembrano la stessa cosa sulla scheda di un'automazione
   const tinte = attrezzi.ATTREZZI.map(a => a.tinta)
   assert.equal(new Set(tinte).size, tinte.length, 'due attrezzi con la stessa tinta')
+})
+
+// — Granola: un file di qualcun altro, che nessuno ci ha promesso —
+
+/**
+ * La cache come la scrive Granola: un JSON che dentro ne contiene un altro
+ * **come stringa**. È la prima cosa contro cui sbatte chi prova a leggerla,
+ * perché `JSON.parse` riesce senza lamentarsi e quello che si ha in mano è
+ * una stringa dove ci si aspettava una mappa.
+ */
+const scriviCache = (dentro: unknown) => {
+  mkdirSync(join(CASA, 'Library', 'Application Support', 'Granola'), { recursive: true })
+  writeFileSync(
+    join(CASA, 'Library', 'Application Support', 'Granola', 'cache-v3.json'),
+    JSON.stringify({ cache: JSON.stringify(dentro) })
+  )
+}
+
+test('la cache annidata si apre, e le note diventano documenti', async () => {
+  scriviCache({
+    state: {
+      documents: {
+        d1: {
+          id: 'd1', title: 'Punto con Riccardo', created_at: '2026-09-03T09:00:00.000Z',
+          notes_markdown: 'Preventivo entro venerdì',
+          google_calendar_event: { attendees: [{ displayName: 'Riccardo', email: 'r@esempio.it' }] }
+        }
+      }
+    }
+  })
+  const e = await granola.leggi()
+  assert.equal(e.docs.length, 1)
+  const d = e.docs[0]!
+  assert.equal(d.id, 'granola:d1')
+  assert.equal(d.fonte, 'granola')
+  assert.equal(d.titolo, 'Punto con Riccardo')
+  /*
+   * Chi c'era deve stare *dentro* il corpo, non solo accanto.
+   *
+   * L'indice cerca a parole intere sul testo del documento: fuori di lì il
+   * nome sta in un campo che la ricerca non guarda, e «cosa ci siamo detti
+   * con Riccardo» non trova la riunione con Riccardo.
+   */
+  assert.match(d.corpo, /Riccardo/)
+  assert.match(d.corpo, /Preventivo entro venerdì/)
+})
+
+test('le note scritte come albero dell’editor diventano testo, non JSON', async () => {
+  /*
+   * Granola non salva testo: salva il documento ProseMirror in cui l'hai
+   * visto. Preso com'è, nell'indice ci finisce `{"type":"doc",…}` — una nota
+   * che non si trova cercando nessuna delle parole che contiene.
+   */
+  scriviCache({
+    state: {
+      documents: {
+        d2: {
+          id: 'd2', title: 'Commercialista', created_at: '2026-09-04T14:30:00.000Z',
+          notes: {
+            type: 'doc',
+            content: [
+              { type: 'heading', content: [{ type: 'text', text: 'Scadenze' }] },
+              { type: 'bulletList', content: [
+                { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'IVA il 16' }] }] }
+              ] }
+            ]
+          }
+        }
+      }
+    }
+  })
+  const e = await granola.leggi()
+  const corpo = e.docs[0]!.corpo
+  assert.ok(!corpo.includes('"type"'), 'l’albero dell’editor è finito nell’indice così com’è')
+  assert.match(corpo, /Scadenze/)
+  assert.match(corpo, /IVA il 16/)
+})
+
+test('il riassunto di Granola e i propri appunti stanno tutti e due nel documento', async () => {
+  // rispondono a due domande diverse: cosa è stato deciso, e cosa hai pensato
+  // tu mentre lo decidevate. Tenerne uno solo butta via metà della riunione
+  scriviCache({
+    state: {
+      documents: { d3: { id: 'd3', title: 'Riunione', notes_markdown: 'i miei appunti' } },
+      documentPanels: {
+        d3: { p1: { content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'il riassunto di Granola' }] }] } } }
+      }
+    }
+  })
+  const e = await granola.leggi()
+  assert.match(e.docs[0]!.corpo, /il riassunto di Granola/)
+  assert.match(e.docs[0]!.corpo, /i miei appunti/)
+})
+
+test('una nota buttata via resta buttata, e una senza parole si conta invece di sparire', async () => {
+  scriviCache({
+    state: {
+      documents: {
+        viva: { id: 'viva', title: 'Viva', notes_plain: 'qualcosa' },
+        morta: { id: 'morta', title: 'Morta', notes_plain: 'roba', deleted_at: '2026-09-01T00:00:00.000Z' },
+        muta: { id: 'muta', title: 'Riunione senza appunti' }
+      }
+    }
+  })
+  const e = await granola.leggi()
+  assert.deepEqual(e.docs.map(d => d.id), ['granola:viva'])
+  /*
+   * `vuote` non è una statistica: è la riga che spiega perché chi ha quaranta
+   * riunioni legge «Granola · 12 documenti». Senza, sembra che il
+   * collegamento perda roba.
+   */
+  assert.equal(e.vuote, 1)
+})
+
+test('quando il file non si capisce più lo si dice, invece di collegarsi a zero', async () => {
+  /*
+   * `cache-v3.json` ha già un numero di versione in fondo: è Granola stessa
+   * che avvisa che ce n'è stata una due. Il giorno della quattro, il modo
+   * peggiore di comportarsi è collegarsi lo stesso e restare a zero per
+   * sempre — una fonte rotta che si scopre dopo un mese.
+   */
+  mkdirSync(join(CASA, 'Library', 'Application Support', 'Granola'), { recursive: true })
+  writeFileSync(join(CASA, 'Library', 'Application Support', 'Granola', 'cache-v3.json'), '{"qualcosa":"d’altro"}')
+  await assert.rejects(() => granola.leggi(), /cambiato il modo in cui salva/)
+})
+
+test('Granola non si offre su un server, dove quella cartella non è di nessuno', () => {
+  // legge `~/Library/Application Support` del Mac di chi la usa: dentro un
+  // contenitore quella cartella o non c'è o è quella del server
+  assert.ok(ospitato.SOLO_IN_CASA.includes('granola'))
 })
