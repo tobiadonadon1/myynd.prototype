@@ -290,10 +290,10 @@ const REGISTRAZIONE_SCRITTA = (process.env.MYYND_REGISTRAZIONE ?? '').trim().toL
 export const REGISTRAZIONE: Registrazione =
   REGISTRAZIONE_SCRITTA === 'invito' || REGISTRAZIONE_SCRITTA === 'chiusa' ? REGISTRAZIONE_SCRITTA : 'aperta'
 /**
- * Chi ospita l'ha scritta davvero? Se no, ospitati, la regola la decide
- * `auth.registrazione()`: aperta per il primo conto, poi chiusa o a invito.
- * Un server pubblico lasciato aperto a chiunque per una variabile dimenticata
- * è un errore che nessun messaggio d'errore avrebbe mai segnalato.
+ * Chi ospita l'ha scritta davvero? Non cambia la regola — senza variabile si
+ * resta aperti, come dice il valore predefinito qui sopra — ma cambia cosa si
+ * stampa all'avvio: una porta aperta per scelta non ha bisogno di avvisi, una
+ * porta aperta per distrazione sì.
  */
 export const REGISTRAZIONE_SCELTA = ['aperta', 'invito', 'chiusa'].includes(REGISTRAZIONE_SCRITTA)
 export const INVITO = (process.env.MYYND_INVITO ?? '').trim()

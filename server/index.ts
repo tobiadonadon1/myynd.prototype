@@ -3074,10 +3074,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
   const quantiConti = conti.quanti()
   console.log(`myynd · ${quantiConti} cont${quantiConti === 1 ? 'o' : 'i'} su questa installazione`)
-  if (ospitato.OSPITATO && !ospitato.REGISTRAZIONE_SCELTA) {
+  if (ospitato.OSPITATO) {
     const r = auth.registrazione()
     console.log(r === 'aperta'
-      ? 'myynd · registrazione aperta finché non c\'è il primo conto; poi si chiude (MYYND_REGISTRAZIONE per decidere)'
+      ? `myynd · registrazione aperta a chiunque${ospitato.REGISTRAZIONE_SCELTA ? '' : ' (nessun MYYND_REGISTRAZIONE scritto: «invito» o «chiusa» per stringere)'}`
       : `myynd · registrazione ${r === 'invito' ? 'a invito (MYYND_INVITO)' : 'chiusa'}: MYYND_REGISTRAZIONE=aperta per riaprirla`)
   }
 

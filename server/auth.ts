@@ -17,7 +17,7 @@ import * as chi from './chi.ts'
 import * as gettoni from './gettoni.ts'
 import * as gettoniEmail from './gettoniEmail.ts'
 import * as postaUscita from './postaUscita.ts'
-import { REGISTRAZIONE, REGISTRAZIONE_SCELTA, INVITO, DOMINI_AMMESSI, OSPITATO, type Registrazione } from './ospitato.ts'
+import { REGISTRAZIONE, INVITO, DOMINI_AMMESSI, type Registrazione } from './ospitato.ts'
 
 
 
@@ -144,18 +144,22 @@ export function conto(): { email: string } | null {
 /**
  * Come ci si registra *adesso*.
  *
- * Chi ospita decide con `MYYND_REGISTRAZIONE`, e quella vale. Ma un server
- * pubblico con la variabile dimenticata non può restare aperto a chiunque
- * passi: ogni conto costa disco e un posto in ogni giro di sfondo, e con un
- * conto in mano si arriva a cose che da fuori non si toccano. Quindi, ospitati
- * e senza una scelta scritta: la porta è aperta finché non entra il primo —
- * chi ha messo su il server — e poi si chiude, o passa all'invito se ce n'è
- * uno. Una riga all'avvio lo dice.
+ * Lo decide `MYYND_REGISTRAZIONE`, e basta quella. Prima no: ospitati e senza
+ * la variabile scritta, la porta si chiudeva da sola dopo il primo conto. Il
+ * primo conto è sempre quello di chi ha messo su il server, quindi in pratica
+ * Myynd si chiudeva addosso a chi l'aveva appena acceso, e chiunque arrivasse
+ * dopo trovava «le registrazioni sono chiuse» senza che nessuno l'avesse
+ * deciso. Difendeva un server privato lasciato in giro per distrazione, e
+ * rompeva l'unica cosa che un prodotto deve saper fare: far entrare gente
+ * nuova.
+ *
+ * Il rischio che quella regola copriva resta vero — ogni conto costa disco e
+ * un posto in ogni giro di sfondo — ma si chiude scrivendo `chiusa`, o con un
+ * invito, o con i domini ammessi. Si dice, non si indovina. All'avvio, se la
+ * variabile non c'è, una riga avvisa che la porta è aperta.
  */
 export function registrazione(): Registrazione {
-  if (REGISTRAZIONE_SCELTA || !OSPITATO) return REGISTRAZIONE
-  if (conti.quanti() === 0) return 'aperta'
-  return INVITO ? 'invito' : 'chiusa'
+  return REGISTRAZIONE
 }
 
 export async function registra(email: string, password: string, invito = ''):
