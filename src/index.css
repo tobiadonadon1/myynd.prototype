@@ -29,6 +29,16 @@ button,input,textarea,select{font-family:inherit}
 @keyframes marchioCresci{0%{opacity:0;transform:scale(.86)}100%{opacity:1;transform:scale(1)}}
 @keyframes marchioOnda{0%,100%{transform:rotate(-.7deg)}50%{transform:rotate(.7deg)}}
 
+/* — L'accesso e l'accensione —
+   `both` e non `forwards`: il pezzo deve essere già invisibile *prima* che
+   tocchi il suo turno, se no compare intero e poi riparte dal basso. */
+@keyframes entrasu{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:translateY(0)}}
+/* il riflesso che attraversa il bottone mentre il server risponde: dice che
+   qualcosa sta succedendo senza togliere la scritta e farlo saltare */
+@keyframes lucido{0%{transform:translateX(-130%)}100%{transform:translateX(230%)}}
+/* la luce che si apre alla fine del primo avvio, e finisce nel fondo dell'app */
+@keyframes accende{0%{opacity:0}60%{opacity:.94}100%{opacity:1}}
+
 /* — I campi di testo —
    Il colore del testo si può mettere inline; il placeholder no, perché è uno
    pseudo-elemento. Senza queste righe restava quello di sistema — grigio scuro,

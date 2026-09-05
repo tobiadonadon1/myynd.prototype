@@ -51,6 +51,16 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
     return torno ? 'connetti' : passoDaRiprendere(stato)
   })
   const [s, setS] = useState(stato)
+  /**
+   * L'ultimo gesto: la mente si accende e la luce diventa il fondo dell'app.
+   *
+   * Il velo è color `#E7DFD3`, che è esattamente il fondo di quello che c'è
+   * dopo. Non è un dettaglio di gusto: senza, fra l'ultima schermata scura e
+   * la prima chiara c'era uno stacco secco — l'app *sbatteva* addosso invece
+   * di arrivare. Il velo copre il buio, `fatto()` scambia le due schermate
+   * sotto, e quello che si vede è una cosa sola che si apre.
+   */
+  const [accensione, setAccensione] = useState(false)
   const [nome, setNome] = useState(stato.config.nome ?? '')
   const [ruolo, setRuolo] = useState(stato.config.ruolo ?? '')
 
@@ -87,10 +97,19 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
     }}>
       <canvas ref={cv} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
-      {/* il velo: il testo deve restare leggibile qualunque cosa passi dietro */}
+      {/*
+        Il velo: il testo deve restare leggibile qualunque cosa passi dietro.
+
+        Se ne va quando la mente si accende, ed è quello che rende visibile
+        l'accensione: è un cerchio scuro piazzato esattamente sopra al punto da
+        cui esce la luce, e con quello davanti il lampo restava un vago
+        schiarirsi del fondo. Il testo che stava proteggendo, in quel momento,
+        se ne sta già andando anche lui.
+      */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)'
+        background: 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)',
+        opacity: accensione ? 0 : 1, transition: 'opacity .45s ease'
       }} />
 
       <div style={{
@@ -132,8 +151,18 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
             <Genera s={s} avanti={() => setPasso('pronta')} />
           )}
           {passo === 'pronta' && (
-            <Pronta totale={s.conteggi.totale} entra={async () => {
-              try { await api.profilo({ onboarding: true }) } catch { /* si riapre al prossimo avvio */ }
+            <Pronta totale={s.conteggi.totale} partita={accensione} entra={async () => {
+              // parte subito e non blocca la luce: se il server ci mette un
+              // secondo, l'accensione non deve aspettarlo per cominciare
+              const scritto = api.profilo({ onboarding: true }).catch(() => { /* si riapre al prossimo avvio */ })
+              if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                await scritto
+                fatto()
+                return
+              }
+              campo.accendi()
+              setAccensione(true)
+              await Promise.all([scritto, new Promise(r => setTimeout(r, 820))])
               fatto()
             }} />
           )}
@@ -141,6 +170,13 @@ export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }
       </div>
 
       <Passi corrente={passo} />
+
+      {accensione && (
+        <div aria-hidden="true" style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none', background: '#E7DFD3',
+          opacity: 0, animation: 'accende .82s cubic-bezier(.4,0,.2,1) forwards'
+        }} />
+      )}
     </div>
   )
 }
@@ -636,13 +672,35 @@ function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
   )
 }
 
-function Pronta({ totale, entra }: { totale: number; entra: () => Promise<void> }) {
+/**
+ * L'ultima schermata, e l'unica che si festeggia.
+ *
+ * Il titolo prende i colori del marchio invece del bianco di tutti gli altri:
+ * succede una volta sola nella vita di un account, ed è il punto in cui la
+ * cosa che si è appena montata pezzo per pezzo diventa una cosa sola. Mentre
+ * la luce sale, il pannello se ne va per conto suo — se restasse fermo si
+ * vedrebbe sbiadire sotto al velo, che è la differenza fra una schermata che
+ * finisce e una che si spegne.
+ */
+function Pronta({ totale, partita, entra }: {
+  totale: number; partita: boolean; entra: () => Promise<void>
+}) {
   // «Entra» aspetta due chiamate: premuto due volte le faceva partire due volte
   const [occupato, setOccupato] = useState(false)
   const vai = async () => { setOccupato(true); try { await entra() } finally { setOccupato(false) } }
   return (
-    <div style={{ animation: 'fadein .6s ease' }}>
-      <Titolo>{t('Pronta.')}</Titolo>
+    <div style={{
+      animation: 'fadein .6s ease',
+      opacity: partita ? 0 : 1,
+      transform: partita ? 'scale(1.05)' : 'scale(1)',
+      transition: 'opacity .5s ease, transform .85s cubic-bezier(.3,0,.2,1)'
+    }}>
+      <div style={{
+        fontSize: 42, lineHeight: 1.14, letterSpacing: '-.035em', textWrap: 'pretty',
+        backgroundImage: 'linear-gradient(96deg,#FFF7F0 0%,#F4EFE8 32%,#E8A87C 74%,#A8C4AB 100%)',
+        WebkitBackgroundClip: 'text', backgroundClip: 'text',
+        color: 'transparent', WebkitTextFillColor: 'transparent'
+      }}>{t('Pronta.')}</div>
       <Sotto>
         {totale
           ? frasi.documentiDentro(String(totale))

@@ -153,6 +153,26 @@ const EN: Record<string, string> = {
   'imap.tuodominio.it': 'imap.yourdomain.com',
   '/Users/…/Lavoro': '/Users/…/Work',
 
+// — l'accesso: la colonna che dice perché, prima di chiedere l'indirizzo —
+//   Sono le tre obiezioni di chi non ha ancora niente, nell'ordine in cui
+//   arrivano, e la risposta a ognuna sta nella seconda metà della riga: in
+//   inglese quel ritmo va tenuto, perché è il ritmo che le fa leggere tutte e
+//   tre invece di fermarsi alla prima.
+  'Smetti di essere il passaggio obbligato.': 'Stop being the bottleneck.',
+  'Legge la tua posta e i tuoi file.': 'It reads your mail and your files.',
+  'Non carichi niente.': 'You upload nothing.',
+  'Risponde come risponderesti tu.': 'It answers the way you would.',
+  'Invio lo premi tu.': 'You press send.',
+  'Dieci minuti la prima volta.': 'Ten minutes the first time.',
+  'Poi impara da sola.': 'After that it learns on its own.',
+  'Riprende da dove l\u2019hai lasciata.': 'It picks up where you left it.',
+  'Un indirizzo e una password. Il resto te lo chiede dopo.':
+    'An address and a password. It asks for the rest later.',
+  'Crea il tuo Myynd': 'Create your Myynd',
+  // le due strade che arrivano da una mail: un titolo corto, e nient'altro
+  'Capita.': 'It happens.',
+  'Una password nuova.': 'A new password.',
+
 // — l'accesso: quale delle due cose stai facendo, e dove sta girando —
   'Bentornato.': 'Welcome back.',
   'Crea il tuo accesso.': 'Create your account.',
@@ -549,6 +569,10 @@ const EN: Record<string, string> = {
   'te lo dà chi ti ha invitato': 'from whoever invited you',
   'Le registrazioni sono chiuse su questo server.': 'Sign-ups are closed on this server.',
   'Serve il codice d’invito per registrarsi qui.': 'You need the invite code to sign up here.',
+  // la porta chiusa, detta a chi la trova chiusa: non è un errore del server,
+  // è la schermata che spiega perché non c'è niente da premere
+  'Se ti aspettavi di poterti fare un conto, chiedilo a chi tiene su questo Myynd.':
+    'If you were expecting to be able to make an account, ask whoever runs this Myynd.',
   'Questo server accetta solo indirizzi dell’azienda.': 'This server only accepts company addresses.',
   'Il server rifiuta la connessione sulla porta 993.': 'The server refuses the connection on port 993.',
   'Il server di posta ha rifiutato la connessione.': 'The mail server refused the connection.',

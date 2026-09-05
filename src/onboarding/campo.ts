@@ -39,6 +39,25 @@ export class Campo {
   private h = 0
   private dpr = 1
   private seme = 1
+  /**
+   * L'accensione, da uno a zero.
+   *
+   * È un colpo solo e non uno stato: alla fine del primo avvio la mente si
+   * apre — le particelle escono dal centro, la luce sale e poi si spegne da
+   * sé. Tenuto come numero che cala invece che come «acceso sì/no» perché
+   * tutto quello che ne dipende — spinta, luce, alone — deve salire e
+   * ridiscendere insieme, e con un booleano servirebbero tre timer.
+   */
+  private bagliore = 0
+  /**
+   * Chi ha chiesto meno movimento al sistema.
+   *
+   * Qui non si ferma tutto: il campo continua ad assestarsi verso i suoi
+   * punti — quello è un movimento che *risponde*, e serve a far vedere che
+   * qualcosa è cambiato. Si ferma il tempo, cioè le due cose che si muovono
+   * da sole per sempre: la deriva dei colori di fondo e il giro della sfera.
+   */
+  private calmo = false
 
   private rnd() {
     // Math.imul tiene la moltiplicazione a 32 bit: senza, si supera 2^53,
@@ -50,6 +69,7 @@ export class Campo {
   monta(cv: HTMLCanvasElement) {
     this.cv = cv
     this.ctx = cv.getContext('2d')
+    this.calmo = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     this.misura()
     this.genera()
     this.creaGrana()
@@ -65,6 +85,17 @@ export class Campo {
     this.cv?.removeEventListener('pointerleave', this.esci)
     window.removeEventListener('resize', this.misura)
     this.cv = null
+  }
+
+  /**
+   * Accendila.
+   *
+   * A chi ha chiesto meno movimento non succede niente: un lampo che copre lo
+   * schermo è esattamente la cosa che quella preferenza vuole evitare, e la
+   * schermata che lo chiama ha comunque la sua strada senza.
+   */
+  accendi() {
+    if (!this.calmo) this.bagliore = 1
   }
 
   imposta(o: Partial<Opzioni>) {
@@ -166,9 +197,9 @@ export class Campo {
 
   /** Dove si raccolgono le particelle il colore si scalda appena. Non è più
    *  una palla luminosa: è un addensamento, e il testo resta leggibile. */
-  private cuore(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, k: number) {
-    if (k < 0.05) return
-    const forza = Math.pow(k, 1.2) * 0.5
+  private cuore(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, k: number, b: number) {
+    if (k < 0.05 && b < 0.02) return
+    const forza = Math.pow(k, 1.2) * 0.5 * (1 + b * 2.6)
     const pulsa = 1 + Math.sin(this.t * 1.4) * 0.04
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.9 * pulsa)
     g.addColorStop(0.00, `rgba(206,124,72,${0.30 * forza})`)
@@ -184,9 +215,13 @@ export class Campo {
     const ctx = this.ctx
     if (!ctx || !this.w || !this.h) return
 
-    this.t += 0.0045
+    // fermo il tempo, il campo resta com'è e continua solo ad assestarsi
+    this.t += this.calmo ? 0 : 0.0045
     this.obiettivo += (this.opt.coesione - this.obiettivo) * 0.045
     const k = this.obiettivo
+    // un secondo scarso, che è quanto ci mette la luce a coprire lo schermo
+    const b = this.bagliore
+    if (b > 0) this.bagliore = Math.max(0, b - 0.016)
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     ctx.clearRect(0, 0, this.w, this.h)
@@ -200,7 +235,7 @@ export class Campo {
     const cy = this.h / 2
     const R = Math.min(this.w, this.h) * 0.30
 
-    this.cuore(ctx, cx, cy, R, k)
+    this.cuore(ctx, cx, cy, R, k, b)
 
     const yaw = this.t * 0.9
     const cyw = Math.cos(yaw), syw = Math.sin(yaw)
@@ -227,6 +262,23 @@ export class Campo {
       let fx = (tx - q.x) * 0.026
       let fy = (ty - q.y) * 0.026
 
+      /*
+       * L'accensione: fuori dal centro, e non tutte insieme.
+       *
+       * `(1 - b) * b` parte da zero, sale a metà corsa e torna a zero: al clic
+       * non succede niente di brusco — la sfera si gonfia, poi si apre, poi si
+       * ferma. Con una spinta costante partivano di scatto e sembrava uno
+       * scoppio, che è la cosa sbagliata da mettere in fondo a un primo avvio.
+       */
+      if (b > 0) {
+        const dx = q.x - cx
+        const dy = q.y - cy
+        const d = Math.sqrt(dx * dx + dy * dy) || 1
+        const spinta = (1 - b) * b * 27
+        fx += (dx / d) * spinta
+        fy += (dy / d) * spinta
+      }
+
       if (this.mouse.dentro) {
         const dx = q.x - this.mouse.x
         const dy = q.y - this.mouse.y
@@ -247,7 +299,7 @@ export class Campo {
 
       const profondita = k > 0.25 ? (z2 + 1) / 2 : 0.7
       const alpha = (0.14 + 0.34 * profondita) * (0.45 + 0.55 * k)
-      ctx.globalAlpha = Math.min(1, alpha)
+      ctx.globalAlpha = Math.min(1, alpha * (1 + b * 2.2))
       ctx.fillStyle = colori[q.c % colori.length]
       ctx.beginPath()
       ctx.arc(q.x, q.y, q.r * (k > 0.25 ? 0.6 + pers * 0.5 : 1), 0, 6.2832)
@@ -275,6 +327,25 @@ export class Campo {
       ctx.stroke()
     }
     ctx.globalAlpha = 1
+
+    /*
+     * L'alone dell'accensione.
+     *
+     * `sin(b * PI)` vale zero ai due estremi e uno a metà: la luce nasce dal
+     * buio, riempie lo schermo e se ne va da sola — senza uno stacco al primo
+     * fotogramma e senza restare accesa alla fine, che sono i due modi in cui
+     * un lampo si vede *come* lampo invece che come una cosa che succede.
+     */
+    if (b > 0) {
+      const luce = Math.sin(b * Math.PI)
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(this.w, this.h) * 0.86)
+      g.addColorStop(0.00, `rgba(255,238,212,${0.52 * luce})`)
+      g.addColorStop(0.34, `rgba(226,146,92,${0.34 * luce})`)
+      g.addColorStop(0.70, `rgba(140,150,116,${0.16 * luce})`)
+      g.addColorStop(1.00, 'rgba(92,118,96,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, this.w, this.h)
+    }
 
     // la grana sopra a tutto: è quella che rende la luce "stampata"
     if (this.grana) {
