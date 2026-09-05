@@ -3,8 +3,9 @@
 // Due colonne dove c'è spazio: a sinistra perché uno dovrebbe volerlo, a
 // destra le due caselle per averlo. Non è decorazione — questa è l'unica
 // schermata che parla a chi non ha ancora niente, e un modulo da solo, in
-// mezzo a uno schermo nero, non dice cosa si compra. Sotto i mille pixel la
-// colonna di sinistra si riduce al titolo: la promessa resta, il resto no.
+// mezzo a uno schermo nero, non dice cosa si compra. Sotto i millecentottanta
+// pixel la colonna di sinistra si riduce al titolo: la promessa resta, il
+// resto no.
 //
 // La password non lascia mai il tuo computer.
 
@@ -72,7 +73,17 @@ export function Accesso({ accesso, entrato }: {
   const registrato = modo === 'entra'
   const cv = useRef<HTMLCanvasElement>(null)
   const campo = useMemo(() => new Campo(), [])
-  const largo = useLarghezza() >= 1000
+  /*
+   * Due colonne solo quando ce n'è davvero il posto.
+   *
+   * A mille pixel ci *stavano* — 420 + 84 + 380 fa 884 — ma «ci sta» e «sta
+   * bene» non sono la stessa cosa: le due colonne finivano appiccicate ai due
+   * bordi con un vuoto in mezzo e un vuoto sotto, e la pagina sembrava mezza
+   * caricata invece che composta. Sotto la soglia la colonna singola è più
+   * bella, ed è la ragione per cui la soglia sale invece di stringere ancora
+   * le colonne.
+   */
+  const largo = useLarghezza() >= 1180
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -299,7 +310,7 @@ export function Accesso({ accesso, entrato }: {
       }}>
         <div style={{
           margin: 'auto', display: 'flex', alignItems: 'flex-start',
-          gap: largo ? 84 : 0, padding: largo ? '44px 40px' : '32px 24px'
+          gap: largo ? 72 : 0, padding: largo ? '44px 48px' : '32px 24px'
         }}>
           {largo && <Pitch modo={modo} />}
 
@@ -354,22 +365,21 @@ export function Accesso({ accesso, entrato }: {
               Con le registrazioni chiuse la scheda «Crea un account» veniva
               tolta e basta: chi arriva qui senza un conto trovava un modulo
               d'accesso e nient'altro — nessuna spiegazione, nessuna strada, e
-              nemmeno il sospetto che una strada esistesse da qualche parte. È
-              il caso in cui una persona vera è rimasta fuori: mandi l'indirizzo
-              a qualcuno, e quel qualcuno non ha *niente* da premere.
+              nemmeno il sospetto che una strada esistesse da qualche parte.
 
-              Dirlo non regala niente a nessuno — chi tenta di registrarsi lo
-              sente comunque dal server, con la stessa frase — e a chi è stato
-              invitato davvero dice l'unica cosa che lo sblocca: chiedere a chi
-              tiene su questo Myynd.
+              Una frase e non due. Prima c'era anche «chiedilo a chi tiene su
+              questo Myynd», ed era scritta per un estraneo — ma su un Myynd di
+              una persona sola chi legge quella riga è quasi sempre il padrone
+              del server, e a lui dice di chiedere a sé stesso. Un consiglio che
+              non si può seguire fa dubitare anche della frase che sta accanto.
+              Il fatto, secco, non ha quel problema.
             */}
             {registrazione === 'chiusa' && modo === 'entra' && (
               <div style={{
                 fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(244,239,232,.42)',
                 marginTop: -8, marginBottom: 22, textWrap: 'pretty', ...su(.16)
               }}>
-                {t('Le registrazioni sono chiuse su questo server.')}{' '}
-                {t('Se ti aspettavi di poterti fare un conto, chiedilo a chi tiene su questo Myynd.')}
+                {t('Le registrazioni sono chiuse su questo server.')}
               </div>
             )}
 
@@ -544,7 +554,7 @@ function Pitch({ modo }: { modo: Modo }) {
 
   return (
     <div style={{
-      width: 420, flex: 'none', pointerEvents: 'auto',
+      width: 400, flex: 'none', pointerEvents: 'auto',
       textShadow: '0 1px 26px rgba(12,10,8,.85)'
     }}>
       <div style={{ marginBottom: 34, ...su(0) }}>

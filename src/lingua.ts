@@ -569,10 +569,6 @@ const EN: Record<string, string> = {
   'te lo dà chi ti ha invitato': 'from whoever invited you',
   'Le registrazioni sono chiuse su questo server.': 'Sign-ups are closed on this server.',
   'Serve il codice d’invito per registrarsi qui.': 'You need the invite code to sign up here.',
-  // la porta chiusa, detta a chi la trova chiusa: non è un errore del server,
-  // è la schermata che spiega perché non c'è niente da premere
-  'Se ti aspettavi di poterti fare un conto, chiedilo a chi tiene su questo Myynd.':
-    'If you were expecting to be able to make an account, ask whoever runs this Myynd.',
   'Questo server accetta solo indirizzi dell’azienda.': 'This server only accepts company addresses.',
   'Il server rifiuta la connessione sulla porta 993.': 'The server refuses the connection on port 993.',
   'Il server di posta ha rifiutato la connessione.': 'The mail server refused the connection.',
