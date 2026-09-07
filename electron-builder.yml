@@ -89,4 +89,10 @@ nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
 
+# Il binario di @napi-rs/canvas giusto per ogni target: prima di raccogliere
+# i file lo si mette in cache, dopo si controlla che nel pacchetto ci sia lui
+# e nessun altro. Le righe di `files` che lo portano dentro le aggiunge
+# build/configura.cjs, perché la cache sta fuori dal progetto.
+beforePack: build/binari.cjs
+afterPack: build/binari.cjs
 afterSign: build/notarizza.cjs

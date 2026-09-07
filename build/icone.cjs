@@ -10,11 +10,12 @@
 // altrimenti accanto alle altre sembra gonfia: si allarga il viewBox in modo
 // che il disegno occupi l'82% del quadrato, come vuole la griglia di Apple.
 //
-//   node build/icone.cjs      → build/icon.png (1024), build/icon.icns, build/icon.ico
+//   node build/icone.cjs      → build/icon.png (1024), build/icon.icns, build/icon.ico,
+//                               desktop/icone/tray.ico e trayAttesa.ico (la barra di Windows)
 const { execFileSync } = require('node:child_process')
 const { mkdtempSync, readFileSync, writeFileSync, renameSync, mkdirSync, copyFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
-const { join } = require('node:path')
+const { basename, join } = require('node:path')
 const { ico } = require('./ico.cjs')
 
 const radice = join(__dirname, '..')
@@ -33,16 +34,17 @@ const lavoro = mkdtempSync(join(tmpdir(), 'myynd-icone-'))
 const svg = join(lavoro, 'marchio.svg')
 writeFileSync(svg, largo)
 
-/** Un PNG del marchio a `n` pixel di lato; la stessa misura si disegna una volta sola. */
+/** Un PNG di un SVG a `n` pixel di lato; la stessa misura si disegna una volta sola. */
 const fatti = new Map()
-function png(n) {
-  if (fatti.has(n)) return fatti.get(n)
-  const cartella = join(lavoro, String(n))
+function png(n, sorgente = svg) {
+  const chiave = `${sorgente}:${n}`
+  if (fatti.has(chiave)) return fatti.get(chiave)
+  const cartella = join(lavoro, `${basename(sorgente, '.svg')}-${n}`)
   mkdirSync(cartella)
-  execFileSync('qlmanage', ['-t', '-s', String(n), '-o', cartella, svg], { stdio: 'ignore' })
+  execFileSync('qlmanage', ['-t', '-s', String(n), '-o', cartella, sorgente], { stdio: 'ignore' })
   const fuori = join(cartella, 'marchio.png')
-  renameSync(join(cartella, 'marchio.svg.png'), fuori)
-  fatti.set(n, fuori)
+  renameSync(join(cartella, `${basename(sorgente)}.png`), fuori)
+  fatti.set(chiave, fuori)
   return fuori
 }
 
@@ -62,5 +64,19 @@ copyFileSync(join(iconset, 'icon_512x512@2x.png'), join(__dirname, 'icon.png'))
 const misure = [16, 32, 48, 64, 128, 256]
 writeFileSync(join(__dirname, 'icon.ico'), ico(misure.map(n => readFileSync(png(n)))))
 
+// — la barra di Windows: il marchio a colori, senza aria intorno (a 16 pixel
+// non ce n'è da regalare), nelle misure che la barra usa dal 100% al 300%.
+// La variante «in attesa» ha un puntino in basso a destra: scuro con un
+// bordo chiaro, così si vede sulla barra scura e su quella chiara.
+const tray = join(lavoro, 'tray.svg')
+writeFileSync(tray, sorgente)
+const trayAttesa = join(lavoro, 'trayAttesa.svg')
+writeFileSync(trayAttesa, sorgente.replace('</svg>',
+  '  <circle cx="84" cy="87" r="15" fill="#22271F" stroke="#F2E9DC" stroke-width="6"/>\n</svg>'))
+const misureBarra = [16, 20, 24, 32, 48]
+const icone = join(radice, 'desktop', 'icone')
+writeFileSync(join(icone, 'tray.ico'), ico(misureBarra.map(n => readFileSync(png(n, tray)))))
+writeFileSync(join(icone, 'trayAttesa.ico'), ico(misureBarra.map(n => readFileSync(png(n, trayAttesa)))))
+
 rmSync(lavoro, { recursive: true, force: true })
-console.log('build/icon.png, build/icon.icns, build/icon.ico: fatte da public/marchio.svg')
+console.log('build/icon.png, build/icon.icns, build/icon.ico, desktop/icone/tray.ico, trayAttesa.ico: fatte da public/marchio.svg')

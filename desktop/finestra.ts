@@ -44,10 +44,13 @@ let urlApp = ''
 
 function paginaDiAvvio(): string {
   const riga = t('Myynd si sta svegliando.')
+  // su Mac la barra del titolo è nascosta e la finestra si prende dal corpo;
+  // su Windows la barra c'è, e un corpo trascinabile si mangerebbe i clic
+  const trascina = process.platform === 'darwin' ? ';-webkit-app-region:drag' : ''
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Myynd</title><style>
 html,body{margin:0;height:100%;background:${SFONDO};color:${INCHIOSTRO};
 font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-user-select:none}
-body{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;-webkit-app-region:drag}
+body{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px${trascina}}
 h1{margin:0;font-weight:600;font-size:34px;letter-spacing:-.02em}
 p{margin:0;font-size:15px;opacity:.7}
 </style></head><body><h1>Myynd</h1><p>${riga}</p></body></html>`
