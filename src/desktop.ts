@@ -28,6 +28,8 @@ export type Desktop = {
   piattaforma: 'darwin' | 'win32' | 'linux'
   /** La finestra di sistema per scegliere cartelle, anche più d'una; `[]` se si annulla. */
   scegliCartelle(): Promise<string[]>
+  /** La stessa finestra per dei file, filtrati per estensione (`['json']`); `[]` se si annulla. */
+  scegliFile(estensioni: string[]): Promise<string[]>
   /** Apre un http(s)/mailto nel browser di sistema. Tutto il resto il guscio lo rifiuta. */
   apriFuori(url: string): Promise<void>
   /** Mostra un percorso nel Finder / Esplora file. */

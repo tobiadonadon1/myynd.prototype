@@ -52,6 +52,7 @@ export type Nome =
   | 'desktop.leggi'
   | 'notion.leggi'
   | 'granola.leggi'
+  | 'conversazioni.leggi'
   | 'slack.leggi'
   | 'drive.leggi'
   | 'sharepoint.leggi'
@@ -68,7 +69,7 @@ export type Attrezzo = {
   /** Una riga che dice cosa apre, per chi legge la scheda. */
   spiega: { it: string; en: string }
   /** Quale connessione gli serve. Null = non gliene serve nessuna. */
-  serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'slack' | 'drive' | 'sharepoint'
+  serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'conversazioni' | 'slack' | 'drive' | 'sharepoint'
     | 'dropbox' | 'whatsapp' | 'agenda' | null
   /** Il colore con cui compare, che è quello della sua fonte. */
   tinta: string
@@ -93,6 +94,7 @@ const FONTI: Partial<Record<Nome, string[]>> = {
   'desktop.leggi': ['desktop'],
   'notion.leggi': ['notion'],
   'granola.leggi': ['granola'],
+  'conversazioni.leggi': ['conversazioni'],
   'slack.leggi': ['slack'],
   'drive.leggi': ['drive'],
   // SharePoint e OneDrive stanno insieme per lo stesso motivo: da fuori sono
@@ -159,6 +161,20 @@ export const ATTREZZI: Attrezzo[] = [
     serve: 'granola',
     tinta: '#8A6A3C',
     tool: cercaIn('granola.leggi', 'le note delle sue riunioni su Granola', 'una riunione')
+  },
+  {
+    /*
+     * Quello che ha già chiesto a un altro modello. Sta accanto a Granola
+     * perché è la stessa famiglia — roba pensata, non arrivata — e risponde a
+     * una domanda che finora non aveva risposta: «cosa avevo concluso con
+     * ChatGPT su quel contratto».
+     */
+    nome: 'conversazioni.leggi',
+    etichetta: { it: 'le conversazioni', en: 'conversations' },
+    spiega: { it: 'Rilegge le tue chat con ChatGPT, Claude e Claude Code.', en: 'Re-reads your chats with ChatGPT, Claude and Claude Code.' },
+    serve: 'conversazioni',
+    tinta: '#4F6E8F',
+    tool: cercaIn('conversazioni.leggi', 'le sue conversazioni passate con ChatGPT, Claude e Claude Code', 'una conversazione')
   },
   {
     nome: 'slack.leggi',
@@ -347,6 +363,7 @@ export function collegato(n: Nome): boolean {
     case 'desktop': return !!c.desktop?.cartelle?.length
     case 'notion': return !!c.notion
     case 'granola': return !!c.granola
+    case 'conversazioni': return !!c.conversazioni
     case 'slack': return !!c.slack
     case 'drive': return !!c.drive
     case 'sharepoint': return !!c.microsoft?.parti.includes('file')

@@ -1572,6 +1572,36 @@ const EN: Record<string, string> = {
   'Una riga per ogni documento': 'One line per document',
   'Una riga per ogni documento.': 'One line per document.',
   'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
+// — le conversazioni: la scheda, e quello che può dire il connettore —
+  'Le chat esportate da ChatGPT e da Claude, e le sessioni di Claude Code su questo computer.':
+    'The chats exported from ChatGPT and Claude, and the Claude Code sessions on this computer.',
+  'Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.':
+    'The chats you already had with ChatGPT and Claude, and — if you want — the Claude Code sessions on this computer.',
+  'ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.':
+    'ChatGPT: Settings › Data controls › Export data. Claude: Settings › Privacy › Export data. An archive arrives by email: inside there is conversations.json, and that is the file to choose.',
+  'I file esportati': 'The exported files',
+  'Scegli i file…': 'Choose files…',
+  '/Users/…/Scaricati/conversations.json': '/Users/…/Downloads/conversations.json',
+  'Anche le sessioni di Claude Code su questo computer': 'Also the Claude Code sessions on this computer',
+  'Stanno in ~/.claude/projects: si tengono le battute, non i file che ha aperto né i comandi che ha lanciato.':
+    'They live in ~/.claude/projects: what you wrote to each other is kept, not the files it opened nor the commands it ran.',
+  'Collega le conversazioni': 'Connect conversations',
+  'Togli': 'Remove',
+  'rileggo le chat': 're-reading the chats',
+  'Questo file non è un JSON: non è un’esportazione di ChatGPT né di Claude.':
+    'This file is not JSON: it is not a ChatGPT or Claude export.',
+  'Questo file non è un’esportazione di ChatGPT né di Claude.': 'This file is not a ChatGPT or Claude export.',
+  'Questo file è vuoto: dentro non c’è nessuna conversazione.': 'This file is empty: there is no conversation inside.',
+  'Non trovo questo file.': 'I cannot find this file.',
+  'Non ho il permesso di leggere questo file.': 'I do not have permission to read this file.',
+  'Questo è una cartella: serve il file conversations.json che c’è dentro.':
+    'This is a folder: I need the conversations.json file inside it.',
+  'Non riesco a leggere questo file.': 'I cannot read this file.',
+  'Non trovo le sessioni di Claude Code su questo computer.': 'I cannot find Claude Code sessions on this computer.',
+  'Un percorso deve essere intero: comincia da / o da ~.': 'A path must be complete: it starts with / or ~.',
+  'Scegli almeno un file, o accendi le sessioni di Claude Code.': 'Choose at least one file, or turn on the Claude Code sessions.',
+  'Su un server non ci sono file da leggere: le conversazioni si collegano dal tuo computer.':
+    'On a server there are no files to read: conversations are connected from your own computer.',
 }
 
 

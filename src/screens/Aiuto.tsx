@@ -230,6 +230,13 @@ const SEZIONI: Sezione[] = [
             }
           },
           {
+            nome: { it: 'Conversazioni', en: 'Conversations' },
+            testo: {
+              it: 'Le chat che hai già avuto con ChatGPT e con Claude, e le sessioni di Claude Code su questo computer. Le prime arrivano dai file che ti mandano loro — ChatGPT: Impostazioni › Controlli dati › Esporta dati; Claude: Impostazioni › Privacy › Esporta dati — e Myynd legge solo il conversations.json che scegli tu, quando lo scegli. Le sessioni di Claude Code stanno in ~/.claude/projects e si leggono solo se accendi l’interruttore. Di ogni conversazione tiene quello che vi siete scritti: non i file che ha aperto, non i comandi che ha lanciato, non il suo ragionamento. C’è solo quando Myynd gira sul tuo computer.',
+              en: 'The chats you already had with ChatGPT and Claude, and the Claude Code sessions on this computer. The first come from the files they send you — ChatGPT: Settings › Data controls › Export data; Claude: Settings › Privacy › Export data — and Myynd reads only the conversations.json you choose, when you choose it. Claude Code sessions live in ~/.claude/projects and are read only if you turn the switch on. Of each conversation it keeps what you wrote to each other: not the files it opened, not the commands it ran, not its reasoning. It is available only when Myynd runs on your own computer.'
+            }
+          },
+          {
             nome: { it: 'Desktop', en: 'Desktop' },
             testo: {
               it: 'Le cartelle che scegli tu, in sola lettura: PDF, Word, testo e Markdown. Salta i progetti di codice. C’è solo quando Myynd gira sul tuo computer: su un server non ha nessuna cartella tua da leggere.',
@@ -384,8 +391,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Cosa può leggere', en: 'What it may read' },
             testo: {
-              it: 'Solo gli attrezzi che le hai dato: la posta, il desktop, Notion, Granola, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’automazione lo dice e non trova niente.',
-              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the automation says so and finds nothing.'
+              it: 'Solo gli attrezzi che le hai dato: la posta, il desktop, Notion, Granola, le conversazioni, Slack, Drive, SharePoint, Dropbox, WhatsApp, l’agenda, le chat passate. Claude Code è un attrezzo a parte: guarda un progetto e scrive cosa farebbe, senza toccare niente. Un attrezzo è un permesso: se la fonte non è collegata, l’automazione lo dice e non trova niente.',
+              en: 'Only the tools you gave it: mail, desktop, Notion, Granola, conversations, Slack, Drive, SharePoint, Dropbox, WhatsApp, calendar, past chats. Claude Code is a tool of its own: it reads a project and writes what it would do, touching nothing. A tool is a permission: if the source is not connected, the automation says so and finds nothing.'
             }
           },
           {

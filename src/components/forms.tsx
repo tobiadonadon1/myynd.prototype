@@ -8,6 +8,7 @@ import { api } from '../api'
 import type { ClaudeCon, Stato } from '../api'
 import { frasi, t } from '../lingua'
 import { desktop } from '../desktop'
+import { knob, track } from '../ui'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -708,6 +709,117 @@ export function FormGranola({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Le conversazioni: i file esportati, e un interruttore.
+ *
+ * Due righe di istruzioni, e non una: il passaggio che costa è l'esportazione,
+ * che sta dentro le impostazioni di ChatGPT e di Claude in due posti diversi,
+ * e chi apre questa scheda deve trovarli scritti qui — non andare a cercarli.
+ * Dentro l'app i file si scelgono con la finestra di sistema; nel browser
+ * resta il percorso scritto a mano, come per il desktop. L'interruttore di
+ * Claude Code compare solo se la sua cartella c'è: un interruttore su una
+ * cartella che non esiste è un bottone che fallisce.
+ */
+export function FormConversazioni({ tema, ok }: Props) {
+  const [file, setFile] = useState<string[]>([])
+  const [manuale, setManuale] = useState('')
+  const [codice, setCodice] = useState(false)
+  const [codicePossibile, setCodicePossibile] = useState(false)
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+
+  useEffect(() => {
+    api.stato().then(s => {
+      setCodicePossibile(s.codiceConversazioni)
+      // parte acceso se la cartella c'è: è l'unica parte senza attrito, e
+      // spegnerlo è un clic
+      setCodice(s.codiceConversazioni)
+    }).catch(() => {})
+  }, [])
+
+  const scegli = async () => {
+    const d = desktop()
+    if (!d) return
+    setErr('')
+    try {
+      const scelti = [...new Set(await d.scegliFile(['json']))]
+      if (!scelti.length) return
+      setFile(f => [...f, ...scelti.filter(x => !f.includes(x))])
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+
+  const collega = async () => {
+    const tutti = manuale.trim() ? [...file, manuale.trim()] : file
+    setOccupato(true); setErr('')
+    try { await api.collegaConversazioni(tutti, codice); ok() }
+    catch (e) {
+      // il nome del file accanto alla frase, quando il server dice quale
+      const quale = (e as { file?: string }).file
+      const frase = e instanceof Error ? t(e.message) : String(e)
+      setErr(quale ? `${quale.split('/').pop()} · ${frase}` : frase)
+    }
+    setOccupato(false)
+  }
+
+  const scuro = tema === 'scuro'
+  const pronto = file.length > 0 || manuale.trim().length > 0 || codice
+  const pastiglia: CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 99,
+    fontSize: '12.5px', fontFamily: 'inherit', border: '1px solid #C4623B',
+    background: 'rgba(196,98,59,.16)', color: scuro ? '#E8A87C' : '#8E3F1F'
+  }
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.')}
+      </div>
+      <div style={{ ...nota(tema), marginTop: 8 }}>
+        {t('ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.')}
+      </div>
+
+      <div style={etichetta(tema)}>{t('I file esportati')}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+        {file.map(f => (
+          // il nome e non il percorso intero, ma il percorso resta nel titolo:
+          // due conversations.json si distinguono passandoci sopra
+          <span key={f} title={f} style={pastiglia}>
+            {f.split('/').pop()}
+            <button type="button" onClick={() => setFile(v => v.filter(x => x !== f))} title={t('Togli')} aria-label={t('Togli')}
+              style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+          </span>
+        ))}
+        {desktop() && (
+          <button type="button" onClick={scegli} style={{
+            ...pastiglia, cursor: 'pointer', borderStyle: 'dashed', background: 'none',
+            borderColor: scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)',
+            color: scuro ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)'
+          }}>{t('Scegli i file…')}</button>
+        )}
+      </div>
+      <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
+      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Scaricati/conversations.json')}
+        className={classeCampo(tema)} style={campo(tema)}
+        onKeyDown={e => { if (e.key === 'Enter' && pronto && !occupato) collega() }} />
+
+      {codicePossibile && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Anche le sessioni di Claude Code su questo computer')}</div>
+            <div style={{ ...nota(tema), marginTop: 3, marginBottom: 0 }}>
+              {t('Stanno in ~/.claude/projects: si tengono le battute, non i file che ha aperto né i comandi che ha lanciato.')}
+            </div>
+          </div>
+          <button type="button" role="switch" aria-checked={codice} aria-label={t('Anche le sessioni di Claude Code su questo computer')}
+            onClick={() => setCodice(c => !c)} style={track(codice)}><span style={knob()} /></button>
+        </div>
+      )}
+
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega le conversazioni')}</Conferma>
+    </div>
+  )
+}
+
 export function FormNotion({ tema, ok }: Props) {
   const [token, setToken] = useState('')
   const [err, setErr] = useState('')
@@ -1216,6 +1328,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
   if (id === 'granola') return <FormGranola tema={tema} ok={ok} />
+  if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} />

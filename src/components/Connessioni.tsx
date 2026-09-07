@@ -17,6 +17,7 @@ import { IconPiu } from '../icons'
  */
 const COLORE: Record<string, string> = {
   posta: '#C4553C', calendario: '#A8763F', desktop: '#E0A44A', notion: '#5B9BC9', granola: '#8A6A3C',
+  conversazioni: '#4F6E8F',
   claude: '#7FA98A',
   google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
   drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3',

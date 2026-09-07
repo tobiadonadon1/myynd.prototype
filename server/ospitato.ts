@@ -254,7 +254,10 @@ export const SOLO_IN_CASA: string[] = [
    * «non trovo le note di Granola», e una persona che va a cercare il guasto
    * nella sua installazione di Granola invece che nel posto in cui gira Myynd.
    */
-  'granola'
+  'granola',
+  // per la stessa ragione: legge file di *questo* disco — i `conversations.json`
+  // scelti e `~/.claude/projects` — e su un server quel disco non è di nessuno
+  'conversazioni'
 ]
 
 /**

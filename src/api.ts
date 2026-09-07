@@ -37,6 +37,8 @@ export type Stato = {
     notion: { collegato: boolean } | null
     /** Granola sul Mac: non c'è nessuna credenziale, solo quante note ha letto. */
     granola: { collegato: boolean; note: number } | null
+    /** I file esportati da ChatGPT e Claude, e se legge anche le sessioni di Claude Code. */
+    conversazioni: { collegato: boolean; file: string[]; codice: boolean } | null
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
     calendario: { collegato: boolean; nome: string | null; giorni: number } | null
     claude: { collegato: boolean } | null
@@ -76,6 +78,8 @@ export type Stato = {
   /** Le cartelle del desktop guardate dal vivo: se è in ascolto, e su quante. */
   vedetta: { attiva: boolean; cartelle: number }
   suggerimentiDesktop: string[]
+  /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
+  codiceConversazioni: boolean
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
   /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
@@ -306,10 +310,14 @@ export class DaCollegare extends Error {
 function guastoDellaRisposta(r: Response, corpo: unknown): Error {
   const detto = (corpo as { errore?: string })?.errore
   if (detto) {
-    const c = corpo as { daVerificare?: boolean; collega?: string }
-    if (c.daVerificare) return new DaVerificare(detto)
-    if (c.collega) return new DaCollegare(detto, c.collega)
-    return new Error(detto)
+    const c = corpo as { daVerificare?: boolean; collega?: string; file?: unknown }
+    const e: Error = c.daVerificare ? new DaVerificare(detto)
+      : c.collega ? new DaCollegare(detto, c.collega)
+      : new Error(detto)
+    // il file che non si è aperto, se il server lo dice: la frase resta
+    // traducibile, e il nome le si mette accanto nella scheda
+    if (typeof c.file === 'string' && c.file) (e as Error & { file?: string }).file = c.file
+    return e
   }
   if (r.status >= 500) return new MotoreGiu(`HTTP ${r.status} · ${r.url}`)
   if (r.status === 401 || r.status === 403) return new Error('Sessione scaduta.')
@@ -373,6 +381,7 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
 /** Il nome della fonte, non il suo identificativo. */
 const NOME_FONTE: Record<string, string> = {
   posta: 'Posta', calendario: 'Calendario', desktop: 'Desktop', notion: 'Notion', granola: 'Granola',
+  conversazioni: 'Conversazioni',
   claude: 'Claude', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
@@ -907,6 +916,11 @@ export const api = {
   // niente da mandare: il file sta dove sta, e il percorso non si prende da qui
   collegaGranola: () =>
     json<{ ok: true; note: number }>('/api/connettori/granola', { method: 'POST', body: '{}' }),
+
+  /** I `conversations.json` scelti, e l'interruttore per le sessioni di Claude Code. */
+  collegaConversazioni: (file: string[], codice: boolean) =>
+    json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number }>(
+      '/api/connettori/conversazioni', { method: 'POST', body: JSON.stringify({ file, codice }) }),
 
   collegaNotion: (token: string) =>
     json<{ ok: true; pagine: number }>('/api/connettori/notion', { method: 'POST', body: JSON.stringify({ token }) }),
