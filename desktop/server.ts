@@ -17,6 +17,7 @@ import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'nod
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import * as impostazioni from './impostazioni.ts'
 
 const SERVER = fileURLToPath(new URL('../server/index.ts', import.meta.url))
 
@@ -116,6 +117,7 @@ const ATTESA_USCITA = 10_000
 const RIGHE_DA_TENERE = 20
 
 let figlio: UtilityProcess | null = null
+let partendo = false
 let fermando = false
 let riavvii: number[] = []
 let ultime: string[] = []
@@ -140,15 +142,28 @@ export function acceso(): boolean {
 }
 
 export async function avvia(ascolto: Ascolto): Promise<void> {
-  if (figlio) return
+  // il guardiano sta prima dell'attesa del PATH: un riavvio automatico e un
+  // «Riapri» premuto nello stesso istante farebbero partire due server
+  if (figlio || partendo) return
+  partendo = true
   fermando = false
   const PATH = await risolviPATH()
+  /*
+   * La stessa porta dell'ultima volta, o una libera.
+   *
+   * Vedi `Impostazioni.porta`: l'origine della pagina è la porta, e con lei
+   * la sessione. Se quella ricordata è occupata il server esce prima di dire
+   * la porta: allora si dimentica, si riparte con 0, e quella nuova diventa
+   * la ricordata.
+   */
+  const ricordata = impostazioni.leggi().porta
+  const portaChiesta = Number.isInteger(ricordata) && ricordata! > 1024 && ricordata! < 65536 ? ricordata! : 0
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
   // il server crede di essere un Node normale se lo trova: dentro un
   // utilityProcess non lo è, e con questa variabile Electron farebbe pasticci
   delete env.ELECTRON_RUN_AS_NODE
-  Object.assign(env, { PATH, MYYND_PORT: '0', NODE_ENV: 'production', MYYND_APP: '1' })
+  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1' })
   // MYYND_DEV acceso in produzione fa uscire il server con un errore: meglio
   // toglierlo qui che vedere la finestra di errore
   delete env.MYYND_DEV
@@ -158,14 +173,18 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
     execArgv: ['--disable-warning=ExperimentalWarning']
   })
   figlio = p
+  partendo = false
   ultime = []
-  scriviRegistro(`guscio · avvio il server (${SERVER})`)
+  let portaDetta = false
+  scriviRegistro(`guscio · avvio il server (${SERVER}${portaChiesta ? `, porta ${portaChiesta}` : ''})`)
 
   p.stdout?.on('data', d => ricorda('server ·', d))
   p.stderr?.on('data', d => ricorda('server !', d))
   p.on('message', (m: unknown) => {
     const porta = (m as { porta?: unknown })?.porta
     if (typeof porta === 'number') {
+      portaDetta = true
+      if (porta !== ricordata) impostazioni.scrivi({ porta })
       scriviRegistro(`guscio · il server ascolta su ${porta}`)
       ascolto.suPorta(porta)
     }
@@ -175,6 +194,15 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
     figlio = null
     scriviRegistro(`guscio · il server è uscito con ${codice}`)
     if (fermando) return
+    if (!portaDetta && portaChiesta) {
+      // non è arrivato a dire la porta: quasi sempre è la ricordata che è
+      // presa. La si dimentica e si riparte da una libera, senza contarlo
+      // fra i riavvii — non è il server che muore, è la porta che manca
+      scriviRegistro(`guscio · la porta ${portaChiesta} non si è aperta: ne chiedo una libera`)
+      impostazioni.scrivi({ porta: undefined })
+      void avvia(ascolto)
+      return
+    }
     const adesso = Date.now()
     riavvii = riavvii.filter(t => adesso - t < FINESTRA_RIAVVII)
     if (riavvii.length < RIAVVII_MASSIMI) {

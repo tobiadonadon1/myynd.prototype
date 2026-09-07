@@ -55,6 +55,9 @@ async function avvio() {
   const registro = server.apriRegistro(app.getPath('userData'))
   impostazioni.apri(app.getPath('userData'))
 
+  process.on('unhandledRejection', e => {
+    server.scriviRegistro(`guscio ! promessa rifiutata: ${e instanceof Error ? e.stack ?? e.message : String(e)}`)
+  })
   process.on('uncaughtException', e => {
     server.scriviRegistro(`guscio ! ${e.stack ?? e.message}`)
     if (dialogoAperto) return
@@ -64,6 +67,10 @@ async function avvio() {
       detail: `${e.message}\n\n${registro}`, buttons: [t('Continua')]
     }).finally(() => { dialogoAperto = false })
   })
+
+  // prima di aspettare il PATH e il server: una seconda apertura in quei
+  // secondi deve portare su questa, non sparire
+  app.on('second-instance', finestra.mostra)
 
   await app.whenReady()
   lingua.imposta(impostazioni.leggi().lingua ?? lingua.daLocale(app.getLocale()))
@@ -92,9 +99,7 @@ async function avvio() {
 
   // il renderer appena caricato non sa ancora come stanno gli aggiornamenti
   w.webContents.on('did-finish-load', () => {
-    if (finestra.origineNostra() && w.webContents.getURL().startsWith(finestra.origineNostra())) {
-      finestra.manda('myynd:aggiornamento', aggiornamenti.stato())
-    }
+    if (finestra.nostra(w.webContents.getURL())) finestra.manda('myynd:aggiornamento', aggiornamenti.stato())
   })
 
   const ascolto: server.Ascolto = {
@@ -106,9 +111,10 @@ async function avvio() {
   if (process.env.MYYND_APP_WEB) finestra.caricaApp(process.env.MYYND_APP_WEB)
   else await server.avvia(ascolto)
 
-  void aggiornamenti.prepara(finestra.attuale)
+  // prima di installare un aggiornamento si spegne tutto come a un'uscita
+  // normale: il server deve finire di scrivere, e la X deve chiudere davvero
+  void aggiornamenti.prepara(finestra.attuale, spegniSenzaUscire)
 
-  app.on('second-instance', finestra.mostra)
   app.on('activate', () => { if (finestra.attuale()) finestra.mostra(); else finestra.crea() })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
   app.on('before-quit', e => {
@@ -120,12 +126,19 @@ async function avvio() {
   })
 }
 
-async function spegni() {
+async function spegniSenzaUscire() {
   if (serverFermato) return
   serverFermato = true
+  staUscendo = true
+  finestra.lasciaChiudere()
   scorciatoia.spegni()
   tray.distruggi()
   await server.ferma()
+}
+
+async function spegni() {
+  if (serverFermato) return
+  await spegniSenzaUscire()
   server.scriviRegistro('guscio · esco')
   app.quit()
 }
@@ -134,6 +147,9 @@ async function spegni() {
 async function chiediRiapertura(righe: string[], ascolto: server.Ascolto) {
   if (staUscendo || dialogoAperto) return
   dialogoAperto = true
+  // la finestra può essere nascosta — l'app vive nel Dock — e un foglio su
+  // una finestra nascosta non lo vede nessuno: prima la si porta su
+  finestra.mostra()
   const w = finestra.attuale()
   const opzioni = {
     type: 'error' as const,
@@ -180,6 +196,7 @@ function canali(azioni: menu.Azioni) {
   ipcMain.handle('myynd:imposta-avvio-automatico', (_e, acceso: unknown) => {
     app.setLoginItemSettings({ openAtLogin: !!acceso })
   })
+  ipcMain.handle('myynd:aggiornamenti-stato', () => aggiornamenti.stato())
   ipcMain.handle('myynd:aggiornamenti-controlla', () => aggiornamenti.controlla())
   ipcMain.handle('myynd:aggiornamenti-installa', () => aggiornamenti.installa())
 }

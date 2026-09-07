@@ -12,3 +12,6 @@ dist-app/
 
 # worktree degli agenti
 .claude/
+
+# il feed degli aggiornamenti, scritto da build/configura.cjs quando c'è
+desktop/feed.json

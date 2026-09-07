@@ -36,6 +36,7 @@ let ultimo: Aggiornamento = { stato: 'spento', perche: 'sviluppo' }
 let updater: Updater | null = null
 let invia: (a: Aggiornamento) => void = () => {}
 let inCorso: Promise<Aggiornamento> | null = null
+let primaDiInstallare: () => Promise<void> = async () => {}
 
 function feed(): string | null {
   if (process.env.MYYND_AGGIORNAMENTI_URL) return process.env.MYYND_AGGIORNAMENTI_URL
@@ -71,8 +72,9 @@ export function stato(): Aggiornamento {
   return ultimo
 }
 
-export async function prepara(finestra: () => BrowserWindow | null) {
+export async function prepara(finestra: () => BrowserWindow | null, spegni: () => Promise<void>) {
   invia = a => finestra()?.webContents.send('myynd:aggiornamento', a)
+  primaDiInstallare = spegni
   if (!app.isPackaged) { ultimo = { stato: 'spento', perche: 'sviluppo' }; return }
   const url = feed()
   if (!url) { ultimo = { stato: 'spento', perche: 'nessun-feed' }; return }
@@ -136,12 +138,20 @@ export function controlla(): Promise<Aggiornamento> {
   return inCorso
 }
 
-/** Chiude e installa quello che è già sceso. Se non c'è niente, non fa niente. */
-export function installa(): Promise<void> {
+/**
+ * Chiude e installa quello che è già sceso. Se non c'è niente, non fa niente.
+ *
+ * `quitAndInstall` chiude le finestre e poi esce da sé, senza passare da
+ * `before-quit`: la X che su Mac nasconde invece di chiudere lo bloccherebbe
+ * a metà, con una finestra nascosta e niente installato, e il server non
+ * riceverebbe il suo SIGTERM. Quindi prima si spegne tutto come a un'uscita
+ * normale, e solo dopo si lascia fare all'aggiornamento.
+ */
+export async function installa(): Promise<void> {
   if (!updater || ultimo.stato !== 'pronta') {
     scriviRegistro(`guscio · installa chiesto ma ${t('Gli aggiornamenti non sono disponibili.')}`)
-    return Promise.resolve()
+    return
   }
+  await primaDiInstallare()
   updater.quitAndInstall()
-  return Promise.resolve()
 }

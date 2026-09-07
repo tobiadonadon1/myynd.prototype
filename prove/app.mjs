@@ -26,7 +26,7 @@ const CHIAVI = [
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
   'aggiornamenti', 'naviga'
 ]
-const CHIAVI_AGGIORNAMENTI = ['controlla', 'installa', 'stato']
+const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 
 // — il registro della prova —
 let guasti = 0

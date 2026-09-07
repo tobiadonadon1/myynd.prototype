@@ -9,7 +9,7 @@
 //
 // CommonJS di proposito: electron-builder lo carica con `require`, e il
 // package.json dice `"type": "module"` — un `.js` qui verrebbe letto come ESM.
-const { readFileSync } = require('node:fs')
+const { readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { join } = require('node:path')
 const yaml = require('js-yaml')
 
@@ -51,7 +51,21 @@ if (!firmata) mac.identity = '-'
  * «non-firmata» invece di provarci.
  */
 const feed = (amb.MYYND_AGGIORNAMENTI_URL || '').trim()
-const publish = feed ? [{ provider: 'generic', url: feed, channel: 'latest' }] : undefined
+/*
+ * `publish: null` e non «assente»: senza niente electron-builder si inventa
+ * un feed dal remoto git del progetto, e l'app se lo porterebbe dentro in
+ * `app-update.yml` senza che nessuno l'abbia deciso.
+ */
+const publish = feed ? [{ provider: 'generic', url: feed, channel: 'latest' }] : null
+/*
+ * Il guscio legge `desktop/feed.json` a runtime — una variabile d'ambiente
+ * di chi impacchetta non esiste sul computer di chi scarica. Si scrive qui,
+ * quando il feed c'è, e si toglie quando non c'è: un feed di ieri non deve
+ * finire nel pacchetto di oggi. Il file è ignorato da git.
+ */
+const feedJson = join(__dirname, '..', 'desktop', 'feed.json')
+if (feed) writeFileSync(feedJson, JSON.stringify({ url: feed }, null, 2) + '\n')
+else rmSync(feedJson, { force: true })
 if (feed) {
   const archi = new Set(mac.target.flatMap(t => t.arch))
   mac.target = [...mac.target, ...[...archi].map(a => ({ target: 'zip', arch: [a] }))]
@@ -60,5 +74,5 @@ if (feed) {
 module.exports = {
   ...fissa,
   mac,
-  ...(publish ? { publish } : {})
+  publish
 }

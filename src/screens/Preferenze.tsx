@@ -37,14 +37,18 @@ function LApp() {
   const [avvio, setAvvio] = useState<boolean | null>(null)
   const [agg, setAgg] = useState<Aggiornamento | null>(null)
   const [chiedo, setChiedo] = useState(false)
-  const [home, setHome] = useState('')
+  const [dati, setDati] = useState('')
   const [guaio, setGuaio] = useState('')
 
   useEffect(() => {
     if (!d) return
     d.scorciatoia().then(setAcc).catch(() => {})
     d.avvioAutomatico().then(setAvvio).catch(() => {})
-    api.stato().then(s => setHome(s.home)).catch(() => {})
+    // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
+    api.stato().then(s => setDati(s.dati || (s.home ? `${s.home}/.myynd` : ''))).catch(() => {})
+    // gli eventi già mandati prima che questa scheda esistesse non tornano:
+    // si chiede com'è adesso, e da lì in poi si ascolta
+    d.aggiornamenti.attuale().then(setAgg).catch(() => {})
     return d.aggiornamenti.stato(setAgg)
   }, [d])
 
@@ -165,10 +169,10 @@ function LApp() {
         <div style={TESTO}>
           <div style={{ fontSize: 15 }}>{t('I tuoi dati')}</div>
           <div style={NOTA}>
-            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>{home ? `${home}/.myynd` : '~/.myynd'}</code>
+            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>{dati || '~/.myynd'}</code>
           </div>
         </div>
-        <button type="button" disabled={!home} onClick={() => { d.mostraNelFinder(`${home}/.myynd`).catch(() => {}) }} style={{ ...SECONDARIO, opacity: home ? 1 : 0.6 }}>
+        <button type="button" disabled={!dati} onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }} style={{ ...SECONDARIO, opacity: dati ? 1 : 0.6 }}>
           {mac ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
         </button>
       </div>

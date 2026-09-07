@@ -100,7 +100,7 @@ export function costruisci(su: Azioni) {
       { label: t('Guida di Myynd'), click: () => su.naviga('aiuto') },
       { type: 'separator' },
       { label: t('Cartella dei dati'), click: () => { void shell.openPath(su.cartellaDati()) } },
-      { label: t('Registro del guscio'), click: () => shell.showItemInFolder(su.registro()) },
+      { label: t('Registro dell’app'), click: () => shell.showItemInFolder(su.registro()) },
       ...(mac ? [] : [{ type: 'separator' as const }, { role: 'about' as const, label: t('Informazioni su Myynd') }])
     ]
   })

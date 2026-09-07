@@ -25,7 +25,18 @@ const TASTI_SPECIALI = new Set([
   'mediaplaypause', 'printscreen', 'numdec', 'numadd', 'numsub', 'nummult', 'numdiv'
 ])
 
-/** Un modificatore almeno e un tasto solo, nella grammatica di Electron. */
+/**
+ * Le combinazioni con il solo ⌘ (o Ctrl) e una lettera che sono già di
+ * qualcuno: dell'app stessa, o di ogni app. Una scorciatoia globale vince
+ * sui menù ovunque, e ⌘Q che apre Myynd invece di chiudere quello che si
+ * sta usando non è una preferenza, è un guasto.
+ */
+const RISERVATE = new Set(['q', 'w', 'n', 'c', 'v', 'x', 'a', 'z', 'h', 'm', 'r', 'f', 'p', 's', 't', ',', 'tab', 'space'])
+
+/**
+ * Un modificatore vero almeno — ⇧ da solo prenderebbe una maiuscola a tutte
+ * le app — e un tasto solo, nella grammatica di Electron.
+ */
 export function valida(acc: string): boolean {
   if (typeof acc !== 'string') return false
   const parti = acc.split('+').map(p => p.trim())
@@ -34,13 +45,22 @@ export function valida(acc: string): boolean {
   let tasti = 0
   for (const p of parti) {
     const l = p.toLowerCase()
-    if (MODIFICATORI.has(l)) { modificatori++; continue }
+    if (MODIFICATORI.has(l)) { if (l !== 'shift') modificatori++; continue }
     const tasto = /^[a-z0-9]$/.test(l) || /^f([1-9]|1[0-9]|2[0-4])$/.test(l) ||
-      /^num[0-9]$/.test(l) || TASTI_SPECIALI.has(l) || /^[~!@#$%^&*()_\-=[\]{}\\|;:'",.<>/?]$/.test(p)
+      /^num[0-9]$/.test(l) || TASTI_SPECIALI.has(l) || /^[`~!@#$%^&*()_\-=[\]{}\\|;:'",.<>/?]$/.test(p)
     if (!tasto) return false
     tasti++
   }
   return modificatori >= 1 && tasti === 1
+}
+
+/** ⌘ o Ctrl da soli con un tasto che è già di tutti. */
+export function riservata(acc: string): boolean {
+  const parti = acc.split('+').map(p => p.trim().toLowerCase())
+  const soloPrimario = parti.filter(p => MODIFICATORI.has(p)).every(p => ['command', 'cmd', 'control', 'ctrl', 'commandorcontrol', 'cmdorctrl', 'shift'].includes(p))
+    && !parti.includes('shift')
+  const tasto = parti.find(p => !MODIFICATORI.has(p)) ?? ''
+  return soloPrimario && RISERVATE.has(tasto)
 }
 
 let attuale = ''
@@ -71,6 +91,7 @@ export function imposta(nuova: string): { ok: boolean; errore?: string } {
   if (!valida(nuova)) {
     return { ok: false, errore: t('La combinazione deve avere un modificatore e un tasto, per esempio CommandOrControl+Shift+M.') }
   }
+  if (riservata(nuova)) return { ok: false, errore: t('Questa combinazione non si può usare qui.') }
   const vecchia = attuale
   if (vecchia) globalShortcut.unregister(vecchia)
   if (registra(nuova)) {

@@ -76,6 +76,8 @@ export type Stato = {
   suggerimentiDesktop: string[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
+  /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
+  dati: string
   /** Gira su un server: le fonti che leggono «questa macchina» non ci sono, e il ballo OAuth passa dal web. */
   ospitato: boolean
   /** Il server l'ha acceso il guscio dell'app da scrivania. */

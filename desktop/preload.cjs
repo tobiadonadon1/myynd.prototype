@@ -16,6 +16,18 @@ function argomento(nome) {
   return voce ? voce.slice(prefisso.length) : ''
 }
 
+/**
+ * Un `invoke` che fallisce arriva alla pagina come «Error invoking remote
+ * method 'myynd:…': Error: la frase»: la pagina mostra `message` così com'è,
+ * e quella cornice non è di nessuno. Resta la frase.
+ */
+function chiedi(canale, ...argomenti) {
+  return ipcRenderer.invoke(canale, ...argomenti).catch(e => {
+    const grezzo = e instanceof Error ? e.message : String(e)
+    throw new Error(grezzo.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''))
+  })
+}
+
 function ascolta(canale, cb) {
   const f = (_evento, carico) => cb(carico)
   ipcRenderer.on(canale, f)
@@ -25,18 +37,19 @@ function ascolta(canale, cb) {
 contextBridge.exposeInMainWorld('myynd', {
   versione: argomento('versione'),
   piattaforma: argomento('piattaforma') || process.platform,
-  scegliCartelle: () => ipcRenderer.invoke('myynd:scegli-cartelle'),
-  apriFuori: url => ipcRenderer.invoke('myynd:apri-fuori', String(url)),
-  mostraNelFinder: percorso => ipcRenderer.invoke('myynd:mostra', String(percorso)),
+  scegliCartelle: () => chiedi('myynd:scegli-cartelle'),
+  apriFuori: url => chiedi('myynd:apri-fuori', String(url)),
+  mostraNelFinder: percorso => chiedi('myynd:mostra', String(percorso)),
   segnala: inAttesa => ipcRenderer.send('myynd:segnala', Number(inAttesa)),
   lingua: l => ipcRenderer.send('myynd:lingua', l === 'en' ? 'en' : 'it'),
-  scorciatoia: () => ipcRenderer.invoke('myynd:scorciatoia'),
-  impostaScorciatoia: acc => ipcRenderer.invoke('myynd:imposta-scorciatoia', String(acc)),
-  avvioAutomatico: () => ipcRenderer.invoke('myynd:avvio-automatico'),
-  impostaAvvioAutomatico: acceso => ipcRenderer.invoke('myynd:imposta-avvio-automatico', !!acceso),
+  scorciatoia: () => chiedi('myynd:scorciatoia'),
+  impostaScorciatoia: acc => chiedi('myynd:imposta-scorciatoia', String(acc)),
+  avvioAutomatico: () => chiedi('myynd:avvio-automatico'),
+  impostaAvvioAutomatico: acceso => chiedi('myynd:imposta-avvio-automatico', !!acceso),
   aggiornamenti: {
-    controlla: () => ipcRenderer.invoke('myynd:aggiornamenti-controlla'),
-    installa: () => ipcRenderer.invoke('myynd:aggiornamenti-installa'),
+    attuale: () => chiedi('myynd:aggiornamenti-stato'),
+    controlla: () => chiedi('myynd:aggiornamenti-controlla'),
+    installa: () => chiedi('myynd:aggiornamenti-installa'),
     stato: cb => ascolta('myynd:aggiornamento', cb)
   },
   naviga: cb => ascolta('myynd:naviga', cb)

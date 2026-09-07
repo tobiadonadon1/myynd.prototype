@@ -42,6 +42,8 @@ export type Desktop = {
   avvioAutomatico(): Promise<boolean>
   impostaAvvioAutomatico(acceso: boolean): Promise<void>
   aggiornamenti: {
+    /** Com'è adesso, per chi arriva dopo gli eventi già mandati. */
+    attuale(): Promise<Aggiornamento>
     /** Chiede adesso. Risponde con l'esito; il guscio manda anche gli eventi di `stato`. */
     controlla(): Promise<Aggiornamento>
     /** Chiude e installa quello che ha scaricato. */

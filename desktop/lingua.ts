@@ -55,7 +55,7 @@ const EN: Record<string, string> = {
   'Aiuto': 'Help',
   'Guida di Myynd': 'Myynd Help',
   'Cartella dei dati': 'Data Folder',
-  'Registro del guscio': 'Shell Log',
+  'Registro dell’app': 'App log',
   'in attesa': 'waiting',
   'La combinazione deve avere un modificatore e un tasto, per esempio CommandOrControl+Shift+M.':
     'The shortcut needs a modifier and a key, for example CommandOrControl+Shift+M.',

@@ -581,6 +581,9 @@ app.get('/api/stato', (_req, res) => {
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
+    // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
+    // è dove la persona può andare a guardare
+    dati: ospitato.OSPITATO ? '' : ospitato.DATI,
     ospitato: ospitato.OSPITATO,
     // dentro la finestra dell'app, non in una scheda del browser
     app: ospitato.APP,

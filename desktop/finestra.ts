@@ -104,7 +104,7 @@ export function crea(argomenti: string[] = argomentiDati): BrowserWindow {
     return { action: 'deny' }
   })
   w.webContents.on('will-navigate', (e, url) => {
-    if (origine && url.startsWith(origine)) return
+    if (nostra(url)) return
     e.preventDefault()
     apriFuoriSePuoi(url)
   })
@@ -153,6 +153,17 @@ export function caricaApp(url: string) {
 
 export function origineNostra(): string {
   return origine
+}
+
+/**
+ * È un indirizzo della nostra pagina?
+ *
+ * Si confronta l'origine *letta* dall'indirizzo, non l'inizio della stringa:
+ * `http://127.0.0.1:5174@altrove/` comincia come la nostra e va altrove.
+ */
+export function nostra(url: string): boolean {
+  if (!origine) return false
+  try { return new URL(url).origin === origine } catch { return false }
 }
 
 /** In primo piano, anche se era nascosta o ridotta a icona. */
