@@ -22,7 +22,7 @@ const PORTA_CDP = 9333
 
 // le chiavi che il contratto del ponte promette, e che il renderer usa
 const CHIAVI = [
-  'versione', 'piattaforma', 'scegliCartelle', 'apriFuori', 'mostraNelFinder', 'segnala',
+  'versione', 'piattaforma', 'scegliCartelle', 'scegliFile', 'apriFuori', 'mostraNelFinder', 'segnala',
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
   'aggiornamenti', 'naviga'
 ]

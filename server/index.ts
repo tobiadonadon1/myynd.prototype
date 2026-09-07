@@ -31,6 +31,7 @@ import * as desktopRemoto from './connettori/desktopRemoto.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
+import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
 import * as drive from './connettori/drive.ts'
@@ -546,6 +547,7 @@ app.get('/api/stato', (_req, res) => {
         v.id === 'desktop' ? !!c.desktop :
         v.id === 'notion' ? !!c.notion :
         v.id === 'granola' ? granola.collegato(c) :
+        v.id === 'conversazioni' ? conversazioni.collegato(c) :
         v.id === 'calendario' ? !!c.calendario :
         // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
         // può ragionare», che da quando c'è un altro fornitore non coincide più
@@ -579,6 +581,9 @@ app.get('/api/stato', (_req, res) => {
      */
     credito: mod.mancaIlCredito(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
+    // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
+    // la sua cartella c'è: un interruttore su una cartella vuota è un bottone che fallisce
+    codiceConversazioni: !ospitato.OSPITATO && conversazioni.codicePossibile(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -1029,6 +1034,29 @@ app.post('/api/connettori/granola', async (_req, res) => {
   } catch (e) { errore(res, e) }
 })
 
+/**
+ * Le conversazioni: i file che ha scelto, e l'interruttore di Claude Code.
+ *
+ * Ogni file si apre per davvero prima di scriverlo in configurazione: chi ha
+ * preso il file sbagliato dall'archivio deve saperlo adesso, con il nome del
+ * file accanto, non al primo giro di lettura. Un percorso è un percorso di
+ * *questo* disco, quindi su un server la rotta si chiude da sola — come
+ * quella del desktop, e per la stessa ragione.
+ */
+app.post('/api/connettori/conversazioni', async (req, res) => {
+  if (ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Su un server non ci sono file da leggere: le conversazioni si collegano dal tuo computer.' })
+  }
+  let voluto: cfg.ConfigConversazioni
+  try { voluto = conversazioni.normalizza(req.body) } catch (e) { return errore(res, e, 400) }
+  try {
+    const esito = await conversazioni.prova(voluto)
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore, file: esito.file ?? null })
+    cfg.aggiorna({ conversazioni: voluto })
+    res.json({ ok: true, file: esito.file, codice: esito.codice })
+  } catch (e) { errore(res, e) }
+})
+
 app.post('/api/connettori/notion', async (req, res) => {
   const token: string = req.body?.token ?? ''
   if (!token) return res.status(400).json({ errore: 'Serve il token di integrazione.' })
@@ -1287,6 +1315,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'desktop') delete c.desktop
   else if (id === 'notion') delete c.notion
   else if (id === 'granola') delete c.granola
+  else if (id === 'conversazioni') delete c.conversazioni
   else if (id === 'calendario') delete c.calendario
   /*
     «Scollega» su Claude vuol dire che Myynd deve smettere di ragionare, e da
@@ -1422,6 +1451,22 @@ async function leggiTutto(
     const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
     cfg.aggiorna({ granola: { note: e.docs.length } })
     avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
+    return e.docs.length
+  })
+  /*
+   * Le conversazioni, in casa e basta: sono file di questo disco. Un file
+   * esportato è un insieme intero, e la cartella delle sessioni pure, quindi
+   * quello che non c'è più dentro non c'è più — ma un file che non si è
+   * aperto non prova niente, e finché ce n'è uno non si cancella.
+   */
+  const conv = c.conversazioni
+  if (conv && !ospitato.OSPITATO) await fonte('conversazioni', async () => {
+    avvisa({ fase: 'conversazioni', stato: 'rileggo le chat' })
+    const e = await conversazioni.sincronizza(conv)
+    await store.salvaDocumentiAPezzi(e.docs)
+    const tolti = store.riconcilia('conversazioni', { completo: !e.troncato && !e.guasti.length }, e.docs.map(d => d.id))
+    for (const g of e.guasti) console.error(`myynd · conversazioni · ${g.file}: ${g.errore}`)
+    avvisa({ fase: 'conversazioni', stato: 'fatto', documenti: e.docs.length, falliti: e.guasti.length, troncato: e.troncato, tolti })
     return e.docs.length
   })
   const cal = c.calendario
@@ -1625,7 +1670,7 @@ async function rileggiDaSola() {
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola) return
+    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.conversazioni) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {

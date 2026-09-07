@@ -75,6 +75,16 @@ export const CATALOGO: VoceConnettore[] = [
    * Granola stia su questo computer, e quella la dice `SOLO_IN_CASA`.
    */
   { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, lette da Granola su questo Mac. Niente da incollare.' },
+  /*
+   * Le conversazioni, e la nota dice il passaggio che costa: l'esportazione.
+   *
+   * ChatGPT e Claude non lasciano rileggere le chat da un'API; mandano un
+   * archivio via email, e va chiesto a mano. La nota lo dice prima che
+   * qualcuno apra la scheda aspettandosi un bottone come quello di Granola.
+   * Le sessioni di Claude Code invece sono già su questo disco, e quelle sì
+   * si leggono premendo un interruttore.
+   */
+  { id: 'conversazioni', nome: 'Conversazioni', gruppo: 'Note', pronto: true, legge: true, nota: 'Le chat esportate da ChatGPT e da Claude, e le sessioni di Claude Code su questo computer.' },
   { id: 'claude', nome: 'Claude', gruppo: 'Ragionamento', pronto: true, nota: 'La chiave API che fa ragionare Myynd sul tuo materiale.' },
   // Un'altra testa al posto di Claude, non un'altra fonte: OpenAI e chi parla
   // come lei, compresi i modelli che girano su questa macchina. Sta nel

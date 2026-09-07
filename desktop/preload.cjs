@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('myynd', {
   versione: argomento('versione'),
   piattaforma: argomento('piattaforma') || process.platform,
   scegliCartelle: () => chiedi('myynd:scegli-cartelle'),
+  scegliFile: estensioni => chiedi('myynd:scegli-file', Array.isArray(estensioni) ? estensioni.map(String) : []),
   apriFuori: url => chiedi('myynd:apri-fuori', String(url)),
   mostraNelFinder: percorso => chiedi('myynd:mostra', String(percorso)),
   segnala: inAttesa => ipcRenderer.send('myynd:segnala', Number(inAttesa)),

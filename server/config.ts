@@ -540,6 +540,16 @@ export type ConfigNotion = { token: string }
 export type ConfigGranola = { note?: number }
 
 /**
+ * Le conversazioni con ChatGPT, Claude e Claude Code.
+ *
+ * `file` sono i `conversations.json` esportati — percorsi di *questo* disco,
+ * scelti da chi collega — e `codice` dice se leggere anche le sessioni di
+ * Claude Code in `~/.claude/projects`. Non c'è nessuna credenziale: i file
+ * sono già suoi, e stanno dove li ha messi.
+ */
+export type ConfigConversazioni = { file: string[]; codice: boolean }
+
+/**
  * Il calendario, letto da un indirizzo invece che da un'API.
  *
  * `url` è l'indirizzo segreto in formato iCal della propria agenda. **È una
@@ -560,6 +570,7 @@ export type Config = {
   desktop?: ConfigDesktop
   notion?: ConfigNotion
   granola?: ConfigGranola
+  conversazioni?: ConfigConversazioni
   calendario?: ConfigCalendario
   claude?: ConfigClaude
   tono?: string
@@ -898,6 +909,9 @@ export function pubblica(c: Config = leggi()) {
     notion: c.notion ? { collegato: true } : null,
     // non ha niente da nascondere: non c'è nessuna credenziale, esce intera
     granola: c.granola ? { collegato: true, note: c.granola.note ?? 0 } : null,
+    // i percorsi escono come le cartelle del desktop: in casa sono suoi, e la
+    // scheda deve poterli mostrare
+    conversazioni: c.conversazioni ? { collegato: true, file: c.conversazioni.file, codice: c.conversazioni.codice } : null,
     // il nome dell'agenda esce, l'indirizzo no: quello è la chiave di casa
     calendario: c.calendario ? { collegato: true, nome: c.calendario.nome ?? null, giorni: c.calendario.giorni ?? 30 } : null,
     /*

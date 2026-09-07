@@ -172,6 +172,18 @@ function canali(azioni: menu.Azioni) {
       : await dialog.showOpenDialog({ properties: [...opzioni.properties] })
     return r.canceled ? [] : r.filePaths
   })
+  // I file esportati delle conversazioni: la stessa finestra, per file e non
+  // per cartelle, filtrata sulle estensioni che la pagina chiede.
+  ipcMain.handle('myynd:scegli-file', async (_e, estensioni: unknown) => {
+    const w = finestra.attuale()
+    const ext = Array.isArray(estensioni) ? estensioni.map(String).filter(Boolean) : []
+    const opzioni = {
+      properties: ['openFile', 'multiSelections'] as ('openFile' | 'multiSelections')[],
+      filters: ext.length ? [{ name: ext.map(e => e.toUpperCase()).join(', '), extensions: ext }] : []
+    }
+    const r = w ? await dialog.showOpenDialog(w, opzioni) : await dialog.showOpenDialog(opzioni)
+    return r.canceled ? [] : r.filePaths
+  })
   ipcMain.handle('myynd:apri-fuori', async (_e, url: unknown) => {
     let u: URL
     try { u = new URL(String(url)) } catch { throw new Error(t('Questo indirizzo non si apre fuori da Myynd.')) }

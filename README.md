@@ -199,6 +199,7 @@ configurazione: su un server la macchina sta in UTC.
 | **Dropbox** | La chiave dell'app e un codice da incollare una volta. |
 | **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
 | **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
+| **Conversazioni** | I `conversations.json` esportati da ChatGPT (Impostazioni › Controlli dati › Esporta dati) e da Claude (Impostazioni › Privacy › Esporta dati), e — se lo accendi — le sessioni di Claude Code in `~/.claude/projects`. Di ogni chat si tiene il testo, non gli attrezzi. Solo sul tuo computer. |
 
 ### Il desktop di casa che spinge verso il server
 
