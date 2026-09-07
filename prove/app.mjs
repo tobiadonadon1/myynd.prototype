@@ -229,6 +229,17 @@ try {
   }
 
   /*
+   * Fuori dal primo avvio, che copre tutta la finestra: quello che c'è da
+   * misurare qui sotto — le due colonne — esiste solo dopo.
+   */
+  await api('/api/profilo', { onboarding: true })
+  await pagina.valuta('location.reload(); return 1')
+  const casa = await aspetta(async () => pagina.valuta(`
+    const c = document.getElementById('root')?.firstElementChild?.firstElementChild
+    return !!(c && [...c.children].some(e => getComputedStyle(e).overflowY === 'auto'))`), 30_000)
+  segna(!!casa, 'chiuso il primo avvio si arriva alle due colonne')
+
+  /*
    * Niente da scorrere di lato, e la colonna comincia sotto i semafori.
    *
    * Sono i due difetti che si vedevano solo dentro la finestra vera: le
