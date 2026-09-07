@@ -165,6 +165,11 @@ function segna(posto: Posto, radice: string, percorso: string) {
  *   · non c'è più → esce dall'indice, e con lei tutto quello che stava sotto.
  */
 async function guarda(posto: Posto, radice: string, percorso: string) {
+  // il lotto comincia *prima* di leggere: `indicizzato` lo scrive `salvaDocumenti`
+  // con la sua ora, e un `daQuando` preso dopo veniva un millisecondo più tardi
+  // — `appenaArrivati(daQuando)` non trovava il file che aveva svegliato la
+  // vedetta, e un file solo sulla scrivania non arrivava mai alla prima pagina
+  const inizio = new Date().toISOString()
   let s
   try { s = await stat(percorso) } catch { s = null }
 
@@ -174,7 +179,7 @@ async function guarda(posto: Posto, radice: string, percorso: string) {
     const id = `desktop:${percorso}`
     const ids = [...(await daSaltare(percorso, radice) ? [] : [id]), ...store.idsConPrefisso(`${id}/`)]
     const n = ids.length ? store.scordaDocumenti(ids) : 0
-    if (n) conta(posto, 0, n)
+    if (n) conta(posto, 0, n, inizio)
     return
   }
 
@@ -183,7 +188,7 @@ async function guarda(posto: Posto, radice: string, percorso: string) {
     const e = await leggiCartella(percorso)
     if (!e.docs.length) return
     const r = store.salvaDocumenti(e.docs)
-    conta(posto, r.nuovi + r.cambiati, 0)
+    conta(posto, r.nuovi + r.cambiati, 0, inizio)
     return
   }
 
@@ -196,16 +201,17 @@ async function guarda(posto: Posto, radice: string, percorso: string) {
   if (!d) {
     // c'è ancora, ma non è più un documento: svuotato, o cresciuto troppo
     const n = store.scordaDocumenti([id])
-    if (n) conta(posto, 0, n)
+    if (n) conta(posto, 0, n, inizio)
     return
   }
   const r = store.salvaDocumenti([d])
-  if (r.nuovi + r.cambiati) conta(posto, r.nuovi + r.cambiati, 0)
+  if (r.nuovi + r.cambiati) conta(posto, r.nuovi + r.cambiati, 0, inizio)
 }
 
 /** Un cambiamento vero nell'indice: si aggiunge al lotto e si riaccende il silenzio. */
-function conta(posto: Posto, cambiati: number, tolti: number) {
-  if (!posto.daQuando) posto.daQuando = new Date().toISOString()
+function conta(posto: Posto, cambiati: number, tolti: number, inizio: string) {
+  // da quando si è cominciato a guardare, non da adesso: vedi `guarda`
+  if (!posto.daQuando || inizio < posto.daQuando) posto.daQuando = inizio
   posto.cambiati += cambiati
   posto.tolti += tolti
   if (posto.quiete) clearTimeout(posto.quiete)
