@@ -106,5 +106,7 @@ export function costruisci(su: Azioni) {
   })
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(voci))
-  if (mac) app.setAboutPanelOptions({ applicationName: 'Myynd', applicationVersion: app.getVersion() })
+  // su Windows il ruolo `about` apre una finestrella di Electron, non del
+  // sistema: senza queste tre righe direbbe poco
+  app.setAboutPanelOptions({ applicationName: 'Myynd', applicationVersion: app.getVersion(), copyright: '© 2026 Myynd' })
 }

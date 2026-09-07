@@ -237,6 +237,9 @@ try {
     const nuovo = readFileSync(registro, 'utf8')
     segna(nuovo.includes('il server ascolta su'), 'il registro racconta questo avvio')
     segna(!nuovo.includes('il lavoratore non parte'), 'il lavoratore dei PDF è partito dentro il pacchetto')
+    // il binario di canvas è quello di questa architettura, o pdf-parse lo dice qui
+    const moduli = nuovo.split('\n').filter(r => /Cannot find module|Failed to load native binding|canvas/i.test(r))
+    segna(!moduli.length, 'nessun modulo mancante nel registro', moduli.slice(0, 2).join(' | '))
   }
 } catch (e) {
   segna(false, 'la prova è arrivata in fondo', e instanceof Error ? e.message : String(e))

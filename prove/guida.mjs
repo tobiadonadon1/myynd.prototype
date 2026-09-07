@@ -8,7 +8,9 @@
 let id = 0
 
 export async function attacca(porta = 9222, quale = /oggi|Oggi|127\.0\.0\.1/) {
-  for (let giro = 0; giro < 40; giro++) {
+  // un minuto: la prima apertura di un binario x64 sotto Rosetta traduce
+  // tutta l'app prima di partire, e venti secondi non le bastavano
+  for (let giro = 0; giro < 120; giro++) {
     try {
       const bersagli = await (await fetch(`http://127.0.0.1:${porta}/json/list`)).json()
       const pagina = bersagli.find(b => b.type === 'page' && quale.test(b.url + b.title))

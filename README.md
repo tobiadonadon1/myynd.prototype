@@ -102,18 +102,20 @@ Si impacchetta con `npm run pacchetto` (Mac e Windows), `pacchetto:mac` o
 `pacchetto:win`; gli artefatti finiscono in `dist-app/`. La configurazione è
 in `electron-builder.yml` per la parte fissa e in `build/configura.cjs` per
 quella che dipende dall'ambiente — è per questo che i comandi passano
-`--config build/configura.cjs`. Le icone in `build/` vengono da
-`public/marchio.svg` con `node build/icone.cjs` (solo su un Mac).
+`--config build/configura.cjs`. Le icone in `build/`, e quelle a colori per
+la barra di Windows in `desktop/icone/`, vengono da `public/marchio.svg` con
+`node build/icone.cjs` (solo su un Mac).
 
 **Due DMG per il Mac**, `Myynd-<versione>-arm64.dmg` per i chip Apple e
 `Myynd-<versione>-x64.dmg` per gli Intel, mai uno universale: `pdf-parse`
 porta con sé `@napi-rs/canvas`, un binario diverso per architettura, e
 fonderli non riesce. Il DMG contiene l'app e il collegamento ad Applicazioni;
-si trascina e basta. La versione x64 costruita su un Mac Apple silicon porta
-il binario di canvas che `npm` ha installato qui — cioè quello arm64: i PDF
-si leggono lo stesso (canvas serve a disegnare, non a estrarre il testo), ma
-per un pacchetto x64 completo si costruisce su un Mac Intel, o si installa
-anche `@napi-rs/canvas-darwin-x64` prima di impacchettare.
+si trascina e basta. Ogni pacchetto porta il binario di canvas della *sua*
+piattaforma e architettura, non quello del Mac che lo costruisce:
+`build/binari.cjs` lo scarica da npm prima che electron-builder raccolga i
+file (in `~/Library/Caches/myynd-binari`, una volta sola) e dopo controlla
+che nel pacchetto ci sia quello, che sia davvero per quell'architettura, e
+che non ce ne siano altri.
 
 **Windows** ha un installatore NSIS a 64 bit, `Myynd-Setup-<versione>.exe`:
 chiede dove installare, per l'utente e non per la macchina. Non è firmato:

@@ -12,6 +12,7 @@
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const yaml = require('js-yaml')
+const binari = require('./binari.cjs')
 
 const fissa = yaml.load(readFileSync(join(__dirname, '..', 'electron-builder.yml'), 'utf8'))
 const amb = process.env
@@ -39,6 +40,17 @@ const mac = { ...fissa.mac }
 if (!firmata) mac.identity = '-'
 
 /*
+ * Il binario di canvas, uno per pacchetto.
+ *
+ * Da node_modules non entra nessun `@napi-rs/canvas-*`: entra quello della
+ * cache di build/binari.cjs per la piattaforma e l'architettura del target,
+ * che il gancio `beforePack` prepara. La cache sta nella cartella dell'utente,
+ * per questo le righe si aggiungono qui e non nel YAML.
+ */
+mac.files = [...(mac.files ?? []), ...binari.voci('darwin')]
+const win = { ...fissa.win, files: [...(fissa.win.files ?? []), ...binari.voci('win32')] }
+
+/*
  * Gli aggiornamenti, se c'è un posto da cui scaricarli.
  *
  * Con MYYND_AGGIORNAMENTI_URL si scrive il feed (`latest-mac.yml`,
@@ -60,5 +72,6 @@ if (feed) {
 module.exports = {
   ...fissa,
   mac,
+  win,
   ...(publish ? { publish } : {})
 }

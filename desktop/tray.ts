@@ -5,6 +5,10 @@
 // aspetta la persona. Niente pannello: il brief lo vieta. Un clic porta su
 // la finestra, il tasto destro dà quattro voci e basta.
 //
+// Su Windows «template» non vuol dire niente, e un segno nero sparisce sulla
+// barra scura: là va il marchio a colori, in un .ico con le misure che la
+// barra usa alle varie scale (`build/icone.cjs` fa tutti e due).
+//
 // Su Mac si tiene anche il numero sul Dock: è lo stesso conto, visto da
 // chi ha la barra piena e il Dock in vista.
 
@@ -25,9 +29,14 @@ let tray: Tray | null = null
 let inAttesa = 0
 let azioni: Azioni | null = null
 
-function icona(nome: string) {
+const MAC = process.platform === 'darwin'
+
+function icona(attesa: boolean) {
+  const nome = process.platform === 'win32'
+    ? (attesa ? 'trayAttesa.ico' : 'tray.ico')
+    : (attesa ? 'trayAttesaTemplate.png' : 'trayTemplate.png')
   const img = nativeImage.createFromPath(ICONE + nome)
-  img.setTemplateImage(true)
+  if (MAC) img.setTemplateImage(true)
   return img
 }
 
@@ -47,7 +56,7 @@ export function crea(su: Azioni) {
   azioni = su
   if (tray) return
   try {
-    tray = new Tray(icona('trayTemplate.png'))
+    tray = new Tray(icona(false))
   } catch {
     // senza immagine niente barra: l'app funziona lo stesso dal Dock
     return
@@ -60,7 +69,7 @@ export function crea(su: Azioni) {
 /** Tooltip e immagine seguono il conto e la lingua: si rifà tutto insieme. */
 export function aggiorna() {
   if (!tray) return
-  tray.setImage(icona(inAttesa > 0 ? 'trayAttesaTemplate.png' : 'trayTemplate.png'))
+  tray.setImage(icona(inAttesa > 0))
   tray.setToolTip(inAttesa > 0 ? `Myynd · ${inAttesa} ${t('in attesa')}` : 'Myynd')
 }
 
@@ -68,7 +77,7 @@ export function aggiorna() {
 export function segnala(n: number) {
   inAttesa = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
   aggiorna()
-  if (process.platform === 'darwin' && app.dock) app.dock.setBadge(inAttesa ? String(inAttesa) : '')
+  if (MAC && app.dock) app.dock.setBadge(inAttesa ? String(inAttesa) : '')
 }
 
 export function distruggi() {
