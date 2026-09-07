@@ -1025,7 +1025,10 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
 
       {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0 }}>
+      {/* la riga va a capo prima di stringere il bottone: «Manda a nome@…» è
+          l'unica cosa che qui deve leggersi per intero, e la nota in fondo
+          può scendere sotto senza perdere niente */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
         <button type="button" onClick={manda} disabled={!puo} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
           background: puo ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
@@ -1042,7 +1045,7 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
           }}
           hover={{ color: '#22271F' }}>{t('Annulla')}</Hov>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)', flex: 'none', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)', flex: 'none', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
           {pronta?.rispondeA ? t('Risponde nel filo del suo messaggio.') : t('parte dalla tua casella')}
         </span>
       </div>
