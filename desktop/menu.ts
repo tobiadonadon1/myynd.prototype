@@ -11,7 +11,7 @@ import { app, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import { t } from './lingua.ts'
 
 export type Azioni = {
-  naviga(dove: string): void
+  naviga(dove: string | { dove: 'chat'; id: string }): void
   cartellaDati(): string
   registro(): string
 }

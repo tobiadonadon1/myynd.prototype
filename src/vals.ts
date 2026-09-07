@@ -268,6 +268,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * di una persona nuova restava senza risposta finché non ricaricava.
    */
   const filoNuovo = useRef<string | null>(null)
+  // cresce quando una chat già aperta va riletta: il richiamo ci ha scritto
+  // dentro da un'altra finestra, e per questo effetto non è cambiato niente
+  const [rilettura, setRilettura] = useState(0)
   useEffect(() => {
     if (!thread) { setMessaggi([]); setMessaggiPronti(true); return }
     if (filoNuovo.current === thread) { filoNuovo.current = null; setMessaggiPronti(true); return }
@@ -277,7 +280,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       .then(m => { if (gen.current === mio) setMessaggi(m) })
       .catch(() => { if (gen.current === mio) setMessaggi([]) })
       .finally(() => { if (gen.current === mio) setMessaggiPronti(true) })
-  }, [thread])
+  }, [thread, rilettura])
 
   useEffect(() => {
     const el = threadRef.current
@@ -907,6 +910,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       }
     })),
     newChat: () => { setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
+    /** Una chat precisa, anche se nata altrove: l'elenco si rilegge, e i messaggi con lui. */
+    apriChat: (id: string) => {
+      setThread(id); setRilettura(n => n + 1); setScreen('chat'); setSearch(false); setMenu(false)
+      caricaChat().catch(() => {})
+    },
     chatEmpty: messaggi.length === 0,
     chatCaricata: elencoChatPronto && messaggiPronti,
     chatTitolo: th?.titolo ?? 'Nuova chat',

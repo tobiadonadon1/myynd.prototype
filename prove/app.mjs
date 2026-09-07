@@ -24,8 +24,9 @@ const PORTA_CDP = 9333
 const CHIAVI = [
   'versione', 'piattaforma', 'scegliCartelle', 'apriFuori', 'mostraNelFinder', 'segnala',
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
-  'aggiornamenti', 'naviga'
+  'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo'
 ]
+const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 
 // — il registro della prova —
@@ -219,13 +220,17 @@ try {
   // il ponte
   const chiavi = await pagina.valuta(`
     if (!window.myynd) return null
-    return { tutte: Object.keys(window.myynd), aggiornamenti: Object.keys(window.myynd.aggiornamenti ?? {}) }`)
+    return { tutte: Object.keys(window.myynd), aggiornamenti: Object.keys(window.myynd.aggiornamenti ?? {}),
+      richiamo: Object.keys(window.myynd.richiamo ?? {}), dentro: window.myynd.dentroIlRichiamo }`)
   segna(!!chiavi, '`window.myynd` c’è nella pagina')
   if (chiavi) {
     const mancano = CHIAVI.filter(k => !chiavi.tutte.includes(k))
     segna(!mancano.length, 'il ponte ha tutte le chiavi del contratto', mancano.length ? `mancano: ${mancano.join(', ')}` : '')
     const mancanoA = CHIAVI_AGGIORNAMENTI.filter(k => !chiavi.aggiornamenti.includes(k))
     segna(!mancanoA.length, '`aggiornamenti` ha controlla, installa, stato', mancanoA.length ? `mancano: ${mancanoA.join(', ')}` : '')
+    const mancanoR = CHIAVI_RICHIAMO.filter(k => !chiavi.richiamo.includes(k))
+    segna(!mancanoR.length, '`richiamo` ha chiudi, apri, misura', mancanoR.length ? `mancano: ${mancanoR.join(', ')}` : '')
+    segna(chiavi.dentro === false, 'la finestra grande sa di non essere il richiamo', `dentroIlRichiamo: ${chiavi.dentro}`)
   }
 
   /*

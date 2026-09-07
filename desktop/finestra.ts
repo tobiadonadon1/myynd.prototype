@@ -42,6 +42,19 @@ let chiudeDavvero = false
  */
 let argomentiDati: string[] = []
 let urlApp = ''
+/*
+ * La X nasconde invece di chiudere?
+ *
+ * Su Mac sempre: l'app vive nel Dock. Altrove solo se c'è un segno nella
+ * barra da cui riaprirla — senza, una finestra che sparisce e un'app che
+ * resta viva è un'app invisibile, e la persona non ha modo di riprenderla.
+ * Lo decide `main.ts`, che sa se il segno è nato.
+ */
+let restaViva: () => boolean = () => false
+
+export function tieniViva(quando: () => boolean) {
+  restaViva = quando
+}
 
 function paginaDiAvvio(): string {
   const riga = t('Myynd si sta svegliando.')
@@ -74,7 +87,13 @@ function apriFuoriSePuoi(url: string) {
   } catch { /* non è un indirizzo: si ignora */ }
 }
 
-export function crea(argomenti: string[] = argomentiDati): BrowserWindow {
+/**
+ * La finestra, mostrata appena è pronta — o tenuta nascosta, se l'app è
+ * partita da sola all'accesso: si carica lo stesso, perché il filo degli
+ * eventi e il punto nella barra vivono nella pagina, ma non compare finché
+ * qualcuno non la chiama.
+ */
+export function crea(argomenti: string[] = argomentiDati, nascosta = false): BrowserWindow {
   if (finestra) return finestra
   argomentiDati = argomenti
   const salvato = impostazioni.leggi().finestra
@@ -100,7 +119,7 @@ export function crea(argomenti: string[] = argomentiDati): BrowserWindow {
   })
   finestra = w
 
-  w.once('ready-to-show', () => w.show())
+  w.once('ready-to-show', () => { if (!nascosta) w.show() })
 
   // le finestre nuove non esistono: o è un link e va nel browser, o niente
   w.webContents.setWindowOpenHandler(({ url }) => {
@@ -125,9 +144,10 @@ export function crea(argomenti: string[] = argomentiDati): BrowserWindow {
   w.on('resize', ricorda)
   w.on('move', ricorda)
 
-  // su Mac la X nasconde: l'app resta nel Dock e nella barra, come le altre
+  // la X nasconde: l'app resta nel Dock e nella barra, e il server con lei.
+  // Dove non c'è un segno nella barra da cui riaprirla, chiude davvero
   w.on('close', e => {
-    if (process.platform === 'darwin' && !chiudeDavvero) {
+    if (!chiudeDavvero && (process.platform === 'darwin' || restaViva())) {
       e.preventDefault()
       w.hide()
     }
@@ -181,12 +201,19 @@ export function nostra(url: string): boolean {
  * quello che stavi facendo» — quindi qui non è un dettaglio.
  */
 export function mostra() {
-  const w = attuale()
-  if (!w) return
+  // sparita del tutto — un `destroy`, un renderer caduto — si rifà da capo,
+  // e `ready-to-show` la mostra
+  const w = attuale() ?? crea()
   if (w.isMinimized()) w.restore()
   if (!w.isVisible()) w.show()
   if (process.platform === 'darwin') app.focus({ steal: true })
   w.focus()
+}
+
+/** In vista: non nascosta e non ridotta a icona. */
+export function inVista(): boolean {
+  const w = attuale()
+  return !!w && w.isVisible() && !w.isMinimized()
 }
 
 /** Visibile e con il fuoco: la scorciatoia globale la nasconde, se no la porta su. */

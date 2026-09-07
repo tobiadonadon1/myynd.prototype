@@ -1567,6 +1567,16 @@ const EN: Record<string, string> = {
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
   'Mostra la cartella dei dati': 'Show the data folder',
+  // — il richiamo: la barra della scorciatoia, e gli avvisi di sistema —
+  'Segna una cosa, o chiedi con «?»': 'Note something, or ask with “?”',
+  'Continua nell’app': 'Continue in the app',
+  'Apri Myynd per entrare': 'Open Myynd to sign in',
+  'Apri Myynd': 'Open Myynd',
+  'Una bozza è pronta.': 'A draft is ready.',
+  'Myynd ti chiede una cosa.': 'Myynd is asking you something.',
+  'Avvisami quando una bozza è pronta': 'Tell me when a draft is ready',
+  'Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.': 'A system notification, only when Myynd is not in front. Also for the questions it asks you.',
+  'Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.': 'Opens the quick bar from any program: a line to note, or a question with “?”. Pressed again, it closes it.',
 }
 
 
@@ -1885,5 +1895,13 @@ export const frasi = {
   aggiornamentoPronto: (versione: string) =>
     corrente === 'en'
       ? `${versione} is ready: it installs at the next restart.`
-      : `La ${versione} è pronta: si installa al prossimo riavvio.`
+      : `La ${versione} è pronta: si installa al prossimo riavvio.`,
+
+  // — il richiamo: la conferma dopo una riga segnata, o un elenco —
+  segnate: (n: number, quando: 'oggi' | 'settimana' | 'poi') => {
+    if (n !== 1) return corrente === 'en' ? `${n} lines noted.` : `${n} righe segnate.`
+    const en = { oggi: 'Noted for today.', settimana: 'Noted for this week.', poi: 'Noted for later.' }
+    const it = { oggi: 'Segnata per oggi.', settimana: 'Segnata per questa settimana.', poi: 'Segnata per prima o poi.' }
+    return (corrente === 'en' ? en : it)[quando]
+  }
 }

@@ -80,6 +80,11 @@ export function segnala(n: number) {
   if (MAC && app.dock) app.dock.setBadge(inAttesa ? String(inAttesa) : '')
 }
 
+/** C'è un segno nella barra? Senza, chiudere la finestra deve chiudere l'app. */
+export function attiva(): boolean {
+  return tray !== null && !tray.isDestroyed()
+}
+
 export function distruggi() {
   tray?.destroy()
   tray = null

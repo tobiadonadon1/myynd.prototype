@@ -22,6 +22,9 @@ export type Aggiornamento =
   | { stato: 'pronta'; versione: string }
   | { stato: 'errore'; messaggio: string }
 
+/** Dove il guscio può mandare la pagina: un posto dell'app, o una chat precisa. */
+export type Dove = 'preferenze' | 'chat' | 'oggi' | 'aiuto' | 'nuova-chat' | { dove: 'chat'; id: string }
+
 export type Desktop = {
   /** La versione dell'app, dal package.json. */
   versione: string
@@ -51,8 +54,26 @@ export type Desktop = {
     /** Si iscrive; torna la funzione per smettere. */
     stato(cb: (a: Aggiornamento) => void): () => void
   }
-  /** Il guscio chiede di andare da qualche parte: 'preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'. */
-  naviga(cb: (dove: string) => void): () => void
+  /** Il guscio chiede di andare da qualche parte: un posto, o `{ dove: 'chat', id }` per una chat precisa. */
+  naviga(cb: (dove: Dove | string) => void): () => void
+  /**
+   * Un avviso di sistema; un clic porta su la finestra, su `dove`.
+   *
+   * Lo chiede la pagina, e solo se la persona ha acceso gli avvisi e la
+   * finestra non è davanti: il guscio mostra e basta. Manca nei gusci vecchi.
+   */
+  notifica?(avviso: { titolo: string; corpo: string; dove: Dove }): void
+  /** Questa pagina è la barra del richiamo, non l'app intera. Manca nei gusci vecchi. */
+  dentroIlRichiamo?: boolean
+  /** Quello che la barra può chiedere al guscio. Manca nei gusci vecchi. */
+  richiamo?: {
+    /** Via, e il fuoco torna a chi ce l'aveva. */
+    chiudi(): void
+    /** Nasconde la barra e porta la finestra grande su `dove`. */
+    apri(dove: Dove): void
+    /** L'altezza del contenuto: la finestra si adatta. */
+    misura(altezza: number): void
+  }
 }
 
 declare global {
@@ -66,6 +87,26 @@ export function desktop(): Desktop | null {
 }
 
 export type Piattaforma = Desktop['piattaforma']
+
+/*
+ * Gli avvisi di sistema: spenti finché la persona non li accende.
+ *
+ * Il brief vuole un'app quieta, e un avviso è un'interruzione: la si sceglie.
+ * Sta in `localStorage`, come le altre preferenze della pagina, e si legge
+ * senza rompere niente dove il browser lo nega.
+ */
+const CHIAVE_AVVISI = 'myynd.avvisi'
+
+export function avvisiAccesi(): boolean {
+  try { return localStorage.getItem(CHIAVE_AVVISI) === '1' } catch { return false }
+}
+
+export function impostaAvvisi(accesi: boolean) {
+  try {
+    if (accesi) localStorage.setItem(CHIAVE_AVVISI, '1')
+    else localStorage.removeItem(CHIAVE_AVVISI)
+  } catch { /* senza deposito resta spento, che è il predefinito */ }
+}
 
 /** Il nome della piattaforma come lo si scrive, non come lo dice Node. */
 export function nomePiattaforma(p: Piattaforma): string {

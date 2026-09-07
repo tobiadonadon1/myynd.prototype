@@ -6,9 +6,14 @@
 // con il sistema attraverso un solo ponte, `window.myynd` (`preload.cjs`).
 // Il resto è quello che un'app nativa deve avere e una pagina web no: il menu
 // con ⌘C che funziona (`menu.ts`), il segno nella barra (`tray.ts`), una
-// scorciatoia da qualunque app (`scorciatoia.ts`), gli aggiornamenti quando
-// si possono fare (`aggiornamenti.ts`), e tre preferenze in un JSON
-// (`impostazioni.ts`). Le frasi passano tutte da `lingua.ts`.
+// scorciatoia da qualunque app che apre il richiamo (`scorciatoia.ts`,
+// `richiamo.ts`), gli aggiornamenti quando si possono fare
+// (`aggiornamenti.ts`), e tre preferenze in un JSON (`impostazioni.ts`). Le
+// frasi passano tutte da `lingua.ts`.
+//
+// L'app vive anche a finestra chiusa: la X nasconde, il segno nella barra e
+// il Dock la tengono viva, e il server con le sue automazioni continua a
+// girare. Si esce da «Esci» — nella barra, nel menù, o con ⌘Q.
 //
 // Questo file fa da regista e basta: ordine di avvio, chi risponde a quale
 // canale IPC, e come si esce senza lasciare processi in giro.
@@ -17,10 +22,11 @@
 // quindi qui valgono le stesse regole di `server/` — niente enum, niente
 // namespace, import con l'estensione `.ts`.
 
-import { app, dialog, ipcMain, shell, session } from 'electron'
+import { app, dialog, ipcMain, Notification, powerMonitor, shell, session } from 'electron'
 import { join } from 'node:path'
 import * as server from './server.ts'
 import * as finestra from './finestra.ts'
+import * as richiamo from './richiamo.ts'
 import * as menu from './menu.ts'
 import * as tray from './tray.ts'
 import * as scorciatoia from './scorciatoia.ts'
@@ -28,6 +34,21 @@ import * as aggiornamenti from './aggiornamenti.ts'
 import * as impostazioni from './impostazioni.ts'
 import * as lingua from './lingua.ts'
 import { t } from './lingua.ts'
+import { ARGOMENTO_NASCOSTO, avvioNascosto } from './nascosto.ts'
+
+/** Dove il renderer può essere mandato: un posto dell'app, o una chat precisa. */
+type Dove = string | { dove: 'chat'; id: string }
+const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'])
+
+/** Quello che arriva via IPC non è fidato: o è un posto conosciuto, o non si va. */
+function doveValido(x: unknown): Dove | null {
+  if (typeof x === 'string') return POSTI.has(x) ? x : null
+  if (x && typeof x === 'object') {
+    const { dove, id } = x as { dove?: unknown; id?: unknown }
+    if (dove === 'chat' && typeof id === 'string' && /^[\w-]{1,80}$/.test(id)) return { dove: 'chat', id }
+  }
+  return null
+}
 
 app.setName('Myynd')
 
@@ -74,49 +95,69 @@ async function avvio() {
 
   await app.whenReady()
   lingua.imposta(impostazioni.leggi().lingua ?? lingua.daLocale(app.getLocale()))
-  server.scriviRegistro(`guscio · Myynd ${app.getVersion()} parte (${process.platform}, lingua ${lingua.lingua()})`)
+  // aperta dal sistema all'accesso: si carica tutto, ma la finestra non compare
+  const nascosto = avvioNascosto(process.argv, app.getLoginItemSettings())
+  server.scriviRegistro(`guscio · Myynd ${app.getVersion()} parte (${process.platform}, lingua ${lingua.lingua()}${nascosto ? ', nascosta' : ''})`)
 
   // la pagina è la nostra, ma i permessi del browser restano chiusi
   session.defaultSession.setPermissionRequestHandler((_wc, permesso, rispondi) => {
     rispondi(['notifications', 'clipboard-sanitized-write', 'fullscreen'].includes(permesso))
   })
 
-  const w = finestra.crea([`--myynd-versione=${app.getVersion()}`, `--myynd-piattaforma=${process.platform}`])
+  const argomenti = [`--myynd-versione=${app.getVersion()}`, `--myynd-piattaforma=${process.platform}`]
+  const w = finestra.crea(argomenti, nascosto)
+  /** La finestra grande davanti, sul posto chiesto. Il richiamo, se era aperto, si toglie. */
+  const vai = (dove: Dove) => {
+    richiamo.nascondi(true)
+    finestra.mostra()
+    finestra.manda('myynd:naviga', dove)
+  }
   const azioniMenu: menu.Azioni = {
-    naviga: dove => { finestra.mostra(); finestra.manda('myynd:naviga', dove) },
+    naviga: vai,
     cartellaDati: server.cartellaDati,
     registro: () => registro
   }
   menu.costruisci(azioniMenu)
   tray.crea({
     apri: finestra.mostra,
-    nuovaChat: () => azioniMenu.naviga('nuova-chat'),
-    preferenze: () => azioniMenu.naviga('preferenze'),
+    nuovaChat: () => vai('nuova-chat'),
+    preferenze: () => vai('preferenze'),
     esci: () => app.quit()
   })
-  scorciatoia.attiva(finestra.alterna)
-  canali(azioniMenu)
+  // senza il segno nella barra, fuori dal Mac, la X chiude come prima: un'app
+  // viva che non si vede e non si riapre è peggio di una chiusa
+  finestra.tieniViva(tray.attiva)
+  // la scorciatoia apre il richiamo; finché il server non c'è, la finestra
+  scorciatoia.attiva(() => { if (!richiamo.alterna(finestra.inVista())) finestra.alterna() })
+  // il computer si è svegliato: il server deve saperlo (`server.ts`)
+  powerMonitor.on('resume', server.sveglia)
+  canali(azioniMenu, vai)
 
   // il renderer appena caricato non sa ancora come stanno gli aggiornamenti
   w.webContents.on('did-finish-load', () => {
     if (finestra.nostra(w.webContents.getURL())) finestra.manda('myynd:aggiornamento', aggiornamenti.stato())
   })
 
+  const caricaApp = (url: string) => {
+    finestra.caricaApp(url)
+    richiamo.prepara(url, argomenti)
+  }
   const ascolto: server.Ascolto = {
-    suPorta: porta => finestra.caricaApp(`http://127.0.0.1:${porta}/`),
+    suPorta: porta => caricaApp(`http://127.0.0.1:${porta}/`),
     suMorte: righe => chiediRiapertura(righe, ascolto)
   }
   // in `app:dev` il server ce l'ha già `npm run dev`: un secondo sugli stessi
   // dati farebbe a botte con il primo per l'indice
-  if (process.env.MYYND_APP_WEB) finestra.caricaApp(process.env.MYYND_APP_WEB)
+  if (process.env.MYYND_APP_WEB) caricaApp(process.env.MYYND_APP_WEB)
   else await server.avvia(ascolto)
 
   // prima di installare un aggiornamento si spegne tutto come a un'uscita
   // normale: il server deve finire di scrivere, e la X deve chiudere davvero
   void aggiornamenti.prepara(finestra.attuale, spegniSenzaUscire)
 
-  app.on('activate', () => { if (finestra.attuale()) finestra.mostra(); else finestra.crea() })
-  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+  app.on('activate', () => finestra.mostra())
+  // con un segno nella barra l'app vive anche senza finestre: è il punto
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !tray.attiva()) app.quit() })
   app.on('before-quit', e => {
     staUscendo = true
     finestra.lasciaChiudere()
@@ -132,6 +173,7 @@ async function spegniSenzaUscire() {
   staUscendo = true
   finestra.lasciaChiudere()
   scorciatoia.spegni()
+  richiamo.distruggi()
   tray.distruggi()
   await server.ferma()
 }
@@ -164,7 +206,7 @@ async function chiediRiapertura(righe: string[], ascolto: server.Ascolto) {
 }
 
 /** Tutti i canali del ponte, nell'ordine del contratto. */
-function canali(azioni: menu.Azioni) {
+function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   ipcMain.handle('myynd:scegli-cartelle', async () => {
     const w = finestra.attuale()
     const opzioni = { properties: ['openDirectory', 'multiSelections', 'createDirectory'] as const }
@@ -194,7 +236,29 @@ function canali(azioni: menu.Azioni) {
   ipcMain.handle('myynd:imposta-scorciatoia', (_e, acc: unknown) => scorciatoia.imposta(String(acc)))
   ipcMain.handle('myynd:avvio-automatico', () => app.getLoginItemSettings().openAtLogin)
   ipcMain.handle('myynd:imposta-avvio-automatico', (_e, acceso: unknown) => {
-    app.setLoginItemSettings({ openAtLogin: !!acceso })
+    // nascosta: all'accesso non deve comparire una finestra che nessuno ha
+    // chiesto. `openAsHidden` lo dice al Mac, l'argomento lo dice a noi
+    app.setLoginItemSettings({ openAtLogin: !!acceso, openAsHidden: true, args: [ARGOMENTO_NASCOSTO] })
+  })
+  // — il richiamo —
+  ipcMain.on('myynd:richiamo-chiudi', () => richiamo.nascondi(finestra.inVista()))
+  ipcMain.on('myynd:richiamo-misura', (_e, altezza: unknown) => richiamo.ridimensiona(Number(altezza)))
+  ipcMain.on('myynd:richiamo-apri', (_e, dove: unknown) => vai(doveValido(dove) ?? 'oggi'))
+  /*
+   * Un avviso di sistema, su richiesta della pagina.
+   *
+   * La pagina lo chiede solo se la persona ha acceso gli avvisi e la finestra
+   * non è davanti: qui non si decide niente, si mostra. Un clic porta su la
+   * finestra sul posto giusto.
+   */
+  ipcMain.on('myynd:notifica', (_e, n: unknown) => {
+    if (!Notification.isSupported()) return
+    const { titolo, corpo, dove } = (n && typeof n === 'object' ? n : {}) as { titolo?: unknown; corpo?: unknown; dove?: unknown }
+    const title = String(titolo ?? '').trim().slice(0, 120)
+    if (!title) return
+    const nota = new Notification({ title, body: String(corpo ?? '').trim().slice(0, 300) })
+    nota.on('click', () => vai(doveValido(dove) ?? 'oggi'))
+    nota.show()
   })
   ipcMain.handle('myynd:aggiornamenti-stato', () => aggiornamenti.stato())
   ipcMain.handle('myynd:aggiornamenti-controlla', () => aggiornamenti.controlla())

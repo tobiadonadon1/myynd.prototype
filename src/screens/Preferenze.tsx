@@ -4,7 +4,7 @@ import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
 import type { Vals } from '../vals'
-import { acceleratore, desktop, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
+import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
 
 /** Una riga che si sceglie, scritta come bottone: perde il vestito del bottone e tiene il suo. */
 const RIGA_BOTTONE: React.CSSProperties = {
@@ -35,6 +35,7 @@ function LApp() {
   const [acc, setAcc] = useState('')
   const [registro, setRegistro] = useState(false)
   const [avvio, setAvvio] = useState<boolean | null>(null)
+  const [avvisi, setAvvisi] = useState(avvisiAccesi)
   const [agg, setAgg] = useState<Aggiornamento | null>(null)
   const [chiedo, setChiedo] = useState(false)
   const [dati, setDati] = useState('')
@@ -148,7 +149,7 @@ function LApp() {
           <div style={NOTA}>
             {registro
               ? t('Esc lascia com’è.')
-              : t('Porta Myynd davanti da qualunque programma, e lo nasconde se è già davanti.')}
+              : t('Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.')}
           </div>
         </div>
         <button type="button" onClick={() => { setGuaio(''); setRegistro(r => !r) }} style={SECONDARIO}>
@@ -163,6 +164,17 @@ function LApp() {
         </div>
         <button type="button" role="switch" aria-checked={!!avvio} aria-label={t('Si apre all’accesso')}
           disabled={avvio === null} onClick={cambiaAvvio} style={track(!!avvio)}><span style={knob()} /></button>
+      </div>
+
+      {/* Spento finché non lo si accende: il brief vuole un'app quieta, e un
+          avviso è un'interruzione che si sceglie. */}
+      <div style={RIGA}>
+        <div style={TESTO}>
+          <div style={{ fontSize: 15 }}>{t('Avvisami quando una bozza è pronta')}</div>
+          <div style={NOTA}>{t('Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.')}</div>
+        </div>
+        <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando una bozza è pronta')}
+          onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
       </div>
 
       <div style={RIGA}>
