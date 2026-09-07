@@ -102,9 +102,13 @@ Si impacchetta con `npm run pacchetto` (Mac e Windows), `pacchetto:mac` o
 `pacchetto:win`; gli artefatti finiscono in `dist-app/`. La configurazione è
 in `electron-builder.yml` per la parte fissa e in `build/configura.cjs` per
 quella che dipende dall'ambiente — è per questo che i comandi passano
-`--config build/configura.cjs`. Le icone in `build/`, e quelle a colori per
-la barra di Windows in `desktop/icone/`, vengono da `public/marchio.svg` con
-`node build/icone.cjs` (solo su un Mac).
+`--config build/configura.cjs`. Le icone in `build/`, e quelle della barra
+in `desktop/icone/`, le disegna `build/icona.cjs` — la piastrella del Dock,
+con la squircle di Apple, e il marchio nudo per la barra dei menu — e le
+rasterizza `node build/icone.cjs` (solo su un Mac: serve `iconutil`). Lo
+script si rilancia da sé dentro Electron, che è quello che disegna: serve un
+rasterizzatore che rispetti la trasparenza, e `qlmanage` appiattisce su
+fondo bianco.
 
 **Due DMG per il Mac**, `Myynd-<versione>-arm64.dmg` per i chip Apple e
 `Myynd-<versione>-x64.dmg` per gli Intel, mai uno universale: `pdf-parse`
