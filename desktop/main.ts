@@ -109,7 +109,7 @@ async function avvio() {
   void aggiornamenti.prepara(finestra.attuale)
 
   app.on('second-instance', finestra.mostra)
-  app.on('activate', () => { if (finestra.attuale()) finestra.mostra(); else finestra.crea([]) })
+  app.on('activate', () => { if (finestra.attuale()) finestra.mostra(); else finestra.crea() })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
   app.on('before-quit', e => {
     staUscendo = true

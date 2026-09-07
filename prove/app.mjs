@@ -12,8 +12,8 @@
 //   npm run prova:app                    → dist-app/mac-arm64/Myynd.app
 //   node prove/app.mjs <binario>         → un altro binario
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { homedir, platform, tmpdir } from 'node:os'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { platform, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { attacca, pausa, trova } from './guida.mjs'
 
@@ -44,13 +44,6 @@ async function aspetta(cosa, ms, ogni = 400) {
     await pausa(ogni)
   }
   return null
-}
-
-/** Dove il guscio tiene il suo registro: `app.getPath('userData')` con productName Myynd. */
-function cartellaDelGuscio() {
-  if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'Myynd')
-  if (platform() === 'win32') return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Myynd')
-  return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'Myynd')
 }
 
 /**
@@ -128,9 +121,12 @@ writeFileSync(join(cartella, 'appunti.md'), '# Appunti della prova\n\nUna riga c
 writeFileSync(join(cartella, 'promemoria.txt'), 'Chiamare il commercialista giovedì alle dieci.\n')
 writeFileSync(join(cartella, 'foglio.pdf'), pdfMinimo('Myynd: una prova in PDF'))
 
-const registro = join(cartellaDelGuscio(), 'myynd.log')
-// il registro è quello vero dell'app: si guarda solo quello che scrive da adesso
-const registroPrima = existsSync(registro) ? statSync(registro).size : 0
+// Con MYYND_DATI impostata il guscio sposta anche il suo `userData` — registro,
+// impostazioni, sessione — sotto `<MYYND_DATI>/app`, per la stessa ragione per
+// cui i dati stanno in una cartella temporanea: quello vero non si tocca. Il
+// registro che si legge è quindi questo, e nasce con la prova: niente di
+// vecchio da saltare.
+const registro = join(dati, 'app', 'myynd.log')
 
 const env = { ...process.env, MYYND_DATI: dati }
 // mai nel pacchetto, e non deve arrivarci nemmeno dall'ambiente di chi prova
@@ -238,7 +234,8 @@ try {
   // il registro del guscio, e dentro niente lavoratore dei PDF caduto
   segna(existsSync(registro), 'il registro del guscio esiste', registro)
   if (existsSync(registro)) {
-    const nuovo = readFileSync(registro, 'utf8').slice(registroPrima)
+    const nuovo = readFileSync(registro, 'utf8')
+    segna(nuovo.includes('il server ascolta su'), 'il registro racconta questo avvio')
     segna(!nuovo.includes('il lavoratore non parte'), 'il lavoratore dei PDF è partito dentro il pacchetto')
   }
 } catch (e) {

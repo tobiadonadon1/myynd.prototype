@@ -31,6 +31,16 @@ export const SEMAFORI = { x: 14, y: 16 }
 let finestra: BrowserWindow | null = null
 let origine = ''
 let chiudeDavvero = false
+/*
+ * Quello che serve a rifare la finestra da capo.
+ *
+ * Su Mac la X nasconde e basta, ma una finestra può comunque sparire — un
+ * errore del renderer, un `destroy` — e il Dock la chiede di nuovo. Senza
+ * questi due la seconda finestra nascerebbe senza versione e piattaforma nel
+ * preload, e sulla pagina d'avvio, aspettando una porta che è già arrivata.
+ */
+let argomentiDati: string[] = []
+let urlApp = ''
 
 function paginaDiAvvio(): string {
   const riga = t('Myynd si sta svegliando.')
@@ -60,8 +70,9 @@ function apriFuoriSePuoi(url: string) {
   } catch { /* non è un indirizzo: si ignora */ }
 }
 
-export function crea(argomenti: string[]): BrowserWindow {
+export function crea(argomenti: string[] = argomentiDati): BrowserWindow {
   if (finestra) return finestra
+  argomentiDati = argomenti
   const salvato = impostazioni.leggi().finestra
   const riquadro = salvato && visibile(salvato) ? salvato : { width: 1280, height: 860 }
 
@@ -119,7 +130,7 @@ export function crea(argomenti: string[]): BrowserWindow {
   })
   w.on('closed', () => { finestra = null })
 
-  void w.loadURL(paginaDiAvvio())
+  void w.loadURL(urlApp || paginaDiAvvio())
   return w
 }
 
@@ -135,6 +146,7 @@ export function attuale(): BrowserWindow | null {
 /** Il server c'è: si carica l'interfaccia vera da lì. */
 export function caricaApp(url: string) {
   origine = new URL(url).origin
+  urlApp = url
   const w = attuale()
   if (w) void w.loadURL(url)
 }
