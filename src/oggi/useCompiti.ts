@@ -173,7 +173,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
       // in coda al suo secchio: la chiave vera arriva dal server, questa serve
       // solo a non far saltare la riga di posto nel mezzo secondo di attesa
       ordine: 'zzzz', origine: 'mano', voce: null, doc: null, chiesto: null,
-      risultato: null, fonti: null, proposta: null, chieste: null, guaio: null, creato: ora, aggiornato: ora,
+      risultato: null, fonti: null, proposta: null, chieste: null, email: null, guaio: null, creato: ora, aggiornato: ora,
       chiuso: null, esito: null, sparito: null, versione: 1, modo: 'io'
     }
     const prima = compitiRef.current
@@ -310,7 +310,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
    * La riga si chiude quando il server dice che è partita, non un istante
    * prima — sarebbe la peggior bugia che questa app possa raccontare.
    */
-  const manda = useCallback(async (id: string, m: { a: string; oggetto: string; corpo: string }) => {
+  const manda = useCallback(async (id: string, m?: { a: string; oggetto: string; corpo: string }) => {
     const r = await api.inviaEmail(id, m)
     setCompiti(r.compiti); setChiusi(r.chiusi)
     scorda(id)

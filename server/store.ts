@@ -295,7 +295,7 @@ function colonna(d: DatabaseSync, tabella: string, nome: string, tipo: string) {
  * e prima era `LOWER(autore) LIKE '%…%'`: una lettura di tutto l'indice, con
  * il server fermo, per rispondere sì o no.
  */
-function indirizzoDi(autore: string | null | undefined): string | null {
+export function indirizzoDi(autore: string | null | undefined): string | null {
   if (!autore) return null
   const m = autore.match(/[^\s<>()[\],;:"']+@[^\s<>()[\],;:"']+/)
   return m ? m[0].toLowerCase() : null
@@ -1125,6 +1125,23 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
 
     rifaiLIndice(d)
     d.exec(TRIGGER_RICERCA)
+  },
+
+  // 29 → 30 · l'email già pronta, e a quale messaggio risponde.
+  //
+  //   `compiti.email` è quello che prima si chiedeva al modello *dopo* aver
+  //   premuto «Mandala per email…»: a chi va, l'oggetto, il testo. Adesso si
+  //   prepara quando la bozza diventa pronta, così mandarla è un gesto solo.
+  //   JSON, come `fonti` e `proposta`; vuoto quando la bozza non è una email.
+  //
+  //   `documenti.messageId` è l'identificativo del singolo messaggio. `filo`
+  //   tiene la *radice* della conversazione, che per rispondere non basta:
+  //   `In-Reply-To` vuole il messaggio a cui si risponde, e sul terzo di un
+  //   filo la radice è un altro. Lo scrive la lettura successiva della posta,
+  //   senza contare i messaggi come cambiati — come già fa con il filo.
+  d => {
+    colonna(d, 'compiti', 'email', 'TEXT')
+    colonna(d, 'documenti', 'messageId', 'TEXT')
   }
 
 ]
@@ -1201,10 +1218,11 @@ const COLONNE: Record<string, [string, string][]> = {
     // `radici` è la colonna che l'indice full-text legge da qui invece di
     // tenersene una copia: senza, ogni ricerca in italiano smette di piegare
     // i plurali, e in silenzio
-    ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT']
+    ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT'], ['messageId', 'TEXT']
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
-  convinzioni: [['confermata', 'TEXT']]
+  convinzioni: [['confermata', 'TEXT']],
+  compiti: [['email', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -1352,6 +1370,13 @@ export type Documento = {
    * vorrebbe dire una prima pagina fatta delle sue stesse email.
    */
   inviato?: boolean
+  /**
+   * Il `Message-ID` di questa email, pulito dalle parentesi angolari.
+   *
+   * Non è il filo: quello è la radice della conversazione. Questo è il
+   * messaggio preciso, ed è quello che una risposta cita in `In-Reply-To`.
+   */
+  messageId?: string | null
 }
 
 /**
@@ -1367,7 +1392,7 @@ export type Documento = {
  */
 const CAMPI_DOC = [
   'rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore',
-  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato'
+  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'messageId'
 ]
 const CAMPI = CAMPI_DOC.join(', ')
 /** Gli stessi, per la ricerca, dove `documenti` sta in una giunzione. */
@@ -1413,14 +1438,14 @@ function istr(): Istruzioni {
      * un documento che nessuna ricerca troverà mai.
      */
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, radici FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, radici FROM documenti WHERE id = ?'
     ),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, radici, autoreIndirizzo, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, radici, autoreIndirizzo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
-      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?,
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, messageId=?,
         radici=?, autoreIndirizzo=?, indicizzato=?
       WHERE rid = ?
     `),
@@ -1435,8 +1460,12 @@ function istr(): Istruzioni {
      *
      * E non tocca `radici`: il trigger sull'indice guarda proprio quelle
      * quattro colonne, quindi una riga scritta di qui non fa rifare niente.
+     *
+     * `messageId` passa di qui per la stessa ragione: è arrivato dopo il filo,
+     * e la prima lettura che lo porta non deve far sembrare nuova tutta la
+     * casella.
      */
-    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ? WHERE rid = ?')
+    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ?, messageId = ? WHERE rid = ?')
   }
   istruzioni.set(d, i)
   return i
@@ -1496,7 +1525,7 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
       const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
-        filo: string | null; inviato: number | null; radici: string | null
+        filo: string | null; inviato: number | null; messageId: string | null; radici: string | null
       } | undefined
 
       if (gia) {
@@ -1515,8 +1544,8 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         if (uguale && gia.radici !== null) {
           // il filo e «l'ho scritta io» arrivano tutti e due dopo, e nessuno dei
           // due è un contenuto: si scrivono senza far contare il documento come cambiato
-          if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato) {
-            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, gia.rid)
+          if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato || gia.messageId !== (d.messageId ?? null)) {
+            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, gia.rid)
           }
           esito.invariati++
           continue
@@ -1524,12 +1553,12 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
 
         // l'indice full-text si aggiorna da solo: legge queste stesse colonne,
         // e i trigger su `documenti` gli dicono quando sono cambiate
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
         esito.cambiati++
         continue
       }
 
-      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
+      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
       esito.nuovi++
     }
     db.exec('COMMIT')
@@ -2408,6 +2437,31 @@ export type Compito = {
    * e `automazioni.ts` separati come sono sempre stati.
    */
   attrezzi: Concessione | null
+  /**
+   * L'email già smontata dalla bozza, se la bozza è una email.
+   *
+   * Si prepara quando la riga diventa pronta, non quando si preme il bottone:
+   * è quello che fa di «manda» un gesto solo. Null vuol dire che non c'è —
+   * la posta non è collegata, la bozza non è un messaggio, o il modello non
+   * ce l'ha fatta — e allora l'interfaccia torna a chiederla in due passi.
+   */
+  email: EmailPronta | null
+}
+
+/**
+ * Un'email pronta da mandare, com'è uscita dalla bozza.
+ *
+ * `conosciuto` dice se il destinatario compare già nel materiale letto: non
+ * blocca niente, ma un indirizzo mai visto merita uno sguardo prima del
+ * bottone. `rispondeA` c'è solo quando la bozza risponde a una email
+ * dell'indice: sono le intestazioni che tengono la risposta nel suo filo.
+ */
+export type EmailPronta = {
+  a: string
+  oggetto: string
+  corpo: string
+  conosciuto: boolean
+  rispondeA?: { messageId: string; references?: string[] } | null
 }
 
 /** Quello che una riga nata da un'automazione ha il permesso di aprire. */
@@ -2450,7 +2504,8 @@ function compitoDaRiga(r: Record<string, unknown>): Compito {
     fonti: r.fonti ? JSON.parse(String(r.fonti)) : null,
     proposta: r.proposta ? JSON.parse(String(r.proposta)) : null,
     chieste: r.chieste ? JSON.parse(String(r.chieste)) : null,
-    attrezzi: r.attrezzi ? JSON.parse(String(r.attrezzi)) : null
+    attrezzi: r.attrezzi ? JSON.parse(String(r.attrezzi)) : null,
+    email: r.email ? JSON.parse(String(r.email)) : null
   } as Compito
 }
 
@@ -2597,10 +2652,21 @@ export function cambiaCompito(id: string, c: {
  */
 export function proponi(id: string, p: Proposta, riassunto: string) {
   db.prepare(`
-    UPDATE compiti SET proposta = ?, risultato = ?, stato = 'pronto',
+    UPDATE compiti SET proposta = ?, risultato = ?, email = NULL, stato = 'pronto',
       aggiornato = ?, versione = versione + 1
     WHERE id = ?
   `).run(JSON.stringify(p), riassunto, new Date().toISOString(), id)
+}
+
+/**
+ * L'email pronta, o il fatto che non c'è.
+ *
+ * Non tocca `aggiornato` né `versione`: chi ha dato `pronto` un attimo prima
+ * ha già mosso tutt'e due, e questa è la seconda metà dello stesso lavoro.
+ */
+export function scriviEmailCompito(id: string, email: EmailPronta | null) {
+  db.prepare('UPDATE compiti SET email = ? WHERE id = ?')
+    .run(email ? JSON.stringify(email) : null, id)
 }
 
 /**
@@ -2647,7 +2713,7 @@ export function tieniLaTua(id: string, testo: string) {
 export function sbozzaCompito(id: string) {
   const ora = new Date().toISOString()
   db.prepare(`
-    UPDATE compiti SET risultato = NULL, fonti = NULL, chiesto = NULL, aggiornato = ?, versione = versione + 1
+    UPDATE compiti SET risultato = NULL, fonti = NULL, chiesto = NULL, email = NULL, aggiornato = ?, versione = versione + 1
     WHERE id = ?
   `).run(ora, id)
 }
@@ -2700,7 +2766,7 @@ export function risultatoCompito(
 ): boolean {
   const ora = new Date().toISOString()
   const r = db.prepare(`
-    UPDATE compiti SET stato = ?, risultato = ?, fonti = ?, guaio = NULL, aggiornato = ?, versione = versione + 1
+    UPDATE compiti SET stato = ?, risultato = ?, fonti = ?, email = NULL, guaio = NULL, aggiornato = ?, versione = versione + 1
     WHERE id = ? AND stato = 'delegato'
   `).run(stato, risultato, JSON.stringify(fonti), ora, id)
   return Number(r.changes) > 0

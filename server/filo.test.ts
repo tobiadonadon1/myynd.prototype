@@ -20,7 +20,7 @@ import type { Documento } from './store.ts'
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-filo-'))
 process.env.MYYND_DATI = CASA
 
-const { filoDi, oggettoNormalizzato, idPulito } = await import('./filo.ts')
+const { filoDi, oggettoNormalizzato, idPulito, rispostaA } = await import('./filo.ts')
 const store = await import('./store.ts')
 const claude = await import('./claude.ts')
 
@@ -71,6 +71,20 @@ test('la pulizia degli id e degli oggetti, da sola', () => {
   assert.equal(idPulito(null), '')
   assert.equal(oggettoNormalizzato('Fwd:   Re: Ciao  a   tutti '), 'ciao a tutti')
   assert.equal(oggettoNormalizzato(undefined), '')
+})
+
+// — rispondere dentro il filo —
+
+test('una risposta cita il messaggio e la radice, in quest’ordine', () => {
+  assert.deepEqual(rispostaA({ messageId: '<c@x>', filo: 'a@x' }), { messageId: 'c@x', references: ['a@x', 'c@x'] })
+  // il primo messaggio di una conversazione è la sua stessa radice: una volta sola
+  assert.deepEqual(rispostaA({ messageId: 'a@x', filo: 'a@x' }), { messageId: 'a@x', references: ['a@x'] })
+})
+
+test('un filo fatto dall’oggetto non è un identificativo, e senza Message-ID non c’è risposta', () => {
+  assert.deepEqual(rispostaA({ messageId: 'c@x', filo: 's:preventivo' }), { messageId: 'c@x', references: ['c@x'] })
+  assert.equal(rispostaA({ messageId: null, filo: 'a@x' }), null)
+  assert.equal(rispostaA({ messageId: '<>', filo: 'a@x' }), null)
 })
 
 // — nell’indice —

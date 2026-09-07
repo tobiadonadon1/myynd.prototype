@@ -23,6 +23,8 @@ import * as claude from './claude.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as memoria from './memoria.ts'
 import * as chi from './chi.ts'
+import * as cfg from './config.ts'
+import * as invio from './invio.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -208,11 +210,17 @@ type Ferri = {
   svolgi: typeof claude.svolgi
   chiedeAiuto: typeof claude.chiedeAiuto
   domandeDaFare: typeof claude.domandeDaFare
+  /** Da bozza pronta a email pronta: quarta chiamata, stesso motivo delle altre tre. */
+  preparaEmail: typeof claude.preparaEmail
+  /** Se c'è una casella da cui mandare: senza, non si prepara niente. */
+  postaCollegata: () => boolean
 }
 const VERI: Ferri = {
   svolgi: (...a) => claude.svolgi(...a),
   chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
-  domandeDaFare: (...a) => claude.domandeDaFare(...a)
+  domandeDaFare: (...a) => claude.domandeDaFare(...a),
+  preparaEmail: (...a) => claude.preparaEmail(...a),
+  postaCollegata: () => !!cfg.leggi().posta
 }
 let ferri: Ferri = VERI
 
@@ -271,6 +279,10 @@ async function svolgiUno(id: string) {
     if (chiede) {
       const righe = await ferri.domandeDaFare(c.testo, testo).catch(() => [])
       if (righe.length && !richiamati.has(chiave(id))) store.chiediSuCompito(id, righe)
+    } else {
+      // e se è pronta, l'email lo è già: si annuncia dopo, così il «pronto»
+      // arriva con dentro a chi va — un gesto solo, non due attese
+      await preparaLaMail(c, testo, fonti)
     }
 
     const fatto = store.compito(id)
@@ -298,6 +310,29 @@ async function svolgiUno(id: string) {
       return
     }
     annuncia({ fase: 'guaio', id, guaio })
+  }
+}
+
+/**
+ * L'email già smontata, scritta accanto alla bozza.
+ *
+ * Non fallisce mai: una bozza pronta resta pronta anche se il modello che la
+ * smonta è giù — al peggio si torna a chiederla in due passi, com'era prima.
+ * E non si chiama su tutto: un riassunto non ha un destinatario, e pagare un
+ * modello per sentirselo dire è la spesa che il registro dei token non
+ * perdona. Si prepara dopo aver scritto `pronto`, quindi la riga può essere
+ * stata chiusa o richiamata nel frattempo: si scrive solo se è ancora lì.
+ */
+async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Fonte[]) {
+  try {
+    if (!ferri.postaCollegata()) return
+    if (!invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) return
+    const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc)
+    if (!e || richiamati.has(chiave(c.id))) return
+    if (store.compito(c.id)?.stato !== 'pronto') return
+    store.scriviEmailCompito(c.id, { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false })
+  } catch (e) {
+    console.warn(`myynd · compito ${c.id}: la bozza è pronta, l'email no —`, e instanceof Error ? e.message : e)
   }
 }
 

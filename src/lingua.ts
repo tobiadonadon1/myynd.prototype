@@ -1567,6 +1567,10 @@ const EN: Record<string, string> = {
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
   'Mostra la cartella dei dati': 'Show the data folder',
+// — mandare in un gesto: l'email è già pronta sotto la bozza —
+  'Modifica': 'Edit',
+  'Controlla e manda': 'Check and send',
+  'Risponde nel filo del suo messaggio.': 'Replies in the thread of their message.',
 }
 
 
@@ -1871,6 +1875,9 @@ export const frasi = {
   cercaFra: (n: string) =>
     corrente === 'en'
       ? `Search ${n} document${n === '1' ? '' : 's'}…` : `Cerca fra ${n} document${n === '1' ? 'o' : 'i'}…`,
+
+  // — mandare in un gesto: il bottone dice a chi, così non serve rileggere il campo —
+  mandaA: (a: string) => corrente === 'en' ? `Send to ${a}` : `Manda a ${a}`,
 
   // — la lista: i passi del lavoro su una riga affidata. Il server manda
   //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —

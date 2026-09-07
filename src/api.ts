@@ -446,6 +446,21 @@ export type StatoRicette = { repo: string | null; quando: string | null; guaio: 
 /** Una domanda con le risposte già pronte da toccare. */
 export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
 
+/**
+ * L'email già smontata dalla bozza, com'è arrivata dal server.
+ *
+ * C'è quando la posta è collegata e la bozza è un messaggio: mandarla è un
+ * gesto solo. `conosciuto` dice se il destinatario compare già nella posta
+ * letta; `rispondeA` che partirà dentro il filo del messaggio a cui risponde.
+ */
+export type EmailPronta = {
+  a: string
+  oggetto: string
+  corpo: string
+  conosciuto: boolean
+  rispondeA?: { messageId: string; references?: string[] } | null
+}
+
 export type Compito = {
   id: string
   testo: string
@@ -464,6 +479,8 @@ export type Compito = {
   proposta: Proposta | null
   /** Le domande a scelta, quando si è fermato perché gli manca qualcosa. */
   chieste: Chiesta[] | null
+  /** L'email pronta da mandare, se la bozza è una email e la posta è collegata. */
+  email: EmailPronta | null
   guaio: string | null
   creato: string
   aggiornato: string
@@ -787,8 +804,7 @@ export const api = {
    * conterrebbe, e non manda niente. Fra le due c'è una persona che legge.
    */
   preparaEmail: (id: string) =>
-    json<{ a: string; oggetto: string; corpo: string; conosciuto: boolean }>(
-      `/api/compiti/${encodeURIComponent(id)}/prepara-email`, { method: 'POST' }),
+    json<EmailPronta>(`/api/compiti/${encodeURIComponent(id)}/prepara-email`, { method: 'POST' }),
 
   /** C'è Claude Code su questa macchina, e in quali cartelle può lavorare. */
   lavoroPronto: () => json<{ pronto: boolean; cartelle: string[] }>('/api/lavoro/pronto'),
@@ -813,9 +829,13 @@ export const api = {
     json<{ ok: true; spostati: number; dove: string; compiti: Compito[]; chiusi: Compito[] }>(
       `/api/compiti/${encodeURIComponent(id)}/esegui`, { method: 'POST' }),
 
-  inviaEmail: (id: string, m: { a: string; oggetto: string; corpo: string }) =>
+  /**
+   * Manda. Senza campi parte l'email che sta sulla riga — quella che si è
+   * vista — e con i campi parte quello che la persona ha corretto.
+   */
+  inviaEmail: (id: string, m?: { a: string; oggetto: string; corpo: string }) =>
     json<{ ok: true; compiti: Compito[]; chiusi: Compito[] }>(
-      `/api/compiti/${encodeURIComponent(id)}/invia`, { method: 'POST', body: JSON.stringify(m) }),
+      `/api/compiti/${encodeURIComponent(id)}/invia`, { method: 'POST', body: JSON.stringify(m ?? {}) }),
 
   /** Quello che è uscito da qui davvero. */
   azioni: () => json<{ azioni: Azione[] }>('/api/azioni'),

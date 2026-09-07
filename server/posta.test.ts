@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mosseDa, normalizza, vuolePasswordPerLeApp } from './connettori/posta.ts'
+import { messaggioDa, mosseDa, normalizza, vuolePasswordPerLeApp } from './connettori/posta.ts'
 
 test('un id normale diventa cartella e uid', () => {
   assert.deepEqual(mosseDa(['posta:INBOX:4211']), [{ cartella: 'INBOX', uid: 4211 }])
@@ -81,4 +81,36 @@ test('chi vuole una password per le app, e chi no', () => {
   assert.equal(vuolePasswordPerLeApp('imap.mail.me.com'), 'apple')
   assert.equal(vuolePasswordPerLeApp('imap.mail.yahoo.com'), 'yahoo')
   assert.equal(vuolePasswordPerLeApp('imaps.aruba.it'), null)
+})
+
+// — rispondere nel filo —
+//
+// Le due intestazioni che fanno finire la risposta sotto la domanda nel
+// programma di posta di chi la riceve. Sbagliarle non dà errore: dà una email
+// che arriva staccata, in fondo alla casella. Si guarda il messaggio com'è
+// costruito, senza nessuna rete.
+
+const CASELLA = { host: 'imap.esempio.it', porta: 993, utente: 'io@esempio.it', password: 'x' }
+
+test('senza «rispondeA» il messaggio è quello di sempre', () => {
+  assert.deepEqual(messaggioDa(CASELLA, { a: 'rossi@esempio.it', oggetto: 'Ciao', corpo: 'Testo' }),
+    { from: 'io@esempio.it', to: 'rossi@esempio.it', subject: 'Ciao', text: 'Testo' })
+  assert.ok(!('inReplyTo' in messaggioDa(CASELLA, { a: 'r@x', oggetto: 'o', corpo: 'c', rispondeA: null })))
+})
+
+test('«rispondeA» diventa In-Reply-To e References, con le parentesi angolari', () => {
+  const m = messaggioDa(CASELLA, {
+    a: 'rossi@esempio.it', oggetto: 'Re: Preventivo', corpo: 'Ecco.',
+    rispondeA: { messageId: 'm7@esempio.it', references: ['radice@esempio.it', 'm7@esempio.it'] }
+  })
+  assert.equal(m.inReplyTo, '<m7@esempio.it>')
+  assert.deepEqual(m.references, ['<radice@esempio.it>', '<m7@esempio.it>'])
+})
+
+test('il messaggio a cui si risponde sta sempre in References, anche se nessuno l’ha messo', () => {
+  const m = messaggioDa(CASELLA, { a: 'r@x', oggetto: 'o', corpo: 'c', rispondeA: { messageId: '<m1@x>' } })
+  assert.equal(m.inReplyTo, '<m1@x>')
+  assert.deepEqual(m.references, ['<m1@x>'])
+  // un id vuoto non è una risposta
+  assert.ok(!('inReplyTo' in messaggioDa(CASELLA, { a: 'r@x', oggetto: 'o', corpo: 'c', rispondeA: { messageId: ' ' } })))
 })
