@@ -83,3 +83,25 @@ export function filoDi(h: Intestazioni): string | null {
   const oggetto = oggettoNormalizzato(h.oggetto)
   return oggetto ? `s:${oggetto}` : null
 }
+
+/**
+ * Le intestazioni con cui una risposta resta dentro il filo.
+ *
+ * Un programma di posta raggruppa una risposta con il messaggio a cui risponde
+ * leggendo due campi: `In-Reply-To`, che è l'identificativo di *quel*
+ * messaggio, e `References`, la catena da cui viene. Senza, la risposta di
+ * Myynd arriva a Rossi come una email nuova, staccata dalla sua domanda — e
+ * il suo programma la mette in fondo, da sola.
+ *
+ * `filo` è la radice della conversazione, e sta prima nella catena; ma se è
+ * una chiave fatta dall'oggetto (`s:…`) non è un identificativo, e in
+ * `References` non ci va. Senza `messageId` non c'è niente da citare: null,
+ * e la risposta parte come una email nuova — meglio di un'intestazione inventata.
+ */
+export function rispostaA(d: { messageId?: string | null; filo?: string | null }): { messageId: string; references?: string[] } | null {
+  const id = idPulito(d.messageId)
+  if (!id) return null
+  const radice = idPulito(d.filo)
+  const references = radice && !radice.startsWith('s:') && radice !== id ? [radice, id] : [id]
+  return { messageId: id, references }
+}

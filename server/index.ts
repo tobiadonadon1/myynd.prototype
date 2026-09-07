@@ -22,6 +22,7 @@ import * as attrezzi from './attrezzi.ts'
 import * as domande from './domande.ts'
 import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
+import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
@@ -2133,6 +2134,11 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
  * il testo e premuto un bottone — è l'unico passo che non si automatizza, ed è
  * la ragione per cui il resto si può automatizzare.
  *
+ * Di solito `prepara` non ha più niente da fare: l'email si smonta quando la
+ * bozza diventa pronta, e sta scritta sulla riga. Questa rotta resta per le
+ * righe che non ce l'hanno — la posta collegata dopo, un modello che quel
+ * giorno non ha risposto — e allora la ricava e la scrive, così la volta dopo c'è.
+ *
  * `conosciuto` non blocca niente: dice se quell'indirizzo compare già nel
  * materiale letto. Se non compare, l'interfaccia lo segnala e chi guarda decide.
  * Un destinatario mai visto non è un errore — è solo la cosa su cui vale la
@@ -2141,50 +2147,47 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
 app.post('/api/compiti/:id/prepara-email', async (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  if (c.email) return res.json(c.email)
   if (!c.risultato?.trim()) return res.status(400).json({ errore: 'Non c\'è ancora niente da mandare.' })
   if (!cfg.leggi().posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
 
   try {
     // dalle fonti che la bozza ha citato, non da una ricerca nuova: il
     // destinatario deve venire da quello che ha letto lei
-    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti)
+    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti, c.doc)
     if (!e) return res.status(400).json({ errore: 'Non sono riuscito a ricavarne un\'email.' })
-    res.json({ ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false })
+    const pronta: store.EmailPronta = { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
+    if (c.stato === 'pronto') store.scriviEmailCompito(c.id, pronta)
+    res.json(pronta)
   } catch (e) { errore(res, e) }
 })
 
+/**
+ * Il gesto solo.
+ *
+ * Il corpo della richiesta può non dire niente: allora parte l'email che sta
+ * sulla riga, quella che si è vista sullo schermo. Se dice qualcosa, è perché
+ * la persona l'ha corretta, e vale quello che ha scritto lei. Le due strade
+ * stanno in `invio.daMandare`, dove si possono provare senza una rotta.
+ */
 app.post('/api/compiti/:id/invia', async (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   const conf = cfg.leggi()
   if (!conf.posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
 
-  const a = String(req.body?.a ?? '').trim()
-  const oggetto = String(req.body?.oggetto ?? '').trim()
-  const corpo = String(req.body?.corpo ?? '').trim()
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a)) return res.status(400).json({ errore: 'Manca un indirizzo valido.' })
-  if (!corpo) return res.status(400).json({ errore: 'Il messaggio è vuoto.' })
+  const d = invio.daMandare(c, req.body)
+  if (!d.ok) return res.status(400).json({ errore: d.errore })
 
   try {
-    await posta.invia(conf.posta, { a, oggetto, corpo })
-  } catch (e) {
-    // anche il fallimento va nel registro: il giorno che una mail non parte è
-    // proprio quello in cui vuoi trovarne traccia
-    store.registraAzione({
-      tipo: 'email', verso: a, cosa: oggetto || c.testo, compito: c.id,
-      esito: 'fallita', dettaglio: e instanceof Error ? e.message : String(e)
-    })
-    return errore(res, e)
-  }
+    // manda, scrive nel registro, e chiude la riga con «Mandata a …»
+    await invio.manda(c, conf.posta, d.m)
+  } catch (e) { return errore(res, e) }
 
-  store.registraAzione({ tipo: 'email', verso: a, cosa: oggetto || c.testo, compito: c.id, esito: 'fatta' })
-  // mandata vuol dire fatta: la riga si chiude con le parole giuste, e quello
-  // che hai tenuto davvero passa alla memoria come per ogni altra chiusura
-  store.tieniLaTua(c.id, corpo)
-  store.cambiaStatoCompito(c.id, 'fatto', `Mandata a ${a}.`)
   res.json({ ok: true, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
-  compiti.imparaSeCorretto(c.risultato, corpo)
+  // quello che hai tenuto davvero passa alla memoria come per ogni altra chiusura
+  compiti.imparaSeCorretto(c.risultato, d.m.corpo)
 })
 
 /**

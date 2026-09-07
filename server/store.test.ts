@@ -1068,8 +1068,13 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
 
   const documenti = colonne('documenti')
   for (const c of ['rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore', 'percorso',
-    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato']) {
+    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'radici', 'autoreIndirizzo', 'messageId']) {
     assert.ok(documenti.includes(c), `documenti non ha «${c}»: una migrazione è stata saltata`)
+  }
+
+  const compiti = colonne('compiti')
+  for (const c of ['id', 'testo', 'stato', 'modo', 'risultato', 'fonti', 'proposta', 'chieste', 'attrezzi', 'email']) {
+    assert.ok(compiti.includes(c), `compiti non ha «${c}»: una migrazione è stata saltata`)
   }
 
   const automazioni = colonne('automazioni')
@@ -1103,4 +1108,46 @@ test('la posta inviata non conta come appena arrivata', () => {
 
   // ma resta cercabile, che è tutto il motivo per cui la si legge
   assert.ok(store.cerca('mandato', 5).some(d => d.id === 'inv:1'), 'la posta inviata non si trova')
+})
+
+test('il Message-ID arriva dopo, e non fa contare la email come cambiata', () => {
+  /*
+   * Come per il filo: la prima lettura dopo l'aggiornamento porta l'id su
+   * ogni email che c'era già. Se passasse dalla strada delle modifiche,
+   * `indicizzato` si sposterebbe a oggi e la mattina dopo il feed vedrebbe
+   * tremila email «nuove». Una chiave in più non è un arrivo.
+   */
+  const base = {
+    id: 'mid:1', fonte: 'posta', tipo: 'email', titolo: 'Con un id',
+    corpo: 'il testo di una email che ha un identificativo', autore: 'Rossi <rossi@esempio.it>',
+    percorso: 'INBOX', quando: '2026-09-01T10:00:00.000Z', gruppo: 'posta', filo: 'r@x'
+  }
+  store.salvaDocumenti([base])
+  assert.equal(store.documento('mid:1')!.messageId, null)
+
+  const e = store.salvaDocumenti([{ ...base, messageId: 'm1@x' }])
+  assert.deepEqual(e, { nuovi: 0, cambiati: 0, invariati: 1 })
+  assert.equal(store.documento('mid:1')!.messageId, 'm1@x')
+
+  // e una scrittura nuova lo porta con sé
+  store.salvaDocumenti([{ ...base, id: 'mid:2', messageId: 'm2@x' }])
+  assert.equal(store.documento('mid:2')!.messageId, 'm2@x')
+})
+
+test('l’email pronta si scrive e si legge com’è, e sparisce con la bozza', () => {
+  store.scriviCompito({ id: 'ce1', testo: 'Scrivere a Rossi', ordine: 'zz1' })
+  store.affidaCompito('ce1', 'bozza')
+  store.risultatoCompito('ce1', 'Gentile Rossi.', [], 'pronto')
+  assert.equal(store.compito('ce1')!.email, null)
+
+  const email = {
+    a: 'rossi@esempio.it', oggetto: 'Re: Preventivo', corpo: 'Gentile Rossi.', conosciuto: true,
+    rispondeA: { messageId: 'm1@x', references: ['r@x', 'm1@x'] }
+  }
+  store.scriviEmailCompito('ce1', email)
+  assert.deepEqual(store.compito('ce1')!.email, email)
+  assert.deepEqual(store.elencoCompiti().find(c => c.id === 'ce1')!.email, email)
+
+  store.scriviEmailCompito('ce1', null)
+  assert.equal(store.compito('ce1')!.email, null)
 })

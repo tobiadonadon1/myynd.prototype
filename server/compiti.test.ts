@@ -213,3 +213,142 @@ test('riaffidare la stessa riga nello stesso modo non la mette in fila due volte
   assert.equal(o.sentiti.filter(e => e.fase === 'pronto').length, 1)
   o.smetti()
 })
+
+// — l'email già pronta, quando la bozza lo è —
+//
+// Mandare è un gesto solo perché l'email si smonta *prima* che la riga si
+// accenda: il «pronto» arriva con dentro a chi va. Qui si prova che succeda
+// solo quando deve — posta collegata, bozza che sembra un messaggio, riga
+// ancora pronta — e che quando non riesce la bozza non ne soffra.
+
+const emailFinta = async () => ({ a: 'rossi@esempio.it', oggetto: 'Preventivo', corpo: 'Gentile Rossi, ecco.', rispondeA: null })
+
+test('con la posta collegata il «pronto» porta già l’email, e la riga la tiene', async () => {
+  let preparate = 0
+  compiti.perProva({
+    svolgi: async () => ({ testo: 'Gentile Rossi, ecco il preventivo.\n\n(per te: l\'ho preso dal listino)', fonti: [] }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async (...a) => { preparate++; return emailFinta() }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const pronto = await o.aspetta('pronto')
+
+  assert.equal(preparate, 1)
+  const email = pronto.fase === 'pronto' ? pronto.compito.email : null
+  assert.deepEqual(email, { a: 'rossi@esempio.it', oggetto: 'Preventivo', corpo: 'Gentile Rossi, ecco.', rispondeA: null, conosciuto: false })
+  assert.deepEqual(store.compito(id)!.email, email)
+  o.smetti()
+})
+
+test('senza la posta collegata non si prepara niente', async () => {
+  let preparate = 0
+  compiti.perProva({
+    svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => false,
+    preparaEmail: async () => { preparate++; return emailFinta() }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const pronto = await o.aspetta('pronto')
+  assert.equal(preparate, 0)
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.email, null)
+  o.smetti()
+})
+
+test('una bozza che non sembra un messaggio non paga il modello che la smonta', async () => {
+  let preparate = 0
+  compiti.perProva({
+    svolgi: async () => ({ testo: '- lunedì: riunione\n- martedì: fiera', fonti: [] }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async () => { preparate++; return emailFinta() }
+  })
+  const id = riga('Riassumere la settimana')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.equal(preparate, 0)
+  assert.equal(store.compito(id)!.email, null)
+  o.smetti()
+})
+
+test('su una riga che chiede non si prepara: non c’è ancora niente da mandare', async () => {
+  let preparate = 0
+  compiti.perProva({
+    svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }),
+    chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'] }),
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async () => { preparate++; return emailFinta() }
+  })
+  const id = riga('Scrivere a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('chiede')
+  assert.equal(preparate, 0)
+  assert.equal(store.compito(id)!.email, null)
+  o.smetti()
+})
+
+test('se smontarla fallisce la bozza è pronta lo stesso, senza email', async () => {
+  compiti.perProva({
+    svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async () => { throw new Error('Il modello non risponde.') }
+  })
+  const id = riga('Scrivere a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const pronto = await o.aspetta('pronto')
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.stato, 'pronto')
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Gentile Rossi, ecco.')
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.email, null)
+  assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
+  o.smetti()
+})
+
+test('richiamare la riga porta via anche l’email, e una risposta pure', async () => {
+  compiti.perProva({
+    svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: emailFinta
+  })
+  const id = riga('Scrivere a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.ok(store.compito(id)!.email)
+
+  compiti.richiama(id)
+  await o.aspetta('richiamato')
+  assert.equal(store.compito(id)!.email, null)
+  assert.equal(store.compito(id)!.risultato, null)
+
+  // la strada di «rispondi» e «riapri» è `sbozzaCompito`: stessa pulizia
+  store.scriviEmailCompito(id, { a: 'x@y.it', oggetto: 'o', corpo: 'c', conosciuto: true })
+  store.sbozzaCompito(id)
+  assert.equal(store.compito(id)!.email, null)
+  o.smetti()
+})
+
+test('un risultato nuovo azzera l’email di quello vecchio', () => {
+  const id = riga('Scrivere a Rossi')
+  store.affidaCompito(id, 'bozza')
+  store.risultatoCompito(id, 'Prima bozza.', [], 'pronto')
+  store.scriviEmailCompito(id, { a: 'x@y.it', oggetto: 'o', corpo: 'c', conosciuto: true })
+  store.affidaCompito(id, 'bozza')
+  store.risultatoCompito(id, 'Seconda bozza.', [], 'pronto')
+  assert.equal(store.compito(id)!.email, null)
+})

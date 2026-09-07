@@ -851,19 +851,52 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
  * testo esatto che arriverà — e sono tutti e tre modificabili, perché un campo
  * che non si può correggere è un campo di cui ci si deve fidare alla cieca.
  *
- * L'avviso sul destinatario sconosciuto non blocca niente. Dice solo che quel
- * nome nella tua posta non c'è mai stato, che è esattamente il momento in cui
- * vale la pena guardarlo due volte invece di una.
+ * Ma vedere non vuol dire compilare. Se l'email è già pronta sulla riga — il
+ * server la smonta quando la bozza diventa pronta — qui non c'è nessun
+ * «Preparo…»: una riga con a chi va e l'oggetto, il testo che riceve, e un
+ * bottone solo che dice a chi la manda. I tre campi restano a un clic, per chi
+ * vuole correggere. Si aprono da soli in un caso: il destinatario manca o non
+ * è mai comparso nella posta letta — è esattamente il momento in cui vale la
+ * pena guardarlo due volte invece di una, e il bottone lo dice.
+ *
+ * Per le righe senza email pronta resta la strada di prima: si prepara quando
+ * lo chiedi, e si rileggono i tre campi.
  */
+type Email = { a: string; oggetto: string; corpo: string; conosciuto: boolean }
+
 function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
+  const pronta = c.email
   const [preparo, setPreparo] = useState(false)
   const [mando, setMando] = useState(false)
   const [guaio, setGuaio] = useState('')
-  const [m, setM] = useState<{ a: string; oggetto: string; corpo: string; conosciuto: boolean } | null>(null)
+  const [m, setM] = useState<Email | null>(pronta)
+  /** Ha chiesto di vedere i tre campi: da lì in poi restano. */
+  const [tutto, setTutto] = useState(false)
+  /** Il testo si sta correggendo sul posto. */
+  const [scrivo, setScrivo] = useState(false)
+  const area = useRef<HTMLTextAreaElement>(null)
+
+  // L'email pronta apre il pannello da sola: è lei il gesto che aspetta una
+  // persona, e la bozza sopra lo sa — il suo «Va bene» si fa di contorno.
+  // Solo quando arriva, non a ogni giro: chi preme «Annulla» non se lo
+  // ritrova riaperto.
+  useEffect(() => {
+    setM(pronta)
+    if (pronta) apri()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pronta])
+
+  useEffect(() => {
+    const a = area.current
+    if (!scrivo || !a) return
+    a.style.height = 'auto'
+    a.style.height = `${Math.min(a.scrollHeight, 400)}px`
+    a.focus()
+  }, [scrivo])
 
   const prepara = async () => {
     setPreparo(true); setGuaio('')
-    try { setM(await api.preparaEmail(c.id)); apri() }
+    try { setM(await api.preparaEmail(c.id)); setTutto(true); apri() }
     catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setPreparo(false)
   }
@@ -871,7 +904,10 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
   const manda = async () => {
     if (!m) return
     setMando(true); setGuaio('')
-    try { await l.manda(c.id, { a: m.a, oggetto: m.oggetto, corpo: m.corpo }) }
+    // se non ha toccato niente parte quella sulla riga, com'è scritta là: il
+    // server non deve fidarsi di una copia che ha fatto il giro del browser
+    const uguale = !!pronta && m.a === pronta.a && m.oggetto === pronta.oggetto && m.corpo === pronta.corpo
+    try { await l.manda(c.id, uguale ? undefined : { a: m.a, oggetto: m.oggetto, corpo: m.corpo }) }
     catch (e) { setGuaio(e instanceof Error ? e.message : String(e)); setMando(false) }
   }
 
@@ -884,15 +920,16 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
     fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
     color: 'rgba(34,39,31,.45)', marginBottom: 4
   }
+  const lieve: CSSProperties = {
+    border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
+  }
 
   if (!aperto) {
     return (
       <div style={{ marginTop: 10 }}>
-        <Hov as="button" type="button" onClick={prepara} disabled={preparo}
-          style={{
-            border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
-          }}
+        <Hov as="button" type="button" onClick={pronta ? () => { setM(pronta); apri() } : prepara} disabled={preparo}
+          style={lieve}
           hover={{ color: '#C4623B' }}>
           {preparo ? t('Preparo l’email…') : t('Mandala per email…')}
         </Hov>
@@ -901,51 +938,109 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
     )
   }
 
+  const a = m?.a?.trim() ?? ''
+  const corpo = m?.corpo?.trim() ?? ''
+  // senza indirizzo, o con uno mai visto, i campi si aprono e il bottone
+  // chiede di guardare: è l'unico caso in cui il gesto solo non basta
+  const daControllare = !m || !a || !m.conosciuto
+  const campi = tutto || daControllare
+  const puo = !mando && !!a && !!corpo
+
   return (
     <div style={{
       marginTop: 12, padding: '13px 15px', borderRadius: 13,
-      background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)'
+      background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)',
+      overflow: 'hidden'
     }}>
-      <div style={etichetta}>{t('A')}</div>
-      <input value={m?.a ?? ''} onChange={e => setM(v => (v ? { ...v, a: e.target.value } : v))}
-        placeholder={t('nome@dominio.it')} style={campo} />
-      {m && !m.a && (
-        <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 5 }}>
-          {t('Nel materiale non ho trovato un indirizzo: scrivilo tu.')}
-        </div>
+      {campi ? (
+        <>
+          <div style={etichetta}>{t('A')}</div>
+          <input value={m?.a ?? ''} onChange={e => setM(v => (v ? { ...v, a: e.target.value } : v))}
+            placeholder={t('nome@dominio.it')} style={campo} />
+          {m && !a && (
+            <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 5 }}>
+              {t('Nel materiale non ho trovato un indirizzo: scrivilo tu.')}
+            </div>
+          )}
+          {m && !!a && !m.conosciuto && (
+            <div style={{ fontSize: '11.5px', color: '#8A6317', marginTop: 5 }}>
+              {t('Non ho mai visto questo indirizzo nella tua posta. Controllalo.')}
+            </div>
+          )}
+
+          <div style={{ ...etichetta, marginTop: 11 }}>{t('Oggetto')}</div>
+          <input value={m?.oggetto ?? ''} onChange={e => setM(v => (v ? { ...v, oggetto: e.target.value } : v))}
+            style={campo} />
+
+          <div style={{ ...etichetta, marginTop: 11 }}>{t('Quello che riceve')}</div>
+          <textarea value={m?.corpo ?? ''} onChange={e => setM(v => (v ? { ...v, corpo: e.target.value } : v))}
+            rows={8} style={{ ...campo, lineHeight: 1.55, resize: 'vertical' }} />
+        </>
+      ) : (
+        <>
+          {/* a chi e cosa, in una riga che non può sforare: un indirizzo lungo si tronca, non spinge */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+            <div style={{
+              flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.6)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+            }}>
+              {t('A')} <span style={{ color: '#22271F', fontWeight: 500 }}>{a}</span>
+              {m?.oggetto ? <> · <span style={{ color: '#22271F' }}>{m.oggetto}</span></> : null}
+            </div>
+            <Hov as="button" type="button" onClick={() => setTutto(true)}
+              style={{ ...lieve, flex: 'none', padding: 0, color: 'rgba(34,39,31,.45)' }}
+              hover={{ color: '#22271F' }}>{t('Modifica')}</Hov>
+          </div>
+
+          {scrivo ? (
+            <textarea
+              ref={area}
+              value={m?.corpo ?? ''}
+              onChange={e => {
+                setM(v => (v ? { ...v, corpo: e.target.value } : v))
+                e.target.style.height = 'auto'
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 400)}px`
+              }}
+              onBlur={() => setScrivo(false)}
+              onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setScrivo(false) } }}
+              aria-label={t('Quello che riceve')}
+              style={{ ...campo, marginTop: 9, lineHeight: 1.55, resize: 'none', maxHeight: 400, overflowY: 'auto' }} />
+          ) : (
+            // il testo si corregge toccandolo, come la bozza qui sopra
+            <div role="button" tabIndex={0} onClick={() => setScrivo(true)}
+              onKeyDown={e => { if (e.key === 'Enter') setScrivo(true) }}
+              title={t('Modifica')}
+              style={{
+                marginTop: 9, fontSize: '13.5px', lineHeight: 1.55, color: '#22271F',
+                whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
+                maxHeight: 300, overflowY: 'auto', cursor: 'text'
+              }}>{m?.corpo}</div>
+          )}
+        </>
       )}
-      {m && !!m.a && !m.conosciuto && (
-        <div style={{ fontSize: '11.5px', color: '#8A6317', marginTop: 5 }}>
-          {t('Non ho mai visto questo indirizzo nella tua posta. Controllalo.')}
-        </div>
-      )}
 
-      <div style={{ ...etichetta, marginTop: 11 }}>{t('Oggetto')}</div>
-      <input value={m?.oggetto ?? ''} onChange={e => setM(v => (v ? { ...v, oggetto: e.target.value } : v))}
-        style={campo} />
+      {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
-      <div style={{ ...etichetta, marginTop: 11 }}>{t('Quello che riceve')}</div>
-      <textarea value={m?.corpo ?? ''} onChange={e => setM(v => (v ? { ...v, corpo: e.target.value } : v))}
-        rows={8} style={{ ...campo, lineHeight: 1.55, resize: 'vertical' }} />
-
-      {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9 }}>{t(guaio)}</div>}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
-        <button type="button" onClick={manda} disabled={mando || !m?.a?.trim() || !m?.corpo?.trim()} style={{
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0 }}>
+        <button type="button" onClick={manda} disabled={!puo} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
-          background: !mando && m?.a?.trim() && m?.corpo?.trim() ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
-          color: !mando && m?.a?.trim() && m?.corpo?.trim() ? '#FFF7F0' : 'rgba(34,39,31,.35)',
+          background: puo ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+          color: puo ? '#FFF7F0' : 'rgba(34,39,31,.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
-          cursor: mando ? 'default' : 'pointer'
-        }}>{mando ? t('Mando…') : t('Manda')}</button>
-        <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
+          cursor: puo ? 'pointer' : 'default',
+          // l'indirizzo sta dentro il bottone: lungo, si tronca — non esce dal riquadro
+          maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+        }}>{mando ? t('Mando…') : daControllare ? t('Controlla e manda') : frasi.mandaA(a)}</button>
+        <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio(''); setScrivo(false) }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)', flex: 'none'
           }}
           hover={{ color: '#22271F' }}>{t('Annulla')}</Hov>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)' }}>{t('parte dalla tua casella')}</span>
+        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)', flex: 'none', whiteSpace: 'nowrap' }}>
+          {pronta?.rispondeA ? t('Risponde nel filo del suo messaggio.') : t('parte dalla tua casella')}
+        </span>
       </div>
     </div>
   )

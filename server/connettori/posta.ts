@@ -6,7 +6,7 @@ import { simpleParser } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
-import { filoDi } from '../filo.ts'
+import { filoDi, idPulito } from '../filo.ts'
 import { resto, type Resto } from './ripresa.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
@@ -309,7 +309,39 @@ export function smtpDi(c: ConfigPosta): { host: string; porta: number } {
   return { host: c.host.replace(/^imaps?\./, 'smtp.'), porta: 465 }
 }
 
-export type DaMandare = { a: string; oggetto: string; corpo: string }
+export type DaMandare = {
+  a: string
+  oggetto: string
+  corpo: string
+  /**
+   * Il messaggio a cui risponde, se risponde.
+   *
+   * Diventa `In-Reply-To` e `References`: è quello che fa finire la risposta
+   * sotto la domanda nel programma di posta di chi la riceve, invece che in
+   * fondo alla casella come una email nuova.
+   */
+  rispondeA?: { messageId: string; references?: string[] } | null
+}
+
+/**
+ * Il messaggio come lo vuole nodemailer, senza rete.
+ *
+ * Sta a parte da `invia` perché è l'unica parte che si può provare: la
+ * corrispondenza fra `rispondeA` e le due intestazioni è esattamente il posto
+ * in cui un errore non dà errore — dà una risposta che arriva staccata.
+ * Gli identificativi vanno fra parentesi angolari, come li vuole lo standard.
+ */
+export function messaggioDa(c: ConfigPosta, m: DaMandare): {
+  from: string; to: string; subject: string; text: string; inReplyTo?: string; references?: string[]
+} {
+  const fra = (id: string) => `<${idPulito(id)}>`
+  const base = { from: c.utente, to: m.a, subject: m.oggetto, text: m.corpo }
+  const r = m.rispondeA
+  if (!r || !idPulito(r.messageId)) return base
+  const references = (r.references ?? []).map(idPulito).filter(Boolean)
+  if (!references.includes(idPulito(r.messageId))) references.push(idPulito(r.messageId))
+  return { ...base, inReplyTo: fra(r.messageId), references: references.map(fra) }
+}
 
 /**
  * Manda un'email, e basta quella.
@@ -334,12 +366,7 @@ export async function invia(c: ConfigPosta, m: DaMandare): Promise<{ id: string 
     socketTimeout: 30_000
   })
   try {
-    const r = await posta.sendMail({
-      from: c.utente,
-      to: m.a,
-      subject: m.oggetto,
-      text: m.corpo
-    })
+    const r = await posta.sendMail(messaggioDa(c, m))
     return { id: String(r.messageId ?? '') }
   } finally {
     posta.close()
@@ -688,6 +715,8 @@ export async function sincronizza(
               gruppo: 'posta',
               // la conversazione: la radice della catena degli id, o l'oggetto
               filo: filoDi({ messageId: p.messageId, inReplyTo: p.inReplyTo, references: p.references, oggetto: p.subject }),
+              // il messaggio preciso, per poterci rispondere dentro il suo filo
+              messageId: idPulito(p.messageId) || null,
               // scritta da lei: cercabile e utile alla voce, ma non «arrivata»
               inviato: cartella === inviata
             })

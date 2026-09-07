@@ -1602,6 +1602,10 @@ const EN: Record<string, string> = {
   'Scegli almeno un file, o accendi le sessioni di Claude Code.': 'Choose at least one file, or turn on the Claude Code sessions.',
   'Su un server non ci sono file da leggere: le conversazioni si collegano dal tuo computer.':
     'On a server there are no files to read: conversations are connected from your own computer.',
+// — mandare in un gesto: l'email è già pronta sotto la bozza —
+  'Modifica': 'Edit',
+  'Controlla e manda': 'Check and send',
+  'Risponde nel filo del suo messaggio.': 'Replies in the thread of their message.',
 }
 
 
@@ -1912,6 +1916,8 @@ export const frasi = {
     corrente === 'en'
       ? `${n} line${n === 1 ? '' : 's'} noted.`
       : `${n} ${n === 1 ? 'riga segnata' : 'righe segnate'}.`,
+  // — mandare in un gesto: il bottone dice a chi, così non serve rileggere il campo —
+  mandaA: (a: string) => corrente === 'en' ? `Send to ${a}` : `Manda a ${a}`,
 
   // — la lista: i passi del lavoro su una riga affidata. Il server manda
   //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —

@@ -6,7 +6,8 @@ import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomia
 import * as attrezzi from './attrezzi.ts'
 import { attesaDi, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
-import { cerca, documento, recenti, stessoFilo, type Documento } from './store.ts'
+import { cerca, documento, indirizzoDi, recenti, stessoFilo, type Documento } from './store.ts'
+import { rispostaA } from './filo.ts'
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
@@ -1683,7 +1684,30 @@ const SCHEMA_EMAIL = {
   additionalProperties: false
 } as const
 
-export type Email = { a: string; oggetto: string; corpo: string }
+export type Email = {
+  a: string
+  oggetto: string
+  corpo: string
+  /** Il messaggio a cui risponde, quando la bozza risponde a una email dell'indice. */
+  rispondeA?: { messageId: string; references?: string[] } | null
+}
+
+/**
+ * La email a cui la bozza risponde, se ce n'è una.
+ *
+ * Prima il documento della riga — quello da cui è nata, per una riga venuta
+ * dal feed — poi la prima fonte citata: è l'ordine in cui la persona la
+ * riconoscerebbe. Solo la posta, e solo quella arrivata: rispondere a una
+ * email che ha scritto lei vorrebbe dire mandarla a sé stessa.
+ */
+function aCuiRisponde(doc: string | null | undefined, fonti: Fonte[] | null | undefined): Documento | null {
+  const ids = [doc, ...(fonti ?? []).map(f => f.id)].filter((id): id is string => !!id && id.startsWith('posta:'))
+  for (const id of ids) {
+    const d = documento(id)
+    if (d && d.fonte === 'posta' && !d.inviato) return d
+  }
+  return null
+}
 
 export async function preparaEmail(
   compito: string,
@@ -1698,12 +1722,23 @@ export async function preparaEmail(
    * non da quello che una ricerca nuova trova adesso. La ricerca resta solo
    * come ripiego per le righe senza fonti, cioè quelle scritte prima di oggi.
    */
-  fonti?: Fonte[] | null
+  fonti?: Fonte[] | null,
+  /** Il documento da cui è nata la riga, se ne viene: una email, di solito. */
+  doc?: string | null
 ): Promise<Email | null> {
   const dalleFonti = (fonti ?? [])
     .map(f => documento(f.id))
     .filter((d): d is Documento => !!d)
   const docs = dalleFonti.length ? dalleFonti : materiale(compito, [])
+  /*
+   * Se risponde a una email, il destinatario e l'oggetto non si chiedono al
+   * modello: sono chi l'ha scritta e «Re: » più il suo oggetto. Il modello
+   * serve lo stesso, per l'unica parte che sa fare lui — separare il testo
+   * che riceve Rossi dalle note rivolte a lei — e glielo si dice, così non
+   * ricopia il saluto di un messaggio che non è il suo.
+   */
+  const origine = aCuiRisponde(doc, fonti)
+  const mittente = origine ? indirizzoDi(origine.autore) : null
   const e = await chiediJSON<Email>({
     lavoro: 'classifica',
     max_tokens: 4000,
@@ -1715,14 +1750,21 @@ export async function preparaEmail(
       role: 'user',
       content:
         (docs.length ? `Il materiale da cui è nata:\n\n${contesto(docs, 1, 1200)}\n\n---\n\n` : '') +
+        (origine ? `La bozza risponde al messaggio «${origine.titolo}» di ${origine.autore ?? 'mittente ignoto'}.\n\n---\n\n` : '') +
         `Il compito era: ${compito}\n\n---\n\nLa bozza:\n${bozza}`
     }]
   })
   if (!e || !e.corpo?.trim()) return null
   // un indirizzo che non è un indirizzo vale meno di nessun indirizzo: meglio
   // il campo vuoto, che l'interfaccia mostra come «dimmi tu a chi»
-  const a = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.a?.trim() ?? '') ? e.a.trim() : ''
-  return { a, oggetto: (e.oggetto ?? '').trim(), corpo: e.corpo.trim() }
+  const valido = (x: string | null | undefined) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x?.trim() ?? '')
+  const a = valido(mittente) ? mittente!.trim() : valido(e.a) ? e.a.trim() : ''
+  let oggetto = (e.oggetto ?? '').trim()
+  if (origine) {
+    const suo = origine.titolo.trim()
+    oggetto = /^re\s*:/i.test(suo) ? suo : `Re: ${suo}`
+  }
+  return { a, oggetto, corpo: e.corpo.trim(), rispondeA: origine ? rispostaA(origine) : null }
 }
 
 export async function titoloChat(domanda: string): Promise<string> {
