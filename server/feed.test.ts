@@ -93,6 +93,18 @@ test('due cose diverse sullo stesso cliente restano due cose', () => {
   assert.equal(store.elencoFeed('aperto').length, 3)
 })
 
+test('due documenti diversi con titoli quasi uguali sono due voci: la rete delle parole non copre un documento nuovo', () => {
+  store.azzeraTutto()
+  // due fatture dello stesso fornitore, due email: i numeri corti non contano fra le parole
+  store.salvaDocumenti([doc('posta:INBOX:5', 'Fattura n. 123'), doc('posta:INBOX:6', 'Fattura n. 124')])
+  assert.equal(store.salvaFeed([voce('Fattura n. 123 di Rossi da pagare', 'posta:INBOX:5')]), 1)
+  assert.equal(store.salvaFeed([voce('Fattura n. 124 di Rossi da pagare', 'posta:INBOX:6')]), 1,
+    'la seconda fattura è stata presa per un doppione della prima')
+  assert.equal(store.elencoFeed('aperto').length, 2)
+  // ma una voce senza documento che ripete una di quelle resta fuori
+  assert.equal(store.salvaFeed([voce('Pagare la fattura n. 123 di Rossi')]), 0)
+})
+
 test('la stessa voce riscritta uguale non conta come nuova, e resta chiusa se l’avevi chiusa', () => {
   store.azzeraTutto()
   store.salvaDocumenti([doc('posta:INBOX:4', 'Deck')])
