@@ -9,7 +9,7 @@
 // I link verso fuori escono nel browser. Tutto quello che non è la nostra
 // origine e non è http(s) resta fuori e basta: la finestra non è un browser.
 
-import { BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import * as impostazioni from './impostazioni.ts'
 import { t } from './lingua.ts'
@@ -170,12 +170,22 @@ export function nostra(url: string): boolean {
   try { return new URL(url).origin === origine } catch { return false }
 }
 
-/** In primo piano, anche se era nascosta o ridotta a icona. */
+/**
+ * In primo piano, anche se era nascosta, ridotta a icona, o dietro un'altra app.
+ *
+ * `w.focus()` da solo non basta su Mac: accende la finestra dentro Myynd, ma
+ * se davanti c'è la posta o l'editor Myynd resta dietro, e chi ha premuto la
+ * scorciatoia da un'altra app non vede succedere niente. Portare avanti *l'app*
+ * è un'altra richiesta, e macOS la concede solo se gliela si fa: è `steal`.
+ * È la promessa della scorciatoia globale — «la finestra viene avanti sopra
+ * quello che stavi facendo» — quindi qui non è un dettaglio.
+ */
 export function mostra() {
   const w = attuale()
   if (!w) return
   if (w.isMinimized()) w.restore()
   if (!w.isVisible()) w.show()
+  if (process.platform === 'darwin') app.focus({ steal: true })
   w.focus()
 }
 
