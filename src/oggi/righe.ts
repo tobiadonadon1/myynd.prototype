@@ -14,7 +14,7 @@
  * gente — ma un trattino attaccato a una cifra è un segno meno: «-5 gradi»
  * resta com'è.
  */
-const SEGNO = /^\s*(?:[-*•–—](?=\s|[^\d\s])\s*|\d{1,3}[.)]\s+|\[\s*[xX]?\s*\]\s*)/
+const SEGNO = /^\s*(?:[-*•–—](?=\s|$|[^\d\s])\s*|\d{1,3}[.)]\s+|\[\s*[xX]?\s*\]\s*)/
 
 /** Le righe piene di un testo, ripulite dai segni di elenco. */
 export function righeDaTesto(testo: string): string[] {
