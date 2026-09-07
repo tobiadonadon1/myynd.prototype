@@ -11,7 +11,7 @@ import { rispostaA } from './filo.ts'
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, indirizzoConosciuto } from './store.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -853,7 +853,7 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const aperte = feedAperto(40)
   const giaSulFeed = new Set(aperte.map(v => v.doc).filter((d): d is string => !!d))
   const candidati = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))]
-  const inLista = docsConRiga(candidati.map(d => d.id))
+  const inLista = docsConRiga(candidati.map(d => d.id), undefined, 30)
   const docs = candidati
     .filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id))
     .slice(0, 30)
@@ -1758,13 +1758,28 @@ export async function preparaEmail(
   // un indirizzo che non è un indirizzo vale meno di nessun indirizzo: meglio
   // il campo vuoto, che l'interfaccia mostra come «dimmi tu a chi»
   const valido = (x: string | null | undefined) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x?.trim() ?? '')
-  const a = valido(mittente) ? mittente!.trim() : valido(e.a) ? e.a.trim() : ''
+  const scelto = valido(e.a) ? e.a.trim() : ''
+  /*
+   * È una risposta solo se va a chi ha scritto. Una riga nata da una email
+   * non è per forza una risposta a quella email: «gira la fattura di Rossi
+   * al commercialista» ha il documento di Rossi sotto, e la bozza è per il
+   * commercialista. Se il modello ha messo un indirizzo diverso da quello
+   * del mittente, ha ragione lui: il destinatario resta quello, e con lui
+   * l'oggetto suo — e niente filo, perché non si sta rispondendo a nessuno.
+   * Purché quell'indirizzo esista davvero nel suo materiale: uno mai visto
+   * è quasi sempre inventato, e lì il mittente resta la scelta sicura.
+   */
+  const altro = !!scelto && scelto.toLowerCase() !== (mittente ?? '').trim().toLowerCase()
+  // un indirizzo diverso dal mittente vale solo se esiste nel suo materiale:
+  // uno mai visto è quasi sempre inventato, e allora ha ragione il mittente
+  const rispostaAlMittente = !!origine && valido(mittente) && !(altro && indirizzoConosciuto(scelto))
+  const a = rispostaAlMittente ? mittente!.trim() : scelto
   let oggetto = (e.oggetto ?? '').trim()
-  if (origine) {
-    const suo = origine.titolo.trim()
+  if (rispostaAlMittente) {
+    const suo = origine!.titolo.trim()
     oggetto = /^re\s*:/i.test(suo) ? suo : `Re: ${suo}`
   }
-  return { a, oggetto, corpo: e.corpo.trim(), rispondeA: origine ? rispostaA(origine) : null }
+  return { a, oggetto, corpo: e.corpo.trim(), rispondeA: rispostaAlMittente ? rispostaA(origine!) : null }
 }
 
 export async function titoloChat(domanda: string): Promise<string> {

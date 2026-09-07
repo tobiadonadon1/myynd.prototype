@@ -3656,8 +3656,21 @@ export function compitoVivoDa(automazione: string): boolean {
  * ripetersi, ma non deve nemmeno tacere perché un'altra ha già parlato di
  * quel documento con un'altra cosa da fare.
  */
-export function docsConRiga(ids: string[], origine?: string): Set<string> {
+export function docsConRiga(
+  ids: string[],
+  origine?: string,
+  /**
+   * Contano solo le righe vive, o chiuse da meno di tanti giorni.
+   *
+   * Senza, una riga chiusa mesi fa su un file che è ancora lì — e che
+   * intanto è cambiato — lo terrebbe fuori dal feed per sempre. Le
+   * automazioni non lo passano: per loro una riga già fatta su quel
+   * documento è fatta, e non si rifà.
+   */
+  entroGiorni?: number
+): Set<string> {
   const fuori = new Set<string>()
+  const soglia = entroGiorni ? new Date(Date.now() - entroGiorni * 86_400_000).toISOString() : null
   // a blocchi: i segnaposto di SQLite hanno un tetto, e qui gli id arrivano
   // da una pescata che può crescere
   for (let i = 0; i < ids.length; i += 200) {
@@ -3665,7 +3678,8 @@ export function docsConRiga(ids: string[], origine?: string): Set<string> {
     const righe = db.prepare(`
       SELECT DISTINCT doc FROM compiti
       WHERE doc IN (${pezzo.map(() => '?').join(',')})${origine ? ' AND origine = ?' : ''}
-    `).all(...pezzo, ...(origine ? [origine] : [])) as { doc: string }[]
+      ${soglia ? 'AND ((chiuso IS NULL AND sparito IS NULL) OR COALESCE(sparito, chiuso, aggiornato) >= ?)' : ''}
+    `).all(...pezzo, ...(origine ? [origine] : []), ...(soglia ? [soglia] : [])) as { doc: string }[]
     for (const r of righe) fuori.add(r.doc)
   }
   return fuori

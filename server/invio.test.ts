@@ -213,6 +213,29 @@ test('una bozza che risponde a una email va a chi l’ha scritta, con «Re:» e 
   assert.match(JSON.stringify(viste[0]), /risponde al messaggio/)
 })
 
+test('se la bozza è per un altro, il documento sotto non la dirotta al mittente', async () => {
+  cfg.scrivi({
+    motore: 'compatibile', compatibile: { url: 'https://finto.test/v1', modello: 'finto', nome: 'Finto' },
+    locale: { attivo: false }
+  })
+  store.salvaDocumenti([mail('8'), mail('9', {
+    titolo: 'Documenti per il bilancio', corpo: 'Buongiorno, mi servono le fatture del trimestre.',
+    autore: 'Studio Verdi <studio@commercialista.it>', messageId: 'm9@esempio.it', filo: 'm9@esempio.it'
+  })])
+  // «gira la fattura di Rossi al commercialista»: il documento è la mail di
+  // Rossi, ma il destinatario è un altro — che nella posta c'è davvero — e
+  // il modello l'ha scritto
+  modelloFinto({ a: 'studio@commercialista.it', oggetto: 'Fattura Rossi', corpo: 'Buongiorno,\nvi giro la fattura di Rossi.' })
+
+  const e = await claude.preparaEmail('Girare la fattura di Rossi al commercialista', 'Buongiorno,\nvi giro la fattura di Rossi.', [
+    { id: 'posta:INBOX:8', label: '[1] Preventivo impianto' }
+  ], 'posta:INBOX:8')
+  assert.ok(e)
+  assert.equal(e.a, 'studio@commercialista.it')
+  assert.equal(e.oggetto, 'Fattura Rossi', 'niente «Re:»: non è una risposta')
+  assert.equal(e.rispondeA, null, 'e niente filo: non si sta rispondendo a nessuno')
+})
+
 test('l’email da cui è nata la riga (`doc`) vale prima delle fonti, e «Re:» non si raddoppia', async () => {
   store.salvaDocumenti([mail('8', { titolo: 'RE: Preventivo impianto', autore: 'Anna <anna@esempio.it>', messageId: 'm8@esempio.it' })])
   modelloFinto({ a: '', oggetto: '', corpo: 'Ciao Anna, va bene.' })

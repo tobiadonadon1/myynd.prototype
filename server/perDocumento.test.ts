@@ -318,3 +318,25 @@ test('quello che sta già in lista si riconosce, così il feed non lo ripropone'
   // e un elenco vuoto non fa nemmeno la query
   assert.equal(store.docsConRiga([]).size, 0)
 })
+
+test('per il feed una riga chiusa da mesi non tiene fuori il documento per sempre', async () => {
+  const { DatabaseSync } = await import('node:sqlite')
+  const ADESSO = new Date().toISOString()
+  store.salvaDocumenti([{
+    id: 'desktop:/vivo/contratto.md', fonte: 'desktop', tipo: 'md', titolo: 'Contratto',
+    corpo: 'Il contratto, che intanto è cambiato.', autore: null, quando: ADESSO, gruppo: 'documenti'
+  }])
+  store.scriviCompito({ id: 'riga-vecchia', testo: 'Rileggere il contratto', nota: null, quando: 'oggi', ordine: 'a', origine: 'mano', doc: 'desktop:/vivo/contratto.md' })
+  // viva: conta, con o senza finestra
+  assert.ok(store.docsConRiga(['desktop:/vivo/contratto.md'], undefined, 30).has('desktop:/vivo/contratto.md'))
+  store.cambiaStatoCompito('riga-vecchia', 'fatto', 'Letto.')
+  // chiusa adesso: conta ancora nella finestra
+  assert.ok(store.docsConRiga(['desktop:/vivo/contratto.md'], undefined, 30).has('desktop:/vivo/contratto.md'))
+  // chiusa quattro mesi fa: per il feed non conta più, per le automazioni sì
+  const db = new DatabaseSync(join(CASA, '.myynd', 'mente.db'))
+  db.prepare('UPDATE compiti SET chiuso = ?, aggiornato = ? WHERE id = ?')
+    .run('2026-05-01T10:00:00.000Z', '2026-05-01T10:00:00.000Z', 'riga-vecchia')
+  db.close()
+  assert.ok(!store.docsConRiga(['desktop:/vivo/contratto.md'], undefined, 30).has('desktop:/vivo/contratto.md'))
+  assert.ok(store.docsConRiga(['desktop:/vivo/contratto.md']).has('desktop:/vivo/contratto.md'))
+})

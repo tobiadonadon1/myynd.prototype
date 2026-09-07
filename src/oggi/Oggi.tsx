@@ -879,12 +879,16 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
   // L'email pronta apre il pannello da sola: è lei il gesto che aspetta una
   // persona, e la bozza sopra lo sa — il suo «Va bene» si fa di contorno.
   // Solo quando arriva, non a ogni giro: chi preme «Annulla» non se lo
-  // ritrova riaperto.
+  // ritrova riaperto. «Arriva» si misura sul contenuto e non sull'oggetto:
+  // la lista si rilegge a ogni annuncio e ogni rilettura rifà gli oggetti,
+  // e sull'oggetto il pannello si riapriva — buttando le correzioni in corso —
+  // ogni volta che cambiava un'altra riga.
+  const chiavePronta = pronta ? `${pronta.a}\n${pronta.oggetto}\n${pronta.corpo}` : ''
   useEffect(() => {
     setM(pronta)
     if (pronta) apri()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pronta])
+  }, [chiavePronta])
 
   useEffect(() => {
     const a = area.current
