@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito } from '../api'
 import { frasi, t } from '../lingua'
-import { desktop } from '../desktop'
+import { avvisiAccesi, desktop } from '../desktop'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -127,6 +127,20 @@ export function useCompiti(
           if (!(e.id in p)) return p
           const { [e.id]: _via, ...resto } = p
           return resto
+        })
+      }
+      /*
+       * Un avviso di sistema, se la persona l'ha chiesto e non sta guardando.
+       *
+       * Sono le stesse due cose che accendono il punto nella barra: una bozza
+       * pronta, una domanda. Con la finestra davanti la riga si apre da sola
+       * e basta; nascosta o dietro un'altra app, chi ha acceso gli avvisi
+       * vuole saperlo. Il guscio mostra e basta: la scelta sta qui.
+       */
+      if ((e.fase === 'pronto' || e.fase === 'chiede') && avvisiAccesi() && (document.hidden || !document.hasFocus())) {
+        desktop()?.notifica?.({
+          titolo: e.fase === 'pronto' ? t('Una bozza è pronta.') : t('Myynd ti chiede una cosa.'),
+          corpo: e.compito.testo, dove: 'oggi'
         })
       }
       // una domanda si apre da sola come una bozza: in tutti e due i casi

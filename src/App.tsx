@@ -318,6 +318,8 @@ function Casa({ stato, apriConnessioni, esci }: {
   vRef.current = v
   useEffect(() => desktop()?.naviga(dove => {
     const v = vRef.current
+    // dal richiamo: «continua nell'app» porta sulla chat appena nata
+    if (typeof dove === 'object') { if (dove.dove === 'chat' && dove.id) v.apriChat(dove.id); return }
     if (dove === 'preferenze') v.goPref()
     else if (dove === 'chat') v.goChat()
     else if (dove === 'oggi') v.goOggi()

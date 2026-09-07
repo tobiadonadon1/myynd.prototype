@@ -53,5 +53,21 @@ contextBridge.exposeInMainWorld('myynd', {
     installa: () => chiedi('myynd:aggiornamenti-installa'),
     stato: cb => ascolta('myynd:aggiornamento', cb)
   },
-  naviga: cb => ascolta('myynd:naviga', cb)
+  naviga: cb => ascolta('myynd:naviga', cb),
+  /*
+   * Un avviso di sistema: titolo, corpo e dove andare al clic. Il guscio
+   * non decide se mostrarlo — lo decide la pagina, che sa se la persona
+   * l'ha chiesto e se la finestra è davanti.
+   */
+  notifica: n => ipcRenderer.send('myynd:notifica', {
+    titolo: String(n?.titolo ?? ''), corpo: String(n?.corpo ?? ''), dove: n?.dove
+  }),
+  // — il richiamo: la barra che la scorciatoia apre. Le tre cose che la pagina
+  //   può chiedere al guscio, e il fatto di essere lì dentro —
+  dentroIlRichiamo: argomento('richiamo') === '1',
+  richiamo: {
+    chiudi: () => ipcRenderer.send('myynd:richiamo-chiudi'),
+    apri: dove => ipcRenderer.send('myynd:richiamo-apri', dove),
+    misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza))
+  }
 })

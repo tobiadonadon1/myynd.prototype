@@ -98,6 +98,38 @@ guscio tiene le sue cose — la posizione della finestra, la scorciatoia, il
 registro `myynd.log` — nella cartella dell'app (`~/Library/Application
 Support/Myynd` sul Mac, `%APPDATA%\Myynd` su Windows).
 
+**Vive anche a finestra chiusa.** La X nasconde la finestra e basta: il segno
+nella barra dei menù (e il Dock, sul Mac) tengono l'app viva, e con lei il
+server e le automazioni che ha in programma. Si esce da «Esci» — nel menù
+del segno, nel menù dell'app, o con ⌘Q. Dove il segno nella barra non è
+riuscito a nascere (Windows e Linux senza vassoio), la X chiude come prima:
+un'app viva che non si vede e non si riapre è peggio di una chiusa. Con
+«Si apre all'accesso» acceso nelle preferenze, l'app parte insieme al
+computer *senza* far comparire la finestra — si registra con `openAsHidden`
+e con l'argomento `--nascosto`, e all'avvio guarda tutti e due più
+`wasOpenedAtLogin`; sui Mac recenti quei due segnali di Apple non arrivano
+più, e resta l'argomento — ma carica lo stesso la pagina, perché il filo
+degli eventi, il punto nella barra e il numero sul Dock vivono nel renderer.
+Al risveglio dal sonno il guscio manda al server `{ tipo: 'sveglia' }` su
+`parentPort`, così può rimettere in pari gli orologi.
+
+**Il richiamo.** La scorciatoia globale (⇧⌘M, si cambia nelle preferenze)
+non porta più su la finestra intera: apre una barra sola, senza cornice,
+sopra a tutto, sullo schermo dove sta il cursore. Ci si scrive una cosa da
+fare e Invio la segna in lista — con gli stessi «/» della barra grande:
+`/oggi`, `/settimana`, `/poi`, `/bozza`, `/myynd` — oppure una domanda, se
+comincia con `?` o si preme ⌘Invio, e la risposta cresce lì sotto, con un
+«Continua nell'app» che apre quella chat nella finestra. Incollare un elenco
+segna una riga per riga (`src/oggi/righe.ts` toglie trattini, numeri e
+caselle). Esc la chiude, e il fuoco torna all'app da cui si era partiti. È
+la stessa pagina dell'app con `?richiamo=1` (`src/richiamo/Richiamo.tsx`):
+nel browser si può aprire a mano per provarla. La finestra la fa
+`desktop/richiamo.ts`, e si adatta all'altezza del contenuto che la pagina le
+dice via `window.myynd.richiamo.misura`. Gli avvisi di sistema per una bozza
+pronta o una domanda sono spenti finché non li si accende nelle preferenze
+(«Avvisami quando una bozza è pronta»), e arrivano solo se la finestra non è
+davanti.
+
 Si impacchetta con `npm run pacchetto` (Mac e Windows), `pacchetto:mac` o
 `pacchetto:win`; gli artefatti finiscono in `dist-app/`. La configurazione è
 in `electron-builder.yml` per la parte fissa e in `build/configura.cjs` per

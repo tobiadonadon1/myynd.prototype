@@ -215,6 +215,26 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
   })
 }
 
+/**
+ * Il computer si è svegliato: lo si dice al server.
+ *
+ * Dopo un'ora di stop gli orologi del pianificatore sono in ritardo e le
+ * connessioni aperte sono morte senza dirlo. Il server sa cosa fare, ma
+ * non ha modo di accorgersene da solo: il guscio glielo dice, con il
+ * messaggio `{ tipo: 'sveglia' }` su `parentPort`. Chi non lo ascolta non
+ * si accorge di niente — è un avviso, non un comando.
+ */
+export function sveglia() {
+  const p = figlio
+  if (!p) return
+  try {
+    p.postMessage({ tipo: 'sveglia' })
+    scriviRegistro('guscio · il computer si è svegliato: lo dico al server')
+  } catch (e) {
+    scriviRegistro(`guscio · non sono riuscito a svegliare il server: ${e instanceof Error ? e.message : e}`)
+  }
+}
+
 /** Da capo, su richiesta della persona: il conto dei riavvii riparte da zero. */
 export function riavvia(ascolto: Ascolto): Promise<void> {
   riavvii = []
