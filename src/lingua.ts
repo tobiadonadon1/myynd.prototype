@@ -1567,6 +1567,9 @@ const EN: Record<string, string> = {
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
   'Mostra la cartella dei dati': 'Show the data folder',
+  'Una riga per ogni documento': 'One line per document',
+  'Una riga per ogni documento.': 'One line per document.',
+  'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 }
 
 

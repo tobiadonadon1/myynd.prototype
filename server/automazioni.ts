@@ -62,6 +62,18 @@ export type Automazione = {
     inLista: 'oggi' | 'settimana' | 'poi'
     /** 'io' la scrive e basta; 'bozza' e 'tutto' la fanno anche svolgere. */
     modo?: 'io' | 'bozza' | 'tutto'
+    /**
+     * Una riga per ogni documento, invece di una riga con l'elenco.
+     *
+     * È la differenza fra «Risposte da dare» con otto titoli in nota e otto
+     * righe che dicono ciascuna «Rispondere a Rossi sul preventivo». La prima
+     * è un promemoria; le seconde sono cose da fare, e ognuna si svolge e si
+     * chiude da sola. A scegliere quali documenti meritano una riga è un
+     * modello piccolo, con l'istruzione `fai` davanti; a scrivere la bozza,
+     * dopo, il modello grande — una riga alla volta, e sotto il tetto del
+     * giorno come tutte le altre.
+     */
+    perDocumento?: boolean
   }
   /**
    * Invece di scrivere un testo, sceglie dei messaggi e propone di metterli via.
@@ -197,6 +209,15 @@ function valida(x: unknown, da: string): Automazione {
   if (!m || typeof m !== 'object') male('«metti» manca')
   if (!SECCHI.includes(String(m!.inLista))) male('«metti.inLista» dev\'essere oggi, settimana o poi')
   if (m!.modo !== undefined && !MODI.includes(String(m!.modo))) male('«metti.modo» dev\'essere io, bozza o tutto')
+  if (m!.perDocumento !== undefined && typeof m!.perDocumento !== 'boolean') {
+    male('«metti.perDocumento» dev\'essere vero o falso')
+  }
+  // una ricetta che propone sceglie già lei i messaggi, uno per uno: una riga
+  // per documento sopra a una proposta sarebbero due modi di dire la stessa
+  // cosa, e il motore ne saprebbe fare uno solo
+  if (m!.perDocumento === true && a.proponi !== undefined) {
+    male('«metti.perDocumento» non va con «proponi»: chi propone sceglie già i messaggi uno per uno')
+  }
 
   return a as unknown as Automazione
 }
@@ -706,6 +727,181 @@ async function cernita(a: Automazione, docs: store.Documento[]): Promise<store.P
   return voci.length ? { azione: a.proponi, voci } : null
 }
 
+// — le automazioni che scrivono una riga per documento —
+
+const RIGHE = (ids: string[]) => ({
+  type: 'object',
+  properties: {
+    righe: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          doc: { type: 'string', enum: ids, description: 'Uno degli id forniti, copiato alla lettera.' },
+          testo: {
+            type: 'string',
+            description: 'La cosa da fare, in una riga: un verbo, chi, cosa. Come «Rispondere a Rossi sul preventivo di marzo».'
+          }
+        },
+        required: ['doc', 'testo'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['righe'],
+  additionalProperties: false
+})
+
+/** Una riga scelta: il documento e la cosa da fare, in una frase. */
+export type RigaScelta = { doc: string; testo: string }
+
+/**
+ * Quali di questi documenti meritano una riga, e con che titolo.
+ *
+ * Un modello piccolo, e apposta: gira dopo ogni lettura della posta, per
+ * sempre, e sceglie fra otto messaggi. La scelta sbagliata costa poco — una
+ * riga di troppo si chiude con un dito — e quello che produce non esce da
+ * qui. La bozza, che esce, la scrive poi il modello grande, una riga alla
+ * volta. Come `schemaFeed`, l'id è un `enum` dei candidati: uno inventato non
+ * passa la validazione, e non può far nascere una riga su niente.
+ *
+ * Nel dubbio non sceglie, come `cernita`: una riga che manca la scrive la
+ * persona in tre secondi; otto righe su otto newsletter sono la lista
+ * rovinata, e un'automazione che si spegne.
+ */
+async function scegliRighe(a: Automazione, docs: store.Documento[]): Promise<RigaScelta[] | null> {
+  const out = await ferri.chiediJSON({
+    severo: true,
+    lavoro: 'smistamento',
+    max_tokens: 2000,
+    system:
+      `Scrivi in ${nellaLingua()}.\n\n` +
+      'Stai smistando dei documenti per la lista delle cose da fare di una persona, ' +
+      'seguendo questa istruzione sua:\n\n«' + a.fai + '»\n\n' +
+      'Fra i documenti che ricevi, scegli soltanto quelli che secondo l’istruzione ' +
+      'meritano una riga nella sua lista. Per ognuno scrivi la cosa da fare in una riga ' +
+      'sola: un verbo all’infinito, chi, cosa — «Rispondere a Rossi sul preventivo di ' +
+      'marzo», non «Email da Rossi». Nomi veri, presi dal documento.\n\n' +
+      'Nel dubbio non lo scegli: una riga che manca la aggiunge lei in tre secondi, ' +
+      'otto righe inutili le fanno spegnere l’automazione. Se non ce n’è nessuno, torni ' +
+      'un elenco vuoto — è la risposta normale, non un fallimento.\n\n' +
+      'Gli id li copi identici: uno inventato non esiste e non farà nascere niente.',
+    formato: RIGHE(docs.map(d => d.id)),
+    messages: [{
+      role: 'user',
+      content: JSON.stringify(docs.map(d => ({
+        id: d.id, da: d.autore ?? '', titolo: d.titolo, quando: d.quando,
+        inizio: d.corpo.slice(0, 600)
+      })))
+    }]
+  }) as { righe?: RigaScelta[] } | null
+  // `chiediJSON` torna null anche su una risposta illeggibile: qui non si può
+  // far finta di aver letto — si lancia, e il paletto non si muove
+  if (!out) throw new Error('Non sono riuscito a smistare i documenti: riprovo al prossimo giro.')
+  const per = new Map(docs.map(d => [d.id, d]))
+  const visti = new Set<string>()
+  return (out.righe ?? [])
+    .map(r => ({ doc: String(r.doc ?? ''), testo: String(r.testo ?? '').trim() }))
+    // solo id veri, una volta sola, e con un testo: la cintura oltre alle
+    // bretelle dello schema, per i modelli che lo schema lo leggono a metà
+    .filter(r => per.has(r.doc) && r.testo && !visti.has(r.doc) && visti.add(r.doc))
+}
+
+/**
+ * Le mani con cui sceglie, sostituibili solo nelle prove.
+ *
+ * Lo smistamento chiama un modello, e una prova che chiama un modello non è
+ * una prova. In produzione è sempre `chiediJSON` vero; le prove ci mettono
+ * una funzione che risponde quello che serve, e non c'è nessun'altra strada.
+ */
+type Ferri = { chiediJSON: (o: Parameters<typeof chiediJSON>[0]) => Promise<unknown> }
+const VERI: Ferri = { chiediJSON: o => chiediJSON(o) }
+let ferri: Ferri = VERI
+
+/** Solo per le prove: sostituisce le mani, o le rimette (con `null`). */
+export function perProva(f: Partial<Ferri> | null) {
+  ferri = f ? { ...VERI, ...f } : VERI
+}
+
+/**
+ * Una riga per ogni documento scelto.
+ *
+ * La guardia qui è per documento, non per ricetta: «Rispondere a Rossi» rimasto
+ * in lista non deve impedire «Rispondere a Bianchi», arrivata dopo. E vale per
+ * sempre — anche chiusa, anche buttata — perché quella mail non torna nuova.
+ *
+ * Il tetto del giorno si conta riga per riga: le prime si affidano, quelle
+ * oltre nascono lo stesso ma con `modo: io`. Niente si perde: la riga c'è, e
+ * la bozza la si chiede con un dito quando si vuole.
+ */
+async function faiPerDocumento(
+  a: Automazione,
+  s: store.StatoAutomazione | null,
+  docs: store.Documento[],
+  opzioni: { aMano?: boolean; adesso?: Date }
+): Promise<'fatta' | 'niente'> {
+  const gia = store.docsConRiga(docs.map(d => d.id), `auto:${a.id}`)
+  const candidati = docs.filter(d => !gia.has(d.id))
+  // tutto già in lista: non si chiama nessun modello per non dire niente
+  if (!candidati.length) {
+    store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+    return 'niente'
+  }
+
+  const scelte = await scegliRighe(a, candidati)
+  if (!scelte?.length) {
+    store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+    return 'niente'
+  }
+
+  const quando = a.metti.inLista
+  const modo = a.metti.modo ?? 'io'
+  const scrive = modo === 'bozza' || modo === 'tutto'
+  const perId = new Map(candidati.map(d => [d.id, d]))
+  const concessi = { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null }
+  const giorno = giornoDi(opzioni.adesso ?? new Date())
+  let bozze = bozzeOggi(s, opzioni.adesso)
+  let lasciate = 0
+
+  for (const r of scelte) {
+    const d = perId.get(r.doc)!
+    const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    store.scriviCompito({
+      id,
+      testo: r.testo,
+      // la stessa forma della nota di sempre — l'istruzione, poi «Da guardare» —
+      // così `rinominaInLista` la riconosce e la ridice nell'altra lingua
+      nota: [a.fai, '', 'Da guardare:', `— ${d.titolo}`].join('\n'),
+      quando,
+      ordine: ordine.dopo(store.ultimoOrdine(quando)),
+      origine: `auto:${a.id}`,
+      doc: d.id,
+      attrezzi: concessi
+    })
+    if (!scrive) continue
+    if (opzioni.aMano || bozze < BOZZE_AL_GIORNO) {
+      compiti.affida(id, modo)
+      bozze = store.segnaBozza(a.id, giorno)
+    } else {
+      lasciate++
+    }
+  }
+  if (lasciate) {
+    console.log(
+      `myynd · automazione «${a.nome}»: tetto del giorno raggiunto (${BOZZE_AL_GIORNO} bozze), ` +
+      `${lasciate} ${lasciate === 1 ? 'riga resta' : 'righe restano'} in lista senza bozza`
+    )
+  }
+
+  store.automazioneGirata(a.id, 'fatta', undefined, docs.length)
+  store.registraAzione({
+    tipo: 'automazione', cosa: a.nome, esito: 'fatta',
+    dettaglio: `${scelte.length} ${scelte.length === 1 ? 'riga' : 'righe'} da ${docs.length} document${docs.length === 1 ? 'o' : 'i'}`
+  })
+  compiti.annunciaCambio()
+  return 'fatta'
+}
+
 /** Quello che si legge sulla riga prima di aprirla: un conto e un verbo. */
 function riassunto(p: store.Proposta): string {
   const en = cfgLingua() === 'en'
@@ -783,7 +979,11 @@ export async function fai(
    * paletto: non rimandato, saltato. Per sempre, senza un errore, e la cosa
    * saltata era proprio la fattura che l'automazione doveva prendere.
    */
-  if (store.compitoVivoDa(a.id)) {
+  // Per quelle che scrivono una riga per documento la guardia è per documento,
+  // e sta in `faiPerDocumento`: la riga di Rossi non deve fermare quella di
+  // Bianchi.
+  const perDocumento = !!a.metti.perDocumento
+  if (!perDocumento && store.compitoVivoDa(a.id)) {
     store.automazioneRimandata(a.id)
     return 'gia'
   }
@@ -803,7 +1003,9 @@ export async function fai(
    */
   const modoScelto = a.metti.modo ?? 'io'
   const scrive = (modoScelto === 'bozza' || modoScelto === 'tutto') && !a.proponi
-  if (scrive && !opzioni.aMano && bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
+  // una riga per documento non si salta: le righe nascono lo stesso, e solo
+  // la bozza aspetta domani — vedi `faiPerDocumento`
+  if (scrive && !perDocumento && !opzioni.aMano && bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
     store.automazioneSaltata(a.id)
     console.log(`myynd · automazione «${a.nome}»: tetto del giorno raggiunto (${BOZZE_AL_GIORNO} bozze), riprende domani`)
     return 'saltata'
@@ -816,6 +1018,8 @@ export async function fai(
     store.automazioneGirata(a.id, 'niente', undefined, 0)
     return 'niente'
   }
+
+  if (perDocumento) return faiPerDocumento(a, s, docs, opzioni)
 
   // Quelle che propongono scelgono *prima* di scrivere la riga. Se non c'è
   // niente da mettere via non deve comparire nessuna riga: «ho guardato e non
@@ -978,6 +1182,13 @@ const FORMA = () => ({
       type: 'string', enum: ['io', 'bozza'],
       description: '«io» mette solo una riga da fare; «bozza» le fa anche scrivere il testo.'
     },
+    perDocumento: {
+      type: 'boolean',
+      description:
+        'Vero se vuole una riga per ogni documento — «una riga per ogni messaggio», «per ' +
+        'ognuna una cosa da fare» — invece di una riga sola con l\'elenco. Falso per i ' +
+        'riepiloghi, i confronti, le cose che si leggono tutte insieme.'
+    },
     attrezzi: {
       type: 'array',
       items: { type: 'string', enum: attrezzi.ATTREZZI.map(a => a.nome) },
@@ -1008,7 +1219,7 @@ const FORMA = () => ({
       additionalProperties: false
     }
   },
-  required: ['nome', 'spiega', 'ogni', 'ora', 'cerca', 'soloNuovi', 'fai', 'inLista', 'modo', 'attrezzi', 'en'],
+  required: ['nome', 'spiega', 'ogni', 'ora', 'cerca', 'soloNuovi', 'fai', 'inLista', 'modo', 'perDocumento', 'attrezzi', 'en'],
   additionalProperties: false
 })
 
@@ -1040,6 +1251,12 @@ senza sapere perché. Dille cosa cercare, cosa scriverne, e cosa fare quando non
 c'è niente — perché «non c'è niente» è la risposta più frequente, e va detta in
 una riga invece di inventare qualcosa.
 
+Su una riga o tante: se vuole una cosa da fare *per ogni* messaggio — «per ogni
+mail che chiede qualcosa preparami la risposta», «una riga per ogni fattura» —
+metti perDocumento a vero: nascerà una riga per documento, col suo titolo, e
+l'istruzione dice quali documenti meritano la riga e cosa farne. Per un
+riepilogo, un confronto, una cosa che si legge tutta insieme, lascialo falso.
+
 Sull'ora: se non l'ha detta, sceglila tu e scegliela presto — un'automazione
 serve prima che la giornata cominci.`
 
@@ -1052,6 +1269,7 @@ export async function daUnaFrase(descrizione: string): Promise<Automazione> {
     severo: true,
     nome: string; spiega: string; ogni: string; giorno?: number; ora: number
     cerca: string; soloNuovi: boolean; fai: string; inLista: string; modo: string
+    perDocumento?: boolean
     attrezzi?: string[]; cartella?: string
     en: { nome: string; spiega: string; fai: string; cerca: string }
   }>({
@@ -1082,7 +1300,7 @@ export async function daUnaFrase(descrizione: string): Promise<Automazione> {
       limite: 8
     },
     fai: r.fai,
-    metti: { inLista: r.inLista, modo: r.modo },
+    metti: { inLista: r.inLista, modo: r.modo, ...(r.perDocumento === true ? { perDocumento: true } : {}) },
     ...(attrezzi.ripulisci(r.attrezzi).length ? { attrezzi: attrezzi.ripulisci(r.attrezzi) } : {}),
     ...(r.cartella?.trim() ? { cartella: r.cartella.trim() } : {}),
     en: { nome: r.en.nome, spiega: r.en.spiega, fai: r.en.fai, ...(r.en.cerca?.trim() ? { cerca: r.en.cerca.trim() } : {}) }
@@ -1112,6 +1330,7 @@ export async function riscrivi(id: string, richiesta: string): Promise<Automazio
     severo: true,
     nome: string; spiega: string; ogni: string; giorno?: number; ora: number
     cerca: string; soloNuovi: boolean; fai: string; inLista: string; modo: string
+    perDocumento?: boolean
     attrezzi?: string[]; cartella?: string
     en: { nome: string; spiega: string; fai: string; cerca: string }
   }>({
@@ -1155,7 +1374,7 @@ quello che ti ha detto di cambiare e nient'altro, e ridammi la ricetta intera.`,
       ...(r.soloNuovi ? { soloNuovi: true } : { soloNuovi: undefined })
     },
     fai: r.fai,
-    metti: { inLista: r.inLista, modo: r.modo },
+    metti: { inLista: r.inLista, modo: r.modo, ...(r.perDocumento === true ? { perDocumento: true } : {}) },
     attrezzi: attrezzi.ripulisci(r.attrezzi),
     ...(r.cartella?.trim() ? { cartella: r.cartella.trim() } : { cartella: undefined }),
     en: { nome: r.en.nome, spiega: r.en.spiega, fai: r.en.fai, ...(r.en.cerca?.trim() ? { cerca: r.en.cerca.trim() } : {}) }

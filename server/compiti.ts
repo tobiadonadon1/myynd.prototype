@@ -248,7 +248,10 @@ async function svolgiUno(id: string) {
       // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
       // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
       // richiamo si tace: quella riga non è più sua
-      p => { if (!richiamati.has(chiave(id))) annuncia({ fase: 'lavoro', id, passo: p }) }
+      p => { if (!richiamati.has(chiave(id))) annuncia({ fase: 'lavoro', id, passo: p }) },
+      // la riga può essere nata da un documento preciso — «rispondere a
+      // Rossi» — e allora la bozza parte da lì, non da una ricerca
+      c.doc
     )
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano

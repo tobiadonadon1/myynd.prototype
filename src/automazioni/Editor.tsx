@@ -219,6 +219,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [quando, setQuando] = useState(a.quando)
   const [inLista, setInLista] = useState(a.metti.inLista)
   const [modo, setModo] = useState(a.metti.modo ?? 'io')
+  const [perDocumento, setPerDocumento] = useState(!!a.metti.perDocumento)
   const [suoi, setSuoi] = useState<string[]>(a.attrezzi)
   const [cartella, setCartella] = useState(a.cartella ?? '')
 
@@ -252,7 +253,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     if (!n) return
     setNome(n.nome); setSpiega(n.spiega); setFai(n.fai)
     setCerca(n.guarda.cerca ?? ''); setQuando(n.quando)
-    setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io')
+    setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
     setSuoi(n.attrezzi); setCartella(n.cartella ?? '')
     setProvata(x => x + 1)
   }
@@ -261,7 +262,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     setSalvo(true); setGuaio(''); setDetto('')
     try {
       const r = await api.cambiaAutomazione(a.id, {
-        nome, spiega, fai, cerca, quando, metti: { inLista, modo },
+        nome, spiega, fai, cerca, quando,
+        // il campo entra solo se acceso: spento, nel file non deve restare scritto
+        metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) },
         attrezzi: suoi, cartella: vuoleCartella ? cartella : ''
       })
       cambiata(r.automazioni)
@@ -548,6 +551,19 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                     <option value="poi">{t('in Prima o poi')}</option>
                   </select>
                 </div>
+                {/*
+                  Una riga per documento, o una riga con l'elenco. Sta qui,
+                  accanto a «cosa ne fa», perché è la stessa domanda: cosa
+                  compare in lista quando gira.
+                */}
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginTop: 9,
+                  fontSize: '12.5px', color: 'rgba(34,39,31,.75)', cursor: 'pointer'
+                }}>
+                  <input type="checkbox" checked={perDocumento}
+                    onChange={e => setPerDocumento(e.target.checked)} />
+                  {t('Una riga per ogni documento')}
+                </label>
               </Campo>
             </div>
           )}

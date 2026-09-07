@@ -180,6 +180,7 @@ export type Lavoro =
   | 'rassegna'      // quali titoli di giornale vale la pena leggere stamattina
   | 'ricetta'       // da una frase sua a un'automazione che gira davvero
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
+  | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
 
 type Profilo = {
   frontiera: boolean
@@ -237,7 +238,15 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * Quello che produce non esce da questa macchina e nessuno lo firma: se una
    * riga viene storta, sta in una schermata fatta apposta per correggerla.
    */
-  ritratto:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 }
+  ritratto:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 },
+  /*
+   * Lo smistamento: scegliere fra otto messaggi quali meritano una riga, e
+   * scriverne il titolo. Gira dopo ogni lettura della posta, per sempre, e
+   * quello che produce non esce da qui: una riga di troppo si chiude con un
+   * dito, una che manca la scrive la persona. La risposta vera — la bozza —
+   * la scrive poi il modello grande, una riga alla volta e sotto il tetto.
+   */
+  smistamento: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 }
 }
 
 // — il modello di casa —

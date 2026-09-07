@@ -1,7 +1,7 @@
 {
   "id": "chi-aspetta-risposta",
   "nome": "Chi aspetta una risposta",
-  "spiega": "Ogni pomeriggio guarda chi ti ha scritto e non ha ancora avuto risposta.",
+  "spiega": "Ogni pomeriggio guarda chi ti ha scritto da giorni e non ha ancora avuto risposta.",
   "quando": {
     "ogni": "giorno",
     "ora": 16
@@ -10,7 +10,7 @@
     "cerca": "domanda richiesta cortesemente attendo riscontro",
     "limite": 8
   },
-  "fai": "Chi di questi aspetta una risposta da te e non l'ha avuta? Per il più urgente, scrivi la risposta per intero, pronta da mandare. Per gli altri, una riga a testa. Se non aspetta nessuno, dillo e fermati.",
+  "fai": "Chi di questi ti ha scritto da più di due giorni, aspetta una risposta da te e non l'ha avuta? Una riga a testa, dal più vecchio: chi, cosa chiede, da quanto. Non scrivere le risposte — quelle alla posta appena arrivata le prepara «Risposte da dare», riga per riga: qui conta quello che è rimasto indietro. Se non aspetta nessuno, dillo e fermati.",
   "metti": {
     "inLista": "oggi",
     "modo": "bozza"
@@ -20,8 +20,8 @@
   ],
   "en": {
     "nome": "Who is waiting on you",
-    "spiega": "Every afternoon, looks at who wrote to you and has not had an answer yet.",
+    "spiega": "Every afternoon, looks at who wrote to you days ago and has not had an answer yet.",
     "cerca": "question request kindly waiting to hear back following up",
-    "fai": "Which of these is waiting for an answer from you and has not had one? For the most urgent, write the reply in full, ready to send. For the others, one line each. If nobody is waiting, say so and stop."
+    "fai": "Which of these wrote to you more than two days ago, is waiting for an answer from you and has not had one? One line each, oldest first: who, what they ask, how long ago. Do not write the replies — those to mail that just came in are prepared by \"Replies to give\", one line per message: this is about what slipped behind. If nobody is waiting, say so and stop."
   }
 }

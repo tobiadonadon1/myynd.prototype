@@ -186,6 +186,22 @@ Le ore delle automazioni («ogni giorno alle 7») e il conto delle bozze del
 giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
 configurazione: su un server la macchina sta in UTC.
 
+## Le automazioni
+
+Una ricetta in `automazioni/_comuni` scrive di norma **una riga** con l'elenco
+di quello che ha guardato. Con `metti.perDocumento: true` scrive invece **una
+riga per ogni documento** che merita attenzione: un modello piccolo (il lavoro
+`smistamento`, mai di frontiera) legge i candidati con l'istruzione `fai`
+davanti e sceglie quali meritano una riga e con che titolo — «Rispondere a
+Rossi sul preventivo di marzo» — e ogni riga nasce col suo documento attaccato,
+così la bozza parte da *quel* messaggio ed è una risposta a chi l'ha scritto.
+Un documento che ha già una riga da quella ricetta — viva, chiusa o buttata —
+non ne riceve una seconda; il tetto delle bozze del giorno vale riga per riga,
+e oltre il tetto le righe nascono lo stesso, senza bozza. È la ricetta di serie
+«Risposte da dare» (`risposte-da-dare.json`): a ogni lettura della posta, una
+riga per ogni messaggio in arrivo che aspetta una tua risposta, con la risposta
+già scritta. Un'email che sta già in lista non viene riproposta nel feed.
+
 ## Connettori
 
 | Connettore | Cosa serve |
