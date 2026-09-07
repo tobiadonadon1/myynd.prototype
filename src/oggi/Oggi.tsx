@@ -1173,6 +1173,12 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
     if (id && modo) l.delega(id, modo)
   }
 
+  /** Una lista incollata: una riga per cosa, e il comando scelto vale per tutte. */
+  const aggiungiRighe = async (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null) => {
+    const ids = await l.aggiungiTante(righe, quando)
+    if (modo) for (const id of ids) l.delega(id, modo)
+  }
+
   return (
     // il fondo si può afferrare: è così che si sposta la finestra. Tutto quello
     // che si tocca dentro dice «no-drag», altrimenti non lo tocchi più
@@ -1197,7 +1203,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         }}>{oggi}</div>
       </div>
 
-      <Barra aggiungi={aggiungi} mostraFatte={() => setFatteAperte(a => !a)} />
+      <Barra aggiungi={aggiungi} aggiungiRighe={aggiungiRighe} mostraFatte={() => setFatteAperte(a => !a)} />
 
       {l.guasto && (
         <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: '#8E3F1F' }}>{t(l.guasto)}</div>

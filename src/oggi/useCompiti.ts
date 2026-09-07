@@ -12,7 +12,7 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Compito, type EventoCompito, type PassoCompito } from '../api'
+import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito } from '../api'
 import { frasi, t } from '../lingua'
 import { desktop } from '../desktop'
 
@@ -25,7 +25,11 @@ export function nuovoId(): string {
 
 export type Avviso = { testo: string; quando: number } | null
 
-export function useCompiti(mostraToast: (t: string) => void) {
+export function useCompiti(
+  mostraToast: (t: string) => void,
+  /** Dove si collega una fonte che manca: il pannello delle connessioni, aperto su di lei. */
+  apriConnessioni?: (fonte: string) => void
+) {
   const [compiti, setCompiti] = useState<Compito[]>([])
   const [chiusi, setChiusi] = useState<Compito[]>([])
   const [fuoco, setFuoco] = useState('')
@@ -189,6 +193,26 @@ export function useCompiti(mostraToast: (t: string) => void) {
   }, [indietro])
 
   /**
+   * Tante righe in un colpo: una lista incollata.
+   *
+   * Una alla volta, in fila, e non tutte insieme: ogni risposta del server
+   * porta la lista intera, e otto risposte in volo che si sorpassano lasciano
+   * sullo schermo quella arrivata per ultima — non l'ultima scritta. In fila
+   * l'ordine è quello del foglio, e la chiave d'ordine del server lo segue.
+   * Torna gli id di quelle nate davvero; se una non è nata l'avviso è il suo.
+   */
+  const aggiungiTante = useCallback(async (righe: string[], quando: Secchio): Promise<string[]> => {
+    const piene = righe.map(r => r.trim()).filter(Boolean)
+    const nati: string[] = []
+    for (const r of piene) {
+      const id = await aggiungi(r, quando)
+      if (id) nati.push(id)
+    }
+    if (nati.length && nati.length === piene.length) mostraToast(frasi.righeSegnate(nati.length))
+    return nati
+  }, [aggiungi, mostraToast])
+
+  /**
    * Toglie una riga dall'insieme di quelle aperte, e con lei il suo ultimo passo.
    *
    * Chiudere o buttare una riga mentre Myynd ci lavorava non produce nessun
@@ -232,8 +256,11 @@ export function useCompiti(mostraToast: (t: string) => void) {
       setCompiti(r.compiti)
     } catch (e) {
       indietro(prima, id, e instanceof Error ? t(e.message) : t('Non sono riuscito ad affidarlo.'))
+      // «collega Claude» detto e basta lascia la persona dov'era: si apre il
+      // pannello in cui si collega, con la riga già tornata sua
+      if (e instanceof DaCollegare) apriConnessioni?.(e.fonte)
     }
-  }, [indietro])
+  }, [indietro, apriConnessioni])
 
   /** Ci ho ripensato: il compito torna mio. */
   const richiama = useCallback(async (id: string) => {
@@ -411,7 +438,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
     quante: (s: Secchio) => compiti.filter(c => c.quando === s).length,
     pronte, chiedono,
-    aggiungi, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda
+    aggiungi, aggiungiTante, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda
   }
 }
 

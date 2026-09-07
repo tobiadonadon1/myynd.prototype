@@ -1567,6 +1567,7 @@ const EN: Record<string, string> = {
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
   'Mostra la cartella dei dati': 'Show the data folder',
+  'Per la lettura serve una chiave API o un fornitore: l’abbonamento basta per la chat.': 'Reading needs an API key or a provider: the subscription covers chat only.',
 }
 
 
@@ -1871,6 +1872,12 @@ export const frasi = {
   cercaFra: (n: string) =>
     corrente === 'en'
       ? `Search ${n} document${n === '1' ? '' : 's'}…` : `Cerca fra ${n} document${n === '1' ? 'o' : 'i'}…`,
+
+  // — la lista: una lista incollata, una riga per cosa —
+  righeSegnate: (n: number) =>
+    corrente === 'en'
+      ? `${n} line${n === 1 ? '' : 's'} noted.`
+      : `${n} ${n === 1 ? 'riga segnata' : 'righe segnate'}.`,
 
   // — la lista: i passi del lavoro su una riga affidata. Il server manda
   //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —

@@ -2096,7 +2096,60 @@ function idFeed(v: { titolo: string; doc?: string | null }): string {
   return 'f' + h.toString(36)
 }
 
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string }[]) {
+/** Le parole di un titolo, spogliate: minuscole, senza accenti né punteggiatura, solo quelle lunghe. */
+function paroleDi(titolo: string): Set<string> {
+  return new Set(
+    titolo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/).filter(p => p.length >= 4)
+  )
+}
+
+/**
+ * Due titoli che dicono la stessa cosa con parole quasi uguali.
+ *
+ * Non è capire il senso: è contare le parole in comune. Basta, perché il
+ * modello che riscrive la stessa voce cambia l'ordine e un aggettivo, non
+ * l'argomento — «Preventivo Rossi da confermare» e «Confermare il preventivo
+ * a Rossi» hanno tre parole su quattro in comune. Due voci diverse sullo
+ * stesso cliente («Fattura di marzo a Rossi», «Fattura di aprile a Rossi») ne
+ * hanno due su quattro, e passano.
+ */
+function stessoTitolo(a: string, b: string): boolean {
+  const pa = paroleDi(a), pb = paroleDi(b)
+  if (!pa.size || !pb.size) return a.trim().toLowerCase() === b.trim().toLowerCase()
+  let comuni = 0
+  for (const p of pa) if (pb.has(p)) comuni++
+  const unione = pa.size + pb.size - comuni
+  return comuni / unione >= 0.6
+}
+
+/** Entro quanto una voce chiusa tiene ancora lontane le sue sorelle. */
+const OMBRA_GIORNI = 60
+
+/**
+ * Salva quello che la lettura ha tirato fuori. Torna quante voci sono nuove.
+ *
+ * L'id nasce da documento e titolo, e l'upsert tiene chiuso quello che hai
+ * già chiuso. Ma non bastava, e si è visto sul database vero: la stessa
+ * email tornava sul feed tre volte in tre giorni, con tre titoli un po'
+ * diversi — e tre id diversi. Il modello non è tenuto a riscrivere un titolo
+ * alla lettera, quindi l'identità non può essere solo quella. Qui ci sono
+ * altre due reti, e passano *prima* dell'upsert:
+ *
+ *   · un documento, una voce. Se per quel documento c'è già una voce aperta,
+ *     o una chiusa da poco — fatta, scartata, passata in lista — la nuova non
+ *     entra. «Non te la rimetto davanti» vale per il documento, non per le
+ *     parole con cui era scritta.
+ *   · un titolo che somiglia a uno già in feed non entra. È la rete per le
+ *     voci senza documento, che sono proprio quelle che si duplicavano: un
+ *     documento sparito dall'indice lascia la voce con `doc` vuoto, e la
+ *     stessa cosa riletta da un documento nuovo non ha più niente in comune
+ *     con lei se non le parole.
+ *
+ * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
+ * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
+ */
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string }[]): number {
   const ins = db.prepare(`
     INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, stato, quando)
     VALUES (?,?,?,?,?,?,?,'aperto',?)
@@ -2111,16 +2164,51 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
   // con un nome e un contenuto che non si parlano.
   const esiste = db.prepare('SELECT 1 FROM documenti WHERE id = ?')
   const puliti = items.map(i => ({ ...i, doc: i.doc && esiste.get(i.doc) ? i.doc : undefined }))
+
+  const soglia = new Date(Date.now() - OMBRA_GIORNI * 86_400_000).toISOString()
+  const giaConId = db.prepare('SELECT 1 FROM feed WHERE id = ?')
+  const stessoDoc = db.prepare(`
+    SELECT 1 FROM feed WHERE doc = ? AND id != ? AND (stato = 'aperto' OR COALESCE(risposto, quando) >= ?)
+  `)
+  // quelle con cui confrontare i titoli: aperte, o chiuse da poco
+  const vicine = db.prepare(`
+    SELECT id, titolo FROM feed WHERE stato = 'aperto' OR COALESCE(risposto, quando) >= ?
+  `).all(soglia) as { id: string; titolo: string }[]
+
+  let nuove = 0
   db.exec('BEGIN')
   try {
     for (const i of puliti) {
-      ins.run(idFeed(i), i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
+      const id = idFeed(i)
+      if (!giaConId.get(id)) {
+        if (i.doc && stessoDoc.get(i.doc, id, soglia)) continue
+        if (vicine.some(v => v.id !== id && stessoTitolo(v.titolo, i.titolo))) continue
+        nuove++
+        // anche fra quelle di questo giro: il modello ne scrive due uguali più
+        // spesso di quanto si creda
+        vicine.push({ id, titolo: i.titolo })
+      }
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
     }
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
     throw e
   }
+  return nuove
+}
+
+/**
+ * Le voci aperte, per il modello: titolo e documento e basta.
+ *
+ * Servono a due cose nella lettura — dirgli «queste le sai già, non
+ * riscriverle» e togliergli dal materiale i documenti da cui sono nate. Solo
+ * i titoli: ogni lettura costa quello che costa, e la lista intera con i
+ * testi sarebbe un altro migliaio di token per dire la stessa cosa.
+ */
+export function feedAperto(limite = 40): { titolo: string; doc: string | null }[] {
+  return db.prepare('SELECT titolo, doc FROM feed WHERE stato = ? ORDER BY quando DESC LIMIT ?')
+    .all('aperto', limite) as unknown as { titolo: string; doc: string | null }[]
 }
 
 /**

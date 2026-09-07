@@ -101,3 +101,10 @@ test('quanti eventi ha letto il calendario', () => {
   assert.match(in_('en', () => frasi.agendaLetta('Work', 3)), /“Work” is connected: 3 events read\./)
   assert.match(in_('it', () => frasi.agendaLetta('Lavoro', 3)), /«Lavoro» è collegata: 3 eventi letti\./)
 })
+
+test('una riga incollata è «una riga segnata», non «1 righe»', () => {
+  assert.equal(in_('it', () => frasi.righeSegnate(1)), '1 riga segnata.')
+  assert.equal(in_('it', () => frasi.righeSegnate(8)), '8 righe segnate.')
+  assert.equal(in_('en', () => frasi.righeSegnate(1)), '1 line noted.')
+  assert.equal(in_('en', () => frasi.righeSegnate(8)), '8 lines noted.')
+})

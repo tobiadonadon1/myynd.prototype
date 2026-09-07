@@ -11,6 +11,7 @@ import { Hov } from '../ui'
 import { lingua, t } from '../lingua'
 import { IconPiu } from '../icons'
 import type { Secchio } from './useCompiti'
+import { righeDaTesto } from './righe'
 
 export type Comando = {
   /** Quello che si scrive. Due, perché un menù in inglese che vuole «/oggi» non è in inglese. */
@@ -37,8 +38,10 @@ const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
-export function Barra({ aggiungi, mostraFatte }: {
+export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
   aggiungi: (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null) => void
+  /** Più righe in un colpo: una lista incollata. Una per cosa, nell'ordine in cui stanno. */
+  aggiungiRighe: (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null) => void
   mostraFatte: () => void
 }) {
   const [testo, setTesto] = useState('')
@@ -71,13 +74,38 @@ export function Barra({ aggiungi, mostraFatte }: {
     campo.current?.focus()
   }
 
-  const manda = () => {
-    if (!testo.trim()) return
-    aggiungi(testo, dove, modo)
+  const azzera = () => {
     setTesto('')
     setDove('oggi')
     setModo(null)
     setVistaScelta(false)
+  }
+
+  const manda = () => {
+    if (!testo.trim()) return
+    // un campo di una riga non contiene a capo, ma chi lo riempie da fuori sì:
+    // più righe sono più cose, qui come nell'incolla
+    const righe = righeDaTesto(testo)
+    if (righe.length > 1) aggiungiRighe(righe, dove, modo)
+    else aggiungi(testo, dove, modo)
+    azzera()
+  }
+
+  /**
+   * Una lista incollata.
+   *
+   * Il campo è di una riga sola, e il browser ci incolla un elenco togliendo
+   * gli a capo: otto cose da fare diventavano una riga lunga con i trattini in
+   * mezzo, e la prima cosa che si faceva era cancellarla. Qui l'elenco si
+   * intercetta prima, e ogni riga diventa una cosa. Quello che era già scritto
+   * nel campo è una riga come le altre, e viene prima.
+   */
+  const incolla = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const righe = righeDaTesto(e.clipboardData.getData('text'))
+    if (righe.length < 2) return
+    e.preventDefault()
+    aggiungiRighe([...righeDaTesto(testo), ...righe], dove, modo)
+    azzera()
   }
 
   const tasti = (e: React.KeyboardEvent) => {
@@ -88,7 +116,7 @@ export function Barra({ aggiungi, mostraFatte }: {
       if (e.key === 'Escape') { e.stopPropagation(); setTesto(testo.replace(/(?:^|\s)\/\S*$/, '')); return }
     }
     if (e.key === 'Enter') manda()
-    if (e.key === 'Escape') { e.stopPropagation(); setTesto(''); setModo(null); setDove('oggi'); setVistaScelta(false) }
+    if (e.key === 'Escape') { e.stopPropagation(); azzera() }
   }
 
   const etichetta: CSSProperties = {
@@ -115,6 +143,7 @@ export function Barra({ aggiungi, mostraFatte }: {
           onFocus={() => setFuoco(true)}
           onBlur={() => setFuoco(false)}
           onKeyDown={tasti}
+          onPaste={incolla}
           aria-label={t('Cosa c\'è da fare')}
           placeholder={t('Cosa c\'è da fare')}
           style={{

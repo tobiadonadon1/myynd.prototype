@@ -26,7 +26,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync
 import { join } from 'node:path'
 import { cartella, leggi, nellaLingua , lingua as cfgLingua } from './config.ts'
 import * as ricettario from './ricettario.ts'
-import { chiediJSON } from './modello.ts'
+import { chiediJSON, collegato } from './modello.ts'
 import * as store from './store.ts'
 import * as compiti from './compiti.ts'
 import * as ordine from './ordine.ts'
@@ -1047,6 +1047,10 @@ serve prima che la giornata cominci.`
 export async function daUnaFrase(descrizione: string): Promise<Automazione> {
   const detto = descrizione.trim()
   if (detto.length < 8) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
+  // senza un modello `chiediJSON` torna null in silenzio, e la frase sotto
+  // diceva «riprova dicendola in un altro modo» a chi poteva ridirla in cento
+  // modi senza cambiare niente: il motivo era un altro, e va detto quello
+  if (!collegato()) throw new Error('Collega Claude e potrò lavorarci.')
 
   const r = await chiediJSON<{
     severo: true,
