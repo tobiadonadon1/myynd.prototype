@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test": "node --test --disable-warning=ExperimentalWarning server/*.test.ts src/*.test.ts",
     "start": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/index.ts",
-    "password": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/password.ts"
+    "password": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/password.ts",
+    "pacchetto": "npm run build && electron-builder --config build/configura.cjs --mac --win",
+    "pacchetto:mac": "npm run build && electron-builder --config build/configura.cjs --mac",
+    "pacchetto:win": "npm run build && electron-builder --config build/configura.cjs --win --x64",
+    "prova:app": "node prove/app.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -41,6 +45,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^10.0.4",
     "electron": "43.4.1",
+    "electron-builder": "26.15.3",
     "typescript": "^5.7.3",
     "vite": "^7.3.6"
   }

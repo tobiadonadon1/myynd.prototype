@@ -531,6 +531,9 @@ app.get('/api/stato', (_req, res) => {
     // abbonamento — si mette qui sopra, dove le due si conoscono entrambe
     config: { ...cfg.pubblica(c), claude: mod.conClaude() ? { collegato: true } : null },
     conteggi: n,
+    // dentro l'app del desktop, che lo dice al server con MYYND_APP=1: da qui
+    // l'interfaccia sa se c'è un guscio intorno — la prova del pacchetto lo chiede
+    app: process.env.MYYND_APP === '1',
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
     // che sia rotto Myynd invece che fuori posto
