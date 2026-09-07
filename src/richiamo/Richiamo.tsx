@@ -27,9 +27,15 @@ const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settima
 const COMANDI_QUI = COMANDI.filter(c => !c.fai)
 const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
 
-/** La risposta a paragrafi, con gli asterischi del grassetto tolti: è testo, non un terminale. */
+/**
+ * La risposta a paragrafi, con gli asterischi del grassetto tolti: è testo,
+ * non un terminale. Via anche i numeri fra parentesi quadre: nella chat sono
+ * le fonti, che si aprono; qui non c'è niente da aprire, e «[1]» in mezzo a
+ * una frase è solo un pezzo di codice avanzato.
+ */
 function paragrafi(testo: string): string[] {
-  return testo.replace(/\*\*/g, '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+  return testo.replace(/\*\*/g, '').replace(/\s*\[\d+(?:,\s*\d+)*\]/g, '')
+    .split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
 }
 
 export function Richiamo() {

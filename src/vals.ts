@@ -1106,7 +1106,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — connettori —
     connMeta: frasi.attiviDaCollegare(connOn.length, connettori.filter(c => c.pronto).length - connOn.length),
     connAttivi: connOn.map(c => ({
-      id: c.id, nome: c.nome, stato: frasi.statoConnettore(c.documenti),
+      id: c.id, nome: c.nome,
+      // il desktop dice anche se lo sta guardando dal vivo: è la differenza
+      // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
+      stato: [frasi.statoConnettore(c.documenti), c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+        .filter(Boolean).join(' · '),
       onClick: async () => {
         // «scollegato» si dice solo se è vero: prima usciva anche quando il server aveva detto di no
         try { await api.scollega(c.id) }

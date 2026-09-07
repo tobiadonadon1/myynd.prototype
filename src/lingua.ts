@@ -377,6 +377,7 @@ const EN: Record<string, string> = {
 // — il catalogo delle fonti —
   'Posta': 'Mail',
   'Desktop': 'Desktop',
+  'Conversazioni': 'Conversations',
   'Calendario': 'Calendar',
   'Comunicazione': 'Communication',
   'File': 'Files',
