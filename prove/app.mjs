@@ -263,6 +263,46 @@ try {
     for (const pid of dopo) { try { process.kill(Number(pid), 'SIGKILL') } catch { /* già via */ } }
   }
 
+  /*
+   * La seconda apertura, sugli stessi dati.
+   *
+   * È qui che si vede il guasto più facile da non vedere: la sessione sta in
+   * `localStorage`, legato all'origine, cioè alla porta. Un'app che riparte
+   * su una porta a caso è un'app che chiede l'accesso a ogni apertura — e
+   * la prima apertura, da sola, non lo dice mai.
+   */
+  if (portaServer && uscito !== null) {
+    let uscita2 = null
+    const app2 = spawn(BINARIO, [`--remote-debugging-port=${PORTA_CDP}`], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    app2.on('exit', (codice, segnale) => { uscita2 = { codice, segnale } })
+    try {
+      const pagina2 = await attacca(PORTA_CDP, /./)
+      const origine2 = await aspetta(async () => {
+        const o = await pagina2.valuta('return location.origin')
+        return /^http:\/\/127\.0\.0\.1:\d+$/.test(o) ? o : null
+      }, 60_000)
+      segna(origine2 === `http://127.0.0.1:${portaServer}`, 'alla seconda apertura la porta è la stessa', `${origine2} (prima: ${portaServer})`)
+      const ancoraDentro = await aspetta(async () => {
+        const token2 = await pagina2.valuta(`return localStorage.getItem('myynd.token')`)
+        const t = await pagina2.testo()
+        return token2 && !t.includes('Create an account') ? t : null
+      }, 20_000)
+      segna(!!ancoraDentro, 'alla seconda apertura si è ancora dentro, senza rifare l’accesso',
+        ancoraDentro ? '' : `visto: ${(await pagina2.testo()).split('\n').filter(Boolean).slice(0, 4).join(' / ')}`)
+      pagina2.chiudi()
+    } catch (e) {
+      segna(false, 'la seconda apertura risponde', e instanceof Error ? e.message : String(e))
+    }
+    if (uscita2 === null) {
+      app2.kill('SIGTERM')
+      const chiusa2 = await aspetta(async () => uscita2 !== null, 15_000, 250)
+      if (!chiusa2) app2.kill('SIGKILL')
+      segna(!!chiusa2, 'anche la seconda apertura esce con SIGTERM')
+    }
+    await pausa(500)
+    for (const pid of inAscolto(portaServer)) { try { process.kill(Number(pid), 'SIGKILL') } catch { /* già via */ } }
+  }
+
   rmSync(dati, { recursive: true, force: true })
   rmSync(cartella, { recursive: true, force: true })
   if (guasti) {
