@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
+import { desktop } from './desktop'
 import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
@@ -235,7 +236,9 @@ export default function App() {
 function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
   useEffect(() => { const t = setTimeout(chiudi, 12000); return () => clearTimeout(t) }, [chiudi])
   return (
-    <div role="status" aria-live="polite" onClick={chiudi} style={{
+    // `app-presa`: dentro l'app sta nella striscia che trascina la finestra,
+    // e senza si trascinerebbe invece di chiudersi
+    <div role="status" aria-live="polite" onClick={chiudi} className="app-presa" style={{
       position: 'fixed', top: 22, right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
       padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)',
       color: '#22271F', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)',
@@ -288,6 +291,24 @@ function Casa({ stato, apriConnessioni, esci }: {
    */
   const { rail, colonna } = taglia(useLarghezza())
 
+  /**
+   * Il guscio dell'app chiede di andare da qualche parte.
+   *
+   * Cmd+, nel menù, «Nuova chat» nel vassoio: arrivano da qui come nomi, e si
+   * portano dove porterebbe la voce corrispondente della colonna. `v` si rifà a
+   * ogni disegno, e ci si iscrive una volta sola: il riferimento tiene l'ultimo.
+   */
+  const vRef = useRef(v)
+  vRef.current = v
+  useEffect(() => desktop()?.naviga(dove => {
+    const v = vRef.current
+    if (dove === 'preferenze') v.goPref()
+    else if (dove === 'chat') v.goChat()
+    else if (dove === 'oggi') v.goOggi()
+    else if (dove === 'aiuto') v.goAiuto()
+    else if (dove === 'nuova-chat') v.newChat()
+  }), [])
+
   /** Nel rail l'icona si centra e l'etichetta sparisce: restano i titoli. */
   const nav = (base: React.CSSProperties): React.CSSProperties =>
     rail ? { ...base, justifyContent: 'center', padding: '10px 0', gap: 0 } : base
@@ -338,7 +359,9 @@ function Casa({ stato, apriConnessioni, esci }: {
         // dietro obbliga a rifare la sfocatura di tutta la colonna
         transform: 'translateZ(0)', backfaceVisibility: 'hidden', contain: 'paint'
       }}>
-        <div style={{
+        {/* le classi servono solo dentro l'app sul Mac: fanno scendere il
+            marchio sotto i semafori della finestra (vedi index.css) */}
+        <div className={rail ? 'app-testata app-testata-rail' : 'app-testata'} style={{
           display: 'flex', alignItems: 'center', gap: 10,
           flexDirection: rail ? 'column' : 'row',
           padding: rail ? '0 0 18px' : '0 4px 24px'

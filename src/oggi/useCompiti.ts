@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Compito, type EventoCompito, type PassoCompito } from '../api'
 import { frasi, t } from '../lingua'
+import { desktop } from '../desktop'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -379,6 +380,28 @@ export function useCompiti(mostraToast: (t: string) => void) {
 
   const perSecchio = (s: Secchio) => compiti.filter(c => c.quando === s)
 
+  const pronte = compiti.filter(c => c.stato === 'pronto').length
+  const chiedono = compiti.filter(c => c.stato === 'chiede').length
+
+  /**
+   * Quante cose aspettano una persona, dette al guscio dell'app.
+   *
+   * Sono le stesse due che accendono il punto sulla voce «Da fare»: una bozza
+   * pronta da leggere e una domanda che Myynd ha fatto e a cui nessuno ha
+   * ancora risposto. Non le righe aperte — quelle sono la lista, e una lista
+   * di dieci cose non è dieci interruzioni — e non quelle affidate, che
+   * stanno lavorando e non chiedono niente. Il segno nella barra dei menù e
+   * il numero sul Dock vogliono dire una cosa sola: c'è qualcosa che si
+   * sblocca solo se guardi.
+   *
+   * Si manda solo quando cambia, e zero quando questa lista se ne va — cioè
+   * quando si esce: un numero rimasto sul Dock dopo l'uscita parlerebbe di
+   * un conto che non c'è più.
+   */
+  const inAttesa = pronte + chiedono
+  useEffect(() => { desktop()?.segnala(inAttesa) }, [inAttesa])
+  useEffect(() => () => { desktop()?.segnala(0) }, [])
+
   return {
     esegui, salvaDocumento, lavora,
     compiti, chiusi, fuoco, caricato, guasto, aperti, passi,
@@ -387,8 +410,7 @@ export function useCompiti(mostraToast: (t: string) => void) {
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
     quante: (s: Secchio) => compiti.filter(c => c.quando === s).length,
-    pronte: compiti.filter(c => c.stato === 'pronto').length,
-    chiedono: compiti.filter(c => c.stato === 'chiede').length,
+    pronte, chiedono,
     aggiungi, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda
   }
 }

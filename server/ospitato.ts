@@ -76,6 +76,16 @@ export const DOMINIO = pulisci(process.env.MYYND_PUBBLICO ?? '')
 export const OSPITATO = !!DOMINIO || SEGNI_DI_UN_SERVER.some(v => !!process.env[v])
 
 /**
+ * Vero quando è il guscio dell'app da scrivania ad aver acceso questo server.
+ *
+ * Lo scrive lui nell'ambiente, e serve a una cosa sola: dirlo all'interfaccia
+ * in `/api/stato`, così sa di stare dentro una finestra e non in una scheda.
+ * Non cambia niente di quello che il server fa: i dati stanno in `~/.myynd`
+ * come per chi lo lancia a mano.
+ */
+export const APP = process.env.MYYND_APP === '1'
+
+/**
  * La porta, e chi la decide.
  *
  * `PORT` la scrive chi ospita — Railway, Render, Fly — e non è negoziabile: il

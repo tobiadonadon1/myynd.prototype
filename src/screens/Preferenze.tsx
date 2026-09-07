@@ -4,10 +4,178 @@ import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
 import type { Vals } from '../vals'
+import { acceleratore, desktop, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
 
 /** Una riga che si sceglie, scritta come bottone: perde il vestito del bottone e tiene il suo. */
 const RIGA_BOTTONE: React.CSSProperties = {
   border: 'none', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left', width: '100%'
+}
+
+/** Il bottone di seconda fila, com'è in «Il tuo accesso» e nel fascicolo. */
+const SECONDARIO: React.CSSProperties = {
+  flex: 'none', padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+  border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.78)', fontSize: '13px'
+}
+
+/**
+ * L'app da scrivania: quello che sa fare il guscio e il sito no.
+ *
+ * Si vede solo dentro l'app. Sono le quattro cose che una persona tocca una
+ * volta e poi dimentica: la scorciatoia che porta Myynd davanti da qualunque
+ * programma, se parte da solo all'accesso, gli aggiornamenti, e dove stanno i
+ * file. La scorciatoia si cambia premendola — non scrivendola — perché
+ * «CommandOrControl+Shift+M» non è una cosa che si chiede a nessuno di sapere.
+ *
+ * Quando l'app non può aggiornarsi lo dice con una frase e basta, senza un
+ * bottone spento accanto: un «Controlla» che non controlla niente insegna a
+ * non fidarsi degli altri.
+ */
+function LApp() {
+  const d = desktop()
+  const [acc, setAcc] = useState('')
+  const [registro, setRegistro] = useState(false)
+  const [avvio, setAvvio] = useState<boolean | null>(null)
+  const [agg, setAgg] = useState<Aggiornamento | null>(null)
+  const [chiedo, setChiedo] = useState(false)
+  const [home, setHome] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  useEffect(() => {
+    if (!d) return
+    d.scorciatoia().then(setAcc).catch(() => {})
+    d.avvioAutomatico().then(setAvvio).catch(() => {})
+    api.stato().then(s => setHome(s.home)).catch(() => {})
+    return d.aggiornamenti.stato(setAgg)
+  }, [d])
+
+  /*
+   * La registrazione: il prossimo tasto premuto è la scorciatoia nuova.
+   *
+   * In cattura e su `window`, così arriva prima di qualunque campo o
+   * scorciatoia della pagina — ⌘K aprirebbe la ricerca invece di diventare
+   * la combinazione. Esc lascia com'era; un modificatore da solo aspetta.
+   */
+  useEffect(() => {
+    if (!registro || !d) return
+    const alTasto = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopPropagation()
+      if (e.key === 'Escape') { setRegistro(false); return }
+      if (soloModificatore(e.key)) return
+      const nuovo = acceleratore(e, d.piattaforma)
+      if (!nuovo) {
+        setGuaio(d.piattaforma === 'darwin' ? t('Serve ⌘, ⌃ o ⌥ insieme a un tasto.') : t('Serve Ctrl, Alt o Win insieme a un tasto.'))
+        return
+      }
+      setRegistro(false); setGuaio('')
+      d.impostaScorciatoia(nuovo)
+        .then(r => { if (r.ok) setAcc(nuovo); else setGuaio(r.errore ? t(r.errore) : t('Non sono riuscito a cambiare la scorciatoia.')) })
+        .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+    }
+    window.addEventListener('keydown', alTasto, true)
+    return () => window.removeEventListener('keydown', alTasto, true)
+  }, [registro, d])
+
+  if (!d) return null
+
+  const cambiaAvvio = async () => {
+    const nuovo = !avvio
+    setAvvio(nuovo); setGuaio('')
+    try { await d.impostaAvvioAutomatico(nuovo) }
+    catch (e) { setAvvio(!nuovo); setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+  }
+
+  const controlla = async () => {
+    setChiedo(true); setGuaio('')
+    try { setAgg(await d.aggiornamenti.controlla()) }
+    catch (e) { setAgg({ stato: 'errore', messaggio: e instanceof Error ? e.message : String(e) }) }
+    setChiedo(false)
+  }
+
+  const rigaAggiornamenti = (): string => {
+    if (!agg) return t('Non ho ancora controllato.')
+    switch (agg.stato) {
+      case 'spento':
+        return agg.perche === 'non-firmata' ? t('L’app non è firmata, quindi non può ancora aggiornarsi da sola.')
+          : agg.perche === 'sviluppo' ? t('In sviluppo non si aggiorna.')
+          : t('Questa copia non ha un indirizzo da cui aggiornarsi.')
+      case 'controllo': return t('Controllo…')
+      case 'aggiornata': return t('È l’ultima versione.')
+      case 'scarico': return frasi.scaricoAggiornamento(agg.versione, agg.percento)
+      case 'pronta': return frasi.aggiornamentoPronto(agg.versione)
+      case 'errore': return `${t('Non sono riuscito a controllare.')} ${agg.messaggio}`
+    }
+  }
+  const inCorso = chiedo || agg?.stato === 'controllo' || agg?.stato === 'scarico'
+  const mac = d.piattaforma === 'darwin'
+
+  const RIGA: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }
+  const TESTO: React.CSSProperties = { flex: 1, minWidth: 0 }
+  const NOTA: React.CSSProperties = { fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('L’app')}</div>
+
+      <div style={{ ...RIGA, marginTop: 12 }}>
+        <div style={TESTO}>
+          <div style={{ fontSize: 15 }}>{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
+          <div style={NOTA}>{rigaAggiornamenti()}</div>
+        </div>
+        {agg?.stato === 'pronta' ? (
+          <button type="button" onClick={() => d.aggiornamenti.installa()} style={{
+            flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
+            background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+            fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
+          }}>{t('Riavvia e aggiorna')}</button>
+        ) : agg?.stato !== 'spento' && (
+          <button type="button" onClick={controlla} disabled={inCorso} style={{ ...SECONDARIO, cursor: inCorso ? 'default' : 'pointer', opacity: inCorso ? 0.6 : 1 }}>
+            {inCorso ? t('Controllo…') : t('Controlla')}
+          </button>
+        )}
+      </div>
+
+      <div style={RIGA}>
+        <div style={TESTO}>
+          {registro
+            ? <div style={{ fontSize: 15 }}>{t('Premi la combinazione nuova…')}</div>
+            : <div style={{ fontSize: 15 }}>
+                <span style={{ background: 'rgba(34,39,31,.07)', padding: '2px 9px', borderRadius: 7, letterSpacing: '.06em' }}>{acc ? simboli(acc, d.piattaforma) : '…'}</span>
+              </div>}
+          <div style={NOTA}>
+            {registro
+              ? t('Esc lascia com’è.')
+              : t('Porta Myynd davanti da qualunque programma, e lo nasconde se è già davanti.')}
+          </div>
+        </div>
+        <button type="button" onClick={() => { setGuaio(''); setRegistro(r => !r) }} style={SECONDARIO}>
+          {registro ? t('Annulla') : t('Cambia')}
+        </button>
+      </div>
+
+      <div style={RIGA}>
+        <div style={TESTO}>
+          <div style={{ fontSize: 15 }}>{t('Si apre all’accesso')}</div>
+          <div style={NOTA}>{t('Myynd parte da solo quando entri nel computer.')}</div>
+        </div>
+        <button type="button" role="switch" aria-checked={!!avvio} aria-label={t('Si apre all’accesso')}
+          disabled={avvio === null} onClick={cambiaAvvio} style={track(!!avvio)}><span style={knob()} /></button>
+      </div>
+
+      <div style={RIGA}>
+        <div style={TESTO}>
+          <div style={{ fontSize: 15 }}>{t('I tuoi dati')}</div>
+          <div style={NOTA}>
+            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>{home ? `${home}/.myynd` : '~/.myynd'}</code>
+          </div>
+        </div>
+        <button type="button" disabled={!home} onClick={() => { d.mostraNelFinder(`${home}/.myynd`).catch(() => {}) }} style={{ ...SECONDARIO, opacity: home ? 1 : 0.6 }}>
+          {mac ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
+        </button>
+      </div>
+
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+    </div>
+  )
 }
 
 
@@ -1146,6 +1314,9 @@ export function Preferenze({ v }: { v: Vals }) {
       <Conto />
 
       <Gettoni ospitato={v.ospitato} />
+
+      {/* solo dentro l'app da scrivania: nel browser la carta non si disegna */}
+      <LApp />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
