@@ -250,6 +250,26 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     caricaChat().catch(() => {})
   }, [caricaFeed, caricaMente, caricaChat])
 
+  /**
+   * Il feed cambia anche quando non lo tocchi.
+   *
+   * La rilettura automatica salva le voci nuove nel cuore della notte, e
+   * finora nessuno lo diceva a questa pagina: la prima pagina restava quella
+   * di ieri finché non si ricaricava. Lo stesso filo che tiene vive le
+   * deleghe porta anche questo — un fatto, non le voci — e qui si rilegge.
+   * Anche quando il filo si riapre: quello che è successo mentre era giù non
+   * lo racconta nessuno.
+   */
+  useEffect(() => {
+    let attesa: ReturnType<typeof setTimeout> | undefined
+    const chiudi = api.flussoCompiti(e => {
+      if (e.fase !== 'feed' && e.fase !== 'aperto') return
+      clearTimeout(attesa)
+      attesa = setTimeout(() => { caricaFeed().catch(() => {}) }, 200)
+    })
+    return () => { clearTimeout(attesa); chiudi() }
+  }, [caricaFeed])
+
   // il grafo arriva quando si apre la Mappa, e una volta sola
   useEffect(() => {
     if (mappaInVista && !grafo) caricaMente(true).catch(() => {})

@@ -10,7 +10,7 @@ import { cerca, documento, recenti, stessoFilo, type Documento } from './store.t
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import { convinzioni, feedGiaVisto, compitiPerIlModello } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello } from './store.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -836,7 +836,21 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   // contratto del 2023 messo nella cartella stamattina non è «recente», ma è
   // la cosa più nuova che sia successa oggi ed è quella che va guardata.
   const arrivati = new Set(nuovi.map(d => d.id))
-  const docs = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))].slice(0, 30)
+  /*
+   * Quello che è già sul feed non si rilegge.
+   *
+   * Ogni lettura ripartiva dagli stessi trenta documenti recenti, e su quelli
+   * il modello rifaceva le stesse voci con parole nuove: la stessa email tre
+   * volte in tre giorni. Un documento che ha già una voce aperta ha già avuto
+   * la sua attenzione — si toglie dal materiale, e i posti che libera vanno a
+   * cose che non ha ancora visto. Le voci restano nel prompt, come titoli:
+   * la stessa cosa può stare anche in un altro documento.
+   */
+  const aperte = feedAperto(40)
+  const giaSulFeed = new Set(aperte.map(v => v.doc).filter((d): d is string => !!d))
+  const docs = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))]
+    .filter(d => !giaSulFeed.has(d.id))
+    .slice(0, 30)
   if (!docs.length) return []
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file
@@ -848,6 +862,12 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const indicazioni = [
     carta() ? `Chi è:\n${carta()}` : '',
     f ? `\nTi ha chiesto di concentrarti su questo, e viene prima di tutto il resto:\n${f}` : '',
+    aperte.length
+      ? '\nQueste sono GIÀ sul suo feed, le vede. Non riscriverle — nemmeno con ' +
+        'altre parole, nemmeno da un altro documento: una voce nuova che parla ' +
+        'della stessa cosa è un doppione.\n' +
+        aperte.map(v => `— «${v.titolo}»`).join('\n')
+      : '',
     gia.length
       ? '\nA queste ha già risposto. NON riproporgliele — nemmeno riformulate, ' +
       'nemmeno da un documento diverso: se una voce nuova somiglia a una di ' +

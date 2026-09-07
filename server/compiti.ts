@@ -33,6 +33,8 @@ export type Evento =
   | { fase: 'guaio'; id: string; guaio: string }
   | { fase: 'richiamato'; id: string }
   | { fase: 'cambiato' }
+  /** Il feed è cambiato: qualcosa è arrivato, o una voce ha cambiato stato. Si rilegge. */
+  | { fase: 'feed' }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -67,6 +69,19 @@ export function ascolta(f: (e: Evento) => void, di: string | null = chi.adesso()
  */
 export function annunciaCambio() {
   annuncia({ fase: 'cambiato' })
+}
+
+/**
+ * «Il feed è cambiato, rileggi.»
+ *
+ * Viaggia sullo stesso filo dei compiti, ed è la riga che mancava: la
+ * rilettura automatica salvava le voci nuove alle tre di notte e la prima
+ * pagina restava quella di ieri finché non si ricaricava — a nessuno
+ * arrivava niente. Come per i compiti non si manda la voce, si manda il fatto:
+ * chi ascolta rilegge da sé, e solo chi è la stessa persona.
+ */
+export function annunciaFeed() {
+  annuncia({ fase: 'feed' })
 }
 
 /**

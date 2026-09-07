@@ -401,9 +401,18 @@ app.post('/api/auth/reimposta', async (req, res) => {
 // da qui in giù serve essere dentro
 app.use(auth.guardia)
 
+/**
+ * Un guaio che si ripara collegando qualcosa.
+ *
+ * «Collega Claude e potrò lavorarci» detto in un avviso che sparisce dopo
+ * quattro secondi lascia la persona dov'era: sa cosa manca, non dove si
+ * mette. Con `collega` accanto, l'interfaccia apre il pannello giusto invece
+ * di limitarsi a leggere la frase.
+ */
+const DA_COLLEGARE = /^Collega Claude|serve una chiave API/
 function errore(res: express.Response, e: unknown, stato = 500) {
   const m = e instanceof Error ? e.message : String(e)
-  res.status(stato).json({ errore: m })
+  res.status(stato).json({ errore: m, ...(DA_COLLEGARE.test(m) ? { collega: 'claude' } : {}) })
 }
 
 // — stato generale —
@@ -1647,9 +1656,11 @@ async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuan
   if (!nuovi.length || !claude.collegato()) return nuovi.length
 
   const voci = await claude.generaFeed(nuovi)
-  if (voci.length) {
-    store.salvaFeed(voci)
-    console.log(`myynd · ${voci.length} cose nuove messe da parte senza che nessuno le chiedesse`)
+  const nuove = voci.length ? store.salvaFeed(voci) : 0
+  if (nuove) {
+    console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)
+    // e chi ha la pagina aperta lo sa adesso, non alla prossima ricarica
+    compiti.annunciaFeed()
   }
   // e, ogni tanto e quasi mai, una domanda. I cinque cancelli stanno dentro
   // `forseChiedi`: qui si dà solo l'occasione.
@@ -1745,13 +1756,25 @@ app.get('/api/feed', (_req, res) => {
 })
 
 app.post('/api/feed/genera', async (_req, res) => {
+  // la lettura vuole un motore vero — chiave o fornitore — perché torna uno
+  // schema, e l'abbonamento non lo fa. Senza, `generaFeed` tornava vuoto in
+  // silenzio e l'avviso diceva «niente da segnalare»: una bugia, e di quelle
+  // che fanno chiudere l'app. Meglio dire cosa manca, come fanno le bozze.
+  if (!mod.motore()) {
+    return errore(res, new Error(mod.collegato()
+      ? 'Per la lettura serve una chiave API o un fornitore: l’abbonamento basta per la chat.'
+      : 'Collega Claude e potrò lavorarci.'), 400)
+  }
   try {
     const voci = await claude.generaFeed()
     // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
     // è quello che impedisce a una rilettura di duplicare il feed. Quello che
-    // si passava veniva ignorato a ogni giro.
-    store.salvaFeed(voci)
-    res.json({ ok: true, generate: voci.length, feed: store.elencoFeed('aperto') })
+    // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
+    // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
+    const nuove = store.salvaFeed(voci)
+    res.json({ ok: true, generate: nuove, feed: store.elencoFeed('aperto') })
+    // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
+    compiti.annunciaFeed()
 
     // Dopo aver risposto, non prima: capire se c'è qualcosa da chiedere non deve
     // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
@@ -1787,6 +1810,7 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
     const esito = await timone.rispondiAVoce(req.params.id, testo, stato)
     const ore = cfg.leggi().oreFatte ?? 48
     res.json({ ...esito, aperti: store.elencoFeed('aperto'), fatte: store.elencoFeed('fatto', ore) })
+    compiti.annunciaFeed()
   } catch (e) { errore(res, e) }
 })
 
@@ -1801,6 +1825,7 @@ app.post('/api/feed/fuoco', (req, res) => {
 app.post('/api/feed/:id/:stato', (req, res) => {
   store.cambiaStatoFeed(req.params.id, req.params.stato === 'fatto' ? 'fatto' : 'aperto')
   res.json({ ok: true })
+  compiti.annunciaFeed()
 })
 
 // — la rassegna —
@@ -1905,6 +1930,8 @@ app.post('/api/compiti', (req, res) => {
 
   res.json({ ok: true, id, compiti: store.elencoCompiti() })
   compiti.annunciaCambio()
+  // la voce promossa è sparita dal feed: anche il feed va riletto
+  if (req.body?.voce) compiti.annunciaFeed()
 })
 
 app.patch('/api/compiti/:id', (req, res) => {
@@ -1984,7 +2011,7 @@ app.post('/api/compiti/:id/delega', (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   if (!claude.collegato()) {
-    return res.status(400).json({ errore: 'Collega Claude e potrò lavorarci.' })
+    return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   }
   /*
    * Le bozze vogliono un motore vero, non l'abbonamento.
@@ -1996,7 +2023,7 @@ app.post('/api/compiti/:id/delega', (req, res) => {
    * gli funzionavano. Meglio dirlo qui, prima di affidare, che con una rotella.
    */
   if (!mod.motore()) {
-    return res.status(400).json({ errore: 'Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.' })
+    return errore(res, new Error('Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.'), 400)
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
   compiti.affida(c.id, modo)

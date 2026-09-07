@@ -287,9 +287,30 @@ export function guaio(e: unknown): Guaio {
  */
 export class DaVerificare extends Error {}
 
+/**
+ * Un guaio che si ripara collegando qualcosa, e il server dice cosa.
+ *
+ * «Collega Claude e potrò lavorarci» in un avviso che sparisce dopo quattro
+ * secondi lascia la persona dov'era. Con il nome della fonte attaccato, chi
+ * riceve l'errore può aprire il pannello giusto invece di limitarsi a leggerlo.
+ */
+export class DaCollegare extends Error {
+  fonte: string
+  constructor(m: string, fonte: string) {
+    super(m)
+    this.fonte = fonte
+    this.name = 'DaCollegare'
+  }
+}
+
 function guastoDellaRisposta(r: Response, corpo: unknown): Error {
   const detto = (corpo as { errore?: string })?.errore
-  if (detto) return (corpo as { daVerificare?: boolean }).daVerificare ? new DaVerificare(detto) : new Error(detto)
+  if (detto) {
+    const c = corpo as { daVerificare?: boolean; collega?: string }
+    if (c.daVerificare) return new DaVerificare(detto)
+    if (c.collega) return new DaCollegare(detto, c.collega)
+    return new Error(detto)
+  }
   if (r.status >= 500) return new MotoreGiu(`HTTP ${r.status} · ${r.url}`)
   if (r.status === 401 || r.status === 403) return new Error('Sessione scaduta.')
   /*
@@ -496,6 +517,8 @@ export type EventoCompito =
   | { fase: 'guaio'; id: string; guaio: string }
   | { fase: 'richiamato'; id: string }
   | { fase: 'cambiato' }
+  /** Il feed è cambiato — una lettura in sottofondo, una voce chiusa altrove: si rilegge. */
+  | { fase: 'feed' }
 
 export type Accesso = {
   entrato: boolean

@@ -259,7 +259,7 @@ function Casa({ stato, apriConnessioni, esci }: {
   const v = useVals(stato, apriConnessioni)
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
   // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
-  const lista = useCompiti(v.mostraToast)
+  const lista = useCompiti(v.mostraToast, apriConnessioni)
 
   /**
    * Il giro è stato chiuso *adesso*, prima che il server lo racconti.
