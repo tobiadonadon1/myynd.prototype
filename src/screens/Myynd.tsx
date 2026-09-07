@@ -528,7 +528,23 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
 
 
       {righe.length > 0 && (
-        <div style={{ flex: 'none', marginTop: 16, borderRadius: '22px 26px 20px 24px', background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)', transform: 'rotate(.2deg)', overflow: 'hidden' }}>
+        /*
+          Questa scheda non è inclinata, e le altre sì. Non è una dimenticanza.
+
+          Un quinto di grado su una card che si vede tutta insieme è la mano
+          che l'ha posata storta: si legge come carattere. Ma questa è la lista
+          intera — duemila pixel, spesso tremila — e di una cosa così alta non
+          si vede mai la forma, si vede solo il bordo che passa. Inclinato, quel
+          bordo non è più verticale: scende di dieci pixel verso sinistra dal
+          primo rigo all'ultimo, e mentre si scorre lo spazio fra la colonna e
+          la lista si stringe piano piano, senza motivo apparente. Sembra che
+          si muova la finestra.
+
+          `position: relative` prende il posto che aveva la trasformazione:
+          serviva anche da riferimento a quello che qui dentro si posiziona da
+          sé, e toglierla e basta avrebbe spostato i menù delle righe.
+        */
+        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: '22px 26px 20px 24px', background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)', overflow: 'hidden' }}>
           {/* le tue righe stanno DENTRO la stessa lista delle sue, vestite
               uguali. Il filo va per posizione, non per specie: la prima non ha
               bordo sopra e tutte le altre sì — chiunque sia la prima. */}
