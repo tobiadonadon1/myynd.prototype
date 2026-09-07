@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    I diritti che Electron chiede con l'hardened runtime, e nient'altro.
+
+    `allow-jit` e `allow-unsigned-executable-memory`: V8 compila JavaScript
+    in memoria eseguibile, e senza questi due il processo viene ucciso al
+    primo salto. `disable-library-validation`: i moduli nativi (il binario di
+    @napi-rs/canvas che porta pdf-parse) e la firma ad hoc caricano codice
+    che non porta il nostro Team ID. Lo stesso file vale per l'app e per
+    quello che eredita (`entitlementsInherit`): i processi figli di Chromium
+    hanno bisogno degli stessi tre.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

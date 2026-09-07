@@ -16,7 +16,11 @@
     "start": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/index.ts",
     "password": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/password.ts",
     "app": "electron .",
-    "app:dev": "MYYND_APP_WEB=http://127.0.0.1:5173 electron ."
+    "app:dev": "MYYND_APP_WEB=http://127.0.0.1:5173 electron .",
+    "pacchetto": "npm run build && electron-builder --config build/configura.cjs --mac --win",
+    "pacchetto:mac": "npm run build && electron-builder --config build/configura.cjs --mac",
+    "pacchetto:win": "npm run build && electron-builder --config build/configura.cjs --win --x64",
+    "prova:app": "node prove/app.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -44,6 +48,8 @@
     "@vitejs/plugin-react": "^5.2.0",
     "concurrently": "^10.0.4",
     "electron": "43.4.1",
+    "electron-builder": "26.15.3",
+    "js-yaml": "4.3.2",
     "typescript": "^5.7.3",
     "vite": "^7.3.6"
   },

@@ -86,6 +86,73 @@ Il giro intero è stato provato con un server di posta finto: registrazione,
 mail ricevuta, collegamento aperto, conto confermato, e lo stesso collegamento
 che la seconda volta non vale più.
 
+## L'app
+
+Myynd si scarica anche come app per Mac e Windows. Dentro c'è tutto quello
+che gira su un server, ma gira sul computer di chi la apre: il server parte
+insieme all'app, in un processo suo, e la finestra è l'interfaccia di sempre
+caricata da `http://127.0.0.1:<porta>` — mai da `file://`, che il server
+rifiuta. I dati stanno dove stanno anche senza app, in `~/.myynd` (su Windows
+`%USERPROFILE%\.myynd`): chi aveva già un Myynd in casa se lo ritrova. Il
+guscio tiene le sue cose — la posizione della finestra, la scorciatoia, il
+registro `myynd.log` — nella cartella dell'app (`~/Library/Application
+Support/Myynd` sul Mac, `%APPDATA%\Myynd` su Windows).
+
+Si impacchetta con `npm run pacchetto` (Mac e Windows), `pacchetto:mac` o
+`pacchetto:win`; gli artefatti finiscono in `dist-app/`. La configurazione è
+in `electron-builder.yml` per la parte fissa e in `build/configura.cjs` per
+quella che dipende dall'ambiente — è per questo che i comandi passano
+`--config build/configura.cjs`. Le icone in `build/` vengono da
+`public/marchio.svg` con `node build/icone.cjs` (solo su un Mac).
+
+**Due DMG per il Mac**, `Myynd-<versione>-arm64.dmg` per i chip Apple e
+`Myynd-<versione>-x64.dmg` per gli Intel, mai uno universale: `pdf-parse`
+porta con sé `@napi-rs/canvas`, un binario diverso per architettura, e
+fonderli non riesce. Il DMG contiene l'app e il collegamento ad Applicazioni;
+si trascina e basta. La versione x64 costruita su un Mac Apple silicon porta
+il binario di canvas che `npm` ha installato qui — cioè quello arm64: i PDF
+si leggono lo stesso (canvas serve a disegnare, non a estrarre il testo), ma
+per un pacchetto x64 completo si costruisce su un Mac Intel, o si installa
+anche `@napi-rs/canvas-darwin-x64` prima di impacchettare.
+
+**Windows** ha un installatore NSIS a 64 bit, `Myynd-Setup-<versione>.exe`:
+chiede dove installare, per l'utente e non per la macchina. Non è firmato:
+quando ci sarà un certificato, `WIN_CSC_LINK` (il `.pfx`) e
+`WIN_CSC_KEY_PASSWORD` lo accendono.
+
+**La firma, oggi.** Su questa macchina c'è solo un certificato «Apple
+Development», che vale per sviluppare e non per distribuire, e electron-builder
+giustamente non lo usa. Senza un «Developer ID Application» l'app viene
+firmata *ad hoc*: parte sul Mac che l'ha costruita e su quelli dove la si
+apre col tasto destro, ma sugli altri Gatekeeper dice che è danneggiata — è
+il suo modo di dire «non so chi l'ha fatta». Quando il certificato arriva,
+basta l'ambiente: `CSC_NAME="Developer ID Application: Nome (TEAMID)"` fa
+trovare l'identità nel portachiavi (o `CSC_LINK`/`CSC_KEY_PASSWORD` con un
+`.p12`), e `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` fanno
+partire la notarizzazione da `build/notarizza.cjs`. Senza queste tre la
+notarizzazione si salta e lo si legge nel log del pacchetto, non si fallisce.
+I diritti dell'hardened runtime stanno in `build/entitlements.mac.plist`:
+sono i tre che Electron chiede, non uno di più.
+
+**Gli aggiornamenti** passano da `electron-updater`. Con
+`MYYND_AGGIORNAMENTI_URL=https://…/myynd/` al momento di impacchettare si
+scrive il feed (`latest-mac.yml`, `latest.yml`) accanto agli artefatti, e sul
+Mac si aggiunge lo zip che l'aggiornamento scarica al posto del DMG: si carica
+tutto a quell'indirizzo e l'app installata lo chiede da sola. Senza la
+variabile l'app parte senza feed e dice «aggiornamenti spenti». Su macOS
+funzionano solo su un'app firmata con un Developer ID: finché la firma è ad
+hoc il guscio lo dice, invece di provarci e sbagliare.
+
+**La prova del pacchetto**: `npm run prova:app` apre l'app costruita
+(`dist-app/mac-arm64/Myynd.app`, o il binario passato come argomento) con una
+cartella dati vuota e temporanea — è l'unico posto in cui `MYYND_DATI` viene
+impostata, per non toccare il `~/.myynd` di chi prova — e verifica dal di
+fuori, attraverso DevTools, che la schermata d'avvio lasci il posto all'app,
+che ci si registri in inglese, che una cartella con tre file si legga fino
+in fondo (PDF compreso, nel suo lavoratore), che `/api/stato` dica `app:
+true`, che `window.myynd` ci sia con tutte le sue chiavi, che il registro
+esista, e che chiudendo l'app non resti nessun server in ascolto.
+
 ## Il modello
 
 Tre strade, in quest'ordine di preferenza e di costo:
@@ -212,6 +279,8 @@ src/
 | `npm test` | Le prove (`server/*.test.ts`, `src/*.test.ts`); quelle che chiamano un modello vero solo con `MYYND_VIVO=1` |
 | `npm run build` | Typecheck + bundle |
 | `npm run password` | Cambia la password di un conto dalla riga di comando |
+| `npm run pacchetto` | L'app per Mac (due DMG) e Windows (installatore), in `dist-app/`; `pacchetto:mac`, `pacchetto:win` per uno solo |
+| `npm run prova:app` | Apre l'app impacchettata e la prova da fuori, con una cartella dati temporanea |
 
 Due regole del codice che non si vedono dal typecheck: node esegue il
 TypeScript togliendo i tipi e basta, quindi niente `enum`, parameter

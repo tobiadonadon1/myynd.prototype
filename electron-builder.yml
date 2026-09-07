@@ -1,0 +1,92 @@
+# La parte fissa del pacchetto. Quella che dipende dall'ambiente — firma,
+# notarizzazione, feed degli aggiornamenti — sta in build/configura.cjs, che
+# legge questo file e ci mette sopra il resto: un YAML non sa leggere le
+# variabili. Si impacchetta sempre con `--config build/configura.cjs`.
+
+appId: com.myynd.app
+productName: Myynd
+copyright: © 2026 Myynd
+
+directories:
+  output: dist-app
+  buildResources: build
+
+# Solo quello che serve a far girare l'app: il guscio, il server così com'è,
+# le ricette, l'interfaccia costruita. Le prove del server restano fuori. Le
+# dipendenze di produzione le raccoglie electron-builder da solo e non vanno
+# elencate qui; quelle di sviluppo le toglie lui.
+files:
+  - desktop/**
+  - server/**
+  - "!server/**/*.test.ts"
+  - automazioni/**
+  - dist/**
+  - package.json
+
+# L'archivio asar tiene insieme i file, ma tre cose vogliono file veri sul
+# disco: il server, che parte per percorso come processo a parte; il
+# lavoratore dei PDF, che è `new Worker(url)`; e i binari nativi. Anche
+# `dist/` resta fuori, perché lo serve il server dal disco, non Electron.
+asar: true
+asarUnpack:
+  - server/**
+  - automazioni/**
+  - dist/**
+  - "**/*.node"
+
+mac:
+  category: public.app-category.productivity
+  # Due DMG separati, mai uno universale: pdf-parse porta con sé @napi-rs/canvas,
+  # un binario diverso per architettura, e fonderli non riesce.
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: dmg
+      arch: [x64]
+  artifactName: Myynd-${version}-${arch}.${ext}
+  # Le chiavi piatte della firma: la 26 vuole queste, non `mac.sign` della 27.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  gatekeeperAssess: false
+  # La notarizzazione la fa build/notarizza.cjs, e solo se ha le credenziali:
+  # quella integrata di electron-builder fallirebbe senza dire perché.
+  notarize: false
+  extendInfo:
+    NSHumanReadableCopyright: © 2026 Myynd
+    LSMinimumSystemVersion: "13.0"
+    # Le frasi che macOS mostra quando l'app apre una di queste cartelle.
+    # Senza, la richiesta di permesso compare con un testo vuoto.
+    NSDesktopFolderUsageDescription: Myynd legge i documenti che tieni sulla Scrivania, se scegli di collegarla.
+    NSDocumentsFolderUsageDescription: Myynd legge i documenti che tieni in Documenti, se scegli di collegarla.
+    NSDownloadsFolderUsageDescription: Myynd legge i file che tieni in Download, se scegli di collegarla.
+
+# Un DMG nudo: l'app a sinistra, il collegamento ad Applicazioni a destra.
+dmg:
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 140
+      y: 180
+      type: file
+    - x: 400
+      y: 180
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Myynd-Setup-${version}.${ext}
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+afterSign: build/notarizza.cjs

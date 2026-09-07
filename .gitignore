@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# l'app impacchettata (electron-builder)
+dist-app/
 .DS_Store
 *.log
 .env
