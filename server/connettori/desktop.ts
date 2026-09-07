@@ -5,7 +5,8 @@
 // delle tue cose.
 
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { join, extname, basename, resolve } from 'node:path'
+import { join, extname, basename, resolve, relative, sep } from 'node:path'
+import type { Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import type { ConfigDesktop } from '../config.ts'
 import type { Documento } from '../store.ts'
@@ -32,6 +33,8 @@ const SEGNI_PROGETTO = [
 const MAX_FILE = 12_000_000     // i PDF pesano
 const MAX_TESTO = 20_000
 const MAX_TOTALE = 4000
+/** Sotto la radice: le cartelle fino a questa profondità si percorrono, oltre no. */
+const MAX_PROFONDITA = 6
 
 export function suggerimenti(): string[] {
   const h = homedir()
@@ -41,6 +44,81 @@ export function suggerimenti(): string[] {
 async function eProgetto(cartella: string, voci: { name: string }[]): Promise<boolean> {
   const nomi = new Set(voci.map(v => v.name))
   return SEGNI_PROGETTO.some(s => nomi.has(s))
+}
+
+/**
+ * Un percorso che la lettura salterebbe: la stessa regola di `cammina`, ma
+ * per un file solo.
+ *
+ * Serve alla vedetta, che riceve un percorso alla volta e non percorre
+ * niente: senza questa funzione avrebbe avuto le sue regole, e un file
+ * ignorato dalla lettura delle sei ore sarebbe entrato dal vivo — un
+ * `README.md` dentro un progetto di codice, per dire. Non pretende che il
+ * percorso esista ancora: per un file appena cancellato si giudica dal nome,
+ * e una cartella madre che non si apre più non è un progetto.
+ */
+export async function daSaltare(percorso: string, radice: string, eCartella = false): Promise<boolean> {
+  const rel = relative(resolve(radice), resolve(percorso))
+  if (!rel || rel.startsWith('..')) return true
+  const pezzi = rel.split(sep)
+  if (pezzi.some(n => n.startsWith('.') || SALTA.has(n))) return true
+  // le cartelle: quelle in mezzo, e la cartella stessa se è una cartella
+  const cartelle = eCartella ? pezzi : pezzi.slice(0, -1)
+  if (cartelle.length > MAX_PROFONDITA) return true
+  if (!eCartella && !LETTI.includes(extname(pezzi[pezzi.length - 1]!).toLowerCase())) return true
+  let qui = resolve(radice)
+  for (const n of cartelle) {
+    qui = join(qui, n)
+    let voci: { name: string }[]
+    try { voci = await readdir(qui, { withFileTypes: true }) } catch { return false }
+    if (await eProgetto(qui, voci)) return true
+  }
+  return false
+}
+
+/**
+ * Un file solo, con le stesse regole e gli stessi limiti di `cammina`.
+ *
+ * `null` è «esiste ma non è un documento»: troppo grande, vuoto, o senza
+ * niente da leggere dentro. Un errore di lettura si lancia, non si ingoia —
+ * chi chiama sa distinguere «non l'ho letto» da «non c'è niente».
+ */
+export async function leggiUno(percorso: string, s?: Stats): Promise<Documento | null> {
+  const p = resolve(percorso)
+  const nome = basename(p)
+  const st = s ?? await stat(p)
+  if (!st.isFile() || st.size > MAX_FILE || st.size === 0) return null
+  /*
+   * La corsa resta, ma adesso è una rete e non *la* rete.
+   *
+   * Fin qui era l'unico riparo contro un PDF che manda pdfjs in bambola, e
+   * non poteva funzionare: l'estrazione girava su questo stesso filo, quindi
+   * il timer per suonare avrebbe avuto bisogno del giro degli eventi che
+   * quell'estrazione teneva bloccato. Adesso il cronometro vero sta dentro
+   * `estrai`, dall'altra parte di un filo a parte. Questo qui copre quello
+   * che resta di questo lato: la lettura dal disco, che su una cartella di
+   * rete staccata può restare appesa da sola.
+   */
+  // il cronometro si spegne quando si è finito: lasciato acceso teneva in
+  // vita il processo per venticinque secondi dopo l'ultimo file
+  let cronometro: NodeJS.Timeout | undefined
+  const corpo = await Promise.race([
+    readFile(p).then(b => daBuffer(b, nome)),
+    new Promise<string>((_, no) => { cronometro = setTimeout(() => no(new Error('troppo lento')), 25_000) })
+  ]).finally(() => clearTimeout(cronometro))
+  // un file vuoto non è un documento — ma esiste, e va detto
+  if (corpo.length < 20) return null
+  return {
+    id: `desktop:${p}`,
+    fonte: 'desktop',
+    tipo: tipoDi(nome),
+    titolo: nome,
+    corpo: corpo.slice(0, MAX_TESTO),
+    autore: null,
+    percorso: p,
+    quando: st.mtime.toISOString(),
+    gruppo: 'documenti'
+  }
 }
 
 export type Esito = {
@@ -62,13 +140,24 @@ export type Esito = {
    * stavolta non abbiamo letto.
    */
   visti: string[]
+  /**
+   * I file che c'erano già, uguali: stessa data di modifica di quella in
+   * indice, quindi non riletti. Stanno anche fra i `visti`; qui si contano.
+   */
+  invariati: number
 }
 
-async function cammina(radice: string, fuori: Esito, tetto: number, profondita = 0) {
+/** La data di modifica già in indice, per id: chi ce l'ha uguale non si rilegge. */
+export type GiaIndicizzati = Map<string, string | null | undefined>
+
+/** Quanti file questa lettura ha «consumato»: letti o saltati perché uguali, il tetto vale per tutti. */
+const letti = (e: Esito) => e.docs.length + e.invariati
+
+async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0) {
   // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
   // fa credere a riconcilia() che il resto della cartella non esista più
-  if (fuori.docs.length >= tetto) { fuori.troncato = true; return }
-  if (profondita > 6) { fuori.troncato = true; return }
+  if (letti(fuori) >= tetto) { fuori.troncato = true; return }
+  if (profondita > MAX_PROFONDITA) { fuori.troncato = true; return }
   let voci
   try {
     voci = await readdir(radice, { withFileTypes: true })
@@ -92,12 +181,12 @@ async function cammina(radice: string, fuori: Esito, tetto: number, profondita =
   }
 
   for (const v of voci) {
-    if (fuori.docs.length >= tetto) { fuori.troncato = true; return }
+    if (letti(fuori) >= tetto) { fuori.troncato = true; return }
     if (v.name.startsWith('.') || SALTA.has(v.name)) continue
     const p = join(radice, v.name)
 
     if (v.isDirectory()) {
-      await cammina(p, fuori, tetto, profondita + 1)
+      await cammina(p, fuori, tetto, gia, profondita + 1)
       continue
     }
     if (!v.isFile()) continue
@@ -107,41 +196,28 @@ async function cammina(radice: string, fuori: Esito, tetto: number, profondita =
 
     try {
       const s = await stat(p)
+      /*
+       * Uguale a com'era: la data di modifica è quella già in indice, quindi
+       * non si riestrae. Prima ogni giro delle sei ore rileggeva tutti i PDF
+       * da capo per scoprire, uno per uno, che erano identici — e `salvaDocumenti`
+       * lo scopriva dopo che l'estrazione era già costata. Il file resta fra i
+       * visti, come tutto quello che c'è ma che stavolta non si è letto, e
+       * conta per il tetto come se fosse stato letto: la stessa cartella
+       * grande si ferma allo stesso punto di prima.
+       */
+      const id = `desktop:${p}`
+      if (gia && gia.has(id) && gia.get(id) === s.mtime.toISOString()) {
+        fuori.visti.push(id); fuori.invariati++; continue
+      }
       // Un file che esiste ma che stavolta non indicizziamo va comunque
       // dichiarato vivo. Senza questa riga finiva fuori dall'elenco dei visti,
       // la radice veniva lo stesso dichiarata «completa» — nessun errore,
       // nessun permesso negato — e `riconcilia` lo cancellava dall'indice.
       // Cioè: un PDF cresciuto oltre i dodici mega spariva dalla mente, e
       // spariva *perché era diventato grande*.
-      if (s.size > MAX_FILE || s.size === 0) { fuori.visti.push(`desktop:${p}`); continue }
-      /*
-       * La corsa resta, ma adesso è una rete e non *la* rete.
-       *
-       * Fin qui era l'unico riparo contro un PDF che manda pdfjs in bambola, e
-       * non poteva funzionare: l'estrazione girava su questo stesso filo, quindi
-       * il timer per suonare avrebbe avuto bisogno del giro degli eventi che
-       * quell'estrazione teneva bloccato. Adesso il cronometro vero sta dentro
-       * `estrai`, dall'altra parte di un filo a parte. Questo qui copre quello
-       * che resta di questo lato: la lettura dal disco, che su una cartella di
-       * rete staccata può restare appesa da sola.
-       */
-      const corpo = await Promise.race([
-        readFile(p).then(b => daBuffer(b, v.name)),
-        new Promise<string>((_, no) => setTimeout(() => no(new Error('troppo lento')), 25_000))
-      ])
-      // un file vuoto non è un documento — ma esiste, e va detto
-      if (corpo.length < 20) { fuori.visti.push(`desktop:${p}`); continue }
-      fuori.docs.push({
-        id: `desktop:${p}`,
-        fonte: 'desktop',
-        tipo: tipoDi(v.name),
-        titolo: basename(p),
-        corpo: corpo.slice(0, MAX_TESTO),
-        autore: null,
-        percorso: p,
-        quando: s.mtime.toISOString(),
-        gruppo: 'documenti'
-      })
+      const d = await leggiUno(p, s)
+      if (!d) { fuori.visti.push(id); continue }
+      fuori.docs.push(d)
     } catch {
       fuori.falliti++
     }
@@ -162,11 +238,26 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
   return { ok: true, cartelle: buone }
 }
 
+/**
+ * Una cartella sola, fino in fondo, con le regole di sempre.
+ *
+ * Per la vedetta, quando una cartella intera compare di colpo — spostata
+ * dentro, o ripristinata: gli eventi arrivano per la cartella e non sempre
+ * per quello che c'è dentro. Il tetto è basso apposta: è una lettura dal
+ * vivo, non il giro delle sei ore.
+ */
+export async function leggiCartella(cartella: string, tetto = 200): Promise<Esito> {
+  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
+  await cammina(resolve(cartella), esito, tetto)
+  return esito
+}
+
 export async function sincronizza(
   c: ConfigDesktop,
-  avanzamento?: (fatti: number) => void
+  avanzamento?: (fatti: number) => void,
+  gia?: GiaIndicizzati
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [] }
+  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
   // il tetto è per cartella: una cartella enorme non deve affamare le altre
   const perCartella = Math.max(200, Math.floor(MAX_TOTALE / Math.max(1, c.cartelle.length)))
   for (const cartella of c.cartelle) {
@@ -175,7 +266,7 @@ export async function sincronizza(
     const fallitiPrima = esito.falliti
     const radice = resolve(cartella)
 
-    await cammina(radice, esito, prima + perCartella)
+    await cammina(radice, esito, letti(esito) + perCartella, gia)
 
     // Una radice si può riconciliare solo se è stata percorsa tutta: niente
     // tetto raggiunto, nessuna cartella figlia illeggibile, nessun file caduto.

@@ -1932,6 +1932,19 @@ export function idsConPrefisso(prefisso: string): string[] {
     .all(prefisso, prefisso + '\uffff') as { id: string }[]).map(r => r.id)
 }
 
+/**
+ * La data di modifica di tutto quello che comincia così, per id.
+ *
+ * Serve al desktop per non rileggere quello che non è cambiato: `quando` di
+ * un file è la sua data di modifica, e un file con la stessa data è lo
+ * stesso file. Stesso intervallo sull'indice degli id di `idsConPrefisso`.
+ */
+export function quandoPerPrefisso(prefisso: string): Map<string, string | null> {
+  const righe = db.prepare('SELECT id, quando FROM documenti WHERE id >= ? AND id < ?')
+    .all(prefisso, prefisso + '\uffff') as { id: string; quando: string | null }[]
+  return new Map(righe.map(r => [r.id, r.quando]))
+}
+
 export function documento(id: string): Documento | null {
   return (db.prepare(`SELECT ${CAMPI} FROM documenti WHERE id = ?`).get(id) as unknown as Documento) ?? null
 }

@@ -73,6 +73,8 @@ export type Stato = {
    * nostre parole attorno stanno nel cartellino e passano dal dizionario.
    */
   credito: string | null
+  /** Le cartelle del desktop guardate dal vivo: se è in ascolto, e su quante. */
+  vedetta: { attiva: boolean; cartelle: number }
   suggerimentiDesktop: string[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string

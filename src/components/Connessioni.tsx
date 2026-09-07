@@ -215,7 +215,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                           // per il fornitore compatibile la riga utile è quale: nome e modello, non «collegato»
                           ? (c.id === 'compatibile' && s?.config.compatibile
                             ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
-                            : c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato'))
+                            : [
+                              c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato'),
+                              // il desktop dice anche se lo sta guardando dal vivo
+                              c.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
+                            ].filter(Boolean).join(' · '))
                           : t(c.nota)}
                       </div>
                     </div>

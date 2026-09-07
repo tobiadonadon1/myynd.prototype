@@ -1567,6 +1567,7 @@ const EN: Record<string, string> = {
   'I tuoi dati': 'Your data',
   'Mostra nel Finder': 'Show in Finder',
   'Mostra la cartella dei dati': 'Show the data folder',
+  'in ascolto': 'watching',
 }
 
 

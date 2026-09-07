@@ -200,6 +200,19 @@ configurazione: su un server la macchina sta in UTC.
 | **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
 | **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
 
+Le cartelle del desktop si guardano anche dal vivo — *la vedetta*
+(`server/connettori/vedetta.ts`). Un file salvato, spostato o cancellato entra
+o esce dall'indice nel giro di qualche secondo, con le stesse regole della
+lettura intera: niente file nascosti, niente progetti di codice, gli stessi
+limiti di peso. Quello che viene dopo — la prima pagina, una domanda, le
+automazioni «quando arriva» — aspetta invece che le cartelle si calmino per
+qualche minuto e non parte più di una volta ogni dieci: duecento file
+trascinati dentro sono una chiamata al modello, non duecento. Il giro delle
+sei ore resta, ma non rilegge più quello che ha la stessa data di modifica di
+prima; e quando il computer si sveglia, l'app lo dice al server e si recupera
+subito quello che è successo nel frattempo. Solo in casa: su un server le
+cartelle sono nomi, non percorsi.
+
 ### Il desktop di casa che spinge verso il server
 
 Un server non ha le tue cartelle. Quello che può fare è ricevere quello che un

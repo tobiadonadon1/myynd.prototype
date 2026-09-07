@@ -28,6 +28,7 @@ import * as lavoro from './lavoro.ts'
 import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as desktopRemoto from './connettori/desktopRemoto.ts'
+import * as vedetta from './connettori/vedetta.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
@@ -48,6 +49,7 @@ import * as postgres from './postgres.ts'
 import * as chi from './chi.ts'
 import * as trasloco from './trasloco.ts'
 import * as fuso from './fuso.ts'
+import * as sveglia from './sveglia.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua } from './testo.ts'
 
@@ -578,6 +580,8 @@ app.get('/api/stato', (_req, res) => {
      * rossa dentro una chat, che è dove finora si perdeva.
      */
     credito: mod.mancaIlCredito(),
+    // la vedetta: le cartelle del desktop guardate dal vivo, per questa persona
+    vedetta: vedetta.stato(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
@@ -871,6 +875,8 @@ app.post('/api/connettori/desktop', async (req, res) => {
     const esito = await desktop.prova({ cartelle })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ desktop: { cartelle: esito.cartelle } })
+    // le cartelle nuove si guardano da subito, non dal prossimo avvio
+    vedetta.avvia({ cartelle: esito.cartelle })
     res.json({ ok: true, cartelle: esito.cartelle })
   } catch (e) { errore(res, e) }
 })
@@ -1284,7 +1290,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   const id = req.params.id
   const c = cfg.leggi()
   if (id === 'posta') delete c.posta
-  else if (id === 'desktop') delete c.desktop
+  else if (id === 'desktop') { delete c.desktop; vedetta.ferma() }
   else if (id === 'notion') delete c.notion
   else if (id === 'granola') delete c.granola
   else if (id === 'calendario') delete c.calendario
@@ -1372,7 +1378,14 @@ async function leggiTutto(
   const desk = c.desktop
   if (desk && !ospitato.OSPITATO) await fonte('desktop', async () => {
     avvisa({ fase: 'desktop', stato: 'apro le cartelle' })
-    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }))
+    /*
+     * Quello che non è cambiato non si rilegge: la data di modifica già in
+     * indice basta a saperlo, e un PDF costa da estrarre. Ma verso un server
+     * ospitato si spinge quello che si è letto, e un server appena collegato
+     * deve ricevere tutto — lì si rilegge per intero, come prima.
+     */
+    const gia = desktopRemoto.ATTIVO ? undefined : store.quandoPerPrefisso('desktop:')
+    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }), gia)
     await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
     // silenzio non prova niente
@@ -1383,7 +1396,7 @@ async function leggiTutto(
     avvisa({
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
-      illeggibili: e.illeggibili, troncato: e.troncato, tolti
+      illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati
     })
     // Verso un server ospitato, se qualcuno l'ha impostato: la stessa lettura
     // appena fatta, mandata anche là. Un guaio qui non deve fermare le altre
@@ -1619,6 +1632,34 @@ const OGNI = 6 * 60 * 60 * 1000
  * e da lì può nascere anche una domanda. Se non è cambiato niente non si
  * chiama nessun modello: una rilettura a vuoto non deve costare.
  */
+/**
+ * Quello che viene dopo un arrivo: la prima pagina, forse una domanda, le
+ * automazioni «quando arriva».
+ *
+ * Stava in fondo a `rileggiDaSola`, e ci arrivava una strada sola: il giro
+ * delle sei ore. Adesso ci arriva anche la vedetta, quando le cartelle si
+ * sono calmate — ed è la stessa sequenza, con gli stessi cancelli: senza
+ * niente di nuovo, o senza un modello, non si chiama nessuno. Il tetto dei
+ * token di oggi sta dentro `modello.ts` e ferma `generaFeed` come tutto il
+ * resto: qui lo si lascia salire, e chi chiama lo scrive nel registro.
+ */
+async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
+  if (!nuovi.length || !claude.collegato()) return nuovi.length
+
+  const voci = await claude.generaFeed(nuovi)
+  if (voci.length) {
+    store.salvaFeed(voci)
+    console.log(`myynd · ${voci.length} cose nuove messe da parte senza che nessuno le chiedesse`)
+  }
+  // e, ogni tanto e quasi mai, una domanda. I cinque cancelli stanno dentro
+  // `forseChiedi`: qui si dà solo l'occasione.
+  await domande.forseChiedi().catch(() => {})
+
+  // le automazioni che aspettano l'arrivo di qualcosa: è arrivato
+  await automazioni.quandoArriva().catch(() => {})
+  return nuovi.length
+}
+
 async function rileggiDaSola() {
   if (sincronizzazioneInCorso()) return
   const c = cfg.leggi()
@@ -1638,20 +1679,7 @@ async function rileggiDaSola() {
     })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
-
-    if (!nuovi.length || !claude.collegato()) return
-
-    const voci = await claude.generaFeed(nuovi)
-    if (voci.length) {
-      store.salvaFeed(voci)
-      console.log(`myynd · ${voci.length} cose nuove messe da parte senza che nessuno le chiedesse`)
-    }
-    // e, ogni tanto e quasi mai, una domanda. I cinque cancelli stanno dentro
-    // `forseChiedi`: qui si dà solo l'occasione.
-    await domande.forseChiedi().catch(() => {})
-
-    // le automazioni che aspettano l'arrivo di qualcosa: è arrivato
-    await automazioni.quandoArriva().catch(() => {})
+    await dopoLArrivo(daQuando, nuovi)
   } catch (e) {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
@@ -2918,6 +2946,8 @@ await cfg.avvia()
  */
 for (const segnale of ['SIGTERM', 'SIGINT'] as const) {
   process.once(segnale, () => {
+    // gli occhi sulle cartelle si chiudono subito: non c'è niente da aspettare
+    vedetta.fermaTutti()
     cfg.scaricato(10_000)
       .catch(e => console.error('myynd · spegnendomi non sono riuscito a scrivere tutto:', e instanceof Error ? e.message : e))
       .finally(() => process.exit(0))
@@ -2990,6 +3020,29 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const rilettura = perOgnuno('la rilettura automatica si è fermata', rileggiDaSola)
   setTimeout(rilettura, 60_000)
   setInterval(rilettura, OGNI)
+
+  // La vedetta, subito e per ognuno: le cartelle del desktop si guardano dal
+  // vivo, e quello che arriva passa dalla stessa strada del giro delle sei ore.
+  vedetta.quandoSiCalma(dopoLArrivo)
+  perOgnuno('la vedetta non è partita', async () => vedetta.avvia(cfg.leggi().desktop))()
+
+  /*
+   * Il risveglio del computer, se il guscio ce lo dice.
+   *
+   * Un portatile chiuso per una notte ha i timer fermi allo stesso punto: la
+   * prossima rilettura può essere fra cinque ore. Al risveglio si recupera
+   * — la rilettura e il giro delle automazioni, per ognuno — e due risvegli
+   * vicini ne fanno uno solo (vedi `sveglia.ts`). Fuori da Electron non c'è
+   * nessun filo, e non è un errore.
+   */
+  const recupero = perOgnuno('il recupero dopo il risveglio non è riuscito', async () => {
+    await rileggiDaSola()
+    await store.senzaToccare(() => automazioni.giro())
+  })
+  sveglia.ascolta(() => {
+    console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
+    recupero()
+  })
 
   // Le automazioni guardano l'orologio ogni quarto d'ora. Il primo giro dopo
   // due minuti e non subito: all'avvio c'è già la lettura delle fonti, e due
