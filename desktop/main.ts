@@ -263,8 +263,14 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
    * non è davanti: qui non si decide niente, si mostra. Un clic porta su la
    * finestra sul posto giusto.
    */
+  // una alla volta, e non più di una ogni due secondi: tre bozze pronte
+  // insieme sono un avviso, non tre — e una pagina impazzita non deve poter
+  // riempire il centro notifiche
+  let ultimoAvviso = 0
   ipcMain.on('myynd:notifica', (_e, n: unknown) => {
     if (!Notification.isSupported()) return
+    if (Date.now() - ultimoAvviso < 2_000) return
+    ultimoAvviso = Date.now()
     const { titolo, corpo, dove } = (n && typeof n === 'object' ? n : {}) as { titolo?: unknown; corpo?: unknown; dove?: unknown }
     const title = String(titolo ?? '').trim().slice(0, 120)
     if (!title) return

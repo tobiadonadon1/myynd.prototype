@@ -284,7 +284,7 @@ export function Richiamo() {
 
       {domanda && (
         <div style={{
-          borderTop: `1px solid ${RIGA}`, padding: '12px 17px 13px', maxHeight: 340,
+          borderTop: `1px solid ${RIGA}`, padding: '12px 17px 13px', maxHeight: 260,
           overflowY: 'auto', overflowX: 'hidden', overflowWrap: 'anywhere', fontSize: '14px', lineHeight: 1.5
         }}>
           <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginBottom: 6 }}>{domanda}</div>
