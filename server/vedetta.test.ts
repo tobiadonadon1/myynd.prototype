@@ -215,3 +215,22 @@ test('due risvegli vicini sono un recupero solo, e il messaggio giusto sul filo 
   // fuori da Electron non c'è nessun filo, e non è un errore
   assert.equal(sveglia.ascolta(() => recuperi++, null), !!(process as unknown as { parentPort?: unknown }).parentPort)
 })
+
+// — il lotto comincia da prima del primo file, non da dopo —
+
+test('il primo file del lotto sta fra quelli «appena arrivati» da quando dice la vedetta', async () => {
+  vedetta.perProva({ attesa: 100, quiete: 500, minimo: 0, riprova: 60_000 })
+  const cartella = join(CASA, 'uno-solo')
+  mkdirSync(cartella, { recursive: true })
+  let arrivati: string[] | null = null
+  // quello che fa `index.ts`: i documenti indicizzati da `daQuando` in poi
+  vedetta.quandoSiCalma(async daQuando => { arrivati = store.appenaArrivati(daQuando, 20).map(d => d.id) })
+  vedetta.avvia({ cartelle: [cartella] })
+  await dormi(500)
+
+  const f = join(cartella, 'contratto.md')
+  writeFileSync(f, 'Un contratto messo sulla scrivania adesso: deve arrivare alla prima pagina.')
+  await finche(() => arrivati !== null, 'si ragionasse sul lotto', 6_000)
+  assert.deepEqual(arrivati, [`desktop:${f}`], 'il file che ha svegliato la vedetta non è fra gli arrivati')
+  vedetta.ferma()
+})

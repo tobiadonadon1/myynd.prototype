@@ -2186,7 +2186,8 @@ const OMBRA_GIORNI = 60
  *     voci senza documento, che sono proprio quelle che si duplicavano: un
  *     documento sparito dall'indice lascia la voce con `doc` vuoto, e la
  *     stessa cosa riletta da un documento nuovo non ha più niente in comune
- *     con lei se non le parole.
+ *     con lei se non le parole. Fra due voci con due documenti diversi non
+ *     vale: quelle sono due cose, anche con le stesse parole.
  *
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
@@ -2214,8 +2215,17 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
   `)
   // quelle con cui confrontare i titoli: aperte, o chiuse da poco
   const vicine = db.prepare(`
-    SELECT id, titolo FROM feed WHERE stato = 'aperto' OR COALESCE(risposto, quando) >= ?
-  `).all(soglia) as { id: string; titolo: string }[]
+    SELECT id, titolo, doc FROM feed WHERE stato = 'aperto' OR COALESCE(risposto, quando) >= ?
+  `).all(soglia) as { id: string; titolo: string; doc: string | null }[]
+  /*
+   * Le parole decidono solo quando un documento non può: due voci nate da
+   * due documenti diversi sono due cose anche se si assomigliano — due
+   * fatture dello stesso fornitore, due riunioni con la stessa persona nello
+   * stesso mese — e la rete che le confondeva lasciava fuori la seconda in
+   * silenzio, e la rimandava al modello a ogni lettura.
+   */
+  const stessaCosa = (v: { id: string; titolo: string; doc: string | null }, i: { doc?: string; titolo: string }, id: string) =>
+    v.id !== id && !(v.doc && i.doc && v.doc !== i.doc) && stessoTitolo(v.titolo, i.titolo)
 
   let nuove = 0
   db.exec('BEGIN')
@@ -2224,11 +2234,11 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
       const id = idFeed(i)
       if (!giaConId.get(id)) {
         if (i.doc && stessoDoc.get(i.doc, id, soglia)) continue
-        if (vicine.some(v => v.id !== id && stessoTitolo(v.titolo, i.titolo))) continue
+        if (vicine.some(v => stessaCosa(v, i, id))) continue
         nuove++
         // anche fra quelle di questo giro: il modello ne scrive due uguali più
         // spesso di quanto si creda
-        vicine.push({ id, titolo: i.titolo })
+        vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null })
       }
       ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
     }
