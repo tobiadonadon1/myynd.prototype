@@ -627,7 +627,7 @@ export type Automazione = {
   nome: string
   spiega: string
   quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
-  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' }
+  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto'; perDocumento?: boolean }
   accesa: boolean
   ultima: string | null
   quante: number

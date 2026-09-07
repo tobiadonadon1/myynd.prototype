@@ -10,7 +10,7 @@ import { cerca, documento, recenti, stessoFilo, type Documento } from './store.t
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga } from './store.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -845,11 +845,16 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * la sua attenzione — si toglie dal materiale, e i posti che libera vanno a
    * cose che non ha ancora visto. Le voci restano nel prompt, come titoli:
    * la stessa cosa può stare anche in un altro documento.
+   *
+   * E quello che sta già in lista nemmeno: un'email con la sua riga — scritta
+   * a mano, dal feed o da un'automazione — è già stata vista.
    */
   const aperte = feedAperto(40)
   const giaSulFeed = new Set(aperte.map(v => v.doc).filter((d): d is string => !!d))
-  const docs = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))]
-    .filter(d => !giaSulFeed.has(d.id))
+  const candidati = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))]
+  const inLista = docsConRiga(candidati.map(d => d.id))
+  const docs = candidati
+    .filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id))
     .slice(0, 30)
   if (!docs.length) return []
 
@@ -1202,7 +1207,21 @@ export async function svolgi(
    * preventivo di marzo», «scrivo». Chi ascolta non deve poter fermare il
    * lavoro: se esplode, si ignora.
    */
-  onPasso?: (p: Passo) => void
+  onPasso?: (p: Passo) => void,
+  /**
+   * Il documento da cui è nata la riga, se ne ha uno.
+   *
+   * «Rispondere a Rossi sul preventivo» scritto da un'automazione che ha letto
+   * la mail di Rossi non è un compito da cercare: è una risposta a *quella*
+   * mail. Senza questo, la bozza partiva da una ricerca con le parole del
+   * titolo, che trovava il filo giusto quasi sempre — e quel «quasi» era una
+   * risposta a un messaggio diverso, indirizzata alla persona sbagliata. Qui
+   * il documento entra per primo, è la fonte [1], e il modello lo sa.
+   *
+   * In coda alla firma apposta: chi chiama con sei argomenti continua a
+   * funzionare com'era.
+   */
+  doc?: string | null
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   const m = motore()
   /*
@@ -1233,7 +1252,22 @@ export async function svolgi(
   // chiederti qualcosa». Prima si lanciava, e il compito tornava indietro con
   // un guaio rosso invece che con la domanda che serviva davvero.
   const recinto = recintoDi(concessi)
-  const partenza = materiale(domanda, [], recinto)
+  /*
+   * Il documento della riga viene prima di tutto, con il suo filo dietro.
+   *
+   * Solo se esiste ancora e sta dentro il recinto: uno sparito dall'indice
+   * non è un errore — la riga si svolge come una scritta a mano — e uno fuori
+   * dal recinto non si apre nemmeno qui, o la scheda dell'automazione
+   * mentirebbe. La ricerca di sempre segue, senza ripetere quello che c'è già.
+   */
+  const dalDoc = doc ? documento(doc) : null
+  const dalla = dalDoc && (!recinto || recinto.includes(dalDoc.fonte)) ? conIlFilo([dalDoc]) : []
+  if (dalla.length) passo({ passo: 'apro', dettaglio: dalla[0].titolo })
+  const giaDentro = new Set(dalla.map(d => d.id))
+  const partenza = [
+    ...dalla,
+    ...materiale(domanda, [], recinto).filter(d => !giaDentro.has(d.id))
+  ].slice(0, Math.max(MATERIALE_MAX, dalla.length))
 
   /**
    * Tutto quello che ha letto, in ordine di apparizione.
@@ -1259,7 +1293,16 @@ export async function svolgi(
     content: [{
       type: 'text',
       text: partenza.length
-        ? `Materiale:\n\n${contesto(partenza)}\n\n---\n\nIl compito: ${domanda}`
+        ? `Materiale:\n\n${contesto(partenza)}\n\n---\n\nIl compito: ${domanda}` +
+          // la riga è nata da [1]: la cosa da consegnare è la risposta a quel
+          // messaggio, a chi l'ha scritto — non una ricerca su parole simili
+          (dalla.length
+            ? '\n\nQuesta riga è nata dal documento [1]. Rispondi a questo messaggio: quello che ' +
+              'consegni è la risposta a chi l\'ha scritto, sul punto che solleva, nella sua lingua ' +
+              'e con lo stesso oggetto. Il resto del materiale è contorno — il filo, quello che ' +
+              'trovi cercando — e serve a rispondere bene, non a cambiare destinatario. Cita [1] ' +
+              'come fonte.'
+            : '')
         : `Non ho trovato niente di pertinente nel materiale con le parole del compito. ` +
           `Prova a cercare con altre parole prima di dire che non c'è.\n\n---\n\nIl compito: ${domanda}`,
       cache_control: { type: 'ephemeral' }

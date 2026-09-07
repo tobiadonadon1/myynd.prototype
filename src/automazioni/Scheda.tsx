@@ -185,7 +185,7 @@ export function Scheda({ a, catalogo, apri, accendi, butta, prendi, ritardo }: {
         fontSize: '12px', lineHeight: 1.5, color: 'rgba(34,39,31,.55)', flex: 1,
         display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         textWrap: 'pretty'
-      }}>{a.spiega}</div>
+      }}>{a.spiega}{a.metti.perDocumento ? ` ${t('Una riga per ogni documento.')}` : ''}</div>
 
       {/*
         Le pastiglie: l'unico colore rimasto sulla scheda, ed è quello che

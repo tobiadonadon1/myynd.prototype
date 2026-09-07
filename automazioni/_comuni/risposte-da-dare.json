@@ -1,0 +1,26 @@
+{
+  "id": "risposte-da-dare",
+  "nome": "Risposte da dare",
+  "spiega": "Quando arriva posta, mette in lista una riga per ogni messaggio che aspetta una risposta da te, con la risposta già scritta.",
+  "quando": {
+    "quandoArriva": true
+  },
+  "guarda": {
+    "soloNuovi": true,
+    "limite": 12
+  },
+  "fai": "Scegli solo i messaggi scritti a te da una persona che ti chiede qualcosa o aspetta una tua mossa: una domanda, una conferma, un preventivo, un appuntamento, una cosa che ti ha mandato e vuole sapere se va bene. Lascia fuori newsletter, notifiche automatiche, promozioni, ricevute, conferme d'ordine, avvisi di servizi, mail mandate a molti, e quello che hai scritto tu. Per ogni messaggio scelto scrivi la risposta per intero, nella tua voce, pronta da rileggere e mandare: rispondi al punto che solleva, con nomi e cifre presi dal messaggio e dal filo precedente, e se manca un dato dillo in una riga in fondo invece di inventarlo. Se chi scrive non ti ha mai scritto prima, è una risposta di apertura: rispondi alla sua domanda e chiedi le due cose che ti servirebbero per andare avanti. Se nessuno aspetta niente, non scegliere nessuno.",
+  "metti": {
+    "inLista": "oggi",
+    "modo": "bozza",
+    "perDocumento": true
+  },
+  "attrezzi": [
+    "posta.leggi"
+  ],
+  "en": {
+    "nome": "Replies to give",
+    "spiega": "When mail comes in, puts one line on the list for each message waiting on a reply from you, with the reply already written.",
+    "fai": "Pick only the messages a person wrote to you asking for something or waiting on a move from you: a question, a confirmation, a quote, an appointment, something they sent and want to know is fine. Leave out newsletters, automatic notifications, promotions, receipts, order confirmations, service notices, mail sent to many, and anything you wrote yourself. For each message picked, write the reply in full, in your voice, ready to read over and send: answer the point it raises, with names and figures taken from the message and the earlier thread, and if a fact is missing say so in one line at the bottom instead of making it up. If the sender has never written to you before, it is an opening reply: answer their question and ask for the two things you would need to move forward. If nobody is waiting on anything, pick nobody."
+  }
+}

@@ -3569,6 +3569,32 @@ export function compitoVivoDa(automazione: string): boolean {
   `).get(`auto:${automazione}`)
 }
 
+/**
+ * Fra questi documenti, quali hanno già una riga in lista.
+ *
+ * *Qualunque* riga: viva, chiusa, tolta. È la guardia delle automazioni che
+ * scrivono una riga per documento — «rispondere a Rossi» non deve ricomparire
+ * perché la riga di ieri è stata chiusa, né perché è stata buttata — ed è
+ * quello che tiene fuori dal feed una email che sta già in lista. Con
+ * `origine` si guarda solo le righe nate da lì: una ricetta non deve
+ * ripetersi, ma non deve nemmeno tacere perché un'altra ha già parlato di
+ * quel documento con un'altra cosa da fare.
+ */
+export function docsConRiga(ids: string[], origine?: string): Set<string> {
+  const fuori = new Set<string>()
+  // a blocchi: i segnaposto di SQLite hanno un tetto, e qui gli id arrivano
+  // da una pescata che può crescere
+  for (let i = 0; i < ids.length; i += 200) {
+    const pezzo = ids.slice(i, i + 200)
+    const righe = db.prepare(`
+      SELECT DISTINCT doc FROM compiti
+      WHERE doc IN (${pezzo.map(() => '?').join(',')})${origine ? ' AND origine = ?' : ''}
+    `).all(...pezzo, ...(origine ? [origine] : [])) as { doc: string }[]
+    for (const r of righe) fuori.add(r.doc)
+  }
+  return fuori
+}
+
 // — quello che ha fatto davvero —
 
 export type Azione = {

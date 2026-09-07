@@ -1569,6 +1569,9 @@ const EN: Record<string, string> = {
   'Mostra la cartella dei dati': 'Show the data folder',
   'in ascolto': 'watching',
   'Per la lettura serve una chiave API o un fornitore: l’abbonamento basta per la chat.': 'Reading needs an API key or a provider: the subscription covers chat only.',
+  'Una riga per ogni documento': 'One line per document',
+  'Una riga per ogni documento.': 'One line per document.',
+  'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 }
 
 
