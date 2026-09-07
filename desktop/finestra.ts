@@ -145,12 +145,18 @@ export function crea(argomenti: string[] = argomentiDati, nascosta = false): Bro
   w.on('move', ricorda)
 
   // la X nasconde: l'app resta nel Dock e nella barra, e il server con lei.
-  // Dove non c'è un segno nella barra da cui riaprirla, chiude davvero
+  // Dove non c'è un segno nella barra da cui riaprirla, chiude davvero — e
+  // con lei esce l'app: `window-all-closed` non basta, perché il richiamo,
+  // una volta aperto, resta una finestra anche da nascosto, e un'app viva
+  // senza finestra e senza segno non la chiude più nessuno
   w.on('close', e => {
-    if (!chiudeDavvero && (process.platform === 'darwin' || restaViva())) {
+    if (chiudeDavvero) return
+    if (process.platform === 'darwin' || restaViva()) {
       e.preventDefault()
       w.hide()
+      return
     }
+    app.quit()
   })
   w.on('closed', () => { finestra = null })
 

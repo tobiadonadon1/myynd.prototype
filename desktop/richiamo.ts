@@ -14,11 +14,12 @@ import { app, BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { ALTEZZA_MINIMA, posizioneRichiamo } from './posizione.ts'
 import { scriviRegistro } from './server.ts'
+import * as finestra from './finestra.ts'
 
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 const MAC = process.platform === 'darwin'
 
-let finestra: BrowserWindow | null = null
+let barra: BrowserWindow | null = null
 let url = ''
 let argomenti: string[] = []
 let altezza = ALTEZZA_MINIMA
@@ -39,7 +40,7 @@ export function prepara(urlApp: string, argomentiPreload: string[]) {
   url = new URL('/?richiamo=1', urlApp).toString()
   argomenti = argomentiPreload
   // la pagina vecchia parlava con un altro server: si rifà alla prossima apertura
-  if (finestra && !finestra.isDestroyed()) { finestra.destroy(); finestra = null }
+  if (barra && !barra.isDestroyed()) { barra.destroy(); barra = null }
 }
 
 /** L'area utile dello schermo su cui sta il cursore: è lì che si sta guardando. */
@@ -72,7 +73,7 @@ function crea(): BrowserWindow {
       additionalArguments: [...argomenti, '--myynd-richiamo=1']
     }
   })
-  finestra = w
+  barra = w
   // sopra le finestre a schermo intero, e su tutti gli spazi: la scorciatoia
   // si preme da dove si è, non da dove sta Myynd
   w.setAlwaysOnTop(true, 'floating')
@@ -83,7 +84,7 @@ function crea(): BrowserWindow {
     scriviRegistro('guscio · il richiamo perde il fuoco: si nasconde')
     nascondi()
   })
-  w.on('closed', () => { if (finestra === w) finestra = null })
+  w.on('closed', () => { if (barra === w) barra = null })
   // le finestre nuove qui non esistono, e non si va da nessun'altra parte
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   w.webContents.on('will-navigate', e => e.preventDefault())
@@ -92,7 +93,7 @@ function crea(): BrowserWindow {
 }
 
 export function attuale(): BrowserWindow | null {
-  return finestra && !finestra.isDestroyed() ? finestra : null
+  return barra && !barra.isDestroyed() ? barra : null
 }
 
 export function visibile(): boolean {
@@ -122,17 +123,22 @@ export function mostra(): boolean {
  * i suoi menù, e chi ha premuto Esc si ritrova senza tastiera sull'editor da
  * cui era partito. Se la finestra grande non è in vista si nasconde l'app
  * intera, che è il gesto con cui macOS ridà il fuoco all'app di prima.
+ *
+ * Se invece è in vista, l'app resta: `app.hide()` la porterebbe via con la
+ * barra — e la si chiama anche dal `blur`, cioè proprio quando la persona
+ * ha appena cliccato sulla finestra grande. Lo si guarda qui, al momento,
+ * e non lo si fa dire a chi chiama: il `blur` non lo sa.
  */
-export function nascondi(finestraGrandeInVista = false) {
+export function nascondi() {
   const w = attuale()
   if (!w || !w.isVisible()) return
   w.hide()
-  if (MAC && !finestraGrandeInVista) app.hide()
+  if (MAC && !finestra.inVista()) app.hide()
 }
 
 /** La scorciatoia: apre se è chiusa, chiude se è aperta. */
-export function alterna(finestraGrandeInVista = false): boolean {
-  if (visibile()) { nascondi(finestraGrandeInVista); return true }
+export function alterna(): boolean {
+  if (visibile()) { nascondi(); return true }
   return mostra()
 }
 
@@ -151,5 +157,5 @@ export function ridimensiona(contenuto: number) {
 export function distruggi() {
   const w = attuale()
   if (w) w.destroy()
-  finestra = null
+  barra = null
 }

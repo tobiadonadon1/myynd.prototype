@@ -108,8 +108,8 @@ async function avvio() {
   const w = finestra.crea(argomenti, nascosto)
   /** La finestra grande davanti, sul posto chiesto. Il richiamo, se era aperto, si toglie. */
   const vai = (dove: Dove) => {
-    richiamo.nascondi(true)
     finestra.mostra()
+    richiamo.nascondi()
     finestra.manda('myynd:naviga', dove)
   }
   const azioniMenu: menu.Azioni = {
@@ -128,7 +128,7 @@ async function avvio() {
   // viva che non si vede e non si riapre è peggio di una chiusa
   finestra.tieniViva(tray.attiva)
   // la scorciatoia apre il richiamo; finché il server non c'è, la finestra
-  scorciatoia.attiva(() => { if (!richiamo.alterna(finestra.inVista())) finestra.alterna() })
+  scorciatoia.attiva(() => { if (!richiamo.alterna()) finestra.alterna() })
   // il computer si è svegliato: il server deve saperlo (`server.ts`)
   powerMonitor.on('resume', server.sveglia)
   canali(azioniMenu, vai)
@@ -253,7 +253,7 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
     app.setLoginItemSettings({ openAtLogin: !!acceso, openAsHidden: true, args: [ARGOMENTO_NASCOSTO] })
   })
   // — il richiamo —
-  ipcMain.on('myynd:richiamo-chiudi', () => richiamo.nascondi(finestra.inVista()))
+  ipcMain.on('myynd:richiamo-chiudi', () => richiamo.nascondi())
   ipcMain.on('myynd:richiamo-misura', (_e, altezza: unknown) => richiamo.ridimensiona(Number(altezza)))
   ipcMain.on('myynd:richiamo-apri', (_e, dove: unknown) => vai(doveValido(dove) ?? 'oggi'))
   /*
