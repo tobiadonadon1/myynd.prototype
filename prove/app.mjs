@@ -228,6 +228,40 @@ try {
     segna(!mancanoA.length, '`aggiornamenti` ha controlla, installa, stato', mancanoA.length ? `mancano: ${mancanoA.join(', ')}` : '')
   }
 
+  /*
+   * Niente da scorrere di lato, e la colonna comincia sotto i semafori.
+   *
+   * Sono i due difetti che si vedevano solo dentro la finestra vera: le
+   * macchie del fondo sbordavano e rendevano scorribile in orizzontale
+   * l'applicazione intera — il trackpad la portava via mentre si leggeva il
+   * feed — e i tre cerchi cadevano sull'angolo della colonna. Tutti e due si
+   * misurano, quindi si misurano.
+   */
+  const stanza = await pagina.valuta(`
+    const cornice = document.getElementById('root').firstElementChild.firstElementChild
+    const colonna = [...cornice.children].find(e => getComputedStyle(e).backdropFilter !== 'none')
+    const centro = [...cornice.children].find(e => getComputedStyle(e).overflowY === 'auto')
+    if (!colonna || !centro) return null
+    const prima = Math.round(centro.firstElementChild.getBoundingClientRect().x)
+    centro.scrollTop = 1200
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const dopo = Math.round(centro.firstElementChild.getBoundingClientRect().x)
+    centro.scrollTop = 0
+    return {
+      daScorrere: cornice.scrollWidth - cornice.clientWidth,
+      colonnaY: Math.round(colonna.getBoundingClientRect().y),
+      prima, dopo
+    }`)
+  if (stanza) {
+    segna(stanza.daScorrere === 0, 'non c’è niente da scorrere di lato', `${stanza.daScorrere}px oltre la finestra`)
+    segna(stanza.prima === stanza.dopo, 'scorrendo, il contenuto non si sposta di lato', `da ${stanza.prima} a ${stanza.dopo}`)
+    // i semafori stanno fra 15 e 27 pixel dall'alto (desktop/finestra.ts)
+    segna(process.platform !== 'darwin' || stanza.colonnaY >= 32,
+      'la colonna comincia sotto i semafori', `la scheda parte a ${stanza.colonnaY}px`)
+  } else {
+    segna(false, 'l’impaginato si lascia misurare')
+  }
+
   const guai = await pagina.guai()
   segna(!guai.length, 'nessun errore in console mentre si lavorava', guai.slice(0, 3).join(' | '))
 
