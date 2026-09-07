@@ -77,3 +77,16 @@ input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(34,39,31,.
 .giostra{cursor:grab;outline:none}
 .giostra:active{cursor:grabbing}
 .giostra:focus-visible{outline:2px solid rgba(196,98,59,.65);outline-offset:4px;border-radius:22px}
+
+/* — Dentro l'app, sul Mac —
+   La finestra non ha la barra del titolo: i tre semafori stanno in alto a
+   sinistra (x 14–70, y 16–30), sopra la colonna. La prima striscia della
+   finestra si può afferrare per trascinarla, come si farebbe con una barra
+   del titolo; tutto quello che si preme si toglie dalla presa, se no un
+   bottone finito lassù trascinerebbe invece di premere. E il marchio scende
+   di quanto basta a non finire sotto i semafori: nella colonna larga sta già
+   sotto, nel rail — che parte più in alto — ci finirebbe dentro. */
+html.app-darwin body::before{content:'';position:fixed;top:0;left:0;right:0;height:38px;-webkit-app-region:drag;pointer-events:none;z-index:0}
+html.app-darwin :is(button,a,input,textarea,select,[role=button],[role=switch],.app-presa){-webkit-app-region:no-drag}
+html.app-darwin .app-testata{margin-top:12px}
+html.app-darwin .app-testata-rail{margin-top:18px}

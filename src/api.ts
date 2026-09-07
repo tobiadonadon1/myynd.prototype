@@ -78,6 +78,8 @@ export type Stato = {
   home: string
   /** Gira su un server: le fonti che leggono «questa macchina» non ci sono, e il ballo OAuth passa dal web. */
   ospitato: boolean
+  /** Il server l'ha acceso il guscio dell'app da scrivania. */
+  app: boolean
   /** Quali balli via web sono possibili qui, cioè per quali fornitori chi ospita ha registrato l'app. */
   oauth: { google: boolean; microsoft: boolean; ritorno: string | null }
 }

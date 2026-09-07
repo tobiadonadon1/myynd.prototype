@@ -582,6 +582,8 @@ app.get('/api/stato', (_req, res) => {
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     ospitato: ospitato.OSPITATO,
+    // dentro la finestra dell'app, non in una scheda del browser
+    app: ospitato.APP,
     oauth: ospitato.oauthWeb()
   })
 })

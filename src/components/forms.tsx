@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
 import type { ClaudeCon, Stato } from '../api'
 import { frasi, t } from '../lingua'
+import { desktop } from '../desktop'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -614,6 +615,28 @@ export function FormDesktop({ tema, ok }: Props) {
 
   const alterna = (c: string) => setCartelle(v => (v.includes(c) ? v.filter(x => x !== c) : [...v, c]))
 
+  /**
+   * Dentro l'app le cartelle si scelgono con la finestra di sistema.
+   *
+   * Un percorso scritto a mano è la strada del browser, dove non c'è altro:
+   * qui c'è il Finder, e chiedere di scrivere `/Users/…/Lavoro` a chi ha una
+   * finestra per indicarlo sarebbe assurdo. Le cartelle scelte entrano fra le
+   * pastiglie, già spuntate, senza doppioni; il campo resta per chi preferisce.
+   */
+  const scegli = async () => {
+    const d = desktop()
+    if (!d) return
+    setErr('')
+    try {
+      // senza doppioni anche dentro la scelta stessa: due pastiglie con la
+      // stessa chiave sono una lista che React non sa più tenere
+      const scelte = [...new Set(await d.scegliCartelle())]
+      if (!scelte.length) return
+      setSuggeriti(s => [...s, ...scelte.filter(c => !s.includes(c))])
+      setCartelle(c => [...c, ...scelte.filter(x => !c.includes(x))])
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+
   const collega = async () => {
     setOccupato(true); setErr('')
     const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
@@ -623,21 +646,24 @@ export function FormDesktop({ tema, ok }: Props) {
   }
 
   const scuro = tema === 'scuro'
+  const pastiglia = (on: boolean): CSSProperties => ({
+    padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
+    border: `1px solid ${on ? '#C4623B' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)'}`,
+    background: on ? 'rgba(196,98,59,.16)' : 'none',
+    color: on ? (scuro ? '#E8A87C' : '#8E3F1F') : (scuro ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)')
+  })
   return (
     <div>
       <div style={nota(tema)}>{t('PDF, Word, testo. Solo lettura, solo dove dici tu.')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {suggeriti.map(c => {
-          const on = cartelle.includes(c)
-          return (
-            <button key={c} onClick={() => alterna(c)} style={{
-              padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
-              border: `1px solid ${on ? '#C4623B' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)'}`,
-              background: on ? 'rgba(196,98,59,.16)' : 'none',
-              color: on ? (scuro ? '#E8A87C' : '#8E3F1F') : (scuro ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)')
-            }}>{c.split('/').pop()}</button>
-          )
-        })}
+        {suggeriti.map(c => (
+          // il nome e non il percorso intero, ma il percorso resta nel titolo:
+          // due «Lavoro» in due posti diversi si distinguono passandoci sopra
+          <button key={c} title={c} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
+        ))}
+        {desktop() && (
+          <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
+        )}
       </div>
       <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
       <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
@@ -807,8 +833,12 @@ function ViaWeb({ tema, disponibile, avvia, nome }: {
   const [occupato, setOccupato] = useState(false)
   const vai = async () => {
     setOccupato(true); setErr('')
-    try { const { dove } = await avvia(); window.location.assign(dove) }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setOccupato(false) }
+    try {
+      const { dove } = await avvia()
+      // dentro l'app la finestra non va da Google: ci va il browser di sistema
+      const d = desktop()
+      if (d) { await d.apriFuori(dove); setOccupato(false) } else window.location.assign(dove)
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setOccupato(false) }
   }
   return (
     <div>

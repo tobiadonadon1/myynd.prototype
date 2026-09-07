@@ -11,8 +11,13 @@
 // sporcato ogni riga dell'app per una cosa che si tocca due volte l'anno.
 
 import type { ReactNode } from 'react'
+// con l'estensione, perché questo file lo eseguono anche le prove in Node —
+// e `desktop.ts` non importa niente, quindi non c'è un giro
+import { desktop } from './desktop.ts'
 
 let corrente = 'en'
+/** L'ultima lingua detta al guscio dell'app: si ridice solo quando cambia. */
+let dettaAlGuscio = ''
 
 /**
  * La chiave in cui si tiene la lingua scelta.
@@ -49,6 +54,13 @@ export function impostaLingua(l: string | undefined) {
   // pagina?» del browser — che su un'app in inglese con lang="it" compare a
   // sproposito. Era scritto a mano nell'index.html, e quindi era sempre «it».
   document.documentElement.lang = corrente
+  // e il guscio dell'app, se c'è: i menù e la finestra parlano come la pagina.
+  // Solo quando cambia: questa funzione gira a ogni stato che arriva dal
+  // server, e il guscio rifà i menù ogni volta che glielo si dice
+  if (corrente !== dettaAlGuscio) {
+    const guscio = desktop()
+    if (guscio) { dettaAlGuscio = corrente; guscio.lingua(corrente === 'it' ? 'it' : 'en') }
+  }
 }
 
 /**
@@ -1531,6 +1543,30 @@ const EN: Record<string, string> = {
   'Non sono riuscito a scollegare.': 'I could not disconnect it.',
   'Non sono riuscito a cambiare.': 'I could not change it.',
   'Il conto è pronto, ma il tuo Myynd non è entrato:': 'The account is ready, but your Myynd did not come in:',
+// — l'app da scrivania: la carta «L'app» nelle preferenze e il selettore delle cartelle —
+  'Scegli le cartelle…': 'Choose folders…',
+  'L’app': 'The app',
+  'Versione': 'Version',
+  'Non ho ancora controllato.': 'I have not checked yet.',
+  'L’app non è firmata, quindi non può ancora aggiornarsi da sola.': 'The app is not signed, so it cannot update itself yet.',
+  'In sviluppo non si aggiorna.': 'No updates in development.',
+  'Questa copia non ha un indirizzo da cui aggiornarsi.': 'This copy has no address to update from.',
+  'Controllo…': 'Checking…',
+  'È l’ultima versione.': 'This is the latest version.',
+  'Non sono riuscito a controllare.': 'I could not check.',
+  'Riavvia e aggiorna': 'Restart and update',
+  'Controlla': 'Check',
+  'Premi la combinazione nuova…': 'Press the new combination…',
+  'Esc lascia com’è.': 'Esc leaves it as it is.',
+  'Porta Myynd davanti da qualunque programma, e lo nasconde se è già davanti.': 'Brings Myynd to the front from any program, and hides it if it is already in front.',
+  'Serve ⌘, ⌃ o ⌥ insieme a un tasto.': 'It needs ⌘, ⌃ or ⌥ together with a key.',
+  'Serve Ctrl, Alt o Win insieme a un tasto.': 'It needs Ctrl, Alt or Win together with a key.',
+  'Non sono riuscito a cambiare la scorciatoia.': 'I could not change the shortcut.',
+  'Si apre all’accesso': 'Opens at login',
+  'Myynd parte da solo quando entri nel computer.': 'Myynd starts on its own when you log in to the computer.',
+  'I tuoi dati': 'Your data',
+  'Mostra nel Finder': 'Show in Finder',
+  'Mostra la cartella dei dati': 'Show the data folder',
 }
 
 
@@ -1839,5 +1875,15 @@ export const frasi = {
   // — la lista: i passi del lavoro su una riga affidata. Il server manda
   //   `cerco`/`apro` e il dettaglio; la frase si compone qui, nella lingua giusta —
   passoCerco: (q: string) => corrente === 'en' ? `Searching “${q}”` : `Cerco «${q}»`,
-  passoApro: (titolo: string) => corrente === 'en' ? `Opening “${titolo}”` : `Apro «${titolo}»`
+  passoApro: (titolo: string) => corrente === 'en' ? `Opening “${titolo}”` : `Apro «${titolo}»`,
+
+  // — l'app da scrivania: gli aggiornamenti, con la versione dentro la frase —
+  scaricoAggiornamento: (versione: string, percento: number) =>
+    corrente === 'en'
+      ? `Downloading ${versione} · ${Math.round(percento)}%`
+      : `Scarico la ${versione} · ${Math.round(percento)}%`,
+  aggiornamentoPronto: (versione: string) =>
+    corrente === 'en'
+      ? `${versione} is ready: it installs at the next restart.`
+      : `La ${versione} è pronta: si installa al prossimo riavvio.`
 }
