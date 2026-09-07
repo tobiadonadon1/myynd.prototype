@@ -232,6 +232,9 @@ export default function App() {
   )
 }
 
+/** Sotto i semafori, dentro l'app sul Mac; in alto e basta dappertutto altrove. */
+const alto = () => (desktop()?.piattaforma === 'darwin' ? 46 : 22)
+
 /** Una riga che compare sopra qualunque schermata e se ne va da sola, o a un clic. */
 function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
   useEffect(() => { const t = setTimeout(chiudi, 12000); return () => clearTimeout(t) }, [chiudi])
@@ -239,7 +242,7 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
     // `app-presa`: dentro l'app sta nella striscia che trascina la finestra,
     // e senza si trascinerebbe invece di chiudersi
     <div role="status" aria-live="polite" onClick={chiudi} className="app-presa" style={{
-      position: 'fixed', top: 22, right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
+      position: 'fixed', top: alto(), right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
       padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)',
       color: '#22271F', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)',
       fontSize: '13.5px', lineHeight: 1.45, overflowWrap: 'anywhere', cursor: 'pointer',
@@ -290,6 +293,19 @@ function Casa({ stato, apriConnessioni, esci }: {
    * che si sta guardando, che è la cosa giusta su una finestra piccola.
    */
   const { rail, colonna } = taglia(useLarghezza())
+
+  /**
+   * La striscia in cima, dentro l'app sul Mac.
+   *
+   * La finestra non ha barra del titolo, ma i tre semafori ci sono lo stesso e
+   * stanno in alto a sinistra: prima cadevano *sopra* la colonna, sull'angolo
+   * arrotondato della scheda, e si vedeva che erano due cose messe una addosso
+   * all'altra. Qui si lascia loro una fascia tutta per sé — il fondo si vede
+   * attraverso, ed è la stessa striscia da cui si trascina la finestra — e le
+   * due colonne cominciano sotto. Fuori dall'app, e su Windows dove la barra
+   * del titolo c'è davvero, non cambia niente.
+   */
+  const striscia = desktop()?.piattaforma === 'darwin' ? 24 : 0
 
   /**
    * Il guscio dell'app chiede di andare da qualche parte.
@@ -349,7 +365,8 @@ function Casa({ stato, apriConnessioni, esci }: {
         // `minHeight: 0` è quello che permette ai figli in overflow di scorrere
         // dentro la colonna invece di allungarla: senza, un elenco chat lungo
         // spingerebbe la colonna oltre lo schermo e riporterebbe la fascia vuota
-        minHeight: 0, margin: rail ? '12px 0 12px 12px' : '18px 0 18px 18px',
+        minHeight: 0,
+        margin: rail ? `${12 + striscia}px 0 12px 12px` : `${18 + striscia}px 0 18px 18px`,
         padding: rail ? '16px 7px 12px' : '22px 15px 15px',
         borderRadius: rail ? 20 : '26px 22px 24px 20px',
         background: 'linear-gradient(180deg,rgba(255,253,249,.72),rgba(255,253,249,.5))',
@@ -359,9 +376,7 @@ function Casa({ stato, apriConnessioni, esci }: {
         // dietro obbliga a rifare la sfocatura di tutta la colonna
         transform: 'translateZ(0)', backfaceVisibility: 'hidden', contain: 'paint'
       }}>
-        {/* le classi servono solo dentro l'app sul Mac: fanno scendere il
-            marchio sotto i semafori della finestra (vedi index.css) */}
-        <div className={rail ? 'app-testata app-testata-rail' : 'app-testata'} style={{
+        <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
           flexDirection: rail ? 'column' : 'row',
           padding: rail ? '0 0 18px' : '0 4px 24px'
@@ -471,7 +486,17 @@ function Casa({ stato, apriConnessioni, esci }: {
         position: 'relative', flex: 1, minWidth: 0, minHeight: 0,
         display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
         overflowY: 'auto', overscrollBehavior: 'contain',
-        padding: rail ? '16px 14px 24px 14px' : '22px 34px 30px 30px'
+        /*
+         * Il posto della barra di scorrimento è sempre lo stesso, ci sia o no.
+         *
+         * Il contenuto qui dentro è centrato: senza `both-edges`, la barra che
+         * compare quando la pagina diventa lunga si mangia una decina di pixel
+         * da un lato solo, e tutto quello che si sta leggendo salta di lato di
+         * cinque. Riservarli da tutte e due le parti costa un po' di larghezza
+         * e tiene ferma la riga sotto gli occhi.
+         */
+        scrollbarGutter: 'stable both-edges',
+        padding: rail ? `${16 + striscia}px 14px 24px 14px` : `${22 + striscia}px 34px 30px 30px`
       }}>
         {v.isMyynd && <Myynd v={v} lista={lista} />}
         {v.isOggi && (

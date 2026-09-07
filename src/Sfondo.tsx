@@ -2,7 +2,24 @@
 export function Sfondo() {
   return (
     <>
-      <div style={{ position: 'absolute', inset: 0, opacity: 'var(--fi,1.25)' as unknown as number, transition: 'opacity .6s ease', pointerEvents: 'none' }}>
+      {/*
+        `overflow: hidden` non è una rifinitura: senza, tutta l'app scivola di lato.
+
+        Le macchie sbordano apposta — `.wash` sta a `inset: -28%`, le altre
+        hanno `top: -140`, `right: -70` — e finché le tagliava soltanto la
+        radice sembrava tutto a posto. Ma il contenitore delle due colonne ha
+        `overflow-x: auto` (serve alle finestre più strette di 360), e per lui
+        quel debordare era *pagina vera*: `scrollWidth` 1798 contro 1280 di
+        finestra. Il risultato è che il trackpad, che manda sempre un filo di
+        movimento orizzontale insieme a quello verticale, portava di lato
+        l'intera applicazione — colonna, schede, tutto — mentre si scorreva il
+        feed. Sembrava che il riquadro delle cose da fare si allargasse; in
+        realtà scivolava via lo schermo intero.
+
+        Tagliate qui, le macchie restano identiche a prima — la radice le
+        tagliava già nello stesso punto — e non c'è più niente da scorrere.
+      */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', opacity: 'var(--fi,1.25)' as unknown as number, transition: 'opacity .6s ease', pointerEvents: 'none' }}>
         <div className="wash" style={{ background: 'conic-gradient(from 20deg at 50% 50%, rgba(196,98,59,.34), rgba(216,164,110,.28) 22%, rgba(126,156,130,.36) 46%, rgba(216,164,110,.24) 68%, rgba(196,98,59,.34) 100%)', filter: 'blur(72px)' }} />
         <div className="fl" style={{ width: 560, height: 470, top: -140, right: -70, filter: 'blur(48px)', background: 'radial-gradient(circle at 45% 45%, rgba(196,98,59,.85), rgba(196,98,59,.26) 56%, transparent 74%)', animation: 'flA 34s ease-in-out infinite' }} />
         <div className="fl" style={{ width: 640, height: 520, bottom: -200, left: -140, filter: 'blur(50px)', background: 'radial-gradient(circle at 55% 45%, rgba(96,138,106,.86), rgba(116,150,122,.28) 56%, transparent 74%)', animation: 'flB 42s ease-in-out infinite' }} />

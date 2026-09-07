@@ -22,11 +22,12 @@ const INCHIOSTRO = '#22271F'
 /**
  * Dove stanno i semafori con la barra del titolo nascosta.
  *
- * La colonna di sinistra dell'app comincia con il marchio in alto: i tre
- * cerchi devono stare sopra la sua riga, non sopra di lui. Chi cambia il
- * margine della colonna ricontrolli lo scatto di `prove/app.mjs`.
+ * L'interfaccia lascia una fascia vuota in cima — ventiquattro pixel, li
+ * mette `App.tsx` come margine delle due colonne — e i tre cerchi stanno lì
+ * dentro, sul fondo, senza toccare la scheda della colonna che comincia
+ * sotto. Chi cambia quella fascia rimisuri questi due numeri.
  */
-export const SEMAFORI = { x: 14, y: 16 }
+export const SEMAFORI = { x: 19, y: 15 }
 
 let finestra: BrowserWindow | null = null
 let origine = ''
