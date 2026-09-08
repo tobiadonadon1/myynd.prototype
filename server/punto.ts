@@ -495,15 +495,23 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
       doc: r.doc && docs.has(r.doc) ? r.doc : null
     }
   }
+  // la stessa riga due volte è una riga: si tiene la prima, in qualunque sezione stia
+  const viste = new Set<string>()
   const righe = (xs: Partial<Riga>[] | undefined, max: number) =>
-    (xs ?? []).map(riga).filter((r): r is Riga => !!r).slice(0, max)
+    (xs ?? []).map(riga).filter((r): r is Riga => {
+      if (!r) return false
+      const k = r.testo.trim().toLowerCase()
+      if (viste.has(k)) return false
+      viste.add(k)
+      return true
+    }).slice(0, max)
 
   const chiave = (s: string) => s.trim().toLowerCase()
   const rifiutati = new Set(scartati.map(chiave))
   const progetti: Progetto[] = []
   for (const p of g.progetti ?? []) {
     const nome = (p.nome ?? '').trim()
-    if (!nome || progetti.length >= 2) continue
+    if (!nome || progetti.length >= 2 || progetti.some(x => chiave(x.nome) === chiave(nome))) continue
     const vecchio = prima.find(x => chiave(x.nome) === chiave(nome))
     const angolo = (p.angolo ?? '').trim()
     progetti.push({
@@ -532,6 +540,7 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
   for (const a of g.avvii ?? []) {
     const frase = accorcia((a.frase ?? '').trim())
     if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 3) continue
+    gia.add(chiave(frase))
     avvii.push({ frase, perche: accorcia((a.perche ?? '').trim()) })
   }
 
