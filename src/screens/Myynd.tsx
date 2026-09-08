@@ -368,8 +368,12 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
             margin: 0, padding: '0 0 0 3px', fontWeight: 400, textWrap: 'pretty'
-          }}>{v.feedVuoto && (lista?.compiti.length ?? 0) > 0
+          }}>{v.feedVuoto && (lista?.compiti.length ?? 0) > 0 && !v.domanda
             ? frasi.daFare(lista!.compiti.length)
+            : v.feedCaricato && !v.guastoFeed && (!v.feedVuoto || v.domanda)
+            /* quello che c'è in pagina, contato con le regole di `righe` qui sopra:
+               «due cose» sopra nove righe era il titolo di un'altra pagina */
+            ? v.sulTavolo(compiti.length, !!inTesta)
             : v.headline}</h1>
           <div style={{
             marginTop: 9, paddingLeft: 3, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',

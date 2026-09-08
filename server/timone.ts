@@ -36,7 +36,11 @@ export function scriviFuoco(testo: string) {
 }
 
 export type Esito = {
-  /** aperto = resta lì; fatto = sparisce fra le fatte; scartato = non ripropormelo. */
+  /**
+   * aperto = resta lì; fatto = sparisce fra le fatte; scartato = non
+   * ripropormelo — e, se sotto c'era un'email, nemmeno le altre di chi l'ha
+   * scritta: lo legge `store.mittentiScartati` quando il feed si rifà.
+   */
   stato: 'aperto' | 'fatto' | 'scartato' | 'piu_tardi'
   /** Le tue parole, ripulite: è questo che si rivede dopo, non l'etichetta. */
   motivo: string

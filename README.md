@@ -218,6 +218,30 @@ Le ore delle automazioni («ogni giorno alle 7») e il conto delle bozze del
 giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
 configurazione: su un server la macchina sta in UTC.
 
+## Il feed
+
+La prima pagina è corta di proposito. Una lettura tira fuori **al massimo
+cinque** voci, e una voce è una cosa che ha bisogno di te — una decisione, una
+risposta, una scadenza, un pagamento — o che muove quello su cui stai
+lavorando. Non ci arrivano: le promozioni, le newsletter, le ricevute, le
+notifiche e in genere la posta in serie (`documenti.massa`, che il connettore
+decide dalle intestazioni: `List-Unsubscribe`, `Precedence: bulk`, un mittente
+`noreply`, un link per disiscriversi); le email che hai scritto tu; e le email
+che hai **già letto** da più di un giorno — se chiedevano qualcosa, l'hai fatta
+o l'hai messa in lista. «Letto» è la bandiera della casella
+(`documenti.letto`): ogni lettura della posta la rilegge sugli ultimi duecento
+messaggi di ogni cartella, così vale anche per quello che apri nel tuo
+programma di posta. Il feed non supera le **otto** voci aperte — oltre, le più
+vecchie scadono — e una voce che sta lì da **quattro giorni** scade da sé:
+scaduta non è fatta e non è scartata, solo lasciata passare, e non torna.
+
+**«Non mi interessa» insegna.** Scartare una voce ricorda da chi arrivava
+l'email sotto: per tre mesi la posta di quell'indirizzo non entra più nel
+feed, e se l'indirizzo era una macchina (`no-reply@banca.it`) non entra più
+nessuno di quel dominio. Al modello si dice anche, in una riga, chi hai
+scartato, perché capisca il genere di cosa non vuoi. Non c'è nessuna
+tabella nuova: è una giunzione fra le voci scartate e i documenti.
+
 ## Le automazioni
 
 Una ricetta in `automazioni/_comuni` scrive di norma **una riga** con l'elenco

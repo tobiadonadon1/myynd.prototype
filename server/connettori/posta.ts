@@ -2,7 +2,7 @@
 // password della casella — niente OAuth.
 
 import { ImapFlow } from 'imapflow'
-import { simpleParser } from 'mailparser'
+import { simpleParser, type ParsedMail } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
@@ -542,6 +542,67 @@ export type EsitoPosta = {
   visti: string[]
   /** Quanti messaggi della finestra sono dentro, e quanti restano da leggere. */
   resto: Resto
+  /**
+   * Le bandiere «letto» dei messaggi che erano già nell'indice e non si sono
+   * riscaricati: il giro a parte di `bandiereRecenti`. Chi chiama le scrive
+   * con `store.segnaLetti`.
+   */
+  letti: { id: string; letto: boolean }[]
+}
+
+/** Su quanti degli ultimi messaggi di ogni cartella si rileggono le bandiere. */
+export const BANDIERE_RECENTI = 200
+
+/** La bandiera \Seen, se il server ce l'ha detta. Senza bandiere non si sa. */
+export function lettoDa(flags: Set<string> | undefined | null): boolean | undefined {
+  return flags ? flags.has('\\Seen') : undefined
+}
+
+/**
+ * Un indirizzo da cui scrive una macchina.
+ *
+ * Le stesse parole di `MITTENTE_MACCHINA` in `store.ts`, guardate come parole
+ * intere della parte prima della chiocciola: `promo@` e `no-reply@` sì,
+ * `promozione.rossi@` no — quello è un cognome.
+ */
+const MACCHINA =
+  /(^|[.\-_+])(no-?reply|no_reply|do-?not-?reply|donotreply|newsletters?|news|promo(tions?)?|marketing|notifications?|notify|alerts?|mailer(-daemon)?|bounces?|updates?|hello|info|team|digest)([.\-_+]|@)/i
+
+/** I sistemi di invio in serie, quando si firmano nell'X-Mailer. */
+const SPEDITORI = /mailchimp|sendgrid|mailgun|hubspot|klaviyo|brevo|sendinblue|constant ?contact|mailjet|marketo|salesforce|iterable|braze|customer\.io|campaign ?monitor|activecampaign|mailup|getresponse|mailerlite/i
+
+/** Il link per disiscriversi, in fondo a quasi ogni posta in serie. */
+const DISISCRIVITI = /unsubscribe|disiscriv|cancell?a(?:re|ti)? (?:l')?iscrizione|annulla(?:re)? l'iscrizione|d[eé]sabonner|abbestellen|darse de baja|opt[- ]?out/i
+
+/**
+ * Posta di massa o no: newsletter, promozioni, notifiche automatiche.
+ *
+ * Non c'è un'intestazione sola che lo dica, ma ce ne sono parecchie che lo
+ * dicono ognuna a modo suo, e chi manda in serie ne mette quasi sempre
+ * almeno una: `List-Unsubscribe` e `List-Id` (le liste e le newsletter),
+ * `Precedence: bulk` o `list`, `Auto-Submitted` (le macchine),
+ * `Feedback-ID` (chi manda tramite Google in quantità), l'X-Mailer di un
+ * sistema d'invio. Poi due indizi che non stanno nelle intestazioni: un
+ * mittente che si chiama `noreply` o `newsletter`, e la parola
+ * «unsubscribe» nel corpo. Basta uno qualunque: il costo di sbagliare per
+ * eccesso è un'email in meno da guardare, quello di sbagliare per difetto
+ * è un feed di promozioni.
+ */
+export function massaDi(p: Pick<ParsedMail, 'headers' | 'from' | 'text' | 'html'>): boolean {
+  const h = p.headers
+  const lista = h.get('list') as { unsubscribe?: unknown; id?: unknown } | undefined
+  if (lista && (lista.unsubscribe || lista.id)) return true
+  const precedenza = String(h.get('precedence') ?? '').toLowerCase()
+  if (/^(bulk|list|junk)/.test(precedenza)) return true
+  const auto = String(h.get('auto-submitted') ?? '').toLowerCase()
+  if (auto && auto !== 'no') return true
+  if (h.has('feedback-id') || h.has('x-feedback-id') || h.has('x-campaign') || h.has('x-campaignid') ||
+      h.has('x-mc-user') || h.has('x-mailgun-tag') || h.has('x-sg-eid') || h.has('x-mailchimp-campaign')) return true
+  if (SPEDITORI.test(String(h.get('x-mailer') ?? ''))) return true
+  const mittente = (p.from?.value?.[0]?.address ?? '').toLowerCase()
+  if (mittente && MACCHINA.test(mittente.slice(0, mittente.indexOf('@') + 1))) return true
+  const corpo = (p.text ?? '') + ' ' + (typeof p.html === 'string' ? p.html : '')
+  return DISISCRIVITI.test(corpo)
 }
 
 /**
@@ -595,6 +656,7 @@ export async function sincronizza(
   const validita: Record<string, string> = { ...(c.validita ?? {}) }
   const finestre: Finestra[] = []
   const visti: string[] = []
+  const letti: { id: string; letto: boolean }[] = []
   let saltati = 0
   let troncato = false
   /** Quanti messaggi ci sono nella finestra di giorni, in tutte le cartelle. */
@@ -693,7 +755,7 @@ export async function sincronizza(
         // perché è il giro in cui l'unica novità può essere una email sparita
         const nessuno: AsyncIterable<never> = { async *[Symbol.asyncIterator]() {} }
         for await (const msg of daScaricare.length
-          ? cl.fetch(daScaricare, { uid: true, source: true, envelope: true }, { uid: true })
+          ? cl.fetch(daScaricare, { uid: true, source: true, envelope: true, flags: true }, { uid: true })
           : nessuno) {
           try {
             const p = await simpleParser(msg.source as Buffer)
@@ -718,13 +780,42 @@ export async function sincronizza(
               // il messaggio preciso, per poterci rispondere dentro il suo filo
               messageId: idPulito(p.messageId) || null,
               // scritta da lei: cercabile e utile alla voce, ma non «arrivata»
-              inviato: cartella === inviata
+              inviato: cartella === inviata,
+              // l'ha già aperta, e se è posta in serie: due cose che il feed
+              // deve sapere per non riproporle come novità
+              letto: lettoDa(msg.flags),
+              massa: massaDi(p)
             })
           } catch {
             // un messaggio illeggibile non deve fermare la sincronizzazione
           }
           fatti++
           if (avanzamento && fatti % 20 === 0) avanzamento(fatti, daScaricare.length)
+        }
+
+        /*
+         * Le sole bandiere degli ultimi messaggi che erano già dentro.
+         *
+         * Un'email letta nel programma di posta ieri sera non si riscarica —
+         * è già nell'indice — e quindi il suo \Seen non arriverebbe mai. Un
+         * FETCH di sole bandiere sugli ultimi duecento uid della cartella
+         * costa una riga di risposta per messaggio, qualche kilobyte in
+         * tutto e nessun corpo: è il prezzo per cui «già letta» resta vero
+         * anche dopo la prima lettura. Duecento e non tutti perché quello
+         * che legge o non legge è recente; oltre, che sia letta o no non
+         * cambia più niente al feed. Se va storto, la cartella è comunque
+         * letta bene: si lascia perdere e basta.
+         */
+        const recenti = uids.filter(u => noti.has(u)).sort((a, b) => a - b).slice(-BANDIERE_RECENTI)
+        if (recenti.length) {
+          try {
+            for await (const msg of cl.fetch(recenti, { uid: true, flags: true }, { uid: true })) {
+              const letto = lettoDa(msg.flags)
+              if (letto !== undefined) letti.push({ id: `posta:${cartella}:${msg.uid}`, letto })
+            }
+          } catch {
+            // le bandiere sono un aiuto, non un requisito
+          }
         }
 
         /*
@@ -758,7 +849,7 @@ export async function sincronizza(
     try { await cl.logout() } catch { /* la connessione è già caduta */ }
   }
   return {
-    docs, cartelleFallite, troncato, validita, saltati, finestre, visti,
+    docs, cartelleFallite, troncato, validita, saltati, finestre, visti, letti,
     // «tremila di cinquemila», non «non ho finito»: chi guarda deve poter
     // vedere quanto manca, o smette di guardare
     resto: {

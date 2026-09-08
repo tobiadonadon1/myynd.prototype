@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { sulTavolo } from './tavolo'
 import { costruisci, costruisciDaGrafo, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
@@ -725,6 +726,19 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         : stato.conteggi.totale ? t('Niente che richieda te, adesso.')
         : t('La tua mente è ancora vuota.'))
       : frasi.daGuardare(aperti.length, parole(aperti.length)),
+    /**
+     * Il titolo che conta la pagina intera.
+     *
+     * `headline` conosce solo le voci, e diceva «due cose» sopra una pagina
+     * di nove: sotto le voci la prima pagina mostra anche le righe della
+     * lista e la domanda. Le righe della lista qui non ci sono — le ha chi
+     * disegna la pagina — quindi è lui a passare quante sono, e il conto lo
+     * fa `sulTavolo`, con le stesse regole con cui la pagina le dispone.
+     */
+    sulTavolo: (compiti: number, inCimaUnCompito: boolean) => {
+      const n = sulTavolo({ voci: aperti.length, compiti, domanda: !!domanda, inCimaUnCompito })
+      return frasi.daGuardare(n, parole(n))
+    },
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
     feedCaricato,
     ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },

@@ -1517,6 +1517,8 @@ async function leggiTutto(
     const e = await posta.sincronizza(pst, (fatti, tot) =>
       avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi`, fatti, tot }), giaIndicizzati)
     await store.salvaDocumentiAPezzi(e.docs)
+    // le bandiere «letto» dei messaggi che erano già dentro: solo la colonna
+    store.segnaLetti(e.letti)
     /*
      * Quello che sul server non c'è più esce anche da qui.
      *

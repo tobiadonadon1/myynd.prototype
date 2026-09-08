@@ -11,7 +11,7 @@ import { rispostaA } from './filo.ts'
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -799,6 +799,10 @@ const schemaFeed = (ids: string[]) => ({
   properties: {
     voci: {
       type: 'array',
+      // cinque e non «da tre a sei»: il feed si riempiva di cose che non
+      // chiedevano niente, e il tetto sta nello schema perché una riga di
+      // prompt non basta a un modello che vuole essere utile
+      maxItems: VOCI_PER_LETTURA,
       items: {
         type: 'object',
         properties: {
@@ -819,6 +823,51 @@ const schemaFeed = (ids: string[]) => ({
 })
 
 export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string }
+
+/** Quante voci al massimo può tirare fuori una lettura. */
+export const VOCI_PER_LETTURA = 5
+/** Quanti documenti si mandano a leggere: è questo che fa il costo della lettura. */
+const DOCS_PER_LETTURA = 30
+/** Quanti mittenti scartati si nominano al modello. */
+const MITTENTI_NOMINATI = 15
+
+/**
+ * Cosa non vale nemmeno la pena di far leggere al modello.
+ *
+ * Il feed diceva ventiquattro cose da guardare e metà erano promozioni,
+ * newsletter, ed email già lette che non chiedevano niente. Il modello le
+ * riceveva tutte e, dovendo tirar fuori «da tre a sei cose», le trovava.
+ * Meglio che non le veda proprio: un candidato in meno è anche un pezzo di
+ * prompt in meno, e i posti che liberano vanno a cose che contano.
+ *
+ *   · la posta di massa, sempre;
+ *   · la posta che ha scritto lui: non gli chiede niente;
+ *   · un'email già letta, a meno che non sia arrivata nell'ultimo giorno —
+ *     una cosa letta stamattina può ancora aspettare una risposta, una
+ *     letta la settimana scorsa e lasciata lì no: se avesse chiesto
+ *     qualcosa, l'avrebbe fatta o messa in lista. Con le sue parole: «email
+ *     che ho già letto e che non hanno bisogno di me»;
+ *   · la posta di chi ha scartato — per indirizzo, e per dominio se
+ *     l'indirizzo era una macchina.
+ */
+export function candidatoDaFeed(
+  d: Documento,
+  scartati: { indirizzi: Set<string>; domini: Set<string> },
+  adesso = Date.now()
+): boolean {
+  if (d.massa) return false
+  if (d.inviato) return false
+  if (d.letto) {
+    const quando = d.quando ? Date.parse(d.quando) : NaN
+    if (!(quando > adesso - 86_400_000)) return false
+  }
+  const mittente = indirizzoDi(d.autore)
+  if (mittente) {
+    if (scartati.indirizzi.has(mittente)) return false
+    if (scartati.domini.has(mittente.slice(mittente.indexOf('@') + 1))) return false
+  }
+  return true
+}
 
 /**
  * La prima lettura: Claude guarda quello che è stato indicizzato e tira fuori
@@ -851,12 +900,20 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * a mano, dal feed o da un'automazione — è già stata vista.
    */
   const aperte = feedAperto(40)
-  const giaSulFeed = new Set(aperte.map(v => v.doc).filter((d): d is string => !!d))
-  const candidati = [...nuovi, ...recenti(30).filter(d => !arrivati.has(d.id))]
-  const inLista = docsConRiga(candidati.map(d => d.id), undefined, 30)
+  // quello che non merita nemmeno una lettura si toglie *prima* di contare i
+  // trenta: la pescata è più larga apposta, perché una casella dove metà è
+  // posta di massa deve comunque arrivare a trenta candidati veri
+  const scartati = mittentiScartati()
+  const filtro = { indirizzi: new Set(scartati.indirizzi), domini: new Set(scartati.domini) }
+  const candidati = [...nuovi, ...recenti(DOCS_PER_LETTURA * 3).filter(d => !arrivati.has(d.id))]
+    .filter(d => candidatoDaFeed(d, filtro))
+  const ids = candidati.map(d => d.id)
+  // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
+  const giaSulFeed = docsSulFeed(ids)
+  const inLista = docsConRiga(ids, undefined, 30)
   const docs = candidati
     .filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id))
-    .slice(0, 30)
+    .slice(0, DOCS_PER_LETTURA)
   if (!docs.length) return []
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file
@@ -887,15 +944,28 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
       : '',
     regole.length
       ? '\nQuello che sai di come lavora:\n' + regole.map(r => `— ${r.enunciato}`).join('\n')
+      : '',
+    // solo gli indirizzi, e pochi: la posta di questi è già fuori dal
+    // materiale, la riga serve a fargli capire il *genere* di cosa non vuole
+    scartati.indirizzi.length
+      ? '\nHa scartato la posta di questi mittenti, e quello che gli somiglia non gli interessa:\n' +
+        scartati.indirizzi.slice(0, MITTENTI_NOMINATI).join(', ')
       : ''
   ].filter(Boolean).join('\n')
 
   const risposta = await m.crea({
     ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
     system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori
-da tre a sei cose che meritano la sua attenzione oggi.
+al massimo ${VOCI_PER_LETTURA} cose che hanno bisogno di lei oggi. Zero è una risposta giusta.
 
 ${indicazioni}
+
+Una voce del feed è una cosa che ha bisogno di LEI — una decisione, una
+risposta, una scadenza, un pagamento — oppure una cosa che muove quello su cui
+sta lavorando. Non lo sono mai: promozioni, newsletter, ricevute, notifiche,
+posta in serie, e i «per tua informazione» su email che ha già letto: se l'ha
+letta e non deve farci niente, non c'è niente da dire. «Da leggere» solo se
+riguarda il suo lavoro: le notizie le fa la rassegna, non tu.
 
 Quello che ti ha detto lei batte quello che dicono i documenti: i file sono
 quasi sempre indietro sulla realtà. Se ti ha detto che una cosa è fatta, è
@@ -907,7 +977,7 @@ sapere e perché conta, quanto è urgente in DUE O TRE PAROLE — «entro venerd
 documento fra quelli forniti.
 
 Sii concreto: nomi, cifre e date che hai letto davvero. Niente inventato.
-Se il materiale è povero, restituisci meno voci invece di riempire.
+Nel dubbio, lascia fuori: meno voci, giuste.
 Scrivi in ${nellaLingua()}.`),
     messages: [{
       role: 'user',
@@ -925,7 +995,8 @@ Scrivi in ${nellaLingua()}.`),
   if (risposta.stop_reason === 'refusal') return []
   const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
   try {
-    const voci = (JSON.parse(estraiJSON(testo)).voci ?? []) as VoceFeed[]
+    // il tetto anche qui: un fornitore compatibile non è tenuto a rispettare `maxItems`
+    const voci = ((JSON.parse(estraiJSON(testo)).voci ?? []) as VoceFeed[]).slice(0, VOCI_PER_LETTURA)
     // Cintura oltre alle bretelle. Se malgrado l'enum arriva un titolo, lo si
     // riconosce e si converte; se non si riconosce, meglio nessun documento che
     // un bottone «apri» che non aprirà mai niente.

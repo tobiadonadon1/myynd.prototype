@@ -181,6 +181,134 @@ test('senza un motore la lettura non finge: torna vuota, e scriversi un’automa
     /Collega Claude e potrò lavorarci/)
 })
 
+// — cosa non arriva nemmeno al modello —
+//
+// Sul database vero il feed diceva ventiquattro cose da guardare, e metà erano
+// promozioni, newsletter, ed email già lette che non chiedevano niente. Le
+// prove qui sotto guardano cosa si manda, non cosa torna: il modello finto
+// risponde sempre la stessa cosa.
+
+const ieriLAltro = new Date(Date.now() - 3 * 86_400_000).toISOString()
+const stamattina = new Date(Date.now() - 3 * 3_600_000).toISOString()
+
+test('la posta di massa, quella scritta da lui e quella letta da giorni non si leggono; una letta stamattina sì', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:40', 'Offerta Chase', { autore: 'Chase <no-reply@chase.com>', massa: true, quando: stamattina }),
+    doc('posta:INBOX:41', 'Re: preventivo', { inviato: true, quando: stamattina }),
+    doc('posta:INBOX:42', 'Verbale di lunedì', { letto: true, quando: ieriLAltro }),
+    doc('posta:INBOX:43', 'Conferma per giovedì?', { letto: true, quando: stamattina }),
+    doc('posta:INBOX:44', 'Contratto da firmare', { letto: false, quando: ieriLAltro })
+  ])
+  const ricevute = fornitoreFinto([])
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 1)
+  const mandato = testoDi(ricevute[0])
+  assert.doesNotMatch(mandato, /id: posta:INBOX:40/, 'la posta di massa è arrivata al modello')
+  assert.doesNotMatch(mandato, /id: posta:INBOX:41/, 'una email scritta da lui è arrivata al modello')
+  assert.doesNotMatch(mandato, /id: posta:INBOX:42/, 'una email letta tre giorni fa è arrivata al modello')
+  assert.match(mandato, /id: posta:INBOX:43/, 'una email letta stamattina può ancora chiedere qualcosa')
+  assert.match(mandato, /id: posta:INBOX:44/)
+})
+
+test('chi ha scartato non torna: per indirizzo, e per dominio se scriveva una macchina', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:50', 'Promo caffè', { autore: 'Caffè <promo@caffe.it>' }),
+    doc('posta:INBOX:51', 'Novità caffè', { autore: 'Caffè <novita@caffe.it>' }),
+    doc('posta:INBOX:52', 'Ciao', { autore: 'Bianchi <bianchi@gmail.com>' }),
+    doc('posta:INBOX:53', 'Ci sei?', { autore: 'Verdi <verdi@gmail.com>' }),
+    doc('posta:INBOX:54', 'Preventivo', { autore: 'Rossi <rossi@esempio.it>' })
+  ])
+  store.salvaFeed([voce('Promozione del caffè', 'posta:INBOX:50'), voce('Bianchi saluta', 'posta:INBOX:52')])
+  for (const v of store.elencoFeed('aperto')) store.cambiaStatoFeed(v.id, 'scartato', 'Non mi interessa.')
+
+  const m = store.mittentiScartati()
+  assert.deepEqual(m.indirizzi.sort(), ['bianchi@gmail.com', 'promo@caffe.it'])
+  // gmail.com è di tutti: scartare Bianchi non chiude Verdi
+  assert.deepEqual(m.domini, ['caffe.it'])
+
+  const ricevute = fornitoreFinto([])
+  await claude.generaFeed()
+  const mandato = testoDi(ricevute[0])
+  assert.doesNotMatch(mandato, /id: posta:INBOX:51/, 'un altro indirizzo dello stesso mittente in serie è passato')
+  assert.doesNotMatch(mandato, /id: posta:INBOX:52/)
+  assert.match(mandato, /id: posta:INBOX:53/, 'una persona su gmail è stata chiusa fuori con un\'altra')
+  assert.match(mandato, /id: posta:INBOX:54/)
+  assert.match(mandato, /Ha scartato la posta di questi mittenti[^\n]*\n[^\n]*promo@caffe\.it/, 'i mittenti scartati non si dicono al modello')
+})
+
+test('al massimo cinque voci: nello schema, nel prompt, e su quello che torna', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:60', 'Sette cose')])
+  const sette = Array.from({ length: 7 }, (_, i) =>
+    ({ tipo: 'Da decidere', titolo: `Cosa ${i}`, testo: 'x', urgenza: 'oggi', fonte: 'posta', doc: 'posta:INBOX:60' }))
+  const ricevute = fornitoreFinto(sette)
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 5, 'un fornitore che ignora maxItems ha riempito il feed')
+  const schema = (ricevute[0].response_format as { json_schema: { schema: { properties: { voci: { maxItems: number } } } } })
+    .json_schema.schema.properties.voci.maxItems
+  assert.equal(schema, 5)
+  assert.match(testoDi(ricevute[0]), /al massimo 5 cose/)
+})
+
+// — il feed si tiene corto —
+
+const vociCon = (da: number, quante: number) => {
+  const ids = Array.from({ length: quante }, (_, i) => `posta:INBOX:${da + i}`)
+  store.salvaDocumenti(ids.map(id => doc(id, `Documento ${id}`)))
+  return ids.map(id => voce(`Cosa da fare per ${id}`, id))
+}
+const spostaQuando = (id: string, giorniFa: number) =>
+  store.default.prepare('UPDATE feed SET quando = ? WHERE id = ?')
+    .run(new Date(Date.now() - giorniFa * 86_400_000).toISOString(), id)
+
+test('più di otto aperte: le più vecchie scadono, e non passano per «risposte»', () => {
+  store.azzeraTutto()
+  assert.equal(store.salvaFeed(vociCon(100, 6)), 6)
+  const vecchie = store.elencoFeed('aperto').map(v => v.id)
+  for (const id of vecchie) spostaQuando(id, 2)
+  assert.equal(store.salvaFeed(vociCon(200, 4)), 4)
+
+  const aperte = store.elencoFeed('aperto')
+  assert.equal(aperte.length, 8, 'il feed è cresciuto oltre le otto')
+  // le quattro nuove ci sono tutte: sono andate via due delle vecchie
+  assert.equal(aperte.filter(v => v.doc.startsWith('posta:INBOX:2')).length, 4)
+  assert.equal(store.elencoFeed('scaduto').length, 2)
+  assert.equal(store.elencoFeed('fatto').length, 0, 'una voce scaduta è finita fra le fatte')
+  assert.ok(!store.feedGiaVisto().some(v => v.stato === 'scaduto'), 'una voce scaduta è stata raccontata come risposta')
+})
+
+test('una voce di cinque giorni scade anche senza una lettura nuova, e non torna', () => {
+  store.azzeraTutto()
+  const [v] = vociCon(300, 1)
+  store.salvaFeed([v])
+  const [aperta] = store.elencoFeed('aperto')
+  spostaQuando(aperta.id, 5)
+  assert.equal(store.elencoFeed('aperto').length, 0, 'una voce di cinque giorni è ancora in pagina')
+  assert.equal(store.voceFeed(aperta.id)!.stato, 'scaduto')
+  // le reti la sanno: lo stesso documento con un titolo nuovo non rientra,
+  // e non si rilegge nemmeno
+  assert.equal(store.salvaFeed([voce('La stessa cosa, detta diversa', v.doc)]), 0)
+  assert.ok(store.docsSulFeed([v.doc!]).has(v.doc!))
+})
+
+test('«letto» si scrive senza far sembrare nuova l’email', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:70', 'Da leggere', { letto: false })])
+  const indicizzato = () => (store.default.prepare('SELECT indicizzato FROM documenti WHERE id = ?')
+    .get('posta:INBOX:70') as { indicizzato: string }).indicizzato
+  const prima = indicizzato()
+  assert.equal(store.segnaLetti([{ id: 'posta:INBOX:70', letto: true }]), 1)
+  assert.equal(store.segnaLetti([{ id: 'posta:INBOX:70', letto: true }]), 0, 'la stessa bandiera è stata riscritta')
+  assert.equal(store.documento('posta:INBOX:70')!.letto, 1)
+  assert.equal(indicizzato(), prima, 'aprire una email l’ha fatta contare come arrivata adesso')
+  // e anche da una rilettura della posta: stesso contenuto, bandiera diversa
+  const e = store.salvaDocumenti([doc('posta:INBOX:70', 'Da leggere', { letto: false })])
+  assert.equal(e.invariati, 1)
+  assert.equal(store.documento('posta:INBOX:70')!.letto, 0)
+})
+
 // — il filo: chi ha la pagina aperta lo sente —
 
 test('«feed» arriva sul filo dei compiti, e solo a chi è la stessa persona', () => {

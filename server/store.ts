@@ -1142,6 +1142,31 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => {
     colonna(d, 'compiti', 'email', 'TEXT')
     colonna(d, 'documenti', 'messageId', 'TEXT')
+  },
+
+  /*
+   * 30 → 31 · un'email letta, e un'email di massa.
+   *
+   * Il feed diceva «ventiquattro cose da guardare», e metà erano promozioni
+   * della banca, newsletter, ed email che lui aveva già letto e che non
+   * chiedevano niente. L'indice non sapeva distinguerle: di ogni messaggio
+   * teneva chi lo scrive e cosa dice, non se era stato aperto né se era
+   * arrivato a diecimila persone insieme.
+   *
+   *   `letto` è la bandiera \Seen della casella, e la scrive ogni lettura
+   *   della posta — anche per i messaggi già dentro — senza contarli come
+   *   cambiati, come già succede col filo. Vuoto vuol dire «non lo so»:
+   *   i documenti che non sono posta, e la posta entrata prima di questa
+   *   colonna.
+   *   `massa` lo decide il connettore dalle intestazioni (List-Unsubscribe,
+   *   Precedence: bulk, i mittenti «noreply»…) quando il messaggio entra.
+   *
+   * Due ALTER TABLE, niente da riempire: l'indice pieno si aggiorna al giro
+   * di posta dopo. Sta in fondo, come tutte.
+   */
+  d => {
+    colonna(d, 'documenti', 'letto', 'INTEGER')
+    colonna(d, 'documenti', 'massa', 'INTEGER')
   }
 
 ]
@@ -1218,7 +1243,8 @@ const COLONNE: Record<string, [string, string][]> = {
     // `radici` è la colonna che l'indice full-text legge da qui invece di
     // tenersene una copia: senza, ogni ricerca in italiano smette di piegare
     // i plurali, e in silenzio
-    ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT'], ['messageId', 'TEXT']
+    ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT'], ['messageId', 'TEXT'],
+    ['letto', 'INTEGER'], ['massa', 'INTEGER']
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
@@ -1377,6 +1403,20 @@ export type Documento = {
    * messaggio preciso, ed è quello che una risposta cita in `In-Reply-To`.
    */
   messageId?: string | null
+  /**
+   * L'ha già aperta nel suo programma di posta: la bandiera \Seen.
+   *
+   * Vuoto è «non lo so», e non è la stessa cosa di falso: un file sul disco
+   * non è né letto né da leggere. Il feed lo usa per non ripetergli, come
+   * fosse una novità, una cosa che ha già letto e che non gli chiede niente.
+   */
+  letto?: boolean | null
+  /**
+   * Posta di massa: newsletter, promozioni, notifiche automatiche. Lo
+   * decide il connettore dalle intestazioni quando il messaggio entra, e il
+   * feed non la guarda nemmeno.
+   */
+  massa?: boolean | null
 }
 
 /**
@@ -1392,7 +1432,7 @@ export type Documento = {
  */
 const CAMPI_DOC = [
   'rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore',
-  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'messageId'
+  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'messageId', 'letto', 'massa'
 ]
 const CAMPI = CAMPI_DOC.join(', ')
 /** Gli stessi, per la ricerca, dove `documenti` sta in una giunzione. */
@@ -1438,14 +1478,14 @@ function istr(): Istruzioni {
      * un documento che nessuna ricerca troverà mai.
      */
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, radici FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, radici FROM documenti WHERE id = ?'
     ),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, radici, autoreIndirizzo, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, radici, autoreIndirizzo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
-      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, messageId=?,
+      UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, messageId=?, letto=?, massa=?,
         radici=?, autoreIndirizzo=?, indicizzato=?
       WHERE rid = ?
     `),
@@ -1463,9 +1503,10 @@ function istr(): Istruzioni {
      *
      * `messageId` passa di qui per la stessa ragione: è arrivato dopo il filo,
      * e la prima lettura che lo porta non deve far sembrare nuova tutta la
-     * casella.
+     * casella. E `letto` e `massa` pure: aprire un'email nel programma di
+     * posta non la rende un'email nuova.
      */
-    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ?, messageId = ? WHERE rid = ?')
+    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ?, messageId = ?, letto = ?, massa = ? WHERE rid = ?')
   }
   istruzioni.set(d, i)
   return i
@@ -1473,6 +1514,36 @@ function istr(): Istruzioni {
 
 /** Quanto è cambiato davvero in una lettura. */
 export type EsitoScrittura = { nuovi: number; cambiati: number; invariati: number }
+
+/** Un sì/no che può anche non esserci: `null` in colonna vuol dire «non lo so». */
+function bit(v: boolean | null | undefined): number | null {
+  return v === undefined || v === null ? null : v ? 1 : 0
+}
+
+/**
+ * Segna come lette — o tornate da leggere — le email che erano già dentro.
+ *
+ * La lettura della posta scarica solo i messaggi che mancano: quelli che
+ * c'erano già non si toccano, e quindi la bandiera \Seen di un'email letta
+ * ieri sera nel programma di posta non arriverebbe mai qui. Il connettore fa
+ * un giro a parte sulle sole bandiere degli ultimi messaggi, e questo è dove
+ * finisce. Solo la colonna, e solo dove cambia: non `indicizzato`, che
+ * direbbe «è arrivata adesso» di un'email di una settimana fa.
+ */
+export function segnaLetti(righe: { id: string; letto: boolean }[]): number {
+  if (!righe.length) return 0
+  const upd = db.prepare('UPDATE documenti SET letto = ? WHERE id = ? AND (letto IS NULL OR letto != ?)')
+  let cambiati = 0
+  db.exec('BEGIN')
+  try {
+    for (const r of righe) cambiati += Number(upd.run(r.letto ? 1 : 0, r.id, r.letto ? 1 : 0).changes)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+  return cambiati
+}
 
 /**
  * Scrive i documenti, e tocca solo quelli che sono cambiati davvero.
@@ -1525,7 +1596,8 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
       const gia = istr().selEsistente.get(d.id) as {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
-        filo: string | null; inviato: number | null; messageId: string | null; radici: string | null
+        filo: string | null; inviato: number | null; messageId: string | null
+        letto: number | null; massa: number | null; radici: string | null
       } | undefined
 
       if (gia) {
@@ -1544,8 +1616,9 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         if (uguale && gia.radici !== null) {
           // il filo e «l'ho scritta io» arrivano tutti e due dopo, e nessuno dei
           // due è un contenuto: si scrivono senza far contare il documento come cambiato
-          if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato || gia.messageId !== (d.messageId ?? null)) {
-            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, gia.rid)
+          if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato || gia.messageId !== (d.messageId ?? null) ||
+              (gia.letto ?? null) !== bit(d.letto) || (gia.massa ?? null) !== bit(d.massa)) {
+            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), gia.rid)
           }
           esito.invariati++
           continue
@@ -1553,12 +1626,12 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
 
         // l'indice full-text si aggiorna da solo: legge queste stesse colonne,
         // e i trigger su `documenti` gli dicono quando sono cambiate
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
         esito.cambiati++
         continue
       }
 
-      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
+      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
       esito.nuovi++
     }
     db.exec('COMMIT')
@@ -2242,6 +2315,8 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
       }
       ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
     }
+    // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
+    scadiFeed()
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
@@ -2249,6 +2324,119 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
   }
   return nuove
 }
+
+/** Più di tante aperte, o più vecchie di tanti giorni, non stanno sul feed. */
+export const FEED_APERTE_MAX = 8
+export const FEED_GIORNI_MAX = 4
+
+/**
+ * Le voci che il feed lascia andare da solo.
+ *
+ * Sul database vero il feed è arrivato a ventiquattro voci aperte: otto al
+ * giorno per tre giorni, perché ogni lettura in sottofondo ne aggiungeva e
+ * nessuna ne toglieva — l'unico modo di farne sparire una era rispondere.
+ * Ventiquattro cose «da guardare» non le guarda nessuno, e la pagina smette
+ * di voler dire qualcosa.
+ *
+ * Qui il feed si tiene corto in due modi: oltre le otto più recenti le
+ * altre scadono, e scade anche una voce che sta lì da più di quattro giorni
+ * — se in quattro giorni non l'ha toccata, non era una cosa da fare oggi.
+ *
+ * `scaduto` non è `fatto`, e non è `scartato`: non l'ha fatta e non l'ha
+ * buttata via, l'ha lasciata passare. Non compare fra le fatte, non si
+ * racconta al modello come una risposta (`feedGiaVisto` la lascia fuori),
+ * ma per le reti di `salvaFeed` conta come chiusa da poco — `risposto` si
+ * scrive apposta — così la stessa cosa non torna il giorno dopo con un
+ * titolo nuovo. Se era davvero importante, lo dirà il documento cambiando,
+ * o lui.
+ */
+export function scadiFeed(massimo = FEED_APERTE_MAX, giorni = FEED_GIORNI_MAX): number {
+  const ora = new Date().toISOString()
+  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
+  const vecchie = db.prepare(`
+    UPDATE feed SET stato = 'scaduto', risposto = ? WHERE stato = 'aperto' AND quando < ?
+  `).run(ora, soglia).changes
+  const oltre = db.prepare(`
+    UPDATE feed SET stato = 'scaduto', risposto = ?
+    WHERE stato = 'aperto'
+      AND id NOT IN (SELECT id FROM feed WHERE stato = 'aperto' ORDER BY quando DESC, id LIMIT ?)
+  `).run(ora, massimo).changes
+  return Number(vecchie) + Number(oltre)
+}
+
+/**
+ * I documenti che hanno già avuto la loro voce, in qualunque stato, da poco.
+ *
+ * `feedAperto` dice al modello cosa c'è *adesso*; questo gli toglie dal
+ * materiale anche quello che c'è stato — fatto, scartato, scaduto — negli
+ * ultimi due mesi. Rileggerli è tutto spreco: la rete di `salvaFeed` sullo
+ * stesso documento butterebbe comunque via la voce, dopo averla pagata.
+ */
+export function docsSulFeed(ids: string[], entroGiorni = OMBRA_GIORNI): Set<string> {
+  const fuori = new Set<string>()
+  const soglia = new Date(Date.now() - entroGiorni * 86_400_000).toISOString()
+  for (let i = 0; i < ids.length; i += 200) {
+    const pezzo = ids.slice(i, i + 200)
+    const righe = db.prepare(`
+      SELECT DISTINCT doc FROM feed
+      WHERE doc IN (${pezzo.map(() => '?').join(',')})
+        AND (stato = 'aperto' OR COALESCE(risposto, quando) >= ?)
+    `).all(...pezzo, soglia) as { doc: string }[]
+    for (const r of righe) fuori.add(r.doc)
+  }
+  return fuori
+}
+
+/**
+ * Da chi arrivava la posta che ha buttato via.
+ *
+ * «Non mi interessa» su una voce è il gesto più informativo che fa, e finora
+ * insegnava solo a non riproporre *quella* voce: il giorno dopo la stessa
+ * banca mandava la stessa promozione con un altro oggetto, e il feed la
+ * riproponeva. Qui si guarda il mittente dei documenti dietro le voci
+ * scartate negli ultimi tre mesi — nessuna tabella nuova, è una giunzione
+ * fra il feed e i documenti — e chi chiama tiene fuori tutta la posta di
+ * quegli indirizzi.
+ *
+ * I domini valgono solo per i mittenti che sembrano macchine (`noreply`,
+ * `newsletter`, `promo`…): una promozione scartata da `no-reply@banca.it`
+ * chiude anche `offerte@banca.it`, ma scartare un'email di una persona su
+ * gmail.com non chiude gmail.com. Un indirizzo può stare sotto un dominio
+ * che non conta, ed è esattamente il caso di tenerlo per indirizzo.
+ */
+export function mittentiScartati(giorni = 90): { indirizzi: string[]; domini: string[] } {
+  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
+  const righe = db.prepare(`
+    SELECT DISTINCT d.autoreIndirizzo AS indirizzo FROM feed f
+    JOIN documenti d ON d.id = f.doc
+    WHERE f.stato = 'scartato' AND COALESCE(f.risposto, f.quando) >= ? AND d.autoreIndirizzo IS NOT NULL
+    ORDER BY COALESCE(f.risposto, f.quando) DESC
+  `).all(soglia) as { indirizzo: string }[]
+  const indirizzi = righe.map(r => r.indirizzo.toLowerCase())
+  const domini = new Set<string>()
+  for (const i of indirizzi) {
+    const dominio = i.slice(i.indexOf('@') + 1)
+    if (dominio && MITTENTE_MACCHINA.test(i) && !DOMINI_DI_TUTTI.has(dominio)) domini.add(dominio)
+  }
+  return { indirizzi, domini: [...domini] }
+}
+
+/**
+ * Un indirizzo da cui scrive una macchina, non una persona.
+ *
+ * Sono i nomi che i sistemi di invio usano per convenzione, guardati come
+ * parole intere dentro la parte prima della chiocciola: `news@` sì,
+ * `agnews@` no.
+ */
+export const MITTENTE_MACCHINA =
+  /(^|[.\-_+])(no-?reply|no_reply|do-?not-?reply|donotreply|newsletters?|news|promo(tions?)?|marketing|notifications?|notify|alerts?|mailer(-daemon)?|bounces?|updates?|hello|info|team|digest)([.\-_+]|@)/i
+
+/** I domini che appartengono a tutti: scartare una persona lì non chiude nessuno. */
+const DOMINI_DI_TUTTI = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.it', 'live.it', 'live.com',
+  'yahoo.com', 'yahoo.it', 'icloud.com', 'me.com', 'mac.com', 'libero.it', 'virgilio.it', 'tiscali.it',
+  'alice.it', 'tin.it', 'fastwebnet.it', 'aruba.it', 'pec.it', 'protonmail.com', 'proton.me'
+])
 
 /**
  * Le voci aperte, per il modello: titolo e documento e basta.
@@ -2272,6 +2460,9 @@ export function feedAperto(limite = 40): { titolo: string; doc: string | null }[
  * smettono di occupare la pagina. Zero significa «tienile tutte».
  */
 export function elencoFeed(stato = 'aperto', oreMax = 0) {
+  // le aperte scadono anche senza una lettura nuova: una voce di cinque giorni
+  // fa non deve restare in pagina solo perché nel frattempo nessuno ha letto
+  if (stato === 'aperto') scadiFeed()
   if (!oreMax || stato === 'aperto') {
     return db.prepare('SELECT * FROM feed WHERE stato = ? ORDER BY quando DESC').all(stato) as Record<string, string>[]
   }
@@ -2339,9 +2530,13 @@ export function voceFeed(id: string) {
  * lettura, e le cose nuove resterebbero fuori.
  */
 export function feedGiaVisto(limite = 30): { titolo: string; stato: string; motivo: string | null }[] {
+  // una voce scaduta non è una risposta: lui non l'ha vista, o non l'ha voluta
+  // vedere. Raccontarla al modello come «liquidata» sarebbe una bugia e un
+  // posto in meno per quelle vere; a tenerla lontana pensano le reti di
+  // `salvaFeed` e `docsSulFeed`.
   return db.prepare(`
     SELECT titolo, stato, motivo FROM feed
-    WHERE stato != 'aperto' ORDER BY COALESCE(risposto, quando) DESC LIMIT ?
+    WHERE stato NOT IN ('aperto', 'scaduto') ORDER BY COALESCE(risposto, quando) DESC LIMIT ?
   `).all(limite) as unknown as { titolo: string; stato: string; motivo: string | null }[]
 }
 

@@ -1068,7 +1068,7 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
 
   const documenti = colonne('documenti')
   for (const c of ['rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore', 'percorso',
-    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'radici', 'autoreIndirizzo', 'messageId']) {
+    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'radici', 'autoreIndirizzo', 'messageId', 'letto', 'massa']) {
     assert.ok(documenti.includes(c), `documenti non ha «${c}»: una migrazione è stata saltata`)
   }
 

@@ -1726,10 +1726,13 @@ export const frasi = {
       ? `${fonti} source${fonti === 1 ? '' : 's'} · ${docs} document${uno ? '' : 's'}`
       : `${fonti} font${fonti === 1 ? 'e' : 'i'} · ${docs} document${uno ? 'o' : 'i'}`,
 
+  // «sul tavolo», non «da guardare»: il numero conta tutto quello che sta in
+  // pagina — le voci, le righe della lista, la domanda — e «da guardare»
+  // prometteva che fossero tutte cose che Myynd ha notato. Non lo sono.
   daGuardare: (n: number, parola: string) =>
     corrente === 'en'
-      ? (n === 1 ? 'One thing to look at.' : `${n} things to look at.`)
-      : `${parola}, da guardare.`,
+      ? (n === 1 ? 'One thing on your desk.' : `${n} things on your desk.`)
+      : `${parola} sul tavolo.`,
 
   cartelleNonLette: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 folder could not be read' : `${n} folders could not be read`)
