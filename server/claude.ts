@@ -800,9 +800,10 @@ const schemaFeed = (ids: string[]) => ({
     voci: {
       type: 'array',
       // cinque e non «da tre a sei»: il feed si riempiva di cose che non
-      // chiedevano niente, e il tetto sta nello schema perché una riga di
-      // prompt non basta a un modello che vuole essere utile
-      maxItems: VOCI_PER_LETTURA,
+      // chiedevano niente. Il tetto NON sta nello schema: l'API di Claude
+      // rifiuta `maxItems` (e con lui l'intera lettura, in silenzio, alle tre
+      // di notte) — sta nel prompt e nel taglio dopo la risposta
+      description: `Al massimo ${VOCI_PER_LETTURA} voci.`,
       items: {
         type: 'object',
         properties: {

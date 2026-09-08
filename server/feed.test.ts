@@ -245,10 +245,13 @@ test('al massimo cinque voci: nello schema, nel prompt, e su quello che torna', 
     ({ tipo: 'Da decidere', titolo: `Cosa ${i}`, testo: 'x', urgenza: 'oggi', fonte: 'posta', doc: 'posta:INBOX:60' }))
   const ricevute = fornitoreFinto(sette)
   const voci = await claude.generaFeed()
-  assert.equal(voci.length, 5, 'un fornitore che ignora maxItems ha riempito il feed')
-  const schema = (ricevute[0].response_format as { json_schema: { schema: { properties: { voci: { maxItems: number } } } } })
-    .json_schema.schema.properties.voci.maxItems
-  assert.equal(schema, 5)
+  assert.equal(voci.length, 5, 'un fornitore che ha ignorato il tetto ha riempito il feed')
+  // il tetto NON sta nello schema: l'API di Claude rifiuta «maxItems» e con
+  // lui l'intera lettura — è successo davvero, alle tre di notte, in silenzio
+  const voce = (ricevute[0].response_format as { json_schema: { schema: { properties: { voci: Record<string, unknown> } } } })
+    .json_schema.schema.properties.voci
+  assert.ok(!('maxItems' in voce), 'maxItems nello schema: Claude lo rifiuta')
+  assert.match(String(voce.description), /5/)
   assert.match(testoDi(ricevute[0]), /al massimo 5 cose/)
 })
 
