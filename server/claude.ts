@@ -11,6 +11,7 @@ import { rispostaA } from './filo.ts'
 import { riflua } from './testo.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
+import * as progetti from './progetti.ts'
 import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 
 /**
@@ -812,9 +813,12 @@ const schemaFeed = (ids: string[]) => ({
           testo: { type: 'string', description: 'Una o due frasi, massimo 240 caratteri.' },
           urgenza: { type: 'string' },
           fonte: { type: 'string' },
-          doc: { type: 'string', enum: ids, description: 'Uno degli identificativi forniti, copiato alla lettera dalla riga «id:».' }
+          doc: { type: 'string', enum: ids, description: 'Uno degli identificativi forniti, copiato alla lettera dalla riga «id:».' },
+          // la riga che rende la scelta controllabile: senza, una voce è
+          // un'opinione del modello; con, è una cosa che si può contraddire
+          perche: { type: 'string', description: 'Al massimo dodici parole: perché conta e per quale progetto o obiettivo — o quale decisione chiede.' }
         },
-        required: ['tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc'],
+        required: ['tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'perche'],
         additionalProperties: false
       }
     }
@@ -823,7 +827,7 @@ const schemaFeed = (ids: string[]) => ({
   additionalProperties: false
 })
 
-export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string }
+export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string }
 
 /** Quante voci al massimo può tirare fuori una lettura. */
 export const VOCI_PER_LETTURA = 5
@@ -912,20 +916,41 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
   const inLista = docsConRiga(ids, undefined, 30)
-  const docs = candidati
-    .filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id))
+  const leggibili = candidati.filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id))
+  /*
+   * Prima quello che tocca un suo progetto.
+   *
+   * I trenta posti della lettura andavano ai trenta documenti più recenti, e
+   * la posta recente è per lo più posta: un'email sul progetto di cui ha
+   * scritto l'obiettivo poteva restare al trentunesimo posto dietro trenta
+   * cose che non c'entrano. Qui i documenti che nominano un progetto — il
+   * nome, o due parole distintive dell'obiettivo — passano davanti dentro la
+   * finestra; l'ordine fra loro resta quello di arrivo. Non è una scelta al
+   * posto del modello: è la scelta di cosa fargli leggere, e costa zero.
+   */
+  const suoi = progetti.vivi()
+  const toccaUnSuo = (d: Documento) => suoi.length > 0 && progetti.toccaUnProgetto(`${d.titolo}\n${d.autore ?? ''}\n${d.corpo.slice(0, 1500)}`, suoi)
+  const docs = [...leggibili.filter(toccaUnSuo), ...leggibili.filter(d => !toccaUnSuo(d))]
     .slice(0, DOCS_PER_LETTURA)
   if (!docs.length) return []
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file
   const f = fuoco()
-  const gia = feedGiaVisto(60)
+  // quaranta e non sessanta: le righe che ha guadagnato il blocco dei
+  // progetti si tolgono qui, dalle risposte più vecchie, così la lettura
+  // costa quello che costava
+  const gia = feedGiaVisto(40)
+  const obiettivi = progetti.perIlModello()
   const lista = compitiPerIlModello()
   const regole = convinzioni('persona').filter(attendibile).slice(0, 8)
 
   const indicazioni = [
     carta() ? `Chi è:\n${carta()}` : '',
     f ? `\nTi ha chiesto di concentrarti su questo, e viene prima di tutto il resto:\n${f}` : '',
+    obiettivi
+      ? '\nSu cosa sta lavorando, e a cosa punta ciascuno. Una cosa è del feed se ' +
+        'muove uno di questi obiettivi o se ha bisogno di lei; altrimenti non lo è:\n' + obiettivi
+      : '',
     aperte.length
       ? '\nQueste sono GIÀ sul suo feed, le vede. Non riscriverle — nemmeno con ' +
         'altre parole, nemmeno da un altro documento: una voce nuova che parla ' +
@@ -974,8 +999,10 @@ fatta, anche se il documento non lo sa ancora.
 
 Per ognuna: che tipo è, un titolo breve, due righe che spiegano cosa c'è da
 sapere e perché conta, quanto è urgente in DUE O TRE PAROLE — «entro venerdì», «questa settimana»,
-«nessuna fretta» — mai una frase, da che fonte arriva, e l'identificativo del
-documento fra quelli forniti.
+«nessuna fretta» — mai una frase, da che fonte arriva, l'identificativo del
+documento fra quelli forniti, e un «perché» di dodici parole al massimo: per
+quale progetto o obiettivo conta, o quale decisione chiede. Se non sai
+scrivere il perché, la voce non ci va.
 
 Sii concreto: nomi, cifre e date che hai letto davvero. Niente inventato.
 Nel dubbio, lascia fuori: meno voci, giuste.
@@ -1005,6 +1032,7 @@ Scrivi in ${nellaLingua()}.`),
     const perTitolo = new Map(docs.map(d => [d.titolo, d.id]))
     return voci.map(v => ({
       ...v,
+      perche: typeof v.perche === 'string' ? v.perche.trim() : '',
       doc: veri.has(v.doc) ? v.doc : (perTitolo.get(v.doc) ?? '')
     }))
   } catch {

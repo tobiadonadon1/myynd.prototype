@@ -1167,6 +1167,39 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => {
     colonna(d, 'documenti', 'letto', 'INTEGER')
     colonna(d, 'documenti', 'massa', 'INTEGER')
+  },
+
+  /*
+   * 31 → 32 · i progetti con un obiettivo, e il perché di una voce.
+   *
+   * I progetti li teneva il punto in `punto.json`: un nome, una data, e
+   * l'angolo proposto. Non un obiettivo — e senza obiettivo il feed non può
+   * sapere se un documento *muove* qualcosa, la rassegna non può sapere quale
+   * notizia c'entra, e il punto se ne inventa uno («Myynd per papà») senza
+   * che si possa dire «questo non è un progetto». Adesso stanno in una
+   * tabella, con l'obiettivo che si scrive a mano nella Memoria, e uno stato:
+   * un progetto chiuso resta scritto — così non torna — ma non conta più.
+   *
+   *   `feed.perche` è la riga che dice perché una voce sta sul feed e per
+   *   quale obiettivo: è quello che rende una scelta controllabile invece che
+   *   subita. Le notizie ce l'hanno già dalla nascita.
+   *
+   * Sta in fondo, come tutte.
+   */
+  d => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS progetti (
+        id         TEXT PRIMARY KEY,
+        nome       TEXT NOT NULL,
+        obiettivo  TEXT,                              -- una riga: a cosa punta
+        stato      TEXT NOT NULL DEFAULT 'attivo',    -- attivo | fermo | chiuso
+        dal        TEXT NOT NULL,
+        aggiornato TEXT NOT NULL,
+        note       TEXT,
+        origine    TEXT                               -- mano | punto
+      );
+    `)
+    colonna(d, 'feed', 'perche', 'TEXT')
   }
 
 ]
@@ -1248,7 +1281,8 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT']]
+  compiti: [['email', 'TEXT']],
+  feed: [['perche', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -2265,13 +2299,13 @@ const OMBRA_GIORNI = 60
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
  */
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string }[]): number {
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string }[]): number {
   const ins = db.prepare(`
-    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, stato, quando)
-    VALUES (?,?,?,?,?,?,?,'aperto',?)
+    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, stato, quando)
+    VALUES (?,?,?,?,?,?,?,?,'aperto',?)
     ON CONFLICT(id) DO UPDATE SET
       tipo=excluded.tipo, testo=excluded.testo, urgenza=excluded.urgenza,
-      fonte=excluded.fonte, doc=excluded.doc
+      fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche)
   `)
   const ora = new Date().toISOString()
   // Un `doc` che non corrisponde a nessuna riga è un bottone «apri» che non
@@ -2313,7 +2347,7 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
         // spesso di quanto si creda
         vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null })
       }
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()
@@ -2605,6 +2639,20 @@ export function notizie(giorni = 7): Notizia[] {
   return db.prepare(
     'SELECT * FROM notizie WHERE presa >= ? AND scartata IS NULL ORDER BY presa DESC, quando DESC'
   ).all(soglia) as unknown as Notizia[]
+}
+
+/**
+ * Quante sono entrate in rassegna da un momento in qua.
+ *
+ * È il conto del tetto giornaliero: la rassegna gira quattro volte al giorno
+ * e ognuna sceglieva otto — trentadue notizie, che non sono «poche e
+ * mirate», sono un giornale. Si conta sulla `presa`, non sull'uscita: una
+ * notizia ripresa oggi si sposta a oggi, e conta una volta. Le scartate
+ * contano lo stesso: sono state scelte, e il tetto è sulle scelte.
+ */
+export function notiziePreseDal(quando: string): number {
+  const r = db.prepare('SELECT COUNT(*) AS n FROM notizie WHERE presa >= ?').get(quando) as { n: number }
+  return r.n
 }
 
 /**
@@ -3996,7 +4044,7 @@ export function azzeraTutto() {
     DELETE FROM documenti; DELETE FROM feed;
     DELETE FROM messaggi; DELETE FROM chat;
     DELETE FROM convinzioni; DELETE FROM blocchi; DELETE FROM domande;
-    DELETE FROM compiti; DELETE FROM cursori;
+    DELETE FROM compiti; DELETE FROM cursori; DELETE FROM progetti;
   `)
   /*
    * E non `DELETE FROM ricerca`.

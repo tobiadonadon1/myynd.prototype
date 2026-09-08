@@ -624,9 +624,13 @@ export type Notizia = {
   scartata: string | null
 }
 
+type Notizie = Notizia[]
+
 export type Rassegna = {
-  notizie: Notizia[]
+  notizie: Notizie
   quando: string | null
+  /** Quante ne ha scelte oggi, sul tetto di otto: la testata lo dice. */
+  oggi: number
   argomenti: string
   /**
    * Quello che Myynd ha notato da come leggi, detto in una riga.
@@ -1071,6 +1075,16 @@ export const api = {
   avviaDalPunto: (frase: string) =>
     json<{ ok: true; id: string; nome: string; punto: Punto | null }>('/api/punto/avvia', { method: 'POST', body: JSON.stringify({ frase }) }),
 
+  // — i progetti: su cosa lavora, e a cosa punta ciascuno —
+  progetti: () => json<{ progetti: Progetto[] }>('/api/progetti'),
+  nuovoProgetto: (nome: string, obiettivo = '') =>
+    json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
+  cambiaProgetto: (id: string, c: { nome?: string; obiettivo?: string; stato?: StatoProgetto; note?: string }) =>
+    json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(c) }),
+  /** Chiudere, non cancellare: la riga resta, e un chiuso non torna nel punto. */
+  chiudiProgetto: (id: string) =>
+    json<{ ok: true; progetto: Progetto | null }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   /** Riordina una nota. Non salva: torna il testo, e decidi tu. */
   riscriviBlocco: (etichetta: string, testo: string) =>
     json<{ testo: string }>('/api/memoria/riscrivi',
@@ -1418,7 +1432,8 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
  * sono le idee che ha già fatto sue, e non si ripropongono.
  */
 export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
-export type ProgettoPunto = { nome: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
+/** `id` è la riga nella tabella dei progetti: «non è un progetto» la chiude da lì. */
+export type ProgettoPunto = { id: string; nome: string; obiettivo: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
 export type AvvioPunto = { frase: string; perche: string }
 export type Punto = {
   quando: string
@@ -1433,3 +1448,22 @@ export type Punto = {
 }
 /** `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito. */
 export type EsitoPunto = { punto: Punto | null; generatoAdesso: boolean; tetto: boolean }
+
+/**
+ * Un progetto: su cosa sta lavorando, e a cosa punta.
+ *
+ * È la riga che il feed, la rassegna e il punto leggono prima di scegliere.
+ * `obiettivo` lo scrive lui nella Memoria; `stato` è quello che rende
+ * reversibile un errore del modello — chiuso non cancella, e non torna.
+ */
+export type StatoProgetto = 'attivo' | 'fermo' | 'chiuso'
+export type Progetto = {
+  id: string
+  nome: string
+  obiettivo: string
+  stato: StatoProgetto
+  dal: string
+  aggiornato: string
+  note: string
+  origine: 'mano' | 'punto'
+}

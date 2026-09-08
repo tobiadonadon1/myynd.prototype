@@ -188,9 +188,17 @@ function Finestra({ v, lista, apriCompito, p }: {
               const tenuto = !!pr.angolo && pr.angoliTenuti.includes(pr.angolo)
               return (
                 <div key={pr.nome} style={{ ...RIGA, alignItems: 'flex-start', flexDirection: 'column', gap: 2 }}>
-                  <span style={TESTO}>
-                    <span style={{ fontWeight: 500 }}>{pr.nome}</span>
-                    {pr.doveSei && <span style={{ color: 'rgba(34,39,31,.65)' }}> — {pr.doveSei}</span>}
+                  <span style={{ ...TESTO, display: 'flex', alignItems: 'baseline', gap: 10, width: '100%' }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontWeight: 500 }}>{pr.nome}</span>
+                      {pr.doveSei && <span style={{ color: 'rgba(34,39,31,.65)' }}> — {pr.doveSei}</span>}
+                    </span>
+                    {/* il modello i progetti li indovina, e a volte sbaglia: un dito
+                        lo chiude in tabella, e non torna — nemmeno al punto dopo */}
+                    {pr.id && (
+                      <Hov as="button" type="button" style={PICCOLO} hover={{ color: '#22271F' }}
+                        onClick={() => p.nonProgetto(pr.id)}>{t('Non è un progetto')}</Hov>
+                    )}
                   </span>
                   {pr.angolo && (
                     <span style={{ ...TESTO, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', width: '100%' }}>

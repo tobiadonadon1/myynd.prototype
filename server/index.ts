@@ -16,6 +16,7 @@ import * as timone from './timone.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
+import * as progetti from './progetti.ts'
 import * as compiti from './compiti.ts'
 import * as automazioni from './automazioni.ts'
 import * as ordine from './ordine.ts'
@@ -1945,6 +1946,44 @@ app.post('/api/punto/scarta', (req, res) => {
 app.post('/api/punto/avvia', async (req, res) => {
   try { res.json(await punto.avvia(String(req.body?.frase ?? ''))) }
   catch (e) { errore(res, e) }
+})
+
+// — i progetti —
+//
+// Su cosa sta lavorando, e a cosa punta ciascuno. Sono la cosa che il feed,
+// la rassegna e il punto leggono prima di scegliere: un obiettivo scritto in
+// una riga vale più di trenta documenti. Quattro rotte: l'elenco, uno nuovo,
+// un cambiamento, e la chiusura — che non cancella mai: un progetto chiuso
+// resta scritto, ed è quello che impedisce al punto di reinventarlo.
+
+app.get('/api/progetti', (_req, res) => res.json({ progetti: progetti.elenco() }))
+
+app.post('/api/progetti', (req, res) => {
+  try {
+    res.json({ ok: true, progetto: progetti.scrivi({ nome: String(req.body?.nome ?? ''), obiettivo: String(req.body?.obiettivo ?? '') }) })
+  } catch (e) { errore(res, e, 400) }
+})
+
+app.patch('/api/progetti/:id', (req, res) => {
+  const c: { nome?: string; obiettivo?: string; stato?: string; note?: string } = {}
+  for (const k of ['nome', 'obiettivo', 'stato', 'note'] as const) {
+    if (req.body?.[k] !== undefined) c[k] = String(req.body[k])
+  }
+  try {
+    // chiudere dal punto e chiudere dalla Memoria sono lo stesso gesto: la
+    // riga esce anche dal punto che la pagina sta mostrando
+    const p = c.stato === 'chiuso' ? (punto.nonEUnProgetto(req.params.id), progetti.cambia(req.params.id, c)) : progetti.cambia(req.params.id, c)
+    if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+    res.json({ ok: true, progetto: p })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/** Chiudere, non cancellare: la storia resta, e un chiuso non torna nel punto. */
+app.delete('/api/progetti/:id', (req, res) => {
+  try {
+    punto.nonEUnProgetto(req.params.id)
+    res.json({ ok: true, progetto: progetti.trova(req.params.id) })
+  } catch (e) { errore(res, e, 404) }
 })
 
 // — compiti —

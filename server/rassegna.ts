@@ -24,10 +24,22 @@ import { createHash } from 'node:crypto'
 import { cartella, leggi, nellaLingua, lingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
+import * as progetti from './progetti.ts'
 import * as store from './store.ts'
 
 /** Quante notizie fanno una rassegna. Poche: si legge in tre minuti o non si legge. */
 const QUANTE = 8
+
+/**
+ * Quante al giorno, in tutto.
+ *
+ * Otto per giro e quattro giri al giorno facevano trentadue: un giornale, non
+ * una rassegna. Con le sue parole: «mai più di cinque-dieci notizie al giorno,
+ * molto concentrate». Il tetto è sul giorno, non sul giro: il primo giro può
+ * prenderne otto e gli altri zero, o due a testa — dipende da quello che
+ * c'è, e zero è una risposta giusta.
+ */
+export const AL_GIORNO = 8
 
 /** Quanto vale una rassegna prima di rifarla. */
 // Sei ore: quattro rassegne al giorno, che è quello che `modello.ts` dà per
@@ -378,6 +390,16 @@ export function cernita(tutte: Grezza[], adesso = Date.now(), gia: Gia[] = []): 
 
 export type Scelta = { n: number; riga: string }
 
+/** L'inizio del giorno solare UTC — lo stesso del tetto dei token e del punto. */
+export function inizioGiorno(adesso = Date.now()): string {
+  return `${new Date(adesso).toISOString().slice(0, 10)}T00:00:00.000Z`
+}
+
+/** Quante ne può ancora scegliere oggi: il tetto meno quelle già prese. */
+export function postiOggi(adesso = Date.now()): number {
+  return Math.max(0, AL_GIORNO - store.notiziePreseDal(inizioGiorno(adesso)))
+}
+
 const schema = () => ({
   type: 'object',
   properties: {
@@ -394,9 +416,9 @@ const schema = () => ({
           riga: {
             type: 'string',
             description:
-              `Una riga sola in ${nellaLingua()}, massimo venti parole: cosa è successo o ` +
-              'perché conta. Non ripetere il titolo con altre parole — aggiungi quello che ' +
-              'il titolo non dice.'
+              `Una riga sola in ${nellaLingua()}, massimo venti parole: perché conta PER LEI — ` +
+              'quale suo progetto o interesse tocca, e cosa cambia. Non ripetere il titolo ' +
+              'con altre parole.'
           }
         },
         required: ['n', 'riga'],
@@ -408,25 +430,24 @@ const schema = () => ({
   additionalProperties: false
 })
 
-const ISTRUZIONI = `Stai facendo la rassegna del mattino per una persona che ha cinque minuti.
+const ISTRUZIONI = `Stai facendo la rassegna per una persona che ha cinque minuti e che
+non vuole «le notizie»: vuole le poche cose che toccano quello su cui lavora.
 
-Scegli le notizie che varrà la pena aver letto stasera. Preferisci quello che è
-successo davvero a quello che qualcuno ha detto; una cosa che cambia qualcosa a
-una che la commenta. Salta il gossip, le classifiche, le recensioni di prodotto e
-i pezzi che esistono per far cliccare.
+Scegli SOLO quello che tocca uno dei suoi progetti e obiettivi, o quello che ha
+detto di seguire con le sue parole. Meno è giusto: se niente c'entra, scegli
+zero. Mai notizie generiche di economia, mercati, politica o tecnologia solo
+perché sono grosse — entrano solo se toccano un obiettivo, e allora la riga
+dice quale. Salta il gossip, le classifiche, le recensioni e i pezzi che
+esistono per far cliccare.
 
 Non mettere due notizie sullo stesso fatto: scegli la migliore delle due.
-Vale la pena coprire più di un argomento, a meno che i suoi interessi non dicano
-il contrario — se ha scritto che gli interessa una cosa sola, dagli quella.
+Preferisci quello che è successo davvero a quello che qualcuno ha detto.
 
-Se ti do anche quello che si è visto da come legge, usalo per inclinare la scelta
-dentro ogni argomento, non per cancellare gli argomenti che non tocca mai. Una
-rassegna che restituisce solo quello che uno ha già letto smette di servire a
-qualcosa, e chi la legge non se ne accorge: gli sembra solo che non succeda più
-niente.
+Se ti do anche quello che si è visto da come legge, usalo per scegliere fra
+due cose che c'entrano, non per allargare a cose che non c'entrano.
 
-La riga che scrivi accanto è la parte utile: chi legge il titolo lo ha già
-letto. Dì cosa è successo, o cosa cambia, o perché adesso.`
+La riga che scrivi accanto è la parte utile, ed è per lei: quale suo progetto
+o interesse tocca, e cosa cambia. Chi legge il titolo lo ha già letto.`
 
 /**
  * Quali leggere, e perché.
@@ -436,8 +457,8 @@ letto. Dì cosa è successo, o cosa cambia, o perché adesso.`
  * esiste. Vale la pena ripeterlo perché è la ragione per cui questa funzione
  * non lancia mai.
  */
-export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto): Promise<Scelta[] | null> {
-  if (!candidate.length) return []
+export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto, quante = QUANTE, obiettivi = ''): Promise<Scelta[] | null> {
+  if (!candidate.length || quante <= 0) return []
   const elenco = candidate
     .map((n, i) => `${i + 1}. [${n.fonte}] ${n.titolo}${n.riassunto ? ` — ${n.riassunto.slice(0, 180)}` : ''}`)
     .join('\n')
@@ -450,16 +471,27 @@ export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto):
     messages: [{
       role: 'user',
       content:
+        // i progetti prima di tutto: sono la cosa che decide se una notizia è sua
+        (obiettivi.trim()
+          ? `Su cosa sta lavorando, e a cosa punta ciascuno:\n${obiettivi.trim()}\n\n`
+          : '') +
         (interessi.trim()
-          ? `Quello che le interessa, con le sue parole:\n«${interessi.trim()}»\n\n`
-          : 'Non ha detto cosa le interessa: fa’ una rassegna generale, ben distribuita.\n\n') +
+          ? `Quello che segue, con le sue parole:\n«${interessi.trim()}»\n\n`
+          : '') +
+        (!obiettivi.trim() && !interessi.trim()
+          ? 'Non ha scritto né progetti né interessi: scegli pochissimo, solo quello che cambia davvero qualcosa.\n\n'
+          : '') +
         // quello che *fa*, non quello che dice: vale più della riga qui sopra,
         // ma non la sostituisce — gli argomenti scritti restano una scelta
         (g && perIlModello(g) ? `Quello che si è visto da come legge:\n${perIlModello(g)}\n\n` : '') +
-        `Scegline ${QUANTE}, dalle più importanti alle meno.\n\n${elenco}`
+        `Scegline al massimo ${quante}, dalle più importanti alle meno; zero va benissimo.\n\n${elenco}`
     }]
   })
-  if (!esito?.scelte?.length) return null
+  // «niente» e «non ce l'ha fatta» sono due risposte diverse: la prima è
+  // una scelta — con la regola «solo quello che c'entra» è la più frequente —
+  // e non deve far ripiegare sul conteggio, che di c'entrare non sa niente
+  if (!esito?.scelte || !Array.isArray(esito.scelte)) return null
+  if (!esito.scelte.length) return []
 
   // un numero fuori elenco è una scelta che non esiste: si butta, non si
   // ripiega su un'altra notizia a caso
@@ -470,7 +502,7 @@ export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto):
     if (!Number.isFinite(n) || n < 1 || n > candidate.length || viste.has(n)) continue
     viste.add(n)
     buone.push({ n, riga: String(s.riga ?? '') })
-    if (buone.length >= QUANTE) break
+    if (buone.length >= quante) break
   }
   return buone
 }
@@ -490,7 +522,7 @@ export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto):
  * il mondo, la tecnologia, l'economia, l'Italia — la prima pagina somiglia a
  * una prima pagina anche quando non l'ha pensata nessuno.
  */
-export function sceltaAMano(candidate: Grezza[], interessi: string, adesso = Date.now(), g?: Gusto): Scelta[] {
+export function sceltaAMano(candidate: Grezza[], interessi: string, adesso = Date.now(), g?: Gusto, quante = QUANTE): Scelta[] {
   const senza = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const parole = senza(interessi).split(/[^a-z0-9]+/).filter(p => p.length > 3)
 
@@ -518,21 +550,21 @@ export function sceltaAMano(candidate: Grezza[], interessi: string, adesso = Dat
   // che hanno qualcosa da dire bastano, se ne prende uno per uno; quando sono
   // pochi si allarga a due, perché una rassegna corta è peggio di una ripetuta.
   const giornali = new Set(candidate.map(n => n.fonte)).size
-  const TETTO = giornali >= QUANTE ? 1 : 2
-  const quante = new Map<string, number>()
+  const TETTO = giornali >= quante ? 1 : 2
+  const perGiornale = new Map<string, number>()
   const presi = new Set<number>()
   const scelte: Scelta[] = []
 
-  while (scelte.length < QUANTE) {
+  while (scelte.length < quante) {
     let messa = false
     for (const coda of code.values()) {
-      const i = coda.find(x => !presi.has(x) && (quante.get(candidate[x].fonte) ?? 0) < TETTO)
+      const i = coda.find(x => !presi.has(x) && (perGiornale.get(candidate[x].fonte) ?? 0) < TETTO)
       if (i === undefined) continue
       presi.add(i)
-      quante.set(candidate[i].fonte, (quante.get(candidate[i].fonte) ?? 0) + 1)
+      perGiornale.set(candidate[i].fonte, (perGiornale.get(candidate[i].fonte) ?? 0) + 1)
       scelte.push({ n: i + 1, riga: '' })
       messa = true
-      if (scelte.length >= QUANTE) break
+      if (scelte.length >= quante) break
     }
     // nessun argomento ha più niente da dare: si smette invece di girare a vuoto
     if (!messa) break
@@ -547,7 +579,10 @@ export function interessi(): string {
   return (leggi().argomenti ?? '').trim()
 }
 
-export type Esito = { notizie: store.Notizia[]; quando: string | null; fatta: boolean }
+/** `oggi` è quante ne ha scelte oggi, sul tetto: la testata lo dice. */
+export type Esito = { notizie: store.Notizia[]; quando: string | null; fatta: boolean; oggi: number }
+
+const preseOggi = () => store.notiziePreseDal(inizioGiorno())
 
 /**
  * Va a prendere le notizie, sceglie, e le scrive nell'indice.
@@ -559,16 +594,27 @@ export type Esito = { notizie: store.Notizia[]; quando: string | null; fatta: bo
  */
 export async function aggiorna(forza = false): Promise<Esito> {
   const ultima = store.ultimaRassegna()
-  if (!forza && ultima && Date.now() - new Date(ultima).getTime() < ORE_VALIDA * 3600_000) {
-    return { notizie: store.notizie(), quando: ultima, fatta: false }
+  const chiave = cartella()
+  // Un giro che ha scelto zero è un giro lo stesso: con il tetto e la regola
+  // «solo quello che c'entra» succede spesso, e l'ultima `presa` non si
+  // sposta. Senza questo segno l'orologio, ogni ora, tornava dai giornali e
+  // dal modello — pagando per chiedere di nuovo la stessa cosa.
+  const ultimoGiro = Math.max(ultima ? new Date(ultima).getTime() : 0, ultimiGiri.get(chiave) ?? 0)
+  if (!forza && ultimoGiro && Date.now() - ultimoGiro < ORE_VALIDA * 3600_000) {
+    return { notizie: store.notizie(), quando: ultima, fatta: false, oggi: preseOggi() }
+  }
+  // il tetto del giorno è pieno: non si va nemmeno a prendere i giornali.
+  // Vale anche per il bottone — è la promessa, non un risparmio
+  if (postiOggi() <= 0) {
+    return { notizie: store.notizie(), quando: ultima, fatta: false, oggi: preseOggi() }
   }
   // Il bottone e l'orologio possono cadere insieme: due giri in parallelo
   // vorrebbero dire trenta richieste ai giornali e due chiamate al modello per
   // una rassegna sola. Chi arriva secondo aspetta il primo e ne prende l'esito.
-  const chiave = cartella()
   let giroInCorso = inCorso.get(chiave)
   if (!giroInCorso) {
-    giroInCorso = giro().finally(() => { inCorso.delete(chiave) })
+    giroInCorso = giro().then(e => { ultimiGiri.set(chiave, Date.now()); return e })
+      .finally(() => { inCorso.delete(chiave) })
     inCorso.set(chiave, giroInCorso)
   }
   return giroInCorso
@@ -580,8 +626,11 @@ export async function aggiorna(forza = false): Promise<Esito> {
  * suoi «perché», salvate nell'indice di A e mostrate a B.
  */
 const inCorso = new Map<string, Promise<Esito>>()
+/** L'ultimo giro finito, per persona — anche se non ha scelto niente. */
+const ultimiGiri = new Map<string, number>()
 
 async function giro(): Promise<Esito> {
+  const posti = postiOggi()
   const fonti = fontiPer(lingua())
   const tutte = (await Promise.all(fonti.map(prendi))).flat()
   if (!tutte.length) {
@@ -591,28 +640,40 @@ async function giro(): Promise<Esito> {
   }
 
   // quello che è già uscito negli ultimi due giorni, per non raccontarlo due volte
-  const gia = store.notizie(2).map(n => ({ id: n.id, parole: impronta(n.titolo) }))
+  const uscite = store.notizie(2)
+  const gia = uscite.map(n => ({ id: n.id, parole: impronta(n.titolo) }))
   // e quello che hai buttato via non rientra dalla finestra: `notizie()` non
   // lo elenca più, quindi senza questa riga sarebbe l'unica cosa che la
   // rassegna può riproporti all'infinito
   const scartate = new Set(store.notizieScartate())
-  const candidate = cernita(tutte.filter(n => !scartate.has(n.id)), Date.now(), gia)
+  // L'articolo già in rassegna non si ripropone al modello. Prima ripassava
+  // apposta — si aggiornava al suo posto — ma con otto posti al giorno un
+  // articolo ripreso è un posto pagato per una cosa che c'era già: resta
+  // dov'è, con il suo segno di letto, e i posti vanno a quello che manca.
+  const prese = new Set(uscite.map(n => n.id))
+  const candidate = cernita(tutte.filter(n => !scartate.has(n.id) && !prese.has(n.id)), Date.now(), gia)
   const miei = interessi()
+  // i progetti con l'obiettivo: è quello che decide se una notizia è sua
+  const suoi = progetti.vivi()
+  const obiettivi = progetti.perIlModello()
   // quello che si è imparato da come legge: costa due conteggi sull'indice, e
   // vale sia per il modello sia per la scelta a mano
   const g = gusto()
-  const scelte = (await scegli(candidate, miei, g)) ?? sceltaAMano(candidate, miei, Date.now(), g)
+  // senza modello la scelta è un conteggio di parole: le parole degli
+  // obiettivi valgono come interessi scritti, così almeno guarda dalla parte giusta
+  const parole = [miei, ...suoi.flatMap(p => [p.nome, ...progetti.paroleDi(p)])].filter(Boolean).join(', ')
+  const scelte = (await scegli(candidate, miei, g, posti, obiettivi)) ?? sceltaAMano(candidate, parole, Date.now(), g, posti)
 
-  store.salvaNotizie(scelte.map(s => {
+  store.salvaNotizie(scelte.slice(0, posti).map(s => {
     const n = candidate[s.n - 1]
     return { ...n, perche: s.riga.trim() || null }
   }))
   store.potaNotizie(GIORNI_ARCHIVIO)
 
-  return { notizie: store.notizie(), quando: store.ultimaRassegna(), fatta: true }
+  return { notizie: store.notizie(), quando: store.ultimaRassegna(), fatta: true, oggi: preseOggi() }
 }
 
 /** Quello che c'è adesso, senza andare a prendere niente. */
 export function elenco(): Esito {
-  return { notizie: store.notizie(), quando: store.ultimaRassegna(), fatta: false }
+  return { notizie: store.notizie(), quando: store.ultimaRassegna(), fatta: false, oggi: preseOggi() }
 }

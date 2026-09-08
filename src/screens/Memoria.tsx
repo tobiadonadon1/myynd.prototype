@@ -21,7 +21,7 @@
 //     può falsificare.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Blocco, type Convinzione, type Memoria as Dati } from '../api'
+import { api, type Blocco, type Convinzione, type Memoria as Dati, type Progetto, type StatoProgetto } from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
 import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
@@ -278,6 +278,139 @@ function Riga({ c, scorda, tieni, storica }:
   )
 }
 
+/**
+ * I progetti: su cosa lavora, e a cosa punta ciascuno.
+ *
+ * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che
+ * il feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
+ * scritto in una riga vale più di trenta documenti. Un nome, l'obiettivo che
+ * si scrive qui dentro, e uno stato — attivo, fermo, chiuso — che gira con
+ * un dito. Chiuso non cancella: resta scritto, e il punto non lo reinventa.
+ */
+const PROSSIMO: Record<StatoProgetto, StatoProgetto> = { attivo: 'fermo', fermo: 'chiuso', chiuso: 'attivo' }
+
+function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void> }) {
+  const [obiettivo, setObiettivo] = useState(p.obiettivo)
+  useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
+  const chiuso = p.stato === 'chiuso'
+  const salva = () => { if (obiettivo.trim() !== p.obiettivo.trim()) cambia(p.id, { obiettivo: obiettivo.trim() }) }
+
+  return (
+    <div style={{ padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)', opacity: chiuso ? 0.55 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: '14.5px', fontWeight: 500, color: '#22271F', overflowWrap: 'anywhere',
+          textDecoration: chiuso ? 'line-through' : 'none' }}>{p.nome}</span>
+        {p.origine === 'punto' && (
+          <span style={{ flex: 'none', fontSize: '11.5px', color: 'rgba(34,39,31,.45)' }}>{t('riconosciuto dal punto')}</span>
+        )}
+        {/* la pastiglia gira: attivo → fermo → chiuso → attivo. Un solo gesto, senza menù */}
+        <Hov as="button" type="button" onClick={() => cambia(p.id, { stato: PROSSIMO[p.stato] })}
+          title={t(PROSSIMO[p.stato])}
+          style={{
+            flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase',
+            padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            color: chiuso ? 'rgba(34,39,31,.55)' : p.stato === 'fermo' ? '#8A6317' : '#2F4A33',
+            background: chiuso ? 'rgba(34,39,31,.08)' : p.stato === 'fermo' ? 'rgba(216,164,110,.2)' : 'rgba(126,156,130,.18)'
+          }}
+          hover={{ opacity: 0.8 }}>{t(p.stato)}</Hov>
+      </div>
+      {/* una riga sola: l'obiettivo non è un documento, è la frase che decide cosa conta */}
+      <textarea
+        value={obiettivo}
+        onChange={e => setObiettivo(e.target.value.replace(/\n/g, ' ').slice(0, 200))}
+        onBlur={salva}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
+        placeholder={t('Obiettivo non ancora scritto: scrivilo qui, in una riga.')}
+        rows={1}
+        disabled={chiuso}
+        style={{
+          width: '100%', boxSizing: 'border-box', marginTop: 7, padding: '8px 11px', borderRadius: 10,
+          border: '1px solid rgba(34,39,31,.14)', background: chiuso ? 'transparent' : 'rgba(255,255,255,.7)',
+          color: '#22271F', fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'none'
+        }} />
+    </div>
+  )
+}
+
+function Progetti() {
+  const [progetti, setProgetti] = useState<Progetto[] | null>(null)
+  const [nuovo, setNuovo] = useState(false)
+  const [nome, setNome] = useState('')
+  const [obiettivo, setObiettivo] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  const carica = useCallback(async () => {
+    try { setProgetti((await api.progetti()).progetti) } catch { /* la pagina resta com'è */ }
+  }, [])
+  useEffect(() => { carica() }, [carica])
+
+  const cambia = async (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => {
+    // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
+    setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
+    try { await api.cambiaProgetto(id, c); setGuaio('') }
+    catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    finally { carica() }
+  }
+
+  const aggiungi = async () => {
+    if (!nome.trim()) return
+    try {
+      await api.nuovoProgetto(nome.trim(), obiettivo.trim())
+      setNome(''); setObiettivo(''); setNuovo(false); setGuaio('')
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    finally { carica() }
+  }
+
+  const campo = {
+    width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
+    border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.75)',
+    color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
+  }
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '20px 24px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <span style={{ ...LABEL, flex: 1 }}>{t('Progetti')}</span>
+        <Hov as="button" type="button" onClick={() => setNuovo(v => !v)}
+          style={{ flex: 'none', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: '12px', color: '#8E3F1F', cursor: 'pointer' }}
+          hover={{ color: '#C4623B' }}>{t('+ Nuovo progetto')}</Hov>
+      </div>
+      <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
+        {t('Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.')}
+      </div>
+
+      {nuovo && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          <input value={nome} onChange={e => setNome(e.target.value)} autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
+            placeholder={t('Il nome del progetto')} style={campo} />
+          <input value={obiettivo} onChange={e => setObiettivo(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
+            placeholder={t('A cosa punta, in una riga: «chiudere il round entro ottobre»')} style={campo} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={aggiungi} disabled={!nome.trim()} style={{
+              flex: 'none', padding: '8px 16px', borderRadius: 99, border: 'none',
+              background: nome.trim() ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+              color: nome.trim() ? '#FFF7F0' : 'rgba(34,39,31,.3)',
+              fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: nome.trim() ? 'pointer' : 'default'
+            }}>{t('Aggiungi')}</button>
+          </div>
+        </div>
+      )}
+
+      {progetti && progetti.length === 0 && !nuovo && (
+        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.55)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
+          {t('Nessun progetto ancora. Scrivine uno, o lascia che il punto lo riconosca dal materiale.')}
+        </div>
+      )}
+      <div style={{ marginTop: progetti?.length ? 10 : 0 }}>
+        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} cambia={cambia} />)}
+      </div>
+      {guaio && <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
+    </div>
+  )
+}
+
 export function Memoria() {
   const [d, setD] = useState<Dati | null>(null)
   const [guasto, setGuasto] = useState('')
@@ -372,6 +505,9 @@ export function Memoria() {
           {t('Quello che Myynd sa di te, separato da quello che ha letto. I documenti sono fatti; qui sta il giudizio, e puoi cambiarlo.')}
         </div>
       </div>
+
+      {/* — i progetti: prima di tutto, perché sono la prima cosa che legge — */}
+      <Progetti />
 
       {/* — i cinque blocchi — */}
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '20px 24px 18px' }}>

@@ -21,6 +21,8 @@ export type VoceFeed = {
   doc: string | null
   stato: string
   quando: string
+  /** Perché sta sul feed, e per quale obiettivo. Vuoto per le voci di prima. */
+  perche?: string | null
 }
 
 export type Gruppo = { id: string; nome: string; colore: string; nodi: number }

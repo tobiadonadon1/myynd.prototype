@@ -1638,6 +1638,24 @@ const EN: Record<string, string> = {
   'apri': 'open',
   'Il punto di oggi.': 'Today’s briefing.',
   'Niente di nuovo.': 'Nothing new.',
+  // — i progetti: su cosa lavora, e a cosa punta —
+  'Progetti': 'Projects',
+  'Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.':
+    'What you are working on, and what each one is aiming at. It is the first thing Myynd reads before choosing what to show you.',
+  'Nessun progetto ancora. Scrivine uno, o lascia che il punto lo riconosca dal materiale.':
+    'No projects yet. Write one, or let the briefing recognise it from your material.',
+  '+ Nuovo progetto': '+ New project',
+  'Il nome del progetto': 'The project’s name',
+  'A cosa punta, in una riga: «chiudere il round entro ottobre»': 'What it aims at, in one line: “close the round by October”',
+  'Obiettivo non ancora scritto: scrivilo qui, in una riga.': 'Goal not written yet: write it here, in one line.',
+  'attivo': 'active',
+  'fermo': 'paused',
+  'chiuso': 'closed',
+  'riconosciuto dal punto': 'recognised by the briefing',
+  'Non è un progetto': 'Not a project',
+  'Un progetto ha bisogno di un nome.': 'A project needs a name.',
+  'Lo stato di un progetto è attivo, fermo o chiuso.': 'A project’s state is active, paused or closed.',
+  'Questo progetto non c’è.': 'This project does not exist.',
 }
 
 
@@ -1722,6 +1740,8 @@ export const frasi = {
   minutiFa: (n: number) => corrente === 'en' ? `${n} min ago` : `${n} min fa`,
   oreFa: (n: number) => corrente === 'en' ? `${n}h ago` : `${n} h fa`,
   daLeggere: (n: number) => corrente === 'en' ? `${n} to read` : `${n} da leggere`,
+  // quante ne ha scelte oggi, sul tetto: «3 oggi · su 8»
+  oggiSulTetto: (n: number, tetto: number) => corrente === 'en' ? `${n} today · of ${tetto}` : `${n} oggi · su ${tetto}`,
   leggiSu: (fonte: string) => corrente === 'en' ? `Read on ${fonte}` : `Leggi su ${fonte}`,
   guardatiIGiornali: (quando: string) => corrente === 'en'
     ? `Papers checked ${quando}` : `Giornali guardati ${quando}`,

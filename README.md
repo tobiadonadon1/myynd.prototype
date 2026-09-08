@@ -271,6 +271,29 @@ del giorno. Nessun timer: lo chiede la pagina quando riprende il fuoco dopo
 un'assenza, o al primo caricamento del giorno. Senza un motore, o su una
 mente vuota, la carta non compare.
 
+## I progetti
+
+Su cosa stai lavorando, e a cosa punta ciascuno: un nome, un obiettivo in una
+riga, uno stato (attivo, fermo, chiuso). Stanno in cima alla Memoria, e sono
+la prima cosa che Myynd legge prima di scegliere. Il feed manda a leggere
+prima i documenti che nominano un progetto — il nome, o due parole
+distintive dell'obiettivo — e ogni voce porta un «perché» in dodici parole
+(`feed.perche`): per quale obiettivo conta, o quale decisione chiede. La
+rassegna sceglie solo quello che tocca un obiettivo o quello che segui con le
+tue parole, con un tetto di **otto notizie al giorno** in tutto (non per giro:
+un giro che ne sceglie zero è un giro giusto), e ogni notizia dice perché è
+per te. Il punto legge gli stessi obiettivi, dice a che punto sta ciascun
+progetto rispetto al suo, e ogni mossa dice quale obiettivo muove.
+
+Il punto può ancora riconoscere un progetto nuovo dal materiale — uno per
+punto, con l'obiettivo che gli sembra — e quello entra in tabella
+(`progetti`, `origine = 'punto'`). «Non è un progetto», dal punto o dalla
+Memoria, lo **chiude**: la riga resta, e un progetto chiuso non torna, nemmeno
+con un altro nome. Gli angoli tenuti restano nella memoria (`progetto:<nome>`).
+I progetti che il punto teneva in `punto.json` entrano in tabella al primo
+avvio, con la loro data. Rotte: `GET/POST /api/progetti`,
+`PATCH/DELETE /api/progetti/:id` — `DELETE` chiude, non cancella.
+
 ## Le automazioni
 
 Una ricetta in `automazioni/_comuni` scrive di norma **una riga** con l'elenco

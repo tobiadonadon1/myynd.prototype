@@ -103,6 +103,18 @@ export function usePunto() {
     catch { aggiornaProgetto(nome, p => ({ ...p, angoliTenuti: p.angoliTenuti.filter(a => a !== angolo) })) }
   }, [])
 
+  /** «Non è un progetto»: si chiude in tabella, e sparisce dalla finestra. Se non passa, torna. */
+  const nonProgetto = useCallback(async (id: string) => {
+    let tolto: Punto['progetti'][number] | undefined
+    setPunto(p => {
+      if (!p) return p
+      tolto = p.progetti.find(x => x.id === id)
+      return { ...p, progetti: p.progetti.filter(x => x.id !== id) }
+    })
+    try { await api.chiudiProgetto(id) }
+    catch { if (tolto) setPunto(p => p ? { ...p, progetti: [...p.progetti, tolto!] } : p) }
+  }, [])
+
   const scarta = useCallback(async (nome: string, angolo: string) => {
     aggiornaProgetto(nome, p => ({ ...p, angolo: '' }))
     try { await api.scartaAngolo(nome, angolo) }
@@ -132,7 +144,7 @@ export function usePunto() {
     /** Riapre quello di prima, da un dito. */
     riapri: () => { try { localStorage.removeItem(CHIAVE_NASCOSTO) } catch { /* pazienza */ } setNascosto(null) },
     carico, tetto,
-    rifai, nascondi, tieni, scarta,
+    rifai, nascondi, tieni, scarta, nonProgetto,
     avvia, accese, guaioAvvio
   }
 }

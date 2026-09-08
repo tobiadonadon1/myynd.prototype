@@ -14,11 +14,35 @@
 //
 //   node --test server/rassegna.test.ts
 
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  cernita, entita, impronta, leggiFeed, pulisciLink, ripulisci, sceltaAMano, sensato, simili, type Grezza
-} from './rassegna.ts'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { Grezza } from './rassegna.ts'
+
+// il giro intero — in fondo — scrive nell'indice: una cartella sua, e mai
+// quella di casa. Va detto prima di importare, perché la radice si legge
+// all'apertura del modulo
+const CASA = mkdtempSync(join(tmpdir(), 'myynd-rassegna-'))
+process.env.MYYND_DATI = CASA
+delete process.env.ANTHROPIC_API_KEY
+
+const { cernita, entita, impronta, leggiFeed, pulisciLink, ripulisci, sceltaAMano, sensato, simili } = await import('./rassegna.ts')
+const rassegna = await import('./rassegna.ts')
+const cfg = await import('./config.ts')
+const store = await import('./store.ts')
+const compatibile = await import('./compatibile.ts')
+const progetti = await import('./progetti.ts')
+
+const reteVera = globalThis.fetch
+after(() => {
+  globalThis.fetch = reteVera
+  compatibile.usaRete(null)
+  store.chiudiIndici()
+  delete process.env.MYYND_DATI
+  rmSync(CASA, { recursive: true, force: true })
+})
 
 const FONTE = { nome: 'Prova', url: 'https://x', argomento: 'mondo', lingua: '*' } as const
 
@@ -274,4 +298,108 @@ test('un riassunto che è per lo più indirizzi si butta', () => {
 
 test('due parole non sono un riassunto', () => {
   assert.equal(sensato('Leggi qui'), '')
+})
+
+// — il giro intero: il tetto del giorno, e il perché —
+//
+// Qui i giornali sono finti (un `fetch` che risponde XML) e il modello è un
+// fornitore compatibile finto che sceglie quello che gli si dice. Quello che
+// si guarda è il conto: otto al giorno, in tutto, su quanti giri servono.
+
+/** Dodici titoli che non si somigliano: la cernita non deve buttarne nessuno. */
+const POOL = [
+  ...TITOLI,
+  'Il comune di Bolzano cambia il piano del traffico',
+  'Scoperta una nuova specie di rana in Amazzonia'
+]
+
+/** Tre giornali rispondono, con quattro pezzi a testa dal mazzo; gli altri sono giù. */
+function giornaliFinti(adesso = Date.now()) {
+  const chiamate: string[] = []
+  const rispondono = rassegna.fontiPer('en').slice(0, 3)
+  globalThis.fetch = (async (dove: string | URL | Request) => {
+    const url = String(dove)
+    chiamate.push(url)
+    const i = rispondono.findIndex(f => f.url === url)
+    if (i < 0) return new Response('', { status: 503 })
+    const items = POOL.slice(i * 4, i * 4 + 4).map((titolo, k) =>
+      `<item><title>${titolo}</title><link>https://g${i}.test/${k}</link>` +
+      `<pubDate>${new Date(adesso - (k + 1) * 3600_000).toUTCString()}</pubDate></item>`
+    ).join('')
+    return new Response(`<rss><channel>${items}</channel></rss>`, { headers: { 'content-type': 'application/rss+xml' } })
+  }) as typeof fetch
+  return chiamate
+}
+
+/** Un fornitore finto: sceglie le prime `quante` e si ricorda cosa ha ricevuto. */
+function modelloFinto(quante: () => number, argomenti = '') {
+  cfg.scrivi({ argomenti, motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+  const ricevute: string[] = []
+  compatibile.usaRete((async (_url: string | URL | Request, init?: RequestInit) => {
+    const corpo = init?.body ? JSON.parse(String(init.body)) as { messages: { content: string }[] } : { messages: [] }
+    ricevute.push(corpo.messages.map(m => m.content).join('\n'))
+    const scelte = Array.from({ length: quante() }, (_, i) => ({ n: i + 1, riga: `Tocca il round seed: notizia ${i + 1}.` }))
+    return Response.json({
+      id: 'chatcmpl-1', model: 'gpt-prova',
+      choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ scelte }) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 10 }
+    })
+  }) as typeof fetch)
+  return ricevute
+}
+
+test('otto al giorno in tutto: il secondo giro prende solo i posti rimasti, il terzo non va nemmeno dai giornali; e il perché si salva', async () => {
+  store.azzeraTutto()
+  store.default.exec('DELETE FROM notizie')
+  progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed con Bianchi entro ottobre' })
+  const chiamate = giornaliFinti()
+  let quante = 5
+  const ricevute = modelloFinto(() => quante, 'startup italiane')
+
+  // primo giro: il modello ne sceglie cinque
+  const primo = await rassegna.aggiorna(true)
+  assert.ok(primo.fatta)
+  assert.equal(primo.oggi, 5)
+  assert.equal(store.notizie(1).length, 5)
+  assert.equal(store.notizie(1)[0].perche, 'Tocca il round seed: notizia 1.', 'il perché non è arrivato nell’indice')
+  // il prompt: gli obiettivi, gli interessi, la regola, e il tetto di questo giro
+  assert.match(ricevute[0], /Su cosa sta lavorando, e a cosa punta ciascuno:\n— Nextas: Chiudere il round seed con Bianchi entro ottobre \(attivo\)/)
+  assert.match(ricevute[0], /Quello che segue, con le sue parole:\n«startup italiane»/)
+  assert.match(ricevute[0], /Scegline al massimo 8/)
+
+  // secondo giro: il modello ne vorrebbe otto, ma i posti sono tre
+  quante = 8
+  const giornaliPrima = chiamate.length
+  const secondo = await rassegna.aggiorna(true)
+  assert.ok(secondo.fatta)
+  assert.ok(chiamate.length > giornaliPrima, 'il secondo giro non è andato dai giornali')
+  assert.match(ricevute[1], /Scegline al massimo 3/)
+  assert.equal(secondo.oggi, 8, `${secondo.oggi} notizie oggi: il tetto è otto`)
+  assert.equal(store.notizie(1).length, 8)
+
+  // terzo giro, anche col bottone: il conto è pieno, niente rete e niente modello
+  const giornaliDopo = chiamate.length
+  const terzo = await rassegna.aggiorna(true)
+  assert.equal(terzo.fatta, false)
+  assert.equal(terzo.oggi, 8)
+  assert.equal(chiamate.length, giornaliDopo, 'con il tetto pieno è andato lo stesso dai giornali')
+  assert.equal(ricevute.length, 2, 'con il tetto pieno ha chiamato il modello')
+  assert.equal(rassegna.elenco().oggi, 8)
+})
+
+test('un giro che sceglie zero è un giro: per sei ore l’orologio non torna dai giornali, e la regola dice al modello che zero va bene', async () => {
+  store.azzeraTutto()
+  store.default.exec('DELETE FROM notizie')
+  const chiamate = giornaliFinti()
+  const ricevute = modelloFinto(() => 0)
+  const e = await rassegna.aggiorna(true)
+  assert.ok(e.fatta)
+  assert.equal(e.oggi, 0)
+  assert.equal(store.notizie(1).length, 0)
+  assert.match(ricevute[0], /zero va benissimo/)
+  assert.match(ricevute[0], /Non ha scritto né progetti né interessi/)
+  const prima = chiamate.length
+  const poi = await rassegna.aggiorna(false)
+  assert.equal(poi.fatta, false)
+  assert.equal(chiamate.length, prima, 'l’orologio è tornato dai giornali un attimo dopo un giro vuoto')
 })

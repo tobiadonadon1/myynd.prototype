@@ -4,8 +4,9 @@
 // stesso punto e si ricorda cosa ha ricevuto — perché quello che va provato
 // non è la qualità del testo: è che il materiale sia quello giusto e tagliato,
 // che il cancello tenga (tre al giorno, tre ore, niente su niente di nuovo),
-// che i progetti sopravvivano da un punto all'altro, e che un angolo tenuto
-// finisca nella memoria e uno scartato non torni nel prompt.
+// che i progetti stiano in tabella con il loro obiettivo e sopravvivano da un
+// punto all'altro, che uno chiuso non torni, e che un angolo tenuto finisca
+// nella memoria e uno scartato non torni nel prompt.
 //
 // L'orologio del punto si passa a mano, ma `indicizzato` dei documenti è
 // quello vero: per questo ogni prova prende «adesso» *dopo* aver seminato, e
@@ -29,6 +30,7 @@ const cfg = await import('./config.ts')
 const store = await import('./store.ts')
 const compatibile = await import('./compatibile.ts')
 const punto = await import('./punto.ts')
+const progetti = await import('./progetti.ts')
 const chi = await import('./chi.ts')
 const conti = await import('./conti.ts')
 const timone = await import('./timone.ts')
@@ -58,7 +60,7 @@ const RISPOSTA = {
   mentreNonCeri: [{ testo: 'È arrivato il preventivo di Rossi.', compito: '', doc: 'posta:INBOX:1' }],
   adesso: [{ testo: 'Approva la bozza per Bianchi.', compito: 'c1', doc: '' }],
   daLeggere: [{ titolo: 'Notizia sui modelli', perche: 'C’entra con Myynd.' }],
-  progetti: [{ nome: 'Myynd', doveSei: 'Il punto è in lavorazione.', angolo: 'Far crescere i progetti insieme a lui.' }]
+  progetti: [{ nome: 'Myynd', obiettivo: 'Un gemello che sceglie per lui.', doveSei: 'Il punto è in lavorazione.', angolo: 'Far crescere i progetti insieme a lui.' }]
 }
 
 /** Un fornitore compatibile finto: risponde con questo punto e si ricorda cosa ha ricevuto. */
@@ -246,7 +248,7 @@ test('senza motore, e su una mente vuota, non c’è nessun punto e nessuna chia
 
 // — quello che resta scritto —
 
-test('il punto e i progetti stanno in punto.json, e il nome e la data del progetto sopravvivono al giro dopo', async () => {
+test('il punto sta in punto.json, i progetti in tabella: un progetto nuovo entra con l’obiettivo, e nome, id e data sopravvivono al giro dopo', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
@@ -255,17 +257,84 @@ test('il punto e i progetti stanno in punto.json, e il nome e la data del proget
   assert.ok(existsSync(join(CASA, 'punto.json')))
   const foglio = JSON.parse(readFileSync(join(CASA, 'punto.json'), 'utf8'))
   assert.equal(foglio.ultimo.via, null, 'senza una richiesta con «via», nessuna assenza inventata')
-  assert.equal(foglio.progetti[0].nome, 'Myynd')
+  // il primo punto, senza progetti scritti: al modello si dice di riconoscerli
+  assert.match(istruzioneDi(ricevute[0]), /Non ha ancora scritto i suoi progetti/)
 
-  // il giro dopo: il modello riceve i progetti di prima, e quello che torna li ricuce
+  // quello che il modello ha capito sta in tabella, non nel foglio
+  const [inTabella] = progetti.elenco()
+  assert.equal(inTabella.nome, 'Myynd')
+  assert.equal(inTabella.obiettivo, 'Un gemello che sceglie per lui.')
+  assert.equal(inTabella.origine, 'punto')
+  assert.equal(inTabella.dal, new Date(t0).toISOString())
+  assert.equal(primo.punto?.progetti[0].id, inTabella.id, 'il progetto del punto non porta l’id della riga')
+  assert.equal(primo.punto?.progetti[0].obiettivo, inTabella.obiettivo)
+
+  // il giro dopo: il modello riceve i progetti dalla tabella, con l'obiettivo
+  // e dov'erano, e quello che torna si ricuce sulla stessa riga
   await unAttimo()
   store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
   const secondo = await punto.punto({ forza: true }, t0 + ore(4))
   const giorno = new Date(t0).toISOString().slice(0, 10)
   assert.match(istruzioneDi(ricevute[1]),
-    new RegExp(`I suoi progetti, come li avevi capiti[\\s\\S]*— Myynd \\(dal ${giorno}\\): Il punto è in lavorazione`))
+    new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  dov'era l'ultima volta: Il punto è in lavorazione`))
+  assert.match(istruzioneDi(ricevute[1]), /ognuna\n  dice in due parole quale progetto o obiettivo muove/)
   assert.equal(secondo.punto?.progetti[0].dal, primo.punto?.progetti[0].dal, 'la data del progetto è ripartita')
+  assert.equal(secondo.punto?.progetti[0].id, inTabella.id)
+  assert.equal(progetti.elenco().length, 1, 'lo stesso progetto è entrato due volte')
   assert.equal(punto.ultimo()?.quando, secondo.punto?.quando)
+})
+
+test('un progetto chiuso non torna: il modello lo riceve come «non è un progetto», e se lo riscrive non passa; uno nuovo per punto, non di più', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const nextas = progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed entro ottobre' })
+  const papa = progetti.scrivi({ nome: 'Myynd per papà', obiettivo: 'Inventato dal modello' })
+  progetti.chiudi(papa.id)
+
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [
+      { nome: 'nextas', obiettivo: 'Un obiettivo diverso, inventato', doveSei: 'Bianchi ha confermato.', angolo: '' },
+      { nome: 'Myynd per papà', obiettivo: 'Ancora lui', doveSei: 'Ricomincia.', angolo: '' },
+      { nome: 'Orto', obiettivo: 'Piantare i pomodori', doveSei: 'Semi comprati.', angolo: '' },
+      { nome: 'Cantina', obiettivo: 'Svuotarla', doveSei: 'Iniziata.', angolo: '' }
+    ]
+  })
+  const e = await punto.punto({}, adesso())
+  const istr = istruzioneDi(ricevute[0])
+  assert.match(istr, /— Nextas: Chiudere il round seed entro ottobre \(attivo/)
+  assert.match(istr, /NON sono progetti[\s\S]*— Myynd per papà/)
+  assert.doesNotMatch(istr, /Myynd per papà: Inventato/, 'un chiuso è entrato fra i progetti vivi')
+
+  const nomi = e.punto?.progetti.map(p => p.nome)
+  assert.deepEqual(nomi, ['Nextas', 'Orto'], `ha tenuto ${nomi?.join(', ')}`)
+  assert.equal(e.punto?.progetti[0].id, nextas.id)
+  assert.equal(e.punto?.progetti[0].obiettivo, 'Chiudere il round seed entro ottobre', 'l’obiettivo scritto da lui è stato riscritto dal modello')
+  assert.equal(progetti.trova(papa.id)?.stato, 'chiuso', 'il modello ha riaperto un progetto chiuso')
+  assert.equal(progetti.trovaPerNome('Orto')?.origine, 'punto')
+  assert.equal(progetti.trovaPerNome('Cantina'), undefined, 'il secondo progetto nuovo dello stesso punto è entrato')
+})
+
+test('«non è un progetto»: si chiude, esce dal punto mostrato, e al giro dopo non c’è più', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto()
+  const t0 = adesso()
+  const primo = await punto.punto({}, t0)
+  const id = primo.punto!.progetti[0].id
+  const r = punto.nonEUnProgetto(id)
+  assert.deepEqual(r.punto?.progetti, [])
+  assert.deepEqual(punto.ultimo()?.progetti, [])
+  assert.equal(progetti.trova(id)?.stato, 'chiuso')
+  assert.throws(() => punto.nonEUnProgetto('inesistente'), /non c’è nel punto/)
+  // tenere un angolo su un chiuso non si può: non è più un progetto
+  assert.throws(() => punto.tieni('Myynd', 'Un angolo'), /non c’è nel punto/)
+
+  await unAttimo()
+  store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
+  const dopo = await punto.punto({ forza: true }, t0 + ore(4))
+  assert.match(istruzioneDi(ricevute[1]), /NON sono progetti[\s\S]*— Myynd/)
+  assert.deepEqual(dopo.punto?.progetti, [], 'il modello finto lo ripropone, e il punto l’ha ripreso')
 })
 
 test('«tienilo»: l’angolo diventa una convinzione con l’ambito del progetto, e il modello lo trova fra i suoi', async () => {

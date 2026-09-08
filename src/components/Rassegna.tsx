@@ -27,6 +27,9 @@ import { Giostra } from './Giostra'
 /** Cosa vuol dire «oggi» per una notizia: da quante ore è entrata in rassegna. */
 const ORE_OGGI = 24
 
+/** Il tetto del giorno, lo stesso di `server/rassegna.ts`: la testata lo dice. */
+const TETTO_GIORNO = 8
+
 /** Quanto dura l'uscita di una carta prima che sparisca davvero. */
 const USCITA = 240
 
@@ -170,8 +173,11 @@ function Carta({ n, colore, centrata, uscendo, letta, scarta }: {
    * restare aperto su un rettangolo vuoto, e il titolo si prende le righe che
    * avanzano.
    */
-  const testo = (n.perche || n.riassunto || '').trim()
+  // il «perché» — per quale suo progetto conta — sta sotto al titolo, piccolo;
+  // nel vetro resta quello che ne dice il giornale
+  const testo = (n.riassunto || '').trim()
   const vuoto = !testo
+  const perche = (n.perche || '').trim()
 
   const zona = useRef<HTMLDivElement>(null)
   const [righe, setRighe] = useState(3)
@@ -292,6 +298,13 @@ function Carta({ n, colore, centrata, uscendo, letta, scarta }: {
           display: '-webkit-box', WebkitLineClamp: vuoto ? 5 : 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'
         }}>{n.titolo}</div>
       </div>
+      {perche && (
+        <div style={{
+          position: 'relative', marginTop: 5, fontSize: '11px', lineHeight: 1.35, color: 'rgba(255,255,255,.78)',
+          textWrap: 'pretty', overflowWrap: 'anywhere',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+        }}>{perche}</div>
+      )}
 
       {/*
         Il vetro prende tutto quello che resta.
@@ -367,6 +380,8 @@ function Scelta({ on, onClick, children }: { on: boolean; onClick: () => void; c
 export function Rassegna() {
   const [notizie, setNotizie] = useState<Notizia[] | null>(null)
   const [quando, setQuando] = useState<string | null>(null)
+  /** Quante ne ha scelte oggi, sul tetto: la testata lo dice. */
+  const [oggi, setOggi] = useState(0)
   const [periodo, setPeriodo] = useState<Periodo>('oggi')
   const [carico, setCarico] = useState(false)
   const [guaio, setGuaio] = useState('')
@@ -377,7 +392,7 @@ export function Rassegna() {
 
   const carica = useCallback(() => {
     return api.rassegna()
-      .then(r => { setNotizie(r.notizie); setQuando(r.quando); return r.notizie.length })
+      .then(r => { setNotizie(r.notizie); setQuando(r.quando); setOggi(r.oggi ?? 0); return r.notizie.length })
       // la rassegna non è il motivo per cui si apre Myynd: se non risponde,
       // la fascia sparisce e la pagina resta quella di prima
       .catch(() => { setNotizie([]); return 0 })
@@ -417,6 +432,7 @@ export function Rassegna() {
       const r = await api.aggiornaRassegna()
       setNotizie(r.notizie)
       setQuando(r.quando)
+      setOggi(r.oggi ?? 0)
     } catch (e) {
       setGuaio(e instanceof Error ? e.message : String(e))
     } finally {
@@ -464,6 +480,9 @@ export function Rassegna() {
         <span style={{ ...LABEL, color: 'rgba(34,39,31,.5)' }}>{t('La rassegna')}</span>
         {quante > 0 && (
           <span style={{ fontSize: '11.5px', color: '#8E3F1F' }}>{frasi.daLeggere(quante)}</span>
+        )}
+        {oggi > 0 && (
+          <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.45)' }}>{frasi.oggiSulTetto(oggi, TETTO_GIORNO)}</span>
         )}
 
         <div style={{ flex: 1, minWidth: 8 }} />

@@ -91,6 +91,10 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
             </Hov>
           )}
         </div>
+        {/* perché sta qui, e per quale obiettivo: una riga sotto, piana, senza colore */}
+        {riga.perche && (
+          <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.perche}</div>
+        )}
       </div>
       {/* prendere in carico una cosa che lui ha notato: è il gesto che unisce le
           due schermate, e va fatto da qui — dove la cosa la stai leggendo */}
@@ -446,6 +450,10 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 hover={{ color: '#FFF7F0' }}>{v.heroLong ? t('meno') : t('di più')}</Hov>
             )}
           </div>
+          {/* il perché: per quale progetto o obiettivo conta, in una riga quieta */}
+          {v.heroPerche && (
+            <div style={{ fontSize: '13px', lineHeight: 1.5, marginTop: 8, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.heroPerche}</div>
+          )}
 
           {v.heroHaDoc && (
             <Hov as="button" type="button" onClick={v.apriDoc}

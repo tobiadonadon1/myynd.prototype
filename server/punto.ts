@@ -9,14 +9,18 @@
 // anche l'unico lavoro di frontiera che si concede un tetto suo: tre al
 // giorno, mai a meno di tre ore l'uno dall'altro, mai se non è successo niente.
 //
-// La parte che cresce sono i progetti. Il modello li riconosce dal materiale,
-// li chiama per nome, e a ogni punto dice dove stanno e propone un angolo —
-// un'idea che potrebbe prendere su quel progetto, sua e non da manuale. Un
-// angolo tenuto diventa una convinzione nella memoria, cioè una cosa che Myynd
-// sa di lui da lì in poi; uno scartato resta scritto qui, per non tornare.
+// La parte che cresce sono i progetti. Stanno in una tabella loro
+// (`progetti.ts`), con l'obiettivo scritto da lui: il punto li legge da lì,
+// dice dove stanno, e propone un angolo — un'idea che potrebbe prendere su
+// quel progetto, sua e non da manuale. Un angolo tenuto diventa una
+// convinzione nella memoria, cioè una cosa che Myynd sa di lui da lì in poi;
+// uno scartato resta scritto qui, per non tornare. Il modello può ancora
+// riconoscere un progetto nuovo dal materiale — uno per punto, con
+// l'obiettivo che gli sembra — e quello entra in tabella; ma uno che lui ha
+// chiuso non rientra mai, nemmeno con un altro nome.
 //
-// Tutto sta in un file JSON nella cartella della persona, come le automazioni:
-// non è materiale da cercare, è un foglio che si riscrive.
+// Il punto stesso sta in un file JSON nella cartella della persona, come le
+// automazioni: non è materiale da cercare, è un foglio che si riscrive.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -28,6 +32,7 @@ import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { affinita, gusto } from './gusto.ts'
 import * as automazioni from './automazioni.ts'
+import * as progetti from './progetti.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -43,12 +48,16 @@ const CORPO_MAX = 200
 export type Riga = { testo: string; compito: string | null; doc: string | null }
 
 export type Progetto = {
+  /** La riga in tabella. Vuoto solo fra la risposta del modello e la scrittura. */
+  id: string
   nome: string
+  /** A cosa punta, con le sue parole — o, per uno nuovo, come l'ha capito il modello. */
+  obiettivo: string
   /** La prima volta che è comparso: un progetto che dura si vede da qui. */
   dal: string
   doveSei: string
   angolo: string
-  /** Gli angoli che ha tenuto: suoi, e il modello ci costruisce sopra. */
+  /** Gli angoli che ha tenuto: suoi, dalla memoria, e il modello ci costruisce sopra. */
   angoliTenuti: string[]
 }
 
@@ -91,7 +100,8 @@ export type Richiesta = {
 /** Il foglio su disco. */
 type Archivio = {
   ultimo: Punto | null
-  progetti: Progetto[]
+  /** Com'erano prima della tabella: `progetti.ts` li importa da qui una volta, poi non si legge più. */
+  progetti: { nome: string; dal: string }[]
   /** Gli angoli che ha detto che non sono così: non tornano. */
   scartati: string[]
   /** Quando il modello è stato chiamato, per contare quelli di oggi. */
@@ -110,6 +120,17 @@ function leggiArchivio(): Archivio {
     const a = { ...VUOTO, ...letto }
     // un foglio scritto da una versione che non conosceva ancora `via` e `avvii`
     if (a.ultimo) a.ultimo = { ...a.ultimo, via: a.ultimo.via ?? null, avvii: a.ultimo.avvii ?? [] }
+    // ...né la tabella dei progetti: un progetto del punto vecchio ritrova la sua riga per nome
+    if (a.ultimo?.progetti.some(p => !p.id)) {
+      a.ultimo = {
+        ...a.ultimo,
+        progetti: a.ultimo.progetti.map(p => {
+          if (p.id) return p
+          const vero = progetti.trovaPerNome(p.nome)
+          return { ...p, id: vero?.id ?? '', obiettivo: p.obiettivo ?? vero?.obiettivo ?? '' }
+        })
+      }
+    }
     return a
   } catch {
     return { ...VUOTO }
@@ -174,6 +195,10 @@ export type Materiale = {
   convinzioni: store.Convinzione[]
   /** Gli angoli già suoi, dalla memoria: ambito `progetto:<nome>`. */
   tenuti: { nome: string; angolo: string }[]
+  /** I suoi progetti, con l'obiettivo: quelli vivi, dalla tabella. */
+  progetti: progetti.Progetto[]
+  /** Quelli che ha chiuso: al modello si dicono come «non sono progetti». */
+  chiusi: string[]
 }
 
 function daAllora(quando: string | null | undefined, dal: string): boolean {
@@ -244,7 +269,9 @@ export function raccogli(dal: string, primo = false): Materiale {
     convinzioni: store.convinzioni('persona').filter(attendibile).slice(0, 8),
     tenuti: store.convinzioni()
       .filter(k => k.ambito.startsWith('progetto:'))
-      .map(k => ({ nome: k.ambito.slice('progetto:'.length), angolo: k.enunciato }))
+      .map(k => ({ nome: k.ambito.slice('progetto:'.length), angolo: k.enunciato })),
+    progetti: progetti.vivi(),
+    chiusi: progetti.chiusi()
   }
 }
 
@@ -295,15 +322,16 @@ const schema = (compiti: string[], docs: string[]) => {
       },
       progetti: {
         type: 'array',
-        description: 'Uno o due.',
+        description: 'Uno o due, fra quelli elencati; uno nuovo solo se il materiale lo mostra davvero.',
         items: {
           type: 'object',
           properties: {
-            nome: { type: 'string', description: 'Corto e stabile: lo stesso della volta scorsa, se è lo stesso progetto.' },
-            doveSei: { type: 'string', description: 'Una riga: a che punto sta.' },
+            nome: { type: 'string', description: 'Lo stesso nome dell’elenco, alla lettera. Per uno nuovo, corto e come lo direbbe lui.' },
+            obiettivo: { type: 'string', description: 'Una riga: a cosa punta. Se l’elenco lo dice già, copialo; se manca, proponilo.' },
+            doveSei: { type: 'string', description: 'Una riga: a che punto sta rispetto all’obiettivo.' },
             angolo: { type: 'string', description: 'Un’idea distintiva che potrebbe prendere, in una frase. Vuoto se non ne hai una buona.' }
           },
-          required: ['nome', 'doveSei', 'angolo'],
+          required: ['nome', 'obiettivo', 'doveSei', 'angolo'],
           additionalProperties: false
         }
       },
@@ -327,23 +355,24 @@ const schema = (compiti: string[], docs: string[]) => {
 }
 
 /**
- * L'istruzione: chi è, cosa sa di lui, i progetti come li aveva capiti, gli
+ * L'istruzione: chi è, cosa sa di lui, i progetti con il loro obiettivo, gli
  * angoli già suoi e quelli rifiutati. Cambia poco fra un punto e l'altro, ed è
  * per questo che va nel blocco che si mette in cache; il materiale del giorno
  * sta nel messaggio.
+ *
+ * `prima` sono i progetti dell'ultimo punto: da lì si prende «dove sei» e
+ * l'angolo proposto la volta scorsa. I progetti veri — nome, obiettivo, stato
+ * — stanno in `m.progetti`, dalla tabella.
  */
-export function istruzione(m: Materiale, progetti: Progetto[], scartati: string[]): string {
-  const tenuti = [
-    ...progetti.flatMap(p => p.angoliTenuti.map(a => ({ nome: p.nome, angolo: a }))),
-    ...m.tenuti
-  ]
+export function istruzione(m: Materiale, prima: Progetto[], scartati: string[]): string {
   const visti = new Set<string>()
-  const suoi = tenuti.filter(t => {
+  const suoi = m.tenuti.filter(t => {
     const k = `${t.nome}|${t.angolo}`.toLowerCase()
     if (visti.has(k)) return false
     visti.add(k)
     return true
   })
+  const ultimo = (nome: string) => prima.find(p => p.nome.toLowerCase() === nome.toLowerCase())
 
   return [
     `Sei Myynd. Questa persona torna all'app dopo un po' e tu le fai il punto: cosa è
@@ -354,13 +383,22 @@ adesso, e dove stanno i suoi progetti.`,
       ? 'Quello che sai di come lavora:\n' + m.convinzioni.map(k => `— ${k.enunciato}`).join('\n')
       : '',
     m.fuoco ? `Ti ha chiesto di concentrarti su questo, e viene prima di tutto il resto:\n${m.fuoco}` : '',
-    progetti.length
-      ? 'I suoi progetti, come li avevi capiti l\'ultima volta. Tieni gli stessi nomi; ' +
-        'aggiorna «dove sei» con quello che è successo; aggiungine uno solo se il materiale lo ' +
-        'mostra davvero, e lascia cadere quello di cui non c\'è più traccia da settimane.\n' +
-        progetti.map(p => `— ${p.nome} (dal ${p.dal.slice(0, 10)}): ${p.doveSei}` +
-          (p.angolo ? `\n  angolo proposto la volta scorsa: ${p.angolo}` : '')).join('\n')
-      : 'Non hai ancora dato un nome ai suoi progetti: fallo adesso, dal materiale. Un progetto è una cosa su cui sta lavorando da più di un giorno, con un nome che userebbe lui.',
+    m.progetti.length
+      ? 'I suoi progetti, e a cosa punta ciascuno. Tieni gli stessi nomi, alla lettera; ' +
+        'parla solo di quelli che il materiale tocca; per ognuno di\' «dove sei» rispetto ' +
+        'al suo obiettivo. Uno nuovo solo se il materiale lo mostra davvero, da più di un giorno.\n' +
+        m.progetti.map(p => {
+          const u = ultimo(p.nome)
+          return `— ${p.nome}${p.obiettivo ? `: ${p.obiettivo}` : ' (obiettivo non scritto: proponilo in una riga)'}` +
+            ` (${p.stato}, dal ${p.dal.slice(0, 10)})` +
+            (u?.doveSei ? `\n  dov'era l'ultima volta: ${u.doveSei}` : '') +
+            (u?.angolo ? `\n  angolo proposto la volta scorsa: ${u.angolo}` : '')
+        }).join('\n')
+      : 'Non ha ancora scritto i suoi progetti: riconoscili dal materiale. Un progetto è una cosa su cui sta lavorando da più di un giorno, con un nome che userebbe lui e un obiettivo in una riga.',
+    m.chiusi.length
+      ? 'Questi NON sono progetti — li ha chiusi lui. Non nominarli, non riproporli, nemmeno con un altro nome:\n' +
+        m.chiusi.map(n => `— ${n}`).join('\n')
+      : '',
     suoi.length
       ? 'Angoli che ha già tenuto — sono suoi, non riproporli: costruisci sopra, o proponi un passo oltre.\n' +
         suoi.map(t => `— [${t.nome}] ${t.angolo}`).join('\n')
@@ -386,14 +424,16 @@ adesso, e dove stanno i suoi progetti.`,
 — «mentreNonCeri»: fino a tre righe — quello che è arrivato e conta davvero, e
   quello che hai fatto tu (bozze preparate, mail mandate, automazioni girate).
   Metti l'id del compito o del documento quando c'è, così si apre con un dito.
-— «adesso»: fino a tre mosse che fanno andare avanti il suo lavoro. Una riga
-  pronta da approvare viene prima di tutto.
+— «adesso»: fino a tre mosse che fanno andare avanti il suo lavoro, e ognuna
+  dice in due parole quale progetto o obiettivo muove («… — per Nome»). Una
+  riga pronta da approvare viene prima di tutto.
 — «daLeggere»: al massimo una notizia, solo fra quelle elencate e solo se
   c'entra con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
-— «progetti»: uno o due. «doveSei» in una riga. «angolo» è UN'idea distintiva
-  che potrebbe prendere su quel progetto — radicata nel suo materiale e in
-  quello che crede, mai generica, mai un consiglio da manuale. Se non ne hai
-  una buona, lascia l'angolo vuoto.
+— «progetti»: uno o due, di quelli elencati e toccati dal materiale. «doveSei»
+  in una riga, rispetto all'obiettivo. «angolo» è UN'idea distintiva che
+  potrebbe prendere su quel progetto — radicata nel suo materiale e in quello
+  che crede, mai generica, mai un consiglio da manuale. Se non ne hai una
+  buona, lascia l'angolo vuoto.
 — «avvii»: fino a tre automazioni da accendere, solo dove il materiale mostra
   una cosa che si ripete (lo stesso tipo di mail, lo stesso lavoro ogni
   settimana). La frase dev'essere una che Myynd sa trasformare in ricetta:
@@ -468,7 +508,7 @@ type Grezzo = {
   mentreNonCeri?: Partial<Riga>[]
   adesso?: Partial<Riga>[]
   daLeggere?: { titolo?: string; perche?: string }[]
-  progetti?: { nome?: string; doveSei?: string; angolo?: string }[]
+  progetti?: { nome?: string; obiettivo?: string; doveSei?: string; angolo?: string }[]
   avvii?: { frase?: string; perche?: string }[]
 }
 
@@ -480,10 +520,13 @@ const accorcia = (s: string) => (s.length > TESTO_MAX ? `${s.slice(0, TESTO_MAX 
  * Da quello che ha scritto il modello a un punto che si può mostrare.
  *
  * Gli id passano solo se stanno nel materiale — cintura oltre alle bretelle
- * dell'enum — e i progetti si ricuciono con quelli di prima per nome: `dal` e
- * gli angoli tenuti sono suoi, non del modello, e non si perdono a ogni giro.
+ * dell'enum — e i progetti si ricuciono con quelli della tabella per nome:
+ * id, obiettivo e `dal` sono suoi, non del modello; gli angoli tenuti vengono
+ * dalla memoria. Un nome che ha chiuso non passa, nemmeno se il modello lo
+ * riscrive; uno che non conosce nessuno entra come nuovo, ma uno solo per
+ * punto — è il modello che propone, e la Memoria dove si corregge.
  */
-export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: string[], quando: string, via: number | null = null, avviate: string[] = []): Punto {
+export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: string, via: number | null = null, avviate: string[] = []): Punto {
   const compiti = new Set([...m.attendono, ...m.perOggi, ...m.preparate].map(c => c.id))
   const docs = new Set(m.arrivati.map(d => d.id))
   const riga = (r: Partial<Riga>): Riga | null => {
@@ -508,19 +551,28 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
 
   const chiave = (s: string) => s.trim().toLowerCase()
   const rifiutati = new Set(scartati.map(chiave))
+  const chiusi = new Set(m.chiusi.map(chiave))
+  const tenutiDi = (nome: string) => m.tenuti.filter(t => chiave(t.nome) === chiave(nome)).map(t => t.angolo)
   const progetti: Progetto[] = []
+  let nuovi = 0
   for (const p of g.progetti ?? []) {
     const nome = (p.nome ?? '').trim()
     if (!nome || progetti.length >= 2 || progetti.some(x => chiave(x.nome) === chiave(nome))) continue
-    const vecchio = prima.find(x => chiave(x.nome) === chiave(nome))
+    // un progetto che ha chiuso lui non torna: nemmeno se il modello lo riscrive
+    if (chiusi.has(chiave(nome))) continue
+    const vero = m.progetti.find(x => chiave(x.nome) === chiave(nome))
+    if (!vero && nuovi++ >= 1) continue
+    const angoliTenuti = tenutiDi(vero?.nome ?? nome)
     const angolo = (p.angolo ?? '').trim()
     progetti.push({
-      nome: vecchio?.nome ?? nome,
-      dal: vecchio?.dal ?? quando,
+      id: vero?.id ?? '',
+      nome: vero?.nome ?? nome,
+      obiettivo: vero?.obiettivo || accorcia((p.obiettivo ?? '').trim()),
+      dal: vero?.dal ?? quando,
       doveSei: accorcia((p.doveSei ?? '').trim()),
       // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
-      angolo: rifiutati.has(chiave(angolo)) || vecchio?.angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
-      angoliTenuti: vecchio?.angoliTenuti ?? []
+      angolo: rifiutati.has(chiave(angolo)) || angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
+      angoliTenuti
     })
   }
 
@@ -611,7 +663,7 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
       [...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id),
       mat.arrivati.map(d => d.id)
     )),
-    system: [{ type: 'text', text: conLaLingua(istruzione(mat, a.progetti, a.scartati)), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: conLaLingua(istruzione(mat, a.ultimo?.progetti ?? [], a.scartati)), cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }]
   }, attesaDi('punto'))
   segnaUso('punto', risposta.usage, m.nome)
@@ -628,12 +680,20 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     return fermo
   }
 
-  const nuovo = ricuci(grezzo, mat, a.progetti, a.scartati, quando, r.via ?? null, a.avviate ?? [])
-  // i progetti che il modello ha lasciato cadere restano nel foglio ancora un
-  // giro: un nome che sparisce e ricompare non deve perdere la sua data
-  const nomi = new Set(nuovo.progetti.map(p => p.nome.toLowerCase()))
-  const caduti = a.progetti.filter(p => !nomi.has(p.nome.toLowerCase()) && p.dal >= new Date(adesso - 14 * 86_400_000).toISOString())
-  a.progetti = [...nuovo.progetti, ...caduti.map(p => ({ ...p, angolo: '' }))]
+  const nuovo = ricuci(grezzo, mat, a.scartati, quando, r.via ?? null, a.avviate ?? [])
+  // quello che il modello ha capito entra in tabella: un progetto nuovo con
+  // l'obiettivo che gli sembra, e l'obiettivo di uno che ancora non ce l'ha.
+  // Il resto — nome, stato, obiettivo scritto da lui — non lo tocca
+  for (const p of nuovo.progetti) {
+    if (!p.id) {
+      const scritto = progetti.scrivi({ nome: p.nome, obiettivo: p.obiettivo, origine: 'punto', dal: quando })
+      p.id = scritto.id
+      p.dal = scritto.dal
+    } else {
+      const vero = progetti.trova(p.id)
+      if (vero && !vero.obiettivo && p.obiettivo) progetti.cambia(p.id, { obiettivo: p.obiettivo })
+    }
+  }
   a.ultimo = nuovo
   scriviArchivio(a)
   return { punto: nuovo, generatoAdesso: true, tetto: false }
@@ -662,24 +722,24 @@ export async function avvia(frase: string): Promise<{ ok: true; id: string; nome
 
 // — gli angoli —
 
-function progettoNelFoglio(a: Archivio, nome: string): Progetto | undefined {
-  const k = nome.trim().toLowerCase()
-  return a.progetti.find(p => p.nome.toLowerCase() === k)
+/** Il progetto di cui parla, fra quelli vivi: un chiuso non ha più angoli da tenere. */
+function progettoVivo(nome: string): progetti.Progetto {
+  const p = progetti.trovaPerNome(nome)
+  if (!p || p.stato === 'chiuso') throw new Error('Questo progetto non c’è nel punto.')
+  return p
 }
 
 /**
  * «Tienilo»: l'angolo diventa una cosa che Myynd sa di lui.
  *
  * Passa dalla stessa porta di una convinzione scritta a mano — `ricorda`, con
- * genere esplicito, perché l'ha scelto lui con un dito — e resta anche nel
- * foglio dei progetti, così il prossimo punto lo trova sotto il nome giusto.
- * L'ambito è il progetto: un'idea su Myynd non deve entrare nel ritratto che
- * guida ogni email, ma deve esserci quando si parla di Myynd.
+ * genere esplicito, perché l'ha scelto lui con un dito. L'ambito è il
+ * progetto: un'idea su Myynd non deve entrare nel ritratto che guida ogni
+ * email, ma deve esserci quando si parla di Myynd — ed è da lì, dalla
+ * memoria, che il prossimo punto la ritrova sotto il nome giusto.
  */
 export function tieni(nome: string, angolo: string): { ok: true; id: string } {
-  const a = leggiArchivio()
-  const p = progettoNelFoglio(a, nome)
-  if (!p) throw new Error('Questo progetto non c’è nel punto.')
+  const p = progettoVivo(nome)
   const testo = angolo.trim()
   if (!testo) throw new Error('Non c’è nessun angolo da tenere.')
   const id = store.ricorda({
@@ -689,27 +749,45 @@ export function tieni(nome: string, angolo: string): { ok: true; id: string } {
     fiducia: 0.9,
     origine: 'punto'
   })
-  if (!p.angoliTenuti.some(x => x.toLowerCase() === testo.toLowerCase())) p.angoliTenuti.push(testo)
   // anche nell'ultimo punto, che è quello che la pagina mostra
+  const a = leggiArchivio()
   const mostrato = a.ultimo?.progetti.find(x => x.nome.toLowerCase() === p.nome.toLowerCase())
-  if (mostrato) mostrato.angoliTenuti = [...p.angoliTenuti]
-  scriviArchivio(a)
+  if (mostrato && !mostrato.angoliTenuti.some(x => x.toLowerCase() === testo.toLowerCase())) {
+    mostrato.angoliTenuti = [...mostrato.angoliTenuti, testo]
+    scriviArchivio(a)
+  }
   return { ok: true, id }
 }
 
 /** «Non è così»: resta scritto, e il modello non lo ripropone. */
 export function scarta(nome: string, angolo: string): { ok: true } {
-  const a = leggiArchivio()
-  const p = progettoNelFoglio(a, nome)
-  if (!p) throw new Error('Questo progetto non c’è nel punto.')
+  const p = progettoVivo(nome)
   const testo = angolo.trim()
   if (!testo) throw new Error('Non c’è nessun angolo da scartare.')
+  const a = leggiArchivio()
   if (!a.scartati.some(x => x.toLowerCase() === testo.toLowerCase())) a.scartati = [...a.scartati, testo].slice(-40)
-  if (p.angolo.toLowerCase() === testo.toLowerCase()) p.angolo = ''
   const mostrato = a.ultimo?.progetti.find(x => x.nome.toLowerCase() === p.nome.toLowerCase())
   if (mostrato && mostrato.angolo.toLowerCase() === testo.toLowerCase()) mostrato.angolo = ''
   scriviArchivio(a)
   return { ok: true }
+}
+
+/**
+ * «Non è un progetto»: dal punto, con un dito.
+ *
+ * Il modello si era inventato «Myynd per papà» e non c'era un posto dove
+ * dirglielo. Chiudere è la risposta: la riga resta, con lo stato, e il
+ * prossimo punto la riceve fra quelli che NON sono progetti. Sparisce anche
+ * dal punto che la pagina sta mostrando, così non lo si dice due volte.
+ */
+export function nonEUnProgetto(id: string): { ok: true; punto: Punto | null } {
+  if (!progetti.chiudi(id)) throw new Error('Questo progetto non c’è nel punto.')
+  const a = leggiArchivio()
+  if (a.ultimo) {
+    a.ultimo = { ...a.ultimo, progetti: a.ultimo.progetti.filter(p => p.id !== id) }
+    scriviArchivio(a)
+  }
+  return { ok: true, punto: a.ultimo }
 }
 
 /** Per le prove: dove sta il foglio di chi chiede. */
