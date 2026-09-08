@@ -5,6 +5,7 @@ import { IconDoc, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
+import { Punto } from '../components/Punto'
 import { taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import type { Compito } from '../api'
@@ -402,6 +403,10 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         che potevamo aggiungere qui.
       */}
       <Rassegna />
+
+      {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
+          alla card scura perché è la risposta alla domanda con cui si torna. */}
+      <Punto v={v} lista={lista} apriCompito={id => setInCima(id)} />
 
       {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} />}
 
