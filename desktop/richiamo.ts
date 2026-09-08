@@ -130,6 +130,14 @@ function crea(): BrowserWindow {
     scriviRegistro('guscio · il richiamo perde il fuoco: si nasconde')
     via(false)
   })
+  // ⌘Q con la barra davanti: chi lo preme crede di essere nell'app da cui
+  // ha chiamato il richiamo, e chiudere Myynd al suo posto è un guasto. La
+  // barra si toglie e basta; per uscire c'è la finestra grande, e il tray
+  w.webContents.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return
+    const primario = MAC ? input.meta : input.control
+    if (primario && input.key.toLowerCase() === 'q') { e.preventDefault(); nascondi() }
+  })
   w.on('closed', () => { if (barra === w) barra = null })
   // le finestre nuove qui non esistono, e non si va da nessun'altra parte
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
