@@ -15,6 +15,7 @@ import * as memoria from './memoria.ts'
 import * as timone from './timone.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
+import * as punto from './punto.ts'
 import * as compiti from './compiti.ts'
 import * as automazioni from './automazioni.ts'
 import * as ordine from './ordine.ts'
@@ -1904,6 +1905,38 @@ app.post('/api/rassegna/:id/letta', (req, res) => {
 app.post('/api/rassegna/:id/scarta', (req, res) => {
   store.segnaNotiziaScartata(req.params.id)
   res.json({ ok: true })
+})
+
+// — il punto —
+//
+// Cosa è cambiato mentre non c'era, cosa ha fatto Myynd, da dove riprendere.
+// Il cancello sta tutto in `punto.ts`: la GET e la POST senza `forza` sono la
+// stessa domanda — «c'è un punto?» — e chiamano il modello solo se sono
+// passate tre ore ed è successo qualcosa. Nessun timer: lo chiede la pagina
+// quando la persona torna, perché un punto fatto mentre non guarda nessuno è
+// un punto pagato per niente.
+
+app.get('/api/punto', async (_req, res) => {
+  try { res.json(await punto.punto()) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/punto', async (req, res) => {
+  const via = Number(req.body?.via)
+  try {
+    res.json(await punto.punto({ forza: req.body?.forza === true, via: Number.isFinite(via) && via > 0 ? via : null }))
+  } catch (e) { errore(res, e) }
+})
+
+/** «Tienilo»: l'angolo entra nella memoria, con l'ambito del progetto. */
+app.post('/api/punto/tieni', (req, res) => {
+  try { res.json(punto.tieni(String(req.body?.nome ?? ''), String(req.body?.angolo ?? ''))) }
+  catch (e) { errore(res, e, 400) }
+})
+
+/** «Non è così»: resta scritto, e non torna. */
+app.post('/api/punto/scarta', (req, res) => {
+  try { res.json(punto.scarta(String(req.body?.nome ?? ''), String(req.body?.angolo ?? ''))) }
+  catch (e) { errore(res, e, 400) }
 })
 
 // — compiti —

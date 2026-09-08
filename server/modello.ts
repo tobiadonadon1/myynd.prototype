@@ -181,6 +181,7 @@ export type Lavoro =
   | 'ricetta'       // da una frase sua a un'automazione che gira davvero
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
+  | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
 
 type Profilo = {
   frontiera: boolean
@@ -204,6 +205,12 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // scopre cosa sa fare. Un modello piccolo le fa generiche, e generiche non
   // servono a niente — si preferisce pagare qui che far scrivere a mano.
   domande:    { frontiera: true,  ragiona: false, sforzo: 'low',    attesa: 90_000 },
+  // Il punto: dieci righe che dicono cosa è cambiato e da dove riprendere. È
+  // l'unico posto dove la qualità del testo è tutto il prodotto — un punto
+  // generico non si legge dal secondo giorno — e per questo frontiera, con
+  // il pensiero acceso. Il conto lo tiene `punto.ts`: tre al giorno, mai a
+  // meno di tre ore, mai se non è successo niente.
+  punto:      { frontiera: true,  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
   // Frontiera, e per una volta non per il costo di sbagliare in pubblico: una
   // ricetta scritta male gira ogni mattina per mesi, e il modo in cui sbaglia è
   // il peggiore — non si rompe, fa *quasi* quello che avevi chiesto. Si scrive

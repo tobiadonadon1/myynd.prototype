@@ -1617,6 +1617,19 @@ const EN: Record<string, string> = {
   'Avvisami quando una bozza è pronta': 'Tell me when a draft is ready',
   'Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.': 'A system notification, only when Myynd is not in front. Also for the questions it asks you.',
   'Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.': 'Opens the quick bar from any program: a line to note, or a question with “?”. Pressed again, it closes it.',
+  // — il punto: la carta di quando torni —
+  'Il punto': 'The briefing',
+  'Mentre non c’eri': 'While you were away',
+  'Adesso': 'Now',
+  'I tuoi progetti': 'Your projects',
+  'Tienilo': 'Keep it',
+  'Non è così': 'Not quite',
+  'Tenuto': 'Kept',
+  'Rifai il punto': 'Redo the briefing',
+  'Per oggi basta: tre punti al giorno. Si riparte domani.': 'That’s it for today: three briefings a day. Tomorrow again.',
+  'Questo progetto non c’è nel punto.': 'This project is not in the briefing.',
+  'Non c’è nessun angolo da tenere.': 'There is no angle to keep.',
+  'Non c’è nessun angolo da scartare.': 'There is no angle to discard.',
 }
 
 

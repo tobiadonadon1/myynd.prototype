@@ -218,6 +218,29 @@ Le ore delle automazioni («ogni giorno alle 7») e il conto delle bozze del
 giorno sono nel fuso di chi usa, che il browser manda una volta e resta nella
 configurazione: su un server la macchina sta in UTC.
 
+## Il punto
+
+Quando torni dopo un po' — tre ore, o la prima volta nella giornata — in cima
+alla prima pagina c'è il punto: cosa è arrivato che conta, cosa ha fatto Myynd
+nel frattempo (bozze preparate, mail mandate su tua richiesta, automazioni
+girate), le mosse che fanno andare avanti il lavoro con la riga pronta da
+approvare in testa, una o due notizie della rassegna con il perché, e i tuoi
+progetti: dove stanno, e un angolo — un'idea sua su quel progetto, radicata in
+quello che ha letto e in quello che sa di te. «Tienilo» la mette nella memoria
+(ambito `progetto:<nome>`, si vede in «Come lavori»); «Non è così» la scrive
+fra le rifiutate, e non torna. Tutto sta in `punto.json` nella cartella della
+persona (`server/punto.ts`), compresi i nomi dei progetti, che restano stabili
+da un punto all'altro.
+
+È l'unico posto in cui la qualità del testo è tutto il prodotto, e per questo
+è un lavoro di frontiera — e l'unico con un tetto suo: al massimo tre al giorno
+per persona, mai a meno di tre ore dall'ultimo, mai se da allora non è successo
+niente (nessun documento, azione, riga o voce nuova: si rilegge quello di
+prima senza chiamare nessuno). «Rifai il punto» salta le tre ore, non il conto
+del giorno. Nessun timer: lo chiede la pagina quando riprende il fuoco dopo
+un'assenza, o al primo caricamento del giorno. Senza un motore, o su una
+mente vuota, la carta non compare.
+
 ## Le automazioni
 
 Una ricetta in `automazioni/_comuni` scrive di norma **una riga** con l'elenco

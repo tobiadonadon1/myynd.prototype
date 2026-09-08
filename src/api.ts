@@ -1056,6 +1056,19 @@ export const api = {
   /** Rimette la memoria nella lingua dell'interfaccia. */
   traduciMemoria: () => json<{ ok: true; tradotte: number }>('/api/memoria/traduci', { method: 'POST' }),
 
+  // — il punto: cosa è cambiato mentre non c'eri, e da dove riprendere —
+  //
+  // La GET e la POST senza `forza` sono la stessa domanda: il server decide
+  // da sé se chiamare il modello. `via` sono i minuti di assenza, se la
+  // pagina li sa: il saluto li dice con le sue parole.
+  punto: () => json<EsitoPunto>('/api/punto'),
+  rifaiPunto: (forza = false, via: number | null = null) =>
+    json<EsitoPunto>('/api/punto', { method: 'POST', body: JSON.stringify({ forza, via }) }),
+  tieniAngolo: (nome: string, angolo: string) =>
+    json<{ ok: true; id: string }>('/api/punto/tieni', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
+  scartaAngolo: (nome: string, angolo: string) =>
+    json<{ ok: true }>('/api/punto/scarta', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
+
   /** Riordina una nota. Non salva: torna il testo, e decidi tu. */
   riscriviBlocco: (etichetta: string, testo: string) =>
     json<{ testo: string }>('/api/memoria/riscrivi',
@@ -1394,3 +1407,23 @@ export type ClaudeCon = {
 }
 
 export type Messaggio = { id: string; role: string; text: string; sources?: { id: string; label: string }[] }
+
+/**
+ * Il punto: quello che Myynd dice quando torni.
+ *
+ * Una riga può portare l'id di una cosa della lista o di un documento, e
+ * allora si apre da lì. I progetti sono la parte che cresce: `angoliTenuti`
+ * sono le idee che ha già fatto sue, e non si ripropongono.
+ */
+export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
+export type ProgettoPunto = { nome: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
+export type Punto = {
+  quando: string
+  saluto: string
+  mentreNonCeri: RigaPunto[]
+  adesso: RigaPunto[]
+  daLeggere: { titolo: string; perche: string; link: string | null }[]
+  progetti: ProgettoPunto[]
+}
+/** `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito. */
+export type EsitoPunto = { punto: Punto | null; generatoAdesso: boolean; tetto: boolean }
