@@ -521,7 +521,9 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
     if (!titolo) return []
     const vera = m.notizie.find(x => chiave(x.titolo) === chiave(titolo))
       ?? m.notizie.find(x => chiave(x.titolo).includes(chiave(titolo)) || chiave(titolo).includes(chiave(x.titolo)))
-    return [{ titolo: vera?.titolo ?? titolo, perche: (n.perche ?? '').trim(), link: vera?.link ?? null }]
+    // una notizia che non sta nella rassegna è inventata: non passa
+    if (!vera) return []
+    return [{ titolo: vera.titolo, perche: accorcia((n.perche ?? '').trim()), link: vera.link ?? null }]
   })
 
   // le automazioni già accese da qui, e quelle che ha già: non si ripropongono
