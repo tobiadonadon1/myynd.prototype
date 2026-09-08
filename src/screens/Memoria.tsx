@@ -216,7 +216,7 @@ function Riga({ c, scorda, tieni, storica }:
             {c.ambito !== 'persona' && (
               // «cliente:Nick» è come sta scritto nel database, non come si legge
               <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)' }}>
-                · {c.ambito === 'azienda' ? t('azienda') : c.ambito.replace(/^cliente:/, '')}
+                · {c.ambito === 'azienda' ? t('azienda') : c.ambito.replace(/^(?:cliente|progetto):/, '')}
               </span>
             )}
             <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.4)' }}>
