@@ -128,7 +128,12 @@ async function avvio() {
   // viva che non si vede e non si riapre è peggio di una chiusa
   finestra.tieniViva(tray.attiva)
   // la scorciatoia apre il richiamo; finché il server non c'è, la finestra
-  scorciatoia.attiva(() => { if (!richiamo.alterna()) finestra.alterna() })
+  const alPremere = () => { if (!richiamo.alterna()) finestra.alterna() }
+  scorciatoia.attiva(alPremere)
+  // con `--inspect` e MYYND_ISPEZIONE=1 si prova il guscio dal vivo: un
+  // `import()` dall'inspector non passa, e la scorciatoia non si preme da
+  // uno script — questi sono i pezzi che servono, a portata di mano
+  if (process.env.MYYND_ISPEZIONE) Object.assign(globalThis, { myynd: { app, richiamo, finestra, alPremere } })
   // il computer si è svegliato: il server deve saperlo (`server.ts`)
   powerMonitor.on('resume', server.sveglia)
   canali(azioniMenu, vai)

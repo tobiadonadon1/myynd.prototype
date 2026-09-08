@@ -26,7 +26,7 @@ const CHIAVI = [
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
   'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo'
 ]
-const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura']
+const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura', 'mostrato']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 
 // — il registro della prova —
@@ -229,7 +229,7 @@ try {
     const mancanoA = CHIAVI_AGGIORNAMENTI.filter(k => !chiavi.aggiornamenti.includes(k))
     segna(!mancanoA.length, '`aggiornamenti` ha controlla, installa, stato', mancanoA.length ? `mancano: ${mancanoA.join(', ')}` : '')
     const mancanoR = CHIAVI_RICHIAMO.filter(k => !chiavi.richiamo.includes(k))
-    segna(!mancanoR.length, '`richiamo` ha chiudi, apri, misura', mancanoR.length ? `mancano: ${mancanoR.join(', ')}` : '')
+    segna(!mancanoR.length, '`richiamo` ha chiudi, apri, misura, mostrato', mancanoR.length ? `mancano: ${mancanoR.join(', ')}` : '')
     segna(chiavi.dentro === false, 'la finestra grande sa di non essere il richiamo', `dentroIlRichiamo: ${chiavi.dentro}`)
   }
 

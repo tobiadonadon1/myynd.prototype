@@ -27,3 +27,15 @@ export function posizioneRichiamo(area: Area, altezza: number): Area {
   const y = Math.min(Math.round(area.y + area.height * QUOTA), area.y + area.height - height - MARGINE)
   return { x, y: Math.max(area.y, y), width, height }
 }
+
+/** Uno schermo come lo dice Electron: basta il numero, e il nome se c'è. */
+export type Schermo = { id: number; label?: string }
+
+/**
+ * La frase del registro quando la barra compare: quale schermo e quale
+ * riquadro. «Non funziona» da un Mac con due schermi si legge solo così.
+ */
+export function doveSiApre(schermo: Schermo, r: Area): string {
+  const nome = schermo.label ? `«${schermo.label}» ` : ''
+  return `${nome}#${schermo.id} a ${r.x},${r.y} ${r.width}×${r.height}`
+}

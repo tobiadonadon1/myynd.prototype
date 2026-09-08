@@ -98,6 +98,25 @@ export function Richiamo() {
     return () => window.removeEventListener('focus', alRitorno)
   }, [])
 
+  /*
+   * Il guscio l'ha appena mostrata di nuovo.
+   *
+   * Il pannello prende la tastiera senza attivare l'app, e il `focus` della
+   * finestra non è detto che arrivi: il fuoco nella casella lo si rimette
+   * qui, a colpo sicuro. La risposta dell'altra volta se ne va — la barra
+   * riaperta è una barra vuota — a meno che non stia ancora arrivando: chi
+   * ha chiuso mentre Myynd pensava la ritrova.
+   */
+  useEffect(() => {
+    if (!ponte?.mostrato) return
+    return ponte.mostrato(() => {
+      campo.current?.focus()
+      if (sessione.token()) setSenzaSessione(false)
+      if (pensando) return
+      setDomanda(''); setRisposta(''); setChat(null); setGuaio(''); setConferma('')
+    })
+  }, [ponte, pensando])
+
   // il server ha detto che la sessione non vale più
   useEffect(() => { alloScadere(() => setSenzaSessione(true)) }, [])
   useEffect(() => () => { for (const o of orologi.current) clearTimeout(o) }, [])
