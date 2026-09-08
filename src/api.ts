@@ -1068,6 +1068,8 @@ export const api = {
     json<{ ok: true; id: string }>('/api/punto/tieni', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
   scartaAngolo: (nome: string, angolo: string) =>
     json<{ ok: true }>('/api/punto/scarta', { method: 'POST', body: JSON.stringify({ nome, angolo }) }),
+  avviaDalPunto: (frase: string) =>
+    json<{ ok: true; id: string; nome: string; punto: Punto | null }>('/api/punto/avvia', { method: 'POST', body: JSON.stringify({ frase }) }),
 
   /** Riordina una nota. Non salva: torna il testo, e decidi tu. */
   riscriviBlocco: (etichetta: string, testo: string) =>
@@ -1417,13 +1419,17 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
  */
 export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
 export type ProgettoPunto = { nome: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
+export type AvvioPunto = { frase: string; perche: string }
 export type Punto = {
   quando: string
-  saluto: string
+  /** Da quanti minuti mancava, se la finestra lo sapeva: il saluto lo compone la pagina. */
+  via: number | null
   mentreNonCeri: RigaPunto[]
   adesso: RigaPunto[]
   daLeggere: { titolo: string; perche: string; link: string | null }[]
   progetti: ProgettoPunto[]
+  /** Automazioni da accendere con un dito. */
+  avvii: AvvioPunto[]
 }
 /** `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito. */
 export type EsitoPunto = { punto: Punto | null; generatoAdesso: boolean; tetto: boolean }

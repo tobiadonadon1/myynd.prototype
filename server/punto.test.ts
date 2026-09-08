@@ -55,7 +55,6 @@ const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Docume
 })
 
 const RISPOSTA = {
-  saluto: 'Sei stato via quattro ore. Tre cose sono cambiate.',
   mentreNonCeri: [{ testo: 'È arrivato il preventivo di Rossi.', compito: '', doc: 'posta:INBOX:1' }],
   adesso: [{ testo: 'Approva la bozza per Bianchi.', compito: 'c1', doc: '' }],
   daLeggere: [{ titolo: 'Notizia sui modelli', perche: 'C’entra con Myynd.' }],
@@ -148,7 +147,7 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
   assert.doesNotMatch(istruzioneDi(ricevute[0]), /ARRIVATO/)
 
   // e quello che torna è ricucito: gli id passano solo se stanno nel materiale
-  assert.equal(e.punto?.saluto, RISPOSTA.saluto)
+  assert.equal(e.punto?.via, 240, 'l’assenza la porta la richiesta, non il modello')
   assert.equal(e.punto?.mentreNonCeri[0].doc, 'posta:INBOX:1')
   assert.equal(e.punto?.adesso[0].compito, 'c1')
   assert.equal(e.punto?.progetti[0].nome, 'Myynd')
@@ -255,7 +254,7 @@ test('il punto e i progetti stanno in punto.json, e il nome e la data del proget
   const primo = await punto.punto({}, t0)
   assert.ok(existsSync(join(CASA, 'punto.json')))
   const foglio = JSON.parse(readFileSync(join(CASA, 'punto.json'), 'utf8'))
-  assert.equal(foglio.ultimo.saluto, RISPOSTA.saluto)
+  assert.equal(foglio.ultimo.via, null, 'senza una richiesta con «via», nessuna assenza inventata')
   assert.equal(foglio.progetti[0].nome, 'Myynd')
 
   // il giro dopo: il modello riceve i progetti di prima, e quello che torna li ricuce
@@ -343,4 +342,42 @@ test('il foglio è di chi chiede: uno per cartella, e il punto di una non compar
     assert.equal((await punto.punto({}, adesso())).punto, null)
   })
   assert.equal(ricevute.length, 1)
+})
+
+test('quello che ha scartato non torna nel punto, e gli avvii non ripetono le automazioni che ha già', async () => {
+  pulisci()
+  // una mail scartata dal feed, una da un mittente scartato, una riga lasciata perdere, e una buona
+  store.salvaDocumenti([
+    doc('posta:INBOX:10', 'Il gestore dello stabile ha scritto', { autore: 'CERU <ceru@stabile.it>' }),
+    doc('posta:INBOX:11', 'Ancora il gestore', { autore: 'CERU <ceru@stabile.it>' }),
+    doc('posta:INBOX:12', 'Il flusso in CSV', { autore: 'Anna <anna@esempio.it>' }),
+    doc('posta:INBOX:13', 'Preventivo Verdi', { autore: 'Verdi <verdi@esempio.it>' })
+  ])
+  store.salvaFeed([{ tipo: 'Da decidere', titolo: 'Il gestore dello stabile ha scritto', testo: '…', doc: 'posta:INBOX:10' }])
+  const voce = store.elencoFeed('aperto').find(v => v.doc === 'posta:INBOX:10')!
+  store.cambiaStatoFeed(voce.id, 'scartato')
+  store.scriviCompito({ id: 'c-csv', testo: 'Sistemare il flusso in CSV', ordine: 'z', quando: 'oggi', doc: 'posta:INBOX:12' })
+  store.cambiaStatoCompito('c-csv', 'lasciato')
+
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA,
+    avvii: [
+      { frase: 'Quando arriva un preventivo, mettilo in lista con le cifre', perche: 'Niente da ricopiare.' },
+      { frase: 'Ogni lunedì alle 8, un riepilogo della settimana', perche: 'Lo fa già.' }
+    ]
+  })
+  const e = await punto.punto({ via: 200 }, adesso())
+  assert.ok(e.generatoAdesso)
+  const mandato = JSON.stringify(ricevute[0])
+  assert.doesNotMatch(mandato, /posta:INBOX:10/, 'la mail scartata dal feed non è nel materiale')
+  assert.doesNotMatch(mandato, /posta:INBOX:11/, 'nemmeno l’altra dello stesso mittente')
+  assert.doesNotMatch(mandato, /posta:INBOX:12/, 'né quella della riga lasciata perdere')
+  assert.match(mandato, /posta:INBOX:13/, 'quella buona sì')
+  assert.match(mandato, /NON gli interessano[\s\S]*Il gestore dello stabile ha scritto[\s\S]*Sistemare il flusso in CSV/)
+  assert.match(mandato, /NON dire da quanto manca/)
+  assert.match(mandato, /È stato via circa 3 ore/)
+  assert.equal(e.punto?.via, 200)
+  // gli avvii: al massimo tre, e mai uno uguale a una ricetta già accesa per nome
+  assert.equal(e.punto?.avvii.length, 2)
+  assert.match(mandato, /avvii/)
 })

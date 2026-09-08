@@ -1941,6 +1941,12 @@ app.post('/api/punto/scarta', (req, res) => {
   catch (e) { errore(res, e, 400) }
 })
 
+/** Un'automazione accesa da una frase del punto: passa dalla stessa strada di «scrivine una». */
+app.post('/api/punto/avvia', async (req, res) => {
+  try { res.json(await punto.avvia(String(req.body?.frase ?? ''))) }
+  catch (e) { errore(res, e) }
+})
+
 // — compiti —
 //
 // La lista. È l'altra metà del feed: lì c'è quello che Myynd ha notato, qui

@@ -109,11 +109,31 @@ export function usePunto() {
     catch { aggiornaProgetto(nome, p => ({ ...p, angolo })) }
   }, [])
 
+  /** Le frasi accese da qui, in questa pagina: il bottone dice «Accesa» e non si ripreme. */
+  const [accese, setAccese] = useState<Record<string, string>>({})
+  const [guaioAvvio, setGuaioAvvio] = useState<string | null>(null)
+  const avvia = useCallback(async (frase: string) => {
+    setGuaioAvvio(null)
+    try {
+      const r = await api.avviaDalPunto(frase)
+      setAccese(a => ({ ...a, [frase]: r.nome }))
+      // il server toglie l'avvio dal punto: qui si tiene la riga, con il nome
+      // della ricetta accanto, finché la finestra non si chiude
+    } catch (e) {
+      setGuaioAvvio(e instanceof Error ? e.message : String(e))
+    }
+  }, [])
+
   return {
-    /** Null anche quando c'è, se l'ha chiuso e non ce n'è uno nuovo. */
-    punto: punto && nascosto !== punto.quando ? punto : null,
+    /** Il punto, anche se l'ha già chiuso: chi lo chiama decide se aprirlo o solo nominarlo. */
+    punto,
+    /** Vero se questo punto non l'ha ancora chiuso con la ×. */
+    daVedere: !!punto && nascosto !== punto.quando,
+    /** Riapre quello di prima, da un dito. */
+    riapri: () => { try { localStorage.removeItem(CHIAVE_NASCOSTO) } catch { /* pazienza */ } setNascosto(null) },
     carico, tetto,
-    rifai, nascondi, tieni, scarta
+    rifai, nascondi, tieni, scarta,
+    avvia, accese, guaioAvvio
   }
 }
 

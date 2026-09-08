@@ -1630,6 +1630,14 @@ const EN: Record<string, string> = {
   'Questo progetto non c’è nel punto.': 'This project is not in the briefing.',
   'Non c’è nessun angolo da tenere.': 'There is no angle to keep.',
   'Non c’è nessun angolo da scartare.': 'There is no angle to discard.',
+  // — il punto, da finestra —
+  'Da accendere': 'Worth switching on',
+  'Accendi': 'Switch on',
+  'Accesa': 'On',
+  'Fagliela fare': 'Hand it over',
+  'apri': 'open',
+  'Il punto di oggi.': 'Today’s briefing.',
+  'Niente di nuovo.': 'Nothing new.',
 }
 
 
@@ -1962,6 +1970,17 @@ export const frasi = {
       : `La ${versione} è pronta: si installa al prossimo riavvio.`,
 
   // — il richiamo: la conferma dopo una riga segnata, o un elenco —
+  // — il punto: il saluto lo compone la pagina, dal tempo che la finestra sa —
+  viaDa: (minuti: number | null) => {
+    if (!minuti || minuti < 60) return corrente === 'en' ? 'While you were away.' : 'Mentre non c’eri.'
+    const ore = Math.round(minuti / 60)
+    if (ore < 36) return corrente === 'en' ? `You were away ${ore} hour${ore === 1 ? '' : 's'}.` : `Sei stato via ${ore} or${ore === 1 ? 'a' : 'e'}.`
+    const giorni = Math.round(ore / 24)
+    return corrente === 'en' ? `You were away ${giorni} day${giorni === 1 ? '' : 's'}.` : `Sei stato via ${giorni} giorn${giorni === 1 ? 'o' : 'i'}.`
+  },
+  coseNelPunto: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'one thing' : `${n} things`) : (n === 1 ? 'una cosa' : `${n} cose`),
+
   segnate: (n: number, quando: 'oggi' | 'settimana' | 'poi') => {
     if (n !== 1) return corrente === 'en' ? `${n} lines noted.` : `${n} righe segnate.`
     const en = { oggi: 'Noted for today.', settimana: 'Noted for this week.', poi: 'Noted for later.' }

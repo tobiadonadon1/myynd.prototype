@@ -27,6 +27,7 @@ import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { affinita, gusto } from './gusto.ts'
+import * as automazioni from './automazioni.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -51,13 +52,24 @@ export type Progetto = {
   angoliTenuti: string[]
 }
 
+/** Un'automazione da accendere: la frase come la direbbe lui, e il perché. */
+export type Avvio = { frase: string; perche: string }
+
 export type Punto = {
   quando: string
-  saluto: string
+  /**
+   * Da quanti minuti mancava quando è stato fatto, se la finestra lo sapeva.
+   * Il saluto lo compone la pagina da qui: al modello non si chiede di
+   * indovinare un'assenza, perché la indovinava dalla finestra del materiale
+   * — «sei stato via sette giorni» al primo punto, che guarda sette giorni.
+   */
+  via: number | null
   mentreNonCeri: Riga[]
   adesso: Riga[]
   daLeggere: { titolo: string; perche: string; link: string | null }[]
   progetti: Progetto[]
+  /** Automazioni che potrebbe accendere, pronte per `daUnaFrase`. */
+  avvii: Avvio[]
 }
 
 export type Esito = {
@@ -84,16 +96,21 @@ type Archivio = {
   scartati: string[]
   /** Quando il modello è stato chiamato, per contare quelli di oggi. */
   chiamate: string[]
+  /** Le automazioni accese da qui: non si ripropongono. */
+  avviate?: string[]
 }
 
-const VUOTO: Archivio = { ultimo: null, progetti: [], scartati: [], chiamate: [] }
+const VUOTO: Archivio = { ultimo: null, progetti: [], scartati: [], chiamate: [], avviate: [] }
 
 const FILE = () => join(cartella(), 'punto.json')
 
 function leggiArchivio(): Archivio {
   try {
     const letto = JSON.parse(readFileSync(FILE(), 'utf8')) as Partial<Archivio>
-    return { ...VUOTO, ...letto }
+    const a = { ...VUOTO, ...letto }
+    // un foglio scritto da una versione che non conosceva ancora `via` e `avvii`
+    if (a.ultimo) a.ultimo = { ...a.ultimo, via: a.ultimo.via ?? null, avvii: a.ultimo.avvii ?? [] }
+    return a
   } catch {
     return { ...VUOTO }
   }
@@ -132,6 +149,12 @@ export function inMassa(d: store.Documento): boolean {
 
 export type Materiale = {
   dal: string
+  /** Il primo punto di sempre: il materiale è una finestra, non un'assenza. */
+  primo: boolean
+  /** Quello che ha detto che non gli interessa: si toglie dal materiale e si dice al modello. */
+  nonInteressa: string[]
+  /** Le automazioni che ha già, per nome: non si propongono due volte. */
+  automazioni: string[]
   arrivati: store.Documento[]
   /** Quanti ne sono entrati in tutto, anche quelli che non si elencano. */
   indicizzati: number
@@ -158,8 +181,34 @@ function daAllora(quando: string | null | undefined, dal: string): boolean {
 }
 
 /** Tutto quello che il punto guarda, raccolto in un posto per poterlo provare. */
-export function raccogli(dal: string): Materiale {
+export function raccogli(dal: string, primo = false): Materiale {
   const arrivati = store.appenaArrivati(dal, 200)
+
+  /*
+   * Quello che ha già scartato non torna dalla porta di servizio.
+   *
+   * Una voce del feed buttata con «non mi interessa», una riga lasciata
+   * perdere, un mittente che ha scartato più volte: sono le cose che ha detto
+   * a Myynd con un dito, e un punto che le rimette in cima — «il gestore
+   * dello stabile ha scritto» — dice che non l'ha ascoltato. Si tolgono dal
+   * materiale, e le si nominano al modello perché non ci giri intorno.
+   */
+  const scartate = [...store.elencoFeed('scartato'), ...store.elencoFeed('scaduto')]
+  const docsScartati = new Set(scartate.map(v => v.doc).filter((d): d is string => !!d))
+  const lasciate = store.compitiChiusi(80).filter(c => c.stato === 'lasciato')
+  const docsLasciati = new Set(lasciate.map(c => c.doc).filter((d): d is string => !!d))
+  const mittenti = store.mittentiScartati()
+  const daMittenteScartato = (d: store.Documento) => {
+    const ind = (store.indirizzoDi(d.autore) ?? '').toLowerCase()
+    if (!ind) return false
+    const dominio = ind.slice(ind.indexOf('@') + 1)
+    return mittenti.indirizzi.includes(ind) || mittenti.domini.includes(dominio)
+  }
+  const fuori = (d: store.Documento) => docsScartati.has(d.id) || docsLasciati.has(d.id) || inMassa(d) || daMittenteScartato(d)
+  const nonInteressa = [
+    ...scartate.slice(0, 12).map(v => v.titolo),
+    ...lasciate.slice(0, 6).map(c => c.testo)
+  ].filter(Boolean)
   const azioni = store.azioni(200).filter(a => a.quando >= dal)
   const vive = store.elencoCompiti()
   const chiuse = store.compitiChiusi(40).filter(c => daAllora(c.chiuso, dal))
@@ -173,9 +222,15 @@ export function raccogli(dal: string): Materiale {
     .slice(0, 3)
     .map(x => x.n)
 
+  let nomiAutomazioni: string[] = []
+  try { nomiAutomazioni = automazioni.elenco().filter(a => a.accesa).map(a => a.nome) } catch { /* senza ricette il punto vive lo stesso */ }
+
   return {
     dal,
-    arrivati: arrivati.filter(d => !inMassa(d)).slice(0, DOCS_MAX),
+    primo,
+    nonInteressa,
+    automazioni: nomiAutomazioni,
+    arrivati: arrivati.filter(d => !fuori(d)).slice(0, DOCS_MAX),
     indicizzati: arrivati.length,
     azioni,
     attendono: vive.filter(c => c.stato === 'pronto' || c.stato === 'chiede'),
@@ -223,12 +278,11 @@ const schema = (compiti: string[], docs: string[]) => {
   return {
     type: 'object',
     properties: {
-      saluto: { type: 'string', description: 'Una riga: da quanto manca e quante cose sono cambiate.' },
-      mentreNonCeri: { type: 'array', items: riga, description: 'Fino a quattro righe.' },
-      adesso: { type: 'array', items: riga, description: 'Fino a tre mosse.' },
+      mentreNonCeri: { type: 'array', items: riga, description: 'Fino a tre righe, ognuna al massimo dodici parole.' },
+      adesso: { type: 'array', items: riga, description: 'Fino a tre mosse, ognuna al massimo dodici parole.' },
       daLeggere: {
         type: 'array',
-        description: 'Fino a due, solo fra le notizie elencate.',
+        description: 'Una sola, solo fra le notizie elencate, solo se c’entra con il suo lavoro. Vuoto va benissimo.',
         items: {
           type: 'object',
           properties: {
@@ -241,20 +295,33 @@ const schema = (compiti: string[], docs: string[]) => {
       },
       progetti: {
         type: 'array',
-        description: 'Da uno a tre.',
+        description: 'Uno o due.',
         items: {
           type: 'object',
           properties: {
             nome: { type: 'string', description: 'Corto e stabile: lo stesso della volta scorsa, se è lo stesso progetto.' },
             doveSei: { type: 'string', description: 'Una riga: a che punto sta.' },
-            angolo: { type: 'string', description: 'Un’idea distintiva che potrebbe prendere. Vuoto se non ne hai una buona.' }
+            angolo: { type: 'string', description: 'Un’idea distintiva che potrebbe prendere, in una frase. Vuoto se non ne hai una buona.' }
           },
           required: ['nome', 'doveSei', 'angolo'],
           additionalProperties: false
         }
+      },
+      avvii: {
+        type: 'array',
+        description: 'Fino a tre automazioni che potrebbe accendere, solo su cose che nel materiale si ripetono.',
+        items: {
+          type: 'object',
+          properties: {
+            frase: { type: 'string', description: 'L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …».' },
+            perche: { type: 'string', description: 'Al massimo otto parole: cosa gli toglie di mano.' }
+          },
+          required: ['frase', 'perche'],
+          additionalProperties: false
+        }
       }
     },
-    required: ['saluto', 'mentreNonCeri', 'adesso', 'daLeggere', 'progetti'],
+    required: ['mentreNonCeri', 'adesso', 'daLeggere', 'progetti', 'avvii'],
     additionalProperties: false
   }
 }
@@ -302,22 +369,35 @@ adesso, e dove stanno i suoi progetti.`,
       ? 'Angoli che ha detto che NON sono così. Non riproporli, nemmeno riformulati.\n' +
         scartati.map(a => `— ${a}`).join('\n')
       : '',
+    m.nonInteressa.length
+      ? 'Cose che ha detto che NON gli interessano. Non nominarle, non farci un ' +
+        'progetto, non metterle fra le mosse — nemmeno se nel materiale ce n\'è traccia:\n' +
+        m.nonInteressa.map(x => `— ${x}`).join('\n')
+      : '',
+    m.automazioni.length
+      ? 'Le automazioni che ha già accese — non proporne di uguali:\n' +
+        m.automazioni.map(x => `— ${x}`).join('\n')
+      : '',
     `Regole:
-— Tono piano, niente entusiasmo, niente «io», niente cappelli. Frasi corte.
-— Il saluto è una riga sola: da quanto manca, se lo sai, e quante cose sono
-  cambiate. Così: «Sei stato via quattro ore. Tre cose sono cambiate.» Se non è
-  successo niente, dillo in quattro parole.
-— «mentreNonCeri»: fino a quattro righe — quello che è arrivato e conta, e
+— Tono piano, niente entusiasmo, niente «io», niente cappelli. Frasi corte:
+  ogni riga al massimo dodici parole. Il punto si legge in dieci secondi.
+— NON dire da quanto manca né quanto tempo è passato: non lo sai. Quello lo
+  dice la pagina.
+— «mentreNonCeri»: fino a tre righe — quello che è arrivato e conta davvero, e
   quello che hai fatto tu (bozze preparate, mail mandate, automazioni girate).
   Metti l'id del compito o del documento quando c'è, così si apre con un dito.
-— «adesso»: fino a tre mosse che fanno andare avanti il suo lavoro, ognuna con
-  la ragione in poche parole. Una riga pronta da approvare viene prima di tutto.
-— «daLeggere»: fino a due notizie, solo fra quelle elencate e solo se c'entrano
-  con quello su cui lavora, con una riga sul perché. Vuoto è una risposta giusta.
-— «progetti»: da uno a tre. «doveSei» in una riga. «angolo» è UN'idea
-  distintiva che potrebbe prendere su quel progetto — radicata nel suo
-  materiale e in quello che crede, mai generica, mai un consiglio da manuale.
-  Se non ne hai una buona, lascia l'angolo vuoto.
+— «adesso»: fino a tre mosse che fanno andare avanti il suo lavoro. Una riga
+  pronta da approvare viene prima di tutto.
+— «daLeggere»: al massimo una notizia, solo fra quelle elencate e solo se
+  c'entra con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
+— «progetti»: uno o due. «doveSei» in una riga. «angolo» è UN'idea distintiva
+  che potrebbe prendere su quel progetto — radicata nel suo materiale e in
+  quello che crede, mai generica, mai un consiglio da manuale. Se non ne hai
+  una buona, lascia l'angolo vuoto.
+— «avvii»: fino a tre automazioni da accendere, solo dove il materiale mostra
+  una cosa che si ripete (lo stesso tipo di mail, lo stesso lavoro ogni
+  settimana). La frase dev'essere una che Myynd sa trasformare in ricetta:
+  quando guardare, cosa guardare, cosa farne. Niente di generico.
 — Concreto: nomi, cifre e date che hai letto davvero. Niente inventato. Meno
   righe piuttosto che righe di riempimento.
 — Gli id di compiti e documenti li prendi SOLO da quelli elencati nel
@@ -351,7 +431,9 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
     (c.stato === 'chiede' && c.chieste?.length ? `\n  chiede: ${c.chieste.map(x => x.domanda).join(' · ')}` : '')
 
   return [
-    `Da quando: ${m.dal} (${ore(m.dal, adesso)} ore fa)` +
+    (m.primo
+      ? `Primo punto: il materiale copre gli ultimi ${GIORNI_PRIMO} giorni, ma NON è un'assenza — non dire da quanto manca.`
+      : `Da quando: ${m.dal} (${ore(m.dal, adesso)} ore fa).`) +
       (via && via > 0 ? `\nÈ stato via circa ${via < 90 ? `${via} minuti` : `${Math.round(via / 60)} ore`}.` : ''),
     m.arrivati.length
       ? `ARRIVATO (${m.arrivati.length} documenti, i più nuovi prima):\n` +
@@ -383,12 +465,16 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
 // — il punto —
 
 type Grezzo = {
-  saluto?: string
   mentreNonCeri?: Partial<Riga>[]
   adesso?: Partial<Riga>[]
   daLeggere?: { titolo?: string; perche?: string }[]
   progetti?: { nome?: string; doveSei?: string; angolo?: string }[]
+  avvii?: { frase?: string; perche?: string }[]
 }
+
+/** Una riga corta resta corta anche se il modello non ha ascoltato. */
+const TESTO_MAX = 160
+const accorcia = (s: string) => (s.length > TESTO_MAX ? `${s.slice(0, TESTO_MAX - 1).trimEnd()}…` : s)
 
 /**
  * Da quello che ha scritto il modello a un punto che si può mostrare.
@@ -397,11 +483,11 @@ type Grezzo = {
  * dell'enum — e i progetti si ricuciono con quelli di prima per nome: `dal` e
  * gli angoli tenuti sono suoi, non del modello, e non si perdono a ogni giro.
  */
-export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: string[], quando: string): Punto {
+export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: string[], quando: string, via: number | null = null, avviate: string[] = []): Punto {
   const compiti = new Set([...m.attendono, ...m.perOggi, ...m.preparate].map(c => c.id))
   const docs = new Set(m.arrivati.map(d => d.id))
   const riga = (r: Partial<Riga>): Riga | null => {
-    const testo = (r.testo ?? '').trim()
+    const testo = accorcia((r.testo ?? '').trim())
     if (!testo) return null
     return {
       testo,
@@ -417,20 +503,20 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
   const progetti: Progetto[] = []
   for (const p of g.progetti ?? []) {
     const nome = (p.nome ?? '').trim()
-    if (!nome || progetti.length >= 3) continue
+    if (!nome || progetti.length >= 2) continue
     const vecchio = prima.find(x => chiave(x.nome) === chiave(nome))
     const angolo = (p.angolo ?? '').trim()
     progetti.push({
       nome: vecchio?.nome ?? nome,
       dal: vecchio?.dal ?? quando,
-      doveSei: (p.doveSei ?? '').trim(),
+      doveSei: accorcia((p.doveSei ?? '').trim()),
       // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
       angolo: rifiutati.has(chiave(angolo)) || vecchio?.angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
       angoliTenuti: vecchio?.angoliTenuti ?? []
     })
   }
 
-  const daLeggere = (g.daLeggere ?? []).slice(0, 2).flatMap(n => {
+  const daLeggere = (g.daLeggere ?? []).slice(0, 1).flatMap(n => {
     const titolo = (n.titolo ?? '').trim()
     if (!titolo) return []
     const vera = m.notizie.find(x => chiave(x.titolo) === chiave(titolo))
@@ -438,13 +524,23 @@ export function ricuci(g: Grezzo, m: Materiale, prima: Progetto[], scartati: str
     return [{ titolo: vera?.titolo ?? titolo, perche: (n.perche ?? '').trim(), link: vera?.link ?? null }]
   })
 
+  // le automazioni già accese da qui, e quelle che ha già: non si ripropongono
+  const gia = new Set([...avviate, ...m.automazioni].map(chiave))
+  const avvii: Avvio[] = []
+  for (const a of g.avvii ?? []) {
+    const frase = accorcia((a.frase ?? '').trim())
+    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 3) continue
+    avvii.push({ frase, perche: accorcia((a.perche ?? '').trim()) })
+  }
+
   return {
     quando,
-    saluto: (g.saluto ?? '').trim(),
-    mentreNonCeri: righe(g.mentreNonCeri, 4),
+    via: via && via > 0 ? Math.round(via) : null,
+    mentreNonCeri: righe(g.mentreNonCeri, 3),
     adesso: righe(g.adesso, 3),
     daLeggere,
-    progetti
+    progetti,
+    avvii
   }
 }
 
@@ -488,7 +584,7 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   if (!r.forza && a.ultimo && adesso - new Date(a.ultimo.quando).getTime() < ORE_FRA * 3600_000) return fermo
 
   const dal = a.ultimo?.quando ?? new Date(adesso - GIORNI_PRIMO * 86_400_000).toISOString()
-  const mat = raccogli(dal)
+  const mat = raccogli(dal, !a.ultimo)
   // il primo punto su una mente vuota non ha niente da dire, e non lo finge
   if (!successoQualcosa(mat) && (!r.forza || !a.ultimo)) return fermo
 
@@ -521,7 +617,7 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     return fermo
   }
 
-  const nuovo = ricuci(grezzo, mat, a.progetti, a.scartati, quando)
+  const nuovo = ricuci(grezzo, mat, a.progetti, a.scartati, quando, r.via ?? null, a.avviate ?? [])
   // i progetti che il modello ha lasciato cadere restano nel foglio ancora un
   // giro: un nome che sparisce e ricompare non deve perdere la sua data
   const nomi = new Set(nuovo.progetti.map(p => p.nome.toLowerCase()))
@@ -530,6 +626,27 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   a.ultimo = nuovo
   scriviArchivio(a)
   return { punto: nuovo, generatoAdesso: true, tetto: false }
+}
+
+// — gli avvii —
+
+/**
+ * Accende un'automazione da una frase del punto.
+ *
+ * La frase passa dalla stessa strada di «scrivine una a parole»: il modello
+ * ne fa una ricetta, `valida()` la controlla, e quello che ne esce è
+ * un'automazione come le altre — si vede nella schermata, si spegne, si
+ * butta. Qui si segna solo che è partita da qui, così non si ripropone.
+ */
+export async function avvia(frase: string): Promise<{ ok: true; id: string; nome: string; punto: Punto | null }> {
+  const detta = frase.trim()
+  if (!detta) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
+  const ricetta = await automazioni.daUnaFrase(detta)
+  const a = leggiArchivio()
+  a.avviate = [...(a.avviate ?? []), detta].slice(-40)
+  if (a.ultimo) a.ultimo = { ...a.ultimo, avvii: (a.ultimo.avvii ?? []).filter(x => x.frase !== detta) }
+  scriviArchivio(a)
+  return { ok: true, id: ricetta.id, nome: ricetta.nome, punto: a.ultimo }
 }
 
 // — gli angoli —
