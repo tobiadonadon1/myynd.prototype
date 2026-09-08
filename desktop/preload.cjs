@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('myynd', {
   richiamo: {
     chiudi: () => ipcRenderer.send('myynd:richiamo-chiudi'),
     apri: dove => ipcRenderer.send('myynd:richiamo-apri', dove),
-    misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza))
+    misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza)),
+    // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella
+    mostrato: cb => ascolta('myynd:richiamo-mostrato', () => cb())
   }
 })

@@ -7,12 +7,24 @@
 // (`src/richiamo/Richiamo.tsx`). L'altezza la decide la pagina e la dice via
 // IPC: la finestra si adatta al contenuto, entro i limiti di `posizione.ts`.
 //
+// Nasce nascosta appena il server c'è, così la prima scorciatoia trova una
+// pagina già disegnata: una finestra trasparente che sta ancora caricando è
+// un rettangolo invisibile, e chi preme ⇧⌘M vede «niente» e va altrove.
+//
+// Su Mac è un pannello che non attiva l'app — `type: 'panel'`, cioè un
+// NSPanel con lo stile nonactivating, quello di Spotlight. Compare sopra a
+// quello che si sta usando, anche a schermo intero e sullo Space in cui si è,
+// prende la tastiera senza portare avanti Myynd, e quando sparisce la
+// tastiera torna da sola a chi ce l'aveva. Portare avanti l'app era il
+// guasto: macOS saltava allo Space della finestra grande, rendeva chiave
+// quella, e la barra si vedeva sfilare il fuoco prima ancora di comparire.
+//
 // Si nasconde quando perde il fuoco o quando la pagina chiede di chiudere
 // (Esc): una barra che resta a mezz'aria sopra un'altra app è una cosa rotta.
 
 import { app, BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
-import { ALTEZZA_MINIMA, posizioneRichiamo } from './posizione.ts'
+import { ALTEZZA_MINIMA, doveSiApre, posizioneRichiamo } from './posizione.ts'
 import { scriviRegistro } from './server.ts'
 import * as finestra from './finestra.ts'
 
@@ -23,34 +35,55 @@ let barra: BrowserWindow | null = null
 let url = ''
 let argomenti: string[] = []
 let altezza = ALTEZZA_MINIMA
+/** La pagina è arrivata in fondo: da qui in poi mostrarla mostra qualcosa. */
+let caricata = false
+/** La scorciatoia è arrivata prima della pagina: si mostra appena c'è. */
+let daMostrare = false
 /*
  * Quando è comparsa l'ultima volta.
  *
- * Su Mac portare avanti l'app rende chiave la finestra che lo era prima —
- * quella grande, se è in vista — e la barra appena mostrata perde il fuoco
- * per un istante, prima ancora che qualcuno la veda. Un `blur` in quel
- * mezzo secondo non è la persona che è andata altrove: si riprende il fuoco
- * invece di sparire.
+ * Se la finestra grande è in vista e Myynd è l'app attiva, macOS può rendere
+ * chiave quella per un istante mentre la barra sta comparendo, e la barra
+ * perde il fuoco prima ancora che qualcuno la veda. Un `blur` in quel mezzo
+ * secondo non è la persona che è andata altrove: si riprende il fuoco invece
+ * di sparire.
  */
 let mostrataAlle = 0
 const GRAZIA = 500
+/*
+ * Myynd è l'app attiva? Solo su Mac conta, e lo si sa solo dai suoi eventi.
+ *
+ * Il pannello non attiva l'app, quindi di norma non lo è: la persona è in
+ * un'altra app, e quando la barra sparisce la tastiera torna lì da sola. Lo
+ * è se la persona era già in Myynd — per esempio ha chiuso la finestra con
+ * la X, che su Mac la nasconde soltanto — e allora, sparita la barra,
+ * resterebbe un'app attiva senza finestre: lì, e solo lì, si nasconde l'app.
+ */
+let appAttiva = false
+if (MAC) {
+  app.on('did-become-active', () => { appAttiva = true })
+  app.on('did-resign-active', () => { appAttiva = false })
+}
+/** Myynd era l'app attiva quando la barra è comparsa: è a lei che si torna. */
+let attivaAllApertura = false
 
-/** Il server c'è: da qui in poi la barra si può aprire. */
+/** Il server c'è: la barra nasce adesso, nascosta, e da qui in poi si può aprire. */
 export function prepara(urlApp: string, argomentiPreload: string[]) {
   url = new URL('/?richiamo=1', urlApp).toString()
   argomenti = argomentiPreload
-  // la pagina vecchia parlava con un altro server: si rifà alla prossima apertura
-  if (barra && !barra.isDestroyed()) { barra.destroy(); barra = null }
+  // la pagina vecchia parlava con un altro server: si rifà da capo
+  distruggi()
+  crea()
 }
 
-/** L'area utile dello schermo su cui sta il cursore: è lì che si sta guardando. */
-function areaDelCursore() {
-  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+/** Lo schermo su cui sta il cursore: è lì che si sta guardando. */
+function schermoDelCursore() {
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
 }
 
 function crea(): BrowserWindow {
   const w = new BrowserWindow({
-    ...posizioneRichiamo(areaDelCursore(), altezza),
+    ...posizioneRichiamo(schermoDelCursore().workArea, altezza),
     show: false,
     frame: false,
     transparent: true,
@@ -62,8 +95,11 @@ function crea(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: true,
+    focusable: true,
     title: 'Myynd',
-    ...(MAC ? { vibrancy: 'hud' as const, visualEffectState: 'active' as const } : {}),
+    // il pannello che non attiva l'app; `focusable` resta vero, perché la
+    // tastiera deve arrivare lo stesso
+    ...(MAC ? { type: 'panel', vibrancy: 'hud' as const, visualEffectState: 'active' as const } : {}),
     webPreferences: {
       preload: PRELOAD,
       sandbox: true,
@@ -74,15 +110,25 @@ function crea(): BrowserWindow {
     }
   })
   barra = w
-  // sopra le finestre a schermo intero, e su tutti gli spazi: la scorciatoia
-  // si preme da dove si è, non da dove sta Myynd
-  w.setAlwaysOnTop(true, 'floating')
-  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  caricata = false
+  daMostrare = false
+  // sopra a tutto, anche alle finestre a schermo intero, e su tutti gli
+  // Space: la scorciatoia si preme da dove si è, non da dove sta Myynd.
+  // `skipTransformProcessType` non è un dettaglio: senza, Electron trasforma
+  // il processo in un'app di sfondo (UIElement) — via il Dock, via il menù —
+  // e Myynd dopo la prima scorciatoia non era più un'app normale
+  w.setAlwaysOnTop(true, 'screen-saver')
+  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  w.webContents.once('did-finish-load', () => {
+    caricata = true
+    if (daMostrare) { daMostrare = false; mostra() }
+  })
   w.on('blur', () => {
-    if (w.webContents.isDevToolsFocused()) return
+    // nascondersi manda un `blur` a finestra già sparita: non c'è niente da fare
+    if (!w.isVisible() || w.webContents.isDevToolsFocused()) return
     if (Date.now() - mostrataAlle < GRAZIA) { w.focus(); return }
     scriviRegistro('guscio · il richiamo perde il fuoco: si nasconde')
-    nascondi()
+    via(false)
   })
   w.on('closed', () => { if (barra === w) barra = null })
   // le finestre nuove qui non esistono, e non si va da nessun'altra parte
@@ -101,39 +147,66 @@ export function visibile(): boolean {
   return !!w && w.isVisible()
 }
 
-/** Sullo schermo del cursore, con il fuoco. Falso se il server non c'è ancora. */
+/**
+ * Sullo schermo del cursore, con il fuoco. Falso se il server non c'è ancora.
+ *
+ * Se la pagina non è ancora arrivata si aspetta lei: compare da sola appena
+ * c'è. Il riquadro e lo schermo finiscono nel registro, perché «non
+ * funziona» detto da un Mac con due schermi non si può capire altrimenti.
+ */
 export function mostra(): boolean {
   if (!url) return false
   const w = attuale() ?? crea()
-  w.setBounds(posizioneRichiamo(areaDelCursore(), altezza))
-  // prima l'app davanti, poi la barra: al contrario macOS rende chiave la
-  // finestra grande dopo la barra, e la barra si vede sfilare il fuoco
-  if (MAC) app.focus({ steal: true })
+  if (!caricata) {
+    daMostrare = true
+    scriviRegistro('guscio · il richiamo aspetta la pagina')
+    return true
+  }
+  const schermo = schermoDelCursore()
+  const riquadro = posizioneRichiamo(schermo.workArea, altezza)
+  w.setBounds(riquadro)
   mostrataAlle = Date.now()
+  attivaAllApertura = appAttiva
   w.show()
   w.focus()
-  scriviRegistro('guscio · il richiamo si apre')
+  // la pagina rimette il fuoco nella casella e toglie la risposta di prima
+  w.webContents.send('myynd:richiamo-mostrato')
+  scriviRegistro(`guscio · il richiamo si apre su ${doveSiApre(schermo, riquadro)}`)
   return true
 }
 
 /**
  * Via, e il fuoco torna a chi ce l'aveva.
  *
- * Su Mac nascondere una finestra non basta: Myynd resta l'app attiva, con
- * i suoi menù, e chi ha premuto Esc si ritrova senza tastiera sull'editor da
- * cui era partito. Se la finestra grande non è in vista si nasconde l'app
- * intera, che è il gesto con cui macOS ridà il fuoco all'app di prima.
- *
- * Se invece è in vista, l'app resta: `app.hide()` la porterebbe via con la
- * barra — e la si chiama anche dal `blur`, cioè proprio quando la persona
- * ha appena cliccato sulla finestra grande. Lo si guarda qui, al momento,
- * e non lo si fa dire a chi chiama: il `blur` non lo sa.
+ * Con il pannello basta nasconderlo: se la persona era in un'altra app,
+ * Myynd non è mai diventata attiva e la tastiera torna lì da sola. Se
+ * invece era in Myynd, macOS al pannello che sparisce non ridà il fuoco
+ * alla finestra grande — lascia l'app senza finestra chiave, e la tastiera
+ * finisce in un'altra app. Con la finestra grande in vista la si riporta
+ * su lei; se non è in vista — chiusa con la X, che su Mac la nasconde
+ * soltanto — resterebbe un'app attiva senza finestre, con i suoi menù e
+ * senza tastiera: si nasconde l'app intera, che è il gesto con cui macOS
+ * ridà il fuoco a chi lo aveva. Tutto questo solo se è la pagina a chiedere
+ * di chiudere, o la scorciatoia: dal `blur` la persona è già andata dove
+ * voleva — sulla finestra grande, o in un'altra app — e non la si segue.
  */
 export function nascondi() {
+  via(true)
+}
+
+function via(ridaiIlFuoco: boolean) {
+  daMostrare = false
   const w = attuale()
   if (!w || !w.isVisible()) return
   w.hide()
-  if (MAC && !finestra.inVista()) app.hide()
+  if (!MAC || !attivaAllApertura || !ridaiIlFuoco) return
+  if (finestra.inVista()) {
+    scriviRegistro('guscio · il richiamo si chiude: il fuoco torna alla finestra grande')
+    finestra.mostra()
+  } else {
+    scriviRegistro('guscio · il richiamo si chiude: Myynd era attiva senza finestre, si nasconde')
+    app.hide()
+  }
 }
 
 /** La scorciatoia: apre se è chiusa, chiude se è aperta. */
@@ -145,7 +218,7 @@ export function alterna(): boolean {
 /** La pagina ha misurato il suo contenuto: la finestra si adatta. */
 export function ridimensiona(contenuto: number) {
   const w = attuale()
-  const nuova = posizioneRichiamo(w ? screen.getDisplayMatching(w.getBounds()).workArea : areaDelCursore(), contenuto)
+  const nuova = posizioneRichiamo(w ? screen.getDisplayMatching(w.getBounds()).workArea : schermoDelCursore().workArea, contenuto)
   altezza = nuova.height
   if (!w || !w.isVisible()) return
   const adesso = w.getBounds()
@@ -158,4 +231,6 @@ export function distruggi() {
   const w = attuale()
   if (w) w.destroy()
   barra = null
+  caricata = false
+  daMostrare = false
 }

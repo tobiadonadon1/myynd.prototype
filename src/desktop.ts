@@ -75,6 +75,12 @@ export type Desktop = {
     apri(dove: Dove): void
     /** L'altezza del contenuto: la finestra si adatta. */
     misura(altezza: number): void
+    /**
+     * Il guscio l'ha appena mostrata: il fuoco torna nella casella, e la
+     * risposta dell'altra volta se ne va. Torna la funzione per smettere.
+     * Manca nei gusci vecchi.
+     */
+    mostrato?(cb: () => void): () => void
   }
 }
 

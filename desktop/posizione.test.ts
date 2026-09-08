@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ALTEZZA_MASSIMA, ALTEZZA_MINIMA, LARGHEZZA, posizioneRichiamo } from './posizione.ts'
+import { ALTEZZA_MASSIMA, ALTEZZA_MINIMA, LARGHEZZA, doveSiApre, posizioneRichiamo } from './posizione.ts'
 
 const SCHERMO = { x: 0, y: 25, width: 1440, height: 875 }
 
@@ -33,4 +33,10 @@ test('su uno schermo stretto o basso resta dentro', () => {
   const r = posizioneRichiamo({ x: 0, y: 0, width: 500, height: 300 }, 400)
   assert.ok(r.width < 500 && r.x >= 0 && r.x + r.width <= 500)
   assert.ok(r.height < 300 && r.y >= 0 && r.y + r.height <= 300)
+})
+
+test('il registro dice schermo e riquadro, con il nome dello schermo se c’è', () => {
+  const r = posizioneRichiamo(SCHERMO, 120)
+  assert.equal(doveSiApre({ id: 2, label: 'DELL U2720Q' }, r), '«DELL U2720Q» #2 a 380,200 680×120')
+  assert.equal(doveSiApre({ id: 7 }, r), '#7 a 380,200 680×120')
 })

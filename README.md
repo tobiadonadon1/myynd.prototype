@@ -121,7 +121,14 @@ fare e Invio la segna in lista — con gli stessi «/» della barra grande:
 comincia con `?` o si preme ⌘Invio, e la risposta cresce lì sotto, con un
 «Continua nell'app» che apre quella chat nella finestra. Incollare un elenco
 segna una riga per riga (`src/oggi/righe.ts` toglie trattini, numeri e
-caselle). Esc la chiude, e il fuoco torna all'app da cui si era partiti. È
+caselle). Esc la chiude, e il fuoco torna all'app da cui si era partiti. Su
+Mac è un pannello che non attiva l'app (`type: 'panel'`): compare sopra a
+quello che si sta usando, anche a schermo intero e senza cambiare Space,
+prende la tastiera senza portare avanti Myynd, e nasce nascosta appena il
+server c'è, così la prima ⇧⌘M trova una pagina già disegnata; nel registro
+ogni apertura dice schermo e riquadro. Per provarla dal vivo, `npm run app
+-- --inspect=9229` con `MYYND_ISPEZIONE=1` mette `richiamo`, `finestra` e
+l'azione della scorciatoia su `globalThis.myynd` nel processo principale. È
 la stessa pagina dell'app con `?richiamo=1` (`src/richiamo/Richiamo.tsx`):
 nel browser si può aprire a mano per provarla. La finestra la fa
 `desktop/richiamo.ts`, e si adatta all'altezza del contenuto che la pagina le
