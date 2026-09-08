@@ -27,8 +27,8 @@ export type VoceConnettore = {
   /**
    * Porta documenti nell'indice: c'è un `sincronizza` dietro.
    *
-   * Separato da `pronto` di proposito. Teams e Fatture non hanno codice, e non
-   * devono entrare nel recinto delle automazioni; Gmail e Outlook ce l'hanno,
+   * Separato da `pronto` di proposito. Teams non ha codice, e non deve
+   * entrare nel recinto delle automazioni; Gmail e Outlook ce l'hanno,
    * e devono restarci anche mentre non si offrono — perché chi li ha collegati
    * prima continua a portare documenti, e un'automazione deve poterli
    * dichiarare. Il recinto segue il codice, non la vetrina.
@@ -60,7 +60,7 @@ export const CATALOGO: VoceConnettore[] = [
    * aprire la scheda, non dentro un errore dopo mezz'ora su developers.facebook.com.
    */
   { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Cloud API: un numero registrato su WhatsApp Business, non quello personale. Serve un indirizzo pubblico.' },
-  { id: 'desktop', nome: 'Desktop', gruppo: 'File', pronto: true, legge: true, nota: 'Le cartelle che scegli tu, lette in sola lettura.' },
+  { id: 'desktop', nome: 'Desktop', gruppo: 'File', pronto: true, legge: true, nota: 'Le cartelle che scegli tu, o tutto il Mac, in sola lettura.' },
   { id: 'drive', nome: 'Google Drive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Gmail.' },
   { id: 'sharepoint', nome: 'SharePoint e OneDrive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Outlook.' },
   { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, legge: true, nota: 'La chiave dell’app, e un codice da incollare una volta sola.' },
@@ -75,6 +75,15 @@ export const CATALOGO: VoceConnettore[] = [
    * Granola stia su questo computer, e quella la dice `SOLO_IN_CASA`.
    */
   { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, lette da Granola su questo Mac. Niente da incollare.' },
+  /*
+   * Le Note di Apple, e la nota dice l'unica cosa che costa: un permesso.
+   *
+   * Il file sta in una cartella che macOS protegge — la stessa della posta di
+   * Mail — e senza «Accesso completo al disco» dato a Myynd nelle Impostazioni
+   * di Sistema si apre con «operazione non permessa». Va detto qui, prima del
+   * bottone: chi lo scopre dall'errore pensa che sia rotto Myynd.
+   */
+  { id: 'note', nome: 'Note', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note dell’app Note di Apple su questo Mac. Serve l’accesso completo al disco per Myynd.' },
   /*
    * Le conversazioni, e la nota dice il passaggio che costa: l'esportazione.
    *
@@ -95,8 +104,7 @@ export const CATALOGO: VoceConnettore[] = [
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.
   { id: 'mind2do', nome: 'Da fare', gruppo: 'Note', pronto: true, nota: 'La tua lista. Collegata da sola, sempre.' },
 
-  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Richiede una app registrata su Entra ID.' },
-  { id: 'fatture', nome: 'Fatture in Cloud', gruppo: 'Gestionale', pronto: false, nota: 'Richiede OAuth Fatture in Cloud.' }
+  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Richiede una app registrata su Entra ID.' }
 ]
 
 export const PRONTI = CATALOGO.filter(c => c.pronto).map(c => c.id)

@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react'
 import { Hov, LABEL, useLarghezza } from '../ui'
 import { t } from '../lingua'
 import { IconPiu } from '../icons'
+import { api } from '../api'
+import { AccessoDisco } from '../components/forms'
 import type { Vals } from '../vals'
 
 /** Le fonti da cui Myynd legge. */
@@ -8,6 +11,11 @@ export function Connettori({ v }: { v: Vals }) {
   // due card da 350 pixel affiancate smettono di starci molto prima
   // dell'intera schermata: sotto, una per riga
   const stretta = useLarghezza() < 900
+  // il permesso per le Note: la riga con la strada si mostra solo se manca, e
+  // solo se le Note sono fra quelle da collegare o collegate
+  const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
+  useEffect(() => { api.stato().then(s => setAccesso(s.accessoDisco)).catch(() => {}) }, [])
+  const noteInVista = [...v.connAttivi, ...v.connSpenti].some(c => c.id === 'note')
   return (
     <div style={{ width: 700, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 20px' }}>
@@ -56,6 +64,10 @@ export function Connettori({ v }: { v: Vals }) {
             ))}
           </div>
         </>
+      )}
+
+      {accesso === 'no' && noteInVista && (
+        <div style={{ maxWidth: 520 }}><AccessoDisco tema="chiaro" /></div>
       )}
 
       <div style={{ ...LABEL, color: 'rgba(34,39,31,.5)', padding: '24px 4px 10px' }}>{t('Più avanti')}</div>

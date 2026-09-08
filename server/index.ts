@@ -34,6 +34,8 @@ import * as vedetta from './connettori/vedetta.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
+import * as note from './connettori/note.ts'
+import * as accesso from './connettori/accesso.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -536,7 +538,7 @@ app.delete('/api/conto/gettoni/:id', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
-app.get('/api/stato', (_req, res) => {
+app.get('/api/stato', async (_req, res) => {
   const c = cfg.leggi()
   const n = store.conteggi()
   res.json({
@@ -560,6 +562,7 @@ app.get('/api/stato', (_req, res) => {
         v.id === 'desktop' ? !!c.desktop :
         v.id === 'notion' ? !!c.notion :
         v.id === 'granola' ? granola.collegato(c) :
+        v.id === 'note' ? note.collegato(c) :
         v.id === 'conversazioni' ? conversazioni.collegato(c) :
         v.id === 'calendario' ? !!c.calendario :
         // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
@@ -599,6 +602,16 @@ app.get('/api/stato', (_req, res) => {
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
     // la sua cartella c'è: un interruttore su una cartella vuota è un bottone che fallisce
     codiceConversazioni: !ospitato.OSPITATO && conversazioni.codicePossibile(),
+    // quante ce ne sono, per dirlo sulla scheda prima di accendere l'interruttore
+    sessioniCodice: !ospitato.OSPITATO && conversazioni.codicePossibile() ? await conversazioni.contaSessioni() : 0,
+    /*
+     * L'accesso completo al disco: «si», «no», o «non-mac».
+     *
+     * Serve alla scheda delle Note, che senza quel permesso non può leggere
+     * niente — e deve dirlo con la strada per darlo, non con un errore dopo
+     * il bottone. Su un server non ha senso: le Note non si offrono.
+     */
+    accessoDisco: ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -885,15 +898,24 @@ app.post('/api/connettori/desktop', async (req, res) => {
   if (ospitato.OSPITATO) {
     return res.status(400).json({ errore: 'Su un server non ci sono cartelle da leggere: le fonti sono quelle collegate in rete.' })
   }
-  const cartelle: string[] = req.body?.cartelle ?? []
-  if (!cartelle.length) return res.status(400).json({ errore: 'Scegli almeno una cartella.' })
+  /*
+   * «Tutto il Mac»: le cartelle non le sceglie nessuno, sono la casa e iCloud
+   * Drive — `desktop.radiciTutto()` — e si scrivono lo stesso in `cartelle`,
+   * così tutto quello che legge le cartelle (la vedetta, la scheda, il
+   * recinto degli attrezzi) continua a funzionare senza sapere della
+   * differenza. Quello che manda la scheda in quel caso si ignora.
+   */
+  const tutto = req.body?.tutto === true
+  const cartelle: string[] = tutto ? [] : (Array.isArray(req.body?.cartelle) ? req.body.cartelle.map(String) : [])
+  if (!tutto && !cartelle.length) return res.status(400).json({ errore: 'Scegli almeno una cartella.' })
   try {
-    const esito = await desktop.prova({ cartelle })
+    const esito = await desktop.prova({ cartelle, tutto })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ desktop: { cartelle: esito.cartelle } })
+    const nuovo: cfg.ConfigDesktop = tutto ? { cartelle: esito.cartelle, tutto: true } : { cartelle: esito.cartelle }
+    cfg.aggiorna({ desktop: nuovo })
     // le cartelle nuove si guardano da subito, non dal prossimo avvio
-    vedetta.avvia({ cartelle: esito.cartelle })
-    res.json({ ok: true, cartelle: esito.cartelle })
+    vedetta.avvia(nuovo)
+    res.json({ ok: true, cartelle: esito.cartelle, tutto })
   } catch (e) { errore(res, e) }
 })
 
@@ -1047,6 +1069,23 @@ app.post('/api/connettori/granola', async (_req, res) => {
     const esito = await granola.prova()
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ granola: { note: esito.note } })
+    res.json({ ok: true, note: esito.note })
+  } catch (e) { errore(res, e) }
+})
+
+/**
+ * Le Note di Apple: come Granola, niente da mandare. Il database sta in una
+ * cartella che macOS protegge: senza l'accesso completo al disco la prova
+ * risponde con la strada per darlo, e la scheda la mostra com'è.
+ */
+app.post('/api/connettori/note', async (_req, res) => {
+  if (ospitato.OSPITATO) {
+    return res.status(400).json({ errore: 'Le Note si leggono dal Mac dove gira Myynd, e qui Myynd gira su un server.' })
+  }
+  try {
+    const esito = await note.prova()
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    cfg.aggiorna({ note: { note: esito.note } })
     res.json({ ok: true, note: esito.note })
   } catch (e) { errore(res, e) }
 })
@@ -1332,6 +1371,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'desktop') { delete c.desktop; vedetta.ferma() }
   else if (id === 'notion') delete c.notion
   else if (id === 'granola') delete c.granola
+  else if (id === 'note') delete c.note
   else if (id === 'conversazioni') delete c.conversazioni
   else if (id === 'calendario') delete c.calendario
   /*
@@ -1475,6 +1515,21 @@ async function leggiTutto(
     const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
     cfg.aggiorna({ granola: { note: e.docs.length } })
     avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
+    return e.docs.length
+  })
+  /*
+   * Le Note di Apple, in casa e per la stessa ragione di Granola. Il database
+   * si legge intero da una copia: quello che non c'è più dentro non c'è più.
+   * Senza il permesso la lettura fallisce con la strada per darlo, e la
+   * frase arriva alla scheda come «guaio» — che è quello che è.
+   */
+  if (c.note && !ospitato.OSPITATO) await fonte('note', async () => {
+    avvisa({ fase: 'note', stato: 'leggo le note' })
+    const e = await note.sincronizza()
+    await store.salvaDocumentiAPezzi(e.docs)
+    const tolti = store.riconcilia('note', { completo: !e.troncato }, e.docs.map(d => d.id))
+    cfg.aggiorna({ note: { note: e.docs.length } })
+    avvisa({ fase: 'note', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, illeggibili: e.illeggibili, troncato: e.troncato, tolti })
     return e.docs.length
   })
   /*
@@ -1726,7 +1781,7 @@ async function rileggiDaSola() {
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.conversazioni) return
+    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {

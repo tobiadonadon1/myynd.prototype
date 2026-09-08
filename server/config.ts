@@ -526,7 +526,22 @@ export type ConfigPosta = {
   smtp?: { host: string; porta: number }
 }
 
-export type ConfigDesktop = { cartelle: string[]; estensioni?: string[] }
+/**
+ * Il desktop: le cartelle scelte, o tutto il Mac.
+ *
+ * Con `tutto` le `cartelle` sono quelle che `desktop.radiciTutto()` ha
+ * deciso — la casa e iCloud Drive — e si scrivono lo stesso, così tutto
+ * quello che legge `cartelle` (la vedetta, la scheda, il recinto degli
+ * attrezzi) continua a funzionare senza sapere della differenza. `tutto`
+ * cambia solo i tetti e le cartelle da saltare.
+ */
+export type ConfigDesktop = { cartelle: string[]; estensioni?: string[]; tutto?: boolean }
+/**
+ * Le Note di Apple: come Granola, un collegamento senza niente dentro.
+ * Il file sta sempre nello stesso posto; resta scritto solo che c'è, e quante
+ * note aveva l'ultima volta.
+ */
+export type ConfigNote = { note?: number }
 export type ConfigNotion = { token: string }
 
 /**
@@ -570,6 +585,7 @@ export type Config = {
   desktop?: ConfigDesktop
   notion?: ConfigNotion
   granola?: ConfigGranola
+  note?: ConfigNote
   conversazioni?: ConfigConversazioni
   calendario?: ConfigCalendario
   claude?: ConfigClaude
@@ -905,10 +921,11 @@ export function pubblica(c: Config = leggi()) {
       ? { collegato: true, url: c.compatibile.url, modello: c.compatibile.modello, nome: c.compatibile.nome ?? null }
       : null,
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
-    desktop: c.desktop ? { cartelle: c.desktop.cartelle } : null,
+    desktop: c.desktop ? { cartelle: c.desktop.cartelle, tutto: c.desktop.tutto === true } : null,
     notion: c.notion ? { collegato: true } : null,
     // non ha niente da nascondere: non c'è nessuna credenziale, esce intera
     granola: c.granola ? { collegato: true, note: c.granola.note ?? 0 } : null,
+    note: c.note ? { collegato: true, note: c.note.note ?? 0 } : null,
     // i percorsi escono come le cartelle del desktop: in casa sono suoi, e la
     // scheda deve poterli mostrare
     conversazioni: c.conversazioni ? { collegato: true, file: c.conversazioni.file, codice: c.conversazioni.codice } : null,

@@ -52,6 +52,7 @@ export type Nome =
   | 'desktop.leggi'
   | 'notion.leggi'
   | 'granola.leggi'
+  | 'note.leggi'
   | 'conversazioni.leggi'
   | 'slack.leggi'
   | 'drive.leggi'
@@ -69,7 +70,7 @@ export type Attrezzo = {
   /** Una riga che dice cosa apre, per chi legge la scheda. */
   spiega: { it: string; en: string }
   /** Quale connessione gli serve. Null = non gliene serve nessuna. */
-  serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'conversazioni' | 'slack' | 'drive' | 'sharepoint'
+  serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'note' | 'conversazioni' | 'slack' | 'drive' | 'sharepoint'
     | 'dropbox' | 'whatsapp' | 'agenda' | null
   /** Il colore con cui compare, che è quello della sua fonte. */
   tinta: string
@@ -94,6 +95,7 @@ const FONTI: Partial<Record<Nome, string[]>> = {
   'desktop.leggi': ['desktop'],
   'notion.leggi': ['notion'],
   'granola.leggi': ['granola'],
+  'note.leggi': ['note'],
   'conversazioni.leggi': ['conversazioni'],
   'slack.leggi': ['slack'],
   'drive.leggi': ['drive'],
@@ -161,6 +163,17 @@ export const ATTREZZI: Attrezzo[] = [
     serve: 'granola',
     tinta: '#8A6A3C',
     tool: cercaIn('granola.leggi', 'le note delle sue riunioni su Granola', 'una riunione')
+  },
+  {
+    // Le Note di Apple: gli appunti presi al volo, che non stanno in nessun
+    // file e in nessuna email. Stessa famiglia di Granola — roba scritta da
+    // lei — e per questo sta qui accanto.
+    nome: 'note.leggi',
+    etichetta: { it: 'Note', en: 'Notes' },
+    spiega: { it: 'Legge le tue Note di Apple.', en: 'Reads your Apple Notes.' },
+    serve: 'note',
+    tinta: '#B08D2B',
+    tool: cercaIn('note.leggi', 'le sue Note di Apple', 'una nota')
   },
   {
     /*
@@ -363,6 +376,7 @@ export function collegato(n: Nome): boolean {
     case 'desktop': return !!c.desktop?.cartelle?.length
     case 'notion': return !!c.notion
     case 'granola': return !!c.granola
+    case 'note': return !!c.note
     case 'conversazioni': return !!c.conversazioni
     case 'slack': return !!c.slack
     case 'drive': return !!c.drive

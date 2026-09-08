@@ -19,6 +19,12 @@
 //
 // Solo in casa: su un server le cartelle sono nomi, non percorsi. E per
 // persona, come tutto il resto — ognuno ha le sue cartelle e il suo indice.
+//
+// Con «tutto il Mac» la radice è la casa. Su macOS un ascolto ricorsivo sulla
+// casa costa poco — è FSEvents, un flusso solo — ma gli eventi arrivano anche
+// da dove il sistema scrive di continuo (`Library`, le cache), e ognuno di
+// quelli, se arrivasse fino a `guarda`, sarebbe un timer e uno `stat`. Si
+// filtrano dal nome, prima di segnarli, con la stessa regola della lettura.
 
 import { watch, type FSWatcher } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -27,7 +33,7 @@ import * as chi from '../chi.ts'
 import * as store from '../store.ts'
 import { OSPITATO } from '../ospitato.ts'
 import type { ConfigDesktop } from '../config.ts'
-import { daSaltare, leggiUno, leggiCartella } from './desktop.ts'
+import { daSaltare, leggiUno, leggiCartella, radici, saltaDalNome } from './desktop.ts'
 
 /** I tempi. Si accorciano solo nelle prove. */
 const TEMPI = {
@@ -57,6 +63,8 @@ export function perProva(t: Partial<typeof TEMPI> | null) {
 type Posto = {
   /** Di chi sono queste cartelle: i lavori in sottofondo rientrano con `chi.dentro`. */
   utente: string | null
+  /** La casa intera: le regole di salto sono quelle larghe di `desktop.ts`. */
+  tutto: boolean
   /** Cartella → quello che la guarda; `null` finché non si riesce ad aprirla. */
   cartelle: Map<string, FSWatcher | null>
   /** Percorso → il timer che aspetta la fine della raffica. */
@@ -93,13 +101,15 @@ function dentro<T>(posto: Posto, fn: () => T): T {
  */
 export function avvia(c: ConfigDesktop | undefined | null) {
   ferma()
-  if (OSPITATO || !c?.cartelle.length) return
+  if (OSPITATO || !c) return
+  const cartelle = radici(c)
+  if (!cartelle.length) return
   const posto: Posto = {
-    utente: chi.adesso(), cartelle: new Map(), pendenti: new Map(), riprove: new Map(),
+    utente: chi.adesso(), tutto: c.tutto === true, cartelle: new Map(), pendenti: new Map(), riprove: new Map(),
     quiete: null, daQuando: null, cambiati: 0, tolti: 0, ultimoGiro: 0, inCorso: false
   }
   posti.set(chiave(), posto)
-  for (const cartella of c.cartelle) apri(posto, resolve(cartella))
+  for (const cartella of cartelle) apri(posto, resolve(cartella))
 }
 
 /**
@@ -146,6 +156,9 @@ function riprovaPiuTardi(posto: Posto, cartella: string) {
 
 /** Un evento su un percorso: si aspetta la fine della raffica, poi si guarda. */
 function segna(posto: Posto, radice: string, percorso: string) {
+  // dal nome e basta, prima di qualunque timer: con la casa intera sotto
+  // ascolto è qui che muoiono gli eventi di `Library` e delle cache
+  if (saltaDalNome(percorso, radice, posto.tutto)) return
   const t = posto.pendenti.get(percorso)
   if (t) clearTimeout(t)
   posto.pendenti.set(percorso, setTimeout(() => {
@@ -177,22 +190,22 @@ async function guarda(posto: Posto, radice: string, percorso: string) {
     // per un percorso sparito si giudica dal nome: cancellare un file
     // ignorato non tocca niente, e una cartella si svuota per prefisso
     const id = `desktop:${percorso}`
-    const ids = [...(await daSaltare(percorso, radice) ? [] : [id]), ...store.idsConPrefisso(`${id}/`)]
+    const ids = [...(await daSaltare(percorso, radice, false, posto.tutto) ? [] : [id]), ...store.idsConPrefisso(`${id}/`)]
     const n = ids.length ? store.scordaDocumenti(ids) : 0
     if (n) conta(posto, 0, n, inizio)
     return
   }
 
   if (s.isDirectory()) {
-    if (await daSaltare(percorso, radice, true)) return
-    const e = await leggiCartella(percorso)
+    if (await daSaltare(percorso, radice, true, posto.tutto)) return
+    const e = await leggiCartella(percorso, undefined, posto.tutto)
     if (!e.docs.length) return
     const r = store.salvaDocumenti(e.docs)
     conta(posto, r.nuovi + r.cambiati, 0, inizio)
     return
   }
 
-  if (!s.isFile() || await daSaltare(percorso, radice)) return
+  if (!s.isFile() || await daSaltare(percorso, radice, false, posto.tutto)) return
   const id = `desktop:${percorso}`
   // un evento senza cambiamento — un tocco ai permessi, un'apertura — non
   // deve costare un'estrazione: la data di modifica lo dice prima

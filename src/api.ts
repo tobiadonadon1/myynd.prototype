@@ -33,10 +33,11 @@ export type Stato = {
     /** Ha chiesto le undici automazioni che arrivano col pacchetto. */
     diSerie: boolean
     posta: { host: string; utente: string; giorni: number } | null
-    desktop: { cartelle: string[] } | null
+    desktop: { cartelle: string[]; tutto: boolean } | null
     notion: { collegato: boolean } | null
     /** Granola sul Mac: non c'è nessuna credenziale, solo quante note ha letto. */
     granola: { collegato: boolean; note: number } | null
+    note: { collegato: boolean; note: number } | null
     /** I file esportati da ChatGPT e Claude, e se legge anche le sessioni di Claude Code. */
     conversazioni: { collegato: boolean; file: string[]; codice: boolean } | null
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
@@ -80,6 +81,10 @@ export type Stato = {
   suggerimentiDesktop: string[]
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
   codiceConversazioni: boolean
+  /** Quante sessioni di Claude Code ci sono lì: la scheda lo dice prima di accendere l'interruttore. */
+  sessioniCodice: number
+  /** L'accesso completo al disco per Myynd: le Note si leggono solo con «si». «non-mac» = non parlarne. */
+  accessoDisco: 'si' | 'no' | 'non-mac'
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
   /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
@@ -912,8 +917,9 @@ export const api = {
     json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null }>(
       '/api/connettori/posta', { method: 'POST', body: JSON.stringify(p) }),
 
-  collegaDesktop: (cartelle: string[]) =>
-    json<{ ok: true; cartelle: string[] }>('/api/connettori/desktop', { method: 'POST', body: JSON.stringify({ cartelle }) }),
+  /** Le cartelle scelte — o, con `tutto`, la casa intera: allora le cartelle le decide il server. */
+  collegaDesktop: (cartelle: string[], tutto = false) =>
+    json<{ ok: true; cartelle: string[]; tutto: boolean }>('/api/connettori/desktop', { method: 'POST', body: JSON.stringify({ cartelle, tutto }) }),
 
   /** Un pezzo della cartella scelta nel browser, letta lì e mandata qui. */
   caricaFileDesktop: (p: {
@@ -936,6 +942,10 @@ export const api = {
   // niente da mandare: il file sta dove sta, e il percorso non si prende da qui
   collegaGranola: () =>
     json<{ ok: true; note: number }>('/api/connettori/granola', { method: 'POST', body: '{}' }),
+
+  /** Le Note di Apple: come Granola, niente da mandare. Senza il permesso risponde con la strada per darlo. */
+  collegaNote: () =>
+    json<{ ok: true; note: number }>('/api/connettori/note', { method: 'POST', body: '{}' }),
 
   /** I `conversations.json` scelti, e l'interruttore per le sessioni di Claude Code. */
   collegaConversazioni: (file: string[], codice: boolean) =>

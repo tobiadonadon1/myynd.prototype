@@ -49,8 +49,11 @@ const microsoft = await import('./connettori/microsoft.ts')
 const estrai = await import('./connettori/estrai.ts')
 const registro = await import('./connettori/registro.ts')
 const attrezzi = await import('./attrezzi.ts')
+const desktop = await import('./connettori/desktop.ts')
+const vedetta = await import('./connettori/vedetta.ts')
 
 after(() => {
+  vedetta.fermaTutti()
   process.env.HOME = CASA_VERA
   rmSync(CASA, { recursive: true, force: true })
 })
@@ -328,4 +331,91 @@ test('Granola non si offre su un server, dove quella cartella non è di nessuno'
   // legge `~/Library/Application Support` del Mac di chi la usa: dentro un
   // contenitore quella cartella o non c'è o è quella del server
   assert.ok(ospitato.SOLO_IN_CASA.includes('granola'))
+})
+
+// — tutto il Mac: la casa come radice, con le regole larghe —
+
+/** Una casa finta con dentro quello che una casa vera ha: documenti, e tutto il resto. */
+function arredaLaCasa() {
+  const scrivi = (rel: string, testo = 'Un documento abbastanza lungo da valere qualcosa nell’indice.') => {
+    const p = join(CASA, rel)
+    mkdirSync(join(p, '..'), { recursive: true })
+    writeFileSync(p, testo)
+    return p
+  }
+  return {
+    contratto: scrivi('Desktop/contratto.md'),
+    // otto cartelle sotto la casa: oltre il tetto delle cartelle scelte (6), dentro quello di tutto il Mac (10)
+    profondo: scrivi('Documents/a/b/c/d/e/f/g/profondo.md'),
+    icloud: scrivi('Library/Mobile Documents/com~apple~CloudDocs/Lavoro/icloud.md'),
+    posta: scrivi('Library/Mail/V10/posta.md'),
+    canzone: scrivi('Music/Logic/canzone.txt'),
+    foto: scrivi('Pictures/Photos Library.photoslibrary/foto.md'),
+    app: scrivi('Applications/Cosa.app/Contents/leggimi.md'),
+    cestino: scrivi('.Trash/buttato.md'),
+    progetto: (() => { scrivi('Progetti/app/package.json', '{}'); return scrivi('Progetti/app/README.md') })()
+  }
+}
+
+test('le radici di tutto il Mac sono la casa e, se c’è, iCloud Drive', () => {
+  const casa = join(CASA, 'casa-senza-icloud')
+  mkdirSync(casa, { recursive: true })
+  assert.deepEqual(desktop.radiciTutto(casa), [casa])
+  const icloud = join(casa, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')
+  mkdirSync(icloud, { recursive: true })
+  assert.deepEqual(desktop.radiciTutto(casa), [casa, icloud])
+  // la configurazione: con `tutto` le cartelle scelte non contano
+  assert.deepEqual(desktop.radici({ cartelle: ['/altrove'] }), ['/altrove'])
+  assert.deepEqual(desktop.radici({ cartelle: ['/altrove'], tutto: true }), desktop.radiciTutto())
+})
+
+test('tutto il Mac legge la scrivania, i documenti profondi e iCloud, e salta quello che non è tuo', async () => {
+  const f = arredaLaCasa()
+  const e = await desktop.sincronizza({ cartelle: [], tutto: true })
+  const ids = e.docs.map(d => d.id).sort()
+  assert.deepEqual(ids, [f.contratto, f.icloud, f.profondo].map(p => `desktop:${p}`).sort())
+  assert.equal(e.troncato, false)
+  assert.deepEqual(e.complete, desktop.radiciTutto(CASA), 'le due radici, percorse tutte, si possono riconciliare')
+  assert.deepEqual(e.saltatiProgetti, [join(CASA, 'Progetti', 'app')])
+  assert.deepEqual(e.illeggibili, [])
+  // la prova accetta la configurazione senza cartelle scelte
+  const prova = await desktop.prova({ cartelle: [], tutto: true })
+  assert.ok(prova.ok && prova.cartelle.length === 2)
+})
+
+test('la stessa casa come cartella scelta: le regole strette di sempre', async () => {
+  const f = arredaLaCasa()
+  const e = await desktop.sincronizza({ cartelle: [CASA] })
+  const ids = e.docs.map(d => d.id)
+  assert.ok(ids.includes(`desktop:${f.contratto}`))
+  // «Music» e «Pictures» si saltano solo con tutto il Mac: chi sceglie a mano una cartella la vuole letta
+  assert.ok(ids.includes(`desktop:${f.canzone}`))
+  // otto cartelle sotto: oltre il tetto delle cartelle scelte, e lo dice
+  assert.ok(!ids.includes(`desktop:${f.profondo}`))
+  assert.equal(e.troncato, true)
+  // `Library` si salta sempre: iCloud entra solo come radice a parte
+  assert.ok(!ids.includes(`desktop:${f.icloud}`))
+})
+
+test('daSaltare e saltaDalNome conoscono le regole di tutto il Mac, dal nome e prima di ogni I/O', async () => {
+  arredaLaCasa()
+  const musica = join(CASA, 'Music', 'Logic', 'canzone.txt')
+  assert.equal(desktop.saltaDalNome(musica, CASA, true), true)
+  assert.equal(desktop.saltaDalNome(musica, CASA, false), false)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Library', 'Caches', 'x.md'), CASA, true), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Desktop', 'nota.md'), CASA, true), false)
+  const profondo = join(CASA, 'Documents/a/b/c/d/e/f/g/profondo.md')
+  assert.equal(desktop.saltaDalNome(profondo, CASA, true), false)
+  assert.equal(desktop.saltaDalNome(profondo, CASA, false), true, 'otto cartelle sono troppe per le cartelle scelte')
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents/1/2/3/4/5/6/7/8/9/10/11/x.md'), CASA, true), true, 'undici sono troppe anche per tutto il Mac')
+  assert.equal(await desktop.daSaltare(musica, CASA, false, true), true)
+  assert.equal(await desktop.daSaltare(join(CASA, 'Progetti', 'app', 'README.md'), CASA, false, true), true, 'un progetto di codice resta un progetto')
+})
+
+test('la vedetta con tutto il Mac guarda le stesse due radici', () => {
+  arredaLaCasa()
+  vedetta.avvia({ cartelle: [], tutto: true })
+  assert.deepEqual(vedetta.stato(), { attiva: true, cartelle: 2 })
+  vedetta.ferma()
+  assert.deepEqual(vedetta.stato(), { attiva: false, cartelle: 0 })
 })

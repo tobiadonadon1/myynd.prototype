@@ -43,8 +43,8 @@ ospitato (`RAILWAY_ENVIRONMENT`, `RENDER`, `FLY_APP_NAME`, `K_SERVICE`, `DYNO`,
 | `MYYND_GOOGLE_CLIENT_ID`, `MYYND_GOOGLE_CLIENT_SECRET` | L'app OAuth di chi ospita, per Gmail, Calendario e Drive. Tipo «Applicazione web», URI di ritorno **esattamente** `https://<dominio>/api/oauth/ritorno`. Senza, quelle schede si dichiarano non disponibili. |
 | `MYYND_MICROSOFT_CLIENT_ID`, `MYYND_MICROSOFT_CLIENT_SECRET`, `MYYND_MICROSOFT_TENANT` | Idem per Outlook, Calendario e SharePoint (Entra ID, piattaforma «Web», stesso URI di ritorno; tenant predefinito `common`). |
 
-Su un server **non** si usano: le cartelle del desktop, Claude Code, e la
-chiave `ANTHROPIC_API_KEY` dell'ambiente (sarebbe di chi ospita, spesa da
+Su un server **non** si usano: le cartelle del desktop, Granola, le Note, le
+conversazioni, Claude Code, e la chiave `ANTHROPIC_API_KEY` dell'ambiente (sarebbe di chi ospita, spesa da
 tutti). Ognuno collega la propria chiave, o un fornitore compatibile con
 OpenAI, dalle preferenze.
 
@@ -299,8 +299,42 @@ già scritta. Un'email che sta già in lista non viene riproposta nel feed.
 | **Slack** | Un token utente `xoxp-…` con gli ambiti di lettura. |
 | **Dropbox** | La chiave dell'app e un codice da incollare una volta. |
 | **WhatsApp Business** | Cloud API: serve un indirizzo pubblico per il webhook. |
-| **Desktop** | Le cartelle che scegli, in sola lettura. Solo sul tuo computer. |
-| **Conversazioni** | I `conversations.json` esportati da ChatGPT (Impostazioni › Controlli dati › Esporta dati) e da Claude (Impostazioni › Privacy › Esporta dati), e — se lo accendi — le sessioni di Claude Code in `~/.claude/projects`. Di ogni chat si tiene il testo, non gli attrezzi. Solo sul tuo computer. |
+| **Desktop** | Le cartelle che scegli — o, con «Tutto il Mac», la tua cartella personale e iCloud Drive — in sola lettura. Solo sul tuo computer. |
+| **Granola** | Le note delle riunioni, lette dalla cache di Granola su questo Mac. Niente da incollare. |
+| **Note** | Le note dell'app Note di Apple, lette da una copia di `~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite`. Niente da incollare, ma serve **l'accesso completo al disco** per Myynd (vedi sotto). Le note protette da password e quelle nel cestino restano fuori. Solo su Mac. |
+| **Conversazioni** | I `conversations.json` esportati da ChatGPT (Impostazioni › Controlli dati › Esporta dati) e da Claude (Impostazioni › Privacy › Esporta dati), e — se lo accendi — le sessioni di Claude Code in `~/.claude/projects` (la scheda dice quante ne trova; l'interruttore parte acceso). Le chat di claude.ai non stanno sul disco, nemmeno con l'app Claude: si passa dall'esportazione. Di ogni chat si tiene il testo, non gli attrezzi. Solo sul tuo computer. |
+
+### Tutto il Mac
+
+È l'interruttore per cui esiste l'app da scrivania: un server non ha le tue
+cartelle, l'app le ha tutte. Con «Tutto il Mac» la radice della lettura è la
+tua cartella personale, più iCloud Drive (`~/Library/Mobile Documents/
+com~apple~CloudDocs`, che sta sotto `Library` e va detto a parte perché è dove
+molti tengono i documenti). Le regole per un file sono quelle di sempre — PDF,
+Word, testo, Markdown, niente file nascosti, niente progetti di codice — e in
+più si saltano le cartelle che non contengono mai documenti tuoi: `Library`,
+`Applications`, `Music`, `Movies`, `Pictures`, la libreria di Foto, le cache,
+il cestino, le macchine virtuali. I tetti salgono: venticinquemila documenti e
+dieci livelli di cartelle, contro quattromila e sei delle cartelle scelte.
+Misurato su una casa vera, la passeggiata a secco sulle cartelle sta sotto il
+secondo (a freddo, con iCloud che deve ancora rispondere, qualche minuto);
+quello che costa sono i PDF da estrarre, e solo la prima volta — dal giro
+dopo la data di modifica fa saltare quello che non è cambiato. La vedetta
+guarda le stesse due radici, e gli eventi che arrivano dalle cartelle saltate
+muoiono dal nome, prima di qualunque lettura.
+
+### L'accesso completo al disco
+
+macOS protegge alcune cartelle della casa anche da chi la casa ce l'ha: la
+posta di Mail, le Note, i Messaggi. Senza il permesso, aprirle risponde
+«operazione non permessa» — non «non esiste». Myynd non può darselo né
+chiederlo da codice: lo dà la persona, in *Impostazioni di Sistema › Privacy e
+sicurezza › Accesso completo al disco › Myynd*. Il server guarda se ce l'ha
+(`server/connettori/accesso.ts`: un `readdir` su una cartella protetta, senza
+leggere niente dentro) e lo dice in `/api/stato` come `accessoDisco`; la
+scheda delle Note, quando manca, mostra la strada e — dentro l'app — un
+bottone che apre quella schermata. È l'unico indirizzo fuori da http, https e
+mailto che il guscio accetta, e lo apre solo chi preme.
 
 Le cartelle del desktop si guardano anche dal vivo — *la vedetta*
 (`server/connettori/vedetta.ts`). Un file salvato, spostato o cancellato entra
@@ -380,7 +414,7 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   claude.ts             il ragionamento: recupero, prompt, strumenti, bozze
   compiti.ts            la coda delle cose affidate a Myynd
   automazioni.ts        le ricette che girano da sole
-  connettori/           posta · calendario · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop
+  connettori/           posta · calendario · google · microsoft · drive · dropbox · slack · whatsapp · notion · desktop · granola · note · conversazioni · accesso
                         oauth.ts: il ballo su 127.0.0.1 in casa, via web ospitati
 
 src/

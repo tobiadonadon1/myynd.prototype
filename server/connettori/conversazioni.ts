@@ -12,6 +12,15 @@
 // Claude Code invece scrive ogni sessione in `~/.claude/projects`, sul disco
 // di chi lo usa, e si legge da lì — come Granola, senza chiedere niente.
 //
+// **Le chat di claude.ai non stanno su questo disco.** L'app Claude per Mac
+// è una finestra sul sito: quello che ci si scrive vive dai loro, e l'unica
+// strada resta l'esportazione. Quello che l'app tiene qui — in
+// `~/Library/Application Support/Claude/claude-code-sessions` — sono le
+// *schede* delle sessioni di Claude Code aperte da lì: titolo, cartella,
+// modello, e l'id della sessione vera, che è uno dei `.jsonl` di
+// `~/.claude/projects`. Quindi non c'è una seconda fonte da leggere: si
+// prendono i titoli, che sono migliori di una prima riga, e basta.
+//
 // **Si tiene il testo, non il resto.** Di una sessione di Claude Code si
 // tengono le battute scritte — quello che ha chiesto la persona e quello che
 // ha risposto il modello — e non gli attrezzi: il contenuto dei file aperti,
@@ -245,6 +254,78 @@ export function codicePossibile(): boolean {
   return existsSync(cartellaCodice())
 }
 
+/**
+ * Quante sessioni ci sono, per dirlo sulla scheda prima di collegare.
+ *
+ * «Trovate 361 sessioni di Claude Code su questo Mac» è la riga che fa capire
+ * cosa si sta per accendere; un interruttore muto no. Si contano i file e
+ * basta, senza aprirli: è una riga della schermata, non una lettura.
+ */
+export async function contaSessioni(cartella = cartellaCodice()): Promise<number> {
+  let n = 0
+  try {
+    for (const d of await readdir(cartella, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue
+      try {
+        n += (await readdir(join(cartella, d.name))).filter(f => f.endsWith('.jsonl')).length
+      } catch { /* una cartella di progetto che non si sfoglia non conta */ }
+    }
+  } catch {
+    return 0
+  }
+  return n
+}
+
+/** Dove l'app Claude tiene le schede delle sessioni di Claude Code aperte da lì. */
+export function cartellaSchedeClaude(): string {
+  return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions')
+}
+
+/** Oltre questa taglia una scheda non è una scheda. */
+const SCHEDA_MAX = 4_000_000
+
+/**
+ * I titoli che l'app Claude ha dato alle sessioni, per id di sessione.
+ *
+ * Le schede stanno due cartelle sotto, una per file, e ognuna è un JSON con
+ * `cliSessionId` — l'id del `.jsonl` in `~/.claude/projects` — e `title`. Non
+ * c'è dentro nessuna battuta: è metadato, e si prende solo quello. Una
+ * cartella che manca, o un file che non si capisce, non è un guaio: si va
+ * avanti con i titoli che si trovano nei `.jsonl`.
+ */
+export async function titoliClaude(cartella = cartellaSchedeClaude(), tetto = 5000): Promise<Map<string, string>> {
+  const titoli = new Map<string, string>()
+  let livello1: string[] = []
+  try {
+    livello1 = (await readdir(cartella, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(cartella, d.name))
+  } catch {
+    return titoli
+  }
+  for (const a of livello1) {
+    let livello2: string[] = []
+    try {
+      livello2 = (await readdir(a, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(a, d.name))
+    } catch { continue }
+    for (const b of livello2) {
+      let file: string[] = []
+      try {
+        file = (await readdir(b, { withFileTypes: true })).filter(d => d.isFile() && d.name.endsWith('.json')).map(d => join(b, d.name))
+      } catch { continue }
+      for (const f of file) {
+        if (titoli.size >= tetto) return titoli
+        try {
+          if ((await stat(f)).size > SCHEDA_MAX) continue
+          const o = oggetto(JSON.parse(await readFile(f, 'utf8')))
+          const id = typeof o?.cliSessionId === 'string' ? o.cliSessionId.trim() : ''
+          const titolo = typeof o?.title === 'string' ? o.title.trim() : ''
+          if (id && titolo) titoli.set(id, titolo)
+        } catch { /* non è una scheda: si salta */ }
+      }
+    }
+  }
+  return titoli
+}
+
 /** I promemoria che il programma infila nei messaggi: non li ha scritti nessuno. */
 function senzaPromemoria(s: string): string {
   return s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim()
@@ -325,8 +406,14 @@ export async function sessione(percorso: string): Promise<Conversazione | null> 
 
 export type EsitoCodice = { conversazioni: Conversazione[]; saltate: number; troncato: boolean }
 
-/** Tutte le sessioni sotto la cartella: una sottocartella per progetto, dentro i `.jsonl`. */
-export async function sessioni(cartella = cartellaCodice(), tetto = TETTO): Promise<EsitoCodice> {
+/**
+ * Tutte le sessioni sotto la cartella: una sottocartella per progetto, dentro i `.jsonl`.
+ *
+ * `titoli` sono quelli dell'app Claude, per id: valgono solo dove il file
+ * non ha un titolo suo, perché quello del file l'ha scritto il modello
+ * guardando la conversazione e quello dell'app è lo stesso o più vecchio.
+ */
+export async function sessioni(cartella = cartellaCodice(), tetto = TETTO, titoli?: Map<string, string>): Promise<EsitoCodice> {
   const conversazioni: Conversazione[] = []
   let saltate = 0
   let troncato = false
@@ -348,7 +435,10 @@ export async function sessioni(cartella = cartellaCodice(), tetto = TETTO): Prom
       try {
         if ((await stat(f)).size > SESSIONE_MAX) { saltate++; continue }
         const c = await sessione(f)
-        if (c) conversazioni.push(c)
+        if (c) {
+          if (!c.titolo && titoli?.has(c.id)) c.titolo = titoli.get(c.id)!
+          conversazioni.push(c)
+        }
       } catch { saltate++ }
     }
     if (troncato) break
@@ -469,7 +559,7 @@ export type EsitoConversazioni = {
  * visti — e cancellarli vorrebbe dire perdere un anno di chat perché qualcuno
  * ha spostato una cartella.
  */
-export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice()): Promise<EsitoConversazioni> {
+export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice(), schede = cartellaSchedeClaude()): Promise<EsitoConversazioni> {
   // per id, non in una lista: due esportazioni dello stesso conto — quella di
   // marzo e quella di oggi — contengono le stesse chat, e l'ultima vince
   const docs = new Map<string, Documento>()
@@ -495,7 +585,7 @@ export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice(
   let codice = 0
   if (cfg.codice) {
     try {
-      const s = await sessioni(cartella, Math.max(0, TETTO - docs.size))
+      const s = await sessioni(cartella, Math.max(0, TETTO - docs.size), await titoliClaude(schede))
       if (s.troncato) troncato = true
       saltate += s.saltate
       for (const c of s.conversazioni) {
@@ -560,12 +650,8 @@ export async function prova(cfg: ConfigConversazioni): Promise<Prova> {
   let codice = 0
   if (cfg.codice) {
     if (!codicePossibile()) return { ok: false, errore: 'Non trovo le sessioni di Claude Code su questo computer.' }
-    try {
-      for (const d of await readdir(cartellaCodice(), { withFileTypes: true })) {
-        if (!d.isDirectory()) continue
-        codice += (await readdir(join(cartellaCodice(), d.name))).filter(n => n.endsWith('.jsonl')).length
-      }
-    } catch { /* la cartella c'è ma non si sfoglia: lo dirà la lettura */ }
+    // la cartella c'è ma non si sfoglia: zero, e lo dirà la lettura
+    codice = await contaSessioni()
   }
   return { ok: true, file, codice }
 }

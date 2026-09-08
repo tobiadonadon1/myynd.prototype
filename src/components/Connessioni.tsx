@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api, rigaSincronizzazione, type Stato } from '../api'
-import { Form } from './forms'
+import { AccessoDisco, Form } from './forms'
 import { frasi, lingua, loc, t } from '../lingua'
 import { BottoneSicuro, Hov, daTastiera, useFocoDialogo } from '../ui'
 import { IconPiu } from '../icons'
@@ -17,7 +17,7 @@ import { IconPiu } from '../icons'
  */
 const COLORE: Record<string, string> = {
   posta: '#C4553C', calendario: '#A8763F', desktop: '#E0A44A', notion: '#5B9BC9', granola: '#8A6A3C',
-  conversazioni: '#4F6E8F',
+  note: '#B08D2B', conversazioni: '#4F6E8F',
   claude: '#7FA98A',
   google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
   drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3',
@@ -218,7 +218,8 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                             ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
                             : [
                               c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato'),
-                              // il desktop dice anche se lo sta guardando dal vivo
+                              // il desktop dice se è la casa intera, e se la sta guardando dal vivo
+                              c.id === 'desktop' && s?.config.desktop?.tutto ? t('il Mac intero') : null,
                               c.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
                             ].filter(Boolean).join(' · '))
                           : t(c.nota)}
@@ -262,6 +263,10 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                         <IconPiu size={13} />{t('Collega')}</span>
                     )}
                   </div>
+                  {/* le Note collegate senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
+                  {c.id === 'note' && c.collegato && s?.accessoDisco === 'no' && (
+                    <div style={{ padding: '0 18px 14px' }}><AccessoDisco tema="chiaro" /></div>
+                  )}
                   {apertoQui && (!c.collegato || c.id === 'compatibile') && (
                     <div style={{ padding: '2px 18px 18px', animation: 'fadein .2s ease' }}>
                       <Form id={c.id} tema="chiaro" ok={async () => {
