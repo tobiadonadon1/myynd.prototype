@@ -500,7 +500,7 @@ export type Compito = {
   quando: string          // oggi | settimana | poi
   giorno?: string | null  // planned local calendar day, YYYY-MM-DD
   stato: string           // aperto | delegato | pronto | chiede | fatto | lasciato
-  modo: string            // io | bozza | tutto
+  modo: string            // io | bozza | tutto | prompt
   ordine: string
   origine: string
   voce: string | null
@@ -660,7 +660,7 @@ export type Automazione = {
   nome: string
   spiega: string
   quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
-  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto'; perDocumento?: boolean }
+  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
   accesa: boolean
   ultima: string | null
   quante: number
@@ -855,8 +855,10 @@ export const api = {
    *
    * `piano` legge e racconta cosa farebbe senza toccare niente; `fai` lo fa.
    * Sono due chiamate e non una perché in mezzo ci va una persona che legge.
+   * `richiesta` è un testo già scritto apposta per lui — il prompt di una riga
+   * in modo prompt — al posto del titolo della riga.
    */
-  lavora: (id: string, m: { cartella: string; passo: 'piano' | 'fai' }) =>
+  lavora: (id: string, m: { cartella: string; passo: 'piano' | 'fai'; richiesta?: string }) =>
     json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito }>(
       `/api/compiti/${encodeURIComponent(id)}/lavora`, { method: 'POST', body: JSON.stringify(m) }),
 

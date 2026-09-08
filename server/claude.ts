@@ -1074,8 +1074,21 @@ Non stai mandando niente. Qualunque cosa scrivi passa da lei prima di uscire.`
  * passo — il testo, cosa allegare, a chi va, cosa controllare — e lascia a lei
  * solo quel passo. Non è più autonomia: è più lavoro finito. L'ultimo gesto
  * resta suo in tutti e due i casi, e questo non si tratta.
+ *
+ * «Prompt» è la terza strada, e va nella direzione opposta: non consegna la
+ * cosa, consegna *la richiesta con cui farla fare* a un altro assistente —
+ * Claude, ChatGPT, Claude Code. Suo padre l'ha detto meglio di chiunque:
+ * avrebbe trasformato volentieri tutte le note del to-do in tanti prompt, se
+ * fosse servito a fargli fare le cose. Il valore sta nel materiale: un prompt
+ * scritto a mano parte da una riga di sei parole, questo parte da quello che
+ * Myynd ha già letto — nomi, cifre, date, il filo con quella persona — e dalla
+ * sua voce. Perciò cerca come «tutto», e poi scrive per un lettore che non ha
+ * accesso a niente di tutto ciò.
+ *
+ * Esportato per le prove: quello che si promette qui sopra si legge nel testo,
+ * e un testo che non si può leggere da fuori non si può provare.
  */
-const MODI: Record<string, string> = {
+export const MODI: Record<string, string> = {
   bozza: '\n\nTi ha chiesto la cosa scritta. Scrivila, e basta quella. Se ti manca un ' +
     'elemento, cercalo prima di chiederglielo: quasi sempre è già nel suo materiale.',
   tutto: '\n\nTi ha chiesto di portarla fino in fondo, e «fino in fondo» comincia dal ' +
@@ -1085,7 +1098,35 @@ const MODI: Record<string, string> = {
     'risultato: se una cosa ti sembra mancare, manca perché non l\'hai ancora cercata.\n\n' +
     'Poi, oltre alla cosa scritta, nella riga finale dille tutto quello che serve per ' +
     'chiuderla: a chi va, cosa allegare e dove sta, cosa controllare prima. Un elenco ' +
-    'corto, non un discorso. L\'ultimo passo — premere invio — resta suo.'
+    'corto, non un discorso. L\'ultimo passo — premere invio — resta suo.',
+  prompt: '\n\nQuesta volta non ti ha chiesto la cosa fatta: ti ha chiesto **il prompt con cui ' +
+    'farla fare** a un altro assistente — Claude, ChatGPT o Claude Code — pronto da ' +
+    'incollare. Quello che consegni è quel prompt, e nient\'altro.\n\n' +
+    'Prima il materiale, come sempre: cerca tutto quello che serve — il filo con quella ' +
+    'persona, il listino in vigore, la versione buona del documento — e apri per intero ' +
+    'quelli da cui prendere una cifra o una data. Chi leggerà il prompt non ha accesso a ' +
+    'niente di tutto questo: quello che non ci metti tu, per lui non esiste.\n\n' +
+    'Il prompt è rivolto all\'assistente («tu»), si regge da solo, e in quest\'ordine dice:\n' +
+    '— l\'obiettivo, in una riga: cosa deve uscire e per chi;\n' +
+    '— il contesto che serve: nomi, cifre, date, vincoli, e i passi rilevanti del suo ' +
+    'materiale citati fra virgolette, non riassunti — un prezzo parafrasato è un prezzo ' +
+    'da ricontrollare;\n' +
+    '— come scrive lei e cosa preferisce, preso da quello che sai di lei: il tono, la ' +
+    'lingua, la lunghezza, le formule che usa e quelle che non usa;\n' +
+    '— cosa deve uscire e in che forma: un\'email con l\'oggetto, una tabella, tre opzioni, ' +
+    'un file;\n' +
+    '— cosa non fare: inventare cifre, aggiungere cappelli, cambiare destinatario.\n' +
+    'Se è lavoro dentro un progetto di codice, scrivilo per Claude Code: la cartella, i ' +
+    'file da cui partire, cosa non toccare.\n\n' +
+    'Testo semplice, da incollare com\'è: niente titoli, al massimo un\'etichetta di una ' +
+    'riga («Contesto:», «Formato:») davanti a un blocco. NIENTE numeri fra parentesi ' +
+    'quadre dentro il prompt: chi lo legge non ha i tuoi documenti e un [2] in mezzo a una ' +
+    'frase è un pezzo di codice avanzato. Le fonti stanno in fondo al prompt, in un blocco ' +
+    'che comincia con «Fonti:» e ha una riga per documento — il numero fra parentesi ' +
+    'quadre, il titolo, e cosa ne hai preso — così chi lo incolla sa da dove viene ogni ' +
+    'cifra, e chi rilegge qui può controllarti.\n\n' +
+    'La riga per lei — un dubbio, una scelta che hai fatto, cosa manca — resta dov\'è ' +
+    'sempre: una riga sola in fondo, dopo una riga vuota, fuori dal prompt.'
 }
 
 /**
@@ -1243,8 +1284,12 @@ function dentroIlRecinto(fonti: string[]): string {
   return fonti.length ? `fra ${fonti.join(', ')}` : 'da nessuna parte'
 }
 
-/** Quanti giri di ricerca concede ciascun modo. «Tutto» vuol dire anche cercare di più. */
-const GIRI = { bozza: 4, tutto: 7 } as const
+/**
+ * Quanti giri di ricerca concede ciascun modo. «Tutto» vuol dire anche cercare
+ * di più, e un prompt cerca quanto «tutto»: il materiale che non trova qui non
+ * arriverà mai a chi lo legge.
+ */
+const GIRI = { bozza: 4, tutto: 7, prompt: 7 } as const
 
 /**
  * Un passo del lavoro, detto a chi guarda.

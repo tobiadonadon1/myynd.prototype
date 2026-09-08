@@ -102,6 +102,41 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
   mio.smetti(); altro.smetti()
 })
 
+test('una riga in modo prompt arriva a «pronto» senza che nessuno prepari una email', async () => {
+  // il prompt parla di una email, con tanto di saluto: è esattamente il testo
+  // su cui `sembraUnMessaggio` direbbe di sì
+  const prompt = 'Scrivi un\'email a Rossi.\n\nComincia con «Gentile Rossi» e chiudi con «Cordiali saluti».\n\nFonti:\n— [1] Listino 2026: il prezzo\n\nManca il preventivo di marzo.'
+  let preparate = 0
+  compiti.perProva({
+    svolgi: async (_c, _n, modo) => {
+      assert.equal(modo, 'prompt', 'il modo non è arrivato a chi scrive')
+      return { testo: prompt, fonti: [{ id: 'desktop:listino', label: '[1] Listino 2026' }] }
+    },
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async () => { preparate++; return { a: 'rossi@esempio.it', oggetto: 'Preventivo', corpo: prompt } }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'prompt')
+  const pronto = await o.aspetta('pronto')
+
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, prompt)
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.equal(c.modo, 'prompt')
+  assert.equal(c.email, null, 'sotto un prompt è comparsa una email da mandare')
+  assert.equal(preparate, 0, 'un prompt non è una email: prepararla è una chiamata buttata')
+
+  // «Rifallo», e la risposta a una domanda: si riaffida con il modo della riga,
+  // che resta prompt — è la stessa cosa che fa la rotta `/rispondi`
+  compiti.affida(id, c.modo)
+  assert.equal(store.compito(id)!.modo, 'prompt')
+  await o.aspetta('pronto')
+  o.smetti()
+})
+
 test('i passi arrivano strutturati, non come frasi', async () => {
   const passi: Passo[] = [
     { passo: 'cerco', dettaglio: 'listino 2026' },

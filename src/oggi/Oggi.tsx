@@ -7,6 +7,11 @@
 //
 // Poche parole, di proposito. Una lista di cose da fare che ti spiega sé stessa
 // è una lista che non stai leggendo.
+//
+// C'è un quarto modo, e non è una colonna: «preparami il prompt» — la riga
+// diventa la richiesta da incollare in Claude o ChatGPT, con dentro il suo
+// materiale. Sta sotto i tre puntini della riga, perché è una cosa che si
+// chiede ogni tanto, non una che si guarda a colpo d'occhio.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
@@ -15,7 +20,8 @@ import { IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Testo } from '../Testo'
 import { SECCHI, type Lista, type Secchio } from './useCompiti'
-import { Barra } from './Barra'
+import { Barra, type Modo } from './Barra'
+import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
@@ -202,6 +208,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
   const delegato = c.stato === 'delegato'
   const aspetta = pronto || chiede
   const col = tinta(c)
+  /** Ha chiesto il prompt, non la cosa: nessuna delle tre caselle è sua, e la riga lo dice a parole. */
+  const prompt = c.modo === 'prompt'
+  const [menu, setMenu] = useState(false)
 
   return (
     <li
@@ -295,11 +304,74 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
             {/* «pronta» su una riga che in realtà ti sta chiedendo una cosa era
                 la bugia più grossa dell'app: leggevi «fatto» dove c'era scritto
                 «non posso». Adesso le due cose hanno due nomi. */}
-            {chiede ? t('ti chiede') : t('pronta')}
+            {chiede ? t('ti chiede') : prompt ? t('prompt') : t('pronta')}
             <span aria-hidden="true" style={{ display: 'flex', transform: aperto ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
               <IconGiu size={10} stroke="currentColor" />
             </span>
           </Hov>
+        )}
+
+        {/* mentre scrive il prompt nessuna casella si accende — non è nessuna
+            delle tre — e senza questa parola la riga sembrerebbe ferma */}
+        {delegato && prompt && (
+          <span style={{
+            flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 12, color: 'rgba(34,39,31,.5)'
+          }}>
+            <Glifo tipo="penso" dim={14} colore="#C4623B" />
+            {t('prompt')}
+          </span>
+        )}
+
+        {/*
+          I tre puntini: quello che si chiede ogni tanto.
+
+          Una cosa sola, per ora — «preparami il prompt» — e sta qui e non in
+          una quarta colonna perché le colonne dicono di chi è la riga a colpo
+          d'occhio, e un prompt non è di nessuno dei due: è una richiesta da
+          portare altrove. Solo sulle righe ancora tue: sotto una bozza pronta
+          c'è già «Rifallo».
+        */}
+        {!delegato && !aspetta && (
+          <span style={{ position: 'relative', flex: 'none', display: 'flex' }}>
+            <Hov as="button" type="button"
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); setMenu(m => !m) }}
+              onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }}
+              aria-label={t('Altro')} title={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
+              style={{
+                width: 20, height: 20, display: 'grid', placeItems: 'center', border: 'none',
+                background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 15, lineHeight: 1, color: menu ? '#8E3F1F' : 'rgba(34,39,31,.35)',
+                opacity: mostra || menu ? 1 : 0, pointerEvents: mostra || menu ? 'auto' : 'none',
+                transition: 'opacity .15s, color .15s'
+              }}
+              hover={{ color: '#8E3F1F' }}>⋯</Hov>
+            {menu && (
+              <div role="menu" style={{
+                position: 'absolute', right: 0, top: 24, zIndex: 5, minWidth: 200,
+                padding: 5, borderRadius: 11, background: '#FFFDF9',
+                border: '1px solid rgba(34,39,31,.14)', boxShadow: '0 12px 28px -12px rgba(84,64,44,.4)',
+                animation: 'fadein .12s ease'
+              }}>
+                <Hov as="button" type="button" role="menuitem" autoFocus
+                  onClick={() => { setMenu(false); l.delega(c.id, 'prompt') }}
+                  // il fuoco resta sulla voce mentre la si preme: Safari non
+                  // lo dà ai bottoni, e il blur chiuderebbe il menù prima del clic
+                  onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                  onBlur={() => setMenu(false)}
+                  onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(false) } }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
+                    padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                    color: '#22271F', fontSize: '13px'
+                  }}
+                  hover={{ background: 'rgba(34,39,31,.06)' }}>
+                  <div>{t('Preparami il prompt')}</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Da incollare in Claude o ChatGPT')}</div>
+                </Hov>
+              </div>
+            )}
+          </span>
         )}
 
         {/* toglierla chiede una volta, sul posto: la stessa regola di ogni cestino qui dentro */}
@@ -528,6 +600,13 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
   const [testo, setTesto] = useState(c.risultato ?? '')
   const [modifico, setModifico] = useState(false)
   /**
+   * Un prompt non si manda e non si salva: si copia. Il testo è quello che
+   * finirà negli appunti — testo semplice, senza le fonti trasformate in
+   * chip — e la riga per lei sta sotto, smorzata, fuori da quello che si copia.
+   */
+  const prompt = c.modo === 'prompt'
+  const spezzato = prompt ? spezzaPrompt(testo) : null
+  /**
    * Quale dei tre pannelli sotto è aperto: mandare, salvare, far lavorare.
    * Uno alla volta, e lo sa la bozza: finché uno è aperto il bottone pieno è
    * il suo, e «Va bene» si fa di contorno — un solo gesto principale per volta.
@@ -572,12 +651,22 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             if (e.key === 'Escape') { e.stopPropagation(); setTesto(c.risultato ?? ''); setModifico(false) }
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), testo)
           }}
-          aria-label={t('La bozza')}
+          aria-label={prompt ? t('Il prompt') : t('La bozza')}
           style={{
             width: '100%', boxSizing: 'border-box', border: 'none', background: 'none', outline: 'none',
             resize: 'none', color: '#22271F', fontSize: '14px', lineHeight: 1.6,
             fontFamily: 'inherit', maxHeight: 400, overflowY: 'auto'
           }} />
+      ) : spezzato ? (
+        <div style={{
+          fontSize: '14px', lineHeight: 1.6, color: '#22271F', whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere', maxHeight: 340, overflowY: 'auto'
+        }}>
+          {spezzato.prompt}
+          {spezzato.nota && (
+            <div style={{ marginTop: 12, fontSize: '12.5px', color: 'rgba(34,39,31,.55)' }}>{spezzato.nota}</div>
+          )}
+        </div>
       ) : (
         <div style={{
           fontSize: '14px', lineHeight: 1.6, color: '#22271F', whiteSpace: 'pre-wrap',
@@ -587,10 +676,16 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
+        {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}
+        {spezzato && (
+          <Hov as="button" type="button" onClick={() => l.copia(spezzato.prompt)}
+            style={pannello ? CONTORNO : PIENO}
+            hover={pannello ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Copia il prompt')}</Hov>
+        )}
         <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
-          style={pannello ? CONTORNO : PIENO}
-          hover={pannello ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
+          style={pannello || spezzato ? CONTORNO : PIENO}
+          hover={pannello || spezzato ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
 
         <Hov as="button" type="button" onClick={() => setModifico(m => !m)}
           style={{
@@ -610,9 +705,12 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           hover={{ color: '#22271F' }}>{t('Rifallo')}</Hov>
       </div>
 
-      <Manda c={c} l={l} aperto={pannello === 'manda'} apri={() => setPannello('manda')} chiudi={() => setPannello('')} />
-      <Salva c={c} l={l} testo={testo} aperto={pannello === 'salva'} apri={() => setPannello('salva')} chiudi={() => setPannello('')} />
-      <Lavora c={c} l={l} aperto={pannello === 'lavora'} apri={() => setPannello('lavora')} chiudi={() => setPannello('')} />
+      {/* un prompt non ha un destinatario né un file da diventare: va negli
+          appunti, o dritto a Claude Code se c'è un progetto in cui lavorare */}
+      {!spezzato && <Manda c={c} l={l} aperto={pannello === 'manda'} apri={() => setPannello('manda')} chiudi={() => setPannello('')} />}
+      {!spezzato && <Salva c={c} l={l} testo={testo} aperto={pannello === 'salva'} apri={() => setPannello('salva')} chiudi={() => setPannello('')} />}
+      <Lavora c={c} l={l} richiesta={spezzato?.prompt}
+        aperto={pannello === 'lavora'} apri={() => setPannello('lavora')} chiudi={() => setPannello('')} />
     </div>
   )
 }
@@ -628,7 +726,11 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
  * decorativa: fra i due passi ci va una persona che ha letto, ed è l'unica cosa
  * che rende accettabile lasciare un agente dentro una cartella di lavoro.
  */
-function Lavora({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
+function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
+  c: Compito; l: Lista
+  /** Un testo già scritto per lui — il prompt della riga — al posto del titolo. */
+  richiesta?: string
+} & Pannello) {
   const [pronto, setPronto] = useState<{ pronto: boolean; cartelle: string[] } | null>(null)
   const [cartella, setCartella] = useState('')
   const [gira, setGira] = useState<'' | 'piano' | 'fai'>('')
@@ -636,15 +738,24 @@ function Lavora({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Panne
   // vero dopo il primo passo: è quello che sblocca «fallo davvero»
   const [pianoFatto, setPianoFatto] = useState(false)
 
+  // Di solito si chiede solo aprendo il pannello. Con un prompt si chiede
+  // subito: «Apri in Claude Code…» sotto un prompt va offerto solo a chi può
+  // premerlo davvero — una cartella collegata e Claude Code installato — e
+  // per saperlo prima di mostrarlo bisogna chiederlo prima.
   useEffect(() => {
-    if (!aperto || pronto) return
+    if ((!aperto && !richiesta) || pronto) return
     api.lavoroPronto().then(setPronto).catch(() => setPronto({ pronto: false, cartelle: [] }))
-  }, [aperto, pronto])
+  }, [aperto, pronto, richiesta])
 
   const vai = async (passo: 'piano' | 'fai') => {
     setGira(passo); setGuaio('')
     try {
-      const r = await l.lavora(c.id, { cartella: cartella || pronto?.cartelle[0] || '', passo })
+      // il prompt va con il primo passo; al secondo vale il piano approvato,
+      // che il server ha già sotto mano
+      const r = await l.lavora(c.id, {
+        cartella: cartella || pronto?.cartelle[0] || '', passo,
+        ...(passo === 'piano' && richiesta?.trim() ? { richiesta } : {})
+      })
       if (passo === 'piano') setPianoFatto(true)
       if (!r.finito) setGuaio('Si è fermato dopo il tempo massimo: quello che ha fatto è qui sopra.')
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
@@ -658,6 +769,8 @@ function Lavora({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Panne
   }
 
   if (!aperto) {
+    // sotto un prompt il verso compare solo se c'è dove andare
+    if (richiesta && !(pronto?.pronto && pronto.cartelle.length)) return null
     return (
       <div style={{ marginTop: 4 }}>
         <Hov as="button" type="button" onClick={apri}
@@ -665,7 +778,7 @@ function Lavora({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Panne
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
           }}
-          hover={{ color: '#C4623B' }}>{t('Falla fare a Claude Code…')}</Hov>
+          hover={{ color: '#C4623B' }}>{richiesta ? t('Apri in Claude Code…') : t('Falla fare a Claude Code…')}</Hov>
       </div>
     )
   }
@@ -1280,15 +1393,15 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
     const data = senzaData ? null : giorno
     return { data, secchio: secchioDelGiorno(data) }
   }
-  const aggiungi = async (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito = false) => {
+  const aggiungi = async (testo: string, quando: Secchio, modo: Modo | null, esplicito = false) => {
     const { data, secchio } = destinazione(quando, esplicito)
     const id = await l.aggiungi(testo, secchio, data)
-    // «/bozza» e «/tutto» scrivono e affidano nello stesso gesto
+    // «/bozza», «/myynd» e «/prompt» scrivono e affidano nello stesso gesto
     if (id && modo) l.delega(id, modo)
   }
 
   /** Una lista incollata: una riga per cosa, e il comando scelto vale per tutte. */
-  const aggiungiRighe = async (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito = false) => {
+  const aggiungiRighe = async (righe: string[], quando: Secchio, modo: Modo | null, esplicito = false) => {
     const { data, secchio } = destinazione(quando, esplicito)
     const ids = await l.aggiungiTante(righe, secchio, data)
     if (modo) for (const id of ids) l.delega(id, modo)

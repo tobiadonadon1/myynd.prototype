@@ -14,6 +14,9 @@ import type { Secchio } from './useCompiti'
 import { righeDaTesto } from './righe'
 import { dataLocale } from './giorni'
 
+/** Cosa gli si affida scrivendo la riga: la bozza, tutto, o il prompt per farla fare altrove. */
+export type Modo = 'bozza' | 'tutto' | 'prompt'
+
 export type Comando = {
   /** Quello che si scrive. Due, perché un menù in inglese che vuole «/oggi» non è in inglese. */
   it: string
@@ -21,7 +24,7 @@ export type Comando = {
   nome: string
   nota: string
   quando?: Secchio
-  modo?: 'bozza' | 'tutto'
+  modo?: Modo
   fai?: 'fatte'
 }
 
@@ -31,6 +34,9 @@ export const COMANDI: Comando[] = [
   { it: 'poi',       en: 'later', nome: 'Prima o poi',      nota: 'Quando capita',             quando: 'poi' },
   { it: 'bozza',     en: 'draft', nome: 'Chiedi la bozza',  nota: 'La scrive lui, la mandi tu', modo: 'bozza' },
   { it: 'myynd',     en: 'myynd', nome: 'Falla fare a lui', nota: 'Fino all\'ultimo passo',    modo: 'tutto' },
+  // la riga diventa una richiesta da incollare altrove: è quello che suo padre
+  // avrebbe fatto a mano con tutte le note del to-do, se fosse servito
+  { it: 'prompt',    en: 'prompt', nome: 'Preparami il prompt', nota: 'Da incollare in Claude o ChatGPT', modo: 'prompt' },
   { it: 'fatte',     en: 'done',  nome: 'Le fatte',         nota: 'Mostra o nascondi',          fai: 'fatte' }
 ]
 
@@ -40,16 +46,16 @@ const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
 export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: linguaPagina }: {
-  aggiungi: (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito?: boolean) => void
+  aggiungi: (testo: string, quando: Secchio, modo: Modo | null, esplicito?: boolean) => void
   /** Più righe in un colpo: una lista incollata. Una per cosa, nell'ordine in cui stanno. */
-  aggiungiRighe: (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito?: boolean) => void
+  aggiungiRighe: (righe: string[], quando: Secchio, modo: Modo | null, esplicito?: boolean) => void
   mostraFatte: () => void
   giorno?: string
   lingua?: string
 }) {
   const [testo, setTesto] = useState('')
   const [dove, setDove] = useState<Secchio>('oggi')
-  const [modo, setModo] = useState<'bozza' | 'tutto' | null>(null)
+  const [modo, setModo] = useState<Modo | null>(null)
   const [fuoco, setFuoco] = useState(false)
   const [scelto, setScelto] = useState(0)
   // acceso appena scegli dal menù: serve a far comparire la targhetta anche
@@ -167,7 +173,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
         )}
         {modo && (
           <span style={{ ...etichetta, background: 'rgba(196,98,59,.12)', color: '#8E3F1F' }}>
-            {modo === 'bozza' ? t('bozza') : t('Myynd')}
+            {modo === 'bozza' ? t('bozza') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
 

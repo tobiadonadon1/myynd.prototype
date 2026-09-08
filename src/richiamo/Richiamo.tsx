@@ -15,7 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { api, alloScadere, sessione } from '../api'
 import { desktop, type Dove } from '../desktop'
 import { frasi, lingua, t } from '../lingua'
-import { COMANDI, type Comando } from '../oggi/Barra'
+import { COMANDI, type Comando, type Modo } from '../oggi/Barra'
 import { righeDaTesto } from '../oggi/righe'
 import { nuovoId, type Secchio } from '../oggi/useCompiti'
 import { Hov } from '../ui'
@@ -45,7 +45,7 @@ export function Richiamo() {
 
   const [testo, setTesto] = useState('')
   const [dove, setDove] = useState<Secchio>('oggi')
-  const [modo, setModo] = useState<'bozza' | 'tutto' | null>(null)
+  const [modo, setModo] = useState<Modo | null>(null)
   const [scelto, setScelto] = useState(0)
   const [vistaScelta, setVistaScelta] = useState(false)
   const [conferma, setConferma] = useState('')
@@ -256,7 +256,7 @@ export function Richiamo() {
         )}
         {modo && (
           <span style={{ ...etichetta, background: 'rgba(196,98,59,.12)', color: '#8E3F1F' }}>
-            {modo === 'bozza' ? t('bozza') : t('Myynd')}
+            {modo === 'bozza' ? t('bozza') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
         {!testo && (

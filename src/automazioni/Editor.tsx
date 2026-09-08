@@ -565,10 +565,11 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               <Campo etichetta={t('E poi')}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <select value={modo} aria-label={t('Cosa ne fa')}
-                    onChange={e => setModo(e.target.value as 'io' | 'bozza')}
+                    onChange={e => setModo(e.target.value as 'io' | 'bozza' | 'prompt')}
                     style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
                     <option value="io">{t('mette solo una riga')}</option>
                     <option value="bozza">{t('prepara anche la bozza')}</option>
+                    <option value="prompt">{t('prepara il prompt')}</option>
                   </select>
                   <select value={inLista} aria-label={t('Dove la mette')}
                     onChange={e => setInLista(e.target.value as 'oggi' | 'settimana' | 'poi')}

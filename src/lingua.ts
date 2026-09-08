@@ -1755,6 +1755,16 @@ const EN: Record<string, string> = {
   'apri': 'open',
   'Il punto di oggi.': 'Today’s briefing.',
   'Niente di nuovo.': 'Nothing new.',
+  // — il prompt: la riga diventa una richiesta da incollare in un altro assistente —
+  'Preparami il prompt': 'Write me the prompt',
+  'Da incollare in Claude o ChatGPT': 'To paste into Claude or ChatGPT',
+  'prompt': 'prompt',
+  'Il prompt': 'The prompt',
+  'Copia il prompt': 'Copy the prompt',
+  'Copiato.': 'Copied.',
+  'Non sono riuscito a copiarlo.': 'I could not copy it.',
+  'Apri in Claude Code…': 'Open in Claude Code…',
+  'prepara il prompt': 'writes the prompt',
 }
 
 

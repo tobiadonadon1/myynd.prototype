@@ -32,7 +32,9 @@ const ITALIANE = new RegExp(
  */
 const UGUALI_APPOSTA = new Set([
   'Myynd', 'Chat', 'Desktop', 'Email', 'Password', 'Notion', 'Slack', 'Dropbox',
-  'WhatsApp Business', 'Google Drive', 'Word, Pages', 'Claude', 'Claude Code'
+  'WhatsApp Business', 'Google Drive', 'Word, Pages', 'Claude', 'Claude Code',
+  // «prompt» si dice così anche in italiano: è la parola con cui lo chiede lui
+  'prompt'
 ])
 
 const sorgente = readFileSync(new URL('./lingua.ts', import.meta.url), 'utf8')

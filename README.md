@@ -117,7 +117,7 @@ Al risveglio dal sonno il guscio manda al server `{ tipo: 'sveglia' }` su
 non porta più su la finestra intera: apre una barra sola, senza cornice,
 sopra a tutto, sullo schermo dove sta il cursore. Ci si scrive una cosa da
 fare e Invio la segna in lista — con gli stessi «/» della barra grande:
-`/oggi`, `/settimana`, `/poi`, `/bozza`, `/myynd` — oppure una domanda, se
+`/oggi`, `/settimana`, `/poi`, `/bozza`, `/myynd`, `/prompt` — oppure una domanda, se
 comincia con `?` o si preme ⌘Invio, e la risposta cresce lì sotto, con un
 «Continua nell'app» che apre quella chat nella finestra. Incollare un elenco
 segna una riga per riga (`src/oggi/righe.ts` toglie trattini, numeri e
@@ -136,6 +136,23 @@ dice via `window.myynd.richiamo.misura`. Gli avvisi di sistema per una bozza
 pronta o una domanda sono spenti finché non li si accende nelle preferenze
 («Avvisami quando una bozza è pronta»), e arrivano solo se la finestra non è
 davanti.
+
+**Il prompt.** Una riga della lista ha tre colonne — la faccio io, me ne fa
+una bozza, se ne occupa lui — e un quarto modo che non è una colonna: sotto i
+tre puntini della riga, «Preparami il prompt» (`/prompt` nella barra e nel
+richiamo, `metti.modo: prompt` in una ricetta). Myynd non consegna la cosa
+fatta ma la richiesta con cui farla fare a un altro assistente — Claude,
+ChatGPT o Claude Code — cercando prima nel materiale come in «tutto» e
+scrivendo poi per un lettore che quel materiale non ce l'ha: l'obiettivo in
+una riga, il contesto con i passi citati fra virgolette, la sua voce, la forma
+attesa, cosa non fare, e in fondo un blocco «Fonti:» al posto dei `[n]`. La
+riga per lei resta sotto, fuori dal prompt. Il pannello ha un gesto solo,
+«Copia il prompt» — negli appunti via `navigator.clipboard`, con la casella
+nascosta e `execCommand('copy')` di riserva — e, se c'è una cartella collegata
+con Claude Code installato, «Apri in Claude Code…», che passa il prompt come
+richiesta del passo «piano». Un prompt non è una email: la posta non si
+prepara mai sotto una riga in questo modo, anche se dentro c'è scritto «Gentile
+Rossi».
 
 Si impacchetta con `npm run pacchetto` (Mac e Windows), `pacchetto:mac` o
 `pacchetto:win`; gli artefatti finiscono in `dist-app/`. La configurazione è
