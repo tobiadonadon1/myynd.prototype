@@ -23,6 +23,7 @@
 // che hai scritto tu senza che tu l'abbia chiesto non è un aiuto.
 
 import { useEffect, useRef, useState } from 'react'
+import { Flusso } from './Flusso'
 import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta } from '../api'
 import { frasi, loc, t } from '../lingua'
 import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
@@ -35,7 +36,7 @@ const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 've
 
 const PIENO: React.CSSProperties = {
   padding: '10px 19px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+  background: '#8E3F1F', color: '#FFF7F0',
   fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }
 
@@ -68,7 +69,7 @@ function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' 
       display: 'inline-flex', gap: 2, padding: 3, borderRadius: 99, flex: 'none',
       background: 'rgba(34,39,31,.055)'
     }}>
-      {([['parole', 'A parole'], ['campi', 'I campi']] as const).map(([id, testo]) => (
+      {([['parole', 'A parole'], ['campi', 'Flusso']] as const).map(([id, testo]) => (
         <button key={id} type="button" role="tab" aria-selected={dove === id} onClick={() => vai(id)}
           style={{
             padding: '5px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12px',
@@ -212,6 +213,11 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 }) {
   const [dove, setDove] = useState<'parole' | 'campi'>('campi')
 
+  const [confermaChiusura, setConfermaChiusura] = useState(false)
+  const chiediChiusura = () => { if (modificata) setConfermaChiusura(true); else chiudi() }
+  const [avanzati, setAvanzati] = useState(false)
+  const [passi, setPassi] = useState(a.passi ?? [])
+  const campiRef = useRef<HTMLDivElement>(null)
   const [nome, setNome] = useState(a.nome)
   const [spiega, setSpiega] = useState(a.spiega)
   const [fai, setFai] = useState(a.fai)
@@ -240,7 +246,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [guaio, setGuaio] = useState('')
   // il fuoco entra con la finestra, Esc la chiude, e alla chiusura torna alla scheda
   const finestra = useRef<HTMLDivElement>(null)
-  useFocoDialogo(finestra, chiudi)
+  useFocoDialogo(finestra, chiediChiusura)
 
   const ogni = 'quandoArriva' in quando ? 'arrivo' : quando.ogni
   const ora = 'quandoArriva' in quando ? 8 : quando.ora
@@ -251,30 +257,35 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     cambiata(tutte)
     const n = tutte.find(x => x.id === a.id)
     if (!n) return
-    setNome(n.nome); setSpiega(n.spiega); setFai(n.fai)
+    setPassi(n.passi ?? []); setNome(n.nome); setSpiega(n.spiega); setFai(n.fai)
     setCerca(n.guarda.cerca ?? ''); setQuando(n.quando)
     setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
     setSuoi(n.attrezzi); setCartella(n.cartella ?? '')
     setProvata(x => x + 1)
   }
 
-  const salva = async () => {
+  const patch = { nome, spiega, fai, cerca, quando,
+    metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) },
+    attrezzi: suoi, cartella: vuoleCartella ? cartella : '', passi }
+  const modificata = JSON.stringify(patch) !== JSON.stringify({
+    nome: a.nome, spiega: a.spiega, fai: a.fai, cerca: a.guarda.cerca ?? '', quando: a.quando,
+    metti: { inLista: a.metti.inLista, modo: a.metti.modo ?? 'io', ...(a.metti.perDocumento ? { perDocumento: true } : {}) },
+    attrezzi: a.attrezzi, cartella: a.attrezzi.includes('claude.lavora') ? a.cartella ?? '' : '', passi: a.passi ?? []
+  })
+  const salva = async (): Promise<boolean> => {
     setSalvo(true); setGuaio(''); setDetto('')
     try {
-      const r = await api.cambiaAutomazione(a.id, {
-        nome, spiega, fai, cerca, quando,
-        // il campo entra solo se acceso: spento, nel file non deve restare scritto
-        metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) },
-        attrezzi: suoi, cartella: vuoleCartella ? cartella : ''
-      })
+      const r = await api.cambiaAutomazione(a.id, patch)
       cambiata(r.automazioni)
       setProvata(n => n + 1)
       setDetto(t('Salvata.'))
-    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    setSalvo(false)
+      return true
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)); return false }
+    finally { setSalvo(false) }
   }
 
   const ottimizza = async () => {
+    if (modificata && !await salva()) return
     setPenso('ottimizzo'); setGuaio(''); setDetto('')
     try {
       riprendi((await api.ottimizzaAutomazione(a.id)).automazioni)
@@ -284,7 +295,8 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   }
 
   const riscrivi = async () => {
-    if (richiesta.trim().length < 3) return
+    if (occupato || richiesta.trim().length < 3) return
+    if (modificata && !await salva()) return
     setPenso('riscrivo'); setGuaio(''); setDetto('')
     try {
       riprendi((await api.riscriviAutomazione(a.id, richiesta)).automazioni)
@@ -296,7 +308,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   }
 
   const adesso = async () => {
+    if (salvo || gira || penso) return
     setGira(true); setDetto(''); setGuaio('')
+    if (modificata && !await salva()) { setGira(false); return }
     try {
       const r = await api.automazioneAdesso(a.id)
       cambiata(r.automazioni)
@@ -315,19 +329,27 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   }
 
   const attaccati = suoi.map(n => catalogo.find(x => x.nome === n)).filter((x): x is Attrezzo => !!x)
-  const occupato = !!penso
+  const occupato = !!penso || salvo || gira
 
   return (
     <>
-      <div onClick={chiudi} style={{
+      <div onClick={chiediChiusura} style={{
         position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
 
-      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="editor-titolo" style={{
+      <div ref={finestra} className="auto-editor" role="dialog" aria-modal="true" aria-labelledby="editor-titolo"
+        onKeyDown={e => {
+          if (e.key !== 'Tab') return
+          const nodes = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex="0"]'))
+            .filter(el => el.getClientRects().length > 0 && !el.closest('[inert]'))
+          const first = nodes[0], last = nodes[nodes.length - 1]
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus() }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+        }} style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%',
         transform: 'translate(-50%,-50%)',
-        width: 600, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100vh - 64px)',
+        width: 720, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 64px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
         background: 'linear-gradient(180deg,rgba(255,253,249,.97),rgba(255,251,245,.95))',
         backdropFilter: 'blur(40px) saturate(1.6)', WebkitBackdropFilter: 'blur(40px) saturate(1.6)',
@@ -336,14 +358,15 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
         animation: 'editoresu .3s cubic-bezier(.2,.8,.25,1) both'
       }}>
 
+        {confermaChiusura && <div className="auto-error" role="alert" style={{ margin: 12 }}><p>{t('Hai modifiche non salvate.')}</p><button className="auto-button" onClick={() => setConfermaChiusura(false)}>{t('Continua a modificare')}</button> <button className="auto-button" onClick={chiudi}>{t('Scarta e chiudi')}</button></div>}
         {/* la testa: chi è, e i due bottoni che valgono per tutta la scheda */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '16px 15px 15px 19px',
-          borderBottom: '1px solid rgba(34,39,31,.08)'
+          display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '21px 24px 19px',
+          borderBottom: '1px solid rgba(34,39,31,.08)', background: 'rgba(126,156,130,.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div id="editor-titolo" style={{
-              fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em',
+              fontSize: '19px', fontWeight: 450, color: '#22271F', letterSpacing: '-.02em',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>{nome || a.nome}</div>
             <div style={{
@@ -361,11 +384,11 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             salvataggio: è una cosa che riguarda tutta la scheda, e va dove si
             guarda per prima quando ci si accorge che una non funziona.
           */}
-          <Hov as="button" onClick={ottimizza} disabled={occupato}
+          <Hov as="button" onClick={ottimizza} disabled={occupato} aria-label={t('Ottimizza')}
             title={t('Falla guardare a Claude e falla scrivere meglio')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none',
-              padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12px',
+              padding: '9px', borderRadius: 11, fontFamily: 'inherit', fontSize: '12px',
               fontWeight: 500, cursor: occupato ? 'default' : 'pointer',
               border: '1px solid rgba(196,98,59,.32)', background: 'rgba(196,98,59,.1)',
               color: '#8E3F1F', opacity: occupato ? 0.6 : 1
@@ -374,10 +397,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             {penso === 'ottimizzo'
               ? <Glifo tipo="penso" dim={11} colore="#8E3F1F" />
               : <IconGiro size={12} />}
-            {penso === 'ottimizzo' ? t('Guardo…') : t('Ottimizza')}
           </Hov>
 
-          <Hov as="button" onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')}
+          <Hov as="button" onClick={chiediChiusura} title={t('Chiudi')} aria-label={t('Chiudi')}
             style={{
               display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0,
               borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)',
@@ -386,18 +408,18 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             hover={{ background: 'rgba(34,39,31,.13)', color: '#22271F' }}><IconCroce size={12} /></Hov>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '15px 18px 18px' }}>
+        <div className="auto-editor-body" inert={occupato} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, flexWrap: 'wrap' }}>
             <Linguette dove={dove} vai={setDove} />
             <div style={{ flex: 1 }} />
             {/* la cartella in cui sta: un menù, perché trascinare dentro un
                 pannello aperto non si può */}
-            <select value={a.raccolta ?? ''} aria-label={t('In che cartella')}
+            {!!raccolte.length && <select value={a.raccolta ?? ''} aria-label={t('In che cartella')}
               onChange={e => spostata(a.id, e.target.value || null)}
               style={{ ...RIGO, width: 'auto', cursor: 'pointer', fontSize: '12px', padding: '6px 9px' }}>
               <option value="">{t('in nessuna cartella')}</option>
               {raccolte.map(r => <option key={r.nome} value={r.nome}>{r.nome}</option>)}
-            </select>
+            </select>}
           </div>
 
           {dove === 'parole' ? (
@@ -424,12 +446,16 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             </div>
           ) : (
             <div>
+              <Flusso a={{ ...a, nome, fai, quando, attrezzi: suoi, guarda: { ...a.guarda, cerca }, metti: { inLista, modo, perDocumento } }} catalogo={catalogo} passi={passi} cambia={setPassi}
+                dettagli={() => { setAvanzati(true); requestAnimationFrame(() => campiRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }} />
+              <button className="auto-button" aria-expanded={avanzati} onClick={() => setAvanzati(!avanzati)}>{avanzati ? t('Nascondi dettagli') : t('Modifica dettagli')}</button>
+              <div className="auto-editor-settings" ref={campiRef} hidden={!avanzati}>
               <Campo etichetta={t('Come si chiama')}>
-                <input value={nome} onChange={e => setNome(e.target.value)} style={RIGO} />
+                <input aria-label={t('Come si chiama')} value={nome} onChange={e => setNome(e.target.value)} style={RIGO} />
               </Campo>
 
               <Campo etichetta={t('Cosa fa, in una riga')}>
-                <input value={spiega} onChange={e => setSpiega(e.target.value)} style={RIGO} />
+                <input aria-label={t('Cosa fa, in una riga')} value={spiega} onChange={e => setSpiega(e.target.value)} style={RIGO} />
               </Campo>
 
               {/*
@@ -448,6 +474,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                       <Hov key={x.nome} as="button" type="button"
                         onClick={() => setSuoi(s => on ? s.filter(y => y !== x.nome) : [...s, x.nome])}
                         title={x.spiega}
+                        aria-pressed={on}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px',
                           borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12px',
@@ -463,7 +490,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                           border: on ? 'none' : '1px solid rgba(34,39,31,.28)'
                         }} />
                         {x.etichetta}
-                        {!x.collegato && <span style={{ fontSize: '10px', opacity: 0.6 }}>·</span>}
+                        {!x.collegato && <span style={{ fontSize: '10px', color: '#8E3F1F' }}>· {t('Da collegare')}</span>}
                       </Hov>
                     )
                   })}
@@ -523,15 +550,15 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
               <Campo etichetta={t('Che parole cercare')}
                 nota={t('Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: guarda tutto.')}>
-                <input value={cerca} onChange={e => setCerca(e.target.value)} style={RIGO}
+                <input aria-label={t('Che parole cercare')} value={cerca} onChange={e => setCerca(e.target.value)} style={RIGO}
                   placeholder={t('le parole da cercare nei tuoi documenti — vuoto: guarda tutto')} />
               </Campo>
 
               {/* subito sotto le parole, perché è di quelle che è la risposta */}
-              <Anteprima id={a.id} catalogo={catalogo} chiave={provata} />
+              {modificata ? <p className="auto-muted">{t('Salva le modifiche per vedere quali documenti leggerà.')}</p> : <Anteprima id={a.id} catalogo={catalogo} chiave={provata} />}
 
               <Campo etichetta={t('Cosa deve farne')}>
-                <textarea value={fai} onChange={e => setFai(e.target.value)} rows={5}
+                <textarea aria-label={t('Cosa deve farne')} value={fai} onChange={e => setFai(e.target.value)} rows={5}
                   style={{ ...RIGO, resize: 'vertical', lineHeight: 1.55 }} />
               </Campo>
 
@@ -565,17 +592,21 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                   {t('Una riga per ogni documento')}
                 </label>
               </Campo>
+              </div>
+              <details className="auto-history"><summary>{t('Cronologia esecuzioni')}</summary>
+                {a.storia.length ? <ol>{[...a.storia].reverse().map((r, i) => <li key={i}><time>{new Date(r.quando).toLocaleString(loc())}</time><span>{r.esito === 'fatta' ? t('Risultato preparato') : r.esito === 'niente' ? t('Niente da fare') : r.esito === 'guaio' ? t('Da controllare') : t('Rimandata')} · {r.quanti} {t('documenti')}</span>{r.risultato && <details className="auto-run-result"><summary>{t('Risultato')}</summary><p>{r.risultato}</p></details>}</li>)}</ol> : <p className="auto-muted">{t('Nessuna esecuzione. Provala per vedere il primo risultato.')}</p>}
+              </details>
             </div>
           )}
         </div>
 
         <div style={{
           flex: 'none', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          padding: '13px 18px', borderTop: '1px solid rgba(34,39,31,.08)',
+          padding: '15px 24px', borderTop: '1px solid rgba(34,39,31,.08)',
           background: 'rgba(255,255,255,.4)'
         }}>
           {dove === 'campi' && (
-            <button onClick={salva} disabled={salvo || occupato} style={PIENO}>
+            <button onClick={salva} disabled={salvo || occupato || !modificata} style={{ ...PIENO, opacity: modificata ? 1 : .45 }}>
               {salvo ? t('Salvo…') : t('Salva')}
             </button>
           )}
@@ -585,10 +616,17 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             style={{ ...VUOTO, display: 'inline-flex', alignItems: 'center', gap: 7, cursor: gira ? 'default' : 'pointer' }}
             hover={gira ? {} : { borderColor: '#C4623B', color: '#8E3F1F' }}>
             {gira && <Glifo tipo="penso" dim={11} colore="#8E3F1F" />}
-            {gira ? t('Provo…') : t('Provala adesso')}
+            {gira ? t('Provo…') : modificata ? t('Salva e prova') : t('Provala adesso')}
           </Hov>
 
           <div style={{ flex: 1, minWidth: 20 }} />
+          <button className="auto-button" disabled={occupato} onClick={async () => {
+            if (modificata && !await salva()) return
+            setSalvo(true)
+            try { cambiata((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) }
+            catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+            finally { setSalvo(false) }
+          }}>{a.accesa ? t('Mettila in pausa') : t('Accendila')}</button>
 
           {/* il cestino chiede una volta: la scheda in griglia lo fa già, e due
               porte sulla stessa azione non devono avere due regole */}
@@ -612,6 +650,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             background: a.salute.stato === 'ferma' ? 'rgba(34,39,31,.035)' : 'rgba(196,98,59,.07)',
             color: a.salute.stato === 'ferma' ? 'rgba(34,39,31,.6)' : '#8E3F1F'
           }}>
+            <details style={{ width: '100%' }}><summary style={{ cursor: 'pointer', fontSize: 11.5 }}>
+              {a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('L’ultima volta è andata storta.') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}
+            </summary><div style={{ paddingTop: 9 }}>
             <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
               {a.salute.stato === 'scollegata'
                 ? t('Uno degli attrezzi che ha dichiarato non è collegato: finché resta così, non troverà mai niente.')
@@ -633,10 +674,11 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                 {t('Riscrivile le parole')}
               </Hov>
             )}
+            </div></details>
           </div>
         )}
 
-        {(detto || guaio || a.guaio || a.quante > 0) && (
+        {(detto || guaio || a.guaio) && (
           <div style={{
             flex: 'none', padding: '9px 18px 11px', fontSize: '11.5px', lineHeight: 1.55,
             borderTop: '1px solid rgba(34,39,31,.06)', background: 'rgba(255,255,255,.4)'
@@ -670,19 +712,13 @@ export function Nuova({ catalogo, chiudi, fatta }: {
   const [guaio, setGuaio] = useState('')
   // la casella ha già il fuoco con `autoFocus`; qui Esc chiude e il fuoco torna a chi ha aperto
   const finestra = useRef<HTMLDivElement>(null)
-  useFocoDialogo(finestra, chiudi)
+  useFocoDialogo(finestra, () => { if (!faccio) chiudi() })
 
   const crea = async () => {
-    if (testo.trim().length < 8) return
+    if (faccio || testo.trim().length < 8) return
     setFaccio(true); setGuaio('')
     try {
-      const r = await api.creaAutomazione(testo)
-      // gli attrezzi che ha attaccato con la chiocciola vincono su quelli che
-      // il modello ha dedotto: li ha scelti lei, guardando l'elenco
-      if (suoi.length) {
-        const s = await api.cambiaAutomazione(r.id, { attrezzi: suoi })
-        return fatta(s.automazioni, r.id)
-      }
+      const r = await api.creaAutomazione(testo, suoi.length ? suoi : undefined)
       fatta(r.automazioni, r.id)
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setFaccio(false)
@@ -693,7 +729,7 @@ export function Nuova({ catalogo, chiudi, fatta }: {
 
   return (
     <>
-      <div onClick={chiudi} style={{
+      <div onClick={() => { if (!faccio) chiudi() }} style={{
         position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
@@ -713,13 +749,13 @@ export function Nuova({ catalogo, chiudi, fatta }: {
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div id="nuova-titolo" style={{ fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>
-              {t('Scrivine una tua')}
+              {t('Crea automazione')}
             </div>
             <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>
-              {t('Dilla a parole tue, la scrivo io.')}
+              {t('Cosa vuoi delegare?')}
             </div>
           </div>
-          <Hov as="button" onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')}
+          <Hov as="button" onClick={() => { if (!faccio) chiudi() }} title={t('Chiudi')} aria-label={t('Chiudi')}
             style={{
               display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0,
               borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)',
@@ -728,7 +764,7 @@ export function Nuova({ catalogo, chiudi, fatta }: {
             hover={{ background: 'rgba(34,39,31,.13)', color: '#22271F' }}><IconCroce size={12} /></Hov>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px 18px' }}>
+        <div inert={faccio} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px 18px' }}>
           <Casella
             testo={testo} cambia={setTesto} righe={4} autoFocus
             attaccati={suoi} catalogo={catalogo}
@@ -738,18 +774,18 @@ export function Nuova({ catalogo, chiudi, fatta }: {
             segnaposto={t('Ogni lunedì dimmi quali preventivi in @ sono ancora senza risposta')} />
 
           <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(34,39,31,.52)', marginTop: 13, textWrap: 'pretty' }}>
-            {t('Scrivi @ per dirle cosa può aprire — la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.')}
+            {t('Usa @ per scegliere le fonti. Nasce in pausa.')}
           </div>
 
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 14 }}>
-            {SPUNTI.map(s => (
+            {SPUNTI.map(([label, s]) => (
               <Hov key={s} as="button" onClick={() => setTesto(t(s))}
                 style={{
                   padding: '6px 11px', borderRadius: 99, cursor: 'pointer', textAlign: 'left',
                   border: '1px dashed rgba(34,39,31,.2)', background: 'none',
                   color: 'rgba(34,39,31,.55)', fontSize: '11.5px', fontFamily: 'inherit', maxWidth: '100%'
                 }}
-                hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t(s)}</Hov>
+                hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t(label)}</Hov>
             ))}
           </div>
         </div>
@@ -777,7 +813,7 @@ export function Nuova({ catalogo, chiudi, fatta }: {
 
 /** Gli attacchi buoni: toccarne uno riempie la casella invece di guardarla vuota. */
 const SPUNTI = [
-  'Ogni lunedì mattina dimmi quali preventivi sono ancora senza risposta',
-  'Quando arriva una fattura, controlla l’importo e mettimela in lista',
-  'Ogni sera prepara la risposta a chi mi ha scritto e aspetta ancora'
+  ['Preventivi', 'Ogni lunedì mattina dimmi quali preventivi sono ancora senza risposta'],
+  ['Fatture', 'Quando arriva una fattura, controlla l’importo e mettimela in lista'],
+  ['Risposte', 'Ogni sera prepara la risposta a chi mi ha scritto e aspetta ancora']
 ]

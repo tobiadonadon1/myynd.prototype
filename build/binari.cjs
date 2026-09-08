@@ -211,6 +211,8 @@ async function afterPack(contesto) {
   // che `require('@napi-rs/canvas-…')` arriva al .node spacchettato
   const asar = require('@electron/asar')
   const dentro = new Set(asar.listPackage(join(risorse, 'app.asar'), { isPack: false }).map(p => p.replace(/\\/g, '/')))
+  const vietati = [...dentro].filter(p => /^\/(?:\.env[^/]*|dist-app|src|\.git)(?:\/|$)/.test(p) || /^\/(?:server|desktop)\/.*\.test\.ts$/.test(p))
+  if (vietati.length) throw new Error('Il pacchetto include file di sviluppo o configurazione privata: build interrotta')
   if (!dentro.has(`/node_modules/@napi-rs/${nome}/package.json`)) {
     throw new Error(`app.asar non ha node_modules/@napi-rs/${nome}/package.json: canvas non si caricherebbe`)
   }

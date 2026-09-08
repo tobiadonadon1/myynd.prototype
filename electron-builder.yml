@@ -17,11 +17,14 @@ directories:
 # elencate qui; quelle di sviluppo le toglie lui.
 files:
   - desktop/**
+  - "!desktop/**/*.test.ts"
   - server/**
   - "!server/**/*.test.ts"
   - automazioni/**
   - dist/**
   - package.json
+  - "!.env*"
+  - "!dist-app/**"
 
 # L'archivio asar tiene insieme i file, ma tre cose vogliono file veri sul
 # disco: il server, che parte per percorso come processo a parte; il

@@ -47,8 +47,10 @@ if (!firmata) mac.identity = '-'
  * che il gancio `beforePack` prepara. La cache sta nella cartella dell'utente,
  * per questo le righe si aggiungono qui e non nel YAML.
  */
-mac.files = [...(mac.files ?? []), ...binari.voci('darwin')]
-const win = { ...fissa.win, files: [...(fissa.win.files ?? []), ...binari.voci('win32')] }
+// I filtri della piattaforma sostituiscono quelli comuni: conservare la lista
+// esplicita, altrimenti builder ripiega su **/* (anche fuori da dist-app).
+mac.files = [...fissa.files, ...(mac.files ?? []), ...binari.voci('darwin')]
+const win = { ...fissa.win, files: [...fissa.files, ...(fissa.win.files ?? []), ...binari.voci('win32')] }
 
 /*
  * Gli aggiornamenti, se c'è un posto da cui scaricarli.

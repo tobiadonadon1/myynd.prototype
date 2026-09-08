@@ -640,3 +640,59 @@ test('il tetto non tocca chi scrive una riga e basta, né chi propone', async ()
   const soloRiga = { ...RICETTA, id: 'io-solo', metti: { inLista: 'oggi' as const, modo: 'io' as const } }
   assert.notEqual(await auto.fai(soloRiga), 'saltata')
 })
+
+test('workflow output reaches the task and does not mutate the saved recipe', async () => {
+  const r = auto.scrivi({ ...RICETTA, id: 'flow-output',
+    passi: [{ id: 'extract', tipo: 'trasforma', testo: 'Extract deadlines' }, { id: 'summarize', tipo: 'trasforma', testo: 'Summarize' }] })
+  store.salvaDocumenti([{ id: 'flow-doc', fonte: 'desktop', tipo: 'file', titolo: 'preventivo workflow', corpo: 'Due on Friday.', quando: new Date().toISOString() }])
+  const inputs: string[] = []
+  auto.perProva({ collegato: () => true, chiediJSON: async o => {
+    inputs.push(JSON.stringify(o.messages)); return { continua: true, testo: inputs.length === 1 ? 'extracted deadline' : 'final workflow result' }
+  } })
+  try {
+    assert.equal(await auto.fai(r, { aMano: true }), 'fatta')
+    assert.match(inputs[1], /extracted deadline/)
+    const task = store.elencoCompiti().find(c => c.origine === 'auto:flow-output')
+    assert.match(task!.nota!, /final workflow result/)
+    assert.equal(store.storiaDi(store.statoAutomazione(r.id)).at(-1)?.risultato, 'final workflow result')
+    assert.equal(r.fai, RICETTA.fai)
+    assert.equal(auto.ricette().find(x => x.id === r.id)!.fai, RICETTA.fai)
+  } finally { auto.perProva(null) }
+})
+test('workflow condition stops task creation and records a no-work result', async () => {
+  const r = auto.scrivi({ ...RICETTA, id: 'flow-stop', passi: [{ id: 'gate', tipo: 'condizione', testo: 'Is it relevant?' }] })
+  auto.perProva({ collegato: () => true, chiediJSON: async () => ({ continua: false, testo: '' }) })
+  try {
+    assert.equal(await auto.fai(r, { aMano: true }), 'niente')
+    assert.equal(store.compitoVivoDa(r.id), false)
+    assert.equal(store.statoAutomazione(r.id)?.esito, 'niente')
+  } finally { auto.perProva(null) }
+})
+test('overlapping workflow runs cannot create duplicate tasks', async () => {
+  const r = auto.scrivi({ ...RICETTA, id: 'flow-overlap', passi: [{ id: 'step', tipo: 'trasforma', testo: 'Summarize' }] })
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  auto.perProva({ collegato: () => true, chiediJSON: async () => { await gate; return { continua: true, testo: 'Done' } } })
+  try {
+    const first = auto.fai(r, { aMano: true })
+    assert.equal(await auto.fai(r, { aMano: true }), 'gia')
+    release(); assert.equal(await first, 'fatta')
+    assert.equal(store.elencoCompiti().filter(c => c.origine === 'auto:flow-overlap').length, 1)
+  } finally { release(); auto.perProva(null) }
+})
+test('per-document workflows also respect the daily step budget', async () => {
+  const r = auto.scrivi({ ...RICETTA, id: 'flow-budget', metti: { ...RICETTA.metti, perDocumento: true }, passi: [{ id: 'step', tipo: 'trasforma', testo: 'Extract' }] })
+  for (let i = 0; i < auto.BOZZE_AL_GIORNO; i++) store.segnaBozza(r.id, auto.giornoDi(new Date()))
+  let calls = 0
+  auto.perProva({ collegato: () => true, chiediJSON: async () => { calls++; return { continua: true, testo: 'Done' } } })
+  try {
+    assert.equal(await auto.fai(r), 'saltata')
+    assert.equal(calls, 0)
+  } finally { auto.perProva(null) }
+})
+test('recipe generation uses provider-compatible schemas and still enforces the six-step limit', () => {
+  const schema = auto.formaRicetta()
+  assert.equal('maxItems' in schema.properties.passi, false)
+  assert.match(schema.properties.passi.description, /six/)
+  assert.throws(() => auto.scrivi({ ...RICETTA, id: 'too-many-steps', passi: Array.from({length: 7}, (_, i) => ({ id: String(i), tipo: 'trasforma', testo: 'Summarize' })) }), /six/)
+})

@@ -2,6 +2,7 @@
 // scrivi nell'onboarding restano su questa macchina.
 
 import express from 'express'
+import { giornoValido } from './giorno-compito.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
@@ -18,6 +19,7 @@ import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
 import * as compiti from './compiti.ts'
 import * as automazioni from './automazioni.ts'
+import * as scoperte from './scoperte.ts'
 import * as ordine from './ordine.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as domande from './domande.ts'
@@ -1515,8 +1517,9 @@ async function leggiTutto(
     const giaIndicizzati = (cartella: string) => new Set(
       store.idsConPrefisso(`posta:${cartella}:`).map(id => Number(id.slice(id.lastIndexOf(':') + 1))).filter(n => n > 0)
     )
+    const daClassificare = (cartella: string) => store.uidPostaDaClassificare(cartella)
     const e = await posta.sincronizza(pst, (fatti, tot) =>
-      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi`, fatti, tot }), giaIndicizzati)
+      avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi`, fatti, tot }), giaIndicizzati, daClassificare)
     await store.salvaDocumentiAPezzi(e.docs)
     // le bandiere «letto» dei messaggi che erano già dentro: solo la colonna
     store.segnaLetti(e.letti)
@@ -1882,11 +1885,11 @@ app.post('/api/feed/:id/:stato', (req, res) => {
 // L'unica parte di Myynd che guarda fuori. Le rotte sono tre e fanno tre cose
 // sole: dammi quello che c'è, vai a vedere se c'è di nuovo, l'ho letta.
 //
-// `GET` non va mai a prendere niente: aprire la pagina non deve poter far
-// partire quindici richieste ai giornali e una al modello. Chi aggiorna è
-// l'orologio, in sottofondo, o il bottone — cioè una persona che l'ha chiesto.
+// La lettura restituisce subito la cache; un aggiornamento deduplicato e con
+// cooldown prepara in sottofondo una selezione nuova quando serve.
 
 app.get('/api/rassegna', (_req, res) => {
+  rassegna.prepara()
   const e = rassegna.elenco()
   res.json({ ...e, argomenti: rassegna.interessi(), gusto: gusto.inParole(gusto.gusto(), cfg.lingua() === 'en') })
 })
@@ -1993,6 +1996,8 @@ app.post('/api/compiti', (req, res) => {
   if (!testo) return res.status(400).json({ errore: 'Scrivi cosa c\'è da fare.' })
 
   const quando = SECCHI.includes(String(req.body?.quando)) ? String(req.body.quando) : 'oggi'
+  const giorno = req.body?.giorno ?? null
+  if (giorno !== null && !giornoValido(giorno)) return res.status(400).json({ errore: 'Data non valida.' })
   // l'id lo può portare il client: un compito dettato altrove e uno scritto qui
   // devono poter nascere con lo stesso nome senza chiedere il permesso a nessuno
   const id = String(req.body?.id ?? '').trim() || `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -2001,7 +2006,7 @@ app.post('/api/compiti', (req, res) => {
     store.scriviCompito({
     id, testo,
     nota: req.body?.nota ? String(req.body.nota) : null,
-    quando,
+    quando, giorno,
     ordine: ordine.dopo(store.ultimoOrdine(quando)),
     origine: String(req.body?.origine ?? 'mano'),
     voce: req.body?.voce ? String(req.body.voce) : null,
@@ -2028,13 +2033,17 @@ app.patch('/api/compiti/:id', (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   const b = req.body ?? {}
-  const patch: { testo?: string; nota?: string | null } = {}
+  const patch: { testo?: string; nota?: string | null; giorno?: string | null } = {}
   if (b.testo !== undefined) {
     const testo = String(b.testo).trim()
     if (!testo) return res.status(400).json({ errore: 'Un compito senza testo non è un compito.' })
     patch.testo = testo
   }
   if (b.nota !== undefined) patch.nota = b.nota === null ? null : String(b.nota)
+  if (b.giorno !== undefined) {
+    if (b.giorno !== null && !giornoValido(b.giorno)) return res.status(400).json({ errore: 'Data non valida.' })
+    patch.giorno = b.giorno
+  }
 
   let quando: string | undefined
   if (b.quando !== undefined) {
@@ -2077,6 +2086,9 @@ app.post('/api/compiti/:id/sposta', (req, res) => {
   }
   const sopra = vicino(req.body?.sopra)
   const sotto = vicino(req.body?.sotto)
+
+  // Moving between legacy lists explicitly removes the previous fixed date.
+  if (quando !== c.quando && c.giorno) store.cambiaCompito(c.id, { giorno: null })
 
   try {
     store.riordina(req.params.id, quando, ordine.fra(sopra?.ordine ?? '', sotto?.ordine ?? ''))
@@ -2500,6 +2512,20 @@ app.delete('/api/compiti/:id', (req, res) => {
 // La ricetta arriva con l'azienda: chi apre Myynd se le ritrova già lì, e
 // non deve installare niente. Quello che è suo è solo se tenerle accese.
 
+app.get('/api/automazioni/suggerimenti', (_req, res) => {
+  try { res.json({ suggerimenti: scoperte.suggerimenti() }) } catch (e) { errore(res, e) }
+})
+app.post('/api/automazioni/suggerimenti/:id', (req, res) => {
+  try {
+    const a = scoperte.adotta(req.params.id)
+    res.json({ id: a.id, automazioni: automazioni.elenco() })
+  } catch (e) { errore(res, e, 400) }
+})
+app.delete('/api/automazioni/suggerimenti/:id', (req, res) => {
+  if (scoperte.suggerimenti().some(a => a.id === req.params.id)) store.togliAutomazione(req.params.id)
+  res.json({ ok: true })
+})
+
 app.get('/api/automazioni', (_req, res) => {
   res.json({ automazioni: automazioni.elenco(), ricette: automazioni.statoRicette() })
 })
@@ -2536,7 +2562,7 @@ app.post('/api/automazioni/aggiorna', async (_req, res) => {
  */
 app.post('/api/automazioni', async (req, res) => {
   try {
-    const a = await automazioni.daUnaFrase(String(req.body?.descrizione ?? ''))
+    const a = await automazioni.daUnaFrase(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
     store.accendiAutomazione(a.id, false)
     res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
   } catch (e) { errore(res, e, 400) }
@@ -2573,7 +2599,10 @@ app.post('/api/automazioni/:id/adesso', async (req, res) => {
     // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
     const esito = await automazioni.fai(a, { aMano: true })
     res.json({ ok: true, esito, automazioni: automazioni.elenco(), compiti: store.elencoCompiti() })
-  } catch (e) { errore(res, e) }
+  } catch (e) {
+    store.automazioneGirata(a.id, 'guaio', e instanceof Error ? e.message : String(e))
+    errore(res, e)
+  }
 })
 
 /**
@@ -3222,22 +3251,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   setTimeout(imparaDaSolo, 180_000)
   setInterval(imparaDaSolo, 6 * 3600_000)
 
-  /**
-   * La rassegna, prima di tutto il resto.
-   *
-   * Dieci secondi dopo l'avvio, e non un minuto: è la prima cosa che si guarda
-   * la mattina, e deve essere già lì quando la pagina finisce di aprirsi.
-   * Costa poco — quindici richieste a dei feed pubblici — e `aggiorna()` senza
-   * `forza` non fa niente se ce n'è già una di meno di tre ore fa, quindi
-   * riaprire l'app dieci volte in una mattina non rifà dieci rassegne.
-   *
-   * Poi ogni ora: la finestra utile la decide `ORE_VALIDA`, e guardare più
-   * spesso di così serve solo a essere pronti quando quelle tre ore scadono
-   * mentre l'app è aperta.
-   */
+  // Check periodically even when the home page is closed. The per-account
+  // cache and retry cooldown prevent repeated feed/model requests.
   const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
   setTimeout(giornali, 10_000)
-  setInterval(giornali, 3600_000)
+  setInterval(giornali, 60_000)
 
   /*
    * La compattazione, una volta al giorno e per ognuno.

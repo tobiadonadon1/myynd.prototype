@@ -115,6 +115,19 @@ test('svuotare una fonte lascia le due tabelle allineate', () => {
   assert.equal(c.documenti, 1)
 })
 
+test('la posta vecchia senza classificazione torna in piccoli blocchi', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:1', { fonte: 'posta', tipo: 'email', percorso: 'INBOX', massa: undefined }),
+    doc('posta:INBOX:2', { fonte: 'posta', tipo: 'email', percorso: 'INBOX', massa: false }),
+    doc('posta:INBOX:3', { fonte: 'posta', tipo: 'email', percorso: 'INBOX', massa: undefined }),
+    doc('posta:Archivio:4', { fonte: 'posta', tipo: 'email', percorso: 'Archivio', massa: undefined })
+  ])
+  assert.deepEqual([...store.uidPostaDaClassificare('INBOX')].sort((a, b) => a - b), [1, 3])
+  assert.equal(store.uidPostaDaClassificare('Archivio', 1).size, 1)
+  assert.equal(store.uidPostaDaClassificare('INBOX', 0).size, 0)
+})
+
 /*
  * L'indice a contenuto esterno, per un giro intero.
  *

@@ -28,6 +28,7 @@ import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { affinita, gusto } from './gusto.ts'
 import * as automazioni from './automazioni.ts'
+import { parti } from './fuso.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -211,6 +212,8 @@ export function raccogli(dal: string, primo = false): Materiale {
   ].filter(Boolean)
   const azioni = store.azioni(200).filter(a => a.quando >= dal)
   const vive = store.elencoCompiti()
+  const data = parti(new Date())
+  const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
   const chiuse = store.compitiChiusi(40).filter(c => daAllora(c.chiuso, dal))
 
   // le notizie di oggi che non ha ancora aperto, dalla più vicina al suo gusto
@@ -234,7 +237,7 @@ export function raccogli(dal: string, primo = false): Materiale {
     indicizzati: arrivati.length,
     azioni,
     attendono: vive.filter(c => c.stato === 'pronto' || c.stato === 'chiede'),
-    perOggi: vive.filter(c => c.stato === 'aperto' && c.quando === 'oggi'),
+    perOggi: vive.filter(c => c.stato === 'aperto' && (c.giorno ? c.giorno <= oggi : c.quando === 'oggi')),
     chiuse,
     preparate: vive.filter(c => (c.stato === 'pronto' || c.stato === 'chiede') && daAllora(c.aggiornato, dal)),
     feed: store.elencoFeed('aperto').slice(0, 12).map(v => ({ id: v.id, titolo: v.titolo, doc: v.doc ?? null, quando: v.quando })),
@@ -426,7 +429,7 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
     .slice(0, 5)
 
   const compito = (c: store.Compito) =>
-    `— [${c.id}] ${c.testo} (${c.stato}${c.quando === 'oggi' ? ', per oggi' : ''})` +
+    `— [${c.id}] ${c.testo} (${c.stato}${c.giorno ? `, pianificato per ${c.giorno}` : c.quando === 'oggi' ? ', per oggi' : ''})` +
     (c.stato === 'pronto' && c.risultato ? `\n  bozza: ${c.risultato.slice(0, 200).replace(/\s+/g, ' ')}` : '') +
     (c.stato === 'chiede' && c.chieste?.length ? `\n  chiede: ${c.chieste.map(x => x.domanda).join(' · ')}` : '')
 

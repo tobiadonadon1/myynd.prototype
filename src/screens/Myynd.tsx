@@ -381,28 +381,16 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             color: 'rgba(34,39,31,.5)', textTransform: 'capitalize'
           }}>{v.oggi}</div>
         </div>
-        <Hov as="a" href="#" onClick={v.goConn}
-          style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#2F4A33', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
-          hover={{ background: '#FFFFFF' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
-          {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
-        </Hov>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, flexWrap: 'wrap' }}>
+          <Rassegna />
+          <Hov as="a" href="#" onClick={v.goConn}
+            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#2F4A33', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
+            hover={{ background: '#FFFFFF' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
+            {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
+          </Hov>
+        </div>
       </div>
-
-      {/*
-        Il mondo, prima del lavoro.
-
-        Sta fra la data e la card in cima, e non è un caso: sopra alla card ci
-        vuole perché la mattina è la prima cosa che si guarda, e *sotto* al
-        titolo perché non deve rubare il posto a quello che oggi ti riguarda
-        davvero. Tre righe piatte in mezzo a due superfici di vetro: si legge in
-        un minuto, e l'occhio arriva comunque alla card scura subito dopo.
-
-        Se non c'è niente da leggere non c'è neanche la fascia: una cornice
-        vuota in cima alla prima pagina tutti i giorni sarebbe la cosa peggiore
-        che potevamo aggiungere qui.
-      */}
-      <Rassegna />
 
       {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
           alla card scura perché è la risposta alla domanda con cui si torna. */}

@@ -202,3 +202,23 @@ test('i messaggi nuovi entrano con «letto» e «massa»; quelli già dentro rim
   ])
   assert.deepEqual(e.letti, [{ id: 'posta:INBOX:1', letto: true }, { id: 'posta:INBOX:2', letto: false }])
 })
+
+test('un messaggio vecchio senza classificazione viene riletto una volta sola', async () => {
+  usaClient(() => casellaConBandiere([1, 2, 3], new Set([1, 2])))
+  const e = await sincronizza(
+    { ...CASELLA, cartelle: ['INBOX'], validita: { INBOX: '1' } },
+    undefined,
+    () => new Set([1, 2, 3]),
+    () => new Set([2])
+  )
+  assert.deepEqual(e.docs.map(d => [d.id, d.letto, d.massa]), [
+    ['posta:INBOX:2', true, true]
+  ])
+  // 2 ha già portato la bandiera dentro il documento completo: il giro
+  // leggero aggiorna soltanto gli altri messaggi noti.
+  assert.deepEqual(e.letti, [
+    { id: 'posta:INBOX:1', letto: true },
+    { id: 'posta:INBOX:3', letto: false }
+  ])
+  assert.equal(e.saltati, 2)
+})

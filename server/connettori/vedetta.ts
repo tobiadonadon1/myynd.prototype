@@ -20,7 +20,7 @@
 // Solo in casa: su un server le cartelle sono nomi, non percorsi. E per
 // persona, come tutto il resto — ognuno ha le sue cartelle e il suo indice.
 
-import { watch, type FSWatcher } from 'node:fs'
+import { Worker } from 'node:worker_threads'
 import { stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import * as chi from '../chi.ts'
@@ -38,7 +38,9 @@ const TEMPI = {
   /** Fra un ragionamento e l'altro, al minimo, per persona. */
   minimo: 10 * 60_000,
   /** Prima di riprovare una cartella che non si è lasciata guardare. */
-  riprova: 10 * 60_000
+  riprova: 10 * 60_000,
+  /** Only tests simulate a blocking kernel call in the isolated worker. */
+  apertura: 0
 }
 
 /** Cosa succede quando si è fatto silenzio: lo mette `index.ts`, lo sostituiscono le prove. */
@@ -51,14 +53,16 @@ export function quandoSiCalma(fn: (daQuando: string) => Promise<unknown>) {
 
 /** Solo per le prove: tempi corti, o i tempi veri con `null`. */
 export function perProva(t: Partial<typeof TEMPI> | null) {
-  Object.assign(TEMPI, t ?? { attesa: 1_500, quiete: 3 * 60_000, minimo: 10 * 60_000, riprova: 10 * 60_000 })
+  Object.assign(TEMPI, t ?? { attesa: 1_500, quiete: 3 * 60_000, minimo: 10 * 60_000, riprova: 10 * 60_000, apertura: 0 })
 }
+
+type Osservatore = { pronta: boolean; close: () => void }
 
 type Posto = {
   /** Di chi sono queste cartelle: i lavori in sottofondo rientrano con `chi.dentro`. */
   utente: string | null
   /** Cartella → quello che la guarda; `null` finché non si riesce ad aprirla. */
-  cartelle: Map<string, FSWatcher | null>
+  cartelle: Map<string, Osservatore | null>
   /** Percorso → il timer che aspetta la fine della raffica. */
   pendenti: Map<string, NodeJS.Timeout>
   /** Le cartelle da riprovare più tardi. */
@@ -113,18 +117,43 @@ function apri(posto: Posto, cartella: string) {
   if (vecchio) vecchio.close()
   posto.cartelle.set(cartella, null)
   try {
-    const w = watch(cartella, { recursive: true, persistent: false }, (_evento, nome) => {
-      // `nome` può mancare, in teoria: allora non si sa cosa è cambiato, e
-      // l'unica cosa onesta è lasciare il lavoro al giro delle sei ore
-      if (nome == null) return
-      segna(posto, cartella, join(cartella, String(nome)))
+    // server/** is unpacked by electron-builder; Worker needs a real file,
+    // whereas import.meta.url can still name its virtual app.asar location.
+    const percorso = new URL('./vedetta.lavoratore.ts', import.meta.url)
+    percorso.pathname = percorso.pathname.replace(/\.asar\//, '.asar.unpacked/')
+    const worker = new Worker(percorso, {
+      workerData: { cartella, ritardo: TEMPI.apertura }
     })
-    w.on('error', (e: NodeJS.ErrnoException) => {
-      console.error(`myynd · vedetta: ${cartella} non si lascia più guardare (${e.code ?? e.message}); riprovo fra dieci minuti`)
-      w.close()
+    let chiuso = false
+    const osservatore: Osservatore = {
+      pronta: false,
+      close: () => {
+        if (chiuso) return
+        chiuso = true
+        osservatore.pronta = false
+        // Do not await termination: a kernel open() may still be blocked.
+        // Late messages are ignored and the worker cannot keep the app alive.
+        worker.postMessage({ tipo: 'chiudi' })
+        void worker.terminate().catch(() => {})
+      }
+    }
+    const vivo = () => !chiuso && posti.get(posto.utente ?? '') === posto && posto.cartelle.get(cartella) === osservatore
+    const fallito = (errore: string) => {
+      if (!vivo()) return
+      console.error(`myynd · vedetta: ${cartella} non si lascia più guardare (${errore}); riprovo fra dieci minuti`)
+      osservatore.close()
       riprovaPiuTardi(posto, cartella)
+    }
+    posto.cartelle.set(cartella, osservatore)
+    worker.on('message', (m: { tipo: string; nome?: string; errore?: string }) => {
+      if (!vivo()) return
+      if (m.tipo === 'pronta') osservatore.pronta = true
+      else if (m.tipo === 'errore') fallito(m.errore ?? 'watcher non disponibile')
+      else if (m.tipo === 'cambiato' && m.nome) segna(posto, cartella, join(cartella, m.nome))
     })
-    posto.cartelle.set(cartella, w)
+    worker.on('error', e => fallito(e instanceof Error ? e.message : String(e)))
+    worker.on('exit', code => { if (vivo()) fallito(`watcher terminato (${code})`) })
+    worker.unref()
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code
     console.error(`myynd · vedetta: non riesco a guardare ${cartella} (${code ?? (e instanceof Error ? e.message : e)}); riprovo fra dieci minuti`)
@@ -271,6 +300,6 @@ export function fermaTutti() {
 /** Com'è messa, per la persona di adesso: in ascolto, e su quante cartelle davvero aperte. */
 export function stato(): { attiva: boolean; cartelle: number } {
   const posto = posti.get(chiave())
-  const aperte = posto ? [...posto.cartelle.values()].filter(Boolean).length : 0
+  const aperte = posto ? [...posto.cartelle.values()].filter(w => w?.pronta).length : 0
   return { attiva: aperte > 0, cartelle: aperte }
 }

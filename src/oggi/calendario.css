@@ -1,0 +1,89 @@
+.task-calendar {margin-top:24px; padding:22px; background:linear-gradient(140deg,rgba(255,253,248,.9),rgba(247,244,235,.76)); border:1px solid rgba(255,255,255,.96); border-radius:24px; box-shadow:0 10px 36px -24px rgba(71,57,40,.34); color:#22271f;}
+.task-calendar button,.task-detail button,.task-view-toggle button {font-family:inherit;cursor:pointer;}
+.task-calendar-toolbar,.task-calendar-agenda-header {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.task-calendar-month {font-size:16px;font-weight:500;text-transform:capitalize;letter-spacing:-.02em;}
+.task-calendar-nav {display:flex;align-items:center;gap:5px;}
+.task-calendar-nav button {border:0;background:transparent;border-radius:9px;min-width:32px;min-height:32px;color:#555b50;font-size:22px;}
+.task-calendar-nav button:first-child {font-size:12px;margin-right:5px;padding:0 12px;border:1px solid #deded3;}
+.task-calendar-nav button:hover {background:#eaeade;}
+.task-calendar-week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;margin-top:22px;}
+.task-calendar-day {position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px 2px 9px;border:1px solid transparent;background:transparent;border-radius:15px;color:#555b50;transition:background .16s,box-shadow .16s;}
+.task-calendar-day:hover {background:rgba(126,156,130,.12);}
+.task-calendar-day.selected {background:#e2e9dc;border-color:#c8d4bf;color:#354b36;box-shadow:0 6px 12px -8px #85917b;}
+.task-calendar-day.today .task-calendar-number {color:#a94f2b;}
+.task-calendar-day.drop-target {background:#e1e7d5;outline:2px solid #789175;}
+.task-calendar-weekday {font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+.task-calendar-number {font-size:23px;line-height:1.1;font-weight:500;letter-spacing:-.04em;}
+.task-calendar-dots {display:flex;gap:3px;height:4px;}
+.task-calendar-dots i {display:block;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.55;}
+.task-calendar-agenda-header {padding:25px 0 16px;border-top:1px solid #e2e3d9;margin-top:20px;}
+.task-calendar-agenda-header h2 {font-size:13px;font-weight:500;margin:0;letter-spacing:0;text-transform:none;color:#66715f;}
+.task-calendar-agenda-header > div {display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.task-calendar-agenda-header > div > span {font-size:12px;color:#6c7065;}
+.task-unscheduled {border:0;background:transparent;color:#646b5d;display:flex;align-items:center;gap:7px;font-size:11px;border-radius:9px;padding:7px 9px;}
+.task-unscheduled span {background:#e8eadd;padding:2px 5px;border-radius:5px;}
+.task-unscheduled.selected {background:#e4e8db;color:#344532;}
+.task-agenda-list {list-style:none;display:flex;flex-direction:column;gap:8px;margin:0;padding:0;}
+.task-calendar-owners {display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 52px;padding:0 16px 9px 23px;font-size:9px;color:#747a6b;text-align:center;}
+.task-calendar-empty {text-align:center;padding:26px 12px 33px;color:#74796b;}
+.task-calendar-empty > span {display:inline-grid;place-items:center;border:1px solid #d9dece;border-radius:12px;width:34px;height:34px;color:#819074;font-size:21px;}
+.task-calendar-empty p {font-size:12px;margin-bottom:0;}
+.task-calendar-overdue {border-left:2px solid #c89478;padding-left:12px;margin:2px 0 19px;}
+.task-calendar-overdue h3 {font-size:11px;font-weight:500;color:#955b3c;margin:0 0 10px;}
+.task-calendar-overdue h3 span {margin-left:6px;}
+.task-view-toggle {display:inline-flex;padding:3px;background:rgba(229,230,217,.66);border:1px solid rgba(255,255,255,.7);border-radius:11px;}
+.task-view-toggle button {font-size:11px;border:0;padding:7px 12px;background:transparent;border-radius:8px;color:#697060;}
+.task-view-toggle button[aria-pressed=true] {background:#fffdf8;box-shadow:0 2px 5px #68675012;color:#323f2e;}
+.task-detail {padding:0;width:510px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 48px);border:1px solid #fffdf4;border-radius:20px;background:#f8f7f0;color:#22271f;box-shadow:0 30px 100px #27301f40;}
+.task-detail::backdrop {background:#252b2040;backdrop-filter:blur(8px);}
+.task-detail header {display:flex;align-items:center;justify-content:space-between;padding:13px 22px;border-bottom:1px solid #e3e4d9;font-size:12px;color:#626d59;}
+.task-detail button {border:1px solid #daddce;background:transparent;color:#46523e;border-radius:10px;padding:9px 15px;font-size:12px;}
+.task-detail button:disabled {opacity:.5;cursor:default;}
+.task-detail .task-detail-close {border:0;padding:0;width:32px;height:32px;font-size:23px;border-radius:50%;}
+.task-detail .task-detail-close:hover {background:#e5e8dc;}
+.task-detail-body {padding:22px;}
+.task-detail-label,.task-detail legend {display:block;font-size:11px;font-weight:500;letter-spacing:.02em;color:#65705c;margin-bottom:10px;}
+.task-detail textarea {box-sizing:border-box;width:100%;resize:vertical;font-family:inherit;color:#283222;}
+.task-detail-title {box-sizing:border-box;width:100%;font-family:inherit;font-size:15px;font-weight:450;line-height:1.5;background:#fffdf9;color:#283222;border:1px solid #dfe2d4;border-radius:10px;padding:10px 12px;}
+.task-detail fieldset {padding:0;border:0;margin:22px 0;}
+.task-detail-presets {display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.task-detail-presets button {padding:8px 11px;}
+.task-detail-presets button[aria-pressed=true] {background:#e1e8d8;border-color:#bfcdb0;color:#3d5333;}
+.task-detail input[type=date] {font-family:inherit;font-size:13px;color:#4a5940;border:1px solid #daddce;background:#fffdf8;padding:9px 12px;border-radius:10px;}
+.task-detail-notes {font-size:13px;line-height:1.6;border:1px solid #dfe2d4;border-radius:10px;background:#fffdf9;padding:10px 12px;}
+.task-detail footer {display:flex;justify-content:flex-end;gap:9px;padding:17px 24px;background:#eef0e5;border-top:1px solid #e0e4d6;}
+.task-detail .task-detail-save {background:#435f43;color:#fffdf8;border-color:#435f43;min-width:86px;}
+.task-detail-error {font-size:12px;color:#954c2d;}
+.task-calendar button:focus-visible,.task-detail button:focus-visible,.task-detail textarea:focus-visible,.task-detail input:focus-visible,.task-view-toggle button:focus-visible {outline:2px solid #8b603f;outline-offset:3px;}
+.task-detail .task-detail-title,.task-detail .task-detail-notes {border-radius:12px;}
+.task-detail .task-detail-title:focus-visible,.task-detail .task-detail-notes:focus-visible {border-radius:12px;border-color:#7e9472;outline:2px solid #7e9472;outline-offset:-1px;}
+@media (max-width:560px) {.task-calendar {padding:16px 10px;border-radius:19px;}.task-calendar-week {gap:2px;}.task-calendar-day {border-radius:11px;}.task-calendar-number {font-size:21px;}.task-calendar-weekday {font-size:9px;}.task-calendar-agenda-header {align-items:flex-start;}.task-calendar-agenda-header > div {display:block;}.task-calendar-agenda-header h2 {font-size:19px;margin-bottom:4px;}.task-detail-body {padding:22px 20px;}}
+@media (max-width:560px) {.task-calendar-owners {grid-template-columns:minmax(0,1fr) 40px 40px 40px;padding:0 11px 9px 19px;}}
+@media (prefers-reduced-motion:reduce) {.task-calendar-day {transition:none;}}
+
+.task-calendar-columns {display:grid;gap:10px;align-items:stretch;}
+.task-day-column {min-width:0;min-height:230px;background:rgba(235,238,227,.48);border:1px solid #e0e4d8;border-radius:14px;padding:10px;}
+.task-day-column.today {background:rgba(224,233,215,.5);border-color:#cddbc0;}
+.task-day-column.drop-target {outline:2px solid #839875;outline-offset:-2px;background:#e3ead9;}
+.task-day-column > header {display:flex;justify-content:space-between;align-items:flex-start;gap:7px;padding:3px 3px 14px;}
+.task-day-column h3 {font-size:13px;font-weight:500;line-height:1.4;margin:0 0 3px;color:#344630;text-transform:capitalize;}
+.task-day-column > header > div > span {font-size:11px;color:#7b8171;}
+.task-day-count {font-size:10px;color:#7b8670;border:1px solid #dbe1d1;border-radius:6px;padding:2px 5px;}
+.task-day-add {width:100%;min-height:34px;margin-top:9px;border:1px dashed #d9dfcf;background:transparent;border-radius:9px;color:#829073;font-size:18px;}
+.task-day-add:hover {background:#e3e9da;color:#4d6740;}
+.task-unscheduled-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;list-style:none;padding:0;margin:0;}
+.task-planning-card {min-width:0;list-style:none;position:relative;padding:11px 10px 8px;background:#fffdf8;border:1px solid #e4e5d9;border-radius:11px;box-shadow:0 3px 9px -6px #53634035;}
+.task-planning-card.waiting {border-left:3px solid #c68e6a;}
+.task-planning-card.working {border-left:3px solid #8fa57b;}
+.task-planning-main {display:flex;align-items:flex-start;gap:8px;}
+.task-planning-main > button:first-child {margin-top:2px;}
+.task-planning-title {min-width:0;flex:1;text-align:left;font-size:12.5px;line-height:1.45;overflow-wrap:anywhere;color:#313d2b;border:0;padding:0;background:none;}
+.task-planning-title:hover {color:#956344;}
+.task-planning-footer {display:flex;align-items:center;justify-content:space-between;gap:3px;margin:12px -3px 0 19px;}
+.task-planning-footer select {max-width:85px;font-family:inherit;font-size:10px;color:#748068;border:0;background:transparent;padding:3px 1px;cursor:pointer;}
+.task-planning-footer select:focus-visible {outline:2px solid #7e9472;outline-offset:2px;border-radius:5px;}
+.task-planning-status {border:0;background:none;font-size:10px;color:#9b613f;padding:3px 0;white-space:nowrap;}
+.task-planning-card.working .task-planning-status {color:#6e825d;}
+.task-planning-error {font-size:10px;color:#9b613f;margin:6px 0 0;overflow-wrap:anywhere;}
+.task-calendar-result {margin-top:16px;scroll-margin:18px;max-width:900px;}
+@media (max-width:560px) {.task-calendar-agenda-header h2 {font-size:13px;}.task-calendar-columns {gap:7px;}.task-day-column {padding:7px;}.task-planning-card {padding:9px 7px 7px;}.task-planning-footer {margin-left:0;}}

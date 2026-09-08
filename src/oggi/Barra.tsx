@@ -12,6 +12,7 @@ import { lingua, t } from '../lingua'
 import { IconPiu } from '../icons'
 import type { Secchio } from './useCompiti'
 import { righeDaTesto } from './righe'
+import { dataLocale } from './giorni'
 
 export type Comando = {
   /** Quello che si scrive. Due, perché un menù in inglese che vuole «/oggi» non è in inglese. */
@@ -38,11 +39,13 @@ const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
-export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
-  aggiungi: (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null) => void
+export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: linguaPagina }: {
+  aggiungi: (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito?: boolean) => void
   /** Più righe in un colpo: una lista incollata. Una per cosa, nell'ordine in cui stanno. */
-  aggiungiRighe: (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null) => void
+  aggiungiRighe: (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito?: boolean) => void
   mostraFatte: () => void
+  giorno?: string
+  lingua?: string
 }) {
   const [testo, setTesto] = useState('')
   const [dove, setDove] = useState<Secchio>('oggi')
@@ -86,8 +89,8 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
     // un campo di una riga non contiene a capo, ma chi lo riempie da fuori sì:
     // più righe sono più cose, qui come nell'incolla
     const righe = righeDaTesto(testo)
-    if (righe.length > 1) aggiungiRighe(righe, dove, modo)
-    else aggiungi(testo, dove, modo)
+    if (righe.length > 1) aggiungiRighe(righe, dove, modo, vistaScelta)
+    else aggiungi(testo, dove, modo, vistaScelta)
     azzera()
   }
 
@@ -104,7 +107,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
     const righe = righeDaTesto(e.clipboardData.getData('text'))
     if (righe.length < 2) return
     e.preventDefault()
-    aggiungiRighe([...righeDaTesto(testo), ...righe], dove, modo)
+    aggiungiRighe([...righeDaTesto(testo), ...righe], dove, modo, vistaScelta)
     azzera()
   }
 
@@ -136,6 +139,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
         transition: 'border-color .15s, box-shadow .15s'
       }}>
         <input
+          id="task-composer"
           ref={campo}
           autoFocus
           value={testo}
@@ -145,7 +149,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte }: {
           onKeyDown={tasti}
           onPaste={incolla}
           aria-label={t('Cosa c\'è da fare')}
-          placeholder={t('Cosa c\'è da fare')}
+          placeholder={giorno ? `${t('Aggiungi per')} ${dataLocale(giorno).toLocaleDateString(linguaPagina === 'it' ? 'it-IT' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' })}` : t('Cosa c\'è da fare')}
           style={{
             flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
             fontFamily: 'inherit', fontSize: '14.5px', color: '#22271F', padding: '8px 0'

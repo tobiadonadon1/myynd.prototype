@@ -103,6 +103,7 @@ test('un file che compare, cambia e sparisce entra, cambia ed esce dall’indice
   vedetta.quandoSiCalma(async daQuando => { arrivi.push(daQuando) })
 
   vedetta.avvia({ cartelle: [CARTELLA] })
+  await finche(() => vedetta.stato().attiva, 'il lavoratore aprisse la cartella')
   assert.deepEqual(vedetta.stato(), { attiva: true, cartelle: 1 })
   // gli occhi si aprono un attimo dopo: quello che si scrive prima non si vede
   await dormi(500)
@@ -153,11 +154,36 @@ test('un file che compare, cambia e sparisce entra, cambia ed esce dall’indice
   assert.deepEqual(vedetta.stato(), { attiva: false, cartelle: 0 })
 })
 
-test('una cartella che non c’è non fa cadere niente: si segna, e si sta in ascolto sulle altre', () => {
+test('una cartella che non c’è non fa cadere niente: si segna, e si sta in ascolto sulle altre', async () => {
   vedetta.perProva({ attesa: 100, quiete: 700, minimo: 0, riprova: 60_000 })
   vedetta.avvia({ cartelle: [CARTELLA, join(CASA, 'non-esiste')] })
+  await finche(() => vedetta.stato().attiva, 'la cartella disponibile si aprisse')
   assert.deepEqual(vedetta.stato(), { attiva: true, cartelle: 1 })
   vedetta.ferma()
+})
+
+test('un watcher lento non blocca il server e fermarlo impedisce aperture ed eventi tardivi', async () => {
+  const cartella = join(CASA, 'watcher-lento')
+  mkdirSync(cartella)
+  vedetta.perProva({ apertura: 1_000, attesa: 30, quiete: 100 })
+  const inizio = performance.now()
+  vedetta.avvia({ cartelle: [cartella] })
+  await dormi(40)
+  assert.ok(performance.now() - inizio < 500, 'il timer del server non deve aspettare fs.watch')
+  assert.deepEqual(vedetta.stato(), { attiva: false, cartelle: 0 }, 'in apertura non si dichiara già attivo')
+  vedetta.ferma()
+  writeFileSync(join(cartella, 'dopo-stop.md'), 'Questo file non deve essere indicizzato dopo la chiusura del watcher.')
+  await dormi(1_100)
+  assert.deepEqual(vedetta.stato(), { attiva: false, cartelle: 0 })
+  assert.equal(store.documento(`desktop:${join(cartella, 'dopo-stop.md')}`), null)
+
+  vedetta.perProva({ apertura: 0 })
+  vedetta.avvia({ cartelle: [cartella] })
+  await finche(() => vedetta.stato().attiva, 'il watcher ripartisse dopo lo stop')
+  writeFileSync(join(cartella, 'dopo-riavvio.md'), 'Un documento creato dopo il riavvio deve tornare a essere indicizzato.')
+  await finche(() => !!store.documento(`desktop:${join(cartella, 'dopo-riavvio.md')}`), 'gli eventi arrivassero dal nuovo worker')
+  vedetta.ferma()
+  vedetta.perProva(null)
 })
 
 // — il giro delle sei ore non rilegge l'uguale —

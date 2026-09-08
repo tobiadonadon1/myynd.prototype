@@ -1161,12 +1161,19 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
    *   `massa` lo decide il connettore dalle intestazioni (List-Unsubscribe,
    *   Precedence: bulk, i mittenti «noreply»…) quando il messaggio entra.
    *
-   * Due ALTER TABLE, niente da riempire: l'indice pieno si aggiorna al giro
-   * di posta dopo. Sta in fondo, come tutte.
+   * Due ALTER TABLE, senza una riscrittura lunga durante l'avvio. I messaggi
+   * vecchi con `massa` vuoto vengono riletti a piccoli blocchi dai giri di
+   * posta successivi; così anche un indice già pieno arriva gradualmente alla
+   * stessa qualità di uno nuovo. Sta in fondo, come tutte.
    */
   d => {
     colonna(d, 'documenti', 'letto', 'INTEGER')
     colonna(d, 'documenti', 'massa', 'INTEGER')
+  },
+
+  // 31 → 32 · optional planned calendar day; existing buckets remain intact.
+  d => {
+    colonna(d, 'compiti', 'giorno', 'TEXT')
   }
 
 ]
@@ -1248,7 +1255,7 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT']]
+  compiti: [['email', 'TEXT'], ['giorno', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -2035,6 +2042,28 @@ export function idsConPrefisso(prefisso: string): string[] {
 }
 
 /**
+ * Le email vecchie di cui non abbiamo ancora letto le intestazioni di massa.
+ *
+ * La colonna `massa` è arrivata dopo molte caselle già indicizzate. Lasciarla
+ * vuota per sempre significa che proprio newsletter e promozioni storiche
+ * passano il filtro del feed. Si restituisce un blocco piccolo e recente: il
+ * connettore lo rilegge insieme alla posta nuova, poi al giro dopo prosegue.
+ */
+export function uidPostaDaClassificare(cartella: string, limite = 200): Set<number> {
+  if (!cartella || limite < 1) return new Set()
+  const prefisso = `posta:${cartella}:`
+  const righe = db.prepare(`
+    SELECT id FROM documenti
+    WHERE fonte = 'posta' AND percorso = ? AND massa IS NULL
+      AND id >= ? AND id < ?
+    ORDER BY quando DESC
+    LIMIT ?
+  `).all(cartella, prefisso, prefisso + '\uffff', limite) as { id: string }[]
+  return new Set(righe.map(r => Number(r.id.slice(r.id.lastIndexOf(':') + 1)))
+    .filter(n => Number.isInteger(n) && n > 0))
+}
+
+/**
  * La data di modifica di tutto quello che comincia così, per id.
  *
  * Serve al desktop per non rileggere quello che non è cambiato: `quando` di
@@ -2708,6 +2737,7 @@ export type Compito = {
   testo: string
   nota: string | null
   quando: string
+  giorno?: string | null
   stato: string
   modo: string
   ordine: string
@@ -2880,16 +2910,18 @@ export function ultimoOrdine(quando: string): string {
  */
 export function scriviCompito(c: {
   id: string; testo: string; nota?: string | null; quando?: string
+  giorno?: string | null
   ordine: string; origine?: string; voce?: string | null; doc?: string | null
   attrezzi?: Concessione | null
 }) {
   const ora = new Date().toISOString()
   db.prepare(`
-    INSERT INTO compiti (id, testo, nota, quando, stato, ordine, origine, voce, doc, attrezzi, creato, aggiornato)
-    VALUES (?,?,?,?,'aperto',?,?,?,?,?,?,?)
+    INSERT INTO compiti (id, testo, nota, quando, giorno, stato, ordine, origine, voce, doc, attrezzi, creato, aggiornato)
+    VALUES (?,?,?,?,?,'aperto',?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       testo      = excluded.testo,
       quando     = excluded.quando,
+      giorno     = COALESCE(excluded.giorno, compiti.giorno),
       -- il permesso si riscrive con la riga: se l'automazione nel frattempo ha
       -- perso un attrezzo, la riga rifatta non se lo tiene
       attrezzi   = excluded.attrezzi,
@@ -2907,7 +2939,7 @@ export function scriviCompito(c: {
       aggiornato = excluded.aggiornato,
       versione   = compiti.versione + 1
   `).run(
-    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.ordine,
+    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null,
     c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
@@ -2928,6 +2960,7 @@ export function riordina(id: string, quando: string, nuova: string) {
 
 export function cambiaCompito(id: string, c: {
   testo?: string; nota?: string | null; quando?: string; ordine?: string
+  giorno?: string | null
 }) {
   const campi: string[] = []
   const valori: (string | null)[] = []
@@ -2935,6 +2968,7 @@ export function cambiaCompito(id: string, c: {
   // differenza si perde se si passa tutto per una stessa condizione
   if (c.testo !== undefined) { campi.push('testo = ?'); valori.push(c.testo) }
   if (c.nota !== undefined) { campi.push('nota = ?'); valori.push(c.nota) }
+  if (c.giorno !== undefined) { campi.push('giorno = ?'); valori.push(c.giorno) }
   if (c.quando !== undefined) { campi.push('quando = ?'); valori.push(c.quando) }
   if (c.ordine !== undefined) { campi.push('ordine = ?'); valori.push(c.ordine) }
   if (!campi.length) return
@@ -3584,7 +3618,7 @@ export function segnaBozza(id: string, giorno: string): number {
 }
 
 /** Un giro, com'è andato. */
-export type Giro = { quando: string; esito: string; quanti: number }
+export type Giro = { quando: string; esito: string; quanti: number; risultato?: string }
 
 /** Quanti giri si tengono. Venti: bastano a vedere un'abitudine, non un anno. */
 const GIRI = 20
@@ -3731,10 +3765,10 @@ export function statoAutomazione(id: string): StatoAutomazione | null {
  * una che non trova niente perché sta cercando parole che nei documenti non
  * compaiono. Le due si scrivono uguali nell'esito, e sono problemi opposti.
  */
-export function automazioneGirata(id: string, esito: string, guaio?: string, quanti = 0) {
+export function automazioneGirata(id: string, esito: string, guaio?: string, quanti = 0, risultato?: string) {
   const ora = new Date().toISOString()
   const prima = storiaDi(statoAutomazione(id))
-  const storia = JSON.stringify([...prima, { quando: ora, esito, quanti }].slice(-GIRI))
+  const storia = JSON.stringify([...prima, { quando: ora, esito, quanti, ...(risultato ? { risultato: risultato.slice(0, 24000) } : {}) }].slice(-GIRI))
   // un guaio muove l'orologio (`ultima`) ma non il paletto (`vista`): quello
   // che è arrivato mentre falliva dev'essere ancora lì al prossimo giro
   const vista = esito === 'guaio' ? null : ora

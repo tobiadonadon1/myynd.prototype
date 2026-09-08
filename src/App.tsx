@@ -456,7 +456,7 @@ function Casa({ stato, apriConnessioni, esci }: {
                 <span style={{ flex: 1 }}>{t('Connettori')}</span>
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
-              <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>
+              {!desktop() && <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}
               <div style={{ height: 1, background: 'rgba(34,39,31,.1)', margin: '5px 8px' }} />
               <Hov as="a" href="#"
                 onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}

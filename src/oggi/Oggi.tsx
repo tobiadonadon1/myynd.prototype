@@ -19,6 +19,10 @@ import { Barra } from './Barra'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
+import { Calendario } from './Calendario'
+import { Dettaglio } from './Dettaglio'
+import { giornoLocale, secchioDelGiorno } from './giorni'
+import { desktop } from '../desktop'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -150,33 +154,6 @@ function Casella({ scelto, lavora, onClick, id, nome, riga }: {
   )
 }
 
-/** Cambiare il testo di una riga. Niente di più: il resto sta nelle colonne. */
-function Modifica({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () => void }) {
-  const [testo, setTesto] = useState(c.testo)
-  const salva = () => {
-    const pulito = testo.trim()
-    if (pulito && pulito !== c.testo) l.cambia(c.id, { testo: pulito })
-    chiudi()
-  }
-  return (
-    <input
-      autoFocus
-      value={testo}
-      onChange={e => setTesto(e.target.value)}
-      onBlur={salva}
-      onKeyDown={e => {
-        if (e.key === 'Enter') salva()
-        if (e.key === 'Escape') { e.stopPropagation(); chiudi() }
-      }}
-      aria-label={t('Il testo della riga')}
-      style={{
-        width: '100%', boxSizing: 'border-box', padding: '2px 6px', marginLeft: -7,
-        borderRadius: 7, border: '1px solid rgba(34,39,31,.2)', background: '#FFFDF9',
-        color: '#22271F', fontSize: '14.5px', fontFamily: 'inherit', outline: 'none'
-      }} />
-  )
-}
-
 /**
  * Una riga, e adesso è una lastra per conto suo.
  *
@@ -191,10 +168,32 @@ function Modifica({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () => void }
  * identica per tutte — stessa forma, stessa misura, stesso gesto — e cambia
  * solo la tinta, che è quello che le distingue davvero.
  */
-function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
+function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (c: Compito) => void }) {
+  const attende = c.stato === 'pronto' || c.stato === 'chiede'
+  const classi = ['task-planning-card', attende && 'waiting', c.stato === 'delegato' && 'working'].filter(Boolean).join(' ')
+  const apri = () => {
+    l.apriChiudi(c.id)
+    if (!l.aperti.has(c.id)) requestAnimationFrame(() => document.getElementById(`task-result-${c.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'auto' }))
+  }
+  return <li className={classi} draggable onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}>
+    <div className="task-planning-main"><Cerchio c={c} onClick={() => l.chiudi(c.id)} />
+      <button type="button" className="task-planning-title" onClick={() => modifica(c)}>{c.testo}</button>
+    </div>
+    <div className="task-planning-footer">
+      <select aria-label={`${t('Assegnazione')}: ${c.testo}`} value={c.modo}
+        onChange={e => { if (e.target.value === 'io') l.richiama(c.id); else l.delega(c.id, e.target.value) }}>
+        {MODI.map(m => <option key={m.id} value={m.id}>{t(m.nome)}</option>)}
+      </select>
+      {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} ↗</button>
+        : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
+    </div>
+    {c.guaio && <p className="task-planning-error">{t(c.guaio)}</p>}
+  </li>
+}
+
+function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void }) {
   // sotto mano: il mouse sopra, il fuoco dentro, o un dito — che non sa passare sopra a niente
   const { attiva: mostra, props: sottoMano } = useAttiva()
-  const [modifico, setModifico] = useState(false)
   /** Vera solo mentre tieni premuta la striscia: vedi il commento lì sotto. */
   const [afferrata, setAfferrata] = useState(false)
   const aperto = l.aperti.has(c.id)
@@ -266,18 +265,14 @@ function Riga({ c, l, stretta }: { c: Compito; l: Lista; stretta: boolean }) {
         <Cerchio c={c} onClick={() => l.chiudi(c.id)} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {modifico ? (
-            <Modifica c={c} l={l} chiudi={() => setModifico(false)} />
-          ) : (
-            <Hov as="button" type="button" onClick={() => setModifico(true)}
+            <Hov as="button" type="button" onClick={() => modifica(c)}
               style={{
                 display: 'block', width: '100%', textAlign: 'left', border: 'none',
-                background: 'none', padding: 0, fontFamily: 'inherit', cursor: 'text',
+                background: 'none', padding: 0, fontFamily: 'inherit', cursor: 'pointer',
                 fontSize: '14.5px', lineHeight: 1.4, overflowWrap: 'anywhere',
                 color: delegato ? 'rgba(34,39,31,.6)' : '#22271F'
               }}
               hover={{ color: '#8E3F1F' }}>{c.testo}</Hov>
-          )}
 
           {c.guaio && (
             <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
@@ -1067,7 +1062,7 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
  * lista vecchia di due secondi mette la riga nel posto sbagliato, e il giorno
  * che la stessa lista vive anche su un telefono lo fa sempre.
  */
-function Gruppo({ s, l, stretta }: { s: Secchio; l: Lista; stretta: boolean }) {
+function Gruppo({ s, l, stretta, modifica }: { s: Secchio; l: Lista; stretta: boolean; modifica: (c: Compito) => void }) {
   const righe = l.perSecchio(s)
   // l'id della riga davanti alla quale si andrebbe a cadere, per disegnare il filo
   const [bersaglio, setBersaglio] = useState<string | null>(null)
@@ -1122,7 +1117,7 @@ function Gruppo({ s, l, stretta }: { s: Secchio; l: Lista; stretta: boolean }) {
             onDragOver={e => { e.preventDefault(); setBersaglio(c.id) }}
             onDrop={e => { e.preventDefault(); lascia(e.dataTransfer.getData('text/plain'), c.id) }}>
             <div style={filo(bersaglio === c.id)} />
-            <Riga c={c} l={l} stretta={stretta} />
+            <Riga c={c} l={l} stretta={stretta} modifica={modifica} />
           </div>
         ))}
         {/* l'ultimo pezzo di lista: lasciarla qui vuol dire «in fondo» */}
@@ -1210,7 +1205,7 @@ function Finito({ l }: { l: Lista }) {
       <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '14px', color: 'rgba(34,39,31,.62)' }}>{t('Oggi è finito.')}</span>
         <Hov as="button" type="button"
-          onClick={() => l.cambia(prossima.id, { quando: 'oggi' })}
+          onClick={() => l.cambia(prossima.id, { quando: 'oggi', giorno: giornoLocale() })}
           style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '14px', color: '#8E3F1F', textAlign: 'left'
@@ -1238,6 +1233,17 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   apriGuida: () => void
 }) {
   const [fatteAperte, setFatteAperte] = useState(false)
+  const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
+  const [giorno, setGiorno] = useState(giornoLocale)
+  const [senzaData, setSenzaData] = useState(false)
+  const [modifica, setModifica] = useState<Compito | null>(null)
+  const [dataOggi, setDataOggi] = useState(giornoLocale)
+  useEffect(() => {
+    const aggiorna = () => setDataOggi(giornoLocale())
+    const timer = window.setInterval(aggiorna, 60_000)
+    window.addEventListener('focus', aggiorna)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', aggiorna) }
+  }, [])
   const larghezza = useLarghezza()
   // sotto questa soglia la finestra è una colonna stretta di lato, non una
   // finestra: cambia il titolo, i margini e la larghezza delle tre colonne
@@ -1269,22 +1275,29 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
     chiuseErano.current = l.chiusi.length
   }, [l.compiti.length, l.chiusi.length, l.caricato])
 
-  const aggiungi = async (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null) => {
-    const id = await l.aggiungi(testo, quando)
+  const destinazione = (quando: Secchio, esplicito = false): { data: string | null; secchio: Secchio } => {
+    if (esplicito || vista === 'lista') return { data: quando === 'oggi' ? dataOggi : null, secchio: quando }
+    const data = senzaData ? null : giorno
+    return { data, secchio: secchioDelGiorno(data) }
+  }
+  const aggiungi = async (testo: string, quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito = false) => {
+    const { data, secchio } = destinazione(quando, esplicito)
+    const id = await l.aggiungi(testo, secchio, data)
     // «/bozza» e «/tutto» scrivono e affidano nello stesso gesto
     if (id && modo) l.delega(id, modo)
   }
 
   /** Una lista incollata: una riga per cosa, e il comando scelto vale per tutte. */
-  const aggiungiRighe = async (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null) => {
-    const ids = await l.aggiungiTante(righe, quando)
+  const aggiungiRighe = async (righe: string[], quando: Secchio, modo: 'bozza' | 'tutto' | null, esplicito = false) => {
+    const { data, secchio } = destinazione(quando, esplicito)
+    const ids = await l.aggiungiTante(righe, secchio, data)
     if (modo) for (const id of ids) l.delega(id, modo)
   }
 
   return (
     // il fondo si può afferrare: è così che si sposta la finestra. Tutto quello
     // che si tocca dentro dice «no-drag», altrimenti non lo tocchi più
-    <div style={{ ...SPOSTA, width: 660, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ ...SPOSTA, width: vista === 'calendario' ? 1480 : 780, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: stretta ? 24 : 34 }} />
 
       <div style={{ ...SPOSTA, padding: stretta ? '0 2px 20px' : '0 4px 26px' }}>
@@ -1305,13 +1318,28 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         }}>{oggi}</div>
       </div>
 
-      <Barra aggiungi={aggiungi} aggiungiRighe={aggiungiRighe} mostraFatte={() => setFatteAperte(a => !a)} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        <div className="task-view-toggle" role="group" aria-label={t('Vista attività')}>
+          <button type="button" aria-pressed={vista === 'calendario'} onClick={() => setVista('calendario')}>{t('Calendario')}</button>
+          <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>{t('Lista')}</button>
+        </div>
+      </div>
+      <Barra aggiungi={aggiungi} aggiungiRighe={aggiungiRighe} mostraFatte={() => setFatteAperte(a => !a)}
+        giorno={vista === 'calendario' && !senzaData ? giorno : undefined} lingua={lingua} />
 
       {l.guasto && (
         <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: '#8E3F1F' }}>{t(l.guasto)}</div>
       )}
 
-      {l.caricato && !l.guasto && !vuota && (
+      {l.caricato && !l.guasto && vista === 'calendario' && <Calendario compiti={l.compiti} oggi={dataOggi}
+        giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
+        pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
+        renderRiga={c => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} />} />}
+
+      {vista === 'calendario' && l.compiti.filter(c => l.aperti.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede')).map(c =>
+        <section key={c.id} id={`task-result-${c.id}`} className="task-calendar-result"><ul className="task-agenda-list"><Riga c={c} l={l} stretta={stretta} modifica={setModifica} /></ul></section>)}
+
+      {l.caricato && !l.guasto && !vuota && vista === 'lista' && (
         <>
           {/*
             Le intestazioni delle colonne, una volta sola in cima.
@@ -1337,7 +1365,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
             ))}
           </div>
 
-          {SECCHI.map(s => <Gruppo key={s} s={s} l={l} stretta={stretta} />)}
+          {SECCHI.map(s => <Gruppo key={s} s={s} l={l} stretta={stretta} modifica={setModifica} />)}
           {oggiFinito && <Finito l={l} />}
         </>
       )}
@@ -1352,12 +1380,13 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
             fontSize: '11.5px', color: 'rgba(34,39,31,.3)'
           }}
           hover={{ color: '#8E3F1F' }}>{t('Come funziona')}</Hov>
-        <Hov as="a" href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); apriGuida() }}
+        {!desktop() && <Hov as="a" href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); apriGuida() }}
           style={{ marginLeft: 14, fontSize: '11.5px', color: 'rgba(34,39,31,.3)', textDecoration: 'none' }}
-          hover={{ color: '#8E3F1F' }}>{t('La guida')}</Hov>
+          hover={{ color: '#8E3F1F' }}>{t('La guida')}</Hov>}
       </div>
 
       <Coriandoli quando={festa} finito={() => setFesta(0)} />
+      {modifica && <Dettaglio c={modifica} l={l} chiudi={() => setModifica(null)} />}
       {giro && <Giro lingua={lingua} chiudi={() => { setGiro(false); segnaGiro() }} festa={() => setFesta(Date.now())} />}
     </div>
   )

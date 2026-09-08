@@ -17,8 +17,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  cernita, entita, impronta, leggiFeed, pulisciLink, ripulisci, sceltaAMano, sensato, simili, type Grezza
+  cernita, contestoDi, entita, impronta, leggiFeed, pulisciLink, ricuciScelte, rilevanza, ripulisci, sceltaAMano, selezioneVisibile, sensato, simili, QUANTE, type Grezza
 } from './rassegna.ts'
+import type { Notizia } from './store.ts'
 
 const FONTE = { nome: 'Prova', url: 'https://x', argomento: 'mondo', lingua: '*' } as const
 
@@ -274,4 +275,92 @@ test('un riassunto che è per lo più indirizzi si butta', () => {
 
 test('due parole non sono un riassunto', () => {
   assert.equal(sensato('Leggi qui'), '')
+})
+
+const focus = contestoDi([{ nome: 'Myynd', doveSei: 'Release Electron macOS' }], [], '', 'politica estera')
+const notizia = (n: Grezza): Notizia => ({ ...n, perche: 'Un commento generato non verificato.', presa: fa(1), letta: null, scartata: null })
+
+test('i progetti attivi prevalgono sugli interessi generali', () => {
+  assert.equal(focus.length, 1)
+  assert.ok(!focus[0].testo.includes('politica'))
+  assert.ok(rilevanza(finta({ id: 'app', titolo: 'Electron fixes macOS sandbox security' }), focus) > 0)
+  assert.equal(rilevanza(finta({ id: 'world', titolo: 'La politica estera cambia dopo il vertice' }), focus), 0)
+})
+
+test('il fallback non riempie una selezione corta con notizie generiche', () => {
+  const tutte = [notizia(finta({ id: 'app', titolo: 'Electron fixes macOS sandbox security' })),
+    ...TITOLI.map((titolo, i) => notizia(finta({ id: `g${i}`, titolo })))]
+  assert.deepEqual(selezioneVisibile(tutte, focus, undefined, ora).map(n => n.id), ['app'])
+  assert.deepEqual(selezioneVisibile(tutte, [], undefined, ora), [])
+})
+
+test('una parola generica condivisa non basta a rendere una notizia pertinente', () => {
+  const f = contestoDi([], [{ testo: 'Review the project with the team', nota: null }], '', '')
+  assert.equal(rilevanza(finta({ id: 'rumore', titolo: 'The world has a new project for today' }), f), 0)
+})
+
+test('new e only non fanno rientrare la cronaca mondiale dalla cache con un task sulla posta', () => {
+  const f = contestoDi([], [{ testo: 'Inbox Priorities', nota: 'Find only the new actionable items in my inbox.' }], '', '')
+  const irrilevante = notizia(finta({
+    id: 'mappa-onu',
+    titolo: "UN votes to adopt new world map to reflect Africa's true size",
+    riassunto: 'The Togo-sponsored resolution was backed by 164 nations - the US the only nation to vote against it.'
+  }))
+  assert.equal(rilevanza(irrilevante, f), 0)
+  assert.deepEqual(selezioneVisibile([irrilevante], f, undefined, ora), [])
+})
+
+test('le parole grammaticali italiane non sono interessi, i nomi tecnici rimangono validi', () => {
+  const f = contestoDi([], [{ testo: 'Solo le nuove cose', nota: 'Tutto quello che posso fare quando sono pronto.' }], '', '')
+  assert.equal(rilevanza(finta({ id: 'rumore-it', titolo: 'Sono tutti pronti: cosa possiamo fare', riassunto: 'Tutto quello che cambia quando arriva il momento.' }), f), 0)
+  assert.ok(rilevanza(finta({ id: 'utile', titolo: 'Electron improves security on macOS' }), focus) > 0)
+})
+
+test('le risposte accumulate e le edizioni salvate rispettano entrambe il tetto', () => {
+  const tutte = Array.from({ length: 20 }, (_, i) => notizia(finta({ id: `n${i}`, titolo: `Electron ${'x'.repeat(i + 4)} ${'z'.repeat(i + 4)} sicurezza` })))
+  assert.equal(selezioneVisibile(tutte, focus, undefined, ora).length, QUANTE)
+  assert.equal(selezioneVisibile(tutte, focus, tutte.map(n => n.id), ora).length, QUANTE)
+})
+
+test('le notizie lette non consumano posti prima del limite della selezione visibile', () => {
+  const tutte = Array.from({ length: 16 }, (_, i) => ({
+    ...notizia(finta({ id: `n${i}`, titolo: `Electron ${'x'.repeat(i + 4)} ${'z'.repeat(i + 4)} sicurezza` })),
+    letta: i < 8 ? fa(1) : null
+  }))
+  const attese = tutte.slice(8).map(n => n.id)
+  assert.deepEqual(selezioneVisibile(tutte, focus, undefined, ora).map(n => n.id), attese)
+  assert.deepEqual(selezioneVisibile(tutte, focus, tutte.map(n => n.id), ora).map(n => n.id), attese)
+})
+
+test('l’edizione contiene solo gli ID scelti e preserva il riassunto della fonte giusta', () => {
+  const tutte = [notizia(finta({ id: 'canada', titolo: 'Canada updates tariffs', riassunto: 'Tariffs change in Canada.' })),
+    notizia(finta({ id: 'libano', titolo: 'Lebanon peace talks resume', riassunto: 'Peace talks resume in Lebanon.' }))]
+  const scelte = ricuciScelte(tutte as Grezza[], [{ id: 'libano' }, { id: 1.5 }, { id: 'inesistente' }, { id: 'libano' }])
+  assert.deepEqual(scelte, [{ n: 2, riga: '' }])
+  const visibili = selezioneVisibile(tutte, focus, scelte.map(s => tutte[s.n - 1].id), ora)
+  assert.equal(visibili.length, 1)
+  assert.equal(visibili[0].titolo, 'Lebanon peace talks resume')
+  assert.equal(visibili[0].riassunto, 'Peace talks resume in Lebanon.')
+  assert.equal(visibili[0].perche, null)
+})
+
+test('una scelta vuota del modello rimane vuota e non diventa un ripiego generale', () => {
+  assert.deepEqual(ricuciScelte([finta({ id: 'x' })], []), [])
+  assert.deepEqual(selezioneVisibile([notizia(finta({ id: 'x' }))], focus, [], ora), [])
+})
+
+test('gli articoli scaduti non rientrano quando tutte le fonti sono ferme', () => {
+  const vecchia = finta({ id: 'vecchia', titolo: 'Electron improves macOS security', quando: fa(120) })
+  assert.deepEqual(cernita([vecchia], ora), [])
+  assert.deepEqual(selezioneVisibile([notizia(vecchia)], focus, ['vecchia'], ora), [])
+})
+
+test('una deprecazione ufficiale macOS resta utile per due settimane, la cronaca no', () => {
+  const rilascio = finta({ id: 'rosetta', fonte: 'Apple Developer', titolo: 'Upcoming changes to Rosetta support for Intel-based macOS apps', quando: fa(7 * 24) })
+  const cronaca = finta({ id: 'cronaca', fonte: 'BBC', titolo: 'Parliament reaches a trade agreement', quando: fa(7 * 24) })
+  assert.deepEqual(cernita([rilascio, cronaca], ora).map(n => n.id), ['rosetta'])
+  assert.deepEqual(selezioneVisibile([notizia(rilascio)], focus, undefined, ora).map(n => n.id), ['rosetta'])
+  const scaduto = { ...rilascio, quando: fa(15 * 24) }
+  assert.deepEqual(cernita([scaduto], ora), [])
+  assert.deepEqual(selezioneVisibile([notizia(scaduto)], focus, [scaduto.id], ora), [])
 })

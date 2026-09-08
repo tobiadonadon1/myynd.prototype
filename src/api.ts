@@ -498,6 +498,7 @@ export type Compito = {
   testo: string
   nota: string | null
   quando: string          // oggi | settimana | poi
+  giorno?: string | null  // planned local calendar day, YYYY-MM-DD
   stato: string           // aperto | delegato | pronto | chiede | fatto | lasciato
   modo: string            // io | bozza | tutto
   ordine: string
@@ -626,6 +627,8 @@ export type Notizia = {
 
 export type Rassegna = {
   notizie: Notizia[]
+  recenti?: Notizia[]
+  aggiornando?: boolean
   quando: string | null
   argomenti: string
   /**
@@ -648,7 +651,11 @@ export type Blocco = { etichetta: string; descrizione: string; valore: string; t
  * La ricetta arriva con l'azienda e non si modifica da qui: quello che è tuo
  * è se tenerla accesa, e la storia di quello che ha fatto su questa macchina.
  */
+export type Passo = { id: string; tipo: 'condizione' | 'trasforma'; testo: string }
+export type SuggerimentoAutomazione = { id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[] }
+
 export type Automazione = {
+  passi?: Passo[]
   id: string
   nome: string
   spiega: string
@@ -685,7 +692,7 @@ export type Automazione = {
   /** Il turno è già passato: girerà al primo giro utile, non all'ora scritta. */
   inRitardo: boolean
   /** Le ultime volte, dalla più vecchia alla più recente. */
-  storia: { quando: string; esito: string; quanti: number }[]
+  storia: { quando: string; esito: string; quanti: number; risultato?: string }[]
 }
 
 /** Quello che un'automazione guarderebbe adesso, senza fare niente. */
@@ -810,10 +817,10 @@ export const api = {
 
   compiti: () => json<Lista>('/api/compiti'),
 
-  aggiungiCompito: (c: { id: string; testo: string; quando?: string; nota?: string; voce?: string; doc?: string; origine?: string }) =>
+  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
     json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti', { method: 'POST', body: JSON.stringify(c) }),
 
-  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string }) =>
+  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
 
@@ -1213,6 +1220,9 @@ export const api = {
     return corpo
   },
 
+  suggerimentiAutomazioni: () => json<{ suggerimenti: SuggerimentoAutomazione[] }>('/api/automazioni/suggerimenti'),
+  adottaAutomazione: (id: string) => json<{ id: string; automazioni: Automazione[] }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'POST' }),
+  ignoraAutomazione: (id: string) => json<{ ok: true }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
 
   /** Va a vedere adesso se il repository ne ha di nuove. */
@@ -1221,9 +1231,9 @@ export const api = {
       '/api/automazioni/aggiorna', { method: 'POST' }),
 
   /** Da una frase a un'automazione. Nasce in pausa: prima la guardi. */
-  creaAutomazione: (descrizione: string) =>
+  creaAutomazione: (descrizione: string, attrezzi?: string[]) =>
     json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni',
-      { method: 'POST', body: JSON.stringify({ descrizione }) }),
+      { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),
 
   cambiaAutomazione: (id: string, patch: Record<string, unknown>) =>
     json<{ ok: true; automazioni: Automazione[] }>(`/api/automazioni/${encodeURIComponent(id)}`,
@@ -1284,10 +1294,8 @@ export const api = {
 
   // — la rassegna —
   //
-  // `rassegna()` legge e basta: aprire la pagina non deve far partire quindici
-  // richieste ai giornali. Chi le fa partire è l'orologio del server, o il
-  // bottone di chi ha voglia di riguardare adesso.
-
+  // Returns the current edition immediately while the server refreshes stale
+  // selections in the background, with its own cache and retry limits.
   rassegna: () => json<Rassegna>('/api/rassegna'),
   aggiornaRassegna: () => json<Rassegna>('/api/rassegna/aggiorna', { method: 'POST', body: JSON.stringify({ forza: true }) }),
   notiziaLetta: (id: string) => json<{ ok: true }>(`/api/rassegna/${encodeURIComponent(id)}/letta`, { method: 'POST' }),

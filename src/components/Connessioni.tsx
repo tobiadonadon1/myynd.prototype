@@ -1,293 +1,140 @@
-// Il pannello Connessioni: si apre da qualsiasi punto dell'app per collegare
-// o scollegare una fonte. Non fa ricominciare l'onboarding.
-
 import { useEffect, useRef, useState } from 'react'
 import { api, rigaSincronizzazione, type Stato } from '../api'
 import { Form } from './forms'
-import { frasi, lingua, loc, t } from '../lingua'
-import { BottoneSicuro, Hov, daTastiera, useFocoDialogo } from '../ui'
-import { IconPiu } from '../icons'
+import { frasi, loc, t } from '../lingua'
+import { BottoneSicuro, useFocoDialogo } from '../ui'
+import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
+import './connessioni.css'
 
-/**
- * Il pallino di ogni fonte.
- *
- * Le tinte sono le stesse degli attrezzi in `attrezzi.ts`, e devono restare
- * le stesse: una fonte che è verde nel pannello delle connessioni e blu sulla
- * pastiglia di un'automazione è una fonte che sembra due cose diverse.
- */
-const COLORE: Record<string, string> = {
-  posta: '#C4553C', calendario: '#A8763F', desktop: '#E0A44A', notion: '#5B9BC9', granola: '#8A6A3C',
-  conversazioni: '#4F6E8F',
-  claude: '#7FA98A',
-  google: '#C4623B', microsoft: '#B4573A', slack: '#3D8A6E', whatsapp: '#4E8C3F',
-  drive: '#2E6FBF', sharepoint: '#1F6F74', dropbox: '#3B5BC4', mind2do: '#8E7CC3',
-  compatibile: '#6B7FB3'
-}
-
-/** Quelli che ragionano e non leggono: niente da rileggere, niente da contare. */
 const MOTORI = ['claude', 'compatibile']
 
+/** A quiet source picker; credentials and account controls appear only after choosing. */
 export function Connessioni({ fonte, chiudi, cambiato }: {
-  /** La fonte da aprire già espansa; stringa vuota per l'elenco intero. */
-  fonte?: string
-  chiudi: () => void
-  cambiato: () => void
+  fonte?: string; chiudi: () => void; cambiato: () => void
 }) {
   const [s, setS] = useState<Stato | null>(null)
-  const [aperto, setAperto] = useState<string | null>(fonte || null)
-  /**
-   * Una fonte sola, quando è una fonte sola che hai chiesto.
-   *
-   * Cliccando «Posta» si apriva l'elenco intero con Posta espansa in mezzo:
-   * quattro card, tre delle quali non c'entravano niente con quello che
-   * stavi per fare. Chi clicca Posta vuole Posta. L'elenco resta a un clic,
-   * per chi lo cerca.
-   */
+  const [cerca, setCerca] = useState('')
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
-  /**
-   * La fonte che si sta rileggendo, e a parte la riga che racconta come va.
-   *
-   * Erano una variabile sola: l'id, poi sovrascritto dalla riga — e il bottone,
-   * che cercava l'id, tornava a dire «Rileggi» a metà lettura; la riga non la
-   * mostrava nessuno, e un secondo clic chiedeva al server una seconda lettura.
-   */
+  const [modifica, setModifica] = useState(false)
   const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
   const [avanzamento, setAvanzamento] = useState<string | null>(null)
-  // una password IMAP scaduta, dopo «Rileggi», prima non produceva niente:
-  // il conteggio non saliva, e basta
   const [guaio, setGuaio] = useState<string | null>(null)
-  // il fuoco entra con il pannello, Esc lo chiude, e alla chiusura torna a chi l'ha aperto
+  const [subito, setSubito] = useState<string[]>([])
+  const [collegando, setCollegando] = useState(false)
   const finestra = useRef<HTMLDivElement>(null)
+  const indietro = useRef<HTMLButtonElement>(null)
+  const ultimo = useRef(fonte || '')
   useFocoDialogo(finestra, chiudi)
 
   const ricarica = async () => { const n = await api.stato(); setS(n); return n }
-  useEffect(() => { ricarica().catch(() => {}) }, [])
-
-  const leggi = async (fonte: string) => {
-    if (fonteInLettura) return
-    setFonteInLettura(fonte)
-    setAvanzamento(null)
+  const carica = () => {
     setGuaio(null)
-    try {
-      await api.sincronizza(m => { if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m)) }, fonte)
-      await ricarica()
-      cambiato()
-    } catch (e) {
-      setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.'))
-    }
-    setFonteInLettura(null)
-    setAvanzamento(null)
+    void ricarica().catch(e => setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')))
   }
-
-  const tutti = s?.connettori.filter(c => c.pronto || c.collegato) ?? []
-  const pronti = soloQuesta ? tutti.filter(c => c.id === soloQuesta) : tutti
-  const dopo = soloQuesta ? [] : (s?.connettori.filter(c => !c.pronto && !c.collegato) ?? [])
-  const messaFuoco = !!soloQuesta && pronti.length === 1
-
-  // Quello che si può collegare senza chiedere niente a nessuno: le cartelle
-  // di casa, e la chiave di Claude se è già nell'ambiente. Posta e Notion no —
-  // una password e un token non si possono indovinare, e fingere che un
-  // pulsante li risolva sarebbe solo un pulsante che fallisce.
-  const [subito, setSubito] = useState<string[]>([])
-  const [collegando, setCollegando] = useState(false)
+  useEffect(() => { carica() }, [])
   useEffect(() => {
     if (!s) return
-    const puoi: string[] = []
     const desktop = s.connettori.find(c => c.id === 'desktop')
-    if (desktop && !desktop.collegato && s.suggerimentiDesktop.length) puoi.push('desktop')
+    const puoi = desktop && !desktop.collegato && s.suggerimentiDesktop.length ? ['desktop'] : []
+    let attuale = true
     api.chiaveNellAmbiente().then(r => {
+      if (!attuale) return
       const claude = s.connettori.find(c => c.id === 'claude')
       setSubito(r.presente && claude && !claude.collegato ? [...puoi, 'claude'] : puoi)
-    }).catch(() => setSubito(puoi))
+    }).catch(() => { if (attuale) setSubito(puoi) })
+    return () => { attuale = false }
   }, [s])
 
-  const collegaSubito = async () => {
-    setCollegando(true)
-    setGuaio(null)
+  const leggi = async (id: string) => {
+    if (fonteInLettura) return
+    setFonteInLettura(id); setAvanzamento(null); setGuaio(null)
     try {
-      if (subito.includes('desktop') && s) await api.collegaDesktop(s.suggerimentiDesktop)
-      if (subito.includes('claude')) await api.usaChiaveAmbiente()
-      await ricarica()
-      cambiato()
-      if (subito.includes('desktop')) leggi('desktop')
-    } catch (e) {
-      setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.'))
-    } finally { setCollegando(false) }
+      await api.sincronizza(m => { if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m)) }, id)
+      await ricarica(); cambiato()
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')) }
+    setFonteInLettura(null); setAvanzamento(null)
+  }
+  const collegaSubito = async (id: string) => {
+    if (collegando) return
+    setCollegando(true); setGuaio(null)
+    try {
+      if (id === 'desktop' && s) await api.collegaDesktop(s.suggerimentiDesktop)
+      else if (id === 'claude') await api.usaChiaveAmbiente()
+      else return
+      await ricarica(); cambiato()
+      if (id === 'desktop') void leggi(id)
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.')) }
+    finally { setCollegando(false) }
   }
 
-  return (
-    <>
-      <div onClick={chiudi} style={{
-        position: 'absolute', inset: 0, background: 'rgba(40,30,22,.34)',
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 60
-      }} />
-      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="connessioni-titolo" style={{
-        // `top`/`bottom` fissi obbligavano la finestra all'altezza dello
-        // schermo anche con dentro una scheda sola — poche righe in alto e il
-        // resto vuoto, fino in fondo. Centrata e alta quanto il contenuto, con
-        // un tetto: la scheda singola si stringe, l'elenco intero delle fonti
-        // ci sbatte contro e scorre come ha sempre fatto.
-        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        maxHeight: 'calc(100% - 120px)',
-        width: 620, maxWidth: '88%', zIndex: 61, display: 'flex', flexDirection: 'column',
-        borderRadius: '26px 22px 26px 20px', background: 'rgba(255,253,249,.97)',
-        border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)',
-        overflow: 'hidden'
+  const tutti = s?.connettori.filter(c => (c.pronto || c.collegato) && c.id !== 'mind2do') ?? []
+  const scelta = tutti.find(c => c.id === soloQuesta)
+  const pronti = tutti.filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cerca.toLocaleLowerCase()))
+  const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
+  const apri = (id: string) => {
+    ultimo.current = id; setSoloQuesta(id); setModifica(false)
+    requestAnimationFrame(() => indietro.current?.focus())
+  }
+  const torna = () => {
+    setSoloQuesta(''); setModifica(false)
+    requestAnimationFrame(() => {
+      const tiles = finestra.current?.querySelectorAll<HTMLButtonElement>('[data-connector]')
+      Array.from(tiles ?? []).find(el => el.dataset.connector === ultimo.current)?.focus()
+    })
+  }
+
+  return <>
+    <div className="connections-backdrop" onClick={chiudi} />
+    <div ref={finestra} className="connections-dialog" role="dialog" aria-modal="true" aria-labelledby="connessioni-titolo" tabIndex={-1}
+      onKeyDown={e => {
+        if (e.key !== 'Tab') return
+        const focusabili = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary, [tabindex="0"]'))
+          .filter(el => el.getClientRects().length > 0 && !el.closest('[inert]'))
+        const primo = focusabili[0], ultimo = focusabili[focusabili.length - 1]
+        if (e.shiftKey && document.activeElement === primo) { e.preventDefault(); ultimo?.focus() }
+        else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primo?.focus() }
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 16px', borderBottom: '1px solid rgba(34,39,31,.08)' }}>
-          <div style={{ flex: 1 }}>
-            <div id="connessioni-titolo" style={{ fontSize: 21, letterSpacing: '-.02em' }}>
-              {messaFuoco ? t(pronti[0].nome) : t('Connessioni')}
+      <header className="connections-dialog-header">
+        {scelta && <button ref={indietro} className="connections-icon-button" onClick={torna} aria-label={t('‹ tutte le fonti')} title={t('‹ tutte le fonti')}>←</button>}
+        <h2 id="connessioni-titolo">{scelta ? t(scelta.nome) : t('Connessioni')}</h2>
+        <button className="connections-icon-button" onClick={chiudi} aria-label={t('Chiudi')} title={t('Chiudi')}>×</button>
+      </header>
+      <div className="connections-dialog-body">
+        {guaio && <div role="alert" className="connections-feedback">{guaio}{!s && <button className="connections-button" onClick={carica}>{t('Riprova')}</button>}</div>}
+        {avanzamento && <div role="status" className="connections-progress">{avanzamento}</div>}
+        {!s && !guaio && <p role="status" className="connections-progress">{t('carico…')}</p>}
+        {s && !scelta && <>
+          <input className="connections-search" type="search" value={cerca} onChange={e => setCerca(e.target.value)} placeholder={t('Cerca connessioni…')} aria-label={t('Cerca connessioni…')} />
+          <div className="connector-tiles compact">{pronti.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
+          {!pronti.length && <p className="connections-progress">{t('Nessun risultato')}</p>}
+          {!!dopo.length && !cerca && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
+        </>}
+        {scelta && <div className="connection-detail">
+          <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''}`}>
+            <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} /></span>
+            <div><span className="connection-detail-status">{scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
+              <p>{scelta.collegato
+                ? scelta.id === 'compatibile' && s?.config.compatibile
+                  ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
+                  : [scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null, scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null].filter(Boolean).join(' · ') || t(scelta.nota)
+                : t(scelta.nota)}</p>
             </div>
-            <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 3 }}>
-              {messaFuoco ? (
-                <Hov as="button" onClick={() => { setSoloQuesta(''); setAperto(null) }}
-                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.6)' }}
-                  hover={{ color: '#8E3F1F' }}>{t('‹ tutte le fonti')}</Hov>
-              ) : (s ? frasi.documentiLetti(s.conteggi.totale.toLocaleString(loc())) : t('carico…'))}
-            </div>
-            {/* Una riga sua, e non il posto del ritorno «‹ tutte le fonti»:
-                aperto su una fonte sola — che è come ci si arriva dallo schermo
-                dei connettori — il guasto della rilettura non compariva, cioè
-                proprio nel caso per cui era stato scritto. */}
-            {guaio && (
-              <div role="status" style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 4, overflowWrap: 'anywhere' }}>
-                {guaio}
-              </div>
-            )}
-            {avanzamento && (
-              <div role="status" style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 4, overflowWrap: 'anywhere' }}>
-                {avanzamento}
-              </div>
-            )}
           </div>
-          <button onClick={chiudi} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: 22, cursor: 'pointer', padding: '0 4px' }}>×</button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px' }}>
-          {subito.length > 0 && !messaFuoco && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, padding: '15px 18px',
-              borderRadius: 18, border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)'
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15 }}>{frasi.collegabiliOra(subito.length)}</div>
-                <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.62)', marginTop: 3, lineHeight: 1.5 }}>
-                  {subito.includes('desktop') && t('Scrivania, Documenti e Download in sola lettura')}
-                  {subito.length === 2 && t(', e ')}
-                  {subito.includes('claude') && t('la chiave di Claude che è già qui')}
-                  {t('. Le altre no: servono le tue credenziali.')}
-                </div>
-              </div>
-              <button onClick={collegaSubito} disabled={collegando} style={{
-                flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
-                background: collegando ? 'rgba(34,39,31,.18)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
-                color: collegando ? 'rgba(34,39,31,.5)' : '#FFF7F0',
-                fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
-                cursor: collegando ? 'default' : 'pointer'
-              }}>{collegando ? t('Collego…') : t('Consenti')}</button>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pronti.map(c => {
-              const colore = COLORE[c.id] ?? '#C4623B'
-              const apertoQui = aperto === c.id
-              return (
-                <div key={c.id} style={{
-                  borderRadius: 18,
-                  border: `1px solid ${c.collegato ? 'rgba(34,39,31,.14)' : 'rgba(34,39,31,.09)'}`,
-                  background: c.collegato ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.4)',
-                  overflow: 'hidden'
-                }}>
-                  <div role="button" tabIndex={0} aria-expanded={apertoQui}
-                    onClick={() => setAperto(apertoQui ? null : c.id)}
-                    onKeyDown={daTastiera(() => setAperto(apertoQui ? null : c.id))}
-                    style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', cursor: 'pointer' }}>
-                    <span style={{
-                      width: 9, height: 9, borderRadius: '50%', flex: 'none',
-                      background: c.collegato ? colore : 'rgba(34,39,31,.2)',
-                      boxShadow: c.collegato ? `0 0 0 5px ${colore}22` : 'none'
-                    }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15 }}>{t(c.nome)}</div>
-                      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.58)', marginTop: 3, overflowWrap: 'anywhere' }}>
-                        {c.collegato
-                          // per il fornitore compatibile la riga utile è quale: nome e modello, non «collegato»
-                          ? (c.id === 'compatibile' && s?.config.compatibile
-                            ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
-                            : [
-                              c.documenti ? frasi.nDocumenti(c.documenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT')) : t('collegato'),
-                              // il desktop dice anche se lo sta guardando dal vivo
-                              c.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
-                            ].filter(Boolean).join(' · '))
-                          : t(c.nota)}
-                      </div>
-                    </div>
-                    {c.collegato ? (
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 'none' }}>
-                        {/*
-                          «Rileggi» solo dove c'è qualcosa da rileggere.
-                          Claude non è una fonte, e WhatsApp non si può
-                          chiedere: i messaggi li spinge Meta mentre arrivano.
-                          Un bottone che gira a vuoto è peggio di un bottone
-                          che non c'è — fa credere che la fonte sia rotta.
-                        */}
-                        {!MOTORI.includes(c.id) && c.id !== 'whatsapp' && (
-                          <Hov as="button"
-                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); leggi(c.id) }}
-                            style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                            hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                            {fonteInLettura === c.id ? t('leggo…') : t('Rileggi')}
-                          </Hov>
-                        )}
-                        {/* il fornitore si può cambiare senza scollegarlo: indirizzo, modello o chiave */}
-                        {c.id === 'compatibile' && (
-                          <Hov as="button"
-                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAperto(apertoQui ? null : c.id) }}
-                            style={{ border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                            hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                            {t('Cambia')}
-                          </Hov>
-                        )}
-                        {/* scollegare chiede una volta: le automazioni che aprono questa fonte si fermano */}
-                        <BottoneSicuro titolo={t('Scollega')}
-                          guaio={m => setGuaio(t(m))}
-                          fai={async () => { await api.scollega(c.id); await ricarica(); cambiato() }}>
-                          {t('Scollega')}
-                        </BottoneSicuro>
-                      </div>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: '#8E3F1F', flex: 'none' }}>
-                        <IconPiu size={13} />{t('Collega')}</span>
-                    )}
-                  </div>
-                  {apertoQui && (!c.collegato || c.id === 'compatibile') && (
-                    <div style={{ padding: '2px 18px 18px', animation: 'fadein .2s ease' }}>
-                      <Form id={c.id} tema="chiaro" ok={async () => {
-                        await ricarica()
-                        setAperto(null)
-                        cambiato()
-                        if (!MOTORI.includes(c.id)) leggi(c.id)
-                      }} />
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {!messaFuoco && <div style={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(34,39,31,.45)', margin: '26px 0 12px' }}>{t('Più avanti')}</div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {dopo.map(c => (
-              <span key={c.id} title={t(c.nota)} style={{
-                padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
-                border: '1px dashed rgba(34,39,31,.18)', color: 'rgba(34,39,31,.42)'
-              }}>{t(c.nome)}</span>
-            ))}
-          </div>
-        </div>
+          {scelta.collegato && <div className="connection-detail-actions">
+            {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id ? t('leggo…') : t('Rileggi')}</button>}
+            {scelta.id === 'compatibile' && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
+            <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica(); cambiato() }}>{t('Scollega')}</BottoneSicuro>
+          </div>}
+          {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">
+            <p>{scelta.id === 'desktop' ? t('Scrivania, Documenti e Download in sola lettura') : t('la chiave di Claude che è già qui')}</p>
+            <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
+          </div>}
+          {(!scelta.collegato || (scelta.id === 'compatibile' && modifica)) && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
+            await ricarica(); setModifica(false); cambiato()
+            if (!MOTORI.includes(scelta.id)) void leggi(scelta.id)
+          }} /></div>}
+        </div>}
       </div>
-    </>
-  )
+    </div>
+  </>
 }

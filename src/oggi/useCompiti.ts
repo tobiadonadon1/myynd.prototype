@@ -182,12 +182,12 @@ export function useCompiti(
     mostraToast(messaggio)
   }, [mostraToast])
 
-  const aggiungi = useCallback(async (testo: string, quando: Secchio): Promise<string | null> => {
+  const aggiungi = useCallback(async (testo: string, quando: Secchio, giorno?: string | null): Promise<string | null> => {
     const pulito = testo.trim()
     if (!pulito) return null
     const ora = new Date().toISOString()
     const finto: Compito = {
-      id: nuovoId(), testo: pulito, nota: null, quando, stato: 'aperto',
+      id: nuovoId(), testo: pulito, nota: null, quando, giorno, stato: 'aperto',
       // in coda al suo secchio: la chiave vera arriva dal server, questa serve
       // solo a non far saltare la riga di posto nel mezzo secondo di attesa
       ordine: 'zzzz', origine: 'mano', voce: null, doc: null, chiesto: null,
@@ -197,7 +197,7 @@ export function useCompiti(
     const prima = compitiRef.current
     setCompiti(cs => [...cs, finto])
     try {
-      const r = await api.aggiungiCompito({ id: finto.id, testo: pulito, quando })
+      const r = await api.aggiungiCompito({ id: finto.id, testo: pulito, quando, giorno })
       setCompiti(r.compiti)
       return finto.id
     } catch {
@@ -215,11 +215,11 @@ export function useCompiti(
    * l'ordine è quello del foglio, e la chiave d'ordine del server lo segue.
    * Torna gli id di quelle nate davvero; se una non è nata l'avviso è il suo.
    */
-  const aggiungiTante = useCallback(async (righe: string[], quando: Secchio): Promise<string[]> => {
+  const aggiungiTante = useCallback(async (righe: string[], quando: Secchio, giorno?: string | null): Promise<string[]> => {
     const piene = righe.map(r => r.trim()).filter(Boolean)
     const nati: string[] = []
     for (const r of piene) {
-      const id = await aggiungi(r, quando)
+      const id = await aggiungi(r, quando, giorno)
       if (id) nati.push(id)
     }
     if (nati.length && nati.length === piene.length) mostraToast(frasi.righeSegnate(nati.length))
@@ -298,13 +298,14 @@ export function useCompiti(
     } catch { indietro(prima, id, t('Non sono riuscito a rispondergli.')) }
   }, [indietro])
 
-  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string }) => {
+  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null }): Promise<boolean> => {
     const prima = compitiRef.current
     setCompiti(cs => cs.map(x => (x.id === id ? { ...x, ...c } as Compito : x)))
     try {
       const r = await api.cambiaCompito(id, c)
       setCompiti(r.compiti)
-    } catch { indietro(prima, id, t('Non sono riuscito a salvarlo.')) }
+      return true
+    } catch { indietro(prima, id, t('Non sono riuscito a salvarlo.')); return false }
   }, [indietro])
 
   /**
@@ -324,7 +325,8 @@ export function useCompiti(
         : sopra ? senza.findIndex(c => c.id === sopra) + 1
         : senza.length
       const nuova = [...senza]
-      nuova.splice(dove < 0 ? senza.length : dove, 0, { ...mossa, quando: quando ?? mossa.quando })
+      nuova.splice(dove < 0 ? senza.length : dove, 0, { ...mossa, quando: quando ?? mossa.quando,
+        giorno: quando && quando !== mossa.quando ? null : mossa.giorno })
       return nuova
     })
     try {

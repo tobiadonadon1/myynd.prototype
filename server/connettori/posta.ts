@@ -646,7 +646,8 @@ export async function cartellaInviata(cl: ImapFlow): Promise<string | null> {
 export async function sincronizza(
   c: ConfigPosta,
   avanzamento?: (fatti: number, totale: number) => void,
-  giaIndicizzati?: (cartella: string) => Set<number>
+  giaIndicizzati?: (cartella: string) => Set<number>,
+  daClassificare?: (cartella: string) => Set<number>
 ): Promise<EsitoPosta> {
   const giorni = c.giorni ?? 30
   const da = new Date(Date.now() - giorni * 86400_000)
@@ -729,7 +730,6 @@ export async function sincronizza(
          * si perdono.
          */
         const mancanti = (noti.size ? uids.filter(u => !noti.has(u)) : uids).sort((a, b) => a - b)
-        saltati += uids.length - mancanti.length
         dentroLaFinestra += uids.length
         /*
          * Il segno di dove riprendere non si scrive da nessuna parte, e per la
@@ -742,7 +742,24 @@ export async function sincronizza(
         const troppi = Math.max(0, mancanti.length - 400)
         arretrato += troppi
         if (troppi) troncato = true
-        const daScaricare = mancanti.slice(-400)
+        const nuovi = mancanti.slice(-400)
+        /*
+         * Le email entrate prima delle colonne `letto` e `massa` sono note,
+         * quindi la regola qui sopra le salterebbe per sempre. Chi chiama ci
+         * passa soltanto quelle ancora senza classificazione: al massimo
+         * duecento per giro, presenti ancora nella finestra e sullo stesso
+         * UIDVALIDITY. Rileggerne il corpo è necessario perché List-Unsubscribe
+         * e gli altri segnali non sono nell'indice; farlo a blocchi evita una
+         * seconda prima sincronizzazione di tutta la casella.
+         */
+        const richiesti = stessa && daClassificare ? daClassificare(cartella) : new Set<number>()
+        const scelti = new Set(nuovi)
+        const riclassificati = [...richiesti]
+          .filter(u => noti.has(u) && uids.includes(u) && !scelti.has(u))
+          .sort((a, b) => a - b)
+          .slice(-BANDIERE_RECENTI)
+        const daScaricare = [...nuovi, ...riclassificati]
+        saltati += uids.length - mancanti.length - riclassificati.length
 
         let fatti = 0
         // esistono, e vanno detti vivi tutti: quelli che riscarichiamo adesso e
@@ -806,7 +823,8 @@ export async function sincronizza(
          * cambia più niente al feed. Se va storto, la cartella è comunque
          * letta bene: si lascia perdere e basta.
          */
-        const recenti = uids.filter(u => noti.has(u)).sort((a, b) => a - b).slice(-BANDIERE_RECENTI)
+        const riletti = new Set(riclassificati)
+        const recenti = uids.filter(u => noti.has(u) && !riletti.has(u)).sort((a, b) => a - b).slice(-BANDIERE_RECENTI)
         if (recenti.length) {
           try {
             for await (const msg of cl.fetch(recenti, { uid: true, flags: true }, { uid: true })) {
