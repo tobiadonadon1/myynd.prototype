@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, rigaSincronizzazione, type Stato } from '../api'
-import { Form } from './forms'
+import { AccessoDisco, Form } from './forms'
 import { frasi, loc, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
@@ -116,10 +116,17 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
               <p>{scelta.collegato
                 ? scelta.id === 'compatibile' && s?.config.compatibile
                   ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
-                  : [scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null, scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null].filter(Boolean).join(' · ') || t(scelta.nota)
+                  : [
+                    scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null,
+                    // il desktop dice se è la casa intera, e se la sta guardando dal vivo
+                    scelta.id === 'desktop' && s?.config.desktop?.tutto ? t('il Mac intero') : null,
+                    scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
+                  ].filter(Boolean).join(' · ') || t(scelta.nota)
                 : t(scelta.nota)}</p>
             </div>
           </div>
+          {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
+          {scelta.id === 'note' && s?.accessoDisco === 'no' && <div className="connection-detail-form"><AccessoDisco tema="chiaro" /></div>}
           {scelta.collegato && <div className="connection-detail-actions">
             {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id ? t('leggo…') : t('Rileggi')}</button>}
             {scelta.id === 'compatibile' && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}

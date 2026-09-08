@@ -38,6 +38,9 @@ import { ARGOMENTO_NASCOSTO, avvioNascosto } from './nascosto.ts'
 
 /** Dove il renderer può essere mandato: un posto dell'app, o una chat precisa. */
 type Dove = string | { dove: 'chat'; id: string }
+/** L'unico indirizzo fuori da http/https/mailto che il guscio apre: la schermata del permesso per le Note. */
+const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+
 const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'])
 
 /** Quello che arriva via IPC non è fidato: o è un posto conosciuto, o non si va. */
@@ -232,6 +235,14 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
     return r.canceled ? [] : r.filePaths
   })
   ipcMain.handle('myynd:apri-fuori', async (_e, url: unknown) => {
+    /*
+     * Una sola eccezione a http/https/mailto, e uguale alla lettera: la
+     * schermata «Accesso completo al disco» delle Impostazioni di Sistema, che
+     * è dove una persona dà a Myynd il permesso di leggere le Note. Non un
+     * prefisso — `x-apple.systempreferences:` apre qualunque pannello — ma
+     * quell'indirizzo e basta. E lo apre solo chi preme il bottone.
+     */
+    if (String(url) === PANNELLO_ACCESSO_DISCO) { await shell.openExternal(PANNELLO_ACCESSO_DISCO); return }
     let u: URL
     try { u = new URL(String(url)) } catch { throw new Error(t('Questo indirizzo non si apre fuori da Myynd.')) }
     if (!['http:', 'https:', 'mailto:'].includes(u.protocol)) throw new Error(t('Questo indirizzo non si apre fuori da Myynd.'))

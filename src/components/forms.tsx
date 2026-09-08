@@ -593,6 +593,16 @@ export function FormDesktop({ tema, ok }: Props) {
   const [manuale, setManuale] = useState('')
   const [suggeriti, setSuggeriti] = useState<string[]>([])
   const [ospitato, setOspitato] = useState<boolean | null>(null)
+  /**
+   * «Tutto il Mac»: la casa intera invece delle cartelle scelte.
+   *
+   * È l'interruttore per cui esiste l'app da scrivania — un server non ha le
+   * tue cartelle, l'app le ha tutte — e sta qui, accanto alle cartelle, non
+   * al posto loro: chi lo accende vede sparire le pastiglie, chi lo spegne le
+   * ritrova come le aveva lasciate. La riga sotto dice cosa legge e cosa
+   * salta, perché «tutto» senza quella riga fa paura a ragione.
+   */
+  const [tutto, setTutto] = useState(false)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -641,7 +651,7 @@ export function FormDesktop({ tema, ok }: Props) {
   const collega = async () => {
     setOccupato(true); setErr('')
     const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
-    try { await api.collegaDesktop(tutte); ok() }
+    try { await api.collegaDesktop(tutte, tutto); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -656,20 +666,34 @@ export function FormDesktop({ tema, ok }: Props) {
   return (
     <div>
       <div style={nota(tema)}>{t('PDF, Word, testo. Solo lettura, solo dove dici tu.')}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {suggeriti.map(c => (
-          // il nome e non il percorso intero, ma il percorso resta nel titolo:
-          // due «Lavoro» in due posti diversi si distinguono passandoci sopra
-          <button key={c} title={c} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
-        ))}
-        {desktop() && (
-          <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
-        )}
+      {!tutto && (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            {suggeriti.map(c => (
+              // il nome e non il percorso intero, ma il percorso resta nel titolo:
+              // due «Lavoro» in due posti diversi si distinguono passandoci sopra
+              <button key={c} title={c} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
+            ))}
+            {desktop() && (
+              <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
+            )}
+          </div>
+          <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
+          <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
+        </>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Tutto il Mac')}</div>
+          <div style={{ ...nota(tema), marginTop: 3, marginBottom: 0 }}>
+            {t('La tua cartella personale e iCloud Drive, fino a venticinquemila documenti. Salta le app, la musica, i film, le foto, le cache, il cestino, i file nascosti e i progetti di codice.')}
+          </div>
+        </div>
+        <button type="button" role="switch" aria-checked={tutto} aria-label={t('Tutto il Mac')}
+          onClick={() => setTutto(v => !v)} style={track(tutto)}><span style={knob()} /></button>
       </div>
-      <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
-      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega il desktop')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{tutto ? t('Collega tutto il Mac') : t('Collega il desktop')}</Conferma>
     </div>
   )
 }
@@ -710,6 +734,85 @@ export function FormGranola({ tema, ok }: Props) {
 }
 
 /**
+ * Le Note di Apple: come Granola, una scheda senza un solo campo — con una
+ * riga in più che compare solo quando serve.
+ *
+ * Il database delle Note sta in una cartella che macOS protegge, e senza
+ * «Accesso completo al disco» il bottone fallisce. Quel permesso lo dà la
+ * persona, a mano, nelle Impostazioni di Sistema: qui si dice la strada e,
+ * dentro l'app, si offre il bottone che apre quella schermata. Myynd non la
+ * apre mai da solo: lo fa chi preme.
+ */
+export function FormNote({ tema, ok }: Props) {
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
+
+  useEffect(() => {
+    api.stato().then(s => setAccesso(s.accessoDisco)).catch(() => {})
+  }, [])
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try { await api.collegaNote(); ok() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  return (
+    <div>
+      <div style={nota(tema)}>
+        {t('Legge le note dell’app Note di Apple su questo Mac: gli appunti, le liste, quello che ti sei scritto al volo.')}
+      </div>
+      <div style={{ ...nota(tema), marginTop: 8 }}>
+        {t('Niente da incollare. Si legge una copia del suo archivio, in sola lettura; le note protette da password e quelle nel cestino restano fuori.')}
+      </div>
+      {accesso === 'no' && <AccessoDisco tema={tema} />}
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega le Note')}</Conferma>
+    </div>
+  )
+}
+
+/** L'indirizzo che apre la schermata del permesso. Lo stesso, alla lettera, che il guscio accetta. */
+const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+
+/**
+ * La riga del permesso mancante: la strada, e dentro l'app il bottone.
+ *
+ * Nel browser non c'è un guscio che possa aprire le Impostazioni di Sistema,
+ * e allora resta la strada scritta per intero — è quella che una persona
+ * segue a mano. Si mostra solo quando il server dice «no»: una riga sul
+ * permesso a chi ce l'ha già è una riga che insegna a ignorare le righe.
+ */
+export function AccessoDisco({ tema }: { tema: Tema }) {
+  const d = desktop()
+  const [err, setErr] = useState('')
+  const apri = async () => {
+    setErr('')
+    try { await d?.apriFuori(PANNELLO_ACCESSO_DISCO) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+  const scuro = tema === 'scuro'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: '11px 14px', borderRadius: 13, border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(196,98,59,.35)'}` }}>
+      <div style={{ ...nota(tema), marginBottom: 0, flex: 1, minWidth: 0 }}>
+        {t('Per leggere le Note serve l’accesso completo al disco')}
+        {!d && <>{': '}{t('Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd')}</>}
+        {'.'}
+        {err && <span style={{ color: '#8E3F1F' }}> {t(err)}</span>}
+      </div>
+      {d && (
+        <button type="button" onClick={apri} style={{
+          flex: 'none', padding: '8px 14px', borderRadius: 99, fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer',
+          border: '1px solid #C4623B', background: 'rgba(196,98,59,.16)', color: scuro ? '#E8A87C' : '#8E3F1F'
+        }}>{t('Apri Impostazioni')}</button>
+      )}
+    </div>
+  )
+}
+
+/**
  * Le conversazioni: i file esportati, e un interruttore.
  *
  * Due righe di istruzioni, e non una: il passaggio che costa è l'esportazione,
@@ -725,12 +828,14 @@ export function FormConversazioni({ tema, ok }: Props) {
   const [manuale, setManuale] = useState('')
   const [codice, setCodice] = useState(false)
   const [codicePossibile, setCodicePossibile] = useState(false)
+  const [sessioni, setSessioni] = useState(0)
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
   useEffect(() => {
     api.stato().then(s => {
       setCodicePossibile(s.codiceConversazioni)
+      setSessioni(s.sessioniCodice)
       // parte acceso se la cartella c'è: è l'unica parte senza attrito, e
       // spegnerlo è un clic
       setCodice(s.codiceConversazioni)
@@ -776,6 +881,9 @@ export function FormConversazioni({ tema, ok }: Props) {
       <div style={{ ...nota(tema), marginTop: 8 }}>
         {t('ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.')}
       </div>
+      <div style={{ ...nota(tema), marginTop: 8 }}>
+        {t('Le chat di claude.ai non stanno su questo Mac — nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.')}
+      </div>
 
       <div style={etichetta(tema)}>{t('I file esportati')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
@@ -806,6 +914,7 @@ export function FormConversazioni({ tema, ok }: Props) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Anche le sessioni di Claude Code su questo computer')}</div>
             <div style={{ ...nota(tema), marginTop: 3, marginBottom: 0 }}>
+              {sessioni > 0 && <>{frasi.sessioniTrovate(sessioni)}{' '}</>}
               {t('Stanno in ~/.claude/projects: si tengono le battute, non i file che ha aperto né i comandi che ha lanciato.')}
             </div>
           </div>
@@ -1328,6 +1437,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
   if (id === 'granola') return <FormGranola tema={tema} ok={ok} />
+  if (id === 'note') return <FormNote tema={tema} ok={ok} />
   if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />

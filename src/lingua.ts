@@ -554,7 +554,6 @@ const EN: Record<string, string> = {
   'leggo le riunioni': 'reading the meetings',
   'Richiede OAuth Google.': 'Needs Google OAuth.',
   'Richiede OAuth Dropbox.': 'Needs Dropbox OAuth.',
-  'Richiede OAuth Fatture in Cloud.': 'Needs Fatture in Cloud OAuth.',
   'collegato': 'connected',
 // — il giro —
   'Scrivi la riga': 'Write the line',
@@ -1765,6 +1764,36 @@ const EN: Record<string, string> = {
   'Non sono riuscito a copiarlo.': 'I could not copy it.',
   'Apri in Claude Code…': 'Open in Claude Code…',
   'prepara il prompt': 'writes the prompt',
+
+  // — tutto il Mac, le Note di Apple, l'accesso completo al disco —
+  'Le cartelle che scegli tu, o tutto il Mac, in sola lettura.': 'The folders you pick, or the whole Mac, read-only.',
+  'Tutto il Mac': 'Whole Mac',
+  'La tua cartella personale e iCloud Drive, fino a venticinquemila documenti. Salta le app, la musica, i film, le foto, le cache, il cestino, i file nascosti e i progetti di codice.':
+    'Your home folder and iCloud Drive, up to twenty-five thousand documents. It skips apps, music, movies, photos, caches, the trash, hidden files and code projects.',
+  'Collega tutto il Mac': 'Connect the whole Mac',
+  'il Mac intero': 'the whole Mac',
+  'Le note dell’app Note di Apple su questo Mac. Serve l’accesso completo al disco per Myynd.':
+    'Your Apple Notes on this Mac. Myynd needs Full Disk Access.',
+  'Legge le note dell’app Note di Apple su questo Mac: gli appunti, le liste, quello che ti sei scritto al volo.':
+    'Reads your Apple Notes on this Mac: the jottings, the lists, what you wrote down on the fly.',
+  'Niente da incollare. Si legge una copia del suo archivio, in sola lettura; le note protette da password e quelle nel cestino restano fuori.':
+    'Nothing to paste. It reads a copy of the Notes store, read-only; password-protected notes and those in the trash stay out.',
+  'Collega le Note': 'Connect Notes',
+  'Per leggere le Note serve l’accesso completo al disco': 'Reading Notes needs Full Disk Access',
+  'Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd':
+    'System Settings › Privacy & Security › Full Disk Access › Myynd',
+  'Apri Impostazioni': 'Open Settings',
+  'Per leggere le Note serve l’accesso completo al disco: Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd.':
+    'Reading Notes needs Full Disk Access: System Settings › Privacy & Security › Full Disk Access › Myynd.',
+  'Non trovo le Note su questo Mac. Apri Note una volta e riprova.': 'I cannot find Notes on this Mac. Open Notes once and try again.',
+  'Non riesco a leggere le Note.': 'I cannot read Notes.',
+  'Note ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.':
+    'Notes changed the way it saves notes: this connection needs updating.',
+  'Note è un’app per Mac: su questo computer non c’è niente da leggere.': 'Notes is a Mac app: there is nothing to read on this computer.',
+  'Le Note si leggono dal Mac dove gira Myynd, e qui Myynd gira su un server.': 'Notes are read from the Mac Myynd runs on, and here Myynd runs on a server.',
+  'leggo le note': 'reading the notes',
+  'Le chat di claude.ai non stanno su questo Mac — nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.':
+    'claude.ai chats are not on this Mac — not even with the Claude app installed: they live on their side, and the export is the only way.',
 }
 
 
@@ -2065,6 +2094,11 @@ export const frasi = {
     corrente === 'en'
       ? (docs ? `${docs} document${docs === 1 ? '' : 's'}` : 'connected')
       : (docs ? `${docs} document${docs === 1 ? 'o' : 'i'}` : 'collegato'),
+
+  // — le conversazioni: quante sessioni di Claude Code ci sono, prima di accendere l'interruttore —
+  sessioniTrovate: (n: number) => corrente === 'en'
+    ? `Found ${n} Claude Code session${n === 1 ? '' : 's'} on this Mac.`
+    : `Trovat${n === 1 ? 'a una sessione' : `e ${n} sessioni`} di Claude Code su questo Mac.`,
 
   nDocumenti: (n: string) => corrente === 'en'
     ? `${n} document${n === '1' ? '' : 's'}` : `${n} document${n === '1' ? 'o' : 'i'}`,

@@ -230,6 +230,13 @@ const SEZIONI: Sezione[] = [
             }
           },
           {
+            nome: { it: 'Note', en: 'Notes' },
+            testo: {
+              it: 'Le note dell’app Note di Apple su questo Mac, lette da una copia del suo archivio. Niente da incollare, ma serve un permesso che solo tu puoi dare: Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd. Le note protette da password e quelle nel cestino restano fuori.',
+              en: 'Your Apple Notes on this Mac, read from a copy of its store. Nothing to paste, but it needs a permission only you can grant: System Settings › Privacy & Security › Full Disk Access › Myynd. Password-protected notes and those in the trash stay out.'
+            }
+          },
+          {
             nome: { it: 'Conversazioni', en: 'Conversations' },
             testo: {
               it: 'Le chat che hai già avuto con ChatGPT e con Claude, e le sessioni di Claude Code su questo computer. Le prime arrivano dai file che ti mandano loro — ChatGPT: Impostazioni › Controlli dati › Esporta dati; Claude: Impostazioni › Privacy › Esporta dati — e Myynd legge solo il conversations.json che scegli tu, quando lo scegli. Le sessioni di Claude Code stanno in ~/.claude/projects e si leggono solo se accendi l’interruttore. Di ogni conversazione tiene quello che vi siete scritti: non i file che ha aperto, non i comandi che ha lanciato, non il suo ragionamento. C’è solo quando Myynd gira sul tuo computer.',
@@ -239,8 +246,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Desktop', en: 'Desktop' },
             testo: {
-              it: 'Le cartelle che scegli tu, in sola lettura: PDF, Word, testo e Markdown. Salta i progetti di codice. C’è solo quando Myynd gira sul tuo computer: su un server non ha nessuna cartella tua da leggere.',
-              en: 'The folders you choose, read-only: PDF, Word, text and Markdown. It skips code projects. It is available only when Myynd runs on your own computer: on a server it has no folder of yours to read.'
+              it: 'Le cartelle che scegli tu — o, con l’interruttore «Tutto il Mac», la tua cartella personale e iCloud Drive — in sola lettura: PDF, Word, testo e Markdown. Salta i progetti di codice, le app, la musica, i film, le foto e le cache. C’è solo quando Myynd gira sul tuo computer: su un server non ha nessuna cartella tua da leggere.',
+              en: 'The folders you choose — or, with the “Whole Mac” switch, your home folder and iCloud Drive — read-only: PDF, Word, text and Markdown. It skips code projects, apps, music, movies, photos and caches. It is available only when Myynd runs on your own computer: on a server it has no folder of yours to read.'
             }
           },
           {

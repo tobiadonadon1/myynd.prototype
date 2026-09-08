@@ -286,6 +286,47 @@ test('l’interruttore di Claude Code chiede che la cartella ci sia', async () =
   assert.match(e.errore, /Non trovo le sessioni di Claude Code/)
 })
 
+// — quante sono, e i titoli dell'app Claude —
+
+test('le sessioni si contano senza aprirle, e la prova riporta il conto', async () => {
+  const progetti = join(CASA, 'sessioni-conto')
+  mkdirSync(join(progetti, '-a'), { recursive: true })
+  mkdirSync(join(progetti, '-b', 'sotto'), { recursive: true })
+  writeFileSync(join(progetti, '-a', 'uno.jsonl'), '')
+  writeFileSync(join(progetti, '-b', 'due.jsonl'), '')
+  writeFileSync(join(progetti, '-b', 'tre.jsonl'), '')
+  writeFileSync(join(progetti, '-b', 'appunti.txt'), '')
+  writeFileSync(join(progetti, 'fuori.jsonl'), '')
+  assert.equal(await conv.contaSessioni(progetti), 3)
+  assert.equal(await conv.contaSessioni(join(CASA, 'non-c-e')), 0)
+})
+
+test('l’app Claude tiene solo le schede: se ne prende il titolo, per le sessioni che non ne hanno uno', async () => {
+  // le schede stanno due cartelle sotto, una per file: `cliSessionId` è l'id del .jsonl
+  const schede = join(CASA, 'schede', 'aaa', 'bbb')
+  mkdirSync(schede, { recursive: true })
+  writeFileSync(join(schede, 'local_1.json'), JSON.stringify({ sessionId: 'local_1', cliSessionId: 'senza-titolo', title: 'Coda delle migrazioni', cwd: '/tmp/prova' }))
+  writeFileSync(join(schede, 'local_2.json'), JSON.stringify({ sessionId: 'local_2', cliSessionId: 'sess-1', title: 'Un titolo più vecchio', cwd: '/x' }))
+  writeFileSync(join(schede, 'rotta.json'), '{non è json')
+  const titoli = await conv.titoliClaude(join(CASA, 'schede'))
+  assert.deepEqual([...titoli.entries()].sort(), [['senza-titolo', 'Coda delle migrazioni'], ['sess-1', 'Un titolo più vecchio']])
+  assert.equal((await conv.titoliClaude(join(CASA, 'schede-che-non-ci-sono'))).size, 0)
+
+  const progetti = join(CASA, 'sessioni-titoli')
+  const cartella = join(progetti, '-tmp-prova')
+  mkdirSync(cartella, { recursive: true })
+  writeFileSync(join(cartella, 'senza-titolo.jsonl'), sessioneCodice('senza-titolo', '/tmp/prova', [
+    { type: 'user', sessionId: 'senza-titolo', cwd: '/tmp/prova', timestamp: '2026-09-02T08:00:00Z', message: { role: 'user', content: 'Spiegami come funziona la coda delle migrazioni in questo progetto, con calma.' } },
+    { type: 'assistant', sessionId: 'senza-titolo', cwd: '/tmp/prova', timestamp: '2026-09-02T08:00:05Z', message: { role: 'assistant', content: [{ type: 'text', text: 'Le migrazioni stanno in fondo.' }] } }
+  ]))
+  writeFileSync(join(cartella, 'sess-1.jsonl'), sessioneCodice('sess-1', '/Users/tizio/Progetti/iscrizioni', righeSessione('sess-1', '/Users/tizio/Progetti/iscrizioni')))
+  const e = await conv.leggi({ file: [], codice: true }, progetti, join(CASA, 'schede'))
+  assert.deepEqual(e.docs.map(d => d.titolo).sort(), [
+    'iscrizioni · Validazione del codice fiscale',   // il titolo del file vince su quello della scheda
+    'prova · Coda delle migrazioni'                  // senza un titolo nel file, quello della scheda
+  ])
+})
+
 // — nel catalogo, nel recinto, in casa —
 
 test('le conversazioni sono una fonte del catalogo, con un attrezzo, e solo in casa', () => {

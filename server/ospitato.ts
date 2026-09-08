@@ -257,7 +257,10 @@ export const SOLO_IN_CASA: string[] = [
   'granola',
   // per la stessa ragione: legge file di *questo* disco — i `conversations.json`
   // scelti e `~/.claude/projects` — e su un server quel disco non è di nessuno
-  'conversazioni'
+  'conversazioni',
+  // le Note di Apple stanno in `~/Library/Group Containers` del Mac di chi le
+  // scrive: dentro un contenitore non c'è nemmeno la cartella
+  'note'
 ]
 
 /**

@@ -3,10 +3,18 @@
 // Legge i documenti veri — PDF, Word, testo, Markdown — e salta i progetti di
 // codice, che altrimenti riempirebbero l'indice di file macchina invece che
 // delle tue cose.
+//
+// **«Tutto il Mac»** è la stessa lettura con la casa intera come radice. È la
+// ragione per cui esiste l'app da scrivania: un server non ha le tue cartelle,
+// l'app ce le ha tutte. Cambiano tre cose e basta — le radici (la casa, e
+// iCloud Drive che sta sotto `Library` e va detto a parte), i tetti (più
+// documenti, più profondità) e l'elenco delle cartelle che non contengono mai
+// documenti tuoi: le app, la musica, i film, le foto, le cache. Le regole per
+// un file restano quelle di sempre.
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, extname, basename, resolve, relative, sep } from 'node:path'
-import type { Stats } from 'node:fs'
+import { existsSync, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import type { ConfigDesktop } from '../config.ts'
 import type { Documento } from '../store.ts'
@@ -30,15 +38,65 @@ const SEGNI_PROGETTO = [
   'CMakeLists.txt', 'Makefile', '.git'
 ]
 
+/**
+ * Con tutto il Mac, in più: cartelle della casa dove i documenti non stanno.
+ *
+ * Solo con `tutto`, di proposito. Chi sceglie a mano `~/Pictures` perché ci
+ * tiene gli scontrini scansionati deve trovarla letta; è quando la radice è
+ * la casa intera che «Pictures» vuol dire la libreria di Foto, e «Music» i
+ * file di Logic. `Library` e `.Trash` stanno già in `SALTA`, e i nomi con il
+ * punto davanti non si aprono mai.
+ */
+const SALTA_TUTTO = new Set([
+  'Applications', 'Music', 'Movies', 'Pictures', 'Public', 'Photos Library.photoslibrary',
+  'Caches', 'Cache', 'caches', 'cache', 'tmp', 'temp', 'Temp', 'go',
+  'Parallels', 'VirtualBox VMs', 'Virtual Machines'
+])
+
 const MAX_FILE = 12_000_000     // i PDF pesano
 const MAX_TESTO = 20_000
 const MAX_TOTALE = 4000
 /** Sotto la radice: le cartelle fino a questa profondità si percorrono, oltre no. */
 const MAX_PROFONDITA = 6
+/*
+ * I tetti con tutto il Mac. Misurati su una casa vera con dieci anni dentro:
+ * la lettura a secco delle sole cartelle — senza estrarre niente — sta sotto
+ * il minuto, e quello che costa sono i PDF. Venticinquemila documenti e dieci
+ * livelli tengono la prima lettura nell'ordine dei minuti; dal giro dopo la
+ * data di modifica fa saltare quasi tutto.
+ */
+const MAX_TOTALE_TUTTO = 25_000
+const MAX_PROFONDITA_TUTTO = 10
+
+/** Le regole che cambiano fra «le cartelle scelte» e «tutto il Mac». */
+type Regole = { profondita: number; salta: (nome: string) => boolean }
+const REGOLE: Regole = { profondita: MAX_PROFONDITA, salta: n => SALTA.has(n) }
+const REGOLE_TUTTO: Regole = { profondita: MAX_PROFONDITA_TUTTO, salta: n => SALTA.has(n) || SALTA_TUTTO.has(n) }
+const regoleDi = (tutto?: boolean): Regole => (tutto ? REGOLE_TUTTO : REGOLE)
 
 export function suggerimenti(): string[] {
   const h = homedir()
   return [join(h, 'Desktop'), join(h, 'Documents'), join(h, 'Downloads')]
+}
+
+/**
+ * Le radici di «tutto il Mac»: la casa, e iCloud Drive.
+ *
+ * iCloud Drive sta in `~/Library/Mobile Documents/com~apple~CloudDocs`, cioè
+ * dentro la cartella che si salta per prima: senza dirla a parte, chi tiene
+ * i documenti su iCloud — che è la metà delle persone — leggerebbe la casa
+ * intera e non troverebbe niente. Si aggiunge solo se c'è.
+ */
+export function radiciTutto(casa = homedir()): string[] {
+  const radici = [casa]
+  const icloud = join(casa, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')
+  if (existsSync(icloud)) radici.push(icloud)
+  return radici
+}
+
+/** Le cartelle da percorrere per questa configurazione: quelle scelte, o la casa intera. */
+export function radici(c: Pick<ConfigDesktop, 'cartelle' | 'tutto'>): string[] {
+  return c.tutto ? radiciTutto() : c.cartelle
 }
 
 async function eProgetto(cartella: string, voci: { name: string }[]): Promise<boolean> {
@@ -57,14 +115,11 @@ async function eProgetto(cartella: string, voci: { name: string }[]): Promise<bo
  * percorso esista ancora: per un file appena cancellato si giudica dal nome,
  * e una cartella madre che non si apre più non è un progetto.
  */
-export async function daSaltare(percorso: string, radice: string, eCartella = false): Promise<boolean> {
-  const rel = relative(resolve(radice), resolve(percorso))
-  if (!rel || rel.startsWith('..')) return true
-  const pezzi = rel.split(sep)
-  if (pezzi.some(n => n.startsWith('.') || SALTA.has(n))) return true
+export async function daSaltare(percorso: string, radice: string, eCartella = false, tutto = false): Promise<boolean> {
+  if (saltaDalNome(percorso, radice, tutto, eCartella)) return true
+  const pezzi = relative(resolve(radice), resolve(percorso)).split(sep)
   // le cartelle: quelle in mezzo, e la cartella stessa se è una cartella
   const cartelle = eCartella ? pezzi : pezzi.slice(0, -1)
-  if (cartelle.length > MAX_PROFONDITA) return true
   if (!eCartella && !LETTI.includes(extname(pezzi[pezzi.length - 1]!).toLowerCase())) return true
   let qui = resolve(radice)
   for (const n of cartelle) {
@@ -74,6 +129,29 @@ export async function daSaltare(percorso: string, radice: string, eCartella = fa
     if (await eProgetto(qui, voci)) return true
   }
   return false
+}
+
+/**
+ * La parte di `daSaltare` che si decide dal nome, senza toccare il disco.
+ *
+ * Con la casa intera sotto ascolto gli eventi arrivano anche da `Library` —
+ * che è dove il Mac scrive in continuazione: cache, registri, la posta — e
+ * ognuno di quelli costava un timer e poi uno `stat`. Qui si guardano i
+ * pezzi del percorso e basta: un nome con il punto davanti, una cartella
+ * dell'elenco, una profondità oltre il tetto, e l'evento muore prima di
+ * costare qualcosa. È il filtro che la vedetta applica *prima* di segnare —
+ * senza sapere se il percorso è un file o una cartella, quindi con la regola
+ * più larga: quello che passa di qui viene comunque rigiudicato da `daSaltare`.
+ */
+export function saltaDalNome(percorso: string, radice: string, tutto = false, eCartella = false): boolean {
+  const rel = relative(resolve(radice), resolve(percorso))
+  if (!rel || rel.startsWith('..')) return true
+  const pezzi = rel.split(sep)
+  const regole = regoleDi(tutto)
+  if (pezzi.some(n => n.startsWith('.') || regole.salta(n))) return true
+  // le cartelle: quelle in mezzo, e la cartella stessa se è una cartella
+  const cartelle = eCartella ? pezzi : pezzi.slice(0, -1)
+  return cartelle.length > regole.profondita
 }
 
 /**
@@ -153,11 +231,11 @@ export type GiaIndicizzati = Map<string, string | null | undefined>
 /** Quanti file questa lettura ha «consumato»: letti o saltati perché uguali, il tetto vale per tutti. */
 const letti = (e: Esito) => e.docs.length + e.invariati
 
-async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0) {
+async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0, regole: Regole = REGOLE) {
   // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
   // fa credere a riconcilia() che il resto della cartella non esista più
   if (letti(fuori) >= tetto) { fuori.troncato = true; return }
-  if (profondita > MAX_PROFONDITA) { fuori.troncato = true; return }
+  if (profondita > regole.profondita) { fuori.troncato = true; return }
   let voci
   try {
     voci = await readdir(radice, { withFileTypes: true })
@@ -182,11 +260,11 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
 
   for (const v of voci) {
     if (letti(fuori) >= tetto) { fuori.troncato = true; return }
-    if (v.name.startsWith('.') || SALTA.has(v.name)) continue
+    if (v.name.startsWith('.') || regole.salta(v.name)) continue
     const p = join(radice, v.name)
 
     if (v.isDirectory()) {
-      await cammina(p, fuori, tetto, gia, profondita + 1)
+      await cammina(p, fuori, tetto, gia, profondita + 1, regole)
       continue
     }
     if (!v.isFile()) continue
@@ -226,7 +304,7 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
 
 export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: string[] } | { ok: false; errore: string }> {
   const buone: string[] = []
-  for (const cartella of c.cartelle) {
+  for (const cartella of radici(c)) {
     try {
       const s = await stat(resolve(cartella))
       if (s.isDirectory()) buone.push(cartella)
@@ -246,9 +324,9 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
  * per quello che c'è dentro. Il tetto è basso apposta: è una lettura dal
  * vivo, non il giro delle sei ore.
  */
-export async function leggiCartella(cartella: string, tetto = 200): Promise<Esito> {
+export async function leggiCartella(cartella: string, tetto = 200, tutto = false): Promise<Esito> {
   const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
-  await cammina(resolve(cartella), esito, tetto)
+  await cammina(resolve(cartella), esito, tetto, undefined, 0, regoleDi(tutto))
   return esito
 }
 
@@ -258,15 +336,18 @@ export async function sincronizza(
   gia?: GiaIndicizzati
 ): Promise<Esito> {
   const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
+  const cartelle = radici(c)
+  const regole = regoleDi(c.tutto)
   // il tetto è per cartella: una cartella enorme non deve affamare le altre
-  const perCartella = Math.max(200, Math.floor(MAX_TOTALE / Math.max(1, c.cartelle.length)))
-  for (const cartella of c.cartelle) {
+  const totale = c.tutto ? MAX_TOTALE_TUTTO : MAX_TOTALE
+  const perCartella = Math.max(200, Math.floor(totale / Math.max(1, cartelle.length)))
+  for (const cartella of cartelle) {
     const prima = esito.docs.length
     const illeggibiliPrima = esito.illeggibili.length
     const fallitiPrima = esito.falliti
     const radice = resolve(cartella)
 
-    await cammina(radice, esito, letti(esito) + perCartella, gia)
+    await cammina(radice, esito, letti(esito) + perCartella, gia, 0, regole)
 
     // Una radice si può riconciliare solo se è stata percorsa tutta: niente
     // tetto raggiunto, nessuna cartella figlia illeggibile, nessun file caduto.
