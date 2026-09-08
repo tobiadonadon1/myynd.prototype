@@ -2092,7 +2092,7 @@ app.post('/api/compiti/:id/sposta', (req, res) => {
   compiti.annunciaCambio()
 })
 
-const MODI = ['bozza', 'tutto']
+const MODI = ['bozza', 'tutto', 'prompt']
 
 app.post('/api/compiti/:id/delega', (req, res) => {
   const c = store.compito(req.params.id)
@@ -2405,7 +2405,17 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   const cartella = String(req.body?.cartella ?? '').trim()
   if (!cartella) return res.status(400).json({ errore: 'Dimmi in quale cartella lavorare.' })
 
-  const richiesta = [
+  /*
+   * Quello che gli si chiede: la riga, oppure un testo già scritto apposta.
+   *
+   * Una riga con `modo: prompt` ha sotto un prompt pensato per Claude Code —
+   * cartella, file da cui partire, cosa non toccare — e mandargli il titolo di
+   * sei parole al posto di quello sarebbe buttare via il lavoro appena fatto.
+   * La pagina lo passa in `richiesta`; è testo della stessa persona che ha
+   * scritto la riga, e parte in modalità piano come tutto il resto.
+   */
+  const scritta = typeof req.body?.richiesta === 'string' ? req.body.richiesta.trim() : ''
+  const richiesta = scritta || [
     c.testo,
     c.nota ? `\n${c.nota}` : '',
     // al secondo passo il piano è già stato letto e approvato: si dice di

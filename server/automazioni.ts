@@ -60,8 +60,8 @@ export type Automazione = {
   fai: string
   metti: {
     inLista: 'oggi' | 'settimana' | 'poi'
-    /** 'io' la scrive e basta; 'bozza' e 'tutto' la fanno anche svolgere. */
-    modo?: 'io' | 'bozza' | 'tutto'
+    /** 'io' la scrive e basta; 'bozza' e 'tutto' la fanno anche svolgere; 'prompt' fa scrivere il prompt per farla fare altrove. */
+    modo?: 'io' | 'bozza' | 'tutto' | 'prompt'
     /**
      * Una riga per ogni documento, invece di una riga con l'elenco.
      *
@@ -136,7 +136,16 @@ const CAMPI = new Set([
 ])
 const PROPOSTE = ['posta.cestina', 'posta.archivia']
 const SECCHI = ['oggi', 'settimana', 'poi']
-const MODI = ['io', 'bozza', 'tutto']
+const MODI = ['io', 'bozza', 'tutto', 'prompt']
+
+/**
+ * I modi che affidano la riga al modello, e quindi costano.
+ *
+ * Erano due confronti ripetuti in tre posti, e il terzo modo li avrebbe
+ * fatti divergere: una ricetta con `prompt` che conta nel tetto del giorno in
+ * un posto e non nell'altro è una spesa che nessuno vede.
+ */
+const faScrivere = (modo: string) => modo === 'bozza' || modo === 'tutto' || modo === 'prompt'
 
 /**
  * Una ricetta valida, o un errore che dice cosa non va.
@@ -208,7 +217,7 @@ function valida(x: unknown, da: string): Automazione {
   const m = a.metti as Record<string, unknown> | undefined
   if (!m || typeof m !== 'object') male('«metti» manca')
   if (!SECCHI.includes(String(m!.inLista))) male('«metti.inLista» dev\'essere oggi, settimana o poi')
-  if (m!.modo !== undefined && !MODI.includes(String(m!.modo))) male('«metti.modo» dev\'essere io, bozza o tutto')
+  if (m!.modo !== undefined && !MODI.includes(String(m!.modo))) male('«metti.modo» dev\'essere io, bozza, tutto o prompt')
   if (m!.perDocumento !== undefined && typeof m!.perDocumento !== 'boolean') {
     male('«metti.perDocumento» dev\'essere vero o falso')
   }
@@ -856,7 +865,7 @@ async function faiPerDocumento(
 
   const quando = a.metti.inLista
   const modo = a.metti.modo ?? 'io'
-  const scrive = modo === 'bozza' || modo === 'tutto'
+  const scrive = faScrivere(modo)
   const perId = new Map(candidati.map(d => [d.id, d]))
   const concessi = { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null }
   const giorno = giornoDi(opzioni.adesso ?? new Date())
@@ -1002,7 +1011,7 @@ export async function fai(
    * come esito e si dice nel registro del server.
    */
   const modoScelto = a.metti.modo ?? 'io'
-  const scrive = (modoScelto === 'bozza' || modoScelto === 'tutto') && !a.proponi
+  const scrive = faScrivere(modoScelto) && !a.proponi
   // una riga per documento non si salta: le righe nascono lo stesso, e solo
   // la bozza aspetta domani — vedi `faiPerDocumento`
   if (scrive && !perDocumento && !opzioni.aMano && bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
@@ -1067,7 +1076,7 @@ export async function fai(
     compiti.annunciaPronto(id)
   } else {
     const modo = a.metti.modo ?? 'io'
-    if (modo === 'bozza' || modo === 'tutto') {
+    if (faScrivere(modo)) {
       compiti.affida(id, modo)
       // il tetto del giorno si conta qui, dove la bozza parte davvero
       store.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
@@ -1179,8 +1188,11 @@ const FORMA = () => ({
     },
     inLista: { type: 'string', enum: ['oggi', 'settimana', 'poi'] },
     modo: {
-      type: 'string', enum: ['io', 'bozza'],
-      description: '«io» mette solo una riga da fare; «bozza» le fa anche scrivere il testo.'
+      type: 'string', enum: ['io', 'bozza', 'prompt'],
+      description:
+        '«io» mette solo una riga da fare; «bozza» le fa anche scrivere il testo; «prompt» le ' +
+        'fa scrivere il prompt con cui farla fare a un altro assistente — quando ha detto ' +
+        '«preparami il prompt», «da dare a ChatGPT», «da incollare in Claude».'
     },
     perDocumento: {
       type: 'boolean',
@@ -1250,6 +1262,11 @@ Sull'istruzione: scrivila come la diresti a un collega che aprirà quei document
 senza sapere perché. Dille cosa cercare, cosa scriverne, e cosa fare quando non
 c'è niente — perché «non c'è niente» è la risposta più frequente, e va detta in
 una riga invece di inventare qualcosa.
+
+Su cosa ne esce: «io» è una riga e basta; «bozza» la fa scrivere; «prompt» fa
+scrivere, al posto della cosa, il prompt per farla fare a un altro assistente —
+sceglilo solo se l'ha chiesto, con parole come «preparami il prompt», «da dare
+a ChatGPT», «da incollare in Claude Code».
 
 Su una riga o tante: se vuole una cosa da fare *per ogni* messaggio — «per ogni
 mail che chiede qualcosa preparami la risposta», «una riga per ogni fattura» —

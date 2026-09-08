@@ -343,6 +343,12 @@ async function svolgiUno(id: string) {
  */
 async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Fonte[]) {
   try {
+    // Un prompt non è una email, anche quando dentro c'è scritto «scrivi a
+    // Rossi» con tanto di saluto: è la richiesta di scriverla, da incollare
+    // altrove. `sembraUnMessaggio` guarda i verbi e le formule e ci cascherebbe
+    // in pieno — e la riga si accenderebbe con un «Manda a Rossi» sotto un
+    // testo che comincia con «Sei un assistente».
+    if (c.modo === 'prompt') return
     if (!ferri.postaCollegata()) return
     if (!invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) return
     const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc)

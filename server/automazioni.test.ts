@@ -620,6 +620,40 @@ test('una ricetta che fa scrivere si ferma al tetto del giorno, a mano no, e dom
   assert.notEqual(await auto.fai(ricetta, { adesso: new Date(oggi.getTime() + 86_400_000) }), 'saltata')
 })
 
+test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel modo, e conta nel tetto', async () => {
+  // il modello si sostituisce: qui si guarda solo che la riga parta nel modo giusto
+  const compiti = await import('./compiti.ts')
+  const modi: string[] = []
+  compiti.perProva({
+    svolgi: async (_c, _n, modo) => { modi.push(modo ?? ''); return { testo: 'Un prompt.', fonti: [] } },
+    chiedeAiuto: async () => ({ chiede: false, manca: [] }),
+    domandeDaFare: async () => []
+  })
+  try {
+    const ricetta = { ...RICETTA, id: 'prompt', nome: 'Il prompt', metti: { inLista: 'oggi' as const, modo: 'prompt' as const } }
+    auto.scrivi(ricetta)
+    assert.equal(auto.elenco().find(a => a.id === 'prompt')?.metti.modo, 'prompt', 'il modo prompt non è passato da «valida»')
+
+    const oggi = new Date()
+    assert.equal(await auto.fai(ricetta, { adesso: oggi }), 'fatta')
+    const riga = store.elencoCompiti().find(c => c.origine === 'auto:prompt')
+    assert.ok(riga, 'la riga non è nata')
+    assert.equal(riga.modo, 'prompt')
+    assert.equal(riga.stato, 'delegato', 'una ricetta con modo prompt non ha affidato la riga')
+    assert.equal(auto.bozzeOggi(store.statoAutomazione('prompt'), oggi), 1, 'un prompt costa quanto una bozza e va contato')
+    // e chi scrive riceve il modo giusto
+    await new Promise(r => setTimeout(r, 50))
+    assert.deepEqual(modi, ['prompt'])
+  } finally {
+    compiti.perProva(null)
+    auto.butta('prompt')
+  }
+})
+
+test('un modo che non esiste fa scartare la ricetta', () => {
+  assert.throws(() => auto.scrivi({ ...MIA, id: 'storto', metti: { inLista: 'oggi', modo: 'magia' } }), /io, bozza, tutto o prompt/)
+})
+
 test('il conto delle bozze non scorre via con la storia', () => {
   // La storia tiene gli ultimi venti giri. Contando le bozze da lì, una
   // ricetta che gira ogni quarto d'ora si azzerava il tetto da sola prima di

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito } from '../api'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
+import { copia as negliAppunti } from './prompt'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -397,11 +398,23 @@ export function useCompiti(
    * guarda prima di dire che è finita. Chiuderla qui vorrebbe dire fidarsi di
    * un lavoro che nessuno ha ancora aperto.
    */
-  const lavora = useCallback(async (id: string, m: { cartella: string; passo: 'piano' | 'fai' }) => {
+  const lavora = useCallback(async (id: string, m: { cartella: string; passo: 'piano' | 'fai'; richiesta?: string }) => {
     const r = await api.lavora(id, m)
     setCompiti(r.compiti)
     return r
   }, [])
+
+  /**
+   * Il prompt negli appunti, e una parola che dice che è andata.
+   *
+   * Sta qui e non nella riga perché il «Copiato.» è un avviso come gli altri,
+   * e gli avvisi escono da un posto solo. Se gli appunti dicono di no, lo si
+   * dice: un bottone premuto che non fa niente è peggio di un errore.
+   */
+  const copia = useCallback(async (testo: string) => {
+    try { await negliAppunti(testo); mostraToast(t('Copiato.')) }
+    catch { mostraToast(t('Non sono riuscito a copiarlo.')) }
+  }, [mostraToast])
 
   const salvaFuoco = useCallback(async (testo: string) => {
     setFuoco(testo)
@@ -444,7 +457,7 @@ export function useCompiti(
   useEffect(() => () => { desktop()?.segnala(0) }, [])
 
   return {
-    esegui, salvaDocumento, lavora,
+    esegui, salvaDocumento, lavora, copia,
     compiti, chiusi, fuoco, caricato, guasto, aperti, passi,
     perSecchio,
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
