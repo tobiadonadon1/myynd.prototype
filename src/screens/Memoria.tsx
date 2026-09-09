@@ -166,7 +166,7 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
           <Hov as="button" onClick={salva} disabled={salvando}
             style={{
               flex: 'none', padding: '6px 14px', borderRadius: 99, border: 'none',
-              background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+              background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
               fontSize: '12.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
             }}
             hover={{ opacity: 0.92 }}>{salvando ? t('Salvo…') : t('Salva')}</Hov>
@@ -370,7 +370,7 @@ function Progetti() {
   }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '20px 24px 18px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
         <span style={{ ...LABEL, flex: 1 }}>{t('Progetti')}</span>
         <Hov as="button" type="button" onClick={() => setNuovo(v => !v)}
@@ -392,7 +392,7 @@ function Progetti() {
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={aggiungi} disabled={!nome.trim()} style={{
               flex: 'none', padding: '8px 16px', borderRadius: 99, border: 'none',
-              background: nome.trim() ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+              background: nome.trim() ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
               color: nome.trim() ? '#FFF7F0' : 'rgba(34,39,31,.3)',
               fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: nome.trim() ? 'pointer' : 'default'
             }}>{t('Aggiungi')}</button>
@@ -512,7 +512,7 @@ export function Memoria() {
       <Progetti />
 
       {/* — i cinque blocchi — */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '20px 24px 18px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ ...LABEL, flex: 1 }}>{t('Come lavori')}</span>
           {/*
@@ -538,7 +538,7 @@ export function Memoria() {
       </div>
 
       {/* — quello che ha capito da solo — */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '20px 24px 18px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{ ...LABEL, flex: 1 }}>{t('Quello che ha capito')}</span>
           {/* mentre le rimette nella tua lingua: una riga, e poi sparisce */}
@@ -581,7 +581,7 @@ export function Memoria() {
             }} />
           <button onClick={aggiungi} disabled={!nuova.trim()} style={{
             flex: 'none', padding: '10px 18px', borderRadius: 99, border: 'none',
-            background: nuova.trim() ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+            background: nuova.trim() ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
             color: nuova.trim() ? '#FFF7F0' : 'rgba(34,39,31,.3)',
             fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
             cursor: nuova.trim() ? 'pointer' : 'default'
@@ -591,7 +591,7 @@ export function Memoria() {
 
       {/* — quello che pensava prima — */}
       {!!d?.storiche.length && (
-        <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '18px 24px' }}>
+        <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 24px' }}>
           <Hov as="button" onClick={() => setStoricheAperte(v => !v)} aria-expanded={storicheAperte}
             style={{
               display: 'flex', alignItems: 'center', gap: 8, width: '100%', border: 'none',

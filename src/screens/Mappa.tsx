@@ -45,7 +45,7 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
         className={scuro ? 'scuro' : undefined}
         disabled={!v.claudeOn}
         style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : '#22271F' }} />
-      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(120,110,100,.35)', color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
+      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(120,110,100,.35)', color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
         <IconSu size={14} />
       </button>
     </div>
@@ -100,7 +100,7 @@ export function Mappa({ v }: { v: Vals }) {
         <span style={{ fontSize: 13, color: 'rgba(34,39,31,.65)' }}>{v.mappaMeta}</span>
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexDirection: stretta ? 'column' : 'row' }}>
-        <div style={{ flex: 1, minWidth: 0, borderRadius: '24px 20px 24px 20px', background: '#1B1917', border: '1px solid rgba(255,247,240,.14)', boxShadow: '0 30px 70px rgba(50,36,24,.32)', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(255,247,240,.14)', boxShadow: '0 30px 70px rgba(50,36,24,.32)', overflow: 'hidden', position: 'relative' }}>
           <canvas ref={v.cvA} style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
           <Sopra v={v} />
           {disegnata && (
@@ -117,7 +117,7 @@ export function Mappa({ v }: { v: Vals }) {
           )}
         </div>
 
-        <div style={{ width: stretta ? '100%' : 308, flex: 'none', borderRadius: '22px 26px 20px 24px', background: 'rgba(255,253,249,.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: stretta ? '100%' : 308, flex: 'none', borderRadius: 20, background: 'rgba(255,253,249,.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
           <Pannello v={v} />
           <div style={{ flex: 1, minHeight: 12 }} />
           <BarraNodo v={v} />

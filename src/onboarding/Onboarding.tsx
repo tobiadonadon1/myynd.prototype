@@ -6,20 +6,12 @@ import { ConnectorIcon } from '../components/ConnectorIcon'
 import { Form } from '../components/forms'
 import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
+import { Introduzione } from './Introduzione'
 
 const NON_FONTI = new Set(['claude', 'compatibile', 'mind2do'])
 const PRIORITA_FONTI = ['desktop', 'google', 'posta', 'notion', 'slack', 'calendario']
 const momentoDi = (fase: StatoAvvio['fase']): Momento => fase === 'progetto' ? 0 : fase === 'fonte' ? 3 : fase === 'verifica' ? 2 : 3
 const messaggio = (e: unknown) => e instanceof Error ? e.message : String(e)
-/**
- * Quanto resta il benvenuto, da solo.
- *
- * Era una schermata con una frase e un bottone: si leggeva e si premeva. Tre
- * secondi bastano a leggerla; poi passa da sé alla prima domanda. Il bottone
- * resta per chi non vuole aspettare, e «usa un altro account» pure.
- */
-const ATTESA_BENVENUTO = 3000
-
 /** La freccia del bottone che va avanti, nel suo riquadro scuro. */
 const Avanti = () => <span className="onboard-arrow"><IconFreccia /></span>
 
@@ -122,13 +114,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     } catch { /* Resume still uses the last successful server save. */ }
   }, [avvio, carico, progetto, obiettivo, azione, giorno])
 
+  // l'introduzione: cinque momenti che finiscono da soli nel progetto (vedi Introduzione)
   const benvenuto = !carico && !accountConfermato
-  const caricato = !!avvio
-  useEffect(() => {
-    if (!benvenuto || !caricato || !accountEmail) return
-    const id = window.setTimeout(() => setAccountConfermato(true), ATTESA_BENVENUTO)
-    return () => window.clearTimeout(id)
-  }, [benvenuto, caricato, accountEmail])
 
   useEffect(() => {
     if (!iniziato.current) { iniziato.current = true; return }
@@ -232,19 +219,13 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
 
   const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 3.4 : momento === 2 ? 3.7 : risultato ? 5 : 3
 
-  return <Scena progressione={progressione} benvenuto={benvenuto} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
+  return <Scena progressione={progressione} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
-      {!accountConfermato && <div className="onboard-welcome">
-        <span className="onboard-kicker">{t('Il tuo digital brain')}</span>
-        <h1 ref={titolo} tabIndex={-1}>{t('Meno rumore.')}<br /><em>{t('Più spazio per te.')}</em></h1>
-        <p>{t('I tuoi progetti, le tue idee. Una mente in più per portarli avanti.')}</p>
-        <p className="onboard-account-note">{t('Configuri il progetto per')} <strong>{accountEmail}</strong></p>
-        <button className="onboard-primary" disabled={!accountEmail || occupato} onClick={() => setAccountConfermato(true)}>{avvio.progetto ? t('Riprendi') : t('Configura il progetto')}<Avanti /></button>
-        <button className="onboard-secondary onboard-switch-account" disabled={occupato} onClick={() => void cambiaAccount()}>{t('Usa un altro account')}</button>
-      </div>}
+      {!accountConfermato && <Introduzione avanti={() => setAccountConfermato(true)} pronto={!!accountEmail} riprendi={!!avvio.progetto} cambiaAccount={() => void cambiaAccount()} occupato={occupato} />}
       {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
         <span className="onboard-kicker">{t('Cominciamo da te')}</span>
         <h2 ref={titolo} tabIndex={-1}>{t('Cosa vuoi ottenere?')}</h2>
+        <p className="onboard-why">{t('Serve a scegliere cosa conta, ogni mattina.')}</p>
         <fieldset disabled={occupato} className="onboard-fieldset">
           <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Cosa vuoi ottenere?')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Un risultato concreto, con le tue parole.')} /></label>
           <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Il nome del tuo progetto')} /></label>
@@ -283,6 +264,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       </>}
       {accountConfermato && momento === 3 && <>
         <h2 ref={titolo} tabIndex={-1}>{risultato ? t('Il tuo primo passo è pronto.') : t('Qual è la prima attività?')}</h2>
+        {!risultato && <p className="onboard-why">{t('Finisce nella lista: è la prima cosa che vedrai.')}</p>}
         {risultato ? <div className="onboard-result">
           <div className="onboard-result-eyebrow"><span />{t('Salvato nella To-do')}</div><h3>{risultato.compito.testo}</h3>
           <div className="onboard-result-body"><span className="onboard-result-label">{t('Obiettivo')}</span><p>{risultato.traccia.obiettivo}</p>{risultato.traccia.estratti.length > 0 && <><span className="onboard-result-label">{t('Estratti confermati')}</span>{risultato.traccia.estratti.map((e, i) => <blockquote key={`${e.doc}-${i}`}>{e.testo}<cite>{e.titolo}</cite></blockquote>)}</>}</div>

@@ -3,6 +3,7 @@ import {
   type CSSProperties, type ElementType, type ComponentPropsWithoutRef,
   type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject
 } from 'react'
+import { GRADIENTE, RAME_CUPO } from './tema'
 import { t } from './lingua'
 import { IconCestino } from './icons'
 
@@ -373,7 +374,7 @@ const NAV_BASE: CSSProperties = {
   borderRadius: 14, fontSize: '14.5px', cursor: 'pointer', transition: 'background .18s'
 }
 export const NAV_ON: CSSProperties = {
-  ...NAV_BASE, background: 'linear-gradient(120deg,#C4623B,#7E9C82)',
+  ...NAV_BASE, background: GRADIENTE,
   border: '1px solid rgba(255,255,255,.5)', boxShadow: '0 10px 22px -12px rgba(120,60,40,.65)', color: '#FFF7F0'
 }
 export const NAV_OFF: CSSProperties = { ...NAV_BASE, border: '1px solid transparent', color: 'rgba(34,39,31,.72)' }
@@ -382,7 +383,7 @@ const MENU_BASE: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px',
   borderRadius: 12, fontSize: '13.5px', cursor: 'pointer'
 }
-export const MENU_ON: CSSProperties = { ...MENU_BASE, background: 'linear-gradient(110deg,#C4623B,#7E9C82)', color: '#FFF7F0' }
+export const MENU_ON: CSSProperties = { ...MENU_BASE, background: GRADIENTE, color: '#FFF7F0' }
 export const MENU_OFF: CSSProperties = { ...MENU_BASE, color: '#22271F' }
 
 /** L'interruttore. È lo stile di un `<button>`: da tastiera un div non si raggiunge. */
@@ -390,7 +391,7 @@ export function track(on: boolean): CSSProperties {
   return {
     width: 40, height: 23, flex: 'none', borderRadius: 99, padding: 2, boxSizing: 'border-box', cursor: 'pointer',
     border: 'none',
-    background: on ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.2)',
+    background: on ? GRADIENTE : 'rgba(34,39,31,.2)',
     display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background .2s'
   }
 }
@@ -418,7 +419,7 @@ export const LABEL: CSSProperties = {
  */
 export const PILL: CSSProperties = {
   padding: '4px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-  color: '#8E3F1F', background: 'rgba(196,98,59,.14)',
+  color: RAME_CUPO, background: 'rgba(196,98,59,.14)',
   border: '1px solid rgba(196,98,59,.32)'
 }
 

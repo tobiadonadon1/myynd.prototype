@@ -709,7 +709,7 @@ function Scheda({ s, i, v }: { s: Sezione; i: number; v: Vals }) {
   return (
     <section id={s.id} aria-labelledby={`${s.id}-titolo`} style={{
       ...CARD_GLASS, flex: 'none', marginTop: i ? 14 : 0,
-      borderRadius: i % 2 ? '20px 24px 20px 24px' : '24px 20px 24px 20px',
+      borderRadius: 20,
       padding: '22px 24px', scrollMarginTop: 12
     }}>
       <h2 id={`${s.id}-titolo`} style={TITOLO_SCHEDA}>{L(s.titolo)}</h2>

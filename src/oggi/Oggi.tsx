@@ -65,7 +65,7 @@ const FERMO: CSSProperties = {}
  */
 const PIENO: CSSProperties = {
   padding: '8px 17px', borderRadius: 99, border: '1px solid transparent',
-  background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
   fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
 }
 const CONTORNO: CSSProperties = {
@@ -476,7 +476,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
                     padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
                     cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
                     border: `1px solid ${presa ? 'transparent' : 'rgba(34,39,31,.18)'}`,
-                    background: presa ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(255,255,255,.7)',
+                    background: presa ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(255,255,255,.7)',
                     color: presa ? '#FFF7F0' : '#22271F'
                   }}
                   hover={presa ? { opacity: 0.92 } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
@@ -506,7 +506,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
           }} />
         <button type="button" onClick={manda} disabled={!qualcosa} style={{
           flex: 'none', padding: '9px 17px', borderRadius: 99, border: 'none',
-          background: qualcosa ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+          background: qualcosa ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
           color: qualcosa ? '#FFF7F0' : 'rgba(34,39,31,.3)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: qualcosa ? 'pointer' : 'default'
@@ -582,7 +582,7 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13 }}>
         <button type="button" onClick={vai} disabled={faccio} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: faccio ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
+          background: faccio ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#B24E2E,#D98A5A)',
           color: faccio ? 'rgba(34,39,31,.35)' : '#FFF7F0',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
@@ -822,7 +822,7 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             {pianoFatto && (
               <button type="button" onClick={() => vai('fai')} disabled={!!gira} style={{
                 padding: '9px 18px', borderRadius: 99, border: 'none',
-                background: gira ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
+                background: gira ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#B24E2E,#D98A5A)',
                 color: gira ? 'rgba(34,39,31,.35)' : '#FFF7F0',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
                 cursor: gira ? 'default' : 'pointer'
@@ -923,7 +923,7 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
         <button type="button" onClick={salva} disabled={salvo || !nome.trim() || !cartelle.length} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: !salvo && nome.trim() && cartelle.length ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+          background: !salvo && nome.trim() && cartelle.length ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
           color: !salvo && nome.trim() && cartelle.length ? '#FFF7F0' : 'rgba(34,39,31,.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: salvo ? 'default' : 'pointer'
@@ -1139,7 +1139,7 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
         <button type="button" onClick={manda} disabled={!puo} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
-          background: puo ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.1)',
+          background: puo ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
           color: puo ? '#FFF7F0' : 'rgba(34,39,31,.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: puo ? 'pointer' : 'default',

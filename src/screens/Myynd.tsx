@@ -388,7 +388,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, flexWrap: 'wrap' }}>
           <Rassegna />
           <Hov as="a" href="#" onClick={v.goConn}
-            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#2F4A33', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
+            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(34,39,31,.78)', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
             hover={{ background: '#FFFFFF' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
             {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
@@ -561,7 +561,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           serviva anche da riferimento a quello che qui dentro si posiziona da
           sé, e toglierla e basta avrebbe spostato i menù delle righe.
         */
-        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: '22px 26px 20px 24px', background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)', overflow: 'hidden' }}>
+        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)', overflow: 'hidden' }}>
           {/* le tue righe stanno DENTRO la stessa lista delle sue, vestite
               uguali. Il filo va per posizione, non per specie: la prima non ha
               bordo sopra e tutte le altre sì — chiunque sia la prima. */}
@@ -601,7 +601,7 @@ function Domanda({ v }: { v: Vals }) {
     return (
       <div style={{
         display: 'flex', alignItems: 'flex-start', gap: 13, marginTop: 16, padding: '18px 20px',
-        borderRadius: '20px 22px 18px 22px', border: '1px solid rgba(126,156,130,.4)',
+        borderRadius: 20, border: '1px solid rgba(126,156,130,.4)',
         background: 'rgba(126,156,130,.12)', animation: 'fadein .3s ease'
       }}>
         <IconSpunta style={{ flex: 'none', marginTop: 1 }} />
@@ -641,7 +641,7 @@ function Domanda({ v }: { v: Vals }) {
       */
       position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13,
       margin: '14px 0 4px', padding: '10px 14px 10px 15px',
-      borderRadius: '16px 20px 16px 18px',
+      borderRadius: 16,
       background: 'linear-gradient(258deg, rgba(255,253,249,.82) 0%, rgba(255,253,249,.46) 55%, rgba(255,253,249,.16) 100%)',
       backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
       border: '1px solid rgba(255,255,255,.55)',
@@ -766,6 +766,6 @@ function Vuoto({ v }: { v: Vals }) {
 
 const BOTTONE: React.CSSProperties = {
   padding: '11px 20px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
   fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }

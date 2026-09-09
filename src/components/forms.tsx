@@ -81,7 +81,7 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
       marginTop: 18, padding: '11px 22px', borderRadius: 99, border: 'none',
       background: spento
         ? (scuro ? 'rgba(244,239,232,.2)' : 'rgba(34,39,31,.18)')
-        : (scuro ? CHIARO : 'linear-gradient(120deg,#C4623B,#7E9C82)'),
+        : (scuro ? CHIARO : 'linear-gradient(120deg,#B24E2E,#D98A5A)'),
       color: spento ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.5)') : (scuro ? '#191715' : '#FFF7F0'),
       fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
       cursor: spento ? 'default' : 'pointer'

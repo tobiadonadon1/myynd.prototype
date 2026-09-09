@@ -210,7 +210,7 @@ export default function App() {
 
   return (
     <>
-      <Casa stato={stato} apriConnessioni={(fonte = '') => setConnessioni(fonte)} esci={fuori} avviaOnboarding={() => setOnboarding(true)} />
+      <Casa stato={stato} apriConnessioni={(fonte = '') => setConnessioni(fonte)} esci={fuori} avviaOnboarding={() => setOnboarding(true)} email={accesso.account?.email ?? ''} />
       {connessioni !== null && (
         <Connessioni
           fonte={connessioni}
@@ -245,7 +245,7 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
     // e senza si trascinerebbe invece di chiudersi
     <div role="status" aria-live="polite" onClick={chiudi} className="app-presa" style={{
       position: 'fixed', top: alto(), right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
-      padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)',
+      padding: '13px 16px', borderRadius: 16, background: 'rgba(255,253,249,.94)',
       color: '#22271F', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)',
       fontSize: '13.5px', lineHeight: 1.45, overflowWrap: 'anywhere', cursor: 'pointer',
       animation: 'toastin .3s ease', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif"
@@ -255,10 +255,10 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
   )
 }
 
-function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
-  stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void; avviaOnboarding: () => void
+function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
+  stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void; avviaOnboarding: () => void; email: string
 }) {
-  const v = useVals(stato, apriConnessioni, avviaOnboarding)
+  const v = useVals(stato, apriConnessioni, avviaOnboarding, email)
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
   // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
   const lista = useCompiti(v.mostraToast, apriConnessioni)
@@ -372,7 +372,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
         minHeight: 0,
         margin: rail ? `${12 + striscia}px 0 12px 12px` : `${18 + striscia}px 0 18px 18px`,
         padding: rail ? '16px 7px 12px' : '22px 15px 15px',
-        borderRadius: rail ? 20 : '26px 22px 24px 20px',
+        borderRadius: 20,
         background: 'linear-gradient(180deg,rgba(255,253,249,.72),rgba(255,253,249,.5))',
         backdropFilter: 'blur(26px) saturate(1.5)', WebkitBackdropFilter: 'blur(26px) saturate(1.5)',
         border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)',
@@ -449,7 +449,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
               dalla colonna e si allarga verso destra — le voci del menù le parole
               ce le hanno anche quando la navigazione non le ha. */}
           {v.menuOpen && (
-            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: '18px 16px 18px 14px', background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
+            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
               <a href="#" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
               <a href="#" onClick={v.goMemoria} style={v.menuMemoria}><IconSpunta size={15} style={{ flex: 'none' }} />{t('Memoria')}</a>
               <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>

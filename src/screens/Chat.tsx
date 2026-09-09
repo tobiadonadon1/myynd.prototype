@@ -110,7 +110,7 @@ export function Chat({ v }: { v: Vals }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 18px', borderRadius: '22px 20px 22px 18px', background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 18px', borderRadius: 20, background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
         {scrivibile ? (
           <input value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
             placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
@@ -126,7 +126,7 @@ export function Chat({ v }: { v: Vals }) {
         )}
         <button onClick={v.send} disabled={rispondendo ? false : (!v.claudeOn || v.pensando)} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
-          background: scrivibile ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
+          background: scrivibile ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.18)',
           color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: scrivibile ? 'pointer' : 'default'
         }}>
           <IconSu />

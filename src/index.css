@@ -7,6 +7,15 @@ body{margin:0;background:#E7DFD3;font-family:'Helvetica Neue',Helvetica,Arial,sa
    ferma, e con lui la ragione per cui i pannelli sfocati si ridipingono */
 @media (prefers-reduced-motion:reduce){:root{--mo:paused}}
 a{color:#3E5140;text-decoration:none}a:hover{color:#C4623B}
+/* — Il tema —
+   Un'identità sola, due mondi: il palco (accesso e primo avvio) è inchiostro
+   con la luce di rame; la scrivania (l'app) è avorio con lo stesso rame come
+   unico accento. I valori veri stanno in src/tema.ts; qui quelli che il CSS
+   deve poter leggere. */
+:root{--rame:#C4623B;--rame-cupo:#8E3F1F;--ambra:#D98A5A;--inchiostro:#22271F;--avorio:#FFF7F0;--sabbia:#EFE6DA;--salvia:#5C7660;--serif:'Iowan Old Style','Baskerville','Times New Roman',serif}
+/* I titoli di pagina parlano con la voce del primo avvio: è il filo più
+   visibile fra il palco e la scrivania. Un h1 è sempre un titolo di pagina. */
+h1{font-family:var(--serif);font-weight:400;letter-spacing:-.035em}
 button,input,textarea,select{font-family:inherit}
 @keyframes flA{0%{transform:translate(0,0) scale(1)}33%{transform:translate(3.5%,2.5%) scale(1.05)}66%{transform:translate(-2.5%,3.5%) scale(.96)}100%{transform:translate(0,0) scale(1)}}
 @keyframes flB{0%{transform:translate(0,0) scale(1.02)}40%{transform:translate(-4%,2%) scale(.95)}75%{transform:translate(2.5%,4%) scale(1.06)}100%{transform:translate(0,0) scale(1.02)}}

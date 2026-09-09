@@ -103,7 +103,7 @@ function Interruttore({ on, onClick, titolo }: {
       style={{
         width: 32, height: 19, flex: 'none', borderRadius: 99, padding: 2, boxSizing: 'border-box', border: 'none',
         cursor: 'pointer', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start',
-        background: on ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.17)',
+        background: on ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.17)',
         transition: 'background .2s'
       }}>
       <span style={{ width: 15, height: 15, borderRadius: '50%', background: '#FFFDF9', boxShadow: '0 1px 4px rgba(30,20,14,.28)' }} />

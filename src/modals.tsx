@@ -52,7 +52,7 @@ export function Ricerca({ v }: { v: Vals }) {
     <>
       <div onClick={v.closeSearch} style={VELO(46, 0.24, 3)} />
       <div ref={finestra} role="dialog" aria-modal="true" aria-label={t('Cerca')}
-        style={{ position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)', width: 600, maxWidth: '82%', borderRadius: '24px 20px 24px 20px', background: 'rgba(255,253,249,.96)', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)', zIndex: 47, overflow: 'hidden' }}>
+        style={{ position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)', width: 600, maxWidth: '82%', borderRadius: 20, background: 'rgba(255,253,249,.96)', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)', zIndex: 47, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(34,39,31,.09)' }}>
           <IconCerca size={17} style={{ flex: 'none', color: 'rgba(34,39,31,.6)' }} />
           <input value={v.query} onChange={v.onQuery}
@@ -94,8 +94,8 @@ export function Ricerca({ v }: { v: Vals }) {
 export function Toast({ v }: { v: Vals }) {
   return (
     // una notizia che compare da sola va anche letta da sola, senza rubare il fuoco
-    <div role="status" aria-live="polite" style={{ position: 'absolute', top: 22, right: 26, zIndex: 50, display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: '18px 15px 18px 14px', background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', flex: 'none' }} />
+    <div role="status" aria-live="polite" style={{ position: 'absolute', top: 22, right: 26, zIndex: 50, display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 16, background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', flex: 'none' }} />
       <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{v.toastText}</span>
       {v.toastUndo && (
         <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{frasi.annullaGesto()}</button>

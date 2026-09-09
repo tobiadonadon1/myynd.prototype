@@ -56,9 +56,6 @@ void main() {
   vec3 color=mix(deep,copper,smoothstep(.015,.47,energy));
   color=mix(color,amber,smoothstep(.40,1.05,energy));
   color=mix(color,ivory,smoothstep(.90,1.65,energy));
-  float greenBand = exp(-pow((p.x-.73-.06*sin(t*.22))/.10,2.))*smoothstep(.35,.9,energy);
-  greenBand *= .55+.45*sin(p.y*9.+t*.12);
-  color=mix(color,vec3(.43,.78,.57)*(.55+energy*.45),greenBand*.70);
   color*=smoothstep(.006,.17,energy);
   vec2 cellUV=fract(uv*cells);
   float seams=smoothstep(.035,.11,cellUV.x)*(1.-smoothstep(.86,.97,cellUV.x));

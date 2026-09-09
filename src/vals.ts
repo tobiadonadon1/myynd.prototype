@@ -49,7 +49,7 @@ const BOLLA_SUA: CSSProperties = {
   overflowWrap: 'anywhere', minWidth: 0
 }
 
-export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void, avviaOnboarding: () => void = () => {}) {
+export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void, avviaOnboarding: () => void = () => {}, email = '') {
   const [stato, setStato] = useState<Stato>(iniziale)
   // Va impostata a ogni giro, prima di qualunque calcolo che produca testo:
   // così cambiare lingua nelle preferenze si vede subito, senza ricaricare.
@@ -61,7 +61,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   useEffect(() => { setStato(iniziale) }, [iniziale])
   // si apre sulla chat se Myynd ha delle domande da fare: vedi l'intervista, più sotto
   const [screen, setScreen] = useState<Screen>(() => {
-    try { return !localStorage.getItem(`myynd.intervista.${iniziale.config.account?.email ?? ''}`) && (!iniziale.config.nome || !iniziale.config.ruolo) ? 'chat' : 'myynd' } catch { return 'myynd' }
+    try { return !localStorage.getItem(`myynd.intervista.${email}`) && (!iniziale.config.nome || !iniziale.config.ruolo) ? 'chat' : 'myynd' } catch { return 'myynd' }
   })
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
@@ -105,7 +105,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * risposte di adesso già segnate sulle scelte. Non serve un motore: sono
    * domande scritte, non generate, e devono funzionare al primo minuto.
    */
-  const chiaveIntervista = `myynd.intervista.${iniziale.config.account?.email ?? ''}`
+  // per conto: la mail arriva dall'accesso, che è l'unico posto in cui è certa
+  const chiaveIntervista = `myynd.intervista.${email}`
   const valoreDi = (campo: Campo, c: Stato['config'], f: string): string =>
     campo === 'nome' ? (c.nome ?? '') : campo === 'ruolo' ? (c.ruolo ?? '') : campo === 'fuoco' ? f
     : campo === 'argomenti' ? (c.argomenti ?? '') : campo === 'tono' ? (c.tono ?? '') : (c.autonomia ?? '')
@@ -835,8 +836,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     haFatte: fatte.length > 0,
     generando, genera,
     heroStyle: {
-      borderRadius: '28px 24px 28px 22px',
-      background: 'linear-gradient(138deg,rgba(176,82,46,.9),rgba(154,100,55,.88) 46%,rgba(65,96,74,.9))',
+      borderRadius: 20,
+      background: 'linear-gradient(138deg,rgba(176,82,46,.9),rgba(154,100,55,.88) 46%,rgba(74,58,49,.92))',
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       border: '1px solid rgba(255,255,255,.6)',
       boxShadow: '0 30px 70px rgba(120,74,48,.34),inset 0 1px 0 rgba(255,255,255,.35)',
@@ -1130,7 +1131,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       ...x, label: t(x.label),
       onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
       style: (x.id === stato.config.tono
-        ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+        ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
         : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
     })),
     tonoEsempio: t(ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto),
