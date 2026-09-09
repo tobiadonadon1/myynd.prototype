@@ -62,6 +62,14 @@ test('«pronto» non diventa «no» perché una chiamata è andata storta', () =
   assert.ok(!p.slice(0, 120).includes('spento'), '`pronto()` guarda il riposo: lo stato lampeggerebbe')
 })
 
+test('sceglierlo di nuovo toglie subito il riposo', () => {
+  assert.match(sorgente, /export function riprova\(\) \{\s*spento = 0\s*\}/,
+    'un guasto momentaneo continua a mandare il lavoro sulla chiave anche dopo un tentativo esplicito')
+  const indice = readFileSync(join(QUI, 'index.ts'), 'utf8')
+  assert.match(indice, /if \(con === 'abbonamento'\) abbonamento\.riprova\(\)/,
+    'la scelta nelle preferenze non sveglia l’abbonamento')
+})
+
 /**
  * Il posto dell'abbonamento nella catena, che è la ragione per cui esiste.
  *

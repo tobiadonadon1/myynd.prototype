@@ -412,9 +412,18 @@ test('daSaltare e saltaDalNome conoscono le regole di tutto il Mac, dal nome e p
   assert.equal(await desktop.daSaltare(join(CASA, 'Progetti', 'app', 'README.md'), CASA, false, true), true, 'un progetto di codice resta un progetto')
 })
 
-test('la vedetta con tutto il Mac guarda le stesse due radici', () => {
+test('la vedetta con tutto il Mac guarda le stesse due radici', async () => {
   arredaLaCasa()
   vedetta.avvia({ cartelle: [], tutto: true })
+  // `stato()` conta le radici *aperte davvero*, e gli occhi si aprono in un
+  // lavoratore a parte: alla riga dopo `avvia` non ce n'è ancora nessuna.
+  // Non è un dettaglio della prova, è il contratto — `vedetta.test.ts`
+  // pretende apposta che «in apertura non si dichiara già attivo», perché
+  // dire di guardare una cartella che non si è ancora riusciti ad aprire è
+  // il modo di non accorgersi di un disco staccato. Qui si aspetta che siano
+  // su tutte e due: due radici aperte è quello che il nome della prova dice.
+  const fine = Date.now() + 8_000
+  while (vedetta.stato().cartelle < 2 && Date.now() < fine) await new Promise(r => setTimeout(r, 50))
   assert.deepEqual(vedetta.stato(), { attiva: true, cartelle: 2 })
   vedetta.ferma()
   assert.deepEqual(vedetta.stato(), { attiva: false, cartelle: 0 })

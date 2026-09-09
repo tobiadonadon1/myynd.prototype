@@ -25,6 +25,7 @@ import * as memoria from './memoria.ts'
 import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as invio from './invio.ts'
+import * as progetti from './progetti.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -264,8 +265,12 @@ async function svolgiUno(id: string) {
     // usa quello che c'era scritto quando la riga è nata. Un compito scritto a
     // mano non ne ha, e lavora come ha sempre lavorato.
     const dato = c.attrezzi
+    const progetto = c.progetto ? progetti.trova(c.progetto) : null
+    const nota = progetto && progetto.stato !== 'chiuso'
+      ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
+      : c.nota
     const { testo, fonti } = await ferri.svolgi(
-      c.testo, c.nota, c.modo,
+      c.testo, nota, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
       dato?.cartella ?? null,
       // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da

@@ -33,3 +33,18 @@
 @media(max-width:620px){.connections-header h1{font-size:28px}.connections-filters{width:100%;box-sizing:border-box}.connections-filters button{flex:1;justify-content:center;padding:8px 6px}.connections-toolbar input{width:100%}.connections-header{gap:10px}.connections-header .connections-button{padding:9px;font-size:11px}.connector-tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.connector-tiles.compact{grid-template-columns:repeat(3,minmax(0,1fr))}.connector-tile{min-height:137px;padding:14px 8px}.connector-tile-name{font-size:12px}.connections-dialog-body{padding:17px}.connections-dialog-header{padding:17px}.connections-dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px)}}
 @media(max-width:380px){.connector-tiles,.connector-tiles.compact{grid-template-columns:repeat(2,minmax(0,1fr))}.connection-quick{align-items:flex-start;flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.connector-tile,.connector-tile-arrow{transition:none}.connector-tile:hover{transform:none}}
+
+/* — collegate sopra, da collegare sotto —
+   Una griglia sola mescolava quello che c'è con quello che manca, e la
+   differenza la portava solo la tinta della piastrella: si vedeva guardando,
+   non si vedeva entrando. Due gruppi con un titolo sopra dicono la stessa cosa
+   prima che l'occhio arrivi ai colori — e il conto accanto al titolo risponde
+   alla domanda che uno si fa davvero («quante me ne mancano?») senza contare.
+   Il rosso è quello che l'app usa già per «questo aspetta te» (#8e3f1f), non
+   un secondo accento: una fonte che non hai ancora collegato non è un guasto. */
+.connections-group{margin-bottom:26px}.connections-group:last-of-type{margin-bottom:0}
+.connections-group-heading{display:flex;align-items:baseline;gap:9px;margin:0 0 13px;font-size:12px;font-weight:500;letter-spacing:-.1px;color:#4c6647}
+.connections-group-heading span{font-size:10px;color:#72756b;font-variant-numeric:tabular-nums}
+.connections-group-heading:after{content:'';flex:1;height:1px;background:#22271f0f}
+.connections-group.da-collegare .connections-group-heading{color:#8e3f1f}
+.connections-group.da-collegare .connections-group-heading:after{background:#c4623b1f}

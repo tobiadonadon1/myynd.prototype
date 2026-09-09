@@ -30,6 +30,7 @@ const claude = await import('./claude.ts')
 const compatibile = await import('./compatibile.ts')
 const compiti = await import('./compiti.ts')
 const automazioni = await import('./automazioni.ts')
+const progetti = await import('./progetti.ts')
 
 before(() => store.azzeraTutto())
 after(() => {
@@ -253,6 +254,60 @@ test('al massimo cinque voci: nello schema, nel prompt, e su quello che torna', 
   assert.ok(!('maxItems' in voce), 'maxItems nello schema: Claude lo rifiuta')
   assert.match(String(voce.description), /5/)
   assert.match(testoDi(ricevute[0]), /al massimo 5 cose/)
+})
+
+// — i progetti: gli obiettivi nel prompt, e il perché di ogni voce —
+
+test('gli obiettivi entrano nel prompt, il documento che tocca un progetto passa davanti, e il «perché» si salva e torna', async () => {
+  store.azzeraTutto()
+  progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed con Bianchi entro ottobre' })
+  const chiuso = progetti.scrivi({ nome: 'Myynd per papà', obiettivo: 'Non è un progetto' })
+  progetti.chiudi(chiuso.id)
+  // la posta della luce è più recente, e senza i progetti verrebbe letta per prima
+  store.salvaDocumenti([
+    doc('posta:INBOX:80', 'Fattura della luce di settembre', { autore: 'Enel <fatture@enel.it>', quando: '2026-09-07T10:00:00.000Z' }),
+    doc('posta:INBOX:81', 'Re: seed', { autore: 'Bianchi <bianchi@fondo.it>', corpo: 'Confermo il round: ci vediamo martedì.', quando: '2026-09-06T10:00:00.000Z' }),
+    doc('posta:INBOX:82', 'Aggiornamento su Myynd per papà', { quando: '2026-09-05T10:00:00.000Z' })
+  ])
+  const ricevute = fornitoreFinto([
+    { tipo: 'Da decidere', titolo: 'Bianchi conferma il round', testo: 'Martedì.', urgenza: 'entro martedì', fonte: 'posta', doc: 'posta:INBOX:81', perche: ' Muove il round seed di Nextas: serve una data. ' }
+  ])
+  const voci = await claude.generaFeed()
+  assert.equal(ricevute.length, 1)
+  const mandato = testoDi(ricevute[0])
+  assert.match(mandato, /Su cosa sta lavorando, e a cosa punta ciascuno[^\n]*\n— Nextas: Chiudere il round seed con Bianchi entro ottobre \(attivo\)/)
+  assert.doesNotMatch(mandato, /Myynd per papà: Non è un progetto/, 'un progetto chiuso è arrivato al modello come obiettivo')
+  // l'ordine del materiale: prima quello che tocca il progetto
+  const ordine = [...mandato.matchAll(/^id: (\S+)/gm)].map(m => m[1])
+  assert.deepEqual(ordine, ['posta:INBOX:81', 'posta:INBOX:80', 'posta:INBOX:82'], `l'ordine è ${ordine.join(', ')}`)
+  // il perché sta nello schema, obbligatorio, e nel prompt
+  const schema = (ricevute[0].response_format as { json_schema: { schema: { properties: { voci: { items: { properties: Record<string, unknown>; required: string[] } } } } } })
+    .json_schema.schema.properties.voci.items
+  assert.ok('perche' in schema.properties)
+  assert.ok(schema.required.includes('perche'))
+  assert.match(mandato, /per\nquale progetto o obiettivo conta/)
+
+  // e quello che torna lo porta, pulito, fino al feed
+  assert.equal(voci[0].perche, 'Muove il round seed di Nextas: serve una data.')
+  assert.equal(store.salvaFeed(voci), 1)
+  const [aperta] = store.elencoFeed('aperto')
+  assert.equal(aperta.perche, 'Muove il round seed di Nextas: serve una data.')
+  // una rilettura senza perché non cancella quello che c'era
+  store.salvaFeed([{ ...voci[0], perche: '' }])
+  assert.equal(store.elencoFeed('aperto')[0].perche, 'Muove il round seed di Nextas: serve una data.')
+})
+
+test('senza progetti scritti il prompt non ne parla, e una voce senza perché passa lo stesso', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:90', 'Una cosa')])
+  const ricevute = fornitoreFinto([
+    { tipo: 'Da decidere', titolo: 'Una cosa da fare', testo: 'x', urgenza: 'oggi', fonte: 'posta', doc: 'posta:INBOX:90' }
+  ])
+  const voci = await claude.generaFeed()
+  assert.doesNotMatch(testoDi(ricevute[0]), /Su cosa sta lavorando/)
+  assert.equal(voci[0].perche, '')
+  assert.equal(store.salvaFeed(voci), 1)
+  assert.equal(store.elencoFeed('aperto')[0].perche, null)
 })
 
 // — il feed si tiene corto —

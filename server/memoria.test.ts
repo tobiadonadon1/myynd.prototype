@@ -32,6 +32,8 @@ process.env.HOME = CASA
 
 const store = await import('./store.ts')
 const memoria = await import('./memoria.ts')
+const progetti = await import('./progetti.ts')
+const punto = await import('./punto.ts')
 const { sistema } = await import('./claude.ts')
 
 after(() => {
@@ -152,4 +154,59 @@ test('esplicita e dedotta valgono da subito: il filtro è solo per le indotte', 
 test('quante ne aspettano una risposta', () => {
   // due delle tre indotte scritte qui sopra sono ancora da guardare
   assert.equal(memoria.inAttesa(), 2)
+})
+
+test('un’idea tenuta nel Punto guida il prossimo lavoro del suo progetto', () => {
+  const p = progetti.scrivi({ nome: 'Myynd QA', obiettivo: 'Preparare il rilascio macOS' })
+  punto.tieni(p.nome, 'Le news di Myynd QA devono usare soltanto riassunti della fonte originale')
+  const prompt = sistema('Prepara il prossimo passo per Myynd QA')
+  assert.match(prompt, /soltanto riassunti della fonte originale/)
+  assert.doesNotMatch(memoria.carta(), /soltanto riassunti della fonte originale/)
+  assert.doesNotMatch(sistema('Prepara il preventivo per Rossi'), /soltanto riassunti della fonte originale/)
+})
+
+test('correggere una scelta di progetto sostituisce subito ciò che il gemello riusa', () => {
+  const p = progetti.scrivi({ nome: 'Aurora QA', obiettivo: 'Consegnare la proposta' })
+  const prima = punto.tieni(p.nome, 'La proposta Aurora QA deve includere uno sconto del venti per cento')
+  const corretta = store.ricorda({
+    enunciato: 'Per Aurora QA proporre il prezzo pieno, senza sconti', ambito: `progetto:${p.nome}`,
+    genere: 'esplicita', fiducia: 1, origine: 'mano', sostituisce: prima.id
+  })
+  const prompt = sistema('Scrivi la proposta Aurora QA')
+  assert.match(prompt, /prezzo pieno, senza sconti/)
+  assert.doesNotMatch(prompt, /venti per cento/)
+  assert.ok(store.convinzioniStoriche().some(c => c.id === prima.id), 'la scelta sostituita resta nello storico')
+  store.chiudiConvinzione(corretta)
+  assert.doesNotMatch(sistema('Scrivi la proposta Aurora QA'), /prezzo pieno, senza sconti/)
+})
+
+test('una deduzione indotta su un progetto richiede conferma e un progetto chiuso smette di guidare il lavoro', () => {
+  const p = progetti.scrivi({ nome: 'Orione QA' })
+  const id = indotta(`progetto:${p.nome}`, 'Orione QA usa solo fornitori locali certificati')
+  assert.doesNotMatch(sistema('Prepara la lista fornitori di Orione QA'), /locali certificati/)
+  store.confermaConvinzione(id)
+  assert.match(sistema('Prepara la lista fornitori di Orione QA'), /locali certificati/)
+  progetti.chiudi(p.id)
+  assert.doesNotMatch(sistema('Prepara la lista fornitori di Orione QA'), /locali certificati/)
+  assert.ok(store.convinzioni(`progetto:${p.nome}`).some(c => c.id === id), 'chiudere il progetto non cancella ciò che si è imparato')
+})
+
+test('i nomi contestuali rispettano confini, accenti e alfabeti Unicode', () => {
+  for (const nome of ['Acme', 'Caffè Équipe', '東京開発']) {
+    progetti.scrivi({ nome })
+    punto.tieni(nome, `Regola verificata per ${nome}`)
+  }
+  assert.doesNotMatch(memoria.cartaPerContesto('Prepara Acme2 e SuperAcme'), /Regola verificata per Acme/)
+  assert.match(memoria.cartaPerContesto('Prepara [ACME].'), /Regola verificata per Acme/)
+  assert.match(memoria.cartaPerContesto('Aggiorna CAFFE EQUIPE.'), /Regola verificata per Caffè Équipe/)
+  assert.match(memoria.cartaPerContesto('Prossimo passo: 東京開発。'), /Regola verificata per 東京開発/)
+  assert.doesNotMatch(memoria.cartaPerContesto('Scrivi a Rossini'), /Con Rossi non si applica/)
+})
+
+test('gli ambiti di progetto condividono il tetto con quelli cliente', () => {
+  const discorso = 'Prepara Acme, Caffè Équipe e 東京開発 con Rossi'
+  assert.equal((memoria.cartaPerContesto(discorso).match(/^Su /gm) ?? []).length, 3)
+  assert.equal((memoria.cartaPerContesto(discorso, 1).match(/^Su /gm) ?? []).length, 1)
+  assert.equal(memoria.cartaPerContesto(discorso, 0), '')
+  assert.equal(memoria.cartaPerContesto(discorso, -1), '')
 })

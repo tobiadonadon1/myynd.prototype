@@ -1,712 +1,313 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { frasi, t } from '../lingua'
-import { Campo } from './campo'
-import { DOMANDE } from '../data'
-import { api, rigaSincronizzazione, type Abbonamento, type Stato } from '../api'
-import { BottoneSicuro, Hov, daTastiera } from '../ui'
-import { IconPiu } from '../icons'
-import { Form, FormClaude } from '../components/forms'
-import { Stato as Indicatore } from '../components/Stato'
-import { Logo } from '../components/Marchio'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from 'react'
+import { giornoLocale, spostaGiorno } from '../oggi/giorni'
+import { api, rigaSincronizzazione, type Stato, type StatoAvvio } from '../api'
+import { t } from '../lingua'
+import { ConnectorIcon } from '../components/ConnectorIcon'
+import { Form } from '../components/forms'
+import { IconFreccia } from '../icons'
+import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 
-const COLORI: Record<string, string> = {
-  posta: '#C4553C',
-  desktop: '#E0A44A',
-  notion: '#5B9BC9',
-  claude: '#7FA98A'
-}
+const NON_FONTI = new Set(['claude', 'compatibile', 'mind2do'])
+const PRIORITA_FONTI = ['desktop', 'google', 'posta', 'notion', 'slack', 'calendario']
+const momentoDi = (fase: StatoAvvio['fase']): Momento => fase === 'progetto' ? 0 : fase === 'fonte' ? 3 : fase === 'verifica' ? 2 : 3
+const messaggio = (e: unknown) => e instanceof Error ? e.message : String(e)
+/**
+ * Quanto resta il benvenuto, da solo.
+ *
+ * Era una schermata con una frase e un bottone: si leggeva e si premeva. Tre
+ * secondi bastano a leggerla; poi passa da sé alla prima domanda. Il bottone
+ * resta per chi non vuole aspettare, e «usa un altro account» pure.
+ */
+const ATTESA_BENVENUTO = 3000
 
-type Passo = 'risveglio' | 'claude' | 'nome' | 'ritratto' | 'connetti' | 'leggi' | 'genera' | 'pronta'
-
-const CHIARO = '#F4EFE8'
-const TENUE = 'rgba(244,239,232,.62)'
-
-/** Quelli che non sono fonti: un motore, e la lista che è collegata da sola. */
-const NON_FONTI = ['claude', 'compatibile', 'mind2do']
+/** La freccia del bottone che va avanti, nel suo riquadro scuro. */
+const Avanti = () => <span className="onboard-arrow"><IconFreccia /></span>
 
 /**
- * Da dove si riparte, se il primo avvio si è chiuso a metà.
+ * Una risposta di una riga, che cresce se serve.
  *
- * Il passo stava solo nella memoria di React: un ricaricamento riportava alla
- * prima schermata, con la chiave già data e il nome già scritto. Lo stato del
- * server dice cosa è già fatto, e ogni cosa fatta è un passo da non rifare.
+ * Era una textarea di tre righe con la maniglia in basso: per dieci parole
+ * sembrava un modulo da compilare. Parte alta una riga e si allarga con quello
+ * che ci scrivi. Invio manda avanti — è una risposta, non una lettera — e
+ * Maiuscole+Invio va a capo.
  */
-function passoDaRiprendere(s: Stato): Passo {
-  const collegato = (id: string) => !!s.connettori.find(c => c.id === id)?.collegato
-  const fonti = s.connettori.filter(c => c.collegato && !NON_FONTI.includes(c.id))
-  if (fonti.some(c => c.documenti > 0)) return 'genera'
-  if (fonti.length) return 'connetti'
-  if (s.config.nome) return 'ritratto'
-  if (collegato('claude') || collegato('compatibile')) return 'nome'
-  return 'risveglio'
-}
-
-export function Onboarding({ stato, fatto }: { stato: Stato; fatto: () => void }) {
-  const cv = useRef<HTMLCanvasElement>(null)
-  const campo = useMemo(() => new Campo(), [])
-  const [passo, setPasso] = useState<Passo>(() => {
-    // chi torna dal consenso di Google o Microsoft riprende dalle fonti, non da capo
-    const torno = new URLSearchParams(window.location.search).get('torno') === 'connetti'
-    if (torno) window.history.replaceState(null, '', '/')
-    return torno ? 'connetti' : passoDaRiprendere(stato)
-  })
-  const [s, setS] = useState(stato)
-  /**
-   * L'ultimo gesto: la mente si accende e la luce diventa il fondo dell'app.
-   *
-   * Il velo è color `#E7DFD3`, che è esattamente il fondo di quello che c'è
-   * dopo. Non è un dettaglio di gusto: senza, fra l'ultima schermata scura e
-   * la prima chiara c'era uno stacco secco — l'app *sbatteva* addosso invece
-   * di arrivare. Il velo copre il buio, `fatto()` scambia le due schermate
-   * sotto, e quello che si vede è una cosa sola che si apre.
-   */
-  const [accensione, setAccensione] = useState(false)
-  const [nome, setNome] = useState(stato.config.nome ?? '')
-  const [ruolo, setRuolo] = useState(stato.config.ruolo ?? '')
-
-  const collegati = s.connettori.filter(c => c.collegato)
-  const colori = collegati.length ? collegati.map(c => COLORI[c.id] ?? '#C4623B') : ['#8A7A6A']
-
-  useEffect(() => {
-    if (cv.current) campo.monta(cv.current)
-    return () => campo.smonta()
-  }, [campo])
-
-  useEffect(() => {
-    const coesione =
-      passo === 'risveglio' ? 0 :
-      passo === 'claude' ? 0.12 :
-      passo === 'nome' ? 0.22 :
-      passo === 'ritratto' ? 0.24 :
-      passo === 'connetti' ? 0.2 + Math.min(0.55, collegati.length * 0.16) :
-      passo === 'leggi' ? 0.86 : 1
-    campo.imposta({
-      coesione,
-      colori,
-      legami: passo === 'leggi' || passo === 'genera' || passo === 'pronta',
-      quantita: passo === 'risveglio' ? 520 : 520 + Math.min(900, s.conteggi.totale * 2)
-    })
-  }, [passo, collegati.length, s.conteggi.totale, campo, colori])
-
-  const ricarica = async () => { const n = await api.stato(); setS(n); return n }
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#191715', color: CHIARO,
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", overflow: 'hidden'
-    }}>
-      <canvas ref={cv} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
-
-      {/*
-        Il velo: il testo deve restare leggibile qualunque cosa passi dietro.
-
-        Se ne va quando la mente si accende, ed è quello che rende visibile
-        l'accensione: è un cerchio scuro piazzato esattamente sopra al punto da
-        cui esce la luce, e con quello davanti il lampo restava un vago
-        schiarirsi del fondo. Il testo che stava proteggendo, in quel momento,
-        se ne sta già andando anche lui.
-      */}
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)',
-        opacity: accensione ? 0 : 1, transition: 'opacity .45s ease'
-      }} />
-
-      <div style={{
-        position: 'relative', height: '100%', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', padding: '40px 24px', pointerEvents: 'none'
-      }}>
-        <div style={{
-          width: 640, maxWidth: '100%', pointerEvents: 'auto',
-          textShadow: '0 1px 24px rgba(12,10,8,.75)'
-        }}>
-          {passo === 'risveglio' && <Risveglio avanti={() => setPasso('claude')} />}
-          {passo === 'claude' && (
-            <PassoClaude
-              collegato={!!s.connettori.find(c => c.id === 'claude')?.collegato}
-              ricarica={ricarica}
-              avanti={() => setPasso('nome')}
-            />
-          )}
-          {passo === 'nome' && (
-            <Nome
-              nome={nome} setNome={setNome} ruolo={ruolo} setRuolo={setRuolo}
-              avanti={async () => {
-                try { await api.profilo({ nome, ruolo }) } catch { /* riprovabile dalle preferenze */ }
-                setPasso('ritratto')
-              }}
-            />
-          )}
-          {passo === 'ritratto' && <Ritratto avanti={() => setPasso('connetti')} />}
-          {passo === 'connetti' && (
-            <Connetti s={s} ricarica={ricarica} avanti={() => setPasso('leggi')}
-              // senza niente collegato, leggere e generare sono due schermate
-              // che girano a vuoto: si va dove si può andare davvero
-              salta={() => setPasso('pronta')} />
-          )}
-          {passo === 'leggi' && (
-            <Leggi ricarica={ricarica} avanti={() => setPasso('genera')} />
-          )}
-          {passo === 'genera' && (
-            <Genera s={s} avanti={() => setPasso('pronta')} />
-          )}
-          {passo === 'pronta' && (
-            <Pronta totale={s.conteggi.totale} partita={accensione} entra={async () => {
-              // parte subito e non blocca la luce: se il server ci mette un
-              // secondo, l'accensione non deve aspettarlo per cominciare
-              const scritto = api.profilo({ onboarding: true }).catch(() => { /* si riapre al prossimo avvio */ })
-              if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-                await scritto
-                fatto()
-                return
-              }
-              campo.accendi()
-              setAccensione(true)
-              await Promise.all([scritto, new Promise(r => setTimeout(r, 820))])
-              fatto()
-            }} />
-          )}
-        </div>
-      </div>
-
-      <Passi corrente={passo} />
-
-      {accensione && (
-        <div aria-hidden="true" style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none', background: '#E7DFD3',
-          opacity: 0, animation: 'accende .82s cubic-bezier(.4,0,.2,1) forwards'
-        }} />
-      )}
-    </div>
-  )
-}
-
-// — cornice comune —
-
-function Errore({ testo }: { testo: string }) {
-  if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#E8907A', marginTop: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{t(testo)}</div>
-}
-
-function Titolo({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 42, lineHeight: 1.14, letterSpacing: '-.035em', textWrap: 'pretty' }}>{children}</div>
-}
-
-function Sotto({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 16, lineHeight: 1.6, color: TENUE, marginTop: 16, maxWidth: 520, textWrap: 'pretty' }}>{children}</div>
-}
-
-function Primario({ onClick, children, disabilitato }: { onClick: () => void; children: React.ReactNode; disabilitato?: boolean }) {
-  return (
-    <Hov as="button" onClick={disabilitato ? undefined : onClick} disabled={disabilitato}
-      style={{
-        marginTop: 34, padding: '13px 28px', borderRadius: 99, border: 'none',
-        background: disabilitato ? 'rgba(244,239,232,.16)' : CHIARO,
-        color: disabilitato ? 'rgba(244,239,232,.45)' : '#191715',
-        fontSize: 15, fontWeight: 500, cursor: disabilitato ? 'default' : 'pointer',
-        fontFamily: 'inherit', transition: 'background .2s'
-      }}
-      hover={disabilitato ? {} : { background: '#FFFFFF' }}>{children}</Hov>
-  )
-}
-
-function Passi({ corrente }: { corrente: Passo }) {
-  const tutti: Passo[] = ['risveglio', 'claude', 'nome', 'ritratto', 'connetti', 'leggi', 'genera', 'pronta']
-  const i = tutti.indexOf(corrente)
-  return (
-    <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 7 }}>
-      {tutti.map((p, k) => (
-        <span key={p} style={{
-          width: k === i ? 22 : 6, height: 6, borderRadius: 99,
-          background: k <= i ? 'rgba(244,239,232,.8)' : 'rgba(244,239,232,.22)',
-          transition: 'width .3s, background .3s'
-        }} />
-      ))}
-    </div>
-  )
-}
-
-// — i passi —
-
-function Risveglio({ avanti }: { avanti: () => void }) {
-  return (
-    <div style={{ animation: 'fadein .8s ease' }}>
-      <div style={{ marginBottom: 30 }}><Logo dim={34} testo={23} tinta={CHIARO} /></div>
-      <Titolo>{t('Questa mente è vuota.')}</Titolo>
-      <Sotto>{t('Riempila con quello che leggi e scrivi.')}</Sotto>
-      <Primario onClick={avanti}>{t('Cominciamo')}</Primario>
-    </div>
-  )
-}
-
-const CAMPO: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', marginTop: 10, padding: '13px 16px',
-  borderRadius: 14, border: '1px solid rgba(244,239,232,.22)', background: 'rgba(244,239,232,.06)',
-  color: CHIARO, fontSize: 15, fontFamily: 'inherit', outline: 'none'
-}
-
-const ETICHETTA: React.CSSProperties = {
-  fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(244,239,232,.45)'
-}
-
-/** Una scelta che non è quella principale: testo, non bottone. */
-function Secondario({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <Hov as="button" onClick={onClick}
-      style={{
-        border: 'none', background: 'none', color: TENUE, fontSize: 14,
-        cursor: 'pointer', fontFamily: 'inherit', padding: 0
-      }}
-      hover={{ color: CHIARO }}>{children}</Hov>
-  )
-}
-
-/**
- * Il primo collegamento: senza Claude, Myynd non ragiona.
- *
- * Qui c'erano una strada sola e un campo per la chiave API, e quella strada
- * manda a chi compra Myynd una bolletta a consumo per un'app che gira tutti i
- * giorni. Adesso ce ne sono due, e l'ordine in cui stanno è tutta la decisione:
- * se Claude Code è su questa macchina, l'abbonamento che ha già è il bottone, e
- * la chiave diventa la riga di testo per chi la preferisce.
- *
- * Se Claude Code non c'è, di scelta non ce n'è e non se ne inventa una: resta il
- * campo di prima, senza un'offerta che rimanda a un programma che non ha. Un
- * bivio con un ramo che non porta da nessuna parte è peggio di una strada sola.
- */
-function PassoClaude({ collegato, ricarica, avanti }: {
-  collegato: boolean; ricarica: () => Promise<Stato>; avanti: () => void
-}) {
-  const [abb, setAbb] = useState<Abbonamento | null>(null)
-  /** Ha chiesto lui la chiave: da qui in poi non gli si ripropone l'altra strada. */
-  const [conChiave, setConChiave] = useState(false)
-  const [occupato, setOccupato] = useState(false)
-  const [err, setErr] = useState('')
-
-  useEffect(() => { api.abbonamento().then(setAbb).catch(() => setAbb(null)) }, [])
-
-  const usaAbbonamento = async () => {
-    setOccupato(true); setErr('')
-    // la risposta dice com'è andata, «acceso» compreso: è quella che la conferma legge
-    try { setAbb(await api.usaAbbonamento(true)); await ricarica() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  if (collegato) {
-    return (
-      <div style={{ animation: 'fadein .5s ease' }}>
-        <Titolo>{t('Collega Claude.')}</Titolo>
-        <Sotto>{t('Senza, resta solo un archivio.')}</Sotto>
-        <div style={{ marginTop: 26, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(126,156,130,.16)', border: '1px solid rgba(126,156,130,.4)' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FA98A' }} />
-          {/* quale delle due: l'ha appena scelto, ed è giusto vederselo confermare */}
-          <span style={{ fontSize: 14, color: CHIARO }}>
-            {abb?.acceso ? t('Con il tuo abbonamento.') : t('Collegato.')}
-          </span>
-        </div>
-        <Primario onClick={avanti}>{t('Avanti')}</Primario>
-      </div>
-    )
-  }
-
-  // installato non basta: senza l'accesso fatto, il bottone offrirebbe una
-  // strada che fallisce al primo lavoro vero. Si sa gratis, quindi si sa prima.
-  const offriAbbonamento = !!abb?.installato && !!abb.entrato && !conChiave
-
-  return (
-    <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{t('Collega Claude.')}</Titolo>
-      <Sotto>{t('Senza, resta solo un archivio.')}</Sotto>
-
-      {offriAbbonamento ? (
-        <>
-          <div style={{
-            marginTop: 26, maxWidth: 460, padding: '15px 18px', borderRadius: 16,
-            background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
-            fontSize: '13.5px', lineHeight: 1.65, color: TENUE, textWrap: 'pretty'
-          }}>
-            {t('Claude Code è su questo computer, già entrato con il tuo account. Myynd può ragionare di lì: non costa niente oltre all’abbonamento che paghi già, e le tue credenziali restano dove sono.')}
-          </div>
-          <Errore testo={err} />
-          <Primario onClick={usaAbbonamento} disabilitato={occupato}>
-            {occupato ? t('Un momento…') : t('Usa il tuo abbonamento')}
-          </Primario>
-        </>
-      ) : (
-        <div style={{ marginTop: 26, maxWidth: 460 }}>
-          <FormClaude tema="scuro" senzaNota ok={async () => { await ricarica() }} />
-          {/*
-            A chi ha il programma e non ha fatto l'accesso non si nasconde
-            l'altra strada: è esattamente la persona a cui conviene di più, ed è
-            a dieci secondi di distanza. Una riga, nessun comando da premere —
-            l'accesso si fa nel Terminale e non è cosa che Myynd possa fare al
-            posto suo.
-          */}
-          {abb?.installato && !abb.entrato && (
-            <div style={{ fontSize: '12.5px', lineHeight: 1.6, color: TENUE, marginTop: 16, textWrap: 'pretty' }}>
-              {t('Hai Claude Code su questo computer. Se fai l’accesso — Terminale, scrivi «claude» — Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.')}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* le altre strade, tutte alla stessa altezza: nessuna è un ripensamento */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, marginTop: 22 }}>
-        {offriAbbonamento
-          ? <Secondario onClick={() => setConChiave(true)}>{t('Ho una chiave API')}</Secondario>
-          : abb?.installato && abb.entrato && <Secondario onClick={() => setConChiave(false)}>{t('Usa il tuo abbonamento')}</Secondario>}
-        <Secondario onClick={avanti}>{t('Lo collego dopo')}</Secondario>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Le cinque domande, al primo avvio.
- *
- * Il brief chiama «il punto» la conversazione in cui Myynd impara come questa
- * persona decide. Finora quelle cinque righe stavano solo nella schermata
- * della memoria, e nessuno le chiedeva: si scoprivano per caso, o mai. Qui si
- * chiedono — due righe per domanda bastano — e si possono saltare: «più
- * tardi» è una risposta, non un rifiuto, e la schermata della memoria resta lì.
- */
-function Ritratto({ avanti }: { avanti: () => void }) {
-  const [blocchi, setBlocchi] = useState<{ etichetta: string; descrizione: string }[]>([])
-  const [testi, setTesti] = useState<Record<string, string>>({})
-  /** Quello che c'era già, per non riscrivere quello che non è cambiato. */
-  const [prima, setPrima] = useState<Record<string, string>>({})
-  const [occupato, setOccupato] = useState(false)
-  const [guaio, setGuaio] = useState('')
-  /** Le domande non sono arrivate: si può riprovare, o andare avanti lo stesso. */
-  const [senzaDomande, setSenzaDomande] = useState(false)
-  const carica = useCallback(() => {
-    setGuaio(''); setSenzaDomande(false)
-    api.memoria()
-      .then(m => {
-        setBlocchi(m.blocchi.map(b => ({ etichetta: b.etichetta, descrizione: b.descrizione })))
-        /*
-         * Le risposte che ci sono già si rimettono nei riquadri.
-         *
-         * L'onboarding si può chiudere a metà — `onboarding: true` si scrive
-         * solo alla fine — e alla riapertura questa schermata ripartiva vuota
-         * su risposte già date: riscriverne una sopra le cancellava tutte,
-         * comprese quelle che ci aveva messo Myynd da solo.
-         */
-        const gia = Object.fromEntries(m.blocchi.map(b => [b.etichetta, b.valore ?? '']))
-        setPrima(gia)
-        setTesti(gia)
-      })
-      .catch(e => {
-        // prima moriva qui in silenzio: zero domande e un «Avanti» spento, senza una parola
-        setSenzaDomande(true)
-        setGuaio(e instanceof Error ? e.message : String(e))
-      })
+function Risposta({ value, invio, onKeyDown, ...resto }: TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; invio?: () => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const misura = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = '0'
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`
+    el.style.overflowY = el.scrollHeight > 240 ? 'auto' : 'hidden'
   }, [])
-  useEffect(() => { carica() }, [carica])
-  const scritti = Object.values(testi).filter(v => v.trim()).length
-
-  /*
-   * Quello che non si è salvato non si perde in silenzio.
-   *
-   * Le risposte stanno solo qui dentro finché non partono, e `avanti()` smonta
-   * questa schermata: andare avanti dopo una scrittura fallita voleva dire
-   * buttarle senza dirlo. Se qualcosa non passa si resta, con quello che è
-   * stato scritto ancora nei riquadri — così riprovare non costa niente.
-   */
-  const salva = async () => {
-    setOccupato(true); setGuaio('')
-    let male = 0
-    for (const b of blocchi) {
-      const v = (testi[b.etichetta] ?? '').trim()
-      if (v === (prima[b.etichetta] ?? '').trim()) continue
-      try {
-        await api.scriviBlocco(b.etichetta, v)
-        setPrima(p => ({ ...p, [b.etichetta]: v }))
-      } catch { male++ }
-    }
-    setOccupato(false)
-    if (male) { setGuaio(t('Non sono riuscito a salvare le tue risposte. Riprova.')); return }
-    avanti()
-  }
-
-  return (
-    <div style={{ animation: 'fadein .5s ease', display: 'flex', flexDirection: 'column', maxHeight: '76vh' }}>
-      <Titolo>{t('Cinque domande.')}</Titolo>
-      <Sotto>{t('Quello che sai tu e non sta scritto da nessuna parte. Due righe bastano.')}</Sotto>
-      {/* solo le domande scorrono: i due bottoni restano dove si possono premere */}
-      {/* base automatica, non zero: dentro un contenitore alto quanto il suo
-          contenuto una base a zero non ha spazio libero da cui crescere, e le
-          domande sparivano — restavano i due bottoni sotto un titolo solo */}
-      <div style={{ flex: '0 1 auto', overflowY: 'auto', minHeight: 0, paddingRight: 6, marginTop: 24 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 620 }}>
-          {blocchi.map(b => {
-            const d = DOMANDE[b.etichetta]
-            return (
-              <div key={b.etichetta}>
-                <div style={{ fontSize: '14.5px', color: CHIARO, marginBottom: 7 }}>{t(d?.domanda ?? b.descrizione)}</div>
-                <textarea value={testi[b.etichetta] ?? ''} rows={2} className="scuro"
-                  placeholder={d ? t(d.esempio) : ''}
-                  onChange={e => setTesti(x => ({ ...x, [b.etichetta]: e.target.value }))}
-                  style={{ ...CAMPO, marginTop: 0, resize: 'vertical', minHeight: 54, lineHeight: 1.5, fontFamily: 'inherit' }} />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <Errore testo={guaio} />
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center', flex: 'none' }}>
-        {senzaDomande
-          ? <Primario onClick={carica}>{t('Riprova')}</Primario>
-          : <Primario onClick={salva} disabilitato={occupato || scritti === 0}>{occupato ? t('Un momento…') : t('Avanti')}</Primario>}
-        <Secondario onClick={() => { if (!occupato) avanti() }}>{scritti ? t('Il resto dopo') : t('Rispondo più tardi')}</Secondario>
-      </div>
-    </div>
-  )
-}
-
-function Nome({ nome, setNome, ruolo, setRuolo, avanti }: {
-  nome: string; setNome: (v: string) => void
-  ruolo: string; setRuolo: (v: string) => void
-  avanti: () => void
-}) {
-  return (
-    <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{t('Come ti chiami?')}</Titolo>
-      <Sotto>{t('Per scrivere come scrivi tu.')}</Sotto>
-      <div style={{ display: 'flex', gap: 14, marginTop: 30 }}>
-        <div style={{ flex: 1 }}>
-          <div style={ETICHETTA}>{t('Nome')}</div>
-          <input value={nome} onChange={e => setNome(e.target.value)} placeholder={t('il tuo nome')} autoFocus className="scuro" style={CAMPO} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={ETICHETTA}>{t('Ruolo')}</div>
-          <input value={ruolo} onChange={e => setRuolo(e.target.value)} placeholder={t('Titolare')} className="scuro" style={CAMPO} />
-        </div>
-      </div>
-      <Primario onClick={avanti} disabilitato={!nome.trim()}>{t('Avanti')}</Primario>
-    </div>
-  )
-}
-
-function Connetti({ s, ricarica, avanti, salta }: {
-  s: Stato; ricarica: () => Promise<Stato>; avanti: () => void; salta: () => void
-}) {
-  const [aperto, setAperto] = useState<string | null>(null)
-  // Claude l'ha già chiesto il passo prima; il fornitore compatibile è un
-  // motore, non una fonte, e si collega dalle preferenze
-  // «Da fare» è collegato da solo, sempre: contarlo qui rendeva vero
-  // «1 collegata» a chi non aveva collegato niente
-  const pronti = s.connettori.filter(c =>
-    (c.pronto || c.collegato) && c.id !== 'claude' && c.id !== 'compatibile' && c.id !== 'mind2do')
-  const dopo = s.connettori.filter(c => !c.pronto && !c.collegato)
-  const quanti = pronti.filter(c => c.collegato).length
-
-  return (
-    <div style={{ animation: 'fadein .5s ease', maxHeight: '74vh', overflowY: 'auto', paddingRight: 4 }}>
-      <Titolo>{t('Cosa le fai leggere?')}</Titolo>
-      <Sotto>{s.ospitato ? t('Restano nel tuo spazio, e non escono di lì.') : t('Restano su questo computer.')}</Sotto>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
-        {pronti.map(c => (
-          <Scheda key={c.id} c={c} aperto={aperto === c.id}
-            apri={() => setAperto(aperto === c.id ? null : c.id)}
-            ricarica={ricarica} chiudi={() => setAperto(null)} />
-        ))}
-      </div>
-
-      <div style={{ ...ETICHETTA, marginTop: 28, marginBottom: 12 }}>{t('Più avanti')}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {dopo.map(c => (
-          <span key={c.id} title={t(c.nota)} style={{
-            padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
-            border: '1px dashed rgba(244,239,232,.2)', color: 'rgba(244,239,232,.42)'
-          }}>{t(c.nome)}</span>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, alignItems: 'center' }}>
-        <Primario onClick={avanti} disabilitato={quanti === 0}>
-          {quanti === 0 ? t('Collegane almeno una') : frasi.avantiCollegate(quanti)}
-        </Primario>
-        {/* chi non ha niente sotto mano non deve restare bloccato qui: la chat
-            funziona anche senza fonti, e le fonti si collegano quando si vuole */}
-        {quanti === 0 && <Secondario onClick={salta}>{t('Le collego dopo')}</Secondario>}
-      </div>
-    </div>
-  )
-}
-
-function Scheda({ c, aperto, apri, ricarica, chiudi }: {
-  c: Stato['connettori'][number]
-  aperto: boolean
-  apri: () => void
-  ricarica: () => Promise<Stato>
-  chiudi: () => void
-}) {
-  const colore = COLORI[c.id] ?? '#C4623B'
-  return (
-    <div style={{
-      borderRadius: 18, border: `1px solid ${c.collegato ? 'rgba(244,239,232,.3)' : 'rgba(244,239,232,.14)'}`,
-      background: c.collegato ? 'rgba(244,239,232,.08)' : 'rgba(244,239,232,.03)', overflow: 'hidden'
-    }}>
-      <div role="button" tabIndex={0} aria-expanded={aperto} onClick={apri} onKeyDown={daTastiera(apri)}
-        style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', cursor: 'pointer' }}>
-        <span style={{
-          width: 9, height: 9, borderRadius: '50%', flex: 'none',
-          background: c.collegato ? colore : 'rgba(244,239,232,.25)',
-          boxShadow: c.collegato ? `0 0 0 5px ${colore}22` : 'none'
-        }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15 }}>{t(c.nome)}</div>
-          <div style={{ fontSize: '12.5px', color: 'rgba(244,239,232,.5)', marginTop: 3 }}>
-            {c.collegato ? (c.documenti ? frasi.documentiLetti(String(c.documenti)) : t('collegato')) : t(c.nota)}
-          </div>
-        </div>
-        {c.collegato ? (
-          <BottoneSicuro chiaro titolo={t('Scollega')}
-            fai={async () => {
-              try { await api.scollega(c.id) } catch { /* il vero stato lo dice ricarica */ }
-              await ricarica()
-            }}>
-            {t('Scollega')}
-          </BottoneSicuro>
-        ) : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: CHIARO }}>
-            <IconPiu size={13} />{t('Collega')}</span>
-        )}
-      </div>
-      {aperto && !c.collegato && (
-        <div style={{ padding: '2px 18px 18px', animation: 'fadein .2s ease' }}>
-          <Form id={c.id} tema="scuro" ok={async () => { await ricarica(); chiudi() }} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Leggi({ ricarica, avanti }: { ricarica: () => Promise<Stato>; avanti: () => void }) {
-  const [righe, setRighe] = useState<string[]>([])
-  const [finito, setFinito] = useState(false)
-  const [err, setErr] = useState('')
-  const [totale, setTotale] = useState(0)
-  const partito = useRef(false)
-
+  useLayoutEffect(misura, [value, misura])
   useEffect(() => {
-    if (partito.current) return
-    partito.current = true
-    api.sincronizza(m => {
-      if (m.fase === 'fine') {
-        setTotale(Number(m.totale) || 0)
-        setFinito(true)
-      } else if (m.fase !== 'errore') {
-        setRighe(r => [...r.slice(-4), rigaSincronizzazione(m)])
-      }
-    }).then(ricarica).catch(e => setErr(e instanceof Error ? e.message : String(e)))
-  }, [ricarica])
-
-  return (
-    <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{finito ? t('Fatto.') : t('Leggo.')}</Titolo>
-      <Sotto>
-        {finito
-          ? frasi.documenti(totale)
-          : t('La prima volta è la più lunga.')}
-      </Sotto>
-      <div style={{ marginTop: 26 }}>
-        {!finito && <Indicatore tipo="leggo" testo={righe.at(-1) ?? t('mi collego')} chiaro />}
-        <div style={{
-          marginTop: finito ? 0 : 14, padding: '14px 18px', borderRadius: 16,
-          background: 'rgba(244,239,232,.05)', border: '1px solid rgba(244,239,232,.12)',
-          fontSize: '12.5px', lineHeight: 1.9, color: TENUE, minHeight: 84, fontVariantNumeric: 'tabular-nums'
-        }}>
-          {righe.length ? righe.map((r, i) => <div key={i}>{r}</div>) : <div>{t('mi collego…')}</div>}
-        </div>
-      </div>
-      <Errore testo={err} />
-      <Primario onClick={avanti} disabilitato={!finito && !err}>{t('Avanti')}</Primario>
-    </div>
-  )
-}
-
-function Genera({ s, avanti }: { s: Stato; avanti: () => void }) {
-  const [occupato, setOccupato] = useState(false)
-  const [quante, setQuante] = useState<number | null>(null)
-  const [err, setErr] = useState('')
-  const senzaClaude = !s.connettori.find(c => c.id === 'claude')?.collegato
-
-  const genera = async () => {
-    setOccupato(true); setErr('')
-    try { const r = await api.generaFeed(); setQuante(r.generate) }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
-  }
-
-  return (
-    <div style={{ animation: 'fadein .5s ease' }}>
-      <Titolo>{t('Prima lettura.')}</Titolo>
-      <Sotto>
-        {senzaClaude
-          ? t('Serve Claude. Puoi saltarla.')
-          : quante === null
-            ? t('Metto da parte quello che sembra richiedere te.')
-            : quante === 0
-              ? t('Niente da segnalare.')
-              : frasi.messeDaParte(quante)}
-      </Sotto>
-      <Errore testo={err} />
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        {!senzaClaude && quante === null && (
-          occupato
-            ? <div style={{ marginTop: 34 }}><Indicatore tipo="cerco" testo={t('Leggo tutto e scelgo cosa conta')} chiaro /></div>
-            : <Primario onClick={genera}>{t('Fai la prima lettura')}</Primario>
-        )}
-        {(senzaClaude || quante !== null) && <Primario onClick={avanti}>{t('Avanti')}</Primario>}
-        {!senzaClaude && quante === null && !occupato && (
-          <Hov as="button" onClick={avanti}
-            style={{ marginTop: 34, border: 'none', background: 'none', color: TENUE, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-            hover={{ color: CHIARO }}>{t('Salta')}</Hov>
-        )}
-      </div>
-    </div>
-  )
+    window.addEventListener('resize', misura)
+    return () => window.removeEventListener('resize', misura)
+  }, [misura])
+  return <textarea ref={ref} rows={1} value={value} {...resto} onKeyDown={e => {
+    onKeyDown?.(e)
+    if (e.key === 'Enter' && !e.shiftKey && invio && !e.defaultPrevented) { e.preventDefault(); invio() }
+  }} />
 }
 
 /**
- * L'ultima schermata, e l'unica che si festeggia.
+ * Tre schermate che si compilano, e nessuna che si guarda e basta.
  *
- * Il titolo prende i colori del marchio invece del bianco di tutti gli altri:
- * succede una volta sola nella vita di un account, ed è il punto in cui la
- * cosa che si è appena montata pezzo per pezzo diventa una cosa sola. Mentre
- * la luce sale, il pannello se ne va per conto suo — se restasse fermo si
- * vedrebbe sbiadire sotto al velo, che è la differenza fra una schermata che
- * finisce e una che si spegne.
+ * Il benvenuto passa da solo. Il progetto e l'obiettivo stanno sulla stessa
+ * schermata — erano due domande, una per il nome e una per la meta, e la
+ * seconda si apriva su un campo alto tre righe per una frase. La prima
+ * attività ha la data e la fonte in vista, sotto la risposta, invece che sotto
+ * una linguetta. Salvata l'attività si entra: la schermata «è pronto» con un
+ * bottone solo resta per chi rivede l'avvio dalle preferenze, dove è una
+ * ricapitolazione e non un passaggio.
  */
-function Pronta({ totale, partita, entra }: {
-  totale: number; partita: boolean; entra: () => Promise<void>
-}) {
-  // «Entra» aspetta due chiamate: premuto due volte le faceva partire due volte
+export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stato: Stato; fatto: () => void; accountEmail: string; cambiaAccount: () => Promise<void> }) {
+  const [s, setS] = useState(stato)
+  const [avvio, setAvvio] = useState<StatoAvvio | null>(null)
+  const [momento, setMomento] = useState<Momento>(0)
+  const [carico, setCarico] = useState(true)
   const [occupato, setOccupato] = useState(false)
-  const vai = async () => { setOccupato(true); try { await entra() } finally { setOccupato(false) } }
-  return (
-    <div style={{
-      animation: 'fadein .6s ease',
-      opacity: partita ? 0 : 1,
-      transform: partita ? 'scale(1.05)' : 'scale(1)',
-      transition: 'opacity .5s ease, transform .85s cubic-bezier(.3,0,.2,1)'
-    }}>
-      <div style={{
-        fontSize: 42, lineHeight: 1.14, letterSpacing: '-.035em', textWrap: 'pretty',
-        backgroundImage: 'linear-gradient(96deg,#FFF7F0 0%,#F4EFE8 32%,#E8A87C 74%,#A8C4AB 100%)',
-        WebkitBackgroundClip: 'text', backgroundClip: 'text',
-        color: 'transparent', WebkitTextFillColor: 'transparent'
-      }}>{t('Pronta.')}</div>
-      <Sotto>
-        {totale
-          ? frasi.documentiDentro(String(totale))
-          : t('Ancora vuota.')}
-      </Sotto>
-      <Primario onClick={vai} disabilitato={occupato}>{occupato ? t('Un momento…') : t('Entra')}</Primario>
-    </div>
-  )
+  const [errore, setErrore] = useState('')
+  const [progetto, setProgetto] = useState('')
+  const [obiettivo, setObiettivo] = useState('')
+  /** Il benvenuto è passato: da solo dopo tre secondi, o premendo. */
+  const [accountConfermato, setAccountConfermato] = useState(false)
+  const [fonte, setFonte] = useState('')
+  const [confermati, setConfermati] = useState<string[]>([])
+  const [azione, setAzione] = useState('')
+  const [giorno, setGiorno] = useState('')
+  const [progresso, setProgresso] = useState('')
+  const [tutteFonti, setTutteFonti] = useState(false)
+  const [cercaFonte, setCercaFonte] = useState('')
+  const lock = useRef(false)
+  const titolo = useRef<HTMLHeadingElement>(null)
+  const nome = useRef<HTMLInputElement>(null)
+  const iniziato = useRef(false)
+
+  const ricarica = useCallback(async () => { const n = await api.stato(); setS(n); return n }, [])
+  const carica = useCallback(async () => {
+    setCarico(true); setErrore('')
+    try {
+      const n = await api.avvio()
+      setAvvio(n); setProgetto(n.progetto?.nome ?? ''); setObiettivo(n.progetto?.obiettivo ?? '')
+      setFonte(n.fonte ?? ''); setAzione(n.azione); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+      try {
+        const bozza = JSON.parse(localStorage.getItem(`myynd.avvio.bozza.${n.id}`) ?? 'null')
+        if (!n.risultato && bozza?.revisione === n.revisione) {
+          if (typeof bozza.progetto === 'string') setProgetto(bozza.progetto.slice(0, 160))
+          if (typeof bozza.obiettivo === 'string') setObiettivo(bozza.obiettivo.slice(0, 1000))
+          if (typeof bozza.azione === 'string') setAzione(bozza.azione.slice(0, 2000))
+          if (typeof bozza.giorno === 'string' && /^(\d{4}-\d{2}-\d{2})?$/.test(bozza.giorno)) setGiorno(bozza.giorno)
+        }
+      } catch { /* A damaged local draft never blocks the server-backed flow. */ }
+      const url = new URL(window.location.href)
+      const ritorno = url.searchParams.get('torno') === 'connetti'
+      if (ritorno) { url.searchParams.delete('torno'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
+      setMomento(ritorno && !n.risultato ? 1 : momentoDi(n.fase))
+      try {
+        const salvata = sessionStorage.getItem(`myynd.avvio.fonte.${n.id}`)
+        if (salvata && !n.risultato) setFonte(salvata)
+      } catch { /* The saved server session remains usable with storage disabled. */ }
+    } catch (e) { setErrore(messaggio(e)) }
+    finally { setCarico(false) }
+  }, [])
+  useEffect(() => { void carica() }, [carica])
+  useEffect(() => {
+    if (!avvio || carico) return
+    try {
+      const chiave = `myynd.avvio.bozza.${avvio.id}`
+      if (avvio.risultato) localStorage.removeItem(chiave)
+      else localStorage.setItem(chiave, JSON.stringify({ revisione: avvio.revisione, progetto, obiettivo, azione, giorno }))
+    } catch { /* Resume still uses the last successful server save. */ }
+  }, [avvio, carico, progetto, obiettivo, azione, giorno])
+
+  const benvenuto = !carico && !accountConfermato
+  const caricato = !!avvio
+  useEffect(() => {
+    if (!benvenuto || !caricato || !accountEmail) return
+    const id = window.setTimeout(() => setAccountConfermato(true), ATTESA_BENVENUTO)
+    return () => window.clearTimeout(id)
+  }, [benvenuto, caricato, accountEmail])
+
+  useEffect(() => {
+    if (!iniziato.current) { iniziato.current = true; return }
+    // Il fuoco va nel campo, se c'è: la domanda si legge e si risponde, senza un clic in mezzo.
+    const pannello = titolo.current?.closest('.onboard-panel')
+    const campo = pannello?.querySelector<HTMLElement>('textarea, input:not([type=date]):not([type=checkbox]):not([type=search])')
+    ;(campo ?? titolo.current)?.focus()
+  }, [momento, carico, avvio?.risultato, accountConfermato])
+
+  // Refresh the revision after a lost response/conflict without discarding form drafts.
+  const fai = async (lavoro: () => Promise<void>) => {
+    if (lock.current) return
+    lock.current = true; setOccupato(true); setErrore('')
+    let stessaSessione = false
+    try {
+      const auth = await api.accesso()
+      if (!auth.entrato || !accountEmail || auth.account?.email !== accountEmail) {
+        setErrore(t('L’account è cambiato. Usa un altro account per rientrare.')); return
+      }
+      stessaSessione = true
+      await lavoro()
+    }
+    catch (e) {
+      setErrore(messaggio(e))
+      if (!stessaSessione) return
+      try {
+        const n = await api.avvio(); setAvvio(n)
+        setConfermati(ids => ids.filter(id => n.fatti.some(f => f.id === id)))
+        if (n.risultato) setMomento(3)
+      } catch { /* Keep the initial actionable error and every unsaved field. */ }
+    } finally { lock.current = false; setOccupato(false); setProgresso('') }
+  }
+  const vai = (dove: Momento) => { setErrore(''); setMomento(dove) }
+  const salvaProgetto = () => fai(async () => {
+    if (!avvio || !progetto.trim() || !obiettivo.trim()) return
+    const cambiato = progetto.trim() !== avvio.progetto?.nome || obiettivo.trim() !== avvio.progetto?.obiettivo
+    const n = cambiato ? await api.avvioProgetto({ nome: progetto.trim(), obiettivo: obiettivo.trim(), revisione: avvio.revisione }) : avvio
+    setAvvio(n); if (cambiato) setAzione(''); vai(3)
+  })
+  /** Invio sull'obiettivo: se manca il nome del progetto ci si va, se no si salva. */
+  const invioProgetto = () => {
+    if (occupato || !obiettivo.trim()) return
+    if (!progetto.trim()) { nome.current?.focus(); return }
+    void salvaProgetto()
+  }
+  const scegliFonte = (id: string) => {
+    setFonte(id); setErrore('')
+    if (avvio) try { sessionStorage.setItem(`myynd.avvio.fonte.${avvio.id}`, id) } catch { /* optional return hint */ }
+  }
+  const leggiFonte = (salta = false) => fai(async () => {
+    if (!avvio) return
+    const n = await api.avvioFonte({ fonte: salta ? null : fonte, revisione: avvio.revisione })
+    setAvvio(n)
+    if (salta) {
+      setFonte(''); setConfermati([])
+      try { sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`) } catch { /* optional return hint */ }
+      const confermato = await api.avvioConferma({ ids: [], revisione: n.revisione }); setAvvio(confermato); vai(3); return
+    }
+    setProgresso(t('Leggo la fonte del progetto…'))
+    await api.sincronizza(m => { if (m.fase !== 'fine' && m.fase !== 'errore') setProgresso(rigaSincronizzazione(m)) }, fonte)
+    await ricarica()
+    const letto = await api.avvio(); setAvvio(letto); setConfermati(letto.fatti.filter(f => f.confermato).map(f => f.id)); vai(2)
+  })
+  const conferma = () => fai(async () => {
+    if (!avvio) return
+    const n = await api.avvioConferma({ ids: confermati, revisione: avvio.revisione })
+    setAvvio(n); setAzione(prima => prima || n.azione); vai(3)
+  })
+  const entra = () => fai(async () => { await api.profilo({ onboarding: true, giro: true }); fatto() })
+  const prepara = () => fai(async () => {
+    if (!avvio || !azione.trim()) return
+    let corrente = avvio
+    if (corrente.fase === 'fonte') {
+      corrente = await api.avvioFonte({ fonte: null, revisione: corrente.revisione }); setAvvio(corrente)
+    }
+    if (corrente.fase === 'verifica') {
+      if (!corrente.fonteSaltata) { vai(2); return }
+      corrente = await api.avvioConferma({ ids: [], revisione: corrente.revisione }); setAvvio(corrente)
+    }
+    const n = await api.avvioCompleta({ azione: azione.trim(), giorno: giorno || null, revisione: corrente.revisione })
+    setAvvio(n)
+    // L'attività è salvata e si vede nella lista: si entra, senza una schermata
+    // in mezzo che lo dica e chieda di premere ancora.
+    await api.profilo({ onboarding: true, giro: true }); fatto()
+  })
+  // Leaving setup never claims completion or creates a project/task.
+  const esci = () => { if (stato.config.onboarding) fatto(); else void cambiaAccount() }
+
+  const fonti = s.connettori.filter(c => (c.pronto || c.collegato) && !NON_FONTI.has(c.id))
+  const ordinate = [...fonti].sort((a, b) => {
+    const ia = PRIORITA_FONTI.indexOf(a.id), ib = PRIORITA_FONTI.indexOf(b.id)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+  })
+  const visibili = (tutteFonti ? ordinate : ordinate.slice(0, 6)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
+  const scelta = fonti.find(c => c.id === fonte)
+  /** La fonte che l'avvio ha già letto, se c'è: sulla prima attività si mostra quella. */
+  const letta = avvio?.fonte ? s.connettori.find(c => c.id === avvio.fonte) : undefined
+  const risultato = avvio?.risultato
+  const oggi = giornoLocale(), domani = spostaGiorno(oggi, 1)
+  const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
+
+  const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 3.4 : momento === 2 ? 3.7 : risultato ? 5 : 3
+
+  return <Scena progressione={progressione} benvenuto={benvenuto} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
+    {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
+      {!accountConfermato && <div className="onboard-welcome">
+        <span className="onboard-kicker">{t('Il tuo digital brain')}</span>
+        <h1 ref={titolo} tabIndex={-1}>{t('Meno rumore.')}<br /><em>{t('Più spazio per te.')}</em></h1>
+        <p>{t('I tuoi progetti, le tue idee. Una mente in più per portarli avanti.')}</p>
+        <p className="onboard-account-note">{t('Configuri il progetto per')} <strong>{accountEmail}</strong></p>
+        <button className="onboard-primary" disabled={!accountEmail || occupato} onClick={() => setAccountConfermato(true)}>{avvio.progetto ? t('Riprendi') : t('Configura il progetto')}<Avanti /></button>
+        <button className="onboard-secondary onboard-switch-account" disabled={occupato} onClick={() => void cambiaAccount()}>{t('Usa un altro account')}</button>
+      </div>}
+      {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
+        <span className="onboard-kicker">{t('Cominciamo da te')}</span>
+        <h2 ref={titolo} tabIndex={-1}>{t('Cosa vuoi ottenere?')}</h2>
+        <fieldset disabled={occupato} className="onboard-fieldset">
+          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Cosa vuoi ottenere?')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Un risultato concreto, con le tue parole.')} /></label>
+          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Il nome del tuo progetto')} /></label>
+          <OnboardErrore testo={errore} />
+          <div className="onboard-actions"><button className="onboard-primary" disabled={!progetto.trim() || !obiettivo.trim() || occupato}>{occupato ? t('Salvo…') : t('Continua')}<Avanti /></button></div>
+        </fieldset>
+      </form>}
+      {accountConfermato && momento === 1 && <>
+        <h2 ref={titolo} tabIndex={-1}>{t('Quale fonte deve leggere Myynd?')}</h2>
+        {progresso ? <OnboardAttesa testo={progresso} /> : <>
+          <fieldset disabled={occupato} className="onboard-fieldset">
+            {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
+            <div className="onboard-sources">{visibili.map(c => <button key={c.id} className="onboard-source" type="button" aria-pressed={fonte === c.id} aria-label={`${t(c.nome)} · ${c.collegato ? t('Collegato') : t('Da collegare')}`} onClick={() => scegliFonte(c.id)}><ConnectorIcon id={c.id} size={25} /><span>{t(c.nome)}</span>{c.collegato && <i aria-hidden="true" />}</button>)}</div>
+            {fonti.length > 6 && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
+            {scelta && <div className="onboard-source-detail" key={scelta.id}>
+              <div className="onboard-source-title"><ConnectorIcon id={scelta.id} size={16} /><span>{t(scelta.nome)}</span>{scelta.collegato && <span className="onboard-connected">✓ {t('Collegato')}</span>}</div>
+              {!scelta.collegato && <Form id={scelta.id} tema="scuro" ok={ricarica} />}
+            </div>}
+          </fieldset>
+        </>}
+        <OnboardErrore testo={errore} />
+        <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(3)}>{t('Indietro')}</button><button className="onboard-primary" disabled={occupato || !scelta?.collegato} onClick={() => leggiFonte()}>{occupato ? t('Leggo…') : t('Leggi questa fonte')}<Avanti /></button></div>
+        {!occupato && <button className="onboard-secondary onboard-skip" onClick={() => leggiFonte(true)}>{t('Continuo senza una fonte')}</button>}
+      </>}
+      {accountConfermato && momento === 2 && <>
+        <h2 ref={titolo} tabIndex={-1}>{avvio.fatti.length ? t('Quali estratti vuoi tenere?') : t('Partiamo dal tuo obiettivo.')}</h2>
+        {avvio.fatti.length ? <>
+          <p className="onboard-note onboard-before-facts">{t('Seleziona gli estratti utili. Ogni frase ha una fonte.')}</p>
+          <div className="onboard-facts">{avvio.fatti.map((f, i) => <article className={`onboard-fact ${confermati.includes(f.id) ? 'selected' : ''}`} key={f.id}>
+            <label className="onboard-fact-choice"><input type="checkbox" disabled={occupato} checked={confermati.includes(f.id)} onChange={e => setConfermati(ids => e.target.checked ? [...ids, f.id] : ids.filter(id => id !== f.id))} /><span className="onboard-fact-number">{String(i + 1).padStart(2, '0')}</span><span>{f.testo}</span></label>
+            <details><summary>{f.evidenza.titolo}</summary><blockquote>{f.evidenza.estratto}</blockquote></details>
+          </article>)}</div>
+        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p><div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti in questa fonte.')}</div></div>}
+        <OnboardErrore testo={errore} />
+        <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(1)}>{t('Cambia fonte')}</button><button className="onboard-primary" disabled={occupato} onClick={conferma}>{occupato ? t('Salvo…') : confermati.length ? t('Conferma') : t('Continua senza estratti')}<Avanti /></button></div>
+      </>}
+      {accountConfermato && momento === 3 && <>
+        <h2 ref={titolo} tabIndex={-1}>{risultato ? t('Il tuo primo passo è pronto.') : t('Qual è la prima attività?')}</h2>
+        {risultato ? <div className="onboard-result">
+          <div className="onboard-result-eyebrow"><span />{t('Salvato nella To-do')}</div><h3>{risultato.compito.testo}</h3>
+          <div className="onboard-result-body"><span className="onboard-result-label">{t('Obiettivo')}</span><p>{risultato.traccia.obiettivo}</p>{risultato.traccia.estratti.length > 0 && <><span className="onboard-result-label">{t('Estratti confermati')}</span>{risultato.traccia.estratti.map((e, i) => <blockquote key={`${e.doc}-${i}`}>{e.testo}<cite>{e.titolo}</cite></blockquote>)}</>}</div>
+          <div className="onboard-result-source">{risultato.progetto.nome} · {t('Attività ancora da svolgere')}</div>
+        </div> : <>
+          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => setAzione(e.target.value)} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Un’azione concreta, con le tue parole.')} /></label>
+          {/* La data e la fonte fanno parte dell'attività: due righe con la loro etichetta, sempre in vista. */}
+          <div className="onboard-options">
+            <div className="onboard-option">
+              <span className="onboard-option-label" id="onboard-giorno">{t('Per che giorno')}</span>
+              <div className="onboard-chips" role="group" aria-labelledby="onboard-giorno">
+                {([[t('Oggi'), oggi], [t('Domani'), domani]] as [string, string][]).map(([etichetta, data]) => <button type="button" key={data} className="onboard-chip" disabled={occupato} aria-pressed={giorno === data} onClick={() => setGiorno(giorno === data ? '' : data)}>{etichetta}</button>)}
+                <label className={`onboard-chip onboard-chip-date${altroGiorno ? ' is-on' : ''}`}><input type="date" disabled={occupato} value={giorno} aria-label={t('Data')} onInput={e => setGiorno(e.currentTarget.value)} onChange={e => setGiorno(e.target.value)} /></label>
+              </div>
+            </div>
+            <button type="button" className="onboard-option onboard-option-button" disabled={occupato} onClick={() => vai(1)}>
+              <span className="onboard-option-label">{t('Fonte')}</span>
+              <span className="onboard-option-body">{letta ? <><ConnectorIcon id={letta.id} size={16} /><strong>{t(letta.nome)}</strong><em>{t('Cambia')}</em></> : <><strong>{t('Aggiungi una fonte')}</strong><small>{t('Myynd la legge e cita quello che serve al progetto.')}</small></>}</span>
+              <span className="onboard-arrow onboard-option-arrow"><IconFreccia /></span>
+            </button>
+          </div>
+        </>}
+        <OnboardErrore testo={errore} />
+        <div className="onboard-actions">{!risultato && <button className="onboard-secondary" disabled={occupato} onClick={() => vai(0)}>{t('Indietro')}</button>}<button className="onboard-primary" disabled={occupato || (!risultato && !azione.trim())} onClick={risultato ? entra : prepara}>{occupato ? t('Salvo…') : risultato ? t('Apri Myynd') : t('Salva la prima attività')}<Avanti /></button></div>
+      </>}
+    </>}
+  </Scena>
 }

@@ -27,10 +27,30 @@ import { chiediJSON } from './modello.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
 import { ultimo } from './punto.ts'
+import * as progetti from './progetti.ts'
 import { fuoco } from './timone.ts'
 
 /** Quante notizie fanno una rassegna. Poche: si legge in tre minuti o non si legge. */
 export const QUANTE = 8
+/**
+ * Il tetto del giorno, su tutti i giri insieme.
+ *
+ * Quattro giri al giorno da otto facevano trentadue notizie: lui ne vuole
+ * «cinque, dieci al massimo», e le vuole sul suo lavoro. Il conto si fa su
+ * quelle prese oggi, in qualunque giro: quando sono finite, il giro non
+ * chiede nemmeno i giornali.
+ */
+export const AL_GIORNO = 8
+
+/** L'inizio del giorno solare UTC — lo stesso del tetto dei token e del punto. */
+export function inizioGiorno(adesso = Date.now()): string {
+  return `${new Date(adesso).toISOString().slice(0, 10)}T00:00:00.000Z`
+}
+
+/** Quante ne può ancora scegliere oggi: il tetto meno quelle già prese. */
+export function postiOggi(adesso = Date.now()): number {
+  return Math.max(0, AL_GIORNO - store.notiziePreseDal(inizioGiorno(adesso)))
+}
 
 /** Quanto vale una rassegna prima di rifarla. */
 // Sei ore: quattro rassegne al giorno, che è quello che `modello.ts` dà per
@@ -427,7 +447,11 @@ export function contestoDi(progetti: { nome: string; doveSei: string }[], compit
 }
 
 function contesto(): Fuoco[] {
-  return contestoDi(ultimo()?.progetti ?? [], store.elencoCompiti(), fuoco(), interessi())
+  // i progetti con il loro obiettivo, dalla tabella: è l'obiettivo che dice
+  // se una notizia muove qualcosa. Quelli del punto restano il ripiego per
+  // chi non ne ha ancora scritto uno
+  const vivi = progetti.vivi().map(p => ({ nome: p.nome, doveSei: p.obiettivo || p.nome }))
+  return contestoDi(vivi.length ? vivi : (ultimo()?.progetti ?? []), store.elencoCompiti(), fuoco(), interessi())
 }
 
 /** Fallback prudente: una parola generica in comune non basta a creare rilevanza. */
@@ -701,6 +725,10 @@ async function giro(): Promise<Esito> {
     const e = salvaEdizione(focus, [])
     return risposta(focus, e, true)
   }
+  // il tetto del giorno è finito: non si chiedono i giornali, non si chiama
+  // nessuno, resta quello che c'è
+  const posti = postiOggi()
+  if (!posti) return risposta(focus, leggiEdizione(), true)
   const fonti = fontiPer(lingua())
   const tutte = (await Promise.all(fonti.map(prendi))).flat()
   if (!tutte.length) {
@@ -728,7 +756,8 @@ async function giro(): Promise<Esito> {
   // Senza modello, il criterio resta il lavoro: nessun riempimento con cronaca generica.
   const pertinenti = candidate.filter(n => rilevanza(n, focus) > 0)
     .sort((a, b) => rilevanza(b, focus) - rilevanza(a, focus) || b.quando.localeCompare(a.quando))
-  const selezionate = dalModello === null ? pertinenti.slice(0, QUANTE) : dalModello.map(s => candidate[s.n - 1])
+  const selezionate = (dalModello === null ? pertinenti.slice(0, QUANTE) : dalModello.map(s => candidate[s.n - 1]))
+    .slice(0, posti)
 
   store.salvaNotizie(selezionate.map(n => ({ ...n, perche: null })))
   store.potaNotizie(GIORNI_ARCHIVIO)

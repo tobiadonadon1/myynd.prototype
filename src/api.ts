@@ -11,6 +11,24 @@ export type Connettore = {
   documenti: number
 }
 
+export type FattoAvvio = {
+  id: string; testo: string; confermato: boolean
+  evidenza: { doc: string; titolo: string; fonte: string; estratto: string }
+}
+export type RisultatoAvvio = {
+  tipo: 'prima_traccia'
+  progetto: { id: string; nome: string; obiettivo: string }
+  compito: { id: string; testo: string; giorno: string | null }
+  traccia: { obiettivo: string; estratti: { testo: string; doc: string; titolo: string }[]; prossimaAzione: string }
+}
+export type StatoAvvio = {
+  id: string; revisione: number
+  fase: 'progetto' | 'fonte' | 'verifica' | 'azione' | 'completo'
+  progetto: { nome: string; obiettivo: string } | null
+  fonte: string | null; fonteSaltata: boolean; fatti: FattoAvvio[]
+  azione: string; risultato: RisultatoAvvio | null; aggiornato: string
+}
+
 export type Stato = {
   config: {
     nome: string | null
@@ -504,6 +522,7 @@ export type Compito = {
   nota: string | null
   quando: string          // oggi | settimana | poi
   giorno?: string | null  // planned local calendar day, YYYY-MM-DD
+  progetto?: string | null
   stato: string           // aperto | delegato | pronto | chiede | fatto | lasciato
   modo: string            // io | bozza | tutto | prompt
   ordine: string
@@ -635,6 +654,8 @@ export type Rassegna = {
   recenti?: Notizia[]
   aggiornando?: boolean
   quando: string | null
+  /** Quante ne ha scelte oggi, sul tetto di otto: la testata lo dice. */
+  oggi: number
   argomenti: string
   /**
    * Quello che Myynd ha notato da come leggi, detto in una riga.
@@ -767,9 +788,9 @@ export type Abbonamento = {
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string, invito = '') => {
+  registra: async (email: string, password: string, invito = '', nome = '') => {
     const r = await json<{ token: string; account: { email: string }; daVerificare?: boolean; mailPartita?: boolean }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito }) })
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito, nome }) })
     // dove l'indirizzo va confermato il server non manda nessun token: il conto
     // c'è e non si entra ancora, e scrivere una sessione vuota qui vorrebbe
     // dire un'app che si crede dentro e prende 401 a ogni schermata
@@ -817,15 +838,24 @@ export const api = {
   },
 
   stato: () => json<Stato>('/api/stato'),
+  avvio: () => json<StatoAvvio>('/api/avvio'),
+  avvioProgetto: (b: { nome: string; obiettivo: string; revisione: number }) =>
+    json<StatoAvvio>('/api/avvio/progetto', { method: 'POST', body: JSON.stringify(b) }),
+  avvioFonte: (b: { fonte: string | null; revisione: number }) =>
+    json<StatoAvvio>('/api/avvio/fonte', { method: 'POST', body: JSON.stringify(b) }),
+  avvioConferma: (b: { ids: string[]; revisione: number }) =>
+    json<StatoAvvio>('/api/avvio/conferma', { method: 'POST', body: JSON.stringify(b) }),
+  avvioCompleta: (b: { azione: string; giorno?: string | null; revisione: number }) =>
+    json<StatoAvvio>('/api/avvio/completa', { method: 'POST', body: JSON.stringify(b) }),
 
   // — la lista —
 
   compiti: () => json<Lista>('/api/compiti'),
 
-  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
+  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; progetto?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
     json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti', { method: 'POST', body: JSON.stringify(c) }),
 
-  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null }) =>
+  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; progetto?: string | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
 
@@ -1090,6 +1120,17 @@ export const api = {
   avviaDalPunto: (frase: string) =>
     json<{ ok: true; id: string; nome: string; punto: Punto | null }>('/api/punto/avvia', { method: 'POST', body: JSON.stringify({ frase }) }),
 
+  // — i progetti: su cosa lavora, e a cosa punta ciascuno —
+  progetti: () => json<{ progetti: Progetto[] }>('/api/progetti'),
+  attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
+  nuovoProgetto: (nome: string, obiettivo = '') =>
+    json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
+  cambiaProgetto: (id: string, c: { nome?: string; obiettivo?: string; stato?: StatoProgetto; note?: string }) =>
+    json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(c) }),
+  /** Chiudere, non cancellare: la riga resta, e un chiuso non torna nel punto. */
+  chiudiProgetto: (id: string) =>
+    json<{ ok: true; progetto: Progetto | null }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   /** Riordina una nota. Non salva: torna il testo, e decidi tu. */
   riscriviBlocco: (etichetta: string, testo: string) =>
     json<{ testo: string }>('/api/memoria/riscrivi',
@@ -1121,11 +1162,6 @@ export const api = {
   usaAbbonamento: (attivo: boolean) =>
     json<{ ok: true } & Abbonamento>('/api/modello/abbonamento',
       { method: 'POST', body: JSON.stringify({ attivo }) }),
-
-  /** Il modello di casa: c'è davvero, adesso? */
-  modelloLocale: () => json<{ acceso: boolean; modello: string | null; spento: boolean }>('/api/modello/locale'),
-  usaModelloLocale: (attivo: boolean) =>
-    json<{ ok: true; attivo: boolean }>('/api/modello/locale', { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile collegato. */
   scegliMotore: (motore: 'claude' | 'compatibile') =>
@@ -1438,7 +1474,8 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
  * sono le idee che ha già fatto sue, e non si ripropongono.
  */
 export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
-export type ProgettoPunto = { nome: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
+/** `id` è la riga nella tabella dei progetti: «non è un progetto» la chiude da lì. */
+export type ProgettoPunto = { id: string; nome: string; obiettivo: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
 export type AvvioPunto = { frase: string; perche: string }
 export type Punto = {
   quando: string
@@ -1453,3 +1490,26 @@ export type Punto = {
 }
 /** `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito. */
 export type EsitoPunto = { punto: Punto | null; generatoAdesso: boolean; tetto: boolean }
+
+/**
+ * Un progetto: su cosa sta lavorando, e a cosa punta.
+ *
+ * È la riga che il feed, la rassegna e il punto leggono prima di scegliere.
+ * `obiettivo` lo scrive lui nella Memoria; `stato` è quello che rende
+ * reversibile un errore del modello — chiuso non cancella, e non torna.
+ */
+export type StatoProgetto = 'attivo' | 'fermo' | 'chiuso'
+export type ProgressoProgetto = {
+  aperte: number; inCorso: number; daRivedere: number; completate: number; lasciate: number
+  prossima: Compito | null; attivita: Compito[]
+}
+export type Progetto = {
+  id: string
+  nome: string
+  obiettivo: string
+  stato: StatoProgetto
+  dal: string
+  aggiornato: string
+  note: string
+  origine: 'mano' | 'punto'
+}

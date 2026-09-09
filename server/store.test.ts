@@ -1095,11 +1095,22 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
     assert.ok(automazioni.includes(c), `automazioni non ha «${c}»: una migrazione è stata saltata`)
   }
 
+  const feed = colonne('feed')
+  for (const c of ['id', 'tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'stato', 'quando', 'motivo', 'risposto', 'perche']) {
+    assert.ok(feed.includes(c), `feed non ha «${c}»: una migrazione è stata saltata`)
+  }
+
+  const progetti = colonne('progetti')
+  for (const c of ['id', 'nome', 'obiettivo', 'stato', 'dal', 'aggiornato', 'note', 'origine']) {
+    assert.ok(progetti.includes(c), `progetti non ha «${c}»: una migrazione è stata saltata`)
+  }
+  assert.ok(colonne('notizie').includes('perche'), 'notizie non ha «perche»')
+
   const tabelle = (store.default.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table'"
   ).all() as { name: string }[]).map(t => t.name)
   for (const t of ['documenti', 'ricerca', 'chat', 'messaggi', 'feed', 'convinzioni', 'blocchi',
-    'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso']) {
+    'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso', 'progetti']) {
     assert.ok(tabelle.includes(t), `manca la tabella «${t}»`)
   }
 })

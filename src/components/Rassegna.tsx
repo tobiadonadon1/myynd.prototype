@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api, type Notizia } from '../api'
 import { frasi, loc, t } from '../lingua'
-import { IconApri, IconCroce, IconGiro, IconSpunta } from '../icons'
+import { IconApri, IconAvanti, IconCroce, IconGiro, IconSpunta } from '../icons'
 import './rassegna.css'
 
 const PER_PAGINA = 5
@@ -80,7 +80,7 @@ function SalaNotizie({ notizie, quando, carico, guaio, aggiorna, togli, occupata
             {pagine > 1 && <div className="news-pagination">
               <button className="news-icon" aria-label={t('Pagina precedente')} disabled={corrente === 0} onClick={() => setPagina(corrente - 1)}>←</button>
               <span aria-live="polite">{corrente + 1} / {pagine}</span>
-              <button className="news-icon" aria-label={t('Pagina successiva')} disabled={corrente === pagine - 1} onClick={() => setPagina(corrente + 1)}>→</button>
+              <button className="news-icon" aria-label={t('Pagina successiva')} disabled={corrente === pagine - 1} onClick={() => setPagina(corrente + 1)}><IconAvanti size={12} /></button>
             </div>}
           </nav>
           <article id="news-article" className="news-article" key={selezionata.id} aria-labelledby="news-article-title">

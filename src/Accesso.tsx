@@ -1,40 +1,36 @@
-// L'accesso. Sullo stesso campo dell'onboarding, così l'app ha una voce sola.
-//
-// Due colonne dove c'è spazio: a sinistra perché uno dovrebbe volerlo, a
-// destra le due caselle per averlo. Non è decorazione — questa è l'unica
-// schermata che parla a chi non ha ancora niente, e un modulo da solo, in
-// mezzo a uno schermo nero, non dice cosa si compra. Sotto i millecentottanta
-// pixel la colonna di sinistra si riduce al titolo: la promessa resta, il
-// resto no.
-//
-// La password non lascia mai il tuo computer.
+// Account access shares the onboarding artwork; authentication stays local to its existing flow.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Campo } from './onboarding/campo'
+import { useEffect, useState } from 'react'
+import { LightField } from './onboarding/LightField'
 import { api, DaVerificare, type Accesso as TipoAccesso } from './api'
 import { lingua, ricordaLingua, t } from './lingua'
 import { Logo } from './components/Marchio'
 import { Hov, useLarghezza } from './ui'
+import './accesso.css'
 
-const CHIARO = '#F4EFE8'
-/** Il colore dell'accento: il bordo di quello che stai scrivendo adesso. */
-const ACCESO = 'rgba(196,98,59,.8)'
+const INCHIOSTRO = '#f6f2eb'
+const ACCESO = '#f6f2eb'
+/** Il colore di una cosa che non va, sotto al campo che non va. */
+const SBAGLIATO = '#f3b49d'
 
 type Modo = 'entra' | 'crea' | 'scordata' | 'nuova'
 
 /**
- * Le tre righe della colonna di sinistra: prima metà chiara, seconda spenta.
+ * Un indirizzo che sembri un indirizzo.
  *
- * Sono coppie e non frasi intere perché il ritmo è il lavoro che fanno: la
- * prima metà è quello che Myynd fa, la seconda è quello che *non* devi fare
- * tu. Tre obiezioni in ordine — «dovrò caricare della roba», «deciderà al
- * posto mio», «quanto ci metto» — e la risposta a ognuna in quattro parole.
+ * Il campo era `type="email"` e basta, e senza un modulo attorno il browser
+ * non controlla niente: «tobia» passava, arrivava al server, e il server
+ * rispondeva con una riga generica sotto al bottone. Qui si guarda prima e si
+ * dice sotto al campo: qualcosa prima della chiocciola che non cominci col
+ * punto, un dominio con un punto e almeno due lettere dopo, niente spazi e
+ * niente punti doppi. La stessa regola sta in `server/conti.ts`: il server
+ * non si fida di nessuno, ma la persona la risposta la vede qui.
  */
-const PROVE: [string, string][] = [
-  ['Legge la tua posta e i tuoi file.', 'Non carichi niente.'],
-  ['Risponde come risponderesti tu.', 'Invio lo premi tu.'],
-  ['Dieci minuti la prima volta.', 'Poi impara da sola.']
-]
+const INDIRIZZO = /^[^\s@.][^\s@]*@[^\s@]+\.[a-z]{2,}$/i
+function indirizzoValido(e: string): boolean {
+  const s = e.trim()
+  return INDIRIZZO.test(s) && !s.includes('..')
+}
 
 /**
  * Il turno di ogni pezzo.
@@ -71,8 +67,6 @@ export function Accesso({ accesso, entrato }: {
    */
   const [modo, setModo] = useState<Modo>('entra')
   const registrato = modo === 'entra'
-  const cv = useRef<HTMLCanvasElement>(null)
-  const campo = useMemo(() => new Campo(), [])
   /*
    * Due colonne solo quando ce n'è davvero il posto.
    *
@@ -83,7 +77,7 @@ export function Accesso({ accesso, entrato }: {
    * bella, ed è la ragione per cui la soglia sale invece di stringere ancora
    * le colonne.
    */
-  const largo = useLarghezza() >= 1180
+  const largo = useLarghezza() >= 980
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -99,18 +93,17 @@ export function Accesso({ accesso, entrato }: {
    * di dubitare della password invece che delle dita.
    */
   const [vedi, setVedi] = useState(false)
-  /**
-   * Il proprio Myynd, portato dentro mentre ci si registra.
-   *
-   * Stava nelle preferenze, ed era il passo di troppo: chi arriva su un
-   * indirizzo nuovo con il suo file in mano deve prima farsi un conto, poi
-   * trovare le preferenze, poi cercare la riga giusta. Sono tre schermate per
-   * una cosa che è una sola — «questo sono io, e questa è la mia roba» — ed è
-   * proprio il momento in cui uno ha il file sul desktop.
-   */
-  const [pacco, setPacco] = useState<File | null>(null)
   // il codice che chi ospita dà a chi può registrarsi, se ha scelto così
   const [invito, setInvito] = useState('')
+  /**
+   * Come si chiama, chiesto subito.
+   *
+   * Il conto nasceva senza un nome e l'app lo chiamava «tu» finché non lo
+   * scriveva nelle preferenze — cioè quasi mai. Ogni risposta e ogni bozza
+   * erano scritte per nessuno. Una riga qui, prima dell'indirizzo, e Myynd sa
+   * con chi parla dal primo minuto.
+   */
+  const [nome, setNome] = useState('')
   const registrazione = accesso.registrazione ?? 'aperta'
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
@@ -122,12 +115,8 @@ export function Accesso({ accesso, entrato }: {
   const [gettone, setGettone] = useState('')
   /** L'indirizzo esiste ma non è confermato: si può chiedere di rimandarla. */
   const [daConfermare, setDaConfermare] = useState(false)
-
-  useEffect(() => {
-    if (cv.current) campo.monta(cv.current)
-    campo.imposta({ colori: ['#D8A46E', '#C4623B', '#7E9C82'], legami: true, quantita: 620 })
-    return () => campo.smonta()
-  }, [campo])
+  /** Si è usciti dal campo dell'indirizzo: da lì in poi, se non sembra un indirizzo, lo si dice sotto. */
+  const [emailToccata, setEmailToccata] = useState(false)
 
   /*
    * I due collegamenti che arrivano per posta.
@@ -158,26 +147,10 @@ export function Accesso({ accesso, entrato }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /**
-   * Quanto manca, da zero a uno.
-   *
-   * Non serve a spegnere il bottone — a quello ci pensa `pronto` — ma al
-   * campo dietro: le particelle si raccolgono man mano che riempi, e mentre il
-   * server risponde si stringono ancora. È la stessa idea dell'onboarding, dove
-   * la mente si forma a ogni fonte collegata, portata qui: la schermata reagisce
-   * a quello che fai invece di guardarti scrivere.
-   */
-  const passi =
-    modo === 'scordata' ? [!!email.trim()] :
-    modo === 'nuova' ? [password.length >= 8, ripeti.length >= 8 && ripeti === password] :
-    [!!email.trim(), registrato ? password.length > 0 : password.length >= 8]
-  const avanzamento = passi.filter(Boolean).length / passi.length
-
-  useEffect(() => {
-    campo.imposta({ coesione: 0.26 + avanzamento * 0.3 + (occupato ? 0.3 : 0) })
-  }, [campo, avanzamento, occupato])
-
   const invia = async () => {
+    // si guarda l'indirizzo prima di partire: la riga sotto al campo dice cosa non va
+    if (modo !== 'nuova' && modo !== 'entra' && !indirizzoValido(email)) { setEmailToccata(true); return }
+    if (modo === 'crea' && password !== ripeti) return
     setOccupato(true); setErr(''); setDetto(''); setDaConfermare(false)
     try {
       if (modo === 'scordata') {
@@ -197,14 +170,12 @@ export function Accesso({ accesso, entrato }: {
       }
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password, invito)
+        : await api.registra(email, password, invito, nome.trim())
       /*
        * Registrato, e non ancora dentro.
        *
        * Dove l'indirizzo va confermato il server non manda nessun token: qui si
-       * resta, e si dice di guardare la posta. Il file del trasloco, se ce n'è
-       * uno, non si carica adesso — non c'è nessuna sessione con cui caricarlo
-       * — e la schermata lo dice invece di lasciar credere che sia entrato.
+       * resta, e si dice di guardare la posta prima di entrare.
        */
       // `in` su una proprietà facoltativa restringe il tipo e si porta via le
       // altre: quello che serve qui è la risposta della registrazione, letta intera
@@ -217,28 +188,13 @@ export function Accesso({ accesso, entrato }: {
           setDetto('')
           setErr(t('Il conto è fatto, ma la mail di conferma non è partita: la posta di questo server non funziona. Riprova a farsela mandare, o dillo a chi lo gestisce.'))
         } else {
-          setDetto(pacco
-            ? t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo. Il tuo Myynd lo porti dentro dalle preferenze, appena entri.')
-            : t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo.'))
+          setDetto(t('Controlla la posta: ti abbiamo mandato un collegamento per confermare il tuo indirizzo.'))
         }
-        setPassword('')
+        setPassword(''); setRipeti('')
         setOccupato(false)
         return
       }
-      // il conto è fatto: se si è portato dietro il suo Myynd, entra adesso —
-      // prima che la schermata si apra su un account vuoto che non è il suo
-      let avviso: string | undefined
-      if (!registrato && pacco) {
-        /*
-         * Se il file non entra, il conto c'è lo stesso, e il token pure.
-         * Restare qui con l'errore voleva dire un secondo tentativo che
-         * rispondeva «esiste già»: si entra, e lo si dice dentro — il file si
-         * può riportare dalle preferenze.
-         */
-        try { await api.caricaTrasloco(pacco) }
-        catch (e) { avviso = `${t('Il conto è pronto, ma il tuo Myynd non è entrato:')} ${t(e instanceof Error ? e.message : String(e))}` }
-      }
-      entrato(r.account, avviso)
+      entrato(r.account)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setErr(msg)
@@ -266,14 +222,21 @@ export function Accesso({ accesso, entrato }: {
   }
 
   /** Da qui si passa fra le quattro schermate senza portarsi dietro un errore vecchio. */
-  const vaiA = (m: Modo) => { setModo(m); setErr(''); setDetto(''); setDaConfermare(false) }
+  const vaiA = (m: Modo) => { setModo(m); setErr(''); setDetto(''); setDaConfermare(false); setRipeti(''); setEmailToccata(false) }
 
+  /*
+   * Per entrare basta che l'indirizzo non sia vuoto: un conto nato con le
+   * regole di prima potrebbe avere un indirizzo che quelle di adesso non
+   * accettano, e la porta di casa non si chiude per un punto in più. Per
+   * crearne uno, o chiedere il collegamento, l'indirizzo deve sembrare un
+   * indirizzo, e la password deve essere scritta due volte uguale.
+   */
   const pronto =
-    modo === 'scordata' ? !!email.trim() :
-    modo === 'nuova' ? password.length >= 8 && ripeti.length >= 8 :
+    modo === 'scordata' ? indirizzoValido(email) :
+    modo === 'nuova' ? password.length >= 8 && ripeti === password :
     registrato
       ? !!email.trim() && password.length > 0
-      : !!email.trim() && password.length >= 8 && (registrazione !== 'invito' || !!invito.trim())
+      : !!nome.trim() && indirizzoValido(email) && password.length >= 8 && ripeti === password && (registrazione !== 'invito' || !!invito.trim())
 
   const tasto = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && pronto && !occupato) invia() }
 
@@ -281,19 +244,12 @@ export function Accesso({ accesso, entrato }: {
     .filter(([id]) => id === 'entra' || registrazione !== 'chiusa')
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#141210', color: CHIARO,
+    <div className="accesso-page" style={{
+      position: 'fixed', inset: 0, color: '#f6f2eb',
       fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", overflow: 'hidden'
     }}>
-      <canvas ref={cv} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
-      {/* il velo: il testo deve restare leggibile qualunque cosa passi dietro,
-          e su due colonne deve coprire tutte e due invece del solo centro */}
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: largo
-          ? 'radial-gradient(ellipse 54vw 56vh at 50% 50%, rgba(16,14,12,.66) 0%, rgba(16,14,12,.60) 56%, rgba(16,14,12,.30) 84%, rgba(16,14,12,0) 100%)'
-          : 'radial-gradient(circle 47vmin at 50% 48%, rgba(16,14,12,.72) 0%, rgba(16,14,12,.70) 58%, rgba(16,14,12,.42) 82%, rgba(16,14,12,0) 100%)'
-      }} />
+      <LightField quiet />
+      <div className="accesso-atmosphere" aria-hidden="true" />
 
       {/*
         `margin: auto` e non `alignItems: center`.
@@ -306,28 +262,28 @@ export function Accesso({ accesso, entrato }: {
       */}
       <div style={{
         position: 'relative', height: '100%', display: 'flex', overflowY: 'auto',
-        pointerEvents: 'none'   // le particelle devono sentire il cursore
+        pointerEvents: 'none'
       }}>
         <div style={{
-          margin: 'auto', display: 'flex', alignItems: 'flex-start',
-          gap: largo ? 72 : 0, padding: largo ? '44px 48px' : '32px 24px'
+          margin: 'auto', display: 'flex', alignItems: 'center',
+          gap: largo ? 80 : 0, padding: largo ? '44px 40px' : '32px 20px',
+          width: largo ? 'auto' : '100%', boxSizing: 'border-box', justifyContent: 'center'
         }}>
           {largo && <Pitch modo={modo} />}
 
-          <div style={{
-            width: 380, maxWidth: '100%', flex: 'none',
-            textShadow: '0 1px 24px rgba(12,10,8,.8)', pointerEvents: 'auto'
+          <div className="accesso-card" style={{
+            width: 430, maxWidth: '100%', flex: 'none', pointerEvents: 'auto', color: INCHIOSTRO
           }}>
             {/* stretta, il marchio sta qui: è comunque la prima cosa che si vede */}
             {!largo && (
-              <div style={{ marginBottom: 26, ...su(0) }}>
-                <Logo dim={38} testo={26} tinta={CHIARO} />
+              <div style={{ marginBottom: 22, ...su(0) }}>
+                <Logo testo={26} tinta={INCHIOSTRO} />
               </div>
             )}
-            {!largo && modo === 'crea' && (
-              <div style={{ fontSize: 27, lineHeight: 1.18, letterSpacing: '-.03em', marginBottom: 22, textWrap: 'pretty', ...su(.06) }}>
-                {t('Smetti di essere il passaggio obbligato.')}
-              </div>
+            {!largo && (
+              <h1 className="accesso-title" style={su(.06)}>
+                {titoloAccesso(modo)}
+              </h1>
             )}
 
             {/*
@@ -347,7 +303,7 @@ export function Accesso({ accesso, entrato }: {
             )}
 
             <div style={{
-              fontSize: '13px', lineHeight: 1.55, color: 'rgba(244,239,232,.5)',
+              fontSize: '13px', lineHeight: 1.55, color: '#bdb0a4',
               marginBottom: 22, textWrap: 'pretty', ...su(.14)
             }}>
               {modo === 'scordata'
@@ -356,7 +312,7 @@ export function Accesso({ accesso, entrato }: {
                   ? t('Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.')
                   : registrato
                     ? t('Entra con l’indirizzo con cui l’hai creato.')
-                    : t('Un indirizzo e una password. Il resto te lo chiede dopo.')}
+                    : t('Il tuo nome, un indirizzo e una password. Il resto te lo chiede dopo.')}
             </div>
 
             {/*
@@ -376,7 +332,7 @@ export function Accesso({ accesso, entrato }: {
             */}
             {registrazione === 'chiusa' && modo === 'entra' && (
               <div style={{
-                fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(244,239,232,.42)',
+                fontSize: '12.5px', lineHeight: 1.6, color: '#bdb0a4',
                 marginTop: -8, marginBottom: 22, textWrap: 'pretty', ...su(.16)
               }}>
                 {t('Le registrazioni sono chiuse su questo server.')}
@@ -384,10 +340,16 @@ export function Accesso({ accesso, entrato }: {
             )}
 
             <div style={su(.18)}>
+              {modo === 'crea' && (
+                <Casella etichetta={t('Il tuo nome')} value={nome} onChange={e => setNome(e.target.value)}
+                  onKeyDown={tasto} autoComplete="name" autoFocus maxLength={80}
+                  placeholder={t('come ti chiamano al lavoro')} />
+              )}
               {modo !== 'nuova' && (
-                <Casella etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
-                  onKeyDown={tasto} type="email" autoComplete="username" autoFocus
-                  placeholder={t('tu@tuodominio.it')} />
+                <Casella key={modo === 'crea' ? 'crea' : 'accesso'} etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
+                  onKeyDown={tasto} onBlur={() => setEmailToccata(true)} type="email" autoComplete="username" autoFocus={modo !== 'crea'}
+                  placeholder={t('tu@tuodominio.it')}
+                  errore={modo !== 'entra' && emailToccata && !!email.trim() && !indirizzoValido(email) ? t('Questo non sembra un indirizzo email.') : undefined} />
               )}
 
               {modo !== 'scordata' && (
@@ -402,10 +364,10 @@ export function Accesso({ accesso, entrato }: {
                       aria-label={vedi ? t('Nascondi la password') : t('Mostra la password')}
                       title={vedi ? t('Nascondi la password') : t('Mostra la password')}
                       style={{
-                        position: 'absolute', right: 6, top: 8, bottom: 0, width: 40,
+                        position: 'absolute', right: 6, top: 6, bottom: 0, width: 40,
                         display: 'grid', placeItems: 'center',
                         border: 'none', background: 'none', cursor: 'pointer', padding: 0,
-                        color: vedi ? 'rgba(244,239,232,.8)' : 'rgba(244,239,232,.4)',
+                        color: vedi ? '#f6f2eb' : '#bdb0a4',
                         transition: 'color .18s'
                       }}>
                       <Occhio aperto={vedi} />
@@ -413,10 +375,12 @@ export function Accesso({ accesso, entrato }: {
                   } />
               )}
 
-              {modo === 'nuova' && (
-                <Casella etichetta={t('Ripeti la password')} value={ripeti}
+              {/* due volte, qui come dove si cambia: e se non tornano lo si vede mentre si scrive */}
+              {(modo === 'nuova' || modo === 'crea') && (
+                <Casella etichetta={t('Conferma la password')} value={ripeti}
                   onChange={e => setRipeti(e.target.value)} onKeyDown={tasto}
-                  type={vedi ? 'text' : 'password'} autoComplete="new-password" />
+                  type={vedi ? 'text' : 'password'} autoComplete="new-password"
+                  errore={ripeti && password !== ripeti ? t('Le due password non coincidono.') : undefined} />
               )}
 
               {!registrato && registrazione === 'invito' && modo === 'crea' && (
@@ -426,51 +390,17 @@ export function Accesso({ accesso, entrato }: {
               )}
             </div>
 
-            {err && <Riga colore="#E8907A">{t(err)}</Riga>}
-            {detto && <Riga colore="#9DBF9F">{detto}</Riga>}
+            {err && <Riga colore="#f3b49d" ruolo="alert">{t(err)}</Riga>}
+            {detto && <Riga colore="#c1d2b9" ruolo="status">{detto}</Riga>}
 
             <div style={su(.26)}>
               <Bottone pronto={pronto} occupato={occupato} premi={invia}>
                 {modo === 'scordata' ? t('Mandami il collegamento')
                   : modo === 'nuova' ? t('Salva ed entra')
                     : registrato ? t('Accedi')
-                      : pacco ? t('Crea l\'accesso e portalo qui') : t('Crea il tuo Myynd')}
+                      : t('Crea il tuo Myynd')}
               </Bottone>
             </div>
-
-            {/*
-              Il trasloco sta *sotto* al bottone, e non fra le caselle.
-
-              Portarsi dietro un Myynd che si ha già è la strada di uno su
-              cento, e stava in mezzo alla strada di tutti gli altri: fra la
-              password e il bottone, con due righe di spiegazione, proprio nel
-              punto in cui uno vuole solo finire. Sotto si vede lo stesso — chi
-              ha quel file lo sta cercando — e la strada principale torna a
-              essere tre cose in fila.
-            */}
-            {modo === 'crea' && (
-              <div style={{ marginTop: 18, ...su(.3) }}>
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 9, cursor: 'pointer', maxWidth: '100%',
-                  fontSize: '12.5px', color: pacco ? CHIARO : 'rgba(244,239,232,.5)'
-                }}>
-                  <span style={{
-                    display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 7,
-                    borderWidth: 1, borderStyle: 'solid',
-                    borderColor: pacco ? 'rgba(244,239,232,.5)' : 'rgba(244,239,232,.25)',
-                    fontSize: 13, lineHeight: 1
-                  }}>{pacco ? '✓' : '+'}</span>
-                  {/* il nome di un file lo sceglie chi lo salva: può essere lungo quanto vuole */}
-                  <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{pacco ? pacco.name : t('Ho già un Myynd: portalo qui')}</span>
-                  <input type="file" accept=".myynd,application/gzip" style={{ display: 'none' }}
-                    onChange={e => setPacco(e.target.files?.[0] ?? null)} />
-                </label>
-                <div style={{ fontSize: '11.5px', color: 'rgba(244,239,232,.34)', marginTop: 7, lineHeight: 1.55 }}>
-                  {t('Il file che hai scaricato da un altro Myynd, con dentro i tuoi documenti e le tue fonti.')}
-                </div>
-              </div>
-            )}
-
 
             {/*
               Le due vie di scampo, sotto al bottone e non fra i campi.
@@ -502,7 +432,7 @@ export function Accesso({ accesso, entrato }: {
                 basa tutto il prodotto: va detta solo dov'è vera. */}
             <div style={{
               display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap',
-              marginTop: 24, fontSize: '11.5px', color: 'rgba(244,239,232,.34)', lineHeight: 1.6,
+              marginTop: 24, fontSize: '11.5px', color: '#bdb0a4', lineHeight: 1.6,
               ...su(.34)
             }}>
               <span style={{ flex: 1, minWidth: 180 }}>
@@ -520,14 +450,15 @@ export function Accesso({ accesso, entrato }: {
               <span style={{ display: 'flex', gap: 12, flex: 'none' }}>
                 {(['en', 'it'] as const).map(l => (
                   <Hov as="button" key={l} type="button"
+                    aria-pressed={lingua() === l}
                     onClick={() => { ricordaLingua(l); ridisegna(n => n + 1) }}
                     style={{
                       border: 'none', background: 'none', padding: 0, cursor: 'pointer',
                       fontFamily: 'inherit', fontSize: '11.5px', letterSpacing: '.06em',
                       textTransform: 'uppercase', transition: 'color .18s',
-                      color: lingua() === l ? 'rgba(244,239,232,.75)' : 'rgba(244,239,232,.3)'
+                      color: lingua() === l ? '#f6f2eb' : '#bdb0a4'
                     }}
-                    hover={{ color: 'rgba(244,239,232,.75)' }}>{l === 'it' ? 'Italiano' : 'English'}</Hov>
+                    hover={{ color: '#f6f2eb' }}>{l === 'it' ? 'Italiano' : 'English'}</Hov>
                 ))}
               </span>
             </div>
@@ -538,61 +469,19 @@ export function Accesso({ accesso, entrato }: {
   )
 }
 
-/**
- * La colonna di sinistra: perché uno dovrebbe volerlo.
- *
- * Cambia con quello che stai facendo, e su tre delle quattro strade è una riga
- * sola. Le tre prove stanno solo su «crea un account»: a chi ha già un conto
- * non si vende niente — si dice bentornato e ci si toglie di mezzo.
- */
+function titoloAccesso(modo: Modo) {
+  return modo === 'crea' ? t('Crea il tuo Myynd')
+    : modo === 'scordata' ? t('Capita.')
+      : modo === 'nuova' ? t('Una password nuova.')
+        : t('Bentornato.')
+}
+
 function Pitch({ modo }: { modo: Modo }) {
-  const titolo =
-    modo === 'crea' ? t('Smetti di essere il passaggio obbligato.')
-      : modo === 'scordata' ? t('Capita.')
-        : modo === 'nuova' ? t('Una password nuova.')
-          : t('Bentornato.')
-
-  return (
-    <div style={{
-      width: 400, flex: 'none', pointerEvents: 'auto',
-      textShadow: '0 1px 26px rgba(12,10,8,.85)'
-    }}>
-      <div style={{ marginBottom: 34, ...su(0) }}>
-        <Logo dim={40} testo={27} tinta={CHIARO} />
-      </div>
-      <div style={{ fontSize: 40, lineHeight: 1.14, letterSpacing: '-.035em', textWrap: 'pretty', ...su(.07) }}>
-        {titolo}
-      </div>
-
-      {modo === 'crea' && (
-        <div style={{ display: 'flex', gap: 18, marginTop: 30 }}>
-          {/* una riga sola per tutte e tre, nei colori di casa: tiene insieme
-              il gruppo senza mettere un segno davanti a ogni frase */}
-          <span aria-hidden="true" style={{
-            width: 2, flex: 'none', borderRadius: 2,
-            background: 'linear-gradient(180deg,#C4623B,#D8A46E 52%,#7E9C82)',
-            ...su(.12)
-          }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 13, minWidth: 0 }}>
-            {PROVE.map(([fa, no], i) => (
-              <div key={fa} style={{ fontSize: '15.5px', lineHeight: 1.5, textWrap: 'pretty', ...su(.16 + i * .07) }}>
-                {t(fa)} <span style={{ color: 'rgba(244,239,232,.52)' }}>{t(no)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {modo === 'entra' && (
-        <div style={{
-          fontSize: 16, lineHeight: 1.6, color: 'rgba(244,239,232,.6)',
-          marginTop: 16, maxWidth: 340, textWrap: 'pretty', ...su(.14)
-        }}>
-          {t('Riprende da dove l’hai lasciata.')}
-        </div>
-      )}
-    </div>
-  )
+  return <div className="accesso-pitch">
+    <div className="accesso-mark" style={su(0)}><Logo testo={25} tinta={INCHIOSTRO} /></div>
+    <h1 className="accesso-title" style={su(.07)}>{titoloAccesso(modo)}</h1>
+    {modo === 'entra' && <p style={su(.14)}>{t('Riprende da dove l’hai lasciata.')}</p>}
+  </div>
 }
 
 /**
@@ -624,7 +513,7 @@ function Schede({ schede, modo, vai }: {
     <div style={{
       position: 'relative', display: 'inline-grid', marginBottom: 20,
       gridTemplateColumns: `repeat(${schede.length},minmax(0,1fr))`,
-      padding: 4, borderRadius: 99, background: 'rgba(244,239,232,.06)',
+      padding: 4, borderRadius: 99, background: 'rgba(246,242,235,.045)',
       width: 320, maxWidth: '100%'
     }}>
       {/* fuori dal flusso: la pastiglia non deve spostare le scritte */}
@@ -632,18 +521,18 @@ function Schede({ schede, modo, vai }: {
         <span aria-hidden="true" style={{
           position: 'absolute', left: 4, top: 4, bottom: 4,
           width: `calc((100% - 8px) / ${schede.length})`,
-          borderRadius: 99, background: 'rgba(244,239,232,.15)',
+          borderRadius: 99, background: 'rgba(246,242,235,.12)',
           transform: `translateX(${indice * 100}%)`,
           transition: 'transform .3s cubic-bezier(.4,0,.2,1)'
         }} />
       )}
       {schede.map(([id, testo]) => (
-        <button key={id} type="button" onClick={() => vai(id)}
+        <button key={id} type="button" onClick={() => vai(id)} aria-pressed={modo === id}
           style={{
             position: 'relative', padding: '8px 14px', borderRadius: 99, border: 'none',
             background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '13px',
             fontWeight: modo === id ? 500 : 400, transition: 'color .2s',
-            color: modo === id ? CHIARO : 'rgba(244,239,232,.45)',
+            color: modo === id ? INCHIOSTRO : '#bdb0a4',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>{t(testo)}</button>
       ))}
@@ -668,13 +557,13 @@ function Bottone({ pronto, occupato, premi, children }: {
       style={{
         position: 'relative', overflow: 'hidden',
         marginTop: 26, width: '100%', padding: '14px 24px', borderRadius: 99, border: 'none',
-        background: pronto ? CHIARO : 'rgba(244,239,232,.16)',
-        color: pronto ? '#141210' : 'rgba(244,239,232,.45)',
+        background: pronto ? '#f6f2eb' : 'rgba(246,242,235,.10)',
+        color: pronto ? '#17130f' : '#a99d92',
         fontSize: 15, fontWeight: 500, fontFamily: 'inherit',
         cursor: vivo ? 'pointer' : 'default',
         transition: 'background .2s, transform .18s, box-shadow .2s'
       }}
-      hover={vivo ? { background: '#FFFFFF', transform: 'translateY(-1px)', boxShadow: '0 12px 30px rgba(10,8,6,.4)' } : {}}>
+      hover={vivo ? { background: '#ffffff', transform: 'translateY(-1px)', boxShadow: '0 8px 24px -12px #ffffff50' } : {}}>
       {children}
       {occupato && (
         <span aria-hidden="true" style={{
@@ -688,9 +577,9 @@ function Bottone({ pronto, occupato, premi, children }: {
 }
 
 /** Una riga di esito — andata male o andata bene — che entra invece di comparire. */
-function Riga({ colore, children }: { colore: string; children: React.ReactNode }) {
+function Riga({ colore, children, ruolo }: { colore: string; children: React.ReactNode; ruolo: 'alert' | 'status' }) {
   return (
-    <div style={{
+    <div role={ruolo} style={{
       fontSize: '12.5px', color: colore, marginTop: 14, lineHeight: 1.5,
       textWrap: 'pretty', overflowWrap: 'anywhere', animation: 'entrasu .3s ease both'
     }}>{children}</div>
@@ -698,38 +587,43 @@ function Riga({ colore, children }: { colore: string; children: React.ReactNode 
 }
 
 /**
- * Una casella con la sua etichetta, e il bordo che si scalda quando ci scrivi.
+ * Neutral focus makes the active field clear without changing the scene palette.
  *
- * Il bordo caldo non è vezzo: su un fondo scuro con quattro caselle uguali,
- * dove sta il cursore si capisce solo dal cursore stesso — che lampeggia, è
- * alto due millimetri, e sparisce appena passi al mouse. Il colore lo dice da
- * un metro. Non basta un `:focus` nel CSS: qui gli stili sono in linea, e in
- * linea vincono sempre sul foglio.
+ * L'errore sta sotto al suo campo, non sotto al bottone: «le due password non
+ * coincidono» accanto alla seconda password si capisce senza cercare quale.
  */
-function Casella({ etichetta, coda, ...campo }: {
+function Casella({ etichetta, coda, errore, ...campo }: {
   etichetta: string
   /** Quello che sta dentro la casella, a destra: l'occhio della password. */
   coda?: React.ReactNode
+  /** Cosa non va in questo campo, se qualcosa non va. */
+  errore?: string
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   const [dentro, setDentro] = useState(false)
   return (
     <label style={{ display: 'block' }}>
       <div style={{
         ...ETICHETTA, transition: 'color .18s',
-        color: dentro ? 'rgba(244,239,232,.75)' : 'rgba(244,239,232,.45)'
+        color: dentro ? INCHIOSTRO : '#bdb0a4'
       }}>{etichetta}</div>
       <div style={{ position: 'relative' }}>
-        <input {...campo} className="scuro"
+        <input {...campo} className="scuro" aria-invalid={errore ? true : undefined}
           onFocus={e => { setDentro(true); campo.onFocus?.(e) }}
           onBlur={e => { setDentro(false); campo.onBlur?.(e) }}
           style={{
             ...CAMPO,
-            paddingRight: coda ? 52 : 16,
-            borderColor: dentro ? ACCESO : 'rgba(244,239,232,.22)',
-            background: dentro ? 'rgba(244,239,232,.1)' : 'rgba(244,239,232,.06)'
+            paddingRight: coda ? 52 : 14,
+            borderColor: errore ? SBAGLIATO : dentro ? ACCESO : 'rgba(246,242,235,.26)',
+            background: dentro ? 'rgba(246,242,235,.05)' : 'rgba(246,242,235,.025)'
           }} />
         {coda}
       </div>
+      {errore && (
+        <div role="alert" style={{
+          fontSize: '12px', color: SBAGLIATO, marginTop: 6, lineHeight: 1.5,
+          textWrap: 'pretty', animation: 'entrasu .3s ease both'
+        }}>{errore}</div>
+      )}
     </label>
   )
 }
@@ -754,20 +648,21 @@ function Occhio({ aperto }: { aperto: boolean }) {
 
 // il bordo scritto per pezzi e non con la scorciatoia: `borderColor` cambia da
 // solo quando ci scrivi, e mescolare le due forme fa lampeggiare il bordo
+// alto una riga: era 13 sopra e sotto, e per un indirizzo sembrava un riquadro
 const CAMPO: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', marginTop: 8, padding: '13px 16px',
-  borderRadius: 14, borderWidth: 1, borderStyle: 'solid',
-  color: CHIARO, fontSize: 15, fontFamily: 'inherit', outline: 'none',
+  width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '10px 14px',
+  borderRadius: 8, borderWidth: 1, borderStyle: 'solid',
+  color: INCHIOSTRO, fontSize: 15, lineHeight: 1.2, fontFamily: 'inherit', outline: 'none',
   transition: 'border-color .18s, background-color .18s'
 }
 
 /** Una via di scampo: si legge, non si preme per sbaglio. */
 const SOTTILE: React.CSSProperties = {
   border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-  fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(244,239,232,.55)',
+  fontFamily: 'inherit', fontSize: '12.5px', color: '#bdb0a4',
   textDecoration: 'underline', textUnderlineOffset: 3
 }
 
 const ETICHETTA: React.CSSProperties = {
-  fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 16
+  fontSize: 11, letterSpacing: '.015em', marginTop: 12
 }

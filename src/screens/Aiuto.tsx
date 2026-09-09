@@ -69,7 +69,8 @@ const ETICHETTE: Record<string, () => string> = {
   finoAllUltimoPasso: () => t("Fino all'ultimo passo"),
   modello: () => t('Con quale modello ragiona'),
   abbonamento: () => t('Con il tuo abbonamento'),
-  lavoroPiccolo: () => t('Il lavoro piccolo, su questo computer'),
+  motore: () => t('Con quale motore lavora'),
+  fornitore: () => t('Un altro fornitore, o un modello sul tuo computer'),
   connettori: () => t('Connettori'),
   preferenze: () => t('Preferenze'),
   memoria: () => t('Memoria'),
@@ -468,8 +469,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Motore e modello', en: 'Engine and model' },
             testo: {
-              it: 'Sotto {{modello}} scegli con quale Claude ragiona: Haiku 4.5, il più rapido ed economico; Sonnet 5, il predefinito; Opus 5, il più capace e il più caro. Se su questo Mac c’è Claude Code con l’accesso fatto, sotto {{abbonamento}} puoi far passare il lavoro grosso dal tuo abbonamento invece che dalla chiave a consumo. Se sul tuo Mac gira un modello locale (Ollama), {{lavoroPiccolo}} gli affida i titoli delle chat, le traduzioni e gli appunti su di te; risposte e bozze restano a Claude.',
-              en: 'Under {{modello}} you choose which Claude it thinks with: Haiku 4.5, the fastest and cheapest; Sonnet 5, the default; Opus 5, the most capable and the most expensive. If Claude Code is installed and signed in on this Mac, {{abbonamento}} lets the heavy work go through your subscription instead of the pay-per-use key. If a local model (Ollama) is running on your Mac, {{lavoroPiccolo}} gives it chat titles, translations and the notes about you; answers and drafts stay with Claude.'
+              it: 'Sotto {{motore}} scegli chi fa il lavoro: Claude con la tua chiave API, a consumo; Claude con l’abbonamento che paghi già, se su questo Mac c’è Claude Code con l’accesso fatto; oppure {{fornitore}} — OpenAI, OpenRouter, Groq, Mistral, o un modello che hai installato tu con Ollama, LM Studio o llama.cpp, collegato con un indirizzo e il nome del modello. Myynd non installa nessun modello. Sotto {{modello}}, quando lavora Claude, scegli quale: Haiku 4.5, il più rapido ed economico; Sonnet 5, il predefinito; Opus 5, il più capace e il più caro.',
+              en: 'Under {{motore}} you choose who does the work: Claude with your API key, pay as you go; Claude with the subscription you already pay for, if Claude Code is installed and signed in on this Mac; or {{fornitore}} — OpenAI, OpenRouter, Groq, Mistral, or a model you installed yourself with Ollama, LM Studio or llama.cpp, connected with an address and the model name. Myynd installs no model. Under {{modello}}, when Claude is working, you pick which one: Haiku 4.5, the fastest and cheapest; Sonnet 5, the default; Opus 5, the most capable and the most expensive.'
             }
           },
           {

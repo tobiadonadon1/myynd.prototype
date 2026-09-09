@@ -1174,6 +1174,45 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // 31 → 32 · optional planned calendar day; existing buckets remain intact.
   d => {
     colonna(d, 'compiti', 'giorno', 'TEXT')
+  },
+
+  /*
+   * 32 → 33 · i progetti con un obiettivo, e il perché di una voce.
+   *
+   * I progetti li teneva il punto in `punto.json`: un nome, una data, e
+   * l'angolo proposto. Non un obiettivo — e senza obiettivo il feed non può
+   * sapere se un documento *muove* qualcosa, la rassegna non può sapere quale
+   * notizia c'entra, e il punto se ne inventa uno («Myynd per papà») senza
+   * che si possa dire «questo non è un progetto». Adesso stanno in una
+   * tabella, con l'obiettivo che si scrive a mano nella Memoria, e uno stato:
+   * un progetto chiuso resta scritto — così non torna — ma non conta più.
+   *
+   *   `feed.perche` è la riga che dice perché una voce sta sul feed e per
+   *   quale obiettivo: è quello che rende una scelta controllabile invece che
+   *   subita. Le notizie ce l'hanno già dalla nascita.
+   *
+   * Sta in fondo, come tutte.
+   */
+  d => {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS progetti (
+        id         TEXT PRIMARY KEY,
+        nome       TEXT NOT NULL,
+        obiettivo  TEXT,                              -- una riga: a cosa punta
+        stato      TEXT NOT NULL DEFAULT 'attivo',    -- attivo | fermo | chiuso
+        dal        TEXT NOT NULL,
+        aggiornato TEXT NOT NULL,
+        note       TEXT,
+        origine    TEXT                               -- mano | punto
+      );
+    `)
+    colonna(d, 'feed', 'perche', 'TEXT')
+  },
+
+  // 33 → 34 · un'attività resta legata al progetto anche quando cambia nome.
+  d => {
+    colonna(d, 'compiti', 'progetto', 'TEXT')
+    d.exec('CREATE INDEX IF NOT EXISTS compiti_progetto ON compiti(progetto)')
   }
 
 ]
@@ -1255,7 +1294,8 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT'], ['giorno', 'TEXT']]
+  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT']],
+  feed: [['perche', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -2294,13 +2334,13 @@ const OMBRA_GIORNI = 60
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
  */
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string }[]): number {
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string }[]): number {
   const ins = db.prepare(`
-    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, stato, quando)
-    VALUES (?,?,?,?,?,?,?,'aperto',?)
+    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, stato, quando)
+    VALUES (?,?,?,?,?,?,?,?,'aperto',?)
     ON CONFLICT(id) DO UPDATE SET
       tipo=excluded.tipo, testo=excluded.testo, urgenza=excluded.urgenza,
-      fonte=excluded.fonte, doc=excluded.doc
+      fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche)
   `)
   const ora = new Date().toISOString()
   // Un `doc` che non corrisponde a nessuna riga è un bottone «apri» che non
@@ -2342,7 +2382,7 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
         // spesso di quanto si creda
         vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null })
       }
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, ora)
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()
@@ -2637,6 +2677,29 @@ export function notizie(giorni = 7): Notizia[] {
 }
 
 /**
+ * Quante sono entrate in rassegna da un momento in qua, e sono ancora lì.
+ *
+ * È il conto del tetto giornaliero: la rassegna gira quattro volte al giorno
+ * e ognuna sceglieva otto — trentadue notizie, che non sono «poche e
+ * mirate», sono un giornale. Si conta sulla `presa`, non sull'uscita: una
+ * notizia ripresa oggi si sposta a oggi, e conta una volta. Le scartate
+ * contano lo stesso: sono state scelte, e il tetto è sulle scelte.
+ *
+ * **Le lette no**, ed è la riga che tiene insieme il tetto e l'edizione. Una
+ * notizia aperta lascia la pagina nello stesso momento — `selezioneVisibile`
+ * nasconde le `letta` e le sposta fra le «recenti» — quindi contarla vorrebbe
+ * dire che chi legge le sue otto a colazione si ritrova la rassegna vuota *e*
+ * ferma fino a mezzanotte, con `giro()` che non va nemmeno a guardare i
+ * giornali. Il tetto è su quanto ti si mette davanti in un giorno, non su
+ * quanto hai già tolto di mezzo: `giro()` dice la stessa cosa un livello più
+ * su, dove le lette non entrano fra le candidate.
+ */
+export function notiziePreseDal(quando: string): number {
+  const r = db.prepare('SELECT COUNT(*) AS n FROM notizie WHERE presa >= ? AND letta IS NULL').get(quando) as { n: number }
+  return r.n
+}
+
+/**
  * Quelle che hai buttato via, e che non devono tornare.
  *
  * Restano nell'indice apposta: sparire dal database vorrebbe dire che la
@@ -2738,6 +2801,7 @@ export type Compito = {
   nota: string | null
   quando: string
   giorno?: string | null
+  progetto?: string | null
   stato: string
   modo: string
   ordine: string
@@ -2911,17 +2975,19 @@ export function ultimoOrdine(quando: string): string {
 export function scriviCompito(c: {
   id: string; testo: string; nota?: string | null; quando?: string
   giorno?: string | null
+  progetto?: string | null
   ordine: string; origine?: string; voce?: string | null; doc?: string | null
   attrezzi?: Concessione | null
 }) {
   const ora = new Date().toISOString()
   db.prepare(`
-    INSERT INTO compiti (id, testo, nota, quando, giorno, stato, ordine, origine, voce, doc, attrezzi, creato, aggiornato)
-    VALUES (?,?,?,?,?,'aperto',?,?,?,?,?,?,?)
+    INSERT INTO compiti (id, testo, nota, quando, giorno, progetto, stato, ordine, origine, voce, doc, attrezzi, creato, aggiornato)
+    VALUES (?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       testo      = excluded.testo,
       quando     = excluded.quando,
       giorno     = COALESCE(excluded.giorno, compiti.giorno),
+      progetto   = COALESCE(excluded.progetto, compiti.progetto),
       -- il permesso si riscrive con la riga: se l'automazione nel frattempo ha
       -- perso un attrezzo, la riga rifatta non se lo tiene
       attrezzi   = excluded.attrezzi,
@@ -2939,7 +3005,7 @@ export function scriviCompito(c: {
       aggiornato = excluded.aggiornato,
       versione   = compiti.versione + 1
   `).run(
-    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ordine,
+    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.progetto ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null,
     c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
@@ -2961,6 +3027,7 @@ export function riordina(id: string, quando: string, nuova: string) {
 export function cambiaCompito(id: string, c: {
   testo?: string; nota?: string | null; quando?: string; ordine?: string
   giorno?: string | null
+  progetto?: string | null
 }) {
   const campi: string[] = []
   const valori: (string | null)[] = []
@@ -2969,6 +3036,7 @@ export function cambiaCompito(id: string, c: {
   if (c.testo !== undefined) { campi.push('testo = ?'); valori.push(c.testo) }
   if (c.nota !== undefined) { campi.push('nota = ?'); valori.push(c.nota) }
   if (c.giorno !== undefined) { campi.push('giorno = ?'); valori.push(c.giorno) }
+  if (c.progetto !== undefined) { campi.push('progetto = ?'); valori.push(c.progetto) }
   if (c.quando !== undefined) { campi.push('quando = ?'); valori.push(c.quando) }
   if (c.ordine !== undefined) { campi.push('ordine = ?'); valori.push(c.ordine) }
   if (!campi.length) return
@@ -4030,7 +4098,7 @@ export function azzeraTutto() {
     DELETE FROM documenti; DELETE FROM feed;
     DELETE FROM messaggi; DELETE FROM chat;
     DELETE FROM convinzioni; DELETE FROM blocchi; DELETE FROM domande;
-    DELETE FROM compiti; DELETE FROM cursori;
+    DELETE FROM compiti; DELETE FROM cursori; DELETE FROM progetti;
   `)
   /*
    * E non `DELETE FROM ricerca`.

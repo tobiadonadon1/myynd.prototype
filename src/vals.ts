@@ -628,6 +628,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // invece di girare a vuoto.
       espandibile: testo.length > 150,
       urgenza: i.urgenza ?? '',
+      // perché sta sul feed, e per quale obiettivo: la riga che rende la scelta controllabile
+      perche: i.perche ?? '',
       /**
        * La freccia accanto a «Da leggere».
        *
@@ -777,6 +779,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // sette righe di paragrafo per ogni voce sono un muro, non un feed.
     heroTesto: heroLong ? (hero?.testo ?? '') : taglia(hero?.testo ?? '', 96),
     heroTagliato: (hero?.testo ?? '').length > 96,
+    heroPerche: hero?.perche ?? '',
     heroLong,
     heroToggle: () => setHeroLong(x => !x),
     heroHaDoc: !!hero?.doc,

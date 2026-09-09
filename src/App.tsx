@@ -196,6 +196,8 @@ export default function App() {
     return (
       <>
         <Onboarding
+          accountEmail={accesso.account?.email ?? ''}
+          cambiaAccount={fuori}
           stato={stato}
           // se lo stato non torna, la schermata di guasto lo dice e riprova da sé:
           // prima «Entra» restava lì, premuto, e non succedeva niente
@@ -208,7 +210,7 @@ export default function App() {
 
   return (
     <>
-      <Casa stato={stato} apriConnessioni={(fonte = '') => setConnessioni(fonte)} esci={fuori} />
+      <Casa stato={stato} apriConnessioni={(fonte = '') => setConnessioni(fonte)} esci={fuori} avviaOnboarding={() => setOnboarding(true)} />
       {connessioni !== null && (
         <Connessioni
           fonte={connessioni}
@@ -253,8 +255,8 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
   )
 }
 
-function Casa({ stato, apriConnessioni, esci }: {
-  stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void
+function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
+  stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void; avviaOnboarding: () => void
 }) {
   const v = useVals(stato, apriConnessioni)
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
@@ -384,7 +386,7 @@ function Casa({ stato, apriConnessioni, esci }: {
           padding: rail ? '0 0 18px' : '0 4px 24px'
         }}>
           <div style={{ flex: rail ? 'none' : 1 }}>
-            {rail ? <Marchio dim={20} animato={false} /> : <Logo dim={20} testo={20} animato={false} />}
+            {rail ? <Marchio dim={28} animato={false} /> : <Logo testo={20} animato={false} />}
           </div>
           <Hov as="button" title={t('Cerca  ⌘K')} onClick={v.openSearch}
             style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
@@ -517,7 +519,7 @@ function Casa({ stato, apriConnessioni, esci }: {
         {v.isChat && <Chat v={v} />}
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
-        {v.isPref && <Preferenze v={v} />}
+        {v.isPref && <Preferenze v={v} avviaOnboarding={avviaOnboarding} />}
         {v.isMemoria && <Memoria />}
         {v.isConn && <Connettori v={v} />}
         {v.isAiuto && <Aiuto v={v} />}

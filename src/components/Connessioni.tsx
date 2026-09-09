@@ -105,13 +105,22 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
         {!s && !guaio && <p role="status" className="connections-progress">{t('carico…')}</p>}
         {s && !scelta && <>
           <input className="connections-search" type="search" value={cerca} onChange={e => setCerca(e.target.value)} placeholder={t('Cerca connessioni…')} aria-label={t('Cerca connessioni…')} />
-          <div className="connector-tiles compact">{pronti.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
+          {/* Lo stesso taglio della pagina intera: quello che c'è sopra, quello che
+              manca sotto. Qui conta ancora di più, perché il pannello si apre per
+              collegare qualcosa — e la seconda lista è quella che si è venuti a
+              leggere. Vedi `connessioni.css`, «collegate sopra, da collegare sotto». */}
+          {([['Collegate', pronti.filter(c => c.collegato), 'collegate'],
+             ['Da collegare', pronti.filter(c => !c.collegato), 'da-collegare']] as const).map(([titolo, quali, classe]) => !!quali.length &&
+            <section key={classe} className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
+              <h3 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
+              <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
+            </section>)}
           {!pronti.length && <p className="connections-progress">{t('Nessun risultato')}</p>}
           {!!dopo.length && !cerca && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
         </>}
         {scelta && <div className="connection-detail">
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''}`}>
-            <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} /></span>
+            <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato} /></span>
             <div><span className="connection-detail-status">{scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
               <p>{scelta.collegato
                 ? scelta.id === 'compatibile' && s?.config.compatibile

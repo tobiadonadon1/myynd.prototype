@@ -17,17 +17,21 @@
 //     `output_config.effort` non esiste su Haiku 4.5 e il pensiero adattivo
 //     nemmeno: mandarglieli è un 400. Con la tabella qui sotto, scegliere
 //     Haiku nelle preferenze smette di rompere tutta l'app.
-//   · mandare il lavoro piccolo a un modello che gira su questa macchina.
-//     Dare un titolo a una conversazione o decidere se un testo è una bozza o
-//     una domanda non ha bisogno di un modello di frontiera; scrivere l'email
-//     che esce dall'azienda sì. La differenza è nella tabella LAVORI.
+//   · mandare il lavoro piccolo al modello economico della famiglia. Dare un
+//     titolo a una conversazione o decidere se un testo è una bozza o una
+//     domanda non ha bisogno del modello grande; scrivere l'email che esce
+//     dall'azienda sì. La differenza è nella tabella LAVORI.
 //   · tradurre gli errori dell'SDK in italiano una volta per tutti.
 //
-// La regola che tiene insieme il tutto: **il locale non deve mai poter
-// peggiorare niente**. Se non c'è, se non risponde, se risponde male, si passa
-// a Claude e chi ha chiamato non se ne accorge. Un'app che si rompe perché non
-// hai installato una cosa che non ti abbiamo chiesto di installare è peggio di
-// un'app che costa.
+// Chi ragiona lo sceglie chi usa Myynd, in un posto solo — le preferenze —
+// fra tre strade: Claude con la chiave, Claude con l'abbonamento (Claude Code
+// su questo computer), o un fornitore che parla la lingua di OpenAI, in rete
+// o in casa (Ollama, LM Studio, llama.cpp). Myynd non installa e non scarica
+// nessun modello. C'era un «modello di casa» che se ne occupava da sé — un
+// download, un processo da tenere acceso, una sonda su Ollama — e per chi lo
+// usava non ha mai funzionato davvero. Un modello locale adesso si *collega*,
+// con un indirizzo, come qualunque altro fornitore: si vede cosa lavora, e
+// quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua } from './config.ts'
@@ -154,11 +158,12 @@ export function capacita(m = modello()): Capacita {
 /**
  * I lavori, e cosa serve a ciascuno.
  *
- * `frontiera` è la riga che conta. Vera vuol dire: questo testo lo legge una
- * persona fuori dall'azienda, o è la risposta su cui prenderà una decisione —
- * e allora non si risparmia. Falsa vuol dire: è una manovra interna, il
- * risultato non esce da qui, e un modello piccolo che gira su questa macchina
- * fa lo stesso lavoro per zero.
+ * `livello` è la riga che conta. `frontiera` vuol dire: questo testo lo legge
+ * una persona fuori dall'azienda, o è la risposta su cui prenderà una
+ * decisione — e allora non si risparmia. `casa` vuol dire: è una manovra
+ * interna, il risultato non esce da qui, e il modello economico della
+ * famiglia fa lo stesso lavoro per pochissimo. `media` sta in mezzo, ed è
+ * dove sta il volume: va in rete al modello scelto, come ha sempre fatto.
  *
  * Il brief è netto sul perché la distinzione non si può sfumare: «una risposta
  * sbagliata detta con sicurezza sul lavoro della tua azienda costa più fiducia
@@ -182,9 +187,40 @@ export type Lavoro =
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
+  | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
+
+/*
+ * Tre livelli, non due.
+ *
+ * `frontiera: true|false` ha retto finché il modello di casa era una cosa che
+ * qualcuno *poteva* aver installato per conto suo: o il lavoro era da poco e ci
+ * andava, o non lo era e non ci andava. Ma quel confine non divideva il lavoro
+ * per difficoltà — divideva per *quanto costa sbagliare in pubblico*, e ci
+ * finivano dalla stessa parte la bozza che esce dall'azienda e la lettura del
+ * feed, che è la chiamata più frequente e più cara di tutta l'app e non la
+ * legge nessuno tranne noi.
+ *
+ * Il risultato pratico: il locale faceva i titoli delle chat, e la bolletta la
+ * facevano le altre. Chi accendeva un modello di casa non se ne accorgeva.
+ *
+ * Con tre livelli la domanda si separa in due domande diverse:
+ *
+ *   · `casa` — un modello piccolo lo fa bene, e non c'è niente da valutare.
+ *   · `media` — un modello di casa *capace* lo fa bene; uno da due giga no.
+ *     Qui sta il volume, e qui sta il risparmio vero.
+ *   · `frontiera` — lo firma l'azienda, e non si risparmia. La bozza che parte
+ *     a un cliente, il punto che si legge ogni mattina, la ricetta che poi gira
+ *     per mesi.
+ *
+ * In rete conta una riga sola: vedi `modelloPer`, dove solo `casa` scende al
+ * modello economico. `media` e `frontiera` oggi si comportano uguale, e
+ * restano scritti perché dicono *quanto pesa* un lavoro: se un giorno torna
+ * in gioco un motore più leggero, la tabella è già pronta.
+ */
+type Livello = 'casa' | 'media' | 'frontiera'
 
 type Profilo = {
-  frontiera: boolean
+  livello: Livello
   ragiona: boolean
   sforzo: 'low' | 'medium' | 'high'
   attesa: number
@@ -192,31 +228,62 @@ type Profilo = {
 
 const LAVORI: Record<Lavoro, Profilo> = {
   // Frontiera: qui non si risparmia.
-  risposta:   { frontiera: true,  ragiona: true,  sforzo: 'medium', attesa: 60_000 },
+  risposta:   { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 60_000 },
   // Cinque minuti, non uno: è lavoro di sfondo, nessuno sta guardando, e con
   // sedicimila token di tetto una bozza lunga scadrebbe sempre.
-  bozza:      { frontiera: true,  ragiona: true,  sforzo: 'medium', attesa: 300_000 },
-  lettura:    { frontiera: true,  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  bozza:      { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 300_000 },
+  // La lettura del feed: quali cinque cose, fra trenta documenti, hanno bisogno
+  // di lei stamattina. Era di frontiera, e nessuno l'ha mai contestato — ma è
+  // anche la chiamata più cara che l'app faccia, gira da sola tutto il giorno,
+  // e il suo risultato non esce di qui: è un ordine di lettura, non una lettera
+  // firmata. Un modello di casa capace lo mette in ordine bene, e quando non
+  // c'è la strada di prima è ancora lì, identica.
+  lettura:    { livello: 'media',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
   // La domanda è semplice — «questa è una newsletter?» — ma la risposta toglie
-  // roba dalla casella di qualcuno. Sbagliarne una costa più di quanto costi
-  // qui il modello grande, quindi frontiera anche per una cosa da poco.
-  cernita:    { frontiera: true,  ragiona: false, sforzo: 'low',    attesa: 120_000 },
+  // roba dalla casella di qualcuno, e sbagliarne una costa più di quanto costi
+  // qui il modello grande. Per questo non è `casa`: un modello da tre miliardi
+  // non la fa, la finge. È `media` perché uno da quattordici la fa davvero, e
+  // perché è la chiamata più frequente dell'app — gira a ogni lettura della
+  // posta, per sempre. Se il locale non è abbastanza grande resta in rete
+  // esattamente com'era.
+  cernita:    { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
   // Le opzioni buone valgono più della domanda: sono il momento in cui si
   // scopre cosa sa fare. Un modello piccolo le fa generiche, e generiche non
-  // servono a niente — si preferisce pagare qui che far scrivere a mano.
-  domande:    { frontiera: true,  ragiona: false, sforzo: 'low',    attesa: 90_000 },
+  // servono a niente — meglio pagarle che farle scrivere a mano. Un modello di
+  // casa capace, però, le fa: è la stessa scommessa della cernita, con la
+  // stessa via d'uscita se il modello non c'è.
+  domande:    { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 90_000 },
   // Il punto: dieci righe che dicono cosa è cambiato e da dove riprendere. È
   // l'unico posto dove la qualità del testo è tutto il prodotto — un punto
   // generico non si legge dal secondo giorno — e per questo frontiera, con
   // il pensiero acceso. Il conto lo tiene `punto.ts`: tre al giorno, mai a
   // meno di tre ore, mai se non è successo niente.
-  punto:      { frontiera: true,  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  punto:      { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
   // Frontiera, e per una volta non per il costo di sbagliare in pubblico: una
   // ricetta scritta male gira ogni mattina per mesi, e il modo in cui sbaglia è
   // il peggiore — non si rompe, fa *quasi* quello che avevi chiesto. Si scrive
   // due o tre volte in tutta la vita di un'installazione: pagarla bene è la
   // spesa più facile da giustificare che ci sia in questa tabella.
-  ricetta:    { frontiera: true,  ragiona: false, sforzo: 'medium', attesa: 90_000 },
+  ricetta:    { livello: 'frontiera',  ragiona: false, sforzo: 'medium', attesa: 90_000 },
+  /*
+   * Ricavare da una bozza l'email vera: a chi va, che oggetto ha, e il solo
+   * testo che deve leggere il destinatario.
+   *
+   * Stava sotto `classifica` — cioè fra le manovre interne, quelle che un
+   * modello da tre miliardi fa per zero. Ci stava perché *sembra* una
+   * classificazione: prendi un testo, separalo in tre campi. Ma il campo che
+   * conta è `corpo`, e quello non è un'etichetta: è la lettera che arriva a un
+   * cliente. Un modello piccolo che si porta dietro una nota rivolta a lei, o
+   * che lascia fuori un paragrafo, produce un'email che passa ogni controllo —
+   * l'indirizzo è valido, l'oggetto c'è, lo schema torna — ed è sbagliata
+   * davanti a qualcuno che non è di qui.
+   *
+   * L'indirizzo era già difeso a valle (`claude.ts`, la regex e
+   * `indirizzoConosciuto`). Il testo no, e non c'è modo di difenderlo a valle:
+   * l'unico controllo possibile è che l'abbia scritto qualcosa che sa scrivere.
+   * Non ragiona e non ha bisogno di sforzo: deve solo tagliare bene.
+   */
+  email:      { livello: 'frontiera',  ragiona: false, sforzo: 'low',    attesa: 90_000 },
 
   // Manovre interne: il locale le fa uguale.
   //
@@ -226,12 +293,12 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // pubblico, e la notizia scartata a torto è ancora lì domani. Girando quattro
   // volte al giorno su un modello di frontiera diventerebbe la voce di spesa
   // più grossa dell'app senza essere la cosa più importante che fa.
-  rassegna:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 },
-  titolo:     { frontiera: false, ragiona: false, sforzo: 'low', attesa: 20_000 },
-  classifica: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 30_000 },
-  traduzione: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 60_000 },
-  estrazione: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 60_000 },
-  giudizio:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 30_000 },
+  rassegna:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
+  titolo:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 20_000 },
+  classifica: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 },
+  traduzione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
+  estrazione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
+  giudizio:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 },
   /*
    * Il ritratto: riordinare quello che ha già capito, non capirlo.
    *
@@ -245,7 +312,7 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * Quello che produce non esce da questa macchina e nessuno lo firma: se una
    * riga viene storta, sta in una schermata fatta apposta per correggerla.
    */
-  ritratto:   { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 },
+  ritratto:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
   /*
    * Lo smistamento: scegliere fra otto messaggi quali meritano una riga, e
    * scriverne il titolo. Gira dopo ogni lettura della posta, per sempre, e
@@ -253,108 +320,22 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * dito, una che manca la scrive la persona. La risposta vera — la bozza —
    * la scrive poi il modello grande, una riga alla volta e sotto il tetto.
    */
-  smistamento: { frontiera: false, ragiona: false, sforzo: 'low', attesa: 90_000 }
-}
-
-// — il modello di casa —
-
-const PORTA_LOCALE = process.env.MYYND_OLLAMA ?? 'http://127.0.0.1:11434'
-
-/**
- * I modelli locali che sappiamo fare questo lavoro, dal più capace al più
- * leggero. Si prende il primo che è davvero installato: non chiediamo a
- * nessuno di scaricare niente, si usa quello che c'è già.
- */
-const LOCALI_BUONI = [
-  'qwen2.5:14b', 'qwen2.5:7b', 'qwen3:8b', 'llama3.1:8b',
-  'mistral-nemo', 'gemma2:9b', 'phi4', 'qwen2.5:3b', 'llama3.2:3b'
-]
-
-/*
- * Per persona, come tutto il resto.
- *
- * Il modello preferito sta nella configurazione di chi chiede: con una sonda
- * sola, dentro il minuto di validità, la scelta della prima persona valeva per
- * la seconda. Non è la posta di qualcun altro, ma è la stessa specie di errore.
- */
-type Sonda = { modello: string | null; quando: number }
-const sonde = new Map<string, Sonda>()
-const SONDA_VALE = 60_000
-
-/**
- * C'è un modello locale acceso, e ne abbiamo uno che va bene?
- *
- * Si guarda al massimo una volta al minuto: bussare a ogni chiamata
- * aggiungerebbe un giro di rete a un percorso che esiste per essere veloce.
- * Un fallimento non si segna come definitivo — chi accende Ollama a metà
- * giornata deve poterlo usare senza riavviare Myynd.
- */
-async function localeDisponibile(): Promise<string | null> {
-  const scelto = leggi().locale
-  if (scelto?.attivo === false) return null
-
-  const ora = Date.now()
-  const mia = sonde.get(chi.adesso() ?? '')
-  if (mia && ora - mia.quando < SONDA_VALE) return mia.modello
-
-  let trovato: string | null = null
-  try {
-    const r = await fetch(`${PORTA_LOCALE}/api/tags`, { signal: AbortSignal.timeout(1500) })
-    if (r.ok) {
-      const j = await r.json() as { models?: { name: string }[] }
-      const installati = (j.models ?? []).map(m => m.name)
-      // quello scelto a mano vince, se c'è davvero
-      const preferito = scelto?.modello
-      if (preferito && installati.includes(preferito)) trovato = preferito
-      else {
-        trovato = LOCALI_BUONI.find(b => installati.some(i => i === b || i === `${b}:latest`)) ?? null
-        if (trovato) trovato = installati.find(i => i === trovato || i === `${trovato}:latest`) ?? trovato
-      }
-    }
-  } catch { /* non c'è, o non risponde: si va da Claude */ }
-
-  sonde.set(chi.adesso() ?? '', { modello: trovato, quando: ora })
-  return trovato
-}
-
-/** Cosa c'è in mano, per dirlo nelle preferenze invece di farlo di nascosto. */
-export async function statoLocale(): Promise<{ acceso: boolean; modello: string | null; spento: boolean }> {
-  const spento = leggi().locale?.attivo === false
-  // la sua sonda si azzera apposta: chi apre le preferenze vuole lo stato di adesso
-  sonde.delete(chi.adesso() ?? '')
-  const m = spento ? null : await localeDisponibile()
-  return { acceso: !!m, modello: m, spento }
+  smistamento: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 }
 }
 
 type Messaggio = { role: 'user' | 'assistant'; content: string }
 
-async function chiediAlLocale(
-  nome: string,
-  o: { system: string; messages: Messaggio[]; max_tokens: number; formato?: object; attesa: number }
-): Promise<string> {
-  const r = await fetch(`${PORTA_LOCALE}/api/chat`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: nome,
-      stream: false,
-      messages: [{ role: 'system', content: o.system }, ...o.messages],
-      // Ollama accetta uno schema JSON qui e ci vincola l'uscita: è quello che
-      // rende utilizzabile un modello piccolo su un compito strutturato.
-      ...(o.formato ? { format: o.formato } : {}),
-      options: {
-        // basso di proposito: nessuno di questi lavori vuole fantasia
-        temperature: 0.2,
-        num_predict: o.max_tokens
-      }
-    }),
-    signal: AbortSignal.timeout(o.attesa)
-  })
-  if (!r.ok) throw new Error(`ollama ${r.status}`)
-  const j = await r.json() as { message?: { content?: string } }
-  const testo = j.message?.content ?? ''
-  if (!testo.trim()) throw new Error('ollama: risposta vuota')
-  return testo
+/**
+ * Si può ragionare adesso?
+ *
+ * Un motore collegato — la chiave, l'abbonamento, o il fornitore compatibile —
+ * e basta. Prima la risposta dipendeva dal lavoro: un modello di casa piccolo
+ * sbloccava i titoli senza sbloccare la chat. Senza modello di casa la domanda
+ * ha una risposta sola, e il lavoro resta nella firma perché chi chiama lo dice
+ * comunque, e un giorno potrebbe tornare a contare.
+ */
+export async function disponibilePer(_lavoro: Lavoro): Promise<boolean> {
+  return collegato()
 }
 
 // — quanto è costato —
@@ -688,7 +669,7 @@ function controllaIlTetto() {
 
 // — la richiesta —
 
-export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'locale' | 'abbonamento' | 'compatibile' }
+export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'abbonamento' | 'compatibile' }
 
 /**
  * I parametri giusti per il modello che ci si trova in mano.
@@ -712,7 +693,11 @@ export type Parametri = Omit<Anthropic.MessageCreateParamsNonStreaming, 'message
 const ECONOMICO = 'claude-haiku-4-5'
 
 export function modelloPer(lavoro: string): string {
-  return LAVORI[lavoro as Lavoro]?.frontiera === false ? ECONOMICO : modello()
+  // Solo `casa` scende all'economico. `media` è passata da `frontiera: true` a
+  // un livello suo, ma *in rete* deve continuare a costare e valere quello di
+  // prima: la lettura del feed su Haiku sarebbe un peggioramento che nessuno
+  // ha chiesto. Il livello nuovo apre una strada in più, non ne chiude una.
+  return LAVORI[lavoro as Lavoro]?.livello === 'casa' ? ECONOMICO : modello()
 }
 
 /** Quanto si aspetta questo lavoro, per chi chiama il motore da sé. */
@@ -794,26 +779,8 @@ export async function chiedi(o: {
 }): Promise<Esito> {
   const p = LAVORI[o.lavoro]
   const attesa = o.attesa ?? p.attesa
-  // prima di qualsiasi strada: locale o Claude, la lingua è quella dell'app
+  // prima di qualsiasi strada, la lingua è quella dell'app
   o = { ...o, system: conLaLingua(o.system) }
-
-  // Il locale, se il lavoro lo consente e c'è. Un suo fallimento non è un
-  // errore dell'app: è solo il motivo per cui adesso si va da Claude.
-  if (!p.frontiera) {
-    const nome = await localeDisponibile()
-    if (nome) {
-      try {
-        const testo = await chiediAlLocale(nome, { ...o, formato: o.formato, attesa })
-        // vincolato o no, un oggetto che non si legge non è una risposta: si
-        // passa a Claude adesso, non si torna un `null` due funzioni più in là
-        if (o.formato) JSON.parse(estraiJSON(testo))
-        return { testo, rifiutata: false, da: 'locale' }
-      } catch (e) {
-        console.warn(`myynd · il modello locale non ce l'ha fatta su «${o.lavoro}», passo a Claude:`,
-          e instanceof Error ? e.message : e)
-      }
-    }
-  }
 
   /**
    * L'abbonamento, quando è quello che ha scelto.
@@ -833,9 +800,8 @@ export async function chiedi(o: {
    * i lavori piccoli — che sono i più frequenti — vorrebbe dire una bolletta che
    * ha appena chiesto di non avere.
    *
-   * Chi le vuole tutt'e due installa un modello di casa: il ramo qui sopra lo
-   * prende prima, il lavoro piccolo non costa niente e non tocca né la chiave né
-   * il tetto dell'abbonamento.
+   * Non c'è più un modello di casa che si prenda il lavoro piccolo prima di
+   * arrivare qui: con l'abbonamento scelto ci passa tutto, piccolo compreso.
    *
    * Se non risponde non è un guasto: è il motivo per cui si passa alla chiave.
    * E se il motore scelto è un altro fornitore, di qui non si passa: l'abbonamento

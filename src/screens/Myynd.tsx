@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { BottoneSicuro, Hov, daTastiera, useAttiva } from '../ui'
-import { IconDoc, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
+import { IconAvanti, IconDoc, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
@@ -91,6 +91,10 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
             </Hov>
           )}
         </div>
+        {/* perché sta qui, e per quale obiettivo: una riga sotto, piana, senza colore */}
+        {riga.perche && (
+          <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.perche}</div>
+        )}
       </div>
       {/* prendere in carico una cosa che lui ha notato: è il gesto che unisce le
           due schermate, e va fatto da qui — dove la cosa la stai leggendo */}
@@ -434,6 +438,10 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 hover={{ color: '#FFF7F0' }}>{v.heroLong ? t('meno') : t('di più')}</Hov>
             )}
           </div>
+          {/* il perché: per quale progetto o obiettivo conta, in una riga quieta */}
+          {v.heroPerche && (
+            <div style={{ fontSize: '13px', lineHeight: 1.5, marginTop: 8, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.heroPerche}</div>
+          )}
 
           {v.heroHaDoc && (
             <Hov as="button" type="button" onClick={v.apriDoc}
@@ -657,7 +665,7 @@ function Domanda({ v }: { v: Vals }) {
           color: v.rispostaDom.trim() ? '#8E3F1F' : 'rgba(34,39,31,.25)',
           cursor: v.rispostaDom.trim() ? 'pointer' : 'default'
         }}
-        hover={v.rispostaDom.trim() ? { color: '#C4623B' } : {}}>→</Hov>
+        hover={v.rispostaDom.trim() ? { color: '#C4623B' } : {}}><IconAvanti size={14} /></Hov>
 
       <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
         style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(34,39,31,.34)', cursor: 'pointer' }}

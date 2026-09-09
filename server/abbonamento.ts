@@ -491,3 +491,15 @@ export async function inStreaming(o: {
 export function nonRisponde() {
   spento = Date.now() + RIPOSO
 }
+
+/**
+ * Una persona ha scelto di riprovare questa strada.
+ *
+ * Il riposo evita che un Claude Code davvero guasto rallenti ogni richiesta,
+ * ma non può vincere su un gesto esplicito nelle preferenze. Prima, dopo un
+ * accesso appena completato o un guasto momentaneo, selezionare di nuovo
+ * l'abbonamento continuava a mandare tutto sulla chiave per cinque minuti.
+ */
+export function riprova() {
+  spento = 0
+}

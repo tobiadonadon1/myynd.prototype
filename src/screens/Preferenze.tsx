@@ -3,8 +3,10 @@ import { api, sessione, type ClaudeCon, type Gettone } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
+import { IconAvanti } from '../icons'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
+import './preferenze.css'
 
 /** Una riga che si sceglie, scritta come bottone: perde il vestito del bottone e tiene il suo. */
 const RIGA_BOTTONE: React.CSSProperties = {
@@ -958,64 +960,97 @@ function CampoArgomenti({ v }: { v: Vals }) {
 }
 
 /**
- * Con quale dei due paghi Claude.
+ * Con chi ragiona Myynd: una scelta sola, con tre strade.
  *
- * Sono due strade per lo stesso modello, non due modelli: l'abbonamento che
- * paghi già — attraverso Claude Code, che gira su questo computer con il tuo
- * account — e una chiave a consumo. Prima qui c'era un interruttore
- * «con il tuo abbonamento», acceso o spento, e diceva metà della cosa: chi
- * aveva tutti e due collegati non trovava scritto da nessuna parte chi stesse
- * lavorando, né un posto dove dirlo.
+ * Erano tre carte — il motore, come si paga Claude, il modello di casa — e
+ * rispondevano a una domanda sola, «chi fa il lavoro», da tre punti diversi:
+ * per capire cosa stesse succedendo bisognava leggerle tutte. Adesso è una
+ * riga per strada. Claude con la chiave, Claude con l'abbonamento che si paga
+ * già, o un fornitore che parla la lingua di OpenAI — in rete, o un modello
+ * sul proprio computer con Ollama, LM Studio, llama.cpp. Myynd non installa
+ * niente: il modello di casa che scaricava e accendeva da sé è stato tolto, e
+ * un modello locale si collega con un indirizzo come tutti gli altri.
  *
- * Adesso si vedono tutte e due, con lo stato vero di ciascuna, e si sceglie.
- * Anche quella che adesso non è pronta: chi collega la chiave stasera e farà
- * l'accesso a Claude Code domani deve poterlo dire stasera, e la riga sotto gli
- * dice cosa manca.
+ * La strada non collegata si collega da qui: scegliendola si apre la sua
+ * scheda, e collegarla la sceglie. Collegata, si vede cosa è, e «Cambia»
+ * riapre la stessa scheda. Siccome Myynd è stato messo a punto su Claude,
+ * scegliere l'altra si può, ma con l'avviso scritto sotto e non in una nota
+ * a piè di pagina: la qualità non deve calare in silenzio.
  */
-function ConQuale({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
+function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
+  type Via = 'chiave' | 'abbonamento' | 'compatibile'
   const [s, setS] = useState<ClaudeCon | null>(null)
+  const [occupato, setOccupato] = useState(false)
   const guarda = useCallback(() => { api.claude().then(setS).catch(() => setS(null)) }, [])
-  useEffect(() => { guarda() }, [guarda])
+  // e si rilegge quando cambia quello che è collegato: la scheda di Claude si
+  // apre sopra questa schermata, e chiudendola la riga deve dire «pronto»
+  // senza che uno esca e rientri
+  useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile])
 
-  // ospitati c'è una strada sola: una scelta fra una cosa non è una scelta
-  if (!s || !s.abbonamentoPossibile) return null
-
-  const scegli = async (con: 'abbonamento' | 'chiave') => {
-    if (con === s.con) return
-    setS({ ...s, con })
-    try { await api.claudeCon(con) }
-    catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
-    finally { guarda(); v.ricaricaStato() }
-  }
+  const f = v.compatibile
+  // ospitati l'abbonamento non esiste: la riga non si mostra, e la scelta non ci cade mai
+  const abbonamentoPossibile = !!s?.abbonamentoPossibile
+  const attuale: Via = v.motore === 'compatibile' ? 'compatibile'
+    : abbonamentoPossibile && s?.con === 'abbonamento' ? 'abbonamento' : 'chiave'
 
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
-  const manca = (id: 'abbonamento' | 'chiave'): string => {
-    if (id === 'chiave') return s.chiave.collegata ? '' : t('Manca la chiave: collegala dalla scheda di Claude.')
-    if (!s.abbonamento.installato) return t('Claude Code non è su questo computer.')
+  const manca = (via: Via): string => {
+    if (via === 'compatibile') return f ? '' : t('Non ancora collegato.')
+    if (via === 'chiave') return s?.chiave.collegata ? '' : t('Manca la chiave: collegala dalla scheda di Claude.')
+    if (!s?.abbonamento.installato) return t('Claude Code non è su questo computer.')
     if (!s.abbonamento.entrato) return t('Apri il Terminale, scrivi «claude» e fai l’accesso.')
     return ''
   }
 
-  const scelte: { id: 'abbonamento' | 'chiave'; titolo: string; nota: string }[] = [
+  const scegli = async (via: Via) => {
+    // finché non si sa cosa c'è, un clic non deve aprire schede a caso
+    if (occupato || !s) return
+    // non collegata: si apre la scheda, e collegarla la sceglie
+    if (via === 'compatibile') { void v.scegliMotore('compatibile'); return }
+    if (via === 'chiave' && !s.chiave.collegata) { v.apriConnessioni('claude'); return }
+    // l'abbonamento senza Claude Code entrato non si sceglie: la riga dice già
+    // cosa manca, e scriverlo lo stesso spegnerebbe tutta l'app
+    if (via === 'abbonamento' && manca(via)) return
+    // premere di nuovo l'abbonamento serve anche a svegliarlo dopo un guasto:
+    // il server azzera il riposo e riprova alla richiesta successiva
+    if (via === attuale && !(via === 'abbonamento' && s?.abbonamento.inRiposo)) return
+    setOccupato(true)
+    try {
+      if (v.motore !== 'claude') await v.scegliMotore('claude')
+      if (s && (s.con !== via || via === 'abbonamento')) await api.claudeCon(via)
+    } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
+    finally { setOccupato(false); guarda(); v.ricaricaStato() }
+  }
+
+  const vie: { id: Via; titolo: string; nota: string; dettaglio?: string; azione?: { testo: string; apri: () => void } }[] = [
     {
-      id: 'abbonamento', titolo: t('L’abbonamento che paghi già'),
-      nota: t('Passa da Claude Code, che gira qui con il tuo account: non costa niente oltre a quello che paghi ogni mese. Myynd non vede le tue credenziali. Le bozze fanno una passata sola sul materiale che ha già trovato, invece di poter cercare ancora: un po’ meno accurate, e gratis.')
+      id: 'chiave', titolo: t('Claude, con la tua chiave API'),
+      nota: t('A consumo, sul credito Anthropic. È il modello su cui Myynd è stato messo a punto.'),
+      dettaglio: s?.chiave.collegata ? t('Chiave collegata') : undefined,
+      azione: { testo: s?.chiave.collegata ? t('Cambia chiave') : t('Collega'), apri: () => v.apriConnessioni('claude') }
     },
+    ...(abbonamentoPossibile ? [{
+      id: 'abbonamento' as Via, titolo: t('Claude, con l’abbonamento che paghi già'),
+      nota: t('Usa Claude Code su questo computer. È incluso nel tuo piano; le bozze lavorano sul materiale che Myynd ha già trovato.')
+    }] : []),
     {
-      id: 'chiave', titolo: t('Una chiave API, a consumo'),
-      nota: t('Si paga ogni riga che scrive, e in cambio le bozze possono cercare più volte prima di scrivere. È l’unica strada su un server, dove Claude Code non c’è.')
+      id: 'compatibile', titolo: t('Un altro fornitore, o un modello sul tuo computer'),
+      nota: t('OpenAI, OpenRouter, Groq, Mistral — o Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.'),
+      // l'indirizzo può essere lungo: si spezza, non sfora
+      dettaglio: f ? [f.nome, f.modello, f.url].filter(Boolean).join(' · ') : undefined,
+      azione: { testo: f ? t('Cambia') : t('Collega'), apri: () => v.apriConnessioni('compatibile') }
     }
   ]
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Con quale dei due paghi Claude')}</div>
-      <div role="radiogroup" aria-label={t('Con quale dei due paghi Claude')}
-        style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
-        {scelte.map(x => {
-          const scelto = s.con === x.id
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+      <div style={LABEL}>{t('Con quale motore lavora')}</div>
+      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        {vie.map(x => {
+          const scelto = attuale === x.id
           const guaio = manca(x.id)
           return (
+            // dentro c'è il bottone «Collega»: la riga tiene il ruolo, non il tag
             <div key={x.id} role="radio" aria-checked={scelto} tabIndex={0}
               onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))} style={{
                 display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
@@ -1028,167 +1063,43 @@ function ConQuale({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 background: scelto ? '#FFF7F0' : 'transparent'
               }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{x.titolo}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{x.titolo}</span>
+                  <span className={`prefs-status ${guaio ? 'needs-attention' : 'ready'}`}>
+                    {guaio ? t('Da configurare') : scelto ? t('In uso') : t('Pronto')}
+                  </span>
+                </div>
                 <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty' }}>
                   {x.nota}
                 </div>
                 {/*
-                  Quello che manca si dice sotto la scelta che l'ha scelta, non
+                  Quello che manca si dice sotto la strada che l'ha scelta, non
                   in cima alla scheda: è di quella riga che parla, e chi legge
-                  deve poter capire quale delle due non è pronta.
+                  deve poter capire quale delle tre non è pronta. Accanto, il
+                  bottone che la collega.
                 */}
-                {!!guaio && (
-                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, textWrap: 'pretty' }}>{guaio}</div>
-                )}
-                {scelto && x.id === 'abbonamento' && s.abbonamento.inRiposo && (
-                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
-                    {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Il modello che gira su questa macchina.
- *
- * Sta qui e si vede, invece di succedere di nascosto. Una parte del lavoro —
- * dare un nome a una conversazione, decidere se un testo è una bozza o una
- * domanda, tradurre quattro righe — non ha bisogno di un modello di frontiera,
- * e se su questo computer ce n'è uno acceso la fa lui, gratis. Ma «gratis e di
- * nascosto» non è una combinazione accettabile in un prodotto che chiede di
- * fidarsi: chi lo usa deve sapere che succede, e poter dire di no.
- *
- * Quello che *non* passa mai di qui: le risposte, le bozze che escono
- * dall'azienda, la lettura del feed. Su quelle si paga, perché è lì che una
- * risposta sbagliata costa.
- */
-function ModelloDiCasa({ avvisa }: { avvisa: (testo: string) => void }) {
-  const [s, setS] = useState<{ acceso: boolean; modello: string | null; spento: boolean } | null>(null)
-
-  const guarda = useCallback(() => {
-    api.modelloLocale().then(setS).catch(() => setS(null))
-  }, [])
-  useEffect(() => { guarda() }, [guarda])
-
-  // non c'è niente da vedere finché non si sa, e se non c'è nessun modello
-  // installato non ha senso mostrare un interruttore per una cosa che non esiste
-  if (!s || (!s.acceso && !s.spento)) return null
-
-  const cambia = async () => {
-    const attivo = !!s.spento
-    setS({ ...s, spento: !attivo })
-    try { await api.usaModelloLocale(attivo) }
-    catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
-    finally { guarda() }
-  }
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Il lavoro piccolo, su questo computer')}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15 }}>
-            {s.spento ? t('Spento: fa tutto Claude.')
-              : s.modello
-                ? `${t('Acceso')} · ${s.modello}`
-                : t('Nessun modello trovato su questa macchina.')}
-          </div>
-          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 5, maxWidth: 460, textWrap: 'pretty' }}>
-            {t('Titoli delle chat, traduzioni, e quello che si segna di te: se qui c’è un modello acceso lo fa lui e non costa niente. Le risposte e le bozze restano a Claude, perché è lì che sbagliare costa.')}
-          </div>
-        </div>
-        <button type="button" role="switch" aria-checked={!s.spento} aria-label={t('Il lavoro piccolo, su questo computer')}
-          onClick={cambia} style={track(!s.spento)}><span style={knob()} /></button>
-      </div>
-      {/*
-        La strada per farlo fare tutto a un modello di casa esiste, e va detta
-        qui — con il prezzo scritto accanto. Non si nasconde perché è una scelta
-        legittima per chi non vuole mandare fuori niente; non si consiglia
-        perché un modello piccolo sbaglia di più, e su una bozza che esce
-        dall'azienda si vede.
-      */}
-      <div style={{ fontSize: '12px', lineHeight: 1.55, color: 'rgba(34,39,31,.55)', marginTop: 12, maxWidth: 560, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-        {t('Può fare anche il lavoro grosso: collega un fornitore compatibile con OpenAI puntandolo a http://127.0.0.1:11434/v1, con un modello come qwen2.5:14b. Ma sappi cosa scegli: un modello piccolo sbaglia di più e inventa più volentieri, e sulle bozze e sulle fonti si vede.')}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Chi fa il lavoro grosso: Claude, o un fornitore compatibile con OpenAI.
- *
- * Due scelte e non tre, perché l'abbonamento e il modello di casa non sono
- * motori alternativi: sono modi di pagare Claude di meno, e hanno le loro
- * schede. Qui si decide *chi* ragiona — e siccome Myynd è stato messo a punto
- * su Claude, scegliere l'altro si può, ma con l'avviso scritto sotto e non in
- * una nota a piè di pagina: la qualità non deve calare in silenzio.
- *
- * Il fornitore non collegato si collega da qui: scegliendolo si apre la scheda,
- * e collegarlo lo sceglie. Collegato, si vede cosa è — nome, modello, indirizzo
- * — e «Cambia» riapre la stessa scheda.
- */
-function Motore({ v }: { v: Vals }) {
-  const f = v.compatibile
-  const scelte: { id: 'claude' | 'compatibile'; titolo: string; nota: string }[] = [
-    {
-      id: 'claude', titolo: 'Claude',
-      nota: t('Il predefinito. Myynd è stato messo a punto su Claude: le risposte, le bozze e il feed passano di lì, con la chiave o con il tuo abbonamento.')
-    },
-    {
-      id: 'compatibile', titolo: t('Un fornitore compatibile con OpenAI'),
-      nota: t('OpenAI, OpenRouter, Groq, Mistral — o un modello in casa con Ollama o LM Studio. Lo colleghi con un indirizzo e il nome di un modello.')
-    }
-  ]
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Con quale motore lavora')}</div>
-      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
-        {scelte.map(s => {
-          const scelto = v.motore === s.id
-          return (
-            // dentro c'è il bottone «Cambia»: la riga tiene il ruolo, non il tag
-            <div key={s.id} role="radio" aria-checked={scelto} tabIndex={0}
-              onClick={() => v.scegliMotore(s.id)} onKeyDown={daTastiera(() => v.scegliMotore(s.id))} style={{
-              display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-              background: scelto ? 'rgba(255,255,255,.85)' : 'transparent',
-              boxShadow: scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
-            }}>
-              <span style={{
-                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-                border: scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
-                background: scelto ? '#FFF7F0' : 'transparent'
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15 }}>{s.titolo}</div>
-                <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{s.nota}</div>
-
-                {s.id === 'compatibile' && f && (
+                {(x.dettaglio || guaio || x.azione) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
-                    {/* l'indirizzo può essere lungo: si spezza, non sfora */}
-                    <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.78)', overflowWrap: 'anywhere' }}>
-                      {[f.nome, f.modello, f.url].filter(Boolean).join(' · ')}
+                    <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: guaio ? '#8E3F1F' : 'rgba(34,39,31,.78)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
+                      {x.dettaglio ?? guaio}
                     </div>
-                    <Hov as="button" type="button"
-                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); v.apriConnessioni('compatibile') }}
-                      style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                      {t('Cambia')}
-                    </Hov>
+                    {x.azione && (
+                      <Hov as="button" type="button"
+                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.azione?.apri() }}
+                        style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
+                        hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                        {x.azione.testo}
+                      </Hov>
+                    )}
                   </div>
                 )}
-                {s.id === 'compatibile' && !f && (
-                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6 }}>
-                    {t('Non ancora collegato: scegliendolo si apre la scheda per collegarlo.')}
+                {scelto && x.id === 'abbonamento' && s?.abbonamento.inRiposo && (
+                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <span>{t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}</span>
+                    <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
                   </div>
                 )}
-                {s.id === 'compatibile' && scelto && (
+                {scelto && x.id === 'compatibile' && (
                   <div style={{
                     fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
                     border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
@@ -1206,10 +1117,52 @@ function Motore({ v }: { v: Vals }) {
   )
 }
 
-export function Preferenze({ v }: { v: Vals }) {
+export function Preferenze({ v, avviaOnboarding }: { v: Vals; avviaOnboarding?: () => void }) {
+  type Sezione = 'myynd' | 'intelligenza' | 'dati' | 'account'
+  const [sezione, setSezione] = useState<Sezione>('myynd')
+  const sezioni: { id: Sezione; titolo: string; nota: string }[] = [
+    { id: 'myynd', titolo: 'Myynd', nota: t('Priorità, autonomia e voce') },
+    { id: 'intelligenza', titolo: t('Intelligenza e costi'), nota: t('Modello, chiave e utilizzo') },
+    { id: 'dati', titolo: t('Dati e fonti'), nota: t('Fonti, memoria e trasferimento') },
+    { id: 'account', titolo: t('Account e app'), nota: t('Accesso, notifiche e sicurezza') }
+  ]
+  const attuale = sezioni.find(s => s.id === sezione)!
+
   return (
-    <div style={{ width: 720, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em', padding: '12px 4px 22px' }}>{t('Preferenze')}</div>
+    <main className="prefs-page">
+      <header className="prefs-header">
+        <h1>{t('Preferenze')}</h1>
+        <p>{t('Scegli un’area. Le impostazioni meno usate restano fuori dalla strada finché non ti servono.')}</p>
+      </header>
+
+      <div className="prefs-layout">
+        <nav className="prefs-nav" aria-label={t('Sezioni delle preferenze')}>
+          {sezioni.map(s => (
+            <button key={s.id} type="button" aria-current={sezione === s.id ? 'page' : undefined}
+              onClick={() => setSezione(s.id)}>
+              <span>{s.titolo}</span>
+              <small>{s.nota}</small>
+            </button>
+          ))}
+        </nav>
+
+        <section className="prefs-panel" aria-labelledby={`prefs-${sezione}`}>
+          <div className="prefs-panel-heading">
+            <h2 id={`prefs-${sezione}`}>{attuale.titolo}</h2>
+            <p>{attuale.nota}</p>
+          </div>
+
+      {sezione === 'myynd' && <>
+      {avviaOnboarding && <div className="prefs-setup-card">
+        <div>
+          <span className="prefs-eyebrow">{t('Punto di partenza')}</span>
+          <h3>{t('Il tuo primo progetto')}</h3>
+          <p>{t('Rivedi il progetto, l’obiettivo, la fonte e la prima attività che orientano Myynd.')}</p>
+        </div>
+        <button type="button" onClick={avviaOnboarding}>
+          {t('Rivedi configurazione')} <IconAvanti />
+        </button>
+      </div>}
 
       {/*
         Il fuoco sta qui e non più come pastiglia sopra al feed.
@@ -1238,10 +1191,6 @@ export function Preferenze({ v }: { v: Vals }) {
         <CampoArgomenti v={v} />
       </div>
 
-      <Trasloco />
-
-      <Fascicolo />
-
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Autonomia')}</div>
         <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
@@ -1257,8 +1206,37 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
       </div>
 
-      {/* Chi ragiona: Claude, o un fornitore compatibile con OpenAI. */}
-      <Motore v={v} />
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Lingua')}</div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('In che lingua ti risponde e scrive il feed. I documenti li legge comunque nella lingua in cui sono.')}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
+          {v.lingue.map(l => (
+            <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: l.occupato ? 'rgba(34,39,31,.4)' : '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
+              {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
+        <div style={LABEL}>{t('Tono')}</div>
+        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
+          {v.toni.map(tono => (
+            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
+      </div>
+
+      <Identita />
+      </>}
+
+      {sezione === 'intelligenza' && <>
+
+      {/* Chi ragiona: Claude con la chiave, Claude con l'abbonamento, o un fornitore — anche in casa. */}
+      <Motore v={v} avvisa={v.mostraToast} />
 
       {/* Il modello di Claude. Sta nelle preferenze e non nel codice perché è
           una scelta di costo, e chi paga deve poterla fare senza chiedere a
@@ -1288,44 +1266,34 @@ export function Preferenze({ v }: { v: Vals }) {
         </div>
       </div>}
 
-      {/* l'abbonamento è un modo di pagare Claude di meno: con un altro motore
-          non c'entra, e un interruttore che non fa niente è peggio di nessuno */}
-      {/* anche con un altro motore scelto: chi l'aveva acceso deve poterlo
-          spegnere, e la carta si nasconde da sola quando non c'è niente da dire */}
-      <ConQuale v={v} avvisa={v.mostraToast} />
-      <ModelloDiCasa avvisa={v.mostraToast} />
+      <Uso />
+      </>}
+
+      {sezione === 'dati' && <>
+      <div className="prefs-sources-card">
+        <div>
+          <div style={LABEL}>{t('Le tue fonti')}</div>
+          <p>{t('Collega o scollega quando vuoi, senza rifare tutto.')}</p>
+        </div>
+        <button onClick={() => v.apriConnessioni()}>{t('Gestisci')} <IconAvanti /></button>
+      </div>
+
+      <Fascicolo />
+      <Trasloco />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-        <div style={LABEL}>{t('Lingua')}</div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('In che lingua ti risponde e scrive il feed. I documenti li legge comunque nella lingua in cui sono.')}</div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
-          {v.lingue.map(l => (
-            <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: l.occupato ? 'rgba(34,39,31,.4)' : '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
-              {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
-            </button>
-          ))}
+        <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
+        <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
+          {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(
+            <code key="directory" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
+            <code key="database" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
+            <code key="config" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
+          )}
         </div>
       </div>
+      </>}
 
-
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
-        <div style={LABEL}>{t('Tono')}</div>
-        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-          {/* `tono`, non `t`: la variabile del map copriva la funzione di
-              traduzione, e il giorno che qualcuno avesse chiamato `t` qui
-              dentro avrebbe chiamato una pastiglia invece del dizionario */}
-          {v.toni.map(tono => (
-            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
-          ))}
-        </div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
-      </div>
-
-      <Uso />
-
-      <Identita />
+      {sezione === 'account' && <>
 
       <Conto />
 
@@ -1334,29 +1302,13 @@ export function Preferenze({ v }: { v: Vals }) {
       {/* solo dentro l'app da scrivania: nel browser la carta non si disegna */}
       <LApp />
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-        <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
-          {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(
-            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
-            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
-            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
-          )}
-        </div>
-      </div>
-
-      <div style={{ flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', background: 'linear-gradient(140deg,rgba(196,98,59,.14),rgba(255,253,249,.78) 52%,rgba(126,156,130,.18))', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15 }}>{t('Le tue fonti')}</div>
-          <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 3 }}>{t('Collega o scollega quando vuoi, senza rifare tutto.')}</div>
-        </div>
-        <button onClick={() => v.apriConnessioni()} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#C4623B,#7E9C82)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{t('Apri')}</button>
-      </div>
-
       {/* ultimo di tutti, e non per pudore: è l'unica cosa in questa schermata
           che non si può annullare, e non deve stare accanto a niente che si
           preme di fretta */}
       <Cancella />
-    </div>
+      </>}
+        </section>
+      </div>
+    </main>
   )
 }

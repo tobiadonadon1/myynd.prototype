@@ -4,7 +4,7 @@ import { loc, t } from '../lingua'
 import { Editor, Nuova } from '../automazioni/Editor'
 import { quandoGira } from '../automazioni/Scheda'
 import { Cestino } from '../ui'
-import { IconPiu, IconGiro } from '../icons'
+import { IconPiu, IconGiro, IconAvanti } from '../icons'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
 import type { Vals } from '../vals'
 import '../automazioni/automazioni.css'
@@ -59,6 +59,20 @@ export function Automazioni({ v }: { v: Vals }) {
     (filtro === 'tutte' || (filtro === 'attive' ? a.accesa : filtro === 'pausa' ? !a.accesa : ['guaio', 'scollegata', 'muta'].includes(a.salute.stato))) &&
     `${a.nome} ${a.spiega} ${a.attrezzi.map(n => catalogo.find(c => c.nome === n)?.etichetta ?? n).join(' ')}`.toLocaleLowerCase().includes(cerca.toLocaleLowerCase()))
   const scelta = tutte.find(a => a.id === aperto)
+  const scheda = (a: Automazione) => <article className={`auto-card ${['guaio', 'scollegata', 'muta'].includes(a.salute.stato) ? 'attention' : a.accesa ? 'active' : 'paused'}`} key={a.id}>
+    <div className="auto-card-top"><span className={`auto-status ${a.accesa ? 'on' : ''}`}>{a.accesa ? t('Attiva') : t('In pausa')}</span>
+      <button className="auto-switch" role="switch" aria-checked={a.accesa} aria-label={`${a.accesa ? t('Mettila in pausa') : t('Accendila')}: ${a.nome}`} disabled={!!occupato}
+        onClick={() => azione(a.id, async () => { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) })}><span /></button></div>
+    <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>
+      <div className="auto-card-sources">{a.attrezzi.slice(0, 4).map(n => { const c = catalogo.find(x => x.nome === n); return <span key={n} className={c && !c.collegato ? 'missing' : ''} title={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`} aria-label={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`}><ConnectorIcon id={connectorPerAttrezzo(n, c?.serve)} size={18} spenta={!!c && !c.collegato} /></span> })}{a.attrezzi.length > 4 && <span className="auto-source-more">+{a.attrezzi.length - 4}</span>}</div>
+    </button>
+    <div className="auto-card-footer"><span>{quandoGira(a)}</span></div>
+    {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
+      const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
+      v.apriConnessioni(mancante?.serve === 'agenda' ? 'calendario' : mancante?.serve === 'sharepoint' ? 'microsoft' : mancante?.serve ?? '')
+    }}>{t('Collega')} <IconAvanti size={11} /></button>}</div>}
+    {a.ultima && <div className="auto-last">{t('Ultima esecuzione')}: {new Date(a.ultima).toLocaleString(loc(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
+  </article>
   return <main className="auto-page">
     <header className="auto-header">
       <h1>{t('Automazioni')}</h1>
@@ -78,7 +92,7 @@ export function Automazioni({ v }: { v: Vals }) {
             <details><summary>{s.quanti} {t('documenti pertinenti')}</summary><p>{s.spiega}</p><ul>{s.esempi.map((e, i) => <li key={i}>{e}</li>)}</ul></details></div>
           <div className="auto-card-actions"><button className="auto-button" disabled={!!occupato} onClick={() => azione(s.id, async () => {
             const r = await api.adottaAutomazione(s.id); setTutte(r.automazioni); setAperto(r.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
-          })}>{occupato === s.id ? t('Preparo…') : t('Crea bozza')} <span aria-hidden="true">↗</span></button>
+          })}>{occupato === s.id ? t('Preparo…') : t('Crea bozza')} <IconAvanti size={11} /></button>
           <button className="auto-button subtle" disabled={!!occupato} aria-label={`${t('Non ora')}: ${s.nome}`} title={t('Non ora')} onClick={() => azione(s.id, async () => {
             await api.ignoraAutomazione(s.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
           })}>×</button></div>
@@ -104,20 +118,24 @@ export function Automazioni({ v }: { v: Vals }) {
         } else setRaccolte((await api.creaRaccolta(nomeCartella.trim())).raccolte)
         setNomeCartella(null); setRinomino(null)
       }) }}><input autoFocus aria-label={t('come si chiama')} value={nomeCartella} onChange={e => setNomeCartella(e.target.value)} /><button className="auto-button" disabled={!!occupato || !nomeCartella.trim()}>{t('Salva')}</button><button className="auto-button subtle" type="button" onClick={() => setNomeCartella(null)}>{t('Chiudi')}</button></form>}
-      <div className="auto-grid">{viste.map(a => <article className={`auto-card ${['guaio', 'scollegata', 'muta'].includes(a.salute.stato) ? 'attention' : a.accesa ? 'active' : 'paused'}`} key={a.id}>
-        <div className="auto-card-top"><span className={`auto-status ${a.accesa ? 'on' : ''}`}>{a.accesa ? t('Attiva') : t('In pausa')}</span>
-          <button className="auto-switch" role="switch" aria-checked={a.accesa} aria-label={`${a.accesa ? t('Mettila in pausa') : t('Accendila')}: ${a.nome}`} disabled={!!occupato}
-            onClick={() => azione(a.id, async () => { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) })}><span /></button></div>
-        <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>
-          <div className="auto-card-sources">{a.attrezzi.slice(0, 4).map(n => { const c = catalogo.find(x => x.nome === n); return <span key={n} className={c && !c.collegato ? 'missing' : ''} title={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`} aria-label={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`}><ConnectorIcon id={connectorPerAttrezzo(n, c?.serve)} size={18} /></span> })}{a.attrezzi.length > 4 && <span className="auto-source-more">+{a.attrezzi.length - 4}</span>}</div>
-        </button>
-        <div className="auto-card-footer"><span>{quandoGira(a)}</span><button className="auto-button subtle" onClick={() => setAperto(a.id)} aria-label={`${t('Apri')}: ${a.nome}`}>↗</button></div>
-        {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
-          const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
-          v.apriConnessioni(mancante?.serve === 'agenda' ? 'calendario' : mancante?.serve === 'sharepoint' ? 'microsoft' : mancante?.serve ?? '')
-        }}>{t('Collega')} ↗</button>}</div>}
-        {a.ultima && <div className="auto-last">{t('Ultima esecuzione')}: {new Date(a.ultima).toLocaleString(loc(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
-      </article>)}</div>
+      {/*
+        Pronte sopra, senza connessione sotto.
+        Un'automazione a cui manca una fonte non è spenta e non è rotta: gira
+        all'ora giusta, non trova niente, e continuerà a non trovare niente
+        finché qualcuno non collega quella fonte. In mezzo alle altre era la
+        cosa più facile da non vedere — la scheda lo diceva, ma solo a chi
+        arrivava a leggerla. Divise, e con il conto sul titolo, la domanda
+        «perché questa non fa niente?» ha una risposta prima di aprirla.
+        Il resto dei guai — l'ultima volta andata storta, quella che non trova
+        mai niente — resta dentro la scheda: si risolvono lì, non collegando.
+      */}
+      {([['Pronte', viste.filter(a => a.salute.stato !== 'scollegata'), 'pronte'],
+         ['Manca una connessione', viste.filter(a => a.salute.stato === 'scollegata'), 'staccate']] as const)
+        .map(([titolo, quali, classe]) => !!quali.length &&
+          <section key={classe} className={`auto-group ${classe}`} aria-labelledby={`auto-gruppo-${classe}`}>
+            <h3 className="auto-group-heading" id={`auto-gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
+            <div className="auto-grid">{quali.map(scheda)}</div>
+          </section>)}
       {!carico && !viste.length && <div className="auto-empty"><h3>{tutte.length ? t('Nessun risultato') : t('Nessuna automazione, per ora.')}</h3><button className="auto-button" onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else setAperto('') }}>{tutte.length ? t('Mostra tutte') : t('Crea automazione')}</button></div>}
     </section>
     {repo && <button className="auto-button subtle" disabled={!!occupato} onClick={() => azione('recipes', async () => { const r = await api.aggiornaRicette(); setTutte(r.automazioni) })}>{t('Cerca automazioni nuove')}</button>}

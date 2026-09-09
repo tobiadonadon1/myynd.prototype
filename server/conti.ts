@@ -379,7 +379,10 @@ function presentaLaCartella(id: string, email: string, creato: string) {
 export async function registra(email: string, password: string, verificato = true):
   Promise<{ ok: true; id: string; token: string } | { ok: false; errore: string }> {
   const e = normale(email)
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, errore: 'Indirizzo non valido.' }
+  // Un indirizzo che sembri un indirizzo: qualcosa prima della chiocciola che
+  // non cominci col punto, un dominio con un punto, almeno due lettere dopo,
+  // niente spazi e niente punti doppi. Prima passava «a@b.1» e anche «a@b..c».
+  if (!/^[^@\s.][^@\s]*@[^@\s]+\.[a-z]{2,}$/.test(e) || e.includes('..')) return { ok: false, errore: 'Indirizzo non valido.' }
   if (password.length < 8) return { ok: false, errore: 'Almeno otto caratteri.' }
   const giaPreso = { ok: false as const, errore: 'C’è già un account con questo indirizzo: entra con la tua password.' }
   if (esiste(e)) return giaPreso

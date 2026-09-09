@@ -1,4 +1,4 @@
-// Il marchio: il cervello-albero, nei nostri colori.
+// Il marchio: una M Helvetica vettoriale.
 //
 // Vettoriale, quindi nitido a ogni misura. Dove c'è spazio entra con una
 // piccola crescita e poi oscilla di un grado; nelle icone piccole sta fermo
@@ -22,11 +22,11 @@ export function Marchio({ dim = 40, animato = true, colore, forma = PREDEFINITA 
   return (
     <svg width={dim} height={alt} viewBox={`0 0 100 ${ALTEZZA}`} style={{ display: 'block', overflow: 'visible' }}>
       <defs>
-        <linearGradient id={`${uid}g`} x1="0" y1="1" x2="0.15" y2="0">
-          <stop offset="0" stopColor="#A34E2D" />
-          <stop offset="0.42" stopColor="#C4623B" />
-          <stop offset="0.78" stopColor="#D8A46E" />
-          <stop offset="1" stopColor="#8FA593" />
+        <linearGradient id={`${uid}g`} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#C26943" />
+          <stop offset="0.42" stopColor="#E4A074" />
+          <stop offset="0.78" stopColor="#BCCDA6" />
+          <stop offset="1" stopColor="#8FAF98" />
         </linearGradient>
       </defs>
 
@@ -45,18 +45,61 @@ export function Marchio({ dim = 40, animato = true, colore, forma = PREDEFINITA 
   )
 }
 
-/** Marchio e parola, come nell'accesso e nella colonna. */
-export function Logo({ dim = 34, animato = true, colore, testo = 22, tinta = 'currentColor', forma }: {
-  dim?: number
+/**
+ * Quanto della tela è inchiostro.
+ *
+ * La sagoma non riempie la sua tela: sopra e sotto c'è un margine di qualche
+ * centesimo, e se si misura la tela invece dell'inchiostro il marchio esce
+ * più basso della d anche a conti fatti. Si legge una volta per forma dai
+ * numeri del tracciato — sono tutti comandi assoluti, quindi ogni coppia è
+ * un punto — e si tiene da parte.
+ */
+const INCHIOSTRI = new Map<string, { alto: number; sotto: number }>()
+function inchiostro(f: Forma): { alto: number; sotto: number } {
+  let v = INCHIOSTRI.get(f.tracciato)
+  if (!v) {
+    const n = f.tracciato.match(/-?\d*\.?\d+/g)?.map(Number) ?? []
+    let min = Infinity, max = -Infinity
+    for (let i = 1; i < n.length; i += 2) { if (n[i] < min) min = n[i]; if (n[i] > max) max = n[i] }
+    v = { alto: (max - min) / f.altezza, sotto: (f.altezza - max) / f.altezza }
+    INCHIOSTRI.set(f.tracciato, v)
+  }
+  return v
+}
+
+/** Le maiuscole di Helvetica Neue, e di Arial dietro: 0,714 em. */
+const MAIUSCOLE = 0.714
+
+/**
+ * Marchio e parola, come nell'accesso e nella colonna.
+ *
+ * Il marchio si misura sulla parola, non il contrario. Prima era largo
+ * `dim` — 29 nel primo avvio — e alto di conseguenza: sporgeva sopra l'asta
+ * della d e sotto la linea di base, e accanto a «myynd» sembrava un cappello
+ * appoggiato lì, non una cosa sola. Adesso l'inchiostro è alto quanto le
+ * maiuscole del carattere e siede sulla stessa linea di base della parola:
+ * il flex allinea le linee di base, e per un disegno la linea di base è il
+ * suo bordo inferiore — il margine della tela sotto l'inchiostro si sconta
+ * con uno spostamento, che non tocca l'impaginazione.
+ */
+export function Logo({ animato = true, colore, testo = 22, tinta = 'currentColor', forma = PREDEFINITA }: {
   animato?: boolean
   colore?: string
+  /** Il corpo della parola: da qui discende la misura del marchio. */
   testo?: number
   tinta?: string
   forma?: Forma
 }) {
+  const { alto, sotto } = inchiostro(forma)
+  const tela = (testo * MAIUSCOLE) / alto
+  const dim = (tela * 100) / forma.altezza
+  /** Il margine della tela sotto l'inchiostro, in pixel: di tanto il disegno scende sulla linea di base. */
+  const scarto = (sotto * tela).toFixed(2)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: dim * 0.26 }}>
-      <Marchio dim={dim} animato={animato} colore={colore} forma={forma} />
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: Math.round(testo * 0.3) }}>
+      <span style={{ display: 'block', lineHeight: 0, transform: `translateY(${scarto}px)` }}>
+        <Marchio dim={dim} animato={animato} colore={colore} forma={forma} />
+      </span>
       <span style={{ fontSize: testo, fontWeight: 300, letterSpacing: '.02em', lineHeight: 1, color: tinta }}>
         myynd
       </span>

@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
 import { frasi, t } from '../lingua'
-import { IconGiu, IconSpunta } from '../icons'
+import { IconAvanti, IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Testo } from '../Testo'
 import { SECCHI, type Lista, type Secchio } from './useCompiti'
@@ -190,7 +190,7 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
         onChange={e => { if (e.target.value === 'io') l.richiama(c.id); else l.delega(c.id, e.target.value) }}>
         {MODI.map(m => <option key={m.id} value={m.id}>{t(m.nome)}</option>)}
       </select>
-      {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} ↗</button>
+      {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
         : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
     </div>
     {c.guaio && <p className="task-planning-error">{t(c.guaio)}</p>}

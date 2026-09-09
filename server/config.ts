@@ -650,20 +650,10 @@ export type Config = {
   /** Il giro di presentazione della lista: fatto una volta, mai più. */
   giro?: boolean
   /**
-   * Il modello che gira su questa macchina, per il lavoro piccolo.
-   *
-   * Assente vuol dire «usalo se c'è»: chi ha già Ollama acceso non deve
-   * accendere niente, e chi non ce l'ha non deve accorgersi che esiste.
-   * `attivo: false` lo spegne di proposito — è l'unico valore che conta,
-   * perché `true` è già il comportamento di serie.
-   */
-  locale?: { attivo?: boolean; modello?: string }
-  /**
    * Ragionare con l'abbonamento di chi usa Myynd, invece che a consumo.
    *
-   * Assente vuol dire spento, al contrario di `locale`. Il modello di casa non
-   * costa niente a nessuno e si può accendere da sé; questo manda il lavoro sul
-   * conto di una persona, e una cosa così si chiede, non si fa e basta.
+   * Assente vuol dire spento: manda il lavoro sul conto di una persona, e una
+   * cosa così si chiede, non si fa e basta.
    */
   abbonamento?: { attivo?: boolean }
   /**
@@ -908,9 +898,6 @@ export function pubblica(c: Config = leggi()) {
     // credere a qualcuno di averla scritta lui
     argomentiDaMe: c.argomentiDaMe === true,
     diSerie: c.diSerie === true,
-    // assente = «usalo se c'è»: il valore vero lo dice /api/modello/locale,
-    // che va a vedere se c'è davvero invece di fidarsi del file
-    locale: { attivo: c.locale?.attivo !== false, modello: c.locale?.modello ?? null },
     abbonamento: { attivo: c.abbonamento?.attivo === true },
     claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo

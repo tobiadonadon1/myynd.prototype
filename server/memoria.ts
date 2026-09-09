@@ -23,6 +23,8 @@
 import { aggiorna, leggi, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
+import * as progetti from './progetti.ts'
+import { nomeNormalizzato, nominaAmbito } from './ambiti-memoria.ts'
 
 /** I blocchi che ogni installazione ha, anche vuoti: sono le domande da riempire. */
 export const BLOCCHI_BASE: { etichetta: string; descrizione: string }[] = [
@@ -150,15 +152,12 @@ export function carta(): string {
 export function cartaDi(ambito: string): string {
   const conv = store.convinzioni(ambito).filter(attendibile)
   if (!conv.length) return ''
-  return `Su ${ambito.replace(/^cliente:/, '')}:\n` +
+  return `Su ${ambito.replace(/^(?:cliente|progetto):/, '')}:\n` +
     conv.slice(0, 8).map(k => `— ${k.enunciato}`).join('\n')
 }
 
-const senzaAccenti = (s: string) =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-
 /**
- * Quello che sa dei clienti che c'entrano con quello di cui si sta parlando.
+ * Quello che sa dei clienti e dei progetti nominati nella richiesta.
  *
  * Le convinzioni su un cliente non possono stare in cima a *ogni* prompt: con
  * venti clienti diventerebbero un muro, e il ritratto smetterebbe di essere un
@@ -169,24 +168,28 @@ const senzaAccenti = (s: string) =>
  * Perciò si guarda: il nome dell'ambito compare in quello che si sta facendo?
  * Allora quelle convinzioni entrano. È l'uso per cui `cartaDi` era stata
  * scritta e che non ha mai avuto, perché nessuno la chiamava.
+ *
+ * Anche un'idea di progetto tenuta nel Punto deve tornare qui: vive in
+ * `progetto:<nome>`, senza entrare nel ritratto generale. I progetti chiusi
+ * restano nello storico, ma non guidano le nuove bozze. Si legge sempre la
+ * memoria attuale: una convinzione ritirata o sostituita smette subito di pesare.
  */
 export function cartaPerContesto(testo: string, tetto = 3): string {
-  const dove = senzaAccenti(testo)
-  if (!dove.trim()) return ''
+  if (!testo.trim() || !Number.isFinite(tetto) || tetto < 1) return ''
 
+  const vivi = new Set(progetti.vivi().map(p => nomeNormalizzato(p.nome)))
   const ambiti = new Set<string>()
   for (const c of store.convinzioni()) {
-    if (!c.ambito.startsWith('cliente:')) continue
     if (!attendibile(c)) continue
-    const nome = senzaAccenti(c.ambito.slice('cliente:'.length)).trim()
-    // sotto le tre lettere un nome è troppo comune per essere un indizio:
-    // «bo» o «li» comparirebbero dentro qualunque parola
-    if (nome.length < 3) continue
-    if (dove.includes(nome)) ambiti.add(c.ambito)
+    const ambito = /^(cliente|progetto):(.+)$/.exec(c.ambito)
+    if (!ambito) continue
+    const [, tipo, nome] = ambito
+    if (tipo === 'progetto' && !vivi.has(nomeNormalizzato(nome))) continue
+    if (nominaAmbito(testo, nome)) ambiti.add(c.ambito)
   }
   if (!ambiti.size) return ''
 
-  return [...ambiti].slice(0, tetto).map(a => cartaDi(a)).filter(Boolean).join('\n\n')
+  return [...ambiti].slice(0, Math.floor(tetto)).map(a => cartaDi(a)).filter(Boolean).join('\n\n')
 }
 
 /**

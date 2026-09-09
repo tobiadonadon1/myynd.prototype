@@ -1,4 +1,6 @@
 .task-calendar {margin-top:24px; padding:22px; background:linear-gradient(140deg,rgba(255,253,248,.9),rgba(247,244,235,.76)); border:1px solid rgba(255,255,255,.96); border-radius:24px; box-shadow:0 10px 36px -24px rgba(71,57,40,.34); color:#22271f;}
+.task-detail-project {width:100%;padding:10px 12px;border:1px solid #d8d9cd;border-radius:10px;background:#fffdf8;color:#333c30;font:inherit;font-size:13px;}
+.task-detail-project:focus-visible {outline:2px solid #7e9c82;outline-offset:2px;}
 .task-calendar button,.task-detail button,.task-view-toggle button {font-family:inherit;cursor:pointer;}
 .task-calendar-toolbar,.task-calendar-agenda-header {display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .task-calendar-month {font-size:16px;font-weight:500;text-transform:capitalize;letter-spacing:-.02em;}

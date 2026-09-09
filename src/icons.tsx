@@ -1,5 +1,27 @@
 type P = { size?: number; style?: React.CSSProperties }
 
+/**
+ * La freccia di casa: asta e punta, un tratto solo.
+ *
+ * Prima erano caratteri (`→`, `↗`), e un carattere dipende dal font: asta
+ * lunga, tratto sottile, e sul fondo scuro sembravano un refuso. Poi un
+ * chevron senza asta, stabile ma non una freccia. Questa è disegnata: asta di
+ * quindici, punta di otto e mezzo per lato, tratto 2,2 con le punte tonde —
+ * pesa quanto la scritta del bottone e non di più, e resta uguale a ogni
+ * misura. I versi sono la stessa freccia girata. Solo «fuori» — si esce, si
+ * apre altrove — è tracciata a parte: una diagonale ottenuta girando la
+ * dritta risulta più corta a occhio, e la punta va dritta negli angoli.
+ */
+export type Verso = 'dx' | 'sx' | 'su' | 'giu' | 'fuori'
+const GIRO: Record<Verso, number> = { dx: 0, giu: 90, sx: 180, su: 270, fuori: 0 }
+export const IconFreccia = ({ size = 14, verso = 'dx', style }: P & { verso?: Verso }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true" focusable="false">
+    {verso === 'fuori'
+      ? <path d="M6.5 17.5 17.5 6.5M9 6.5h8.5V15" />
+      : <path d="M4.5 12h15M13.5 6l6 6-6 6" transform={GIRO[verso] ? `rotate(${GIRO[verso]} 12 12)` : undefined} />}
+  </svg>
+)
+
 export const IconCerca = ({ size = 16, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={style}>
     <circle cx="11" cy="11" r="6.5" /><path d="M16.5 16.5 21 21" />
@@ -12,11 +34,7 @@ export const IconPiu = ({ size = 14, style }: P) => (
   </svg>
 )
 
-export const IconSu = ({ size = 17, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
-    <path d="M12 19V5M6 11l6-6 6 6" />
-  </svg>
-)
+export const IconSu = ({ size = 17, style }: P) => <IconFreccia size={size} verso="su" style={style} />
 
 export const IconCestino = ({ size = 13, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={style}>
@@ -34,15 +52,12 @@ export const IconDoc = ({ size = 22, style }: P) => (
   </svg>
 )
 
-// Una freccia con l'asta, non un chevron: in fondo alla frase ce n'è già uno
-// che apre il testo, e due segni uguali con due significati diversi nella
-// stessa riga si leggono come lo stesso segno rotto. Questa indica la voce —
-// «questa qui» — e la riga intera ci porta sopra.
-export const IconFrecciaDx = ({ size = 13, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
-    <path d="M4 12h14M13 7l5 5-5 5" />
-  </svg>
-)
+// La riga della lista: indica la voce — «questa qui» — e in fondo alla frase
+// c'è un chevron che apre il testo. Due segni diversi per due gesti diversi.
+export const IconFrecciaDx = ({ size = 13, style }: P) => <IconFreccia size={size} style={style} />
+
+/** Avanti, dentro Myynd: continua, o apri il dettaglio qui dentro. */
+export const IconAvanti = ({ size = 13, style }: P) => <IconFreccia size={size} style={style} />
 
 export const IconApri = ({ size = 12, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>

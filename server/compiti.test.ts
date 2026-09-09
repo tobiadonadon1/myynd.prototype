@@ -69,6 +69,26 @@ const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 const nonChiede = async () => ({ chiede: false, manca: [] })
 const nessunaDomanda = async () => []
 
+test('la delega riceve il progetto attuale per ID e conserva le note della riga', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Aurora', obiettivo: 'Lanciare con cinque clienti' })
+  let notaRicevuta: string | null = null
+  compiti.perProva({ svolgi: async (_testo, nota) => {
+    notaRicevuta = nota ?? null
+    return { testo: 'Traccia pronta da rivedere.', fonti: [] }
+  }, chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const id = riga('Preparare il piano')
+  store.cambiaCompito(id, { progetto: p.id, nota: 'Usare la versione breve.' })
+  progetti.cambia(p.id, { nome: 'Aurora Studio', obiettivo: 'Validare con tre clienti' })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.equal(notaRicevuta, 'Progetto: Aurora Studio\nObiettivo: Validare con tre clienti\nUsare la versione breve.')
+  assert.equal(store.compito(id)?.stato, 'pronto')
+  assert.equal(progetti.progresso(p.id).completate, 0)
+  o.smetti()
+})
+
 test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affidata', async () => {
   compiti.perProva({
     svolgi: async (_c, _n, _m, _a, _cart, onPasso) => {

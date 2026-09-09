@@ -299,7 +299,7 @@ export function useCompiti(
     } catch { indietro(prima, id, t('Non sono riuscito a rispondergli.')) }
   }, [indietro])
 
-  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null }): Promise<boolean> => {
+  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; progetto?: string | null }): Promise<boolean> => {
     const prima = compitiRef.current
     setCompiti(cs => cs.map(x => (x.id === id ? { ...x, ...c } as Compito : x)))
     try {

@@ -17,6 +17,8 @@ import * as timone from './timone.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
+import * as progetti from './progetti.ts'
+import * as avvio from './avvio.ts'
 import * as compiti from './compiti.ts'
 import * as automazioni from './automazioni.ts'
 import * as scoperte from './scoperte.ts'
@@ -328,9 +330,19 @@ app.get('/api/auth', async (req, res) => {
 })
 
 app.post('/api/auth/registra', async (req, res) => {
-  const { email, password, invito } = req.body ?? {}
+  const { email, password, invito, nome } = req.body ?? {}
   const e = await auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
+  /*
+   * Il nome, se l'ha detto, nella sua configurazione prima ancora di entrare.
+   *
+   * Si chiede creando il conto e non dopo, perché «dopo» non arrivava mai: il
+   * conto nasceva come «tu», e ogni bozza e ogni risposta erano scritte per
+   * nessuno. Nel contesto del conto nuovo, così finisce nella *sua*
+   * configurazione — anche se l'indirizzo va ancora confermato e la sessione
+   * non c'è.
+   */
+  const comeSiChiama = String(nome ?? '').trim().slice(0, 80)
   /*
    * Senza token, quando l'indirizzo va confermato.
    *
@@ -339,11 +351,14 @@ app.post('/api/auth/registra', async (req, res) => {
    * sessione e poi chiederle di confermare farebbe della conferma una
    * formalità che si può ignorare — cioè niente.
    */
-  chi.dentro(e.utente, () => res.json({
-    ok: true, token: e.token, account: auth.conto(), daVerificare: e.daVerificare === true,
-    // «guarda la posta» si dice solo se la posta è partita davvero
-    mailPartita: e.mailPartita !== false
-  }))
+  chi.dentro(e.utente, () => {
+    if (comeSiChiama) cfg.aggiorna({ nome: comeSiChiama })
+    res.json({
+      ok: true, token: e.token, account: auth.conto(), daVerificare: e.daVerificare === true,
+      // «guarda la posta» si dice solo se la posta è partita davvero
+      mailPartita: e.mailPartita !== false
+    })
+  })
 })
 
 app.post('/api/auth/entra', async (req, res) => {
@@ -642,6 +657,29 @@ app.post('/api/argomenti/proposta', async (_req, res) => {
   catch (e) { errore(res, e) }
 })
 
+// Durable first-project onboarding. Existing authenticated request context
+// scopes both the state file and document/task access to this account.
+app.get('/api/avvio', (_req, res) => {
+  try { res.json(avvio.stato()) }
+  catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
+})
+app.post('/api/avvio/progetto', (req, res) => {
+  try { res.json(avvio.progetto(req.body ?? {})) }
+  catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
+})
+app.post('/api/avvio/fonte', (req, res) => {
+  try { res.json(avvio.fonte(req.body ?? {})) }
+  catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
+})
+app.post('/api/avvio/conferma', (req, res) => {
+  try { res.json(avvio.conferma(req.body ?? {})) }
+  catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
+})
+app.post('/api/avvio/completa', (req, res) => {
+  try { res.json(avvio.completa(req.body ?? {})); compiti.annunciaCambio() }
+  catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
+})
+
 app.post('/api/profilo', async (req, res) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
@@ -735,24 +773,11 @@ app.get('/api/connettori/posta/scopri', async (req, res) => {
   } catch { res.json({ host: null }) }
 })
 
-/**
- * Il modello che gira su questa macchina.
- *
- * Non è una cosa da fare di nascosto. Se una parte del lavoro smette di passare
- * da Claude, chi usa Myynd ha il diritto di saperlo — e di dire di no. Questa
- * rotta va a guardare *davvero* se c'è qualcosa in ascolto, invece di fidarsi
- * di quello che c'è scritto nel file: chi accende Ollama a metà giornata deve
- * vederlo comparire senza riavviare niente.
- */
 /** Quanto ha speso oggi e negli ultimi giorni, e dove sta il tetto. */
 app.get('/api/uso', (_req, res) => {
   try {
     res.json({ oggi: mod.usoDiOggi(), giorni: store.usoPerGiorno(14) })
   } catch (e) { errore(res, e) }
-})
-
-app.get('/api/modello/locale', async (_req, res) => {
-  try { res.json(await mod.statoLocale()) } catch (e) { errore(res, e) }
 })
 
 /**
@@ -775,6 +800,7 @@ app.post('/api/modello/abbonamento', async (req, res) => {
   // le due scritture stanno insieme: `claudeCon` è quella che conta, `attivo`
   // resta per chi legge una configurazione vecchia senza sapere della scelta
   cfg.aggiorna({ abbonamento: { attivo }, claudeCon: attivo ? 'abbonamento' : 'chiave' })
+  if (attivo) abbonamento.riprova()
   try { res.json({ ok: true, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
 })
 
@@ -799,6 +825,7 @@ app.post('/api/modello/claude-con', async (req, res) => {
     return res.status(400).json({ errore: 'Su un server l’abbonamento non si può usare: qui ragiona con una chiave API.' })
   }
   cfg.aggiorna({ claudeCon: con, abbonamento: { attivo: con === 'abbonamento' } })
+  if (con === 'abbonamento') abbonamento.riprova()
   try { res.json({ ok: true, con, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
 })
 
@@ -822,13 +849,6 @@ app.get('/api/modello/claude', async (_req, res) => {
       chiave: { collegata: !!c.claude?.apiKey }
     })
   } catch (e) { errore(res, e) }
-})
-
-app.post('/api/modello/locale', (req, res) => {
-  const attivo = req.body?.attivo !== false
-  const c = cfg.leggi()
-  cfg.aggiorna({ locale: { ...(c.locale ?? {}), attivo } })
-  res.json({ ok: true, attivo })
 })
 
 /** La chiave di Claude può già essere nell'ambiente: se c'è, un clic basta. */
@@ -1760,7 +1780,7 @@ const OGNI = 6 * 60 * 60 * 1000
  * resto: qui lo si lascia salire, e chi chiama lo scrive nel registro.
  */
 async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
-  if (!nuovi.length || !claude.collegato()) return nuovi.length
+  if (!nuovi.length || !await mod.disponibilePer('lettura')) return nuovi.length
 
   const voci = await claude.generaFeed(nuovi)
   const nuove = voci.length ? store.salvaFeed(voci) : 0
@@ -2005,6 +2025,49 @@ app.post('/api/punto/avvia', async (req, res) => {
   catch (e) { errore(res, e) }
 })
 
+// — i progetti —
+//
+// Su cosa sta lavorando, e a cosa punta ciascuno. Sono la cosa che il feed,
+// la rassegna e il punto leggono prima di scegliere: un obiettivo scritto in
+// una riga vale più di trenta documenti. Quattro rotte: l'elenco, uno nuovo,
+// un cambiamento, e la chiusura — che non cancella mai: un progetto chiuso
+// resta scritto, ed è quello che impedisce al punto di reinventarlo.
+
+app.get('/api/progetti', (_req, res) => res.json({ progetti: progetti.elenco() }))
+
+app.get('/api/progetti/:id/attivita', (req, res) => {
+  if (!progetti.trova(req.params.id)) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+  res.json(progetti.progresso(req.params.id))
+})
+
+app.post('/api/progetti', (req, res) => {
+  try {
+    res.json({ ok: true, progetto: progetti.scrivi({ nome: String(req.body?.nome ?? ''), obiettivo: String(req.body?.obiettivo ?? '') }) })
+  } catch (e) { errore(res, e, 400) }
+})
+
+app.patch('/api/progetti/:id', (req, res) => {
+  const c: { nome?: string; obiettivo?: string; stato?: string; note?: string } = {}
+  for (const k of ['nome', 'obiettivo', 'stato', 'note'] as const) {
+    if (req.body?.[k] !== undefined) c[k] = String(req.body[k])
+  }
+  try {
+    // chiudere dal punto e chiudere dalla Memoria sono lo stesso gesto: la
+    // riga esce anche dal punto che la pagina sta mostrando
+    const p = c.stato === 'chiuso' ? (punto.nonEUnProgetto(req.params.id), progetti.cambia(req.params.id, c)) : progetti.cambia(req.params.id, c)
+    if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+    res.json({ ok: true, progetto: p })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/** Chiudere, non cancellare: la storia resta, e un chiuso non torna nel punto. */
+app.delete('/api/progetti/:id', (req, res) => {
+  try {
+    punto.nonEUnProgetto(req.params.id)
+    res.json({ ok: true, progetto: progetti.trova(req.params.id) })
+  } catch (e) { errore(res, e, 404) }
+})
+
 // — compiti —
 //
 // La lista. È l'altra metà del feed: lì c'è quello che Myynd ha notato, qui
@@ -2053,6 +2116,10 @@ app.post('/api/compiti', (req, res) => {
   const quando = SECCHI.includes(String(req.body?.quando)) ? String(req.body.quando) : 'oggi'
   const giorno = req.body?.giorno ?? null
   if (giorno !== null && !giornoValido(giorno)) return res.status(400).json({ errore: 'Data non valida.' })
+  const progetto = req.body?.progetto ?? null
+  if (progetto !== null && (typeof progetto !== 'string' || !progetti.trova(progetto))) {
+    return res.status(400).json({ errore: 'Questo progetto non c’è.' })
+  }
   // l'id lo può portare il client: un compito dettato altrove e uno scritto qui
   // devono poter nascere con lo stesso nome senza chiedere il permesso a nessuno
   const id = String(req.body?.id ?? '').trim() || `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -2061,7 +2128,7 @@ app.post('/api/compiti', (req, res) => {
     store.scriviCompito({
     id, testo,
     nota: req.body?.nota ? String(req.body.nota) : null,
-    quando, giorno,
+    quando, giorno, progetto,
     ordine: ordine.dopo(store.ultimoOrdine(quando)),
     origine: String(req.body?.origine ?? 'mano'),
     voce: req.body?.voce ? String(req.body.voce) : null,
@@ -2088,13 +2155,19 @@ app.patch('/api/compiti/:id', (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   const b = req.body ?? {}
-  const patch: { testo?: string; nota?: string | null; giorno?: string | null } = {}
+  const patch: { testo?: string; nota?: string | null; giorno?: string | null; progetto?: string | null } = {}
   if (b.testo !== undefined) {
     const testo = String(b.testo).trim()
     if (!testo) return res.status(400).json({ errore: 'Un compito senza testo non è un compito.' })
     patch.testo = testo
   }
   if (b.nota !== undefined) patch.nota = b.nota === null ? null : String(b.nota)
+  if (b.progetto !== undefined) {
+    if (b.progetto !== null && (typeof b.progetto !== 'string' || !progetti.trova(b.progetto))) {
+      return res.status(400).json({ errore: 'Questo progetto non c’è.' })
+    }
+    patch.progetto = b.progetto
+  }
   if (b.giorno !== undefined) {
     if (b.giorno !== null && !giornoValido(b.giorno)) return res.status(400).json({ errore: 'Data non valida.' })
     patch.giorno = b.giorno

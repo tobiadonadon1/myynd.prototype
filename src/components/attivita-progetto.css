@@ -1,0 +1,23 @@
+.project-activity {margin-top:10px;font-size:12px;color:#54624e;}
+.project-activity summary {cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;min-height:32px;}
+.project-activity summary::-webkit-details-marker {display:none;}
+.project-activity > summary::before {content:'›';font-size:16px;transform:rotate(0);transition:transform .15s;}
+.project-activity[open] > summary::before {transform:rotate(90deg);}
+.project-activity > summary > span {flex:1;}
+.project-activity small {font-size:10px;color:#5a6753;white-space:nowrap;}
+.project-activity-list {margin-top:6px;}
+.project-activity-task {border-top:1px solid #e0e2d7;padding:5px 0;}
+.project-activity-task summary > span {font-size:12px;line-height:1.5;overflow-wrap:anywhere;color:#303c2c;}
+.project-activity-task small {border-radius:6px;padding:3px 7px;background:#edf0e7;}
+.project-activity-task small[data-state=pronto],.project-activity-task small[data-state=chiede] {color:#914e28;background:#f7e4d7;}
+.project-activity-task small[data-state=fatto] {color:#3e6242;background:#e1ecde;}
+.project-activity-proof {padding:8px 12px;margin:5px 0 8px;background:rgba(255,255,255,.7);border-radius:10px;line-height:1.65;max-height:240px;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap;}
+.project-activity-proof p {margin:5px 0;}
+.project-activity form {display:flex;gap:7px;margin-top:12px;}
+.project-activity input {flex:1;min-width:0;padding:9px 10px;border:1px solid #d6ddcc;background:#fffdf8;color:#303c2c;border-radius:9px;font:inherit;}
+.project-activity button {font:inherit;color:#36543a;border:1px solid #ced9c5;border-radius:9px;padding:8px 12px;cursor:pointer;background:#e8edde;}
+.project-activity button:disabled {opacity:.5;cursor:default;}
+.project-activity :is(input,button,summary):focus-visible {outline:2px solid #7e9c82;outline-offset:3px;}
+.project-activity-error {color:#8e3f1f;}
+.project-activity-empty {color:#6b7463;}
+@media(prefers-reduced-motion:reduce){.project-activity summary::before{transition:none;}}

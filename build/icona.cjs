@@ -94,10 +94,10 @@ function squircle(lato, x = 0, y = 0, r = RAGGIO * lato, s = LISCIATURA) {
  * il viewBox ha dell'aria a sinistra che sposterebbe tutto di un pelo.
  */
 const forma = readFileSync(join(__dirname, '..', 'src', 'components', 'marchio-forma.ts'), 'utf8')
-const cervello = /export const CERVELLO: Forma = \{[^}]*?tracciato: '([^']+)'/s.exec(forma)
-if (!cervello) throw new Error('src/components/marchio-forma.ts: non trovo il tracciato di CERVELLO')
+const cervello = /export const (?:ONDA|CERVELLO): Forma = \{[^}]*?tracciato: '([^']+)'/s.exec(forma)
+if (!cervello) throw new Error('src/components/marchio-forma.ts: non trovo il tracciato del marchio')
 const TRACCIATO = cervello[1]
-const RIQUADRO = { x: 3, y: 2.98, w: 94, h: 99.547 }   // getBBox del tracciato, nelle sue coordinate
+const RIQUADRO = { x: 11.661, y: 10, w: 76.678, h: 80 }   // getBBox del tracciato, nelle sue coordinate
 
 /** La tavolozza dell'app, la stessa di src/index.css e di Marchio.tsx. */
 const COLORI = {
@@ -148,70 +148,18 @@ const LARGHEZZA_MARCHIO = 0.62
 const LARGHEZZA_MARCHIO_PICCOLA = 0.66
 const ALZATA_MARCHIO = 0.015
 
-/**
- * L'icona dell'app: la piastrella terracotta con il marchio ritagliato in crema.
- *
- * Provate tutte e due le strade, e guardate a 1024, 128, 32 e 16.
- *
- *   crema con il marchio a colori — bella a 1024, ma il gradiente del marchio
- *     va dal terracotta alla salvia, e la salvia sul crema quasi non si vede:
- *     a 32 px la metà alta del cervello sbiadisce e a 16 px resta una macchia
- *     rosata su un cartoncino chiaro. Sarebbe anche il bianco di prima,
- *     appena scaldato: il problema di partenza mezzo risolto.
- *   terracotta con il marchio in crema — a 32 px i lobi restano lobi e i
- *     canali si vedono ancora, a 16 px è un anello chiaro su terracotta:
- *     non è più un cervello, ma è *quel* colore lì e si riconosce da lontano.
- *
- * Vince la seconda. Il crema c'è lo stesso, ed è il marchio; il fondo è la
- * terracotta dell'accento. A 16 px il marchio si impasta comunque — i canali
- * fra i lobi sono più sottili di un pixel e non c'è trucco che li salvi
- * senza ridisegnare la sagoma, che è del marchio e non dell'icona.
- *
- * Il rilievo è quello che serve e basta: il gradiente di fondo è già la luce
- * dall'alto, poi un filo chiaro sul bordo superiore e un'ombra molto morbida
- * sul fondo. Niente ombra *fuori* dalla piastrella — quella ce la mette
- * macOS — niente smussi, niente vetro, niente scritte.
- */
+/** White macOS tile with the same orange/green continuous-line mark as the app. */
 function svgApp(misura = TELA) {
   const sq = squircle(LATO, BORDO, BORDO)
-  /*
-   * Sotto i 64 px il filo e l'ombra non arrivano a mezzo pixel: non danno
-   * rilievo, danno sporco sul bordo. Si tolgono, e visto che c'è si allarga
-   * un po' il marchio — quello che a 1024 sarebbe stretto, a 16 è l'unica
-   * cosa che si vede. È lo stesso motivo per cui ogni misura si disegna a
-   * parte invece di rimpicciolire il 1024.
-   */
   const piccola = misura < 64
-  const larghezza = piccola ? LARGHEZZA_MARCHIO_PICCOLA : LARGHEZZA_MARCHIO
-  const rilievo = piccola ? '' : `
-    <path d="${sq}" fill="none" stroke="url(#ombra)" stroke-width="20" filter="url(#sfoca)"/>
-    <path d="${sq}" fill="none" stroke="url(#filo)" stroke-width="3"/>`
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TELA} ${TELA}">
   <defs>
-    <linearGradient id="fondo" x1="0.12" y1="1" x2="0.28" y2="0">
-      <stop offset="0" stop-color="#8F4326"/>
-      <stop offset="0.40" stop-color="${COLORI.terraScura}"/>
-      <stop offset="0.75" stop-color="#C0603A"/>
-      <stop offset="1" stop-color="#CE8A55"/>
-    </linearGradient>
-    <linearGradient id="filo" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.5"/>
-      <stop offset="0.14" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="ombra" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0.84" stop-color="#43200F" stop-opacity="0"/>
-      <stop offset="1" stop-color="#43200F" stop-opacity="0.30"/>
-    </linearGradient>
-    <filter id="sfoca" x="-10%" y="-10%" width="120%" height="120%">
-      <feGaussianBlur stdDeviation="10"/>
-    </filter>
-    <clipPath id="piastrella"><path d="${sq}"/></clipPath>
+    <linearGradient id="fondo" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#24211C"/><stop offset=".55" stop-color="#100E0C"/><stop offset="1" stop-color="#080908"/></linearGradient>
+    <linearGradient id="energia" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#C26943"/><stop offset=".40" stop-color="#E4A074"/><stop offset=".72" stop-color="#BCCDA6"/><stop offset="1" stop-color="#8FAF98"/></linearGradient>
   </defs>
-  <g clip-path="url(#piastrella)">
-    <rect x="${BORDO}" y="${BORDO}" width="${LATO}" height="${LATO}" fill="url(#fondo)"/>
-    ${marchio({ lato: LATO, x: BORDO, y: BORDO, larghezza, alzata: ALZATA_MARCHIO, riempimento: COLORI.crema })}${rilievo}
-  </g>
-</svg>`
+  <path d="${sq}" fill="url(#fondo)"/>
+    ${marchio({ lato: LATO, x: BORDO, y: BORDO, larghezza: piccola ? .73 : .68, alzata: .005, riempimento: 'url(#energia)' })}
+  </svg>`
 }
 
 /*
@@ -233,15 +181,15 @@ const PUNTO = { cx: 84, cy: 87, r: 15, stacco: 6 }
 function svgBarra({ attesa = false, template = false } = {}) {
   // il marchio riempie l'87,5% dell'altezza: come le icone che c'erano prima,
   // e a 16 px un pixel di margine serve a non incollarsi al bordo della barra
-  const alt = RIQUADRO.h / 0.875
+  const alt = Math.max(RIQUADRO.w, RIQUADRO.h) / 0.875
   const vb = `${RIQUADRO.x + RIQUADRO.w / 2 - alt / 2} ${RIQUADRO.y + RIQUADRO.h / 2 - alt / 2} ${alt} ${alt}`
   const tinta = template ? '#000000' : 'url(#g)'
   const defs = template
     ? (attesa ? `<mask id="foro"><rect x="-200" y="-200" width="600" height="600" fill="#fff"/>`
         + `<circle cx="${PUNTO.cx}" cy="${PUNTO.cy}" r="${PUNTO.r + PUNTO.stacco}" fill="#000"/></mask>` : '')
     : `<linearGradient id="g" x1="0" y1="1" x2="0.15" y2="0">`
-        + `<stop offset="0" stop-color="${COLORI.terraScura}"/><stop offset="0.42" stop-color="${COLORI.terra}"/>`
-        + `<stop offset="0.78" stop-color="${COLORI.sabbia}"/><stop offset="1" stop-color="${COLORI.salvia}"/></linearGradient>`
+        + `<stop offset="0" stop-color="#D46A36"/><stop offset="0.42" stop-color="#D7984E"/>`
+        + `<stop offset="0.78" stop-color="#88A16C"/><stop offset="1" stop-color="#4E876C"/></linearGradient>`
   const sagoma = template && attesa
     ? `<g mask="url(#foro)"><path d="${TRACCIATO}" fill="${tinta}"/></g>`
     : `<path d="${TRACCIATO}" fill="${tinta}"/>`

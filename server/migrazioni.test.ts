@@ -94,3 +94,27 @@ test('e una colonna tolta a mano torna al giro dopo', () => {
   const terzo = apriInUnAltroProcesso()
   assert.ok(terzo.colonne.includes('inviato'), 'la colonna tolta non è stata rimessa')
 })
+
+test('la migrazione 33 → 34 conserva testo, pianificazione e bozza delle attività esistenti', () => {
+  const db = new DatabaseSync(MENTE)
+  db.prepare(`INSERT INTO compiti (id, testo, nota, quando, giorno, stato, modo, ordine, risultato, creato, aggiornato)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    'prima-del-progetto', 'Rivedere il preventivo', 'Una nota da conservare', 'settimana', '2026-09-10',
+    'pronto', 'bozza', 'a1', 'La bozza preparata prima dell’aggiornamento', '2026-09-08T10:00:00Z', '2026-09-08T10:30:00Z'
+  )
+  const campi = 'testo, nota, quando, giorno, stato, modo, ordine, risultato, creato, aggiornato'
+  const prima = db.prepare(`SELECT ${campi} FROM compiti WHERE id = ?`).get('prima-del-progetto')
+  db.exec('DROP INDEX IF EXISTS compiti_progetto')
+  db.exec('ALTER TABLE compiti DROP COLUMN progetto')
+  db.exec('PRAGMA user_version = 33')
+  db.close()
+
+  const esito = apriInUnAltroProcesso()
+  assert.ok(esito.versione >= 34)
+  const aggiornata = new DatabaseSync(MENTE)
+  try {
+    assert.deepEqual(aggiornata.prepare(`SELECT ${campi} FROM compiti WHERE id = ?`).get('prima-del-progetto'), prima)
+    assert.equal((aggiornata.prepare('SELECT progetto FROM compiti WHERE id = ?').get('prima-del-progetto') as { progetto: string | null }).progetto, null)
+    assert.ok(aggiornata.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'compiti_progetto'").get())
+  } finally { aggiornata.close() }
+})

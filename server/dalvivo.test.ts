@@ -97,10 +97,7 @@ before(() => {
   if (!CHIAVE) return
   cfg.scrivi({
     nome: 'Tobia', ruolo: 'titolare', tono: 'diretto', autonomia: 'preparare',
-    lingua: 'it', claude: { apiKey: CHIAVE },
-    // il locale si spegne di proposito: questi test devono misurare Claude,
-    // non quello che c'è installato sulla macchina di chi li esegue
-    locale: { attivo: false }
+    lingua: 'it', claude: { apiKey: CHIAVE }
   })
   store.salvaDocumenti(CORPUS)
 })

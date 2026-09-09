@@ -217,24 +217,25 @@ esista, e che chiudendo l'app non resti nessun server in ascolto.
 
 ## Il modello
 
-Tre strade, in quest'ordine di preferenza e di costo:
+Myynd non installa e non scarica nessun modello. Chi ragiona lo si sceglie in
+Preferenze, «Con quale motore lavora», fra tre strade:
 
-1. **Un modello di casa** (Ollama) per i lavori piccoli — titoli, traduzioni,
-   memoria, rassegna — se c'è, e solo sul tuo computer.
-2. **L'abbonamento Claude** di chi usa, attraverso Claude Code, solo sul tuo
-   computer. Si sceglie in Preferenze, «Con quale dei due paghi Claude», e si
-   cambia idea quando si vuole: scelto lui, ci passa **tutto** il lavoro — chat,
-   feed, bozze — e non arriva nessuna bolletta. Le bozze fanno una passata sola
-   sul materiale già trovato invece di poter cercare ancora, perché Claude Code
-   da riga di comando non sa fare il giro degli attrezzi: un po' meno accurate,
-   e gratis. La scheda lo dice a chi sceglie.
-3. **Una chiave API**: Anthropic, oppure un fornitore compatibile con OpenAI
-   (OpenAI, OpenRouter, Groq, Mistral, o Ollama e LM Studio in casa) per tutto
-   il lavoro grosso. Si sceglie nelle preferenze, che mostrano anche quanto si
+1. **Claude con la tua chiave API**, a consumo sul credito Anthropic. È il
+   modello su cui Myynd è stato messo a punto. Le preferenze mostrano quanto si
    è speso oggi e permettono un tetto giornaliero di token.
+2. **Claude con l'abbonamento** di chi usa, attraverso Claude Code, solo sul
+   tuo computer. Scelto lui, ci passa **tutto** il lavoro — chat, feed, bozze —
+   e non arriva nessuna bolletta. Le bozze fanno una passata sola sul materiale
+   già trovato invece di poter cercare ancora, perché Claude Code da riga di
+   comando non sa fare il giro degli attrezzi: un po' meno accurate, e gratis.
+   La scheda lo dice a chi sceglie.
+3. **Un altro fornitore, o un modello sul tuo computer**: qualunque cosa parli
+   la lingua di OpenAI — OpenAI, OpenRouter, Groq, Mistral, oppure Ollama,
+   LM Studio o llama.cpp in casa. Si collega con un indirizzo e il nome di un
+   modello; la chiave solo se il fornitore la vuole.
 
 La tabella `LAVORI` in `server/modello.ts` decide quale lavoro è di frontiera.
-Con la chiave Anthropic, i lavori che non lo sono vanno a Haiku — il più
+Con Claude, i lavori che non lo sono vanno a Haiku — il più
 piccolo della famiglia — anche quando il modello scelto è un altro: sono le
 chiamate più frequenti, e non escono dall'azienda.
 
@@ -287,6 +288,31 @@ prima senza chiamare nessuno). «Rifai il punto» salta le tre ore, non il conto
 del giorno. Nessun timer: lo chiede la pagina quando riprende il fuoco dopo
 un'assenza, o al primo caricamento del giorno. Senza un motore, o su una
 mente vuota, la carta non compare.
+
+## I progetti
+
+Su cosa stai lavorando, e a cosa punta ciascuno: un nome, un obiettivo in una
+riga, uno stato (attivo, fermo, chiuso). Stanno in cima alla Memoria, e sono
+la prima cosa che Myynd legge prima di scegliere. Il feed manda a leggere
+prima i documenti che nominano un progetto — il nome, o due parole
+distintive dell'obiettivo — e ogni voce porta un «perché» in dodici parole
+(`feed.perche`): per quale obiettivo conta, o quale decisione chiede. La
+rassegna sceglie solo quello che tocca un obiettivo o quello che segui con le
+tue parole, con un tetto di **otto notizie al giorno** in tutto (non per giro:
+un giro che ne sceglie zero è un giro giusto; una che apri lascia il suo
+posto, perché il tetto è su quante te ne trovi davanti, non su quante ne hai
+già tolte di mezzo), e ogni notizia dice perché è per te. Il punto legge gli
+stessi obiettivi, dice a che punto sta ciascun progetto rispetto al suo, e
+ogni mossa dice quale obiettivo muove.
+
+Il punto può ancora riconoscere un progetto nuovo dal materiale — uno per
+punto, con l'obiettivo che gli sembra — e quello entra in tabella
+(`progetti`, `origine = 'punto'`). «Non è un progetto», dal punto o dalla
+Memoria, lo **chiude**: la riga resta, e un progetto chiuso non torna, nemmeno
+con un altro nome. Gli angoli tenuti restano nella memoria (`progetto:<nome>`).
+I progetti che il punto teneva in `punto.json` entrano in tabella al primo
+avvio, con la loro data. Rotte: `GET/POST /api/progetti`,
+`PATCH/DELETE /api/progetti/:id` — `DELETE` chiude, non cancella.
 
 ## Le automazioni
 
@@ -426,7 +452,7 @@ server/                 Node 24+, TypeScript eseguito direttamente (solo type st
   chi.ts                di chi è questa richiesta (AsyncLocalStorage)
   config.ts             config.json per persona, 0600
   store.ts              mente.db per persona — SQLite + FTS5 da node:sqlite, migrazioni
-  modello.ts            chi ragiona: locale → abbonamento → chiave; il tetto e il registro dell'uso
+  modello.ts            chi ragiona: abbonamento, chiave o fornitore compatibile; il tetto e il registro dell'uso
   compatibile.ts        il fornitore compatibile con OpenAI, tradotto in forma Anthropic
   claude.ts             il ragionamento: recupero, prompt, strumenti, bozze
   compiti.ts            la coda delle cose affidate a Myynd

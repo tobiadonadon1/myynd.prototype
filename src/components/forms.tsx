@@ -223,9 +223,10 @@ function ConAbbonamento({ tema, ok }: Props) {
 /**
  * Gli indirizzi dei fornitori che conosciamo: un bottone riempie il campo.
  *
- * Gli ultimi due sono in casa — Ollama e LM Studio sulla loro porta di serie —
- * ed è la ragione per cui questo modulo esiste anche per chi non vuole
- * pagare nessuno: lo stesso campo, un indirizzo diverso.
+ * Gli ultimi tre sono in casa — Ollama, LM Studio e llama.cpp sulla loro
+ * porta di serie — ed è la ragione per cui questo modulo esiste anche per chi
+ * non vuole pagare nessuno: lo stesso campo, un indirizzo diverso. Myynd non
+ * installa nessun modello: se ce n'è uno acceso qui, si collega da qui.
  */
 const FORNITORI = [
   { nome: 'OpenAI', url: 'https://api.openai.com/v1' },
@@ -233,7 +234,8 @@ const FORNITORI = [
   { nome: 'Groq', url: 'https://api.groq.com/openai/v1' },
   { nome: 'Mistral', url: 'https://api.mistral.ai/v1' },
   { nome: 'Ollama', url: 'http://127.0.0.1:11434/v1' },
-  { nome: 'LM Studio', url: 'http://127.0.0.1:1234/v1' }
+  { nome: 'LM Studio', url: 'http://127.0.0.1:1234/v1' },
+  { nome: 'llama.cpp', url: 'http://127.0.0.1:8080/v1' }
 ]
 
 /**
@@ -672,7 +674,7 @@ export function FormDesktop({ tema, ok }: Props) {
             {suggeriti.map(c => (
               // il nome e non il percorso intero, ma il percorso resta nel titolo:
               // due «Lavoro» in due posti diversi si distinguono passandoci sopra
-              <button key={c} title={c} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
+              <button key={c} type="button" title={c} aria-pressed={cartelle.includes(c)} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
             ))}
             {desktop() && (
               <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>

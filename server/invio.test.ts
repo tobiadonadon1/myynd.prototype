@@ -194,8 +194,7 @@ const mail = (id: string, sopra: Partial<Documento> = {}): Documento => ({
 
 test('una bozza che risponde a una email va a chi l’ha scritta, con «Re:» e il filo', async () => {
   cfg.scrivi({
-    motore: 'compatibile', compatibile: { url: 'https://finto.test/v1', modello: 'finto', nome: 'Finto' },
-    locale: { attivo: false }
+    motore: 'compatibile', compatibile: { url: 'https://finto.test/v1', modello: 'finto', nome: 'Finto' }
   })
   store.salvaDocumenti([mail('7')])
   const viste = modelloFinto({ a: 'sbagliato@altrove.it', oggetto: 'Un oggetto inventato', corpo: 'Gentile Rossi,\necco il preventivo.' })
@@ -215,8 +214,7 @@ test('una bozza che risponde a una email va a chi l’ha scritta, con «Re:» e 
 
 test('se la bozza è per un altro, il documento sotto non la dirotta al mittente', async () => {
   cfg.scrivi({
-    motore: 'compatibile', compatibile: { url: 'https://finto.test/v1', modello: 'finto', nome: 'Finto' },
-    locale: { attivo: false }
+    motore: 'compatibile', compatibile: { url: 'https://finto.test/v1', modello: 'finto', nome: 'Finto' }
   })
   store.salvaDocumenti([mail('8'), mail('9', {
     titolo: 'Documenti per il bilancio', corpo: 'Buongiorno, mi servono le fatture del trimestre.',
