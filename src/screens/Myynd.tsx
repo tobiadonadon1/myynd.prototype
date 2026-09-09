@@ -396,6 +396,18 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         </div>
       </div>
 
+      {/* Il primo progetto, dalla prima pagina e non da una carta in fondo alle
+          preferenze: finché non c'è, è la cosa che manca, e si dice qui. */}
+      {v.senzaProgetto && (
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '18px 22px', marginBottom: 14 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Nessun progetto ancora.')}</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{t('Un progetto e un obiettivo: da lì scelgo cosa conta.')}</div>
+          </div>
+          <button onClick={v.avviaOnboarding} style={{ ...BOTTONE, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Configura il progetto')} <IconAvanti /></button>
+        </div>
+      )}
+
       {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
           alla card scura perché è la risposta alla domanda con cui si torna. */}
       <Punto v={v} lista={lista} apriCompito={id => setInCima(id)} />

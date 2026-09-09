@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Logo } from '../components/Marchio'
+import { Marchio } from '../components/Marchio'
 import { IconFreccia } from '../icons'
 import { t } from '../lingua'
 import { LightField } from './LightField'
@@ -14,7 +14,8 @@ export function Scena({ momento, children, progetto, salvato, esci, occupato, us
     <LightField quiet={!benvenuto} stage={progressione} />
     <div className="onboard-shade" aria-hidden="true" />
     <header className="onboard-header">
-      <Logo testo={23} tinta="#f6f2eb" animato={false} />
+      {/* il marchio da solo: la parola la dice la schermata */}
+      <Marchio dim={26} animato={false} />
       {/* si esce: la freccia va fuori dall'angolo, non avanti */}
       {esci && <button disabled={occupato} className="onboard-exit" onClick={esci}>{uscita ?? t('Completo più tardi')}<span className="onboard-arrow"><IconFreccia verso="fuori" size={13} /></span></button>}
     </header>

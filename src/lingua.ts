@@ -131,6 +131,22 @@ const EN: Record<string, string> = {
   'L’account è cambiato. Usa un altro account per rientrare.': 'The account changed. Use another account to sign in again.',
   // — creare il conto: la password due volte, e un indirizzo che sembri un indirizzo —
   'Conferma la password': 'Confirm password',
+  // — l'intervista in chat, il progetto dalla prima pagina, e due carte più leggere —
+  'Prima due parole su di te, così so con chi parlo.': 'First, a couple of things about you, so I know who I am talking to.',
+  'Come ti chiamo?': 'What should I call you?',
+  'Che lavoro fai?': 'What do you do?',
+  'Su cosa devo concentrarmi in questo periodo?': 'What should I focus on right now?',
+  'Di cosa vuoi che ti tenga aggiornato?': 'What should I keep you up to date on?',
+  'Con che tono ti scrivo?': 'What tone should I write in?',
+  'Quanto posso fare da solo?': 'How much may I do on my own?',
+  'Fatto. Cambi tutto quando vuoi, dalle preferenze.': 'Done. You can change any of this in Preferences, whenever you like.',
+  'Rispondi qui…': 'Answer here…',
+  'Raccontami di te': 'Tell me about yourself',
+  'Nessun progetto ancora.': 'No project yet.',
+  'Un progetto e un obiettivo: da lì scelgo cosa conta.': 'A project and a goal: that is where I start picking what matters.',
+  'Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.': 'Everything goes: documents, list, chats, memory, automations and sources. There is no way back.',
+  'Apre il richiamo da qualunque programma.': 'Opens the quick bar from any program.',
+  'Un avviso di sistema, solo se Myynd non è davanti.': 'A system notification, only when Myynd is not in front.',
   // — chi ragiona: una carta sola, tre strade; e il nome chiesto al primo giorno —
   'Modello, chiave e utilizzo': 'Model, key and usage',
   'Claude, con la tua chiave API': 'Claude, with your API key',

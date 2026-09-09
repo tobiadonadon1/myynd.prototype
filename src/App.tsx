@@ -258,7 +258,7 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
 function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
   stato: Stato; apriConnessioni: (fonte?: string) => void; esci: () => void; avviaOnboarding: () => void
 }) {
-  const v = useVals(stato, apriConnessioni)
+  const v = useVals(stato, apriConnessioni, avviaOnboarding)
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
   // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
   const lista = useCompiti(v.mostraToast, apriConnessioni)
@@ -519,7 +519,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding }: {
         {v.isChat && <Chat v={v} />}
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
-        {v.isPref && <Preferenze v={v} avviaOnboarding={avviaOnboarding} />}
+        {v.isPref && <Preferenze v={v} />}
         {v.isMemoria && <Memoria />}
         {v.isConn && <Connettori v={v} />}
         {v.isAiuto && <Aiuto v={v} />}

@@ -31,6 +31,8 @@ export type StatoAvvio = {
 
 export type Stato = {
   config: {
+    /** Di chi è questo stato: la mail del conto. Niente, in casa senza conti. */
+    account?: { email: string } | null
     nome: string | null
     ruolo: string | null
     onboarding: boolean

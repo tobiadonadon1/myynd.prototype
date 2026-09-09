@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { DOMANDE, type Campo } from './intervista'
+import type { Progetto } from './api'
 import { sulTavolo } from './tavolo'
 import { costruisci, costruisciDaGrafo, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
@@ -31,7 +33,23 @@ export function taglia(t: string, max: number): string {
   return (spazio > max * 0.6 ? corto.slice(0, spazio) : corto).trimEnd() + '…'
 }
 
-export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void) {
+const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
+const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
+const BOLLA_MIA: CSSProperties = {
+  maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
+  background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
+  color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere', minWidth: 0
+}
+const BOLLA_SUA: CSSProperties = {
+  maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
+  background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+  border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
+  color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere', minWidth: 0
+}
+
+export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => void, avviaOnboarding: () => void = () => {}) {
   const [stato, setStato] = useState<Stato>(iniziale)
   // Va impostata a ogni giro, prima di qualunque calcolo che produca testo:
   // così cambiare lingua nelle preferenze si vede subito, senza ricaricare.
@@ -41,7 +59,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
   // rimontare, così schermata, chat aperta e bozza restano dove sono
   useEffect(() => { setStato(iniziale) }, [iniziale])
-  const [screen, setScreen] = useState<Screen>('myynd')
+  // si apre sulla chat se Myynd ha delle domande da fare: vedi l'intervista, più sotto
+  const [screen, setScreen] = useState<Screen>(() => {
+    try { return !localStorage.getItem(`myynd.intervista.${iniziale.config.account?.email ?? ''}`) && (!iniziale.config.nome || !iniziale.config.ruolo) ? 'chat' : 'myynd' } catch { return 'myynd' }
+  })
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
   const [query, setQuery] = useState('')
@@ -74,6 +95,65 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [scriviAperto, setScriviAperto] = useState(false)
   const [menuAperto, setMenuAperto] = useState(false)
   const [fuoco, setFuoco] = useState('')
+
+  /*
+   * L'intervista: le domande delle preferenze, fatte in chat.
+   *
+   * Parte da sola la prima volta che manca il nome o il lavoro, e si ferma
+   * dove uno la lascia: la chiave in localStorage dice che l'ha vista, così
+   * non torna a ogni apertura. Da «Raccontami di te» si rifà tutta, con le
+   * risposte di adesso già segnate sulle scelte. Non serve un motore: sono
+   * domande scritte, non generate, e devono funzionare al primo minuto.
+   */
+  const chiaveIntervista = `myynd.intervista.${iniziale.config.account?.email ?? ''}`
+  const valoreDi = (campo: Campo, c: Stato['config'], f: string): string =>
+    campo === 'nome' ? (c.nome ?? '') : campo === 'ruolo' ? (c.ruolo ?? '') : campo === 'fuoco' ? f
+    : campo === 'argomenti' ? (c.argomenti ?? '') : campo === 'tono' ? (c.tono ?? '') : (c.autonomia ?? '')
+  /** La prossima domanda dopo `da`: tutte, oppure solo quelle senza risposta e le scelte. */
+  const prossimoPasso = (da: number, tutte: boolean, c: Stato['config'], f: string): number | null => {
+    for (let i = da + 1; i < DOMANDE.length; i++) {
+      const d = DOMANDE[i]
+      if (tutte || d.scelte || !valoreDi(d.campo, c, f)) return i
+    }
+    return null
+  }
+  const intervistaPendente = (() => {
+    try { return !localStorage.getItem(chiaveIntervista) && (!iniziale.config.nome || !iniziale.config.ruolo) } catch { return false }
+  })()
+  const [passo, setPasso] = useState<number | null>(() => intervistaPendente ? prossimoPasso(-1, false, iniziale.config, '') : null)
+  const [tutteLeDomande, setTutteLeDomande] = useState(false)
+  const [battute, setBattute] = useState<{ domanda: string; risposta: string }[]>([])
+  const [intervistaFinita, setIntervistaFinita] = useState(false)
+  /** I progetti: se non ce n'è nessuno, la prima pagina lo dice e offre di farne uno. */
+  const [progetti, setProgetti] = useState<Progetto[] | null>(null)
+  useEffect(() => { api.progetti().then(r => setProgetti(r.progetti)).catch(() => {}) }, [])
+
+  const chiudiIntervista = () => { setPasso(null); setIntervistaFinita(false); setBattute([]) }
+  const avviaIntervista = (tutte: boolean) => {
+    setBattute([]); setIntervistaFinita(false); setTutteLeDomande(tutte)
+    setPasso(prossimoPasso(-1, tutte, stato.config, fuoco))
+    setScreen('chat'); setSearch(false); setMenu(false)
+  }
+  const rispondiIntervista = async (testo: string | null) => {
+    if (passo === null) return
+    const d = DOMANDE[passo]
+    const valore = testo?.trim() ?? ''
+    // saltata: resta la domanda, con un trattino al posto della risposta
+    const detta = valore ? (d.scelte?.find(s => s.id === valore)?.testo ?? valore) : '—'
+    setBattute(b => [...b, { domanda: d.testo, risposta: detta }])
+    const cfgDopo = (valore && d.campo !== 'fuoco' ? { ...stato.config, [d.campo]: valore } : stato.config) as Stato['config']
+    const n = prossimoPasso(passo, tutteLeDomande, cfgDopo, d.campo === 'fuoco' && valore ? valore : fuoco)
+    setPasso(n)
+    if (n === null) { setIntervistaFinita(true); try { localStorage.setItem(chiaveIntervista, '1') } catch { /* incognito */ } }
+    if (!valore) return
+    try {
+      if (d.campo === 'fuoco') await salvaFuoco(valore)
+      else {
+        setStato(s => ({ ...s, config: { ...s.config, [d.campo]: valore } }))
+        await api.profilo({ [d.campo]: valore })
+      }
+    } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
+  }
   const [fuocoAperto, setFuocoAperto] = useState(false)
   const [domanda, setDomanda] = useState<{ id: string; testo: string; spunto: string[] } | null>(null)
   const [rispostaDom, setRispostaDom] = useState('')
@@ -309,7 +389,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     el.scrollTop = el.scrollHeight
     const id = requestAnimationFrame(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight })
     return () => cancelAnimationFrame(id)
-  }, [messaggi.length, screen, pensando])
+  // anche l'intervista: ogni domanda nuova e la chiusura devono arrivare in vista
+  }, [messaggi.length, screen, pensando, battute.length, passo, intervistaFinita])
 
   // aperta la ricerca senza scrivere niente, mostro gli ultimi documenti letti
   const genCerca = useRef(0)
@@ -338,6 +419,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   }
 
   const chiedi = async (testo: string, chatId?: string) => {
+    // una domanda vera chiude l'intervista: le risposte date sono già salvate
+    chiudiIntervista()
     const id = chatId ?? thread ?? `th${Date.now()}`
     // nato adesso: non c'è niente da caricare, e caricare farebbe perdere la risposta
     if (!chatId && !thread) filoNuovo.current = id
@@ -959,36 +1042,48 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     messages: messaggi.map(m => ({
       id: m.id, text: m.text, mio: m.role === 'u',
       hasSources: !!(m.sources && m.sources.length), sources: m.sources ?? [],
-      row: { display: 'flex', justifyContent: m.role === 'u' ? 'flex-end' : 'flex-start' } as CSSProperties,
-      bubble: (m.role === 'u'
-        ? {
-            maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
-            background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
-            color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere', minWidth: 0
-          }
-        : {
-            maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
-            background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
-            color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere', minWidth: 0
-          }) as CSSProperties
+      row: m.role === 'u' ? RIGA_MIA : RIGA_SUA,
+      bubble: m.role === 'u' ? BOLLA_MIA : BOLLA_SUA
     })),
-    prompts: stato.conteggi.totale
-      ? [
-          // il testo mandato al modello è quello tradotto: gli si parla nella
-          // lingua in cui poi deve rispondere
-          { id: 'p1', text: t('Cosa è arrivato oggi?'), onClick: () => chiedi(t('Cosa è arrivato oggi?')) },
-          { id: 'p2', text: t('Chi aspetta una mia risposta?'), onClick: () => chiedi(t('Chi aspetta una mia risposta?')) },
-          { id: 'p3', text: t('Riassumimi la settimana'), onClick: () => chiedi(t('Riassumimi la settimana')) }
-        ]
-      : [],
+    /** Le stesse bolle, per l'intervista: le domande sono sue, le risposte mie. */
+    bolla: { mia: BOLLA_MIA, sua: BOLLA_SUA, rigaMia: RIGA_MIA, rigaSua: RIGA_SUA },
+    intervista: passo !== null || intervistaFinita ? {
+      domanda: passo !== null ? DOMANDE[passo] : null,
+      battute,
+      finita: intervistaFinita,
+      rispondi: (testo: string | null) => { void rispondiIntervista(testo) },
+      chiudi: chiudiIntervista,
+      configuraProgetto: () => { chiudiIntervista(); avviaOnboarding() }
+    } : null,
+    avviaIntervista: () => avviaIntervista(true),
+    senzaProgetto: progetti !== null && progetti.length === 0,
+    avviaOnboarding,
+    prompts: [
+      // le domande su di te si rifanno da qui, e non servono documenti
+      { id: 'p0', text: t('Raccontami di te'), onClick: () => avviaIntervista(true) },
+      ...(stato.conteggi.totale
+        ? [
+            // il testo mandato al modello è quello tradotto: gli si parla nella
+            // lingua in cui poi deve rispondere
+            { id: 'p1', text: t('Cosa è arrivato oggi?'), onClick: () => chiedi(t('Cosa è arrivato oggi?')) },
+            { id: 'p2', text: t('Chi aspetta una mia risposta?'), onClick: () => chiedi(t('Chi aspetta una mia risposta?')) },
+            { id: 'p3', text: t('Riassumimi la settimana'), onClick: () => chiedi(t('Riassumimi la settimana')) }
+          ]
+        : [])
+    ],
     draftMsg,
     onType: (e: { target: { value: string } }) => setDraftMsg(e.target.value),
     // il bottone era già disabilitato mentre risponde; Invio no, e mandava due volte
-    onKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !pensando && draftMsg.trim()) chiedi(draftMsg.trim()) },
-    send: () => { if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim()) },
+    // durante l'intervista Invio risponde a Myynd, non interroga il materiale
+    onKey: (e: React.KeyboardEvent) => {
+      if (e.key !== 'Enter') return
+      if (passo !== null) { if (draftMsg.trim()) { void rispondiIntervista(draftMsg.trim()); setDraftMsg('') } return }
+      if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim())
+    },
+    send: () => {
+      if (passo !== null) { if (draftMsg.trim()) { void rispondiIntervista(draftMsg.trim()); setDraftMsg('') } return }
+      if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim())
+    },
 
     // — mappa —
     mappaMeta: gruppi.length

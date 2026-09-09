@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, sessione, type ClaudeCon, type Gettone } from '../api'
+import { api, sessione, type ClaudeCon } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
@@ -151,7 +151,7 @@ function LApp() {
           <div style={NOTA}>
             {registro
               ? t('Esc lascia com’è.')
-              : t('Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.')}
+              : t('Apre il richiamo da qualunque programma.')}
           </div>
         </div>
         <button type="button" onClick={() => { setGuaio(''); setRegistro(r => !r) }} style={SECONDARIO}>
@@ -173,7 +173,7 @@ function LApp() {
       <div style={RIGA}>
         <div style={TESTO}>
           <div style={{ fontSize: 15 }}>{t('Avvisami quando una bozza è pronta')}</div>
-          <div style={NOTA}>{t('Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.')}</div>
+          <div style={NOTA}>{t('Un avviso di sistema, solo se Myynd non è davanti.')}</div>
         </div>
         <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando una bozza è pronta')}
           onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
@@ -461,7 +461,7 @@ function Identita() {
           <div style={etichetta('chiaro')}>{t('Nome')}</div>
           <input value={nome} onChange={e => setNome(e.target.value)} disabled={!caricato}
             onKeyDown={e => { if (e.key === 'Enter' && caricato) salva() }}
-            placeholder={t('come ti chiamano al lavoro')} className={classeCampo('chiaro')} style={campo('chiaro')} />
+            className={classeCampo('chiaro')} style={campo('chiaro')} />
         </div>
         <div>
           <div style={etichetta('chiaro')}>{t('Ruolo')}</div>
@@ -479,235 +479,6 @@ function Identita() {
         }}>{salvo ? t('Un momento…') : t('Salva')}</button>
         {detto && <span style={{ fontSize: '12.5px', color: '#3E5140' }}>{detto}</span>}
       </div>
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
-  )
-}
-
-function Trasloco() {
-  const [faccio, setFaccio] = useState<'' | 'scarico' | 'carico'>('')
-  const [detto, setDetto] = useState('')
-  const [guaio, setGuaio] = useState('')
-  const [conferma, setConferma] = useState(false)
-  // la password, prima di scaricare: nel file ci sono le credenziali di ogni fonte
-  const [chiedoPassword, setChiedoPassword] = useState(false)
-  const [password, setPassword] = useState('')
-
-  const scarica = async () => {
-    if (!password) { setChiedoPassword(true); return }
-    setFaccio('scarico'); setDetto(''); setGuaio('')
-    try {
-      const { nome, dati } = await api.scaricaTrasloco(password)
-      setPassword(''); setChiedoPassword(false)
-      const url = URL.createObjectURL(dati)
-      const a = document.createElement('a')
-      a.href = url; a.download = nome; a.click()
-      URL.revokeObjectURL(url)
-      setDetto(frasi.traslocoPronto(nome))
-    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    setFaccio('')
-  }
-
-  const carica = async (file: File) => {
-    setFaccio('carico'); setDetto(''); setGuaio(''); setConferma(false)
-    try {
-      const r = await api.caricaTrasloco(file)
-      setDetto(frasi.traslocoArrivato(r.documenti, r.automazioni))
-      // quello che c'è a schermo adesso è di prima: si ricarica tutto
-      setTimeout(() => location.reload(), 1200)
-    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    setFaccio('')
-  }
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Portalo su un’altra macchina')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {t('Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.')}
-      </div>
-      <div style={{
-        fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
-        border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
-        maxWidth: 540, textWrap: 'pretty'
-      }}>
-        {t('Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.')}
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* uno solo pieno: mentre «Sostituisci?» è aperto qui sotto, il pieno è quello */}
-        <button onClick={scarica} disabled={!!faccio} style={{
-          padding: '11px 20px', borderRadius: 99,
-          border: conferma && !faccio ? '1px solid rgba(34,39,31,.18)' : '1px solid transparent',
-          background: faccio ? 'rgba(34,39,31,.18)' : conferma ? 'rgba(255,255,255,.6)' : 'linear-gradient(120deg,#C4623B,#7E9C82)',
-          color: faccio ? 'rgba(34,39,31,.5)' : conferma ? 'rgba(34,39,31,.78)' : '#FFF7F0',
-          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
-          cursor: faccio ? 'default' : 'pointer'
-        }}>{faccio === 'scarico' ? t('Preparo…') : chiedoPassword ? t('Conferma') : t('Scaricalo')}</button>
-        {chiedoPassword && (
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            autoComplete="current-password" placeholder={t('la tua password')}
-            onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }}
-            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 220, marginTop: 0 }} />
-        )}
-
-        <label style={{
-          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer',
-          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-          color: 'rgba(34,39,31,.78)', fontSize: '13px'
-        }}>
-          {faccio === 'carico' ? t('Carico…') : t('Caricane uno')}
-          <input type="file" accept=".myynd,application/gzip" style={{ display: 'none' }}
-            onChange={e => {
-              const f = e.target.files?.[0]
-              e.target.value = ''
-              if (f) { setConferma(true); pronto.current = f }
-            }} />
-        </label>
-      </div>
-
-      {/* Sostituisce, non fonde: va chiesto una volta, e va detto cosa si perde. */}
-      {conferma && (
-        <div style={{
-          marginTop: 12, padding: '12px 14px', borderRadius: 14,
-          border: '1px solid rgba(196,98,59,.35)', background: 'rgba(196,98,59,.08)',
-          fontSize: '13px', lineHeight: 1.55, color: '#8E3F1F', maxWidth: 540, textWrap: 'pretty'
-        }}>
-          {t('Quello che c’è adesso in questo account viene sostituito: documenti, lista, memoria, automazioni. Non si fondono.')}
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button onClick={() => pronto.current && carica(pronto.current)} style={{
-              padding: '8px 15px', borderRadius: 99, border: 'none',
-              background: '#8E3F1F', color: '#FFF7F0', fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer'
-            }}>{t('Sostituisci')}</button>
-            <button onClick={() => setConferma(false)} style={{
-              padding: '8px 15px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-              color: 'rgba(34,39,31,.7)', fontSize: '12.5px'
-            }}>{t('Lascia stare')}</button>
-          </div>
-        </div>
-      )}
-
-      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10 }}>{t(guaio)}</div>}
-    </div>
-  )
-}
-
-/** Il file scelto, in attesa della conferma. Non è stato: non ridisegna niente. */
-const pronto: { current: File | null } = { current: null }
-
-/**
- * I gettoni per le macchine.
- *
- * Serve a una cosa sola oggi — il Mac di casa che spinge i documenti letti
- * verso un Myynd ospitato — e prima quel lavoro si faceva incollando in
- * `MYYND_DESKTOP_REMOTO_TOKEN` un normale token di sessione: trenta giorni di
- * vita, e la morte a ogni cambio di password. Quando moriva, la spinta
- * falliva in silenzio e per sempre.
- *
- * Il gettone si vede **una volta sola**, adesso, quando nasce: sul server ce
- * n'è l'impronta e da quella non si torna indietro. Quindi la carta lo mostra
- * grosso, con accanto le due righe già pronte da incollare — perché il momento
- * in cui va copiato è questo e non ce ne sarà un altro.
- */
-function Gettoni({ ospitato }: { ospitato: boolean }) {
-  const [lista, setLista] = useState<Gettone[] | null>(null)
-  const [nome, setNome] = useState('')
-  const [nato, setNato] = useState('')
-  const [faccio, setFaccio] = useState(false)
-  const [guaio, setGuaio] = useState('')
-
-  const carica = useCallback(() => {
-    api.gettoni()
-      .then(r => setLista(r.gettoni))
-      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
-  }, [])
-  useEffect(carica, [carica])
-
-  const crea = async () => {
-    setFaccio(true); setGuaio(''); setNato('')
-    try {
-      const r = await api.creaGettone(nome, 'desktop')
-      setNato(r.gettone)
-      setLista(r.gettoni)
-      setNome('')
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setFaccio(false)
-  }
-
-  const revoca = async (id: string) => {
-    setGuaio('')
-    try { setLista((await api.revocaGettone(id)).gettoni) }
-    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-  }
-
-  // le due righe da incollare: l'indirizzo di questo Myynd è quello da cui si
-  // sta guardando, e chiederlo a mano sarebbe un modo di farlo sbagliare
-  const righe = `MYYND_DESKTOP_REMOTO=${window.location.origin}\nMYYND_DESKTOP_REMOTO_TOKEN=${nato}`
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '20px 24px 20px 24px', padding: '22px 24px' }}>
-      <div style={LABEL}>{t('Gettoni per le macchine')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {ospitato
-          ? t('Servono al Myynd di casa per spingere qui i documenti che ha letto dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro: con uno di questi non si entra nell’app e non si tocca il conto.')
-          : t('Servono a un altro Myynd — quello su un server — per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.')}
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={nome} onChange={e => setNome(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && nome.trim() && !faccio) crea() }}
-          placeholder={t('il MacBook dell’ufficio')} className={classeCampo('chiaro')}
-          style={{ ...campo('chiaro'), width: 240, marginTop: 0 }} />
-        <button onClick={crea} disabled={!nome.trim() || faccio} style={{
-          padding: '11px 20px', borderRadius: 99, border: 'none',
-          background: nome.trim() && !faccio ? 'linear-gradient(120deg,#C4623B,#7E9C82)' : 'rgba(34,39,31,.18)',
-          color: nome.trim() && !faccio ? '#FFF7F0' : 'rgba(34,39,31,.5)',
-          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: nome.trim() && !faccio ? 'pointer' : 'default'
-        }}>{faccio ? t('Un momento…') : t('Creane uno')}</button>
-      </div>
-
-      {/* una volta sola: non c'è nessun modo di rivederlo, e va detto qui */}
-      {nato && (
-        <div style={{
-          marginTop: 12, padding: '13px 15px', borderRadius: 14,
-          border: '1px solid rgba(126,156,130,.4)', background: 'rgba(126,156,130,.1)', maxWidth: 540
-        }}>
-          <div style={{ fontSize: '12.5px', color: '#3E5140', lineHeight: 1.55, textWrap: 'pretty' }}>
-            {t('Copialo adesso: questa è l’unica volta che si vede. Incolla queste due righe nel Myynd di casa.')}
-          </div>
-          <pre style={{
-            margin: '10px 0 0', padding: '10px 12px', borderRadius: 10, background: 'rgba(34,39,31,.06)',
-            fontSize: '11.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre', userSelect: 'all'
-          }}>{righe}</pre>
-        </div>
-      )}
-
-      {lista && lista.length > 0 && (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 540 }}>
-          {lista.map(g => (
-            <div key={g.id} style={{
-              display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px', borderRadius: 12,
-              background: 'rgba(255,255,255,.55)'
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14px', overflowWrap: 'anywhere' }}>{g.nome}</div>
-                <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.55)', marginTop: 2 }}>
-                  {g.ambito} · {g.usato ? `${t('ultimo uso')} ${new Date(g.usato).toLocaleDateString()}` : t('mai usato')}
-                </div>
-              </div>
-              <button onClick={() => revoca(g.id)} style={{
-                flex: 'none', padding: '7px 14px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-                border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-                color: '#8E3F1F', fontSize: '12.5px'
-              }}>{t('Revoca')}</button>
-            </div>
-          ))}
-        </div>
-      )}
-      {lista && lista.length === 0 && (
-        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 12 }}>{t('Non ne hai ancora nessuno.')}</div>
-      )}
       {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
@@ -804,7 +575,7 @@ function Cancella() {
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
       <div style={LABEL}>{t('Cancella il conto')}</div>
       <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {t('Sparisce tutto: i documenti che ho letto, la lista, le chat, quello che ho imparato su di te, le automazioni e le fonti collegate. Non si torna indietro, e non ne tengo una copia. Se vuoi portarti via qualcosa, fallo prima da qui sopra.')}
+        {t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}
       </div>
 
       {!aperto ? (
@@ -1117,7 +888,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   )
 }
 
-export function Preferenze({ v, avviaOnboarding }: { v: Vals; avviaOnboarding?: () => void }) {
+export function Preferenze({ v }: { v: Vals }) {
   type Sezione = 'myynd' | 'intelligenza' | 'dati' | 'account'
   const [sezione, setSezione] = useState<Sezione>('myynd')
   const sezioni: { id: Sezione; titolo: string; nota: string }[] = [
@@ -1153,17 +924,6 @@ export function Preferenze({ v, avviaOnboarding }: { v: Vals; avviaOnboarding?: 
           </div>
 
       {sezione === 'myynd' && <>
-      {avviaOnboarding && <div className="prefs-setup-card">
-        <div>
-          <span className="prefs-eyebrow">{t('Punto di partenza')}</span>
-          <h3>{t('Il tuo primo progetto')}</h3>
-          <p>{t('Rivedi il progetto, l’obiettivo, la fonte e la prima attività che orientano Myynd.')}</p>
-        </div>
-        <button type="button" onClick={avviaOnboarding}>
-          {t('Rivedi configurazione')} <IconAvanti />
-        </button>
-      </div>}
-
       {/*
         Il fuoco sta qui e non più come pastiglia sopra al feed.
         È una preferenza a tutti gli effetti — vale per tutte le letture che
@@ -1279,7 +1039,6 @@ export function Preferenze({ v, avviaOnboarding }: { v: Vals; avviaOnboarding?: 
       </div>
 
       <Fascicolo />
-      <Trasloco />
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: '24px 20px 24px 20px', padding: '22px 24px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
@@ -1296,8 +1055,6 @@ export function Preferenze({ v, avviaOnboarding }: { v: Vals; avviaOnboarding?: 
       {sezione === 'account' && <>
 
       <Conto />
-
-      <Gettoni ospitato={v.ospitato} />
 
       {/* solo dentro l'app da scrivania: nel browser la carta non si disegna */}
       <LApp />

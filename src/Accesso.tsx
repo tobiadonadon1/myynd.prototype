@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { LightField } from './onboarding/LightField'
 import { api, DaVerificare, type Accesso as TipoAccesso } from './api'
 import { lingua, ricordaLingua, t } from './lingua'
-import { Logo } from './components/Marchio'
+import { Marchio } from './components/Marchio'
 import { Hov, useLarghezza } from './ui'
 import './accesso.css'
 
@@ -277,7 +277,7 @@ export function Accesso({ accesso, entrato }: {
             {/* stretta, il marchio sta qui: è comunque la prima cosa che si vede */}
             {!largo && (
               <div style={{ marginBottom: 22, ...su(0) }}>
-                <Logo testo={26} tinta={INCHIOSTRO} />
+                <Marchio dim={34} />
               </div>
             )}
             {!largo && (
@@ -342,8 +342,7 @@ export function Accesso({ accesso, entrato }: {
             <div style={su(.18)}>
               {modo === 'crea' && (
                 <Casella etichetta={t('Il tuo nome')} value={nome} onChange={e => setNome(e.target.value)}
-                  onKeyDown={tasto} autoComplete="name" autoFocus maxLength={80}
-                  placeholder={t('come ti chiamano al lavoro')} />
+                  onKeyDown={tasto} autoComplete="name" autoFocus maxLength={80} />
               )}
               {modo !== 'nuova' && (
                 <Casella key={modo === 'crea' ? 'crea' : 'accesso'} etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
@@ -359,20 +358,7 @@ export function Accesso({ accesso, entrato }: {
                   autoComplete={registrato ? 'current-password' : 'new-password'}
                   autoFocus={modo === 'nuova'}
                   placeholder={registrato ? '' : t('otto caratteri')}
-                  coda={
-                    <button type="button" onClick={() => setVedi(v => !v)}
-                      aria-label={vedi ? t('Nascondi la password') : t('Mostra la password')}
-                      title={vedi ? t('Nascondi la password') : t('Mostra la password')}
-                      style={{
-                        position: 'absolute', right: 6, top: 6, bottom: 0, width: 40,
-                        display: 'grid', placeItems: 'center',
-                        border: 'none', background: 'none', cursor: 'pointer', padding: 0,
-                        color: vedi ? '#f6f2eb' : '#bdb0a4',
-                        transition: 'color .18s'
-                      }}>
-                      <Occhio aperto={vedi} />
-                    </button>
-                  } />
+                  coda={<Occhiello vedi={vedi} cambia={() => setVedi(x => !x)} />} />
               )}
 
               {/* due volte, qui come dove si cambia: e se non tornano lo si vede mentre si scrive */}
@@ -380,6 +366,7 @@ export function Accesso({ accesso, entrato }: {
                 <Casella etichetta={t('Conferma la password')} value={ripeti}
                   onChange={e => setRipeti(e.target.value)} onKeyDown={tasto}
                   type={vedi ? 'text' : 'password'} autoComplete="new-password"
+                  coda={<Occhiello vedi={vedi} cambia={() => setVedi(x => !x)} />}
                   errore={ripeti && password !== ripeti ? t('Le due password non coincidono.') : undefined} />
               )}
 
@@ -478,7 +465,7 @@ function titoloAccesso(modo: Modo) {
 
 function Pitch({ modo }: { modo: Modo }) {
   return <div className="accesso-pitch">
-    <div className="accesso-mark" style={su(0)}><Logo testo={25} tinta={INCHIOSTRO} /></div>
+    <div className="accesso-mark" style={su(0)}><Marchio dim={36} /></div>
     <h1 className="accesso-title" style={su(.07)}>{titoloAccesso(modo)}</h1>
     {modo === 'entra' && <p style={su(.14)}>{t('Riprende da dove l’hai lasciata.')}</p>}
   </div>
@@ -625,6 +612,24 @@ function Casella({ etichetta, coda, errore, ...campo }: {
         }}>{errore}</div>
       )}
     </label>
+  )
+}
+
+/** Il bottone con l'occhio, dentro la casella: uno solo, e sta su tutt'e due le password. */
+function Occhiello({ vedi, cambia }: { vedi: boolean; cambia: () => void }) {
+  return (
+    <button type="button" onClick={cambia}
+      aria-label={vedi ? t('Nascondi la password') : t('Mostra la password')}
+      title={vedi ? t('Nascondi la password') : t('Mostra la password')}
+      style={{
+        position: 'absolute', right: 6, top: 6, bottom: 0, width: 40,
+        display: 'grid', placeItems: 'center',
+        border: 'none', background: 'none', cursor: 'pointer', padding: 0,
+        color: vedi ? '#f6f2eb' : '#bdb0a4',
+        transition: 'color .18s'
+      }}>
+      <Occhio aperto={vedi} />
+    </button>
   )
 }
 
