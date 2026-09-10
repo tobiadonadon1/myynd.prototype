@@ -39,8 +39,6 @@ function Intervista({ v }: { v: Vals }) {
             <Hov key={s.id} as="button" onClick={() => i.rispondi(s.id)} style={PASTIGLIA}
               hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>{t(s.testo)}</Hov>
           ))}
-          <Hov as="button" onClick={() => i.rispondi(null)} style={{ ...PASTIGLIA, color: 'rgba(34,39,31,.6)' }}
-            hover={{ background: '#FFFFFF' }}>{t('Salta')}</Hov>
         </div>
       </>}
       {i.finita && <>

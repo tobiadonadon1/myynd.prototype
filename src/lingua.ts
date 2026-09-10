@@ -131,6 +131,9 @@ const EN: Record<string, string> = {
   'L’account è cambiato. Usa un altro account per rientrare.': 'The account changed. Use another account to sign in again.',
   // — creare il conto: la password due volte, e un indirizzo che sembri un indirizzo —
   'Conferma la password': 'Confirm password',
+  'Prima scrivi l’attività, poi la fonte.': 'Write the task first, then the source.',
+  'Myynd ti ha scritto.': 'Myynd has written to you.',
+  'Ha qualche domanda per conoscerti: due minuti.': 'A few questions to get to know you: two minutes.',
   // — l'introduzione del primo avvio: cinque momenti, una figura per momento —
   'Quello che legge': 'What it reads',
   'Legge quello': 'It reads what',

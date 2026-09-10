@@ -396,6 +396,19 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         </div>
       </div>
 
+      {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
+          cima a tutto, perché rispondergli viene prima del resto. */}
+      {v.chatDaLeggere && (
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'linear-gradient(130deg,#8e3f1f,#a66b4c 60%,#4a3a31)', color: '#FFF7F0', padding: '18px 22px', marginBottom: 14, boxShadow: '0 22px 52px rgba(84,64,44,.18)' }}>
+          <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: '#FFF7F0' }} />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Myynd ti ha scritto.')}</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(255,247,240,.78)', marginTop: 3, textWrap: 'pretty' }}>{t('Ha qualche domanda per conoscerti: due minuti.')}</div>
+          </div>
+          <button onClick={v.goChat} style={{ ...PIENO_SCURO, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Rispondi')} <IconAvanti /></button>
+        </div>
+      )}
+
       {/* Il primo progetto, dalla prima pagina e non da una carta in fondo alle
           preferenze: finché non c'è, è la cosa che manca, e si dice qui. */}
       {v.senzaProgetto && (

@@ -41,10 +41,11 @@ const BOLLA_MIA: CSSProperties = {
   color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere', minWidth: 0
 }
+// piatta: la sfocatura e l'ombra larga facevano un alone fra una bolla e l'altra
 const BOLLA_SUA: CSSProperties = {
   maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
-  background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-  border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 16px 40px rgba(84,64,44,.1)',
+  background: 'rgba(255,253,249,.92)',
+  border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 1px 2px rgba(84,64,44,.06)',
   color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere', minWidth: 0
 }
@@ -59,10 +60,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
   // rimontare, così schermata, chat aperta e bozza restano dove sono
   useEffect(() => { setStato(iniziale) }, [iniziale])
-  // si apre sulla chat se Myynd ha delle domande da fare: vedi l'intervista, più sotto
-  const [screen, setScreen] = useState<Screen>(() => {
-    try { return !localStorage.getItem(`myynd.intervista.${email}`) && (!iniziale.config.nome || !iniziale.config.ruolo) ? 'chat' : 'myynd' } catch { return 'myynd' }
-  })
+  // sempre sulla prima pagina: se Myynd ha delle domande, lo dice lì — un
+  // pallino sulla chat e una carta in cima — invece di aprire la chat al posto tuo
+  const [screen, setScreen] = useState<Screen>('myynd')
   const [menu, setMenu] = useState(false)
   const [search, setSearch] = useState(false)
   const [query, setQuery] = useState('')
@@ -1057,6 +1057,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       configuraProgetto: () => { chiudiIntervista(); avviaOnboarding() }
     } : null,
     avviaIntervista: () => avviaIntervista(true),
+    /** Myynd ha scritto e aspetta: il pallino sulla chat e la carta in cima alla prima pagina. */
+    chatDaLeggere: passo !== null,
     senzaProgetto: progetti !== null && progetti.length === 0,
     avviaOnboarding,
     prompts: [

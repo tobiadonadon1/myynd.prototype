@@ -412,6 +412,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             <IconChat style={{ flex: 'none' }} />
             {!rail && <span style={{ flex: 1 }}>{t('Chat')}</span>}
+            {/* Myynd ha scritto: il pallino resta finché non gli rispondi */}
+            {v.chatDaLeggere && <span style={{ width: 7, height: 7, flex: 'none', borderRadius: '50%', background: v.isChat ? '#FFF7F0' : '#C4623B' }} />}
           </a>
 
           {/* l'elenco delle conversazioni non ci sta in una fila di icone:

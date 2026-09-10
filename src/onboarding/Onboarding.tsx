@@ -270,7 +270,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           <div className="onboard-result-body"><span className="onboard-result-label">{t('Obiettivo')}</span><p>{risultato.traccia.obiettivo}</p>{risultato.traccia.estratti.length > 0 && <><span className="onboard-result-label">{t('Estratti confermati')}</span>{risultato.traccia.estratti.map((e, i) => <blockquote key={`${e.doc}-${i}`}>{e.testo}<cite>{e.titolo}</cite></blockquote>)}</>}</div>
           <div className="onboard-result-source">{risultato.progetto.nome} · {t('Attività ancora da svolgere')}</div>
         </div> : <>
-          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => setAzione(e.target.value)} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Un’azione concreta, con le tue parole.')} /></label>
+          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => { setAzione(e.target.value); if (errore) setErrore('') }} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Un’azione concreta, con le tue parole.')} /></label>
           {/* La data e la fonte fanno parte dell'attività: due righe con la loro etichetta, sempre in vista. */}
           <div className="onboard-options">
             <div className="onboard-option">
@@ -280,7 +280,11 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
                 <label className={`onboard-chip onboard-chip-date${altroGiorno ? ' is-on' : ''}`}><input type="date" disabled={occupato} value={giorno} aria-label={t('Data')} onInput={e => setGiorno(e.currentTarget.value)} onChange={e => setGiorno(e.target.value)} /></label>
               </div>
             </div>
-            <button type="button" className="onboard-option onboard-option-button" disabled={occupato} onClick={() => vai(1)}>
+            <button type="button" className="onboard-option onboard-option-button" disabled={occupato} onClick={() => {
+              // prima la domanda, poi la fonte: la fonte serve all'attività, non il contrario
+              if (!azione.trim()) { setErrore(t('Prima scrivi l’attività, poi la fonte.')); titolo.current?.closest('.onboard-panel')?.querySelector<HTMLElement>('textarea')?.focus(); return }
+              vai(1)
+            }}>
               <span className="onboard-option-label">{t('Fonte')}</span>
               <span className="onboard-option-body">{letta ? <><ConnectorIcon id={letta.id} size={16} /><strong>{t(letta.nome)}</strong><em>{t('Cambia')}</em></> : <><strong>{t('Aggiungi una fonte')}</strong><small>{t('Myynd la legge e cita quello che serve al progetto.')}</small></>}</span>
               <span className="onboard-arrow onboard-option-arrow"><IconFreccia /></span>
