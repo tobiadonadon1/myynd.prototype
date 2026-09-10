@@ -194,6 +194,26 @@ test('il catalogo non ha due voci con lo stesso id', () => {
   assert.deepEqual(doppi.map(c => c.id), [])
 })
 
+test('la fonte del computer si chiama come la macchina, e il suo id non cambia', () => {
+  /*
+   * «Desktop» era il nome della cartella, e chi lo leggeva capiva quello: che
+   * Myynd guardasse la Scrivania e basta — non i Download, non i Documenti,
+   * non iCloud. La fonte è la macchina intera, e il nome deve dirla.
+   */
+  assert.equal(registro.nomeComputer('darwin'), 'Il mio Mac')
+  assert.equal(registro.nomeComputer('win32'), 'Il mio PC')
+  // tutto quello che non è un Mac è un PC: linux compreso, che non è un caso
+  // a parte per chi legge
+  assert.equal(registro.nomeComputer('linux'), 'Il mio PC')
+
+  const v = registro.CATALOGO.find(c => c.id === 'desktop')
+  assert.ok(v, 'l’id resta «desktop»: è la chiave della configurazione, degli id dei documenti e degli attrezzi')
+  // calcolato, non riscritto a mano: due posti che dicono il nome sono due
+  // posti che smettono di dirlo uguale
+  assert.equal(v.nome, registro.nomeComputer(process.platform))
+  assert.equal(v.nota, 'Tutto quello che tieni sul computer, in sola lettura: cartelle, file, download.')
+})
+
 test('gli attrezzi non hanno due volte lo stesso nome né la stessa tinta', () => {
   const nomi = attrezzi.ATTREZZI.map(a => a.nome)
   assert.equal(new Set(nomi).size, nomi.length, 'due attrezzi con lo stesso nome')
@@ -345,9 +365,15 @@ function arredaLaCasa() {
   }
   return {
     contratto: scrivi('Desktop/contratto.md'),
+    // i Download sono metà di quello che una persona riceve, e non stanno in
+    // nessun elenco di salti: è la cartella che il nome vecchio della fonte
+    // faceva credere esclusa
+    scaricato: scrivi('Downloads/fattura.md'),
     // otto cartelle sotto la casa: oltre il tetto delle cartelle scelte (6), dentro quello di tutto il Mac (10)
     profondo: scrivi('Documents/a/b/c/d/e/f/g/profondo.md'),
     icloud: scrivi('Library/Mobile Documents/com~apple~CloudDocs/Lavoro/icloud.md'),
+    // la `Library` di Windows: cache, registri, dati interni dei programmi
+    appdata: scrivi('AppData/Local/Roba/registro.md'),
     posta: scrivi('Library/Mail/V10/posta.md'),
     canzone: scrivi('Music/Logic/canzone.txt'),
     foto: scrivi('Pictures/Photos Library.photoslibrary/foto.md'),
@@ -369,11 +395,55 @@ test('le radici di tutto il Mac sono la casa e, se c’è, iCloud Drive', () => 
   assert.deepEqual(desktop.radici({ cartelle: ['/altrove'], tutto: true }), desktop.radiciTutto())
 })
 
-test('tutto il Mac legge la scrivania, i documenti profondi e iCloud, e salta quello che non è tuo', async () => {
+test('su Windows le radici sono la casa e OneDrive, e solo se OneDrive sta fuori', () => {
+  const casa = join(CASA, 'windows-casa')
+  mkdirSync(casa, { recursive: true })
+  const prima = process.env.OneDrive
+  try {
+    delete process.env.OneDrive
+    assert.deepEqual(desktop.radiciTutto(casa, 'win32'), [casa], 'senza OneDrive resta %USERPROFILE%')
+
+    // il caso normale: `%USERPROFILE%\OneDrive`, cioè dentro la casa. È già
+    // percorso — aggiungerlo vorrebbe dire leggerlo due volte e dimezzare il
+    // tetto per cartella su metà dei documenti che contano
+    const dentro = join(casa, 'OneDrive')
+    mkdirSync(dentro, { recursive: true })
+    process.env.OneDrive = dentro
+    assert.deepEqual(desktop.radiciTutto(casa, 'win32'), [casa])
+
+    // spostato su un altro disco: lì la casa non ci arriva, ed è una radice a parte
+    const fuori = join(CASA, 'D-disco', 'OneDrive')
+    mkdirSync(fuori, { recursive: true })
+    process.env.OneDrive = fuori
+    assert.deepEqual(desktop.radiciTutto(casa, 'win32'), [casa, fuori])
+
+    // una variabile rimasta indietro non deve far fallire il collegamento
+    // intero: `prova` si ferma alla prima radice che non si apre
+    process.env.OneDrive = join(CASA, 'questa-cartella-non-esiste')
+    assert.deepEqual(desktop.radiciTutto(casa, 'win32'), [casa])
+
+    // iCloud non c'entra niente con Windows, anche se la cartella c'è
+    mkdirSync(join(casa, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'), { recursive: true })
+    assert.deepEqual(desktop.radiciTutto(casa, 'win32'), [casa])
+  } finally {
+    if (prima === undefined) delete process.env.OneDrive
+    else process.env.OneDrive = prima
+  }
+})
+
+test('tutto il computer legge scrivania, documenti, download e iCloud, e salta quello che non è tuo', async () => {
   const f = arredaLaCasa()
   const e = await desktop.sincronizza({ cartelle: [], tutto: true })
   const ids = e.docs.map(d => d.id).sort()
-  assert.deepEqual(ids, [f.contratto, f.icloud, f.profondo].map(p => `desktop:${p}`).sort())
+  assert.deepEqual(ids, [f.contratto, f.scaricato, f.icloud, f.profondo].map(p => `desktop:${p}`).sort())
+  // le quattro che una persona nomina quando dice «il mio computer», una per una
+  for (const p of [f.contratto, f.scaricato, f.profondo, f.icloud]) {
+    assert.ok(ids.includes(`desktop:${p}`), `${p} doveva essere letto`)
+  }
+  // le app non sono documenti: dentro c'è roba di chi le ha scritte, non tua
+  assert.ok(!ids.includes(`desktop:${f.app}`), 'le applicazioni restano fuori')
+  // `AppData` è la `Library` di Windows, e si salta per la stessa ragione
+  assert.ok(!ids.includes(`desktop:${f.appdata}`), 'AppData resta fuori')
   assert.equal(e.troncato, false)
   assert.deepEqual(e.complete, desktop.radiciTutto(CASA), 'le due radici, percorse tutte, si possono riconciliare')
   assert.deepEqual(e.saltatiProgetti, [join(CASA, 'Progetti', 'app')])
@@ -404,6 +474,12 @@ test('daSaltare e saltaDalNome conoscono le regole di tutto il Mac, dal nome e p
   assert.equal(desktop.saltaDalNome(musica, CASA, false), false)
   assert.equal(desktop.saltaDalNome(join(CASA, 'Library', 'Caches', 'x.md'), CASA, true), true)
   assert.equal(desktop.saltaDalNome(join(CASA, 'Desktop', 'nota.md'), CASA, true), false)
+  // i Download non stanno in nessun elenco di salti, con `tutto` e senza
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Downloads', 'fattura.md'), CASA, true), false)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Downloads', 'fattura.md'), CASA, false), false)
+  // `AppData` è la `Library` di Windows: solo con tutto il computer, come le altre
+  assert.equal(desktop.saltaDalNome(join(CASA, 'AppData', 'Local', 'x.md'), CASA, true), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'AppData', 'Local', 'x.md'), CASA, false), false)
   const profondo = join(CASA, 'Documents/a/b/c/d/e/f/g/profondo.md')
   assert.equal(desktop.saltaDalNome(profondo, CASA, true), false)
   assert.equal(desktop.saltaDalNome(profondo, CASA, false), true, 'otto cartelle sono troppe per le cartelle scelte')

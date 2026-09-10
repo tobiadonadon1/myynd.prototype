@@ -122,10 +122,42 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
   mio.smetti(); altro.smetti()
 })
 
+test('un risultato con le lineette arriva pulito, in fonte come nell\'email', async () => {
+  let bozzaVistaDaEmail = ''
+  compiti.perProva({
+    svolgi: async () => ({
+      testo: 'Il succo in una riga — la parte che conta.\n\nGentile Rossi — ecco il preventivo — a presto.',
+      fonti: []
+    }),
+    chiedeAiuto: nonChiede,
+    domandeDaFare: nessunaDomanda,
+    postaCollegata: () => true,
+    preparaEmail: async (_c, bozza) => { bozzaVistaDaEmail = bozza; return emailFinta() }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const pronto = await o.aspetta('pronto')
+
+  const risultato = pronto.fase === 'pronto' ? pronto.compito.risultato : null
+  assert.equal(risultato, 'Il succo in una riga. La parte che conta.\n\nGentile Rossi. Ecco il preventivo. A presto.')
+  assert.ok(!risultato?.includes('—'), `lineetta lunga rimasta: ${risultato}`)
+  assert.equal(store.compito(id)!.risultato, risultato)
+
+  // la stessa pulizia arriva a chi smonta l'email: non una bozza pulita e
+  // un'email che porta ancora gli incisi del modello
+  assert.equal(bozzaVistaDaEmail, risultato)
+  o.smetti()
+})
+
 test('una riga in modo prompt arriva a «pronto» senza che nessuno prepari una email', async () => {
   // il prompt parla di una email, con tanto di saluto: è esattamente il testo
   // su cui `sembraUnMessaggio` direbbe di sì
   const prompt = 'Scrivi un\'email a Rossi.\n\nComincia con «Gentile Rossi» e chiudi con «Cordiali saluti».\n\nFonti:\n— [1] Listino 2026: il prezzo\n\nManca il preventivo di marzo.'
+  // `svolgiUno` passa tutto da `senzaTrattini` prima di salvare, anche un
+  // prompt: la lineetta a inizio riga diventa il trattino di un elenco, come
+  // in qualunque altro risultato
+  const pulito = 'Scrivi un\'email a Rossi.\n\nComincia con «Gentile Rossi» e chiudi con «Cordiali saluti».\n\nFonti:\n- [1] Listino 2026: il prezzo\n\nManca il preventivo di marzo.'
   let preparate = 0
   compiti.perProva({
     svolgi: async (_c, _n, modo) => {
@@ -142,7 +174,7 @@ test('una riga in modo prompt arriva a «pronto» senza che nessuno prepari una 
   compiti.affida(id, 'prompt')
   const pronto = await o.aspetta('pronto')
 
-  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, prompt)
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, pulito)
   const c = store.compito(id)!
   assert.equal(c.stato, 'pronto')
   assert.equal(c.modo, 'prompt')

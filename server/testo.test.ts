@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua } from './testo.ts'
+import { riflua, senzaTrattini } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -91,4 +91,19 @@ test('un testo già a paragrafi non si tocca', () => {
 test('poche righe non bastano per indovinare la colonna: non si tocca niente', () => {
   const corto = 'Una riga.\nE un\'altra.'
   assert.equal(riflua(corto), corto)
+})
+
+test('le lineette diventano punti, e la frase dopo riparte con la maiuscola', () => {
+  assert.equal(senzaTrattini('Finire i testi del sito — ancora segnato per oggi.'), 'Finire i testi del sito. Ancora segnato per oggi.')
+  assert.equal(senzaTrattini('tobiadonadon.com — testi ancora aperti, il blog aspetta'), 'tobiadonadon.com. Testi ancora aperti, il blog aspetta')
+  assert.equal(senzaTrattini('Papà vuole tutto: Granola, Claude — e la lista.'), 'Papà vuole tutto: Granola, Claude. E la lista.')
+})
+
+test('in coda e in apertura la lineetta si toglie, il trattino fra parole resta', () => {
+  assert.equal(senzaTrattini('Tre cose —'), 'Tre cose')
+  assert.equal(senzaTrattini('— prima cosa\n— seconda cosa'), '- prima cosa\n- seconda cosa')
+  assert.equal(senzaTrattini('il week-end del 2024-09-10 resta com\'è'), 'il week-end del 2024-09-10 resta com\'è')
+  assert.equal(senzaTrattini('Già chiuso. — Poi il resto'), 'Già chiuso. Poi il resto')
+  // un intervallo di numeri non è un inciso
+  assert.equal(senzaTrattini('pagine 10–12, anni 2024–2025'), 'pagine 10–12, anni 2024–2025')
 })

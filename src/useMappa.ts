@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type { Ball } from './brain'
 import type { Gruppo } from './data'
+import { t } from './lingua'
 
 type Vista = { yaw: number; pitch: number; zoom: number; drag: null | { x: number; y: number; yaw: number; pitch: number; moved: number }; t: number }
 type Proiezione = { x: number; y: number; r: number; z: number; pers: number; i: number }
@@ -175,7 +176,7 @@ export function useMappa(
         const p = P[i]
         ctx.globalAlpha = f_ && f_ !== n.cluster ? 0.22 : 0.35 + (0.55 * (p.z + 1)) / 2
         ctx.fillStyle = 'rgba(255,247,240,.9)'
-        ctx.fillText(c.nome, p.x, p.y - p.r - 7)
+        ctx.fillText(t(c.nome), p.x, p.y - p.r - 7)
       })
       ctx.globalAlpha = 1
     }

@@ -97,3 +97,29 @@ export function riflua(testo: string): string {
 
   return fuori.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
+
+/*
+ * Via i trattini lunghi.
+ *
+ * Il modello scrive con la lineetta — così — a ogni inciso, e Tobia a quel
+ * segno smette di leggere. Un inciso è quasi sempre una frase a sé: la
+ * lineetta diventa un punto, e la parola dopo prende la maiuscola. Quando
+ * la lineetta è in coda, o apre la riga (un elenco), si toglie e basta. Il
+ * trattino corto fra due parole («week-end», «2024-09») non è una lineetta
+ * e non si tocca.
+ */
+export function senzaTrattini(testo: string): string {
+  // «10–12» e «2024–2025» sono intervalli, non incisi: si mettono da parte e tornano alla fine
+  const SEGNAPOSTO = '\u0000'
+  return testo
+    .replace(/(\d)[—–](\d)/g, `$1${SEGNAPOSTO}$2`)
+    // in apertura di riga: un elenco scritto con la lineetta diventa un elenco con il trattino
+    .replace(/^[ \t]*[—–][ \t]+/gm, '- ')
+    // in coda a una riga: sparisce
+    .replace(/[ \t]*[—–][ \t]*$/gm, '')
+    // in mezzo: un punto, e la frase dopo ricomincia
+    .replace(/[ \t]*[—–][ \t]*([^\s])/g, (_, c: string) => `. ${c.toLocaleUpperCase()}`)
+    // due chiusure di fila, se l'inciso finiva già con un segno
+    .replace(/([.!?:;,])\. /g, '$1 ')
+    .replace(new RegExp(SEGNAPOSTO, 'g'), '–')
+}

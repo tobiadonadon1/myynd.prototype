@@ -27,6 +27,7 @@ import { join } from 'node:path'
 import type Anthropic from '@anthropic-ai/sdk'
 import { cartella, nellaLingua } from './config.ts'
 import { attesaDi, conLaLingua, estraiJSON, motore, parametri, segnaUso } from './modello.ts'
+import { senzaTrattini } from './testo.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
@@ -294,11 +295,14 @@ export function successoQualcosa(m: Materiale): boolean {
 
 // — il prompt —
 
+/** Vale per ogni campo di testo: la stessa frase, detta al modello dove la scrive. */
+const PIANA = 'Una frase sola, piana, al massimo dieci parole. Mai la lineetta (—, –), mai le parentesi, mai il corsivo o il grassetto.'
+
 const schema = (compiti: string[], docs: string[]) => {
   const riga = {
     type: 'object',
     properties: {
-      testo: { type: 'string', description: 'Una riga sola, piana.' },
+      testo: { type: 'string', description: PIANA },
       compito: { type: 'string', enum: ['', ...compiti], description: 'L’id della riga della lista di cui parla, o vuoto.' },
       doc: { type: 'string', enum: ['', ...docs], description: 'L’id del documento di cui parla, o vuoto.' }
     },
@@ -308,8 +312,8 @@ const schema = (compiti: string[], docs: string[]) => {
   return {
     type: 'object',
     properties: {
-      mentreNonCeri: { type: 'array', items: riga, description: 'Fino a tre righe, ognuna al massimo dodici parole.' },
-      adesso: { type: 'array', items: riga, description: 'Fino a tre mosse, ognuna al massimo dodici parole.' },
+      mentreNonCeri: { type: 'array', items: riga, description: 'Al massimo due righe. Meno è meglio: vuoto va benissimo.' },
+      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna. Meno è meglio.' },
       daLeggere: {
         type: 'array',
         description: 'Una sola, solo fra le notizie elencate, solo se c’entra con il suo lavoro. Vuoto va benissimo.',
@@ -317,7 +321,7 @@ const schema = (compiti: string[], docs: string[]) => {
           type: 'object',
           properties: {
             titolo: { type: 'string', description: 'Il titolo della notizia, copiato alla lettera.' },
-            perche: { type: 'string', description: 'Una riga: perché conta per quello su cui lavora.' }
+            perche: { type: 'string', description: `Perché conta per quello su cui lavora. ${PIANA}` }
           },
           required: ['titolo', 'perche'],
           additionalProperties: false
@@ -329,10 +333,10 @@ const schema = (compiti: string[], docs: string[]) => {
         items: {
           type: 'object',
           properties: {
-            nome: { type: 'string', description: 'Lo stesso nome dell’elenco, alla lettera. Per uno nuovo, corto e come lo direbbe lui.' },
-            obiettivo: { type: 'string', description: 'Una riga: a cosa punta. Se l’elenco lo dice già, copialo; se manca, proponilo.' },
-            doveSei: { type: 'string', description: 'Una riga: a che punto sta rispetto all’obiettivo.' },
-            angolo: { type: 'string', description: 'Un’idea distintiva che potrebbe prendere, in una frase. Vuoto se non ne hai una buona.' }
+            nome: { type: 'string', description: 'Lo stesso nome dell’elenco, alla lettera. Per uno nuovo, corto e come lo direbbe lui: nessuna lineetta.' },
+            obiettivo: { type: 'string', description: `A cosa punta. Se l’elenco lo dice già, copialo; se manca, proponilo. ${PIANA}` },
+            doveSei: { type: 'string', description: `A che punto sta rispetto all’obiettivo. ${PIANA}` },
+            angolo: { type: 'string', description: `Un’idea distintiva che potrebbe prendere. Vuoto se non ne hai una buona. ${PIANA}` }
           },
           required: ['nome', 'obiettivo', 'doveSei', 'angolo'],
           additionalProperties: false
@@ -340,12 +344,12 @@ const schema = (compiti: string[], docs: string[]) => {
       },
       avvii: {
         type: 'array',
-        description: 'Fino a tre automazioni che potrebbe accendere, solo su cose che nel materiale si ripetono.',
+        description: 'Al massimo due automazioni che potrebbe accendere, solo su cose che nel materiale si ripetono.',
         items: {
           type: 'object',
           properties: {
-            frase: { type: 'string', description: 'L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …».' },
-            perche: { type: 'string', description: 'Al massimo otto parole: cosa gli toglie di mano.' }
+            frase: { type: 'string', description: 'L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …». Niente lineette, niente parentesi.' },
+            perche: { type: 'string', description: 'Al massimo otto parole: cosa gli toglie di mano. Niente lineette, niente parentesi.' }
           },
           required: ['frase', 'perche'],
           additionalProperties: false
@@ -419,30 +423,40 @@ adesso, e dove stanno i suoi progetti.`,
       ? 'Le automazioni che ha già accese — non proporne di uguali:\n' +
         m.automazioni.map(x => `— ${x}`).join('\n')
       : '',
-    `Regole:
-— Tono piano, niente entusiasmo, niente «io», niente cappelli. Frasi corte:
-  ogni riga al massimo dodici parole. Il punto si legge in dieci secondi.
+    `Come si scrive, senza eccezioni. Vale per ogni campo di testo che riempi:
+— Una frase sola per riga, piana, al massimo dieci parole, con il punto in
+  fondo. Il punto si legge in dieci secondi.
+— Nelle frasi che scrivi non compare MAI la lineetta lunga «—» né quella
+  media «–». Un inciso o diventa una frase sua, o si toglie: non si attacca
+  con un trattino. Vietate anche le parentesi tonde.
+— Niente corsivo, niente grassetto, niente markdown, niente due punti per
+  incastrare due frasi in una riga, niente elenchi dentro una riga.
+— Tono piano, niente entusiasmo, niente «io», niente cappelli.
 — NON dire da quanto manca né quanto tempo è passato: non lo sai. Quello lo
   dice la pagina.
-— «mentreNonCeri»: fino a tre righe — quello che è arrivato e conta davvero, e
-  quello che hai fatto tu (bozze preparate, mail mandate, automazioni girate).
-  Metti l'id del compito o del documento quando c'è, così si apre con un dito.
-— «adesso»: fino a tre mosse che fanno andare avanti il suo lavoro, e ognuna
-  dice in due parole quale progetto o obiettivo muove («… — per Nome»). Una
-  riga pronta da approvare viene prima di tutto.
-— «daLeggere»: al massimo una notizia, solo fra quelle elencate e solo se
-  c'entra con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
+— Concreto: nomi, cifre e date che hai letto davvero nel materiale. Niente
+  inventato, niente aggettivi al posto dei fatti.
+— Meno righe è sempre meglio: una sezione vuota è una risposta giusta. Non
+  riempire per arrivare al massimo.
+
+Quante righe, al massimo:
+— «mentreNonCeri»: due. Quello che è arrivato e conta davvero, o quello che
+  hai fatto tu (bozze preparate, mail mandate, automazioni girate). Metti
+  l'id del compito o del documento quando c'è, così si apre con un dito.
+— «adesso»: tre mosse che fanno andare avanti il suo lavoro. Una riga pronta
+  da approvare viene prima di tutto. Se la mossa è per un progetto, il nome
+  del progetto sta dentro la frase, non attaccato in coda.
+— «daLeggere»: una notizia sola, solo fra quelle elencate e solo se c'entra
+  con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
 — «progetti»: uno o due, di quelli elencati e toccati dal materiale. «doveSei»
-  in una riga, rispetto all'obiettivo. «angolo» è UN'idea distintiva che
-  potrebbe prendere su quel progetto — radicata nel suo materiale e in quello
-  che crede, mai generica, mai un consiglio da manuale. Se non ne hai una
-  buona, lascia l'angolo vuoto.
-— «avvii»: fino a tre automazioni da accendere, solo dove il materiale mostra
-  una cosa che si ripete (lo stesso tipo di mail, lo stesso lavoro ogni
-  settimana). La frase dev'essere una che Myynd sa trasformare in ricetta:
-  quando guardare, cosa guardare, cosa farne. Niente di generico.
-— Concreto: nomi, cifre e date che hai letto davvero. Niente inventato. Meno
-  righe piuttosto che righe di riempimento.
+  è una riga sola, al massimo dieci parole, rispetto all'obiettivo. «angolo» è
+  UN'idea distintiva che potrebbe prendere su quel progetto, radicata nel suo
+  materiale e in quello che crede, mai generica, mai un consiglio da manuale.
+  Se non ne hai una buona, lascia l'angolo vuoto.
+— «avvii»: due, solo dove il materiale mostra una cosa che si ripete (lo
+  stesso tipo di mail, lo stesso lavoro ogni settimana). La frase dev'essere
+  una che Myynd sa trasformare in ricetta: quando guardare, cosa guardare,
+  cosa farne. Niente di generico.
 — Gli id di compiti e documenti li prendi SOLO da quelli elencati nel
   materiale; altrimenti stringa vuota.
 Scrivi in ${nellaLingua()}.`
@@ -516,8 +530,19 @@ type Grezzo = {
 }
 
 /** Una riga corta resta corta anche se il modello non ha ascoltato. */
-const TESTO_MAX = 160
+const TESTO_MAX = 120
 const accorcia = (s: string) => (s.length > TESTO_MAX ? `${s.slice(0, TESTO_MAX - 1).trimEnd()}…` : s)
+
+/**
+ * Il testo come lo legge lui: corto, e senza lineette.
+ *
+ * La lineetta lunga era il difetto che si vedeva prima di tutti gli altri —
+ * ogni riga con il suo inciso, e la finestra sembrava una pagina di appunti
+ * fitta invece di un foglio da leggere in dieci secondi. Il prompt adesso lo
+ * dice chiaro, ma un modello che ricade non deve poterlo far vedere: qui
+ * l'inciso torna a essere una frase sua, e quello che avanza si taglia.
+ */
+const ripulisci = (s: string) => accorcia(senzaTrattini(s.trim()).trim())
 
 /**
  * Da quello che ha scritto il modello a un punto che si può mostrare.
@@ -533,7 +558,7 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
   const compiti = new Set([...m.attendono, ...m.perOggi, ...m.preparate].map(c => c.id))
   const docs = new Set(m.arrivati.map(d => d.id))
   const riga = (r: Partial<Riga>): Riga | null => {
-    const testo = accorcia((r.testo ?? '').trim())
+    const testo = ripulisci(r.testo ?? '')
     if (!testo) return null
     return {
       testo,
@@ -566,13 +591,15 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
     const vero = m.progetti.find(x => chiave(x.nome) === chiave(nome))
     if (!vero && nuovi++ >= 1) continue
     const angoliTenuti = tenutiDi(vero?.nome ?? nome)
-    const angolo = (p.angolo ?? '').trim()
+    const angolo = ripulisci(p.angolo ?? '')
     progetti.push({
       id: vero?.id ?? '',
-      nome: vero?.nome ?? nome,
-      obiettivo: vero?.obiettivo || accorcia((p.obiettivo ?? '').trim()),
+      // il nome di uno che è già in tabella è suo e non si tocca: è la chiave
+      // con cui «tienilo» e «non è un progetto» lo ritrovano
+      nome: vero?.nome ?? ripulisci(nome),
+      obiettivo: vero?.obiettivo || ripulisci(p.obiettivo ?? ''),
       dal: vero?.dal ?? quando,
-      doveSei: accorcia((p.doveSei ?? '').trim()),
+      doveSei: ripulisci(p.doveSei ?? ''),
       // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
       angolo: rifiutati.has(chiave(angolo)) || angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
       angoliTenuti
@@ -586,23 +613,23 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
       ?? m.notizie.find(x => chiave(x.titolo).includes(chiave(titolo)) || chiave(titolo).includes(chiave(x.titolo)))
     // una notizia che non sta nella rassegna è inventata: non passa
     if (!vera) return []
-    return [{ titolo: vera.titolo, perche: accorcia((n.perche ?? '').trim()), link: vera.link ?? null }]
+    return [{ titolo: senzaTrattini(vera.titolo), perche: ripulisci(n.perche ?? ''), link: vera.link ?? null }]
   })
 
   // le automazioni già accese da qui, e quelle che ha già: non si ripropongono
   const gia = new Set([...avviate, ...m.automazioni].map(chiave))
   const avvii: Avvio[] = []
   for (const a of g.avvii ?? []) {
-    const frase = accorcia((a.frase ?? '').trim())
-    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 3) continue
+    const frase = ripulisci(a.frase ?? '')
+    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 2) continue
     gia.add(chiave(frase))
-    avvii.push({ frase, perche: accorcia((a.perche ?? '').trim()) })
+    avvii.push({ frase, perche: ripulisci(a.perche ?? '') })
   }
 
   return {
     quando,
     via: via && via > 0 ? Math.round(via) : null,
-    mentreNonCeri: righe(g.mentreNonCeri, 3),
+    mentreNonCeri: righe(g.mentreNonCeri, 2),
     adesso: righe(g.adesso, 3),
     daLeggere,
     progetti,

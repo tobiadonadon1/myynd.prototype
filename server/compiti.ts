@@ -26,6 +26,7 @@ import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as invio from './invio.ts'
 import * as progetti from './progetti.ts'
+import { senzaTrattini } from './testo.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -269,7 +270,7 @@ async function svolgiUno(id: string) {
     const nota = progetto && progetto.stato !== 'chiuso'
       ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
       : c.nota
-    const { testo, fonti } = await ferri.svolgi(
+    const { testo: grezzo, fonti } = await ferri.svolgi(
       c.testo, nota, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
       dato?.cartella ?? null,
@@ -284,6 +285,12 @@ async function svolgiUno(id: string) {
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano
     if (richiamati.has(chiave(id))) return
+
+    // Via le lineette prima che questo testo vada da qualunque parte: dalla
+    // domanda che classifica se è una bozza pronta, dalla riga che finisce
+    // salvata, dall'email che ne nasce. Un posto solo, una volta sola — non
+    // una bozza pulita e un'email che porta ancora gli incisi del modello.
+    const testo = senzaTrattini(grezzo)
 
     // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
     // ed è quello che stava succedendo: la riga si accendeva come se ci fosse

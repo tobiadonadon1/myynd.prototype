@@ -33,8 +33,8 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   useEffect(() => { carica() }, [])
   useEffect(() => {
     if (!s) return
-    const desktop = s.connettori.find(c => c.id === 'desktop')
-    const puoi = desktop && !desktop.collegato && s.suggerimentiDesktop.length ? ['desktop'] : []
+    // il computer non ha più la via rapida: il suo modulo ha un bottone solo, che fa la stessa cosa
+    const puoi: string[] = []
     let attuale = true
     api.chiaveNellAmbiente().then(r => {
       if (!attuale) return
@@ -57,11 +57,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
     if (collegando) return
     setCollegando(true); setGuaio(null)
     try {
-      if (id === 'desktop' && s) await api.collegaDesktop(s.suggerimentiDesktop)
-      else if (id === 'claude') await api.usaChiaveAmbiente()
+      if (id === 'claude') await api.usaChiaveAmbiente()
       else return
       await ricarica(); cambiato()
-      if (id === 'desktop') void leggi(id)
     } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.')) }
     finally { setCollegando(false) }
   }
@@ -124,8 +122,12 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                   ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
                   : [
                     scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null,
-                    // il desktop dice se è la casa intera, e se la sta guardando dal vivo
-                    scelta.id === 'desktop' && s?.config.desktop?.tutto ? t('il Mac intero') : null,
+                    // il computer dice se è la macchina intera, e se la sta guardando
+                    // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
+                    // si indovina dalla finestra, si legge da quello.
+                    scelta.id === 'desktop' && s?.config.desktop?.tutto
+                      ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
+                      : null,
                     scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
                   ].filter(Boolean).join(' · ') || t(scelta.nota)
                 : t(scelta.nota)}</p>
@@ -139,7 +141,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
             <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica(); cambiato() }}>{t('Scollega')}</BottoneSicuro>
           </div>}
           {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">
-            <p>{scelta.id === 'desktop' ? t('Scrivania, Documenti e Download in sola lettura') : t('la chiave di Claude che è già qui')}</p>
+            <p>{t('la chiave di Claude che è già qui')}</p>
             <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
           {(!scelta.collegato || (scelta.id === 'compatibile' && modifica)) && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {

@@ -60,7 +60,7 @@ import * as trasloco from './trasloco.ts'
 import * as fuso from './fuso.ts'
 import * as sveglia from './sveglia.ts'
 import * as oauth from './connettori/oauth.ts'
-import { riflua } from './testo.ts'
+import { riflua, senzaTrattini } from './testo.ts'
 
 const app = express()
 
@@ -1839,6 +1839,18 @@ async function rileggiDaSola() {
  * I conteggi restano sempre — servono al titolo e alla legenda — e il grafo
  * arriva solo a chi lo sta per disegnare.
  */
+/*
+ * I gruppi della mente, con il nome che l'interfaccia traduce (`t()`) e il
+ * colore che li distingue sulla mappa. Un gruppo che non è qui è «Altre
+ * fonti»: agenda e conversazioni prima ci finivano per sbaglio.
+ */
+const GRUPPI_MENTE: Record<string, { nome: string; colore: string }> = {
+  posta: { nome: 'Posta', colore: '#C4553C' },
+  documenti: { nome: 'Documenti', colore: '#E0A44A' },
+  note: { nome: 'Note', colore: '#5B9BC9' },
+  agenda: { nome: 'Agenda', colore: '#8E6FB8' },
+  conversazioni: { nome: 'Conversazioni', colore: '#3E8F86' }
+}
 app.get('/api/mente', (req, res) => {
   const n = store.conteggi()
   const g = req.query.grafo === '1' ? store.mappa() : null
@@ -1846,8 +1858,8 @@ app.get('/api/mente', (req, res) => {
     totale: n.totale,
     gruppi: n.perGruppo.map(gr => ({
       id: gr.gruppo,
-      nome: gr.gruppo === 'posta' ? 'Posta' : gr.gruppo === 'documenti' ? 'Documenti' : gr.gruppo === 'note' ? 'Note' : 'Altre fonti',
-      colore: gr.gruppo === 'posta' ? '#C4553C' : gr.gruppo === 'documenti' ? '#E0A44A' : gr.gruppo === 'note' ? '#5B9BC9' : '#7FA98A',
+      nome: GRUPPI_MENTE[gr.gruppo]?.nome ?? 'Altre fonti',
+      colore: GRUPPI_MENTE[gr.gruppo]?.colore ?? '#7FA98A',
       nodi: gr.n
     })),
     grafo: g
@@ -2573,7 +2585,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
     })
     // il piano si legge come una bozza; quello che ha fatto davvero anche —
     // con la differenza che i file nella cartella adesso sono cambiati
-    store.risultatoCompito(c.id, e.testo, [], 'pronto')
+    store.risultatoCompito(c.id, senzaTrattini(e.testo), [], 'pronto')
     const dopo = store.compito(c.id)
     res.json({ ok: true, passo, finito: e.finito, compiti: store.elencoCompiti(), compito: dopo })
     compiti.annunciaCambio()
@@ -2650,8 +2662,10 @@ app.delete('/api/compiti/:id', (req, res) => {
 // La ricetta arriva con l'azienda: chi apre Myynd se le ritrova già lì, e
 // non deve installare niente. Quello che è suo è solo se tenerle accese.
 
-app.get('/api/automazioni/suggerimenti', (_req, res) => {
-  try { res.json({ suggerimenti: scoperte.suggerimenti() }) } catch (e) { errore(res, e) }
+// `rifai=1` è il bottone: senza, quelli di ieri se hanno meno di un giorno, e
+// aprire la schermata non chiama nessun modello
+app.get('/api/automazioni/suggerimenti', async (req, res) => {
+  try { res.json({ suggerimenti: await scoperte.suggerimenti(req.query.rifai === '1') }) } catch (e) { errore(res, e) }
 })
 app.post('/api/automazioni/suggerimenti/:id', (req, res) => {
   try {
@@ -2660,8 +2674,9 @@ app.post('/api/automazioni/suggerimenti/:id', (req, res) => {
   } catch (e) { errore(res, e, 400) }
 })
 app.delete('/api/automazioni/suggerimenti/:id', (req, res) => {
-  if (scoperte.suggerimenti().some(a => a.id === req.params.id)) store.togliAutomazione(req.params.id)
-  res.json({ ok: true })
+  // `scarta` controlla da sé che l'id sia di una proposta e non di
+  // un'automazione vera, e non chiama nessun modello per accorgersene
+  try { res.json({ ok: scoperte.scarta(req.params.id) }) } catch (e) { errore(res, e) }
 })
 
 app.get('/api/automazioni', (_req, res) => {

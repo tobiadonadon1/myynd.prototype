@@ -118,6 +118,7 @@ export type Stato = {
 }
 
 import { frasi, lingua, t } from './lingua'
+import { desktop } from './desktop'
 
 const CHIAVE = 'myynd.token'
 
@@ -405,7 +406,7 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
 
 /** Il nome della fonte, non il suo identificativo. */
 const NOME_FONTE: Record<string, string> = {
-  posta: 'Posta', calendario: 'Calendario', desktop: 'Desktop', notion: 'Notion', granola: 'Granola',
+  posta: 'Posta', calendario: 'Calendario', notion: 'Notion', granola: 'Granola',
   conversazioni: 'Conversazioni',
   claude: 'Claude', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
@@ -424,7 +425,17 @@ const NOME_FONTE: Record<string, string> = {
 export function rigaSincronizzazione(m: Record<string, unknown>): string {
   const en = lingua() === 'en'
   const id = String(m.fase ?? '')
-  const fonte = t(NOME_FONTE[id] ?? id)
+  /*
+   * La fonte del computer si chiama come la macchina: «Il mio Mac», «Il mio
+   * PC». Il nome vero lo decide il server e viaggia dentro `stato.connettori`,
+   * ma qui arriva solo un avanzamento — `{ fase: 'desktop' }` — e chiedere lo
+   * stato per una riga di avanzamento sarebbe una chiamata di rete a ogni
+   * documento. Lo dice il guscio, che sa su cosa gira; fuori dall'app resta il
+   * Mac, che è dove l'app gira.
+   */
+  const fonte = t(id === 'desktop'
+    ? (desktop()?.piattaforma === 'win32' ? 'Il mio PC' : 'Il mio Mac')
+    : (NOME_FONTE[id] ?? id))
   // una fonte andata storta porta la sua frase: «calendario · guaio» non diceva niente
   if (m.stato === 'guaio') return `${fonte} · ${t(String(m.errore ?? 'Non ce l’ha fatta.'))}`
   // con i numeri si compone qui: «40 di 120 messaggi» scritto dal server non si traduce
@@ -680,7 +691,17 @@ export type Blocco = { etichetta: string; descrizione: string; valore: string; t
  * è se tenerla accesa, e la storia di quello che ha fatto su questa macchina.
  */
 export type Passo = { id: string; tipo: 'condizione' | 'trasforma'; testo: string }
-export type SuggerimentoAutomazione = { id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[] }
+/**
+ * Una proposta, con dentro i campi di una ricetta vera.
+ *
+ * `quando` non è un di più: la scheda suggerita sta nella griglia in mezzo
+ * alle altre e in fondo scrive quando girerebbe. Senza, la riga avrebbe dovuto
+ * inventarsi un'ora — e accendendola ne sarebbe girata un'altra.
+ */
+export type SuggerimentoAutomazione = {
+  id: string; nome: string; spiega: string; quanti: number; esempi: string[]; attrezzi: string[]
+  quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
+}
 
 export type Automazione = {
   passi?: Passo[]
@@ -1270,7 +1291,9 @@ export const api = {
     return corpo
   },
 
-  suggerimentiAutomazioni: () => json<{ suggerimenti: SuggerimentoAutomazione[] }>('/api/automazioni/suggerimenti'),
+  /** Senza `rifai` non costa niente: il server risponde con quelli di ieri finché sono freschi. */
+  suggerimentiAutomazioni: (rifai = false) =>
+    json<{ suggerimenti: SuggerimentoAutomazione[] }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`),
   adottaAutomazione: (id: string) => json<{ id: string; automazioni: Automazione[] }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'POST' }),
   ignoraAutomazione: (id: string) => json<{ ok: true }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),

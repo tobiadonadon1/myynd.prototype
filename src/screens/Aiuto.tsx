@@ -245,10 +245,10 @@ const SEZIONI: Sezione[] = [
             }
           },
           {
-            nome: { it: 'Desktop', en: 'Desktop' },
+            nome: { it: 'Il mio Mac', en: 'My Mac' },
             testo: {
-              it: 'Le cartelle che scegli tu — o, con l’interruttore «Tutto il Mac», la tua cartella personale e iCloud Drive — in sola lettura: PDF, Word, testo e Markdown. Salta i progetti di codice, le app, la musica, i film, le foto e le cache. C’è solo quando Myynd gira sul tuo computer: su un server non ha nessuna cartella tua da leggere.',
-              en: 'The folders you choose — or, with the “Whole Mac” switch, your home folder and iCloud Drive — read-only: PDF, Word, text and Markdown. It skips code projects, apps, music, movies, photos and caches. It is available only when Myynd runs on your own computer: on a server it has no folder of yours to read.'
+              it: 'Tutto quello che tieni sul computer, in sola lettura: Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella personale, cioè PDF, Word, testo e Markdown. È quello che fa il bottone «Collega il mio Mac» (su Windows «Collega il mio PC»); con «Solo alcune cartelle» lo restringi a quelle che scegli tu. Salta i progetti di codice, le app, la musica, i film, le foto e le cache. Su un Mac serve l’Accesso completo al disco: Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd. Senza, Scrivania, Documenti e Download non si aprono. C’è solo quando Myynd gira sul tuo computer: su un server non ha nessuna cartella tua da leggere.',
+              en: 'Everything you keep on your computer, read-only: Desktop, Documents, Downloads, iCloud Drive and the rest of your home folder, that is PDF, Word, text and Markdown. That is what the «Connect my Mac» button does (on Windows «Connect my PC»); with «Only some folders» you narrow it to the ones you pick. It skips code projects, apps, music, movies, photos and caches. On a Mac it needs Full Disk Access: System Settings › Privacy & Security › Full Disk Access › Myynd. Without it, Desktop, Documents and Downloads do not open. It is only there when Myynd runs on your own computer: on a server it has no folder of yours to read.',
             }
           },
           {

@@ -168,6 +168,66 @@ test('un id che non sta nel materiale non passa, nemmeno se il modello lo scrive
   assert.equal(e.punto?.mentreNonCeri[0].doc, null)
 })
 
+test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il punto le toglie', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  seminaLista()
+  store.salvaNotizie([{
+    id: 'n1', titolo: 'I modelli piccoli — la svolta', riassunto: 'Girano su un portatile.',
+    perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
+    quando: new Date().toISOString()
+  }])
+
+  fornitoreFinto({
+    mentreNonCeri: [{ testo: 'È arrivato il preventivo di Rossi — con le cifre nuove.', compito: '', doc: 'posta:INBOX:1' }],
+    adesso: [{ testo: 'Approva la bozza per Bianchi — per Myynd.', compito: 'c1', doc: '' }],
+    daLeggere: [{ titolo: 'I modelli piccoli — la svolta', perche: 'C’entra con Myynd — da leggere oggi.' }],
+    progetti: [{
+      nome: 'Myynd — il gemello', obiettivo: 'Un gemello — che sceglie per lui.',
+      doveSei: 'Il punto è in lavorazione — quasi pronto.', angolo: 'Far crescere i progetti – insieme a lui.'
+    }],
+    avvii: [{ frase: 'Ogni lunedì alle 8 — un riepilogo della settimana', perche: 'Lo fa a mano — ogni volta.' }]
+  })
+
+  const e = await punto.punto({}, adesso())
+  assert.ok(e.generatoAdesso)
+  const tutto = JSON.stringify(e.punto)
+  assert.doesNotMatch(tutto, /[—–]/, `una lineetta è arrivata in pagina: ${tutto}`)
+  // l'inciso non sparisce: diventa una frase sua, con la maiuscola
+  assert.equal(e.punto?.mentreNonCeri[0].testo, 'È arrivato il preventivo di Rossi. Con le cifre nuove.')
+  assert.equal(e.punto?.adesso[0].testo, 'Approva la bozza per Bianchi. Per Myynd.')
+  assert.equal(e.punto?.daLeggere[0].titolo, 'I modelli piccoli. La svolta')
+  assert.equal(e.punto?.daLeggere[0].perche, 'C’entra con Myynd. Da leggere oggi.')
+  assert.equal(e.punto?.progetti[0].nome, 'Myynd. Il gemello')
+  assert.equal(e.punto?.progetti[0].doveSei, 'Il punto è in lavorazione. Quasi pronto.')
+  assert.equal(e.punto?.progetti[0].angolo, 'Far crescere i progetti. Insieme a lui.')
+  assert.equal(e.punto?.avvii[0].frase, 'Ogni lunedì alle 8. Un riepilogo della settimana')
+})
+
+test('le sezioni sono tagliate corte, e una riga lunga si accorcia a centoventi', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const lunga = 'Una riga che va avanti e non finisce mai, con dentro tutto quello che il modello ha trovato nel materiale di oggi e anche di ieri.'
+  fornitoreFinto({
+    ...RISPOSTA,
+    mentreNonCeri: [
+      { testo: lunga, compito: '', doc: '' },
+      { testo: 'La seconda.', compito: '', doc: '' },
+      { testo: 'La terza, che non deve passare.', compito: '', doc: '' }
+    ],
+    avvii: [
+      { frase: 'Quando arriva un preventivo, mettilo in lista con le cifre', perche: 'Niente da ricopiare.' },
+      { frase: 'Ogni lunedì alle 8, un riepilogo della settimana', perche: 'Lo fa già a mano.' },
+      { frase: 'Quando arriva una fattura, segnala nella lista', perche: 'Non se ne perde una.' }
+    ]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.mentreNonCeri.length, 2, 'la terza riga di «mentre non c’eri» è passata')
+  assert.equal(e.punto?.avvii.length, 2, 'il terzo avvio è passato')
+  assert.ok((e.punto?.mentreNonCeri[0].testo.length ?? 0) <= 120, 'la riga lunga non è stata accorciata')
+  assert.match(e.punto?.mentreNonCeri[0].testo ?? '', /…$/)
+})
+
 // — il cancello —
 
 test('subito dopo un punto si torna quello di prima, senza chiamare nessuno', async () => {
@@ -277,7 +337,9 @@ test('il punto sta in punto.json, i progetti in tabella: un progetto nuovo entra
   const giorno = new Date(t0).toISOString().slice(0, 10)
   assert.match(istruzioneDi(ricevute[1]),
     new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  dov'era l'ultima volta: Il punto è in lavorazione`))
-  assert.match(istruzioneDi(ricevute[1]), /ognuna\n  dice in due parole quale progetto o obiettivo muove/)
+  // le regole di stile viaggiano con l'istruzione: corte, e senza lineette
+  assert.match(istruzioneDi(ricevute[1]), /al massimo dieci parole, con il punto in\n  fondo/)
+  assert.match(istruzioneDi(ricevute[1]), /non compare MAI la lineetta lunga/)
   assert.equal(secondo.punto?.progetti[0].dal, primo.punto?.progetti[0].dal, 'la data del progetto è ripartita')
   assert.equal(secondo.punto?.progetti[0].id, inTabella.id)
   assert.equal(progetti.elenco().length, 1, 'lo stesso progetto è entrato due volte')

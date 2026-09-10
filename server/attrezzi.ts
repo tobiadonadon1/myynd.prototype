@@ -134,7 +134,8 @@ export const ATTREZZI: Attrezzo[] = [
   },
   {
     nome: 'desktop.leggi',
-    etichetta: { it: 'il desktop', en: 'desktop' },
+    // si chiama come la fonte, «Il mio Mac» o «Il mio PC»: nella frase di un'automazione è quello che legge
+    etichetta: process.platform === 'darwin' ? { it: 'il mio Mac', en: 'my Mac' } : { it: 'il mio PC', en: 'my PC' },
     spiega: { it: 'Legge i file nelle cartelle che hai collegato.', en: 'Reads files in your connected folders.' },
     serve: 'desktop',
     tinta: '#2F7B93',

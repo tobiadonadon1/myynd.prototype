@@ -8,6 +8,7 @@ import { loc, ricordaLingua, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
+import { primoParagrafo } from './essenza.ts'
 
 type Toast = { text: string; undo: boolean } | null
 
@@ -32,6 +33,12 @@ export function taglia(t: string, max: number): string {
   const spazio = corto.lastIndexOf(' ')
   return (spazio > max * 0.6 ? corto.slice(0, spazio) : corto).trimEnd() + '…'
 }
+
+// `primoParagrafo` vive in `essenza.ts`, e riesporta da qui: la funzione la
+// prova `essenza.test.ts` da sola, senza doversi trascinare dietro React e
+// tutto il resto che questo file importa. Non `testo.ts`: c'è già `Testo.tsx`,
+// e su un progetto che distingue le maiuscole i due nomi si scontrerebbero.
+export { primoParagrafo }
 
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
 const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
@@ -1118,7 +1125,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       }
     }),
     selTipo: cl ? frasi.nDocumenti(cl.nodi.toLocaleString(loc())) : '',
-    selNome: cl?.nome ?? t('Niente ancora'),
+    selNome: cl ? t(cl.nome) : t('Niente ancora'),
     selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
     selTesto: cl
       ? frasi.tuttoDa(t(cl.nome).toLowerCase())

@@ -59,13 +59,55 @@ export function Automazioni({ v }: { v: Vals }) {
     (filtro === 'tutte' || (filtro === 'attive' ? a.accesa : filtro === 'pausa' ? !a.accesa : ['guaio', 'scollegata', 'muta'].includes(a.salute.stato))) &&
     `${a.nome} ${a.spiega} ${a.attrezzi.map(n => catalogo.find(c => c.nome === n)?.etichetta ?? n).join(' ')}`.toLocaleLowerCase().includes(cerca.toLocaleLowerCase()))
   const scelta = tutte.find(a => a.id === aperto)
+  /*
+    I suggerimenti stanno in griglia, non in un riquadro sopra.
+    Erano una sezione a parte con il suo titolo e il suo sfondo, e per due
+    proposte si mangiava lo schermo prima ancora che si vedesse un'automazione
+    vera. Adesso una proposta è una scheda come le altre — stessa anatomia,
+    stessa griglia, in coda alle sue — solo smorzata: si legge che è una cosa
+    che *non* sta girando, e si accende con un dito senza cambiare pagina.
+  */
+  const suggeriti = !cerca && !raccolta && (filtro === 'tutte' || filtro === 'pausa') ? suggerimenti : []
+  const fonti = (nomi: string[]) => <div className="auto-card-sources">{nomi.slice(0, 4).map(n => {
+    const c = catalogo.find(x => x.nome === n)
+    const eti = `${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`
+    return <span key={n} className={c && !c.collegato ? 'missing' : ''} title={eti} aria-label={eti}>
+      <ConnectorIcon id={connectorPerAttrezzo(n, c?.serve)} size={18} spenta={!!c && !c.collegato} /></span>
+  })}{nomi.length > 4 && <span className="auto-source-more">+{nomi.length - 4}</span>}</div>
+  const rinfresca = async () => {
+    if (occupato) return
+    setOccupato('suggerimenti'); setScoperteErrore('')
+    try { setSuggerimenti((await api.suggerimentiAutomazioni(true)).suggerimenti) }
+    catch (e) { setScoperteErrore(e instanceof Error ? e.message : String(e)) }
+    finally { setOccupato('') }
+  }
+  const schedaSuggerita = (s: SuggerimentoAutomazione) => <article className="auto-card suggestion" key={s.id}>
+    <div className="auto-card-top"><span className="auto-status suggested">{t('Suggerita')}</span></div>
+    <div className="auto-card-open"><h3>{s.nome}</h3><p>{s.spiega}</p>{fonti(s.attrezzi)}</div>
+    <div className="auto-card-footer"><span>{quandoGira({ quando: s.quando } as Automazione)}</span></div>
+    <div className="auto-card-actions">
+      {/* accendere è il gesto intero: la scrive, la accende, e la scheda resta dov'è */}
+      <button className="auto-button" disabled={!!occupato} onClick={() => azione(s.id, async () => {
+        const r = await api.adottaAutomazione(s.id)
+        setTutte((await api.accendiAutomazione(r.id, true)).automazioni)
+        setSuggerimenti(x => x.filter(y => y.id !== s.id))
+      })}>{occupato === s.id ? t('Preparo…') : t('Accendi')}</button>
+      {/* o la si guarda prima: nasce spenta, e l'interruttore resta suo */}
+      <button className="auto-button subtle" disabled={!!occupato} onClick={() => azione(s.id, async () => {
+        const r = await api.adottaAutomazione(s.id)
+        setTutte(r.automazioni); setAperto(r.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
+      })}>{t('Modifica')}</button>
+      <button className="auto-button subtle auto-card-no" disabled={!!occupato} aria-label={`${t('Non ora')}: ${s.nome}`} title={t('Non ora')}
+        onClick={() => azione(s.id, async () => {
+          await api.ignoraAutomazione(s.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
+        })}>×</button>
+    </div>
+  </article>
   const scheda = (a: Automazione) => <article className={`auto-card ${['guaio', 'scollegata', 'muta'].includes(a.salute.stato) ? 'attention' : a.accesa ? 'active' : 'paused'}`} key={a.id}>
     <div className="auto-card-top"><span className={`auto-status ${a.accesa ? 'on' : ''}`}>{a.accesa ? t('Attiva') : t('In pausa')}</span>
       <button className="auto-switch" role="switch" aria-checked={a.accesa} aria-label={`${a.accesa ? t('Mettila in pausa') : t('Accendila')}: ${a.nome}`} disabled={!!occupato}
         onClick={() => azione(a.id, async () => { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) })}><span /></button></div>
-    <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>
-      <div className="auto-card-sources">{a.attrezzi.slice(0, 4).map(n => { const c = catalogo.find(x => x.nome === n); return <span key={n} className={c && !c.collegato ? 'missing' : ''} title={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`} aria-label={`${c?.etichetta ?? n}${c && !c.collegato ? ` · ${t('Da collegare')}` : ''}`}><ConnectorIcon id={connectorPerAttrezzo(n, c?.serve)} size={18} spenta={!!c && !c.collegato} /></span> })}{a.attrezzi.length > 4 && <span className="auto-source-more">+{a.attrezzi.length - 4}</span>}</div>
-    </button>
+    <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>{fonti(a.attrezzi)}</button>
     <div className="auto-card-footer"><span>{quandoGira(a)}</span></div>
     {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
       const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
@@ -82,25 +124,15 @@ export function Automazioni({ v }: { v: Vals }) {
       </div>
     </header>
     {errore && <div className="auto-error" role="alert">{t(errore)} <button className="auto-button" onClick={carica}>{t('Riprova')}</button></div>}
-    <section className="auto-discover" aria-labelledby="auto-discover-title">
-      <div className="auto-section-heading"><h2 id="auto-discover-title">{t('Suggerimenti')}</h2>
-        <button className="auto-button subtle" onClick={carica} disabled={carico} aria-label={t('Aggiorna')} title={t('Aggiorna')}><IconGiro size={13} /></button></div>
-      {scoperteErrore ? <p role="alert" className="auto-error">{t(scoperteErrore)}</p> : carico ? <p role="status" className="auto-muted">{t('Guardo…')}</p> : suggerimenti.length ?
-        <div className="auto-suggestions">{suggerimenti.map(s => <article className="auto-suggestion" key={s.id}>
-          <span className="auto-suggestion-mark" aria-hidden="true">↳</span>
-          <div className="auto-suggestion-body"><h3>{s.nome}</h3>
-            <details><summary>{s.quanti} {t('documenti pertinenti')}</summary><p>{s.spiega}</p><ul>{s.esempi.map((e, i) => <li key={i}>{e}</li>)}</ul></details></div>
-          <div className="auto-card-actions"><button className="auto-button" disabled={!!occupato} onClick={() => azione(s.id, async () => {
-            const r = await api.adottaAutomazione(s.id); setTutte(r.automazioni); setAperto(r.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
-          })}>{occupato === s.id ? t('Preparo…') : t('Crea bozza')} <IconAvanti size={11} /></button>
-          <button className="auto-button subtle" disabled={!!occupato} aria-label={`${t('Non ora')}: ${s.nome}`} title={t('Non ora')} onClick={() => azione(s.id, async () => {
-            await api.ignoraAutomazione(s.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
-          })}>×</button></div>
-        </article>)}</div> : <p className="auto-muted auto-discovery-quiet">{t('Nessun nuovo suggerimento, per ora.')}</p>}
-    </section>
+    {scoperteErrore && <p role="alert" className="auto-error">{t(scoperteErrore)}</p>}
     <section aria-labelledby="auto-library-title">
       <div className="auto-section-heading auto-library-heading"><h2 id="auto-library-title">{t('Le tue automazioni')} <span className="auto-count">{tutte.length}</span></h2>
-        <span className="auto-muted">{tutte.filter(a => a.accesa).length} {t('attive')}</span></div>
+        <div className="auto-heading-side">
+          <span className="auto-muted" role={occupato === 'suggerimenti' ? 'status' : undefined}>
+            {occupato === 'suggerimenti' ? t('Guardo…') : `${tutte.filter(a => a.accesa).length} ${t('attive')}`}</span>
+          <button className="auto-button subtle auto-refresh" onClick={rinfresca} disabled={!!occupato || carico}
+            aria-label={t('Aggiorna i suggerimenti')} title={t('Aggiorna i suggerimenti')}><IconGiro size={12} /></button>
+        </div></div>
       {!!tutte.length && <div className="auto-toolbar">
         <div className="auto-tabs" aria-label={t('Filtra automazioni')}>{[
           ['tutte', t('Tutte')], ['attive', t('Attive')], ['pausa', t('In pausa')], ['attenzione', t('Da controllare')]
@@ -131,12 +163,13 @@ export function Automazioni({ v }: { v: Vals }) {
       */}
       {([['Pronte', viste.filter(a => a.salute.stato !== 'scollegata'), 'pronte'],
          ['Manca una connessione', viste.filter(a => a.salute.stato === 'scollegata'), 'staccate']] as const)
-        .map(([titolo, quali, classe]) => !!quali.length &&
+        .map(([titolo, quali, classe]) => (!!quali.length || (classe === 'pronte' && !!suggeriti.length)) &&
           <section key={classe} className={`auto-group ${classe}`} aria-labelledby={`auto-gruppo-${classe}`}>
-            <h3 className="auto-group-heading" id={`auto-gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
-            <div className="auto-grid">{quali.map(scheda)}</div>
+            <h3 className="auto-group-heading" id={`auto-gruppo-${classe}`}>{t(titolo)}<span>{quali.length + (classe === 'pronte' ? suggeriti.length : 0)}</span></h3>
+            {/* in coda alle sue, nella stessa griglia: la riga si allinea da sola */}
+            <div className="auto-grid">{quali.map(scheda)}{classe === 'pronte' && suggeriti.map(schedaSuggerita)}</div>
           </section>)}
-      {!carico && !viste.length && <div className="auto-empty"><h3>{tutte.length ? t('Nessun risultato') : t('Nessuna automazione, per ora.')}</h3><button className="auto-button" onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else setAperto('') }}>{tutte.length ? t('Mostra tutte') : t('Crea automazione')}</button></div>}
+      {!carico && !viste.length && !suggeriti.length && <div className="auto-empty"><h3>{tutte.length ? t('Nessun risultato') : t('Nessuna automazione, per ora.')}</h3><button className="auto-button" onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else setAperto('') }}>{tutte.length ? t('Mostra tutte') : t('Crea automazione')}</button></div>}
     </section>
     {repo && <button className="auto-button subtle" disabled={!!occupato} onClick={() => azione('recipes', async () => { const r = await api.aggiornaRicette(); setTutte(r.automazioni) })}>{t('Cerca automazioni nuove')}</button>}
     <footer className="auto-page-footer">{v.ospitato ? t('Le automazioni girano nel tuo spazio.') : t('Le automazioni girano mentre Myynd è aperto su questo computer.')}</footer>

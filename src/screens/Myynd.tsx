@@ -6,7 +6,7 @@ import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
-import { taglia, type Vals } from '../vals'
+import { primoParagrafo, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import type { Compito } from '../api'
 
@@ -128,10 +128,17 @@ function didascalia(c: Compito): string {
   return t(c.quando === 'oggi' ? 'Oggi' : c.quando === 'settimana' ? 'Questa settimana' : 'Prima o poi').toLowerCase()
 }
 
-/** Il corpo: il guaio se c'è, quello che ha scritto lui se è arrivato, la nota se l'hai messa. */
+/**
+ * Il corpo: il guaio se c'è, l'essenza di quello che ha scritto lui se è
+ * arrivato, la nota se l'hai messa.
+ *
+ * Quello che ha scritto lui adesso porta due cose in una — l'essenza in cima,
+ * poi una riga vuota, poi il lavoro intero — e qui, sotto il titolo del
+ * compito, ci sta solo la prima: il resto lo vede chi apre la carta.
+ */
 function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
-  if (c.stato === 'pronto' || c.stato === 'chiede') return c.risultato ?? ''
+  if (c.stato === 'pronto' || c.stato === 'chiede') return primoParagrafo(c.risultato ?? '')
   return c.nota ?? ''
 }
 
@@ -177,7 +184,7 @@ function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void })
         <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{c.testo}</div>
         {testo && (
           <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-            {taglia(testo, 150)}
+            {taglia(testo, 140)}
           </div>
         )}
       </div>
@@ -220,8 +227,13 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const pronto = c.stato === 'pronto'
   const chiede = c.stato === 'chiede'
   const delegato = c.stato === 'delegato'
+  // `testo` è l'essenza — quello che sta sotto al titolo, un paragrafo solo.
+  // `completo` è quello che ha scritto per intero: quello che «di più» apre, e
+  // quello che si tiene quando accetti la bozza, perché è da lì che impara
+  // come scrivi — non dalle due righe di riassunto.
   const testo = corpo(c)
-  const tagliato = testo.length > 220
+  const completo = pronto || chiede ? (c.risultato ?? '') : testo
+  const tagliato = completo.length > 180
 
   /** Il «⋯»: quello che non si fa quasi mai, e che quindi non deve stare in vista. */
   const altro = [
@@ -250,7 +262,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
 
       {testo && (
         <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>
-          {lungo ? testo : taglia(testo, 220)}
+          {lungo ? completo : taglia(testo, 180)}
           {tagliato && (
             <Hov as="button" onClick={() => setLungo(x => !x)}
               style={{ border: 'none', background: 'none', padding: '0 0 0 6px', fontFamily: 'inherit', fontSize: '13.5px', color: 'rgba(255,247,240,.6)', cursor: 'pointer' }}
@@ -265,7 +277,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             tenuto — è da lì che impara come scrivi */}
         {/* uno solo pieno per card: quando lui ti chiede una cosa, il pieno è «Manda» qui sotto */}
         <Hov as="button"
-          onClick={() => (pronto ? l.chiudi(c.id, t('Va bene così.'), testo) : l.chiudi(c.id))}
+          onClick={() => (pronto ? l.chiudi(c.id, t('Va bene così.'), completo) : l.chiudi(c.id))}
           style={primario(!chiede)}
           hover={chiede ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
 
@@ -422,7 +434,10 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
       )}
 
       {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
-          alla card scura perché è la risposta alla domanda con cui si torna. */}
+          alla card scura perché è la risposta alla domanda con cui si torna.
+          È una carta come le due qui sopra — titolo, una riga, un bottone — e
+          non più un rigo scritto piccolo: aprendola si apre il foglio da
+          leggere. Il vestito ce l'ha dentro, in `components/Punto.tsx`. */}
       <Punto v={v} lista={lista} apriCompito={id => setInCima(id)} />
 
       {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} />}

@@ -4,13 +4,15 @@
 // codice, che altrimenti riempirebbero l'indice di file macchina invece che
 // delle tue cose.
 //
-// **«Tutto il Mac»** è la stessa lettura con la casa intera come radice. È la
+// **Tutto il computer** — «Il mio Mac», «Il mio PC» — è la stessa lettura con
+// la casa intera come radice, ed è il modo normale di collegare questa fonte:
+// Scrivania, Documenti, Download e il resto stanno tutti lì dentro. È la
 // ragione per cui esiste l'app da scrivania: un server non ha le tue cartelle,
-// l'app ce le ha tutte. Cambiano tre cose e basta — le radici (la casa, e
-// iCloud Drive che sta sotto `Library` e va detto a parte), i tetti (più
-// documenti, più profondità) e l'elenco delle cartelle che non contengono mai
-// documenti tuoi: le app, la musica, i film, le foto, le cache. Le regole per
-// un file restano quelle di sempre.
+// l'app ce le ha tutte. Cambiano tre cose e basta — le radici (la casa, e il
+// disco in nuvola che le sta fuori o sotto `Library` e va detto a parte), i
+// tetti (più documenti, più profondità) e l'elenco delle cartelle che non
+// contengono mai documenti tuoi: le app, la musica, i film, le foto, le cache.
+// Le regole per un file restano quelle di sempre.
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, extname, basename, resolve, relative, sep } from 'node:path'
@@ -39,18 +41,34 @@ const SEGNI_PROGETTO = [
 ]
 
 /**
- * Con tutto il Mac, in più: cartelle della casa dove i documenti non stanno.
+ * Con tutto il computer, in più: cartelle della casa dove i documenti non stanno.
  *
  * Solo con `tutto`, di proposito. Chi sceglie a mano `~/Pictures` perché ci
  * tiene gli scontrini scansionati deve trovarla letta; è quando la radice è
  * la casa intera che «Pictures» vuol dire la libreria di Foto, e «Music» i
  * file di Logic. `Library` e `.Trash` stanno già in `SALTA`, e i nomi con il
  * punto davanti non si aprono mai.
+ *
+ * **Le app restano fuori, e non è una dimenticanza.** Chi chiede «tutto il
+ * computer» pensa anche alle applicazioni, ma un'app non è un documento: è un
+ * pacchetto di binari, con dentro qualche `leggimi.txt` e le traduzioni di
+ * chi l'ha scritta. Indicizzarle riempirebbe la mente di roba di altri —
+ * migliaia di file che nessuno ha mai scritto né letto — e spingerebbe fuori
+ * dal tetto i documenti veri. Quello che una persona *fa* con un'app sta nei
+ * file che l'app salva, e quelli stanno nella casa: quelli si leggono.
+ *
+ * `Downloads` non sta qui e non deve starci: è la cartella dove finisce metà
+ * di quello che una persona riceve — contratti, biglietti, fatture — e con
+ * `tutto` si percorre come le altre.
+ *
+ * `AppData` è la `Library` di Windows: cache, registri, i dati interni dei
+ * programmi. Fuori per la stessa ragione.
  */
 const SALTA_TUTTO = new Set([
   'Applications', 'Music', 'Movies', 'Pictures', 'Public', 'Photos Library.photoslibrary',
   'Caches', 'Cache', 'caches', 'cache', 'tmp', 'temp', 'Temp', 'go',
-  'Parallels', 'VirtualBox VMs', 'Virtual Machines'
+  'Parallels', 'VirtualBox VMs', 'Virtual Machines',
+  'AppData'
 ])
 
 const MAX_FILE = 12_000_000     // i PDF pesano
@@ -79,16 +97,38 @@ export function suggerimenti(): string[] {
   return [join(h, 'Desktop'), join(h, 'Documents'), join(h, 'Downloads')]
 }
 
+/** `p` sta fuori da `radice`, cioè percorrerlo non è ripercorrere quella. */
+function fuoriDa(p: string, radice: string): boolean {
+  return relative(resolve(radice), resolve(p)).startsWith('..')
+}
+
 /**
- * Le radici di «tutto il Mac»: la casa, e iCloud Drive.
+ * Le radici di «tutto il computer»: la casa, più il disco in nuvola.
  *
- * iCloud Drive sta in `~/Library/Mobile Documents/com~apple~CloudDocs`, cioè
- * dentro la cartella che si salta per prima: senza dirla a parte, chi tiene
- * i documenti su iCloud — che è la metà delle persone — leggerebbe la casa
- * intera e non troverebbe niente. Si aggiunge solo se c'è.
+ * Sul Mac la casa è `~` e il secondo è iCloud Drive, che sta in
+ * `~/Library/Mobile Documents/com~apple~CloudDocs`, cioè dentro la cartella
+ * che si salta per prima: senza dirla a parte, chi tiene i documenti su
+ * iCloud — che è la metà delle persone — leggerebbe la casa intera e non
+ * troverebbe niente. Si aggiunge solo se c'è.
+ *
+ * Su Windows la casa è `%USERPROFILE%` — che è quello che `homedir()`
+ * risponde — e il secondo è OneDrive. Quasi sempre OneDrive sta *dentro* la
+ * casa (`%USERPROFILE%\OneDrive`) e allora è già percorso: aggiungerlo lo
+ * stesso vorrebbe dire leggerlo due volte e dimezzare il tetto per cartella.
+ * Si aggiunge quando sta fuori — chi l'ha spostato su un altro disco — e solo
+ * se c'è davvero: una radice che non si apre fa fallire `prova`, cioè il
+ * collegamento intero, per una variabile d'ambiente rimasta indietro.
+ *
+ * `piattaforma` si passa da fuori perché è l'unico modo di provare il caso
+ * Windows da un Mac.
  */
-export function radiciTutto(casa = homedir()): string[] {
+export function radiciTutto(casa = homedir(), piattaforma: string = process.platform): string[] {
   const radici = [casa]
+  if (piattaforma === 'win32') {
+    const onedrive = process.env.OneDrive
+    if (onedrive && existsSync(onedrive) && fuoriDa(onedrive, casa)) radici.push(onedrive)
+    return radici
+  }
   const icloud = join(casa, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')
   if (existsSync(icloud)) radici.push(icloud)
   return radici

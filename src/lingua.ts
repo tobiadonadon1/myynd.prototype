@@ -357,7 +357,6 @@ const EN: Record<string, string> = {
   'Qui arrivano le notizie rilevanti per il tuo lavoro.': 'News that matters to your work appears here.',
   'Aggiungi un dettaglio…': 'Add a detail…',
   'Attività': 'Task',
-  'Crea bozza': 'Create draft',
   'Da pianificare': 'Unscheduled',
   'Da recuperare': 'Overdue',
   'Data': 'Date',
@@ -378,8 +377,9 @@ const EN: Record<string, string> = {
   "Cosa vuoi delegare?": "What would you like to delegate?",
   'Flusso': 'Workflow',
   'Suggerimenti': 'Suggestions',
+  'Suggerita': 'Suggested',
+  'Aggiorna i suggerimenti': 'Refresh suggestions',
   'Rivedi': 'Review',
-  'Nessun nuovo suggerimento, per ora.': 'No new suggestions right now.',
   'Nessuna automazione, per ora.': 'No automations yet.',
   'Hai modifiche non salvate.': 'You have unsaved changes.',
   'Continua a modificare': 'Keep editing',
@@ -445,7 +445,6 @@ const EN: Record<string, string> = {
   "Ultima esecuzione": "Last run",
   "Un piccolo aiuto, che diventa una buona abitudine.": "A little help. A lighter day.",
   "attive": "active",
-  "documenti pertinenti": "matching documents",
   "passi": "steps",
 
   'Ho già un Myynd: portalo qui': 'I already have a Myynd: bring it here',
@@ -706,7 +705,6 @@ const EN: Record<string, string> = {
 
 // — il catalogo delle fonti —
   'Posta': 'Mail',
-  'Desktop': 'Desktop',
   'Conversazioni': 'Conversations',
   'Calendario': 'Calendar',
   'Comunicazione': 'Communication',
@@ -1217,7 +1215,7 @@ const EN: Record<string, string> = {
   'Cerca  ⌘K': 'Search  ⌘K',
   'Chat': 'Chat',
   'Automazioni': 'Automations',
-  'Mappa': 'Map',
+  'Mappa': 'Knowledge Map',
   'Connettori': 'Sources',
   'Preferenze': 'Preferences',
   'Esci': 'Sign out',
@@ -1328,7 +1326,6 @@ const EN: Record<string, string> = {
   'PDF, Word, testo. Solo lettura, solo dove dici tu.':
     'PDF, Word, plain text. Read-only, and only where you say.',
   'Oppure un percorso': 'Or a path',
-  'Collega il desktop': 'Connect the desktop',
   'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.':
     'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime — it does not happen on its own.',
   'Scegli una cartella': 'Choose a folder',
@@ -1557,7 +1554,6 @@ const EN: Record<string, string> = {
   'Consenti': 'Allow',
   'Collego…': 'Connecting…',
   'leggo…': 'reading…',
-  'Scrivania, Documenti e Download in sola lettura': 'Desktop, Documents and Downloads, read-only',
   ', e ': ', and ',
   'la chiave di Claude che è già qui': 'the Claude key already on this machine',
   '. Posta e Notion no: servono le tue credenziali.': '. Not Mail or Notion: those need your credentials.',
@@ -1924,6 +1920,7 @@ const EN: Record<string, string> = {
   'Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.': 'Opens the quick bar from any program: a line to note, or a question with “?”. Pressed again, it closes it.',
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
+  'Dieci secondi.': 'Ten seconds.',
   'Mentre non c’eri': 'While you were away',
   'Adesso': 'Now',
   'I tuoi progetti': 'Your projects',
@@ -1955,11 +1952,29 @@ const EN: Record<string, string> = {
   'prepara il prompt': 'writes the prompt',
 
   // — tutto il Mac, le Note di Apple, l'accesso completo al disco —
-  'Tutto il Mac': 'Whole Mac',
+
+  // — «Il mio Mac» / «Il mio PC»: la fonte è la macchina, non la Scrivania —
+  // Il nome lo decide il server (`nomeComputer` in connettori/registro.ts) e
+  // arriva qui come chiave: servono tutte e due, perché lo stesso dizionario
+  // gira su un Mac e su un PC.
+  'Il mio Mac': 'My Mac',
+  'Il mio PC': 'My PC',
+  'Tutto quello che tieni sul computer, in sola lettura: cartelle, file, download.':
+    'Everything you keep on your computer, read-only: folders, files, downloads.',
+  'Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella. Legge e basta, non sposta niente.':
+    'Desktop, Documents, Downloads, iCloud Drive and the rest of your home folder. It reads, and nothing else: it never moves a thing.',
+  'Collega il mio Mac': 'Connect my Mac',
+  'Collega il mio PC': 'Connect my PC',
+  'Solo alcune cartelle': 'Only some folders',
+  'Collega le cartelle scelte': 'Connect the chosen folders',
+  'Per leggere Scrivania, Documenti, Download e la Posta serve l’Accesso completo al disco':
+    'Reading Desktop, Documents, Downloads and Mail needs Full Disk Access',
+  'Apri Impostazioni, aggiungi Myynd, poi torna qui.': 'Open Settings, add Myynd, then come back here.',
+  'tutto il Mac': 'the whole Mac',
+  'tutto il PC': 'the whole PC',
+
   'La tua cartella personale e iCloud Drive, fino a venticinquemila documenti. Salta le app, la musica, i film, le foto, le cache, il cestino, i file nascosti e i progetti di codice.':
     'Your home folder and iCloud Drive, up to twenty-five thousand documents. It skips apps, music, movies, photos, caches, the trash, hidden files and code projects.',
-  'Collega tutto il Mac': 'Connect the whole Mac',
-  'il Mac intero': 'the whole Mac',
   'Legge le note dell’app Note di Apple su questo Mac: gli appunti, le liste, quello che ti sei scritto al volo.':
     'Reads your Apple Notes on this Mac: the jottings, the lists, what you wrote down on the fly.',
   'Niente da incollare. Si legge una copia del suo archivio, in sola lettura; le note protette da password e quelle nel cestino restano fuori.':

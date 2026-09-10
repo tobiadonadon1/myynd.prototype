@@ -590,23 +590,43 @@ function FormDesktopBrowser({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Il computer intero, che è il modo normale di collegare questa fonte.
+ *
+ * Prima era il contrario: tre cartelle da spuntare e, in fondo, un
+ * interruttore «Tutto il Mac» che quasi nessuno accendeva. Il risultato era
+ * una persona convinta di aver collegato il suo computer e un Myynd che
+ * guardava la Scrivania — non i Download, non i Documenti, non iCloud. Adesso
+ * il bottone è uno e collega tutto; chi vuole restringere apre «Solo alcune
+ * cartelle», che è la stessa scheda di prima, chiusa.
+ */
 export function FormDesktop({ tema, ok }: Props) {
   const [cartelle, setCartelle] = useState<string[]>([])
   const [manuale, setManuale] = useState('')
   const [suggeriti, setSuggeriti] = useState<string[]>([])
   const [ospitato, setOspitato] = useState<boolean | null>(null)
   /**
-   * «Tutto il Mac»: la casa intera invece delle cartelle scelte.
+   * Il nome della fonte, che è il nome della macchina: «Il mio Mac» o «Il mio PC».
    *
-   * È l'interruttore per cui esiste l'app da scrivania — un server non ha le
-   * tue cartelle, l'app le ha tutte — e sta qui, accanto alle cartelle, non
-   * al posto loro: chi lo accende vede sparire le pastiglie, chi lo spegne le
-   * ritrova come le aveva lasciate. La riga sotto dice cosa legge e cosa
-   * salta, perché «tutto» senza quella riga fa paura a ragione.
+   * Lo decide il server con `process.platform` — `nomeComputer`, in
+   * `connettori/registro.ts` — e non il guscio, perché il computer che si
+   * legge è quello dove gira il server, non quello dove sta la finestra.
+   * Arriva già dentro `s.connettori`, senza una chiamata in più.
    */
-  const [tutto, setTutto] = useState(false)
+  const [nome, setNome] = useState('')
+  /**
+   * L'accesso completo al disco, come lo vede il server.
+   *
+   * Senza, su un Mac, Scrivania, Documenti, Download e la Posta si aprono con
+   * «operazione non permessa» — cioè il collegamento riesce e la lettura torna
+   * quasi vuota, che è il modo peggiore di fallire. Si dice prima del bottone,
+   * ma non lo blocca: il permesso si può dare anche dopo, e la lettura delle
+   * sei ore lo ritrova da sola.
+   */
+  const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
   const [err, setErr] = useState('')
-  const [occupato, setOccupato] = useState(false)
+  /** Quale dei due bottoni sta lavorando: sono due azioni diverse, e «Provo…» va su una sola. */
+  const [occupato, setOccupato] = useState<'tutto' | 'cartelle' | null>(null)
 
   // Le cartelle suggerite arrivano già scelte: erano tutte da spuntare a mano
   // prima, e sono le stesse tre volte su quattro. Toglierne una è un clic,
@@ -615,6 +635,8 @@ export function FormDesktop({ tema, ok }: Props) {
     api.stato().then(s => {
       setOspitato(s.ospitato)
       setSuggeriti(s.suggerimentiDesktop)
+      setAccesso(s.accessoDisco)
+      setNome(s.connettori.find(c => c.id === 'desktop')?.nome ?? '')
       setCartelle(c => (c.length ? c : s.suggerimentiDesktop))
     }).catch(() => {})
   }, [])
@@ -650,15 +672,26 @@ export function FormDesktop({ tema, ok }: Props) {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
   }
 
-  const collega = async () => {
-    setOccupato(true); setErr('')
+  /**
+   * `tutto` non è più un interruttore da leggere: è quale bottone si è premuto.
+   *
+   * Con `tutto` le cartelle non si mandano affatto — le sceglie il server, che
+   * è l'unico a sapere dove sta la casa e se c'è un disco in nuvola — e la
+   * rotta le ignorerebbe comunque.
+   */
+  const collega = async (tutto: boolean) => {
+    setOccupato(tutto ? 'tutto' : 'cartelle'); setErr('')
     const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
-    try { await api.collegaDesktop(tutte, tutto); ok() }
+    try { await api.collegaDesktop(tutto ? [] : tutte, tutto); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
+    setOccupato(null)
   }
 
   const scuro = tema === 'scuro'
+  // il nome dice la macchina, e il bottone deve dire la stessa cosa: chi sta
+  // su Windows non collega «il mio Mac»
+  // finché il server non ha detto il nome, decide la piattaforma del guscio
+  const suMac = nome ? nome !== 'Il mio PC' : desktop()?.piattaforma !== 'win32'
   const pastiglia = (on: boolean): CSSProperties => ({
     padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
     border: `1px solid ${on ? '#C4623B' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)'}`,
@@ -667,35 +700,43 @@ export function FormDesktop({ tema, ok }: Props) {
   })
   return (
     <div>
-      <div style={nota(tema)}>{t('PDF, Word, testo. Solo lettura, solo dove dici tu.')}</div>
-      {!tutto && (
-        <>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {suggeriti.map(c => (
-              // il nome e non il percorso intero, ma il percorso resta nel titolo:
-              // due «Lavoro» in due posti diversi si distinguono passandoci sopra
-              <button key={c} type="button" title={c} aria-pressed={cartelle.includes(c)} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
-            ))}
-            {desktop() && (
-              <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
-            )}
-          </div>
-          <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
-          <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
-        </>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Tutto il Mac')}</div>
-          <div style={{ ...nota(tema), marginTop: 3, marginBottom: 0 }}>
-            {t('La tua cartella personale e iCloud Drive, fino a venticinquemila documenti. Salta le app, la musica, i film, le foto, le cache, il cestino, i file nascosti e i progetti di codice.')}
-          </div>
-        </div>
-        <button type="button" role="switch" aria-checked={tutto} aria-label={t('Tutto il Mac')}
-          onClick={() => setTutto(v => !v)} style={track(tutto)}><span style={knob()} /></button>
-      </div>
+      <div style={nota(tema)}>{t('Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella. Legge e basta, non sposta niente.')}</div>
+      {/* il permesso mancante si dice prima del bottone, non dopo: dopo è una
+          fonte collegata che resta a zero e nessuno sa perché */}
+      {accesso === 'no' && <AccessoDisco tema={tema}
+        testo={t('Per leggere Scrivania, Documenti, Download e la Posta serve l’Accesso completo al disco')}
+        coda={t('Apri Impostazioni, aggiungi Myynd, poi torna qui.')} />}
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} tema={tema}>{tutto ? t('Collega tutto il Mac') : t('Collega il desktop')}</Conferma>
+      <Conferma onClick={() => collega(true)} occupato={occupato === 'tutto'} tema={tema}>
+        {suMac ? t('Collega il mio Mac') : t('Collega il mio PC')}
+      </Conferma>
+      {/* La scelta a mano resta intera, ma chiusa: è la strada di chi ha una
+          ragione per restringere — una cartella di lavoro sola, un disco di
+          rete — non quella di chi apre la scheda per la prima volta. */}
+      <details style={{ marginTop: 18 }}>
+        <summary style={{ ...nota(tema), marginBottom: 0, cursor: 'pointer' }}>{t('Solo alcune cartelle')}</summary>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {suggeriti.map(c => (
+            // il nome e non il percorso intero, ma il percorso resta nel titolo:
+            // due «Lavoro» in due posti diversi si distinguono passandoci sopra
+            <button key={c} type="button" title={c} aria-pressed={cartelle.includes(c)} onClick={() => alterna(c)} style={pastiglia(cartelle.includes(c))}>{c.split('/').pop()}</button>
+          ))}
+          {desktop() && (
+            <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
+          )}
+        </div>
+        <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
+        <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
+        {/* secondario per davvero: di primario ce n'è uno solo, ed è quello sopra */}
+        <button type="button" onClick={() => collega(false)} disabled={occupato !== null}
+          style={{
+            ...pastiglia(false), display: 'block', marginTop: 14, padding: '10px 18px',
+            borderColor: '#C4623B', color: scuro ? '#E8A87C' : '#8E3F1F',
+            cursor: occupato ? 'default' : 'pointer'
+          }}>
+          {occupato === 'cartelle' ? t('Provo…') : t('Collega le cartelle scelte')}
+        </button>
+      </details>
     </div>
   )
 }
@@ -787,7 +828,19 @@ const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.s
  * segue a mano. Si mostra solo quando il server dice «no»: una riga sul
  * permesso a chi ce l'ha già è una riga che insegna a ignorare le righe.
  */
-export function AccessoDisco({ tema }: { tema: Tema }) {
+export function AccessoDisco({ tema, testo, coda }: {
+  tema: Tema
+  /**
+   * La frase che dice *cosa* non si legge senza il permesso, senza punto in
+   * fondo: lo mette il componente, dopo la strada. Cambia con chi la mostra —
+   * le Note parlano delle note, il computer parla di Scrivania, Documenti,
+   * Download e Posta — e una riga che nomina la cosa sbagliata è una riga che
+   * si impara a saltare.
+   */
+  testo?: string
+  /** Cosa fare, in una frase, quando il bottone c'è per farlo davvero. */
+  coda?: string
+}) {
   const d = desktop()
   const [err, setErr] = useState('')
   const apri = async () => {
@@ -799,9 +852,12 @@ export function AccessoDisco({ tema }: { tema: Tema }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: '11px 14px', borderRadius: 13, border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(196,98,59,.35)'}` }}>
       <div style={{ ...nota(tema), marginBottom: 0, flex: 1, minWidth: 0 }}>
-        {t('Per leggere le Note serve l’accesso completo al disco')}
+        {testo ?? t('Per leggere le Note serve l’accesso completo al disco')}
         {!d && <>{': '}{t('Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd')}</>}
         {'.'}
+        {/* «Apri Impostazioni» si dice solo dove quel bottone esiste: nel
+            browser la strada scritta qui sopra è già l'istruzione intera */}
+        {d && coda && <>{' '}{coda}</>}
         {err && <span style={{ color: '#8E3F1F' }}> {t(err)}</span>}
       </div>
       {d && (

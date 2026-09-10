@@ -37,6 +37,23 @@ export type VoceConnettore = {
   nota: string
 }
 
+/**
+ * Come si chiama la fonte «questo computer»: «Il mio Mac» o «Il mio PC».
+ *
+ * Il nome vecchio — «Desktop» — era il nome della cartella, e chi lo leggeva
+ * capiva quello: che Myynd guardava la Scrivania e basta. Ma la fonte è la
+ * macchina intera, e il nome deve dire quella. Resta una funzione pura, con la
+ * piattaforma passata da fuori, perché è l'unico modo di provarla per un
+ * Windows da un Mac: il catalogo la chiama una volta con `process.platform`.
+ *
+ * L'id resta `desktop` per sempre: è la chiave con cui la configurazione, gli
+ * id dei documenti (`desktop:/Users/…`) e gli attrezzi si riconoscono. Un nome
+ * si cambia, un id no.
+ */
+export function nomeComputer(piattaforma: string): string {
+  return piattaforma === 'darwin' ? 'Il mio Mac' : 'Il mio PC'
+}
+
 export const CATALOGO: VoceConnettore[] = [
   { id: 'posta', nome: 'Posta', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'La tua casella, letta ogni giorno.' },
   /*
@@ -54,7 +71,7 @@ export const CATALOGO: VoceConnettore[] = [
   // sulla piattaforma di Meta per le aziende, non quello personale — la dice
   // la scheda prima dei campi (forms.tsx), con il perché. La nota dice cos'è.
   { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I messaggi di un numero WhatsApp Business.' },
-  { id: 'desktop', nome: 'Desktop', gruppo: 'File', pronto: true, legge: true, nota: 'Le cartelle che scegli, o tutto il Mac, in sola lettura.' },
+  { id: 'desktop', nome: nomeComputer(process.platform), gruppo: 'File', pronto: true, legge: true, nota: 'Tutto quello che tieni sul computer, in sola lettura: cartelle, file, download.' },
   { id: 'drive', nome: 'Google Drive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Gmail.' },
   { id: 'sharepoint', nome: 'SharePoint e OneDrive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Outlook.' },
   { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, legge: true, nota: 'I tuoi file su Dropbox.' },
