@@ -5,8 +5,7 @@ import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
   IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci
-} from './icons'
+  IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
 import { Automazioni } from './screens/Automazioni'
@@ -22,7 +21,7 @@ import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
 import { Credito } from './components/Credito'
-import { Logo, Marchio } from './components/Marchio'
+import { Marchio } from './components/Marchio'
 import { Mascotte } from './components/Mascotte'
 import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
@@ -387,7 +386,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           padding: rail ? '0 0 18px' : '0 4px 24px'
         }}>
           <div style={{ flex: rail ? 'none' : 1 }}>
-            {rail ? <Marchio dim={28} animato={false} /> : <Logo testo={20} scala={1.4} animato={false} />}
+            {rail ? <Marchio dim={28} animato={false} /> : <span style={{ fontSize: 22, fontWeight: 300, letterSpacing: '.02em', lineHeight: 1 }}>myynd</span>}
           </div>
           <Hov as="button" title={t('Cerca  ⌘K')} onClick={v.openSearch}
             style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
@@ -412,9 +411,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}
-            <IconChat style={{ flex: 'none', color: v.chatDaLeggere && !v.isChat ? '#C4623B' : undefined }} />
+            {v.chatDaLeggere && !v.isChat ? <IconChatPiena style={{ flex: 'none', color: '#C4623B' }} /> : <IconChat style={{ flex: 'none' }} />}
             {!rail && <span style={{ flex: 1 }}>{t('Chat')}</span>}
-            {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 7, height: 7, flex: 'none', borderRadius: '50%', background: v.isChat ? '#FFF7F0' : '#C4623B' }} />}
+            {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 9, height: 9, flex: 'none', borderRadius: '50%', background: v.isChat ? '#FFF7F0' : '#C4623B', boxShadow: v.isChat ? 'none' : '0 0 0 3px rgba(196,98,59,.22)' }} />}
           </a>
 
           {/* l'elenco delle conversazioni non ci sta in una fila di icone:
@@ -431,12 +430,12 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
                 {v.intervista && (
                   <div role="button" tabIndex={0} aria-current={v.isChat || undefined} onClick={v.goChat} onKeyDown={daTastiera(v.goChat)}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 10, cursor: 'pointer', background: 'rgba(255,255,255,.92)' }}>
-                    <Mascotte size={22} style={{ flex: 'none' }} />
+                    <Mascotte size={32} style={{ flex: 'none' }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '12.5px', fontWeight: 500 }}>Myynd</div>
                       <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{v.chatDaLeggere ? t('Ha qualche domanda per te.') : t('Fatto.')}</div>
                     </div>
-                    {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: '#C4623B' }} />}
+                    {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: '#C4623B', boxShadow: '0 0 0 3px rgba(196,98,59,.22)' }} />}
                   </div>
                 )}
                 {v.threads.map(ch => <RigaChat key={ch.id} ch={ch} />)}

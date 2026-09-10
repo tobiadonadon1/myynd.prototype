@@ -95,6 +95,13 @@ export const IconChat = ({ size = 18, style }: P) => (
   </svg>
 )
 
+/** Lo stesso fumetto, pieno: quando dentro c'è qualcosa da leggere. */
+export const IconChatPiena = ({ size = 18, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={style}>
+    <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5v6a3.5 3.5 0 0 1-3.5 3.5H10l-4.5 4v-4.4A3.5 3.5 0 0 1 4 12.5Z" />
+  </svg>
+)
+
 export const IconFulmine = ({ size = 18, style }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" style={style}>
     <path d="M13 2.5 5.5 13H11l-1 8.5L18.5 10H13Z" />

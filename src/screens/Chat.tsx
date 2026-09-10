@@ -7,9 +7,12 @@ import type { Vals } from '../vals'
 import { Mascotte } from '../components/Mascotte'
 
 /** La faccia accanto alla bolla: piccola, allineata alla prima riga. */
-const AVATAR: React.CSSProperties = { flex: 'none', marginTop: 12, marginRight: 8 }
+// la mascotte accanto a ogni fumetto di Myynd: il lato e il vuoto sotto
+// l'etichetta del mittente vanno insieme, se no l'etichetta non è più allineata
+const LATO_MASCOTTE = 40
+const AVATAR: React.CSSProperties = { flex: 'none', marginTop: 4, marginRight: 8 }
 /** Chi scrive, sopra la prima bolla: un nome, non un'intestazione. */
-const MITTENTE: React.CSSProperties = { fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)', margin: '4px 0 -6px 32px' }
+const MITTENTE: React.CSSProperties = { fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)', margin: `4px 0 -6px ${LATO_MASCOTTE + 8}px` }
 
 const PASTIGLIA: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 99, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,253,249,.7)',
@@ -18,7 +21,7 @@ const PASTIGLIA: React.CSSProperties = {
 
 /** Una bolla di Myynd, con la faccia accanto. Fuori dal componente: dentro, rinascerebbe a ogni tasto. */
 function Sua({ testo, bolla }: { testo: string; bolla: Vals['bolla'] }) {
-  return <div style={bolla.rigaSua}><Mascotte size={22} style={AVATAR} /><div style={bolla.sua}>{testo}</div></div>
+  return <div style={bolla.rigaSua}><Mascotte size={LATO_MASCOTTE} style={AVATAR} /><div style={bolla.sua}>{testo}</div></div>
 }
 
 /**
@@ -95,7 +98,7 @@ export function Chat({ v }: { v: Vals }) {
 
         {!v.intervista && v.messages.map(m => (
           <div key={m.id} style={m.row}>
-            {!m.mio && <Mascotte size={22} style={AVATAR} />}
+            {!m.mio && <Mascotte size={LATO_MASCOTTE} style={AVATAR} />}
             <div style={m.bubble}>
               {/* Le domande restano testo semplice: le hai scritte tu, non
                   c'è niente da impaginare. Le risposte passano dal compositore. */}
@@ -105,8 +108,8 @@ export function Chat({ v }: { v: Vals }) {
         ))}
 
         {v.pensando && (
-          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <Mascotte size={22} style={AVATAR} />
+          <div style={v.bolla.rigaSua}>
+            <Mascotte size={LATO_MASCOTTE} style={AVATAR} />
             <Stato tipo="cerco" testo={t('Cerco tra le fonti')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
           </div>
         )}

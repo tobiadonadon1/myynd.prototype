@@ -39,8 +39,8 @@ button,input,textarea,select{font-family:inherit}
 @keyframes marchioOnda{0%,100%{transform:rotate(-.7deg)}50%{transform:rotate(.7deg)}}
 
 /* Il pallino che chiede attenzione: salta piano, e sta fermo per chi ha chiesto meno movimento */
-@keyframes salta{0%,60%,100%{transform:translateY(0)}20%{transform:translateY(-4px)}35%{transform:translateY(0)}45%{transform:translateY(-2px)}}
-.pallino-salta{animation:salta 2.4s ease-in-out infinite;animation-play-state:var(--mo,running)}
+@keyframes salta{0%,55%,100%{transform:translateY(0) scale(1)}18%{transform:translateY(-7px) scale(1.15)}32%{transform:translateY(0) scale(1)}42%{transform:translateY(-3px) scale(1.05)}}
+.pallino-salta{animation:salta 1.8s ease-in-out infinite;animation-play-state:var(--mo,running)}
 
 /* — L'accesso e l'accensione —
    `both` e non `forwards`: il pezzo deve essere già invisibile *prima* che
