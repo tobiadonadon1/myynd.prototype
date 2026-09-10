@@ -71,8 +71,9 @@ export const CATALOGO: VoceConnettore[] = [
   { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, già su questo Mac.' },
   // Le Note di Apple stanno in una cartella che macOS protegge: senza «Accesso
   // completo al disco» si aprono con «operazione non permessa». Lo dice la
-  // scheda, prima del bottone (AccessoDisco in forms.tsx). La nota dice cos'è.
-  { id: 'note', nome: 'Note', gruppo: 'Note', pronto: true, legge: true, nota: 'Le Note di Apple su questo Mac.' },
+  // scheda, prima del bottone (AccessoDisco in forms.tsx), e lo dice la nota:
+  // è la condizione che decide se vale la pena aprire la scheda.
+  { id: 'note', nome: 'Note', gruppo: 'Note', pronto: true, legge: true, nota: 'Le Note di Apple su questo Mac: serve l’accesso completo al disco.' },
   /*
    * Le conversazioni, e la nota dice il passaggio che costa: l'esportazione.
    *

@@ -149,7 +149,7 @@ const EN: Record<string, string> = {
   'I tuoi file su Dropbox.': 'Your files on Dropbox.',
   'Le pagine che condividi con Myynd.': 'The pages you share with Myynd.',
   'Le note delle tue riunioni, già su questo Mac.': 'Your meeting notes, already on this Mac.',
-  'Le Note di Apple su questo Mac.': 'Apple Notes on this Mac.',
+  'Le Note di Apple su questo Mac: serve l’accesso completo al disco.': 'Apple Notes on this Mac: it needs Full Disk Access.',
   'Collega quello che usi già. Myynd lo legge, non lo tocca.': 'Connect what you already use. Myynd reads it, never changes it.',
   'Ha qualche domanda per te.': 'Has a few questions for you.',
   'Viene prima di tutto quando scelgo cosa metterti in prima pagina.': 'Comes first when I pick what goes on your front page.',
