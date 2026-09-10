@@ -120,7 +120,7 @@ function LApp() {
   const NOTA: React.CSSProperties = { fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('L’app')}</div>
 
       <div style={{ ...RIGA, marginTop: 12 }}>
@@ -229,9 +229,6 @@ function CampoFuoco({ v }: { v: Vals }) {
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
         }}>{t('Salva')}</button>
       </div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 10 }}>
-        {t('Vuoto vuol dire: guarda tutto.')}
-      </div>
     </>
   )
 }
@@ -297,7 +294,7 @@ function Uso() {
   if (!u) {
     if (!guaio) return null
     return (
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Quanto ha ragionato')}</div>
         <div style={{ fontSize: '13.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>
       </div>
@@ -308,7 +305,7 @@ function Uso() {
   const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Quanto ha ragionato')}</div>
       <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {u.oggi.chiamate
@@ -379,7 +376,7 @@ function Conto() {
   })
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Il tuo accesso')}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 6, maxWidth: 640 }}>
         <div>
@@ -451,11 +448,8 @@ function Identita() {
   }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Chi sei')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
-        {t('Come ti chiamo, e che lavoro fai. Entrano in ogni risposta e in ogni bozza: è la differenza fra una mail scritta per te e una scritta per nessuno.')}
-      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12, maxWidth: 520 }}>
         <div>
           <div style={etichetta('chiaro')}>{t('Nome')}</div>
@@ -517,7 +511,7 @@ function Fascicolo() {
   }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Tutto quello che tengo su di te')}</div>
       <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {t('Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.')}
@@ -572,7 +566,7 @@ function Cancella() {
   const puo = !!password && !!email.trim() && !faccio
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Cancella il conto')}</div>
       <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}
@@ -671,9 +665,6 @@ function CampoArgomenti({ v }: { v: Vals }) {
           background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
         }}>{salvato ? t('Salvato') : t('Salva')}</button>
-      </div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 10 }}>
-        {t('Vuoto vuol dire: dammi un po’ di tutto.')}
       </div>
 
       {/*
@@ -814,7 +805,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   ]
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Con quale motore lavora')}</div>
       <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
         {vie.map(x => {
@@ -932,10 +923,10 @@ export function Preferenze({ v }: { v: Vals }) {
         alla settimana. Quello che scrivi qui è anche l'unica leva che hai per
         non farti riempire la prima pagina di roba che non ti serve.
       */}
-      <div style={{ ...CARD_GLASS, flex: 'none', borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Su cosa mi concentro')}</div>
         <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
-          {t('Quello che scrivi qui viene prima di tutto il resto quando scelgo cosa metterti in prima pagina.')}
+          {t('Viene prima di tutto quando scelgo cosa metterti in prima pagina.')}
         </div>
         <CampoFuoco v={v} />
       </div>
@@ -943,32 +934,39 @@ export function Preferenze({ v }: { v: Vals }) {
       {/* Subito sotto al fuoco perché sono la stessa domanda fatta due volte —
           dove guardo dentro, cosa cerco fuori — e leggerle vicine è l'unico
           modo per non confonderle. */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Di cosa ti tengo aggiornato')}</div>
         <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
-          {t('I giornali li leggo io ogni mattina. Scrivi qui cosa ti interessa e scelgo quelle: se lasci vuoto, ti do un po’ di tutto.')}
+          {t('Cosa ti interessa nei giornali. Vuoto: un po’ di tutto.')}
         </div>
         <CampoArgomenti v={v} />
       </div>
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Autonomia')}</div>
-        <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+        {/* tre pastiglie come il tono, e sotto una riga sola: quella della scelta */}
+        <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', gap: 9, marginTop: 14, flexWrap: 'wrap' }}>
           {v.autonomie.map(a => (
-            <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick} style={{ ...a.row, ...RIGA_BOTTONE }}>
-              <span style={a.radio} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15 }}>{a.titolo}</div>
-                <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3 }}>{a.nota}</div>
-              </div>
-            </button>
+            <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick} title={a.nota} style={a.scelto
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{a.titolo}</button>
           ))}
         </div>
+        <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 12, textWrap: 'pretty' }}>{v.autonomie.find(a => a.scelto)?.nota}</div>
+        {/* il tono nella stessa carta: sono le due manopole di come lavora e come parla */}
+        <div style={{ height: 1, background: 'rgba(34,39,31,.08)', margin: '18px 0 14px' }} />
+        <div style={LABEL}>{t('Tono')}</div>
+        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
+          {v.toni.map(tono => (
+            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Lingua')}</div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('In che lingua ti risponde e scrive il feed. I documenti li legge comunque nella lingua in cui sono.')}</div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Risposte e prima pagina. I documenti restano nella loro lingua.')}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
           {v.lingue.map(l => (
             <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
@@ -978,16 +976,6 @@ export function Preferenze({ v }: { v: Vals }) {
             </button>
           ))}
         </div>
-      </div>
-
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
-        <div style={LABEL}>{t('Tono')}</div>
-        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-          {v.toni.map(tono => (
-            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
-          ))}
-        </div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
 
       <Identita />
@@ -1002,7 +990,7 @@ export function Preferenze({ v }: { v: Vals }) {
           una scelta di costo, e chi paga deve poterla fare senza chiedere a
           nessuno. Si vede solo quando è Claude a lavorare: con un altro
           motore il modello lo dice la sua scheda. */}
-      {v.motore === 'claude' && <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      {v.motore === 'claude' && <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Con quale modello ragiona')}</div>
         <div role="radiogroup" aria-label={t('Con quale modello ragiona')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
           {v.modelli.map(m => (
@@ -1040,7 +1028,7 @@ export function Preferenze({ v }: { v: Vals }) {
 
       <Fascicolo />
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '22px 24px' }}>
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
         <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
           {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(

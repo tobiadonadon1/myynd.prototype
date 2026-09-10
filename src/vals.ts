@@ -1015,7 +1015,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       } as CSSProperties,
       onEnter: () => setHoverThread(ch.id),
       onLeave: () => setHoverThread(h => (h === ch.id ? null : h)),
-      onClick: () => setThread(ch.id),
+      onClick: () => { chiudiIntervista(); setThread(ch.id) },
       // chiede una volta, sul posto: il cestino della riga se ne occupa
       onDelete: async () => {
         try {
@@ -1030,7 +1030,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         mostraToast(t('Chat eliminata.'))
       }
     })),
-    newChat: () => { setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
+    newChat: () => { chiudiIntervista(); setThread(`th${Date.now()}`); setMessaggi([]); setScreen('chat') },
     /** Una chat precisa, anche se nata altrove: l'elenco si rilegge, e i messaggi con lui. */
     apriChat: (id: string) => {
       setThread(id); setRilettura(n => n + 1); setScreen('chat'); setSearch(false); setMenu(false)
@@ -1038,7 +1038,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     },
     chatEmpty: messaggi.length === 0,
     chatCaricata: elencoChatPronto && messaggiPronti,
-    chatTitolo: th?.titolo ?? 'Nuova chat',
+    // la conversazione con Myynd ha il suo nome
+    chatTitolo: passo !== null || intervistaFinita ? 'Myynd' : th?.titolo ?? 'Nuova chat',
     pensando,
     messages: messaggi.map(m => ({
       id: m.id, text: m.text, mio: m.role === 'u',

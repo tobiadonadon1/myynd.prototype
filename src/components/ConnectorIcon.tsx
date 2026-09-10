@@ -65,11 +65,12 @@ export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; s
   </svg>
 }
 
-export function ConnectorTile({ id, nome, collegata, apri }: { id: string; nome: string; collegata: boolean; apri: () => void }) {
+export function ConnectorTile({ id, nome, nota, collegata, apri }: { id: string; nome: string; nota?: string; collegata: boolean; apri: () => void }) {
   return <button type="button" className={`connector-tile ${collegata ? 'connected' : ''}`} onClick={apri} data-connector={id}
     aria-label={`${t(nome)} · ${collegata ? t('Collegato') : t('Da collegare')}`}>
     <span className="connector-tile-mark"><ConnectorIcon id={id} size={27} spenta={!collegata} /></span>
     <span className="connector-tile-name">{t(nome)}</span>
+    {nota && <span className="connector-tile-note">{nota}</span>}
     <span className="connector-tile-status"><i aria-hidden="true" />{collegata ? t('Collegato') : t('Collega')}</span>
     <span className="connector-tile-arrow"><IconAvanti size={12} /></span>
   </button>

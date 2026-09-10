@@ -131,6 +131,30 @@ const EN: Record<string, string> = {
   'L’account è cambiato. Usa un altro account per rientrare.': 'The account changed. Use another account to sign in again.',
   // — creare il conto: la password due volte, e un indirizzo che sembri un indirizzo —
   'Conferma la password': 'Confirm password',
+  'La tua agenda, sempre aggiornata.': 'Your calendar, always up to date.',
+  'Le cartelle che scegli, o tutto il Mac, in sola lettura.': 'The folders you choose, or your whole Mac, read-only.',
+  'La chiave con cui Myynd ragiona.': 'The key Myynd thinks with.',
+  'Un altro fornitore AI, o un modello sul tuo computer.': 'Another AI provider, or a model on your own computer.',
+  'La tua lista, sempre collegata.': 'Your to-do list, always connected.',
+  'Microsoft Teams: arriva presto.': 'Microsoft Teams: coming soon.',
+  'Le chat esportate da ChatGPT e Claude.': 'Chats exported from ChatGPT and Claude.',
+  'Dove lo trovo?': 'Where do I find it?',
+  'Dove la trovo?': 'Where do I find it?',
+  'Dove li trovo?': 'Where do I find these?',
+  'Come ti chiamo e che lavoro fai: entrano in ogni risposta e in ogni bozza.': 'What I call you and what you do: they go into every answer and every draft.',
+  // — le fonti in una riga, la conversazione con Myynd, le preferenze più corte —
+  'La tua casella, letta ogni giorno.': 'Your mailbox, read every day.',
+  'I canali di cui fai già parte.': 'The channels you are already in.',
+  'I messaggi di un numero WhatsApp Business.': 'The messages of a WhatsApp Business number.',
+  'I tuoi file su Dropbox.': 'Your files on Dropbox.',
+  'Le pagine che condividi con Myynd.': 'The pages you share with Myynd.',
+  'Le note delle tue riunioni, già su questo Mac.': 'Your meeting notes, already on this Mac.',
+  'Le Note di Apple su questo Mac.': 'Apple Notes on this Mac.',
+  'Collega quello che usi già. Myynd lo legge, non lo tocca.': 'Connect what you already use. Myynd reads it, never changes it.',
+  'Ha qualche domanda per te.': 'Has a few questions for you.',
+  'Viene prima di tutto quando scelgo cosa metterti in prima pagina.': 'Comes first when I pick what goes on your front page.',
+  'Cosa ti interessa nei giornali. Vuoto: un po’ di tutto.': 'What interests you in the papers. Empty: a bit of everything.',
+  'Risposte e prima pagina. I documenti restano nella loro lingua.': 'Answers and front page. Documents stay in their own language.',
   'Prima scrivi l’attività, poi la fonte.': 'Write the task first, then the source.',
   'Myynd ti ha scritto.': 'Myynd has written to you.',
   'Ha qualche domanda per conoscerti: due minuti.': 'A few questions to get to know you: two minutes.',
@@ -320,7 +344,6 @@ const EN: Record<string, string> = {
   'Aggiungi per': 'Add for',
   'Cerca connessioni…': 'Search connections…',
   'Collegato': 'Connected',
-  'Filtra connessioni': 'Filter connections',
   'Gestisci': 'Manage',
   'Lista': 'List',
   'Vista attività': 'Task view',
@@ -557,13 +580,9 @@ const EN: Record<string, string> = {
   'Google Drive': 'Google Drive',
   'Microsoft 365: posta e agenda. Serve un’app registrata su Entra ID.':
     'Microsoft 365: mail and calendar. Needs an app registered on Entra ID.',
-  'Un token da utente: legge i canali di cui fai già parte.':
-    'A user token: it reads the channels you are already in.',
   'I tuoi documenti su Drive, in sola lettura.': 'Your documents on Drive, read-only.',
   'I file dei siti che segui, e il tuo OneDrive. Stessa app di Outlook.':
     'Files from the sites you follow, and your OneDrive. Same app as Outlook.',
-  'La chiave dell’app, e un codice da incollare una volta sola.':
-    'The app key, and a code to paste once.',
 
   // Slack
   'Token utente': 'User token',
@@ -695,7 +714,6 @@ const EN: Record<string, string> = {
   'Note': 'Notes',
   'Ragionamento': 'Reasoning',
   'Gestionale': 'Business software',
-  'IMAP: host, indirizzo e password della casella.': 'IMAP: host, address and mailbox password.',
   'Google Workspace: posta e agenda, dalla loro API.': 'Google Workspace: mail and calendar, from their own API.',
   'Gmail e Calendario': 'Gmail and Calendar',
   'Su console.cloud.google.com: crea un progetto, attiva Gmail API e Calendar API, poi Credenziali › ID client OAuth › Applicazione desktop. Incolla qui quello che ti dà.':
@@ -718,15 +736,10 @@ const EN: Record<string, string> = {
   'Google non mi lascia fare questa cosa: ricollega l’account.': 'Google will not let me do this: reconnect the account.',
   'Le cartelle che scegli tu, lette in sola lettura.': 'The folders you pick, read-only.',
   'Token di integrazione interna, pagine condivise con l\u2019integrazione.': 'Internal integration token, pages shared with the integration.',
-  'La chiave API che fa ragionare Myynd sul tuo materiale.': 'The API key that lets Myynd reason over your material.',
-  'La tua lista. Collegata da sola, sempre.': 'Your list. Connected on its own, always.',
   'Richiede un account WhatsApp Business API.': 'Needs a WhatsApp Business API account.',
-  'Richiede una app registrata su Entra ID.': 'Needs an app registered on Entra ID.',
   'Richiede una app Slack con OAuth.': 'Needs a Slack app with OAuth.',
   'CalDAV o Google Calendar.': 'CalDAV or Google Calendar.',
 // — Granola —
-  'Le note delle tue riunioni, lette da Granola su questo Mac. Niente da incollare.':
-    'Your meeting notes, read from Granola on this Mac. Nothing to paste.',
   'Non trovo le note di Granola su questo computer. Apri Granola una volta e riprova.':
     'I cannot find Granola’s notes on this computer. Open Granola once and try again.',
   'Non ho il permesso di leggere le note di Granola.': 'I do not have permission to read Granola’s notes.',
@@ -737,8 +750,6 @@ const EN: Record<string, string> = {
     'Granola is a Mac app: there is nothing to read on this computer.',
   'Granola si legge dal computer dove gira, e qui Myynd gira su un server.':
     'Granola is read from the computer it runs on, and here Myynd runs on a server.',
-  'Cloud API: un numero registrato su WhatsApp Business, non quello personale. Serve un indirizzo pubblico.':
-    'Cloud API: a number registered on WhatsApp Business, not your personal one. Needs a public address.',
   'Serve un numero registrato su WhatsApp Business, quello della piattaforma di Meta per le aziende: con un numero personale non c’è niente da collegare.':
     'You need a number registered on WhatsApp Business, Meta’s platform for companies: with a personal number there is nothing to connect.',
   'Collega Granola': 'Connect Granola',
@@ -826,8 +837,6 @@ const EN: Record<string, string> = {
 
   // — chi sei: nome e ruolo, che prima li chiedeva solo il primo avvio —
   'Chi sei': 'Who you are',
-  'Come ti chiamo, e che lavoro fai. Entrano in ogni risposta e in ogni bozza: è la differenza fra una mail scritta per te e una scritta per nessuno.':
-    'What I call you, and what you do. They go into every answer and every draft: it is the difference between a mail written for you and one written for nobody.',
   'come ti chiamano al lavoro': 'what they call you at work',
   'titolare, responsabile vendite, …': 'owner, head of sales, …',
   'Salvato.': 'Saved.',
@@ -938,7 +947,6 @@ const EN: Record<string, string> = {
   'Apri Billing': 'Open Billing',
   'Chiudo…': 'Closing…',
   // — il calendario, da un indirizzo iCal —
-  'Un indirizzo da incollare: quello segreto in formato iCal della tua agenda. Google, Outlook, iCloud.': 'One address to paste: the secret iCal address of your calendar. Google, Outlook, iCloud.',
   'Arriva presto. Intanto la posta si collega da «Posta» e l’agenda da «Calendario».': 'Coming soon. Meanwhile email connects through “Email” and your calendar through “Calendar”.',
   'Nessuna app da registrare e nessun consenso da dare: la tua agenda ha già un indirizzo, e Myynd lo legge.': 'No app to register and no consent to give: your calendar already has an address, and Myynd reads it.',
   'Su Google Calendar: apri le impostazioni, clicca il nome della tua agenda nella colonna a sinistra, scendi fino in fondo a «Integra il calendario» e copia l’indirizzo privato in formato iCal.': 'In Google Calendar: open Settings, click your calendar’s name in the left column, scroll to the bottom to “Integrate calendar” and copy the secret address in iCal format.',
@@ -1041,9 +1049,6 @@ const EN: Record<string, string> = {
   'ancora nessun documento': 'no documents yet',
   "Crea l'accesso": 'Create your login',
   'Su cosa mi concentro': 'What I focus on',
-  'Quello che scrivi qui viene prima di tutto il resto quando scelgo cosa metterti in prima pagina.':
-    'What you write here comes before everything else when I pick what to put on your front page.',
-  'Vuoto vuol dire: guarda tutto.': 'Empty means: look at everything.',
   'fatta con Myynd': 'done with Myynd',
   'Da fare': 'To do',
   'Niente da segnalare.': 'Nothing to flag.',
@@ -1337,8 +1342,6 @@ const EN: Record<string, string> = {
   // — le preferenze, i paragrafi —
   'Se lo schermo tremola, spegnilo: restano i colori, si ferma il movimento.':
     'If the screen flickers, switch it off: the colours stay, the motion stops.',
-  'In che lingua ti risponde e scrive il feed. I documenti li legge comunque nella lingua in cui sono.':
-    'The language it answers and writes the feed in. It still reads documents in whatever language they are.',
   'Poi spariscono dalla pagina. Non si cancellano: servono comunque a non riproporti quello che hai già liquidato.':
     "Then they leave the page. They aren't deleted: they still keep me from bringing back what you've already dealt with.",
   'Dove stanno i tuoi dati': 'Where your data lives',
@@ -1754,10 +1757,7 @@ const EN: Record<string, string> = {
   'Non ho ancora guardato i giornali.': 'I have not looked at the papers yet.',
   'Non sono riuscito a raggiungere nessun giornale.': 'I could not reach any of the papers.',
   'Di cosa ti tengo aggiornato': 'What I keep you up to date on',
-  'I giornali li leggo io ogni mattina. Scrivi qui cosa ti interessa e scelgo quelle: se lasci vuoto, ti do un po’ di tutto.':
-    'I read the papers every morning. Write what you care about and I will pick those: leave it empty and you get a bit of everything.',
   'intelligenza artificiale, startup, Medio Oriente, mercati': 'artificial intelligence, startups, the Middle East, markets',
-  'Vuoto vuol dire: dammi un po’ di tutto.': 'Empty means: give me a bit of everything.',
   'Salvato': 'Saved',
 
   // — le automazioni: la griglia, le cartelle, la chiocciola —
@@ -1806,7 +1806,6 @@ const EN: Record<string, string> = {
 
   // — il fornitore compatibile con OpenAI —
   'Fornitore compatibile con OpenAI': 'OpenAI-compatible provider',
-  'OpenAI, OpenRouter, Groq, Mistral — o Ollama e LM Studio in casa. Un indirizzo e un modello.': 'OpenAI, OpenRouter, Groq, Mistral — or Ollama and LM Studio at home. An address and a model.',
   'La chiave del fornitore non è valida.': 'The provider’s key is not valid.',
   'Il conto del fornitore è senza credito.': 'The provider account is out of credit.',
   'Il fornitore non conosce questo modello.': 'The provider doesn’t know this model.',
@@ -1882,8 +1881,6 @@ const EN: Record<string, string> = {
   'Una riga per ogni documento.': 'One line per document.',
   'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 // — le conversazioni: la scheda, e quello che può dire il connettore —
-  'Le chat esportate da ChatGPT e da Claude, e le sessioni di Claude Code su questo computer.':
-    'The chats exported from ChatGPT and Claude, and the Claude Code sessions on this computer.',
   'Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.':
     'The chats you already had with ChatGPT and Claude, and — if you want — the Claude Code sessions on this computer.',
   'ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.':
@@ -1958,14 +1955,11 @@ const EN: Record<string, string> = {
   'prepara il prompt': 'writes the prompt',
 
   // — tutto il Mac, le Note di Apple, l'accesso completo al disco —
-  'Le cartelle che scegli tu, o tutto il Mac, in sola lettura.': 'The folders you pick, or the whole Mac, read-only.',
   'Tutto il Mac': 'Whole Mac',
   'La tua cartella personale e iCloud Drive, fino a venticinquemila documenti. Salta le app, la musica, i film, le foto, le cache, il cestino, i file nascosti e i progetti di codice.':
     'Your home folder and iCloud Drive, up to twenty-five thousand documents. It skips apps, music, movies, photos, caches, the trash, hidden files and code projects.',
   'Collega tutto il Mac': 'Connect the whole Mac',
   'il Mac intero': 'the whole Mac',
-  'Le note dell’app Note di Apple su questo Mac. Serve l’accesso completo al disco per Myynd.':
-    'Your Apple Notes on this Mac. Myynd needs Full Disk Access.',
   'Legge le note dell’app Note di Apple su questo Mac: gli appunti, le liste, quello che ti sei scritto al volo.':
     'Reads your Apple Notes on this Mac: the jottings, the lists, what you wrote down on the fly.',
   'Niente da incollare. Si legge una copia del suo archivio, in sola lettura; le note protette da password e quelle nel cestino restano fuori.':

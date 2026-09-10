@@ -38,7 +38,7 @@ export type VoceConnettore = {
 }
 
 export const CATALOGO: VoceConnettore[] = [
-  { id: 'posta', nome: 'Posta', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'IMAP: host, indirizzo e password della casella.' },
+  { id: 'posta', nome: 'Posta', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'La tua casella, letta ogni giorno.' },
   /*
    * L'agenda prima di Gmail, e non è un ordine casuale.
    *
@@ -46,25 +46,19 @@ export const CATALOGO: VoceConnettore[] = [
    * niente da nessuna parte: sta accanto a «Posta» perché insieme fanno il
    * novanta per cento di quello che una persona voleva da Google.
    */
-  { id: 'calendario', nome: 'Calendario', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Un indirizzo da incollare: quello segreto in formato iCal della tua agenda. Google, Outlook, iCloud.' },
+  { id: 'calendario', nome: 'Calendario', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'La tua agenda, sempre aggiornata.' },
   { id: 'google', nome: 'Gmail e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto. Intanto la posta si collega da «Posta» e l’agenda da «Calendario».' },
   { id: 'microsoft', nome: 'Outlook e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto: posta e agenda di Microsoft 365.' },
-  { id: 'slack', nome: 'Slack', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Un token da utente: legge i canali di cui fai già parte.' },
-  /*
-   * «Business» sta nel nome e non basta, perché si legge come il nome di
-   * un'app — quella verde che si scarica dallo store — e non come una
-   * condizione. La condizione è un'altra e più dura: un numero registrato
-   * sulla piattaforma di Meta per le aziende. Con il proprio numero personale
-   * non c'è niente da collegare, e non perché manchi un permesso: la Cloud API
-   * a quel numero non risponde. Va detto qui, che è dove qualcuno decide se
-   * aprire la scheda, non dentro un errore dopo mezz'ora su developers.facebook.com.
-   */
-  { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Cloud API: un numero registrato su WhatsApp Business, non quello personale. Serve un indirizzo pubblico.' },
-  { id: 'desktop', nome: 'Desktop', gruppo: 'File', pronto: true, legge: true, nota: 'Le cartelle che scegli tu, o tutto il Mac, in sola lettura.' },
+  { id: 'slack', nome: 'Slack', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I canali di cui fai già parte.' },
+  // «Business» nel nome e basta: la condizione vera — un numero registrato
+  // sulla piattaforma di Meta per le aziende, non quello personale — la dice
+  // la scheda prima dei campi (forms.tsx), con il perché. La nota dice cos'è.
+  { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I messaggi di un numero WhatsApp Business.' },
+  { id: 'desktop', nome: 'Desktop', gruppo: 'File', pronto: true, legge: true, nota: 'Le cartelle che scegli, o tutto il Mac, in sola lettura.' },
   { id: 'drive', nome: 'Google Drive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Gmail.' },
   { id: 'sharepoint', nome: 'SharePoint e OneDrive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Outlook.' },
-  { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, legge: true, nota: 'La chiave dell’app, e un codice da incollare una volta sola.' },
-  { id: 'notion', nome: 'Notion', gruppo: 'Note', pronto: true, legge: true, nota: 'Token di integrazione interna, pagine condivise con l’integrazione.' },
+  { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, legge: true, nota: 'I tuoi file su Dropbox.' },
+  { id: 'notion', nome: 'Notion', gruppo: 'Note', pronto: true, legge: true, nota: 'Le pagine che condividi con Myynd.' },
   /*
    * Granola, e la nota dice l'unica cosa che costa: niente.
    *
@@ -74,16 +68,11 @@ export const CATALOGO: VoceConnettore[] = [
    * si aspetta leggendo il nome di un'altra app. L'unica condizione vera è che
    * Granola stia su questo computer, e quella la dice `SOLO_IN_CASA`.
    */
-  { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, lette da Granola su questo Mac. Niente da incollare.' },
-  /*
-   * Le Note di Apple, e la nota dice l'unica cosa che costa: un permesso.
-   *
-   * Il file sta in una cartella che macOS protegge — la stessa della posta di
-   * Mail — e senza «Accesso completo al disco» dato a Myynd nelle Impostazioni
-   * di Sistema si apre con «operazione non permessa». Va detto qui, prima del
-   * bottone: chi lo scopre dall'errore pensa che sia rotto Myynd.
-   */
-  { id: 'note', nome: 'Note', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note dell’app Note di Apple su questo Mac. Serve l’accesso completo al disco per Myynd.' },
+  { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, già su questo Mac.' },
+  // Le Note di Apple stanno in una cartella che macOS protegge: senza «Accesso
+  // completo al disco» si aprono con «operazione non permessa». Lo dice la
+  // scheda, prima del bottone (AccessoDisco in forms.tsx). La nota dice cos'è.
+  { id: 'note', nome: 'Note', gruppo: 'Note', pronto: true, legge: true, nota: 'Le Note di Apple su questo Mac.' },
   /*
    * Le conversazioni, e la nota dice il passaggio che costa: l'esportazione.
    *
@@ -93,18 +82,18 @@ export const CATALOGO: VoceConnettore[] = [
    * Le sessioni di Claude Code invece sono già su questo disco, e quelle sì
    * si leggono premendo un interruttore.
    */
-  { id: 'conversazioni', nome: 'Conversazioni', gruppo: 'Note', pronto: true, legge: true, nota: 'Le chat esportate da ChatGPT e da Claude, e le sessioni di Claude Code su questo computer.' },
-  { id: 'claude', nome: 'Claude', gruppo: 'Ragionamento', pronto: true, nota: 'La chiave API che fa ragionare Myynd sul tuo materiale.' },
+  { id: 'conversazioni', nome: 'Conversazioni', gruppo: 'Note', pronto: true, legge: true, nota: 'Le chat esportate da ChatGPT e Claude.' },
+  { id: 'claude', nome: 'Claude', gruppo: 'Ragionamento', pronto: true, nota: 'La chiave con cui Myynd ragiona.' },
   // Un'altra testa al posto di Claude, non un'altra fonte: OpenAI e chi parla
   // come lei, compresi i modelli che girano su questa macchina. Sta nel
   // catalogo perché si collega da qui come tutto il resto, con una scheda.
-  { id: 'compatibile', nome: 'Fornitore compatibile con OpenAI', gruppo: 'Ragionamento', pronto: true, nota: 'OpenAI, OpenRouter, Groq, Mistral — o Ollama e LM Studio in casa. Un indirizzo e un modello.' },
+  { id: 'compatibile', nome: 'Fornitore compatibile con OpenAI', gruppo: 'Ragionamento', pronto: true, nota: 'Un altro fornitore AI, o un modello sul tuo computer.' },
   // La lista è una fonte come le altre: quello che decidi di fare dice di te
   // quanto un documento — e sta qui perché chi guarda le fonti si aspetta di
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.
-  { id: 'mind2do', nome: 'Da fare', gruppo: 'Note', pronto: true, nota: 'La tua lista. Collegata da sola, sempre.' },
+  { id: 'mind2do', nome: 'Da fare', gruppo: 'Note', pronto: true, nota: 'La tua lista, sempre collegata.' },
 
-  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Richiede una app registrata su Entra ID.' }
+  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Microsoft Teams: arriva presto.' }
 ]
 
 export const PRONTI = CATALOGO.filter(c => c.pronto).map(c => c.id)

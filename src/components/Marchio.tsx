@@ -83,16 +83,18 @@ const MAIUSCOLE = 0.714
  * suo bordo inferiore — il margine della tela sotto l'inchiostro si sconta
  * con uno spostamento, che non tocca l'impaginazione.
  */
-export function Logo({ animato = true, colore, testo = 22, tinta = 'currentColor', forma = PREDEFINITA }: {
+export function Logo({ animato = true, colore, testo = 22, tinta = 'currentColor', forma = PREDEFINITA, scala = 1 }: {
   animato?: boolean
   colore?: string
   /** Il corpo della parola: da qui discende la misura del marchio. */
   testo?: number
+  /** Quanto il marchio supera le maiuscole: 1 le pareggia, 1,4 si fa vedere. Resta sulla linea di base. */
+  scala?: number
   tinta?: string
   forma?: Forma
 }) {
   const { alto, sotto } = inchiostro(forma)
-  const tela = (testo * MAIUSCOLE) / alto
+  const tela = (testo * MAIUSCOLE * scala) / alto
   const dim = (tela * 100) / forma.altezza
   /** Il margine della tela sotto l'inchiostro, in pixel: di tanto il disegno scende sulla linea di base. */
   const scarto = (sotto * tela).toFixed(2)

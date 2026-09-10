@@ -4,10 +4,21 @@ import { IconSu } from '../icons'
 import { Stato } from '../components/Stato'
 import { Testo } from '../Testo'
 import type { Vals } from '../vals'
+import { Mascotte } from '../components/Mascotte'
+
+/** La faccia accanto alla bolla: piccola, allineata alla prima riga. */
+const AVATAR: React.CSSProperties = { flex: 'none', marginTop: 12, marginRight: 8 }
+/** Chi scrive, sopra la prima bolla: un nome, non un'intestazione. */
+const MITTENTE: React.CSSProperties = { fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)', margin: '4px 0 -6px 32px' }
 
 const PASTIGLIA: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 99, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,253,249,.7)',
   color: '#22271F', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit'
+}
+
+/** Una bolla di Myynd, con la faccia accanto. Fuori dal componente: dentro, rinascerebbe a ogni tasto. */
+function Sua({ testo, bolla }: { testo: string; bolla: Vals['bolla'] }) {
+  return <div style={bolla.rigaSua}><Mascotte size={22} style={AVATAR} /><div style={bolla.sua}>{testo}</div></div>
 }
 
 /**
@@ -22,18 +33,18 @@ const PASTIGLIA: React.CSSProperties = {
 function Intervista({ v }: { v: Vals }) {
   const i = v.intervista
   if (!i) return null
-  const Sua = ({ testo }: { testo: string }) => <div style={v.bolla.rigaSua}><div style={v.bolla.sua}>{testo}</div></div>
   return (
     <>
-      <Sua testo={t('Prima due parole su di te, così so con chi parlo.')} />
+      <div style={MITTENTE}>Myynd</div>
+      <Sua bolla={v.bolla} testo={t('Prima due parole su di te, così so con chi parlo.')} />
       {i.battute.map((b, n) => (
         <div key={n} style={{ display: 'contents' }}>
-          <Sua testo={t(b.domanda)} />
+          <Sua bolla={v.bolla} testo={t(b.domanda)} />
           <div style={v.bolla.rigaMia}><div style={v.bolla.mia}>{b.risposta === '—' ? '—' : t(b.risposta)}</div></div>
         </div>
       ))}
       {i.domanda && <>
-        <Sua testo={t(i.domanda.testo)} />
+        <Sua bolla={v.bolla} testo={t(i.domanda.testo)} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 2px' }}>
           {i.domanda.scelte?.map(s => (
             <Hov key={s.id} as="button" onClick={() => i.rispondi(s.id)} style={PASTIGLIA}
@@ -42,7 +53,7 @@ function Intervista({ v }: { v: Vals }) {
         </div>
       </>}
       {i.finita && <>
-        <Sua testo={t('Fatto. Cambi tutto quando vuoi, dalle preferenze.')} />
+        <Sua bolla={v.bolla} testo={t('Fatto. Cambi tutto quando vuoi, dalle preferenze.')} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 2px' }}>
           {v.senzaProgetto && (
             <Hov as="button" onClick={i.configuraProgetto} style={PASTIGLIA}
@@ -84,6 +95,7 @@ export function Chat({ v }: { v: Vals }) {
 
         {!v.intervista && v.messages.map(m => (
           <div key={m.id} style={m.row}>
+            {!m.mio && <Mascotte size={22} style={AVATAR} />}
             <div style={m.bubble}>
               {/* Le domande restano testo semplice: le hai scritte tu, non
                   c'è niente da impaginare. Le risposte passano dal compositore. */}
@@ -94,6 +106,7 @@ export function Chat({ v }: { v: Vals }) {
 
         {v.pensando && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <Mascotte size={22} style={AVATAR} />
             <Stato tipo="cerco" testo={t('Cerco tra le fonti')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
           </div>
         )}

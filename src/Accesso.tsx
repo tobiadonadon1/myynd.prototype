@@ -277,7 +277,7 @@ export function Accesso({ accesso, entrato }: {
             {/* stretta, il marchio sta qui: è comunque la prima cosa che si vede */}
             {!largo && (
               <div style={{ marginBottom: 22, ...su(0) }}>
-                <Marchio dim={34} />
+                <Marchio dim={48} />
               </div>
             )}
             {!largo && (
@@ -465,7 +465,7 @@ function titoloAccesso(modo: Modo) {
 
 function Pitch({ modo }: { modo: Modo }) {
   return <div className="accesso-pitch">
-    <div className="accesso-mark" style={su(0)}><Marchio dim={36} /></div>
+    <div className="accesso-mark" style={su(0)}><Marchio dim={52} /></div>
     <h1 className="accesso-title" style={su(.07)}>{titoloAccesso(modo)}</h1>
     {modo === 'entra' && <p style={su(.14)}>{t('Riprende da dove l’hai lasciata.')}</p>}
   </div>

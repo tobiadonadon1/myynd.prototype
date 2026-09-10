@@ -1141,9 +1141,12 @@ export function FormSlack({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Su api.slack.com/apps: crea un’app, in «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read, installala nel tuo spazio e copia il token che comincia per xoxp-.')}
-      </div>
+      <details>
+        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove lo trovo?')}</summary>
+        <div style={{ ...nota(tema), marginTop: 6 }}>
+          {t('Su api.slack.com/apps: crea un’app, in «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read, installala nel tuo spazio e copia il token che comincia per xoxp-.')}
+        </div>
+      </details>
       <div style={etichetta(tema)}>{t('Token utente')}</div>
       <input type="password" value={token} onChange={e => setToken(e.target.value)}
         placeholder="xoxp-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
@@ -1315,9 +1318,12 @@ export function FormDropbox({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Su dropbox.com/developers/apps: crea un’app «Scoped access», in Permissions spunta files.metadata.read e files.content.read, poi copia qui la App key.')}
-      </div>
+      <details>
+        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove la trovo?')}</summary>
+        <div style={{ ...nota(tema), marginTop: 6 }}>
+          {t('Su dropbox.com/developers/apps: crea un’app «Scoped access», in Permissions spunta files.metadata.read e files.content.read, poi copia qui la App key.')}
+        </div>
+      </details>
       <div style={etichetta(tema)}>{t('Chiave dell’app')}</div>
       <input value={chiave} onChange={e => setChiave(e.target.value)}
         autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
@@ -1397,9 +1403,12 @@ export function FormWhatsapp({ tema, ok }: Props) {
       }}>
         {t('WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose — quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.')}
       </div>
-      <div style={{ ...nota(tema), marginTop: 12 }}>
-        {t('Su developers.facebook.com: nell’app WhatsApp, in Configurazione dell’API, copia l’ID del numero e crea un token permanente da utente di sistema. Il segreto dell’app sta in Impostazioni › Di base.')}
-      </div>
+      <details style={{ marginTop: 12 }}>
+        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove li trovo?')}</summary>
+        <div style={{ ...nota(tema), marginTop: 6 }}>
+          {t('Su developers.facebook.com: nell’app WhatsApp, in Configurazione dell’API, copia l’ID del numero e crea un token permanente da utente di sistema. Il segreto dell’app sta in Impostazioni › Di base.')}
+        </div>
+      </details>
 
       <div style={etichetta(tema)}>{t('ID del numero di telefono')}</div>
       <input value={numero} onChange={e => setNumero(e.target.value)}

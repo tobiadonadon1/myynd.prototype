@@ -13,7 +13,6 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   fonte?: string; chiudi: () => void; cambiato: () => void
 }) {
   const [s, setS] = useState<Stato | null>(null)
-  const [cerca, setCerca] = useState('')
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
   const [modifica, setModifica] = useState(false)
   const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
@@ -69,7 +68,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
 
   const tutti = s?.connettori.filter(c => (c.pronto || c.collegato) && c.id !== 'mind2do') ?? []
   const scelta = tutti.find(c => c.id === soloQuesta)
-  const pronti = tutti.filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cerca.toLocaleLowerCase()))
+  const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
     ultimo.current = id; setSoloQuesta(id); setModifica(false)
@@ -104,7 +103,6 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
         {avanzamento && <div role="status" className="connections-progress">{avanzamento}</div>}
         {!s && !guaio && <p role="status" className="connections-progress">{t('carico…')}</p>}
         {s && !scelta && <>
-          <input className="connections-search" type="search" value={cerca} onChange={e => setCerca(e.target.value)} placeholder={t('Cerca connessioni…')} aria-label={t('Cerca connessioni…')} />
           {/* Lo stesso taglio della pagina intera: quello che c'è sopra, quello che
               manca sotto. Qui conta ancora di più, perché il pannello si apre per
               collegare qualcosa — e la seconda lista è quella che si è venuti a
@@ -113,10 +111,9 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
              ['Da collegare', pronti.filter(c => !c.collegato), 'da-collegare']] as const).map(([titolo, quali, classe]) => !!quali.length &&
             <section key={classe} className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
               <h3 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
-              <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
+              <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={t(c.nota)} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
             </section>)}
-          {!pronti.length && <p className="connections-progress">{t('Nessun risultato')}</p>}
-          {!!dopo.length && !cerca && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
+          {!!dopo.length && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
         </>}
         {scelta && <div className="connection-detail">
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''}`}>

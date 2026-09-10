@@ -17,7 +17,7 @@ export function Scena({ momento, children, progetto, salvato, esci, occupato, us
     <div className="onboard-shade" aria-hidden="true" />
     <header className="onboard-header">
       {/* il marchio da solo: la parola la dice la schermata */}
-      <Marchio dim={44} animato={false} />
+      <Marchio dim={56} animato={false} />
       {/* si esce: la freccia va fuori dall'angolo, non avanti */}
       {esci && <button disabled={occupato} className="onboard-exit" onClick={esci}>{uscita ?? t('Completo più tardi')}<span className="onboard-arrow"><IconFreccia verso="fuori" size={13} /></span></button>}
     </header>
