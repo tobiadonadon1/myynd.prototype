@@ -776,7 +776,11 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   // il primo punto su una mente vuota non ha niente da dire, e non lo finge
   if (!successoQualcosa(mat) && (!r.forza || !a.ultimo)) return fermo
 
-  if (diOggi(a.chiamate, adesso).length >= AL_GIORNO) return { ...fermo, tetto: true }
+  // le chiamate di oggi valgono solo se oggi un punto è stato prodotto davvero:
+  // un archivio di prima contava anche i tentativi falliti, e tre tentativi a
+  // vuoto lasciavano la giornata senza punto e senza bottone
+  const prodottoOggi = !!a.ultimo && giornoIn(new Date(a.ultimo.quando)) === giornoIn(new Date(adesso))
+  if (prodottoOggi && diOggi(a.chiamate, adesso).length >= AL_GIORNO) return { ...fermo, tetto: true }
 
   const quando = new Date(adesso).toISOString()
   let risposta: Anthropic.Message
@@ -816,7 +820,7 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
 
   // solo adesso si conta: il tetto è di tre punti al giorno, non di tre
   // tentativi. Una chiamata che non ha prodotto niente non brucia la giornata
-  a.chiamate = [...diOggi(a.chiamate, adesso), quando]
+  a.chiamate = [...(prodottoOggi ? diOggi(a.chiamate, adesso) : []), quando]
 
   const nuovo = ricuci(grezzo, mat, a.scartati, quando, r.via ?? null, a.avviate ?? [])
   // quello che il modello ha capito entra in tabella: un progetto nuovo con

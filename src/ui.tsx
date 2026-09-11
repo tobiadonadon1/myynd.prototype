@@ -153,7 +153,7 @@ export function useAttiva() {
  * tempo, mollare il mouse o uscire con il tab è già la risposta «no». Non un
  * dialogo in mezzo allo schermo: il bottone stesso diventa la domanda.
  */
-export function useConferma(attesa = 3000) {
+export function useConferma(attesa = 6000) {
   const [armato, setArmato] = useState(false)
   const armatoRef = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -197,12 +197,15 @@ export function useConferma(attesa = 3000) {
  * a cliccare.
  */
 function Sicuro({ armato, children }: { armato: boolean; children: ReactNode }) {
+  // armato non si limita a cambiare parola: «Sicuro?» resta scritto e la
+  // parola di prima diventa una pastiglia piena, che è quella da premere.
+  // Prima la scritta si scambiava nello stesso spazio, e chi premeva una
+  // volta vedeva un «Sure?» piccolo e rosso e pensava che non fosse successo niente
+  if (!armato) return <span style={{ whiteSpace: 'nowrap' }}>{children}</span>
   return (
-    <span style={{ display: 'inline-grid', placeItems: 'center' }}>
-      <span style={{ gridArea: '1 / 1', visibility: armato ? 'hidden' : 'visible', whiteSpace: 'nowrap' }}>{children}</span>
-      <span aria-hidden={!armato} style={{ gridArea: '1 / 1', visibility: armato ? 'visible' : 'hidden', whiteSpace: 'nowrap', fontWeight: 500 }}>
-        {t('Sicuro?')}
-      </span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+      <span style={{ fontWeight: 500 }}>{t('Sicuro?')}</span>
+      <span style={{ padding: '4px 10px', borderRadius: 99, background: '#C4623B', color: '#FFF7F0', fontWeight: 500 }}>{children}</span>
     </span>
   )
 }
@@ -210,7 +213,7 @@ function Sicuro({ armato, children }: { armato: boolean; children: ReactNode }) 
 /**
  * Un bottone di sole parole che distrugge — «Toglila», «Scollega» — e chiede
  * una volta. Armato prende il colore dell'accento e dice «Sicuro?» nello stesso
- * spazio; mollare il mouse o uscire con il tab lo disarma.
+ * spazio; uscire con il tab, o qualche secondo di attesa, lo disarma.
  */
 export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
   fai: () => void | Promise<void>
@@ -228,7 +231,9 @@ export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai, guaio && (x => guaio(x instanceof Error ? x.message : String(x)))) }}
-      onMouseLeave={disarma} onBlur={disarma}
+      // niente disarmo al passaggio del mouse: bastava spostarsi di un pelo e la
+      // domanda spariva; resta il tempo di useConferma, e il tab che esce
+      onBlur={disarma}
       title={titolo} aria-label={armato ? t('Sicuro?') : titolo}
       style={{
         border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
