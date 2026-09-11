@@ -242,6 +242,45 @@ export function inMassa(d: store.Documento): boolean {
   return IN_MASSA.test(chi) || IN_MASSA.test(d.titolo.toLowerCase())
 }
 
+/**
+ * Dal disco arriva quasi solo rumore, e il punto lo raccontava per primo.
+ *
+ * L'undici settembre il punto apriva così: «il dev server di tobiaweb è
+ * ripartito più volte inseguendo il testo dello stile della casa». Era vero,
+ * e veniva da un log di terminale sotto `~/terminals/` entrato nell'indice
+ * come tutti gli altri file. Il disco è la fonte più grossa che c'è ed è
+ * quella che produce meno notizie: log, file di build, appunti scritti da un
+ * programma, roba che cambia da sola cento volte al giorno.
+ *
+ * Una notizia dal disco è un documento vero, appena arrivato, dove le cose
+ * vere arrivano — la scrivania, i documenti, gli scaricati, iCloud — e non
+ * dieci cartelle più sotto. Tutto il resto del disco esiste, si cerca, si
+ * legge quando serve: semplicemente non si racconta.
+ *
+ * Le altre fonti passano tutte: una mail, un impegno, una nota, una pagina di
+ * Notion, una trascrizione sono già, per come sono arrivate, cose che qualcuno
+ * ha mandato o scritto apposta.
+ */
+const CARTELLE_DOC = ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents/com~apple~CloudDocs']
+/** Il file, o una cartella sola sotto: più giù è archivio, non è arrivato adesso. */
+const PROFONDITA_DOC = 2
+/** Una fattura, un contratto, una bozza. Non un txt, non un markdown, non un csv. */
+const ESTENSIONE_DOC = /\.(pdf|docx?|xlsx?|pptx?|pages|numbers|key|odt|ods|odp|rtf)$/i
+/** Quanti file dal disco al massimo, i più recenti: il resto non entra nel punto. */
+const DISCO_MAX = 5
+
+export function documentoVero(d: store.Documento): boolean {
+  if (d.fonte !== 'desktop') return true
+  const p = (d.percorso || d.id.replace(/^desktop:/, '')).replace(/\\/g, '/')
+  if (!ESTENSIONE_DOC.test(p)) return false
+  return CARTELLE_DOC.some(c => {
+    const i = p.indexOf(`/${c}/`)
+    if (i < 0) return false
+    const dentro = p.slice(i + c.length + 2)
+    return !!dentro && dentro.split('/').length <= PROFONDITA_DOC
+  })
+}
+
 export type Materiale = {
   dal: string
   /** Il primo punto di sempre: il materiale è una finestra, non un'assenza. */
@@ -251,7 +290,7 @@ export type Materiale = {
   /** Le automazioni che ha già, per nome: non si propongono due volte. */
   automazioni: string[]
   arrivati: store.Documento[]
-  /** Quanti ne sono entrati in tutto, anche quelli che non si elencano. */
+  /** Quanti ne sono arrivati di veri, anche quelli che non si elencano. */
   indicizzati: number
   azioni: store.Azione[]
   /** Le righe della lista che aspettano un dito suo. */
@@ -308,7 +347,19 @@ export function raccogli(dal: string, primo = false): Materiale {
     ...scartate.slice(0, 12).map(v => v.titolo),
     ...lasciate.slice(0, 6).map(c => c.testo)
   ].filter(Boolean)
-  const azioni = store.azioni(200).filter(a => a.quando >= dal)
+  /*
+   * Quello che ha fatto Myynd da solo non è una notizia.
+   *
+   * «L'automazione Priorità in arrivo è girata due volte mentre non c'eri» era
+   * la prima riga del punto dell'undici settembre, e non chiedeva niente a
+   * nessuno: un'automazione che gira è Myynd che fa il suo mestiere, e
+   * raccontarlo è chiedergli di leggere il nostro registro. Quello che resta è
+   * quello che ha bisogno di lui: una cosa andata storta, o una mail partita
+   * su sua richiesta. Il lavoro consegnato si vede dove si può toccare, cioè
+   * nelle righe della lista (`preparate`).
+   */
+  const azioni = store.azioni(200)
+    .filter(a => a.quando >= dal && !(a.tipo === 'automazione' && a.esito === 'fatta'))
   const vive = store.elencoCompiti()
   const data = parti(new Date())
   const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
@@ -326,13 +377,23 @@ export function raccogli(dal: string, primo = false): Materiale {
   let nomiAutomazioni: string[] = []
   try { nomiAutomazioni = automazioni.elenco().filter(a => a.accesa).map(a => a.nome) } catch { /* senza ricette il punto vive lo stesso */ }
 
+  // quello che è arrivato davvero: niente scarti, niente rumore dal disco, e
+  // dal disco al massimo cinque, i più recenti (`appenaArrivati` li dà già in
+  // ordine). Quelli che restano fuori non sono «notizie non elencate»: non
+  // sono notizie, e per questo non contano nemmeno nel conto
+  let dalDisco = 0
+  const daDire = arrivati.filter(d => {
+    if (fuori(d) || !documentoVero(d)) return false
+    return d.fonte !== 'desktop' || ++dalDisco <= DISCO_MAX
+  })
+
   return {
     dal,
     primo,
     nonInteressa,
     automazioni: nomiAutomazioni,
-    arrivati: arrivati.filter(d => !fuori(d)).slice(0, DOCS_MAX),
-    indicizzati: arrivati.length,
+    arrivati: daDire.slice(0, DOCS_MAX),
+    indicizzati: daDire.length,
     azioni,
     attendono: vive.filter(c => c.stato === 'pronto' || c.stato === 'chiede'),
     perOggi: vive.filter(c => c.stato === 'aperto' && (c.giorno ? c.giorno <= oggi : c.quando === 'oggi')),
@@ -384,8 +445,8 @@ const schema = (compiti: string[], docs: string[]) => {
   return {
     type: 'object',
     properties: {
-      mentreNonCeri: { type: 'array', items: riga, description: 'Al massimo due righe. Meno è meglio: vuoto va benissimo.' },
-      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna. Meno è meglio.' },
+      mentreNonCeri: { type: 'array', items: riga, description: 'Al massimo due righe, e solo cose arrivate da fuori. Meno è meglio: vuoto va benissimo.' },
+      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna. Meno è meglio: vuoto va benissimo.' },
       daLeggere: {
         type: 'array',
         description: 'Una sola, solo fra le notizie elencate, solo se c’entra con il suo lavoro. Vuoto va benissimo.',
@@ -401,7 +462,7 @@ const schema = (compiti: string[], docs: string[]) => {
       },
       progetti: {
         type: 'array',
-        description: 'Uno o due, fra quelli elencati; uno nuovo solo se il materiale lo mostra davvero.',
+        description: 'Al massimo due, fra quelli elencati, una riga ciascuno; uno nuovo solo se il materiale lo mostra davvero. Vuoto va benissimo.',
         items: {
           type: 'object',
           properties: {
@@ -416,12 +477,12 @@ const schema = (compiti: string[], docs: string[]) => {
       },
       avvii: {
         type: 'array',
-        description: 'Al massimo due automazioni che potrebbe accendere, solo su cose che nel materiale si ripetono.',
+        description: `Al massimo una automazione che potrebbe accendere, solo su una cosa che nel materiale si ripete. Vuoto va benissimo. Si scrive in ${nellaLingua()}, come tutto il resto.`,
         items: {
           type: 'object',
           properties: {
-            frase: { type: 'string', description: 'L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …». Niente lineette, niente parentesi.' },
-            perche: { type: 'string', description: 'Al massimo otto parole: cosa gli toglie di mano. Niente lineette, niente parentesi.' }
+            frase: { type: 'string', description: `L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …». Scritta in ${nellaLingua()}, come ogni altro campo. Niente lineette, niente parentesi.` },
+            perche: { type: 'string', description: `Al massimo otto parole: cosa gli toglie di mano. In ${nellaLingua()}. Niente lineette, niente parentesi.` }
           },
           required: ['frase', 'perche'],
           additionalProperties: false
@@ -508,12 +569,21 @@ adesso, e dove stanno i suoi progetti.`,
   dice la pagina.
 — Concreto: nomi, cifre e date che hai letto davvero nel materiale. Niente
   inventato, niente aggettivi al posto dei fatti.
-— Meno righe è sempre meglio: una sezione vuota è una risposta giusta. Non
-  riempire per arrivare al massimo.
+— Meno righe è sempre meglio: una sezione vuota è una risposta giusta, per
+  ogni sezione. Non riempire per arrivare al massimo.
+— In tutto il punto, al massimo otto righe. Se non ne hai otto che valgono,
+  scrivine tre.
+
+Cosa NON è una notizia, mai:
+— Quello che ha fatto Myynd da solo (automazioni, letture) non è una notizia.
+— Un file sul disco è una notizia solo se è un documento vero arrivato adesso:
+  una fattura, un contratto, una bozza.
+— Le cose tecniche (server, deploy, log) non entrano nel punto a meno che non
+  ci sia un compito aperto che le riguarda, e allora una riga sola.
 
 Quante righe, al massimo:
-— «mentreNonCeri»: due. Quello che è arrivato e conta davvero, o quello che
-  hai fatto tu (bozze preparate, mail mandate, automazioni girate). Metti
+— «mentreNonCeri»: due. Quello che è arrivato da fuori e conta davvero, o una
+  cosa che hai preparato tu e che adesso aspetta una sua risposta. Metti
   l'id del compito o del documento quando c'è, così si apre con un dito.
 — «adesso»: tre mosse che fanno andare avanti il suo lavoro. Una riga pronta
   da approvare viene prima di tutto. Se la mossa è per un progetto, il nome
@@ -525,13 +595,18 @@ Quante righe, al massimo:
   UN'idea distintiva che potrebbe prendere su quel progetto, radicata nel suo
   materiale e in quello che crede, mai generica, mai un consiglio da manuale.
   Se non ne hai una buona, lascia l'angolo vuoto.
-— «avvii»: due, solo dove il materiale mostra una cosa che si ripete (lo
+— «avvii»: uno, e solo dove il materiale mostra una cosa che si ripete (lo
   stesso tipo di mail, lo stesso lavoro ogni settimana). La frase dev'essere
   una che Myynd sa trasformare in ricetta: quando guardare, cosa guardare,
-  cosa farne. Niente di generico.
+  cosa farne. Niente di generico. «frase» e «perche» si scrivono in
+  ${nellaLingua()}, come ogni altra parola del punto: gli avvii non fanno
+  eccezione. La ricetta la traduce Myynd da sola, dopo.
+— Non ripeterti: la stessa cosa detta in due sezioni è una cosa sola. Se
+  «adesso» dice già di controllare una cosa, «mentreNonCeri» non la racconta,
+  «doveSei» non la ripete e l'avvio non ci gira intorno.
 — Gli id di compiti e documenti li prendi SOLO da quelli elencati nel
   materiale; altrimenti stringa vuota.
-Scrivi in ${nellaLingua()}.`
+Scrivi in ${nellaLingua()}: ogni campo, avvii compresi.`
   ].filter(Boolean).join('\n\n')
 }
 
@@ -616,6 +691,46 @@ const accorcia = (s: string) => (s.length > TESTO_MAX ? `${s.slice(0, TESTO_MAX 
  */
 const ripulisci = (s: string) => accorcia(senzaTrattini(s.trim()).trim())
 
+/** Quante righe in tutto, sommando tutte le sezioni. Sotto sta, sopra no. */
+const RIGHE_MAX = 8
+
+/**
+ * Le parole che portano il senso di una riga: senza punteggiatura, senza le corte.
+ *
+ * Sotto le quattro lettere ci stanno gli articoli, le preposizioni e i verbi
+ * di servizio di tutte e due le lingue: tenerli vorrebbe dire che due righe
+ * che non c'entrano niente si somigliano perché dicono «che» e «per».
+ */
+function paroleDi(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+      .split(/\s+/)
+      .filter(p => p.length >= 4)
+  )
+}
+
+/**
+ * Due frasi che dicono la stessa cosa.
+ *
+ * Il punto dell'undici settembre diceva del dev server di tobiaweb in
+ * «mentreNonCeri», lo richiedeva in «adesso», lo ripeteva in «doveSei» del
+ * progetto e ci costruiva sopra un avvio: quattro righe su dieci per una cosa
+ * sola, e lui l'ha letto come «mi sta dicendo sempre la stessa cosa». Il
+ * prompt lo vieta, ma il modello si ripete lo stesso — e allora si conta:
+ * metà delle parole che contano in comune (Jaccard) e la seconda riga non
+ * esce. Non è una somiglianza di senso, è una rete grossolana: prende il caso
+ * che si vede, e lascia passare due righe che parlano davvero di due cose.
+ */
+export function ridondante(a: string, b: string): boolean {
+  const x = paroleDi(a)
+  const y = paroleDi(b)
+  if (!x.size || !y.size) return false
+  let comuni = 0
+  for (const p of x) if (y.has(p)) comuni++
+  return comuni / (x.size + y.size - comuni) >= 0.5
+}
+
 /**
  * Da quello che ha scritto il modello a un punto che si può mostrare.
  *
@@ -638,16 +753,35 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
       doc: r.doc && docs.has(r.doc) ? r.doc : null
     }
   }
-  // la stessa riga due volte è una riga: si tiene la prima, in qualunque sezione stia
-  const viste = new Set<string>()
-  const righe = (xs: Partial<Riga>[] | undefined, max: number) =>
-    (xs ?? []).map(riga).filter((r): r is Riga => {
-      if (!r) return false
-      const k = r.testo.trim().toLowerCase()
-      if (viste.has(k)) return false
-      viste.add(k)
-      return true
-    }).slice(0, max)
+  /*
+   * Una cosa una volta sola.
+   *
+   * `tenute` è tutto quello che è già stato detto, in qualunque sezione: una
+   * riga nuova passa solo se non ripete niente di quello. L'ordine è l'ordine
+   * in cui si legge il punto — prima «mentre non c'eri», poi «adesso», poi i
+   * progetti, poi gli avvii — così la prima volta che una cosa viene detta è
+   * anche quella nel posto più in alto, e quella che se ne va è l'eco.
+   */
+  const tenute: string[] = []
+  const nuova = (testo: string) => {
+    if (tenute.some(t => ridondante(t, testo))) return false
+    tenute.push(testo)
+    return true
+  }
+  const righe = (xs: Partial<Riga>[] | undefined, max: number) => {
+    const tenuta: Riga[] = []
+    for (const x of xs ?? []) {
+      if (tenuta.length >= max) break
+      const r = riga(x)
+      if (r && nuova(r.testo)) tenuta.push(r)
+    }
+    return tenuta
+  }
+
+  // si compongono qui, nell'ordine in cui si leggono: quello che viene dopo sa
+  // già cos'è stato detto prima
+  const mentreNonCeri = righe(g.mentreNonCeri, 2)
+  const adesso = righe(g.adesso, 3)
 
   const chiave = (s: string) => s.trim().toLowerCase()
   const rifiutati = new Set(scartati.map(chiave))
@@ -664,6 +798,9 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
     if (!vero && nuovi++ >= 1) continue
     const angoliTenuti = tenutiDi(vero?.nome ?? nome)
     const angolo = ripulisci(p.angolo ?? '')
+    // «dove sei» che ripete una riga già letta più su non è dove sei, è l'eco:
+    // il progetto resta, con il nome e l'angolo, e la riga sparisce
+    const doveSei = ripulisci(p.doveSei ?? '')
     progetti.push({
       id: vero?.id ?? '',
       // il nome di uno che è già in tabella è suo e non si tocca: è la chiave
@@ -671,7 +808,7 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
       nome: vero?.nome ?? ripulisci(nome),
       obiettivo: vero?.obiettivo || ripulisci(p.obiettivo ?? ''),
       dal: vero?.dal ?? quando,
-      doveSei: ripulisci(p.doveSei ?? ''),
+      doveSei: doveSei && nuova(doveSei) ? doveSei : '',
       // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
       angolo: rifiutati.has(chiave(angolo)) || angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
       angoliTenuti,
@@ -696,16 +833,34 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
   const avvii: Avvio[] = []
   for (const a of g.avvii ?? []) {
     const frase = ripulisci(a.frase ?? '')
-    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 2) continue
+    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 1) continue
+    // un avvio che gira intorno a una riga già detta è la quarta volta che la dice
+    if (!nuova(frase)) continue
     gia.add(chiave(frase))
     avvii.push({ frase, perche: ripulisci(a.perche ?? '') })
+  }
+
+  /*
+   * Otto righe, e non di più.
+   *
+   * I tetti di sezione sommati fanno nove, ed è una riga più di quello che si
+   * legge in dieci secondi. Quando si sfora si toglie dal fondo, cioè
+   * dall'ordine in cui le cose contano: prima l'avvio — è un suggerimento,
+   * tornerà domani — poi la notizia, poi il secondo progetto. Il primo
+   * progetto non si tocca: senza, la finestra non dice più dove sta il lavoro.
+   */
+  while (mentreNonCeri.length + adesso.length + daLeggere.length + progetti.length + avvii.length > RIGHE_MAX) {
+    if (avvii.length) avvii.pop()
+    else if (daLeggere.length) daLeggere.pop()
+    else if (progetti.length > 1) progetti.pop()
+    else break
   }
 
   return {
     quando,
     via: via && via > 0 ? Math.round(via) : null,
-    mentreNonCeri: righe(g.mentreNonCeri, 2),
-    adesso: righe(g.adesso, 3),
+    mentreNonCeri,
+    adesso,
     daLeggere,
     progetti,
     avvii
@@ -852,6 +1007,12 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
  * ne fa una ricetta, `valida()` la controlla, e quello che ne esce è
  * un'automazione come le altre — si vede nella schermata, si spegne, si
  * butta. Qui si segna solo che è partita da qui, così non si ripropone.
+ *
+ * La frase arriva nella lingua dell'app, perché è quella che ha letto lui:
+ * `daUnaFrase` la legge in qualunque lingua — è il modello a interpretarla, e
+ * la ricetta esce già con il nome, la spiegazione e l'istruzione in italiano e
+ * in inglese. Tradurre qui vorrebbe dire far leggere a lui una frase in una
+ * lingua che non è la sua per comodità nostra: non si fa.
  */
 export async function avvia(frase: string): Promise<{ ok: true; id: string; nome: string; punto: Punto | null }> {
   const detta = frase.trim()

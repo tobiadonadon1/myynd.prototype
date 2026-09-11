@@ -58,6 +58,72 @@ export function leggibile(nome: string): boolean {
   return LETTI.includes(extname(nome).toLowerCase())
 }
 
+// — il testo che una macchina ha scritto per un'altra macchina —
+
+/**
+ * I formati in cui un registro può nascondersi: testo senza struttura propria.
+ *
+ * `.rtf` e i formati ricchi restano fuori di proposito. Nessuno salva un
+ * registro di sessione in Word, e un documento vero aperto male — un PDF che
+ * torna mezzo a pezzi — non deve sparire per colpa di un conteggio di graffe.
+ */
+export const FIUTATI = ['.txt', '.md', '.markdown', '.csv', '.org', '.tex', '.html', '.htm']
+
+/** La prima riga di un registro di sessione: `pid:`, `cwd:`, `command:`, `started_at:`. */
+const INTESTAZIONE = /^(pid|cwd|command|started_at)\s*[:=]/i
+/** Una riga di dati e non di prosa: JSON, un elenco, una stringa, una data ISO. */
+const RIGA_MACCHINA = /^[{["]|^\d{4}-\d{2}-\d{2}T/
+/** Le parole chiave di un processo, dette come le dice un programma. */
+const CHIAVI = /\s(pid|cwd|status|exit_code|stderr|stdout)\s*[:=]/gi
+/** Le graffe, le quadre, le virgolette e le virgole: la punteggiatura dei dati. */
+const STRUTTURA = /[{}[\]":,]/g
+
+/**
+ * Questo testo l'ha scritto una macchina per un'altra macchina.
+ *
+ * Nella casa di Tobia c'era `~/terminals/`, quattordici file di nome
+ * `268734.txt`: il registro di ogni sessione di terminale, con dentro `pid`,
+ * `cwd`, il comando e poi un blocco di JSON. Sono entrati nell'indice come
+ * documenti, e la rassegna del mattino ne ha parlato quattro volte — «il
+ * server di sviluppo è stato riavviato più volte» — citando quei file come
+ * fonti. Il nome li prende quasi sempre (vedi `nomeDiMacchina` in
+ * `desktop.ts`); questo li prende quando il nome è innocente.
+ *
+ * Quattro segni, e ne basta uno:
+ *
+ *   · comincia con l'intestazione di una sessione;
+ *   · un quarto delle prime sessanta righe piene comincia da dati e non da
+ *     una parola;
+ *   · quasi un terzo dei primi quattromila caratteri è punteggiatura di dati;
+ *   · le parole di un processo — `pid`, `exit_code`, `stderr` — tornano cinque
+ *     volte o più.
+ *
+ * **Il conto delle righe vuole almeno otto righe.** Un appunto di quattro
+ * righe che comincia con una citazione fra virgolette è il 25% di righe
+ * «macchina» per costruzione: sotto le otto righe quella percentuale non vuol
+ * dire niente, e un dump di JSON corto lo prende comunque il conto dei
+ * caratteri.
+ *
+ * `soloIntestazione` è per i `.csv`: una tabella di fatture *è* virgole e
+ * virgolette, e la colonna di una data può essere ISO. Lì l'unico segno che
+ * resta vero è l'intestazione, e tutto il resto direbbe di no a un documento
+ * vero.
+ */
+export function sembraUnRegistro(testo: string, o: { soloIntestazione?: boolean } = {}): boolean {
+  const t = testo.trimStart()
+  if (!t) return false
+  if (INTESTAZIONE.test(t)) return true
+  if (o.soloIntestazione) return false
+
+  const righe = t.split('\n').map(r => r.trim()).filter(Boolean).slice(0, 60)
+  if (righe.length >= 8 && righe.filter(r => RIGA_MACCHINA.test(r)).length / righe.length >= 0.25) return true
+
+  const inizio = t.slice(0, 4000)
+  if (inizio.length >= 200 && (inizio.match(STRUTTURA)?.length ?? 0) / inizio.length >= 0.30) return true
+
+  return (t.match(CHIAVI)?.length ?? 0) >= 5
+}
+
 /**
  * Il testo di un file, aperto qui dentro, sul filo di chi chiama.
  *

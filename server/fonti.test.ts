@@ -51,6 +51,7 @@ const registro = await import('./connettori/registro.ts')
 const attrezzi = await import('./attrezzi.ts')
 const desktop = await import('./connettori/desktop.ts')
 const vedetta = await import('./connettori/vedetta.ts')
+const store = await import('./store.ts')
 
 after(() => {
   vedetta.fermaTutti()
@@ -523,6 +524,81 @@ test('quello che si è visto e lasciato fuori si conta, invece di sparire', asyn
   assert.deepEqual(e.saltati, { media: 2, codice: 1, sistema: 1, altro: 1 })
   // `node_modules` non si apre nemmeno: è una cartella saltata, non un file
   assert.equal(e.saltateCartelle, 1)
+})
+
+// — quello che l'ha scritto una macchina —
+//
+// Nella casa di Tobia c'era `~/terminals/`: quattordici file di nome
+// `268734.txt` … `268746.txt`, il registro di ogni sessione di terminale —
+// `pid`, `cwd`, il comando, e poi un blocco di JSON. Sono entrati nell'indice
+// come documenti, e la rassegna del mattino ne ha parlato quattro volte («il
+// server di sviluppo è stato riavviato più volte») citandoli come fonti. Un
+// testo che nessuno ha scritto e che nessuno rileggerà non deve entrare nella
+// mente: né dal nome, né dal contenuto, né restarci se ci è già entrato.
+
+test('i nomi di macchina restano fuori: le cartelle dei registri e i file che nessuno ha battezzato', () => {
+  // la cartella da cui è nato tutto, e vale anche per una cartella scelta a
+  // mano: nessuno tiene le proprie cose dentro `terminals` o `logs`
+  assert.equal(desktop.saltaDalNome(join(CASA, 'terminals', '268746.txt'), CASA, true), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'terminals', 'nota.md'), CASA, false), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Lavoro', 'logs', 'nota.md'), CASA, false), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Lavoro', 'Logs', 'nota.md'), CASA, false), true, 'le maiuscole non cambiano niente')
+  // i tre modi in cui un programma nomina la roba sua: un numero, un'impronta, una coda
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents', '268746.txt'), CASA, true), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents', 'deadbeefdeadbeef0123.md'), CASA, true), true)
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents', 'build-log.txt'), CASA, true), true)
+  // e quello che una persona ha chiamato davvero passa, come prima
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents', 'Preventivo 2026.md'), CASA, true), false)
+  // una cartella di nome «2026» è un archivio per anno, non un file di macchina:
+  // il numero puro conta solo quando c'è un'estensione
+  assert.equal(desktop.saltaDalNome(join(CASA, 'Documents', '2026', 'nota.md'), CASA, true), false)
+})
+
+test('un registro non entra nella mente, nemmeno con un nome innocente', async () => {
+  const dove = join(CASA, 'registri')
+  mkdirSync(join(dove, 'terminals'), { recursive: true })
+  // la cartella intera non si apre nemmeno
+  writeFileSync(join(dove, 'terminals', '268746.txt'), 'pid: 1 cwd: "/tmp" command: "npm run dev" status: succeeded')
+  // il nome è innocente, il contenuto no: è il file che solo il fiuto prende
+  writeFileSync(join(dove, 'sessione.txt'), [
+    'pid: 69516 cwd: "/Users/tobia/Desktop/myynd.prototype" command: "npm run dev" title: "dev" status: succeeded started_at: 2026-09-01T20:49:42.779Z',
+    '---',
+    '{"created_at":"2026-09-01T20:49:39Z","description":null,"exit_code":0,"stderr":"","stdout":""}'
+  ].join('\n'))
+  // questo lo prende il nome, senza aprirlo
+  writeFileSync(join(dove, 'build-log.txt'), 'Un testo qualunque, abbastanza lungo da valere qualcosa.')
+  writeFileSync(join(dove, 'nota.md'), 'Riunione con Marta: il preventivo va rifatto entro venerdì.')
+
+  const e = await desktop.sincronizza({ cartelle: [dove] })
+  assert.deepEqual(e.docs.map(d => d.titolo), ['nota.md'])
+  // i due file lasciati fuori si contano fra la roba di sistema: è quello che
+  // sono, e un numero che cala senza spiegazione è peggio di un numero alto
+  assert.deepEqual(e.saltati, { media: 0, codice: 0, sistema: 2, altro: 0 })
+  assert.equal(e.saltatiPerTipo, 2)
+  // `terminals` non si apre: è una cartella saltata, non due file
+  assert.equal(e.saltateCartelle, 1)
+  // e nessuno dei due si dichiara vivo: se erano già in indice, `riconcilia` li toglie
+  assert.deepEqual(e.visti, [])
+})
+
+test('pulisciIndice toglie quello che le regole di adesso non farebbero più entrare', () => {
+  const registro = join(CASA, 'terminals', '268734.txt')
+  const vero = join(CASA, 'Documents', 'contratto.md')
+  const doc = (p: string) => ({
+    id: `desktop:${p}`, fonte: 'desktop', tipo: 'file', titolo: p.split('/').pop()!,
+    corpo: 'Il contenuto di prova, abbastanza lungo.', autore: null, percorso: p,
+    quando: '2026-09-01T00:00:00.000Z', gruppo: 'documenti'
+  })
+  store.salvaDocumenti([doc(registro), doc(vero)])
+
+  // una regola nuova vale per la lettura di domani: quello che è già dentro ci
+  // resterebbe per sempre, e resterebbe citabile dalla rassegna
+  assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 1)
+  const ids = store.idsConPrefisso('desktop:')
+  assert.ok(!ids.includes(`desktop:${registro}`), 'il registro se n’è andato')
+  assert.ok(ids.includes(`desktop:${vero}`), 'il contratto è rimasto dov’era')
+  // due volte non toglie niente: è idempotente
+  assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 0)
 })
 
 test('la vedetta con tutto il Mac guarda le stesse due radici', async () => {

@@ -20,7 +20,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import JSZip from 'jszip'
-import { quiDentro, daHtml, daRtf, leggibile, tipoDi, LETTI } from './connettori/estrai.ts'
+import { quiDentro, daHtml, daRtf, leggibile, tipoDi, sembraUnRegistro, LETTI } from './connettori/estrai.ts'
 
 /** Lo scheletro minimo di un archivio Office: solo i pezzi che si leggono. */
 async function archivio(file: Record<string, string>): Promise<Buffer> {
@@ -139,4 +139,64 @@ test('un .rtf dà le parole, non la tabella dei font', () => {
 test('un .rtf passa anche dalla strada normale, con lo stesso risultato', async () => {
   const rtf = '{\\rtf1\\ansi{\\fonttbl\\f0 Times;}\\f0\\fs24 Una riga sola, per intero.\\par}'
   assert.equal(await quiDentro(Buffer.from(rtf, 'utf8'), 'appunti.rtf'), 'Una riga sola, per intero.')
+})
+
+// — il testo che non l'ha scritto nessuno —
+//
+// Nella casa di Tobia c'era `~/terminals/`: quattordici file `268734.txt` …
+// `268746.txt`, il registro di ogni sessione di terminale. Sono entrati
+// nell'indice come documenti e la rassegna del mattino ne ha parlato quattro
+// volte — «il server di sviluppo è stato riavviato più volte» — citandoli come
+// fonti. Il nome li prende quasi sempre; qui si prova l'altra metà, quella che
+// guarda dentro. E si prova soprattutto il contrario: che un appunto vero, con
+// dentro un blocco di codice, e una tabella di fatture non vengano scambiati
+// per registri. Un falso positivo qui è un documento che sparisce dalla mente.
+
+test('un registro di sessione si riconosce dalla sua intestazione', () => {
+  const registro = [
+    'pid: 69516 cwd: "/Users/tobia/Desktop/myynd.prototype" command: "mdfind -name terminals" title: "mdfind" status: succeeded started_at: 2026-09-01T20:49:42.779Z',
+    '---',
+    '{"created_at":"2026-09-01T20:49:39Z","description":null,"exit_code":0,"stderr":"","stdout":"/Users/tobia/terminals"}'
+  ].join('\n')
+  assert.equal(sembraUnRegistro(registro), true)
+})
+
+test('un dump di JSON a righe è un registro anche senza intestazione', () => {
+  const righe: string[] = []
+  for (let i = 0; i < 10; i++) {
+    righe.push(`{"ts":"2026-09-0${(i % 9) + 1}T10:0${i}:00Z","level":"info","msg":"server riavviato","porta":${3000 + i}}`)
+  }
+  assert.equal(sembraUnRegistro(righe.join('\n')), true)
+})
+
+test('un appunto di una persona non è un registro, nemmeno con dentro un blocco di codice', () => {
+  const nota = [
+    'Un appunto normale, scritto a mano.',
+    '',
+    'Riunione con Marta: il preventivo va rifatto entro venerdì, e il fornitore',
+    'nuovo chiede un anticipo del trenta per cento. Da chiedere a Luca se il',
+    'contratto di gennaio lo permette.',
+    '',
+    'Il comando per far ripartire il server, che dimentico ogni volta:',
+    '',
+    '```',
+    'npm run dev',
+    '```',
+    '',
+    'Poi si apre da solo sulla porta tremila.'
+  ].join('\n')
+  assert.equal(sembraUnRegistro(nota), false)
+  assert.equal(sembraUnRegistro('Caffè con Marta giovedì alle dieci, da confermare.'), false)
+})
+
+test('una tabella di fatture non è un registro: le virgole non sono un indizio', () => {
+  const csv = [
+    'Data,Cliente,Descrizione,Imponibile,IVA,Totale',
+    '2026-01-12,"Rossi & figli",Consulenza,1200,264,1464',
+    '2026-02-03,"Bianchi srl",Progetto,3400,748,4148',
+    '2026-02-28,"Verdi spa",Manutenzione,800,176,976'
+  ].join('\n')
+  assert.equal(sembraUnRegistro(csv, { soloIntestazione: true }), false)
+  // e un `.csv` che è davvero un registro di sessione lo dice dalla prima riga
+  assert.equal(sembraUnRegistro('pid: 1,cwd: /tmp,status: succeeded', { soloIntestazione: true }), true)
 })

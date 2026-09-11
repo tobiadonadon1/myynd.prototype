@@ -1977,6 +1977,166 @@ const EN: Record<string, string> = {
     'Myynd reads documents: PDF, Word, Excel, PowerPoint, text, Markdown, HTML and RTF. Images, video, code and system files are not documents.',
   'Collega il mio PC': 'Connect my PC',
   'Solo alcune cartelle': 'Only some folders',
+
+  /*
+   * — le schede delle fonti, riscritte corte —
+   *
+   * Ogni modulo adesso ha la stessa forma: una riga che dice cosa dà quella
+   * fonte, i campi, il bottone, e sotto i blocchi chiusi con il loro titolo.
+   * Quello che prima erano tre paragrafi aperti in grigio chiaro qui è
+   * diventato un elenco di passi dentro un «Dove trovo…»: le frasi sono corte
+   * apposta, e vanno tenute corte anche traducendole.
+   */
+  'La chiave con cui Myynd ragiona: risposte, bozze e rassegna.':
+    'The key Myynd thinks with: answers, drafts and the briefing.',
+  'La chiave è salvata, ma c’è una cosa da sapere.': 'The key is saved, but there is one thing to know.',
+  'Cosa ha risposto Anthropic': 'What Anthropic replied',
+  'Ne ho trovata una in ANTHROPIC_API_KEY.': 'I found one in ANTHROPIC_API_KEY.',
+  'Usa quella': 'Use that one',
+  'Dove trovo la chiave?': 'Where do I find the key?',
+  'Su console.anthropic.com apri «API keys» e creane una.': 'On console.anthropic.com open “API keys” and create one.',
+  'In «Billing» metti del credito sul conto.': 'Under “Billing” put some credit on the account.',
+  'Incolla qui la chiave: comincia per sk-ant-.': 'Paste the key here: it starts with sk-ant-.',
+  'Claude Code è qui e sei già entrato: Myynd ragiona di lì, senza chiave.':
+    'Claude Code is here and you are signed in: Myynd thinks through it, no key.',
+  'Apri il Terminale e scrivi «claude».': 'Open Terminal and type “claude”.',
+  'Fai l’accesso con il tuo account.': 'Sign in with your account.',
+  'Torna qui: si ragiona senza chiave.': 'Come back here: it thinks with no key.',
+
+  'Un altro modello al posto di Claude: tuo, o di un fornitore.':
+    'Another model in place of Claude: yours, or a provider’s.',
+  'In casa di solito non serve.': 'At home it is usually not needed.',
+  'Come si collega un modello sul mio computer': 'How to connect a model on my computer',
+  'Accendi Ollama, LM Studio o llama.cpp sul tuo computer.': 'Turn on Ollama, LM Studio or llama.cpp on your computer.',
+  'Qui sopra scegli il suo nome: l’indirizzo si riempie da solo.': 'Pick its name above: the address fills in by itself.',
+  'Scrivi il nome del modello che hai scaricato. La chiave non serve.':
+    'Type the name of the model you downloaded. No key needed.',
+
+  'La tua posta, in sola lettura: chi ti scrive e cosa dice.':
+    'Your mail, read-only: who writes to you and what they say.',
+  'Gmail vuole una «password per le app», non quella del tuo account.':
+    'Gmail wants an app password, not your account password.',
+  'Dove trovo la password per le app?': 'Where do I find the app password?',
+  'Gmail: Account Google › Sicurezza › Password per le app.': 'Gmail: Google Account › Security › App passwords.',
+  'iCloud: appleid.apple.com › Accesso e sicurezza › Password per le app.':
+    'iCloud: appleid.apple.com › Sign-In and Security › App-Specific Passwords.',
+  'Sono sedici lettere: incollale qui sopra.': 'It is sixteen letters: paste them above.',
+
+  'La cartella che scegli, letta qui: documenti, note, appunti.':
+    'The folder you pick, read here: documents, notes, jottings.',
+  'Cosa legge, e cosa no': 'What it reads, and what it does not',
+  'Legge PDF, Word, Markdown, testo e RTF.': 'It reads PDF, Word, Markdown, text and RTF.',
+  'Niente esce dal tuo computer finché non scegli una cartella.': 'Nothing leaves your computer until you pick a folder.',
+  'Non succede da solo: lo rifai quando vuoi.': 'It never happens by itself: you redo it whenever you like.',
+
+  'Tutto il tuo computer, in sola lettura: documenti, note, download.':
+    'Your whole computer, read-only: documents, notes, downloads.',
+  'Scrivania, Documenti, Download e iCloud Drive.': 'Desktop, Documents, Downloads and iCloud Drive.',
+  'Legge e basta: non sposta e non cancella niente.': 'It reads, and that is all: it moves nothing and deletes nothing.',
+  'Immagini, video, codice e file di sistema restano fuori.': 'Images, video, code and system files stay out.',
+
+  'Serve un permesso del Mac': 'A Mac permission is needed',
+  'Apri Impostazioni di Sistema › Privacy e sicurezza.': 'Open System Settings › Privacy & Security.',
+  'Apri «Accesso completo al disco».': 'Open “Full Disk Access”.',
+  'Aggiungi Myynd e accendi il suo interruttore.': 'Add Myynd and turn its switch on.',
+
+  'Le riunioni che Granola ha già scritto su questo Mac.': 'The meetings Granola has already written on this Mac.',
+  'Cosa serve per collegarlo': 'What you need to connect it',
+  'Granola installato su questo Mac.': 'Granola installed on this Mac.',
+  'Aperto almeno una volta.': 'Opened at least once.',
+  'Niente da incollare.': 'Nothing to paste.',
+
+  'Le note dell’app Note di Apple su questo Mac.': 'Your Apple Notes on this Mac.',
+  'Legge una copia del suo archivio, in sola lettura.': 'It reads a copy of the Notes store, read-only.',
+  'Le note protette da password restano fuori.': 'Password-protected notes stay out.',
+  'Quelle nel cestino restano fuori.': 'Notes in the trash stay out.',
+
+  'Le chat che hai già avuto con ChatGPT e con Claude.': 'The chats you have already had with ChatGPT and Claude.',
+  'Come si esportano le chat': 'How to export the chats',
+  'ChatGPT: Impostazioni › Controlli dati › Esporta dati.': 'ChatGPT: Settings › Data controls › Export data.',
+  'Claude: Impostazioni › Privacy › Esporta dati.': 'Claude: Settings › Privacy › Export data.',
+  'Arriva un archivio via email: dentro c’è conversations.json.': 'An archive arrives by email: conversations.json is inside.',
+  'Scegli quel file qui sopra.': 'Pick that file above.',
+  'Le chat di claude.ai vivono dai loro: solo l’esportazione le porta qui.':
+    'Chats on claude.ai live on their side: only the export brings them here.',
+  'Di Claude Code si tengono le battute, non i file aperti né i comandi lanciati.':
+    'From Claude Code it keeps the turns, not the files opened or the commands run.',
+  'Le sessioni stanno in ~/.claude/projects.': 'The sessions live in ~/.claude/projects.',
+
+  'Le pagine di Notion che condividi con l’integrazione.': 'The Notion pages you share with the integration.',
+  'Dove trovo il token?': 'Where do I find the token?',
+  'Su notion.so/my-integrations crea un’integrazione interna.': 'On notion.so/my-integrations create an internal integration.',
+  'Copia il token: comincia per ntn_.': 'Copy the token: it starts with ntn_.',
+  'Su ogni pagina da leggere: Condividi › aggiungi l’integrazione.': 'On each page to read: Share › add the integration.',
+
+  'La tua agenda: cosa hai fatto e cosa ti aspetta.': 'Your calendar: what you did and what is coming.',
+  'Tienilo per te: quel link apre la tua agenda.': 'Keep it to yourself: that link opens your calendar.',
+  'Avanti guarda sempre sei mesi.': 'Ahead it always looks six months out.',
+  'Dove trovo l’indirizzo?': 'Where do I find the address?',
+  'Su Google Calendar apri le impostazioni e clicca il nome della tua agenda.':
+    'In Google Calendar open settings and click your calendar’s name.',
+  'Scendi fino a «Integra il calendario».': 'Scroll down to “Integrate calendar”.',
+  'Copia l’indirizzo privato in formato iCal.': 'Copy the private address in iCal format.',
+  'Su Outlook e iCloud si chiama «pubblica calendario».': 'On Outlook and iCloud it is called “publish calendar”.',
+  'Se lo giri per sbaglio, rigeneralo da lì: il vecchio smette di funzionare.':
+    'If you pass it around by mistake, regenerate it there: the old one stops working.',
+
+  'La tua posta e la tua agenda Google, in sola lettura.': 'Your Google mail and calendar, read-only.',
+  'Come si crea l’app su Google Cloud': 'How to create the app on Google Cloud',
+  'Su console.cloud.google.com crea un progetto.': 'On console.cloud.google.com create a project.',
+  'Attiva Gmail API e Calendar API.': 'Turn on the Gmail API and the Calendar API.',
+  'Credenziali › ID client OAuth › Applicazione desktop.': 'Credentials › OAuth client ID › Desktop app.',
+  'Incolla qui quello che ti dà.': 'Paste here what it gives you.',
+
+  'I canali di Slack di cui fai già parte, in sola lettura.': 'The Slack channels you are already in, read-only.',
+  'Su api.slack.com/apps crea un’app.': 'On api.slack.com/apps create an app.',
+  'In «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read.':
+    'Under “OAuth & Permissions” add the user scopes channels:history, groups:history, im:history, mpim:history, channels:read and users:read.',
+  'Installala nel tuo spazio.': 'Install it in your workspace.',
+  'Copia il token che comincia per xoxp-.': 'Copy the token starting with xoxp-.',
+
+  'I file del tuo Google Drive, in sola lettura.': 'The files in your Google Drive, read-only.',
+  'Stesso progetto di Gmail: l’ID è già quello.': 'Same project as Gmail: that ID is here already.',
+  'Attiva Google Drive API.': 'Turn on the Google Drive API.',
+  'Il consenso si rifà: stavolta riguarda i tuoi file.': 'Consent is asked again: this time it is about your files.',
+
+  'La tua posta e la tua agenda Outlook, in sola lettura.': 'Your Outlook mail and calendar, read-only.',
+  'I file dei siti SharePoint che segui, in sola lettura.': 'The files of the SharePoint sites you follow, read-only.',
+  'L’app è la stessa che hai già registrato: l’ID è quello.': 'The app is the one you registered: that is the ID.',
+  'Come si registra l’app su Entra ID': 'How to register the app on Entra ID',
+  'Su entra.microsoft.com: Registrazioni app › Nuova registrazione.': 'On entra.microsoft.com: App registrations › New registration.',
+  'Piattaforma «App per dispositivi mobili e desktop».': 'Platform “Mobile and desktop applications”.',
+  'Come URI di reindirizzamento aggiungi http://localhost.': 'As the redirect URI add http://localhost.',
+  'Copia qui l’ID applicazione.': 'Copy the application ID here.',
+  'Cosa chiederà Microsoft': 'What Microsoft will ask for',
+  'Di leggere la posta e il calendario. Niente altro, e niente in scrittura.':
+    'To read mail and calendar. Nothing else, and nothing written.',
+  'Di leggere i file dei siti che segui. Niente altro, e niente in scrittura.':
+    'To read the files of the sites you follow. Nothing else, and nothing written.',
+  'Se l’app c’era già, il consenso si rifà: i permessi sono altri.':
+    'If the app was there, consent is asked again: the permissions differ.',
+
+  'I file del tuo Dropbox, in sola lettura.': 'The files in your Dropbox, read-only.',
+  'Su dropbox.com/developers/apps crea un’app «Scoped access».': 'On dropbox.com/developers/apps create a “Scoped access” app.',
+  'In Permissions spunta files.metadata.read e files.content.read.':
+    'Under Permissions tick files.metadata.read and files.content.read.',
+  'Copia qui la App key.': 'Copy the App key here.',
+
+  'I messaggi del tuo numero su WhatsApp Business, la piattaforma di Meta.':
+    'The messages to your number on WhatsApp Business, Meta’s platform.',
+  'Quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet.':
+    'What arrived before today will not be here, and this computer must be reachable from the internet.',
+  'Firma i messaggi in arrivo: senza, chiunque potrebbe fingersi Meta.':
+    'It signs incoming messages: without it, anyone could pose as Meta.',
+  'Su developers.facebook.com apri la tua app WhatsApp.': 'On developers.facebook.com open your WhatsApp app.',
+  'In Configurazione dell’API copia l’ID del numero.': 'Under API Setup copy the phone number ID.',
+  'Crea un token permanente da utente di sistema.': 'Create a permanent token from a system user.',
+  'Il segreto dell’app sta in Impostazioni › Di base.': 'The app secret is under Settings › Basic.',
+  'Come si configura il webhook': 'How to set up the webhook',
+  'Su Meta, come URL metti il tuo indirizzo pubblico seguito da /api/whatsapp/webhook.':
+    'On Meta, as the URL put your public address followed by /api/whatsapp/webhook.',
+  'Come parola d’ordine, la stessa che hai scritto qui sopra.': 'As the passphrase, the same one you typed above.',
+  'Iscriviti al campo «messages».': 'Subscribe to the “messages” field.',
   'Collega le cartelle scelte': 'Connect the chosen folders',
   'Per leggere Scrivania, Documenti, Download e la Posta serve l’Accesso completo al disco':
     'Reading Desktop, Documents, Downloads and Mail needs Full Disk Access',

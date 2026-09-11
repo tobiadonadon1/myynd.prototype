@@ -167,6 +167,69 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
   assert.equal(e.punto?.progetti[0].dal, new Date(t0).toISOString())
 })
 
+/** Un file sul disco, con il percorso che decide se è una notizia. */
+const file = (percorso: string, quando = '2026-09-07T10:00:00.000Z'): Documento => ({
+  id: `desktop:${percorso}`, fonte: 'desktop', tipo: 'documento',
+  titolo: percorso.slice(percorso.lastIndexOf('/') + 1),
+  corpo: 'Il testo del file, abbastanza lungo da contare come documento.',
+  autore: null, percorso, quando, gruppo: 'documenti'
+})
+
+test('dal disco entra un documento vero, non un log di terminale', () => {
+  pulisci()
+  const dal = new Date(Date.now() - 60_000).toISOString()
+  store.salvaDocumenti([
+    file('/Users/x/terminals/1.txt'),
+    file('/Users/x/Documents/Contratto.pdf'),
+    file('/Users/x/Desktop/Fattura.pdf'),
+    file('/Users/x/Library/Mobile Documents/com~apple~CloudDocs/Bozza.docx'),
+    file('/Users/x/Downloads/appunti.md'),
+    file('/Users/x/Documents/Archivio/2025/Vecchia.pdf'),
+    file('/Users/tobiadonadon/Desktop/myynd.prototype/server/punto.ts')
+  ])
+  const ids = punto.raccogli(dal).arrivati.map(d => d.id)
+  assert.ok(!ids.includes('desktop:/Users/x/terminals/1.txt'), 'un log di terminale è una notizia')
+  assert.ok(ids.includes('desktop:/Users/x/Documents/Contratto.pdf'), 'un contratto nei documenti non è entrato')
+  assert.ok(ids.includes('desktop:/Users/x/Desktop/Fattura.pdf'))
+  assert.ok(ids.includes('desktop:/Users/x/Library/Mobile Documents/com~apple~CloudDocs/Bozza.docx'))
+  assert.ok(!ids.includes('desktop:/Users/x/Downloads/appunti.md'), 'un markdown non è un documento arrivato')
+  assert.ok(!ids.includes('desktop:/Users/x/Documents/Archivio/2025/Vecchia.pdf'), 'tre cartelle sotto è archivio')
+  assert.ok(!ids.includes('desktop:/Users/tobiadonadon/Desktop/myynd.prototype/server/punto.ts'))
+})
+
+test('dal disco al massimo cinque, i più recenti', () => {
+  pulisci()
+  const dal = new Date(Date.now() - 60_000).toISOString()
+  store.salvaDocumenti([
+    ...Array.from({ length: 8 }, (_, i) => file(`/Users/x/Documents/Contratto ${i}.pdf`)),
+    doc('posta:INBOX:1', 'Preventivo Rossi'),
+    doc('posta:INBOX:2', 'Fattura Bianchi')
+  ])
+  const m = punto.raccogli(dal)
+  assert.equal(m.arrivati.filter(d => d.fonte === 'desktop').length, 5, 'dal disco ne sono passati più di cinque')
+  assert.equal(m.arrivati.filter(d => d.fonte === 'posta').length, 2, 'la posta è stata tagliata insieme al disco')
+  assert.equal(m.indicizzati, 7, 'il conto dice anche quello che non è una notizia')
+})
+
+test('quello che ha fatto Myynd da solo non arriva al modello', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  seminaLista()
+  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
+  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
+  store.registraAzione({ tipo: 'email', cosa: 'Preventivo aggiornato', verso: 'bianchi@esempio.it', esito: 'fatta', compito: 'c1' })
+  store.registraAzione({ tipo: 'automazione', cosa: 'Rassegna del mattino', esito: 'fallita' })
+
+  const ricevute = fornitoreFinto()
+  await punto.punto({}, adesso())
+  const mandato = testoDi(ricevute[0])
+  assert.doesNotMatch(mandato, /automazioni girate/, 'un’automazione che gira è finita nel punto')
+  assert.doesNotMatch(mandato, /Priorità in arrivo/, 'il registro delle automazioni è finito nel punto')
+  // quello che ha bisogno di lui resta: una mail partita su sua richiesta, e un guasto
+  assert.match(mandato, /email mandate \(su sua richiesta\): 1/)
+  assert.match(mandato, /Rassegna del mattino \(fallita\)/)
+})
+
 test('un id che non sta nel materiale non passa, nemmeno se il modello lo scrive', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
@@ -234,9 +297,114 @@ test('le sezioni sono tagliate corte, e una riga lunga si accorcia a centoventi'
   })
   const e = await punto.punto({}, adesso())
   assert.equal(e.punto?.mentreNonCeri.length, 2, 'la terza riga di «mentre non c’eri» è passata')
-  assert.equal(e.punto?.avvii.length, 2, 'il terzo avvio è passato')
+  assert.equal(e.punto?.avvii.length, 1, 'il secondo avvio è passato')
   assert.ok((e.punto?.mentreNonCeri[0].testo.length ?? 0) <= 120, 'la riga lunga non è stata accorciata')
   assert.match(e.punto?.mentreNonCeri[0].testo ?? '', /…$/)
+})
+
+// — una cosa una volta sola —
+//
+// Il punto dell'undici settembre diceva del dev server di tobiaweb quattro
+// volte: mentre non c'eri, adesso, dove sei sul progetto, e un'automazione da
+// accendere. Quattro righe su dieci per una cosa sola, e lui l'ha letto come
+// «mi sta dicendo sempre la stessa cosa». Qui si conta invece di sperare.
+
+test('ridondante: due frasi che dicono la stessa cosa, e due che non c’entrano', () => {
+  assert.equal(punto.ridondante(
+    'Il server di tobiaweb è ripartito più volte.',
+    'Controlla se il server di tobiaweb è ripartito.'
+  ), true)
+  // la punteggiatura e le maiuscole non contano
+  assert.equal(punto.ridondante('È arrivato il preventivo di Rossi!', 'è ARRIVATO il preventivo, di rossi'), true)
+  assert.equal(punto.ridondante(
+    'È arrivato il preventivo di Rossi.',
+    'Approva la bozza per Bianchi.'
+  ), false)
+  // le parole corte non fanno somiglianza: qui in comune c'è solo «che per la»
+  assert.equal(punto.ridondante('La casa che ha in mano.', 'La rete che ha di sua.'), false)
+  assert.equal(punto.ridondante('', 'Una riga qualunque.'), false)
+})
+
+test('la stessa cosa detta in quattro sezioni esce una volta sola', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea' })
+  fornitoreFinto({
+    mentreNonCeri: [{ testo: 'Il server di tobiaweb è ripartito più volte.', compito: '', doc: '' }],
+    adesso: [{ testo: 'Controlla se il server di tobiaweb è ripartito.', compito: '', doc: '' }],
+    daLeggere: [],
+    progetti: [{
+      nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea',
+      doveSei: 'Il server di tobiaweb è ripartito, deploy da controllare.', angolo: ''
+    }],
+    avvii: [{ frase: 'Quando il server di tobiaweb è ripartito, segnalalo', perche: 'Lo guarda a mano.' }]
+  })
+
+  const e = await punto.punto({}, adesso())
+  assert.ok(e.generatoAdesso)
+  assert.equal(e.punto?.mentreNonCeri.length, 1, 'la prima volta che una cosa si dice resta')
+  assert.deepEqual(e.punto?.adesso, [], 'la stessa cosa è tornata sotto «adesso»')
+  assert.equal(e.punto?.progetti[0].nome, 'tobiadonadon.com', 'il progetto è sparito insieme all’eco')
+  assert.equal(e.punto?.progetti[0].doveSei, '', 'il «dove sei» ripeteva la riga di sopra')
+  assert.deepEqual(e.punto?.avvii, [], 'l’avvio girava intorno alla stessa cosa')
+})
+
+test('otto righe in tutto: quando il modello riempie tutto, l’avvio salta', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.salvaNotizie([{
+    id: 'n1', titolo: 'I modelli piccoli girano su un portatile', riassunto: 'Ci girano.',
+    perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
+    quando: new Date().toISOString()
+  }])
+  progetti.scrivi({ nome: 'H-Farm', obiettivo: 'Chiudere l’audit' })
+  progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea' })
+
+  fornitoreFinto({
+    mentreNonCeri: [
+      { testo: 'È arrivato il preventivo di Rossi.', compito: '', doc: 'posta:INBOX:1' },
+      { testo: 'Anna ha mandato il contratto firmato.', compito: '', doc: '' },
+      { testo: 'Verdi ha confermato la data di giugno.', compito: '', doc: '' }
+    ],
+    adesso: [
+      { testo: 'Approva la bozza per Bianchi.', compito: '', doc: '' },
+      { testo: 'Rispondi sull’ambito da misurare.', compito: '', doc: '' },
+      { testo: 'Scegli il numero della prova.', compito: '', doc: '' },
+      { testo: 'Chiama lo studio di Padova.', compito: '', doc: '' }
+    ],
+    daLeggere: [{ titolo: 'I modelli piccoli girano su un portatile', perche: 'C’entra con Myynd.' }],
+    progetti: [
+      { nome: 'H-Farm', obiettivo: 'Chiudere l’audit', doveSei: 'Quattro domande senza risposta.', angolo: '' },
+      { nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea', doveSei: 'Il sito è in linea da lunedì.', angolo: '' }
+    ],
+    avvii: [{ frase: 'Ogni venerdì alle 8, un riepilogo della settimana', perche: 'Lo fa già a mano.' }]
+  })
+
+  const p = (await punto.punto({}, adesso())).punto!
+  const righe = p.mentreNonCeri.length + p.adesso.length + p.daLeggere.length + p.progetti.length + p.avvii.length
+  assert.ok(righe <= 8, `il punto è lungo ${righe} righe`)
+  assert.equal(p.mentreNonCeri.length, 2)
+  assert.equal(p.adesso.length, 3)
+  assert.equal(p.daLeggere.length, 1)
+  assert.equal(p.progetti.length, 2)
+  assert.deepEqual(p.avvii, [], 'sopra le otto righe si taglia dal fondo, e in fondo c’è l’avvio')
+})
+
+test('l’istruzione dice che anche gli avvii si scrivono nella lingua dell’app', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto()
+  await punto.punto({}, adesso())
+  const istr = istruzioneDi(ricevute[0])
+  const lingua = cfg.nellaLingua()
+  assert.match(istr, new RegExp(`«frase» e «perche» si scrivono in\\s+${lingua}`))
+  assert.match(istr, /gli avvii non fanno\s+eccezione/)
+  assert.match(istr, new RegExp(`Scrivi in ${lingua}: ogni campo, avvii compresi`))
+  // e le regole nuove sul rumore viaggiano con l'istruzione
+  assert.match(istr, /Quello che ha fatto Myynd da solo/)
+  assert.match(istr, /Un file sul disco è una notizia solo se/)
+  assert.match(istr, /Le cose tecniche/)
+  assert.match(istr, /al massimo otto righe/)
 })
 
 // — il cancello —
@@ -634,7 +802,7 @@ test('quello che ha scartato non torna nel punto, e gli avvii non ripetono le au
   assert.match(mandato, /NON dire da quanto manca/)
   assert.match(mandato, /È stato via circa 3 ore/)
   assert.equal(e.punto?.via, 200)
-  // gli avvii: al massimo tre, e mai uno uguale a una ricetta già accesa per nome
-  assert.equal(e.punto?.avvii.length, 2)
+  // gli avvii: uno solo, e mai uno uguale a una ricetta già accesa per nome
+  assert.equal(e.punto?.avvii.length, 1)
   assert.match(mandato, /avvii/)
 })

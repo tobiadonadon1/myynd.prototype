@@ -20,7 +20,8 @@ import { existsSync, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import type { ConfigDesktop } from '../config.ts'
 import type { Documento } from '../store.ts'
-import { daBuffer, LETTI, tipoDi } from './estrai.ts'
+import * as store from '../store.ts'
+import { daBuffer, FIUTATI, LETTI, sembraUnRegistro, tipoDi } from './estrai.ts'
 
 export { LETTI }
 
@@ -70,6 +71,58 @@ const SALTA_TUTTO = new Set([
   'Parallels', 'VirtualBox VMs', 'Virtual Machines',
   'AppData'
 ])
+
+/**
+ * Le cartelle dove una macchina scrive per sé: registri, cache, sessioni.
+ *
+ * Valgono sempre, anche per una cartella scelta a mano, e questa è la
+ * differenza con `SALTA_TUTTO`. Chi indica `~/Lavoro` vuole i suoi documenti,
+ * non il `logs/` che ci ha lasciato dentro uno script: nessuno tiene le
+ * proprie cose in una cartella che si chiama `tmp`, mentre qualcuno tiene
+ * davvero gli scontrini in `~/Pictures`.
+ *
+ * È la cartella da cui è nato tutto questo: `~/terminals`, quattordici
+ * registri di sessione del terminale, letti come documenti e poi citati dalla
+ * rassegna del mattino. Il confronto è senza maiuscole — `Logs`, `Temp`,
+ * `CrashReporter` sono la stessa cosa dei loro gemelli minuscoli.
+ *
+ * `Application Support` sta già sotto `Library`, che si salta per prima: qui
+ * non fa niente, e resta perché il giorno in cui una radice scelta a mano
+ * punta dentro `Library` — capita, con una cartella di lavoro di un'app — è
+ * l'unica riga che tiene fuori i dati interni dei programmi.
+ */
+const SALTA_MACCHINA = new Set([
+  'terminals', 'logs', 'log', 'tmp', 'temp', 'cache', 'caches', '.cache',
+  'crash', 'crashreporter', 'diagnosticreports', 'application support'
+])
+
+/** Le code di un nome che dichiarano un registro: `build-log.txt`. */
+const CODE_REGISTRO = ['.log.txt', '-log.txt', '_log.txt']
+/** Un nome che è solo un numero: `268746.txt`, cioè l'identificativo di una sessione. */
+const SOLO_CIFRE = /^\d+$/
+/** Un nome che è un'impronta: `deadbeefdeadbeef0123.md`, cioè una cosa generata. */
+const IMPRONTA = /^[0-9a-f]{16,}$/i
+
+/**
+ * Il nome di questo file l'ha scelto un programma, non una persona.
+ *
+ * Una persona chiama i suoi file «Preventivo Rossi», «lettera a Marta»,
+ * «appunti riunione». Un numero puro, un'impronta esadecimale, una coda
+ * `-log.txt`: sono i tre modi in cui un programma nomina la roba sua, e
+ * nessuno dei tre è un documento da ricordare.
+ *
+ * Il numero e l'impronta si guardano **solo se c'è un'estensione**: senza,
+ * una cartella di nome `2026` o `2025` — un archivio per anno, che esiste su
+ * mezzo mondo — verrebbe presa per un file di macchina e saltata intera.
+ */
+export function nomeDiMacchina(nome: string): boolean {
+  const basso = nome.toLowerCase()
+  if (CODE_REGISTRO.some(c => basso.endsWith(c))) return true
+  const ext = extname(nome)
+  if (!ext) return false
+  const base = nome.slice(0, nome.length - ext.length)
+  return SOLO_CIFRE.test(base) || IMPRONTA.test(base)
+}
 
 /**
  * I file lasciati fuori, divisi per quello che sono davvero.
@@ -125,9 +178,11 @@ const MAX_TOTALE_TUTTO = 25_000
 const MAX_PROFONDITA_TUTTO = 10
 
 /** Le regole che cambiano fra «le cartelle scelte» e «tutto il Mac». */
-type Regole = { profondita: number; salta: (nome: string) => boolean }
-const REGOLE: Regole = { profondita: MAX_PROFONDITA, salta: n => SALTA.has(n) }
-const REGOLE_TUTTO: Regole = { profondita: MAX_PROFONDITA_TUTTO, salta: n => SALTA.has(n) || SALTA_TUTTO.has(n) }
+export type Regole = { profondita: number; salta: (nome: string) => boolean }
+/** Le cartelle di macchina si saltano in tutti e due i modi: vedi `SALTA_MACCHINA`. */
+const daMacchina = (n: string) => SALTA_MACCHINA.has(n.toLowerCase())
+const REGOLE: Regole = { profondita: MAX_PROFONDITA, salta: n => SALTA.has(n) || daMacchina(n) }
+const REGOLE_TUTTO: Regole = { profondita: MAX_PROFONDITA_TUTTO, salta: n => SALTA.has(n) || SALTA_TUTTO.has(n) || daMacchina(n) }
 const regoleDi = (tutto?: boolean): Regole => (tutto ? REGOLE_TUTTO : REGOLE)
 
 export function suggerimenti(): string[] {
@@ -250,19 +305,76 @@ export function saltaDalNome(percorso: string, radice: string, tutto = false, eC
   const pezzi = rel.split(sep)
   const regole = regoleDi(tutto)
   if (pezzi.some(n => n.startsWith('.') || regole.salta(n))) return true
+  // un nome scelto da un programma — `268746.txt`, un'impronta, un `-log.txt` —
+  // non è un documento: vale per l'ultimo pezzo, che quando non è una cartella
+  // è il file
+  if (!eCartella && nomeDiMacchina(pezzi[pezzi.length - 1]!)) return true
   // le cartelle: quelle in mezzo, e la cartella stessa se è una cartella
   const cartelle = eCartella ? pezzi : pezzi.slice(0, -1)
   return cartelle.length > regole.profondita
 }
 
+// — quello che è già entrato —
+
+/**
+ * Questo documento, che l'indice ha già, oggi non sarebbe entrato.
+ *
+ * L'id di un file è `desktop:` più il percorso intero, quindi il percorso si
+ * rilegge da lì e si rigiudica con le regole di adesso. Non c'è la profondità
+ * e non c'è il punto davanti: quello è un percorso assoluto — `/Users/tobia/…`
+ * — e contare i suoi pezzi vorrebbe dire buttare l'indice intero. Si guardano
+ * le due regole che parlano di *cosa* è una cartella o un file, non di dove
+ * sta.
+ *
+ * `regole` arriva da fuori perché non sono le stesse per tutti: chi ha scelto
+ * `~/Pictures` a mano ci tiene le scansioni, e quei documenti non si buttano.
+ */
+export function daButtare(id: string, regole: Regole): boolean {
+  if (!id.startsWith('desktop:')) return false
+  const percorso = id.slice('desktop:'.length)
+  if (!percorso) return false
+  const pezzi = percorso.split(sep).filter(Boolean)
+  if (!pezzi.length) return false
+  if (pezzi.some(n => regole.salta(n))) return true
+  return nomeDiMacchina(pezzi[pezzi.length - 1]!)
+}
+
+/**
+ * Toglie dall'indice quello che le regole nuove non farebbero più entrare.
+ *
+ * Una regola nuova vale per la lettura di domani; quello che è già dentro ci
+ * resta, e resta citabile. I quattordici registri di `~/terminals` erano già
+ * indicizzati quando la regola è nata: senza questo giro, la rassegna avrebbe
+ * continuato a parlarne. `riconcilia` da solo non basta — cancella quello che
+ * una lettura *completa* non ha più visto, e con tutto il Mac una lettura
+ * completa è rara: basta un permesso negato da macOS.
+ *
+ * Si giudica dal nome e basta, che è l'unica cosa che si sa senza riaprire i
+ * file. Quello che è entrato per il contenuto se ne va da sé: alla prima
+ * rilettura del file `leggiUno` lo riconosce e `cammina` non lo dichiara più
+ * vivo.
+ */
+export function pulisciIndice(c: ConfigDesktop): number {
+  const regole = regoleDi(c.tutto)
+  const buttare = store.idsConPrefisso('desktop:').filter(id => daButtare(id, regole))
+  if (!buttare.length) return 0
+  return store.scordaDocumenti(buttare)
+}
+
 /**
  * Un file solo, con le stesse regole e gli stessi limiti di `cammina`.
  *
- * `null` è «esiste ma non è un documento»: troppo grande, vuoto, o senza
- * niente da leggere dentro. Un errore di lettura si lancia, non si ingoia —
- * chi chiama sa distinguere «non l'ho letto» da «non c'è niente».
+ * `null` è «esiste ma non è un documento»: troppo grande, vuoto, senza niente
+ * da leggere dentro, o scritto da una macchina. Un errore di lettura si
+ * lancia, non si ingoia — chi chiama sa distinguere «non l'ho letto» da «non
+ * c'è niente».
+ *
+ * `nota` è per chi conta: un registro riconosciuto dal contenuto è un `null`
+ * come gli altri, ma è l'unico che si vuole contare fra i file di sistema
+ * lasciati fuori. Chi non conta — la vedetta — non la passa e non cambia
+ * niente per lui.
  */
-export async function leggiUno(percorso: string, s?: Stats): Promise<Documento | null> {
+export async function leggiUno(percorso: string, s?: Stats, nota?: { registro?: boolean }): Promise<Documento | null> {
   const p = resolve(percorso)
   const nome = basename(p)
   const st = s ?? await stat(p)
@@ -287,6 +399,19 @@ export async function leggiUno(percorso: string, s?: Stats): Promise<Documento |
   ]).finally(() => clearTimeout(cronometro))
   // un file vuoto non è un documento — ma esiste, e va detto
   if (corpo.length < 20) return null
+  /*
+   * Un registro non è un documento, e il nome non basta a dirlo.
+   *
+   * `~/terminals/268734.txt` lo prende già il nome; `note-di-lavoro.txt` che
+   * dentro è un dump di JSON no. Si guarda qui, dove il testo è già in mano:
+   * non costa una lettura in più, e succede solo per i file che *si stanno
+   * leggendo* — cioè quelli nuovi o cambiati, mai quelli invariati.
+   */
+  const ext = extname(nome).toLowerCase()
+  if (FIUTATI.includes(ext) && sembraUnRegistro(corpo, { soloIntestazione: ext === '.csv' })) {
+    if (nota) nota.registro = true
+    return null
+  }
   return {
     id: `desktop:${p}`,
     fonte: 'desktop',
@@ -420,6 +545,9 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
     // visto e lasciato fuori: un `.png`, un `.swift`, un `.zip`. Si conta,
     // perché è la metà del computer di cui altrimenti non si dice niente
     if (!LETTI.includes(ext)) { fuori.saltatiPerTipo++; fuori.saltati[classificaSalto(ext)]++; continue }
+    // il nome dice già che l'ha scritto un programma: non si apre nemmeno, e
+    // si conta fra la roba di sistema perché è quello che è
+    if (nomeDiMacchina(v.name)) { fuori.saltatiPerTipo++; fuori.saltati.sistema++; continue }
 
     try {
       const s = await stat(p)
@@ -442,8 +570,21 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
       // nessun permesso negato — e `riconcilia` lo cancellava dall'indice.
       // Cioè: un PDF cresciuto oltre i dodici mega spariva dalla mente, e
       // spariva *perché era diventato grande*.
-      const d = await leggiUno(p, s)
-      if (!d) { fuori.visti.push(id); continue }
+      const nota: { registro?: boolean } = {}
+      const d = await leggiUno(p, s, nota)
+      if (!d) {
+        /*
+         * Un registro riconosciuto dal contenuto **non** si dichiara vivo.
+         *
+         * Gli altri `null` — troppo grande, vuoto — sì: quelli sono documenti
+         * che stavolta non abbiamo letto, e toglierli dall'indice sarebbe un
+         * documento che sparisce perché è cresciuto. Questo no: è una cosa che
+         * non deve stare nella mente, e lasciarlo fuori dai visti è quello che
+         * fa toglierlo a `riconcilia` se ci era già entrato.
+         */
+        if (nota.registro) { fuori.saltatiPerTipo++; fuori.saltati.sistema++; continue }
+        fuori.visti.push(id); continue
+      }
       fuori.docs.push(d)
       // a lotti: tutto il computer sono migliaia di documenti, e tenerli
       // tutti in memoria fino alla fine della camminata è un rischio inutile

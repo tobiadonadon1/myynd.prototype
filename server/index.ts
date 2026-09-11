@@ -1492,6 +1492,14 @@ async function leggiTutto(
   if (desk && !ospitato.OSPITATO) await fonte('desktop', async () => {
     avvisa({ fase: 'desktop', stato: 'apro le cartelle' })
     /*
+     * Prima di leggere: via quello che le regole di adesso non farebbero più
+     * entrare. Le cartelle di registri — `~/terminals` e le sue quattordici
+     * sessioni di terminale — adesso si saltano intere, quindi la lettura non
+     * le incontra nemmeno e `riconcilia` non le vedrebbe mai sparire.
+     */
+    const buttati = desktop.pulisciIndice(desk)
+    if (buttati) console.log(`myynd · tolti dall'indice ${buttati} file di macchina — registri, cache, nomi generati`)
+    /*
      * Quello che non è cambiato non si rilegge: la data di modifica già in
      * indice basta a saperlo, e un PDF costa da estrarre. Ma verso un server
      * ospitato si spinge quello che si è letto, e un server appena collegato

@@ -31,19 +31,113 @@ export function campo(tema: Tema): CSSProperties {
   }
 }
 
+/**
+ * L'etichetta di un campo. Più scura di prima: a metà inchiostro, in maiuscolo
+ * e a 12px, era una delle righe che «si vedono appena» — e l'etichetta è la
+ * sola parola che dice cosa va scritto nella casella sotto.
+ */
 export function etichetta(tema: Tema): CSSProperties {
   return {
     fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
-    color: tema === 'scuro' ? 'rgba(244,239,232,.45)' : 'rgba(34,39,31,.5)',
+    color: tema === 'scuro' ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.68)',
     marginTop: 12
   }
 }
 
+/**
+ * La riga d'apertura: cosa dà questa fonte a Myynd, e basta.
+ *
+ * Inchiostro pieno, non grigio su grigio. Era il difetto che queste schede si
+ * portavano addosso tutte e diciassette: un paragrafo chiaro su uno sfondo
+ * chiaro, che si legge solo se si sa già cosa c'è scritto. Una riga sola, e
+ * tutto il resto di quello che c'era qui adesso sta chiuso più in basso.
+ */
+function guida(tema: Tema): CSSProperties {
+  return {
+    fontSize: '13.5px', lineHeight: 1.5, overflowWrap: 'anywhere',
+    color: tema === 'scuro' ? CHIARO : 'rgba(34,39,31,.88)'
+  }
+}
+
+/** Il testo di servizio: sotto un campo, o dentro un blocco aperto. Mai più chiaro di così. */
 function nota(tema: Tema): CSSProperties {
   return {
-    fontSize: '12.5px', lineHeight: 1.55, marginBottom: 4,
-    color: tema === 'scuro' ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)'
+    fontSize: '12.5px', lineHeight: 1.55, overflowWrap: 'anywhere',
+    color: tema === 'scuro' ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)'
   }
+}
+
+/** La riga che si apre: un titolo che dice cosa c'è dentro, e si vede che si clicca. */
+function sommario(tema: Tema): CSSProperties {
+  return {
+    fontSize: 13, fontWeight: 500, lineHeight: 1.5, cursor: 'pointer', padding: '2px 0',
+    color: tema === 'scuro' ? 'rgba(244,239,232,.72)' : 'rgba(34,39,31,.7)'
+  }
+}
+
+/** Il bottone piccolo accanto a un avviso: rame, una riga sola, mai il primario. */
+function azione(tema: Tema): CSSProperties {
+  return {
+    flex: 'none', padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
+    fontFamily: 'inherit', cursor: 'pointer', border: '1px solid #C4623B',
+    background: 'rgba(196,98,59,.16)', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F'
+  }
+}
+
+/** Un campo per riga: etichetta corta, casella, e — se proprio serve — una riga sotto. */
+function Campo({ tema, nome, sotto, children }: {
+  tema: Tema; nome: React.ReactNode; sotto?: React.ReactNode; children: React.ReactNode
+}) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ ...etichetta(tema), marginTop: 0 }}>{nome}</div>
+      {children}
+      {sotto ? <div style={{ ...nota(tema), marginTop: 6 }}>{sotto}</div> : null}
+    </div>
+  )
+}
+
+/**
+ * Quello che non serve per collegare: chiuso, con sopra il titolo di cosa c'è dentro.
+ *
+ * Non «Dettagli» e non «Altro»: chi legge deve sapere se aprirlo prima di
+ * aprirlo, altrimenti la riga chiusa costa quanto il paragrafo aperto.
+ */
+function Aiuto({ tema, titolo, children }: { tema: Tema; titolo: string; children: React.ReactNode }) {
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary style={sommario(tema)}>{titolo}</summary>
+      <div style={{ marginTop: 8 }}>{children}</div>
+    </details>
+  )
+}
+
+/** I passi dentro un blocco aperto: una lista corta e numerata, non un paragrafo. */
+function Passi({ tema, passi, numerati = true }: {
+  tema: Tema; passi: React.ReactNode[]; numerati?: boolean
+}) {
+  const stile: CSSProperties = { ...nota(tema), margin: 0, paddingLeft: 18 }
+  const voci = passi.map((p, i) => <li key={i} style={{ marginTop: i ? 5 : 0 }}>{p}</li>)
+  return numerati ? <ol style={stile}>{voci}</ol> : <ul style={stile}>{voci}</ul>
+}
+
+/**
+ * Un avviso che vale adesso: inchiostro su sabbia.
+ *
+ * Resta aperto perché parla di questa persona in questo momento — il permesso
+ * che manca, il credito che non c'è, la password della forma sbagliata — e
+ * chiuderlo vorrebbe dire nasconderlo proprio a chi lo riguarda.
+ */
+function Avviso({ tema, children }: { tema: Tema; children: React.ReactNode }) {
+  return (
+    <div style={{
+      marginTop: 12, padding: '10px 13px', borderRadius: 12,
+      border: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.2)' : 'rgba(196,98,59,.28)'}`,
+      background: tema === 'scuro' ? 'rgba(244,239,232,.07)' : '#EFE6DA',
+      fontSize: '12.5px', lineHeight: 1.55, overflowWrap: 'anywhere',
+      color: tema === 'scuro' ? CHIARO : '#22271F'
+    }}>{children}</div>
+  )
 }
 
 /**
@@ -91,7 +185,7 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
 
 type Props = { tema: Tema; ok: () => void }
 
-export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolean }) {
+export function FormClaude({ tema, ok }: Props) {
   const [apiKey, setApiKey] = useState('')
   const [err, setErr] = useState('')
   // la chiave è buona ma il conto non ha credito: si salva, e prima di andare
@@ -141,40 +235,45 @@ export function FormClaude({ tema, ok, senzaNota }: Props & { senzaNota?: boolea
   if (avviso) {
     return (
       <div>
-        <div style={{ ...nota(tema), overflowWrap: 'anywhere' }}>{t(avviso)}</div>
-        {dettaglio && (
-          <div style={{
-            marginTop: 10, padding: '9px 11px', borderRadius: 10,
-            background: tema === 'scuro' ? 'rgba(255,255,255,.06)' : 'rgba(34,39,31,.05)',
-            fontSize: '12px', lineHeight: 1.5,
-            color: tema === 'scuro' ? 'rgba(244,239,232,.55)' : 'rgba(34,39,31,.6)',
-            maxHeight: 96, overflowY: 'auto', overflowWrap: 'anywhere'
-          }}>{dettaglio}</div>
-        )}
+        <div style={guida(tema)}>{t('La chiave è salvata, ma c’è una cosa da sapere.')}</div>
+        <Avviso tema={tema}>{t(avviso)}</Avviso>
         <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
+        {dettaglio && (
+          <Aiuto tema={tema} titolo={t('Cosa ha risposto Anthropic')}>
+            <div style={{ ...nota(tema), maxHeight: 96, overflowY: 'auto' }}>{dettaglio}</div>
+          </Aiuto>
+        )}
       </div>
     )
   }
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {senzaNota
-          ? t('Da console.anthropic.com. Il conto deve avere credito (Billing).')
-          : t('La chiave da console.anthropic.com, con credito sul conto (Billing). Senza, Myynd non ragiona.')}
-      </div>
+      <div style={guida(tema)}>{t('La chiave con cui Myynd ragiona: risposte, bozze e rassegna.')}</div>
+      {/* la chiave che c'è già nell'ambiente: un avviso che vale adesso, e il
+          suo bottone piccolo — il primario resta uno, ed è quello sotto */}
       {nellAmbiente && (
-        <div style={{ marginTop: 14 }}>
-          <Conferma onClick={usaAmbiente} occupato={occupato} tema={tema}>{t("Usa la chiave che c\'è già")}</Conferma>
-          <div style={{ ...nota(tema), marginTop: 10 }}>{t("Ne ho trovata una in ANTHROPIC_API_KEY. Oppure incollane un\'altra qui sotto.")}</div>
-        </div>
+        <Avviso tema={tema}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{t('Ne ho trovata una in ANTHROPIC_API_KEY.')}</div>
+            <button type="button" onClick={usaAmbiente} disabled={occupato} style={azione(tema)}>{t('Usa quella')}</button>
+          </div>
+        </Avviso>
       )}
-      <div style={etichetta(tema)}>{t('Chiave API')}</div>
-      <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-        placeholder="sk-ant-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && apiKey) collega() }} />
+      <Campo tema={tema} nome={t('Chiave API')}>
+        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
+          placeholder="sk-ant-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && apiKey) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!apiKey} tema={tema}>{t('Collega Claude')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+        <Passi tema={tema} passi={[
+          t('Su console.anthropic.com apri «API keys» e creane una.'),
+          t('In «Billing» metti del credito sul conto.'),
+          t('Incolla qui la chiave: comincia per sk-ant-.')
+        ]} />
+      </Aiuto>
       <ConAbbonamento tema={tema} ok={ok} />
     </div>
   )
@@ -206,17 +305,23 @@ function ConAbbonamento({ tema, ok }: Props) {
   }
 
   return (
-    <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${tema === 'scuro' ? 'rgba(255,255,255,.12)' : 'rgba(34,39,31,.1)'}` }}>
-      <div style={etichetta(tema)}>{t('Oppure con l’abbonamento che paghi già')}</div>
-      <div style={{ ...nota(tema), marginTop: 6 }}>
-        {s.abbonamento.entrato
-          ? t('Claude Code è su questo computer ed è già entrato con il tuo account: Myynd può ragionare di lì, senza chiave e senza costi in più. Si cambia idea dalle preferenze quando vuoi.')
-          : t('Claude Code è su questo computer ma non ci sei ancora entrato. Apri il Terminale, scrivi «claude», fai l’accesso, e potrai ragionare senza chiave.')}
-      </div>
-      {s.abbonamento.entrato && (
-        <Conferma onClick={scegli} occupato={occupato} tema={tema}>{t('Usa il mio abbonamento')}</Conferma>
+    <Aiuto tema={tema} titolo={t('Oppure con l’abbonamento che paghi già')}>
+      {s.abbonamento.entrato ? (
+        <>
+          <div style={nota(tema)}>{t('Claude Code è qui e sei già entrato: Myynd ragiona di lì, senza chiave.')}</div>
+          <button type="button" onClick={scegli} disabled={occupato}
+            style={{ ...azione(tema), marginTop: 10 }}>
+            {occupato ? t('Provo…') : t('Usa il mio abbonamento')}
+          </button>
+        </>
+      ) : (
+        <Passi tema={tema} passi={[
+          t('Apri il Terminale e scrivi «claude».'),
+          t('Fai l’accesso con il tuo account.'),
+          t('Torna qui: si ragiona senza chiave.')
+        ]} />
       )}
-    </div>
+    </Aiuto>
   )
 }
 
@@ -298,33 +403,42 @@ export function FormCompatibile({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Al posto di Claude, per le risposte, le bozze e il feed. Serve un indirizzo che parli come OpenAI e il nome di un modello; la chiave solo se il fornitore la vuole.')}
-      </div>
+      <div style={guida(tema)}>{t('Un altro modello al posto di Claude: tuo, o di un fornitore.')}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
         {FORNITORI.map(f => (
           <button key={f.nome} type="button" style={pastiglia(url === f.url)}
             onClick={() => { setUrl(f.url); if (!nome) setNome(f.nome) }}>{f.nome}</button>
         ))}
       </div>
-      <div style={etichetta(tema)}>{t('Indirizzo')}</div>
-      <input value={url} onChange={e => setUrl(e.target.value)}
-        placeholder="https://api.openai.com/v1" autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
-      <div style={etichetta(tema)}>{t('Chiave API (se serve)')}</div>
-      <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
-        placeholder="sk-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
-      <div style={etichetta(tema)}>{t('Modello')}</div>
-      <input list="modelli-compatibili" value={modello} onChange={e => setModello(e.target.value)}
-        placeholder="gpt-4.1 · qwen2.5:14b" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
-      <datalist id="modelli-compatibili">
-        {modelli.map(m => <option key={m} value={m} />)}
-      </datalist>
-      <div style={etichetta(tema)}>{t('Come lo chiami (facoltativo)')}</div>
-      <input value={nome} onChange={e => setNome(e.target.value)}
-        placeholder={t('il mio Ollama')} autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      <Campo tema={tema} nome={t('Indirizzo')}>
+        <input value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://api.openai.com/v1" autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('Chiave API (se serve)')} sotto={t('In casa di solito non serve.')}>
+        <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
+          placeholder="sk-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('Modello')}>
+        <input list="modelli-compatibili" value={modello} onChange={e => setModello(e.target.value)}
+          placeholder="gpt-4.1 · qwen2.5:14b" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+        <datalist id="modelli-compatibili">
+          {modelli.map(m => <option key={m} value={m} />)}
+        </datalist>
+      </Campo>
+      <Campo tema={tema} nome={t('Come lo chiami (facoltativo)')}>
+        <input value={nome} onChange={e => setNome(e.target.value)}
+          placeholder={t('il mio Ollama')} autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Come si collega un modello sul mio computer')}>
+        <Passi tema={tema} passi={[
+          t('Accendi Ollama, LM Studio o llama.cpp sul tuo computer.'),
+          t('Qui sopra scegli il suo nome: l’indirizzo si riempie da solo.'),
+          t('Scrivi il nome del modello che hai scaricato. La chiave non serve.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -386,7 +500,7 @@ export function FormPosta({ tema, ok }: Props) {
     : /mail\.me\.com|icloud/.test(h) ? 'apple'
     : /yahoo/.test(h) ? 'yahoo' : ''
   const consiglio = perLeApp === 'google'
-    ? t('Gmail non accetta la password dell’account: serve una «password per le app», sedici lettere, con la verifica in due passaggi attiva.')
+    ? t('Gmail vuole una «password per le app», non quella del tuo account.')
     : perLeApp === 'apple' ? t('iCloud vuole una password specifica per le app, da appleid.apple.com.')
     : perLeApp === 'yahoo' ? t('Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.')
     : /office365|outlook|hotmail|live\./.test(h) ? t('Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.')
@@ -410,21 +524,46 @@ export function FormPosta({ tema, ok }: Props) {
   const formaSbagliata = !!perLeApp && password.length > 0 && !/^[a-z]{16}$/i.test(nudo)
   return (
     <div>
-      <div style={nota(tema)}>{t('Basta indirizzo e password: il server lo trovo io.')}</div>
+      <div style={guida(tema)}>{t('La tua posta, in sola lettura: chi ti scrive e cosa dice.')}</div>
 
-      <div style={etichetta(tema)}>{t('Indirizzo')}</div>
-      <input value={utente} onChange={e => { setUtente(e.target.value); setTrovato(false) }}
-        placeholder={t('tu@tuodominio.it')} autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
+      <Campo tema={tema} nome={t('Indirizzo')} sotto={
+        cerco ? t('Cerco il tuo server…')
+          : trovato && !aMano ? (
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span>{t('Server trovato:')}{' '}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
+              <button onClick={() => setAMano(true)} style={{
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F', textDecoration: 'underline'
+              }}>{t('non è questo')}</button>
+            </span>
+          ) : undefined
+      }>
+        <input value={utente} onChange={e => { setUtente(e.target.value); setTrovato(false) }}
+          placeholder={t('tu@tuodominio.it')} autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
 
-      <div style={etichetta(tema)}>{t('Password della casella')}</div>
-      <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-        autoComplete="current-password" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+      <Campo tema={tema} nome={t('Password della casella')}>
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+          autoComplete="current-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+      </Campo>
 
-      {cerco && <div style={{ ...nota(tema), marginTop: 12 }}>{t('Cerco il tuo server…')}</div>}
+      {/* un campo per riga: erano affiancati, e il secondo si leggeva per ultimo */}
+      {aMano && (
+        <>
+          <Campo tema={tema} nome={t('Server IMAP')}>
+            <input value={host} onChange={e => setHost(e.target.value)}
+              placeholder={t('imap.tuodominio.it')} className={classeCampo(tema)} style={campo(tema)} />
+          </Campo>
+          <Campo tema={tema} nome={t('Giorni')}>
+            <input type="number" value={giorni} onChange={e => setGiorni(Number(e.target.value))}
+              className={classeCampo(tema)} style={{ ...campo(tema), width: 110 }} />
+          </Campo>
+        </>
+      )}
 
       {consiglio && (
-        <div style={{ ...nota(tema), marginTop: 12, overflowWrap: 'anywhere' }}>
+        <Avviso tema={tema}>
           {consiglio}
           {dove && (
             <>
@@ -434,49 +573,25 @@ export function FormPosta({ tema, ok }: Props) {
               }}>{t('Creane una')}</a>.
             </>
           )}
-        </div>
+        </Avviso>
       )}
 
       {/*
         Non è un errore e non sta in rosso: è un'osservazione su quello che ha
         appena scritto, e arriva prima di premere qualsiasi cosa.
       */}
-      {formaSbagliata && (
-        <div style={{
-          marginTop: 10, padding: '9px 11px', borderRadius: 10,
-          background: tema === 'scuro' ? 'rgba(232,168,124,.12)' : 'rgba(196,98,59,.09)',
-          fontSize: '12.5px', lineHeight: 1.5,
-          color: tema === 'scuro' ? 'rgba(244,239,232,.8)' : 'rgba(34,39,31,.75)'
-        }}>{frasi.nonSembraPerLeApp(nudo.length)}</div>
-      )}
-
-      {trovato && !aMano && (
-        <div style={{ ...nota(tema), marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ overflowWrap: 'anywhere' }}>{t('Server trovato:')}{' '}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
-          <button onClick={() => setAMano(true)} style={{
-            border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F', textDecoration: 'underline'
-          }}>{t('non è questo')}</button>
-        </div>
-      )}
-
-      {aMano && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 2 }}>
-            <div style={etichetta(tema)}>{t('Server IMAP')}</div>
-            <input value={host} onChange={e => setHost(e.target.value)}
-              placeholder={t('imap.tuodominio.it')} className={classeCampo(tema)} style={campo(tema)} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={etichetta(tema)}>{t('Giorni')}</div>
-            <input type="number" value={giorni} onChange={e => setGiorni(Number(e.target.value))} className={classeCampo(tema)} style={campo(tema)} />
-          </div>
-        </div>
-      )}
+      {formaSbagliata && <Avviso tema={tema}>{frasi.nonSembraPerLeApp(nudo.length)}</Avviso>}
 
       <Errore testo={err} />
-      {avviso && <div style={{ ...nota(tema), marginTop: 12 }}>{avviso}</div>}
+      {avviso && <Avviso tema={tema}>{avviso}</Avviso>}
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega la posta')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo la password per le app?')}>
+        <Passi tema={tema} passi={[
+          t('Gmail: Account Google › Sicurezza › Password per le app.'),
+          t('iCloud: appleid.apple.com › Accesso e sicurezza › Password per le app.'),
+          t('Sono sedici lettere: incollale qui sopra.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -568,24 +683,27 @@ function FormDesktopBrowser({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.')}
-      </div>
+      <div style={guida(tema)}>{t('La cartella che scegli, letta qui: documenti, note, appunti.')}</div>
       <input ref={input} type="file" multiple
         {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
         style={{ display: 'none' }} onChange={scegli} />
-      <div style={{ marginTop: 12 }}>
-        <Conferma onClick={() => input.current?.click()} occupato={stato === 'carico'} tema={tema}>
-          {stato === 'carico' ? t('Sto leggendo…') : t('Scegli una cartella')}
-        </Conferma>
-      </div>
+      <Errore testo={err} />
+      <Conferma onClick={() => input.current?.click()} occupato={stato === 'carico'} tema={tema}>
+        {stato === 'carico' ? t('Sto leggendo…') : t('Scegli una cartella')}
+      </Conferma>
       {stato === 'carico' && avanzamento.totale > 0 && (
         <div style={{ ...nota(tema), marginTop: 10 }}>{frasi.fileLettiDiTotale(avanzamento.fatti, avanzamento.totale)}</div>
       )}
       {stato === 'fatto' && fatti !== null && (
         <div style={{ ...nota(tema), marginTop: 10 }}>{frasi.cartellaSincronizzata(fatti)}</div>
       )}
-      <Errore testo={err} />
+      <Aiuto tema={tema} titolo={t('Cosa legge, e cosa no')}>
+        <Passi tema={tema} numerati={false} passi={[
+          t('Legge PDF, Word, Markdown, testo e RTF.'),
+          t('Niente esce dal tuo computer finché non scegli una cartella.'),
+          t('Non succede da solo: lo rifai quando vuoi.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -717,11 +835,11 @@ export function FormDesktop({ tema, ok }: Props) {
     padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
     border: `1px solid ${on ? '#C4623B' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)'}`,
     background: on ? 'rgba(196,98,59,.16)' : 'none',
-    color: on ? (scuro ? '#E8A87C' : '#8E3F1F') : (scuro ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)')
+    color: on ? (scuro ? '#E8A87C' : '#8E3F1F') : (scuro ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)')
   })
   return (
     <div>
-      <div style={nota(tema)}>{t('Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella. Legge e basta, non sposta niente.')}</div>
+      <div style={guida(tema)}>{t('Tutto il tuo computer, in sola lettura: documenti, note, download.')}</div>
       {/* il permesso mancante si dice prima del bottone, non dopo: dopo è una
           fonte collegata che resta a zero e nessuno sa perché */}
       {accesso === 'no' && <AccessoDisco tema={tema}
@@ -734,10 +852,10 @@ export function FormDesktop({ tema, ok }: Props) {
       {/* La scelta a mano resta intera, ma chiusa: è la strada di chi ha una
           ragione per restringere — una cartella di lavoro sola, un disco di
           rete — non quella di chi apre la scheda per la prima volta. */}
-      <details style={{ marginTop: 18 }} open={apriScelta}
+      <details style={{ marginTop: 12 }} open={apriScelta}
         onToggle={e => setApriScelta((e.target as HTMLDetailsElement).open)}>
-        <summary style={{ ...nota(tema), marginBottom: 0, cursor: 'pointer' }}>{t('Solo alcune cartelle')}</summary>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        <summary style={sommario(tema)}>{t('Solo alcune cartelle')}</summary>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {suggeriti.map(c => (
             // il nome e non il percorso intero, ma il percorso resta nel titolo:
             // due «Lavoro» in due posti diversi si distinguono passandoci sopra
@@ -747,8 +865,9 @@ export function FormDesktop({ tema, ok }: Props) {
             <button type="button" onClick={scegli} style={{ ...pastiglia(false), borderStyle: 'dashed' }}>{t('Scegli le cartelle…')}</button>
           )}
         </div>
-        <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
-        <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
+        <Campo tema={tema} nome={t('Oppure un percorso')}>
+          <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Lavoro')} className={classeCampo(tema)} style={campo(tema)} />
+        </Campo>
         {/* secondario per davvero: di primario ce n'è uno solo, ed è quello sopra */}
         <button type="button" onClick={() => collega(false)} disabled={occupato !== null}
           style={{
@@ -759,6 +878,13 @@ export function FormDesktop({ tema, ok }: Props) {
           {occupato === 'cartelle' ? t('Provo…') : t('Collega le cartelle scelte')}
         </button>
       </details>
+      <Aiuto tema={tema} titolo={t('Cosa legge, e cosa no')}>
+        <Passi tema={tema} numerati={false} passi={[
+          t('Scrivania, Documenti, Download e iCloud Drive.'),
+          t('Legge e basta: non sposta e non cancella niente.'),
+          t('Immagini, video, codice e file di sistema restano fuori.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -769,9 +895,8 @@ export function FormDesktop({ tema, ok }: Props) {
  * È l'unico collegamento che non chiede niente — non un token, non un
  * indirizzo, non una cartella — e la scheda deve *sembrare* quello che è,
  * altrimenti chi la apre si mette a cercare la casella che non c'è. Quindi
- * due righe e un bottone: la prima dice cosa legge, la seconda dice le due
- * condizioni vere, che sono avere Granola su questo Mac e averlo aperto
- * almeno una volta.
+ * una riga e un bottone; le due condizioni vere — Granola su questo Mac,
+ * aperto almeno una volta — stanno chiuse sotto il loro titolo.
  */
 export function FormGranola({ tema, ok }: Props) {
   const [err, setErr] = useState('')
@@ -786,14 +911,16 @@ export function FormGranola({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Legge le note che Granola ha già scritto su questo Mac: le riunioni, con quello che si è detto e deciso.')}
-      </div>
-      <div style={{ ...nota(tema), marginTop: 8 }}>
-        {t('Niente da incollare. Serve solo che Granola sia installato qui e che tu l’abbia aperto almeno una volta.')}
-      </div>
+      <div style={guida(tema)}>{t('Le riunioni che Granola ha già scritto su questo Mac.')}</div>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Granola')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Cosa serve per collegarlo')}>
+        <Passi tema={tema} numerati={false} passi={[
+          t('Granola installato su questo Mac.'),
+          t('Aperto almeno una volta.'),
+          t('Niente da incollare.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -826,15 +953,17 @@ export function FormNote({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Legge le note dell’app Note di Apple su questo Mac: gli appunti, le liste, quello che ti sei scritto al volo.')}
-      </div>
-      <div style={{ ...nota(tema), marginTop: 8 }}>
-        {t('Niente da incollare. Si legge una copia del suo archivio, in sola lettura; le note protette da password e quelle nel cestino restano fuori.')}
-      </div>
+      <div style={guida(tema)}>{t('Le note dell’app Note di Apple su questo Mac.')}</div>
       {accesso === 'no' && <AccessoDisco tema={tema} />}
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega le Note')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Cosa legge, e cosa no')}>
+        <Passi tema={tema} numerati={false} passi={[
+          t('Legge una copia del suo archivio, in sola lettura.'),
+          t('Le note protette da password restano fuori.'),
+          t('Quelle nel cestino restano fuori.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -843,11 +972,12 @@ export function FormNote({ tema, ok }: Props) {
 const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
 /**
- * La riga del permesso mancante: la strada, e dentro l'app il bottone.
+ * La riga del permesso mancante: inchiostro su sabbia, e dentro l'app il bottone.
  *
- * Nel browser non c'è un guscio che possa aprire le Impostazioni di Sistema,
- * e allora resta la strada scritta per intero — è quella che una persona
- * segue a mano. Si mostra solo quando il server dice «no»: una riga sul
+ * Una riga sola, aperta, perché riguarda questa persona adesso; la strada da
+ * fare a mano sta nei tre passi chiusi sotto «Serve un permesso del Mac», che
+ * è dove uno la va a cercare — e nel browser, dove il bottone non esiste, è
+ * l'istruzione intera. Si mostra solo quando il server dice «no»: una riga sul
  * permesso a chi ce l'ha già è una riga che insegna a ignorare le righe.
  */
 export function AccessoDisco({ tema, testo, coda }: {
@@ -870,34 +1000,40 @@ export function AccessoDisco({ tema, testo, coda }: {
     try { await d?.apriFuori(PANNELLO_ACCESSO_DISCO) }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
   }
-  const scuro = tema === 'scuro'
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: '11px 14px', borderRadius: 13, border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(196,98,59,.35)'}` }}>
-      <div style={{ ...nota(tema), marginBottom: 0, flex: 1, minWidth: 0 }}>
-        {testo ?? t('Per leggere le Note serve l’accesso completo al disco')}
-        {!d && <>{': '}{t('Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd')}</>}
-        {'.'}
-        {/* «Apri Impostazioni» si dice solo dove quel bottone esiste: nel
-            browser la strada scritta qui sopra è già l'istruzione intera */}
-        {d && coda && <>{' '}{coda}</>}
-        {err && <span style={{ color: '#8E3F1F' }}> {t(err)}</span>}
+    <Avviso tema={tema}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {testo ?? t('Per leggere le Note serve l’accesso completo al disco')}
+          {'.'}
+          {/* «Apri Impostazioni» si dice solo dove quel bottone esiste: nel
+              browser la strada sta nei passi qui sotto, che è dove si va a cercarla */}
+          {d && coda && <>{' '}{coda}</>}
+          {err && <span style={{ color: '#8E3F1F' }}> {t(err)}</span>}
+        </div>
+        {d && <button type="button" onClick={apri} style={azione(tema)}>{t('Apri Impostazioni')}</button>}
       </div>
-      {d && (
-        <button type="button" onClick={apri} style={{
-          flex: 'none', padding: '8px 14px', borderRadius: 99, fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer',
-          border: '1px solid #C4623B', background: 'rgba(196,98,59,.16)', color: scuro ? '#E8A87C' : '#8E3F1F'
-        }}>{t('Apri Impostazioni')}</button>
-      )}
-    </div>
+      <details style={{ marginTop: 8 }}>
+        <summary style={sommario(tema)}>{t('Serve un permesso del Mac')}</summary>
+        <div style={{ marginTop: 8 }}>
+          <Passi tema={tema} passi={[
+            t('Apri Impostazioni di Sistema › Privacy e sicurezza.'),
+            t('Apri «Accesso completo al disco».'),
+            t('Aggiungi Myynd e accendi il suo interruttore.')
+          ]} />
+        </div>
+      </details>
+    </Avviso>
   )
 }
 
 /**
  * Le conversazioni: i file esportati, e un interruttore.
  *
- * Due righe di istruzioni, e non una: il passaggio che costa è l'esportazione,
- * che sta dentro le impostazioni di ChatGPT e di Claude in due posti diversi,
- * e chi apre questa scheda deve trovarli scritti qui — non andare a cercarli.
+ * Il passaggio che costa è l'esportazione, che sta dentro le impostazioni di
+ * ChatGPT e di Claude in due posti diversi: i quattro passi stanno scritti
+ * qui, chiusi in «Come si esportano le chat», e chi li cerca li trova senza
+ * leggerli chi non li cerca.
  * Dentro l'app i file si scelgono con la finestra di sistema; nel browser
  * resta il percorso scritto a mano, come per il desktop. L'interruttore di
  * Claude Code compare solo se la sua cartella c'è: un interruttore su una
@@ -955,48 +1091,40 @@ export function FormConversazioni({ tema, ok }: Props) {
   }
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.')}
-      </div>
-      <div style={{ ...nota(tema), marginTop: 8 }}>
-        {t('ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.')}
-      </div>
-      <div style={{ ...nota(tema), marginTop: 8 }}>
-        {t('Le chat di claude.ai non stanno su questo Mac — nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.')}
-      </div>
+      <div style={guida(tema)}>{t('Le chat che hai già avuto con ChatGPT e con Claude.')}</div>
 
-      <div style={etichetta(tema)}>{t('I file esportati')}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-        {file.map(f => (
-          // il nome e non il percorso intero, ma il percorso resta nel titolo:
-          // due conversations.json si distinguono passandoci sopra
-          <span key={f} title={f} style={pastiglia}>
-            {f.split('/').pop()}
-            <button type="button" onClick={() => setFile(v => v.filter(x => x !== f))} title={t('Togli')} aria-label={t('Togli')}
-              style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
-          </span>
-        ))}
-        {desktop() && (
-          <button type="button" onClick={scegli} style={{
-            ...pastiglia, cursor: 'pointer', borderStyle: 'dashed', background: 'none',
-            borderColor: scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)',
-            color: scuro ? 'rgba(244,239,232,.62)' : 'rgba(34,39,31,.62)'
-          }}>{t('Scegli i file…')}</button>
-        )}
-      </div>
-      <div style={etichetta(tema)}>{t('Oppure un percorso')}</div>
-      <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Scaricati/conversations.json')}
-        className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && pronto && !occupato) collega() }} />
+      <Campo tema={tema} nome={t('I file esportati')}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {file.map(f => (
+            // il nome e non il percorso intero, ma il percorso resta nel titolo:
+            // due conversations.json si distinguono passandoci sopra
+            <span key={f} title={f} style={pastiglia}>
+              {f.split('/').pop()}
+              <button type="button" onClick={() => setFile(v => v.filter(x => x !== f))} title={t('Togli')} aria-label={t('Togli')}
+                style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+            </span>
+          ))}
+          {desktop() && (
+            <button type="button" onClick={scegli} style={{
+              ...pastiglia, cursor: 'pointer', borderStyle: 'dashed', background: 'none',
+              borderColor: scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)',
+              color: scuro ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)'
+            }}>{t('Scegli i file…')}</button>
+          )}
+        </div>
+      </Campo>
+      <Campo tema={tema} nome={t('Oppure un percorso')}>
+        <input value={manuale} onChange={e => setManuale(e.target.value)} placeholder={t('/Users/…/Scaricati/conversations.json')}
+          className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && pronto && !occupato) collega() }} />
+      </Campo>
 
+      {/* l'interruttore resta, la spiegazione no: sta chiusa qui sotto, in «Cosa legge, e cosa no» */}
       {codicePossibile && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Anche le sessioni di Claude Code su questo computer')}</div>
-            <div style={{ ...nota(tema), marginTop: 3, marginBottom: 0 }}>
-              {sessioni > 0 && <>{frasi.sessioniTrovate(sessioni)}{' '}</>}
-              {t('Stanno in ~/.claude/projects: si tengono le battute, non i file che ha aperto né i comandi che ha lanciato.')}
-            </div>
+            {sessioni > 0 && <div style={{ ...nota(tema), marginTop: 3 }}>{frasi.sessioniTrovate(sessioni)}</div>}
           </div>
           <button type="button" role="switch" aria-checked={codice} aria-label={t('Anche le sessioni di Claude Code su questo computer')}
             onClick={() => setCodice(c => !c)} style={track(codice)}><span style={knob()} /></button>
@@ -1005,6 +1133,21 @@ export function FormConversazioni({ tema, ok }: Props) {
 
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega le conversazioni')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Come si esportano le chat')}>
+        <Passi tema={tema} passi={[
+          t('ChatGPT: Impostazioni › Controlli dati › Esporta dati.'),
+          t('Claude: Impostazioni › Privacy › Esporta dati.'),
+          t('Arriva un archivio via email: dentro c’è conversations.json.'),
+          t('Scegli quel file qui sopra.')
+        ]} />
+      </Aiuto>
+      <Aiuto tema={tema} titolo={t('Cosa legge, e cosa no')}>
+        <Passi tema={tema} numerati={false} passi={[
+          t('Le chat di claude.ai vivono dai loro: solo l’esportazione le porta qui.'),
+          t('Di Claude Code si tengono le battute, non i file aperti né i comandi lanciati.'),
+          t('Le sessioni stanno in ~/.claude/projects.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -1023,27 +1166,32 @@ export function FormNotion({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t("Token da notion.so/my-integrations. Poi condividi con l'integrazione le pagine da leggere.")}
-      </div>
-      <div style={etichetta(tema)}>{t('Token di integrazione')}</div>
-      <input type="password" value={token} onChange={e => setToken(e.target.value)}
-        placeholder="ntn_…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
+      <div style={guida(tema)}>{t('Le pagine di Notion che condividi con l’integrazione.')}</div>
+      <Campo tema={tema} nome={t('Token di integrazione')}>
+        <input type="password" value={token} onChange={e => setToken(e.target.value)}
+          placeholder="ntn_…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Notion')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
+        <Passi tema={tema} passi={[
+          t('Su notion.so/my-integrations crea un’integrazione interna.'),
+          t('Copia il token: comincia per ntn_.'),
+          t('Su ogni pagina da leggere: Condividi › aggiungi l’integrazione.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
 
 /**
- * Il calendario: un campo solo, e tre righe che dicono dove trovare cosa.
+ * Il calendario: due campi, e i passi chiusi sotto «Dove trovo l'indirizzo?».
  *
  * È la fonte con meno attrito di tutte, e l'unica cosa che può andare storta è
  * che qualcuno copi l'indirizzo sbagliato — Google ne mostra tre, uno accanto
- * all'altro, e due non servono. Per questo le istruzioni sono numerate e
- * nominano la voce esatta da cercare: qui una nota generica costerebbe più di
- * quanto costerebbe un campo in più.
+ * all'altro, e due non servono. Per questo i passi sono numerati e nominano la
+ * voce esatta da cercare: lì dentro una riga generica costerebbe un pomeriggio.
  *
  * Dopo, si dice quanti eventi ha letto. È l'unica conferma che chi ha incollato
  * può capire da solo di aver incollato la cosa giusta.
@@ -1068,7 +1216,7 @@ export function FormCalendario({ tema, ok }: Props) {
   if (fatto) {
     return (
       <div>
-        <div style={nota(tema)}>
+        <div style={guida(tema)}>
           {fatto.nome ? frasi.agendaLetta(fatto.nome, fatto.eventi) : frasi.eventiLetti(fatto.eventi)}
         </div>
         <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
@@ -1078,36 +1226,32 @@ export function FormCalendario({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Nessuna app da registrare e nessun consenso da dare: la tua agenda ha già un indirizzo, e Myynd lo legge.')}
-      </div>
+      <div style={guida(tema)}>{t('La tua agenda: cosa hai fatto e cosa ti aspetta.')}</div>
 
-      <div style={{ ...nota(tema), marginTop: 12, lineHeight: 1.7 }}>
-        {t('Su Google Calendar: apri le impostazioni, clicca il nome della tua agenda nella colonna a sinistra, scendi fino in fondo a «Integra il calendario» e copia l’indirizzo privato in formato iCal.')}
-      </div>
-      <div style={{ ...nota(tema), marginTop: 8 }}>
-        {t('Su Outlook e iCloud si chiama «pubblica calendario»: va bene lo stesso link.')}
-      </div>
+      <Campo tema={tema} nome={t('Indirizzo del calendario')} sotto={t('Tienilo per te: quel link apre la tua agenda.')}>
+        <input value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+          autoComplete="off" spellCheck={false} className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && url.trim()) collega() }} />
+      </Campo>
 
-      <div style={etichetta(tema)}>{t('Indirizzo del calendario')}</div>
-      <input value={url} onChange={e => setUrl(e.target.value)}
-        placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-        autoComplete="off" spellCheck={false} className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && url.trim()) collega() }} />
-      <div style={{ ...nota(tema), marginTop: 6 }}>
-        {t('Quel link apre la tua agenda senza chiedere niente a nessuno: tienilo per te, come una password. Se lo giri per sbaglio, rigeneralo dalla stessa schermata e il vecchio smette di funzionare.')}
-      </div>
-
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Quanti giorni indietro')}</div>
-      <input type="number" min={1} max={365} value={giorni}
-        onChange={e => setGiorni(Math.max(1, Math.min(365, Number(e.target.value) || 30)))}
-        className={classeCampo(tema)} style={{ ...campo(tema), width: 110 }} />
-      <div style={{ ...nota(tema), marginTop: 6 }}>
-        {t('Avanti guarda sempre sei mesi: è indietro che si sceglie, perché è lì che sta quello che è già successo.')}
-      </div>
+      <Campo tema={tema} nome={t('Quanti giorni indietro')} sotto={t('Avanti guarda sempre sei mesi.')}>
+        <input type="number" min={1} max={365} value={giorni}
+          onChange={e => setGiorni(Math.max(1, Math.min(365, Number(e.target.value) || 30)))}
+          className={classeCampo(tema)} style={{ ...campo(tema), width: 110 }} />
+      </Campo>
 
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!url.trim()} tema={tema}>{t('Collega il calendario')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo l’indirizzo?')}>
+        <Passi tema={tema} passi={[
+          t('Su Google Calendar apri le impostazioni e clicca il nome della tua agenda.'),
+          t('Scendi fino a «Integra il calendario».'),
+          t('Copia l’indirizzo privato in formato iCal.'),
+          t('Su Outlook e iCloud si chiama «pubblica calendario».'),
+          t('Se lo giri per sbaglio, rigeneralo da lì: il vecchio smette di funzionare.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -1143,7 +1287,7 @@ function ViaWeb({ tema, disponibile, avvia, nome }: {
   }
   return (
     <div>
-      <div style={{ ...nota(tema), overflowWrap: 'anywhere' }}>
+      <div style={guida(tema)}>
         {disponibile
           ? frasi.viaWeb(nome)
           : t('Non ancora disponibile su questo server. Per la posta usa «Posta», con una password per le app.')}
@@ -1177,33 +1321,42 @@ export function FormGoogle({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {t('Su console.cloud.google.com: crea un progetto, attiva Gmail API e Calendar API, poi Credenziali › ID client OAuth › Applicazione desktop. Incolla qui quello che ti dà.')}
-      </div>
-      <div style={etichetta(tema)}>{t('ID client')}</div>
-      <input value={id} onChange={e => setId(e.target.value)}
-        placeholder="…apps.googleusercontent.com" autoComplete="off"
-        className={classeCampo(tema)} style={campo(tema)} />
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Segreto del client')}</div>
-      <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
-        placeholder={t('se il tuo progetto ne ha uno')} autoComplete="new-password"
-        className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
+      <div style={guida(tema)}>{t('La tua posta e la tua agenda Google, in sola lettura.')}</div>
+      <Campo tema={tema} nome={t('ID client')}>
+        <input value={id} onChange={e => setId(e.target.value)}
+          placeholder="…apps.googleusercontent.com" autoComplete="off"
+          className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('Segreto del client')}>
+        <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
+          placeholder={t('se il tuo progetto ne ha uno')} autoComplete="new-password"
+          className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Google')}
       </Conferma>
+      <Aiuto tema={tema} titolo={t('Come si crea l’app su Google Cloud')}>
+        <Passi tema={tema} passi={[
+          t('Su console.cloud.google.com crea un progetto.'),
+          t('Attiva Gmail API e Calendar API.'),
+          t('Credenziali › ID client OAuth › Applicazione desktop.'),
+          t('Incolla qui quello che ti dà.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
 
 /**
- * Slack: un campo, e una nota che dice dove cliccare.
+ * Slack: un campo, e i passi chiusi sotto «Dove trovo il token?».
  *
  * Il token si crea in cinque minuti su api.slack.com, e i cinque minuti sono
  * tutti nella scelta degli ambiti: sbagliarli vuol dire un token che si collega
- * e non vede niente. Per questo la nota li elenca invece di dire «dai i
- * permessi necessari», che è il modo in cui una guida fa perdere un pomeriggio.
+ * e non vede niente. Per questo il passo li elenca uno per uno invece di dire
+ * «dai i permessi necessari», che è il modo in cui una guida fa perdere un
+ * pomeriggio.
  */
 export function FormSlack({ tema, ok }: Props) {
   const [token, setToken] = useState('')
@@ -1219,21 +1372,22 @@ export function FormSlack({ tema, ok }: Props) {
 
   return (
     <div>
-      <details>
-        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove lo trovo?')}</summary>
-        <div style={{ ...nota(tema), marginTop: 6 }}>
-          {t('Su api.slack.com/apps: crea un’app, in «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read, installala nel tuo spazio e copia il token che comincia per xoxp-.')}
-        </div>
-      </details>
-      <div style={etichetta(tema)}>{t('Token utente')}</div>
-      <input type="password" value={token} onChange={e => setToken(e.target.value)}
-        placeholder="xoxp-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
-      <div style={{ ...nota(tema), marginTop: 10 }}>
-        {t('Legge solo i canali di cui fai già parte: non è un permesso in più di quelli che hai.')}
-      </div>
+      <div style={guida(tema)}>{t('I canali di Slack di cui fai già parte, in sola lettura.')}</div>
+      <Campo tema={tema} nome={t('Token utente')}>
+        <input type="password" value={token} onChange={e => setToken(e.target.value)}
+          placeholder="xoxp-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega Slack')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
+        <Passi tema={tema} passi={[
+          t('Su api.slack.com/apps crea un’app.'),
+          t('In «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read.'),
+          t('Installala nel tuo spazio.'),
+          t('Copia il token che comincia per xoxp-.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -1274,24 +1428,30 @@ export function FormDrive({ tema, ok }: Props) {
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {daGmail
-          ? t('Stesso progetto di Gmail: riusa lo stesso ID client, e attiva anche Google Drive API. Il consenso si rifà, perché stavolta riguarda i tuoi file.')
-          : t('Su console.cloud.google.com: crea un progetto, attiva Google Drive API, poi Credenziali › ID client OAuth › Applicazione desktop.')}
-      </div>
-      <div style={etichetta(tema)}>{t('ID client')}</div>
-      <input value={id} onChange={e => setId(e.target.value)}
-        placeholder="…apps.googleusercontent.com" autoComplete="off"
-        className={classeCampo(tema)} style={campo(tema)} />
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Segreto del client')}</div>
-      <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
-        placeholder={t('se il tuo progetto ne ha uno')} autoComplete="new-password"
-        className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
+      <div style={guida(tema)}>{t('I file del tuo Google Drive, in sola lettura.')}</div>
+      <Campo tema={tema} nome={t('ID client')} sotto={daGmail ? t('Stesso progetto di Gmail: l’ID è già quello.') : undefined}>
+        <input value={id} onChange={e => setId(e.target.value)}
+          placeholder="…apps.googleusercontent.com" autoComplete="off"
+          className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('Segreto del client')}>
+        <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
+          placeholder={t('se il tuo progetto ne ha uno')} autoComplete="new-password"
+          className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Drive')}
       </Conferma>
+      <Aiuto tema={tema} titolo={t('Come si crea l’app su Google Cloud')}>
+        <Passi tema={tema} passi={[
+          t('Su console.cloud.google.com crea un progetto.'),
+          t('Attiva Google Drive API.'),
+          t('Credenziali › ID client OAuth › Applicazione desktop.'),
+          t('Il consenso si rifà: stavolta riguarda i tuoi file.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -1338,29 +1498,43 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
 
   return (
     <div>
-      <div style={nota(tema)}>
-        {gia.length
-          ? t('L’app su Entra ID è la stessa che hai già registrato: l’ID è quello. Microsoft richiederà il consenso, perché stavolta chiede altri permessi.')
-          : t('Su entra.microsoft.com: Registrazioni app › Nuova registrazione, piattaforma «App per dispositivi mobili e desktop», e come URI di reindirizzamento aggiungi http://localhost. Poi copia qui l’ID applicazione.')}
-      </div>
-      <div style={etichetta(tema)}>{t('ID applicazione')}</div>
-      <input value={id} onChange={e => setId(e.target.value)}
-        placeholder="00000000-0000-0000-0000-000000000000" autoComplete="off"
-        className={classeCampo(tema)} style={campo(tema)} />
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('ID del tenant')}</div>
-      <input value={tenant} onChange={e => setTenant(e.target.value)}
-        placeholder={t('lascia vuoto se non lo sai')} autoComplete="off"
-        className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
-      <div style={{ ...nota(tema), marginTop: 10 }}>
+      <div style={guida(tema)}>
         {parte === 'posta'
-          ? t('Chiederà di poter leggere la posta e il calendario. Niente altro, e niente in scrittura.')
-          : t('Chiederà di poter leggere i file dei siti che segui. Niente altro, e niente in scrittura.')}
+          ? t('La tua posta e la tua agenda Outlook, in sola lettura.')
+          : t('I file dei siti SharePoint che segui, in sola lettura.')}
       </div>
+      <Campo tema={tema} nome={t('ID applicazione')}
+        sotto={gia.length ? t('L’app è la stessa che hai già registrato: l’ID è quello.') : undefined}>
+        <input value={id} onChange={e => setId(e.target.value)}
+          placeholder="00000000-0000-0000-0000-000000000000" autoComplete="off"
+          className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('ID del tenant')}>
+        <input value={tenant} onChange={e => setTenant(e.target.value)}
+          placeholder={t('lascia vuoto se non lo sai')} autoComplete="off"
+          className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
+      </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Microsoft')}
       </Conferma>
+      <Aiuto tema={tema} titolo={t('Come si registra l’app su Entra ID')}>
+        <Passi tema={tema} passi={[
+          t('Su entra.microsoft.com: Registrazioni app › Nuova registrazione.'),
+          t('Piattaforma «App per dispositivi mobili e desktop».'),
+          t('Come URI di reindirizzamento aggiungi http://localhost.'),
+          t('Copia qui l’ID applicazione.')
+        ]} />
+      </Aiuto>
+      <Aiuto tema={tema} titolo={t('Cosa chiederà Microsoft')}>
+        <Passi tema={tema} numerati={false} passi={[
+          parte === 'posta'
+            ? t('Di leggere la posta e il calendario. Niente altro, e niente in scrittura.')
+            : t('Di leggere i file dei siti che segui. Niente altro, e niente in scrittura.'),
+          t('Se l’app c’era già, il consenso si rifà: i permessi sono altri.')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
@@ -1396,36 +1570,42 @@ export function FormDropbox({ tema, ok }: Props) {
 
   return (
     <div>
-      <details>
-        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove la trovo?')}</summary>
-        <div style={{ ...nota(tema), marginTop: 6 }}>
-          {t('Su dropbox.com/developers/apps: crea un’app «Scoped access», in Permissions spunta files.metadata.read e files.content.read, poi copia qui la App key.')}
-        </div>
-      </details>
-      <div style={etichetta(tema)}>{t('Chiave dell’app')}</div>
-      <input value={chiave} onChange={e => setChiave(e.target.value)}
-        autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && chiave && !dove) inizia() }} />
+      <div style={guida(tema)}>
+        {dove
+          ? t('Dropbox ti ha scritto un codice sullo schermo: incollalo qui.')
+          : t('I file del tuo Dropbox, in sola lettura.')}
+      </div>
+      <Campo tema={tema} nome={t('Chiave dell’app')}>
+        <input value={chiave} onChange={e => setChiave(e.target.value)}
+          autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && chiave && !dove) inizia() }} />
+      </Campo>
 
       {!dove ? (
         <>
           <Errore testo={err} />
           <Conferma onClick={inizia} occupato={occupato} disabilitato={!chiave} tema={tema}>{t('Apri Dropbox')}</Conferma>
+          <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+            <Passi tema={tema} passi={[
+              t('Su dropbox.com/developers/apps crea un’app «Scoped access».'),
+              t('In Permissions spunta files.metadata.read e files.content.read.'),
+              t('Copia qui la App key.')
+            ]} />
+          </Aiuto>
         </>
       ) : (
         <>
-          <div style={{ ...nota(tema), marginTop: 14 }}>
-            {t('Dropbox ti ha scritto un codice sullo schermo: incollalo qui.')}
-          </div>
-          <div style={etichetta(tema)}>{t('Codice')}</div>
-          <input value={codice} onChange={e => setCodice(e.target.value)}
-            autoComplete="off" autoFocus className={classeCampo(tema)} style={campo(tema)}
-            onKeyDown={e => { if (e.key === 'Enter' && codice) finisci() }} />
-          <div style={{ ...nota(tema), marginTop: 10 }}>
-            {t('Non si è aperto niente?')}{' '}
-            <a href={dove} target="_blank" rel="noreferrer"
-              style={{ color: '#C4623B' }}>{t('apri la pagina a mano')}</a>
-          </div>
+          <Campo tema={tema} nome={t('Codice')} sotto={
+            <>
+              {t('Non si è aperto niente?')}{' '}
+              <a href={dove} target="_blank" rel="noreferrer"
+                style={{ color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F' }}>{t('apri la pagina a mano')}</a>
+            </>
+          }>
+            <input value={codice} onChange={e => setCodice(e.target.value)}
+              autoComplete="off" autoFocus className={classeCampo(tema)} style={campo(tema)}
+              onKeyDown={e => { if (e.key === 'Enter' && codice) finisci() }} />
+          </Campo>
           <Errore testo={err} />
           <Conferma onClick={finisci} occupato={occupato} disabilitato={!codice} tema={tema}>{t('Collega Dropbox')}</Conferma>
         </>
@@ -1466,54 +1646,58 @@ export function FormWhatsapp({ tema, ok }: Props) {
   return (
     <div>
       {/*
-        La condizione prima del prezzo, perché senza di quella il prezzo non si
-        paga nemmeno. «Business» nel nome della scheda si legge come il nome di
-        un'app; qui si dice che è un numero registrato sulla piattaforma di
-        Meta, e che con il proprio non c'è niente da collegare — prima dei
-        quattro campi, non dentro l'errore che arriverebbe dopo averli riempiti.
+        La condizione sta nella riga d'apertura, e il prezzo subito sotto.
+        «Business» nel nome della scheda si legge come il nome di un'app: la
+        prima riga dice che è un numero della piattaforma di Meta, e l'avviso
+        dice le due cose che non si possono scoprire dopo — quello che è
+        arrivato prima di oggi non c'è, e senza un indirizzo pubblico non ne
+        arriverà di nuovi. Restano aperte tutte e due: chiuderle qui vorrebbe
+        dire farle leggere dentro un errore, a quattro campi già riempiti.
       */}
-      <div style={{ ...nota(tema), marginBottom: 10 }}>
-        {t('Serve un numero registrato su WhatsApp Business, quello della piattaforma di Meta per le aziende: con un numero personale non c’è niente da collegare.')}
-      </div>
-      <div style={{
-        ...nota(tema), padding: '11px 13px', borderRadius: 12, marginBottom: 4,
-        border: '1px solid rgba(196,98,59,.3)', background: 'rgba(196,98,59,.08)'
-      }}>
-        {t('WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose — quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.')}
-      </div>
-      <details style={{ marginTop: 12 }}>
-        <summary style={{ ...nota(tema), cursor: 'pointer' }}>{t('Dove li trovo?')}</summary>
-        <div style={{ ...nota(tema), marginTop: 6 }}>
-          {t('Su developers.facebook.com: nell’app WhatsApp, in Configurazione dell’API, copia l’ID del numero e crea un token permanente da utente di sistema. Il segreto dell’app sta in Impostazioni › Di base.')}
-        </div>
-      </details>
+      <div style={guida(tema)}>{t('I messaggi del tuo numero su WhatsApp Business, la piattaforma di Meta.')}</div>
+      <Avviso tema={tema}>
+        {t('Quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet.')}
+      </Avviso>
 
-      <div style={etichetta(tema)}>{t('ID del numero di telefono')}</div>
-      <input value={numero} onChange={e => setNumero(e.target.value)}
-        autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      <Campo tema={tema} nome={t('ID del numero di telefono')}>
+        <input value={numero} onChange={e => setNumero(e.target.value)}
+          autoComplete="off" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
 
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Token permanente')}</div>
-      <input type="password" value={token} onChange={e => setToken(e.target.value)}
-        autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      <Campo tema={tema} nome={t('Token permanente')}>
+        <input type="password" value={token} onChange={e => setToken(e.target.value)}
+          autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
 
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Segreto dell’app')}</div>
-      <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
-        autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
-      <div style={{ ...nota(tema), marginTop: 6 }}>
-        {t('È quello che firma i messaggi in arrivo: senza, quell’indirizzo non saprebbe distinguere Meta da chiunque altro.')}
-      </div>
+      <Campo tema={tema} nome={t('Segreto dell’app')} sotto={t('Firma i messaggi in arrivo: senza, chiunque potrebbe fingersi Meta.')}>
+        <input type="password" value={segreto} onChange={e => setSegreto(e.target.value)}
+          autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
 
-      <div style={{ ...etichetta(tema), marginTop: 12 }}>{t('Parola d’ordine del webhook')}</div>
-      <input value={parola} onChange={e => setParola(e.target.value)}
-        placeholder={t('inventala, e riscrivila su Meta')} autoComplete="off"
-        className={classeCampo(tema)} style={campo(tema)}
-        onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
-      <div style={{ ...nota(tema), marginTop: 6 }}>
-        {t('Su Meta, come URL del webhook metti il tuo indirizzo pubblico seguito da /api/whatsapp/webhook, e iscriviti al campo «messages».')}
-      </div>
+      <Campo tema={tema} nome={t('Parola d’ordine del webhook')}>
+        <input value={parola} onChange={e => setParola(e.target.value)}
+          placeholder={t('inventala, e riscrivila su Meta')} autoComplete="off"
+          className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+      </Campo>
 
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega WhatsApp')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove li trovo?')}>
+        <Passi tema={tema} passi={[
+          t('Su developers.facebook.com apri la tua app WhatsApp.'),
+          t('In Configurazione dell’API copia l’ID del numero.'),
+          t('Crea un token permanente da utente di sistema.'),
+          t('Il segreto dell’app sta in Impostazioni › Di base.')
+        ]} />
+      </Aiuto>
+      <Aiuto tema={tema} titolo={t('Come si configura il webhook')}>
+        <Passi tema={tema} passi={[
+          t('Su Meta, come URL metti il tuo indirizzo pubblico seguito da /api/whatsapp/webhook.'),
+          t('Come parola d’ordine, la stessa che hai scritto qui sopra.'),
+          t('Iscriviti al campo «messages».')
+        ]} />
+      </Aiuto>
     </div>
   )
 }
