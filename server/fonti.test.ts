@@ -509,14 +509,19 @@ test('quello che si è visto e lasciato fuori si conta, invece di sparire', asyn
   writeFileSync(join(dove, 'schermata.png'), 'non è un documento')
   writeFileSync(join(dove, 'Vista.swift'), 'struct Vista {}')
   writeFileSync(join(dove, 'Immagini', 'foto.jpeg'), 'nemmeno questa')
+  writeFileSync(join(dove, 'app.pak'), 'roba di sistema')
+  writeFileSync(join(dove, 'misterioso.xyz'), 'chissà cos’è')
   writeFileSync(join(dove, 'node_modules', 'leggimi.md'), 'roba di altri')
 
   const e = await desktop.sincronizza({ cartelle: [dove] })
   assert.deepEqual(e.docs.map(d => d.titolo), ['nota.md'])
-  // il png, lo swift e il jpeg: visti, aperti mai. Sono il numero che risponde
-  // a «ma sul mio Mac ce n'è molti di più»
-  assert.equal(e.saltatiPerTipo, 3)
-  // `node_modules` non si apre nemmeno: è una cartella saltata, non tre file
+  // il png, lo swift, il jpeg, il pak e lo xyz: visti, aperti mai. Sono il
+  // numero che risponde a «ma sul mio Mac ce n'è molti di più»
+  assert.equal(e.saltatiPerTipo, 5)
+  // e la ragione di quel numero, divisa per quello che è davvero: due foto,
+  // un file di codice, uno di sistema, uno che non sta in nessuno dei tre
+  assert.deepEqual(e.saltati, { media: 2, codice: 1, sistema: 1, altro: 1 })
+  // `node_modules` non si apre nemmeno: è una cartella saltata, non un file
   assert.equal(e.saltateCartelle, 1)
 })
 

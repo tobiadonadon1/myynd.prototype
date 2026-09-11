@@ -1416,7 +1416,7 @@ app.delete('/api/connettori/:id', (req, res) => {
     l'abbonamento e tenere la chiave c'è l'interruttore nelle preferenze, che è
     il posto dove quella distinzione ha senso.
   */
-  else if (id === 'claude') { delete c.claude; c.abbonamento = { attivo: false } }
+  else if (id === 'claude') abbonamento.scollega(c)
   // via il fornitore, e via anche la scelta: il lavoro grosso torna a Claude
   else if (id === 'compatibile') { delete c.compatibile; delete c.motore }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
@@ -1512,7 +1512,9 @@ async function leggiTutto(
       illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati,
       // quello che si è visto e lasciato fuori: è la risposta a «ma ne ho molti
       // di più», e senza di questa quella domanda resta senza risposta
-      saltatiPerTipo: e.saltatiPerTipo, saltateCartelle: e.saltateCartelle
+      // `saltati` qui sopra è già preso — le cartelle di codice saltate intere —
+      // quindi la divisione per tipo viaggia sotto un altro nome
+      saltatiPerTipo: e.saltatiPerTipo, saltatiTipi: e.saltati, saltateCartelle: e.saltateCartelle
     })
     // Verso un server ospitato, se qualcuno l'ha impostato: la stessa lettura
     // appena fatta, mandata anche là. Un guaio qui non deve fermare le altre

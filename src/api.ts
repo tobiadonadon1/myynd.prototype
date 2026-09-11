@@ -450,15 +450,18 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   if (Number(m.giaLetti)) parti.push(`${Number(m.giaLetti)} ${en ? 'already read' : 'già letti'}`)
   if (Number(m.saltati)) parti.push(`${Number(m.saltati)} ${en ? 'code projects skipped' : 'progetti saltati'}`)
   /*
-   * Quello che c'era e non è entrato.
+   * Quello che c'era e non è entrato, diviso per quello che è.
    *
    * «66 documenti» su un Mac con dentro dieci anni di lavoro è una riga che
-   * sembra un guasto, e non lo è: sono duemilaquattrocento png, json e swift
-   * lasciati fuori apposta. Finché quel numero non si diceva, la sola cosa
-   * che una persona poteva concludere era che Myynd non stesse leggendo il
-   * suo computer.
+   * sembra un guasto, e non lo è: sono duemilaquattrocento file lasciati
+   * fuori apposta. Il totale da solo lasciava aperta la domanda che viene
+   * subito dopo — «perché così tanti?» — e la risposta è che il grosso sono
+   * foto e video, poi codice, poi roba di app e di sistema.
    */
-  if (Number(m.saltatiPerTipo)) parti.push(frasi.altriTipiFuori(Number(m.saltatiPerTipo)))
+  if (Number(m.saltatiPerTipo)) {
+    const st = (m.saltatiTipi ?? {}) as Record<string, unknown>
+    parti.push(frasi.tipiFuori(Number(st.media ?? 0), Number(st.codice ?? 0), Number(st.sistema ?? 0), Number(st.altro ?? 0)))
+  }
   if (Number(m.falliti)) parti.push(`${Number(m.falliti)} ${en ? 'unreadable' : 'illeggibili'}`)
   if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)
   // le pagine di Notion che non sono cambiate e non si sono riscaricate
@@ -517,8 +520,10 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
  */
 export type LetturaDesktop = {
   documenti: number
-  /** I file visti e lasciati fuori perché non sappiamo aprirli: png, zip, codice. */
+  /** I file visti e lasciati fuori perché non sappiamo aprirli: il totale. */
   saltatiPerTipo: number
+  /** Lo stesso conto, diviso per quello che è: foto e video, codice, app e sistema, il resto. */
+  saltati: { media: number; codice: number; sistema: number; altro: number }
   /** Le cartelle non aperte di proposito: gli elenchi dei salti, e i nomi col punto davanti. */
   saltateCartelle: number
   /** Le cartelle che *volevamo* aprire e non ci hanno lasciato: quasi sempre un permesso. */
@@ -528,9 +533,16 @@ export type LetturaDesktop = {
 /** Il riassunto finale della lettura del computer, o `null` se questo messaggio è un altro. */
 export function letturaDesktop(m: Record<string, unknown>): LetturaDesktop | null {
   if (m.fase !== 'desktop' || m.stato !== 'fatto') return null
+  const st = (m.saltatiTipi ?? {}) as Record<string, unknown>
   return {
     documenti: Number(m.documenti ?? 0),
     saltatiPerTipo: Number(m.saltatiPerTipo ?? 0),
+    saltati: {
+      media: Number(st.media ?? 0),
+      codice: Number(st.codice ?? 0),
+      sistema: Number(st.sistema ?? 0),
+      altro: Number(st.altro ?? 0)
+    },
     saltateCartelle: Number(m.saltateCartelle ?? 0),
     illeggibili: (m.illeggibili as string[] | undefined) ?? []
   }

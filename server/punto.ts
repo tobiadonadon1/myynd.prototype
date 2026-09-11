@@ -24,9 +24,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type Anthropic from '@anthropic-ai/sdk'
 import { cartella, nellaLingua } from './config.ts'
-import { attesaDi, conLaLingua, estraiJSON, motore, parametri, segnaUso } from './modello.ts'
+import { attesaDi, chiedi, collegato, estraiJSON } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
@@ -764,9 +763,9 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     ? { punto: null, generatoAdesso: false, tetto: false, vecchio: a.ultimo!.quando }
     : { punto: a.ultimo ? alPresente(a.ultimo) : null, generatoAdesso: false, tetto: false }
 
-  const m = motore()
-  // se è stata lei a chiedere, il perché si dice; su un giro automatico no
-  if (!m) return r.forza ? { ...fermo, guaio: SENZA_MOTORE } : fermo
+  // niente con cui ragionare: né una chiave, né l'abbonamento, né un altro fornitore.
+  // Se è stata lei a chiedere, il perché si dice; su un giro automatico no
+  if (!collegato()) return r.forza ? { ...fermo, guaio: SENZA_MOTORE } : fermo
 
   // le tre ore valgono dentro la giornata: uno di ieri è già da rifare
   if (!r.forza && !scaduto && a.ultimo && adesso - new Date(a.ultimo.quando).getTime() < ORE_FRA * 3600_000) return fermo
@@ -783,16 +782,22 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   if (prodottoOggi && diOggi(a.chiamate, adesso).length >= AL_GIORNO) return { ...fermo, tetto: true }
 
   const quando = new Date(adesso).toISOString()
-  let risposta: Anthropic.Message
+  let esito: { testo: string; rifiutata: boolean }
   try {
-    risposta = await m.crea({
-      ...parametri('punto', 6000, schema(
+    // per la strada di tutti: prima l'abbonamento se è quello scelto, poi la
+    // chiave o l'altro fornitore. Prima il punto chiamava il motore da solo e
+    // con il solo abbonamento restava senza: la scheda diceva «collegato» e
+    // lui rispondeva «collega Claude»
+    esito = await chiedi({
+      lavoro: 'punto', max_tokens: 6000, cache: true,
+      formato: schema(
         [...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id),
         mat.arrivati.map(d => d.id)
-      )),
-      system: [{ type: 'text', text: conLaLingua(istruzione(mat, a.ultimo?.progetti ?? [], a.scartati)), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }]
-    }, attesaDi('punto'))
+      ),
+      system: istruzione(mat, a.ultimo?.progetti ?? [], a.scartati),
+      messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }],
+      attesa: attesaDi('punto')
+    })
   } catch (e) {
     /*
      * Il giorno in cui la chiave era a secco lui ha premuto «rifai il punto»
@@ -804,12 +809,9 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     console.warn('myynd · il punto non è arrivato:', guaio)
     return { ...fermo, guaio }
   }
-  segnaUso('punto', risposta.usage, m.nome)
-  if (risposta.stop_reason === 'refusal') return { ...fermo, guaio: RIFIUTATO }
+  if (esito.rifiutata) return { ...fermo, guaio: RIFIUTATO }
 
-  const testo = risposta.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map(b => b.text).join('')
+  const testo = esito.testo
   let grezzo: Grezzo
   try {
     grezzo = JSON.parse(estraiJSON(testo)) as Grezzo

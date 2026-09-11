@@ -71,6 +71,44 @@ const SALTA_TUTTO = new Set([
   'AppData'
 ])
 
+/**
+ * I file lasciati fuori, divisi per quello che sono davvero.
+ *
+ * «2.400 file di altri tipi lasciati fuori» rispondeva a «ma ne ho molti di
+ * più» senza rispondere alla domanda che viene subito dopo: perché così
+ * tanti? Sul Mac di Tobia il grosso sono foto e video, poi codice, poi roba di
+ * app e di sistema — tre mondi diversi, e dirli separati è quello che rende
+ * la cifra alta una spiegazione invece di un sospetto. `MEDIA_SALTATI` prende
+ * anche l'audio e il video, non solo le immagini: sono lo stesso «non è un
+ * documento, è un file da guardare o ascoltare».
+ */
+const MEDIA_SALTATI = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.heic', '.heif', '.webp', '.tiff', '.tif', '.bmp', '.svg',
+  '.psd', '.ai', '.raw', '.cr2', '.dng',
+  '.mov', '.mp4', '.m4v', '.mp3', '.m4a', '.wav', '.aiff', '.aac', '.flac'
+])
+/** Codice sorgente e quello che lo circonda: mai un documento di una persona. */
+const CODICE_SALTATI = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.yaml', '.yml', '.toml',
+  '.swift', '.py', '.rb', '.go', '.rs', '.java', '.kt', '.c', '.h', '.cpp', '.hpp',
+  '.m', '.mm', '.cs', '.php', '.sh', '.zsh', '.sql', '.css', '.scss', '.less',
+  '.xml', '.lock', '.map'
+])
+/** Binari e file interni di app e sistema operativo. */
+const SISTEMA_SALTATI = new Set([
+  '.pak', '.plist', '.dylib', '.so', '.dll', '.exe', '.app', '.pkg', '.dmg',
+  '.zip', '.tar', '.gz', '.7z', '.rar', '.bin', '.dat', '.db', '.sqlite',
+  '.icns', '.ico', '.ttf', '.otf', '.woff', '.woff2', '.essentialsound',
+  '.nib', '.storyboard', '.xib', '.car', '.strings'
+])
+/** In quale dei quattro cassetti sta un'estensione lasciata fuori. */
+function classificaSalto(ext: string): 'media' | 'codice' | 'sistema' | 'altro' {
+  if (MEDIA_SALTATI.has(ext)) return 'media'
+  if (CODICE_SALTATI.has(ext)) return 'codice'
+  if (SISTEMA_SALTATI.has(ext)) return 'sistema'
+  return 'altro'
+}
+
 const MAX_FILE = 12_000_000     // i PDF pesano
 const MAX_TESTO = 20_000
 const MAX_TOTALE = 4000
@@ -291,15 +329,23 @@ export type Esito = {
    */
   invariati: number
   /**
-   * I file visti e lasciati fuori perché non sappiamo aprirli.
+   * I file visti e lasciati fuori perché non sappiamo aprirli: il totale.
    *
    * Non è una statistica: è la risposta alla frase che una persona dice
    * guardando «66 documenti» su un Mac pieno — «ma ne ho molti di più».
    * Senza questo numero quella frase resta senza risposta e il collegamento
-   * sembra rotto; con questo numero si legge «66 documenti · 2.400 file di
-   * altri tipi lasciati fuori», che è vero ed è anche la ragione.
+   * sembra rotto. Il totale da solo lascia aperta la domanda che viene
+   * subito dopo — «perché così tanti?» — e la risposta sta in `saltati`.
    */
   saltatiPerTipo: number
+  /**
+   * Lo stesso conto, diviso per quello che è: la ragione dietro il totale.
+   *
+   * Vedi `classificaSalto`: foto e video sotto `media`, sorgenti sotto
+   * `codice`, binari e file interni di app e sistema sotto `sistema`, e
+   * tutto il resto sotto `altro`.
+   */
+  saltati: { media: number; codice: number; sistema: number; altro: number }
   /** Le cartelle non aperte di proposito: gli elenchi dei salti, e i nomi col punto davanti. */
   saltateCartelle: number
 }
@@ -373,7 +419,7 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
     const ext = extname(v.name).toLowerCase()
     // visto e lasciato fuori: un `.png`, un `.swift`, un `.zip`. Si conta,
     // perché è la metà del computer di cui altrimenti non si dice niente
-    if (!LETTI.includes(ext)) { fuori.saltatiPerTipo++; continue }
+    if (!LETTI.includes(ext)) { fuori.saltatiPerTipo++; fuori.saltati[classificaSalto(ext)]++; continue }
 
     try {
       const s = await stat(p)
@@ -435,7 +481,7 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
  * vivo, non il giro delle sei ore.
  */
 export async function leggiCartella(cartella: string, tetto = 200, tutto = false): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
   await cammina(resolve(cartella), esito, tetto, undefined, 0, regoleDi(tutto))
   return esito
 }
@@ -446,7 +492,7 @@ export async function sincronizza(
   gia?: GiaIndicizzati,
   versa?: (docs: Documento[]) => Promise<void>
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
   const cartelle = radici(c)
   const regole = regoleDi(c.tutto)
   // il tetto è per cartella: una cartella enorme non deve affamare le altre

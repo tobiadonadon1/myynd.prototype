@@ -1973,6 +1973,8 @@ const EN: Record<string, string> = {
   'Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella. Legge e basta, non sposta niente.':
     'Desktop, Documents, Downloads, iCloud Drive and the rest of your home folder. It reads, and nothing else: it never moves a thing.',
   'Collega il mio Mac': 'Connect my Mac',
+  'Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.':
+    'Myynd reads documents: PDF, Word, Excel, PowerPoint, text, Markdown, HTML and RTF. Images, video, code and system files are not documents.',
   'Collega il mio PC': 'Connect my PC',
   'Solo alcune cartelle': 'Only some folders',
   'Collega le cartelle scelte': 'Connect the chosen folders',
@@ -2153,19 +2155,37 @@ export const frasi = {
     : (n === 1 ? '1 cartella non letta' : `${n} cartelle non lette`),
 
   /**
-   * I file visti e lasciati fuori perché non si sanno aprire.
+   * I file visti e lasciati fuori, divisi per quello che sono.
    *
-   * È la riga che risponde a «ma sul mio Mac ce n'è molti di più». Senza,
-   * «66 documenti» su un disco pieno si legge come un collegamento rotto;
-   * con, si legge come quello che è — duemilaquattrocento png, json e swift
-   * che non sono documenti di nessuno. Il numero è formattato nella lingua
-   * dell'app: quattromila file sono «4.000» in italiano e «4,000» in inglese.
+   * È la riga che risponde a «ma sul mio Mac ce n'è molti di più» — e alla
+   * domanda che viene subito dopo, «perché così tanti?». Senza la divisione,
+   * «2.400 file lasciati fuori» si legge come un collegamento rotto; con,
+   * si legge come quello che è — il grosso sono foto e video, poi codice, poi
+   * roba di app e di sistema. Le categorie a zero non compaiono: chi non ha
+   * progetti di codice sul disco non deve leggere «0 codice». I numeri sono
+   * formattati nella lingua dell'app: quattromila è «4.000» in italiano e
+   * «4,000» in inglese.
    */
-  altriTipiFuori: (n: number) => {
-    const q = n.toLocaleString(loc())
+  tipiFuori: (media: number, codice: number, sistema: number, altro: number) => {
+    const fmt = (n: number) => n.toLocaleString(loc())
+    const totale = media + codice + sistema + altro
+    const voci = corrente === 'en'
+      ? [
+          media ? `${fmt(media)} media` : null,
+          codice ? `${fmt(codice)} code` : null,
+          sistema ? `${fmt(sistema)} app and system file${sistema === 1 ? '' : 's'}` : null,
+          altro ? `${fmt(altro)} other file${altro === 1 ? '' : 's'}` : null
+        ]
+      : [
+          media ? `${fmt(media)} multimediali` : null,
+          codice ? `${fmt(codice)} di codice` : null,
+          sistema ? `${fmt(sistema)} di app e sistema` : null,
+          altro ? `${fmt(altro)} di altro tipo` : null
+        ]
+    const coda = voci.filter((v): v is string => v !== null).join(', ')
     return corrente === 'en'
-      ? (n === 1 ? '1 file of another kind left out' : `${q} files of other kinds left out`)
-      : (n === 1 ? '1 file di un altro tipo lasciato fuori' : `${q} file di altri tipi lasciati fuori`)
+      ? `${fmt(totale)} file${totale === 1 ? '' : 's'} left out: ${coda}`
+      : `${fmt(totale)} file lasciat${totale === 1 ? 'o' : 'i'} fuori: ${coda}`
   },
 
   /**

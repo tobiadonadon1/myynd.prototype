@@ -165,3 +165,15 @@ test('non si accende da solo: è il conto di una persona', async () => {
   const q = await a.stato()
   assert.equal(a.disponibile(), a.scelto() && q.installato && !q.inRiposo)
 })
+
+test('scollegare Claude dimentica anche con cosa lo si pagava', async () => {
+  const { leggi, scrivi } = await import('./config.ts')
+  const abb = await import('./abbonamento.ts')
+  scrivi({ ...leggi(), claudeCon: 'abbonamento', abbonamento: { attivo: true }, claude: { apiKey: 'sk-prova' } })
+  assert.equal(abb.scelto(), true)
+  const c = leggi() as Record<string, unknown>
+  abb.scollega(c)
+  scrivi(c as Parameters<typeof scrivi>[0])
+  assert.equal(abb.scelto(), false, 'la scelta dell’abbonamento è rimasta scritta')
+  assert.equal(leggi().claude, undefined)
+})

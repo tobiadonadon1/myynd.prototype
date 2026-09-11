@@ -100,6 +100,19 @@ const RIPOSO = 5 * 60_000
  * chiamata è andata storta. Il riposo è una faccenda fra `modello.ts` e la
  * prossima richiesta, non una cosa da mostrare in faccia a qualcuno.
  */
+/**
+ * Scollegare Claude vuol dire anche dimenticare con cosa lo si pagava.
+ *
+ * `claudeCon: 'abbonamento'` che restava scritto dopo lo scollegamento
+ * teneva la scheda «collegata» — Claude Code c'è sul disco — mentre il punto,
+ * che passa dalla chiave, rispondeva «collega Claude». Due verità, una app.
+ */
+export function scollega(c: { claude?: unknown; claudeCon?: unknown; abbonamento?: unknown }): void {
+  delete c.claude
+  delete c.claudeCon
+  c.abbonamento = { attivo: false }
+}
+
 export function pronto(): boolean {
   return scelto() && !!installato()
 }

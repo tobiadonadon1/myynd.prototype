@@ -776,6 +776,8 @@ export async function chiedi(o: {
   max_tokens: number
   formato?: object
   attesa?: number
+  /** Il system va in cache dal fornitore: per i lavori con un'istruzione lunga che non cambia. */
+  cache?: boolean
 }): Promise<Esito> {
   const p = LAVORI[o.lavoro]
   const attesa = o.attesa ?? p.attesa
@@ -834,7 +836,7 @@ export async function chiedi(o: {
   // gli errori arrivano già in italiano: li traduce il motore
   const r = await m.crea({
     ...parametri(o.lavoro, o.max_tokens, o.formato),
-    system: o.system,
+    system: o.cache ? [{ type: 'text', text: o.system, cache_control: { type: 'ephemeral' } }] : o.system,
     messages: o.messages
   } as Anthropic.MessageCreateParamsNonStreaming, attesa)
 

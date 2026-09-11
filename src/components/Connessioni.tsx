@@ -157,10 +157,15 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                     // a «sul mio Mac ce n'è molti di più», e senza di questa
                     // quel numero basso non ha nessuna spiegazione
                     scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
-                      ? frasi.altriTipiFuori(letturaDesk.saltatiPerTipo)
+                      ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
                       : null
                   ].filter(Boolean).join(' · ') || t(scelta.nota)
                 : t(scelta.nota)}</p>
+              {/* «perché lascia fuori così tanti file» è la domanda che segue il
+                  numero di sopra: questa riga la chiude, dicendo cos'è un
+                  documento per Myynd invece di lasciarlo indovinare. */}
+              {scelta.id === 'desktop' && !!letturaDesk?.saltatiPerTipo &&
+                <p>{t('Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.')}</p>}
             </div>
           </div>
           {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
