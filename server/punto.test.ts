@@ -78,6 +78,17 @@ function fornitoreFinto(risposta: object = RISPOSTA) {
   return ricevute
 }
 
+/** Lo stesso fornitore, ma il conto è a secco: è quello che è successo davvero. */
+function fornitoreSenzaCredito(): () => number {
+  cfg.scrivi({ motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+  let chiamate = 0
+  compatibile.usaRete((async () => {
+    chiamate++
+    return new Response(JSON.stringify({ error: { message: 'insufficient_quota' } }), { status: 402 })
+  }) as typeof fetch)
+  return () => chiamate
+}
+
 /** Tutto il testo mandato al modello, system e messaggi insieme. */
 const testoDi = (r: Record<string, unknown>) =>
   (r.messages as { content: string }[]).map(m => m.content).join('\n')
@@ -304,6 +315,121 @@ test('senza motore, e su una mente vuota, non c’è nessun punto e nessuna chia
   const ricevute = fornitoreFinto()
   assert.equal((await punto.punto({ forza: true }, adesso())).punto, null)
   assert.equal(ricevute.length, 0, 'ha chiamato il modello senza materiale')
+})
+
+// — quello che è cambiato da quando l'ha scritto —
+//
+// Un punto è la fotografia di un momento. Il resto di questa sezione è quello
+// che è successo a Tobia l'undici settembre: in prima pagina «il punto di
+// oggi» era dell'otto, e le tre cose sotto «adesso» le aveva chiuse tutte la
+// sera dell'otto. Tre difetti in uno — una fotografia mostrata come se fosse
+// adesso, un punto di ieri chiamato di oggi, e tre tentativi falliti contati
+// come punti fatti — e qui stanno le tre prove.
+
+test('una riga che parla di una cosa chiusa dopo non si mostra più, nemmeno dal foglio', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  seminaLista()
+  fornitoreFinto()
+  const t0 = adesso()
+  const primo = await punto.punto({}, t0)
+  assert.equal(primo.punto?.adesso[0].compito, 'c1')
+
+  // lui la fa, e mezz'ora dopo torna nell'app: quella mossa non c'è più
+  store.cambiaStatoCompito('c1', 'fatto')
+  const dopo = await punto.punto({}, t0 + minuti(30))
+  assert.equal(dopo.generatoAdesso, false, 'ha rifatto il punto invece di ripulirlo')
+  assert.deepEqual(dopo.punto?.adesso, [], 'la mossa su una riga chiusa è rimasta in pagina')
+  assert.equal(dopo.punto?.mentreNonCeri.length, 1, 'una riga senza compito non scade')
+  // il foglio resta com'era: si filtra quando esce, non si riscrive la storia
+  assert.equal(punto.ultimo()?.adesso.length, 1)
+})
+
+test('il punto di ieri non è il punto di oggi: torna nullo, con la data di quello vecchio', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto()
+  const t0 = adesso()
+  const ieri = await punto.punto({}, t0)
+  assert.ok(ieri.punto)
+
+  const e = await punto.punto({}, t0 + ore(24))
+  assert.equal(ricevute.length, 1, 'ha rifatto il punto su niente di nuovo')
+  assert.equal(e.punto, null, 'il punto di ieri è stato mostrato come quello di oggi')
+  assert.equal(e.vecchio, ieri.punto?.quando)
+  assert.equal(e.generatoAdesso, false)
+
+  // «rifai» lo rifà comunque, e quello nuovo non è più vecchio
+  const rifatto = await punto.punto({ forza: true }, t0 + ore(24))
+  assert.equal(ricevute.length, 2)
+  assert.ok(rifatto.generatoAdesso)
+  assert.equal(rifatto.vecchio ?? null, null)
+  assert.ok(rifatto.punto)
+})
+
+test('una chiamata fallita non conta come punto del giorno, e dice perché', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const quante = fornitoreSenzaCredito()
+  const t0 = adesso()
+
+  // tre volte «rifai il punto», come ha fatto lui: tre guai, zero tacche
+  for (const n of [1, 2, 3]) {
+    const e = await punto.punto({ forza: true }, t0 + minuti(n))
+    assert.equal(e.punto, null)
+    assert.equal(e.tetto, false, 'un tentativo fallito ha bruciato uno dei tre del giorno')
+    assert.equal(e.guaio, 'Il conto del fornitore è senza credito.')
+  }
+  assert.equal(quante(), 3)
+  assert.equal(punto.ultimo(), null)
+  // il foglio non è stato nemmeno scritto: non c'è niente da segnare
+  const chiamate = existsSync(join(CASA, 'punto.json'))
+    ? (JSON.parse(readFileSync(join(CASA, 'punto.json'), 'utf8')) as { chiamate?: string[] }).chiamate ?? []
+    : []
+  assert.deepEqual(chiamate, [], 'le chiamate fallite sono finite nel conto del giorno')
+
+  // e quando il conto torna a posto, i tre punti ci sono ancora tutti
+  fornitoreFinto()
+  const e = await punto.punto({ forza: true }, t0 + minuti(4))
+  assert.ok(e.generatoAdesso)
+  assert.equal(e.guaio, undefined)
+})
+
+test('aggiornaAlPresente: via le righe delle cose chiuse e i progetti chiusi, e niente altro', () => {
+  const progetto = (id: string, nome: string) => ({
+    id, nome, obiettivo: '', dal: '2026-09-01T10:00:00.000Z',
+    doveSei: '', angolo: '', angoliTenuti: [], proposto: true
+  })
+  const prima = {
+    quando: '2026-09-08T13:47:00.000Z',
+    via: null,
+    mentreNonCeri: [
+      { testo: 'È arrivato il preventivo di Rossi.', compito: null, doc: 'posta:INBOX:1' },
+      { testo: 'Ho preparato la bozza per Bianchi.', compito: 'c1', doc: null }
+    ],
+    adesso: [
+      { testo: 'Approva la bozza per Bianchi.', compito: 'c1', doc: null },
+      { testo: 'Chiama lo studio.', compito: 'sparito', doc: null },
+      { testo: 'Guarda il deck di lunedì.', compito: null, doc: null }
+    ],
+    daLeggere: [{ titolo: 'Una notizia', perche: 'C’entra.', link: null }],
+    progetti: [progetto('p1', 'Myynd'), progetto('p2', 'Orto'), progetto('', 'Cantina')],
+    avvii: [{ frase: 'Ogni lunedì alle 8, un riepilogo', perche: 'Lo fa a mano.' }]
+  }
+
+  const dopo = punto.aggiornaAlPresente(
+    prima,
+    { aperti: new Set(['c2']), chiusi: new Set(['c1']) },
+    { nomi: new Set(['cantina']), id: new Set(['p2']) }
+  )
+  assert.deepEqual(dopo.mentreNonCeri.map(r => r.testo), ['È arrivato il preventivo di Rossi.'])
+  assert.deepEqual(dopo.adesso.map(r => r.testo), ['Guarda il deck di lunedì.'])
+  assert.deepEqual(dopo.progetti.map(x => x.nome), ['Myynd'], 'un progetto chiuso è rimasto nel punto')
+  // il resto non si tocca, e l'originale nemmeno
+  assert.equal(dopo.quando, prima.quando)
+  assert.deepEqual(dopo.daLeggere, prima.daLeggere)
+  assert.deepEqual(dopo.avvii, prima.avvii)
+  assert.equal(prima.adesso.length, 3, 'ha cambiato il punto che gli è stato dato')
 })
 
 // — quello che resta scritto —

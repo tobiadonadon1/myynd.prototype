@@ -10,8 +10,19 @@
 // gli attrezzi collegati, i documenti arrivati, le righe ancora aperte, i
 // progetti, il fuoco. La regola che tiene in piedi la differenza sta nel
 // prompt e si controlla a occhio: `spiega` deve **nominare la roba che ha
-// davanti**. «Ogni mattina, le fatture di Aruba e Fastweb dalla posta nella
-// lista di oggi» è una proposta; «unisci due cose» non lo è.
+// davanti**. «Ogni mattina, le fatture dei fornitori dalla posta nella lista di
+// oggi» è una proposta; «unisci due cose» non lo è.
+//
+// E c'è la regola opposta, che è arrivata dopo, da una proposta vera: «i
+// messaggi di Kyrylo sul danno alla Nissan Kicks». Erano sei email, una sola
+// persona, un solo incidente — e il modello ci aveva letto un andamento perché
+// il materiale gliele aveva messe in fila senza dirgli che venivano tutte dallo
+// stesso filo. **Un'automazione è per quello che si ripete**: lo stesso tipo di
+// cosa da mittenti diversi, o in giorni lontani. Un caso solo, per quanto
+// grosso, è una riga nella lista o una cosa da sapere; non una regola. Perciò
+// adesso il materiale porta gli id, i mittenti e i conti, la proposta deve
+// citare le sue prove, e quelle prove **si riaprono qui** (`siRipete`): il
+// prompt chiede, il cancello verifica.
 //
 // E costa. Per questo si chiama **al massimo una volta al giorno per conto**,
 // con la risposta su un foglio accanto agli altri: aprire la schermata non
@@ -197,11 +208,28 @@ const FORMA = {
       items: {
         type: 'object',
         properties: {
-          nome: { type: 'string', description: 'Al massimo sei parole, come la chiamerebbe lei.' },
+          nome: {
+            type: 'string',
+            description: 'Al massimo sei parole, come la chiamerebbe lei. Il TIPO di roba che torna ' +
+              '(«le fatture dei fornitori»), mai una persona, un’azienda vista una volta, un numero di pratica.'
+          },
           spiega: {
             type: 'string',
             description: 'UNA frase piana, al massimo diciotto parole, che nomina la roba vera che hai ' +
               'visto: da quale fonte viene e che documenti o righe sono.'
+          },
+          perche: {
+            type: 'string',
+            description: 'Che cosa si ripete, in una frase piana di al massimo quindici parole: ' +
+              '«fatture di fornitori diversi, ogni mese». Non lo legge lei: serve a te per controllare ' +
+              'di aver visto una ripetizione e non un caso solo.'
+          },
+          prove: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Almeno DUE id, copiati identici da fra parentesi quadre nel materiale: i ' +
+              'documenti che mostrano la ripetizione. Devono essere di mittenti diversi, oppure di ' +
+              'giorni distanti una settimana o più. Uno inventato fa cadere la proposta.'
           },
           quando: {
             type: 'object',
@@ -246,7 +274,7 @@ const FORMA = {
             additionalProperties: false
           }
         },
-        required: ['nome', 'spiega', 'quando', 'guarda', 'attrezzi', 'metti'],
+        required: ['nome', 'spiega', 'perche', 'prove', 'quando', 'guarda', 'attrezzi', 'metti'],
         additionalProperties: false
       }
     }
@@ -267,15 +295,37 @@ Gli attrezzi che puoi darle, e nessun altro — sono quelli che ha collegato:
 \${ATTREZZI}
 
 **Quello che rende buona una proposta è che nomini la roba che hai davanti.**
-«Ogni mattina, le fatture di Aruba e Fastweb dalla posta nella lista di oggi»
-è una proposta: dice da dove viene quella roba e che roba è, e chi la legge
-riconosce la sua giornata. «Unisci due cose», «tieni tutto sotto controllo»,
-«ottimizza il flusso» non sono proposte: chi le legge non sa nemmeno cosa gli
-stai proponendo, e ha ragione a non fidarsi.
+«Ogni mattina, le fatture dei fornitori dalla posta nella lista di oggi» è una
+proposta: dice da dove viene quella roba e che roba è, e chi la legge riconosce
+la sua giornata. «Unisci due cose», «tieni tutto sotto controllo», «ottimizza
+il flusso» non sono proposte: chi le legge non sa nemmeno cosa gli stai
+proponendo, e ha ragione a non fidarsi.
 
 Perciò «spiega» è UNA frase piana, al massimo diciotto parole, che nomina la
 fonte e il tipo di documenti o di righe che hai visto davvero nel materiale.
 Niente lineette lunghe, niente parole da brochure, niente promesse.
+
+**Si propone soltanto quello che si ripete.** Un'automazione è una regola, e
+una regola ha senso solo se c'è qualcosa che ritorna: lo stesso tipo di
+documento o di richiesta da almeno due mittenti diversi, oppure in almeno due
+giorni distanti una settimana o più.
+
+Un filo solo, una persona sola, un caso solo non è mai un'automazione, per
+quanto grosso sia: sei messaggi di Tizio sullo stesso danno, la stessa pratica
+che va avanti da una settimana, la trattativa che sta per chiudersi. Quelle
+sono cose da fare o cose da sapere, non regole; una regola scritta su un caso
+solo scatterà per sempre su qualcosa che è già finito.
+
+Perciò il nome e la frase dicono il TIPO — «le fatture dei fornitori», «i
+preventivi da confermare», «le note delle riunioni» — e mai una persona, mai
+un'azienda che compare una volta sola, mai un numero di prenotazione, di
+pratica o di ordine. Se togliendo quel nome la proposta non vuol più dire
+niente, non era una proposta.
+
+In «prove» metti gli id dei documenti che dimostrano la ripetizione, copiati
+identici da fra parentesi quadre nel materiale: almeno due, e di mittenti
+diversi o di giorni lontani. Sono la prova, non un ornamento: se non trovi due
+id che reggano, quella proposta non sta in piedi.
 
 Se nel materiale non c'è niente che si ripeta, torni un elenco vuoto: è una
 risposta buona, non un fallimento. Meglio nessuna proposta che una inventata —
@@ -291,6 +341,78 @@ un'altra ora.`
 /** L'elenco degli attrezzi collegati come lo legge il modello. */
 function catalogoScritto(collegati: { nome: string; spiega: string }[]): string {
   return collegati.map(a => `— \`${a.nome}\` — ${a.spiega}`).join('\n')
+}
+
+/** Le fonti in cui un documento è un messaggio, e un mittente vuol dire qualcosa. */
+const POSTA = new Set(['posta', 'google', 'microsoft'])
+
+/** Chi lo manda, come si scrive: il nome quando c'è, se no quello che c'è. */
+function chiScritto(autore: string): string {
+  const a = autore.replace(/\s+/g, ' ').trim()
+  const m = a.match(/^"?([^"<]*[^"<\s])"?\s*<[^>]*>$/)
+  return (m ? m[1] : a) || a
+}
+
+/**
+ * Chi lo manda, come si conta.
+ *
+ * L'indirizzo quando c'è: «Aruba S.p.A. <fatture@aruba.it>» e «fatture@aruba.it»
+ * sono lo stesso mittente, e contarli per due farebbe passare per ripetizione
+ * un filo solo — che è esattamente lo sbaglio che questo file deve smettere di
+ * fare.
+ */
+function chiNudo(autore: string | null | undefined): string {
+  const a = String(autore ?? '').trim()
+  if (!a) return ''
+  return store.indirizzoDi(a)?.toLowerCase() ?? nudo(a)
+}
+
+/**
+ * I documenti recenti, scritti perché la ripetizione si veda.
+ *
+ * Prima era un elenco piatto di quaranta titoli, e un elenco piatto mente: sei
+ * messaggi dello stesso filo, uno sotto l'altro in mezzo ad altro, sembrano un
+ * andamento, e da lì è nata la proposta «i messaggi di Kyrylo sul danno alla
+ * Nissan» — un incidente solo, promosso a regola.
+ *
+ * Qui stanno raggruppati per fonte e per mittente, ognuno con il suo id — che è
+ * quello che dovrà citare in «prove» — e con il giorno. E sopra c'è il conto,
+ * che è la riga che si legge per prima: «12 messaggi da 5 mittenti; 6 da
+ * Kyrylo» dice da solo se c'è una regola o soltanto una conversazione.
+ */
+function documentiScritti(docs: store.Documento[]): string {
+  if (!docs.length) return 'nessuno'
+  const perFonte = new Map<string, store.Documento[]>()
+  for (const d of docs) {
+    const suoi = perFonte.get(d.fonte)
+    if (suoi) suoi.push(d)
+    else perFonte.set(d.fonte, [d])
+  }
+  const conti: string[] = []
+  const righe: string[] = []
+  for (const [fonte, suoi] of perFonte) {
+    const perChi = new Map<string, { come: string; docs: store.Documento[] }>()
+    for (const d of suoi) {
+      const chi = chiNudo(d.autore)
+      const g = perChi.get(chi)
+      if (g) g.docs.push(d)
+      else perChi.set(chi, { come: d.autore ? chiScritto(d.autore) : '', docs: [d] })
+    }
+    // i mittenti più fitti per primi: chi legge vede subito se qualcuno torna
+    const gruppi = [...perChi.values()].sort((a, b) => b.docs.length - a.docs.length)
+    const mittenti = gruppi.filter(g => g.come)
+    const ripetuti = mittenti.filter(g => g.docs.length >= 2)
+    conti.push(`${fonte}: ${suoi.length} ${POSTA.has(fonte) ? 'messaggi' : 'documenti'}${
+      mittenti.length ? ` da ${mittenti.length} mittenti` : ''}${
+      ripetuti.length ? '; ' + ripetuti.map(g => `${g.docs.length} da ${g.come}`).join(', ') : ''}`)
+    for (const g of gruppi) {
+      for (const d of g.docs) {
+        righe.push(`— [${d.id}] [${d.fonte}] ${d.titolo}${
+          d.autore ? ` · da ${chiScritto(d.autore)}` : ''}${d.quando ? ` · ${d.quando.slice(0, 10)}` : ''}`)
+      }
+    }
+  }
+  return [...conti, '', ...righe].join('\n')
 }
 
 /**
@@ -316,8 +438,9 @@ function materiale(scartati: string[]): string {
     `ATTREZZI COLLEGATI (puoi usare solo questi):\n${
       collegati.map(a => `— ${a.nome} (${a.etichetta})`).join('\n') || 'nessuno'}`,
     `PROGETTI E OBIETTIVI:\n${progetti.perIlModello() || 'nessuno'}`,
-    `DOCUMENTI ARRIVATI DI RECENTE:\n${
-      docs.map(d => `— [${d.fonte}] ${d.titolo}${d.quando ? ` (${d.quando.slice(0, 10)})` : ''}`).join('\n') || 'nessuno'}`,
+    'DOCUMENTI ARRIVATI DI RECENTE (prima il conto per fonte e per mittente; poi uno per riga, ' +
+      'con il suo id fra parentesi quadre — è quello da copiare in «prove» — chi lo manda e il giorno):\n' +
+      documentiScritti(docs),
     `RIGHE ANCORA APERTE NELLA SUA LISTA:\n${
       righe.map(r => `— ${r.testo} [${r.stato}]`).join('\n') || 'nessuna'}`,
     `AUTOMAZIONI CHE HA GIÀ (non riproporle):\n${
@@ -345,6 +468,8 @@ export function perProva(f: Partial<Ferri> | null) {
 type Grezza = {
   nome?: unknown
   spiega?: unknown
+  perche?: unknown
+  prove?: unknown
   quando?: { ogni?: unknown; giorno?: unknown; ora?: unknown }
   guarda?: { cerca?: unknown }
   attrezzi?: unknown
@@ -373,6 +498,51 @@ function unaFrase(testo: string): string {
 const nudo = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z0-9]+/g, ' ').trim()
 
+/** Sette giorni. La distanza che fa di due volte un'abitudine e non un caso. */
+const LONTANI = 7 * 86_400_000
+
+/**
+ * Il numero di una pratica, di una prenotazione, di un ordine.
+ *
+ * Nel nome o nella frase è la firma del caso singolo: «il reclamo #48211» non
+ * è una regola, è un fatto, e la regola che ne nascerebbe scatterebbe per
+ * sempre su qualcosa che finisce la settimana prossima.
+ */
+const NUMERO_DI_CASO = /#\d{4,}|\b\d{6,}\b/
+
+/** Le prove citate, risolte sull'indice: i documenti veri, senza doppioni. */
+function proveVere(x: unknown): store.Documento[] {
+  if (!Array.isArray(x)) return []
+  const visti = new Set<string>()
+  const fuori: store.Documento[] = []
+  for (const v of x) {
+    const id = String(v ?? '').trim()
+    if (!id || visti.has(id)) continue
+    visti.add(id)
+    const d = store.documento(id)
+    if (d) fuori.push(d)
+  }
+  return fuori
+}
+
+/**
+ * Si ripete davvero? Il controllo che non chiede niente al modello.
+ *
+ * Due documenti almeno, e o vengono da mittenti diversi — lo stesso tipo di
+ * cosa che arriva da più parti è un andamento — o stanno a una settimana
+ * buona di distanza, che è l'altra forma della stessa prova: torna nel tempo.
+ * Sei messaggi della stessa persona nello stesso giorno non sono né l'una né
+ * l'altra: sono una conversazione.
+ */
+function siRipete(prove: store.Documento[]): boolean {
+  if (prove.length < 2) return false
+  const mittenti = new Set(prove.map(d => chiNudo(d.autore)).filter(Boolean))
+  if (mittenti.size >= 2) return true
+  const giorni = prove.map(d => (d.quando ? Date.parse(d.quando) : NaN)).filter(t => Number.isFinite(t))
+  if (giorni.length < 2) return false
+  return Math.max(...giorni) - Math.min(...giorni) >= LONTANI
+}
+
 /**
  * La proposta ripulita, o niente.
  *
@@ -380,13 +550,23 @@ const nudo = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u
  * di `attrezzi.ts` — e che siano **collegati adesso**. Una proposta che apre
  * una casella che non c'è gira ogni mattina senza trovare niente, ed è il modo
  * più veloce per far spegnere le automazioni a chi le ha appena accese.
+ *
+ * E si controlla la ripetizione, qui, senza fidarsi: il prompt chiede di
+ * proporre solo quello che torna, ma un prompt è una richiesta, non un
+ * cancello. Le prove che cita si riaprono sull'indice e devono reggere da
+ * sole — mittenti diversi o giorni lontani — o la proposta cade, qualunque
+ * cosa abbia scritto nel «perche».
  */
 function ripulisci(g: Grezza, collegati: Set<string>): Suggerimento | null {
   const nome = parole(senzaTrattini(String(g.nome ?? '').trim()).replace(/\s+/g, ' '), 6)
   const spiega = unaFrase(senzaTrattini(String(g.spiega ?? '').trim()).replace(/\s+/g, ' '))
   if (!nome || !spiega) return null
+  if (NUMERO_DI_CASO.test(nome) || NUMERO_DI_CASO.test(spiega)) return null
   const suoi = attrezzi.ripulisci(g.attrezzi).filter(n => collegati.has(n))
   if (!suoi.length) return null
+
+  const prove = proveVere(g.prove)
+  if (!siRipete(prove)) return null
 
   const ora = Math.min(23, Math.max(0, Math.round(Number(g.quando?.ora) || 8)))
   const ogni = String(g.quando?.ogni ?? 'giorno')
@@ -395,19 +575,27 @@ function ripulisci(g: Grezza, collegati: Set<string>): Suggerimento | null {
     : ogni === 'settimana'
       ? { ogni: 'settimana', giorno: Math.min(6, Math.max(0, Math.round(Number(g.quando?.giorno) || 1))), ora }
       : { ogni: 'giorno', ora }
+  /*
+   * «A ogni arrivo» è la regola che scatta più spesso di tutte: due prove non
+   * bastano a pagarla. Una che parte a ogni messaggio nuovo e sbaglia è quella
+   * che fa spegnere tutte le altre.
+   */
+  if (ogni === 'arrivo' && prove.length < 3) return null
 
   const cerca = String(g.guarda?.cerca ?? '').trim()
   const inLista = (SECCHI.includes(String(g.metti?.inLista)) ? String(g.metti?.inLista) : 'oggi') as 'oggi'
   const modo = (MODI.includes(String(g.metti?.modo)) ? String(g.metti?.modo) : 'bozza') as 'bozza'
-  // le prove non le inventa lui: si contano nell'indice, dentro il recinto
-  // degli attrezzi che ha chiesto
-  const prove = cerca ? store.cerca(cerca, 20, attrezzi.recinto(suoi) ?? undefined) : []
+  // quanto ne troverà davvero: si conta nell'indice, dentro il recinto degli
+  // attrezzi che ha chiesto. Meno di due e la ricerca non ha una materia:
+  // girerebbe ogni mattina su un documento solo, o su nessuno
+  const trovati = cerca ? store.cerca(cerca, 20, attrezzi.recinto(suoi) ?? undefined) : []
+  if (trovati.length < 2) return null
   return {
     id: `idea-${auto.idPer(nome, new Set())}`,
     nome,
     spiega,
-    quanti: prove.length,
-    esempi: prove.slice(0, 2).map(d => d.titolo),
+    quanti: trovati.length,
+    esempi: trovati.slice(0, 2).map(d => d.titolo),
     attrezzi: suoi,
     quando,
     guarda: { ...(cerca ? { cerca } : {}), soloNuovi: true, limite: 8 },

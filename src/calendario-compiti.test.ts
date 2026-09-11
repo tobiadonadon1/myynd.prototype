@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { giornoLocale, giornoCompito, giorniVisibili, inizioSettimana, quantiGiorni, secchioDelGiorno, spostaGiorno } from './oggi/giorni.ts'
+import { secchioVivo } from './oggi/secchi.ts'
 
 test('calendar days cross month/year and leap days without UTC conversion', () => {
   assert.equal(spostaGiorno('2026-12-31', 1), '2027-01-01')
@@ -25,6 +26,25 @@ test('planned dates remain fixed; legacy today tasks keep their original semanti
   assert.equal(secchioDelGiorno('2026-09-09', '2026-09-08'), 'settimana')
   assert.equal(secchioDelGiorno('2026-09-07', '2026-09-08'), 'oggi')
   assert.equal(secchioDelGiorno(null, '2026-09-08'), 'poi')
+})
+
+test('secchioVivo brings a live task with a past planned day forward to today, without touching a closed one', () => {
+  // giorno passato, viva: la lista di oggi la vede lì, non dov'è scritta
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: '2026-09-07', quando: 'settimana' }, '2026-09-08'), 'oggi')
+  assert.equal(secchioVivo({ stato: 'delegato', giorno: '2026-09-01', quando: 'poi' }, '2026-09-08'), 'oggi')
+  // giorno passato, chiusa: `quando` scritto resta quello che dice — non compare mai in questa lista comunque
+  assert.equal(secchioVivo({ stato: 'fatto', giorno: '2026-09-07', quando: 'settimana' }, '2026-09-08'), 'settimana')
+  assert.equal(secchioVivo({ stato: 'lasciato', giorno: '2026-09-01', quando: 'poi' }, '2026-09-08'), 'poi')
+  // giorno futuro: si deriva da secchioDelGiorno, come nel calendario
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: '2026-09-09', quando: 'poi' }, '2026-09-08'), 'settimana')
+  // una data lontana non sposta niente: «prima o poi» resta «prima o poi»
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: '2026-12-01', quando: 'poi' }, '2026-09-08'), 'poi')
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: '2026-09-15', quando: 'poi' }, '2026-09-08'), 'settimana')
+  // giorno di oggi: viva, non passata — resta 'oggi'
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: '2026-09-08', quando: 'settimana' }, '2026-09-08'), 'oggi')
+  // senza giorno: si fida di `quando`, qualunque sia lo stato
+  assert.equal(secchioVivo({ stato: 'aperto', giorno: null, quando: 'settimana' }, '2026-09-08'), 'settimana')
+  assert.equal(secchioVivo({ stato: 'aperto', quando: 'poi' }, '2026-09-08'), 'poi')
 })
 
 test('local date arithmetic stays stable across daylight saving and negative UTC offsets', () => {

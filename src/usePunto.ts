@@ -35,6 +35,10 @@ export function usePunto() {
   const [nascosto, setNascosto] = useState<string | null>(() => leggi(CHIAVE_NASCOSTO))
   const [carico, setCarico] = useState(false)
   const [tetto, setTetto] = useState(false)
+  /** La data dell'ultimo punto, quando è di ieri: allora non se ne mostra il testo. */
+  const [vecchio, setVecchio] = useState<string | null>(null)
+  /** Perché non è arrivato: la frase del server, da passare da `t()`. */
+  const [guaio, setGuaio] = useState<string | null>(null)
   const inCorso = useRef(false)
 
   const prendi = useCallback(async (forza = false, via: number | null = null) => {
@@ -44,7 +48,18 @@ export function usePunto() {
     setTetto(false)
     try {
       const r = forza || via !== null ? await api.rifaiPunto(forza, via) : await api.punto()
-      if (r.punto) setPunto(r.punto)
+      /*
+       * Anche quando è nullo.
+       *
+       * Prima si scriveva solo un punto che c'era, e un `null` lasciava in
+       * pagina quello di prima: è così che il punto dell'otto settembre è
+       * rimasto in prima pagina l'undici, con tre cose già fatte sotto
+       * «adesso». Il server adesso toglie le righe scadute e non manda quello
+       * di ieri: la pagina deve credergli anche quando dice «niente».
+       */
+      setPunto(r.punto)
+      setVecchio(r.vecchio ?? null)
+      setGuaio(r.guaio ?? null)
       if (r.tetto) setTetto(true)
     } catch {
       // il punto non è il motivo per cui si apre Myynd: se non risponde, la
@@ -143,6 +158,10 @@ export function usePunto() {
     daVedere: !!punto && nascosto !== punto.quando,
     /** Riapre quello di prima, da un dito. */
     riapri: () => { try { localStorage.removeItem(CHIAVE_NASCOSTO) } catch { /* pazienza */ } setNascosto(null) },
+    /** C'è un punto, ma è di ieri: si dice, e si offre di rifarlo. */
+    vecchio,
+    /** Perché l'ultimo tentativo non è andato: già in italiano, da tradurre in pagina. */
+    guaio,
     carico, tetto,
     rifai, nascondi, tieni, scarta, nonProgetto,
     avvia, accese, guaioAvvio

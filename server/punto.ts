@@ -33,7 +33,7 @@ import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import { affinita, gusto } from './gusto.ts'
 import * as automazioni from './automazioni.ts'
-import { parti } from './fuso.ts'
+import { giornoIn, parti } from './fuso.ts'
 import * as progetti from './progetti.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
@@ -61,6 +61,14 @@ export type Progetto = {
   angolo: string
   /** Gli angoli che ha tenuto: suoi, dalla memoria, e il modello ci costruisce sopra. */
   angoliTenuti: string[]
+  /**
+   * L'ha tirato fuori il punto dal materiale, e lui non l'ha ancora confermato.
+   *
+   * È quello che decide se in pagina compare «non è un progetto»: un progetto
+   * che ha scritto lui — o su cui ha già tenuto un angolo — non si chiude da
+   * una finestra che si legge in dieci secondi.
+   */
+  proposto: boolean
 }
 
 /** Un'automazione da accendere: la frase come la direbbe lui, e il perché. */
@@ -89,6 +97,16 @@ export type Esito = {
   generatoAdesso: boolean
   /** Vero se ha chiesto un punto nuovo e per oggi il conto è finito. */
   tetto: boolean
+  /**
+   * Quando è di ieri.
+   *
+   * Un punto è la fotografia di un momento, e il giorno dopo non è più «il
+   * punto di oggi»: si torna `punto: null` con qui la data di quello vecchio,
+   * così la pagina propone di rifarlo invece di far leggere cose già fatte.
+   */
+  vecchio?: string | null
+  /** Perché non è arrivato: la frase del modello, così com'è, da mostrare. */
+  guaio?: string
 }
 
 /** Cosa ci si può portare dietro nella richiesta. */
@@ -122,14 +140,20 @@ function leggiArchivio(): Archivio {
     const a = { ...VUOTO, ...letto }
     // un foglio scritto da una versione che non conosceva ancora `via` e `avvii`
     if (a.ultimo) a.ultimo = { ...a.ultimo, via: a.ultimo.via ?? null, avvii: a.ultimo.avvii ?? [] }
-    // ...né la tabella dei progetti: un progetto del punto vecchio ritrova la sua riga per nome
-    if (a.ultimo?.progetti.some(p => !p.id)) {
+    // ...né la tabella dei progetti: un progetto del punto vecchio ritrova la
+    // sua riga per nome, e da lì si sa anche chi l'ha scritto
+    if (a.ultimo?.progetti.some(p => !p.id || p.proposto === undefined)) {
       a.ultimo = {
         ...a.ultimo,
         progetti: a.ultimo.progetti.map(p => {
-          if (p.id) return p
-          const vero = progetti.trovaPerNome(p.nome)
-          return { ...p, id: vero?.id ?? '', obiettivo: p.obiettivo ?? vero?.obiettivo ?? '' }
+          if (p.id && p.proposto !== undefined) return p
+          const vero = p.id ? progetti.trova(p.id) : progetti.trovaPerNome(p.nome)
+          return {
+            ...p,
+            id: p.id || vero?.id || '',
+            obiettivo: p.obiettivo ?? vero?.obiettivo ?? '',
+            proposto: p.proposto ?? (vero ? vero.origine === 'punto' : true)
+          }
         })
       }
     }
@@ -148,6 +172,55 @@ function scriviArchivio(a: Archivio) {
 /** Quello che c'è, senza chiamare nessuno. */
 export function ultimo(): Punto | null {
   return leggiArchivio().ultimo
+}
+
+/**
+ * Il punto come sta adesso, non come stava quando l'ha scritto il modello.
+ *
+ * È la fotografia di un momento, e il mondo va avanti: le tre mosse dell'otto
+ * settembre erano tutte fatte entro sera, e il giorno dopo la pagina le
+ * mostrava ancora sotto «adesso». Una cosa che lui ha già fatto, riproposta
+ * come da fare, è il modo più veloce di far sembrare Myynd uno che non
+ * ascolta — e non è un difetto del modello, è che nessuno ricontrollava il
+ * punto prima di mostrarlo.
+ *
+ * Qui si ricontrolla, ogni volta che esce, anche quando viene dal foglio: una
+ * riga che parla di una cosa chiusa o sparita se ne va, un progetto che ha
+ * chiuso lui se ne va. Le righe senza `compito` restano — parlano di quello
+ * che è arrivato o di quello che ha fatto Myynd, e quelle non scadono.
+ *
+ * È una funzione pura: le liste gliele passa chi chiama, e `chiusi` è i nomi
+ * in minuscolo e gli id dei progetti chiusi.
+ */
+export function aggiornaAlPresente(
+  p: Punto,
+  compiti: { aperti: Set<string>; chiusi: Set<string> },
+  chiusi: { nomi: Set<string>; id: Set<string> } = { nomi: new Set(), id: new Set() }
+): Punto {
+  const viva = (r: Riga) => !r.compito || (compiti.aperti.has(r.compito) && !compiti.chiusi.has(r.compito))
+  const nome = (s: string) => s.trim().toLowerCase()
+  return {
+    ...p,
+    mentreNonCeri: p.mentreNonCeri.filter(viva),
+    adesso: p.adesso.filter(viva),
+    progetti: p.progetti.filter(x => !(x.id && chiusi.id.has(x.id)) && !chiusi.nomi.has(nome(x.nome)))
+  }
+}
+
+/** Lo stesso, con le liste prese dal vivo: ogni punto che esce passa di qui. */
+function alPresente(p: Punto): Punto {
+  const spenti = progetti.elenco('chiuso')
+  return aggiornaAlPresente(
+    p,
+    {
+      aperti: new Set(store.elencoCompiti().map(c => c.id)),
+      chiusi: new Set(store.compitiChiusi(200).map(c => c.id))
+    },
+    {
+      nomi: new Set(spenti.map(x => x.nome.trim().toLowerCase())),
+      id: new Set(spenti.map(x => x.id))
+    }
+  )
 }
 
 // — il materiale —
@@ -602,7 +675,10 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
       doveSei: ripulisci(p.doveSei ?? ''),
       // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
       angolo: rifiutati.has(chiave(angolo)) || angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
-      angoliTenuti
+      angoliTenuti,
+      // uno che ha scritto lui non si chiude da qui: «non è un progetto» è per
+      // quelli che il punto ha tirato fuori dal materiale
+      proposto: vero ? vero.origine === 'punto' : true
     })
   }
 
@@ -639,8 +715,9 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
 
 /** Le chiamate di oggi, nel giorno solare UTC — lo stesso del tetto dei token. */
 function diOggi(chiamate: string[], adesso: number): string[] {
-  const giorno = new Date(adesso).toISOString().slice(0, 10)
-  return chiamate.filter(c => c.slice(0, 10) === giorno)
+  // nel fuso del conto, come «scaduto»: a mezzanotte cambia giorno per tutti e due
+  const giorno = giornoIn(new Date(adesso))
+  return chiamate.filter(c => giornoIn(new Date(c)) === giorno)
 }
 
 /*
@@ -667,14 +744,32 @@ export function punto(r: Richiesta = {}, adesso = Date.now()): Promise<Esito> {
   return giro
 }
 
+/** Quando non c'è niente con cui ragionare: la stessa frase del resto dell'app. */
+const SENZA_MOTORE = 'Collega Claude e potrò ragionare sul tuo materiale.'
+const RIFIUTATO = 'Il modello ha rifiutato la richiesta. Prova a cambiarlo nelle preferenze.'
+const ILLEGGIBILE = 'Il punto non è arrivato in una forma leggibile. Riprova.'
+
 async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   const a = leggiArchivio()
-  const fermo: Esito = { punto: a.ultimo, generatoAdesso: false, tetto: false }
+  /*
+   * Il punto di ieri non è il punto di oggi.
+   *
+   * Il confine è il giorno solare di *casa sua*, non quello del server: una
+   * richiesta alle otto di mattina a Roma non deve leggere ancora il foglio di
+   * ieri sera solo perché in UTC sono ancora le sei. Quando è di ieri non si
+   * mostra: torna `punto: null` con la sua data, e la pagina offre di rifarlo.
+   */
+  const scaduto = !!a.ultimo && giornoIn(new Date(a.ultimo.quando)) !== giornoIn(new Date(adesso))
+  const fermo: Esito = scaduto
+    ? { punto: null, generatoAdesso: false, tetto: false, vecchio: a.ultimo!.quando }
+    : { punto: a.ultimo ? alPresente(a.ultimo) : null, generatoAdesso: false, tetto: false }
 
   const m = motore()
-  if (!m) return fermo
+  // se è stata lei a chiedere, il perché si dice; su un giro automatico no
+  if (!m) return r.forza ? { ...fermo, guaio: SENZA_MOTORE } : fermo
 
-  if (!r.forza && a.ultimo && adesso - new Date(a.ultimo.quando).getTime() < ORE_FRA * 3600_000) return fermo
+  // le tre ore valgono dentro la giornata: uno di ieri è già da rifare
+  if (!r.forza && !scaduto && a.ultimo && adesso - new Date(a.ultimo.quando).getTime() < ORE_FRA * 3600_000) return fermo
 
   const dal = a.ultimo?.quando ?? new Date(adesso - GIORNI_PRIMO * 86_400_000).toISOString()
   const mat = raccogli(dal, !a.ultimo)
@@ -684,20 +779,29 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   if (diOggi(a.chiamate, adesso).length >= AL_GIORNO) return { ...fermo, tetto: true }
 
   const quando = new Date(adesso).toISOString()
-  // si conta prima di chiamare: una risposta che non si legge è costata lo stesso
-  a.chiamate = [...diOggi(a.chiamate, adesso), quando]
-  scriviArchivio(a)
-
-  const risposta = await m.crea({
-    ...parametri('punto', 6000, schema(
-      [...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id),
-      mat.arrivati.map(d => d.id)
-    )),
-    system: [{ type: 'text', text: conLaLingua(istruzione(mat, a.ultimo?.progetti ?? [], a.scartati)), cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }]
-  }, attesaDi('punto'))
+  let risposta: Anthropic.Message
+  try {
+    risposta = await m.crea({
+      ...parametri('punto', 6000, schema(
+        [...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id),
+        mat.arrivati.map(d => d.id)
+      )),
+      system: [{ type: 'text', text: conLaLingua(istruzione(mat, a.ultimo?.progetti ?? [], a.scartati)), cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }]
+    }, attesaDi('punto'))
+  } catch (e) {
+    /*
+     * Il giorno in cui la chiave era a secco lui ha premuto «rifai il punto»
+     * tre volte: tre chiamate fallite, tre tacche sul conto del giorno, e in
+     * pagina sempre il punto di due giorni prima, senza una parola che dicesse
+     * perché. Un errore del modello non è un punto: non si conta e si dice.
+     */
+    const guaio = e instanceof Error ? e.message : String(e)
+    console.warn('myynd · il punto non è arrivato:', guaio)
+    return { ...fermo, guaio }
+  }
   segnaUso('punto', risposta.usage, m.nome)
-  if (risposta.stop_reason === 'refusal') return fermo
+  if (risposta.stop_reason === 'refusal') return { ...fermo, guaio: RIFIUTATO }
 
   const testo = risposta.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -707,8 +811,12 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     grezzo = JSON.parse(estraiJSON(testo)) as Grezzo
   } catch {
     console.warn('myynd · il punto non è arrivato in una forma leggibile')
-    return fermo
+    return { ...fermo, guaio: ILLEGGIBILE }
   }
+
+  // solo adesso si conta: il tetto è di tre punti al giorno, non di tre
+  // tentativi. Una chiamata che non ha prodotto niente non brucia la giornata
+  a.chiamate = [...diOggi(a.chiamate, adesso), quando]
 
   const nuovo = ricuci(grezzo, mat, a.scartati, quando, r.via ?? null, a.avviate ?? [])
   // quello che il modello ha capito entra in tabella: un progetto nuovo con
@@ -726,7 +834,7 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   }
   a.ultimo = nuovo
   scriviArchivio(a)
-  return { punto: nuovo, generatoAdesso: true, tetto: false }
+  return { punto: alPresente(nuovo), generatoAdesso: true, tetto: false }
 }
 
 // — gli avvii —
@@ -784,6 +892,8 @@ export function tieni(nome: string, angolo: string): { ok: true; id: string } {
   const mostrato = a.ultimo?.progetti.find(x => x.nome.toLowerCase() === p.nome.toLowerCase())
   if (mostrato && !mostrato.angoliTenuti.some(x => x.toLowerCase() === testo.toLowerCase())) {
     mostrato.angoliTenuti = [...mostrato.angoliTenuti, testo]
+    // tenere un angolo è dire che il progetto c'è: da qui non si chiude più
+    mostrato.proposto = false
     scriviArchivio(a)
   }
   return { ok: true, id }
@@ -811,13 +921,29 @@ export function scarta(nome: string, angolo: string): { ok: true } {
  * dal punto che la pagina sta mostrando, così non lo si dice due volte.
  */
 export function nonEUnProgetto(id: string): { ok: true; punto: Punto | null } {
+  const vero = progetti.trova(id)
+  if (!vero) throw new Error('Questo progetto non c’è nel punto.')
+  // uno che ha scritto lui si chiude dalla Memoria, dov'è scritto l'obiettivo
+  if (vero.origine !== 'punto') throw new Error('Questo progetto l’hai scritto tu: chiudilo dalla Memoria.')
   if (!progetti.chiudi(id)) throw new Error('Questo progetto non c’è nel punto.')
+  return { ok: true, punto: togliDalPunto(id) }
+}
+
+/**
+ * Via dal foglio, e basta.
+ *
+ * È la metà di «non è un progetto» che serve anche a chi chiude dalla
+ * Memoria: la riga esce dal punto che la pagina sta mostrando, senza il
+ * controllo sull'origine, perché lì la decisione è già presa e lo stato
+ * l'ha già cambiato progetti.cambia.
+ */
+export function togliDalPunto(id: string): Punto | null {
   const a = leggiArchivio()
   if (a.ultimo) {
     a.ultimo = { ...a.ultimo, progetti: a.ultimo.progetti.filter(p => p.id !== id) }
     scriviArchivio(a)
   }
-  return { ok: true, punto: a.ultimo }
+  return a.ultimo
 }
 
 /** Per le prove: dove sta il foglio di chi chiede. */

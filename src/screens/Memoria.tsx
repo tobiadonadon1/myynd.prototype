@@ -25,7 +25,7 @@ import { api, type Blocco, type Convinzione, type Memoria as Dati, type Progetto
 import { AttivitaProgetto } from '../components/AttivitaProgetto'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
-import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
+import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva, useConferma } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
 
@@ -285,16 +285,44 @@ function Riga({ c, scorda, tieni, storica }:
  * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che
  * il feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
  * scritto in una riga vale più di trenta documenti. Un nome, l'obiettivo che
- * si scrive qui dentro, e uno stato — attivo, fermo, chiuso — che gira con
- * un dito. Chiuso non cancella: resta scritto, e il punto non lo reinventa.
+ * si scrive qui dentro, e uno stato — attivo, fermo, chiuso — che si sceglie
+ * uno per uno. Chiuso non cancella: resta scritto, e il punto non lo reinventa.
+ *
+ * Prima girava con un dito — un clic sulla pastiglia passava allo stato dopo,
+ * in silenzio — e a lui gliene ha chiusi due per sbaglio: «non sono chiusi,
+ * sono solo in pausa, e "segna come chiuso" suona strano». Adesso i tre stati
+ * si scelgono uno alla volta, chiudere chiede conferma una volta sola, e
+ * riaprire resta un solo clic — perché riaprire non butta via niente.
  */
-const PROSSIMO: Record<StatoProgetto, StatoProgetto> = { attivo: 'fermo', fermo: 'chiuso', chiuso: 'attivo' }
+const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string }> = {
+  attivo: { testo: '#2F4A33', fondo: 'rgba(126,156,130,.18)' },
+  fermo: { testo: '#8A6317', fondo: 'rgba(216,164,110,.2)' },
+  chiuso: { testo: 'rgba(34,39,31,.55)', fondo: 'rgba(34,39,31,.08)' }
+}
 
 function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void> }) {
   const [obiettivo, setObiettivo] = useState(p.obiettivo)
   useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
   const chiuso = p.stato === 'chiuso'
   const salva = () => { if (obiettivo.trim() !== p.obiettivo.trim()) cambia(p.id, { obiettivo: obiettivo.trim() }) }
+
+  // chiudere chiede una volta — è lì che si è rotto; riaprire no, perché non distrugge niente
+  const { armato, chiedi, disarma } = useConferma()
+  // titoli calcolati a ogni resa: `t()` legge la lingua corrente, e un dizionario
+  // fissato una volta sola all'avvio del modulo resterebbe fermo alla prima lingua vista
+  const TITOLO_STATO: Record<StatoProgetto, string> = {
+    attivo: t('Segna come attivo'), fermo: t('Segna come fermo'), chiuso: t('Segna come chiuso')
+  }
+  const chip = (s: StatoProgetto, onClick: () => void) => (
+    <Hov key={s} as="button" type="button" aria-pressed={p.stato === s} title={TITOLO_STATO[s]} onClick={onClick}
+      style={{
+        flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
+        padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        color: p.stato === s ? COLORE_STATO[s].testo : 'rgba(34,39,31,.4)',
+        background: p.stato === s ? COLORE_STATO[s].fondo : 'transparent'
+      }}
+      hover={p.stato === s ? {} : { color: '#C4623B' }}>{t(s)}</Hov>
+  )
 
   return (
     <div style={{ padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)', opacity: chiuso ? 0.55 : 1 }}>
@@ -304,16 +332,41 @@ function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { ob
         {p.origine === 'punto' && (
           <span style={{ flex: 'none', fontSize: '11.5px', color: 'rgba(34,39,31,.45)' }}>{t('riconosciuto dal punto')}</span>
         )}
-        {/* la pastiglia gira: attivo → fermo → chiuso → attivo. Un solo gesto, senza menù */}
-        <Hov as="button" type="button" onClick={() => cambia(p.id, { stato: PROSSIMO[p.stato] })}
-          title={t(PROSSIMO[p.stato])}
-          style={{
-            flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase',
-            padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            color: chiuso ? 'rgba(34,39,31,.55)' : p.stato === 'fermo' ? '#8A6317' : '#2F4A33',
-            background: chiuso ? 'rgba(34,39,31,.08)' : p.stato === 'fermo' ? 'rgba(216,164,110,.2)' : 'rgba(126,156,130,.18)'
-          }}
-          hover={{ opacity: 0.8 }}>{t(p.stato)}</Hov>
+        {chiuso ? (
+          // chiuso non ha più chip da scegliere: solo l'etichetta, e un
+          // ritorno a un solo clic — riaprire non è una cosa da confermare
+          <>
+            <span style={{
+              flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase',
+              padding: '3px 8px', borderRadius: 5, color: COLORE_STATO.chiuso.testo, background: COLORE_STATO.chiuso.fondo
+            }}>{t('chiuso')}</span>
+            <Hov as="button" type="button" onClick={() => cambia(p.id, { stato: 'attivo' })}
+              style={{
+                flex: 'none', border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '12px', color: 'rgba(34,39,31,.5)'
+              }}
+              hover={{ color: '#C4623B' }}>{t('Riapri')}</Hov>
+          </>
+        ) : (
+          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 7, background: 'rgba(34,39,31,.05)' }}>
+              {chip('attivo', () => cambia(p.id, { stato: 'attivo' }))}
+              {chip('fermo', () => cambia(p.id, { stato: 'fermo' }))}
+              {/* il chip arma e basta: chiude solo «Chiudo davvero?», così un doppio clic non chiude niente */}
+              {chip('chiuso', () => { if (!armato) chiedi(() => cambia(p.id, { stato: 'chiuso' })) })}
+            </div>
+            {/* compare solo dopo il primo clic su «chiuso», e si spegne da sola: è `useConferma`, la stessa regola del cestino */}
+            {armato && (
+              <Hov as="button" type="button" onClick={() => chiedi(() => cambia(p.id, { stato: 'chiuso' }))}
+                onMouseLeave={disarma} onBlur={disarma}
+                style={{
+                  flex: 'none', border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: '11.5px', fontWeight: 500, color: '#8E3F1F', whiteSpace: 'nowrap'
+                }}
+                hover={{ color: '#C4623B' }}>{t('Chiudo davvero?')}</Hov>
+            )}
+          </div>
+        )}
       </div>
       {/* una riga sola: l'obiettivo non è un documento, è la frase che decide cosa conta */}
       <textarea
@@ -379,6 +432,10 @@ function Progetti() {
       </div>
       <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
         {t('Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.')}
+      </div>
+      {/* la confusione era proprio questa: un progetto senza un compito in corso non è finito */}
+      <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.45)', marginTop: 4, lineHeight: 1.5, textWrap: 'pretty' }}>
+        {t('Un progetto senza attività resta attivo: chiudilo solo quando è finito.')}
       </div>
 
       {nuovo && (

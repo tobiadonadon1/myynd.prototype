@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
-import { frasi, t } from '../lingua'
+import { frasi, loc, t } from '../lingua'
 import { IconAvanti, IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
 import { Testo } from '../Testo'
@@ -27,7 +27,7 @@ import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
 import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
-import { giornoLocale, secchioDelGiorno } from './giorni'
+import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { desktop } from '../desktop'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
@@ -208,6 +208,10 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
   const delegato = c.stato === 'delegato'
   const aspetta = pronto || chiede
   const col = tinta(c)
+  const oggi = giornoLocale()
+  // vivo: le chiuse non passano mai di qui, ma il conto vale anche da solo
+  const vivo = c.stato !== 'fatto' && c.stato !== 'lasciato'
+  const inRitardo = vivo && !!c.giorno && c.giorno < oggi
   /** Ha chiesto il prompt, non la cosa: nessuna delle tre caselle è sua, e la riga lo dice a parole. */
   const prompt = c.modo === 'prompt'
   const [menu, setMenu] = useState(false)
@@ -296,6 +300,14 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
             }}>{frasePasso(l.passi[c.id])}</div>
           )}
         </div>
+
+        {/* portata avanti da un giorno passato: lo si dice, senza toccare
+            `quando` sul disco — vedi `secchioVivo` in `secchi.ts` */}
+        {inRitardo && (
+          <span style={{ flex: 'none', whiteSpace: 'nowrap', fontSize: 11, color: 'rgba(34,39,31,.42)' }}>
+            {t('in ritardo dal')} {dataLocale(c.giorno as string).toLocaleDateString(loc(), { day: 'numeric', month: 'short' })}
+          </span>
+        )}
 
         {aspetta && (
           <Hov as="button" type="button" onClick={() => l.apriChiudi(c.id)} aria-expanded={aperto}
@@ -1175,8 +1187,21 @@ function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannel
  * lista vecchia di due secondi mette la riga nel posto sbagliato, e il giorno
  * che la stessa lista vive anche su un telefono lo fa sempre.
  */
+/**
+ * Dentro «Oggi», le riportate avanti passano davanti — le più vecchie prima
+ * di tutte, perché è da lì che si è staccate per prime. Il resto tiene
+ * l'ordine che ha già: quello del trascinamento, in `ordine.ts`.
+ */
+function ordinaOggi(righe: Compito[]): Compito[] {
+  const oggi = giornoLocale()
+  const tarde = righe.filter(c => c.giorno && c.giorno < oggi)
+  if (!tarde.length) return righe
+  const restanti = righe.filter(c => !(c.giorno && c.giorno < oggi))
+  return [...tarde.sort((a, b) => (a.giorno as string).localeCompare(b.giorno as string)), ...restanti]
+}
+
 function Gruppo({ s, l, stretta, modifica }: { s: Secchio; l: Lista; stretta: boolean; modifica: (c: Compito) => void }) {
-  const righe = l.perSecchio(s)
+  const righe = s === 'oggi' ? ordinaOggi(l.perSecchio(s)) : l.perSecchio(s)
   // l'id della riga davanti alla quale si andrebbe a cadere, per disegnare il filo
   const [bersaglio, setBersaglio] = useState<string | null>(null)
   if (!righe.length) return null
@@ -1185,7 +1210,9 @@ function Gruppo({ s, l, stretta, modifica }: { s: Secchio; l: Lista; stretta: bo
   const lascia = (id: string, primaDi: string | null) => {
     setBersaglio(null)
     if (!id) return
-    const senza = righe.filter(c => c.id !== id)
+    // le riportate avanti stanno in testa ma sono scritte su un altro scaffale:
+    // il server accetta come vicini solo chi sta davvero in questo
+    const senza = righe.filter(c => c.id !== id && c.quando === s)
     const k = primaDi === null ? senza.length : Math.max(0, senza.findIndex(c => c.id === primaDi))
     const sopra = senza[k - 1]?.id ?? null
     const sotto = senza[k]?.id ?? null

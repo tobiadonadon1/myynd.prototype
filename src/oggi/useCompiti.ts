@@ -16,6 +16,8 @@ import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito }
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
+import { giornoLocale } from './giorni'
+import { secchioVivo } from './secchi'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -434,7 +436,16 @@ export function useCompiti(
     })
   }, [])
 
-  const perSecchio = (s: Secchio) => compiti.filter(c => c.quando === s)
+  /**
+   * Il secchio *vivo*, non quello scritto: vedi `secchioVivo` in `secchi.ts`.
+   *
+   * Una riga pianificata per lunedì e rimasta lì resta scritta «questa
+   * settimana» per sempre — è così che si scopre, arrivati a giovedì, che non
+   * è mai stata portata avanti. Si guarda a ogni lettura invece che scriverlo
+   * una volta, così anche la mezzanotte che passa mentre la finestra sta
+   * aperta la sposta al posto giusto.
+   */
+  const perSecchio = (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s) }
 
   const pronte = compiti.filter(c => c.stato === 'pronto').length
   const chiedono = compiti.filter(c => c.stato === 'chiede').length
@@ -465,7 +476,7 @@ export function useCompiti(
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
-    quante: (s: Secchio) => compiti.filter(c => c.quando === s).length,
+    quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
     aggiungi, aggiungiTante, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda
   }

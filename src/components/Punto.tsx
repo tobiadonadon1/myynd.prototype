@@ -18,13 +18,18 @@
 // copre sette giorni.
 
 import { useRef, type CSSProperties } from 'react'
-import { frasi, loc, t } from '../lingua'
+import { frasi, loc, t, tradotta } from '../lingua'
 import { Hov, LABEL, useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
 import type { Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { usePunto } from '../usePunto'
 import type { RigaPunto } from '../api'
+
+/** Il guaio del server, se lo sappiamo dire; se no una frase sola, invece di un errore grezzo in un'altra lingua. */
+function spiegaGuaio(g: string): string {
+  return tradotta(g) ? t(g) : t('Il punto non è arrivato: il fornitore non ha risposto.')
+}
 
 const VELO: CSSProperties = {
   position: 'fixed', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
@@ -94,6 +99,14 @@ const BOTTONE: CSSProperties = {
   background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
   fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }
+
+/** La riga sotto il titolo della carta: quello che il titolo non dice. */
+const SOTTO: CSSProperties = {
+  fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3,
+  textWrap: 'pretty', overflowWrap: 'anywhere'
+}
+/** Perché non è arrivato: si legge se lo si cerca, e non toglie il posto al resto. */
+const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(34,39,31,.5)' }
 
 /** «5 cose» comincia una frase: la maiuscola la mette la pagina, non il dizionario. */
 const maiuscola = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1)
@@ -228,8 +241,10 @@ function Finestra({ v, lista, apriCompito, p }: {
                       {pr.doveSei && <span style={SPENTO}> {pr.doveSei}</span>}
                     </span>
                     {/* il modello i progetti li indovina, e a volte sbaglia: un dito
-                        lo chiude in tabella, e non torna, nemmeno al punto dopo */}
-                    {pr.id && (
+                        lo chiude in tabella, e non torna, nemmeno al punto dopo.
+                        Ma solo se l'ha indovinato lui: uno scritto a mano, o uno
+                        su cui ha già tenuto un angolo, da qui non si chiude */}
+                    {pr.id && pr.proposto && (
                       <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
                         onClick={() => p.nonProgetto(pr.id)}>{t('Non è un progetto')}</Hov>
                     )}
@@ -276,22 +291,48 @@ function Finestra({ v, lista, apriCompito, p }: {
 }
 
 /**
+ * Il punto di ieri, che non è il punto di oggi.
+ *
+ * Il testo non si mostra: era vero alle due del pomeriggio di ieri, e quello
+ * che diceva di fare adesso lui l'ha fatto ieri sera. Si dice che è scaduto e
+ * si offre l'unica cosa che serve — rifarlo — con accanto, se c'è, il motivo
+ * per cui l'ultimo tentativo non è andato.
+ */
+function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
+  return (
+    <div style={CARTA}>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di ieri è scaduto.')}</div>
+        <div style={SOTTO}>{t('Rifallo quando vuoi: dieci secondi.')}</div>
+        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
+        {p.tetto && <div style={SPIEGA}>{t('Per oggi basta: tre punti al giorno. Si riparte domani.')}</div>}
+      </div>
+      <button type="button" onClick={p.rifai} disabled={p.carico} style={BOTTONE}>
+        {p.carico ? t('Un momento…') : t('Rifai il punto')}
+      </button>
+    </div>
+  )
+}
+
+/**
  * In pagina: il foglio se il punto è da vedere, altrimenti la carta che lo
  * riapre. Senza un punto, niente — una cornice vuota in cima alla prima
- * pagina è la cosa peggiore che si possa aggiungere qui.
+ * pagina è la cosa peggiore che si possa aggiungere qui — tranne quando ce
+ * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
  */
 export function Punto({ v, lista, apriCompito }: { v: Vals; lista?: Lista; apriCompito: (id: string) => void }) {
   const p = usePunto()
-  if (!p.punto) return null
+  if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
   if (p.daVedere) return <Finestra v={v} lista={lista} apriCompito={apriCompito} p={p} />
   const quante = p.punto.mentreNonCeri.length + p.punto.adesso.length + p.punto.daLeggere.length + p.punto.avvii.length
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>
         <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Il punto di oggi.')}</div>
-        <div style={{ fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+        <div style={SOTTO}>
           {maiuscola(frasi.coseNelPunto(quante))}. {t('Dieci secondi.')}
         </div>
+        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
       </div>
       <button type="button" onClick={p.riapri} style={BOTTONE}>{t('Apri')} <IconAvanti /></button>
     </div>

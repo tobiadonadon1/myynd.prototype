@@ -139,6 +139,29 @@ export function radici(c: Pick<ConfigDesktop, 'cartelle' | 'tutto'>): string[] {
   return c.tutto ? radiciTutto() : c.cartelle
 }
 
+/**
+ * Questo collegamento va portato a tutto il computer, una volta sola?
+ *
+ * Chi ha collegato il computer *prima* che «collega il mio Mac» esistesse si
+ * ritrova tre cartelle — Scrivania, Documenti, Download — e un Myynd che dice
+ * «66 documenti» su una macchina che ne ha migliaia. Non è un'impostazione
+ * sbagliata: è una scheda vecchia, e la persona non ha scelto niente. Al primo
+ * avvio della versione nuova quella configurazione diventa tutto il computer.
+ *
+ * Chi invece ha *scelto* — «Solo alcune cartelle», una cartella di lavoro sola,
+ * un disco di rete — ha `scelte`, e non gli si tocca niente: è la differenza fra
+ * aggiornare un'ipotesi e disfare una decisione.
+ *
+ * Il conto si fa qui, fuori dall'avvio, perché è l'unica riga in cui si può
+ * sbagliare: scritta dentro il giro dei conti si proverebbe accendendo un
+ * server, cioè mai. Ed è idempotente per costruzione — dopo la scrittura
+ * `tutto` è vero, quindi al secondo avvio risponde no.
+ */
+export function daAggiornare(c: ConfigDesktop | undefined): boolean {
+  if (!c) return false
+  return c.tutto !== true && !c.scelte
+}
+
 async function eProgetto(cartella: string, voci: { name: string }[]): Promise<boolean> {
   const nomi = new Set(voci.map(v => v.name))
   return SEGNI_PROGETTO.some(s => nomi.has(s))
@@ -241,6 +264,10 @@ export async function leggiUno(percorso: string, s?: Stats): Promise<Documento |
 
 export type Esito = {
   docs: Documento[]
+  /** Quanti sono già stati versati a chi li salva, e non stanno più in `docs`. */
+  versati: number
+  /** Dove versare i documenti a lotti, se chi chiama non vuole tenerli tutti in memoria. */
+  versa?: (docs: Documento[]) => Promise<void>
   saltatiProgetti: string[]
   falliti: number
   illeggibili: string[]
@@ -263,13 +290,27 @@ export type Esito = {
    * indice, quindi non riletti. Stanno anche fra i `visti`; qui si contano.
    */
   invariati: number
+  /**
+   * I file visti e lasciati fuori perché non sappiamo aprirli.
+   *
+   * Non è una statistica: è la risposta alla frase che una persona dice
+   * guardando «66 documenti» su un Mac pieno — «ma ne ho molti di più».
+   * Senza questo numero quella frase resta senza risposta e il collegamento
+   * sembra rotto; con questo numero si legge «66 documenti · 2.400 file di
+   * altri tipi lasciati fuori», che è vero ed è anche la ragione.
+   */
+  saltatiPerTipo: number
+  /** Le cartelle non aperte di proposito: gli elenchi dei salti, e i nomi col punto davanti. */
+  saltateCartelle: number
 }
 
 /** La data di modifica già in indice, per id: chi ce l'ha uguale non si rilegge. */
 export type GiaIndicizzati = Map<string, string | null | undefined>
 
 /** Quanti file questa lettura ha «consumato»: letti o saltati perché uguali, il tetto vale per tutti. */
-const letti = (e: Esito) => e.docs.length + e.invariati
+/** Quanti documenti si tengono in mano prima di versarli. */
+const LOTTO = 400
+const letti = (e: Esito) => e.docs.length + e.versati + e.invariati
 
 async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0, regole: Regole = REGOLE) {
   // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
@@ -300,17 +341,39 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
 
   for (const v of voci) {
     if (letti(fuori) >= tetto) { fuori.troncato = true; return }
-    if (v.name.startsWith('.') || regole.salta(v.name)) continue
+    if (v.name.startsWith('.') || regole.salta(v.name)) {
+      // una cartella lasciata fuori di proposito si conta: è la differenza fra
+      // «non ho guardato» e «ho guardato e ho deciso di no», e sono le due
+      // frasi che una persona vuole distinguere quando i documenti sono meno
+      // di quanti se ne aspettava
+      if (v.isDirectory()) fuori.saltateCartelle++
+      continue
+    }
     const p = join(radice, v.name)
 
     if (v.isDirectory()) {
       await cammina(p, fuori, tetto, gia, profondita + 1, regole)
       continue
     }
+    /*
+     * I link simbolici restano fuori, e resta fuori di proposito.
+     *
+     * `isFile()` è falso per un link: seguirli vorrebbe dire indicizzare due
+     * volte la stessa cosa e, con un link che punta indietro, girare in tondo
+     * finché il tetto non salva la situazione.
+     *
+     * I file «senza corpo» di iCloud — quelli con la nuvoletta, scaricati solo
+     * su richiesta — invece si comportano da file normali: `readdir` e `stat`
+     * li danno per quello che sono, e `readFile` fa scendere i byte. Costa
+     * banda e tempo, ma leggerli è quello che una persona si aspetta: non si
+     * fa niente di speciale, e questa riga esiste per dire che è una scelta.
+     */
     if (!v.isFile()) continue
 
     const ext = extname(v.name).toLowerCase()
-    if (!LETTI.includes(ext)) continue
+    // visto e lasciato fuori: un `.png`, un `.swift`, un `.zip`. Si conta,
+    // perché è la metà del computer di cui altrimenti non si dice niente
+    if (!LETTI.includes(ext)) { fuori.saltatiPerTipo++; continue }
 
     try {
       const s = await stat(p)
@@ -336,6 +399,13 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
       const d = await leggiUno(p, s)
       if (!d) { fuori.visti.push(id); continue }
       fuori.docs.push(d)
+      // a lotti: tutto il computer sono migliaia di documenti, e tenerli
+      // tutti in memoria fino alla fine della camminata è un rischio inutile
+      if (fuori.versa && fuori.docs.length >= LOTTO) {
+        const lotto = fuori.docs.splice(0, fuori.docs.length)
+        fuori.versati += lotto.length
+        await fuori.versa(lotto)
+      }
     } catch {
       fuori.falliti++
     }
@@ -365,7 +435,7 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
  * vivo, non il giro delle sei ore.
  */
 export async function leggiCartella(cartella: string, tetto = 200, tutto = false): Promise<Esito> {
-  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
+  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltateCartelle: 0 }
   await cammina(resolve(cartella), esito, tetto, undefined, 0, regoleDi(tutto))
   return esito
 }
@@ -373,16 +443,17 @@ export async function leggiCartella(cartella: string, tetto = 200, tutto = false
 export async function sincronizza(
   c: ConfigDesktop,
   avanzamento?: (fatti: number) => void,
-  gia?: GiaIndicizzati
+  gia?: GiaIndicizzati,
+  versa?: (docs: Documento[]) => Promise<void>
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0 }
+  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltateCartelle: 0 }
   const cartelle = radici(c)
   const regole = regoleDi(c.tutto)
   // il tetto è per cartella: una cartella enorme non deve affamare le altre
   const totale = c.tutto ? MAX_TOTALE_TUTTO : MAX_TOTALE
   const perCartella = Math.max(200, Math.floor(totale / Math.max(1, cartelle.length)))
   for (const cartella of cartelle) {
-    const prima = esito.docs.length
+    const prima = esito.docs.length + esito.versati
     const illeggibiliPrima = esito.illeggibili.length
     const fallitiPrima = esito.falliti
     const radice = resolve(cartella)
@@ -398,7 +469,8 @@ export async function sincronizza(
       && esito.falliti === fallitiPrima
     if (pulita) esito.complete.push(radice)
 
-    if (avanzamento) avanzamento(esito.docs.length - prima)
+    if (avanzamento) avanzamento(esito.docs.length + esito.versati - prima)
   }
+  delete esito.versa
   return esito
 }

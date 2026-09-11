@@ -84,6 +84,31 @@ test('senza modello la frase locale nomina la fonte e il conto, in una riga sola
   }
 })
 
+/*
+ * Le prove di una proposta scritta dal modello.
+ *
+ * Due fatture uguali di mittenti diversi: la forma minima di una ripetizione
+ * vera, quella che `siRipete()` deve lasciar passare. Stanno nell'indice
+ * perché le prove si riaprono lì — citarne una che non esiste fa cadere la
+ * proposta, ed è un'altra prova più sotto.
+ */
+const PROVE = ['ev-aruba', 'ev-fastweb']
+
+test('le prove citate dal modello stanno nell’indice, con mittente e giorno', async () => {
+  const store = await import('./store.ts')
+  store.salvaDocumenti([
+    {
+      id: 'ev-aruba', fonte: 'desktop', tipo: 'file', titolo: 'Supplier bill, hosting',
+      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: '2026-09-01T09:00:00.000Z'
+    },
+    {
+      id: 'ev-fastweb', fonte: 'desktop', tipo: 'file', titolo: 'Supplier bill, line',
+      corpo: 'line', autore: 'Fastweb <billing@fastweb.it>', quando: '2026-09-02T09:00:00.000Z'
+    }
+  ])
+  assert.equal(store.documento('ev-aruba')?.autore, 'Aruba S.p.A. <fatture@aruba.it>')
+})
+
 test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno', async () => {
   const discovery = await import('./scoperte.ts')
   let chiamate = 0
@@ -94,8 +119,10 @@ test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno
       return {
         automazioni: [
           {
-            nome: 'Fatture di Aruba e Fastweb',
-            spiega: 'Ogni lunedì, le fatture di Aruba dal desktop nella lista della settimana.',
+            nome: 'Le fatture dei fornitori',
+            spiega: 'Ogni lunedì, le fatture dei fornitori dal desktop nella lista della settimana.',
+            perche: 'fatture di fornitori diversi, ogni mese',
+            prove: PROVE,
             quando: { ogni: 'settimana', giorno: 2, ora: 17 },
             guarda: { cerca: 'invoice september' },
             attrezzi: ['desktop.leggi'],
@@ -104,13 +131,15 @@ test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno
           // un attrezzo che non esiste: la proposta cade, non si ripulisce a metà
           {
             nome: 'Roba inventata', spiega: 'Ogni mattina, quello che vuoi.',
-            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'x' },
+            perche: 'niente', prove: PROVE,
+            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'invoice september' },
             attrezzi: ['posta.manda'], metti: { inLista: 'oggi', modo: 'bozza' }
           },
           // uno vero ma non collegato: girerebbe ogni mattina senza trovare niente
           {
             nome: 'Posta che non c’è', spiega: 'Ogni mattina, le richieste dalla posta.',
-            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'y' },
+            perche: 'niente', prove: PROVE,
+            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'invoice september' },
             attrezzi: ['posta.leggi'], metti: { inLista: 'oggi', modo: 'bozza' }
           }
         ]
@@ -120,7 +149,7 @@ test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno
   try {
     const s = await discovery.suggerimenti(true)
     assert.equal(chiamate, 1)
-    assert.deepEqual(s.map(x => x.nome), ['Fatture di Aruba e Fastweb'])
+    assert.deepEqual(s.map(x => x.nome), ['Le fatture dei fornitori'])
     assert.deepEqual(s[0].attrezzi, ['desktop.leggi'])
     assert.deepEqual(s[0].quando, { ogni: 'settimana', giorno: 2, ora: 17 })
     idea = s[0].id
@@ -198,9 +227,11 @@ test('scarta su una vera proposta la toglie, ricorda il nome, e il modello la sa
       return {
         automazioni: [{
           nome: 'Solleciti clienti in ritardo',
-          spiega: 'Ogni mattina, le fatture scadute dal desktop nella lista di oggi.',
+          spiega: 'Ogni mattina, i preventivi senza risposta dal desktop nella lista di oggi.',
+          perche: 'preventivi aperti con clienti diversi',
+          prove: PROVE,
           quando: { ogni: 'giorno', ora: 8 },
-          guarda: { cerca: 'sollecito scaduto' },
+          guarda: { cerca: 'proposal' },
           attrezzi: ['desktop.leggi'],
           metti: { inLista: 'oggi', modo: 'bozza' }
         }]
@@ -281,4 +312,126 @@ test('senza modello, "on my Mac/PC" in inglese e "nel mio Mac/PC" in italiano', 
   } finally {
     cfg.aggiorna({ lingua: 'en' })
   }
+})
+
+/*
+ * La regola che separa una regola da un caso, e il caso vero da cui è nata.
+ *
+ * Il modello aveva proposto «i messaggi di Kyrylo sul danno alla Nissan
+ * Kicks»: sei email, una persona sola, un incidente solo, arrivati tutti nello
+ * stesso giorno. Sembrava un andamento perché il materiale glieli aveva messi
+ * in fila senza dire che venivano tutti dallo stesso filo.
+ *
+ * Da qui in giù si prova il cancello, non il prompt: le prove che cita si
+ * riaprono sull'indice, e devono reggere da sole. Il modello finto può dire
+ * quello che vuole — è esattamente il punto.
+ */
+
+const IDEE = [
+  { id: 'danno-1', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-08-20T09:00:00.000Z', titolo: 'Turo damage claim, first message' },
+  { id: 'danno-2', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-08-20T11:00:00.000Z', titolo: 'Turo damage claim, second message' },
+  { id: 'danno-3', autore: 'kyrylo@example.com', quando: '2026-08-20T15:00:00.000Z', titolo: 'Turo damage claim, third message' },
+  { id: 'danno-altro', autore: 'Anna Rossi <anna@example.com>', quando: '2026-08-20T16:00:00.000Z', titolo: 'Turo damage claim, another renter' },
+  { id: 'danno-tardi', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-09-01T09:00:00.000Z', titolo: 'Turo damage claim, twelve days later' }
+]
+
+/** Una proposta finta, con quello che serve a passare tutto il resto. */
+const proposta = (piu: Record<string, unknown>) => ({
+  nome: 'Le richieste di rimborso',
+  spiega: 'Ogni mattina, le richieste di rimborso dal desktop nella lista di oggi.',
+  perche: 'richieste di rimborso da persone diverse',
+  quando: { ogni: 'giorno', ora: 8 },
+  guarda: { cerca: 'turo damage' },
+  attrezzi: ['desktop.leggi'],
+  metti: { inLista: 'oggi', modo: 'bozza' },
+  ...piu
+})
+
+/** Un giro con un modello finto che risponde queste proposte, e basta. */
+async function conModello(automazioni: unknown[]) {
+  const discovery = await import('./scoperte.ts')
+  discovery.perProva({ collegato: () => true, chiediJSON: async () => ({ automazioni }) })
+  try { return await discovery.suggerimenti(true) } finally { discovery.perProva(null) }
+}
+
+test('sei messaggi dello stesso mittente nello stesso giorno non sono un’automazione', async () => {
+  const store = await import('./store.ts')
+  store.salvaDocumenti(IDEE.map(d => ({ ...d, fonte: 'desktop', tipo: 'file', corpo: 'nissan kicks reservation' })))
+  // la ricerca trova eccome — è l'unica cosa che il caso singolo ha da offrire
+  assert.ok(store.cerca('turo damage', 20, ['desktop']).length >= 2)
+  const s = await conModello([proposta({ prove: ['danno-1', 'danno-2', 'danno-3'] })])
+  assert.deepEqual(s, [], 'un filo solo non diventa una regola')
+})
+
+test('due mittenti diversi sì, e anche lo stesso mittente a dodici giorni di distanza', async () => {
+  const due = await conModello([proposta({ prove: ['danno-1', 'danno-altro'] })])
+  assert.deepEqual(due.map(x => x.nome), ['Le richieste di rimborso'])
+  assert.ok(due[0].quanti >= 2, 'e le prove nell’indice si contano davvero')
+
+  const lontane = await conModello([proposta({ prove: ['danno-1', 'danno-tardi'] })])
+  assert.deepEqual(lontane.map(x => x.nome), ['Le richieste di rimborso'])
+})
+
+test('le prove inventate non valgono: gli id si riaprono sull’indice', async () => {
+  const s = await conModello([
+    proposta({ prove: ['danno-mai-visto', 'nemmeno-questo'] }),
+    proposta({ nome: 'Una prova sola', prove: ['danno-1'] }),
+    proposta({ nome: 'Nessuna prova', prove: [] })
+  ])
+  assert.deepEqual(s, [])
+})
+
+test('«a ogni arrivo» chiede una prova in più: due non bastano, tre di due mittenti sì', async () => {
+  const poche = await conModello([proposta({ quando: { ogni: 'arrivo', giorno: 1, ora: 8 }, prove: ['danno-1', 'danno-altro'] })])
+  assert.deepEqual(poche, [], 'la regola che scatta a ogni messaggio costa di più')
+
+  const basta = await conModello([proposta({
+    quando: { ogni: 'arrivo', giorno: 1, ora: 8 },
+    prove: ['danno-1', 'danno-altro', 'danno-tardi']
+  })])
+  assert.deepEqual(basta.map(x => x.nome), ['Le richieste di rimborso'])
+  assert.deepEqual(basta[0].quando, { quandoArriva: true })
+})
+
+test('un numero di pratica nel nome o nella frase fa cadere la proposta', async () => {
+  const s = await conModello([
+    proposta({ nome: 'Il reclamo #48211', prove: ['danno-1', 'danno-altro'] }),
+    proposta({ nome: 'La prenotazione aperta', spiega: 'Ogni mattina, la prenotazione 1042887 dal desktop nella lista di oggi.', prove: ['danno-1', 'danno-altro'] })
+  ])
+  assert.deepEqual(s, [])
+})
+
+test('il materiale porta gli id, i mittenti e il conto per mittente', async () => {
+  const store = await import('./store.ts')
+  const discovery = await import('./scoperte.ts')
+  store.salvaDocumenti([
+    ...Array.from({ length: 3 }, (_, i) => ({
+      id: `posta-aruba-${i}`, fonte: 'posta', tipo: 'mail', titolo: `Fattura di settembre ${i}`,
+      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: `2026-09-0${i + 1}T09:00:00.000Z`
+    })),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      id: `posta-fastweb-${i}`, fonte: 'posta', tipo: 'mail', titolo: `Bolletta della linea ${i}`,
+      corpo: 'linea', autore: 'Fastweb <billing@fastweb.it>', quando: `2026-09-0${i + 5}T09:00:00.000Z`
+    })),
+    {
+      id: 'posta-uno', fonte: 'posta', tipo: 'mail', titolo: 'Una domanda sola',
+      corpo: 'domanda', autore: 'Carla Neri <carla@example.com>', quando: '2026-09-07T09:00:00.000Z'
+    }
+  ])
+  let materiale = ''
+  discovery.perProva({
+    collegato: () => true,
+    chiediJSON: async (o) => { materiale = String(o.messages[0]?.content ?? ''); return { automazioni: [] } }
+  })
+  try { await discovery.suggerimenti(true) } finally { discovery.perProva(null) }
+
+  // il conto, che è la riga che si legge per prima
+  assert.match(materiale, /posta: 6 messaggi da 3 mittenti; 3 da Aruba S\.p\.A\., 2 da Fastweb/)
+  // e ogni documento con il suo id, chi lo manda e il giorno
+  assert.match(materiale, /— \[posta-aruba-0\] \[posta\] Fattura di settembre 0 · da Aruba S\.p\.A\. · 2026-09-01/)
+  assert.match(materiale, /— \[posta-uno\] \[posta\] Una domanda sola · da Carla Neri · 2026-09-07/)
+  // i tre di Aruba stanno in fila, non sparsi: la ripetizione si deve vedere
+  const righe = materiale.split('\n').filter(r => r.startsWith('— [posta-'))
+  assert.deepEqual(righe.slice(0, 3).map(r => r.slice(3, r.indexOf(']'))).sort(),
+    ['posta-aruba-0', 'posta-aruba-1', 'posta-aruba-2'])
 })

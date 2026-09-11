@@ -933,7 +933,18 @@ app.post('/api/connettori/desktop', async (req, res) => {
   try {
     const esito = await desktop.prova({ cartelle, tutto })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    const nuovo: cfg.ConfigDesktop = tutto ? { cartelle: esito.cartelle, tutto: true } : { cartelle: esito.cartelle }
+    /*
+     * Chi sceglie le cartelle a mano lo dice qui, e lo dice per sempre.
+     *
+     * `scelte` non cambia niente nella lettura: serve all'avvio, dove le
+     * configurazioni senza `tutto` vengono portate a tutto il computer
+     * (`desktop.daAggiornare`). Senza questa riga, chi restringe di proposito
+     * a una cartella di lavoro se la ritroverebbe allargata al riavvio dopo —
+     * cioè una decisione disfatta da un aggiornamento.
+     */
+    const nuovo: cfg.ConfigDesktop = tutto
+      ? { cartelle: esito.cartelle, tutto: true }
+      : { cartelle: esito.cartelle, scelte: true }
     cfg.aggiorna({ desktop: nuovo })
     // le cartelle nuove si guardano da subito, non dal prossimo avvio
     vedetta.avvia(nuovo)
@@ -1487,7 +1498,7 @@ async function leggiTutto(
      * deve ricevere tutto — lì si rilegge per intero, come prima.
      */
     const gia = desktopRemoto.ATTIVO ? undefined : store.quandoPerPrefisso('desktop:')
-    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }), gia)
+    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }), gia, async lotto => { await store.salvaDocumentiAPezzi(lotto) })
     await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
     // silenzio non prova niente
@@ -1498,7 +1509,10 @@ async function leggiTutto(
     avvisa({
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
-      illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati
+      illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati,
+      // quello che si è visto e lasciato fuori: è la risposta a «ma ne ho molti
+      // di più», e senza di questa quella domanda resta senza risposta
+      saltatiPerTipo: e.saltatiPerTipo, saltateCartelle: e.saltateCartelle
     })
     // Verso un server ospitato, se qualcuno l'ha impostato: la stessa lettura
     // appena fatta, mandata anche là. Un guaio qui non deve fermare le altre
@@ -2064,9 +2078,10 @@ app.patch('/api/progetti/:id', (req, res) => {
     if (req.body?.[k] !== undefined) c[k] = String(req.body[k])
   }
   try {
-    // chiudere dal punto e chiudere dalla Memoria sono lo stesso gesto: la
-    // riga esce anche dal punto che la pagina sta mostrando
-    const p = c.stato === 'chiuso' ? (punto.nonEUnProgetto(req.params.id), progetti.cambia(req.params.id, c)) : progetti.cambia(req.params.id, c)
+    // chiudere dalla Memoria fa uscire la riga anche dal punto che la pagina
+    // sta mostrando; il controllo sull'origine è solo di «non è un progetto»
+    const p = progetti.cambia(req.params.id, c)
+    if (p && c.stato === 'chiuso') punto.togliDalPunto(req.params.id)
     if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
     res.json({ ok: true, progetto: p })
   } catch (e) { errore(res, e, 400) }
@@ -3322,7 +3337,50 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // La vedetta, subito e per ognuno: le cartelle del desktop si guardano dal
   // vivo, e quello che arriva passa dalla stessa strada del giro delle sei ore.
   vedetta.quandoSiCalma(dopoLArrivo)
-  perOgnuno('la vedetta non è partita', async () => vedetta.avvia(cfg.leggi().desktop))()
+  perOgnuno('la vedetta non è partita', async () => {
+    /*
+     * Prima della vedetta: il computer collegato «a tre cartelle» diventa il
+     * computer intero.
+     *
+     * Chi ha collegato questa fonte prima che «Collega il mio Mac» esistesse
+     * ha in configurazione Scrivania, Documenti e Download — e un Myynd che
+     * risponde su sessanta documenti mentre sul disco ce ne sono migliaia.
+     * Non c'è nessun meccanismo di migrazione in questo progetto, e per una
+     * cosa sola non vale la pena inventarlo: si guarda qui, una volta, e chi
+     * ha già `tutto` o ha scelto a mano (`scelte`) non viene toccato. Dopo la
+     * scrittura `tutto` è vero, quindi al prossimo avvio questo blocco non
+     * fa più niente.
+     *
+     * La rilettura parte subito ma *dopo* — dentro lo stesso giro a parte,
+     * che non è l'avvio: accendere l'app non deve voler dire aspettare che
+     * abbia finito di leggere il disco.
+     */
+    const desk = cfg.leggi().desktop
+    // ospitati non si tocca niente: là dentro `cartelle` sono i nomi che ha
+    // mandato un Myynd di casa, non percorsi di questa macchina, e
+    // `radiciTutto()` sarebbe la home del contenitore
+    if (!ospitato.OSPITATO && desktop.daAggiornare(desk)) {
+      const largo: cfg.ConfigDesktop = { ...desk, cartelle: desktop.radiciTutto(), tutto: true }
+      cfg.aggiorna({ desktop: largo })
+      console.log(`myynd · «Il mio Mac» ora legge tutto il computer per ${chi.adesso() ?? 'questo conto'}`)
+      vedetta.avvia(largo)
+      // e la rilettura di quella fonte sola, in sottofondo: allargare le
+      // cartelle senza rileggerle vorrebbe dire aspettare sei ore per vedere
+      // la differenza. Non si aspetta qui — gli altri conti hanno una vedetta
+      // da accendere — e il segnale entra nella stessa coda del giro delle sei
+      // ore, così le due letture non si pestano i piedi.
+      void (async () => {
+        const conto = chi.adesso() ?? ''
+        if (sincronizzazioniInCorso.has(conto)) return
+        sincronizzazioniInCorso.add(conto)
+        try { await leggiTutto('desktop', () => {}) }
+        catch (e) { console.error('myynd · la prima lettura di tutto il computer non è riuscita:', e instanceof Error ? e.message : e) }
+        finally { sincronizzazioniInCorso.delete(conto) }
+      })()
+      return
+    }
+    vedetta.avvia(desk)
+  })()
 
   /*
    * Il risveglio del computer, se il guscio ce lo dice.

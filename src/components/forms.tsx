@@ -627,6 +627,16 @@ export function FormDesktop({ tema, ok }: Props) {
   const [err, setErr] = useState('')
   /** Quale dei due bottoni sta lavorando: sono due azioni diverse, e «Provo…» va su una sola. */
   const [occupato, setOccupato] = useState<'tutto' | 'cartelle' | null>(null)
+  /**
+   * «Solo alcune cartelle» aperta o chiusa.
+   *
+   * Chiusa per chi collega la prima volta — è la strada di chi ha una ragione
+   * per restringere, non quella normale — e aperta per chi sta *cambiando* una
+   * scelta che era già quella: trovarla chiusa, con dentro le sue tre cartelle
+   * spuntate e sotto un bottone che dice «collega tutto il Mac», è una scheda
+   * che mente su cosa c'è adesso.
+   */
+  const [apriScelta, setApriScelta] = useState(false)
 
   // Le cartelle suggerite arrivano già scelte: erano tutte da spuntare a mano
   // prima, e sono le stesse tre volte su quattro. Toglierne una è un clic,
@@ -634,10 +644,21 @@ export function FormDesktop({ tema, ok }: Props) {
   useEffect(() => {
     api.stato().then(s => {
       setOspitato(s.ospitato)
-      setSuggeriti(s.suggerimentiDesktop)
       setAccesso(s.accessoDisco)
       setNome(s.connettori.find(c => c.id === 'desktop')?.nome ?? '')
-      setCartelle(c => (c.length ? c : s.suggerimentiDesktop))
+      /*
+       * Se il computer è già collegato questa scheda è un «Cambia», e deve
+       * partire da quello che c'è: le cartelle scelte, spuntate, con dentro
+       * anche quelle che non sono fra i suggerimenti — una cartella di lavoro,
+       * un disco di rete — o cambiare un dettaglio le farebbe sparire tutte.
+       * Con tutto il Mac non c'è niente da preselezionare: la scheda è già
+       * quella giusta.
+       */
+      const gia = s.config.desktop
+      const sue = gia && !gia.tutto ? gia.cartelle : []
+      setSuggeriti([...s.suggerimentiDesktop, ...sue.filter(c => !s.suggerimentiDesktop.includes(c))])
+      setCartelle(c => (c.length ? c : (sue.length ? sue : s.suggerimentiDesktop)))
+      if (sue.length) setApriScelta(true)
     }).catch(() => {})
   }, [])
 
@@ -713,7 +734,8 @@ export function FormDesktop({ tema, ok }: Props) {
       {/* La scelta a mano resta intera, ma chiusa: è la strada di chi ha una
           ragione per restringere — una cartella di lavoro sola, un disco di
           rete — non quella di chi apre la scheda per la prima volta. */}
-      <details style={{ marginTop: 18 }}>
+      <details style={{ marginTop: 18 }} open={apriScelta}
+        onToggle={e => setApriScelta((e.target as HTMLDetailsElement).open)}>
         <summary style={{ ...nota(tema), marginBottom: 0, cursor: 'pointer' }}>{t('Solo alcune cartelle')}</summary>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
           {suggeriti.map(c => (

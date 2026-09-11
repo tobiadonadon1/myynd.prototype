@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, rigaSincronizzazione, type Stato } from '../api'
+import { api, letturaDesktop, rigaSincronizzazione, type LetturaDesktop, type Stato } from '../api'
 import { AccessoDisco, Form } from './forms'
 import { frasi, loc, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
@@ -7,6 +7,16 @@ import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import './connessioni.css'
 
 const MOTORI = ['claude', 'compatibile']
+
+/**
+ * Le fonti che si possono cambiare senza scollegarle prima.
+ *
+ * Per il computer non è un vezzo: scollegare e ricollegare vuol dire buttare
+ * l'indice di quei documenti e rifarlo da capo, per cambiare tre cartelle. E
+ * senza un «Cambia» l'unica strada per passare da tre cartelle a tutto il Mac
+ * era proprio quella — cioè nessuna, per chi non se la sente.
+ */
+const CAMBIABILI = ['compatibile', 'desktop']
 
 /** A quiet source picker; credentials and account controls appear only after choosing. */
 export function Connessioni({ fonte, chiudi, cambiato }: {
@@ -18,6 +28,16 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
   const [avanzamento, setAvanzamento] = useState<string | null>(null)
   const [guaio, setGuaio] = useState<string | null>(null)
+  /*
+   * Come è andata l'ultima lettura del computer, finché la scheda è aperta.
+   *
+   * Il collegamento sa dire quanti documenti ha; non sa dire quanti file ha
+   * *visto e lasciato fuori*, né quante cartelle si sono chiuse in faccia — e
+   * sono le due cose che spiegano un numero più basso di quello che una
+   * persona si aspetta. Arrivano in fondo alla lettura, e restano qui: sono i
+   * conti di quel giro, non una proprietà del collegamento.
+   */
+  const [letturaDesk, setLetturaDesk] = useState<LetturaDesktop | null>(null)
   const [subito, setSubito] = useState<string[]>([])
   const [collegando, setCollegando] = useState(false)
   const finestra = useRef<HTMLDivElement>(null)
@@ -48,7 +68,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
     if (fonteInLettura) return
     setFonteInLettura(id); setAvanzamento(null); setGuaio(null)
     try {
-      await api.sincronizza(m => { if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m)) }, id)
+      await api.sincronizza(m => {
+        if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m))
+        const fine = letturaDesktop(m)
+        if (fine) setLetturaDesk(fine)
+      }, id)
       await ricarica(); cambiato()
     } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')) }
     setFonteInLettura(null); setAvanzamento(null)
@@ -128,24 +152,43 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                     scelta.id === 'desktop' && s?.config.desktop?.tutto
                       ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
                       : null,
-                    scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null
+                    scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null,
+                    // quello che c'era e non è entrato: è la riga che risponde
+                    // a «sul mio Mac ce n'è molti di più», e senza di questa
+                    // quel numero basso non ha nessuna spiegazione
+                    scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
+                      ? frasi.altriTipiFuori(letturaDesk.saltatiPerTipo)
+                      : null
                   ].filter(Boolean).join(' · ') || t(scelta.nota)
                 : t(scelta.nota)}</p>
             </div>
           </div>
           {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
           {scelta.id === 'note' && s?.accessoDisco === 'no' && <div className="connection-detail-form"><AccessoDisco tema="chiaro" /></div>}
+          {/* Il computer, dopo una lettura: le cartelle che si sono chiuse in
+              faccia sono la prova del permesso mancante, e la prova vale più
+              dell'avviso preventivo — questa riga compare quando è successo
+              davvero, con il numero di quello che è rimasto fuori. */}
+          {scelta.id === 'desktop' && !!letturaDesk?.illeggibili.length && <div className="connection-detail-form">
+            <AccessoDisco tema="chiaro"
+              testo={frasi.cartelleNonAperte(letturaDesk.illeggibili.length)}
+              coda={t('Apri Impostazioni, aggiungi Myynd, poi torna qui.')} />
+          </div>}
           {scelta.collegato && <div className="connection-detail-actions">
             {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id ? t('leggo…') : t('Rileggi')}</button>}
-            {scelta.id === 'compatibile' && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
+            {CAMBIABILI.includes(scelta.id) && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
             <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica(); cambiato() }}>{t('Scollega')}</BottoneSicuro>
           </div>}
           {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">
             <p>{t('la chiave di Claude che è già qui')}</p>
             <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
-          {(!scelta.collegato || (scelta.id === 'compatibile' && modifica)) && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
+          {(!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica)) && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
             await ricarica(); setModifica(false); cambiato()
+            // ogni volta che una fonte viene (ri)collegata si rilegge: prima
+            // succedeva solo al primo collegamento, e cambiare le cartelle del
+            // computer lasciava in piedi l'indice di quelle vecchie finché non
+            // passavano sei ore
             if (!MOTORI.includes(scelta.id)) void leggi(scelta.id)
           }} /></div>}
         </div>}

@@ -107,6 +107,9 @@ export function loc(): string {
   return corrente === 'en' ? 'en-GB' : 'it-IT'
 }
 
+/** Se una chiave ha una traduzione: serve a chi riceve dal server un messaggio che potrebbe non essere dei nostri. */
+export function tradotta(chiave: string): boolean { return chiave in EN }
+
 export function lingua(): string {
   return corrente
 }
@@ -359,6 +362,7 @@ const EN: Record<string, string> = {
   'Attività': 'Task',
   'Da pianificare': 'Unscheduled',
   'Da recuperare': 'Overdue',
+  'in ritardo dal': 'late since',
   'Data': 'Date',
   'Data non valida.': 'Invalid date.',
   'Dettagli attività': 'Task details',
@@ -1921,6 +1925,11 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  'Il punto non è arrivato: il fornitore non ha risposto.': 'The briefing did not come: the provider did not answer.',
+  'Il punto di ieri è scaduto.': 'Yesterday’s briefing has expired.',
+  'Rifallo quando vuoi: dieci secondi.': 'Redo it whenever you like: ten seconds.',
+  'Il punto non è arrivato in una forma leggibile. Riprova.': 'The briefing did not come back in a readable shape. Try again.',
+  'Questo progetto l’hai scritto tu: chiudilo dalla Memoria.': 'You wrote this project yourself: close it from Memory.',
   'Mentre non c’eri': 'While you were away',
   'Adesso': 'Now',
   'I tuoi progetti': 'Your projects',
@@ -2008,6 +2017,13 @@ const EN: Record<string, string> = {
   'attivo': 'active',
   'fermo': 'paused',
   'chiuso': 'closed',
+  'Segna come attivo': 'Mark as active',
+  'Segna come fermo': 'Mark as paused',
+  'Segna come chiuso': 'Mark as closed',
+  'Chiudo davvero?': 'Close it, really?',
+  'Riapri': 'Reopen',
+  'Un progetto senza attività resta attivo: chiudilo solo quando è finito.':
+    'A project with no task right now is still active: close it only when it is over.',
   'riconosciuto dal punto': 'recognised by the briefing',
   'Non è un progetto': 'Not a project',
   'Un progetto ha bisogno di un nome.': 'A project needs a name.',
@@ -2135,6 +2151,38 @@ export const frasi = {
   cartelleNonLette: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 folder could not be read' : `${n} folders could not be read`)
     : (n === 1 ? '1 cartella non letta' : `${n} cartelle non lette`),
+
+  /**
+   * I file visti e lasciati fuori perché non si sanno aprire.
+   *
+   * È la riga che risponde a «ma sul mio Mac ce n'è molti di più». Senza,
+   * «66 documenti» su un disco pieno si legge come un collegamento rotto;
+   * con, si legge come quello che è — duemilaquattrocento png, json e swift
+   * che non sono documenti di nessuno. Il numero è formattato nella lingua
+   * dell'app: quattromila file sono «4.000» in italiano e «4,000» in inglese.
+   */
+  altriTipiFuori: (n: number) => {
+    const q = n.toLocaleString(loc())
+    return corrente === 'en'
+      ? (n === 1 ? '1 file of another kind left out' : `${q} files of other kinds left out`)
+      : (n === 1 ? '1 file di un altro tipo lasciato fuori' : `${q} file di altri tipi lasciati fuori`)
+  },
+
+  /**
+   * Le cartelle che si sono chiuse in faccia alla lettura.
+   *
+   * Su un Mac è quasi sempre una cosa sola — l'Accesso completo al disco non
+   * dato — e dirlo insieme al numero è la differenza fra un avviso e una
+   * diagnosi. Senza punto in fondo: lo mette `AccessoDisco`, che ci attacca
+   * anche la strada per le Impostazioni.
+   */
+  cartelleNonAperte: (n: number) => corrente === 'en'
+    ? (n === 1
+      ? '1 folder did not open: Full Disk Access is needed'
+      : `${n.toLocaleString(loc())} folders did not open: Full Disk Access is needed`)
+    : (n === 1
+      ? '1 cartella non si è aperta: serve l’Accesso completo al disco'
+      : `${n.toLocaleString(loc())} cartelle non si sono aperte: serve l’Accesso completo al disco`),
 
   /**
    * L'automazione che gira e non trova mai niente.

@@ -8,6 +8,8 @@ import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { primoParagrafo, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
+import { secchioVivo } from '../oggi/secchi'
+import { giornoLocale } from '../oggi/giorni'
 import type { Compito } from '../api'
 
 // Sulla riga aperta la freccia lascia il posto al pallino di prima: mentre
@@ -125,7 +127,10 @@ const PASTIGLIA: CSSProperties = {
 /** Cosa c'è scritto accanto a «DA FARE»: cosa sta succedendo, o dove sta. */
 function didascalia(c: Compito): string {
   if (c.stato === 'delegato') return t('ci sta lavorando')
-  return t(c.quando === 'oggi' ? 'Oggi' : c.quando === 'settimana' ? 'Questa settimana' : 'Prima o poi').toLowerCase()
+  // lo scaffale che si vede è quello di oggi, non quello scritto: una cosa pianificata
+  // per un giorno passato è di oggi anche qui, come nella lista
+  const secchio = secchioVivo(c, giornoLocale())
+  return t(secchio === 'oggi' ? 'Oggi' : secchio === 'settimana' ? 'Questa settimana' : 'Prima o poi').toLowerCase()
 }
 
 /**

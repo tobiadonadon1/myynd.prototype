@@ -488,6 +488,38 @@ test('daSaltare e saltaDalNome conoscono le regole di tutto il Mac, dal nome e p
   assert.equal(await desktop.daSaltare(join(CASA, 'Progetti', 'app', 'README.md'), CASA, false, true), true, 'un progetto di codice resta un progetto')
 })
 
+test('un computer collegato prima di «tutto il Mac» si aggiorna una volta sola', () => {
+  // niente configurazione: non c'è niente da aggiornare
+  assert.equal(desktop.daAggiornare(undefined), false)
+  // il caso di Tobia: tre cartelle scelte da una scheda che non chiedeva altro
+  assert.equal(desktop.daAggiornare({ cartelle: ['/Users/x/Desktop', '/Users/x/Downloads', '/Users/x/Documents'] }), true)
+  // già tutto il computer: al secondo avvio non succede più niente — è l'idempotenza
+  assert.equal(desktop.daAggiornare({ cartelle: ['/Users/x'], tutto: true }), false)
+  // una scelta fatta a mano non si disfa: è una decisione, non un'impostazione rimasta indietro
+  assert.equal(desktop.daAggiornare({ cartelle: ['/Users/x/Lavoro'], scelte: true }), false)
+  // e l'aggiornamento tiene quello che c'era: le estensioni non le decide l'avvio
+  assert.equal(desktop.daAggiornare({ cartelle: ['/Users/x/Desktop'], estensioni: ['.md'] }), true)
+})
+
+test('quello che si è visto e lasciato fuori si conta, invece di sparire', async () => {
+  const dove = join(CASA, 'contati')
+  mkdirSync(join(dove, 'Immagini'), { recursive: true })
+  mkdirSync(join(dove, 'node_modules'), { recursive: true })
+  writeFileSync(join(dove, 'nota.md'), 'Un documento abbastanza lungo da valere qualcosa nell’indice.')
+  writeFileSync(join(dove, 'schermata.png'), 'non è un documento')
+  writeFileSync(join(dove, 'Vista.swift'), 'struct Vista {}')
+  writeFileSync(join(dove, 'Immagini', 'foto.jpeg'), 'nemmeno questa')
+  writeFileSync(join(dove, 'node_modules', 'leggimi.md'), 'roba di altri')
+
+  const e = await desktop.sincronizza({ cartelle: [dove] })
+  assert.deepEqual(e.docs.map(d => d.titolo), ['nota.md'])
+  // il png, lo swift e il jpeg: visti, aperti mai. Sono il numero che risponde
+  // a «ma sul mio Mac ce n'è molti di più»
+  assert.equal(e.saltatiPerTipo, 3)
+  // `node_modules` non si apre nemmeno: è una cartella saltata, non tre file
+  assert.equal(e.saltateCartelle, 1)
+})
+
 test('la vedetta con tutto il Mac guarda le stesse due radici', async () => {
   arredaLaCasa()
   vedetta.avvia({ cartelle: [], tutto: true })

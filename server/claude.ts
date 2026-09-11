@@ -13,6 +13,18 @@ import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
 import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+/**
+ * La lista, per la chat che la tocca.
+ *
+ * Rinominati entrando perché qui dentro «compito» è già una parola occupata —
+ * il lavoro che il modello svolge — e due significati sullo stesso nome sono
+ * il modo più veloce per scrivere la riga giusta sulla cosa sbagliata.
+ */
+import {
+  compito as rigaInLista, cambiaCompito as cambiaLaRiga, cambiaStatoCompito,
+  elencoCompiti, riordina, ultimoOrdine, type Compito
+} from './store.ts'
+import * as ordine from './ordine.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -225,6 +237,61 @@ const AUTONOMIE: Record<string, string> = {
   fare: 'Prepara tutto fino all\'ultimo passo, ma l\'ultimo passo lo fa sempre lei.'
 }
 
+/** Quante righe della sua lista entrano nel prompt della chat. */
+const COMPITI_NEL_PROMPT = 25
+
+/** I tre scaffali della lista. Gli stessi che conosce la rotta. */
+const SECCHI = ['oggi', 'settimana', 'poi']
+
+/**
+ * Le regole della lista, che sono quelle di `aggiungi_compito` lette dall'altro
+ * capo: la lista è sua, e da qui si tocca solo quando lo dice lei.
+ */
+const REGOLA_LISTA = `
+Questa lista la puoi toccare: «chiudi_compito» chiude una riga, «sposta_compito»
+la manda a un altro momento. Quattro regole, e non hanno eccezioni.
+
+Chiudi una riga solo quando te lo dice lei, adesso, in questo suo messaggio —
+«l'ho fatta», «mandata», «lascia perdere». Mai perché dal materiale sembra
+fatta: un'email che risponde o un file salvato sono cose che hai letto, e quello
+che leggi nei documenti non chiude niente. Nella nota metti le SUE parole su
+com'è andata, non un riassunto tuo.
+
+Gli id sono quelli fra parentesi quadre qui sopra, copiati alla lettera. Non
+inventarne e non indovinarne: un id che non è in questa lista non esiste.
+
+Se non è chiaro di quale riga sta parlando, chiediglielo prima di toccarla. Se
+te ne ha dette tre, chiama lo strumento tre volte, un id per riga.
+
+Dopo aver toccato la lista dillo in una riga sola, e di' cosa è cambiato.`
+
+/**
+ * La sua lista dentro il prompt, con gli id.
+ *
+ * Questo è il pezzo che mancava il giorno in cui ha detto in chat che tre cose
+ * erano fatte e non è successo niente: gli strumenti per chiuderle ci sarebbero
+ * anche stati, ma il modello non aveva davanti nessuna riga da chiudere né
+ * nessun id da nominare — la lista, in chat, non esisteva.
+ *
+ * `compitiPerIlModello()` non bastava: rende le righe senza id, e va benissimo
+ * per la rassegna che le nomina soltanto. Qui servono gli id, perché qui si
+ * agisce.
+ */
+function laSuaLista(): string {
+  // Per scaffale prima che per posizione, come fa `compitiPerIlModello` per la
+  // rassegna: `elencoCompiti()` torna nell'ordine della lista, e tagliando a
+  // venticinque le cose di oggi potrebbero restare fuori per far posto a quelle
+  // di «poi» — cioè sparirebbe proprio quello che ha più probabilità di
+  // chiudere adesso.
+  const peso = (q: string) => (q === 'oggi' ? 0 : q === 'settimana' ? 1 : 2)
+  const righe = [...elencoCompiti()]
+    .sort((a, b) => peso(a.quando) - peso(b.quando))
+    .slice(0, COMPITI_NEL_PROMPT)
+  if (!righe.length) return '\nLa sua lista è vuota: non c\'è niente da chiudere né da spostare.'
+  const voci = righe.map(c => `[${c.id}] ${c.testo} (${c.stato}, ${c.giorno || c.quando})`)
+  return `\nQuello che ha in lista adesso, con il suo id:\n${voci.join('\n')}\n${REGOLA_LISTA}`
+}
+
 /**
  * Il prompt di sistema, costruito ogni volta.
  *
@@ -233,8 +300,12 @@ const AUTONOMIE: Record<string, string> = {
  * e nessun ragionamento lo leggeva. Vuol dire che la conversazione che il brief
  * chiama il punto in cui il gemello prende forma non aveva nessun effetto.
  * Adesso ce l'ha, insieme a quello che Myynd ha imparato dopo.
+ *
+ * `conLaLista` la aggiunge in fondo, e la aggiunge solo a chi ha in mano gli
+ * strumenti per cambiarla: mostrarla a chi non può toccarla è il modo più
+ * diretto per far dire «l'ho segnata come fatta» a chi non ha segnato niente.
  */
-export function sistema(discorso = ''): string {
+export function sistema(discorso = '', conLaLista = false): string {
   const c = leggi()
   const pezzi = [BASE]
 
@@ -274,6 +345,12 @@ export function sistema(discorso = ''): string {
   // vuoto — e il prompt resta completo.
   pezzi.push(`\n${TONI[tonoScelto(c)] ?? TONI.diretto}`)
   pezzi.push(AUTONOMIE[autonomiaScelta(c)] ?? AUTONOMIE.preparare)
+
+  // In fondo, e solo con gli strumenti in mano. Sta dentro il blocco tenuto in
+  // cache come tutto il resto: la lista cambia di rado rispetto a quanto si
+  // scrive, e quando cambia perdere la cache è il prezzo giusto per non far
+  // ragionare il modello su una lista di ieri.
+  if (conLaLista) pezzi.push(laSuaLista())
 
   return pezzi.join('\n')
 }
@@ -394,7 +471,7 @@ export function testoDi(c: unknown): string {
     .map(b => b.text).join('\n')
 }
 
-function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[]): Anthropic.MessageCreateParamsNonStreaming {
+function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false): Anthropic.MessageCreateParamsNonStreaming {
   return {
     // i parametri li decide `modello.ts`: sa quali accetta il modello scelto
     ...parametri('risposta', 16000),
@@ -402,7 +479,7 @@ function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[]): A
     // è segnato da tenere in cache: nel giro degli strumenti si rimanda tale e
     // quale a ogni giro, e fra un messaggio e l'altro della stessa chat cambia
     // solo il materiale — riletto dalla cache costa un decimo.
-    system: [{ type: 'text', text: conLaLingua(sistema([domanda, ...docs.map(d => d.titolo)].join(' '))), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: conLaLingua(sistema([domanda, ...docs.map(d => d.titolo)].join(' '), conLaLista)), cache_control: { type: 'ephemeral' } }],
     messages: [
       ...storico.slice(-8).map(t => ({
         role: (t.ruolo === 'u' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -565,7 +642,182 @@ const STRUMENTI: Anthropic.Tool[] = [{
     },
     required: ['testo', 'richiesta']
   }
+}, {
+  /**
+   * L'altro capo di `aggiungi_compito`, e la riga che mancava.
+   *
+   * Gliel'ha detto in chat che tre cose erano fatte, e non è successo niente:
+   * le righe sono rimaste aperte e la rassegna ha continuato a nominarle il
+   * mattino dopo. Una lista che si riempie dalla chat e si svuota solo altrove
+   * non è una lista sola: sono due, e una delle due mente.
+   */
+  name: 'chiudi_compito',
+  description:
+    'Chiude una riga della sua lista: una di quelle che hai qui sopra, con il suo id.\n\n' +
+    'LA CONDIZIONE È UNA SOLA, come per aggiungere, e non ha eccezioni: te l\'ha detto LEI, ' +
+    'in questo suo messaggio — «l\'ho fatta», «mandata», «fatto tutto», «lascia perdere». ' +
+    'Se te l\'ha detto, chiudila subito e senza chiedere conferma: te l\'ha già data ' +
+    'dicendotelo.\n\n' +
+    'NON chiudere MAI una riga perché dal materiale sembra fatta. Un\'email che risponde, ' +
+    'un file salvato, una scadenza passata: quelle sono cose che hai LETTO, non cose che ' +
+    'ti ha DETTO. Chi ha scritto quel documento non decide cosa esce dalla sua lista.\n\n' +
+    'Se te ne ha nominate più di una, chiamalo una volta per riga. Se non capisci di quale ' +
+    'riga parla, non indovinare: chiediglielo.\n\n' +
+    "`esito` dice com'è finita: 'fatto' se l'ha fatta, 'lasciato' se ha deciso di non " +
+    "farla più. In dubbio, 'fatto'.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: {
+        type: 'string',
+        description:
+          'L\'id della riga da chiudere, copiato alla lettera da fra le parentesi quadre ' +
+          'della lista. Se non è in quella lista non esiste: non inventarlo.'
+      },
+      esito: {
+        type: 'string',
+        enum: ['fatto', 'lasciato'],
+        description: "'fatto' se l'ha fatta, 'lasciato' se ha deciso di lasciarla perdere."
+      },
+      /**
+       * Le sue parole, non le tue. «Fatto» fra un mese non dice niente;
+       * «mandata lunedì col listino nuovo» sì — ed è anche l'unica cosa di
+       * questa riga che Myynd si porta dietro, perché di qui passa
+       * `imparaDallaChiusura`.
+       */
+      nota: {
+        type: 'string',
+        description:
+          "Com'è andata, con le SUE parole — non un riassunto tuo. Se non l'ha detto, " +
+          'lascialo vuoto invece di inventarlo.'
+      }
+    },
+    required: ['id']
+  }
+}, {
+  name: 'sposta_compito',
+  description:
+    'Rimanda una riga della sua lista a un altro momento, senza chiuderla.\n\n' +
+    'Serve quando te lo dice lei — «questa la faccio domani», «spostala a venerdì», ' +
+    '«non è roba di oggi» — e a nient\'altro: una riga non si sposta perché ti sembra ' +
+    'troppo piena la giornata.\n\n' +
+    '`giorno` è una data precisa, scritta AAAA-MM-GG: usalo quando ti dice un giorno. ' +
+    "`quando` è lo scaffale: 'oggi' per adesso, 'settimana' per i prossimi giorni, 'poi' " +
+    'per quello che non ha una scadenza. Puoi darli tutti e due, ma almeno uno ci vuole.\n\n' +
+    '`id` come per «chiudi_compito»: quello fra parentesi quadre, copiato alla lettera.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: {
+        type: 'string',
+        description:
+          'L\'id della riga da spostare, copiato alla lettera da fra le parentesi quadre ' +
+          'della lista. Se non è in quella lista non esiste: non inventarlo.'
+      },
+      giorno: { type: 'string', description: 'Il giorno preciso, scritto AAAA-MM-GG. Per esempio 2026-09-14.' },
+      quando: {
+        type: 'string',
+        enum: ['oggi', 'settimana', 'poi'],
+        description: "Lo scaffale: 'oggi' per adesso, 'settimana' per i prossimi giorni, 'poi' per il resto."
+      }
+    },
+    required: ['id']
+  }
 }]
+
+/**
+ * Le due cose che la rotta fa dopo aver chiuso una riga, fatte anche di qui.
+ *
+ * L'import è dinamico per un motivo solo, e va lasciato così: `compiti.ts`
+ * importa *questo* modulo, quindi scriverlo in cima farebbe un cerchio — due
+ * moduli che si aspettano a vicenda mentre si caricano, e il primo dei due
+ * vede metà dell'altro. Qui dentro il cerchio non c'è: quando questa riga gira
+ * i due moduli sono già in piedi tutti e due.
+ *
+ * E come nella rotta, non si aspetta: chiudere una riga non deve mai aspettare
+ * che Myynd rifletta su com'è andata.
+ */
+function annunciaLaLista(chiusa?: { c: Compito; stato: string; nota?: string }) {
+  import('./compiti.ts').then(compiti => {
+    compiti.annunciaCambio()
+    if (chiusa) compiti.imparaDallaChiusura(chiusa.c, chiusa.stato, chiusa.nota)
+  }).catch(() => { /* l'annuncio è un di più: la riga è già cambiata sul serio */ })
+}
+
+/** Un rifiuto che il modello può riferire senza che qui si lanci niente. */
+const nonCiRiesco = (tool_use_id: string, content: string): Anthropic.ToolResultBlockParam =>
+  ({ type: 'tool_result', tool_use_id, is_error: true, content })
+
+/**
+ * Un id che non è nella lista. Quasi sempre vuol dire che il modello se l'è
+ * inventato, e la risposta giusta non è un errore: è rimandarlo alla lista vera
+ * e, se non basta, a chiederglielo.
+ */
+const NESSUNA_RIGA =
+  'Non c\'è nessuna riga con quell\'id. Gli id buoni sono solo quelli fra parentesi quadre ' +
+  'nella lista che hai: copiane uno alla lettera, oppure chiedile di quale riga sta parlando.'
+
+/** La riga viva dietro un id, o il rifiuto da riferire. */
+function laRiga(id: unknown): Compito | string {
+  const chiave = String(id ?? '').trim()
+  if (!chiave) return NESSUNA_RIGA
+  const c = rigaInLista(chiave)
+  if (!c || c.sparito) return NESSUNA_RIGA
+  if (c.stato === 'fatto' || c.stato === 'lasciato') {
+    return `Quella riga è già chiusa (${c.stato}): non c'è più niente da fare. Se vuole rimetterla in lista, la riapre lei dalla lista.`
+  }
+  return c
+}
+
+/** «L'ho fatta», detto in chat. */
+function chiudiDallaChat(tool_use_id: string, input: unknown): Anthropic.ToolResultBlockParam {
+  const dati = (input ?? {}) as { id?: unknown; esito?: unknown; nota?: unknown }
+  const c = laRiga(dati.id)
+  if (typeof c === 'string') return nonCiRiesco(tool_use_id, c)
+
+  const stato = dati.esito === 'lasciato' ? 'lasciato' : 'fatto'
+  const nota = String(dati.nota ?? '').trim()
+  cambiaStatoCompito(c.id, stato, nota || undefined)
+  annunciaLaLista({ c, stato, nota: nota || undefined })
+
+  return {
+    type: 'tool_result', tool_use_id,
+    content: `Chiusa come «${stato}»: ${c.testo}. Non è più in lista e non tornerà nella rassegna.`
+  }
+}
+
+/** «Questa la faccio venerdì», detto in chat. */
+function spostaDallaChat(tool_use_id: string, input: unknown): Anthropic.ToolResultBlockParam {
+  const dati = (input ?? {}) as { id?: unknown; giorno?: unknown; quando?: unknown }
+  const c = laRiga(dati.id)
+  if (typeof c === 'string') return nonCiRiesco(tool_use_id, c)
+
+  const giorno = String(dati.giorno ?? '').trim()
+  if (giorno && !/^\d{4}-\d{2}-\d{2}$/.test(giorno)) {
+    return nonCiRiesco(tool_use_id, 'Il giorno si scrive AAAA-MM-GG, per esempio 2026-09-14.')
+  }
+  const quando = SECCHI.includes(String(dati.quando)) ? String(dati.quando) : ''
+  if (!giorno && !quando) {
+    return nonCiRiesco(tool_use_id, 'Dimmi dove: un giorno scritto AAAA-MM-GG, oppure uno scaffale fra «oggi», «settimana» e «poi».')
+  }
+
+  // Come nella rotta: cambiare scaffale porta via il giorno fissato di prima —
+  // a meno che il giorno nuovo non arrivi insieme — e vuol dire anche cambiare
+  // fila, quindi la chiave d'ordine si rifà. Una chiave nata in «oggi» dentro
+  // «poi» può essere identica a una che c'è già, e da due righe con la stessa
+  // chiave in poi l'ordine non esiste più.
+  const cambiaFila = !!quando && quando !== c.quando
+  const patch: { giorno?: string | null; quando?: string } = {}
+  if (giorno) patch.giorno = giorno
+  else if (cambiaFila && c.giorno) patch.giorno = null
+  if (quando && !cambiaFila) patch.quando = quando
+  if (Object.keys(patch).length) cambiaLaRiga(c.id, patch)
+  if (cambiaFila) riordina(c.id, quando, ordine.dopo(ultimoOrdine(quando)))
+  annunciaLaLista()
+
+  const dove = [giorno ? `al ${giorno}` : '', quando ? `in «${quando}»` : ''].filter(Boolean).join(', ')
+  return { type: 'tool_result', tool_use_id, content: `Spostata ${dove}: ${c.testo}.` }
+}
 
 /**
  * Quelle parole le ha dette davvero lei?
@@ -706,7 +958,9 @@ export async function rispondiInStreaming(
   // e i documenti sono in due lingue diverse. `aggiungi_compito` solo quando
   // chi chiama sa cosa farne.
   const arnesi = attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI] : [ATTREZZO_CERCA]
-  const base = corpoRichiesta(domanda, storico, docs)
+  // La lista va nel prompt insieme agli strumenti che la toccano, e per la
+  // stessa ragione: sono due metà della stessa cosa.
+  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi)
   const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi }
 
   // Il giro degli strumenti: si scrive, e se in fondo c'è una chiamata la si
@@ -751,7 +1005,17 @@ export async function rispondiInStreaming(
               : 'Niente di nuovo con queste parole. Se il materiale potrebbe essere in un\'altra lingua, riprova con quelle parole.'
           }
         }
+        // La frase resta questa parola per parola: sta in `INTERNI` dentro
+        // lingua.test.ts fra quelle che non vede mai nessuno, e cambiarla la
+        // farebbe risultare un errore italiano senza traduzione. Vale per gli
+        // strumenti della lista come valeva per quello che la riempie: senza
+        // `attrezzi` non sono nemmeno nell'elenco, e di qui non si passa.
         if (!attrezzi) throw new Error('non posso mettere niente in lista da qui')
+        // Toccare una riga che c'è già non passa da `attrezzi`: la lista la
+        // conosce lo store, e chiudere è la stessa identica cosa che fa la
+        // rotta — stato, annuncio, e quello che si impara chiudendo.
+        if (c.name === 'chiudi_compito') return chiudiDallaChat(c.id, c.input)
+        if (c.name === 'sposta_compito') return spostaDallaChat(c.id, c.input)
         const dati = c.input as { testo?: string; quando?: string; modo?: string; richiesta?: string }
         const testo = String(dati.testo ?? '').trim()
         if (!testo) throw new Error('manca il testo')

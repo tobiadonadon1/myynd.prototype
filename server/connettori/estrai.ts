@@ -23,10 +23,35 @@
 import { extname } from 'node:path'
 import { riflua } from '../testo.ts'
 
-/** Quello che è un documento per una persona, non per un compilatore. */
-export const TESTO = ['.md', '.markdown', '.txt', '.rtf', '.csv', '.org', '.tex']
-export const RICCHI = ['.pdf', '.docx']
+/**
+ * Quello che è un documento per una persona, non per un compilatore.
+ *
+ * **Quello che resta fuori, e perché.** `.doc` (il Word di prima del 2007) è
+ * un formato binario chiuso: aprirlo vuol dire un pacchetto in più che
+ * sbaglia spesso, per dei file che quasi nessuno ha più. `.pages`,
+ * `.numbers` e `.key` sono cartelle zippate il cui contenuto vero è un
+ * archivio binario di Apple (IWA, protobuf compresso): dentro non c'è nessun
+ * XML da leggere, solo un'anteprima PDF che non è il documento. Le immagini —
+ * `.png`, `.jpg`, gli screenshot, le scansioni — non hanno testo senza un
+ * riconoscimento ottico, che è un altro mestiere e un'altra spesa. E il
+ * codice resta fuori di proposito: `cammina` salta già i progetti interi, e
+ * indicizzare `.ts` e `.swift` riempirebbe la mente di roba che non è mai
+ * stata scritta per essere riletta da una persona.
+ */
+export const TESTO = ['.md', '.markdown', '.txt', '.rtf', '.csv', '.org', '.tex', '.html', '.htm']
+/** Quelli che costano ad aprirsi: vanno nel filo a parte. */
+export const RICCHI = ['.pdf', '.docx', '.xlsx', '.pptx']
 export const LETTI = [...RICCHI, ...TESTO]
+
+/**
+ * Il tetto del testo che si tira fuori da un file solo.
+ *
+ * Chi indicizza taglia comunque a ventimila caratteri, ma il taglio arriva
+ * *dopo*: un foglio di calcolo con centomila righe costruirebbe una stringa
+ * da decine di mega per poi buttarne il 99%. Qui ci si ferma prima, mentre si
+ * legge.
+ */
+export const MAX_TESTO = 200_000
 
 /** Il file è di quelli che sappiamo leggere? */
 export function leggibile(nome: string): boolean {
@@ -64,7 +89,247 @@ export async function quiDentro(buf: Buffer, nome: string): Promise<string> {
     return riflua((r.value || '').trim())
   }
 
-  return riflua(buf.toString('utf8').trim())
+  if (ext === '.xlsx') return (await daXlsx(buf)).trim()
+  if (ext === '.pptx') return (await daPptx(buf)).trim()
+
+  const grezzo = buf.toString('utf8')
+  if (ext === '.html' || ext === '.htm') return daHtml(grezzo)
+  if (ext === '.rtf') return daRtf(grezzo)
+
+  return riflua(grezzo.trim())
+}
+
+// — i formati che sono un archivio con dentro dell'XML —
+//
+// `.xlsx` e `.pptx` sono cartelle zippate piene di XML. Non serve una libreria
+// che li «capisca»: serve aprire lo zip e tirare fuori il testo dai nodi
+// giusti. Quello che si legge è quello che una persona ha scritto — le celle
+// di un preventivo, le righe di una slide — e basta: niente formule, niente
+// formati, niente note del relatore. `jszip` c'era già (lo porta `mammoth`
+// per i `.docx`), e adesso è dichiarato anche qui perché lo si usa davvero.
+
+/** Le entità XML che compaiono davvero dentro un `<t>`. `&amp;` per ultima, o si decodifica due volte. */
+function entitaXml(s: string): string {
+  return s
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, '&')
+}
+
+/** Il testo di tutti i `<t>` dentro un pezzo di XML, in fila. */
+function nodiT(xml: string, tag = 't'): string {
+  const fuori: string[] = []
+  const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'g')
+  for (const m of xml.matchAll(re)) fuori.push(entitaXml(m[1] ?? ''))
+  return fuori.join('')
+}
+
+/** I file di un archivio che stanno in una serie numerata — `slide1`, `slide2`, `slide10` — nel loro ordine. */
+function inOrdine(nomi: string[]): string[] {
+  const n = (s: string) => Number(s.match(/(\d+)\.xml$/)?.[1] ?? 0)
+  return [...nomi].sort((a, b) => n(a) - n(b))
+}
+
+/**
+ * Un foglio di calcolo: le celle, riga per riga.
+ *
+ * Le parole di un `.xlsx` quasi non stanno nei fogli: stanno tutte in un
+ * elenco unico — `xl/sharedStrings.xml` — e nella cella c'è solo il numero
+ * d'ordine (`t="s"`). Chi legge solo i fogli trova una tabella di indici, che
+ * è il modo di indicizzare un preventivo senza una sola parola dentro.
+ * L'eccezione sono le celle scritte «in linea» (`<is><t>`), che certi
+ * esportatori producono al posto dell'elenco condiviso: ci sono tutte e due,
+ * o metà dei file esportati da un gestionale resta vuota.
+ */
+async function daXlsx(buf: Buffer): Promise<string> {
+  const { default: JSZip } = await import('jszip')
+  const zip = await JSZip.loadAsync(buf)
+
+  const condivise: string[] = []
+  const ss = zip.file('xl/sharedStrings.xml')
+  if (ss) {
+    const xml = await ss.async('string')
+    let peso = 0
+    for (const m of xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)) {
+      // un'esportazione da mezzo milione di righe mette tutto il testo qui: oltre il tetto non si legge più
+      if (peso >= MAX_TESTO) break
+      const t = nodiT(m[1] ?? ''); peso += t.length; condivise.push(t)
+    }
+  }
+
+  const fogli = inOrdine(zip.file(/^xl\/worksheets\/sheet\d+\.xml$/).map(f => f.name))
+  const righe: string[] = []
+  let quanto = 0
+  for (const nome of fogli) {
+    const xml = await zip.file(nome)!.async('string')
+    for (const r of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      const celle: string[] = []
+      for (const c of (r[1] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const attributi = c[1] ?? ''
+        const dentro = c[2] ?? ''
+        let testo = ''
+        if (/\bt="s"/.test(attributi)) {
+          const i = Number(dentro.match(/<v>(\d+)<\/v>/)?.[1] ?? -1)
+          testo = condivise[i] ?? ''
+        } else if (dentro.includes('<is>')) {
+          testo = nodiT(dentro)
+        } else {
+          testo = entitaXml(dentro.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? '')
+        }
+        testo = testo.replace(/\s+/g, ' ').trim()
+        if (testo) celle.push(testo)
+      }
+      if (!celle.length) continue
+      const riga = celle.join(' ')
+      righe.push(riga)
+      quanto += riga.length + 1
+      if (quanto >= MAX_TESTO) return righe.join('\n').slice(0, MAX_TESTO)
+    }
+  }
+  return righe.join('\n')
+}
+
+/**
+ * Una presentazione: il testo delle slide, una per riga.
+ *
+ * Una slide sola è già un paragrafo — un titolo e tre punti elenco — e tenerla
+ * insieme è quello che la rende ritrovabile: cercando due parole che stanno
+ * sulla stessa slide si vuole quella slide, non il file. L'ordine è quello dei
+ * numeri e non quello alfabetico, o `slide10` finisce fra `slide1` e `slide2`.
+ * Le note del relatore stanno altrove (`notesSlide*.xml`) e restano fuori: non
+ * sono quello che è stato detto, sono quello che uno si era scritto.
+ */
+async function daPptx(buf: Buffer): Promise<string> {
+  const { default: JSZip } = await import('jszip')
+  const zip = await JSZip.loadAsync(buf)
+  const slide = inOrdine(zip.file(/^ppt\/slides\/slide\d+\.xml$/).map(f => f.name))
+  const fuori: string[] = []
+  let quanto = 0
+  for (const nome of slide) {
+    const xml = await zip.file(nome)!.async('string')
+    const pezzi: string[] = []
+    for (const m of xml.matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>/g)) {
+      const t = entitaXml(m[1] ?? '').replace(/\s+/g, ' ').trim()
+      if (t) pezzi.push(t)
+    }
+    if (!pezzi.length) continue
+    const riga = pezzi.join(' ')
+    fuori.push(riga)
+    quanto += riga.length + 1
+    if (quanto >= MAX_TESTO) break
+  }
+  return fuori.join('\n').slice(0, MAX_TESTO)
+}
+
+// — i due formati che sono testo con dentro delle istruzioni —
+
+/** Le entità che compaiono davvero in una pagina. `&amp;` per ultima, come sopra. */
+function entitaHtml(s: string): string {
+  return s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+/** Spazi e a capo rimessi in ordine: uno spazio, e mai più di una riga vuota. */
+function ricomponi(s: string): string {
+  return s
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Una pagina salvata: il testo che si legge, non il codice che la disegna.
+ *
+ * Un `.html` indicizzato com'è sono novantanove parti di `class=` e di
+ * JavaScript e una di testo — cioè una ricerca che trova `flex` e `onclick`
+ * in ogni documento. Script e fogli di stile si buttano *interi*, con dentro,
+ * perché il loro contenuto non è testo: è codice fra due tag.
+ *
+ * Il `<title>` va in testa e non nel titolo del documento, perché il titolo
+ * qui è il nome del file e lo decide chi indicizza (`leggiUno`): questa
+ * funzione sa solo tornare del testo. Prima riga e poi una riga vuota è il
+ * modo per cui si legge come un titolo comunque — e, soprattutto, si cerca.
+ */
+export function daHtml(html: string): string {
+  const titolo = ricomponi(entitaHtml((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '')))
+  const corpo = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>|<\/li>|<\/h[1-6]>|<\/blockquote>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+  const testo = ricomponi(entitaHtml(corpo))
+  return titolo ? `${titolo}\n\n${testo}`.trim() : testo
+}
+
+/**
+ * Un `.rtf`: le parole, senza le istruzioni.
+ *
+ * Un RTF è testo semplice con dentro delle parole di comando — `\b`,
+ * `\fs24`, `\par` — e dei gruppi fra graffe. Indicizzarlo com'è vuol dire
+ * mettere nella mente la tabella dei caratteri di TextEdit e i nomi dei font.
+ * Non si scrive un lettore di RTF: si buttano i gruppi che per definizione non
+ * contengono testo (`\fonttbl`, `\colortbl`, `\*\…`), si traducono gli
+ * accenti — che in RTF sono `\'e8` — e si tolgono le parole di comando. I
+ * comandi che *sono* un a capo diventano un a capo, o il documento intero
+ * arriva come una riga sola.
+ */
+export function daRtf(rtf: string): string {
+  // TextEdit chiude le righe con una barra rovescia e un a capo, che in RTF
+  // vuol dire «paragrafo»: senza tradurlo qui, quella barra resta attaccata
+  // alla parola dopo — «Marta\Preventivo» — e le due righe diventano una
+  const senzaTabelle = togliIGruppiMuti(rtf).replace(/\\\r?\n/g, '\\par ')
+  const testo = senzaTabelle.replace(
+    /\\u(-?\d+)\s?\??|\\'([0-9a-fA-F]{2})|\\([\\{}])|\\([a-zA-Z]+)(-?\d+)?[ ]?|[{}]|[\r\n]+/g,
+    (_, unicode, esa, letterale, parola) => {
+      if (unicode !== undefined) return String.fromCharCode(Number(unicode) & 0xffff)
+      if (esa !== undefined) return String.fromCharCode(parseInt(esa, 16))
+      if (letterale !== undefined) return letterale
+      if (parola !== undefined) {
+        if (/^(?:par|line|sect|page|pard)$/.test(parola)) return '\n'
+        if (parola === 'tab') return '\t'
+        if (/^(?:cell|row|nestcell|nestrow)$/.test(parola)) return ' '
+        return ''
+      }
+      // una graffa rimasta, o gli a capo veri del file: in RTF non vogliono dire niente
+      return ''
+    }
+  )
+  return ricomponi(testo)
+}
+
+/**
+ * I gruppi di un RTF che non contengono testo da leggere.
+ *
+ * `{\fonttbl…}` è l'elenco dei font, `{\colortbl…}` i colori, `{\*\…}` per
+ * definizione una destinazione che un lettore che non la conosce deve
+ * ignorare. Togliendo solo le parole di comando resterebbero i loro contenuti
+ * — «Helvetica;Times New Roman;» — in cima a ogni documento.
+ */
+function togliIGruppiMuti(rtf: string): string {
+  const MUTI = /^\\(?:\*|fonttbl|colortbl|stylesheet|info|pict|object|themedata|colorschememapping|latentstyles|datastore|listtable|listoverridetable|rsidtbl|xmlnstbl|filetbl|generator|expandedcolortbl)\b/
+  let fuori = ''
+  for (let i = 0; i < rtf.length; i++) {
+    if (rtf[i] !== '{') { fuori += rtf[i]; continue }
+    if (!MUTI.test(rtf.slice(i + 1, i + 40))) { fuori += rtf[i]; continue }
+    // fino alla graffa che chiude questo gruppo, contando quelle dentro
+    let livello = 0
+    let j = i
+    for (; j < rtf.length; j++) {
+      const c = rtf[j]
+      if (rtf[j - 1] === '\\') continue
+      if (c === '{') livello++
+      else if (c === '}') { livello--; if (!livello) break }
+    }
+    i = j
+  }
+  return fuori
 }
 
 // — il filo a parte —
@@ -363,7 +628,9 @@ export function chiudiIlFilo() {
 export function tipoDi(nome: string): string {
   const ext = extname(nome).toLowerCase()
   if (ext === '.pdf') return 'pdf'
-  if (ext === '.docx') return 'documento'
-  if (ext === '.csv') return 'tabella'
+  if (ext === '.docx' || ext === '.rtf') return 'documento'
+  if (ext === '.csv' || ext === '.xlsx') return 'tabella'
+  if (ext === '.pptx') return 'presentazione'
+  if (ext === '.html' || ext === '.htm') return 'pagina'
   return 'file'
 }

@@ -535,7 +535,22 @@ export type ConfigPosta = {
  * attrezzi) continua a funzionare senza sapere della differenza. `tutto`
  * cambia solo i tetti e le cartelle da saltare.
  */
-export type ConfigDesktop = { cartelle: string[]; estensioni?: string[]; tutto?: boolean }
+export type ConfigDesktop = {
+  cartelle: string[]
+  estensioni?: string[]
+  tutto?: boolean
+  /**
+   * Le cartelle le ha scelte una persona, a mano.
+   *
+   * Serve a una cosa sola, e non è un'impostazione: distinguere «ho deciso di
+   * leggere solo queste tre» da «avevo collegato il computer quando collegare
+   * il computer voleva dire tre cartelle». Le prime non si toccano; le
+   * seconde diventano tutto il computer al primo avvio (vedi `daAggiornare`
+   * in `connettori/desktop.ts`). Chi preme «Solo alcune cartelle» se la
+   * trova scritta, e da lì in poi la sua scelta è sua.
+   */
+  scelte?: boolean
+}
 /**
  * Le Note di Apple: come Granola, un collegamento senza niente dentro.
  * Il file sta sempre nello stesso posto; resta scritto solo che c'è, e quante

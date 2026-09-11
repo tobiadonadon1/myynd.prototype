@@ -449,6 +449,16 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   // la posta che c'era già e non è stata riscaricata: è quello che rende la rilettura leggera
   if (Number(m.giaLetti)) parti.push(`${Number(m.giaLetti)} ${en ? 'already read' : 'già letti'}`)
   if (Number(m.saltati)) parti.push(`${Number(m.saltati)} ${en ? 'code projects skipped' : 'progetti saltati'}`)
+  /*
+   * Quello che c'era e non è entrato.
+   *
+   * «66 documenti» su un Mac con dentro dieci anni di lavoro è una riga che
+   * sembra un guasto, e non lo è: sono duemilaquattrocento png, json e swift
+   * lasciati fuori apposta. Finché quel numero non si diceva, la sola cosa
+   * che una persona poteva concludere era che Myynd non stesse leggendo il
+   * suo computer.
+   */
+  if (Number(m.saltatiPerTipo)) parti.push(frasi.altriTipiFuori(Number(m.saltatiPerTipo)))
   if (Number(m.falliti)) parti.push(`${Number(m.falliti)} ${en ? 'unreadable' : 'illeggibili'}`)
   if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)
   // le pagine di Notion che non sono cambiate e non si sono riscaricate
@@ -495,6 +505,36 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   return `${fonte} · ${parti.join(' · ')}`
 }
 
+
+/**
+ * Quello che la lettura del computer ha detto di sé.
+ *
+ * Non sta in `/api/stato` e non ci deve stare: sono i conti di *quella*
+ * lettura, non una proprietà del collegamento — e metterli in configurazione
+ * vorrebbe dire scrivere su disco un numero che cambia a ogni giro. Vivono
+ * quanto la scheda aperta: chi rilegge li vede, chi non rilegge vede la riga
+ * di prima.
+ */
+export type LetturaDesktop = {
+  documenti: number
+  /** I file visti e lasciati fuori perché non sappiamo aprirli: png, zip, codice. */
+  saltatiPerTipo: number
+  /** Le cartelle non aperte di proposito: gli elenchi dei salti, e i nomi col punto davanti. */
+  saltateCartelle: number
+  /** Le cartelle che *volevamo* aprire e non ci hanno lasciato: quasi sempre un permesso. */
+  illeggibili: string[]
+}
+
+/** Il riassunto finale della lettura del computer, o `null` se questo messaggio è un altro. */
+export function letturaDesktop(m: Record<string, unknown>): LetturaDesktop | null {
+  if (m.fase !== 'desktop' || m.stato !== 'fatto') return null
+  return {
+    documenti: Number(m.documenti ?? 0),
+    saltatiPerTipo: Number(m.saltatiPerTipo ?? 0),
+    saltateCartelle: Number(m.saltateCartelle ?? 0),
+    illeggibili: (m.illeggibili as string[] | undefined) ?? []
+  }
+}
 
 /**
  * Una cosa che Myynd si offre di fare, in attesa di un dito.
@@ -1499,8 +1539,16 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
  * sono le idee che ha già fatto sue, e non si ripropongono.
  */
 export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
-/** `id` è la riga nella tabella dei progetti: «non è un progetto» la chiude da lì. */
-export type ProgettoPunto = { id: string; nome: string; obiettivo: string; dal: string; doveSei: string; angolo: string; angoliTenuti: string[] }
+/**
+ * `id` è la riga nella tabella dei progetti: «non è un progetto» la chiude da lì.
+ *
+ * `proposto` è vero solo per quelli che il punto ha tirato fuori dal materiale
+ * e lui non ha ancora confermato: uno che ha scritto lui non si chiude da qui.
+ */
+export type ProgettoPunto = {
+  id: string; nome: string; obiettivo: string; dal: string
+  doveSei: string; angolo: string; angoliTenuti: string[]; proposto: boolean
+}
 export type AvvioPunto = { frase: string; perche: string }
 export type Punto = {
   quando: string
@@ -1513,8 +1561,21 @@ export type Punto = {
   /** Automazioni da accendere con un dito. */
   avvii: AvvioPunto[]
 }
-/** `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito. */
-export type EsitoPunto = { punto: Punto | null; generatoAdesso: boolean; tetto: boolean }
+/**
+ * `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito.
+ *
+ * `vecchio` è la data dell'ultimo punto quando è di un giorno prima: allora
+ * `punto` è nullo — quello di ieri non è «il punto di oggi» — e la pagina
+ * offre di rifarlo. `guaio` è il motivo per cui non è arrivato, in italiano,
+ * da passare da `t()` come ogni altro errore del server.
+ */
+export type EsitoPunto = {
+  punto: Punto | null
+  generatoAdesso: boolean
+  tetto: boolean
+  vecchio?: string | null
+  guaio?: string
+}
 
 /**
  * Un progetto: su cosa sta lavorando, e a cosa punta.
