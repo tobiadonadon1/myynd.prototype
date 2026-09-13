@@ -443,7 +443,9 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           È una carta come le due qui sopra — titolo, una riga, un bottone — e
           non più un rigo scritto piccolo: aprendola si apre il foglio da
           leggere. Il vestito ce l'ha dentro, in `components/Punto.tsx`. */}
-      <Punto v={v} lista={lista} apriCompito={id => setInCima(id)} />
+      {/* Una riga del punto porta alla lista, non in cima a questa pagina: la
+          mossa è una riga della lista, e si apre dove sta. */}
+      <Punto v={v} lista={lista} />
 
       {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} />}
 

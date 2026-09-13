@@ -140,18 +140,30 @@ function Voce({ r, apriCompito, apriDoc }: {
   )
 }
 
-function Finestra({ v, lista, apriCompito, p }: {
-  v: Vals; lista?: Lista; apriCompito: (id: string) => void; p: ReturnType<typeof usePunto>
+function Finestra({ v, lista, p }: {
+  v: Vals; lista?: Lista; p: ReturnType<typeof usePunto>
 }) {
   const finestra = useRef<HTMLDivElement>(null)
   useFocoDialogo(finestra, p.nascondi)
   const punto = p.punto!
 
-  // una riga chiusa nel frattempo non sta più sulla prima pagina: si va alla lista
+  /*
+   * Una mossa si apre dove vive, cioè in lista.
+   *
+   * Prima la portava in cima alla prima pagina, che è il posto dove Myynd
+   * mette quello che propone lui: una riga della lista finiva a fare
+   * l'annuncio di sé stessa, e quello che gli serviva — le domande da
+   * rispondere, la bozza da approvare — restava un clic più in là. Adesso si
+   * va in «Da fare» con quella riga già aperta: la lista è la stessa delle due
+   * schermate, quindi aprirla qui vuol dire trovarla aperta là. Una riga
+   * chiusa nel frattempo non si apre più: si va in lista e basta.
+   */
   const apriRiga = (id: string) => {
     p.nascondi()
-    if (lista?.compiti.some(c => c.id === id)) apriCompito(id)
-    else v.goOggi()
+    if (!lista?.compiti.some(c => c.id === id)) return v.goOggi()
+    // la riga si apre nel suo dettaglio, non solo si allarga in lista: «apri quella cosa» vuol dire questo
+    lista.chiediDiAprire(id)
+    v.goOggi()
   }
   const apriDoc = (id: string) => { p.nascondi(); v.apriFonte(id) }
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
@@ -320,10 +332,10 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
  * pagina è la cosa peggiore che si possa aggiungere qui — tranne quando ce
  * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
  */
-export function Punto({ v, lista, apriCompito }: { v: Vals; lista?: Lista; apriCompito: (id: string) => void }) {
+export function Punto({ v, lista }: { v: Vals; lista?: Lista }) {
   const p = usePunto()
   if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
-  if (p.daVedere) return <Finestra v={v} lista={lista} apriCompito={apriCompito} p={p} />
+  if (p.daVedere) return <Finestra v={v} lista={lista} p={p} />
   const quante = p.punto.mentreNonCeri.length + p.punto.adesso.length + p.punto.daLeggere.length + p.punto.avvii.length
   return (
     <div style={CARTA}>

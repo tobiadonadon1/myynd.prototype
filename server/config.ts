@@ -640,6 +640,16 @@ export type Config = {
    */
   argomentiDaMe?: boolean
   /**
+   * Il fuoco l'ha scritto Myynd, non lei.
+   *
+   * Stessa identica semantica di `argomentiDaMe`, sull'altro campo: vero vuol
+   * dire «questa riga è mia e la posso tenere aggiornata», falso — o assente
+   * con una riga già scritta — vuol dire che le parole sono sue e non si
+   * toccano più. Salvare il fuoco a mano lo mette a falso, e da lì in avanti
+   * quel campo non si riscrive da solo mai più.
+   */
+  fuocoDaMe?: boolean
+  /**
    * Le undici automazioni che arrivano con il pacchetto: le vuole?
    *
    * Assente vuol dire no, ed è il verso giusto. Erano sempre accese per tutti:
@@ -661,7 +671,7 @@ export type Config = {
    * fino al giorno dopo. Un difetto che non si vede: nessuno dei due si rompe,
    * uno dei due semplicemente non succede quasi mai.
    */
-  imparato?: { argomenti?: string; memoria?: string }
+  imparato?: { argomenti?: string; memoria?: string; fuoco?: string }
   /** Il giro di presentazione della lista: fatto una volta, mai più. */
   giro?: boolean
   /**
@@ -912,6 +922,9 @@ export function pubblica(c: Config = leggi()) {
     // chi ha scritto quella riga: la schermata lo dice, invece di lasciar
     // credere a qualcuno di averla scritta lui
     argomentiDaMe: c.argomentiDaMe === true,
+    // e lo stesso per il fuoco: la schermata deve poter dire chi ha scritto
+    // quella riga, invece di lasciar credere a qualcuno di averla scritta lui
+    fuocoDaMe: c.fuocoDaMe === true,
     diSerie: c.diSerie === true,
     abbonamento: { attivo: c.abbonamento?.attivo === true },
     claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),

@@ -34,6 +34,8 @@ import { affinita, gusto } from './gusto.ts'
 import * as automazioni from './automazioni.ts'
 import { giornoIn, parti } from './fuso.ts'
 import * as progetti from './progetti.ts'
+import * as compiti from './compiti.ts'
+import * as ordine from './ordine.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -423,7 +425,18 @@ export function raccogli(dal: string, primo = false): Materiale {
 export function successoQualcosa(m: Materiale): boolean {
   if (m.indicizzati || m.azioni.length || m.chiuse.length || m.preparate.length) return true
   if (m.feed.some(v => daAllora(v.quando, m.dal))) return true
-  return [...m.attendono, ...m.perOggi].some(c => daAllora(c.aggiornato, m.dal) || daAllora(c.creato, m.dal))
+  /*
+   * Una riga che ha scritto il punto stesso non è una novità.
+   *
+   * Da quando ogni mossa sotto «adesso» è una riga della lista, un punto ne
+   * lascia dietro fino a tre appena nate: senza questa riga il giro dopo le
+   * troverebbe create da allora, direbbe che è successo qualcosa, e il punto
+   * si rifarebbe da solo — a spese sue, per raccontarsi quello che ha appena
+   * scritto. Torna a contare appena la tocca lui: la sposta, la chiude, la
+   * affida a Myynd. Allora la novità è sua.
+   */
+  const diLui = (c: store.Compito) => !(c.origine === 'punto' && c.stato === 'aperto' && c.aggiornato <= c.creato)
+  return [...m.attendono, ...m.perOggi].filter(diLui).some(c => daAllora(c.aggiornato, m.dal) || daAllora(c.creato, m.dal))
 }
 
 // — il prompt —
@@ -446,7 +459,7 @@ const schema = (compiti: string[], docs: string[]) => {
     type: 'object',
     properties: {
       mentreNonCeri: { type: 'array', items: riga, description: 'Al massimo due righe, e solo cose arrivate da fuori. Meno è meglio: vuoto va benissimo.' },
-      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna. Meno è meglio: vuoto va benissimo.' },
+      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna, e ogni riga è una riga della sua lista: o l’id di una che c’è già, o una cosa nuova da fare oggi. Meno è meglio: vuoto va benissimo.' },
       daLeggere: {
         type: 'array',
         description: 'Una sola, solo fra le notizie elencate, solo se c’entra con il suo lavoro. Vuoto va benissimo.',
@@ -585,9 +598,16 @@ Quante righe, al massimo:
 — «mentreNonCeri»: due. Quello che è arrivato da fuori e conta davvero, o una
   cosa che hai preparato tu e che adesso aspetta una sua risposta. Metti
   l'id del compito o del documento quando c'è, così si apre con un dito.
-— «adesso»: tre mosse che fanno andare avanti il suo lavoro. Una riga pronta
-  da approvare viene prima di tutto. Se la mossa è per un progetto, il nome
-  del progetto sta dentro la frase, non attaccato in coda.
+— «adesso»: tre mosse che fanno andare avanti il suo lavoro, e ogni riga È una
+  riga della sua lista. Una riga della lista, una mossa: se una riga gli chiede
+  quattro cose, resta UNA mossa sola, perché le domande stanno dentro la riga e
+  non si spezzano in mosse diverse. Quando la mossa parla di una riga che c'è già,
+  metti il suo id in «compito», copiato da quelli elencati. Una mossa senza id
+  diventa una riga nuova della lista: scrivila solo per una cosa concreta e
+  fattibile oggi, all'imperativo, al massimo dieci parole, e mai per qualcosa
+  che nella lista c'è già. Una riga pronta da approvare viene prima di tutto.
+  Se la mossa è per un progetto, il nome del progetto sta dentro la frase, non
+  attaccato in coda.
 — «daLeggere»: una notizia sola, solo fra quelle elencate e solo se c'entra
   con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
 — «progetti»: uno o due, di quelli elencati e toccati dal materiale. «doveSei»
@@ -867,6 +887,103 @@ export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: stri
   }
 }
 
+// — «adesso» è la lista —
+
+/**
+ * Quanti compiti nuovi può far nascere un punto. Tre è il tetto di «adesso»:
+ * un punto non riempie la lista, al massimo la completa.
+ */
+export const NUOVI_MAX = 3
+/** Quanto indietro si guarda fra le cose chiuse, per non richiedere una cosa già fatta. */
+const GIORNI_CHIUSE = 14
+
+/** Il testo di una mossa come si legge in lista: senza il punto in fondo. */
+const senzaPunto = (s: string) => s.trim().replace(/[.;:·]+$/, '').trim()
+
+/** Le liste con cui si ancorano le righe, vere o finte: qui dentro non si legge il disco. */
+export type Ancora = {
+  /** Le righe aperte adesso, con il loro testo: è da lì che una mossa si riconosce. */
+  aperti: { id: string; testo: string }[]
+  /** I testi delle righe chiuse di recente: una mossa già fatta non si riscrive. */
+  chiuse: string[]
+  /** Scrive la riga nuova e torna il suo id, o null se non se n'è fatto niente. */
+  crea: (testo: string) => string | null
+}
+
+/**
+ * Ogni riga di «adesso» è una riga della lista, o non è.
+ *
+ * Il tredici settembre il punto diceva tre cose sotto «adesso» — rispondi alle
+ * quattro domande sull'ambito, di' quale unità guarda l'audit, scegli chi
+ * tiene il numero — e tutte e tre erano *una* riga della lista che chiedeva
+ * quelle quattro cose. Tre frecce, e nessuna apriva niente: il modello aveva
+ * parafrasato un compito in tre mosse senza id, e una mossa senza id non ha
+ * niente dietro.
+ *
+ * Qui una mossa senza niente dietro non esce. Prima si prova a riconoscerla
+ * fra le righe aperte — la stessa rete grossolana di `ridondante`, che è
+ * quella che ha preso la parafrasi in primo luogo — e due mosse che cadono
+ * sulla stessa riga della lista diventano una, perché sono una. Quello che
+ * resta e non somiglia a niente di chiuso di recente nasce come riga nuova, al
+ * massimo tre per punto. Il resto si perde: una freccia che non apre niente è
+ * peggio di una riga in meno.
+ */
+export function ancoraAlleRighe(adesso: Riga[], ctx: Ancora): Riga[] {
+  const prese = new Set<string>()
+  const tenute: Riga[] = []
+  let nuovi = 0
+  for (const r of adesso) {
+    const id = (r.compito && ctx.aperti.some(c => c.id === r.compito))
+      ? r.compito
+      : ctx.aperti.find(c => ridondante(r.testo, c.testo))?.id ?? null
+    if (id) {
+      // due mosse sulla stessa riga della lista sono la stessa mossa, detta due volte
+      if (prese.has(id)) continue
+      prese.add(id)
+      tenute.push({ ...r, compito: id })
+      continue
+    }
+    // una cosa che ha già fatto non torna a chiedergli di farla
+    if (ctx.chiuse.some(t => ridondante(r.testo, t))) continue
+    if (nuovi >= NUOVI_MAX) continue
+    const nato = ctx.crea(senzaPunto(r.testo))
+    if (!nato) continue
+    nuovi++
+    prese.add(nato)
+    tenute.push({ ...r, compito: nato })
+  }
+  return tenute
+}
+
+/** Le liste vere, con la penna per scrivere le righe nuove. */
+function ancoraViva(m: Materiale, adesso: number): { ancora: Ancora; creati: () => number } {
+  const limite = new Date(adesso - GIORNI_CHIUSE * 86_400_000).toISOString()
+  // le tre liste si sovrappongono — una preparata è anche una che aspetta lui —
+  // e una riga sola non deve poter comparire due volte
+  const visti = new Map<string, string>()
+  for (const c of [...m.attendono, ...m.perOggi, ...m.preparate]) if (!visti.has(c.id)) visti.set(c.id, c.testo)
+  const aperti = [...visti].map(([id, testo]) => ({ id, testo }))
+  let creati = 0
+  return {
+    creati: () => creati,
+    ancora: {
+      aperti,
+      chiuse: store.compitiChiusi(200).filter(c => (c.chiuso ?? '') >= limite).map(c => c.testo),
+      crea: testo => {
+        if (!testo) return null
+        // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso
+        const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+        store.scriviCompito({
+          id, testo, quando: 'oggi', origine: 'punto',
+          ordine: ordine.dopo(store.ultimoOrdine('oggi'))
+        })
+        creati++
+        return id
+      }
+    }
+  }
+}
+
 /** Le chiamate di oggi, nel giorno solare UTC — lo stesso del tetto dei token. */
 function diOggi(chiamate: string[], adesso: number): string[] {
   // nel fuso del conto, come «scaduto»: a mezzanotte cambia giorno per tutti e due
@@ -980,6 +1097,12 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   a.chiamate = [...(prodottoOggi ? diOggi(a.chiamate, adesso) : []), quando]
 
   const nuovo = ricuci(grezzo, mat, a.scartati, quando, r.via ?? null, a.avviate ?? [])
+  // ogni mossa sotto «adesso» è una riga della lista: quella che non ne ha una
+  // la trova, o la fa nascere, o non esce. La freccia in pagina apre sempre qualcosa
+  const ancora = ancoraViva(mat, adesso)
+  nuovo.adesso = ancoraAlleRighe(nuovo.adesso, ancora.ancora)
+  // la lista è cambiata sotto le mani di chi ce l'ha aperta: come le rotte, si dice
+  if (ancora.creati()) compiti.annunciaCambio()
   // quello che il modello ha capito entra in tabella: un progetto nuovo con
   // l'obiettivo che gli sembra, e l'obiettivo di uno che ancora non ce l'ha.
   // Il resto — nome, stato, obiettivo scritto da lui — non lo tocca

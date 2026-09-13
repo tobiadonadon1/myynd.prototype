@@ -428,6 +428,15 @@ export function useCompiti(
     } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
   }, [mostraToast])
 
+  /*
+   * Una riga da aprire nel dettaglio, chiesta da un'altra schermata (il punto
+   * in prima pagina): la lista la apre appena è in vista e poi dimentica la
+   * richiesta. Un id solo: chi chiede due volte vede l'ultima.
+   */
+  const [daAprire, setDaAprire] = useState<string | null>(null)
+  const chiediDiAprire = useCallback((id: string) => setDaAprire(id), [])
+  const richiestaServita = useCallback(() => setDaAprire(null), [])
+
   const apriChiudi = useCallback((id: string) => {
     setAperti(a => {
       const n = new Set(a)
@@ -478,7 +487,8 @@ export function useCompiti(
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
-    aggiungi, aggiungiTante, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda
+    aggiungi, aggiungiTante, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    daAprire, chiediDiAprire, richiestaServita
   }
 }
 

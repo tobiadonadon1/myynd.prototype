@@ -920,6 +920,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     apriSpunto: () => setSpuntoAperto(v => !v),
 
     fuoco,
+    // chi ha scritto quella riga: come per gli argomenti, il campo lo dice
+    // invece di lasciar credere a qualcuno di averla scritta lui
+    fuocoDaMe: stato.config.fuocoDaMe === true,
     fuocoAperto,
     apriFuoco: () => setFuocoAperto(v => !v),
     salvaFuoco,

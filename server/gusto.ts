@@ -23,8 +23,19 @@
 // Non costa niente: sono conteggi su righe che stanno già nell'indice. Nessuna
 // chiamata a un modello per sapere cosa ti piace — quello che si manda al
 // modello, quando c'è, sono due elenchi di parole.
+//
+// E poi c'è la seconda prova, che è arrivata dopo e conta di più: **quello che
+// fa**. Aprire e buttare via una notizia resta un gesto che nessuno è obbligato
+// a fare, e per chi non lo fa qui non si concludeva niente. Quello che ha in
+// lista, quello che ha chiuso, i progetti vivi e le domande che fa sono lì da
+// sempre e dicono di lui più di una rassegna: `evidenzaDalLavoro` li mette in
+// un blocco solo, e da quel blocco si scrivono tutti e due i campi che
+// restavano vuoti per sempre — gli argomenti e il fuoco.
 
+import db from './store.ts'
 import * as store from './store.ts'
+import * as progetti from './progetti.ts'
+import { fuoco, scriviFuoco } from './timone.ts'
 import { aggiorna, leggi, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 
@@ -193,6 +204,102 @@ export function inParole(g: Gusto, en: boolean): string {
   return parti.join(' · ')
 }
 
+// — la prova che sta in quello che fa —
+
+/**
+ * Quello che fa, non quello che legge.
+ *
+ * I due gesti della rassegna sono dati veri, ma sono anche gli unici che
+ * questo file guardava — e c'è chi la rassegna non la tocca. «Se clicco su
+ * Fatto o Non mi interessa è una cosa che non dovrei fare: Myynd deve
+ * imparare dalle mie cose da fare». Ha ragione, e il materiale c'è già:
+ * quello che si è scritto in lista, quello che ha chiuso, i progetti che
+ * porta avanti e le cose che chiede in chat. Sono il ritratto più onesto di
+ * cosa gli interessa che esista dentro quest'app, e fin qui non arrivava
+ * dove serviva.
+ *
+ * Torna un blocco di testo compatto, non un oggetto da rigirare: serve a una
+ * cosa sola — finire dentro un prompt — e i due posti che lo usano lo usano
+ * uguale.
+ */
+
+/** Quante cose sue bastano per concludere qualcosa. Stessa soglia dei gesti. */
+const QUANTE_COSE = MINIMO
+
+/** Il tetto per parte: oltre, non è più «su cosa sta lavorando», è un archivio. */
+const QUANTI_COMPITI = 40
+const QUANTE_DOMANDE = 40
+
+const taglia = (t: string, n: number) => {
+  const pulito = t.replace(/\s+/g, ' ').trim()
+  return pulito.length > n ? pulito.slice(0, n - 1) + '…' : pulito
+}
+
+/**
+ * Le ultime cose che ha chiesto, dalle più recenti.
+ *
+ * Solo le sue: le risposte di Myynd sono parole di Myynd, e imparare i propri
+ * argomenti dalle proprie risposte è il modo più diretto di girare in tondo.
+ * `ruolo = 'u'` è come le scrive `salvaMessaggio`.
+ */
+function ultimeDomande(quante = QUANTE_DOMANDE): string[] {
+  const righe = db.prepare(
+    "SELECT testo FROM messaggi WHERE ruolo = 'u' ORDER BY quando DESC, rowid DESC LIMIT ?"
+  ).all(quante) as { testo: string }[]
+  return righe.map(r => taglia(String(r.testo ?? ''), 160)).filter(Boolean)
+}
+
+export type Evidenza = {
+  /** Vero quando c'è abbastanza roba sua per concludere qualcosa. */
+  vale: boolean
+  /** Quante cose si sono guardate in tutto: compiti, progetti, domande. */
+  quante: number
+  /** Il blocco già pronto per il prompt. Vuoto quando non vale. */
+  testo: string
+}
+
+/**
+ * Il blocco di evidenza: la lista, i progetti, quello che chiede.
+ *
+ * Niente modello, niente rete: sono tre query su tabelle che stanno già lì. Il
+ * costo di questa funzione è il costo di aprire la lista.
+ */
+export function evidenzaDalLavoro(giorni = 30): Evidenza {
+  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
+
+  const tutti = progetti.elenco()
+  const nomeDi = new Map(tutti.map(p => [p.id, p.nome]))
+  const vivi = tutti.filter(p => p.stato !== 'chiuso')
+
+  const riga = (c: { testo: string; nota: string | null; progetto?: string | null }) => {
+    const nome = c.progetto ? nomeDi.get(c.progetto) : ''
+    return '· ' + [
+      taglia(c.testo, 120),
+      c.nota ? taglia(c.nota, 120) : '',
+      nome ? `[${taglia(nome, 40)}]` : ''
+    ].filter(Boolean).join(' — ')
+  }
+
+  const aperti = store.elencoCompiti().slice(0, QUANTI_COMPITI)
+  const chiusi = store.compitiChiusi(QUANTI_COMPITI).filter(c => (c.chiuso ?? '') >= soglia)
+  const domande = ultimeDomande()
+
+  const quante = aperti.length + chiusi.length + vivi.length + domande.length
+
+  const parti: string[] = []
+  if (aperti.length) parti.push('Ha in lista adesso:\n' + aperti.map(riga).join('\n'))
+  if (chiusi.length) parti.push('Ha chiuso di recente:\n' + chiusi.map(riga).join('\n'))
+  if (vivi.length) {
+    parti.push('Progetti vivi:\n' + vivi.slice(0, 12)
+      .map(p => `· ${taglia(p.nome, 60)}${p.obiettivo ? ` — ${taglia(p.obiettivo, 140)}` : ''}`)
+      .join('\n'))
+  }
+  if (domande.length) parti.push('Ultime cose che ha chiesto a Myynd:\n' + domande.map(d => `· ${d}`).join('\n'))
+
+  const vale = quante >= QUANTE_COSE
+  return { vale, quante, testo: vale ? parti.join('\n\n') : '' }
+}
+
 // — dagli argomenti che non scrive nessuno a quelli che si scrivono da soli —
 
 /**
@@ -221,9 +328,10 @@ const FORMA_ARGOMENTI = {
     argomenti: {
       type: 'string',
       description:
-        'Da tre a sei argomenti separati da virgola, come li scriverebbe una persona: ' +
+        'Da tre a otto argomenti separati da virgola, come li scriverebbe una persona: ' +
         '«mercati e tassi, politica estera, intelligenza artificiale». Non parole sciolte, ' +
-        'non un elenco di nomi propri. Vuoto se da queste parole non si capisce niente.'
+        'non un elenco di nomi propri, nessun trattino e nessun elenco puntato. ' +
+        'Vuoto se da questo materiale non si capisce niente.'
     }
   },
   required: ['argomenti'],
@@ -242,24 +350,50 @@ const FORMA_ARGOMENTI = {
  * Passa da un modello, ma dal più economico che c'è: è un lavoro di riscrittura
  * su dodici parole, non un giudizio, e gira una volta al giorno.
  */
-export async function inArgomenti(g: Gusto = gusto()): Promise<string> {
-  if (!g.vale || g.piace.length < 3) return ''
+export async function inArgomenti(g: Gusto = gusto(), e: Evidenza = evidenzaDalLavoro()): Promise<string> {
+  const daiTitoli = g.vale && g.piace.length >= 3
+  if (!daiTitoli && !e.vale) return ''
+
+  const detto: string[] = []
+  if (daiTitoli) detto.push(`Apre notizie con dentro: ${g.piace.join(', ')}`)
+  if (e.vale) detto.push(`Quello che fa davvero:\n\n${e.testo}`)
+
   const r = await chiediJSON<{ argomenti: string }>({
     lavoro: 'ritratto',
     max_tokens: 300,
     system:
       `Scrivi in ${nellaLingua()}.\n\n` +
-      'Queste sono le parole che ricorrono nei titoli delle notizie che una persona ha ' +
-      'aperto. Non descrivere le notizie: di\' di che cosa si interessa, in modo che valga ' +
-      'anche il mese prossimo.\n\n' +
-      'Da tre a sei argomenti, separati da virgola, minuscoli, brevi. Niente nomi di ' +
-      'testate e niente nomi propri di cronaca — quelli passano, gli argomenti restano. ' +
-      'Se da queste parole non si capisce un interesse, torni una stringa vuota: è una ' +
+      'Qui sotto c\'è quello che una persona apre nei giornali e, soprattutto, quello su ' +
+      'cui lavora davvero: le cose che ha in lista, quelle che ha chiuso, i progetti che ' +
+      'porta avanti e le domande che fa. Non descrivere il materiale: di\' di che cosa si ' +
+      'interessa, con le sue parole, in modo che valga anche il mese prossimo.\n\n' +
+      'Gli argomenti sono quello su cui lavora e quello che chiede, non quello che gli ' +
+      'capita davanti. Da tre a otto, separati da virgola, minuscoli, brevi. Nessun ' +
+      'trattino, nessun elenco puntato, una riga sola. Niente nomi di testate e niente ' +
+      'nomi propri di cronaca — quelli passano, gli argomenti restano; il nome di un suo ' +
+      'progetto invece può restare, se è quello di cui si occupa.\n\n' +
+      'Se da questo materiale non si capisce un interesse, torni una stringa vuota: è una ' +
       'risposta buona, non un fallimento.',
     formato: FORMA_ARGOMENTI,
-    messages: [{ role: 'user', content: `Apre notizie con dentro: ${g.piace.join(', ')}` }]
+    messages: [{ role: 'user', content: detto.join('\n\n') }]
   })
-  return (r?.argomenti ?? '').trim().slice(0, 400)
+  return pulisciElenco(r?.argomenti ?? '').slice(0, 400)
+}
+
+/**
+ * Una riga di argomenti, non un elenco.
+ *
+ * Un modello piccolo a cui si chiede «separati da virgola» risponde comunque
+ * con dei trattini a capo una volta su cinque, e quella roba finisce dentro un
+ * campo di testo alto una riga: si vede mezza parola e sembra rotto. Costa
+ * quattro righe raddrizzarla qui invece di sperarci nel prompt.
+ */
+function pulisciElenco(t: string): string {
+  const voci = t
+    .split(/[\n,;•]+/)
+    .map(v => v.replace(/^\s*[-–—*·\d.)]+\s*/, '').trim())
+    .filter(Boolean)
+  return voci.slice(0, 8).join(', ')
 }
 
 /** Quanto spesso ci si riprova, quando è Myynd a tenere il campo. */
@@ -287,10 +421,20 @@ export async function tieniAggiornati(adesso = Date.now()): Promise<string | nul
   const ultima = c.imparato?.argomenti
   if (mio && ultima && adesso - Date.parse(ultima) < OGNI_QUANTO) return null
 
+  /*
+   * Due prove, e ne basta una.
+   *
+   * Prima c'era solo la rassegna, e per chi non la apre quel campo restava
+   * vuoto per sempre: si imparava soltanto da un gesto che non deve essere
+   * obbligatorio fare. Quello che ha in lista e quello che chiede sono
+   * materiale almeno altrettanto buono — e quando ci sono tutti e due, al
+   * modello vanno tutti e due.
+   */
   const g = gusto()
-  if (!g.vale) return null
+  const e = evidenzaDalLavoro()
+  if (!g.vale && !e.vale) return null
 
-  const testo = await inArgomenti(g)
+  const testo = await inArgomenti(g, e)
   if (!testo || testo === (c.argomenti ?? '').trim()) return null
 
   aggiorna({
@@ -311,6 +455,99 @@ export async function tieniAggiornati(adesso = Date.now()): Promise<string | nul
  */
 export async function proposta(): Promise<string> {
   const g = gusto()
-  if (!g.vale) return ''
-  return await inArgomenti(g)
+  const e = evidenzaDalLavoro()
+  if (!g.vale && !e.vale) return ''
+  return await inArgomenti(g, e)
+}
+
+// — il fuoco, scritto da quello che ha in mano —
+
+/**
+ * L'altro campo che nessuno compila.
+ *
+ * Il fuoco dice a Myynd dove guardare *dentro* — nella posta, nei file, negli
+ * incontri — e l'intervista lo chiede una volta sola, all'inizio, quando la
+ * risposta giusta uno non ce l'ha ancora. Poi resta vuoto, e il feed continua
+ * a scegliere senza sapere cosa conta questa settimana.
+ *
+ * La risposta però è scritta nella sua lista: le cose aperte e i progetti vivi
+ * *sono* quello che conta adesso. Qui si legge quello, si scrive una riga, e
+ * la si firma — così lui la vede, e se non torna la corregge.
+ *
+ * Stessa regola degli argomenti, e senza eccezioni: se quella riga l'ha
+ * scritta lui, non si tocca mai più.
+ */
+
+const FORMA_FUOCO = {
+  type: 'object',
+  properties: {
+    fuoco: {
+      type: 'string',
+      description:
+        'Una frase sola, piana, al massimo diciotto parole: su cosa deve guardare adesso ' +
+        'dentro il suo materiale — posta, file, incontri. Niente elenchi, niente trattini, ' +
+        'niente due punti. Vuota se dalla lista non si capisce una direzione.'
+    }
+  },
+  required: ['fuoco'],
+  additionalProperties: false
+} as const
+
+/** Due frasi uguali a meno di maiuscole, accenti e punteggiatura sono la stessa frase. */
+const spoglia = (t: string) =>
+  t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim()
+
+/**
+ * Scrive il fuoco da quello che ha in lista, una volta al giorno.
+ *
+ * I cancelli sono gli stessi di `tieniAggiornati`, e il terzo è più stretto:
+ * la data si segna a ogni tentativo, non solo quando va a buon fine. Segnarla
+ * solo in caso di successo vuol dire che un modello che non risponde diventa
+ * quattro chiamate al giorno per sempre — il genere di difetto che non si vede
+ * da nessuna parte tranne che sulla bolletta.
+ *
+ * Torna la frase scritta, o `null` se non ha toccato niente.
+ */
+export async function imparaIlFuoco(adesso = Date.now()): Promise<string | null> {
+  const c = leggi()
+  const mio = c.fuocoDaMe === true
+  const attuale = fuoco().trim()
+  // l'ha scritto lui: è suo, e non si tocca più — nemmeno quando la lista cambia
+  if (attuale && !mio) return null
+
+  const ultima = c.imparato?.fuoco
+  if (ultima && adesso - Date.parse(ultima) < OGNI_QUANTO) return null
+
+  const e = evidenzaDalLavoro()
+  if (!e.vale) return null
+
+  // la data prima della domanda: qualunque cosa risponda, oggi non si richiede
+  aggiorna({ imparato: { ...leggi().imparato, fuoco: new Date(adesso).toISOString() } })
+
+  const r = await chiediJSON<{ fuoco: string }>({
+    lavoro: 'ritratto',
+    max_tokens: 200,
+    system:
+      `Scrivi in ${nellaLingua()}.\n\n` +
+      'Qui sotto c\'è quello che una persona ha in lista adesso e i progetti che porta ' +
+      'avanti. Scrivi una frase sola che dica su cosa Myynd deve concentrarsi dentro il ' +
+      'suo materiale — la posta, i file, gli incontri — perché quello che ha in mano vada ' +
+      'avanti.\n\n' +
+      'Massimo diciotto parole. Una frase piana, come la direbbe lui a voce: nessun ' +
+      'elenco, nessun trattino, nessun due punti. Nomina i progetti e le cose vere che ' +
+      'leggi qui sotto, con il loro nome — «i preventivi per Rossi e il lancio di Myynd» ' +
+      'vale, «le tue priorità» non vale niente.\n\n' +
+      'Se dalla lista non si capisce una direzione, torni una stringa vuota: è una ' +
+      'risposta buona, non un fallimento.',
+    formato: FORMA_FUOCO,
+    messages: [{ role: 'user', content: e.testo }]
+  })
+
+  const testo = (r?.fuoco ?? '').replace(/\s+/g, ' ').trim().slice(0, 400)
+  if (!testo || spoglia(testo) === spoglia(attuale)) return null
+
+  scriviFuoco(testo)
+  aggiorna({ fuocoDaMe: true })
+  return testo
 }

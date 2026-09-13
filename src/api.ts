@@ -50,6 +50,8 @@ export type Stato = {
     argomenti: string
     /** Quella riga l'ha scritta Myynd da quello che apre, non lei. */
     argomentiDaMe: boolean
+    /** E il fuoco: scritto da Myynd dalle sue attività, non da lei. */
+    fuocoDaMe: boolean
     /** Ha chiesto le undici automazioni che arrivano col pacchetto. */
     diSerie: boolean
     posta: { host: string; utente: string; giorni: number } | null

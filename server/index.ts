@@ -1982,6 +1982,15 @@ app.get('/api/feed/fuoco', (_req, res) => res.json({ fuoco: timone.fuoco() }))
 
 app.post('/api/feed/fuoco', (req, res) => {
   timone.scriviFuoco(String(req.body?.testo ?? ''))
+  /*
+   * Scriverlo a mano vuol dire riprenderselo.
+   *
+   * Stessa regola degli argomenti, e per lo stesso motivo: Myynd riempie quel
+   * campo finché è vuoto o finché l'ha scritto lui, e dal momento in cui ci
+   * mette mano lei non lo tocca più. Una cosa che riscrive quello che hai
+   * scritto tu, senza che tu l'abbia chiesto, non è un aiuto.
+   */
+  cfg.aggiorna({ fuocoDaMe: false })
   res.json({ ok: true, fuoco: timone.fuoco() })
 })
 
@@ -3463,7 +3472,17 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    */
   const imparaDaSolo = perOgnuno('non sono riuscito a mettere in ordine quello che ho imparato', async () => {
     const argomenti = await gusto.tieniAggiornati()
-    if (argomenti) console.log(`myynd · argomenti scritti da quello che leggi: ${argomenti}`)
+    if (argomenti) console.log(`myynd · argomenti scritti da quello che fai: ${argomenti}`)
+    /*
+     * E il fuoco, dallo stesso materiale.
+     *
+     * Gira qui e non dietro a un compito chiuso apposta: i cancelli dentro
+     * sono a giornata, quindi appenderlo alle rotte della lista non lo
+     * renderebbe più pronto — lo renderebbe solo una chiamata in più dentro
+     * un gesto che deve restare istantaneo.
+     */
+    const f = await gusto.imparaIlFuoco()
+    if (f) console.log(`myynd · fuoco scritto da quello che hai in lista: ${f}`)
     const m = await memoria.consolida()
     if (m.blocchi.length) {
       console.log(`myynd · ritratto aggiornato: ${m.blocchi.join(', ')} (da ${m.guardate} convinzioni)`)

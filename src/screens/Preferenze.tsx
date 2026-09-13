@@ -229,6 +229,23 @@ function CampoFuoco({ v }: { v: Vals }) {
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
         }}>{t('Salva')}</button>
       </div>
+
+      {/*
+        Chi ha scritto quella riga.
+
+        Stessa nota che sta sotto gli argomenti, e per la stessa ragione: il
+        campo restava vuoto perché «su cosa vuoi che mi concentri adesso?» non
+        è una domanda a cui si risponde in astratto. Adesso, se è vuoto, lo
+        scrive Myynd da quello che ha in lista — e lo dice, perché una riga
+        comparsa da sola che nessuno dichiara è peggio di una riga vuota.
+      */}
+      {v.fuocoDaMe && !!v.fuoco && (
+        <div style={{
+          marginTop: 9, fontSize: '12px', color: 'rgba(34,39,31,.5)', textWrap: 'pretty'
+        }}>
+          {t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.')}
+        </div>
+      )}
     </>
   )
 }
@@ -699,7 +716,7 @@ function CampoArgomenti({ v }: { v: Vals }) {
             fontSize: '12px', color: '#8E3F1F', cursor: chiedo ? 'default' : 'pointer'
           }}
           hover={chiedo ? {} : { color: '#C4623B' }}>
-          {chiedo ? t('Guardo…') : t('Scrivilo da quello che leggo')}
+          {chiedo ? t('Guardo…') : t('Scrivilo da quello che faccio e leggo')}
         </Hov>
         {detto && <span>{detto}</span>}
       </div>

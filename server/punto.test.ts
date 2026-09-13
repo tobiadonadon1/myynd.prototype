@@ -390,6 +390,122 @@ test('otto righe in tutto: quando il modello riempie tutto, l’avvio salta', as
   assert.deepEqual(p.avvii, [], 'sopra le otto righe si taglia dal fondo, e in fondo c’è l’avvio')
 })
 
+// — «adesso» è la lista —
+//
+// Il tredici settembre sotto «adesso» c'erano tre mosse su H-Farm — rispondi
+// alle quattro domande, di' quale unità guarda l'audit, scegli chi tiene il
+// numero — con tre frecce che non aprivano niente: erano la parafrasi di *una*
+// riga della lista che chiedeva quelle quattro cose. Qui una mossa senza una
+// riga dietro non esce: o ne trova una, o ne fa nascere una, o si perde.
+
+test('una mossa senza id che parla di una riga aperta prende il suo id', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.scriviCompito({ id: 'c9', testo: 'Rispondere alle quattro domande sull’ambito di H-Farm', ordine: 'a', quando: 'oggi' })
+  fornitoreFinto({
+    ...RISPOSTA,
+    adesso: [{ testo: 'Rispondi alle quattro domande sull’ambito di H-Farm.', compito: '', doc: '' }]
+  })
+
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.adesso.length, 1)
+  assert.equal(e.punto?.adesso[0].compito, 'c9', 'la mossa non ha ritrovato la riga di cui parla')
+  assert.equal(store.elencoCompiti().length, 1, 'ha scritto una riga nuova invece di riconoscere quella che c’era')
+})
+
+test('una mossa che non trova niente diventa una riga nuova della lista, e la freccia la apre', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  fornitoreFinto({
+    ...RISPOSTA,
+    adesso: [{ testo: 'Scegli chi tiene il numero della prova.', compito: '', doc: '' }]
+  })
+
+  const e = await punto.punto({}, adesso())
+  const righe = store.elencoCompiti()
+  assert.equal(righe.length, 1, 'la mossa non è diventata una riga')
+  assert.equal(righe[0].testo, 'Scegli chi tiene il numero della prova', 'il punto in fondo è finito in lista')
+  assert.equal(righe[0].origine, 'punto')
+  assert.equal(righe[0].quando, 'oggi')
+  assert.equal(righe[0].stato, 'aperto')
+  assert.equal(e.punto?.adesso[0].compito, righe[0].id, 'la riga del punto non porta l’id di quella nata')
+  assert.equal(e.punto?.adesso[0].testo, 'Scegli chi tiene il numero della prova.', 'il testo del punto si legge com’era')
+})
+
+test('una mossa che ripete una cosa chiusa la settimana scorsa non esce, e non fa nascere niente', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.scriviCompito({ id: 'c9', testo: 'Mandare il preventivo aggiornato a Bianchi', ordine: 'a', quando: 'oggi' })
+  store.cambiaStatoCompito('c9', 'fatto')
+  fornitoreFinto({
+    ...RISPOSTA,
+    adesso: [{ testo: 'Manda il preventivo aggiornato a Bianchi.', compito: '', doc: '' }]
+  })
+
+  const e = await punto.punto({}, adesso())
+  assert.deepEqual(e.punto?.adesso, [], 'una cosa già fatta è tornata sotto «adesso»')
+  assert.deepEqual(store.elencoCompiti(), [], 'una cosa già fatta è tornata in lista')
+})
+
+test('ancoraAlleRighe: tre righe nuove al massimo, e due mosse sulla stessa riga diventano una', () => {
+  const riga = (testo: string, compito: string | null = null) => ({ testo, compito, doc: null })
+
+  // le tre mosse del tredici settembre, e la riga della lista che le conteneva
+  const chiede = { id: 'c1', testo: 'Rispondere alle quattro domande sull’ambito per H-Farm' }
+  const nate: string[] = []
+  const tre = punto.ancoraAlleRighe(
+    [
+      riga('Rispondi alle quattro domande sull’ambito per H-Farm.'),
+      riga('Rispondi alle domande sull’ambito per H-Farm, tutte e quattro.'),
+      riga('Di’ quale unità di H-Farm guarda l’audit.')
+    ],
+    { aperti: [chiede], chiuse: [], crea: t => { nate.push(t); return `n${nate.length}` } }
+  )
+  assert.deepEqual(tre.map(r => r.compito), ['c1', 'n1'], 'la stessa riga della lista è uscita due volte')
+  assert.deepEqual(nate, ['Di’ quale unità di H-Farm guarda l’audit'], 'la mossa che non era in lista non è nata')
+
+  const scritte: string[] = []
+  const quattro = punto.ancoraAlleRighe(
+    [
+      riga('Chiama lo studio di Padova.'),
+      riga('Prepara il preventivo per Verdi.'),
+      riga('Scegli la data della prova sul campo.'),
+      riga('Rileggi il contratto di affitto.')
+    ],
+    { aperti: [], chiuse: [], crea: t => { scritte.push(t); return `n${scritte.length}` } }
+  )
+  assert.equal(scritte.length, 3, 'un punto ha riempito la lista di righe nuove')
+  assert.deepEqual(quattro.map(r => r.compito), ['n1', 'n2', 'n3'])
+  assert.deepEqual(scritte[0], 'Chiama lo studio di Padova', 'il punto in fondo è finito in lista')
+
+  // un id che nel frattempo non è più fra le righe aperte non vale: si riconosce, o si perde
+  const sparita = punto.ancoraAlleRighe(
+    [riga('Approva la bozza per Bianchi.', 'c7')],
+    { aperti: [], chiuse: ['Approvare la bozza per Bianchi'], crea: () => { throw new Error('non doveva scrivere niente') } }
+  )
+  assert.deepEqual(sparita, [])
+})
+
+test('rifare il punto sulla stessa mossa non raddoppia la riga', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  fornitoreFinto({
+    ...RISPOSTA,
+    adesso: [{ testo: 'Scegli chi tiene il numero della prova.', compito: '', doc: '' }]
+  })
+  const t0 = adesso()
+  const primo = await punto.punto({}, t0)
+  const nata = primo.punto?.adesso[0].compito
+  assert.ok(nata)
+
+  await unAttimo()
+  store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
+  const secondo = await punto.punto({ forza: true }, t0 + ore(4))
+  assert.ok(secondo.generatoAdesso)
+  assert.equal(store.elencoCompiti().length, 1, 'la stessa mossa ha fatto nascere due righe')
+  assert.equal(secondo.punto?.adesso[0].compito, nata, 'la mossa non ha ritrovato la riga che aveva fatto nascere')
+})
+
 test('l’istruzione dice che anche gli avvii si scrivono nella lingua dell’app', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])

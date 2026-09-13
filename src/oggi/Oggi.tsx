@@ -1377,6 +1377,13 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   const [giorno, setGiorno] = useState(giornoLocale)
   const [senzaData, setSenzaData] = useState(false)
   const [modifica, setModifica] = useState<Compito | null>(null)
+  // chiesta da fuori (una riga del punto): si apre il dettaglio e la richiesta si consuma
+  useEffect(() => {
+    if (!l.daAprire) return
+    const c = l.compiti.find(x => x.id === l.daAprire)
+    if (c) setModifica(c)
+    l.richiestaServita()
+  }, [l.daAprire, l.compiti, l])
   const [dataOggi, setDataOggi] = useState(giornoLocale)
   useEffect(() => {
     const aggiorna = () => setDataOggi(giornoLocale())

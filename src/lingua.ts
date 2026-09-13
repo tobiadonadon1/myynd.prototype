@@ -542,7 +542,7 @@ const EN: Record<string, string> = {
   'smesso di riprovare': 'stopped trying',
 
 // — quello che si scrive da solo: gli argomenti e il ritratto —
-  'Scrivilo da quello che leggo': 'Write it from what I read',
+  'Scrivilo da quello che faccio e leggo': 'Write it from what I do and read',
   'L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.':
     'I wrote this, from what you open. Change it and it stays yours.',
   'Guarda se ti torna, poi salva.': 'See if that sounds right, then save.',
@@ -1977,6 +1977,10 @@ const EN: Record<string, string> = {
     'Myynd reads documents: PDF, Word, Excel, PowerPoint, text, Markdown, HTML and RTF. Images, video, code and system files are not documents.',
   'Collega il mio PC': 'Connect my PC',
   'Solo alcune cartelle': 'Only some folders',
+
+  // chi ha scritto il fuoco: la stessa nota che sta sotto gli argomenti
+  'L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.':
+    'Myynd wrote this from your tasks and projects. If it is wrong, correct it.',
 
   /*
    * — le schede delle fonti, riscritte corte —
