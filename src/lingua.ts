@@ -382,6 +382,8 @@ const EN: Record<string, string> = {
   'Flusso': 'Workflow',
   'Suggerimenti': 'Suggestions',
   'Suggerita': 'Suggested',
+  'ultima corsa': 'last run',
+  'Nessuna automazione ancora. Descrivine una, o accendi un suggerimento quando compare.': 'No automations yet. Describe one, or switch on a suggestion when it appears.',
   'Aggiorna i suggerimenti': 'Refresh suggestions',
   'Rivedi': 'Review',
   'Nessuna automazione, per ora.': 'No automations yet.',
@@ -1925,30 +1927,24 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  // le quattro sezioni del punto: «Progetti», «Da leggere» e «Risposte» il dizionario le ha già
+  'GitHub': 'GitHub',
+  'Niente di nuovo da quando ci siamo visti.': 'Nothing new since we last met.',
   'Il punto non è arrivato: il fornitore non ha risposto.': 'The briefing did not come: the provider did not answer.',
   'Il punto di ieri è scaduto.': 'Yesterday’s briefing has expired.',
   'Rifallo quando vuoi: dieci secondi.': 'Redo it whenever you like: ten seconds.',
   'Il punto non è arrivato in una forma leggibile. Riprova.': 'The briefing did not come back in a readable shape. Try again.',
   'Questo progetto l’hai scritto tu: chiudilo dalla Memoria.': 'You wrote this project yourself: close it from Memory.',
-  'Mentre non c’eri': 'While you were away',
-  'Adesso': 'Now',
-  'I tuoi progetti': 'Your projects',
-  'Tienilo': 'Keep it',
-  'Non è così': 'Not quite',
-  'Tenuto': 'Kept',
   'Rifai il punto': 'Redo the briefing',
   'Per oggi basta: tre punti al giorno. Si riparte domani.': 'That’s it for today: three briefings a day. Tomorrow again.',
   'Questo progetto non c’è nel punto.': 'This project is not in the briefing.',
   'Non c’è nessun angolo da tenere.': 'There is no angle to keep.',
   'Non c’è nessun angolo da scartare.': 'There is no angle to discard.',
   // — il punto, da finestra —
-  'Da accendere': 'Worth switching on',
   'Accendi': 'Switch on',
-  'Accesa': 'On',
   'Fagliela fare': 'Hand it over',
   'apri': 'open',
   'Il punto di oggi.': 'Today’s briefing.',
-  'Niente di nuovo.': 'Nothing new.',
   // — il prompt: la riga diventa una richiesta da incollare in un altro assistente —
   'Preparami il prompt': 'Write me the prompt',
   'Da incollare in Claude o ChatGPT': 'To paste into Claude or ChatGPT',
@@ -1973,6 +1969,43 @@ const EN: Record<string, string> = {
   'Scrivania, Documenti, Download, iCloud Drive e il resto della tua cartella. Legge e basta, non sposta niente.':
     'Desktop, Documents, Downloads, iCloud Drive and the rest of your home folder. It reads, and nothing else: it never moves a thing.',
   'Collega il mio Mac': 'Connect my Mac',
+
+  /*
+   * — GitHub —
+   *
+   * La scheda, e quello che il server può rispondere mentre si collega o
+   * mentre legge. Le tre righe del «Dove trovo il token?» sono corte apposta:
+   * nominano le voci esatte del menù di GitHub, che in inglese si chiamano
+   * come si chiamano — e infatti restano uguali dentro la frase tradotta.
+   */
+  'Le pull request, le issue e i commit dei tuoi repository.':
+    'The pull requests, issues and commits in your repositories.',
+  'Le pull request, le issue e i commit dei tuoi repository, in sola lettura.':
+    'The pull requests, issues and commits in your repositories, read-only.',
+  'Token di accesso': 'Access token',
+  'Comincia per github_pat_ se \u00e8 a grana fine, per ghp_ se \u00e8 classico.':
+    'It starts with github_pat_ if it is fine-grained, with ghp_ if it is classic.',
+  'Solo questi repository (uno per riga, owner/nome)':
+    'Only these repositories (one per line, owner/name)',
+  'Vuoto: legge i tuoi trenta repository pi\u00f9 attivi.':
+    'Leave empty: it reads your thirty most active repositories.',
+  'Collega GitHub': 'Connect GitHub',
+  'Su github.com: Settings \u203a Developer settings \u203a Personal access tokens.':
+    'On github.com: Settings \u203a Developer settings \u203a Personal access tokens.',
+  'Dagli la sola lettura su contenuti, issue e pull request dei repository che ti interessano.':
+    'Give it read-only access to contents, issues and pull requests on the repositories you care about.',
+  'Copia il token e incollalo qui.': 'Copy the token and paste it here.',
+  'Serve il token di GitHub.': 'I need your GitHub token.',
+  'Il token di GitHub non \u00e8 valido.': 'That GitHub token is not valid.',
+  'A questo token manca l\u2019ambito \u00abrepo\u00bb: rifallo spuntando la lettura dei repository.':
+    'This token is missing the \u00abrepo\u00bb scope: make it again with read access to repositories.',
+  'A questo token mancano dei permessi: serve la lettura di contenuti, issue e pull request.':
+    'This token is missing permissions: it needs read access to contents, issues and pull requests.',
+  'GitHub non trova questo repository, o il token non lo vede.':
+    'GitHub cannot find that repository, or the token cannot see it.',
+  'GitHub non ha risposto come mi aspettavo.': 'GitHub did not answer the way I expected.',
+  'GitHub ha detto di rallentare: riprendo al prossimo giro.':
+    'GitHub asked me to slow down. I will pick it up on the next pass.',
   'Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.':
     'Myynd reads documents: PDF, Word, Excel, PowerPoint, text, Markdown, HTML and RTF. Images, video, code and system files are not documents.',
   'Collega il mio PC': 'Connect my PC',

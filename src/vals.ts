@@ -1237,13 +1237,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
       stato: [frasi.statoConnettore(c.documenti), c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
-      onClick: async () => {
-        // «scollegato» si dice solo se è vero: prima usciva anche quando il server aveva detto di no
-        try { await api.scollega(c.id) }
-        catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a scollegare.')); return }
-        await Promise.all([ricaricaStato(), caricaMente(mappaInVista)])
-        mostraToast(frasi.scollegato(t(c.nome)))
-      }
+      // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
+      // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto
+      onClick: () => apriConnessioni(c.id)
 
     })),
     connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({

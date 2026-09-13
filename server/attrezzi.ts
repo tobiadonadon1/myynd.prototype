@@ -59,6 +59,7 @@ export type Nome =
   | 'sharepoint.leggi'
   | 'dropbox.leggi'
   | 'whatsapp.leggi'
+  | 'github.leggi'
   | 'agenda.leggi'
   | 'chat.leggi'
   | 'claude.lavora'
@@ -71,7 +72,7 @@ export type Attrezzo = {
   spiega: { it: string; en: string }
   /** Quale connessione gli serve. Null = non gliene serve nessuna. */
   serve: 'posta' | 'desktop' | 'notion' | 'granola' | 'note' | 'conversazioni' | 'slack' | 'drive' | 'sharepoint'
-    | 'dropbox' | 'whatsapp' | 'agenda' | null
+    | 'dropbox' | 'whatsapp' | 'github' | 'agenda' | null
   /** Il colore con cui compare, che è quello della sua fonte. */
   tinta: string
   /** Come si presenta al modello. */
@@ -103,7 +104,8 @@ const FONTI: Partial<Record<Nome, string[]>> = {
   // «i file dell'azienda», e la differenza fra i due la conosce solo Microsoft
   'sharepoint.leggi': ['sharepoint'],
   'dropbox.leggi': ['dropbox'],
-  'whatsapp.leggi': ['whatsapp']
+  'whatsapp.leggi': ['whatsapp'],
+  'github.leggi': ['github']
 }
 
 const cercaIn = (nome: Nome, cosa: string, dove: string): Anthropic.Tool => ({
@@ -232,6 +234,17 @@ export const ATTREZZI: Attrezzo[] = [
     serve: 'whatsapp',
     tinta: '#4E8C3F',
     tool: cercaIn('whatsapp.leggi', 'i messaggi arrivati sul suo numero WhatsApp Business', 'un messaggio')
+  },
+  {
+    nome: 'github.leggi',
+    etichetta: { it: 'GitHub', en: 'GitHub' },
+    spiega: {
+      it: 'Legge le pull request, le issue e i commit dei tuoi repository.',
+      en: 'Reads the pull requests, issues and commits in your repositories.'
+    },
+    serve: 'github',
+    tinta: '#5A5A66',
+    tool: cercaIn('github.leggi', 'le pull request, le issue e i commit dei suoi repository su GitHub', 'un repository')
   },
   {
     nome: 'agenda.leggi',
@@ -384,6 +397,7 @@ export function collegato(n: Nome): boolean {
     case 'sharepoint': return !!c.microsoft?.parti.includes('file')
     case 'dropbox': return !!c.dropbox
     case 'whatsapp': return !!c.whatsapp
+    case 'github': return !!c.github
     /*
       Il calendario: quello del Mac, o quello di Outlook.
       Prima era solo il primo, e quindi su Windows un'automazione che diceva

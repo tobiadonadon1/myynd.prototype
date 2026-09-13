@@ -369,9 +369,18 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
   // invece di sparire: è ancora aperta, e deve restare raggiungibile
   const voci = inTesta && v.rigaHero ? [v.rigaHero, ...v.resto] : v.resto
   const righe = [
+    /*
+     * La freccia porta alla cosa, non alla riga.
+     *
+     * Una riga che viene da una mail — il punto le nota e le scrive qui, con
+     * dentro il documento da cui vengono — si apre su quella mail: è quello
+     * che serve per rispondere, ed è quello che ha chiesto lui. Una riga che
+     * si è scritto da solo non ha niente dietro, e allora sale in cima come
+     * sempre, dove c'è lo spazio per farci qualcosa.
+     */
     ...compiti.filter(c => c.id !== inTesta?.id).slice(0, 6).map(c => ({
       chiave: c.id,
-      nodo: <RigaCompito c={c} l={lista!} apri={() => setInCima(c.id)} />
+      nodo: <RigaCompito c={c} l={lista!} apri={() => (c.doc ? v.apriFonte(c.doc) : setInCima(c.id))} />
     })),
     ...voci.map(r => ({
       chiave: r.id,
@@ -443,9 +452,9 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           È una carta come le due qui sopra — titolo, una riga, un bottone — e
           non più un rigo scritto piccolo: aprendola si apre il foglio da
           leggere. Il vestito ce l'ha dentro, in `components/Punto.tsx`. */}
-      {/* Una riga del punto porta alla lista, non in cima a questa pagina: la
-          mossa è una riga della lista, e si apre dove sta. */}
-      <Punto v={v} lista={lista} />
+      {/* Una riga del punto apre il documento da cui viene, e niente altro: le
+          cose da fare non stanno lì dentro, stanno qui sotto. */}
+      <Punto v={v} />
 
       {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} />}
 

@@ -6,12 +6,17 @@
 // domanda con cui si torna nell'app merita il peso delle altre carte.
 //
 // Aprendola si apre un *documento*: un foglio color avorio, largo seicento
-// quaranta, con i margini di una pagina e una riga per cosa. Era una finestra
-// fitta — tredici pixel, pastiglie a destra di ogni riga, incisi con la
-// lineetta, note in corsivo — e la si chiudeva senza leggerla. Qui la riga è
-// il bersaglio: se parla di una bozza, cliccarla apre la bozza; se parla di
-// una notizia, il titolo la apre. Niente pastiglie, niente corsivo, niente
-// lineette: quelle le toglie anche il server, ma la pagina non le rimette.
+// quaranta, con i margini di una pagina e una riga per cosa. Quattro sezioni,
+// e sono le quattro domande che ha scelto lui: i progetti, GitHub, cosa
+// leggere, chi ha risposto. Ogni riga apre il documento da cui viene — la
+// mail, la pagina del repository, il file — e le righe che non hanno niente
+// dietro sono testo e basta.
+//
+// Quello che qui non c'è più sono le cose da fare. Stavano sotto «adesso» con
+// una freccia che apriva una riga nuova della lista, e la sua frase è stata
+// questa: «quello lo devi mettere nel mio feed, non lì». Adesso il server le
+// mette in lista mentre scrive il punto, e nel feed la freccia apre la mail a
+// cui deve rispondere.
 //
 // Il saluto non lo scrive il modello: lo compone la pagina dal tempo che la
 // finestra sa, così non dice «sei stato via sette giorni» perché il materiale
@@ -22,7 +27,6 @@ import { frasi, loc, t, tradotta } from '../lingua'
 import { Hov, LABEL, useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
 import type { Vals } from '../vals'
-import type { Lista } from '../oggi/useCompiti'
 import { usePunto } from '../usePunto'
 import type { RigaPunto } from '../api'
 
@@ -82,7 +86,6 @@ const QUIETO: CSSProperties = {
   flex: 'none', padding: 0, border: 'none', background: 'none', fontFamily: 'inherit',
   fontSize: 12, lineHeight: 1.55, color: 'rgba(34,39,31,.5)', cursor: 'pointer', whiteSpace: 'nowrap'
 }
-const FERMO: CSSProperties = { ...QUIETO, cursor: 'default' }
 
 /** La carta in prima pagina: come le altre, non un rigo di servizio. */
 const CARTA: CSSProperties = {
@@ -123,58 +126,53 @@ function Sezione({ etichetta, children }: { etichetta: string; children: React.R
 /**
  * Una riga del punto.
  *
- * Se parla di una riga della lista o di un documento, la riga si apre; se non
- * parla di niente che si possa aprire, è solo testo. Non c'è un verbo da
- * scegliere: il verbo è quello che c'è dietro alla frase.
+ * Se dietro c'è un documento la riga si apre, e in fondo compare la freccia
+ * piccola che dice che si può; se non c'è, è solo testo. Non c'è un verbo da
+ * scegliere: il verbo è quello che c'è dietro alla frase. `nome` è il progetto,
+ * l'unica cosa che si scrive più forte del resto.
  */
-function Voce({ r, apriCompito, apriDoc }: {
-  r: RigaPunto; apriCompito: (id: string) => void; apriDoc: (id: string) => void
+function Voce({ nome, testo, doc, apriDoc }: {
+  nome?: string; testo: string; doc: string | null; apriDoc: (id: string) => void
 }) {
-  const apri = r.compito ? () => apriCompito(r.compito!) : r.doc ? () => apriDoc(r.doc!) : null
-  if (!apri) return <div style={LINEA}><span style={TESTO}>{r.testo}</span></div>
+  const dentro = (
+    <span style={TESTO}>
+      {nome ? <span style={{ fontWeight: 500 }}>{nome} </span> : null}
+      {nome ? <span style={SPENTO}>{testo}</span> : testo}
+    </span>
+  )
+  if (!doc) return <div style={LINEA}>{dentro}</div>
   return (
-    <Hov as="button" type="button" style={APRIBILE} hover={RAME} onClick={apri}>
-      <span style={TESTO}>{r.testo}</span>
+    <Hov as="button" type="button" style={APRIBILE} hover={RAME} onClick={() => apriDoc(doc)}>
+      {dentro}
       <IconAvanti size={12} style={{ flex: 'none', opacity: .5 }} />
     </Hov>
   )
 }
 
-function Finestra({ v, lista, p }: {
-  v: Vals; lista?: Lista; p: ReturnType<typeof usePunto>
-}) {
+function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
   const finestra = useRef<HTMLDivElement>(null)
   useFocoDialogo(finestra, p.nascondi)
   const punto = p.punto!
 
   /*
-   * Una mossa si apre dove vive, cioè in lista.
+   * Una riga si apre su quello che la dice.
    *
-   * Prima la portava in cima alla prima pagina, che è il posto dove Myynd
-   * mette quello che propone lui: una riga della lista finiva a fare
-   * l'annuncio di sé stessa, e quello che gli serviva — le domande da
-   * rispondere, la bozza da approvare — restava un clic più in là. Adesso si
-   * va in «Da fare» con quella riga già aperta: la lista è la stessa delle due
-   * schermate, quindi aprirla qui vuol dire trovarla aperta là. Una riga
-   * chiusa nel frattempo non si apre più: si va in lista e basta.
+   * È l'unico gesto rimasto nella finestra, ed è sempre lo stesso: la mail che
+   * ha ricevuto, la pagina del repository, il file arrivato. Il documento si
+   * apre nel visore dell'app, quindi la finestra si chiude prima.
    */
-  const apriRiga = (id: string) => {
-    p.nascondi()
-    if (!lista?.compiti.some(c => c.id === id)) return v.goOggi()
-    // la riga si apre nel suo dettaglio, non solo si allarga in lista: «apri quella cosa» vuol dire questo
-    lista.chiediDiAprire(id)
-    v.goOggi()
-  }
   const apriDoc = (id: string) => { p.nascondi(); v.apriFonte(id) }
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
-    <Voce key={i} r={r} apriCompito={apriRiga} apriDoc={apriDoc} />)
+    <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
-  const quante = punto.mentreNonCeri.length + punto.adesso.length + punto.daLeggere.length + punto.avvii.length
-  const vuoto = quante === 0 && punto.progetti.length === 0
+  const quante = punto.progetti.length + punto.github.length + punto.daLeggere.length + punto.risposte.length
+  const vuoto = quante === 0
   const data = new Date(punto.quando).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   const sotto = [
     data,
-    vuoto ? t('Niente di nuovo.') : frasi.coseNelPunto(quante),
+    // quando non c'è niente lo dice il foglio, una riga sotto: dirlo due volte
+    // nella stessa finestra è il modo di far sembrare vuoto anche il resto
+    vuoto ? '' : frasi.coseNelPunto(quante),
     punto.via ? frasi.viaDa(punto.via) : ''
   ].filter(Boolean).join(' · ')
 
@@ -199,11 +197,21 @@ function Finestra({ v, lista, p }: {
           {sotto}
         </div>
 
-        {punto.mentreNonCeri.length > 0 && (
-          <Sezione etichetta={t('Mentre non c’eri')}>{righe(punto.mentreNonCeri)}</Sezione>
+        {vuoto && (
+          <div style={{ ...LINEA, marginTop: 26 }}>
+            <span style={TESTO}>{t('Niente di nuovo da quando ci siamo visti.')}</span>
+          </div>
         )}
-        {punto.adesso.length > 0 && (
-          <Sezione etichetta={t('Adesso')}>{righe(punto.adesso)}</Sezione>
+
+        {punto.progetti.length > 0 && (
+          <Sezione etichetta={t('Progetti')}>
+            {punto.progetti.map(pr => (
+              <Voce key={pr.id || pr.nome} nome={pr.nome} testo={pr.novita} doc={pr.doc} apriDoc={apriDoc} />
+            ))}
+          </Sezione>
+        )}
+        {punto.github.length > 0 && (
+          <Sezione etichetta={t('GitHub')}>{righe(punto.github)}</Sezione>
         )}
         {punto.daLeggere.length > 0 && (
           <Sezione etichetta={t('Da leggere')}>
@@ -221,65 +229,8 @@ function Finestra({ v, lista, p }: {
             ))}
           </Sezione>
         )}
-        {punto.avvii.length > 0 && (
-          <Sezione etichetta={t('Da accendere')}>
-            {punto.avvii.map((a, i) => {
-              const accesa = p.accese[a.frase]
-              return (
-                <div key={i} style={LINEA}>
-                  <span style={TESTO}>
-                    {a.frase}
-                    {a.perche && <span style={SPENTO}> {a.perche}</span>}
-                  </span>
-                  {accesa
-                    ? <span style={FERMO}>{t('Accesa')}</span>
-                    : <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
-                        onClick={() => p.avvia(a.frase)}>{t('Accendi')}</Hov>}
-                </div>
-              )
-            })}
-            {p.guaioAvvio && <div style={{ fontSize: 12, color: '#8E3F1F', overflowWrap: 'anywhere' }}>{t(p.guaioAvvio)}</div>}
-          </Sezione>
-        )}
-        {punto.progetti.length > 0 && (
-          <Sezione etichetta={t('I tuoi progetti')}>
-            {punto.progetti.map(pr => {
-              const tenuto = !!pr.angolo && pr.angoliTenuti.includes(pr.angolo)
-              return (
-                <div key={pr.nome} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <div style={LINEA}>
-                    <span style={TESTO}>
-                      <span style={{ fontWeight: 500 }}>{pr.nome}</span>
-                      {pr.doveSei && <span style={SPENTO}> {pr.doveSei}</span>}
-                    </span>
-                    {/* il modello i progetti li indovina, e a volte sbaglia: un dito
-                        lo chiude in tabella, e non torna, nemmeno al punto dopo.
-                        Ma solo se l'ha indovinato lui: uno scritto a mano, o uno
-                        su cui ha già tenuto un angolo, da qui non si chiude */}
-                    {pr.id && pr.proposto && (
-                      <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
-                        onClick={() => p.nonProgetto(pr.id)}>{t('Non è un progetto')}</Hov>
-                    )}
-                  </div>
-                  {pr.angolo && (
-                    <div style={{ ...LINEA, flexWrap: 'wrap', gap: 10 }}>
-                      <span style={{ ...TESTO, flexBasis: 260 }}>{pr.angolo}</span>
-                      {tenuto
-                        ? <span style={FERMO}>{t('Tenuto')}</span>
-                        : (
-                          <span style={{ display: 'inline-flex', gap: 14, flex: 'none' }}>
-                            <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
-                              onClick={() => p.tieni(pr.nome, pr.angolo)}>{t('Tienilo')}</Hov>
-                            <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
-                              onClick={() => p.scarta(pr.nome, pr.angolo)}>{t('Non è così')}</Hov>
-                          </span>
-                        )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </Sezione>
+        {punto.risposte.length > 0 && (
+          <Sezione etichetta={t('Risposte')}>{righe(punto.risposte)}</Sezione>
         )}
 
         <div style={{
@@ -332,11 +283,11 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
  * pagina è la cosa peggiore che si possa aggiungere qui — tranne quando ce
  * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
  */
-export function Punto({ v, lista }: { v: Vals; lista?: Lista }) {
+export function Punto({ v }: { v: Vals }) {
   const p = usePunto()
   if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
-  if (p.daVedere) return <Finestra v={v} lista={lista} p={p} />
-  const quante = p.punto.mentreNonCeri.length + p.punto.adesso.length + p.punto.daLeggere.length + p.punto.avvii.length
+  if (p.daVedere) return <Finestra v={v} p={p} />
+  const quante = p.punto.progetti.length + p.punto.github.length + p.punto.daLeggere.length + p.punto.risposte.length
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>

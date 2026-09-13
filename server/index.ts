@@ -43,6 +43,7 @@ import * as accesso from './connettori/accesso.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
+import * as github from './connettori/github.ts'
 import * as drive from './connettori/drive.ts'
 import * as microsoft from './connettori/microsoft.ts'
 import * as dropbox from './connettori/dropbox.ts'
@@ -589,6 +590,7 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'compatibile' ? !!c.compatibile :
         v.id === 'google' ? google.collegato() :
         v.id === 'slack' ? slack.collegato(c) :
+        v.id === 'github' ? github.collegato(c) :
         v.id === 'drive' ? drive.collegato() :
         v.id === 'microsoft' ? microsoft.collegato('posta') :
         v.id === 'sharepoint' ? microsoft.collegato('file') :
@@ -1290,6 +1292,29 @@ app.post('/api/connettori/slack', async (req, res) => {
 })
 
 /**
+ * GitHub: il token si prova, e l'elenco dei repository si ripulisce qui.
+ *
+ * Chi incolla «solo questi» li scrive a mano, uno per riga, e a mano si
+ * sbaglia: una riga vuota, uno spazio in coda, l'indirizzo intero al posto di
+ * `owner/nome`. Ripulirli qui — una volta, dove si scrivono — è l'unico modo
+ * perché il connettore possa prenderli alla lettera invece di indovinare a
+ * ogni giro.
+ */
+app.post('/api/connettori/github', async (req, res) => {
+  const token: string = String(req.body?.token ?? '').trim()
+  if (!token) return res.status(400).json({ errore: 'Serve il token di GitHub.' })
+  const repos = (Array.isArray(req.body?.repos) ? req.body.repos : [])
+    .map((r: unknown) => String(r).trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, ''))
+    .filter((r: string) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(r))
+  try {
+    const e = await github.prova({ token })
+    if (!e.ok) return res.status(400).json({ errore: e.errore })
+    cfg.aggiorna({ github: { token, ...(repos.length ? { repos } : {}) } })
+    res.json({ ok: true, login: e.login })
+  } catch (e) { errore(res, e) }
+})
+
+/**
  * Google Drive: lo stesso ballo di Gmail, un consenso diverso.
  *
  * Il client id si può riusare — è lo stesso progetto su Google Cloud — e
@@ -1421,6 +1446,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'compatibile') { delete c.compatibile; delete c.motore }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
   else if (id === 'slack') delete c.slack
+  else if (id === 'github') delete c.github
   else if (id === 'drive') { delete c.drive; drive.scordaIlToken() }
   else if (id === 'dropbox') { delete c.dropbox; dropbox.scordaIlToken() }
   else if (id === 'whatsapp') delete c.whatsapp
@@ -1436,7 +1462,9 @@ app.delete('/api/connettori/:id', (req, res) => {
     return res.json({ ok: true })
   }
   else return res.status(400).json({ errore: 'Connettore sconosciuto.' })
-  cfg.scrivi(c)
+  // si dice nel registro: una credenziale che sparisce senza una riga è quello che è successo il 13 settembre
+  console.log(`myynd · scollegata la fonte «${id}» su richiesta`)
+  cfg.scrivi(c, { togli: [id, ...(id === 'claude' ? ['claudeCon'] : []), ...(id === 'compatibile' ? ['motore'] : [])] })
   if (id !== 'claude' && id !== 'compatibile') store.svuotaFonte(id)
   res.json({ ok: true })
 })
@@ -1680,6 +1708,27 @@ async function leggiTutto(
     avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
     return e.docs.length
   })
+  const gh = c.github
+  if (gh) await fonte('github', async () => {
+    avvisa({ fase: 'github', stato: 'apro i repository' })
+    const e = await github.sincronizza(gh, (fatti, tot) =>
+      avvisa({ fase: 'github', stato: `${fatti} di ${tot} repository` }))
+    await store.salvaDocumentiAPezzi(e.docs)
+    /*
+      Non si riconcilia, e qui è l'unica scelta giusta.
+
+      Un giro guarda le ultime due settimane: `e.docs` non è l'inventario della
+      fonte, è una finestra. Passarlo a `riconcilia` vorrebbe dire cancellare a
+      ogni giro ogni pull request, issue e commit più vecchio di quattordici
+      giorni — non perché sia sparito da GitHub, ma perché non era nella
+      finestra. È la stessa ragione per cui non riconciliano Gmail e Outlook.
+    */
+    avvisa({
+      fase: 'github', stato: 'fatto', documenti: e.docs.length,
+      falliti: e.falliti, troncato: e.troncato, limite: e.limite, repos: e.repos
+    })
+    return e.docs.length
+  })
   const drv = c.drive
   if (drv) await fonte('drive', async () => {
     avvisa({ fase: 'drive', stato: 'apro i documenti' })
@@ -1828,7 +1877,8 @@ async function rileggiDaSola() {
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni) return
+    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni
+    && !c.github) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {

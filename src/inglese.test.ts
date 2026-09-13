@@ -31,7 +31,7 @@ const ITALIANE = new RegExp(
  * allo stesso modo nelle due lingue. Ognuna è una scelta, non una dimenticanza.
  */
 const UGUALI_APPOSTA = new Set([
-  'Myynd', 'Chat', 'Desktop', 'Email', 'Password', 'Notion', 'Slack', 'Dropbox',
+  'Myynd', 'Chat', 'Desktop', 'Email', 'Password', 'Notion', 'Slack', 'Dropbox', 'GitHub',
   'WhatsApp Business', 'Google Drive', 'Word, Pages', 'Claude', 'Claude Code',
   // «prompt» si dice così anche in italiano: è la parola con cui lo chiede lui
   'prompt'

@@ -108,49 +108,15 @@ export function usePunto() {
     setNascosto(punto.quando)
   }, [punto])
 
-  const aggiornaProgetto = (nome: string, f: (p: Punto['progetti'][number]) => Punto['progetti'][number]) =>
-    setPunto(p => p ? { ...p, progetti: p.progetti.map(x => x.nome === nome ? f(x) : x) } : p)
-
-  const tieni = useCallback(async (nome: string, angolo: string) => {
-    // subito nella pagina, poi al server: se fallisce si torna indietro
-    aggiornaProgetto(nome, p => ({ ...p, angoliTenuti: [...p.angoliTenuti, angolo] }))
-    try { await api.tieniAngolo(nome, angolo) }
-    catch { aggiornaProgetto(nome, p => ({ ...p, angoliTenuti: p.angoliTenuti.filter(a => a !== angolo) })) }
-  }, [])
-
-  /** «Non è un progetto»: si chiude in tabella, e sparisce dalla finestra. Se non passa, torna. */
-  const nonProgetto = useCallback(async (id: string) => {
-    let tolto: Punto['progetti'][number] | undefined
-    setPunto(p => {
-      if (!p) return p
-      tolto = p.progetti.find(x => x.id === id)
-      return { ...p, progetti: p.progetti.filter(x => x.id !== id) }
-    })
-    try { await api.chiudiProgetto(id) }
-    catch { if (tolto) setPunto(p => p ? { ...p, progetti: [...p.progetti, tolto!] } : p) }
-  }, [])
-
-  const scarta = useCallback(async (nome: string, angolo: string) => {
-    aggiornaProgetto(nome, p => ({ ...p, angolo: '' }))
-    try { await api.scartaAngolo(nome, angolo) }
-    catch { aggiornaProgetto(nome, p => ({ ...p, angolo })) }
-  }, [])
-
-  /** Le frasi accese da qui, in questa pagina: il bottone dice «Accesa» e non si ripreme. */
-  const [accese, setAccese] = useState<Record<string, string>>({})
-  const [guaioAvvio, setGuaioAvvio] = useState<string | null>(null)
-  const avvia = useCallback(async (frase: string) => {
-    setGuaioAvvio(null)
-    try {
-      const r = await api.avviaDalPunto(frase)
-      setAccese(a => ({ ...a, [frase]: r.nome }))
-      // il server toglie l'avvio dal punto: qui si tiene la riga, con il nome
-      // della ricetta accanto, finché la finestra non si chiude
-    } catch (e) {
-      setGuaioAvvio(e instanceof Error ? e.message : String(e))
-    }
-  }, [])
-
+  /*
+   * Qui non si fa più niente.
+   *
+   * C'erano «tienilo», «non è così», «non è un progetto» e «accendi»: quattro
+   * gesti dentro una finestra che si legge in dieci secondi. Il punto adesso
+   * racconta e basta — quello che si fa si fa dove le cose vivono, cioè in
+   * lista e nel feed — quindi da qui escono solo le due cose che riguardano la
+   * finestra stessa: rifarlo e chiuderla.
+   */
   return {
     /** Il punto, anche se l'ha già chiuso: chi lo chiama decide se aprirlo o solo nominarlo. */
     punto,
@@ -163,8 +129,7 @@ export function usePunto() {
     /** Perché l'ultimo tentativo non è andato: già in italiano, da tradurre in pagina. */
     guaio,
     carico, tetto,
-    rifai, nascondi, tieni, scarta, nonProgetto,
-    avvia, accese, guaioAvvio
+    rifai, nascondi
   }
 }
 

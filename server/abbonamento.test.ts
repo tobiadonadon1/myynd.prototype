@@ -173,7 +173,7 @@ test('scollegare Claude dimentica anche con cosa lo si pagava', async () => {
   assert.equal(abb.scelto(), true)
   const c = leggi() as Record<string, unknown>
   abb.scollega(c)
-  scrivi(c as Parameters<typeof scrivi>[0])
+  scrivi(c as Parameters<typeof scrivi>[0], { togli: ['claude', 'claudeCon'] })
   assert.equal(abb.scelto(), false, 'la scelta dell’abbonamento è rimasta scritta')
   assert.equal(leggi().claude, undefined)
 })

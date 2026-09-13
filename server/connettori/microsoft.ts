@@ -188,7 +188,7 @@ export function scollega(parte?: Parte) {
   const restano = parte ? m.parti.filter(p => p !== parte) : []
   if (!restano.length) {
     const { microsoft: _via, ...resto } = c
-    scriviConfig(resto)
+    scriviConfig(resto, { togli: ['microsoft'] })
   } else {
     scriviConfig({ ...c, microsoft: { ...m, parti: restano } })
   }

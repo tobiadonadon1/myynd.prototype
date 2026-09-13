@@ -49,7 +49,7 @@ const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Docume
 // — inMano: cosa è collegato davvero —
 
 test('senza niente collegato lo dice, e nomina la posta fra quello che manca', () => {
-  cfg.scrivi({})
+  cfg.scrivi({}, { togli: [...cfg.CON_SEGRETI] })
   const r = claude.inMano()
   assert.match(r, /Non hai nessuna fonte collegata/)
   assert.match(r, /NON è collegato[^.]*la posta/)
@@ -63,18 +63,18 @@ test('la posta via Gmail conta come collegata', () => {
 })
 
 test('la posta via Outlook conta come collegata solo se è stata concessa quella metà', () => {
-  cfg.scrivi({ microsoft: { clientId: 'x', refresh: 'y', parti: ['posta'] } })
+  cfg.scrivi({ microsoft: { clientId: 'x', refresh: 'y', parti: ['posta'] } }, { togli: [...cfg.CON_SEGRETI] })
   assert.match(claude.inMano(), /Quello che puoi leggere: la posta/)
 
   // solo i file: SharePoint sì, la posta no
-  cfg.scrivi({ microsoft: { clientId: 'x', refresh: 'y', parti: ['file'] } })
+  cfg.scrivi({ microsoft: { clientId: 'x', refresh: 'y', parti: ['file'] } }, { togli: [...cfg.CON_SEGRETI] })
   const r = claude.inMano()
   assert.match(r, /Quello che puoi leggere:[^.]*SharePoint/)
   assert.match(r, /NON è collegato[^.]*la posta/)
 })
 
 test('la posta via IMAP conta come sempre', () => {
-  cfg.scrivi({ posta: { host: 'imap.esempio.it', porta: 993, utente: 'io@esempio.it', password: 'x' } })
+  cfg.scrivi({ posta: { host: 'imap.esempio.it', porta: 993, utente: 'io@esempio.it', password: 'x' } }, { togli: ['microsoft'] })
   assert.match(claude.inMano(), /Quello che puoi leggere: la posta/)
   cfg.scrivi({})
 })

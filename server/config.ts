@@ -560,6 +560,16 @@ export type ConfigNote = { note?: number }
 export type ConfigNotion = { token: string }
 
 /**
+ * GitHub: un token incollato, in sola lettura.
+ *
+ * `repos` è un recinto, non una comodità: vuoto vuol dire «i miei trenta più
+ * vivi», e un elenco `owner/nome` vuol dire quelli e basta — chi lo scrive sta
+ * escludendo il resto, e va preso alla lettera. Il token è una credenziale come
+ * le altre: non esce mai da `pubblica()`.
+ */
+export type ConfigGithub = { token: string; repos?: string[] }
+
+/**
  * Granola: un collegamento senza niente dentro.
  *
  * Non c'è un token, non c'è un indirizzo, non c'è un percorso — si legge un
@@ -599,6 +609,7 @@ export type Config = {
   posta?: ConfigPosta
   desktop?: ConfigDesktop
   notion?: ConfigNotion
+  github?: ConfigGithub
   granola?: ConfigGranola
   note?: ConfigNote
   conversazioni?: ConfigConversazioni
@@ -876,7 +887,19 @@ export function leggi(): Config {
  * uno stesso filesystem è atomico, quindi il file o è quello di prima o è
  * quello nuovo, mai una via di mezzo.
  */
-export function scrivi(c: Config) {
+/** I campi che portano una credenziale: non spariscono da una scrittura qualunque. */
+export const CON_SEGRETI = ['claude', 'posta', 'notion', 'slack', 'github', 'compatibile', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
+
+/**
+ * Scrive la configurazione.
+ *
+ * Con una regola sola in più: una credenziale che sta sul disco non sparisce
+ * perché chi scrive non ce l'aveva in mano. Il 13 settembre 2026 la chiave di
+ * Claude è sparita fra le 19:00 e le 19:03 senza una riga di registro che
+ * dicesse chi era stato. Togliere una credenziale si fa apposta, dicendolo
+ * (`togli`): tutto il resto la tiene, e se ci prova lo scrive nel registro.
+ */
+export function scrivi(c: Config, opz: { togli?: readonly string[] } = {}) {
   const u = chi.adesso()
   if (postgres.ATTIVO && u) {
     tenuta(u).config = structuredClone(c)
@@ -884,6 +907,15 @@ export function scrivi(c: Config) {
     return
   }
   assicuraDir()
+  const prima = leggi() as Record<string, unknown>
+  const dopo = c as Record<string, unknown>
+  const permessi = new Set(opz.togli ?? [])
+  for (const k of CON_SEGRETI) {
+    if (prima[k] !== undefined && dopo[k] === undefined && !permessi.has(k)) {
+      dopo[k] = prima[k]
+      console.warn(`myynd · qualcuno ha provato a scrivere la configurazione senza «${k}»: l'ho tenuta.`, new Error().stack?.split('\n').slice(2, 5).join(' | '))
+    }
+  }
   const accanto = `${file()}.nuovo`
   writeFileSync(accanto, JSON.stringify(c, null, 2), { mode: 0o600 })
   chmodSync(accanto, 0o600)

@@ -71,6 +71,16 @@ export const CATALOGO: VoceConnettore[] = [
   // sulla piattaforma di Meta per le aziende, non quello personale — la dice
   // la scheda prima dei campi (forms.tsx), con il perché. La nota dice cos'è.
   { id: 'whatsapp', nome: 'WhatsApp Business', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I messaggi di un numero WhatsApp Business.' },
+  /*
+   * GitHub sta con Slack, e non è una forzatura.
+   *
+   * Il gruppo dice dove una persona va a cercarla, non che tipo di prodotto è:
+   * una pull request e una issue sono un posto dove si discute e si decide,
+   * esattamente come un canale — e chi cerca «dove si parla del lavoro» deve
+   * trovarli nello stesso riquadro. La nota dice le tre cose che porta, perché
+   * è la domanda vera prima di incollare un token: cosa finisce nell'indice.
+   */
+  { id: 'github', nome: 'GitHub', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Le pull request, le issue e i commit dei tuoi repository.' },
   { id: 'desktop', nome: nomeComputer(process.platform), gruppo: 'File', pronto: true, legge: true, nota: 'Tutto quello che tieni sul computer, in sola lettura: cartelle, file, download.' },
   { id: 'drive', nome: 'Google Drive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Gmail.' },
   { id: 'sharepoint', nome: 'SharePoint e OneDrive', gruppo: 'File', pronto: false, legge: true, nota: 'Arriva presto, insieme a Outlook.' },

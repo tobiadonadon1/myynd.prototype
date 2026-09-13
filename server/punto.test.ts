@@ -4,9 +4,9 @@
 // stesso punto e si ricorda cosa ha ricevuto — perché quello che va provato
 // non è la qualità del testo: è che il materiale sia quello giusto e tagliato,
 // che il cancello tenga (tre al giorno, tre ore, niente su niente di nuovo),
-// che i progetti stiano in tabella con il loro obiettivo e sopravvivano da un
-// punto all'altro, che uno chiuso non torni, e che un angolo tenuto finisca
-// nella memoria e uno scartato non torni nel prompt.
+// che le quattro sezioni siano quelle e solo quelle, e soprattutto che le cose
+// da fare finiscano in lista con dentro il documento da cui vengono — che è
+// tutto il senso del cambio: «quello lo devi mettere nel mio feed, non lì».
 //
 // L'orologio del punto si passa a mano, ma `indicizzato` dei documenti è
 // quello vero: per questo ogni prova prende «adesso» *dopo* aver seminato, e
@@ -16,7 +16,7 @@
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Documento } from './store.ts'
@@ -56,11 +56,19 @@ const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Docume
   quando: '2026-09-07T10:00:00.000Z', gruppo: 'posta', ...sopra
 })
 
+/** Una notizia da GitHub, come la porta il connettore: «repo #12: titolo». */
+const suGithub = (id: string, titolo: string, sopra: Partial<Documento> = {}): Documento =>
+  doc(id, titolo, { fonte: 'github', tipo: 'attività', autore: 'tobiadonadon', gruppo: 'codice', percorso: null, ...sopra })
+
+/** Il progetto di cui parla il modello finto: senza riga in tabella, non passa. */
+const seminaProgetto = () => progetti.scrivi({ nome: 'Myynd', obiettivo: 'Un gemello che sceglie per lui.' })
+
 const RISPOSTA = {
-  mentreNonCeri: [{ testo: 'È arrivato il preventivo di Rossi.', compito: '', doc: 'posta:INBOX:1' }],
-  adesso: [{ testo: 'Approva la bozza per Bianchi.', compito: 'c1', doc: '' }],
+  progetti: [{ nome: 'Myynd', novita: 'Il punto adesso ha quattro sezioni.', doc: 'posta:INBOX:1' }],
+  github: [],
   daLeggere: [{ titolo: 'Notizia sui modelli', perche: 'C’entra con Myynd.' }],
-  progetti: [{ nome: 'Myynd', obiettivo: 'Un gemello che sceglie per lui.', doveSei: 'Il punto è in lavorazione.', angolo: 'Far crescere i progetti insieme a lui.' }]
+  risposte: [],
+  compiti: []
 }
 
 /** Un fornitore compatibile finto: risponde con questo punto e si ricorda cosa ha ricevuto. */
@@ -92,7 +100,7 @@ function fornitoreSenzaCredito(): () => number {
 /** Tutto il testo mandato al modello, system e messaggi insieme. */
 const testoDi = (r: Record<string, unknown>) =>
   (r.messages as { content: string }[]).map(m => m.content).join('\n')
-/** Solo l'istruzione: è lì che stanno i progetti e gli angoli. */
+/** Solo l'istruzione: è lì che stanno i progetti e le regole delle sezioni. */
 const istruzioneDi = (r: Record<string, unknown>) =>
   String((r.messages as { role: string; content: string }[]).find(m => m.role === 'system')?.content)
 
@@ -120,6 +128,7 @@ const unAttimo = () => new Promise(r => setTimeout(r, 5))
 
 test('il materiale: i documenti arrivati (senza la posta in massa, al massimo venti), la lista, il feed, il fuoco', async () => {
   pulisci()
+  seminaProgetto()
   store.salvaDocumenti([
     doc('posta:INBOX:1', 'Preventivo Rossi'),
     doc('posta:INBOX:2', 'Offerte della settimana', { autore: 'Vinted <noreply@vinted.com>' }),
@@ -129,7 +138,6 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
   store.salvaFeed([{ tipo: 'Da decidere', titolo: 'Il deck per lunedì è a metà', testo: 'Mancano due slide.', fonte: 'desktop' }])
   timone.scriviFuoco('Questa settimana solo i preventivi.')
   store.ricorda({ enunciato: 'Non fa sconti al primo giro.', ambito: 'persona', genere: 'esplicita', fiducia: 1, origine: 'mano' })
-  store.registraAzione({ tipo: 'email', cosa: 'Preventivo aggiornato', verso: 'bianchi@esempio.it', esito: 'fatta', compito: 'c1' })
 
   const ricevute = fornitoreFinto()
   const t0 = adesso()
@@ -148,23 +156,22 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
   assert.match(mandato, /\[c2\] Preparare il contratto \(chiede/)
   assert.match(mandato, /Aperte per oggi:[\s\S]*Chiamare lo studio/)
   assert.match(mandato, /Chiuse da allora:[\s\S]*Pagare la fattura di marzo/)
-  assert.match(mandato, /bozze preparate: 2/)
-  assert.match(mandato, /email mandate \(su sua richiesta\): 1/)
-  assert.match(mandato, /email: Preventivo aggiornato → bianchi@esempio.it \(fatta, compito c1\)/)
   assert.match(mandato, /SUL FEED[\s\S]*Il deck per lunedì è a metà/)
   assert.match(mandato, /concentrarti su questo[\s\S]*solo i preventivi/)
   assert.match(mandato, /Non fa sconti al primo giro/)
   assert.match(mandato, /È stato via circa 4 ore/)
+  // senza GitHub e senza risposte le due sezioni si dicono vuote, invece di tacere
+  assert.match(mandato, /SU GITHUB: niente/)
+  assert.match(mandato, /HANNO RISPOSTO: nessuno/)
   // l'istruzione va nel blocco che si mette in cache, il materiale nel messaggio
   assert.match(istruzioneDi(ricevute[0]), /Sei Myynd\. Questa persona torna/)
   assert.doesNotMatch(istruzioneDi(ricevute[0]), /ARRIVATO/)
 
   // e quello che torna è ricucito: gli id passano solo se stanno nel materiale
   assert.equal(e.punto?.via, 240, 'l’assenza la porta la richiesta, non il modello')
-  assert.equal(e.punto?.mentreNonCeri[0].doc, 'posta:INBOX:1')
-  assert.equal(e.punto?.adesso[0].compito, 'c1')
   assert.equal(e.punto?.progetti[0].nome, 'Myynd')
-  assert.equal(e.punto?.progetti[0].dal, new Date(t0).toISOString())
+  assert.equal(e.punto?.progetti[0].novita, 'Il punto adesso ha quattro sezioni.')
+  assert.equal(e.punto?.progetti[0].doc, 'posta:INBOX:1')
 })
 
 /** Un file sul disco, con il percorso che decide se è una notizia. */
@@ -211,41 +218,109 @@ test('dal disco al massimo cinque, i più recenti', () => {
   assert.equal(m.indicizzati, 7, 'il conto dice anche quello che non è una notizia')
 })
 
-test('quello che ha fatto Myynd da solo non arriva al modello', async () => {
-  pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  seminaLista()
-  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
-  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
-  store.registraAzione({ tipo: 'email', cosa: 'Preventivo aggiornato', verso: 'bianchi@esempio.it', esito: 'fatta', compito: 'c1' })
-  store.registraAzione({ tipo: 'automazione', cosa: 'Rassegna del mattino', esito: 'fallita' })
+// — le quattro domande —
+//
+// Le sezioni sono quelle che ha chiesto lui, e nessun'altra: i progetti che si
+// sono mossi, GitHub, una notizia, chi ha risposto. Quello che le riempie deve
+// venire dal materiale, e ogni riga deve poter aprire qualcosa.
 
-  const ricevute = fornitoreFinto()
-  await punto.punto({}, adesso())
-  const mandato = testoDi(ricevute[0])
-  assert.doesNotMatch(mandato, /automazioni girate/, 'un’automazione che gira è finita nel punto')
-  assert.doesNotMatch(mandato, /Priorità in arrivo/, 'il registro delle automazioni è finito nel punto')
-  // quello che ha bisogno di lui resta: una mail partita su sua richiesta, e un guasto
-  assert.match(mandato, /email mandate \(su sua richiesta\): 1/)
-  assert.match(mandato, /Rassegna del mattino \(fallita\)/)
-})
-
-test('un id che non sta nel materiale non passa, nemmeno se il modello lo scrive', async () => {
+test('GitHub: le righe escono solo se ci sono documenti di GitHub', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   fornitoreFinto({
     ...RISPOSTA,
-    mentreNonCeri: [{ testo: 'Una cosa.', compito: 'inventato', doc: 'posta:INBOX:999' }]
+    github: [{ testo: 'La pipeline di myynd è fallita.', doc: 'posta:INBOX:1' }]
+  })
+  const senza = await punto.punto({}, adesso())
+  assert.deepEqual(senza.punto?.github, [], 'una riga di GitHub è uscita senza GitHub')
+
+  // adesso il connettore c'è, e porta due notizie dal repository
+  pulisci()
+  store.salvaDocumenti([
+    doc('posta:INBOX:1', 'Preventivo Rossi'),
+    suGithub('github:myynd#12', 'myynd #12: il punto a quattro sezioni'),
+    suGithub('github:myynd#13', 'myynd #13: la vedetta sulle cartelle')
+  ])
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA,
+    github: [
+      { testo: 'La #12 di myynd è stata unita.', doc: 'github:myynd#12' },
+      { testo: 'La #13 aspetta una revisione.', doc: 'github:myynd#13' },
+      // senza un documento dietro la freccia non apre niente: non esce
+      { testo: 'Qualcosa si muove sul repository.', doc: '' }
+    ]
   })
   const e = await punto.punto({}, adesso())
-  assert.equal(e.punto?.mentreNonCeri[0].compito, null)
-  assert.equal(e.punto?.mentreNonCeri[0].doc, null)
+  assert.match(testoDi(ricevute[0]), /SU GITHUB \(da allora\):[\s\S]*myynd #12/)
+  assert.deepEqual(e.punto?.github.map(r => r.doc), ['github:myynd#12', 'github:myynd#13'])
+  assert.equal(e.punto?.github[0].testo, 'La #12 di myynd è stata unita.')
+})
+
+test('risposte: solo le mail che continuano una conversazione sua', async () => {
+  pulisci()
+  store.salvaDocumenti([
+    // una risposta dall'oggetto
+    doc('posta:INBOX:20', 'Re: preventivo per la sede nuova', { autore: 'Verdi <verdi@esempio.it>' }),
+    // una mail dentro un filo dove ha scritto anche lui
+    doc('posta:INBOX:0', 'Il listino aggiornato', { filo: 'f1', inviato: true, autore: 'Io <io@esempio.it>' }),
+    doc('posta:INBOX:21', 'Il listino aggiornato, seconda parte', { filo: 'f1', autore: 'Anna <anna@esempio.it>' }),
+    // e una che arriva e basta
+    doc('posta:INBOX:22', 'Preventivo Rossi')
+  ])
+  const m = punto.raccogli(new Date(Date.now() - 60_000).toISOString())
+  assert.deepEqual(m.risposte.map(d => d.id).sort(), ['posta:INBOX:20', 'posta:INBOX:21'])
+  assert.ok(!m.arrivati.some(d => d.id === 'posta:INBOX:20'), 'una risposta è stata detta due volte')
+
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA,
+    risposte: [
+      { testo: 'Verdi chiede il preventivo per la sede.', doc: 'posta:INBOX:20' },
+      // una mail che non è una risposta non entra in questa sezione
+      { testo: 'Rossi ha mandato un preventivo nuovo.', doc: 'posta:INBOX:22' }
+    ]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.match(testoDi(ricevute[0]), /HANNO RISPOSTO \(email dentro conversazioni dove ha scritto anche lui\):/)
+  assert.deepEqual(e.punto?.risposte.map(r => r.doc), ['posta:INBOX:20'])
+})
+
+test('un id che non sta nel materiale non passa, nemmeno se il modello lo scrive', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'Una cosa.', doc: 'posta:INBOX:999' }]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.progetti[0].doc, null)
+})
+
+test('un progetto che non sta in tabella non entra: il punto ne parla, non ne inventa', async () => {
+  pulisci()
+  const vero = progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed entro ottobre' })
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [
+      { nome: 'nextas', novita: 'Bianchi ha confermato il term sheet.', doc: 'posta:INBOX:1' },
+      { nome: 'Orto', novita: 'I semi sono arrivati.', doc: '' }
+    ]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.deepEqual(e.punto?.progetti.map(p => p.nome), ['Nextas'], 'un progetto inventato è entrato nel punto')
+  assert.equal(e.punto?.progetti[0].id, vero.id)
+  assert.equal(progetti.trovaPerNome('Orto'), undefined, 'il punto ha scritto un progetto in tabella')
 })
 
 test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il punto le toglie', async () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  seminaLista()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:1', 'Preventivo Rossi'),
+    doc('posta:INBOX:20', 'Re: la sede nuova', { autore: 'Verdi <verdi@esempio.it>' }),
+    suGithub('github:myynd#12', 'myynd #12: il punto')
+  ])
   store.salvaNotizie([{
     id: 'n1', titolo: 'I modelli piccoli — la svolta', riassunto: 'Girano su un portatile.',
     perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
@@ -253,14 +328,11 @@ test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il p
   }])
 
   fornitoreFinto({
-    mentreNonCeri: [{ testo: 'È arrivato il preventivo di Rossi — con le cifre nuove.', compito: '', doc: 'posta:INBOX:1' }],
-    adesso: [{ testo: 'Approva la bozza per Bianchi — per Myynd.', compito: 'c1', doc: '' }],
+    progetti: [{ nome: 'Myynd', novita: 'Il punto è in lavorazione — quasi pronto.', doc: 'posta:INBOX:1' }],
+    github: [{ testo: 'La #12 è stata unita — ieri sera.', doc: 'github:myynd#12' }],
     daLeggere: [{ titolo: 'I modelli piccoli — la svolta', perche: 'C’entra con Myynd — da leggere oggi.' }],
-    progetti: [{
-      nome: 'Myynd — il gemello', obiettivo: 'Un gemello — che sceglie per lui.',
-      doveSei: 'Il punto è in lavorazione — quasi pronto.', angolo: 'Far crescere i progetti – insieme a lui.'
-    }],
-    avvii: [{ frase: 'Ogni lunedì alle 8 — un riepilogo della settimana', perche: 'Lo fa a mano — ogni volta.' }]
+    risposte: [{ testo: 'Verdi conferma la sede — con le date.', doc: 'posta:INBOX:20' }],
+    compiti: []
   })
 
   const e = await punto.punto({}, adesso())
@@ -268,46 +340,42 @@ test('le lineette non arrivano in pagina: il modello le scrive dappertutto, il p
   const tutto = JSON.stringify(e.punto)
   assert.doesNotMatch(tutto, /[—–]/, `una lineetta è arrivata in pagina: ${tutto}`)
   // l'inciso non sparisce: diventa una frase sua, con la maiuscola
-  assert.equal(e.punto?.mentreNonCeri[0].testo, 'È arrivato il preventivo di Rossi. Con le cifre nuove.')
-  assert.equal(e.punto?.adesso[0].testo, 'Approva la bozza per Bianchi. Per Myynd.')
+  assert.equal(e.punto?.progetti[0].novita, 'Il punto è in lavorazione. Quasi pronto.')
+  assert.equal(e.punto?.github[0].testo, 'La #12 è stata unita. Ieri sera.')
   assert.equal(e.punto?.daLeggere[0].titolo, 'I modelli piccoli. La svolta')
   assert.equal(e.punto?.daLeggere[0].perche, 'C’entra con Myynd. Da leggere oggi.')
-  assert.equal(e.punto?.progetti[0].nome, 'Myynd. Il gemello')
-  assert.equal(e.punto?.progetti[0].doveSei, 'Il punto è in lavorazione. Quasi pronto.')
-  assert.equal(e.punto?.progetti[0].angolo, 'Far crescere i progetti. Insieme a lui.')
-  assert.equal(e.punto?.avvii[0].frase, 'Ogni lunedì alle 8. Un riepilogo della settimana')
+  assert.equal(e.punto?.risposte[0].testo, 'Verdi conferma la sede. Con le date.')
 })
 
 test('le sezioni sono tagliate corte, e una riga lunga si accorcia a centoventi', async () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.salvaDocumenti([
+    suGithub('github:myynd#12', 'myynd #12'),
+    suGithub('github:myynd#13', 'myynd #13'),
+    suGithub('github:myynd#14', 'myynd #14'),
+    suGithub('github:myynd#15', 'myynd #15')
+  ])
   const lunga = 'Una riga che va avanti e non finisce mai, con dentro tutto quello che il modello ha trovato nel materiale di oggi e anche di ieri.'
   fornitoreFinto({
     ...RISPOSTA,
-    mentreNonCeri: [
-      { testo: lunga, compito: '', doc: '' },
-      { testo: 'La seconda.', compito: '', doc: '' },
-      { testo: 'La terza, che non deve passare.', compito: '', doc: '' }
-    ],
-    avvii: [
-      { frase: 'Quando arriva un preventivo, mettilo in lista con le cifre', perche: 'Niente da ricopiare.' },
-      { frase: 'Ogni lunedì alle 8, un riepilogo della settimana', perche: 'Lo fa già a mano.' },
-      { frase: 'Quando arriva una fattura, segnala nella lista', perche: 'Non se ne perde una.' }
+    github: [
+      { testo: lunga, doc: 'github:myynd#12' },
+      { testo: 'La seconda, sul deploy.', doc: 'github:myynd#13' },
+      { testo: 'La terza, sulla revisione.', doc: 'github:myynd#14' },
+      { testo: 'La quarta, che non deve passare.', doc: 'github:myynd#15' }
     ]
   })
   const e = await punto.punto({}, adesso())
-  assert.equal(e.punto?.mentreNonCeri.length, 2, 'la terza riga di «mentre non c’eri» è passata')
-  assert.equal(e.punto?.avvii.length, 1, 'il secondo avvio è passato')
-  assert.ok((e.punto?.mentreNonCeri[0].testo.length ?? 0) <= 120, 'la riga lunga non è stata accorciata')
-  assert.match(e.punto?.mentreNonCeri[0].testo ?? '', /…$/)
+  assert.equal(e.punto?.github.length, 3, 'la quarta riga di GitHub è passata')
+  assert.ok((e.punto?.github[0].testo.length ?? 0) <= 120, 'la riga lunga non è stata accorciata')
+  assert.match(e.punto?.github[0].testo ?? '', /…$/)
 })
 
 // — una cosa una volta sola —
 //
-// Il punto dell'undici settembre diceva del dev server di tobiaweb quattro
-// volte: mentre non c'eri, adesso, dove sei sul progetto, e un'automazione da
-// accendere. Quattro righe su dieci per una cosa sola, e lui l'ha letto come
-// «mi sta dicendo sempre la stessa cosa». Qui si conta invece di sperare.
+// Il punto dell'undici settembre diceva del dev server di tobiaweb in quattro
+// sezioni diverse, e lui l'ha letto come «mi sta dicendo sempre la stessa
+// cosa». Qui si conta invece di sperare.
 
 test('ridondante: due frasi che dicono la stessa cosa, e due che non c’entrano', () => {
   assert.equal(punto.ridondante(
@@ -325,144 +393,159 @@ test('ridondante: due frasi che dicono la stessa cosa, e due che non c’entrano
   assert.equal(punto.ridondante('', 'Una riga qualunque.'), false)
 })
 
-test('la stessa cosa detta in quattro sezioni esce una volta sola', async () => {
+test('la stessa cosa detta in due sezioni esce una volta sola', async () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea' })
+  store.salvaDocumenti([
+    doc('posta:INBOX:20', 'Re: il deploy di tobiaweb', { autore: 'Anna <anna@esempio.it>' }),
+    suGithub('github:tobiaweb#3', 'tobiaweb #3: il deploy')
+  ])
   fornitoreFinto({
-    mentreNonCeri: [{ testo: 'Il server di tobiaweb è ripartito più volte.', compito: '', doc: '' }],
-    adesso: [{ testo: 'Controlla se il server di tobiaweb è ripartito.', compito: '', doc: '' }],
+    progetti: [{ nome: 'tobiadonadon.com', novita: 'Il server di tobiaweb è ripartito più volte.', doc: '' }],
+    github: [{ testo: 'Controlla il server di tobiaweb, ripartito più volte.', doc: 'github:tobiaweb#3' }],
     daLeggere: [],
-    progetti: [{
-      nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea',
-      doveSei: 'Il server di tobiaweb è ripartito, deploy da controllare.', angolo: ''
-    }],
-    avvii: [{ frase: 'Quando il server di tobiaweb è ripartito, segnalalo', perche: 'Lo guarda a mano.' }]
+    risposte: [{ testo: 'Anna chiede la data della prova sul campo.', doc: 'posta:INBOX:20' }],
+    compiti: []
   })
 
   const e = await punto.punto({}, adesso())
   assert.ok(e.generatoAdesso)
-  assert.equal(e.punto?.mentreNonCeri.length, 1, 'la prima volta che una cosa si dice resta')
-  assert.deepEqual(e.punto?.adesso, [], 'la stessa cosa è tornata sotto «adesso»')
-  assert.equal(e.punto?.progetti[0].nome, 'tobiadonadon.com', 'il progetto è sparito insieme all’eco')
-  assert.equal(e.punto?.progetti[0].doveSei, '', 'il «dove sei» ripeteva la riga di sopra')
-  assert.deepEqual(e.punto?.avvii, [], 'l’avvio girava intorno alla stessa cosa')
+  assert.equal(e.punto?.progetti.length, 1, 'la prima volta che una cosa si dice resta')
+  assert.deepEqual(e.punto?.github, [], 'la stessa cosa è tornata sotto GitHub')
+  assert.equal(e.punto?.risposte.length, 1, 'una riga che parla d’altro è stata buttata con l’eco')
 })
 
-test('otto righe in tutto: quando il modello riempie tutto, l’avvio salta', async () => {
+test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano', async () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  store.salvaNotizie([{
-    id: 'n1', titolo: 'I modelli piccoli girano su un portatile', riassunto: 'Ci girano.',
-    perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
-    quando: new Date().toISOString()
-  }])
   progetti.scrivi({ nome: 'H-Farm', obiettivo: 'Chiudere l’audit' })
   progetti.scrivi({ nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea' })
+  progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed' })
+  store.salvaDocumenti([
+    suGithub('github:myynd#12', 'myynd #12'),
+    suGithub('github:myynd#13', 'myynd #13'),
+    suGithub('github:myynd#14', 'myynd #14'),
+    doc('posta:INBOX:20', 'Re: audit', { autore: 'Anna <anna@esempio.it>' }),
+    doc('posta:INBOX:21', 'Re: sede', { autore: 'Verdi <verdi@esempio.it>' }),
+    doc('posta:INBOX:22', 'Re: listino', { autore: 'Bianchi <bianchi@esempio.it>' })
+  ])
+  store.salvaNotizie([
+    {
+      id: 'n1', titolo: 'I modelli piccoli girano su un portatile', riassunto: 'Ci girano.',
+      perche: null, fonte: 'Prova', link: 'https://esempio.test/n1', argomento: 'lavoro',
+      quando: new Date().toISOString()
+    },
+    {
+      id: 'n2', titolo: 'Le agende condivise cambiano formato', riassunto: 'Cambiano.',
+      perche: null, fonte: 'Prova', link: 'https://esempio.test/n2', argomento: 'lavoro',
+      quando: new Date().toISOString()
+    }
+  ])
 
   fornitoreFinto({
-    mentreNonCeri: [
-      { testo: 'È arrivato il preventivo di Rossi.', compito: '', doc: 'posta:INBOX:1' },
-      { testo: 'Anna ha mandato il contratto firmato.', compito: '', doc: '' },
-      { testo: 'Verdi ha confermato la data di giugno.', compito: '', doc: '' }
-    ],
-    adesso: [
-      { testo: 'Approva la bozza per Bianchi.', compito: '', doc: '' },
-      { testo: 'Rispondi sull’ambito da misurare.', compito: '', doc: '' },
-      { testo: 'Scegli il numero della prova.', compito: '', doc: '' },
-      { testo: 'Chiama lo studio di Padova.', compito: '', doc: '' }
-    ],
-    daLeggere: [{ titolo: 'I modelli piccoli girano su un portatile', perche: 'C’entra con Myynd.' }],
     progetti: [
-      { nome: 'H-Farm', obiettivo: 'Chiudere l’audit', doveSei: 'Quattro domande senza risposta.', angolo: '' },
-      { nome: 'tobiadonadon.com', obiettivo: 'Il sito nuovo in linea', doveSei: 'Il sito è in linea da lunedì.', angolo: '' }
+      { nome: 'H-Farm', novita: 'Quattro domande senza risposta.', doc: '' },
+      { nome: 'tobiadonadon.com', novita: 'Il sito è in linea da lunedì.', doc: '' },
+      { nome: 'Nextas', novita: 'Il term sheet arriva venerdì.', doc: '' }
     ],
-    avvii: [{ frase: 'Ogni venerdì alle 8, un riepilogo della settimana', perche: 'Lo fa già a mano.' }]
+    github: [
+      { testo: 'La #12 è stata unita.', doc: 'github:myynd#12' },
+      { testo: 'La #13 aspetta revisione.', doc: 'github:myynd#13' },
+      { testo: 'La #14 ha rotto il deploy.', doc: 'github:myynd#14' }
+    ],
+    daLeggere: [
+      { titolo: 'I modelli piccoli girano su un portatile', perche: 'C’entra con Myynd.' },
+      { titolo: 'Le agende condivise cambiano formato', perche: 'Tocca il calendario.' }
+    ],
+    risposte: [
+      { testo: 'Anna vuole l’unità da misurare.', doc: 'posta:INBOX:20' },
+      { testo: 'Verdi conferma il sopralluogo.', doc: 'posta:INBOX:21' },
+      { testo: 'Bianchi aspetta il listino.', doc: 'posta:INBOX:22' }
+    ],
+    compiti: []
   })
 
   const p = (await punto.punto({}, adesso())).punto!
-  const righe = p.mentreNonCeri.length + p.adesso.length + p.daLeggere.length + p.progetti.length + p.avvii.length
-  assert.ok(righe <= 8, `il punto è lungo ${righe} righe`)
-  assert.equal(p.mentreNonCeri.length, 2)
-  assert.equal(p.adesso.length, 3)
-  assert.equal(p.daLeggere.length, 1)
-  assert.equal(p.progetti.length, 2)
-  assert.deepEqual(p.avvii, [], 'sopra le otto righe si taglia dal fondo, e in fondo c’è l’avvio')
+  const righe = p.progetti.length + p.github.length + p.daLeggere.length + p.risposte.length
+  assert.equal(righe, 8, `il punto è lungo ${righe} righe`)
+  assert.equal(p.progetti.length, 3)
+  assert.deepEqual(p.daLeggere, [], 'sopra le otto righe le notizie sono le prime a saltare')
+  assert.equal(p.github.length, 2, 'dopo le notizie si toglie dal fondo di GitHub')
+  assert.equal(p.risposte.length, 3, 'le risposte si toccano per ultime: qualcuno aspetta')
 })
 
-// — «adesso» è la lista —
+// — quello che nota va in lista —
 //
-// Il tredici settembre sotto «adesso» c'erano tre mosse su H-Farm — rispondi
-// alle quattro domande, di' quale unità guarda l'audit, scegli chi tiene il
-// numero — con tre frecce che non aprivano niente: erano la parafrasi di *una*
-// riga della lista che chiedeva quelle quattro cose. Qui una mossa senza una
-// riga dietro non esce: o ne trova una, o ne fa nascere una, o si perde.
+// È il cuore del cambio. Le cose da fare non si mostrano nella finestra: il
+// modello le vede nel materiale, e il punto le mette in lista con dentro il
+// documento da cui vengono. La freccia nel feed apre quella mail.
 
-test('una mossa senza id che parla di una riga aperta prende il suo id', async () => {
+test('una cosa da fare vista in una mail diventa una riga della lista con dentro quella mail', async () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  store.scriviCompito({ id: 'c9', testo: 'Rispondere alle quattro domande sull’ambito di H-Farm', ordine: 'a', quando: 'oggi' })
-  fornitoreFinto({
-    ...RISPOSTA,
-    adesso: [{ testo: 'Rispondi alle quattro domande sull’ambito di H-Farm.', compito: '', doc: '' }]
-  })
-
-  const e = await punto.punto({}, adesso())
-  assert.equal(e.punto?.adesso.length, 1)
-  assert.equal(e.punto?.adesso[0].compito, 'c9', 'la mossa non ha ritrovato la riga di cui parla')
-  assert.equal(store.elencoCompiti().length, 1, 'ha scritto una riga nuova invece di riconoscere quella che c’era')
-})
-
-test('una mossa che non trova niente diventa una riga nuova della lista, e la freccia la apre', async () => {
-  pulisci()
+  seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   fornitoreFinto({
     ...RISPOSTA,
-    adesso: [{ testo: 'Scegli chi tiene il numero della prova.', compito: '', doc: '' }]
+    compiti: [{ testo: 'Manda a Rossi il preventivo aggiornato.', doc: 'posta:INBOX:1' }]
   })
 
   const e = await punto.punto({}, adesso())
   const righe = store.elencoCompiti()
-  assert.equal(righe.length, 1, 'la mossa non è diventata una riga')
-  assert.equal(righe[0].testo, 'Scegli chi tiene il numero della prova', 'il punto in fondo è finito in lista')
+  assert.equal(righe.length, 1, 'la cosa da fare non è diventata una riga')
+  assert.equal(righe[0].testo, 'Manda a Rossi il preventivo aggiornato', 'il punto in fondo è finito in lista')
+  assert.equal(righe[0].doc, 'posta:INBOX:1', 'la riga non porta la mail da cui viene: la freccia non apre niente')
   assert.equal(righe[0].origine, 'punto')
   assert.equal(righe[0].quando, 'oggi')
   assert.equal(righe[0].stato, 'aperto')
-  assert.equal(e.punto?.adesso[0].compito, righe[0].id, 'la riga del punto non porta l’id di quella nata')
-  assert.equal(e.punto?.adesso[0].testo, 'Scegli chi tiene il numero della prova.', 'il testo del punto si legge com’era')
+  // e nella finestra non se ne vede traccia: il punto racconta, non comanda
+  assert.ok(!('compiti' in (e.punto as object)), 'le cose da fare sono arrivate al client')
+  assert.ok(!JSON.stringify(e.punto).includes('preventivo aggiornato'), 'la cosa da fare è finita nel punto mostrato')
 })
 
-test('una mossa che ripete una cosa chiusa la settimana scorsa non esce, e non fa nascere niente', async () => {
+test('una cosa da fare che parla di una riga aperta non ne fa nascere un’altra', async () => {
   pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.scriviCompito({ id: 'c9', testo: 'Rispondere alle quattro domande sull’ambito di H-Farm', ordine: 'a', quando: 'oggi' })
+  fornitoreFinto({
+    ...RISPOSTA,
+    compiti: [{ testo: 'Rispondi alle quattro domande sull’ambito di H-Farm.', doc: 'posta:INBOX:1' }]
+  })
+
+  await punto.punto({}, adesso())
+  assert.equal(store.elencoCompiti().length, 1, 'ha scritto una riga nuova invece di riconoscere quella che c’era')
+})
+
+test('una cosa da fare che ripete una cosa chiusa la settimana scorsa non fa nascere niente', async () => {
+  pulisci()
+  seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   store.scriviCompito({ id: 'c9', testo: 'Mandare il preventivo aggiornato a Bianchi', ordine: 'a', quando: 'oggi' })
   store.cambiaStatoCompito('c9', 'fatto')
   fornitoreFinto({
     ...RISPOSTA,
-    adesso: [{ testo: 'Manda il preventivo aggiornato a Bianchi.', compito: '', doc: '' }]
+    compiti: [{ testo: 'Manda il preventivo aggiornato a Bianchi.', doc: 'posta:INBOX:1' }]
   })
 
-  const e = await punto.punto({}, adesso())
-  assert.deepEqual(e.punto?.adesso, [], 'una cosa già fatta è tornata sotto «adesso»')
+  await punto.punto({}, adesso())
   assert.deepEqual(store.elencoCompiti(), [], 'una cosa già fatta è tornata in lista')
 })
 
-test('ancoraAlleRighe: tre righe nuove al massimo, e due mosse sulla stessa riga diventano una', () => {
-  const riga = (testo: string, compito: string | null = null) => ({ testo, compito, doc: null })
+test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga diventano una', () => {
+  const riga = (testo: string, doc: string | null = null) => ({ testo, doc })
 
   // le tre mosse del tredici settembre, e la riga della lista che le conteneva
   const chiede = { id: 'c1', testo: 'Rispondere alle quattro domande sull’ambito per H-Farm' }
-  const nate: string[] = []
+  const nate: { testo: string; doc: string | null }[] = []
   const tre = punto.ancoraAlleRighe(
     [
       riga('Rispondi alle quattro domande sull’ambito per H-Farm.'),
       riga('Rispondi alle domande sull’ambito per H-Farm, tutte e quattro.'),
-      riga('Di’ quale unità di H-Farm guarda l’audit.')
+      riga('Di’ quale unità di H-Farm guarda l’audit.', 'posta:INBOX:7')
     ],
-    { aperti: [chiede], chiuse: [], crea: t => { nate.push(t); return `n${nate.length}` } }
+    { aperti: [chiede], chiuse: [], crea: (testo, doc) => { nate.push({ testo, doc }); return `n${nate.length}` } }
   )
-  assert.deepEqual(tre.map(r => r.compito), ['c1', 'n1'], 'la stessa riga della lista è uscita due volte')
-  assert.deepEqual(nate, ['Di’ quale unità di H-Farm guarda l’audit'], 'la mossa che non era in lista non è nata')
+  assert.deepEqual(tre, ['c1', 'n1'], 'la stessa riga della lista è uscita due volte')
+  assert.deepEqual(nate, [{ testo: 'Di’ quale unità di H-Farm guarda l’audit', doc: 'posta:INBOX:7' }])
 
   const scritte: string[] = []
   const quattro = punto.ancoraAlleRighe(
@@ -475,52 +558,56 @@ test('ancoraAlleRighe: tre righe nuove al massimo, e due mosse sulla stessa riga
     { aperti: [], chiuse: [], crea: t => { scritte.push(t); return `n${scritte.length}` } }
   )
   assert.equal(scritte.length, 3, 'un punto ha riempito la lista di righe nuove')
-  assert.deepEqual(quattro.map(r => r.compito), ['n1', 'n2', 'n3'])
+  assert.deepEqual(quattro, ['n1', 'n2', 'n3'])
   assert.deepEqual(scritte[0], 'Chiama lo studio di Padova', 'il punto in fondo è finito in lista')
 
-  // un id che nel frattempo non è più fra le righe aperte non vale: si riconosce, o si perde
+  // una cosa già fatta non torna, e non fa scrivere niente
   const sparita = punto.ancoraAlleRighe(
-    [riga('Approva la bozza per Bianchi.', 'c7')],
+    [riga('Approva la bozza per Bianchi.')],
     { aperti: [], chiuse: ['Approvare la bozza per Bianchi'], crea: () => { throw new Error('non doveva scrivere niente') } }
   )
   assert.deepEqual(sparita, [])
 })
 
-test('rifare il punto sulla stessa mossa non raddoppia la riga', async () => {
+test('rifare il punto sulla stessa cosa da fare non raddoppia la riga', async () => {
   pulisci()
+  seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   fornitoreFinto({
     ...RISPOSTA,
-    adesso: [{ testo: 'Scegli chi tiene il numero della prova.', compito: '', doc: '' }]
+    compiti: [{ testo: 'Scegli chi tiene il numero della prova.', doc: 'posta:INBOX:1' }]
   })
   const t0 = adesso()
-  const primo = await punto.punto({}, t0)
-  const nata = primo.punto?.adesso[0].compito
+  await punto.punto({}, t0)
+  const [nata] = store.elencoCompiti()
   assert.ok(nata)
 
   await unAttimo()
   store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
   const secondo = await punto.punto({ forza: true }, t0 + ore(4))
   assert.ok(secondo.generatoAdesso)
-  assert.equal(store.elencoCompiti().length, 1, 'la stessa mossa ha fatto nascere due righe')
-  assert.equal(secondo.punto?.adesso[0].compito, nata, 'la mossa non ha ritrovato la riga che aveva fatto nascere')
+  assert.deepEqual(store.elencoCompiti().map(c => c.id), [nata.id], 'la stessa cosa ha fatto nascere due righe')
 })
 
-test('l’istruzione dice che anche gli avvii si scrivono nella lingua dell’app', async () => {
+test('l’istruzione dice le quattro sezioni, dove finiscono i compiti, e la lingua', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
   await punto.punto({}, adesso())
   const istr = istruzioneDi(ricevute[0])
   const lingua = cfg.nellaLingua()
-  assert.match(istr, new RegExp(`«frase» e «perche» si scrivono in\\s+${lingua}`))
-  assert.match(istr, /gli avvii non fanno\s+eccezione/)
-  assert.match(istr, new RegExp(`Scrivi in ${lingua}: ogni campo, avvii compresi`))
-  // e le regole nuove sul rumore viaggiano con l'istruzione
+  assert.match(istr, /Le quattro sezioni, e cosa ci va:/)
+  assert.match(istr, /«progetti»[\s\S]*«github»[\s\S]*«daLeggere»[\s\S]*«risposte»/)
+  assert.match(istr, /finiranno nella sua lista, con il\n  documento da cui vengono; non sono righe del punto/)
+  assert.match(istr, new RegExp(`Scrivi in ${lingua}: ogni campo, i compiti compresi`))
+  // e le regole di stile viaggiano con l'istruzione
   assert.match(istr, /Quello che ha fatto Myynd da solo/)
   assert.match(istr, /Un file sul disco è una notizia solo se/)
-  assert.match(istr, /Le cose tecniche/)
-  assert.match(istr, /al massimo otto righe/)
+  assert.match(istr, /dalle dieci alle dodici parole al massimo/)
+  assert.match(istr, /non compare MAI la lineetta lunga/)
+  // quello che il punto non racconta più: le mosse, e le automazioni da accendere
+  assert.doesNotMatch(istr, /«adesso»/)
+  assert.doesNotMatch(istr, /«avvii»/)
 })
 
 // — il cancello —
@@ -605,28 +692,27 @@ test('senza motore, e su una mente vuota, non c’è nessun punto e nessuna chia
 //
 // Un punto è la fotografia di un momento. Il resto di questa sezione è quello
 // che è successo a Tobia l'undici settembre: in prima pagina «il punto di
-// oggi» era dell'otto, e le tre cose sotto «adesso» le aveva chiuse tutte la
-// sera dell'otto. Tre difetti in uno — una fotografia mostrata come se fosse
-// adesso, un punto di ieri chiamato di oggi, e tre tentativi falliti contati
-// come punti fatti — e qui stanno le tre prove.
+// oggi» era dell'otto, e quello che diceva non valeva più. Tre difetti in uno
+// — una fotografia mostrata come se fosse adesso, un punto di ieri chiamato di
+// oggi, e tre tentativi falliti contati come punti fatti — e qui stanno le tre
+// prove.
 
-test('una riga che parla di una cosa chiusa dopo non si mostra più, nemmeno dal foglio', async () => {
+test('un progetto chiuso dopo non si mostra più, nemmeno dal foglio', async () => {
   pulisci()
+  const mio = seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  seminaLista()
   fornitoreFinto()
   const t0 = adesso()
   const primo = await punto.punto({}, t0)
-  assert.equal(primo.punto?.adesso[0].compito, 'c1')
+  assert.equal(primo.punto?.progetti[0].id, mio.id)
 
-  // lui la fa, e mezz'ora dopo torna nell'app: quella mossa non c'è più
-  store.cambiaStatoCompito('c1', 'fatto')
+  // lo chiude, e mezz'ora dopo torna nell'app: quella riga non c'è più
+  progetti.chiudi(mio.id)
   const dopo = await punto.punto({}, t0 + minuti(30))
   assert.equal(dopo.generatoAdesso, false, 'ha rifatto il punto invece di ripulirlo')
-  assert.deepEqual(dopo.punto?.adesso, [], 'la mossa su una riga chiusa è rimasta in pagina')
-  assert.equal(dopo.punto?.mentreNonCeri.length, 1, 'una riga senza compito non scade')
+  assert.deepEqual(dopo.punto?.progetti, [], 'un progetto chiuso è rimasto in pagina')
   // il foglio resta com'era: si filtra quando esce, non si riscrive la storia
-  assert.equal(punto.ultimo()?.adesso.length, 1)
+  assert.equal(punto.ultimo()?.progetti.length, 1)
 })
 
 test('il punto di ieri non è il punto di oggi: torna nullo, con la data di quello vecchio', async () => {
@@ -679,47 +765,35 @@ test('una chiamata fallita non conta come punto del giorno, e dice perché', asy
   assert.equal(e.guaio, undefined)
 })
 
-test('aggiornaAlPresente: via le righe delle cose chiuse e i progetti chiusi, e niente altro', () => {
-  const progetto = (id: string, nome: string) => ({
-    id, nome, obiettivo: '', dal: '2026-09-01T10:00:00.000Z',
-    doveSei: '', angolo: '', angoliTenuti: [], proposto: true
-  })
+test('aggiornaAlPresente: via i progetti chiusi, e niente altro', () => {
   const prima = {
     quando: '2026-09-08T13:47:00.000Z',
     via: null,
-    mentreNonCeri: [
-      { testo: 'È arrivato il preventivo di Rossi.', compito: null, doc: 'posta:INBOX:1' },
-      { testo: 'Ho preparato la bozza per Bianchi.', compito: 'c1', doc: null }
+    progetti: [
+      { id: 'p1', nome: 'Myynd', novita: 'Il punto ha quattro sezioni.', doc: null },
+      { id: 'p2', nome: 'Orto', novita: 'I semi sono arrivati.', doc: null },
+      { id: '', nome: 'Cantina', novita: 'Svuotata a metà.', doc: null }
     ],
-    adesso: [
-      { testo: 'Approva la bozza per Bianchi.', compito: 'c1', doc: null },
-      { testo: 'Chiama lo studio.', compito: 'sparito', doc: null },
-      { testo: 'Guarda il deck di lunedì.', compito: null, doc: null }
-    ],
+    github: [{ testo: 'La #12 è stata unita.', doc: 'github:myynd#12' }],
     daLeggere: [{ titolo: 'Una notizia', perche: 'C’entra.', link: null }],
-    progetti: [progetto('p1', 'Myynd'), progetto('p2', 'Orto'), progetto('', 'Cantina')],
-    avvii: [{ frase: 'Ogni lunedì alle 8, un riepilogo', perche: 'Lo fa a mano.' }]
+    risposte: [{ testo: 'Verdi conferma la sede.', doc: 'posta:INBOX:20' }]
   }
 
-  const dopo = punto.aggiornaAlPresente(
-    prima,
-    { aperti: new Set(['c2']), chiusi: new Set(['c1']) },
-    { nomi: new Set(['cantina']), id: new Set(['p2']) }
-  )
-  assert.deepEqual(dopo.mentreNonCeri.map(r => r.testo), ['È arrivato il preventivo di Rossi.'])
-  assert.deepEqual(dopo.adesso.map(r => r.testo), ['Guarda il deck di lunedì.'])
+  const dopo = punto.aggiornaAlPresente(prima, { nomi: new Set(['cantina']), id: new Set(['p2']) })
   assert.deepEqual(dopo.progetti.map(x => x.nome), ['Myynd'], 'un progetto chiuso è rimasto nel punto')
   // il resto non si tocca, e l'originale nemmeno
   assert.equal(dopo.quando, prima.quando)
+  assert.deepEqual(dopo.github, prima.github)
   assert.deepEqual(dopo.daLeggere, prima.daLeggere)
-  assert.deepEqual(dopo.avvii, prima.avvii)
-  assert.equal(prima.adesso.length, 3, 'ha cambiato il punto che gli è stato dato')
+  assert.deepEqual(dopo.risposte, prima.risposte)
+  assert.equal(prima.progetti.length, 3, 'ha cambiato il punto che gli è stato dato')
 })
 
 // — quello che resta scritto —
 
-test('il punto sta in punto.json, i progetti in tabella: un progetto nuovo entra con l’obiettivo, e nome, id e data sopravvivono al giro dopo', async () => {
+test('il punto sta in punto.json, e al giro dopo il modello riceve i progetti dalla tabella con la novità di prima', async () => {
   pulisci()
+  const mio = seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
   const t0 = adesso()
@@ -727,96 +801,65 @@ test('il punto sta in punto.json, i progetti in tabella: un progetto nuovo entra
   assert.ok(existsSync(join(CASA, 'punto.json')))
   const foglio = JSON.parse(readFileSync(join(CASA, 'punto.json'), 'utf8'))
   assert.equal(foglio.ultimo.via, null, 'senza una richiesta con «via», nessuna assenza inventata')
-  // il primo punto, senza progetti scritti: al modello si dice di riconoscerli
-  assert.match(istruzioneDi(ricevute[0]), /Non ha ancora scritto i suoi progetti/)
+  assert.equal(primo.punto?.progetti[0].id, mio.id, 'il progetto del punto non porta l’id della riga')
 
-  // quello che il modello ha capito sta in tabella, non nel foglio
-  const [inTabella] = progetti.elenco()
-  assert.equal(inTabella.nome, 'Myynd')
-  assert.equal(inTabella.obiettivo, 'Un gemello che sceglie per lui.')
-  assert.equal(inTabella.origine, 'punto')
-  assert.equal(inTabella.dal, new Date(t0).toISOString())
-  assert.equal(primo.punto?.progetti[0].id, inTabella.id, 'il progetto del punto non porta l’id della riga')
-  assert.equal(primo.punto?.progetti[0].obiettivo, inTabella.obiettivo)
-
-  // il giro dopo: il modello riceve i progetti dalla tabella, con l'obiettivo
-  // e dov'erano, e quello che torna si ricuce sulla stessa riga
   await unAttimo()
   store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
   const secondo = await punto.punto({ forza: true }, t0 + ore(4))
-  const giorno = new Date(t0).toISOString().slice(0, 10)
+  const giorno = new Date(mio.dal).toISOString().slice(0, 10)
   assert.match(istruzioneDi(ricevute[1]),
-    new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  dov'era l'ultima volta: Il punto è in lavorazione`))
-  // le regole di stile viaggiano con l'istruzione: corte, e senza lineette
-  assert.match(istruzioneDi(ricevute[1]), /al massimo dieci parole, con il punto in\n  fondo/)
-  assert.match(istruzioneDi(ricevute[1]), /non compare MAI la lineetta lunga/)
-  assert.equal(secondo.punto?.progetti[0].dal, primo.punto?.progetti[0].dal, 'la data del progetto è ripartita')
-  assert.equal(secondo.punto?.progetti[0].id, inTabella.id)
-  assert.equal(progetti.elenco().length, 1, 'lo stesso progetto è entrato due volte')
+    new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  l'ultima volta hai detto: Il punto adesso ha quattro sezioni`))
+  assert.match(istruzioneDi(ricevute[1]), /Non inventarne di nuovi/)
+  assert.equal(secondo.punto?.progetti[0].id, mio.id)
+  assert.equal(progetti.elenco().length, 1, 'il punto ha scritto un progetto in tabella')
   assert.equal(punto.ultimo()?.quando, secondo.punto?.quando)
 })
 
-test('un progetto chiuso non torna: il modello lo riceve come «non è un progetto», e se lo riscrive non passa; uno nuovo per punto, non di più', async () => {
+test('un foglio scritto dalla versione di prima non esplode: resta la data, le sezioni nascono vuote', () => {
   pulisci()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  const nextas = progetti.scrivi({ nome: 'Nextas', obiettivo: 'Chiudere il round seed entro ottobre' })
-  const papa = progetti.scrivi({ nome: 'Myynd per papà', obiettivo: 'Inventato dal modello' })
-  progetti.chiudi(papa.id)
-
-  const ricevute = fornitoreFinto({
-    ...RISPOSTA,
-    progetti: [
-      { nome: 'nextas', obiettivo: 'Un obiettivo diverso, inventato', doveSei: 'Bianchi ha confermato.', angolo: '' },
-      { nome: 'Myynd per papà', obiettivo: 'Ancora lui', doveSei: 'Ricomincia.', angolo: '' },
-      { nome: 'Orto', obiettivo: 'Piantare i pomodori', doveSei: 'Semi comprati.', angolo: '' },
-      { nome: 'Cantina', obiettivo: 'Svuotarla', doveSei: 'Iniziata.', angolo: '' }
-    ]
-  })
-  const e = await punto.punto({}, adesso())
-  const istr = istruzioneDi(ricevute[0])
-  assert.match(istr, /— Nextas: Chiudere il round seed entro ottobre \(attivo/)
-  assert.match(istr, /NON sono progetti[\s\S]*— Myynd per papà/)
-  assert.doesNotMatch(istr, /Myynd per papà: Inventato/, 'un chiuso è entrato fra i progetti vivi')
-
-  const nomi = e.punto?.progetti.map(p => p.nome)
-  assert.deepEqual(nomi, ['Nextas', 'Orto'], `ha tenuto ${nomi?.join(', ')}`)
-  assert.equal(e.punto?.progetti[0].id, nextas.id)
-  assert.equal(e.punto?.progetti[0].obiettivo, 'Chiudere il round seed entro ottobre', 'l’obiettivo scritto da lui è stato riscritto dal modello')
-  assert.equal(progetti.trova(papa.id)?.stato, 'chiuso', 'il modello ha riaperto un progetto chiuso')
-  assert.equal(progetti.trovaPerNome('Orto')?.origine, 'punto')
-  assert.equal(progetti.trovaPerNome('Cantina'), undefined, 'il secondo progetto nuovo dello stesso punto è entrato')
+  const vecchio = {
+    ultimo: {
+      quando: '2026-09-08T13:47:00.000Z', via: null,
+      mentreNonCeri: [{ testo: 'È arrivato il preventivo.', compito: null, doc: 'posta:INBOX:1' }],
+      adesso: [{ testo: 'Approva la bozza.', compito: 'c1', doc: null }],
+      daLeggere: [{ titolo: 'Una notizia', perche: 'C’entra.', link: null }],
+      progetti: [{ id: 'p1', nome: 'Myynd', obiettivo: 'Un gemello', dal: '2026-09-01', doveSei: 'A metà.', angolo: '', angoliTenuti: [], proposto: true }],
+      avvii: [{ frase: 'Ogni lunedì alle 8, un riepilogo', perche: 'Lo fa a mano.' }]
+    },
+    progetti: [], scartati: [], chiamate: []
+  }
+  writeFileSync(punto.perProva.file(), JSON.stringify(vecchio))
+  const letto = punto.ultimo()
+  assert.equal(letto?.quando, '2026-09-08T13:47:00.000Z')
+  assert.deepEqual(letto?.progetti, [], 'un progetto senza novità è stato mostrato lo stesso')
+  assert.deepEqual(letto?.github, [])
+  assert.deepEqual(letto?.risposte, [])
+  assert.equal(letto?.daLeggere.length, 1, 'la notizia aveva già la forma giusta')
 })
 
-test('«non è un progetto»: si chiude, esce dal punto mostrato, e al giro dopo non c’è più', async () => {
+test('«non è un progetto»: si chiude, ed esce dal punto mostrato', async () => {
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  const ricevute = fornitoreFinto()
-  const t0 = adesso()
-  const primo = await punto.punto({}, t0)
-  const id = primo.punto!.progetti[0].id
-  const r = punto.nonEUnProgetto(id)
+  const mio = progetti.scrivi({ nome: 'Myynd', obiettivo: 'Un gemello che sceglie per lui.', origine: 'punto' })
+  fornitoreFinto()
+  await punto.punto({}, adesso())
+  const r = punto.nonEUnProgetto(mio.id)
   assert.deepEqual(r.punto?.progetti, [])
   assert.deepEqual(punto.ultimo()?.progetti, [])
-  assert.equal(progetti.trova(id)?.stato, 'chiuso')
+  assert.equal(progetti.trova(mio.id)?.stato, 'chiuso')
   assert.throws(() => punto.nonEUnProgetto('inesistente'), /non c’è nel punto/)
   // tenere un angolo su un chiuso non si può: non è più un progetto
   assert.throws(() => punto.tieni('Myynd', 'Un angolo'), /non c’è nel punto/)
-
-  await unAttimo()
-  store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
-  const dopo = await punto.punto({ forza: true }, t0 + ore(4))
-  assert.match(istruzioneDi(ricevute[1]), /NON sono progetti[\s\S]*— Myynd/)
-  assert.deepEqual(dopo.punto?.progetti, [], 'il modello finto lo ripropone, e il punto l’ha ripreso')
 })
 
-test('«tienilo»: l’angolo diventa una convinzione con l’ambito del progetto, e il modello lo trova fra i suoi', async () => {
+test('«tienilo»: l’angolo diventa una convinzione con l’ambito del progetto', async () => {
   pulisci()
+  seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
-  const ricevute = fornitoreFinto()
-  const t0 = adesso()
-  await punto.punto({}, t0)
-  const angolo = RISPOSTA.progetti[0].angolo
+  fornitoreFinto()
+  await punto.punto({}, adesso())
 
+  const angolo = 'Far crescere i progetti insieme a lui.'
   const e = punto.tieni('Myynd', angolo)
   assert.ok(e.ok)
   const conv = store.convinzioni('progetto:Myynd')
@@ -824,36 +867,25 @@ test('«tienilo»: l’angolo diventa una convinzione con l’ambito del progett
   assert.equal(conv[0].enunciato, angolo)
   assert.equal(conv[0].genere, 'esplicita')
   assert.equal(conv[0].origine, 'punto')
-  assert.deepEqual(punto.ultimo()?.progetti[0].angoliTenuti, [angolo])
-
-  await unAttimo()
-  store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
-  const dopo = await punto.punto({ forza: true }, t0 + ore(4))
-  assert.match(istruzioneDi(ricevute[1]), /Angoli che ha già tenuto[\s\S]*\[Myynd\] Far crescere i progetti insieme a lui/)
-  // il modello finto lo ripropone uguale: non si mostra due volte come nuovo
-  assert.equal(dopo.punto?.progetti[0].angolo, '')
-  assert.deepEqual(dopo.punto?.progetti[0].angoliTenuti, [angolo])
 
   assert.throws(() => punto.tieni('Inesistente', angolo), /Questo progetto non c’è nel punto/)
 })
 
-test('«non è così»: l’angolo sparisce dal punto e il modello viene avvertito di non riproporlo', async () => {
+test('«non è così»: resta scritto, e il modello viene avvertito di non riproporlo', async () => {
   pulisci()
+  seminaProgetto()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
   const t0 = adesso()
   await punto.punto({}, t0)
-  const angolo = RISPOSTA.progetti[0].angolo
 
-  punto.scarta('Myynd', angolo)
-  assert.equal(punto.ultimo()?.progetti[0].angolo, '')
+  punto.scarta('Myynd', 'Far crescere i progetti insieme a lui.')
   assert.equal(store.convinzioni('progetto:Myynd').length, 0, 'uno scarto non è una convinzione')
 
   await unAttimo()
   store.salvaDocumenti([doc('posta:INBOX:2', 'Fattura Bianchi')])
-  const dopo = await punto.punto({ forza: true }, t0 + ore(4))
+  await punto.punto({ forza: true }, t0 + ore(4))
   assert.match(istruzioneDi(ricevute[1]), /NON sono così[\s\S]*— Far crescere i progetti insieme a lui/)
-  assert.equal(dopo.punto?.progetti[0].angolo, '', 'un angolo scartato è tornato')
 })
 
 // — più persone —
@@ -885,7 +917,7 @@ test('il foglio è di chi chiede: uno per cartella, e il punto di una non compar
   assert.equal(ricevute.length, 1)
 })
 
-test('quello che ha scartato non torna nel punto, e gli avvii non ripetono le automazioni che ha già', async () => {
+test('quello che ha scartato non torna nel punto', async () => {
   pulisci()
   // una mail scartata dal feed, una da un mittente scartato, una riga lasciata perdere, e una buona
   store.salvaDocumenti([
@@ -900,13 +932,7 @@ test('quello che ha scartato non torna nel punto, e gli avvii non ripetono le au
   store.scriviCompito({ id: 'c-csv', testo: 'Sistemare il flusso in CSV', ordine: 'z', quando: 'oggi', doc: 'posta:INBOX:12' })
   store.cambiaStatoCompito('c-csv', 'lasciato')
 
-  const ricevute = fornitoreFinto({
-    ...RISPOSTA,
-    avvii: [
-      { frase: 'Quando arriva un preventivo, mettilo in lista con le cifre', perche: 'Niente da ricopiare.' },
-      { frase: 'Ogni lunedì alle 8, un riepilogo della settimana', perche: 'Lo fa già.' }
-    ]
-  })
+  const ricevute = fornitoreFinto()
   const e = await punto.punto({ via: 200 }, adesso())
   assert.ok(e.generatoAdesso)
   const mandato = JSON.stringify(ricevute[0])
@@ -918,7 +944,22 @@ test('quello che ha scartato non torna nel punto, e gli avvii non ripetono le au
   assert.match(mandato, /NON dire da quanto manca/)
   assert.match(mandato, /È stato via circa 3 ore/)
   assert.equal(e.punto?.via, 200)
-  // gli avvii: uno solo, e mai uno uguale a una ricetta già accesa per nome
-  assert.equal(e.punto?.avvii.length, 1)
-  assert.match(mandato, /avvii/)
+})
+
+test('quello che ha fatto Myynd da solo non arriva più al modello', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  seminaLista()
+  store.registraAzione({ tipo: 'automazione', cosa: 'Priorità in arrivo', esito: 'fatta' })
+  store.registraAzione({ tipo: 'email', cosa: 'Preventivo aggiornato', verso: 'bianchi@esempio.it', esito: 'fatta', compito: 'c1' })
+  store.registraAzione({ tipo: 'automazione', cosa: 'Rassegna del mattino', esito: 'fallita' })
+
+  const ricevute = fornitoreFinto()
+  await punto.punto({}, adesso())
+  const mandato = testoDi(ricevute[0])
+  assert.doesNotMatch(mandato, /FATTO DA MYYND/, 'il registro di Myynd è finito nel punto')
+  assert.doesNotMatch(mandato, /Priorità in arrivo/)
+  assert.doesNotMatch(mandato, /Rassegna del mattino/)
+  // la lista, quella sì: è da lì che si vede cosa c'è già e non va riscritto
+  assert.match(mandato, /LA SUA LISTA:[\s\S]*Rispondere a Bianchi/)
 })

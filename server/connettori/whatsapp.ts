@@ -95,7 +95,7 @@ export async function prova(c: ConfigWhatsapp): Promise<
 
 export function scollega() {
   const { whatsapp: _via, ...resto } = leggi()
-  scriviConfig(resto)
+  scriviConfig(resto, { togli: ['whatsapp'] })
 }
 
 // — l'indirizzo che Meta chiama —

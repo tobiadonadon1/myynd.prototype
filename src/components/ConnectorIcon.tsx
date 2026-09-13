@@ -22,6 +22,7 @@ const DI_MARCA: Record<string, string> = {
   google: 'gmail',
   microsoft: 'microsoftoutlook',
   slack: 'slack',
+  github: 'github',
   whatsapp: 'whatsapp',
   drive: 'googledrive',
   sharepoint: 'microsoftsharepoint',

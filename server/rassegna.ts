@@ -451,7 +451,10 @@ function contesto(): Fuoco[] {
   // se una notizia muove qualcosa. Quelli del punto restano il ripiego per
   // chi non ne ha ancora scritto uno
   const vivi = progetti.vivi().map(p => ({ nome: p.nome, doveSei: p.obiettivo || p.nome }))
-  return contestoDi(vivi.length ? vivi : (ultimo()?.progetti ?? []), store.elencoCompiti(), fuoco(), interessi())
+  // dal punto adesso arriva la novità, che è quello che il progetto ha fatto
+  // di recente: come contesto vale quanto il «dove sei» di prima
+  const dalPunto = (ultimo()?.progetti ?? []).map(p => ({ nome: p.nome, doveSei: p.novita }))
+  return contestoDi(vivi.length ? vivi : dalPunto, store.elencoCompiti(), fuoco(), interessi())
 }
 
 /** Fallback prudente: una parola generica in comune non basta a creare rilevanza. */

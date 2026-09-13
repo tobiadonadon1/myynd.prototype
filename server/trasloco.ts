@@ -22,7 +22,7 @@
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella, leggi, scrivi, type Config } from './config.ts'
+import { CON_SEGRETI, cartella, leggi, scrivi, type Config } from './config.ts'
 import { OSPITATO, APP_GOOGLE, APP_MICROSOFT, hostRaggiungibile } from './ospitato.ts'
 import { indirizzoAmmesso } from './compatibile.ts'
 import * as store from './store.ts'
@@ -199,7 +199,8 @@ export function importa(dati: Buffer): Esito {
   ricontrolla(config)
   // `scrivi()` e non un `writeFileSync`: sceglie lei se è un file o Postgres,
   // e sul file scrive in due tempi invece di troncarlo
-  scrivi(config as Config)
+  // un trasloco sostituisce tutto, credenziali comprese: lo dice
+  scrivi(config as Config, { togli: [...CON_SEGRETI] })
 
   const auto = join(dove, 'automazioni')
   if (!existsSync(auto)) mkdirSync(auto, { recursive: true, mode: 0o700 })

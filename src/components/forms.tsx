@@ -1393,6 +1393,63 @@ export function FormSlack({ tema, ok }: Props) {
 }
 
 /**
+ * GitHub: un campo obbligatorio, uno che quasi nessuno riempie.
+ *
+ * L'elenco dei repository è secondo apposta. Chi collega GitHub quasi sempre
+ * vuole «quello su cui sto lavorando», e i trenta più vivi sono già quella
+ * risposta: chiederglieli tutti scritti a mano sarebbe un modulo che si
+ * abbandona. Ma chi ha quaranta repository e ne segue tre lo sa già mentre
+ * incolla il token, e deve poterlo dire lì, non fra due settimane quando si
+ * accorge che la rassegna gli racconta il lavoro di qualcun altro.
+ *
+ * Il riquadro accetta una riga per repository, e quello che non è un
+ * `owner/nome` lo butta il server: qui non si corregge nessuno mentre scrive.
+ */
+export function FormGithub({ tema, ok }: Props) {
+  const [token, setToken] = useState('')
+  const [repos, setRepos] = useState('')
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
+      setToken(''); setRepos(''); ok()
+    }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  return (
+    <div>
+      <div style={guida(tema)}>{t('Le pull request, le issue e i commit dei tuoi repository, in sola lettura.')}</div>
+      <Campo tema={tema} nome={t('Token di accesso')}
+        sotto={t('Comincia per github_pat_ se è a grana fine, per ghp_ se è classico.')}>
+        <input type="password" value={token} onChange={e => setToken(e.target.value)}
+          autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
+      </Campo>
+      <Campo tema={tema} nome={t('Solo questi repository (uno per riga, owner/nome)')}
+        sotto={t('Vuoto: legge i tuoi trenta repository più attivi.')}>
+        <textarea value={repos} onChange={e => setRepos(e.target.value)} rows={3}
+          autoComplete="off" spellCheck={false}
+          className={classeCampo(tema)} style={{ ...campo(tema), resize: 'vertical' }} />
+      </Campo>
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega GitHub')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
+        <Passi tema={tema} passi={[
+          t('Su github.com: Settings › Developer settings › Personal access tokens.'),
+          t('Dagli la sola lettura su contenuti, issue e pull request dei repository che ti interessano.'),
+          t('Copia il token e incollalo qui.')
+        ]} />
+      </Aiuto>
+    </div>
+  )
+}
+
+/**
  * Drive: lo stesso progetto di Gmail, un consenso diverso.
  *
  * Il client id si porta dietro da solo se Gmail è già collegato — è lo stesso
@@ -1714,6 +1771,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
+  if (id === 'github') return <FormGithub tema={tema} ok={ok} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} />
   // due schede diverse, lo stesso modulo con dentro una parola diversa: sono
   // due permessi, e la schermata del consenso di Microsoft lo dirà

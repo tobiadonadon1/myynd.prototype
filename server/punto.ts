@@ -3,21 +3,25 @@
 // Il feed guarda i documenti e dice cosa merita attenzione. La lista tiene
 // quello che hai deciso tu. La rassegna porta il mondo. Nessuna delle tre
 // risponde alla domanda che si fa aprendo l'app dopo quattro ore: *cosa è
-// cambiato, cosa hai fatto tu nel frattempo, e da dove riprendo?* Il punto è
-// quella risposta, in dieci righe, e la scrive il modello grande — è l'unico
-// posto dell'app dove la qualità del testo è tutto il prodotto, e per questo è
-// anche l'unico lavoro di frontiera che si concede un tetto suo: tre al
-// giorno, mai a meno di tre ore l'uno dall'altro, mai se non è successo niente.
+// cambiato mentre non c'ero?* Il punto è quella risposta, e la scrive il
+// modello grande — è l'unico posto dell'app dove la qualità del testo è tutto
+// il prodotto, e per questo è anche l'unico lavoro di frontiera che si
+// concede un tetto suo: tre al giorno, mai a meno di tre ore l'uno
+// dall'altro, mai se non è successo niente.
 //
-// La parte che cresce sono i progetti. Stanno in una tabella loro
-// (`progetti.ts`), con l'obiettivo scritto da lui: il punto li legge da lì,
-// dice dove stanno, e propone un angolo — un'idea che potrebbe prendere su
-// quel progetto, sua e non da manuale. Un angolo tenuto diventa una
-// convinzione nella memoria, cioè una cosa che Myynd sa di lui da lì in poi;
-// uno scartato resta scritto qui, per non tornare. Il modello può ancora
-// riconoscere un progetto nuovo dal materiale — uno per punto, con
-// l'obiettivo che gli sembra — e quello entra in tabella; ma uno che lui ha
-// chiuso non rientra mai, nemmeno con un altro nome.
+// Le domande a cui risponde sono quattro, e le ha scelte lui: i progetti si
+// sono mossi; su GitHub è successo qualcosa; c'è una notizia che vale la pena
+// leggere; qualcuno ha risposto per email. Quattro sezioni, otto righe in
+// tutto, e niente altro.
+//
+// Quello che NON è il punto sono le cose da fare. Il modello continua a
+// notarle nel materiale — una mail che chiede un preventivo, un modulo da
+// rimandare — ma non finiscono in questa finestra: diventano righe della sua
+// lista, con dentro il documento da cui vengono, e la freccia nel feed apre
+// quella mail. Una cosa da fare detta dentro una finestra che poi si chiude è
+// un compito che gli abbiamo dato noi; una riga nel feed è una cosa che si
+// fa. Era la prima cosa che gli dava fastidio: «quello lo devi mettere nel
+// mio feed, non lì».
 //
 // Il punto stesso sta in un file JSON nella cartella della persona, come le
 // automazioni: non è materiale da cercare, è un foglio che si riscrive.
@@ -47,33 +51,25 @@ const GIORNI_PRIMO = 7
 const DOCS_MAX = 20
 const CORPO_MAX = 200
 
-/** Una riga del punto: il testo, e — se c'è — la cosa che si può aprire. */
-export type Riga = { testo: string; compito: string | null; doc: string | null }
+/**
+ * Una riga del punto: una frase, e il documento da cui viene.
+ *
+ * Il `compito` non c'è più. Una riga del punto non è una cosa da fare — quelle
+ * stanno in lista — quindi l'unica cosa che può esserci dietro a una frase è
+ * il documento che la dice: la mail, la pagina di GitHub, il file.
+ */
+export type Riga = { testo: string; doc: string | null }
 
+/** Un progetto che si è mosso: cosa è cambiato, e dove si vede. */
 export type Progetto = {
-  /** La riga in tabella. Vuoto solo fra la risposta del modello e la scrittura. */
+  /** La riga in tabella: il punto non inventa più progetti, parla di quelli che ci sono. */
   id: string
   nome: string
-  /** A cosa punta, con le sue parole — o, per uno nuovo, come l'ha capito il modello. */
-  obiettivo: string
-  /** La prima volta che è comparso: un progetto che dura si vede da qui. */
-  dal: string
-  doveSei: string
-  angolo: string
-  /** Gli angoli che ha tenuto: suoi, dalla memoria, e il modello ci costruisce sopra. */
-  angoliTenuti: string[]
-  /**
-   * L'ha tirato fuori il punto dal materiale, e lui non l'ha ancora confermato.
-   *
-   * È quello che decide se in pagina compare «non è un progetto»: un progetto
-   * che ha scritto lui — o su cui ha già tenuto un angolo — non si chiude da
-   * una finestra che si legge in dieci secondi.
-   */
-  proposto: boolean
+  /** La novità da quando ci siamo visti. Una frase, e dev'essere successa davvero. */
+  novita: string
+  /** Il documento che la mostra, quando la novità viene da lì. */
+  doc: string | null
 }
-
-/** Un'automazione da accendere: la frase come la direbbe lui, e il perché. */
-export type Avvio = { frase: string; perche: string }
 
 export type Punto = {
   quando: string
@@ -84,12 +80,13 @@ export type Punto = {
    * — «sei stato via sette giorni» al primo punto, che guarda sette giorni.
    */
   via: number | null
-  mentreNonCeri: Riga[]
-  adesso: Riga[]
-  daLeggere: { titolo: string; perche: string; link: string | null }[]
+  /** I progetti che si sono mossi. */
   progetti: Progetto[]
-  /** Automazioni che potrebbe accendere, pronte per `daUnaFrase`. */
-  avvii: Avvio[]
+  /** Cosa è successo sui repository. Vuoto quando GitHub non è collegato. */
+  github: Riga[]
+  daLeggere: { titolo: string; perche: string; link: string | null }[]
+  /** Chi ha risposto per email: chi ha scritto, e cosa vuole. */
+  risposte: Riga[]
 }
 
 export type Esito = {
@@ -135,29 +132,40 @@ const VUOTO: Archivio = { ultimo: null, progetti: [], scartati: [], chiamate: []
 
 const FILE = () => join(cartella(), 'punto.json')
 
+/**
+ * Un foglio scritto da una versione di prima.
+ *
+ * Il punto aveva cinque sezioni e adesso ne ha quattro, e quello che c'era
+ * scritto non si converte: «adesso» erano mosse, e le mosse adesso sono righe
+ * della lista. Si tiene l'unica cosa che serve ancora — `quando`, che è il
+ * cancello e la finestra del materiale — e le sezioni che non c'erano nascono
+ * vuote invece di far esplodere la lettura.
+ */
+function riallinea(p: Punto): Punto {
+  const righe = (xs: unknown): Riga[] =>
+    Array.isArray(xs)
+      ? (xs as Partial<Riga>[])
+        .filter(r => !!r && typeof r.testo === 'string')
+        .map(r => ({ testo: r.testo as string, doc: r.doc ?? null }))
+      : []
+  const vecchi = (Array.isArray(p.progetti) ? p.progetti : []) as Partial<Progetto>[]
+  return {
+    quando: p.quando,
+    via: p.via ?? null,
+    progetti: vecchi
+      .filter(x => !!x && typeof x.novita === 'string' && !!x.id)
+      .map(x => ({ id: x.id as string, nome: x.nome ?? '', novita: x.novita as string, doc: x.doc ?? null })),
+    github: righe(p.github),
+    daLeggere: Array.isArray(p.daLeggere) ? p.daLeggere : [],
+    risposte: righe(p.risposte)
+  }
+}
+
 function leggiArchivio(): Archivio {
   try {
     const letto = JSON.parse(readFileSync(FILE(), 'utf8')) as Partial<Archivio>
     const a = { ...VUOTO, ...letto }
-    // un foglio scritto da una versione che non conosceva ancora `via` e `avvii`
-    if (a.ultimo) a.ultimo = { ...a.ultimo, via: a.ultimo.via ?? null, avvii: a.ultimo.avvii ?? [] }
-    // ...né la tabella dei progetti: un progetto del punto vecchio ritrova la
-    // sua riga per nome, e da lì si sa anche chi l'ha scritto
-    if (a.ultimo?.progetti.some(p => !p.id || p.proposto === undefined)) {
-      a.ultimo = {
-        ...a.ultimo,
-        progetti: a.ultimo.progetti.map(p => {
-          if (p.id && p.proposto !== undefined) return p
-          const vero = p.id ? progetti.trova(p.id) : progetti.trovaPerNome(p.nome)
-          return {
-            ...p,
-            id: p.id || vero?.id || '',
-            obiettivo: p.obiettivo ?? vero?.obiettivo ?? '',
-            proposto: p.proposto ?? (vero ? vero.origine === 'punto' : true)
-          }
-        })
-      }
-    }
+    if (a.ultimo) a.ultimo = riallinea(a.ultimo)
     return a
   } catch {
     return { ...VUOTO }
@@ -178,50 +186,33 @@ export function ultimo(): Punto | null {
 /**
  * Il punto come sta adesso, non come stava quando l'ha scritto il modello.
  *
- * È la fotografia di un momento, e il mondo va avanti: le tre mosse dell'otto
- * settembre erano tutte fatte entro sera, e il giorno dopo la pagina le
- * mostrava ancora sotto «adesso». Una cosa che lui ha già fatto, riproposta
- * come da fare, è il modo più veloce di far sembrare Myynd uno che non
- * ascolta — e non è un difetto del modello, è che nessuno ricontrollava il
- * punto prima di mostrarlo.
+ * È la fotografia di un momento, e il mondo va avanti: un progetto che lui ha
+ * chiuso mezz'ora dopo non deve continuare a raccontare le sue novità dentro
+ * una finestra che dice «oggi». Le altre righe non scadono — una mail che è
+ * arrivata è arrivata, una notizia è uscita — quindi qui si controlla solo
+ * quello che può sparire sotto le mani.
  *
- * Qui si ricontrolla, ogni volta che esce, anche quando viene dal foglio: una
- * riga che parla di una cosa chiusa o sparita se ne va, un progetto che ha
- * chiuso lui se ne va. Le righe senza `compito` restano — parlano di quello
- * che è arrivato o di quello che ha fatto Myynd, e quelle non scadono.
- *
- * È una funzione pura: le liste gliele passa chi chiama, e `chiusi` è i nomi
- * in minuscolo e gli id dei progetti chiusi.
+ * È una funzione pura: `chiusi` sono i nomi in minuscolo e gli id dei progetti
+ * chiusi, e glieli passa chi chiama.
  */
 export function aggiornaAlPresente(
   p: Punto,
-  compiti: { aperti: Set<string>; chiusi: Set<string> },
   chiusi: { nomi: Set<string>; id: Set<string> } = { nomi: new Set(), id: new Set() }
 ): Punto {
-  const viva = (r: Riga) => !r.compito || (compiti.aperti.has(r.compito) && !compiti.chiusi.has(r.compito))
   const nome = (s: string) => s.trim().toLowerCase()
   return {
     ...p,
-    mentreNonCeri: p.mentreNonCeri.filter(viva),
-    adesso: p.adesso.filter(viva),
     progetti: p.progetti.filter(x => !(x.id && chiusi.id.has(x.id)) && !chiusi.nomi.has(nome(x.nome)))
   }
 }
 
-/** Lo stesso, con le liste prese dal vivo: ogni punto che esce passa di qui. */
+/** Lo stesso, con la tabella presa dal vivo: ogni punto che esce passa di qui. */
 function alPresente(p: Punto): Punto {
   const spenti = progetti.elenco('chiuso')
-  return aggiornaAlPresente(
-    p,
-    {
-      aperti: new Set(store.elencoCompiti().map(c => c.id)),
-      chiusi: new Set(store.compitiChiusi(200).map(c => c.id))
-    },
-    {
-      nomi: new Set(spenti.map(x => x.nome.trim().toLowerCase())),
-      id: new Set(spenti.map(x => x.id))
-    }
-  )
+  return aggiornaAlPresente(p, {
+    nomi: new Set(spenti.map(x => x.nome.trim().toLowerCase())),
+    id: new Set(spenti.map(x => x.id))
+  })
 }
 
 // — il materiale —
@@ -283,15 +274,38 @@ export function documentoVero(d: store.Documento): boolean {
   })
 }
 
+/** Le fonti da cui arriva la posta: da un file o da un impegno non risponde nessuno. */
+const FONTI_POSTA = new Set(['posta', 'google', 'microsoft'])
+/** «Re:», «R:», «Fwd:»: una mail che continua una conversazione, non una che la comincia. */
+const RIMANDO = /^\s*(re|r|rif|fwd|fw)\s*:/i
+/** Quante risposte e quante notizie da GitHub si mostrano al modello. */
+const FILO_MAX = 8
+
+/**
+ * Una risposta è una mail dentro una conversazione che c'era già.
+ *
+ * Chi sia un cliente non si sa, e non lo si indovina dal dominio. Quello che si
+ * sa è se questa mail continua qualcosa di suo: o lo dice l'oggetto, o nel filo
+ * c'è un messaggio partito da lui. Tutto il resto è posta in arrivo, e sta dove
+ * sta già — nel feed, che è il posto delle cose che arrivano.
+ */
+export function eUnaRisposta(d: store.Documento): boolean {
+  if (!FONTI_POSTA.has(d.fonte) || d.inviato) return false
+  if (RIMANDO.test(d.titolo)) return true
+  return !!d.filo && store.stessoFilo(d.filo, [d.id], 10).some(x => x.inviato)
+}
+
 export type Materiale = {
   dal: string
   /** Il primo punto di sempre: il materiale è una finestra, non un'assenza. */
   primo: boolean
   /** Quello che ha detto che non gli interessa: si toglie dal materiale e si dice al modello. */
   nonInteressa: string[]
-  /** Le automazioni che ha già, per nome: non si propongono due volte. */
-  automazioni: string[]
   arrivati: store.Documento[]
+  /** Quello che è arrivato da GitHub da allora: senza il connettore, vuoto. */
+  github: store.Documento[]
+  /** Le mail che rispondono a lui, o che stanno in un filo dove ha scritto. */
+  risposte: store.Documento[]
   /** Quanti ne sono arrivati di veri, anche quelli che non si elencano. */
   indicizzati: number
   azioni: store.Azione[]
@@ -308,12 +322,8 @@ export type Materiale = {
   fuoco: string
   carta: string
   convinzioni: store.Convinzione[]
-  /** Gli angoli già suoi, dalla memoria: ambito `progetto:<nome>`. */
-  tenuti: { nome: string; angolo: string }[]
   /** I suoi progetti, con l'obiettivo: quelli vivi, dalla tabella. */
   progetti: progetti.Progetto[]
-  /** Quelli che ha chiuso: al modello si dicono come «non sono progetti». */
-  chiusi: string[]
 }
 
 function daAllora(quando: string | null | undefined, dal: string): boolean {
@@ -376,9 +386,6 @@ export function raccogli(dal: string, primo = false): Materiale {
     .slice(0, 3)
     .map(x => x.n)
 
-  let nomiAutomazioni: string[] = []
-  try { nomiAutomazioni = automazioni.elenco().filter(a => a.accesa).map(a => a.nome) } catch { /* senza ricette il punto vive lo stesso */ }
-
   // quello che è arrivato davvero: niente scarti, niente rumore dal disco, e
   // dal disco al massimo cinque, i più recenti (`appenaArrivati` li dà già in
   // ordine). Quelli che restano fuori non sono «notizie non elencate»: non
@@ -389,12 +396,26 @@ export function raccogli(dal: string, primo = false): Materiale {
     return d.fonte !== 'desktop' || ++dalDisco <= DISCO_MAX
   })
 
+  /*
+   * Le due sezioni che hanno un elenco loro.
+   *
+   * GitHub e le risposte non si pescano da «ARRIVATO»: sono due delle quattro
+   * domande a cui il punto risponde, e se restassero in mezzo agli altri
+   * venti documenti il taglio a venti potrebbe mangiarsele. Si prendono prima,
+   * e dal mucchio generale escono — dirle due volte costa gettoni e non
+   * aggiunge niente.
+   */
+  const github = daDire.filter(d => d.fonte === 'github').slice(0, FILO_MAX)
+  const risposte = daDire.filter(eUnaRisposta).slice(0, FILO_MAX)
+  const aParte = new Set([...github, ...risposte].map(d => d.id))
+
   return {
     dal,
     primo,
     nonInteressa,
-    automazioni: nomiAutomazioni,
-    arrivati: daDire.slice(0, DOCS_MAX),
+    arrivati: daDire.filter(d => !aParte.has(d.id)).slice(0, DOCS_MAX),
+    github,
+    risposte,
     indicizzati: daDire.length,
     azioni,
     attendono: vive.filter(c => c.stato === 'pronto' || c.stato === 'chiede'),
@@ -406,11 +427,7 @@ export function raccogli(dal: string, primo = false): Materiale {
     fuoco: fuoco(),
     carta: carta(),
     convinzioni: store.convinzioni('persona').filter(attendibile).slice(0, 8),
-    tenuti: store.convinzioni()
-      .filter(k => k.ambito.startsWith('progetto:'))
-      .map(k => ({ nome: k.ambito.slice('progetto:'.length), angolo: k.enunciato })),
-    progetti: progetti.vivi(),
-    chiusi: progetti.chiusi()
+    progetti: progetti.vivi()
   }
 }
 
@@ -428,8 +445,8 @@ export function successoQualcosa(m: Materiale): boolean {
   /*
    * Una riga che ha scritto il punto stesso non è una novità.
    *
-   * Da quando ogni mossa sotto «adesso» è una riga della lista, un punto ne
-   * lascia dietro fino a tre appena nate: senza questa riga il giro dopo le
+   * Ogni cosa da fare che il punto nota diventa una riga della lista, e un
+   * punto ne lascia dietro fino a tre appena nate: senza questa riga il giro dopo le
    * troverebbe create da allora, direbbe che è successo qualcosa, e il punto
    * si rifarebbe da solo — a spese sue, per raccontarsi quello che ha appena
    * scritto. Torna a contare appena la tocca lui: la sposta, la chiude, la
@@ -442,27 +459,44 @@ export function successoQualcosa(m: Materiale): boolean {
 // — il prompt —
 
 /** Vale per ogni campo di testo: la stessa frase, detta al modello dove la scrive. */
-const PIANA = 'Una frase sola, piana, al massimo dieci parole. Mai la lineetta (—, –), mai le parentesi, mai il corsivo o il grassetto.'
+const PIANA = 'Una frase sola, piana, al massimo dodici parole. Mai la lineetta (—, –), mai le parentesi, mai il corsivo o il grassetto.'
 
-const schema = (compiti: string[], docs: string[]) => {
-  const riga = {
+const schema = (docs: string[], github: string[], risposte: string[], nomi: string[]) => {
+  /** Una riga con dietro un documento, preso da un elenco preciso. */
+  const riga = (ids: string[], quale: string) => ({
     type: 'object',
     properties: {
       testo: { type: 'string', description: PIANA },
-      compito: { type: 'string', enum: ['', ...compiti], description: 'L’id della riga della lista di cui parla, o vuoto.' },
-      doc: { type: 'string', enum: ['', ...docs], description: 'L’id del documento di cui parla, o vuoto.' }
+      doc: { type: 'string', enum: ['', ...ids], description: quale }
     },
-    required: ['testo', 'compito', 'doc'],
+    required: ['testo', 'doc'],
     additionalProperties: false
-  }
+  })
   return {
     type: 'object',
     properties: {
-      mentreNonCeri: { type: 'array', items: riga, description: 'Al massimo due righe, e solo cose arrivate da fuori. Meno è meglio: vuoto va benissimo.' },
-      adesso: { type: 'array', items: riga, description: 'Al massimo tre mosse, una riga ciascuna, e ogni riga è una riga della sua lista: o l’id di una che c’è già, o una cosa nuova da fare oggi. Meno è meglio: vuoto va benissimo.' },
+      progetti: {
+        type: 'array',
+        description: 'Al massimo tre, uno per progetto, e solo quelli che il materiale ha mosso davvero. Vuoto va benissimo.',
+        items: {
+          type: 'object',
+          properties: {
+            nome: { type: 'string', enum: ['', ...nomi], description: 'Il nome del progetto, copiato dall’elenco alla lettera.' },
+            novita: { type: 'string', description: `Cosa è successo su quel progetto da allora. ${PIANA}` },
+            doc: { type: 'string', enum: ['', ...docs], description: 'L’id del documento che lo mostra, o vuoto se la novità è una riga chiusa.' }
+          },
+          required: ['nome', 'novita', 'doc'],
+          additionalProperties: false
+        }
+      },
+      github: {
+        type: 'array',
+        description: 'Al massimo tre, e solo dai documenti di GitHub elencati. Senza quelli, vuoto.',
+        items: riga(github, 'L’id del documento di GitHub di cui parla la riga. Obbligatorio.')
+      },
       daLeggere: {
         type: 'array',
-        description: 'Una sola, solo fra le notizie elencate, solo se c’entra con il suo lavoro. Vuoto va benissimo.',
+        description: 'Al massimo due, solo fra le notizie elencate, solo se c’entrano con il suo lavoro. Vuoto va benissimo.',
         items: {
           type: 'object',
           properties: {
@@ -473,36 +507,18 @@ const schema = (compiti: string[], docs: string[]) => {
           additionalProperties: false
         }
       },
-      progetti: {
+      risposte: {
         type: 'array',
-        description: 'Al massimo due, fra quelli elencati, una riga ciascuno; uno nuovo solo se il materiale lo mostra davvero. Vuoto va benissimo.',
-        items: {
-          type: 'object',
-          properties: {
-            nome: { type: 'string', description: 'Lo stesso nome dell’elenco, alla lettera. Per uno nuovo, corto e come lo direbbe lui: nessuna lineetta.' },
-            obiettivo: { type: 'string', description: `A cosa punta. Se l’elenco lo dice già, copialo; se manca, proponilo. ${PIANA}` },
-            doveSei: { type: 'string', description: `A che punto sta rispetto all’obiettivo. ${PIANA}` },
-            angolo: { type: 'string', description: `Un’idea distintiva che potrebbe prendere. Vuoto se non ne hai una buona. ${PIANA}` }
-          },
-          required: ['nome', 'obiettivo', 'doveSei', 'angolo'],
-          additionalProperties: false
-        }
+        description: 'Al massimo tre, e solo fra le email elencate come risposte. Vuoto va benissimo.',
+        items: riga(risposte, 'L’id della mail di cui parla la riga. Obbligatorio.')
       },
-      avvii: {
+      compiti: {
         type: 'array',
-        description: `Al massimo una automazione che potrebbe accendere, solo su una cosa che nel materiale si ripete. Vuoto va benissimo. Si scrive in ${nellaLingua()}, come tutto il resto.`,
-        items: {
-          type: 'object',
-          properties: {
-            frase: { type: 'string', description: `L’automazione come la direbbe lui, in una frase che comincia con quando: «Ogni lunedì alle 8, …», «Quando arriva una fattura, …». Scritta in ${nellaLingua()}, come ogni altro campo. Niente lineette, niente parentesi.` },
-            perche: { type: 'string', description: `Al massimo otto parole: cosa gli toglie di mano. In ${nellaLingua()}. Niente lineette, niente parentesi.` }
-          },
-          required: ['frase', 'perche'],
-          additionalProperties: false
-        }
+        description: 'Al massimo tre cose da fare che vedi nel materiale. NON sono righe del punto: finiscono nella sua lista. Vuoto va benissimo.',
+        items: riga(docs, 'L’id del documento da cui viene la cosa da fare, così la riga apre quella mail.')
       }
     },
-    required: ['mentreNonCeri', 'adesso', 'daLeggere', 'progetti', 'avvii'],
+    required: ['progetti', 'github', 'daLeggere', 'risposte', 'compiti'],
     additionalProperties: false
   }
 }
@@ -518,60 +534,41 @@ const schema = (compiti: string[], docs: string[]) => {
  * — stanno in `m.progetti`, dalla tabella.
  */
 export function istruzione(m: Materiale, prima: Progetto[], scartati: string[]): string {
-  const visti = new Set<string>()
-  const suoi = m.tenuti.filter(t => {
-    const k = `${t.nome}|${t.angolo}`.toLowerCase()
-    if (visti.has(k)) return false
-    visti.add(k)
-    return true
-  })
   const ultimo = (nome: string) => prima.find(p => p.nome.toLowerCase() === nome.toLowerCase())
 
   return [
-    `Sei Myynd. Questa persona torna all'app dopo un po' e tu le fai il punto: cosa è
-successo mentre non c'era, cosa hai fatto tu nel frattempo, cosa conviene fare
-adesso, e dove stanno i suoi progetti.`,
+    `Sei Myynd. Questa persona torna all'app dopo un po' e tu le fai il punto. Il
+punto risponde a quattro domande, e a nessun'altra: i suoi progetti si sono
+mossi, su GitHub è successo qualcosa, c'è una notizia che vale la pena
+leggere, qualcuno le ha risposto per email.`,
     m.carta ? `Chi è:\n${m.carta}` : '',
     m.convinzioni.length
       ? 'Quello che sai di come lavora:\n' + m.convinzioni.map(k => `— ${k.enunciato}`).join('\n')
       : '',
     m.fuoco ? `Ti ha chiesto di concentrarti su questo, e viene prima di tutto il resto:\n${m.fuoco}` : '',
     m.progetti.length
-      ? 'I suoi progetti, e a cosa punta ciascuno. Tieni gli stessi nomi, alla lettera; ' +
-        'parla solo di quelli che il materiale tocca; per ognuno di\' «dove sei» rispetto ' +
-        'al suo obiettivo. Uno nuovo solo se il materiale lo mostra davvero, da più di un giorno.\n' +
+      ? 'I suoi progetti, e a cosa punta ciascuno. Tieni gli stessi nomi, alla lettera, e ' +
+        'parla solo di quelli che il materiale ha mosso davvero. Non inventarne di nuovi: ' +
+        'se una cosa non è in questo elenco, non è un progetto.\n' +
         m.progetti.map(p => {
           const u = ultimo(p.nome)
-          return `— ${p.nome}${p.obiettivo ? `: ${p.obiettivo}` : ' (obiettivo non scritto: proponilo in una riga)'}` +
+          return `— ${p.nome}${p.obiettivo ? `: ${p.obiettivo}` : ' (obiettivo non scritto)'}` +
             ` (${p.stato}, dal ${p.dal.slice(0, 10)})` +
-            (u?.doveSei ? `\n  dov'era l'ultima volta: ${u.doveSei}` : '') +
-            (u?.angolo ? `\n  angolo proposto la volta scorsa: ${u.angolo}` : '')
+            (u?.novita ? `\n  l'ultima volta hai detto: ${u.novita}` : '')
         }).join('\n')
-      : 'Non ha ancora scritto i suoi progetti: riconoscili dal materiale. Un progetto è una cosa su cui sta lavorando da più di un giorno, con un nome che userebbe lui e un obiettivo in una riga.',
-    m.chiusi.length
-      ? 'Questi NON sono progetti — li ha chiusi lui. Non nominarli, non riproporli, nemmeno con un altro nome:\n' +
-        m.chiusi.map(n => `— ${n}`).join('\n')
-      : '',
-    suoi.length
-      ? 'Angoli che ha già tenuto — sono suoi, non riproporli: costruisci sopra, o proponi un passo oltre.\n' +
-        suoi.map(t => `— [${t.nome}] ${t.angolo}`).join('\n')
-      : '',
+      : 'Non ha ancora scritto i suoi progetti: la sezione «progetti» resta vuota.',
     scartati.length
-      ? 'Angoli che ha detto che NON sono così. Non riproporli, nemmeno riformulati.\n' +
+      ? 'Cose che ha detto che NON sono così. Non riproporle, nemmeno riformulate.\n' +
         scartati.map(a => `— ${a}`).join('\n')
       : '',
     m.nonInteressa.length
-      ? 'Cose che ha detto che NON gli interessano. Non nominarle, non farci un ' +
-        'progetto, non metterle fra le mosse — nemmeno se nel materiale ce n\'è traccia:\n' +
+      ? 'Cose che ha detto che NON gli interessano. Non nominarle, non farne una ' +
+        'riga del punto, non farne una cosa da fare — nemmeno se nel materiale ce n\'è traccia:\n' +
         m.nonInteressa.map(x => `— ${x}`).join('\n')
       : '',
-    m.automazioni.length
-      ? 'Le automazioni che ha già accese — non proporne di uguali:\n' +
-        m.automazioni.map(x => `— ${x}`).join('\n')
-      : '',
     `Come si scrive, senza eccezioni. Vale per ogni campo di testo che riempi:
-— Una frase sola per riga, piana, al massimo dieci parole, con il punto in
-  fondo. Il punto si legge in dieci secondi.
+— Una frase sola per riga, piana, dalle dieci alle dodici parole al massimo,
+  con il punto in fondo. Il punto si legge in dieci secondi.
 — Nelle frasi che scrivi non compare MAI la lineetta lunga «—» né quella
   media «–». Un inciso o diventa una frase sua, o si toglie: non si attacca
   con un trattino. Vietate anche le parentesi tonde.
@@ -591,42 +588,35 @@ Cosa NON è una notizia, mai:
 — Quello che ha fatto Myynd da solo (automazioni, letture) non è una notizia.
 — Un file sul disco è una notizia solo se è un documento vero arrivato adesso:
   una fattura, un contratto, una bozza.
-— Le cose tecniche (server, deploy, log) non entrano nel punto a meno che non
-  ci sia un compito aperto che le riguarda, e allora una riga sola.
+— Le cose tecniche (server, deploy, log) non entrano nel punto, a meno che non
+  vengano da GitHub, e allora stanno nella loro sezione.
 
-Quante righe, al massimo:
-— «mentreNonCeri»: due. Quello che è arrivato da fuori e conta davvero, o una
-  cosa che hai preparato tu e che adesso aspetta una sua risposta. Metti
-  l'id del compito o del documento quando c'è, così si apre con un dito.
-— «adesso»: tre mosse che fanno andare avanti il suo lavoro, e ogni riga È una
-  riga della sua lista. Una riga della lista, una mossa: se una riga gli chiede
-  quattro cose, resta UNA mossa sola, perché le domande stanno dentro la riga e
-  non si spezzano in mosse diverse. Quando la mossa parla di una riga che c'è già,
-  metti il suo id in «compito», copiato da quelli elencati. Una mossa senza id
-  diventa una riga nuova della lista: scrivila solo per una cosa concreta e
-  fattibile oggi, all'imperativo, al massimo dieci parole, e mai per qualcosa
-  che nella lista c'è già. Una riga pronta da approvare viene prima di tutto.
-  Se la mossa è per un progetto, il nome del progetto sta dentro la frase, non
-  attaccato in coda.
-— «daLeggere»: una notizia sola, solo fra quelle elencate e solo se c'entra
-  con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
-— «progetti»: uno o due, di quelli elencati e toccati dal materiale. «doveSei»
-  è una riga sola, al massimo dieci parole, rispetto all'obiettivo. «angolo» è
-  UN'idea distintiva che potrebbe prendere su quel progetto, radicata nel suo
-  materiale e in quello che crede, mai generica, mai un consiglio da manuale.
-  Se non ne hai una buona, lascia l'angolo vuoto.
-— «avvii»: uno, e solo dove il materiale mostra una cosa che si ripete (lo
-  stesso tipo di mail, lo stesso lavoro ogni settimana). La frase dev'essere
-  una che Myynd sa trasformare in ricetta: quando guardare, cosa guardare,
-  cosa farne. Niente di generico. «frase» e «perche» si scrivono in
-  ${nellaLingua()}, come ogni altra parola del punto: gli avvii non fanno
-  eccezione. La ricetta la traduce Myynd da sola, dopo.
-— Non ripeterti: la stessa cosa detta in due sezioni è una cosa sola. Se
-  «adesso» dice già di controllare una cosa, «mentreNonCeri» non la racconta,
-  «doveSei» non la ripete e l'avvio non ci gira intorno.
-— Gli id di compiti e documenti li prendi SOLO da quelli elencati nel
-  materiale; altrimenti stringa vuota.
-Scrivi in ${nellaLingua()}: ogni campo, avvii compresi.`
+Le quattro sezioni, e cosa ci va:
+— «progetti»: al massimo tre, uno per progetto, e solo quelli che si sono
+  mossi. La novità dev'essere scritta in un documento arrivato da allora o in
+  una riga chiusa da allora: se viene da un documento, metti il suo id in
+  «doc». Niente «va avanti», niente «prosegue»: cosa è successo, con i nomi e
+  le cifre che hai letto. Se nessun progetto si è mosso, la sezione resta
+  vuota.
+— «github»: al massimo tre, solo dai documenti di GitHub elencati. Ogni riga
+  dice il repository e cosa è successo: unita, aperta, fallita, spinta. L'id
+  del documento va sempre in «doc». Senza documenti di GitHub la sezione resta
+  vuota.
+— «daLeggere»: al massimo due, solo fra le notizie elencate e solo se
+  c'entrano con quello su cui lavora. Vuoto è la risposta giusta quasi sempre.
+— «risposte»: al massimo tre, solo fra le email elencate come risposte. Ogni
+  riga dice chi ha scritto e cosa vuole, nella lingua dell'app. L'id della mail
+  va sempre in «doc», così si apre con un dito.
+— «compiti»: cose da fare che vedi nel materiale (una mail che chiede
+  qualcosa, un modulo da rimandare): finiranno nella sua lista, con il
+  documento da cui vengono; non sono righe del punto. Al massimo tre,
+  all'imperativo, una cosa concreta e fattibile oggi, e mai una cosa che nella
+  lista c'è già.
+— Non ripeterti: la stessa cosa detta in due sezioni è una cosa sola. Se una
+  risposta racconta già che il cliente ha scritto, il progetto non lo ripete.
+— Gli id dei documenti li prendi SOLO da quelli elencati nel materiale;
+  altrimenti stringa vuota.
+Scrivi in ${nellaLingua()}: ogni campo, i compiti compresi.`
   ].filter(Boolean).join('\n\n')
 }
 
@@ -634,20 +624,17 @@ function ore(daIso: string, adesso: number): number {
   return Math.max(0, Math.round((adesso - new Date(daIso).getTime()) / 3600_000))
 }
 
-/** Il materiale, come lo legge il modello. */
+/**
+ * Il materiale, come lo legge il modello.
+ *
+ * Quello che ha fatto Myynd da solo non c'è più: non è una delle quattro
+ * domande, e finché c'era il modello lo raccontava — «l'automazione Priorità in
+ * arrivo è girata due volte mentre non c'eri» era la prima riga di un punto
+ * vero, e non chiedeva niente a nessuno.
+ */
 export function materiale(m: Materiale, via: number | null | undefined, adesso: number): string {
-  const conteggi: string[] = []
-  const perTipo = new Map<string, number>()
-  for (const a of m.azioni) if (a.esito === 'fatta') perTipo.set(a.tipo, (perTipo.get(a.tipo) ?? 0) + 1)
-  if (m.preparate.length) conteggi.push(`bozze preparate: ${m.preparate.length}`)
-  if (perTipo.get('email')) conteggi.push(`email mandate (su sua richiesta): ${perTipo.get('email')}`)
-  if (perTipo.get('automazione')) conteggi.push(`automazioni girate: ${perTipo.get('automazione')}`)
-  for (const [tipo, n] of perTipo) if (tipo !== 'email' && tipo !== 'automazione') conteggi.push(`${tipo}: ${n}`)
-  if (m.indicizzati) conteggi.push(`documenti entrati nell'indice: ${m.indicizzati}`)
-
-  const notevoli = [...m.azioni]
-    .sort((a, b) => (a.esito === 'fallita' ? -1 : 0) - (b.esito === 'fallita' ? -1 : 0))
-    .slice(0, 5)
+  const documento = (d: store.Documento) =>
+    `— id: ${d.id}\n  ${d.titolo}${d.autore ? ` · da ${d.autore}` : ''} · ${d.fonte}\n  ${d.corpo.slice(0, CORPO_MAX).replace(/\s+/g, ' ')}`
 
   const compito = (c: store.Compito) =>
     `— [${c.id}] ${c.testo} (${c.stato}${c.giorno ? `, pianificato per ${c.giorno}` : c.quando === 'oggi' ? ', per oggi' : ''})` +
@@ -660,17 +647,14 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
       : `Da quando: ${m.dal} (${ore(m.dal, adesso)} ore fa).`) +
       (via && via > 0 ? `\nÈ stato via circa ${via < 90 ? `${via} minuti` : `${Math.round(via / 60)} ore`}.` : ''),
     m.arrivati.length
-      ? `ARRIVATO (${m.arrivati.length} documenti, i più nuovi prima):\n` +
-        m.arrivati.map(d =>
-          `— id: ${d.id}\n  ${d.titolo}${d.autore ? ` · da ${d.autore}` : ''} · ${d.fonte}\n  ${d.corpo.slice(0, CORPO_MAX).replace(/\s+/g, ' ')}`
-        ).join('\n')
+      ? `ARRIVATO (${m.arrivati.length} documenti, i più nuovi prima):\n` + m.arrivati.map(documento).join('\n')
       : 'ARRIVATO: niente.',
-    'FATTO DA MYYND:' + (conteggi.length ? '\n' + conteggi.map(c => `— ${c}`).join('\n') : ' niente.') +
-      (notevoli.length
-        ? '\nLe più notevoli:\n' + notevoli.map(a =>
-          `— ${a.tipo}: ${a.cosa}${a.verso ? ` → ${a.verso}` : ''} (${a.esito}${a.compito ? `, compito ${a.compito}` : ''})`
-        ).join('\n')
-        : ''),
+    m.github.length
+      ? 'SU GITHUB (da allora):\n' + m.github.map(documento).join('\n')
+      : 'SU GITHUB: niente. La sezione «github» resta vuota.',
+    m.risposte.length
+      ? 'HANNO RISPOSTO (email dentro conversazioni dove ha scritto anche lui):\n' + m.risposte.map(documento).join('\n')
+      : 'HANNO RISPOSTO: nessuno. La sezione «risposte» resta vuota.',
     'LA SUA LISTA:' +
       (m.attendono.length ? '\nAspettano lui:\n' + m.attendono.map(compito).join('\n') : '') +
       (m.perOggi.length ? '\nAperte per oggi:\n' + m.perOggi.map(compito).join('\n') : '') +
@@ -689,11 +673,12 @@ export function materiale(m: Materiale, via: number | null | undefined, adesso: 
 // — il punto —
 
 type Grezzo = {
-  mentreNonCeri?: Partial<Riga>[]
-  adesso?: Partial<Riga>[]
+  progetti?: { nome?: string; novita?: string; doc?: string }[]
+  github?: Partial<Riga>[]
   daLeggere?: { titolo?: string; perche?: string }[]
-  progetti?: { nome?: string; obiettivo?: string; doveSei?: string; angolo?: string }[]
-  avvii?: { frase?: string; perche?: string }[]
+  risposte?: Partial<Riga>[]
+  /** Le cose da fare che ha visto: non sono righe del punto, sono righe della lista. */
+  compiti?: Partial<Riga>[]
 }
 
 /** Una riga corta resta corta anche se il modello non ha ascoltato. */
@@ -733,10 +718,9 @@ function paroleDi(s: string): Set<string> {
 /**
  * Due frasi che dicono la stessa cosa.
  *
- * Il punto dell'undici settembre diceva del dev server di tobiaweb in
- * «mentreNonCeri», lo richiedeva in «adesso», lo ripeteva in «doveSei» del
- * progetto e ci costruiva sopra un avvio: quattro righe su dieci per una cosa
- * sola, e lui l'ha letto come «mi sta dicendo sempre la stessa cosa». Il
+ * Il punto dell'undici settembre diceva del dev server di tobiaweb in quattro
+ * sezioni diverse: quattro righe su dieci per una cosa sola, e lui l'ha letto
+ * come «mi sta dicendo sempre la stessa cosa». Il
  * prompt lo vieta, ma il modello si ripete lo stesso — e allora si conta:
  * metà delle parole che contano in comune (Jaccard) e la seconda riga non
  * esce. Non è una somiglianza di senso, è una rete grossolana: prende il caso
@@ -751,208 +735,210 @@ export function ridondante(a: string, b: string): boolean {
   return comuni / (x.size + y.size - comuni) >= 0.5
 }
 
+/** Quello che esce da `ricuci`: il punto da mostrare, e quello che non si mostra. */
+export type Ricucito = {
+  punto: Punto
+  /**
+   * Le cose da fare che il modello ha visto nel materiale.
+   *
+   * Non sono righe del punto e non arrivano mai al client: passano da
+   * `ancoraAlleRighe` e diventano righe della sua lista, con dentro il
+   * documento da cui vengono. È la differenza fra dirgli «c'è questo da fare»
+   * dentro una finestra che si chiude, e metterglielo dove le cose si fanno.
+   */
+  compiti: Riga[]
+}
+
 /**
  * Da quello che ha scritto il modello a un punto che si può mostrare.
  *
  * Gli id passano solo se stanno nel materiale — cintura oltre alle bretelle
- * dell'enum — e i progetti si ricuciono con quelli della tabella per nome:
- * id, obiettivo e `dal` sono suoi, non del modello; gli angoli tenuti vengono
- * dalla memoria. Un nome che ha chiuso non passa, nemmeno se il modello lo
- * riscrive; uno che non conosce nessuno entra come nuovo, ma uno solo per
- * punto — è il modello che propone, e la Memoria dove si corregge.
+ * dell'enum — e ognuna delle due sezioni che vivono di documenti (GitHub, le
+ * risposte) prende gli id solo dal suo elenco: una riga di GitHub che punta a
+ * una mail non è una riga di GitHub. I progetti si ritrovano per nome fra
+ * quelli della tabella: uno che non c'è non entra, perché il punto non inventa
+ * più progetti.
  */
-export function ricuci(g: Grezzo, m: Materiale, scartati: string[], quando: string, via: number | null = null, avviate: string[] = []): Punto {
-  const compiti = new Set([...m.attendono, ...m.perOggi, ...m.preparate].map(c => c.id))
-  const docs = new Set(m.arrivati.map(d => d.id))
-  const riga = (r: Partial<Riga>): Riga | null => {
-    const testo = ripulisci(r.testo ?? '')
-    if (!testo) return null
-    return {
-      testo,
-      compito: r.compito && compiti.has(r.compito) ? r.compito : null,
-      doc: r.doc && docs.has(r.doc) ? r.doc : null
-    }
-  }
+export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | null = null): Ricucito {
+  const chiave = (s: string) => s.trim().toLowerCase()
+  const tuttiIDoc = new Set([...m.arrivati, ...m.github, ...m.risposte].map(d => d.id))
+  const idGithub = new Set(m.github.map(d => d.id))
+  const idRisposte = new Set(m.risposte.map(d => d.id))
+
   /*
    * Una cosa una volta sola.
    *
-   * `tenute` è tutto quello che è già stato detto, in qualunque sezione: una
-   * riga nuova passa solo se non ripete niente di quello. L'ordine è l'ordine
-   * in cui si legge il punto — prima «mentre non c'eri», poi «adesso», poi i
-   * progetti, poi gli avvii — così la prima volta che una cosa viene detta è
-   * anche quella nel posto più in alto, e quella che se ne va è l'eco.
+   * Chi dedupa tiene l'elenco di quello che ha già fatto passare: una riga
+   * nuova esce solo se non ripete niente di quello. Il punto ne usa uno per
+   * tutte e quattro le sezioni — l'ordine è quello in cui si legge, quindi la
+   * prima volta che una cosa viene detta è anche quella più in alto — e i
+   * compiti ne usano uno loro, perché una cosa da fare *deve* poter parlare
+   * della stessa mail di cui parla una riga: sono due posti diversi.
    */
-  const tenute: string[] = []
-  const nuova = (testo: string) => {
-    if (tenute.some(t => ridondante(t, testo))) return false
-    tenute.push(testo)
-    return true
+  const dedupe = () => {
+    const viste: string[] = []
+    return (testo: string) => {
+      if (viste.some(t => ridondante(t, testo))) return false
+      viste.push(testo)
+      return true
+    }
   }
-  const righe = (xs: Partial<Riga>[] | undefined, max: number) => {
+  const nuova = dedupe()
+  const nuovoCompito = dedupe()
+
+  const righe = (
+    xs: Partial<Riga>[] | undefined,
+    max: number,
+    ids: Set<string>,
+    obbligatorio: boolean,
+    passa: (t: string) => boolean
+  ) => {
     const tenuta: Riga[] = []
     for (const x of xs ?? []) {
       if (tenuta.length >= max) break
-      const r = riga(x)
-      if (r && nuova(r.testo)) tenuta.push(r)
+      const testo = ripulisci(x.testo ?? '')
+      if (!testo) continue
+      const doc = x.doc && ids.has(x.doc) ? x.doc : null
+      // GitHub e le risposte vivono del documento: una riga senza non apre
+      // niente, e una riga che non apre niente è peggio di una riga in meno
+      if (obbligatorio && !doc) continue
+      if (!passa(testo)) continue
+      tenuta.push({ testo, doc })
     }
     return tenuta
   }
 
-  // si compongono qui, nell'ordine in cui si leggono: quello che viene dopo sa
-  // già cos'è stato detto prima
-  const mentreNonCeri = righe(g.mentreNonCeri, 2)
-  const adesso = righe(g.adesso, 3)
-
-  const chiave = (s: string) => s.trim().toLowerCase()
-  const rifiutati = new Set(scartati.map(chiave))
-  const chiusi = new Set(m.chiusi.map(chiave))
-  const tenutiDi = (nome: string) => m.tenuti.filter(t => chiave(t.nome) === chiave(nome)).map(t => t.angolo)
-  const progetti: Progetto[] = []
-  let nuovi = 0
+  // si compongono nell'ordine in cui si leggono: quello che viene dopo sa già
+  // cos'è stato detto prima
+  const fatti: Progetto[] = []
   for (const p of g.progetti ?? []) {
+    if (fatti.length >= 3) break
     const nome = (p.nome ?? '').trim()
-    if (!nome || progetti.length >= 2 || progetti.some(x => chiave(x.nome) === chiave(nome))) continue
-    // un progetto che ha chiuso lui non torna: nemmeno se il modello lo riscrive
-    if (chiusi.has(chiave(nome))) continue
+    const novita = ripulisci(p.novita ?? '')
+    if (!nome || !novita) continue
     const vero = m.progetti.find(x => chiave(x.nome) === chiave(nome))
-    if (!vero && nuovi++ >= 1) continue
-    const angoliTenuti = tenutiDi(vero?.nome ?? nome)
-    const angolo = ripulisci(p.angolo ?? '')
-    // «dove sei» che ripete una riga già letta più su non è dove sei, è l'eco:
-    // il progetto resta, con il nome e l'angolo, e la riga sparisce
-    const doveSei = ripulisci(p.doveSei ?? '')
-    progetti.push({
-      id: vero?.id ?? '',
-      // il nome di uno che è già in tabella è suo e non si tocca: è la chiave
-      // con cui «tienilo» e «non è un progetto» lo ritrovano
-      nome: vero?.nome ?? ripulisci(nome),
-      obiettivo: vero?.obiettivo || ripulisci(p.obiettivo ?? ''),
-      dal: vero?.dal ?? quando,
-      doveSei: doveSei && nuova(doveSei) ? doveSei : '',
-      // un angolo che ha già rifiutato, o già tenuto, non si ripropone: resta vuoto
-      angolo: rifiutati.has(chiave(angolo)) || angoliTenuti.some(a => chiave(a) === chiave(angolo)) ? '' : angolo,
-      angoliTenuti,
-      // uno che ha scritto lui non si chiude da qui: «non è un progetto» è per
-      // quelli che il punto ha tirato fuori dal materiale
-      proposto: vero ? vero.origine === 'punto' : true
+    // un progetto che non sta in tabella non è un progetto: il punto ne parla,
+    // non ne inventa
+    if (!vero || fatti.some(x => x.id === vero.id)) continue
+    if (!nuova(novita)) continue
+    fatti.push({
+      id: vero.id,
+      // il nome di quello in tabella è suo e non si tocca: è la chiave con cui
+      // la pagina lo ritrova
+      nome: vero.nome,
+      novita,
+      doc: p.doc && tuttiIDoc.has(p.doc) ? p.doc : null
     })
   }
 
-  const daLeggere = (g.daLeggere ?? []).slice(0, 1).flatMap(n => {
+  const github = righe(g.github, 3, idGithub, true, nuova)
+
+  const daLeggere: Punto['daLeggere'] = []
+  for (const n of g.daLeggere ?? []) {
+    if (daLeggere.length >= 2) break
     const titolo = (n.titolo ?? '').trim()
-    if (!titolo) return []
+    if (!titolo) continue
     const vera = m.notizie.find(x => chiave(x.titolo) === chiave(titolo))
       ?? m.notizie.find(x => chiave(x.titolo).includes(chiave(titolo)) || chiave(titolo).includes(chiave(x.titolo)))
     // una notizia che non sta nella rassegna è inventata: non passa
-    if (!vera) return []
-    return [{ titolo: senzaTrattini(vera.titolo), perche: ripulisci(n.perche ?? ''), link: vera.link ?? null }]
-  })
-
-  // le automazioni già accese da qui, e quelle che ha già: non si ripropongono
-  const gia = new Set([...avviate, ...m.automazioni].map(chiave))
-  const avvii: Avvio[] = []
-  for (const a of g.avvii ?? []) {
-    const frase = ripulisci(a.frase ?? '')
-    if (frase.length < 12 || gia.has(chiave(frase)) || avvii.length >= 1) continue
-    // un avvio che gira intorno a una riga già detta è la quarta volta che la dice
-    if (!nuova(frase)) continue
-    gia.add(chiave(frase))
-    avvii.push({ frase, perche: ripulisci(a.perche ?? '') })
+    if (!vera) continue
+    if (daLeggere.some(x => chiave(x.titolo) === chiave(vera.titolo))) continue
+    if (!nuova(senzaTrattini(vera.titolo))) continue
+    daLeggere.push({ titolo: senzaTrattini(vera.titolo), perche: ripulisci(n.perche ?? ''), link: vera.link ?? null })
   }
+
+  const risposte = righe(g.risposte, 3, idRisposte, true, nuova)
+  const compiti = righe(g.compiti, NUOVI_MAX, tuttiIDoc, false, nuovoCompito)
 
   /*
    * Otto righe, e non di più.
    *
-   * I tetti di sezione sommati fanno nove, ed è una riga più di quello che si
-   * legge in dieci secondi. Quando si sfora si toglie dal fondo, cioè
-   * dall'ordine in cui le cose contano: prima l'avvio — è un suggerimento,
-   * tornerà domani — poi la notizia, poi il secondo progetto. Il primo
-   * progetto non si tocca: senza, la finestra non dice più dove sta il lavoro.
+   * I tetti di sezione sommati fanno undici, ed è più di quello che si legge in
+   * dieci secondi. Quando si sfora si toglie per ordine di importanza, che non
+   * è l'ordine in cui si legge: prima le notizie — il mondo torna domani — poi
+   * l'ultima riga di GitHub, poi l'ultimo progetto. Le risposte si toccano per
+   * ultime: qualcuno sta aspettando.
    */
-  while (mentreNonCeri.length + adesso.length + daLeggere.length + progetti.length + avvii.length > RIGHE_MAX) {
-    if (avvii.length) avvii.pop()
-    else if (daLeggere.length) daLeggere.pop()
-    else if (progetti.length > 1) progetti.pop()
+  const quante = () => fatti.length + github.length + daLeggere.length + risposte.length
+  while (quante() > RIGHE_MAX) {
+    if (daLeggere.length) daLeggere.pop()
+    else if (github.length > 1) github.pop()
+    else if (fatti.length > 1) fatti.pop()
+    else if (risposte.length > 1) risposte.pop()
     else break
   }
 
   return {
-    quando,
-    via: via && via > 0 ? Math.round(via) : null,
-    mentreNonCeri,
-    adesso,
-    daLeggere,
-    progetti,
-    avvii
+    punto: {
+      quando,
+      via: via && via > 0 ? Math.round(via) : null,
+      progetti: fatti,
+      github,
+      daLeggere,
+      risposte
+    },
+    compiti
   }
 }
 
-// — «adesso» è la lista —
+// — quello che nota va in lista —
 
 /**
- * Quanti compiti nuovi può far nascere un punto. Tre è il tetto di «adesso»:
- * un punto non riempie la lista, al massimo la completa.
+ * Quante righe nuove può far nascere un punto. Un punto non riempie la lista,
+ * al massimo la completa.
  */
 export const NUOVI_MAX = 3
 /** Quanto indietro si guarda fra le cose chiuse, per non richiedere una cosa già fatta. */
 const GIORNI_CHIUSE = 14
 
-/** Il testo di una mossa come si legge in lista: senza il punto in fondo. */
+/** Il testo di una cosa da fare come si legge in lista: senza il punto in fondo. */
 const senzaPunto = (s: string) => s.trim().replace(/[.;:·]+$/, '').trim()
 
 /** Le liste con cui si ancorano le righe, vere o finte: qui dentro non si legge il disco. */
 export type Ancora = {
-  /** Le righe aperte adesso, con il loro testo: è da lì che una mossa si riconosce. */
+  /** Le righe aperte adesso, con il loro testo: è da lì che una cosa da fare si riconosce. */
   aperti: { id: string; testo: string }[]
-  /** I testi delle righe chiuse di recente: una mossa già fatta non si riscrive. */
+  /** I testi delle righe chiuse di recente: una cosa già fatta non si riscrive. */
   chiuse: string[]
-  /** Scrive la riga nuova e torna il suo id, o null se non se n'è fatto niente. */
-  crea: (testo: string) => string | null
+  /** Scrive la riga nuova, con il documento da cui viene, e torna il suo id. */
+  crea: (testo: string, doc: string | null) => string | null
 }
 
 /**
- * Ogni riga di «adesso» è una riga della lista, o non è.
+ * Quello che ha notato diventa una riga della lista, o non è.
  *
- * Il tredici settembre il punto diceva tre cose sotto «adesso» — rispondi alle
- * quattro domande sull'ambito, di' quale unità guarda l'audit, scegli chi
+ * Il tredici settembre il punto diceva tre cose da fare su H-Farm — rispondi
+ * alle quattro domande sull'ambito, di' quale unità guarda l'audit, scegli chi
  * tiene il numero — e tutte e tre erano *una* riga della lista che chiedeva
- * quelle quattro cose. Tre frecce, e nessuna apriva niente: il modello aveva
- * parafrasato un compito in tre mosse senza id, e una mossa senza id non ha
- * niente dietro.
+ * quelle quattro cose. Adesso quelle cose non si mostrano nemmeno: vanno in
+ * lista, e qui si decide in quale riga.
  *
- * Qui una mossa senza niente dietro non esce. Prima si prova a riconoscerla
- * fra le righe aperte — la stessa rete grossolana di `ridondante`, che è
- * quella che ha preso la parafrasi in primo luogo — e due mosse che cadono
- * sulla stessa riga della lista diventano una, perché sono una. Quello che
- * resta e non somiglia a niente di chiuso di recente nasce come riga nuova, al
- * massimo tre per punto. Il resto si perde: una freccia che non apre niente è
- * peggio di una riga in meno.
+ * Prima si prova a riconoscerla fra le righe aperte — la stessa rete
+ * grossolana di `ridondante`, che è quella che ha preso la parafrasi in primo
+ * luogo — e due cose che cadono sulla stessa riga diventano una, perché sono
+ * una. Quello che resta e non somiglia a niente di chiuso di recente nasce
+ * come riga nuova, con dentro il documento da cui viene: è quel documento che
+ * la freccia del feed apre. Il resto si perde.
+ *
+ * Torna gli id delle righe toccate, nell'ordine: alla pagina non arriva
+ * niente di tutto questo, e il posto dove si vede è la lista.
  */
-export function ancoraAlleRighe(adesso: Riga[], ctx: Ancora): Riga[] {
+export function ancoraAlleRighe(notate: Riga[], ctx: Ancora): string[] {
   const prese = new Set<string>()
-  const tenute: Riga[] = []
   let nuovi = 0
-  for (const r of adesso) {
-    const id = (r.compito && ctx.aperti.some(c => c.id === r.compito))
-      ? r.compito
-      : ctx.aperti.find(c => ridondante(r.testo, c.testo))?.id ?? null
-    if (id) {
-      // due mosse sulla stessa riga della lista sono la stessa mossa, detta due volte
-      if (prese.has(id)) continue
-      prese.add(id)
-      tenute.push({ ...r, compito: id })
-      continue
-    }
+  for (const r of notate) {
+    const id = ctx.aperti.find(c => ridondante(r.testo, c.testo))?.id ?? null
+    // due cose sulla stessa riga della lista sono la stessa cosa, detta due volte
+    if (id) { prese.add(id); continue }
     // una cosa che ha già fatto non torna a chiedergli di farla
     if (ctx.chiuse.some(t => ridondante(r.testo, t))) continue
     if (nuovi >= NUOVI_MAX) continue
-    const nato = ctx.crea(senzaPunto(r.testo))
+    const nato = ctx.crea(senzaPunto(r.testo), r.doc)
     if (!nato) continue
     nuovi++
     prese.add(nato)
-    tenute.push({ ...r, compito: nato })
   }
-  return tenute
+  return [...prese]
 }
 
 /** Le liste vere, con la penna per scrivere le righe nuove. */
@@ -969,12 +955,12 @@ function ancoraViva(m: Materiale, adesso: number): { ancora: Ancora; creati: () 
     ancora: {
       aperti,
       chiuse: store.compitiChiusi(200).filter(c => (c.chiuso ?? '') >= limite).map(c => c.testo),
-      crea: testo => {
+      crea: (testo, doc) => {
         if (!testo) return null
         // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso
         const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
         store.scriviCompito({
-          id, testo, quando: 'oggi', origine: 'punto',
+          id, testo, quando: 'oggi', origine: 'punto', doc,
           ordine: ordine.dopo(store.ultimoOrdine('oggi'))
         })
         creati++
@@ -1063,8 +1049,10 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
     esito = await chiedi({
       lavoro: 'punto', max_tokens: 6000, cache: true,
       formato: schema(
-        [...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id),
-        mat.arrivati.map(d => d.id)
+        [...mat.arrivati, ...mat.github, ...mat.risposte].map(d => d.id),
+        mat.github.map(d => d.id),
+        mat.risposte.map(d => d.id),
+        mat.progetti.map(p => p.nome)
       ),
       system: istruzione(mat, a.ultimo?.progetti ?? [], a.scartati),
       messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }],
@@ -1096,40 +1084,35 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   // tentativi. Una chiamata che non ha prodotto niente non brucia la giornata
   a.chiamate = [...(prodottoOggi ? diOggi(a.chiamate, adesso) : []), quando]
 
-  const nuovo = ricuci(grezzo, mat, a.scartati, quando, r.via ?? null, a.avviate ?? [])
-  // ogni mossa sotto «adesso» è una riga della lista: quella che non ne ha una
-  // la trova, o la fa nascere, o non esce. La freccia in pagina apre sempre qualcosa
+  const nuovo = ricuci(grezzo, mat, quando, r.via ?? null)
+  /*
+   * Le cose da fare vanno in lista, non in finestra.
+   *
+   * È il cuore del cambio: quello che il modello ha notato nel materiale — una
+   * mail che chiede un preventivo, un modulo da rimandare — o si riconosce in
+   * una riga che c'è già, o ne fa nascere una nuova con dentro il documento da
+   * cui viene. Al client non arriva: da qui in poi vive dove le cose si fanno,
+   * e la freccia del feed apre quella mail.
+   */
   const ancora = ancoraViva(mat, adesso)
-  nuovo.adesso = ancoraAlleRighe(nuovo.adesso, ancora.ancora)
+  ancoraAlleRighe(nuovo.compiti, ancora.ancora)
   // la lista è cambiata sotto le mani di chi ce l'ha aperta: come le rotte, si dice
   if (ancora.creati()) compiti.annunciaCambio()
-  // quello che il modello ha capito entra in tabella: un progetto nuovo con
-  // l'obiettivo che gli sembra, e l'obiettivo di uno che ancora non ce l'ha.
-  // Il resto — nome, stato, obiettivo scritto da lui — non lo tocca
-  for (const p of nuovo.progetti) {
-    if (!p.id) {
-      const scritto = progetti.scrivi({ nome: p.nome, obiettivo: p.obiettivo, origine: 'punto', dal: quando })
-      p.id = scritto.id
-      p.dal = scritto.dal
-    } else {
-      const vero = progetti.trova(p.id)
-      if (vero && !vero.obiettivo && p.obiettivo) progetti.cambia(p.id, { obiettivo: p.obiettivo })
-    }
-  }
-  a.ultimo = nuovo
+  a.ultimo = nuovo.punto
   scriviArchivio(a)
-  return { punto: alPresente(nuovo), generatoAdesso: true, tetto: false }
+  return { punto: alPresente(nuovo.punto), generatoAdesso: true, tetto: false }
 }
 
 // — gli avvii —
 
 /**
- * Accende un'automazione da una frase del punto.
+ * Accende un'automazione da una frase.
  *
- * La frase passa dalla stessa strada di «scrivine una a parole»: il modello
- * ne fa una ricetta, `valida()` la controlla, e quello che ne esce è
- * un'automazione come le altre — si vede nella schermata, si spegne, si
- * butta. Qui si segna solo che è partita da qui, così non si ripropone.
+ * Il punto non propone più automazioni: le quattro domande a cui risponde non
+ * sono quella. La strada resta aperta perché la rotta esiste ed è la stessa di
+ * «scrivine una a parole»: il modello ne fa una ricetta, `valida()` la
+ * controlla, e quello che ne esce è un'automazione come le altre — si vede
+ * nella schermata, si spegne, si butta. Qui si segna solo che è partita da qui.
  *
  * La frase arriva nella lingua dell'app, perché è quella che ha letto lui:
  * `daUnaFrase` la legge in qualunque lingua — è il modello a interpretarla, e
@@ -1143,12 +1126,17 @@ export async function avvia(frase: string): Promise<{ ok: true; id: string; nome
   const ricetta = await automazioni.daUnaFrase(detta)
   const a = leggiArchivio()
   a.avviate = [...(a.avviate ?? []), detta].slice(-40)
-  if (a.ultimo) a.ultimo = { ...a.ultimo, avvii: (a.ultimo.avvii ?? []).filter(x => x.frase !== detta) }
   scriviArchivio(a)
   return { ok: true, id: ricetta.id, nome: ricetta.nome, punto: a.ultimo }
 }
 
 // — gli angoli —
+//
+// Il punto non propone più angoli: le sue quattro sezioni raccontano quello
+// che è successo, non quello che potrebbe pensare. Queste due restano perché
+// sono la metà che vive nella memoria — un'idea tenuta è una cosa che Myynd sa
+// di lui da lì in poi, una scartata resta scritta nel foglio e torna al
+// modello come «questo NON è così», così nessuna riga del punto ci ricasca.
 
 /** Il progetto di cui parla, fra quelli vivi: un chiuso non ha più angoli da tenere. */
 function progettoVivo(nome: string): progetti.Progetto {
@@ -1177,27 +1165,16 @@ export function tieni(nome: string, angolo: string): { ok: true; id: string } {
     fiducia: 0.9,
     origine: 'punto'
   })
-  // anche nell'ultimo punto, che è quello che la pagina mostra
-  const a = leggiArchivio()
-  const mostrato = a.ultimo?.progetti.find(x => x.nome.toLowerCase() === p.nome.toLowerCase())
-  if (mostrato && !mostrato.angoliTenuti.some(x => x.toLowerCase() === testo.toLowerCase())) {
-    mostrato.angoliTenuti = [...mostrato.angoliTenuti, testo]
-    // tenere un angolo è dire che il progetto c'è: da qui non si chiude più
-    mostrato.proposto = false
-    scriviArchivio(a)
-  }
   return { ok: true, id }
 }
 
 /** «Non è così»: resta scritto, e il modello non lo ripropone. */
 export function scarta(nome: string, angolo: string): { ok: true } {
-  const p = progettoVivo(nome)
+  progettoVivo(nome)
   const testo = angolo.trim()
   if (!testo) throw new Error('Non c’è nessun angolo da scartare.')
   const a = leggiArchivio()
   if (!a.scartati.some(x => x.toLowerCase() === testo.toLowerCase())) a.scartati = [...a.scartati, testo].slice(-40)
-  const mostrato = a.ultimo?.progetti.find(x => x.nome.toLowerCase() === p.nome.toLowerCase())
-  if (mostrato && mostrato.angolo.toLowerCase() === testo.toLowerCase()) mostrato.angolo = ''
   scriviArchivio(a)
   return { ok: true }
 }

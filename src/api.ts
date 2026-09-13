@@ -1104,6 +1104,11 @@ export const api = {
   collegaSlack: (token: string) =>
     json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
 
+  /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
+  collegaGithub: (token: string, repos: string[]) =>
+    json<{ ok: true; login: string }>('/api/connettori/github',
+      { method: 'POST', body: JSON.stringify({ token, repos }) }),
+
   /** Drive: come Google, e appesa come Google finché il browser non ha finito. */
   collegaDrive: (clientId: string, clientSecret: string) =>
     json<{ ok: true; email: string }>('/api/connettori/drive',
@@ -1548,32 +1553,23 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
 /**
  * Il punto: quello che Myynd dice quando torni.
  *
- * Una riga può portare l'id di una cosa della lista o di un documento, e
- * allora si apre da lì. I progetti sono la parte che cresce: `angoliTenuti`
- * sono le idee che ha già fatto sue, e non si ripropongono.
+ * Quattro sezioni e nient'altro: i progetti che si sono mossi, cosa è successo
+ * su GitHub, una notizia o due, chi ha risposto per email. Una riga porta l'id
+ * del documento da cui viene, e cliccarla apre quello — la mail, la pagina,
+ * il file. Le cose da fare non stanno qui: quelle il server le mette nella
+ * lista, e si aprono dal feed.
  */
-export type RigaPunto = { testo: string; compito: string | null; doc: string | null }
-/**
- * `id` è la riga nella tabella dei progetti: «non è un progetto» la chiude da lì.
- *
- * `proposto` è vero solo per quelli che il punto ha tirato fuori dal materiale
- * e lui non ha ancora confermato: uno che ha scritto lui non si chiude da qui.
- */
-export type ProgettoPunto = {
-  id: string; nome: string; obiettivo: string; dal: string
-  doveSei: string; angolo: string; angoliTenuti: string[]; proposto: boolean
-}
-export type AvvioPunto = { frase: string; perche: string }
+export type RigaPunto = { testo: string; doc: string | null }
+/** `id` è la riga nella tabella dei progetti; `novita` è cosa è successo da allora. */
+export type ProgettoPunto = { id: string; nome: string; novita: string; doc: string | null }
 export type Punto = {
   quando: string
   /** Da quanti minuti mancava, se la finestra lo sapeva: il saluto lo compone la pagina. */
   via: number | null
-  mentreNonCeri: RigaPunto[]
-  adesso: RigaPunto[]
-  daLeggere: { titolo: string; perche: string; link: string | null }[]
   progetti: ProgettoPunto[]
-  /** Automazioni da accendere con un dito. */
-  avvii: AvvioPunto[]
+  github: RigaPunto[]
+  daLeggere: { titolo: string; perche: string; link: string | null }[]
+  risposte: RigaPunto[]
 }
 /**
  * `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito.
