@@ -36,7 +36,6 @@ export function AttivitaProgetto({ id, chiuso }: { id: string; chiuso: boolean }
           {c.esito && <p>{c.esito}</p>}
           {c.risultato && <p>{c.risultato}</p>}
           {!c.esito && !c.risultato && <p>{t('Nessun risultato registrato.')}</p>}
-          {c.fonti?.length ? <span>{t('Fonti')}: {c.fonti.map(f => f.label).join(' · ')}</span> : null}
         </div>
       </details>)}
       {!dati.attivita.length && <p className="project-activity-empty">{t('Da quale passo partiamo?')}</p>}

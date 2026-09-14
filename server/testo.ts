@@ -123,3 +123,98 @@ export function senzaTrattini(testo: string): string {
     .replace(/([.!?:;,])\. /g, '$1 ')
     .replace(new RegExp(SEGNAPOSTO, 'g'), '–')
 }
+
+// — la lingua in cui è nato un testo —
+//
+// Il difetto che si vede in faccia: l'app in inglese, e in mezzo al feed una
+// voce intitolata «Cosa significa "large-object promisors" in Git?» con due
+// righe in italiano sotto. Non è una traduzione sbagliata — è testo *nato*
+// nella lingua sbagliata, e nessun dizionario del client lo può recuperare
+// perché non è una chiave, è una frase scritta stanotte da un modello.
+//
+// L'istruzione al modello c'è, ripetuta in testa e in coda (`conLaLingua`), e
+// un modello grande la rispetta. Un modello piccolo che gira sul portatile no,
+// non sempre: legge del materiale in italiano e risponde in italiano, perché
+// è quello che ha sotto gli occhi. Quindi dopo l'istruzione serve un controllo,
+// e il controllo dev'essere qualcosa che si possa fare senza chiedere a
+// nessuno: contare le parole di servizio.
+//
+// Non riconosce la lingua di un testo — non è quello il mestiere. Risponde a
+// una domanda sola e più facile: «questa frase è italiana invece che inglese,
+// abbastanza da vedersi?». Per questo la soglia è uno scarto di due marcatori
+// e non uno, e per questo sotto le sei parole non risponde: un titolo di tre
+// parole non ha abbastanza segni per dire niente, e sbagliare vuol dire
+// buttare una voce giusta.
+
+/** Le parole di servizio dell'italiano: quelle che compaiono comunque. */
+const ITALIANE = [
+  ' il ', ' la ', ' di ', ' che ', ' per ', ' non ', ' una ', ' un ', ' con ',
+  ' sono ', ' della ', ' degli ', 'è '
+]
+/** Le stesse, in inglese. */
+const INGLESI = [
+  ' the ', ' and ', ' of ', ' to ', ' is ', ' for ', ' with ', ' that ',
+  ' this ', ' are '
+]
+/** Sotto queste parole non si giudica: non ci sono abbastanza segni. */
+const PAROLE_MIN = 6
+/** Di quanto una lingua deve battere l'altra perché la risposta sia sì. */
+const SCARTO = 2
+
+/**
+ * Il testo ridotto a parole separate da spazi, con uno spazio anche ai bordi.
+ *
+ * La punteggiatura diventa spazio perché i marcatori hanno lo spazio dentro:
+ * senza, «l'app» non darebbe mai « un » e «di, Rossi» non darebbe mai « di ».
+ * Lo spazio ai bordi serve alla prima e all'ultima parola, che altrimenti non
+ * potrebbero mai essere un marcatore.
+ */
+function spianato(testo: string): string {
+  return ` ${testo.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `
+}
+
+/** Quante volte compaiono, contando anche quelle che condividono uno spazio. */
+function quanti(spianato: string, segni: string[]): number {
+  let n = 0
+  for (const s of segni) {
+    let i = spianato.indexOf(s)
+    while (i >= 0) { n++; i = spianato.indexOf(s, i + 1) }
+  }
+  return n
+}
+
+function pesa(testo: string): { parole: number; it: number; en: number } {
+  const t = spianato(testo)
+  const parole = t.trim() ? t.trim().split(' ').length : 0
+  return { parole, it: quanti(t, ITALIANE), en: quanti(t, INGLESI) }
+}
+
+/** Questo testo è scritto in italiano, abbastanza da vedersi. */
+export function sembraItaliano(testo: string): boolean {
+  const { parole, it, en } = pesa(testo)
+  return parole >= PAROLE_MIN && it - en >= SCARTO
+}
+
+/** Questo testo è scritto in inglese, abbastanza da vedersi. */
+export function sembraInglese(testo: string): boolean {
+  const { parole, it, en } = pesa(testo)
+  return parole >= PAROLE_MIN && en - it >= SCARTO
+}
+
+/**
+ * Questo testo è nato nella lingua sbagliata per un'app in questa lingua.
+ *
+ * È la domanda che si fanno le quattro schermate che mostrano testo scritto da
+ * un modello: il feed, il punto, la rassegna e le domande. Nel dubbio risponde
+ * di no — un testo corto, o senza marcatori, o con le due lingue appaiate, non
+ * è «sbagliato»: è solo un testo su cui non si sa rispondere, e buttarlo
+ * costerebbe più di quanto costi tenerlo.
+ */
+export function linguaSbagliata(testo: string, lingua: 'it' | 'en'): boolean {
+  return lingua === 'en' ? sembraItaliano(testo) : sembraInglese(testo)
+}
+
+/** L'ordine da attaccare al messaggio quando si riprova, nella sua lingua. */
+export function soloInLingua(lingua: 'it' | 'en'): string {
+  return lingua === 'en' ? 'IN ENGLISH ONLY' : 'SOLO IN ITALIANO'
+}

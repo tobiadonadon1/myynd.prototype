@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua, senzaTrattini } from './testo.ts'
+import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -106,4 +106,56 @@ test('in coda e in apertura la lineetta si toglie, il trattino fra parole resta'
   assert.equal(senzaTrattini('Già chiuso. — Poi il resto'), 'Già chiuso. Poi il resto')
   // un intervallo di numeri non è un inciso
   assert.equal(senzaTrattini('pagine 10–12, anni 2024–2025'), 'pagine 10–12, anni 2024–2025')
+})
+
+// — la lingua in cui è nato un testo —
+//
+// Non è un riconoscitore di lingue e non deve diventarlo. Risponde a una
+// domanda sola: «questo testo è italiano invece che inglese, abbastanza da
+// vedersi?». I casi qui sotto sono quelli in cui una risposta sbagliata costa:
+// una voce del feed buttata per niente (falso positivo) o una voce italiana
+// lasciata passare in un'app inglese (falso negativo, che è il difetto vero).
+
+test('una frase italiana è italiana, una inglese è inglese', () => {
+  const it = 'Il contratto di Rossi non è ancora firmato e la scadenza è venerdì.'
+  const en = 'The contract with Rossi is not signed yet and the deadline is Friday.'
+  assert.equal(sembraItaliano(it), true)
+  assert.equal(sembraInglese(it), false)
+  assert.equal(sembraInglese(en), true)
+  assert.equal(sembraItaliano(en), false)
+})
+
+test('la voce che gli è arrivata in faccia si riconosce', () => {
+  // «Why is it telling me what it means by large object promisors in Git? This
+  // task is in Italian and my app is in English»: il titolo e le due righe
+  // sotto, presi insieme come li legge lui
+  const voce = 'Cosa significa «large-object promisors» in Git? ' +
+    'Una spiegazione di cosa sono i promisor per gli oggetti grandi e di come Git li usa.'
+  assert.equal(sembraItaliano(voce), true)
+  assert.equal(linguaSbagliata(voce, 'en'), true, 'in un\'app inglese questa voce non ci deve stare')
+  assert.equal(linguaSbagliata(voce, 'it'), false)
+})
+
+test('poche parole non bastano per giudicare: nel dubbio passa', () => {
+  // un titolo corto non ha abbastanza segni, e buttarlo costa più che tenerlo
+  assert.equal(sembraItaliano('Ciao a tutti'), false)
+  assert.equal(sembraInglese('Hello there'), false)
+  assert.equal(linguaSbagliata('Fattura Rossi', 'en'), false)
+})
+
+test('senza parole di servizio non si dice niente, e nemmeno con le due lingue appaiate', () => {
+  // nomi propri e cifre: non sono di nessuna lingua
+  assert.equal(sembraItaliano('Rossi Bianchi Verdi Nextas Seaboard 2026'), false)
+  assert.equal(sembraInglese('Rossi Bianchi Verdi Nextas Seaboard 2026'), false)
+  // uno scarto di uno non basta: serve che si veda
+  assert.equal(sembraItaliano('Deck Nextas per Bianchi the Seaboard review oggi'), false)
+})
+
+test('linguaSbagliata risponde per l\'app, non per il testo', () => {
+  const it = 'Il preventivo di Rossi non è ancora firmato e la scadenza è venerdì.'
+  const en = 'The quote from Rossi is not signed yet and the deadline is Friday.'
+  assert.equal(linguaSbagliata(it, 'en'), true)
+  assert.equal(linguaSbagliata(it, 'it'), false)
+  assert.equal(linguaSbagliata(en, 'it'), true)
+  assert.equal(linguaSbagliata(en, 'en'), false)
 })

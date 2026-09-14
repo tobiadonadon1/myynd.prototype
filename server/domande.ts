@@ -18,6 +18,7 @@
 
 import { lingua, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
+import { linguaSbagliata, soloInLingua } from './testo.ts'
 import * as store from './store.ts'
 
 /**
@@ -161,20 +162,40 @@ export async function forseChiedi(): Promise<Proposta> {
     }
   }
 
-  const e = await chiediJSON<{ vaChiesto: boolean; deduzione: string; domanda: string }>({
+  const contenuto =
+    `Ha tolto di mezzo queste ${tema.quanti} voci senza spiegare perché:\n` +
+    tema.titoli.map(t => `— ${t}`).join('\n') +
+    `\n\nHanno in comune la radice «${tema.tema}».`
+  const chiama = (aggiunta: string) => chiediJSON<{ vaChiesto: boolean; deduzione: string; domanda: string }>({
     lavoro: 'giudizio',
     max_tokens: 700,
     system: ISTRUZIONI,
     formato: schema(),
-    messages: [{
-      role: 'user',
-      content:
-        `Ha tolto di mezzo queste ${tema.quanti} voci senza spiegare perché:\n` +
-        tema.titoli.map(t => `— ${t}`).join('\n') +
-        `\n\nHanno in comune la radice «${tema.tema}».`
-    }]
+    messages: [{ role: 'user', content: contenuto + aggiunta }]
   })
+
+  let e = await chiama('')
   if (!e) return { chiesta: false }
+
+  /*
+   * Una domanda nella lingua sbagliata non si fa.
+   *
+   * È la riga che si legge più da vicino di tutte — arriva in chat, come se
+   * l'avesse scritta un collega — e un modello piccolo che legge titoli
+   * italiani la scrive in italiano anche a un'app in inglese. Una seconda
+   * chiamata con l'ordine urlato in coda; se sbaglia ancora, non si chiede
+   * niente. Nessuna domanda è sempre una risposta accettabile qui dentro: il
+   * cancello di questo file è fatto apposta per non chiedere.
+   */
+  const l = lingua()
+  const sbagliata = (x: { deduzione?: string; domanda?: string }) =>
+    linguaSbagliata(`${x.domanda ?? ''} ${x.deduzione ?? ''}`, l)
+  if (sbagliata(e)) e = await chiama(`\n\n${soloInLingua(l)}`)
+  if (!e) return { chiesta: false }
+  if (sbagliata(e)) {
+    console.warn('myynd · giudizio: risposta nella lingua sbagliata, scartata')
+    return { chiesta: false }
+  }
 
   // 4 · si può dedurre? allora si deduce, e non si disturba nessuno
   if (!e.vaChiesto || !e.domanda?.trim()) {

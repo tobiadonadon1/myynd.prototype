@@ -6,7 +6,7 @@ import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
-import { generePrimoDocumento, primoParagrafo, taglia, type Vals } from '../vals'
+import { generePrimoDocumento, nomeDelFile, primoParagrafo, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -59,7 +59,7 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <span style={riga.tipoStyle}>{t(riga.tipo)}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0, overflowWrap: 'anywhere' }}>{riga.fonte}{riga.ora ? ` · ${riga.ora}` : ''}</span>
+          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0 }}>{[riga.fonte, riga.ora].filter(Boolean).join(' · ')}</span>
           {/*
             Lo stesso gesto della carta grande, nello stesso angolo. Qui però si
             fa vedere quando la riga è sotto il dito — come «in lista» qui
@@ -124,11 +124,6 @@ const PASTIGLIA: CSSProperties = {
   background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
 }
 
-/** Il titolo di una fonte, senza il «[7]» con cui la cita il modello. */
-function nomeFonte(label: string): string {
-  return label.replace(/^\[\d+\]\s*/, '')
-}
-
 /**
  * Da dove viene una riga, detto in una cosa sola e apribile.
  *
@@ -147,7 +142,12 @@ function nomeFonte(label: string): string {
 function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } | null {
   if (c.doc) {
     const doc = c.doc
-    return { testo: generePrimoDocumento(null, doc), apri: () => v.apriFonte(doc) }
+    // «il file contratto-nextas.pdf»: il nome, mai la strada per arrivarci —
+    // di una mail o di una pagina non si dice niente, perché quello che
+    // resterebbe dell'id sarebbe un numero
+    const nome = nomeDelFile(doc)
+    const cosa = generePrimoDocumento(null, doc)
+    return { testo: nome ? `${cosa} ${nome}` : cosa, apri: () => v.apriFonte(doc) }
   }
   if (c.progetto) {
     const id = c.progetto
@@ -163,65 +163,52 @@ function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } 
 }
 
 /**
- * Le prove di una riga: da dove viene, e cosa ha letto per farla.
+ * Da dove viene una riga: un rigo solo, e apribile.
  *
  * È la risposta a «quando affido una cosa, non la trovo utile come dovrebbe».
  * Una riga affidata tornava con un testo e basta: da dove venisse — la mail a
- * cui rispondere — e su cosa avesse lavorato restavano scritti nel database e
- * invisibili sullo schermo. Qui stanno tutti e due, in chiaro e piano: la cosa
- * da cui è nata, e i documenti che ha davvero aperto.
+ * cui rispondere — restava scritto nel database e invisibile sullo schermo.
  *
- * Sono link, non pastiglie: la riga resta quello che conta, e le prove le
- * legge chi le cerca. Il click non risale — dentro una riga della lista
- * aprirebbe anche la riga — e ogni titolo si ferma con i tre puntini invece
- * di spingere fuori la card.
+ * Sotto ci stava anche «Fonti usate», con i nomi dei documenti che aveva
+ * aperto per lavorarci. Via: «mi dice le fonti che ha usato, e io non voglio
+ * saperlo». Chi legge una riga vuole farla, non controllare come è stata
+ * fatta — e tre titoli di file in coda a ogni riga sono rumore che nessuno ha
+ * chiesto. Quello che resta è la cosa da cui è nata, che serve per agire.
+ *
+ * È un link, non una pastiglia: la riga resta quello che conta. Il click non
+ * risale — dentro una riga della lista aprirebbe anche la riga — e il nome si
+ * ferma con i tre puntini invece di spingere fuori la card.
  */
 function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
   const da = provenienza(c, v)
-  // quello che la riga apre già non si ripete fra le fonti: un link per cosa
-  const citate = (c.fonti ?? []).filter(f => f.id !== c.doc)
-  if (!da && !citate.length) return null
+  if (!da) return null
   const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
   const acceso = scuro ? '#FFF7F0' : '#8E3F1F'
   const link: CSSProperties = {
-    maxWidth: 190, minWidth: 0, padding: 0, border: 'none', background: 'none',
+    maxWidth: 260, minWidth: 0, padding: 0, border: 'none', background: 'none',
     fontFamily: 'inherit', fontSize: '12.5px', color: quieto, cursor: 'pointer', textAlign: 'left',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    // la sottolineatura c'è solo sotto il dito: sul titolo della carta grande
+    // era un invito a cliccare prima ancora di aver letto, qui è la conferma
+    // che quella parola porta da qualche parte
     textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
   }
-  const apri = (id: string) => (e: MouseEvent) => { e.stopPropagation(); v.apriFonte(id) }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, marginTop: 12, minWidth: 0 }}>
-      {da && (
-        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', maxWidth: '100%', minWidth: 0 }}>
-          <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>{t('Da')}</span>
-          {da.apri
-            ? (
-              <Hov as="button" type="button" title={da.testo}
-                onClick={(e: MouseEvent) => { e.stopPropagation(); da.apri?.() }}
-                style={{ ...link, flex: 'none', color: acceso }}
-                hover={{ textDecorationColor: 'currentColor' }}>{da.testo}</Hov>
-            )
-            : (
-              // il punto del giorno, il primo progetto, un'automazione: posti
-              // che non si aprono, e un link che non porta da nessuna parte è
-              // peggio di una parola scritta
-              <span style={{ ...link, flex: 'none', cursor: 'default', textDecoration: 'none' }}>{da.testo}</span>
-            )}
-        </div>
-      )}
-      {citate.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', maxWidth: '100%', minWidth: 0 }}>
-          <span style={{ flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: quieto }}>{t('Fonti usate')}</span>
-          {citate.slice(0, 3).map(f => (
-            <Hov key={f.id} as="button" type="button" onClick={apri(f.id)} title={nomeFonte(f.label)}
-              style={link} hover={{ color: acceso, textDecorationColor: 'currentColor' }}>{nomeFonte(f.label)}</Hov>
-          ))}
-          {citate.length > 3 && (
-            <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>+{citate.length - 3}</span>
-          )}
-        </div>
-      )}
+    <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', marginTop: 12, maxWidth: '100%', minWidth: 0 }}>
+      <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>{t('Da')}</span>
+      {da.apri
+        ? (
+          <Hov as="button" type="button" title={da.testo}
+            onClick={(e: MouseEvent) => { e.stopPropagation(); da.apri?.() }}
+            style={{ ...link, flex: 'none', color: acceso }}
+            hover={{ textDecorationColor: 'currentColor' }}>{da.testo}</Hov>
+        )
+        : (
+          // il punto del giorno, il primo progetto, un'automazione: posti
+          // che non si aprono, e un link che non porta da nessuna parte è
+          // peggio di una parola scritta
+          <span style={{ ...link, flex: 'none', cursor: 'default', textDecoration: 'none' }}>{da.testo}</span>
+        )}
     </div>
   )
 }
@@ -597,7 +584,9 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Glifo tipo="penso" dim={15} colore="#FFF7F0" />
             <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t(v.heroTipo)}</span>
-            <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)', minWidth: 0, overflowWrap: 'anywhere' }}>{v.heroFonte}{v.heroOra ? ` · ${v.heroOra}` : ''}</span>
+            {/* una parola e l'ora: il percorso del file non compare da nessuna
+                parte, e il puntino c'è solo se ha due cose da separare */}
+            <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)', minWidth: 0 }}>{[v.heroFonte, v.heroOra].filter(Boolean).join(' · ')}</span>
             {/*
               «Non mi interessa», in alto a destra e scritto piccolo.
               Stava dentro il «⋯» in fondo, e lì non lo trovava nessuno: è il
@@ -620,31 +609,30 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           </div>
 
           {/*
-            Il titolo è il link, e dice cosa c'è dietro.
+            Il titolo è una frase, non un link.
 
-            Sotto la card c'era un «Apri il documento» con un'icona: una
-            parola che non prometteva niente — e quello che si apriva poteva
-            essere un `.md` pieno di cancelletti. Adesso il posto da cliccare
-            è la cosa stessa, e l'etichetta dice se dietro c'è una mail, un
-            file o una pagina: si sa dove si va prima di andarci.
+            Era cliccabile, sottolineato, e si portava dietro «Apri la pagina →»
+            in fondo: tre segni per un gesto solo, sulla riga che serve a capire
+            di cosa si tratta. «Perché è sottolineato?» — perché un titolo che
+            si comporta da link chiede di decidere prima ancora di aver letto.
+            Adesso si legge e basta.
           */}
-          {v.heroHaDoc ? (
+          <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
+          {/*
+            Aprire la cosa è un gesto solo, e sta sotto il titolo: una riga
+            piccola che dice cosa apre — la mail, il file, la pagina — e niente
+            freccia. Non è un bottone da fascia: quelli in fondo alla carta
+            sono le decisioni, questo è solo «fammela vedere».
+          */}
+          {v.heroHaDoc && (
             <Hov as="button" type="button" onClick={v.apriDoc}
-              title={v.heroApreCosa} aria-label={`${v.heroApreCosa}: ${v.heroTitolo}`}
+              aria-label={`${v.heroApreCosa}: ${v.heroTitolo}`}
               style={{
-                display: 'block', width: '100%', maxWidth: 600, minWidth: 0, marginTop: 20, padding: 0,
-                border: 'none', background: 'none', textAlign: 'left', fontFamily: 'inherit', color: '#FFF7F0',
-                fontSize: 22, lineHeight: 1.35, fontWeight: 500, textWrap: 'pretty', overflowWrap: 'anywhere',
-                cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(255,247,240,.3)',
-                textUnderlineOffset: 5, textDecorationThickness: 1
+                alignSelf: 'flex-start', maxWidth: '100%', marginTop: 9, padding: 0, border: 'none',
+                background: 'none', fontFamily: 'inherit', fontSize: '13px', fontWeight: 500,
+                color: 'rgba(255,247,240,.74)', textAlign: 'left', textDecoration: 'none', cursor: 'pointer'
               }}
-              hover={{ textDecorationColor: '#FFF7F0' }}>
-              {v.heroTitolo}
-              {/* inline-block apposta: la sottolineatura del titolo non lo tocca */}
-              <span style={{ display: 'inline-block', marginLeft: 10, fontSize: '13px', fontWeight: 400, color: 'rgba(255,247,240,.66)', whiteSpace: 'nowrap' }}>{v.heroApreCosa} →</span>
-            </Hov>
-          ) : (
-            <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
+              hover={{ color: '#FFF7F0' }}>{v.heroApreCosa}</Hov>
           )}
           <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
             {v.heroTesto}

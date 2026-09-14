@@ -8,7 +8,8 @@ import { attesaDi, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua
 import * as abbonamento from './abbonamento.ts'
 import { cerca, documento, indirizzoDi, recenti, stessoFilo, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
-import { riflua } from './testo.ts'
+import { linguaSbagliata, riflua, soloInLingua } from './testo.ts'
+import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
@@ -1324,8 +1325,20 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   // posta di massa deve comunque arrivare a trenta candidati veri
   const scartati = mittentiScartati()
   const filtro = { indirizzi: new Set(scartati.indirizzi), domini: new Set(scartati.domini) }
+  /*
+   * Dal disco solo i documenti veri, come nel punto.
+   *
+   * Sul feed è comparsa una voce «Da leggere» su «large-object promisors» in
+   * Git, nata da un file di documentazione dentro l'albero di un installatore.
+   * `desktop.ts` adesso quell'albero non lo apre nemmeno, ma la regola dei
+   * percorsi non basta da sola: un `.html`, un `.txt`, un appunto scritto da
+   * un programma dentro una cartella lecita resta un file che nessuno ha
+   * mandato e nessuno ha scritto. `documentoVero` è la stessa riga che il
+   * punto usa da sempre — un documento, in una cartella dove le cose
+   * arrivano — e vale qui per la stessa ragione.
+   */
   const candidati = [...nuovi, ...recenti(DOCS_PER_LETTURA * 3).filter(d => !arrivati.has(d.id))]
-    .filter(d => candidatoDaFeed(d, filtro))
+    .filter(d => documentoVero(d) && candidatoDaFeed(d, filtro))
   const ids = candidati.map(d => d.id)
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
@@ -1393,9 +1406,10 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
       : ''
   ].filter(Boolean).join('\n')
 
-  const risposta = await m.crea({
-    ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
-    system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori
+  const chiama = async (aggiunta: string): Promise<VoceFeed[]> => {
+    const risposta = await m.crea({
+      ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
+      system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori
 al massimo ${VOCI_PER_LETTURA} cose che hanno bisogno di lei oggi. Zero è una risposta giusta.
 
 ${indicazioni}
@@ -1421,37 +1435,59 @@ scrivere il perché, la voce non ci va.
 Sii concreto: nomi, cifre e date che hai letto davvero. Niente inventato.
 Nel dubbio, lascia fuori: meno voci, giuste.
 Scrivi in ${nellaLingua()}.`),
-    messages: [{
-      role: 'user',
-      content: docs.map(d =>
-        // «appena arrivato» è marcato apposta: una cosa comparsa da poco merita
-        // uno sguardo diverso da una che sta lì da un mese e che ha già avuto
-        // la sua occasione di essere notata
-        `id: ${d.id}\ntitolo: ${d.titolo}\nfonte: ${d.fonte}\nquando: ${d.quando ?? '—'}` +
-        `${arrivati.has(d.id) ? '\nAPPENA ARRIVATO' : ''}\n${d.corpo.slice(0, 1500)}`
-      ).join('\n\n---\n\n')
-    }]
-  }, attesaDi('lettura'))
-  segnaUso('lettura', risposta.usage, m.nome)
+      messages: [{
+        role: 'user',
+        content: docs.map(d =>
+          // «appena arrivato» è marcato apposta: una cosa comparsa da poco merita
+          // uno sguardo diverso da una che sta lì da un mese e che ha già avuto
+          // la sua occasione di essere notata
+          `id: ${d.id}\ntitolo: ${d.titolo}\nfonte: ${d.fonte}\nquando: ${d.quando ?? '—'}` +
+          `${arrivati.has(d.id) ? '\nAPPENA ARRIVATO' : ''}\n${d.corpo.slice(0, 1500)}`
+        ).join('\n\n---\n\n') + aggiunta
+      }]
+    }, attesaDi('lettura'))
+    segnaUso('lettura', risposta.usage, m.nome)
 
-  if (risposta.stop_reason === 'refusal') return []
-  const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
-  try {
-    // il tetto anche qui: un fornitore compatibile non è tenuto a rispettare `maxItems`
-    const voci = ((JSON.parse(estraiJSON(testo)).voci ?? []) as VoceFeed[]).slice(0, VOCI_PER_LETTURA)
-    // Cintura oltre alle bretelle. Se malgrado l'enum arriva un titolo, lo si
-    // riconosce e si converte; se non si riconosce, meglio nessun documento che
-    // un bottone «apri» che non aprirà mai niente.
-    const veri = new Set(docs.map(d => d.id))
-    const perTitolo = new Map(docs.map(d => [d.titolo, d.id]))
-    return voci.map(v => ({
-      ...v,
-      perche: typeof v.perche === 'string' ? v.perche.trim() : '',
-      doc: veri.has(v.doc) ? v.doc : (perTitolo.get(v.doc) ?? '')
-    }))
-  } catch {
-    return []
+    if (risposta.stop_reason === 'refusal') return []
+    const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
+    try {
+      // il tetto anche qui: un fornitore compatibile non è tenuto a rispettare `maxItems`
+      const voci = ((JSON.parse(estraiJSON(testo)).voci ?? []) as VoceFeed[]).slice(0, VOCI_PER_LETTURA)
+      // Cintura oltre alle bretelle. Se malgrado l'enum arriva un titolo, lo si
+      // riconosce e si converte; se non si riconosce, meglio nessun documento che
+      // un bottone «apri» che non aprirà mai niente.
+      const veri = new Set(docs.map(d => d.id))
+      const perTitolo = new Map(docs.map(d => [d.titolo, d.id]))
+      return voci.map(v => ({
+        ...v,
+        perche: typeof v.perche === 'string' ? v.perche.trim() : '',
+        doc: veri.has(v.doc) ? v.doc : (perTitolo.get(v.doc) ?? '')
+      }))
+    } catch {
+      return []
+    }
   }
+
+  /*
+   * La lingua, controllata su quello che è tornato.
+   *
+   * L'istruzione c'è, ripetuta in testa e in coda, e un modello grande la
+   * rispetta. Un modello piccolo sul portatile no: legge trenta documenti in
+   * italiano e risponde in italiano anche a un'app in inglese. Lui l'ha visto
+   * così — «This task is in Italian and my app is in English» — e da fuori non
+   * si distingue da un'app rotta.
+   *
+   * Una seconda chiamata, con l'ordine urlato in coda al materiale. Se anche
+   * quella torna nella lingua sbagliata la voce si butta: una voce in meno non
+   * la nota nessuno, una voce nella lingua sbagliata la notano tutti.
+   */
+  const l = cfgLingua()
+  const daLeggere = (v: VoceFeed) => `${v.titolo} ${v.testo} ${v.perche ?? ''}`
+  let voci = await chiama('')
+  if (voci.some(v => linguaSbagliata(daLeggere(v), l))) voci = await chiama(`\n\n${soloInLingua(l)}`)
+  const buone = voci.filter(v => !linguaSbagliata(daLeggere(v), l))
+  if (buone.length < voci.length) console.warn('myynd · lettura: risposta nella lingua sbagliata, scartata')
+  return buone
 }
 
 /**

@@ -121,9 +121,17 @@ test('la stessa voce riscritta uguale non conta come nuova, e resta chiusa se l�
 
 // — generaFeed: cosa arriva al modello —
 
-/** Un fornitore compatibile finto: risponde con queste voci e si ricorda cosa ha ricevuto. */
-function fornitoreFinto(voci: object[]) {
-  cfg.scrivi({ motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+/**
+ * Un fornitore compatibile finto: risponde con queste voci e si ricorda cosa ha ricevuto.
+ *
+ * L'app qui è in italiano, ed è una dichiarazione e non un dettaglio: le voci
+ * finte sono scritte in italiano, e da quando la lettura controlla la lingua di
+ * quello che torna una voce italiana dentro un'app inglese viene buttata — che
+ * è esattamente quello che si vuole. Le prove della lingua stanno in fondo al
+ * file, e l'app se la scelgono loro.
+ */
+function fornitoreFinto(voci: object[], lingua: 'it' | 'en' = 'it') {
+  cfg.scrivi({ lingua, motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
   const ricevute: Record<string, unknown>[] = []
   compatibile.usaRete((async (_url: string | URL | Request, init?: RequestInit) => {
     ricevute.push(init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {})
@@ -378,4 +386,99 @@ test('«feed» arriva sul filo dei compiti, e solo a chi è la stessa persona', 
   smettiMio(); smettiAltro()
   assert.deepEqual(miei, ['feed'])
   assert.deepEqual(altrui, [])
+})
+
+// — dal disco solo i documenti veri —
+//
+// La voce che gli è arrivata in faccia: «Da leggere», titolo «Cosa significa
+// «large-object promisors» in Git?», fonte un file `.html` dentro l'albero di
+// un installatore. «Why is the source a random HTML file?». `desktop.ts` adesso
+// quell'albero non lo apre nemmeno; questa è la seconda rete, e vale anche per
+// quello che era già in indice prima.
+
+/** Un file sul disco, con il percorso che decide se si racconta. */
+const file = (percorso: string): Documento => ({
+  id: `desktop:${percorso}`, fonte: 'desktop', tipo: 'documento',
+  titolo: percorso.slice(percorso.lastIndexOf('/') + 1),
+  corpo: 'Il testo del file, abbastanza lungo da contare come documento.',
+  autore: null, percorso, quando: '2026-09-01T10:00:00.000Z', gruppo: 'documenti'
+})
+
+const DA_ATTREZZI = '/Users/tobia/pinokio/bin/miniforge/pkgs/git-2.55.0/share/doc/git/large-object-promisors.html'
+const CONTRATTO = '/Users/tobia/Documents/Contratto.pdf'
+
+test('un file di un albero di attrezzi non arriva al modello, un contratto sì', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([file(DA_ATTREZZI), file(CONTRATTO), file('/Users/tobia/Documents/Archivio/2024/2023/Vecchia.pdf')])
+  const ricevute = fornitoreFinto([])
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 1)
+  const mandato = testoDi(ricevute[0])
+  assert.doesNotMatch(mandato, /large-object-promisors/, 'un file di documentazione di Git è arrivato al modello')
+  assert.match(mandato, /id: desktop:\/Users\/tobia\/Documents\/Contratto\.pdf/)
+  // quattro cartelle sotto i Documenti non è «arrivato adesso»: è archivio
+  assert.doesNotMatch(mandato, /Vecchia\.pdf/)
+})
+
+test('con il solo rumore dal disco non si chiama nessun modello', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([file(DA_ATTREZZI)])
+  const ricevute = fornitoreFinto([])
+  assert.deepEqual(await claude.generaFeed(), [])
+  assert.equal(ricevute.length, 0, 'ha chiamato il modello per un file di un installatore')
+})
+
+// — la lingua di quello che torna —
+//
+// «This task is in Italian and my app is in English». L'istruzione al modello
+// c'è, ripetuta in testa e in coda, e un modello grande la rispetta; un modello
+// piccolo sul portatile legge trenta documenti italiani e risponde in italiano.
+// Una seconda chiamata con l'ordine urlato in coda al materiale, e se sbaglia
+// ancora la voce si butta: una voce in meno non la nota nessuno.
+
+const IN_ITALIANO = [{
+  tipo: 'Da decidere', titolo: 'Il preventivo di Rossi non è ancora firmato',
+  testo: 'La scadenza è venerdì e non ha ancora risposto alla mail.',
+  urgenza: 'entro venerdì', fonte: 'posta', doc: 'posta:INBOX:95',
+  perche: 'Serve una risposta per il progetto di Rossi.'
+}]
+const IN_INGLESE = [{
+  tipo: 'Da decidere', titolo: 'The Rossi quote is not signed yet',
+  testo: 'The deadline is Friday and there is no reply to the email.',
+  urgenza: 'by Friday', fonte: 'posta', doc: 'posta:INBOX:95',
+  perche: 'A reply is needed for the Rossi project.'
+}]
+/** L'ultimo messaggio mandato al modello: quello dove finisce l'ordine urlato. */
+const ultimoMessaggio = (r: Record<string, unknown>) =>
+  String((r.messages as { content: string }[]).at(-1)!.content)
+
+test('una voce nella lingua sbagliata si richiede una volta, e poi si butta', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:95', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto(IN_ITALIANO, 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(ricevute.length, 2, 'una risposta in italiano a un\'app inglese non è stata richiesta')
+  assert.doesNotMatch(ultimoMessaggio(ricevute[0]), /IN ENGLISH ONLY/)
+  assert.match(ultimoMessaggio(ricevute[1]), /IN ENGLISH ONLY$/, 'la seconda chiamata non urla la lingua')
+  assert.deepEqual(voci, [], 'una voce italiana è arrivata sul feed di un\'app inglese')
+})
+
+test('una voce nella lingua giusta passa con una chiamata sola', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:95', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto(IN_INGLESE, 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(ricevute.length, 1, 'ha richiesto una risposta che andava bene')
+  assert.equal(voci.length, 1)
+  assert.equal(voci[0].titolo, 'The Rossi quote is not signed yet')
+})
+
+test('e la stessa regola al contrario: un\'app in italiano non tiene una voce inglese', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:96', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto(IN_INGLESE.map(v => ({ ...v, doc: 'posta:INBOX:96' })), 'it')
+  const voci = await claude.generaFeed()
+  assert.equal(ricevute.length, 2)
+  assert.match(ultimoMessaggio(ricevute[1]), /SOLO IN ITALIANO$/)
+  assert.deepEqual(voci, [])
 })

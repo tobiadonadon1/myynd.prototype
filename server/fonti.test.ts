@@ -601,6 +601,70 @@ test('pulisciIndice toglie quello che le regole di adesso non farebbero più ent
   assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 0)
 })
 
+// — gli alberi degli attrezzi —
+//
+// Sul feed è comparsa una voce «Da leggere» intitolata «Cosa significa
+// «large-object promisors» in Git?», e la fonte era
+// `~/pinokio/bin/miniforge/pkgs/git-2.55.0-…/share/doc/git/technical/large-object-promisors.html`:
+// un pezzo della documentazione di Git, scaricato da un installatore. Non era
+// un caso limite — un albero di attrezzi sono decine di migliaia di file di
+// testo, e ognuno di quelli spinge fuori dal feed una cosa vera.
+
+test('un albero di attrezzi non dà nemmeno un documento', async () => {
+  const dove = join(CASA, 'attrezzi')
+  // il percorso vero, quello che è finito in pagina
+  const doc = join(dove, 'pinokio', 'bin', 'miniforge', 'pkgs', 'git-2.55.0-h1234', 'share', 'doc')
+  mkdirSync(doc, { recursive: true })
+  writeFileSync(join(doc, 'large-object-promisors.html'),
+    '<html><body><h1>Large object promisors</h1><p>A design document for the Git project.</p></body></html>')
+  // e una cosa sua accanto, per vedere che non si è saltato tutto
+  writeFileSync(join(dove, 'nota.md'), 'Riunione con Marta: il preventivo va rifatto entro venerdì.')
+
+  const e = await desktop.sincronizza({ cartelle: [dove] })
+  assert.deepEqual(e.docs.map(d => d.titolo), ['nota.md'])
+  // `pinokio` non si apre nemmeno: è una cartella saltata, non sei
+  assert.equal(e.saltateCartelle, 1)
+  assert.deepEqual(e.visti, [])
+})
+
+test('un albero che non si chiama come nessuno lo dice il segno che ha dentro', async () => {
+  // `~/Strumenti/whisper` non sta in nessun elenco di nomi: lo dichiara il
+  // `pyvenv.cfg`, come `package.json` dichiara un progetto di codice
+  const dove = join(CASA, 'strumenti')
+  const ambiente = join(dove, 'whisper')
+  mkdirSync(join(ambiente, 'lib'), { recursive: true })
+  writeFileSync(join(ambiente, 'pyvenv.cfg'), 'home = /usr/bin\nversion = 3.12.1')
+  writeFileSync(join(ambiente, 'LEGGIMI.md'), 'Le istruzioni di whisper, scritte da chi lo ha pubblicato.')
+  writeFileSync(join(dove, 'appunti.md'), 'Le mie note su come usare whisper per le trascrizioni.')
+
+  const e = await desktop.sincronizza({ cartelle: [dove] })
+  assert.deepEqual(e.docs.map(d => d.titolo), ['appunti.md'])
+  assert.deepEqual(e.saltatiProgetti, [join(dove, 'whisper')])
+})
+
+test('pulisciIndice butta quello che era già entrato da un albero di attrezzi', () => {
+  // `site-packages` lo prende il nome; `Lavoro/app` lo prende il segno sul disco
+  const daLibreria = join(CASA, 'Documents', 'roba', 'site-packages', 'urllib3', 'leggimi.md')
+  mkdirSync(join(CASA, 'Lavoro', 'app', 'note'), { recursive: true })
+  writeFileSync(join(CASA, 'Lavoro', 'app', 'package.json'), '{}')
+  const daProgetto = join(CASA, 'Lavoro', 'app', 'note', 'appunti.md')
+  const vero = join(CASA, 'Documents', 'Preventivo Rossi.md')
+  const doc = (p: string) => ({
+    id: `desktop:${p}`, fonte: 'desktop', tipo: 'file', titolo: p.split('/').pop()!,
+    corpo: 'Il contenuto di prova, abbastanza lungo.', autore: null, percorso: p,
+    quando: '2026-09-01T00:00:00.000Z', gruppo: 'documenti'
+  })
+  store.salvaDocumenti([doc(daLibreria), doc(daProgetto), doc(vero)])
+
+  assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 2)
+  const ids = store.idsConPrefisso('desktop:')
+  assert.ok(!ids.includes(`desktop:${daLibreria}`), 'una libreria di Python è rimasta nella mente')
+  assert.ok(!ids.includes(`desktop:${daProgetto}`), 'un appunto dentro un progetto di codice è rimasto nella mente')
+  assert.ok(ids.includes(`desktop:${vero}`), 'il preventivo è sparito con loro')
+  // due volte non toglie niente: è idempotente
+  assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 0)
+})
+
 test('la vedetta con tutto il Mac guarda le stesse due radici', async () => {
   arredaLaCasa()
   vedetta.avvia({ cartelle: [], tutto: true })

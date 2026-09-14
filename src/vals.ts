@@ -45,21 +45,44 @@ export { primoParagrafo }
  *
  * «Apri il documento» era vero e non serviva a niente: dietro c'è una mail a
  * cui rispondere, un file sul disco o una pagina di Notion, e dirlo cambia se
- * uno clicca o no. La fonte la porta già la voce; quando manca, la si legge
- * dall'id del documento, che comincia sempre col nome del connettore
- * (`posta:INBOX:11`, `desktop:/Users/...`, `notion:…`).
+ * uno clicca o no. Il genere si legge dall'id del documento, che comincia
+ * sempre col nome del connettore (`posta:INBOX:11`, `desktop:/Users/...`,
+ * `notion:…`); la voce dice la sua solo quando il documento non c'è.
+ *
+ * L'ordine è questo e non l'altro per un motivo visto sullo schermo: il
+ * modello scrive `fonte` da sé, e a volte ci mette dentro l'id intero del
+ * documento — `desktop:/Users/.../large-object-promisors.html`. Letta come
+ * nome di connettore non è nessuno dei nomi conosciuti, e un file sul disco
+ * diventava «Apri la pagina». L'id invece è costruito da noi, e il pezzo
+ * prima dei due punti è sempre il connettore.
  */
 const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook'])
-const FILE = new Set(['desktop', 'drive', 'dropbox', 'mac'])
+const FILE = new Set(['desktop', 'drive', 'dropbox', 'sharepoint', 'mac'])
+const NOTE = new Set(['note', 'granola', 'conversazioni'])
+const AGENDA = new Set(['calendario', 'agenda', 'ical'])
 
-/** Il connettore da cui viene: dalla voce se ce l'ha, altrimenti dall'id del documento. */
+/** Il connettore da cui viene: dall'id del documento, e solo in mancanza dalla voce. */
 const connettoreDi = (fonte: string | null | undefined, doc: string | null | undefined) =>
-  (fonte || (doc ?? '').split(':')[0] || '').toLowerCase()
+  ((doc ?? '').split(':')[0] || (fonte ?? '').split(':')[0] || '').trim().toLowerCase()
+
+/** Di che cosa si tratta, in una parola sola che non è mai un percorso. */
+type Genere = 'mail' | 'file' | 'nota' | 'calendario' | 'pagina'
+
+function genereDi(fonte: string | null | undefined, doc: string | null | undefined): Genere {
+  const nome = connettoreDi(fonte, doc)
+  if (POSTA.has(nome)) return 'mail'
+  if (FILE.has(nome)) return 'file'
+  if (NOTE.has(nome)) return 'nota'
+  if (AGENDA.has(nome)) return 'calendario'
+  return 'pagina'
+}
 
 export function etichettaFonte(fonte: string | null | undefined, doc: string | null | undefined): string {
-  const nome = connettoreDi(fonte, doc)
-  if (POSTA.has(nome)) return t('Apri la mail')
-  if (FILE.has(nome)) return t('Apri il file')
+  const g = genereDi(fonte, doc)
+  if (g === 'mail') return t('Apri la mail')
+  if (g === 'file') return t('Apri il file')
+  if (g === 'nota') return t('Apri la nota')
+  if (g === 'calendario') return t('Apri il calendario')
   return t('Apri la pagina')
 }
 
@@ -71,10 +94,44 @@ export function etichettaFonte(fonte: string | null | undefined, doc: string | n
  * nuovo la parola giusta la impara un posto solo.
  */
 export function generePrimoDocumento(fonte: string | null | undefined, doc: string | null | undefined): string {
-  const nome = connettoreDi(fonte, doc)
-  if (POSTA.has(nome)) return t('la mail')
-  if (FILE.has(nome)) return t('il file')
+  const g = genereDi(fonte, doc)
+  if (g === 'mail') return t('la mail')
+  if (g === 'file') return t('il file')
+  if (g === 'nota') return t('la nota')
+  if (g === 'calendario') return t('il calendario')
   return t('la pagina')
+}
+
+/**
+ * La parola che sta in cima alla carta, accanto all'ora.
+ *
+ * Lì c'era `fonte` così come arrivava, e quando il modello ci scriveva l'id
+ * intero la carta mostrava mezzo disco: «DA LEGGERE  desktop:/Users/tobia/
+ * pinokio/bin/miniforge/pkgs/git-2.55.0/share/doc/git/technical/
+ * large-object-promisors.html · 10:05». Un percorso non dice niente a nessuno,
+ * e sfora la carta. Qui esce una parola e basta: mail, file, pagina.
+ */
+export function parolaFonte(fonte: string | null | undefined, doc: string | null | undefined): string {
+  const g = genereDi(fonte, doc)
+  if (g === 'mail') return t('mail')
+  if (g === 'file') return t('documento')
+  if (g === 'nota') return t('nota')
+  if (g === 'calendario') return t('calendario')
+  return t('pagina')
+}
+
+/**
+ * Il nome di un file, senza la cartella davanti.
+ *
+ * Solo per i file: l'id di una mail (`posta:INBOX:11`) finisce con un numero,
+ * e «Da: la mail 11» sarebbe un id travestito da parola. Il nome si taglia,
+ * perché fra quello che sta sul disco c'è di tutto.
+ */
+export function nomeDelFile(doc: string | null | undefined): string {
+  if (!doc || genereDi(null, doc) !== 'file') return ''
+  const strada = doc.slice(doc.indexOf(':') + 1)
+  const nome = strada.split(/[/\\]/).filter(Boolean).pop() ?? ''
+  return nome ? taglia(nome, 34) : ''
 }
 
 /**
@@ -799,7 +856,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const aperto = restoAperti.has(i.id)
     const testo = i.testo ?? ''
     return {
-      id: i.id, tipo: i.tipo, titolo: i.titolo, fonte: i.fonte ?? '', ora: quando(i.quando),
+      id: i.id, tipo: i.tipo, titolo: i.titolo, ora: quando(i.quando),
+      // una parola, non un percorso: vale qui come sulla carta in cima
+      fonte: i.doc || i.fonte ? parolaFonte(i.fonte, i.doc) : '',
       onInLista: () => mettiInLista(i as unknown as VoceFeed),
       // Aperta è tutta; chiusa si ferma dov'è ancora una frase e non un
       // troncone. Il chevron sta attaccato a questo punto, in fondo alle
@@ -950,7 +1009,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } as CSSProperties,
     heroTipo: hero?.tipo ?? '',
     heroTitolo: hero?.titolo ?? '',
-    heroFonte: hero?.fonte ?? '',
+    /**
+     * Accanto all'ora ci va una parola: «mail», «documento», «pagina».
+     *
+     * Ci andava `fonte` com'era scritta, e il giorno che il modello ci ha
+     * messo dentro l'id del documento in cima alla prima pagina è comparso un
+     * percorso lungo tre righe. Da dove viene una cosa si dice con una parola;
+     * dove sta esattamente non è una domanda che si fa leggendo il feed.
+     */
+    heroFonte: hero && (hero.doc || hero.fonte) ? parolaFonte(hero.fonte, hero.doc) : '',
     heroOra: quando(hero?.quando),
     // non si disegna più sulla card in cima; resta per le righe sotto
     heroUrgenza: hero?.urgenza ?? '',

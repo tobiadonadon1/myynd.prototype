@@ -71,9 +71,17 @@ const RISPOSTA = {
   compiti: []
 }
 
-/** Un fornitore compatibile finto: risponde con questo punto e si ricorda cosa ha ricevuto. */
-function fornitoreFinto(risposta: object = RISPOSTA) {
-  cfg.scrivi({ motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+/**
+ * Un fornitore compatibile finto: risponde con questo punto e si ricorda cosa ha ricevuto.
+ *
+ * L'app qui è in italiano, ed è una dichiarazione e non un dettaglio: il punto
+ * finto qui sopra è scritto in italiano, e da quando il punto controlla la
+ * lingua di quello che torna un punto italiano dentro un'app inglese viene
+ * buttato — che è esattamente quello che si vuole. Le prove della lingua stanno
+ * in fondo al file, e l'app se la scelgono loro.
+ */
+function fornitoreFinto(risposta: object = RISPOSTA, lingua: 'it' | 'en' = 'it') {
+  cfg.scrivi({ lingua, motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
   const ricevute: Record<string, unknown>[] = []
   compatibile.usaRete((async (_url: string | URL | Request, init?: RequestInit) => {
     ricevute.push(init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {})
@@ -88,7 +96,7 @@ function fornitoreFinto(risposta: object = RISPOSTA) {
 
 /** Lo stesso fornitore, ma il conto è a secco: è quello che è successo davvero. */
 function fornitoreSenzaCredito(): () => number {
-  cfg.scrivi({ motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+  cfg.scrivi({ lingua: 'it', motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
   let chiamate = 0
   compatibile.usaRete((async () => {
     chiamate++
@@ -1021,4 +1029,46 @@ test('quello che ha fatto Myynd da solo non arriva più al modello', async () =>
   assert.doesNotMatch(mandato, /Rassegna del mattino/)
   // la lista, quella sì: è da lì che si vede cosa c'è già e non va riscritto
   assert.match(mandato, /LA SUA LISTA:[\s\S]*Rispondere a Bianchi/)
+})
+
+// — la lingua di quello che torna —
+//
+// «Why is this task in Italian and my app is in English?». L'istruzione al
+// modello c'è, in testa e in coda, e un modello grande la rispetta; un modello
+// piccolo sul portatile legge venti documenti italiani e risponde in italiano.
+// Una seconda chiamata con l'ordine urlato in coda al materiale, e se sbaglia
+// ancora i campi storti restano vuoti e le righe cadono da sole.
+
+const NOVITA_IT = 'Il preventivo di Rossi non è ancora firmato e la scadenza è venerdì.'
+const NOVITA_EN = 'The Rossi quote is not signed yet and the deadline is Friday.'
+/** L'ultimo messaggio mandato al modello: quello dove finisce l'ordine urlato. */
+const messaggioDi = (r: Record<string, unknown>) =>
+  String((r.messages as { role: string; content: string }[]).findLast(m => m.role === 'user')!.content)
+
+test('un punto nella lingua sbagliata si richiede una volta, e le righe storte non si mostrano', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA, daLeggere: [],
+    progetti: [{ nome: 'Myynd', novita: NOVITA_IT, doc: 'posta:INBOX:1' }]
+  }, 'en')
+  const e = await punto.punto({}, adesso())
+  assert.equal(ricevute.length, 2, 'un punto in italiano dentro un\'app inglese non è stato richiesto')
+  assert.doesNotMatch(messaggioDi(ricevute[0]), /IN ENGLISH ONLY/)
+  assert.match(messaggioDi(ricevute[1]), /IN ENGLISH ONLY$/, 'la seconda chiamata non urla la lingua')
+  assert.deepEqual(e.punto?.progetti, [], 'una riga italiana è finita nel punto di un\'app inglese')
+})
+
+test('un punto nella lingua giusta passa con una chiamata sola', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA, daLeggere: [],
+    progetti: [{ nome: 'Myynd', novita: NOVITA_EN, doc: 'posta:INBOX:1' }]
+  }, 'en')
+  const e = await punto.punto({}, adesso())
+  assert.equal(ricevute.length, 1, 'ha richiesto un punto che andava bene')
+  assert.equal(e.punto?.progetti[0].novita, NOVITA_EN)
 })

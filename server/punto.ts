@@ -28,9 +28,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella, nellaLingua } from './config.ts'
+import { cartella, lingua, nellaLingua } from './config.ts'
 import { attesaDi, chiedi, collegato, estraiJSON } from './modello.ts'
-import { senzaTrattini } from './testo.ts'
+import { linguaSbagliata, senzaTrattini, soloInLingua } from './testo.ts'
+import { documentoVero } from './veri.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
 import { fuoco } from './timone.ts'
@@ -235,44 +236,18 @@ export function inMassa(d: store.Documento): boolean {
   return IN_MASSA.test(chi) || IN_MASSA.test(d.titolo.toLowerCase())
 }
 
-/**
+/*
  * Dal disco arriva quasi solo rumore, e il punto lo raccontava per primo.
  *
  * L'undici settembre il punto apriva così: «il dev server di tobiaweb è
  * ripartito più volte inseguendo il testo dello stile della casa». Era vero,
  * e veniva da un log di terminale sotto `~/terminals/` entrato nell'indice
- * come tutti gli altri file. Il disco è la fonte più grossa che c'è ed è
- * quella che produce meno notizie: log, file di build, appunti scritti da un
- * programma, roba che cambia da sola cento volte al giorno.
- *
- * Una notizia dal disco è un documento vero, appena arrivato, dove le cose
- * vere arrivano — la scrivania, i documenti, gli scaricati, iCloud — e non
- * dieci cartelle più sotto. Tutto il resto del disco esiste, si cerca, si
- * legge quando serve: semplicemente non si racconta.
- *
- * Le altre fonti passano tutte: una mail, un impegno, una nota, una pagina di
- * Notion, una trascrizione sono già, per come sono arrivate, cose che qualcuno
- * ha mandato o scritto apposta.
+ * come tutti gli altri file. La regola che lo tiene fuori — `documentoVero` —
+ * adesso sta in `veri.ts`, perché lo stesso rumore è tornato dal feed e una
+ * regola sola non può vivere dentro una schermata sola.
  */
-const CARTELLE_DOC = ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents/com~apple~CloudDocs']
-/** Il file, o una cartella sola sotto: più giù è archivio, non è arrivato adesso. */
-const PROFONDITA_DOC = 2
-/** Una fattura, un contratto, una bozza. Non un txt, non un markdown, non un csv. */
-const ESTENSIONE_DOC = /\.(pdf|docx?|xlsx?|pptx?|pages|numbers|key|odt|ods|odp|rtf)$/i
 /** Quanti file dal disco al massimo, i più recenti: il resto non entra nel punto. */
 const DISCO_MAX = 5
-
-export function documentoVero(d: store.Documento): boolean {
-  if (d.fonte !== 'desktop') return true
-  const p = (d.percorso || d.id.replace(/^desktop:/, '')).replace(/\\/g, '/')
-  if (!ESTENSIONE_DOC.test(p)) return false
-  return CARTELLE_DOC.some(c => {
-    const i = p.indexOf(`/${c}/`)
-    if (i < 0) return false
-    const dentro = p.slice(i + c.length + 2)
-    return !!dentro && dentro.split('/').length <= PROFONDITA_DOC
-  })
-}
 
 /** Le fonti da cui arriva la posta: da un file o da un impegno non risponde nessuno. */
 const FONTI_POSTA = new Set(['posta', 'google', 'microsoft'])
@@ -789,6 +764,23 @@ export type Notata = {
   compito: string | null
 }
 
+/**
+ * Tutto quello che in un punto l'ha scritto il modello, in una stringa sola.
+ *
+ * I titoli delle notizie no: quelli arrivano dalla rassegna e sono già nella
+ * lingua del giornale che li ha pubblicati. Qui c'è solo quello che il modello
+ * ha *composto*, che è l'unica cosa che può nascere nella lingua sbagliata.
+ */
+export function scrittoDalModello(g: Grezzo): string {
+  return [
+    ...(g.progetti ?? []).map(p => p.novita ?? ''),
+    ...(g.github ?? []).map(x => x.testo ?? ''),
+    ...(g.daLeggere ?? []).map(n => n.perche ?? ''),
+    ...(g.risposte ?? []).map(x => x.testo ?? ''),
+    ...(g.compiti ?? []).map(x => x.testo ?? '')
+  ].filter(Boolean).join(' ')
+}
+
 /** Quello che esce da `ricuci`: il punto da mostrare, e quello che non si mostra. */
 export type Ricucito = {
   punto: Punto
@@ -815,6 +807,22 @@ export type Ricucito = {
  */
 export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | null = null): Ricucito {
   const chiave = (s: string) => s.trim().toLowerCase()
+  /*
+   * Un campo nella lingua sbagliata non si mostra.
+   *
+   * `fai()` ha già riprovato una volta con l'ordine urlato in coda al
+   * materiale: se una riga arriva ancora in italiano a un'app in inglese, quel
+   * campo si lascia vuoto e la riga cade da sola — è già quello che succede a
+   * una riga senza testo. Una sezione in meno non la nota nessuno; una riga
+   * nella lingua sbagliata la notano tutti.
+   */
+  const l = lingua()
+  let scartate = 0
+  const inLingua = (s: string) => {
+    const t = ripulisci(s)
+    if (t && linguaSbagliata(t, l)) { scartate++; return '' }
+    return t
+  }
   const tuttiIDoc = new Set([...m.arrivati, ...m.github, ...m.risposte].map(d => d.id))
   const idGithub = new Set(m.github.map(d => d.id))
   const idRisposte = new Set(m.risposte.map(d => d.id))
@@ -850,7 +858,7 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
     const tenuta: Riga[] = []
     for (const x of xs ?? []) {
       if (tenuta.length >= max) break
-      const testo = ripulisci(x.testo ?? '')
+      const testo = inLingua(x.testo ?? '')
       if (!testo) continue
       const doc = x.doc && ids.has(x.doc) ? x.doc : null
       // GitHub e le risposte vivono del documento: una riga senza non apre
@@ -868,7 +876,7 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
   for (const p of g.progetti ?? []) {
     if (fatti.length >= 3) break
     const nome = (p.nome ?? '').trim()
-    const novita = ripulisci(p.novita ?? '')
+    const novita = inLingua(p.novita ?? '')
     if (!nome || !novita) continue
     const vero = m.progetti.find(x => chiave(x.nome) === chiave(nome))
     // un progetto che non sta in tabella non è un progetto: il punto ne parla,
@@ -898,7 +906,7 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
     if (!vera) continue
     if (daLeggere.some(x => chiave(x.titolo) === chiave(vera.titolo))) continue
     if (!nuova(senzaTrattini(vera.titolo))) continue
-    daLeggere.push({ titolo: senzaTrattini(vera.titolo), perche: ripulisci(n.perche ?? ''), link: vera.link ?? null })
+    daLeggere.push({ titolo: senzaTrattini(vera.titolo), perche: inLingua(n.perche ?? ''), link: vera.link ?? null })
   }
 
   const risposte = righe(g.risposte, 3, idRisposte, true, nuova)
@@ -916,7 +924,7 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
   const compiti: Notata[] = []
   for (const x of g.compiti ?? []) {
     if (compiti.length >= NUOVI_MAX) break
-    const testo = ripulisci(x.testo ?? '')
+    const testo = inLingua(x.testo ?? '')
     if (!testo) continue
     if (!nuovoCompito(testo)) continue
     compiti.push({
@@ -944,6 +952,8 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
     else if (risposte.length > 1) risposte.pop()
     else break
   }
+
+  if (scartate) console.warn('myynd · punto: risposta nella lingua sbagliata, scartata')
 
   return {
     punto: {
@@ -1135,26 +1145,28 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   if (prodottoOggi && diOggi(a.chiamate, adesso).length >= AL_GIORNO) return { ...fermo, tetto: true }
 
   const quando = new Date(adesso).toISOString()
+  const contenuto = materiale(mat, r.via, adesso)
+  const chiama = (aggiunta: string) => chiedi({
+    lavoro: 'punto', max_tokens: 6000, cache: true,
+    formato: schema(
+      [...mat.arrivati, ...mat.github, ...mat.risposte].map(d => d.id),
+      mat.github.map(d => d.id),
+      mat.risposte.map(d => d.id),
+      mat.progetti.map(p => p.nome),
+      mat.progetti.map(p => p.id),
+      [...new Set([...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id))]
+    ),
+    system: istruzione(mat, a.ultimo?.progetti ?? [], a.scartati),
+    messages: [{ role: 'user', content: contenuto + aggiunta }],
+    attesa: attesaDi('punto')
+  })
   let esito: { testo: string; rifiutata: boolean }
   try {
     // per la strada di tutti: prima l'abbonamento se è quello scelto, poi la
     // chiave o l'altro fornitore. Prima il punto chiamava il motore da solo e
     // con il solo abbonamento restava senza: la scheda diceva «collegato» e
     // lui rispondeva «collega Claude»
-    esito = await chiedi({
-      lavoro: 'punto', max_tokens: 6000, cache: true,
-      formato: schema(
-        [...mat.arrivati, ...mat.github, ...mat.risposte].map(d => d.id),
-        mat.github.map(d => d.id),
-        mat.risposte.map(d => d.id),
-        mat.progetti.map(p => p.nome),
-        mat.progetti.map(p => p.id),
-        [...new Set([...mat.attendono, ...mat.perOggi, ...mat.preparate].map(c => c.id))]
-      ),
-      system: istruzione(mat, a.ultimo?.progetti ?? [], a.scartati),
-      messages: [{ role: 'user', content: materiale(mat, r.via, adesso) }],
-      attesa: attesaDi('punto')
-    })
+    esito = await chiama('')
   } catch (e) {
     /*
      * Il giorno in cui la chiave era a secco lui ha premuto «rifai il punto»
@@ -1175,6 +1187,27 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   } catch {
     console.warn('myynd · il punto non è arrivato in una forma leggibile')
     return { ...fermo, guaio: ILLEGGIBILE }
+  }
+
+  /*
+   * La lingua, controllata su quello che è tornato.
+   *
+   * L'istruzione sta in testa e in coda all'istruzione di sistema, e un
+   * modello grande la rispetta. Un modello piccolo sul portatile legge venti
+   * documenti italiani e risponde in italiano anche a un'app in inglese. Una
+   * seconda chiamata, con l'ordine urlato in coda al materiale — e se anche
+   * quella sbaglia, `ricuci` lascia vuoti i campi sbagliati e le righe cadono.
+   *
+   * Un errore sulla seconda chiamata non è un guaio: si tiene quella di prima
+   * e si lascia decidere a `ricuci`, che è già la rete buona.
+   */
+  if (linguaSbagliata(scrittoDalModello(grezzo), lingua())) {
+    try {
+      const secondo = await chiama(`\n\n${soloInLingua(lingua())}`)
+      if (!secondo.rifiutata) grezzo = JSON.parse(estraiJSON(secondo.testo)) as Grezzo
+    } catch (e) {
+      console.warn('myynd · punto: la seconda lettura non è arrivata:', e instanceof Error ? e.message : e)
+    }
   }
 
   // solo adesso si conta: il tetto è di tre punti al giorno, non di tre

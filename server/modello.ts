@@ -34,7 +34,7 @@
 // quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { leggi, modello, nellaLingua } from './config.ts'
+import { leggi, lingua, modello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
@@ -805,15 +805,34 @@ export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object):
  * gemella che controlla che ogni `system:` di questo server ci passi davvero.
  *
  * È idempotente: applicarla due volte non raddoppia la frase.
+ *
+ * **Davanti e dietro, e nella lingua giusta.** Stava solo in coda, e solo in
+ * italiano: un modello piccolo che legge trentamila caratteri di materiale
+ * italiano e in fondo trova una riga che gli chiede l'inglese — scritta in
+ * italiano — risponde in italiano, e ha anche una sua logica. La stessa frase
+ * in testa e in coda è il rimedio più vecchio che ci sia, e l'unico che regge
+ * un contesto lungo: l'ultima cosa letta e la prima dicono la stessa cosa.
+ * Scritta nella lingua che si vuole, perché un ordine è più difficile da
+ * disobbedire quando è già un esempio di sé stesso — e la coda la nomina
+ * apposta («anche se questa istruzione è in italiano»), che è la scusa che il
+ * modello si stava dando.
  */
 const REGOLA = '— LINGUA —'
 
+/** L'ordine, scritto nella lingua in cui si vuole la risposta. */
+function ordine(): string {
+  return lingua() === 'en'
+    ? 'Write every word of your answer in English. Never in Italian, even if this instruction is in Italian.'
+    : 'Scrivi ogni parola della tua risposta in italiano. Mai in inglese, anche se questa istruzione fosse in inglese.'
+}
+
 export function conLaLingua(system: string): string {
   if (system.includes(REGOLA)) return system
-  return `${system}\n\n${REGOLA}\nScrivi in ${nellaLingua()}: ogni parola che leggerà una ` +
+  const o = ordine()
+  return `${o}\n\n${system}\n\n${REGOLA}\nScrivi in ${nellaLingua()}: ogni parola che leggerà una ` +
     'persona — titoli, domande, spiegazioni, righe di lista, motivi — va in quella lingua, ' +
     'anche quando il materiale che stai leggendo è scritto in un\'altra. I nomi propri, le ' +
-    'citazioni testuali e le cifre restano come sono.'
+    `citazioni testuali e le cifre restano come sono.\n${o}`
 }
 
 /*

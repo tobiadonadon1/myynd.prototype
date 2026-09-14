@@ -251,7 +251,6 @@ const EN: Record<string, string> = {
   "Dove vuoi arrivare?": "Where do you want to go?",
   "Il nome del tuo progetto": "Your project’s name",
 
-  'Fonti': 'Sources',
   'Progetto': 'Project',
   'Prossima azione': 'Next action',
   'Esiste già un progetto con questo nome.': 'A project with this name already exists.',
@@ -1927,25 +1926,35 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  // — di che cosa si tratta, in una parola: sta in cima alla carta, accanto
+  //   all'ora, al posto del percorso del file che ci finiva prima —
+  'mail': 'email',
+  'documento': 'file',
+  'pagina': 'page',
+  'nota': 'note',
+  'calendario': 'calendar',
   // — da dove viene una riga della lista: «Da» e poi la cosa che apre —
   'Da': 'From',
   'la mail': 'the email',
   'il file': 'the file',
   'la pagina': 'the page',
+  'la nota': 'the note',
+  'il calendario': 'the calendar',
   'il progetto': 'the project',
   'la chat': 'the chat',
   'il punto del giorno': 'today’s briefing',
   'il primo progetto': 'the first project',
   'un’automazione': 'an automation',
   'il feed': 'the feed',
-  // — la carta in cima: il titolo è il link, e dice cosa apre —
+  // — la carta in cima: sotto il titolo, una riga sola che dice cosa apre —
   'Apri la mail': 'Open the email',
   'Apri il file': 'Open the file',
   'Apri la pagina': 'Open the page',
+  'Apri la nota': 'Open the note',
+  'Apri il calendario': 'Open the calendar',
   'Affidalo a Myynd': 'Delegate to Myynd',
   'Affidata a Myynd: la trovi nella lista.': 'Delegated to Myynd: you will find it in the list.',
   'Parlane in chat': 'Talk about it in chat',
-  'Fonti usate': 'Sources used',
   // il pallino che salta sulla pastiglia delle notizie: quello che legge chi non vede il pallino
   'Notizie nuove': 'New stories',
   // le quattro sezioni del punto: «Progetti», «Da leggere» e «Risposte» il dizionario le ha già

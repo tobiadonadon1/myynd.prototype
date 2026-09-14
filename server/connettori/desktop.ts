@@ -15,7 +15,7 @@
 // Le regole per un file restano quelle di sempre.
 
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { join, extname, basename, resolve, relative, sep } from 'node:path'
+import { join, extname, basename, dirname, resolve, relative, sep } from 'node:path'
 import { existsSync, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import type { ConfigDesktop } from '../config.ts'
@@ -26,19 +26,58 @@ import { daBuffer, FIUTATI, LETTI, sembraUnRegistro, tipoDi } from './estrai.ts'
 export { LETTI }
 
 
+/**
+ * Gli alberi degli attrezzi: quello che un programma installa per sé.
+ *
+ * È la cartella da cui è nata questa regola. Sul feed è comparsa una voce
+ * «Da leggere» intitolata «Cosa significa «large-object promisors» in Git?», e
+ * la fonte era
+ * `~/pinokio/bin/miniforge/pkgs/git-2.55.0-…/share/doc/git/technical/large-object-promisors.html`:
+ * un pezzo della documentazione di Git, scaricato da un installatore, che
+ * nessuno ha scritto, nessuno ha ricevuto e nessuno leggerà mai. Non era un
+ * caso limite: un albero di attrezzi sono decine di migliaia di file di testo,
+ * e ognuno di quelli è un candidato per il feed che spinge fuori una cosa vera.
+ *
+ * Valgono in tutti e due i modi — le cartelle scelte a mano e tutto il Mac —
+ * perché un `node_modules` dentro `~/Lavoro` è lo stesso `node_modules`.
+ *
+ * `bin`, `lib`, `share`, `include`, `man`, `opt`: sono i nomi di Unix, e
+ * nessuna persona chiama così una cartella sua. Chi ne avesse una — un
+ * fotografo con `~/Documenti/share` — perde quella cartella e non se ne
+ * accorge; chi non li salta si ritrova la mente piena di pagine di manuale.
+ * La scelta è quella, ed è fatta apposta.
+ */
+const ATTREZZI = [
+  'pinokio', 'miniforge', 'miniconda', 'anaconda', 'conda', 'conda-meta',
+  'pkgs', 'site-packages', 'dist-packages', 'node_modules', 'bower_components',
+  '.venv', 'venv', 'env', '.cargo', '.rustup', '.npm', '.pnpm', '.yarn',
+  '.cache', 'go', 'gopath', 'homebrew', 'opt', 'bin', 'sbin', 'lib', 'lib64',
+  'libexec', 'include', 'share', 'man', '.gradle', '.m2', '.nvm', '.pyenv',
+  '.rbenv', '.docker', '.vscode', '.cursor', 'Library'
+]
+
 /** Cartelle che non contengono mai roba tua. */
 const SALTA = new Set([
   'node_modules', '.git', '.svn', '.hg', 'Library', 'System', '.Trash', '.cache',
   'dist', 'build', 'out', '.next', '.nuxt', 'target', 'venv', '.venv', 'env',
   '__pycache__', 'vendor', 'Pods', 'DerivedData', '.gradle', '.idea', '.vscode',
-  'coverage', '.pytest_cache', '.mypy_cache', 'site-packages', 'bower_components'
+  'coverage', '.pytest_cache', '.mypy_cache', 'site-packages', 'bower_components',
+  ...ATTREZZI
 ])
 
-/** Se una cartella ha uno di questi, è un progetto di codice: la salto tutta. */
+/**
+ * Se una cartella ha uno di questi, è un progetto di codice o un albero di
+ * attrezzi: la salto tutta.
+ *
+ * `conda-meta` e `pyvenv.cfg` sono i due segni che dichiarano un ambiente
+ * installato da un programma — conda e Python — e stanno qui per la stessa
+ * ragione per cui ci sta `package.json`: il nome della cartella cambia da
+ * un'installazione all'altra, il segno dentro no.
+ */
 const SEGNI_PROGETTO = [
   'package.json', 'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
   'requirements.txt', 'pyproject.toml', 'Gemfile', 'composer.json',
-  'CMakeLists.txt', 'Makefile', '.git'
+  'CMakeLists.txt', 'Makefile', '.git', 'conda-meta', 'pyvenv.cfg'
 ]
 
 /**
@@ -329,14 +368,60 @@ export function saltaDalNome(percorso: string, radice: string, tutto = false, eC
  * `regole` arriva da fuori perché non sono le stesse per tutti: chi ha scelto
  * `~/Pictures` a mano ci tiene le scansioni, e quei documenti non si buttano.
  */
-export function daButtare(id: string, regole: Regole): boolean {
+export function daButtare(id: string, regole: Regole, sotto?: SottoAttrezzi): boolean {
   if (!id.startsWith('desktop:')) return false
   const percorso = id.slice('desktop:'.length)
   if (!percorso) return false
   const pezzi = percorso.split(sep).filter(Boolean)
   if (!pezzi.length) return false
   if (pezzi.some(n => regole.salta(n))) return true
-  return nomeDiMacchina(pezzi[pezzi.length - 1]!)
+  if (nomeDiMacchina(pezzi[pezzi.length - 1]!)) return true
+  return !!sotto && sotto(percorso)
+}
+
+/** Risponde «questo file sta dentro un albero di attrezzi», guardando il disco. */
+export type SottoAttrezzi = (percorso: string) => boolean
+
+/**
+ * Il giudizio che il nome non può dare: un segno dentro una cartella sopra.
+ *
+ * Un albero di attrezzi non si chiama sempre `pinokio`. `~/Strumenti/whisper`
+ * con dentro un `pyvenv.cfg` è la stessa cosa, e `cammina` lo salta già —
+ * `eProgetto` guarda il contenuto delle cartelle mentre le percorre. Quello
+ * che era già in indice, però, ci restava per sempre: le regole nuove valgono
+ * per la lettura di domani, e la lettura di domani quella cartella non la apre
+ * nemmeno, quindi non c'è nessuna occasione in cui qualcuno se ne accorga.
+ *
+ * Si sale dalla cartella del file fino alla radice **esclusa** — che è la
+ * stessa regola di `cammina`, dove il controllo parte da `profondita > 0`:
+ * chi punta Myynd dentro un suo progetto ha scelto quello, e non gli si butta
+ * l'indice. La memoria è obbligatoria e non un lusso: con venticinquemila
+ * documenti le stesse cartelle tornerebbero migliaia di volte, e ogni volta
+ * sono sei `existsSync`.
+ */
+export function sottoAttrezzi(radici: string[]): SottoAttrezzi {
+  // la casa è sempre una fermata, anche quando non è una radice: chi tiene i
+  // suoi dotfile in un repo ha un `.git` in `~`, e senza questa riga quel
+  // `.git` dichiarerebbe albero di attrezzi tutto quello che ha sul computer
+  const fermate = new Set([...radici.map(r => resolve(r)), resolve(homedir())])
+  const memoria = new Map<string, boolean>()
+  const eAlbero = (dir: string): boolean => {
+    const gia = memoria.get(dir)
+    if (gia !== undefined) return gia
+    let e = false
+    try { e = SEGNI_PROGETTO.some(segno => existsSync(join(dir, segno))) } catch { e = false }
+    memoria.set(dir, e)
+    return e
+  }
+  return (percorso: string) => {
+    let qui = dirname(resolve(percorso))
+    // la radice del disco non si giudica: è la fermata di tutti
+    while (!fermate.has(qui) && dirname(qui) !== qui) {
+      if (eAlbero(qui)) return true
+      qui = dirname(qui)
+    }
+    return false
+  }
 }
 
 /**
@@ -356,7 +441,8 @@ export function daButtare(id: string, regole: Regole): boolean {
  */
 export function pulisciIndice(c: ConfigDesktop): number {
   const regole = regoleDi(c.tutto)
-  const buttare = store.idsConPrefisso('desktop:').filter(id => daButtare(id, regole))
+  const sotto = sottoAttrezzi(radici(c))
+  const buttare = store.idsConPrefisso('desktop:').filter(id => daButtare(id, regole, sotto))
   if (!buttare.length) return 0
   return store.scordaDocumenti(buttare)
 }
