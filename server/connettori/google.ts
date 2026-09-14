@@ -31,7 +31,7 @@ import * as chi from '../chi.ts'
 import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
-import { filoDi } from '../filo.ts'
+import { filoDi, idPulito } from '../filo.ts'
 import { riflua } from '../testo.ts'
 
 const esegui = promisify(execFile)
@@ -394,7 +394,12 @@ export async function sincronizza(
           inReplyTo: intestazione(m, 'In-Reply-To'),
           references: intestazione(m, 'References'),
           oggetto: intestazione(m, 'Subject')
-        })
+        }),
+        // il messaggio preciso, non la conversazione: è l'unico appiglio con cui
+        // «Portami lì» può far aprire *questa* mail a Mail.app o a Gmail. L'IMAP
+        // lo scriveva già, Gmail no — e le righe nate da una mail letta da qui
+        // non portavano da nessuna parte
+        messageId: idPulito(intestazione(m, 'Message-ID')) || null
       })
     } catch { /* un messaggio illeggibile non ferma la lettura degli altri */ }
     avanzamento?.(++fatti, ids.length)

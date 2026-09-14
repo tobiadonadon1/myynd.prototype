@@ -439,3 +439,30 @@ test('un risultato nuovo azzera l’email di quello vecchio', () => {
   store.risultatoCompito(id, 'Seconda bozza.', [], 'pronto')
   assert.equal(store.compito(id)!.email, null)
 })
+
+/*
+ * `madre`: da quale riga è nata una riga, e che resti scritto.
+ *
+ * Il tredici settembre il punto ha scritto «di’ quale unità di H-Farm guarda
+ * l’audit», e lui ha chiesto dove fosse quella cosa. Da nessuna parte: non
+ * veniva da un documento, veniva dalle domande di un’altra riga — e quel filo
+ * si perdeva nel momento stesso in cui la riga era scritta. Qui si prova la
+ * metà noiosa e indispensabile: la colonna c’è, ci arriva quello che si scrive,
+ * e una riscrittura non la cancella.
+ */
+test('madre si scrive, si rilegge, e una riscrittura non taglia il filo', () => {
+  store.scriviCompito({ id: 'm-madre', testo: 'Rispondere alle quattro domande sull’ambito', ordine: 'z001' })
+  store.scriviCompito({
+    id: 'm-figlia', testo: 'Di’ quale unità di H-Farm guarda l’audit',
+    ordine: 'z002', origine: 'punto', madre: 'm-madre'
+  })
+
+  assert.equal(store.compito('m-figlia')?.madre, 'm-madre', 'la riga non sa più da chi viene')
+  assert.equal(store.compito('m-madre')?.madre, null, 'una riga scritta a mano è nata da qualcuno')
+  assert.equal(store.elencoCompiti().find(c => c.id === 'm-figlia')?.madre, 'm-madre',
+    'la lista che va al client si porta via la provenienza')
+
+  // riscritta senza `madre`: chi non la manda non sta dicendo «dimenticala»
+  store.scriviCompito({ id: 'm-figlia', testo: 'Di’ quale unità guarda l’audit', ordine: 'z002' })
+  assert.equal(store.compito('m-figlia')?.madre, 'm-madre', 'una riscrittura si è portata via il filo')
+})

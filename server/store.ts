@@ -1213,6 +1213,24 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => {
     colonna(d, 'compiti', 'progetto', 'TEXT')
     d.exec('CREATE INDEX IF NOT EXISTS compiti_progetto ON compiti(progetto)')
+  },
+
+  /**
+   * 34 → 35 · da quale riga è nata una riga.
+   *
+   * Il tredici settembre il punto ha scritto «di’ quale unità di H-Farm guarda
+   * l’audit», e lui ha chiesto dove fosse quella cosa. Da nessuna parte: non
+   * nasceva da un documento, nasceva dalle *domande* di un’altra riga della
+   * lista — e quel filo si perdeva appena la riga era scritta. `ancoraAlleRighe`
+   * la madre la conosceva già (ne ereditava il documento e il progetto) e non
+   * la scriveva: adesso resta, ed è l’ultima strada di «Portami lì» quando non
+   * c’è né un documento né un progetto.
+   *
+   * In fondo, come tutte: una migrazione in mezzo alla lista ne fa saltare una
+   * su ogni database già arrivato a quel numero, e senza dire niente.
+   */
+  d => {
+    colonna(d, 'compiti', 'madre', 'TEXT')
   }
 
 ]
@@ -1294,7 +1312,7 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT']],
+  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT']],
   feed: [['perche', 'TEXT']]
 }
 
@@ -2808,6 +2826,14 @@ export type Compito = {
   origine: string
   voce: string | null
   doc: string | null
+  /**
+   * La riga della lista da cui questa è nata, quando è nata da un'altra.
+   *
+   * Solo quando c'è un filo vero: il punto legge le domande di una riga aperta
+   * e ne scrive le mosse in lista. Serve a «Portami lì» — una riga che non ha
+   * un documento né un progetto ha comunque un posto da cui viene, ed è quella.
+   */
+  madre?: string | null
   chiesto: string | null
   risultato: string | null
   fonti: { id: string; label: string }[] | null
@@ -2977,17 +3003,21 @@ export function scriviCompito(c: {
   giorno?: string | null
   progetto?: string | null
   ordine: string; origine?: string; voce?: string | null; doc?: string | null
+  /** La riga da cui questa è nata: si scrive alla nascita e non si riscrive. */
+  madre?: string | null
   attrezzi?: Concessione | null
 }) {
   const ora = new Date().toISOString()
   db.prepare(`
-    INSERT INTO compiti (id, testo, nota, quando, giorno, progetto, stato, ordine, origine, voce, doc, attrezzi, creato, aggiornato)
-    VALUES (?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?)
+    INSERT INTO compiti (id, testo, nota, quando, giorno, progetto, stato, ordine, origine, voce, doc, madre, attrezzi, creato, aggiornato)
+    VALUES (?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       testo      = excluded.testo,
       quando     = excluded.quando,
       giorno     = COALESCE(excluded.giorno, compiti.giorno),
       progetto   = COALESCE(excluded.progetto, compiti.progetto),
+      -- da chi sei nata non cambia: una riscrittura senza madre non taglia il filo
+      madre      = COALESCE(excluded.madre, compiti.madre),
       -- il permesso si riscrive con la riga: se l'automazione nel frattempo ha
       -- perso un attrezzo, la riga rifatta non se lo tiene
       attrezzi   = excluded.attrezzi,
@@ -3006,7 +3036,7 @@ export function scriviCompito(c: {
       versione   = compiti.versione + 1
   `).run(
     c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.progetto ?? null, c.ordine,
-    c.origine ?? 'mano', c.voce ?? null, c.doc ?? null,
+    c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
     c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
 }

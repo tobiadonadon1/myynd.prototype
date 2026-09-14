@@ -584,18 +584,20 @@ test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga 
 test('ancoraAlleRighe: una cosa nata da una riga ne eredita il progetto e il documento', () => {
   // la riga che chiedeva le quattro cose su H-Farm: sa dove sta, e le figlie no
   const chiede = { id: 'avvio-h', testo: 'Rispondere alle quattro domande sull’ambito', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd' }
-  const nate: { testo: string; doc: string | null; progetto: string | null }[] = []
+  const nate: { testo: string; doc: string | null; progetto: string | null; madre: string | null }[] = []
   const prese = punto.ancoraAlleRighe(
     [
       { testo: 'Conferma quale unità guarda l’audit.', doc: null, progetto: null, compito: 'avvio-h' },
       // la riga da cui dice di venire non esiste: nasce nuda, non nasce sbagliata
       { testo: 'Decidi il passo dopo l’unità scelta.', doc: null, progetto: null, compito: 'mai-esistita' }
     ],
-    { aperti: [chiede], chiuse: [], crea: (testo, doc, progetto) => { nate.push({ testo, doc, progetto }); return `n${nate.length}` } }
+    { aperti: [chiede], chiuse: [], crea: (testo, doc, progetto, madre) => { nate.push({ testo, doc, progetto, madre }); return `n${nate.length}` } }
   )
   assert.deepEqual(prese, ['n1', 'n2'])
-  assert.deepEqual(nate[0], { testo: 'Conferma quale unità guarda l’audit', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd' })
-  assert.deepEqual(nate[1], { testo: 'Decidi il passo dopo l’unità scelta', doc: null, progetto: null })
+  // `madre` è la terza strada di «Portami lì»: senza, una figlia che non eredita
+  // né documento né progetto non porta da nessuna parte
+  assert.deepEqual(nate[0], { testo: 'Conferma quale unità guarda l’audit', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd', madre: 'avvio-h' })
+  assert.deepEqual(nate[1], { testo: 'Decidi il passo dopo l’unità scelta', doc: null, progetto: null, madre: null })
 
   // quello che dice il modello viene prima di quello che si eredita
   const suo: { doc: string | null; progetto: string | null }[] = []
@@ -632,6 +634,15 @@ test('la provenienza dal vivo: la riga madre passa il progetto, un id inventato 
   assert.equal(nate.length, 2, 'le cose da fare non sono finite in lista')
   assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.progetto, pr.id, 'la cosa nata dalle domande di una riga non ne ha ereditato il progetto')
   assert.equal(nate.find(c => c.testo.startsWith('Chiama'))?.progetto, null, 'un progetto inventato è entrato in lista')
+  /*
+   * E il filo resta scritto sul disco, non solo dedotto al volo.
+   *
+   * È quello che tiene in piedi «Portami lì» su una riga come «di' quale unità
+   * di H-Farm guarda l'audit»: non c'è nessun documento da aprire, ma la riga
+   * che l'ha fatta nascere è un posto, ed è quello giusto.
+   */
+  assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.madre, 'avvio-h', 'la riga nata dalle domande di un’altra non sa più da chi viene')
+  assert.equal(nate.find(c => c.testo.startsWith('Chiama'))?.madre, null, 'una riga madre inventata è stata scritta')
 })
 
 test('rifare il punto sulla stessa cosa da fare non raddoppia la riga', async () => {

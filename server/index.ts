@@ -2620,6 +2620,45 @@ app.post('/api/compiti/:id/documento', async (req, res) => {
 })
 
 /**
+ * «Portami lì».
+ *
+ * Il tredici settembre: «dov'è che mi chiede quale unità di H-Farm guarda
+ * l'audit? Perché non c'è un bottone che dice *portami lì così la vedo
+ * adesso*?». C'era già un modo di vedere il documento di una riga — dentro
+ * Myynd, in una finestra sua — e non è la stessa cosa: una copia della mail non
+ * è la mail, e alla mail si risponde dal programma di posta.
+ *
+ * Questa rotta non decide niente da sola: la decisione sta in `scrivania`, è
+ * pura, e qui si esegue. Quello che torna dice *dove* si è andati, perché due
+ * delle destinazioni non sono posti del sistema ma posti dell'app — la riga che
+ * l'ha fatta nascere e il progetto — e quelle le apre la pagina, senza bisogno
+ * di un Mac né di un permesso.
+ *
+ * Su un server, o su un computer che non è un Mac, si dice di no invece di far
+ * finta: `open` è macOS, e un bottone che gira a vuoto è la cosa che fa sembrare
+ * rotta tutta l'app.
+ */
+app.post('/api/compiti/:id/portami', async (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+
+  const meta = scrivania.dovePortare(c, c.doc ? store.documento(c.doc) : null)
+  // due posti dell'app: li apre chi ha lo schermo, e funzionano ovunque
+  if (meta.dove === 'compito' || meta.dove === 'progetto') return res.json({ ok: true, dove: meta.dove, id: meta.id })
+  if (meta.dove === 'niente') return res.json({ ok: false, errore: meta.errore })
+  if (ospitato.OSPITATO || process.platform !== 'darwin') {
+    return res.json({ ok: false, errore: 'Posso portarti lì solo sul Mac.' })
+  }
+
+  try {
+    await scrivania.porta(cfg.leggi().desktop, meta)
+    res.json({ ok: true, dove: meta.dove })
+  } catch (e) {
+    res.json({ ok: false, errore: e instanceof Error ? e.message : String(e) })
+  }
+})
+
+/**
  * Affidare una riga a Claude Code, dentro un progetto.
  *
  * Due passi in una rotta sola, scelti da `passo`: «piano» legge il progetto e

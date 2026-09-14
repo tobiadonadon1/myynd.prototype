@@ -122,3 +122,143 @@ test('aprire qualcosa fuori dalle cartelle collegate non si può', async () => {
   writeFileSync(join(FUORI, 'niente.md'), 'x')
   await assert.rejects(() => s.apri(DESKTOP, join(FUORI, 'niente.md')), /solo nelle cartelle/)
 })
+
+// — portami lì —
+//
+// La domanda del tredici settembre: «perché non c'è un bottone che dice
+// portami lì così la vedo adesso?». La risposta è qui sotto, ed è in due pezzi:
+// uno che decide dove si va — puro, provabile, sei strade — e uno che lo fa
+// partire. Le prove del secondo non devono aprire niente sul computer di
+// nessuno: `perProva.apri` prende il posto di `open` e si guarda cosa *avrebbe*
+// aperto.
+
+const RIGA = { doc: null as string | null, madre: null as string | null, progetto: null as string | null }
+
+test('il link di una mail: il Message-ID con le parentesi angolari diventa un message://', () => {
+  // com'è scritto nell'intestazione, angolari comprese
+  assert.equal(
+    s.linkMail('posta', '<CAF=abc.123@mail.esempio.it>'),
+    'message://%3CCAF=abc.123@mail.esempio.it%3E'
+  )
+  // già pulito: stesso risultato, perché è quello che l'indice tiene
+  assert.equal(
+    s.linkMail('posta', 'CAF=abc.123@mail.esempio.it'),
+    'message://%3CCAF=abc.123@mail.esempio.it%3E'
+  )
+  // Gmail si legge nel browser: lì «apri la mail» è la ricerca sul messaggio
+  assert.equal(
+    s.linkMail('google', '<abc@mail.gmail.com>'),
+    'https://mail.google.com/mail/u/0/#search/rfc822msgid:abc%40mail.gmail.com'
+  )
+  // niente id, niente promessa: chi riceve la stringa vuota apre il programma
+  assert.equal(s.linkMail('posta', null), '')
+  assert.equal(s.linkMail('posta', '<>'), '')
+  /*
+   * Un id che non è un id non diventa mezzo URL.
+   *
+   * Questo pezzo finisce dentro un indirizzo che il sistema consegna a
+   * un'applicazione: uno spazio, un apice o una barra lì dentro non sono un
+   * dettaglio, sono la coda di un altro URL. Quando non passa si torna alla
+   * strada onesta — aprire Mail e basta.
+   */
+  assert.equal(s.linkMail('posta', 'uno due@esempio.it'), '')
+  assert.equal(s.linkMail('posta', 'x@y.it" ; open -a Calculator'), '')
+  assert.equal(s.linkMail('posta', 'x/../../altro@y.it'), '')
+})
+
+test('dovePortare: le sei strade, decise senza toccare niente', () => {
+  // (a) una mail: si apre nel programma di posta, sul messaggio preciso
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, doc: 'posta:INBOX:123' }, { fonte: 'posta', percorso: 'INBOX', messageId: 'abc@esempio.it' }),
+    { dove: 'posta', url: 'message://%3Cabc@esempio.it%3E' }
+  )
+  // la stessa mail senza Message-ID: si apre il programma, e si smette di promettere
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, doc: 'posta:INBOX:123' }, { fonte: 'posta', percorso: 'INBOX', messageId: null }),
+    { dove: 'posta', url: '' }
+  )
+
+  // (b) un file sul disco
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, doc: 'desktop:/Users/x/Documenti/contratto.pdf' },
+      { fonte: 'desktop', percorso: '/Users/x/Documenti/contratto.pdf' }),
+    { dove: 'file', percorso: '/Users/x/Documenti/contratto.pdf' }
+  )
+
+  // (c) una pagina: Notion, GitHub, qualunque cosa tenga un http
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, doc: 'notion:abc' }, { fonte: 'notion', percorso: 'https://www.notion.so/abc' }),
+    { dove: 'pagina', url: 'https://www.notion.so/abc' }
+  )
+
+  // (d) niente documento, ma si sa da quale riga è nata: le due righe su H-Farm
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, madre: 'avvio-h' }, null),
+    { dove: 'compito', id: 'avvio-h' }
+  )
+
+  // (e) niente documento e niente madre, ma un progetto
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA, progetto: 'p93ddacbed1bd' }, null),
+    { dove: 'progetto', id: 'p93ddacbed1bd' }
+  )
+
+  // (f) e quando non c'è niente lo si dice, invece di aprire il vuoto
+  assert.deepEqual(
+    s.dovePortare({ ...RIGA }, null),
+    { dove: 'niente', errore: 'Questa riga non viene da nessun posto che possa aprire.' }
+  )
+})
+
+test('dovePortare: il documento viene prima, e un documento sparito non è un vicolo cieco', () => {
+  const riga = { doc: 'posta:INBOX:3', madre: 'avvio-h', progetto: 'pX' }
+  assert.equal(s.dovePortare(riga, { fonte: 'posta', messageId: 'q@w.it' }).dove, 'posta',
+    'il posto dove la cosa è scritta non ha avuto la precedenza')
+  // la mail non c'è più nell'indice: si scende alla riga madre, non si dice di no
+  assert.deepEqual(s.dovePortare(riga, null), { dove: 'compito', id: 'avvio-h' })
+  // e una riga che dice di venire da un documento senza percorso né id fa lo stesso
+  assert.deepEqual(
+    s.dovePortare({ ...riga, doc: 'granola:9' }, { fonte: 'granola', percorso: null }),
+    { dove: 'compito', id: 'avvio-h' }
+  )
+})
+
+test('uno schema che non è http non diventa una pagina da aprire', () => {
+  for (const cattivo of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x', 'ftp://x.it/y']) {
+    assert.equal(s.paginaBuona(cattivo), '', `${cattivo} è passato`)
+    assert.deepEqual(
+      s.dovePortare({ ...RIGA, doc: 'notion:abc' }, { fonte: 'notion', percorso: cattivo }),
+      { dove: 'niente', errore: 'Questa riga non viene da nessun posto che possa aprire.' }
+    )
+  }
+})
+
+test('porta: quello che fa partire davvero, e non fa partire altro', { skip: process.platform !== 'darwin' }, async () => {
+  const lanciati: string[][] = []
+  s.perProva.apri = a => { lanciati.push(a) }
+  try {
+    await s.porta(DESKTOP, { dove: 'posta', url: 'message://%3Cabc@esempio.it%3E' })
+    // senza Message-ID resta solo il programma: due argomenti fissi, nessun nome da fuori
+    await s.porta(DESKTOP, { dove: 'posta', url: '' })
+    await s.porta(DESKTOP, { dove: 'pagina', url: 'https://www.notion.so/abc' })
+    writeFileSync(join(COLLEGATA, 'contratto.md'), 'x')
+    await s.porta(DESKTOP, { dove: 'file', percorso: join(COLLEGATA, 'contratto.md') })
+
+    assert.deepEqual(lanciati.slice(0, 3), [
+      ['message://%3Cabc@esempio.it%3E'],
+      ['-a', 'Mail'],
+      ['https://www.notion.so/abc']
+    ])
+    assert.equal(lanciati[3]?.length, 1)
+    assert.ok(lanciati[3]![0].endsWith('/contratto.md'), `ha aperto ${lanciati[3]![0]}`)
+
+    // un file fuori dalle cartelle collegate non si apre nemmeno da qui: è la
+    // stessa regola della scrittura, e «portami lì» non è una porta di servizio
+    writeFileSync(join(FUORI, 'segreto.md'), 'x')
+    await assert.rejects(
+      () => s.porta(DESKTOP, { dove: 'file', percorso: join(FUORI, 'segreto.md') }),
+      /solo nelle cartelle/
+    )
+    assert.equal(lanciati.length, 4, 'ha fatto partire qualcosa che non doveva')
+  } finally { s.perProva.apri = null }
+})

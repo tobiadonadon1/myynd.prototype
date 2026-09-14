@@ -596,6 +596,8 @@ export type Compito = {
   origine: string
   voce: string | null
   doc: string | null
+  /** La riga da cui è nata, quando è nata dalle domande di un'altra: la terza strada di «Portami lì». */
+  madre?: string | null
   chiesto: string | null
   risultato: string | null
   fonti: { id: string; label: string }[] | null
@@ -615,6 +617,18 @@ export type Compito = {
 }
 
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
+
+/**
+ * Dov'è andato «Portami lì».
+ *
+ * `posta`, `file` e `pagina` sono già successi: il Mac ha aperto qualcosa e non
+ * resta che dirlo. `compito` e `progetto` sono una consegna, non un risultato —
+ * quei due posti stanno dentro Myynd, e li apre la schermata che ha premuto.
+ */
+export type Portato =
+  | { ok: true; dove: 'posta' | 'file' | 'pagina' }
+  | { ok: true; dove: 'compito' | 'progetto'; id: string }
+  | { ok: false; errore: string }
 
 /**
  * Un passo del lavoro su una riga: cerca, apre, scrive.
@@ -973,6 +987,17 @@ export const api = {
   lavora: (id: string, m: { cartella: string; passo: 'piano' | 'fai'; richiesta?: string }) =>
     json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito }>(
       `/api/compiti/${encodeURIComponent(id)}/lavora`, { method: 'POST', body: JSON.stringify(m) }),
+
+  /**
+   * «Portami lì»: il posto vero, non una copia dentro Myynd.
+   *
+   * Il server decide da solo dove porta la riga — la mail, il file, la pagina —
+   * e quello che è sul Mac lo apre lui. Quando torna `dove: 'compito'` o
+   * `dove: 'progetto'` non c'era niente da aprire sul sistema: quei due posti
+   * stanno dentro l'app, e ce li porta chi ha lo schermo.
+   */
+  portami: (id: string) =>
+    json<Portato>(`/api/compiti/${encodeURIComponent(id)}/portami`, { method: 'POST' }),
 
   /** Dalla bozza a un file vero, in una cartella collegata, aperto sul Mac. */
   salvaDocumento: (id: string, m: { testo: string; nome: string; formato: string; cartella?: string }) =>

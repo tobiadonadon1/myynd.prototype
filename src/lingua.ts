@@ -1926,6 +1926,12 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  // — «portami lì»: il posto vero, non una copia dentro Myynd —
+  'Portami lì': 'Take me there',
+  'Aperto.': 'Opened.',
+  'Non sono riuscito ad aprirlo.': 'I could not open it.',
+  'Posso portarti lì solo sul Mac.': 'I can only take you there on the Mac.',
+  'Questa riga non viene da nessun posto che possa aprire.': 'This line does not come from anywhere I can open.',
   // — di che cosa si tratta, in una parola: sta in cima alla carta, accanto
   //   all'ora, al posto del percorso del file che ci finiva prima —
   'mail': 'email',

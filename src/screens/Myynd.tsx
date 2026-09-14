@@ -213,6 +213,57 @@ function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
   )
 }
 
+/**
+ * «Portami lì».
+ *
+ * «Perché non c'è un bottone che dice *portami lì così la vedo adesso*? Mi
+ * serve un bottone, soprattutto se è una mail o un documento: invece di
+ * aprirlo dentro Myynd, "portami lì", e l'agente me lo apre.»
+ *
+ * Il link «Da …» qui accanto fa l'altra cosa — mostra il documento *dentro*
+ * Myynd — e le due restano separate apposta: una copia della mail non è la
+ * mail, e alla mail si risponde dal programma di posta. Questo bottone apre il
+ * posto vero: Mail sul messaggio giusto, il Finder sul file, il browser sulla
+ * pagina. Quando dietro la riga non c'è niente da aprire sul Mac, porta dove
+ * porta il filo — la riga che l'ha fatta nascere, o il progetto.
+ *
+ * Di contorno, mai pieno: su ogni carta il pieno è uno solo, ed è quello che
+ * chiude la riga. E non sta sotto il «⋯»: quello che serve adesso non si
+ * nasconde dietro tre puntini.
+ */
+function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: boolean }) {
+  if (!c.doc && !c.madre && !c.progetto) return null
+
+  const vai = async () => {
+    const r = await l.portami(c.id)
+    // il perché l'ha già detto la lista, con un avviso: qui non si aggiunge niente
+    if (!r || !r.ok) return
+    // i due posti che stanno dentro l'app: li apre chi ha lo schermo
+    if (r.dove === 'compito') { l.chiediDiAprire(r.id); v.goOggi() }
+    else if (r.dove === 'progetto') v.apriProgetto(r.id)
+  }
+
+  const vestito: CSSProperties = scuro
+    ? {
+        padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.32)',
+        background: 'none', color: 'rgba(255,247,240,.9)', fontSize: 14
+      }
+    : {
+        padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
+        background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12
+      }
+
+  return (
+    <Hov as="button" type="button"
+      onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
+      title={t('Portami lì')}
+      style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
+      hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
+      {t('Portami lì')}
+    </Hov>
+  )
+}
+
 /** Cosa c'è scritto accanto a «DA FARE»: cosa sta succedendo, o dove sta. */
 function didascalia(c: Compito): string {
   if (c.stato === 'delegato') return t('ci sta lavorando')
@@ -286,6 +337,11 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
         <Prove c={c} v={v} />
       </div>
 
+      {/* il posto vero da cui viene, aperto sul Mac. Sempre visibile — al
+          contrario di «fatta», che compare col mouse: è la cosa che mancava, e
+          una cosa che si scopre solo passandoci sopra continua a mancare */}
+      <Portami c={c} l={l} v={v} />
+
       {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso, e sta
           nello stesso punto in cui le voci di Myynd offrono «in lista» */}
       <Hov as="button"
@@ -343,7 +399,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const rispondi = () => { if (risposta.trim()) l.rispondi(c.id, risposta.trim()) }
 
   return (
-    <div style={v.heroStyle}>
+    <div style={{ ...v.heroStyle, position: 'relative', zIndex: menu ? 30 : undefined }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Glifo tipo="penso" dim={15} colore="#FFF7F0" />
         <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t('Da fare')}</span>
@@ -370,7 +426,10 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
 
       <Prove c={c} v={v} scuro />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
+      {/* a capo invece che fuori: con un bottone in più questa fascia, in una
+          finestra stretta, usciva dalla carta — e il testo che sfora non è un
+          dettaglio, è l'app che sembra rotta */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
         {/* quello che si fa quasi sempre. Su una bozza pronta «Fatto» sarebbe
             una bugia: quello che chiudi lì è il testo che hai davanti, e va
             tenuto — è da lì che impara come scrivi */}
@@ -386,6 +445,8 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           hover={{ background: 'rgba(255,247,240,.16)' }}>
           {pronto ? t('Rifallo') : delegato ? t('Richiamala') : t('Se ne occupa Myynd')}
         </Hov>
+
+        <Portami c={c} l={l} v={v} scuro />
 
         {altro.length > 0 && (
           <div style={{ position: 'relative' }}>
@@ -752,7 +813,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           serviva anche da riferimento a quello che qui dentro si posiziona da
           sé, e toglierla e basta avrebbe spostato i menù delle righe.
         */
-        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)' }}>
+        <div style={{ flex: 'none', position: 'relative', zIndex: v.menuAperto ? 30 : undefined, marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)' }}>
           {/* le tue righe stanno DENTRO la stessa lista delle sue, vestite
               uguali. Il filo va per posizione, non per specie: la prima non ha
               bordo sopra e tutte le altre sì — chiunque sia la prima. */}

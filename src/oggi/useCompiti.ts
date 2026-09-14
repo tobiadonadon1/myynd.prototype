@@ -12,7 +12,7 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito } from '../api'
+import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato } from '../api'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
@@ -468,6 +468,29 @@ export function useCompiti(
     catch { mostraToast(t('Non sono riuscito a copiarlo.')) }
   }, [mostraToast])
 
+  /**
+   * «Portami lì»: aprire il posto vero, non la copia dentro Myynd.
+   *
+   * Decide il server — è lui che sa se dietro la riga c'è una mail, un file o
+   * una pagina, ed è lui che ha le mani per aprirla. Qui restano le due cose
+   * che il server non può fare: dirlo, e consegnare a chi ha lo schermo i due
+   * posti che stanno dentro l'app. Chi chiama naviga con quello che torna —
+   * la lista non conosce la colonna delle schermate, e non deve.
+   */
+  const portami = useCallback(async (id: string): Promise<Portato | null> => {
+    try {
+      const r = await api.portami(id)
+      if (!r.ok) { mostraToast(t(r.errore)); return null }
+      // i posti dell'app non sono «aperti» finché non ci si è arrivati: il
+      // «Aperto.» lo dice solo quello che è successo davvero sul Mac
+      if (r.dove !== 'compito' && r.dove !== 'progetto') mostraToast(t('Aperto.'))
+      return r
+    } catch (e) {
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito ad aprirlo.'))
+      return null
+    }
+  }, [mostraToast])
+
   const salvaFuoco = useCallback(async (testo: string) => {
     setFuoco(testo)
     try {
@@ -536,6 +559,7 @@ export function useCompiti(
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
     aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    portami,
     daAprire, chiediDiAprire, richiestaServita
   }
 }

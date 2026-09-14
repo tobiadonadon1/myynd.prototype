@@ -25,6 +25,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
+import { portaAlProgetto } from '../vals'
 import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
@@ -197,6 +198,41 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
   </li>
 }
 
+/**
+ * «Portami lì»: il posto vero, aperto sul Mac.
+ *
+ * «Mi serve un bottone, soprattutto se è una mail o un documento: invece di
+ * aprirlo dentro Myynd, "portami lì", e l'agente me lo apre.» Qui sta sulla
+ * riga, di fianco a quello che dice di chi è il turno, e c'è solo quando c'è
+ * davvero un posto — un documento, la riga che l'ha fatta nascere, un progetto.
+ *
+ * Questa schermata non ha `v`: è la lista e basta, montata con la lista e
+ * niente altro. Quando il posto è un progetto, la strada passa da
+ * `portaAlProgetto` — la mano che `useVals` lascia in `vals.ts` apposta per
+ * chi non ha la colonna sotto mano.
+ */
+function Portami({ c, l }: { c: Compito; l: Lista }) {
+  if (!c.doc && !c.madre && !c.progetto) return null
+  const vai = async () => {
+    const r = await l.portami(c.id)
+    // quello che non è andato l'ha già detto la lista, con un avviso
+    if (!r || !r.ok) return
+    if (r.dove === 'compito') l.chiediDiAprire(r.id)
+    else if (r.dove === 'progetto') portaAlProgetto(r.id)
+  }
+  return (
+    <Hov as="button" type="button"
+      onClick={(e: React.MouseEvent) => { e.stopPropagation(); void vai() }}
+      title={t('Portami lì')}
+      style={{
+        flex: 'none', whiteSpace: 'nowrap', padding: '4px 11px', borderRadius: 99,
+        border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)',
+        color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
+      }}
+      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Portami lì')}</Hov>
+  )
+}
+
 function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: boolean; modifica: (c: Compito) => void }) {
   // sotto mano: il mouse sopra, il fuoco dentro, o un dito — che non sa passare sopra a niente
   const { attiva: mostra, props: sottoMano } = useAttiva()
@@ -334,6 +370,10 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
             {t('prompt')}
           </span>
         )}
+
+        {/* il posto vero da cui viene: sempre lì, non sotto il mouse e non
+            dentro un menù — è la cosa che mancava */}
+        <Portami c={c} l={l} />
 
         {/*
           I tre puntini: quello che si chiede ogni tanto.

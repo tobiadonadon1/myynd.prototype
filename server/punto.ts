@@ -994,8 +994,14 @@ export type Ancora = {
   aperti: { id: string; testo: string; doc?: string | null; progetto?: string | null }[]
   /** I testi delle righe chiuse di recente: una cosa già fatta non si riscrive. */
   chiuse: string[]
-  /** Scrive la riga nuova, con il documento e il progetto da cui viene, e torna il suo id. */
-  crea: (testo: string, doc: string | null, progetto: string | null) => string | null
+  /**
+   * Scrive la riga nuova e torna il suo id.
+   *
+   * `madre` è la riga della lista da cui è nata, quando è nata dalle domande di
+   * un'altra: è la terza strada di «Portami lì» — dopo il documento e il
+   * progetto — e senza scriverla quel filo si perdeva appena la riga esisteva.
+   */
+  crea: (testo: string, doc: string | null, progetto: string | null, madre: string | null) => string | null
 }
 
 /**
@@ -1036,7 +1042,14 @@ export function ancoraAlleRighe(notate: Notata[], ctx: Ancora): string[] {
      * passa alla figlia, e quel che ha detto il modello viene prima.
      */
     const madre = r.compito ? ctx.aperti.find(c => c.id === r.compito) ?? null : null
-    const nato = ctx.crea(senzaPunto(r.testo), r.doc ?? madre?.doc ?? null, r.progetto ?? madre?.progetto ?? null)
+    const nato = ctx.crea(
+      senzaPunto(r.testo),
+      r.doc ?? madre?.doc ?? null,
+      r.progetto ?? madre?.progetto ?? null,
+      // e il filo resta scritto: «Portami lì» su una riga senza documento e
+      // senza progetto apre la riga che l'ha fatta nascere
+      madre?.id ?? null
+    )
     if (!nato) continue
     nuovi++
     prese.add(nato)
@@ -1060,12 +1073,12 @@ function ancoraViva(m: Materiale, adesso: number): { ancora: Ancora; creati: () 
     ancora: {
       aperti,
       chiuse: store.compitiChiusi(200).filter(c => (c.chiuso ?? '') >= limite).map(c => c.testo),
-      crea: (testo, doc, progetto) => {
+      crea: (testo, doc, progetto, madre) => {
         if (!testo) return null
         // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso
         const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
         store.scriviCompito({
-          id, testo, quando: 'oggi', origine: 'punto', doc, progetto,
+          id, testo, quando: 'oggi', origine: 'punto', doc, progetto, madre,
           ordine: ordine.dopo(store.ultimoOrdine('oggi'))
         })
         creati++

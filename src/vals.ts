@@ -164,6 +164,20 @@ export function ascoltaProgetto(f: () => void): () => void {
   return () => { inAscolto.delete(f) }
 }
 
+/**
+ * «Portami sul progetto», detto da chi non ha `v`.
+ *
+ * La lista di Oggi è una schermata sola, montata con la lista e niente altro:
+ * non conosce la colonna, non sa cambiare pagina, e va bene così. Ma «Portami
+ * lì» su una riga che non ha un documento porta sul progetto, e quello sta
+ * nella Memoria. Invece di far passare mezza app dentro i puntelli di `Oggi`,
+ * `useVals` lascia qui la sua mano: chi ce l'ha la usa, chi non ce l'ha lascia
+ * almeno il biglietto — la Memoria lo trova quando la si apre.
+ */
+let portaAllaMemoria: ((id: string) => void) | null = null
+export function registraPortaProgetto(f: ((id: string) => void) | null) { portaAllaMemoria = f }
+export function portaAlProgetto(id: string) { (portaAllaMemoria ?? chiediProgetto)(id) }
+
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
 const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
 const BOLLA_MIA: CSSProperties = {
@@ -921,6 +935,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
   })
 
+  /*
+   * Portare su un progetto: un biglietto per la Memoria e la schermata che
+   * cambia. Sta fuori dall'oggetto perché la registra anche `registraPortaProgetto`,
+   * per le schermate che non ricevono `v` — vedi lì sopra.
+   */
+  const apriProgetto = useCallback((id: string) => {
+    chiediProgetto(id)
+    setScreen('memoria'); setSearch(false); setMenu(false)
+  }, [])
+  useEffect(() => {
+    registraPortaProgetto(apriProgetto)
+    return () => registraPortaProgetto(null)
+  }, [apriProgetto])
+
   return {
     threadRef, cvA, cvB,
 
@@ -1120,10 +1148,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * in un elenco — quindi si lascia il biglietto, e la Memoria porta quella
      * riga sotto gli occhi appena si disegna.
      */
-    apriProgetto: (id: string) => {
-      chiediProgetto(id)
-      setScreen('memoria'); setSearch(false); setMenu(false)
-    },
+    apriProgetto,
     apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => {
         // il bottone sparisce insieme all'errore: invitarti a riprovare su una
         // cosa che non c'è è il modo di far sembrare rotta tutta l'app
