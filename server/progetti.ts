@@ -256,6 +256,39 @@ export function paroleDi(p: { nome: string; obiettivo: string }): string[] {
 }
 
 /**
+ * Questo testo *è* l'obiettivo, riscritto.
+ *
+ * Non «ne parla»: lo ripete. L'obiettivo di un progetto sta nell'istruzione
+ * del feed per una ragione sola — far capire al modello cosa NON riproporre —
+ * e la ragione è scritta lì in chiaro. Il quattordici settembre l'ha
+ * riproposto lo stesso, due volte nella stessa lettura: «Ship the finished
+ * site copy and offers live» è tornato indietro come «Ship live site copy for
+ * tobiadonadon.com» e «Ship finished site copy for tobiadonadon.com».
+ *
+ * Una frase in prosa il modello la disattende; un conto no. La soglia è alta
+ * apposta: una voce che parla davvero di quel progetto condivide due o tre
+ * parole con l'obiettivo, non quasi tutte. «Il cliente ha rimandato il testo
+ * del sito» ne condivide due e passa; l'obiettivo ricopiato ne condivide
+ * quattro su cinque e non passa.
+ */
+export function eLObiettivo(p: { nome: string; obiettivo: string }, testo: string): boolean {
+  const sue = paroleDi(p)
+  if (sue.length < 3) return false
+  const parole = new Set(
+    testo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !VUOTE.has(w))
+  )
+  if (parole.size < 3) return false
+  const comuni = sue.filter(w => parole.has(w)).length
+  return comuni >= 3 && comuni / Math.min(sue.length, parole.size) >= 0.75
+}
+
+/** Uno qualunque dei progetti vivi si riconosce riscritto in questo testo. */
+export function eUnObiettivo(testo: string, progetti = vivi()): boolean {
+  return progetti.some(p => eLObiettivo(p, testo))
+}
+
+/**
  * Questo testo tocca il progetto?
  *
  * Il nome intero, oppure due parole distintive dell'obiettivo: una sola

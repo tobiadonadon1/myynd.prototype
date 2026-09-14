@@ -11,6 +11,9 @@ import { giornoValido } from './giorno-compito.ts'
 import { parti } from './fuso.ts'
 import { CATALOGO } from './connettori/registro.ts'
 
+/** Quanto indietro si guarda per spiegare un progetto che comincia adesso. */
+const GIORNI_EVIDENZE = 180
+
 export type FattoAvvio = {
   id: string
   testo: string
@@ -103,8 +106,31 @@ function evidenze(s: Salvato): FattoAvvio[] {
   if (!s.progetto || !s.fonte) return []
   const p = s.progetto
   const documenti = [...store.cerca(p.nome, 30, [s.fonte]), ...store.cerca(p.obiettivo, 30, [s.fonte])]
+  /*
+   * E non quello che è vecchio.
+   *
+   * Questa ricerca guardava l'indice intero, senza guardare le date, e su
+   * questa persona ha pescato il suo curriculum: il progetto si chiama
+   * «H-Farm», che è anche la scuola che ha fatto, e «H-FARM» sta scritto dieci
+   * volte in un PDF di un anno fa. Da lì è uscita la frase che è diventata il
+   * suo primo compito, e da quel compito il punto ha staccato figli per giorni
+   * — «Identify who will own and score the clean number for the proof», che
+   * non vuol dire niente ed è una riga del suo curriculum.
+   *
+   * Un progetto che comincia adesso non si spiega con un file di un anno fa:
+   * si spiega con quello che sta succedendo. Sei mesi è largo — un contratto
+   * firmato a primavera spiega ancora — e taglia comunque un curriculum e i
+   * compiti dell'università.
+   *
+   * Il filtro sulla forma (`documentoVero`) qui non serve e farebbe danno: lì
+   * un `.md` non è un documento vero perché non è «arrivato», ma un appunto di
+   * progetto scritto a mano è esattamente la prova migliore che ci sia. E il
+   * curriculum, che è un PDF sulla scrivania, lo passerebbe comunque.
+   */
+  const soglia = Date.now() - GIORNI_EVIDENZE * 86_400_000
+  const recente = (d: store.Documento) => !d.quando || Date.parse(d.quando) >= soglia
   const unici = [...new Map(documenti.map(d => [d.id, d])).values()]
-    .filter(d => !d.massa && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
+    .filter(d => !d.massa && recente(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
   const perDocumento = unici.map(d => {
     // Markdown titles and metadata identify a document; they are not facts
     // about the project. Remove only structural lines, keeping body excerpts

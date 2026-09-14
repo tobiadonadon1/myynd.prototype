@@ -6,7 +6,7 @@ import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomia
 import * as attrezzi from './attrezzi.ts'
 import { attesaDi, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, motivo, motore, parametri, perIlCredito as senzaCredito, PRIMA_PAROLA, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
-import { cerca, documento, indirizzoDi, recenti, stessoFilo, type Documento } from './store.ts'
+import { cerca, compito as compitoDi, documento, indirizzoDi, recenti, stessoFilo, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
 import { linguaSbagliata, riflua, soloInLingua } from './testo.ts'
 import { documentoVero } from './veri.ts'
@@ -315,6 +315,12 @@ const SECCHI = ['oggi', 'settimana', 'poi']
  * capo: la lista è sua, e da qui si tocca solo quando lo dice lei.
  */
 const REGOLA_LISTA = `
+Sotto ogni riga c'è da dove viene: se ti chiede di una riga, la risposta è lì,
+e «non ne so niente» è la risposta sbagliata. Se una riga non dice da dove
+viene, dillo: è una cosa che hai proposto tu e non sai giustificare, e saperlo
+le serve. Gli id fra parentesi quadre servono agli strumenti e non si scrivono
+mai dentro una frase: si dice «dalla riga sull'audit», non il suo id.
+
 Questa lista la puoi toccare: «chiudi_compito» chiude una riga, «sposta_compito»
 la manda a un altro momento. Quattro regole, e non hanno eccezioni.
 
@@ -334,6 +340,9 @@ Dopo aver toccato la lista dillo in una riga sola, e di' cosa è cambiato.`
 
 /** Le stesse quattro regole, per il prompt compatto: quello che si perde sono i perché. */
 const REGOLA_LISTA_CORTA = `
+Sotto ogni riga c'è da dove viene: se ti chiede di una riga, rispondi con
+quello, non con «non ne so niente». Gli id non si scrivono dentro una frase.
+
 Questa lista la puoi toccare: «chiudi_compito» chiude una riga, «sposta_compito»
 la manda a un altro momento. Solo se te lo dice lei adesso, in questo messaggio:
 mai perché dal materiale sembra fatta. Gli id sono quelli fra parentesi quadre
@@ -378,6 +387,48 @@ function aRighe(testo: string, tetto: number): string {
  * per la rassegna che le nomina soltanto. Qui servono gli id, perché qui si
  * agisce.
  */
+/**
+ * Da dove viene una riga, in coda alla riga.
+ *
+ * «A volte mi propone un compito, poi glielo chiedo, e mi dice che non ne sa
+ * niente.» Non stava mentendo: nel prompt di ogni riga c'erano quattro cose —
+ * id, testo, stato, giorno — e nient'altro. Myynd aveva esattamente la stessa
+ * informazione che aveva lui, cioè la frase che stava già leggendo, e nessun
+ * modo di dire di più. «Non lo so» era la risposta onesta al suo stesso
+ * contesto.
+ *
+ * Qui si aggiunge quello che una riga sa di sé: da quale documento viene, per
+ * quale progetto, da quale altra riga, e chi l'ha scritta. Costa una riga di
+ * prompt per compito e risponde alla domanda che faceva lui.
+ */
+function daDove(c: Compito): string {
+  const pezzi: string[] = []
+  // Niente id qui dentro. L'id della riga sta già in testa, dove serve agli
+  // strumenti; scriverlo anche qui vuol dire che un modello piccolo lo copia in
+  // mezzo a una frase, e chi legge si trova «viene da [avvio-c550ad96-baf3]».
+  // Quello che serve a rispondere è il *nome* della cosa, non il suo numero.
+  if (c.doc) {
+    const d = documento(c.doc)
+    if (d) pezzi.push(`dal documento «${d.titolo}»`)
+  }
+  if (c.progetto) {
+    const p = progetti.trova(c.progetto)
+    if (p) pezzi.push(`per il progetto ${p.nome}`)
+  }
+  if (c.madre) {
+    const m = compitoDi(c.madre)
+    pezzi.push(m ? `nata da un'altra riga della lista, «${m.testo.slice(0, 80)}»` : 'nata da un\'altra riga della lista')
+  }
+  if (c.origine === 'punto') pezzi.push('proposta da te nel punto del giorno')
+  else if (c.origine === 'feed') pezzi.push('presa da una voce del feed')
+  else if (c.origine === 'avvio') pezzi.push('scritta al primo avvio')
+  else if (c.origine?.startsWith('auto:')) pezzi.push('scritta da un\'automazione')
+  else if (c.origine === 'chat') pezzi.push('scritta in chat')
+  else if (c.origine === 'mano') pezzi.push('scritta a mano da lei')
+  if (c.nota) pezzi.push(`nota: ${c.nota.slice(0, 120).replace(/\s+/g, ' ')}`)
+  return pezzi.length ? `\n    ${pezzi.join(' · ')}` : ''
+}
+
 function laSuaLista(compatto = false): string {
   // Per scaffale prima che per posizione, come fa `compitiPerIlModello` per la
   // rassegna: `elencoCompiti()` torna nell'ordine della lista, e tagliando a
@@ -389,7 +440,7 @@ function laSuaLista(compatto = false): string {
     .sort((a, b) => peso(a.quando) - peso(b.quando))
     .slice(0, compatto ? COMPITI_COMPATTI : COMPITI_NEL_PROMPT)
   if (!righe.length) return '\nLa sua lista è vuota: non c\'è niente da chiudere né da spostare.'
-  const voci = righe.map(c => `[${c.id}] ${c.testo} (${c.stato}, ${c.giorno || c.quando})`)
+  const voci = righe.map(c => `[${c.id}] ${c.testo} (${c.stato}, ${c.giorno || c.quando})${daDove(c)}`)
   return `\nQuello che ha in lista adesso, con il suo id:\n${voci.join('\n')}\n${compatto ? REGOLA_LISTA_CORTA : REGOLA_LISTA}`
 }
 
@@ -641,9 +692,20 @@ function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], co
             // nascevano le risposte che finiscono con «chiarisci la fonte» e
             // «potrei cercare altrove», che sono un modello che spiega perché
             // non ha fatto una cosa che non poteva fare.
+            //
+            // E «non c'è niente» vale per i *documenti*, non per quello che
+            // Myynd sa di suo. La riga di prima diceva «dillo in una riga e
+            // basta», e chiudeva la bocca anche sulle domande che non
+            // riguardano un documento: «di cosa parla questa riga della mia
+            // lista?» non si cerca nell'indice, si legge nell'elenco che sta
+            // qui sopra nel prompt. Lui l'ha visto così — gli propone un
+            // compito, glielo chiede, e Myynd risponde che non ne sa niente.
             : compatto
-              ? `Nel suo materiale non c'è niente che risponda a questa domanda. Dillo in ` +
-                `una riga e basta.\n\n---\n\nDomanda: ${domanda}`
+              ? `Fra i suoi documenti non c'è niente che risponda. Se la domanda riguarda ` +
+                `la sua lista, i suoi progetti o quello che sai di lei, rispondi con quello ` +
+                `che hai qui sopra: è roba tua, non è materiale da cercare. Se invece la ` +
+                `risposta starebbe in un documento, dillo in una riga e basta.` +
+                `\n\n---\n\nDomanda: ${domanda}`
               : `La prima ricerca con le sue parole non ha trovato niente. NON dire ancora ` +
                 `che non c'è: usa \`cerca\` con parole diverse, e se può essere scritto in ` +
                 `un'altra lingua, con quelle.\n\n---\n\nDomanda: ${domanda}`,
@@ -1522,6 +1584,25 @@ Scrivi in ${nellaLingua()}.`),
         perche: typeof v.perche === 'string' ? v.perche.trim() : '',
         doc: veri.has(v.doc) ? v.doc : (perTitolo.get(v.doc) ?? '')
       }))
+      /*
+       * E fuori quelle che sono l'obiettivo di un progetto, riscritto.
+       *
+       * L'istruzione lo dice tre volte — nel blocco degli obiettivi, in quello
+       * della lista, e nel corpo: «questi obiettivi non sono mai l'argomento
+       * di una voce». Il quattordici settembre il modello le ha scritte lo
+       * stesso, due nello stesso giro: «Ship the finished site copy and offers
+       * live» è tornato indietro spezzato in «Ship live site copy for
+       * tobiadonadon.com» e «Ship finished site copy for tobiadonadon.com».
+       *
+       * Una frase in prosa la si può disattendere, un conto no. Sta qui e non
+       * in `salvaFeed` perché è una regola su cosa è una notizia, non su cosa
+       * è un doppione: `progetti.eUnObiettivo` ne è il criterio.
+       */
+        .filter(v => {
+          if (!suoi.length || !progetti.eUnObiettivo(`${v.titolo} ${v.testo ?? ''}`, suoi)) return true
+          console.warn(`myynd · lettura: «${v.titolo}» è l'obiettivo di un progetto riscritto, non una notizia`)
+          return false
+        })
     } catch {
       return []
     }

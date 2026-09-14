@@ -134,7 +134,7 @@ const PASTIGLIA: CSSProperties = {
  * «mano» non torna niente: l'ha scritta lui, e dirgli da dove viene sarebbe
  * una presa in giro.
  */
-function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } | null {
+function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: () => void } | null {
   if (c.doc) {
     const doc = c.doc
     // «il file contratto-nextas.pdf»: il nome, mai la strada per arrivarci —
@@ -149,10 +149,27 @@ function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } 
     const nome = v.progetti.find(p => p.id === id)?.nome ?? ''
     return { testo: nome ? `${t('il progetto')} ${nome}` : t('il progetto'), apri: () => v.apriProgetto(id) }
   }
-  if (c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
+  /*
+   * La riga da cui è nata, che non si leggeva da nessuna parte.
+   *
+   * `madre` c'è sul disco da giorni e qui non veniva nemmeno guardata: una
+   * riga nata dalle domande di un'altra non diceva niente, e lui chiedeva
+   * «chi me l'ha chiesto? da dove viene?». La riga madre è la risposta, ed è
+   * anche un posto dove andare.
+   */
+  if (c.madre) {
+    const id = c.madre
+    // stessa strada di «Portami lì» quando il posto è una riga: la lista
+    // apre il dettaglio appena la vede
+    return { testo: t('la riga che l’ha fatta nascere'), apri: () => { l?.chiediDiAprire(id); v.goOggi() } }
+  }
+  // «chat» e le automazioni: i due rami di prima cercavano parole che nessuno
+  // scrive più — `origine` vale 'chat', e un'automazione scrive 'auto:<id>' —
+  // quindi quelle righe non dicevano da dove venivano
+  if (c.origine === 'chat' || c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
   if (c.origine === 'punto') return { testo: t('il punto del giorno') }
   if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
-  if (c.origine === 'automazione') return { testo: t('un’automazione') }
+  if (c.origine?.startsWith('auto:') || c.origine === 'automazione') return { testo: t('un’automazione') }
   if (c.origine === 'feed') return { testo: t('il feed') }
   return null
 }
@@ -174,8 +191,8 @@ function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } 
  * risale — dentro una riga della lista aprirebbe anche la riga — e il nome si
  * ferma con i tre puntini invece di spingere fuori la card.
  */
-function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
-  const da = provenienza(c, v)
+function Prove({ c, v, l, scuro }: { c: Compito; v: Vals; l?: Lista; scuro?: boolean }) {
+  const da = provenienza(c, v, l)
   if (!da) return null
   const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
   const acceso = scuro ? '#FFF7F0' : '#8E3F1F'
@@ -341,7 +358,7 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
         )}
         {/* da dove viene e cosa ha letto: la riga si apre in cima, il documento
             si apre solo da qui — e da nessun altro punto della riga */}
-        <Prove c={c} v={v} />
+        <Prove c={c} v={v} l={l} />
       </div>
 
       {/* il posto vero da cui viene, aperto sul Mac. Sempre visibile — al
@@ -433,7 +450,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         </div>
       )}
 
-      <Prove c={c} v={v} scuro />
+      <Prove c={c} v={v} l={l} scuro />
 
       {/* a capo invece che fuori: con un bottone in più questa fascia, in una
           finestra stretta, usciva dalla carta — e il testo che sfora non è un
@@ -477,7 +494,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         )}
 
         <div style={{ flex: 1 }} />
-        <BottoneSicuro fai={() => l.elimina(c.id)} titolo={t('Toglila')} chiaro
+        <BottoneSicuro fai={() => l.elimina(c.id)} titolo={t('Toglila')} chiaro subito
           style={{ padding: '12px 4px', fontSize: 13 }}>{t('Toglila')}</BottoneSicuro>
       </div>
 

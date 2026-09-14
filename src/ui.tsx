@@ -219,13 +219,15 @@ function Sicuro({ armato, children }: { armato: boolean; children: ReactNode }) 
  * una volta. Armato prende il colore dell'accento e dice «Sicuro?» nello stesso
  * spazio; uscire con il tab, o qualche secondo di attesa, lo disarma.
  */
-export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
+export function BottoneSicuro({ fai, guaio, titolo, chiaro, subito, style, children }: {
   fai: () => void | Promise<void>
   /** Dove dire che `fai` non ce l'ha fatta. Senza, il guasto resta a chi ha scritto `fai`. */
   guaio?: (frase: string) => void
   titolo?: string
   /** Su fondo scuro. */
   chiaro?: boolean
+  /** Fa e basta, senza chiedere: vedi `subito` in `Cestino`. */
+  subito?: boolean
   style?: CSSProperties
   children: ReactNode
 }) {
@@ -234,7 +236,12 @@ export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
   const acceso = chiaro ? '#FFFFFF' : '#8E3F1F'
   return (
     <Hov as="button" type="button"
-      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai, guaio && (x => guaio(x instanceof Error ? x.message : String(x)))) }}
+      onClick={(e: MouseEvent) => {
+        e.stopPropagation()
+        const male = guaio && ((x: unknown) => guaio(x instanceof Error ? x.message : String(x)))
+        if (subito) { const r = fai(); if (r instanceof Promise && male) r.catch(male); return }
+        chiedi(fai, male)
+      }}
       // niente disarmo al passaggio del mouse: bastava spostarsi di un pelo e la
       // domanda spariva; resta il tempo di useConferma, e il tab che esce
       onBlur={disarma}
@@ -261,7 +268,7 @@ export function BottoneSicuro({ fai, guaio, titolo, chiaro, style, children }: {
  * titolo accanto. Il bottone resta al suo posto, trasparente, finché la riga
  * non è sotto mano: così non salta niente né quando compare né quando chiede.
  */
-export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona = 12, chiaro, style }: {
+export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona = 12, chiaro, subito, style }: {
   fai: () => void | Promise<void>
   /** Come in `BottoneSicuro`: dove dire che `fai` non ce l'ha fatta. */
   guaio?: (frase: string) => void
@@ -272,6 +279,20 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
   icona?: number
   /** Su fondo scuro. */
   chiaro?: boolean
+  /**
+   * Fa e basta, senza chiedere.
+   *
+   * «A volte quando cancello delle cose mi chiede *Sicuro?*. Deve smettere.»
+   * Ha ragione dove la cosa si può disfare: togliere una riga dalla lista non
+   * la cancella, le scrive addosso la data in cui è sparita, e la riga può
+   * tornare. Chiedere conferma per una cosa reversibile è solo un clic in più
+   * su un gesto che si fa dieci volte al giorno.
+   *
+   * Resta dov'è invece per quello che non torna: scollegare una casella,
+   * buttare un'automazione scritta a mano, dimenticare una convinzione,
+   * cancellare una chat. Lì la domanda non è attrito, è l'ultima occasione.
+   */
+  subito?: boolean
   style?: CSSProperties
 }) {
   const { armato, chiedi, disarma } = useConferma()
@@ -280,7 +301,12 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
   const mostra = visibile || armato
   return (
     <Hov as="button" type="button"
-      onClick={(e: MouseEvent) => { e.stopPropagation(); chiedi(fai, guaio && (x => guaio(x instanceof Error ? x.message : String(x)))) }}
+      onClick={(e: MouseEvent) => {
+        e.stopPropagation()
+        const male = guaio && ((x: unknown) => guaio(x instanceof Error ? x.message : String(x)))
+        if (subito) { const r = fai(); if (r instanceof Promise && male) r.catch(male); return }
+        chiedi(fai, male)
+      }}
       onKeyDown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
       onMouseLeave={disarma} onBlur={disarma}
       title={armato ? t('Sicuro?') : titolo} aria-label={armato ? t('Sicuro?') : titolo}

@@ -2046,7 +2046,19 @@ app.post('/api/feed/fuoco', (req, res) => {
 })
 
 app.post('/api/feed/:id/:stato', (req, res) => {
-  store.cambiaStatoFeed(req.params.id, req.params.stato === 'fatto' ? 'fatto' : 'aperto')
+  /*
+   * «Fatto» lascia scritto che era già fatto.
+   *
+   * Il bottone della spunta non scriveva nessun motivo, e alla lettura dopo il
+   * modello leggeva «— «Ship live site copy» → fatto» e basta: uno stato senza
+   * una ragione, che non dice se era già fatto da prima o se l'ha fatto adesso.
+   * «This has already been done, and I already told them that it has been
+   * done» — e la volta dopo gliel'ha riproposta con una parola cambiata.
+   * Rimetterla in aperto invece è un ripensamento, e un ripensamento non è un
+   * motivo: lì il motivo di prima si cancella.
+   */
+  const fatto = req.params.stato === 'fatto'
+  store.cambiaStatoFeed(req.params.id, fatto ? 'fatto' : 'aperto', fatto ? 'Già fatto.' : '')
   res.json({ ok: true })
   compiti.annunciaFeed()
 })

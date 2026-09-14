@@ -31,6 +31,7 @@ import { join } from 'node:path'
 import { cartella, lingua, nellaLingua } from './config.ts'
 import { attesaDi, chiedi, collegato, estraiJSON } from './modello.ts'
 import { linguaSbagliata, senzaTrattini, soloInLingua } from './testo.ts'
+import { radice } from './lingua.ts'
 import { documentoVero } from './veri.ts'
 import * as store from './store.ts'
 import { attendibile, carta } from './memoria.ts'
@@ -225,8 +226,13 @@ function alPresente(p: Punto): Punto {
  * segno suo per la posta promozionale, questa riga lo userà al posto del
  * proprio fiuto — ma un punto che apre con «è arrivata la newsletter di
  * Vinted» è un punto che non si legge più dal secondo giorno.
+ *
+ * `renewals@`, `alerts@`, `updates@`, `automated@`, `billing@`: caselle da cui
+ * parte posta e in cui non entra risposta. «Mi dice di certe email tipo i
+ * rinnovi» — quella era `renewals@godaddy.com`, e il rinnovo automatico di un
+ * dominio non aspetta niente da nessuno.
  */
-const IN_MASSA = /no-?reply|not?-?reply|newsletter|notifications?@|mailer|donotreply|noreply|marketing@|news@|info@|promo/i
+const IN_MASSA = /no-?reply|not?-?reply|newsletter|notifications?@|mailer|donotreply|noreply|marketing@|news@|info@|promo|renewals?@|alerts?@|updates?@|automated@|billing@/i
 
 export function inMassa(d: store.Documento): boolean {
   // la posta letta dopo oggi porta il segno dal connettore (`massa`, dalle
@@ -321,7 +327,20 @@ export function raccogli(dal: string, primo = false): Materiale {
   const scartate = [...store.elencoFeed('scartato'), ...store.elencoFeed('scaduto')]
   const docsScartati = new Set(scartate.map(v => v.doc).filter((d): d is string => !!d))
   const lasciate = store.compitiChiusi(80).filter(c => c.stato === 'lasciato')
-  const docsLasciati = new Set(lasciate.map(c => c.doc).filter((d): d is string => !!d))
+  /*
+   * E quelle che ha buttato via, che sono la stessa cosa detta più forte.
+   *
+   * Una riga tolta col cestino non diventa «lasciato»: `scordaCompito` scrive
+   * solo `sparito` e lo stato resta «aperto». Da lì in poi non esisteva per
+   * nessuno, e il punto la riproponeva al giro dopo — il quattordici settembre
+   * tre alle 16:33, tre alle 17:42, una identica parola per parola. Adesso il
+   * gesto vale quanto vale: il testo si nomina fra le cose che non interessano,
+   * e il documento da cui veniva smette di essere materiale.
+   */
+  const tolte = store.compitiTolti(GIORNI_TOLTE)
+  const docsLasciati = new Set(
+    [...lasciate, ...tolte].map(c => c.doc).filter((d): d is string => !!d)
+  )
   const mittenti = store.mittentiScartati()
   const daMittenteScartato = (d: store.Documento) => {
     const ind = (store.indirizzoDi(d.autore) ?? '').toLowerCase()
@@ -329,10 +348,25 @@ export function raccogli(dal: string, primo = false): Materiale {
     const dominio = ind.slice(ind.indexOf('@') + 1)
     return mittenti.indirizzi.includes(ind) || mittenti.domini.includes(dominio)
   }
-  const fuori = (d: store.Documento) => docsScartati.has(d.id) || docsLasciati.has(d.id) || inMassa(d) || daMittenteScartato(d)
+  /*
+   * E i documenti che hanno già dato una riga alla lista.
+   *
+   * Il feed questa rete ce l'ha da sempre — `docsConRiga`, che guarda le righe
+   * vive, chiuse *e* buttate — e il punto no: rileggeva lo stesso documento a
+   * ogni giro e ne ricavava un'altra volta le stesse cose da fare. Il
+   * quattordici settembre lo stesso curriculum ha prodotto righe su H-FARM
+   * alle 13:58 e di nuovo alle 17:42.
+   *
+   * Trenta giorni, come il feed: un documento che ha già chiesto qualcosa ha
+   * già chiesto.
+   */
+  const conRiga = store.docsConRiga(arrivati.map(d => d.id), undefined, GIORNI_CON_RIGA)
+  const fuori = (d: store.Documento) =>
+    docsScartati.has(d.id) || docsLasciati.has(d.id) || conRiga.has(d.id) || inMassa(d) || daMittenteScartato(d)
   const nonInteressa = [
     ...scartate.slice(0, 12).map(v => v.titolo),
-    ...lasciate.slice(0, 6).map(c => c.testo)
+    ...lasciate.slice(0, 6).map(c => c.testo),
+    ...tolte.slice(0, 12).map(c => c.testo)
   ].filter(Boolean)
   /*
    * Quello che ha fatto Myynd da solo non è una notizia.
@@ -587,6 +621,10 @@ Cosa NON è una notizia, mai:
 — Quello che ha fatto Myynd da solo (automazioni, letture) non è una notizia.
 — Un file sul disco è una notizia solo se è un documento vero arrivato adesso:
   una fattura, un contratto, una bozza.
+— Un documento segnato VECCHIO è entrato nell'indice adesso ma è stato scritto
+  mesi fa: non è successo niente, è solo un file che era lì. Non è una notizia
+  e non ci si ricava niente da fare. Un curriculum, un vecchio compito
+  dell'università, un modello di documento: non sono cose che aspettano lui.
 — Le cose tecniche (server, deploy, log) non entrano nel punto, a meno che non
   vengano da GitHub, e allora stanno nella loro sezione.
 
@@ -639,8 +677,27 @@ function ore(daIso: string, adesso: number): number {
  * vero, e non chiedeva niente a nessuno.
  */
 export function materiale(m: Materiale, via: number | null | undefined, adesso: number): string {
+  /*
+   * La data del documento, che mancava.
+   *
+   * Il blocco si intitola «ARRIVATO … i più nuovi prima», e l'istruzione dice
+   * «un file sul disco è una notizia solo se è un documento vero arrivato
+   * adesso». Ma «arrivato» qui vuol dire «entrato nell'indice adesso», che è
+   * un'altra cosa: una cartella collegata stamattina fa entrare tutto insieme,
+   * vecchio e nuovo. E la data del documento non gliela si diceva. Gli si
+   * chiedeva di distinguere una fattura di ieri da un curriculum dell'anno
+   * scorso a occhi chiusi, e il quattordici settembre ha messo in lista tre
+   * cose ricavate da un curriculum di un anno fa.
+   */
+  const quando = (d: store.Documento) => {
+    if (!d.quando) return ''
+    const giorni = Math.floor((adesso - Date.parse(d.quando)) / 86_400_000)
+    if (!Number.isFinite(giorni)) return ''
+    return ` · del ${d.quando.slice(0, 10)}${giorni >= GIORNI_VECCHIO ? ` (VECCHIO: ${giorni} giorni fa)` : ''}`
+  }
+
   const documento = (d: store.Documento) =>
-    `— id: ${d.id}\n  ${d.titolo}${d.autore ? ` · da ${d.autore}` : ''} · ${d.fonte}\n  ${d.corpo.slice(0, CORPO_MAX).replace(/\s+/g, ' ')}`
+    `— id: ${d.id}\n  ${d.titolo}${d.autore ? ` · da ${d.autore}` : ''} · ${d.fonte}${quando(d)}\n  ${d.corpo.slice(0, CORPO_MAX).replace(/\s+/g, ' ')}`
 
   // il progetto sulla riga: è il filo che una cosa nata dalle sue domande
   // eredita, e senza scriverlo qui il modello non ha modo di nominarlo
@@ -721,7 +778,33 @@ function paroleDi(s: string): Set<string> {
       .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
       .split(/\s+/)
       .filter(p => p.length >= 4)
+      .map(radiceDiDue)
   )
+}
+
+/**
+ * La radice, in tutte e due le lingue dell'app.
+ *
+ * `radice` è italiana: toglie le code e la vocale finale, e su «steps» non ha
+ * niente da dire — la esse del plurale inglese non la conosce. Ma questa
+ * persona scrive la lista in inglese, e «Define the next step» e «define next
+ * steps» sono la stessa frase: senza la esse restavano due cose, e il punto
+ * gliele ha messe in lista tutte e due.
+ *
+ * La esse si toglie prima, e solo dove è un plurale: almeno cinque lettere, e
+ * non dopo un'altra esse («address») né dopo una i («analisi»). Poi passa da
+ * `radice` come prima. In italiano una parola che finisce per esse è quasi
+ * sempre straniera, e toglierle la coda non cambia niente a chi la confronta
+ * con sé stessa.
+ */
+function radiceDiDue(p: string): string {
+  const senzaEsse = p.length >= 5 && /[^si]s$/.test(p) ? p.slice(0, -1) : p
+  return radice(senzaEsse)
+}
+
+/** I numeri dentro una frase: sono loro a distinguere due cose che si somigliano. */
+function numeriDi(s: string): Set<string> {
+  return new Set((s.match(/\d+/g) ?? []).filter(n => n.length >= 2))
 }
 
 /**
@@ -736,13 +819,49 @@ function paroleDi(s: string): Set<string> {
  * che si vede, e lascia passare due righe che parlano davvero di due cose.
  */
 export function ridondante(a: string, b: string): boolean {
+  /*
+   * I numeri prima delle parole.
+   *
+   * «Paga la fattura 123 di Rossi» e «Paga la fattura 124 di Rossi» sono due
+   * cose, e tutte le parole che contano ce l'hanno in comune: qualunque conto
+   * sulle parole dice che sono la stessa. La differenza è tutta nel numero, ed
+   * è il numero che distingue una fattura da un'altra, una versione da
+   * un'altra, un'unità da un'altra. Se tutte e due ne hanno e non ne
+   * condividono nemmeno uno, sono due cose e non si discute.
+   */
+  const na = numeriDi(a)
+  const nb = numeriDi(b)
+  if (na.size && nb.size && ![...na].some(n => nb.has(n))) return false
+
   const x = paroleDi(a)
   const y = paroleDi(b)
   if (!x.size || !y.size) return false
   let comuni = 0
   for (const p of x) if (y.has(p)) comuni++
-  return comuni / (x.size + y.size - comuni) >= 0.5
+  if (comuni / (x.size + y.size - comuni) >= 0.5) return true
+
+  /*
+   * La seconda rete: una frase che sta dentro l'altra.
+   *
+   * Jaccard punisce la frase lunga. «Conferma quale unità di H-FARM guarda
+   * l'audit» e «Conferma l'unità H-FARM e definisci i passi dopo» hanno quattro
+   * parole in comune su sei e su sette: per Jaccard fanno 0,44 e passano tutte e
+   * due, e il quattordici settembre sono passate davvero, a tre ore e mezza di
+   * distanza, dopo che lui aveva buttato la prima.
+   *
+   * Contando invece sulla più corta delle due fanno 0,67: quasi tutta la prima
+   * frase sta dentro la seconda, ed è quello che vuol dire «me l'hai già detto».
+   * Le tre parole minime tengono fuori le frasi da due parole, dove una sola in
+   * comune farebbe uno su uno — «Paga fattura 123» e «Paga fattura 124».
+   */
+  const dentro = comuni / Math.min(x.size, y.size)
+  return comuni >= COMUNI_MIN && dentro >= DENTRO_MIN
 }
+
+/** Quante parole in comune servono perché «una sta dentro l'altra» voglia dire qualcosa. */
+const COMUNI_MIN = 3
+/** Quanta parte della frase più corta deve stare nell'altra. */
+const DENTRO_MIN = 0.6
 
 /**
  * Una cosa da fare vista nel materiale, con da dove viene.
@@ -977,6 +1096,12 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
 export const NUOVI_MAX = 3
 /** Quanto indietro si guarda fra le cose chiuse, per non richiedere una cosa già fatta. */
 const GIORNI_CHIUSE = 14
+/** Per quanto si ricorda una riga buttata via. Più delle chiuse: buttarla è più netto. */
+const GIORNI_TOLTE = 30
+/** Oltre questi giorni un documento non è successo adesso, e lo si dice al modello. */
+const GIORNI_VECCHIO = 30
+/** Per quanto un documento che ha già dato una riga alla lista resta fuori dal materiale. */
+const GIORNI_CON_RIGA = 30
 
 /** Il testo di una cosa da fare come si legge in lista: senza il punto in fondo. */
 const senzaPunto = (s: string) => s.trim().replace(/[.;:·]+$/, '').trim()
@@ -992,8 +1117,16 @@ export type Ancora = {
    * l'ha generata, altrimenti nasce senza niente da aprire.
    */
   aperti: { id: string; testo: string; doc?: string | null; progetto?: string | null }[]
-  /** I testi delle righe chiuse di recente: una cosa già fatta non si riscrive. */
+  /** I testi delle righe chiuse di recente, e di quelle buttate: una cosa già detta non si riscrive. */
   chiuse: string[]
+  /**
+   * Le righe che hanno già fatto nascere altre righe — vedi `madreBuona`.
+   *
+   * Si legge e si scrive: quelle di prima arrivano dal disco, e quelle di
+   * questo giro si aggiungono man mano, così tre cose proposte sulla stessa
+   * madre non diventano tre figlie nello stesso momento.
+   */
+  madri: Set<string>
   /**
    * Scrive la riga nuova e torna il suo id.
    *
@@ -1023,6 +1156,28 @@ export type Ancora = {
  * Torna gli id delle righe toccate, nell'ordine: alla pagina non arriva
  * niente di tutto questo, e il posto dove si vede è la lista.
  */
+/**
+ * Una riga può farne nascere un'altra? Due condizioni, e sono la stessa.
+ *
+ * *Sa dove sta.* Una riga con un documento o un progetto è ancorata a qualcosa
+ * che esiste fuori da Myynd. Una riga che non ha né l'uno né l'altro è stata
+ * inventata da Myynd, e costruirci sopra vuol dire inventare due volte: il
+ * quattordici settembre «Deadline for H-Farm AI Systems solidification» —
+ * nata da una voce del feed, senza documento — ha fatto nascere «Confirm the
+ * target H-FARM unit and define next steps», che infatti non apriva niente.
+ *
+ * *Non ha già parlato.* Il punto gira ogni tre ore e rilegge la stessa riga
+ * aperta: senza questa condizione ne stacca figli finché resta aperta. Una
+ * riga dell'avvio ne aveva fatti nascere quattro, a giorni di distanza, e
+ * nessuno li aveva chiesti.
+ */
+function madreBuona(c: Ancora['aperti'][number] | null, ctx: Ancora): Ancora['aperti'][number] | null {
+  if (!c) return null
+  if (!c.doc && !c.progetto) return null
+  if (ctx.madri.has(c.id)) return null
+  return c
+}
+
 export function ancoraAlleRighe(notate: Notata[], ctx: Ancora): string[] {
   const prese = new Set<string>()
   let nuovi = 0
@@ -1041,16 +1196,37 @@ export function ancoraAlleRighe(notate: Notata[], ctx: Ancora): string[] {
      * stava: aveva il progetto, e a volte la mail. Qui quel che sa la madre
      * passa alla figlia, e quel che ha detto il modello viene prima.
      */
-    const madre = r.compito ? ctx.aperti.find(c => c.id === r.compito) ?? null : null
+    const proposta = r.compito ? ctx.aperti.find(c => c.id === r.compito) ?? null : null
+    const madre = madreBuona(proposta, ctx)
+    const doc = r.doc ?? madre?.doc ?? null
+    const progetto = r.progetto ?? madre?.progetto ?? null
+
+    /*
+     * Una riga che non sa da dove viene non nasce.
+     *
+     * L'istruzione lo chiede da sempre — «almeno uno dei tre va riempito» — e
+     * lo spiega bene: «una cosa da fare che non apre niente è una cosa da fare
+     * che lui non può fare». Ma era una frase, e le frasi il modello le
+     * disattende: lo schema accetta tre stringhe vuote, e qui si scriveva lo
+     * stesso. Il quattordici settembre in prima pagina c'era «Confirm the
+     * target H-FARM unit and define next steps» senza documento, senza
+     * progetto e senza madre — e la sua domanda è stata esattamente quella:
+     * «chi me l'ha chiesto? da dove viene? perché non c'è Portami lì?».
+     * Nessuna delle tre aveva una risposta, perché la riga non la conteneva.
+     */
+    if (!doc && !progetto && !madre) continue
+
     const nato = ctx.crea(
       senzaPunto(r.testo),
-      r.doc ?? madre?.doc ?? null,
-      r.progetto ?? madre?.progetto ?? null,
+      doc,
+      progetto,
       // e il filo resta scritto: «Portami lì» su una riga senza documento e
       // senza progetto apre la riga che l'ha fatta nascere
       madre?.id ?? null
     )
     if (!nato) continue
+    // da adesso quella madre ha parlato: al giro dopo non ne stacca altre
+    if (madre) ctx.madri.add(madre.id)
     nuovi++
     prese.add(nato)
   }
@@ -1072,7 +1248,13 @@ function ancoraViva(m: Materiale, adesso: number): { ancora: Ancora; creati: () 
     creati: () => creati,
     ancora: {
       aperti,
-      chiuse: store.compitiChiusi(200).filter(c => (c.chiuso ?? '') >= limite).map(c => c.testo),
+      // chiuse *e* buttate: per la rete che decide se una cosa è già stata
+      // detta, «l'ho fatta» e «non la voglio» sono la stessa risposta
+      chiuse: [
+        ...store.compitiChiusi(200).filter(c => (c.chiuso ?? '') >= limite).map(c => c.testo),
+        ...store.compitiTolti(GIORNI_TOLTE).map(c => c.testo)
+      ],
+      madri: store.madriUsate(),
       crea: (testo, doc, progetto, madre) => {
         if (!testo) return null
         // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso

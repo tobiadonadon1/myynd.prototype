@@ -461,7 +461,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
         )}
 
         {/* toglierla chiede una volta, sul posto: la stessa regola di ogni cestino qui dentro */}
-        <Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} visibile={mostra} dim={20} icona={11} />
+        {/* togliere una riga non la cancella: le scrive la data in cui è sparita,
+            e può tornare. Per una cosa che si disfa, «Sicuro?» è solo un clic in più */}
+        <Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} visibile={mostra} dim={20} icona={11} subito />
       </div>
 
       <div role="radiogroup" aria-label={c.testo} style={{ display: 'contents' }}>

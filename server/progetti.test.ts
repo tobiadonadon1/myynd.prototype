@@ -181,3 +181,29 @@ test('rinominare conserva le decisioni e rifiuta nomi già usati', () => {
   assert.equal(r.ambito, 'progetto:Acme Studio')
   assert.throws(() => progetti.cambia(p.id, { nome: 'beta' }), /già un progetto/)
 })
+
+/*
+ * L'obiettivo riscritto non è una notizia.
+ *
+ * Il quattordici settembre il feed gli ha proposto due volte l'obiettivo del
+ * suo progetto, tagliato in due: «Ship the finished site copy and offers live»
+ * è tornato come «Ship live site copy for tobiadonadon.com» e «Ship finished
+ * site copy for tobiadonadon.com». Una delle due l'aveva già data per fatta,
+ * e infatti la sua frase è stata: «This has already been done, and I already
+ * told them that it has been done».
+ */
+test('un obiettivo riscritto si riconosce, e una notizia vera no', () => {
+  const p = { nome: 'tobiadonadon.com', obiettivo: 'Ship the finished site copy and offers live.' }
+
+  assert.ok(progetti.eLObiettivo(p, 'Ship live site copy for tobiadonadon.com'))
+  assert.ok(progetti.eLObiettivo(p, 'Ship finished site copy for tobiadonadon.com'))
+  assert.ok(progetti.eLObiettivo(p, 'Ship the finished site copy and offers live'))
+
+  // queste parlano del progetto senza esserlo: devono passare
+  assert.equal(progetti.eLObiettivo(p, 'Client sent revised site copy for review'), false)
+  assert.equal(progetti.eLObiettivo(p, 'Hosting invoice for tobiadonadon.com is due Friday'), false)
+  assert.equal(progetti.eLObiettivo(p, 'Milena replied about the noise complaint'), false)
+
+  // un obiettivo di due parole non basta a giudicare: nel dubbio passa
+  assert.equal(progetti.eLObiettivo({ nome: 'X', obiettivo: 'Crescere.' }, 'Crescere di più'), false)
+})

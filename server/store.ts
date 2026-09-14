@@ -2375,6 +2375,50 @@ function stessoTitolo(a: string, b: string): boolean {
   return comuni / unione >= 0.6
 }
 
+/**
+ * Due titoli che sono lo stesso titolo riscritto, e non due cose che si somigliano.
+ *
+ * La differenza conta perché decide se il documento può smentire le parole.
+ * Due fatture dello stesso fornitore hanno titoli quasi uguali e documenti
+ * diversi: sono due cose, e il documento ha ragione. Ma
+ * «Ship live site copy for tobiadonadon.com» e «Ship finished site copy for
+ * tobiadonadon.com» non sono due cose: è una frase con una parola cambiata.
+ *
+ * Il quattordici settembre sono arrivate tutte e due nello stesso giro. Il
+ * conto sulle parole le avrebbe prese — quattro in comune su cinque — ma non è
+ * stato nemmeno consultato: lo schema obbliga ogni voce a nominare un
+ * documento, il modello le aveva inventate dall'obiettivo di un progetto, e
+ * per forza le ha appese a due documenti a caso. Documenti diversi, e la rete
+ * dei titoli saltava.
+ *
+ * Qui la soglia è quasi uno: quattro parole su cinque della più corta. A
+ * questa distanza due documenti diversi non vogliono dire due cose, vogliono
+ * dire che almeno uno dei due riferimenti è sbagliato.
+ */
+function titoloRiscritto(a: string, b: string): boolean {
+  // I numeri prima delle parole: «Fattura 123» e «Fattura 124» hanno tutte le
+  // parole in comune e sono due fatture. È il numero a distinguerle, ed è
+  // proprio il numero che `paroleDi` butta via perché è corto.
+  const na = numeriDi(a), nb = numeriDi(b)
+  if (na.size && nb.size && ![...na].some(n => nb.has(n))) return false
+
+  const pa = paroleDi(a), pb = paroleDi(b)
+  if (pa.size < PAROLE_MIN_RISCRITTO || pb.size < PAROLE_MIN_RISCRITTO) return false
+  let comuni = 0
+  for (const p of pa) if (pb.has(p)) comuni++
+  return comuni / Math.min(pa.size, pb.size) >= DENTRO_RISCRITTO
+}
+
+/** I numeri dentro un titolo: fatture, versioni, unità. Sono loro a distinguere. */
+function numeriDi(s: string): Set<string> {
+  return new Set((s.match(/\d+/g) ?? []).filter(n => n.length >= 2))
+}
+
+/** Sotto queste parole un titolo è troppo corto perché «riscritto» voglia dire qualcosa. */
+const PAROLE_MIN_RISCRITTO = 3
+/** Quanta parte del titolo più corto deve stare nell'altro perché sia lo stesso, riscritto. */
+const DENTRO_RISCRITTO = 0.8
+
 /** Entro quanto una voce chiusa tiene ancora lontane le sue sorelle. */
 const OMBRA_GIORNI = 60
 
@@ -2434,8 +2478,13 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
    * stesso mese — e la rete che le confondeva lasciava fuori la seconda in
    * silenzio, e la rimandava al modello a ogni lettura.
    */
-  const stessaCosa = (v: { id: string; titolo: string; doc: string | null }, i: { doc?: string; titolo: string }, id: string) =>
-    v.id !== id && !(v.doc && i.doc && v.doc !== i.doc) && stessoTitolo(v.titolo, i.titolo)
+  const stessaCosa = (v: { id: string; titolo: string; doc: string | null }, i: { doc?: string; titolo: string }, id: string) => {
+    if (v.id === id) return false
+    // lo stesso titolo con una parola cambiata è lo stesso titolo, qualunque
+    // documento gli abbiano appeso: vedi `titoloRiscritto`
+    if (titoloRiscritto(v.titolo, i.titolo)) return true
+    return !(v.doc && i.doc && v.doc !== i.doc) && stessoTitolo(v.titolo, i.titolo)
+  }
 
   let nuove = 0
   db.exec('BEGIN')
@@ -3041,6 +3090,46 @@ export function compitiChiusi(limite = 30): Compito[] {
     SELECT * FROM compiti WHERE stato IN ('fatto','lasciato') AND sparito IS NULL
     ORDER BY chiuso DESC LIMIT ?
   `).all(limite) as Record<string, unknown>[]
+  return righe.map(compitoDaRiga)
+}
+
+/**
+ * Le righe che ha buttato via, e quando.
+ *
+ * `scordaCompito` scrive la data in `sparito` e lascia lo stato dov'era. Da
+ * quel momento la riga non esiste per nessuno: `elencoCompiti` la salta,
+ * `compitiChiusi` la salta due volte — una per lo stato, una per `sparito` —
+ * e il punto, che legge solo quelle due, non sa che è mai esistita. Quindi la
+ * riproponeva. Il quattordici settembre ne ha tolte tre alle 16:33 e alle
+ * 17:42 se le è ritrovate, una identica parola per parola.
+ *
+ * Buttare una riga è la cosa più chiara che una persona possa dire di una
+ * cosa da fare: non la voglio. Costava una riga di SQL leggerlo.
+ */
+/**
+ * Le righe che hanno già fatto nascere altre righe.
+ *
+ * Una riga può generarne altre — una che chiede quattro cose diventa quattro
+ * righe — e va bene una volta. Non va bene per sempre: il punto gira ogni tre
+ * ore, rilegge la stessa riga aperta, e ogni volta ne stacca altri figli.
+ * Il quattordici settembre una riga sola ne aveva quattro, e uno di quei
+ * quattro ne aveva uno suo. Nessuno aveva chiesto niente: era Myynd che
+ * scriveva compiti a partire dai compiti che si era scritto da solo.
+ *
+ * Qualunque stato: viva, chiusa o buttata. Una figlia che lui ha buttato è
+ * comunque una prova che quella madre ha già parlato.
+ */
+export function madriUsate(): Set<string> {
+  const righe = db.prepare('SELECT DISTINCT madre FROM compiti WHERE madre IS NOT NULL').all() as { madre: string }[]
+  return new Set(righe.map(r => r.madre))
+}
+
+export function compitiTolti(giorni = 30, limite = 60): Compito[] {
+  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
+  const righe = db.prepare(`
+    SELECT * FROM compiti WHERE sparito IS NOT NULL AND sparito >= ?
+    ORDER BY sparito DESC LIMIT ?
+  `).all(soglia, limite) as Record<string, unknown>[]
   return righe.map(compitoDaRiga)
 }
 

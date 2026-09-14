@@ -482,3 +482,36 @@ test('e la stessa regola al contrario: un\'app in italiano non tiene una voce in
   assert.match(ultimoMessaggio(ricevute[1]), /SOLO IN ITALIANO$/)
   assert.deepEqual(voci, [])
 })
+
+/*
+ * Le due voci del quattordici settembre.
+ *
+ * Il suo progetto «tobiadonadon.com» ha per obiettivo «Ship the finished site
+ * copy and offers live.» Nello stesso giro di lettura il feed ha prodotto
+ * «Ship live site copy for tobiadonadon.com» e «Ship finished site copy for
+ * tobiadonadon.com»: l'obiettivo tagliato in due, con il nome del progetto in
+ * coda. Nessuna delle due veniva da un documento — erano appese a una nota
+ * della spesa e a una lista di prezzi di mobili, perché lo schema obbliga a
+ * nominarne uno.
+ *
+ * La rete dei titoli le avrebbe prese: quattro parole in comune su cinque. Ma
+ * non veniva nemmeno consultata, perché i due documenti erano diversi.
+ */
+test('lo stesso titolo con una parola cambiata è una voce sola, anche appeso a due documenti', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('note:AAA', 'BUILD COST APT'), doc('note:BBB', 'list')])
+  assert.equal(store.salvaFeed([
+    voce('Ship live site copy for tobiadonadon.com', 'note:AAA'),
+    voce('Ship finished site copy for tobiadonadon.com', 'note:BBB')
+  ]), 1, 'la stessa frase con una parola cambiata è entrata due volte')
+  assert.equal(store.elencoFeed('aperto').length, 1)
+})
+
+test('ma due cose davvero diverse restano due, anche se si somigliano', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:11', 'Marzo'), doc('posta:INBOX:12', 'Aprile')])
+  assert.equal(store.salvaFeed([
+    voce('Fattura di marzo a Rossi da pagare', 'posta:INBOX:11'),
+    voce('Fattura di aprile a Rossi da pagare', 'posta:INBOX:12')
+  ]), 2, 'due mesi diversi sono diventati una voce sola')
+})

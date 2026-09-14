@@ -1961,6 +1961,8 @@ const EN: Record<string, string> = {
   'la chat': 'the chat',
   'il punto del giorno': 'today’s briefing',
   'il primo progetto': 'the first project',
+  // da quale riga è nata: il filo che prima non si leggeva da nessuna parte
+  'la riga che l’ha fatta nascere': 'the line it came from',
   'un’automazione': 'an automation',
   'il feed': 'the feed',
   // — la carta in cima: sotto il titolo, una riga sola che dice cosa apre —

@@ -208,3 +208,35 @@ test('a corrupt saved session is reported and retained, not reset into duplicate
   assert.throws(() => avvio.stato(), /dati sono ancora/)
   assert.equal(readFileSync(join(casa, 'avvio.json'), 'utf8'), '{broken')
 })
+
+/*
+ * Il curriculum che ha fatto partire tutto.
+ *
+ * Il progetto si chiama «H-Farm», che è anche la scuola che ha fatto: «H-FARM»
+ * sta scritto dieci volte in un suo PDF di un anno fa. La ricerca dell'avvio
+ * guardava l'indice intero senza guardare le date, ha preso quel file, e la
+ * frase che ne è uscita è diventata il suo primo compito. Da lì, per giorni,
+ * il punto ha staccato figli: «Identify who will own and score the clean
+ * number for the proof», che è una riga di un curriculum.
+ */
+test('un file di un anno fa non spiega un progetto che comincia adesso', async () => {
+  const folder = join(casa, 'source-vecchio')
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(join(folder, 'recente.md'),
+    '# Aurora\n\n[Fixture di test] Aurora avrà cinque clienti pilota, già invitati alla prima sessione di prova.')
+  writeFileSync(join(folder, 'curriculum.md'),
+    '# Curriculum\n\n[Fixture di test] Aurora clienti pilota lancio prova sessione, scritto un anno fa e mai toccato.')
+  const letti = await desktop.leggiCartella(folder)
+  assert.equal(letti.docs.length, 2)
+  // il secondo porta la data di un anno fa, come il suo curriculum
+  const vecchio = new Date(Date.now() - 400 * 86_400_000).toISOString()
+  store.salvaDocumenti(letti.docs.map(d => d.id.includes('curriculum') ? { ...d, quando: vecchio } : d))
+
+  const p = progetto()
+  const s = avvio.fonte({ fonte: 'desktop', revisione: p.revisione })
+  assert.ok(s.fatti.length > 0, 'non è rimasta nessuna prova')
+  for (const f of s.fatti) {
+    assert.ok(!f.evidenza.doc.includes('curriculum'),
+      `una prova viene da un file di un anno fa: ${f.evidenza.doc}`)
+  }
+})

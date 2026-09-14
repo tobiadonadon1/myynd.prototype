@@ -554,20 +554,21 @@ test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga 
       riga('Rispondi alle domande sull’ambito per H-Farm, tutte e quattro.'),
       riga('Di’ quale unità di H-Farm guarda l’audit.', 'posta:INBOX:7')
     ],
-    { aperti: [chiede], chiuse: [], crea: (testo, doc) => { nate.push({ testo, doc }); return `n${nate.length}` } }
+    { aperti: [chiede], chiuse: [], madri: new Set<string>(), crea: (testo, doc) => { nate.push({ testo, doc }); return `n${nate.length}` } }
   )
   assert.deepEqual(tre, ['c1', 'n1'], 'la stessa riga della lista è uscita due volte')
   assert.deepEqual(nate, [{ testo: 'Di’ quale unità di H-Farm guarda l’audit', doc: 'posta:INBOX:7' }])
 
+  // ognuna dice da quale documento viene: senza, adesso non nascerebbe nessuna
   const scritte: string[] = []
   const quattro = punto.ancoraAlleRighe(
     [
-      riga('Chiama lo studio di Padova.'),
-      riga('Prepara il preventivo per Verdi.'),
-      riga('Scegli la data della prova sul campo.'),
-      riga('Rileggi il contratto di affitto.')
+      riga('Chiama lo studio di Padova.', 'posta:INBOX:1'),
+      riga('Prepara il preventivo per Verdi.', 'posta:INBOX:2'),
+      riga('Scegli la data della prova sul campo.', 'posta:INBOX:3'),
+      riga('Rileggi il contratto di affitto.', 'posta:INBOX:4')
     ],
-    { aperti: [], chiuse: [], crea: t => { scritte.push(t); return `n${scritte.length}` } }
+    { aperti: [], chiuse: [], madri: new Set<string>(), crea: t => { scritte.push(t); return `n${scritte.length}` } }
   )
   assert.equal(scritte.length, 3, 'un punto ha riempito la lista di righe nuove')
   assert.deepEqual(quattro, ['n1', 'n2', 'n3'])
@@ -575,8 +576,8 @@ test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga 
 
   // una cosa già fatta non torna, e non fa scrivere niente
   const sparita = punto.ancoraAlleRighe(
-    [riga('Approva la bozza per Bianchi.')],
-    { aperti: [], chiuse: ['Approvare la bozza per Bianchi'], crea: () => { throw new Error('non doveva scrivere niente') } }
+    [riga('Approva la bozza per Bianchi.', 'posta:INBOX:5')],
+    { aperti: [], chiuse: ['Approvare la bozza per Bianchi'], madri: new Set<string>(), crea: () => { throw new Error('non doveva scrivere niente') } }
   )
   assert.deepEqual(sparita, [])
 })
@@ -591,19 +592,27 @@ test('ancoraAlleRighe: una cosa nata da una riga ne eredita il progetto e il doc
       // la riga da cui dice di venire non esiste: nasce nuda, non nasce sbagliata
       { testo: 'Decidi il passo dopo l’unità scelta.', doc: null, progetto: null, compito: 'mai-esistita' }
     ],
-    { aperti: [chiede], chiuse: [], crea: (testo, doc, progetto, madre) => { nate.push({ testo, doc, progetto, madre }); return `n${nate.length}` } }
+    { aperti: [chiede], chiuse: [], madri: new Set<string>(), crea: (testo, doc, progetto, madre) => { nate.push({ testo, doc, progetto, madre }); return `n${nate.length}` } }
   )
-  assert.deepEqual(prese, ['n1', 'n2'])
   // `madre` è la terza strada di «Portami lì»: senza, una figlia che non eredita
   // né documento né progetto non porta da nessuna parte
   assert.deepEqual(nate[0], { testo: 'Conferma quale unità guarda l’audit', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd', madre: 'avvio-h' })
-  assert.deepEqual(nate[1], { testo: 'Decidi il passo dopo l’unità scelta', doc: null, progetto: null, madre: null })
+  /*
+   * E la seconda non nasce affatto.
+   *
+   * Prima nasceva nuda — niente documento, niente progetto, niente madre — e
+   * in prima pagina diventava «Confirm the target H-FARM unit and define next
+   * steps», senza il bottone per andarci. La sua domanda: «chi me l'ha
+   * chiesto? da dove viene?». Una riga che non risponde non si scrive.
+   */
+  assert.deepEqual(prese, ['n1'])
+  assert.equal(nate.length, 1)
 
   // quello che dice il modello viene prima di quello che si eredita
   const suo: { doc: string | null; progetto: string | null }[] = []
   punto.ancoraAlleRighe(
     [{ testo: 'Manda il modulo firmato al notaio.', doc: 'posta:INBOX:9', progetto: 'pAltro', compito: 'avvio-h' }],
-    { aperti: [chiede], chiuse: [], crea: (_t, doc, progetto) => { suo.push({ doc, progetto }); return 'n1' } }
+    { aperti: [chiede], chiuse: [], madri: new Set<string>(), crea: (_t, doc, progetto) => { suo.push({ doc, progetto }); return 'n1' } }
   )
   assert.deepEqual(suo, [{ doc: 'posta:INBOX:9', progetto: 'pAltro' }])
 })
@@ -631,9 +640,11 @@ test('la provenienza dal vivo: la riga madre passa il progetto, un id inventato 
   assert.match(testoDi(ricevute[0]), new RegExp(`\\[avvio-h\\].*progetto \\[${pr.id}\\]`), 'la riga aperta non dice su che progetto sta')
 
   const nate = store.elencoCompiti().filter(c => c.origine === 'punto')
-  assert.equal(nate.length, 2, 'le cose da fare non sono finite in lista')
+  // «Chiama il commercialista» citava un progetto inventato e nient'altro:
+  // senza documento, senza progetto vero e senza madre non nasce più
+  assert.equal(nate.length, 1, 'una riga senza nessuna provenienza è entrata in lista')
   assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.progetto, pr.id, 'la cosa nata dalle domande di una riga non ne ha ereditato il progetto')
-  assert.equal(nate.find(c => c.testo.startsWith('Chiama'))?.progetto, null, 'un progetto inventato è entrato in lista')
+  assert.equal(nate.find(c => c.testo.startsWith('Chiama')), undefined, 'un progetto inventato è entrato in lista')
   /*
    * E il filo resta scritto sul disco, non solo dedotto al volo.
    *
@@ -642,7 +653,6 @@ test('la provenienza dal vivo: la riga madre passa il progetto, un id inventato 
    * che l'ha fatta nascere è un posto, ed è quello giusto.
    */
   assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.madre, 'avvio-h', 'la riga nata dalle domande di un’altra non sa più da chi viene')
-  assert.equal(nate.find(c => c.testo.startsWith('Chiama'))?.madre, null, 'una riga madre inventata è stata scritta')
 })
 
 test('rifare il punto sulla stessa cosa da fare non raddoppia la riga', async () => {
@@ -1082,4 +1092,120 @@ test('un punto nella lingua giusta passa con una chiamata sola', async () => {
   const e = await punto.punto({}, adesso())
   assert.equal(ricevute.length, 1, 'ha richiesto un punto che andava bene')
   assert.equal(e.punto?.progetti[0].novita, NOVITA_EN)
+})
+
+/*
+ * La rete che non ha retto, il quattordici settembre.
+ *
+ * Alle 13:58 il punto gli ha messo in lista tre cose su H-FARM. Alle 16:33 le
+ * ha buttate tutte e tre. Alle 17:42 se le è ritrovate: una identica parola
+ * per parola, e una che diceva la stessa cosa delle altre due messe insieme.
+ * «Sometimes they even come back after I told them done.»
+ *
+ * Due guasti, e questi casi sono il secondo: anche se il punto le avesse
+ * viste, `ridondante` le avrebbe lasciate passare — 0,44 e 0,40 di Jaccard,
+ * sotto la soglia di 0,5. Le frasi qui sotto sono le sue, copiate dal suo
+ * database.
+ */
+test('le tre righe di H-FARM che gli sono tornate indietro sono la stessa cosa', () => {
+  const nuova = 'Confirm the target H-FARM unit and define next steps'
+  assert.ok(punto.ridondante('Confirm which H-FARM unit is the target for the AI audit', nuova))
+  assert.ok(punto.ridondante('Define the next step after identifying the H-FARM unit', nuova))
+  assert.ok(punto.ridondante(
+    'List systems currently run by the target unit for audit',
+    'List systems currently run by the target unit for audit'
+  ))
+})
+
+test('il plurale inglese non fa due cose di una', () => {
+  assert.ok(punto.ridondante('Define the next step for the audit', 'Define next steps for the audit'))
+  assert.ok(punto.ridondante('List the system run by the unit', 'List systems run by the unit'))
+})
+
+test('due cose che si somigliano ma hanno due numeri restano due cose', () => {
+  assert.equal(punto.ridondante('Paga la fattura 123 di Rossi', 'Paga la fattura 124 di Rossi'), false)
+  assert.equal(punto.ridondante('Rivedi il preventivo 2026 di Bianchi', 'Rivedi il preventivo 2025 di Bianchi'), false)
+  // lo stesso numero invece non separa niente
+  assert.ok(punto.ridondante('Paga la fattura 123 di Rossi', 'Fattura 123 di Rossi da pagare'))
+})
+
+test('due cose diverse restano diverse', () => {
+  assert.equal(punto.ridondante('Manda il preventivo a Rossi', 'Manda il contratto a Bianchi'), false)
+  assert.equal(punto.ridondante('Rispondi a Milena sul rumore', 'Prenota il volo per Lisbona'), false)
+  assert.equal(punto.ridondante('Fattura di marzo a Rossi', 'Scadenza del contratto Bianchi'), false)
+})
+
+/*
+ * La sua giornata del quattordici settembre, rifatta.
+ *
+ * 13:58 — il punto gli mette in lista tre cose su H-FARM.
+ * 16:33 — le butta tutte e tre col cestino.
+ * 17:42 — se le ritrova, una identica parola per parola.
+ *
+ * Due guasti in fila. `scordaCompito` scrive solo `sparito` e lascia lo stato
+ * su «aperto», e nessuna delle due liste che il punto legge vede una riga
+ * così: né `elencoCompiti`, che salta le sparite, né `compitiChiusi`, che le
+ * salta due volte. Per il punto quelle righe non erano mai esistite.
+ */
+test('una riga buttata non torna al giro dopo', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([doc('posta:INBOX:8', 'Ambito dell’audit H-FARM')])
+
+  // quella delle 13:58, che poi lui butta
+  store.scriviCompito({
+    id: 'c-tolta', testo: 'List systems currently run by the target unit for audit',
+    ordine: 'a', quando: 'oggi', origine: 'punto', doc: 'posta:INBOX:8'
+  })
+  store.scordaCompito('c-tolta')
+  // com'è davvero sul suo disco: tolta, ma lo stato è rimasto «aperto»
+  assert.equal(store.compito('c-tolta')!.stato, 'aperto')
+  assert.ok(store.compito('c-tolta')!.sparito)
+  assert.equal(store.elencoCompiti().some(c => c.id === 'c-tolta'), false)
+  assert.equal(store.compitiChiusi(200).some(c => c.id === 'c-tolta'), false)
+
+  // quella delle 17:42: il modello la riscrive tale e quale
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [],
+    compiti: [{ testo: 'List systems currently run by the target unit for audit.', doc: 'posta:INBOX:8', compito: '', progetto: '' }]
+  })
+  await punto.punto({}, adesso())
+
+  const tornate = store.elencoCompiti().filter(c => c.testo.startsWith('List systems'))
+  assert.deepEqual(tornate, [], 'la riga che aveva buttato è tornata in lista')
+
+  // e il modello se l'è sentito dire, così non ci prova nemmeno
+  assert.ok(
+    store.compitiTolti(30).some(c => c.id === 'c-tolta'),
+    'una riga buttata non si ritrova più da nessuna parte'
+  )
+})
+
+test('una riga inventata non ne fa nascere altre, e una madre parla una volta sola', () => {
+  // la sua: nata da una voce del feed, senza documento e senza progetto
+  const inventata = { id: 'c-feed', testo: 'Deadline for H-Farm AI Systems solidification' }
+  const nate: string[] = []
+  const prese = punto.ancoraAlleRighe(
+    [{ testo: 'Confirm the target H-FARM unit and define next steps.', doc: null, progetto: null, compito: 'c-feed' }],
+    { aperti: [inventata], chiuse: [], madri: new Set<string>(), crea: t => { nate.push(t); return 'n1' } }
+  )
+  assert.deepEqual(prese, [], 'una riga senza documento né progetto ha fatto nascere una figlia')
+  assert.deepEqual(nate, [])
+
+  // una madre ancorata sì, ma una volta: al giro dopo ha già parlato
+  const vera = { id: 'c-vera', testo: 'Rispondere alle domande sull’ambito', doc: 'posta:INBOX:3', progetto: 'p1' }
+  const prima: string[] = []
+  punto.ancoraAlleRighe(
+    [{ testo: 'Conferma quale unità guarda l’audit.', doc: null, progetto: null, compito: 'c-vera' }],
+    { aperti: [vera], chiuse: [], madri: new Set<string>(), crea: t => { prima.push(t); return 'n1' } }
+  )
+  assert.equal(prima.length, 1)
+
+  const dopo: string[] = []
+  punto.ancoraAlleRighe(
+    [{ testo: 'Elenca i sistemi dell’unità scelta.', doc: null, progetto: null, compito: 'c-vera' }],
+    { aperti: [vera], chiuse: [], madri: new Set(['c-vera']), crea: t => { dopo.push(t); return 'n2' } }
+  )
+  assert.deepEqual(dopo, [], 'la stessa riga ha fatto nascere figlie a ogni giro del punto')
 })
