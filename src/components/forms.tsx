@@ -360,6 +360,16 @@ export function FormCompatibile({ tema, ok }: Props) {
   const [modelli, setModelli] = useState<string[]>([])
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
+  /**
+   * Se c'è qualcuno a quell'indirizzo, detto mentre lo si scrive.
+   *
+   * `null` è «non lo so ancora» — l'indirizzo non è finito, o la domanda è per
+   * strada — e non va disegnato: una scritta «non risponde» mentre uno sta
+   * ancora battendo l'indirizzo è una bugia che compare a ogni tasto.
+   */
+  const [vivo, setVivo] = useState<boolean | null>(null)
+  /** Quanto ci ha messo a dire la prima parola, misurato collegandolo davvero. */
+  const [primaParola, setPrimaParola] = useState<number | null>(null)
 
   // se è già collegato si parte da com'è: cambiare un campo non deve voler
   // dire riscriverli tutti e quattro
@@ -372,21 +382,36 @@ export function FormCompatibile({ tema, ok }: Props) {
 
   // i modelli del fornitore, con un po' di calma: non a ogni tasto
   useEffect(() => {
-    if (!/^https?:\/\/\S+/.test(url)) { setModelli([]); return }
+    if (!/^https?:\/\/\S+/.test(url)) { setModelli([]); setVivo(null); return }
+    let ancora = true
+    setVivo(null)
     const sveglia = setTimeout(() => {
-      api.modelliCompatibili(url, chiave).then(r => setModelli(r.modelli)).catch(() => setModelli([]))
+      api.modelliCompatibili(url, chiave)
+        .then(r => { if (ancora) { setModelli(r.modelli); setVivo(r.modelli.length > 0) } })
+        .catch(() => { if (ancora) { setModelli([]); setVivo(false) } })
     }, 600)
-    return () => clearTimeout(sveglia)
+    return () => { ancora = false; clearTimeout(sveglia) }
   }, [url, chiave])
 
   const collega = async () => {
     setOccupato(true); setErr('')
+    /*
+     * Il cronometro sta qui, e non sul server.
+     *
+     * La rotta che collega prova il fornitore con una richiesta vera e aspetta
+     * la prima parola: il tempo di quella chiamata *è* il tempo che ci metterà
+     * a rispondere in chat, più un giro su questa macchina — cioè niente.
+     * Misurarlo qui costa una riga e dice a chi collega la cosa che vorrebbe
+     * sapere prima di fidarsi: quanto dovrà aspettare.
+     */
+    const partito = Date.now()
     try {
       await api.collegaCompatibile({
         url: url.trim(), modello: modello.trim(),
         ...(chiave.trim() ? { chiave: chiave.trim() } : {}),
         ...(nome.trim() ? { nome: nome.trim() } : {})
       })
+      setPrimaParola(Date.now() - partito)
       ok()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
@@ -418,6 +443,19 @@ export function FormCompatibile({ tema, ok }: Props) {
         <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
           placeholder="sk-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
       </Campo>
+      {/*
+        Se c'è qualcuno, detto sotto l'indirizzo mentre lo si scrive.
+        È la riga che mancava: chi incolla la porta di Ollama con Ollama spento
+        non aveva nessun modo di saperlo finché non premeva «Collega» e non
+        leggeva un errore che parlava dell'indirizzo.
+      */}
+      {vivo !== null && (
+        <div style={{ ...nota(tema), marginTop: 8, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <span style={{ color: vivo ? '#2F6B4F' : '#8E3F1F' }}>{vivo ? t('Risponde') : t('Non risponde')}</span>
+          {vivo && modelli.length > 0 && <span>· {frasi.modelliTrovati(modelli.length)}</span>}
+          {primaParola !== null && <span>· {t('Prima parola in')} <span>{(primaParola / 1000).toFixed(1)} s</span></span>}
+        </div>
+      )}
       <Campo tema={tema} nome={t('Modello')}>
         <input list="modelli-compatibili" value={modello} onChange={e => setModello(e.target.value)}
           placeholder="gpt-4.1 · qwen2.5:14b" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}

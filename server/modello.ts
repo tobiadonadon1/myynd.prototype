@@ -546,9 +546,33 @@ export type Motore = {
   tipo: 'claude' | 'compatibile'
   /** Come si chiama, per i registri: il modello di Claude, o il nome dato al fornitore. */
   nome: string
+  /**
+   * C'è qualcuno, prima di cominciare?
+   *
+   * Con Claude non c'è niente da chiedere: o la chiave c'è o `motore()` avrebbe
+   * dato `null`. Con un modello sul suo computer sì, ed è il guasto più
+   * frequente che ci sia: Ollama spento, il portatile riavviato, LM Studio
+   * chiuso. Senza questa domanda la chat parte, gira, e dopo qualche secondo
+   * dice «non riesco a raggiungere il fornitore» — che è vero e inutile. Con,
+   * si dice subito la cosa che si può fare: accendilo.
+   */
+  pronto(): Promise<void>
   crea(p: Anthropic.MessageCreateParamsNonStreaming, attesa?: number): Promise<Anthropic.Message>
   flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number, segnale?: AbortSignal): Promise<Anthropic.Message>
 }
+
+/**
+ * Quanto si aspetta la *prima parola* in chat, da un modello di casa.
+ *
+ * Misurato sul suo Mac, con Ollama e un modello da nove miliardi di parametri:
+ * la preparazione del prompt va a seicentocinquanta token al secondo, quindi
+ * ogni migliaio di token di prompt è un secondo e mezzo prima che cominci a
+ * scrivere. Quindici secondi sono già un prompt enorme o un modello troppo
+ * grosso per quella macchina: tenere la rotella accesa oltre non scopre niente
+ * di nuovo, e quello che va detto non è «riprova» — è «prendine uno più
+ * piccolo, o torna su Claude».
+ */
+export const PRIMA_PAROLA = 15_000
 
 /**
  * Il filo che si spegne senza dirlo.
@@ -592,11 +616,29 @@ export function motore(): Motore | null {
     return {
       tipo: 'compatibile',
       nome: f.nome || f.modello,
+      pronto: async () => {
+        if (await compatibile.risponde(f)) return
+        throw tradotto(new Error('Il modello sul tuo computer non risponde: controlla che Ollama (o LM Studio) sia acceso.'))
+      },
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
-          .catch(e => { throw tradotto(e) })
+          .catch(e => {
+            /*
+             * Il tetto sulla prima parola, detto per quello che è.
+             *
+             * Chi passa un `attesa` corto — la chat, e solo lei — sta dicendo
+             * «entro qui, o cambiamo modello». La frase generica («ci ha messo
+             * troppo, riprova») manderebbe a riprovare la stessa cosa che ha
+             * appena fallito, che è il modo più sicuro di far perdere un altro
+             * quarto di minuto.
+             */
+            if (attesa && attesa <= PRIMA_PAROLA && e instanceof Error && e.name === compatibile.ATTESA_SCADUTA) {
+              throw tradotto(new Error('Il modello ha impiegato più di quindici secondi per cominciare: prova un modello più piccolo, o passa a Claude.'))
+            }
+            throw tradotto(e)
+          })
       }
     }
   }
@@ -605,6 +647,9 @@ export function motore(): Motore | null {
   return {
     tipo: 'claude',
     nome: modello(),
+    // la chiave c'è — senza, `cliente()` avrebbe dato `null` — e chiedere ad
+    // Anthropic «ci sei?» prima di ogni domanda sarebbe una chiamata sprecata
+    pronto: async () => {},
     crea: async (p, attesa) => {
       controllaIlTetto()
       try {

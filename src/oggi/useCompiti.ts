@@ -279,6 +279,54 @@ export function useCompiti(
     }
   }, [indietro, apriConnessioni])
 
+  /**
+   * Una cosa notata nel feed, presa in carico e affidata nello stesso gesto.
+   *
+   * Dalla carta in cima «Affidalo a Myynd» deve fare *una* cosa sola vista da
+   * fuori: la riga nasce nella lista, con dentro il documento da cui viene, e
+   * parte subito il lavoro. In due chiamate separate — crea, poi affida — il
+   * primo mezzo secondo la riga sarebbe lì aperta e ferma, cioè il contrario
+   * di quello che si è appena chiesto.
+   *
+   * `voce` non è un di più: dirlo al server chiude la voce nel feed, perché la
+   * stessa cosa in due posti con due stati diversi diverge al primo tocco.
+   * Torna l'id della riga nata, così chi ha cliccato può portarsela in cima.
+   */
+  const affidaNuovo = useCallback(async (
+    testo: string,
+    da?: { doc?: string | null; voce?: string | null }
+  ): Promise<string | null> => {
+    const pulito = testo.trim()
+    if (!pulito) return null
+    const ora = new Date().toISOString()
+    const finto: Compito = {
+      id: nuovoId(), testo: pulito, nota: null, quando: 'oggi', giorno: null,
+      // nasce aperta e la passa ad affidata `delega`, un respiro dopo: se
+      // l'affido non riesce, quello a cui si torna è una riga vera e aperta,
+      // non una riga che dice di essere in lavorazione mentre non lo è
+      stato: 'aperto', modo: 'io',
+      ordine: 'zzzz', origine: 'feed', voce: da?.voce ?? null, doc: da?.doc ?? null, chiesto: null,
+      risultato: null, fonti: null, proposta: null, chieste: null, email: null, guaio: null,
+      creato: ora, aggiornato: ora, chiuso: null, esito: null, sparito: null, versione: 1
+    }
+    const prima = compitiRef.current
+    setCompiti(cs => [...cs, finto])
+    try {
+      await api.aggiungiCompito({
+        id: finto.id, testo: pulito, quando: 'oggi', origine: 'feed',
+        ...(da?.doc ? { doc: da.doc } : {}),
+        ...(da?.voce ? { voce: da.voce } : {})
+      })
+    } catch {
+      indietro(prima, finto.id, t('Non sono riuscito a segnarlo.'))
+      return null
+    }
+    // la lista che torna dal server ha la riga aperta: `delega` la rimette
+    // affidata e chiede il lavoro
+    await delega(finto.id, 'tutto')
+    return finto.id
+  }, [indietro, delega])
+
   /** Ci ho ripensato: il compito torna mio. */
   const richiama = useCallback(async (id: string) => {
     const prima = compitiRef.current
@@ -487,7 +535,7 @@ export function useCompiti(
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
-    aggiungi, aggiungiTante, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
     daAprire, chiediDiAprire, richiestaServita
   }
 }

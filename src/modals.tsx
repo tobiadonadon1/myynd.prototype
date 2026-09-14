@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Hov, useFocoDialogo } from './ui'
 import { frasi, lingua, loc, t } from './lingua'
 import { IconCerca } from './icons'
+import { leggibile } from './leggibile.ts'
 import type { Vals } from './vals'
 
 const VELO = (z: number, alpha: number, blur: number) => ({
@@ -36,7 +37,25 @@ export function Documento({ v }: { v: Vals }) {
             </div>
           </div>
           {/* le email grezze sono piene di indirizzi lunghi senza spazi: il foglio non deve scorrere di lato */}
-          <div style={{ fontSize: 14, lineHeight: 1.75, color: 'rgba(34,39,31,.86)', marginTop: 26, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{d.corpo}</div>
+          {/* Il corpo passa da `leggibile`: un `.md` indicizzato arrivava qui
+              con i cancelletti, gli asterischi e le pipe delle tabelle, e si
+              leggeva come il sorgente di un documento invece che come il
+              documento. Il testo semplice non lo tocca: una mail esce riga
+              per riga come è entrata. */}
+          <div style={{ fontSize: 14, color: 'rgba(34,39,31,.86)', marginTop: 26 }}>
+            {leggibile(d.corpo).map((b, i) => (
+              b.tipo === 'vuota' ? <div key={i} style={{ height: 13 }} />
+                : b.tipo === 'titolo' ? (
+                  <div key={i} style={{ fontSize: '15px', fontWeight: 600, lineHeight: 1.5, marginTop: i ? 18 : 0, marginBottom: 2, color: '#22271F', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
+                ) : b.tipo === 'codice' ? (
+                  // il codice non si spezza a metà parola: scorre dentro il suo
+                  // riquadro, e il foglio resta fermo
+                  <pre key={i} style={{ margin: '10px 0', padding: '12px 14px', borderRadius: 8, background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.09)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre' }}>{b.testo}</pre>
+                ) : (
+                  <div key={i} style={{ lineHeight: 1.75, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
+                )
+            ))}
+          </div>
         </div>
       </div>
     </>

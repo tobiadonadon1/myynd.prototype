@@ -370,12 +370,24 @@ export function erroreDelFornitore(stato: number, testo: string): Error {
   return new Error('Il fornitore non ha risposto. Riprova.')
 }
 
+/**
+ * Il nome che porta l'errore di chi non ha cominciato in tempo.
+ *
+ * Serve a chi chiama per distinguerlo da tutti gli altri: il tetto sulla
+ * *prima parola* in chat è quindici secondi, e la frase da dire lì non è
+ * «riprova» — è «questo modello è troppo grosso per il tuo computer». Chi non
+ * ha un budget suo continua a leggere la frase generica.
+ */
+export const ATTESA_SCADUTA = 'AttesaScaduta'
+
 /** Quando `fetch` stesso non ce l'ha fatta: nessuno in ascolto, o troppo tempo. */
 function erroreDiRete(e: unknown, perche: 'attesa' | 'silenzio' | null): Error {
   if (perche === 'silenzio') return new Error('La risposta si è interrotta a metà. Riprova.')
   const nome = e instanceof Error ? e.name : ''
   if (perche === 'attesa' || nome === 'TimeoutError' || nome === 'AbortError') {
-    return new Error('Ci ha messo troppo e ho lasciato perdere. Riprova.')
+    const troppo = new Error('Ci ha messo troppo e ho lasciato perdere. Riprova.')
+    troppo.name = ATTESA_SCADUTA
+    return troppo
   }
   return new Error('Non riesco a raggiungere il fornitore. Controlla l’indirizzo.')
 }
@@ -440,11 +452,18 @@ export function ritocca(c: Record<string, unknown>, messaggio: string): boolean 
  * Al massimo tre ritocchi: sono quattro le cose che si possono togliere, e un
  * server che rifiuta tutto ha un problema che non è nostro.
  */
-async function spedisci(f: Fornitore, c: Record<string, unknown>, segnale: AbortSignal, perche: () => 'attesa' | 'silenzio' | null): Promise<Response> {
+async function spedisci(
+  f: Fornitore,
+  dove: string,
+  c: Record<string, unknown>,
+  segnale: AbortSignal,
+  perche: () => 'attesa' | 'silenzio' | null,
+  conRitocchi = true
+): Promise<Response> {
   for (let ritocchi = 0; ; ) {
     let r: Response
     try {
-      r = await chiama(`${base(f.url)}/chat/completions`, {
+      r = await chiama(dove, {
         method: 'POST', headers: intestazioni(f), body: JSON.stringify(c), signal: segnale
       })
     } catch (e) {
@@ -452,9 +471,250 @@ async function spedisci(f: Fornitore, c: Record<string, unknown>, segnale: Abort
     }
     if (r.ok) return r
     const testo = await r.text().catch(() => '')
-    if (r.status === 400 && ritocchi < 3 && ritocca(c, detto(testo))) { ritocchi++; continue }
+    // i ritocchi sono differenze fra fornitori che parlano OpenAI: sulla porta
+    // di casa di Ollama non c'è niente da ritoccare, e riprovare sarebbe solo
+    // la stessa richiesta due volte
+    if (conRitocchi && r.status === 400 && ritocchi < 3 && ritocca(c, detto(testo))) { ritocchi++; continue }
     throw erroreDelFornitore(r.status, testo)
   }
+}
+
+// — Ollama, che parla anche la lingua sua —
+
+/**
+ * Perché a Ollama si parla nella sua lingua e non in quella di OpenAI.
+ *
+ * Sulla porta `/v1` Ollama fa finta di essere OpenAI, e funziona. Ma due cose
+ * che contano non passano da lì, e sono esattamente le due che decidono se la
+ * chat risponde in un secondo o in venti:
+ *
+ *   · `think: false`. I modelli nuovi ragionano a voce alta prima di
+ *     rispondere, e quel monologo lo si paga tutto in attesa — in chat non lo
+ *     legge nessuno. Sulla porta compatibile non c'è modo di spegnerlo.
+ *   · `num_ctx`. Ollama alloca la finestra che gli si chiede, e il valore di
+ *     serie di un modello moderno è enorme: con 262k dichiarati la macchina
+ *     prepara una finestra che non userà mai, e il primo token arriva dopo.
+ *
+ * Fuori da Ollama non cambia niente: si continua a parlare `chat/completions`
+ * con tutti, che è il motivo per cui questo file esiste.
+ */
+/** Un nome che sta su questa macchina o sulla rete di casa. Vedi `indirizzoAmmesso`. */
+function hostInCasa(host: string): boolean {
+  return host === 'localhost' || host.endsWith('.localhost') ||
+    host.endsWith('.local') || host.endsWith('.internal') ||
+    host === '::1' || /^fe80:/i.test(host) || /^fd/i.test(host) ||
+    /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^169\.254\./.test(host) ||
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || /^0\./.test(host)
+}
+
+const ORIGINE_OLLAMA = new Map<string, { ollama: boolean; quando: number }>()
+
+/** Quanto si crede a quello che si è scoperto bussando. Dieci minuti: un'app che si accende in mezzo. */
+const RICORDO_OLLAMA = 10 * 60_000
+
+/** Per i test, e per quando l'indirizzo cambia sotto i piedi. */
+export function scordaOllama() { ORIGINE_OLLAMA.clear() }
+
+/** La radice del server, senza il pezzo `/v1`: le API native di Ollama stanno lì. */
+export function origine(url: string): string {
+  try { return new URL(base(url)).origin } catch { return base(url) }
+}
+
+/** La porta di serie di Ollama, in casa: si riconosce senza chiedere niente a nessuno. */
+function sembraOllama(url: string): boolean {
+  try {
+    const u = new URL(base(url))
+    const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    return u.port === '11434' && (host === '127.0.0.1' || host === 'localhost' || host === '::1')
+  } catch { return false }
+}
+
+/** Vale la pena bussare? Solo in casa: Ollama sta lì, e un fornitore in rete non deve pagare una GET in più. */
+function daBussare(url: string): boolean {
+  try {
+    const u = new URL(base(url))
+    return u.protocol === 'http:' || hostInCasa(u.hostname.replace(/^\[|\]$/g, '').toLowerCase())
+  } catch { return false }
+}
+
+/**
+ * È Ollama?
+ *
+ * Prima dall'indirizzo, che copre il caso normale senza costare niente — la
+ * porta 11434 su questa macchina. Se non basta, e solo se l'indirizzo è di
+ * casa, si bussa una volta a `/api/tags` — che esiste solo lì — e si tiene a
+ * mente la risposta per dieci minuti: un fornitore in rete non deve pagare una
+ * chiamata in più a ogni domanda.
+ *
+ * Non basta che risponda: deve rispondere *come Ollama*, cioè con l'elenco dei
+ * modelli. Un server qualunque che dice 200 a tutto non è Ollama, e trattarlo
+ * come tale vorrebbe dire mandargli un corpo che non capisce e leggere una
+ * risposta che non c'è.
+ */
+export async function eOllama(url: string): Promise<boolean> {
+  if (sembraOllama(url)) return true
+  if (!daBussare(url)) return false
+  const chiave = base(url)
+  const visto = ORIGINE_OLLAMA.get(chiave)
+  if (visto && Date.now() - visto.quando < RICORDO_OLLAMA) return visto.ollama
+  let ollama = false
+  try {
+    const r = await chiama(`${origine(url)}/api/tags`, { signal: AbortSignal.timeout(2_000) })
+    if (r.ok) {
+      const j = await r.json() as { models?: unknown }
+      ollama = Array.isArray(j?.models)
+    }
+  } catch { ollama = false }
+  ORIGINE_OLLAMA.set(chiave, { ollama, quando: Date.now() })
+  return ollama
+}
+
+/** I messaggi, come li vuole `/api/chat`: gli argomenti sono oggetti, non stringhe. */
+export function messaggiOllama(righe: MessaggioOA[]): Record<string, unknown>[] {
+  return righe.map(m => {
+    if (m.role === 'assistant') {
+      const chiamate = m.tool_calls ?? []
+      return {
+        role: 'assistant',
+        content: m.content ?? '',
+        ...(chiamate.length
+          ? { tool_calls: chiamate.map(c => ({ function: { name: c.function.name, arguments: argomenti(c.function.arguments) } })) }
+          : {})
+      }
+    }
+    // di là il risultato di un attrezzo si riconosce dall'ordine, non da un id
+    if (m.role === 'tool') return { role: 'tool', content: m.content }
+    return { role: m.role, content: m.content }
+  })
+}
+
+/** La finestra minima, e quella oltre cui non si va. */
+
+/**
+ * Quanta finestra chiedere.
+ *
+ * Ottomila token bastano alla chat — il prompt compatto è fatto apposta per
+ * starci — ed è il valore che tiene la prima parola vicina. Ma gli altri
+ * lavori (la rassegna, il feed) mandano molto di più, e una finestra troppo
+ * stretta Ollama non la segnala: taglia il prompt in silenzio, e il modello
+ * risponde su metà materiale. Quindi si parte da ottomila e si raddoppia
+ * finché ci sta, con un tetto.
+ */
+/*
+ * Una finestra sola, sempre la stessa.
+ *
+ * Misurato il 14 settembre 2026 sul suo Mac: ogni volta che `num_ctx` cambia
+ * fra una richiesta e l'altra Ollama ricarica il modello, dieci secondi buoni;
+ * con la stessa finestra il modello caldo risponde in meno di tre. Una finestra
+ * che si adatta al prompt (la chat piccola, il punto grande) ricaricava a ogni
+ * passaggio. Quindi: 16k per tutto, e un prompt che non ci sta si accorcia
+ * prima di partire (`entroLaFinestra`), invece di farselo tagliare in silenzio.
+ */
+export const CTX_FISSO = 16_384
+export function finestra(_righe: Record<string, unknown>[], _max = 0): number {
+  return CTX_FISSO
+}
+
+/** Quanti token, a occhio: tre caratteri e mezzo l'uno. */
+const stimaToken = (testo: string) => Math.ceil(testo.length / 3.5)
+
+/**
+ * Le righe accorciate quanto basta a stare nella finestra, con un margine per
+ * la risposta. Si taglia in mezzo alla riga più lunga (di solito il materiale
+ * dentro il messaggio della persona), e si lascia scritto che manca un pezzo:
+ * un modello che legge «[…]» sa di non avere tutto, uno a cui Ollama toglie
+ * la testa del prompt non lo sa nemmeno.
+ */
+export function entroLaFinestra(righe: Record<string, unknown>[], max = 0): Record<string, unknown>[] {
+  const spazio = CTX_FISSO - Math.max(max, 512) - 256
+  const peso = () => stimaToken(JSON.stringify(righe))
+  let giri = 0
+  while (peso() > spazio && giri++ < 8) {
+    let i = -1, lung = 0
+    righe.forEach((r, k) => { const c = typeof r.content === 'string' ? r.content : ''; if (c.length > lung) { lung = c.length; i = k } })
+    if (i < 0 || lung < 400) break
+    const c = righe[i].content as string
+    const tolgo = Math.min(c.length - 300, Math.ceil((peso() - spazio) * 3.5) + 200)
+    const meta = Math.floor(c.length / 2)
+    righe[i] = { ...righe[i], content: c.slice(0, meta - Math.floor(tolgo / 2)) + '\n[…]\n' + c.slice(meta + Math.ceil(tolgo / 2)) }
+  }
+  return righe
+}
+
+/** Il corpo per `/api/chat`, che è un'altra forma dalla stessa richiesta. */
+export function corpoOllama(f: Fornitore, p: Richiesta, inStreaming: boolean): Record<string, unknown> {
+  const righe = entroLaFinestra(messaggiOllama(messaggi(p.system, p.messages)), p.max_tokens)
+  const fuori: Record<string, unknown> = {
+    model: f.modello,
+    messages: righe,
+    stream: inStreaming,
+    think: false,
+    options: {
+      num_ctx: finestra(righe, p.max_tokens),
+      ...(typeof p.temperature === 'number' ? { temperature: p.temperature } : {}),
+      ...(p.max_tokens ? { num_predict: p.max_tokens } : {}),
+      ...(p.stop_sequences?.length ? { stop: p.stop_sequences } : {})
+    }
+  }
+  const ferri = attrezzi(p.tools)
+  if (ferri.length) fuori.tools = ferri
+  // lo schema d'uscita di là si chiama `format`, e si passa intero
+  const schema = p.output_config?.format?.schema
+  if (schema) fuori.format = schema
+  return fuori
+}
+
+type PezzoOllama = {
+  model?: string
+  message?: {
+    content?: string
+    tool_calls?: { function?: { name?: string; arguments?: unknown } }[]
+  }
+  done?: boolean
+  done_reason?: string | null
+  prompt_eval_count?: number
+  eval_count?: number
+  error?: string
+}
+
+/**
+ * Quello che arriva da `/api/chat`, rimesso nella forma che leggono tutti.
+ *
+ * Si accumula come per l'SSE — testo, chiamate, motivo della fine, conto dei
+ * token — e poi si passa da `inMessaggio`, che è l'unica funzione che i giri
+ * degli strumenti vedono davvero.
+ */
+function daOllama(pezzi: PezzoOllama[], modello: string): Anthropic.Message {
+  let testo = ''
+  let finish: string | null = null
+  let entrata = 0
+  let uscita = 0
+  const chiamate: { id?: string; type?: string; function?: { name?: string; arguments?: unknown } }[] = []
+  for (const p of pezzi) {
+    if (p.message?.content) testo += p.message.content
+    for (const c of p.message?.tool_calls ?? []) {
+      chiamate.push({ type: 'function', function: { name: c.function?.name, arguments: c.function?.arguments } })
+    }
+    if (p.prompt_eval_count) entrata = p.prompt_eval_count
+    if (p.eval_count) uscita = p.eval_count
+    if (p.done) finish = p.done_reason ?? 'stop'
+  }
+  return inMessaggio({
+    model: modello,
+    usage: { prompt_tokens: entrata, completion_tokens: uscita },
+    choices: [{ message: { role: 'assistant', content: testo, tool_calls: chiamate }, finish_reason: finish }]
+  }, modello)
+}
+
+/** Una riga di NDJSON: o è un pezzo, o è un errore detto in mezzo al flusso. */
+function pezzoOllama(riga: string): PezzoOllama | null {
+  const pulita = riga.trim()
+  if (!pulita) return null
+  let j: PezzoOllama
+  try { j = JSON.parse(pulita) as PezzoOllama } catch { return null }
+  if (j.error) throw erroreDelFornitore(/model/i.test(j.error) ? 404 : 500, JSON.stringify({ error: j.error }))
+  return j
 }
 
 /**
@@ -467,19 +727,53 @@ export async function crea(f: Fornitore, p: Richiesta, attesa = 60_000): Promise
   const controllo = new AbortController()
   let perche: 'attesa' | 'silenzio' | null = null
   const sveglia = setTimeout(() => { perche = 'attesa'; controllo.abort() }, attesa)
+  const nativo = await eOllama(f.url)
   try {
-    const r = await spedisci(f, corpo(f, p, false), controllo.signal, () => perche)
-    let j: RispostaOA
+    const r = await spedisci(
+      f,
+      nativo ? `${origine(f.url)}/api/chat` : `${base(f.url)}/chat/completions`,
+      nativo ? corpoOllama(f, p, false) : corpo(f, p, false),
+      controllo.signal, () => perche, !nativo
+    )
+    let j: RispostaOA | PezzoOllama
     try {
-      j = await r.json() as RispostaOA
+      j = await r.json() as RispostaOA | PezzoOllama
     } catch (e) {
       if (controllo.signal.aborted) throw erroreDiRete(e, perche)
       throw new Error('Il fornitore ha risposto con qualcosa che non so leggere.')
     }
-    return inMessaggio(j, f.modello)
+    return nativo ? daOllama([j as PezzoOllama], f.modello) : inMessaggio(j as RispostaOA, f.modello)
   } finally {
     clearTimeout(sveglia)
   }
+}
+
+/**
+ * Il corpo letto riga per riga, con la guardia riarmata a ogni pezzo.
+ *
+ * SSE e NDJSON sono due modi di scrivere la stessa cosa — righe che arrivano
+ * quando arrivano — e la parte difficile è la stessa per tutti e due: un pezzo
+ * può finire a metà riga fra due letture, e chi lo dimentica perde una parola
+ * ogni tanto, senza che nessuno se ne accorga.
+ */
+async function perRiga(r: Response, riarma: () => void, riga: (l: string) => void): Promise<void> {
+  if (!r.body) throw new Error('Il fornitore ha risposto con qualcosa che non so leggere.')
+  const lettore = r.body.getReader()
+  const dec = new TextDecoder()
+  let resto = ''
+  for (;;) {
+    const { value, done } = await lettore.read()
+    if (done) break
+    riarma()
+    resto += dec.decode(value, { stream: true })
+    let i: number
+    while ((i = resto.indexOf('\n')) >= 0) {
+      riga(resto.slice(0, i))
+      resto = resto.slice(i + 1)
+    }
+  }
+  resto += dec.decode()
+  if (resto) riga(resto)
 }
 
 /**
@@ -513,96 +807,121 @@ export async function flusso(
   }
 
   try {
-    const r = await spedisci(f, corpo(f, p, true), controllo.signal, () => perche)
-    riarma()
-
-    // quello che si accumula
-    let id: string | undefined
-    let model: string | undefined
-    let testo = ''
-    let finish: string | null = null
-    let rifiuto = false
-    let usato: UsoOA | null | undefined
-    const chiamate = new Map<number, { id: string; name: string; arguments: string }>()
-
-    const evento = (dato: string) => {
-      if (dato === '[DONE]') return
-      let j: RispostaOA & { choices?: (SceltaOA & { delta?: SceltaOA['message'] & { tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: unknown } }[] } })[] }
-      try { j = JSON.parse(dato) } catch { return }   // una riga rotta non ferma le altre
-      if (j.error) throw erroreDelFornitore(500, JSON.stringify({ error: j.error }))
-      if (j.id) id = j.id
-      if (j.model) model = j.model
-      if (j.usage) usato = j.usage
-      const s = j.choices?.[0]
-      if (!s) return
-      const d = s.delta ?? {}
-      const pezzo = testoDi(d.content ?? '')
-      if (pezzo) { testo += pezzo; onTesto(pezzo) }
-      if (d.refusal) rifiuto = true
-      for (const tc of d.tool_calls ?? []) {
-        // per indice quando c'è; altrimenti per id, e un id mai visto è una
-        // chiamata nuova — due chiamate parallele senza indice si fondevano in una
-        const i = tc.index ?? (tc.id ? ([...chiamate].find(([, v]) => v.id === tc.id)?.[0] ?? chiamate.size) : 0)
-        const voce = chiamate.get(i) ?? { id: '', name: '', arguments: '' }
-        if (tc.id) voce.id = tc.id
-        // si assegna e non si accoda: qualche server rimanda il nome intero a
-        // ogni pezzo, e accodarlo darebbe «cercacercacerca»
-        if (tc.function?.name) voce.name = tc.function.name
-        const a = tc.function?.arguments
-        if (typeof a === 'string') voce.arguments += a
-        else if (a && typeof a === 'object') voce.arguments += JSON.stringify(a)
-        chiamate.set(i, voce)
-      }
-      if (s.finish_reason) finish = s.finish_reason
-    }
-
-    if (!r.body) throw new Error('Il fornitore ha risposto con qualcosa che non so leggere.')
-    const lettore = r.body.getReader()
-    const dec = new TextDecoder()
-    let resto = ''
-    let dati: string[] = []
-    const riga = (l: string) => {
-      const pulita = l.replace(/\r$/, '')
-      if (pulita === '') {
-        if (dati.length) { evento(dati.join('\n')); dati = [] }
-        return
-      }
-      if (pulita.startsWith(':')) return                        // un battito
-      if (pulita.startsWith('data:')) dati.push(pulita.slice(5).replace(/^ /, ''))
-    }
-    try {
-      for (;;) {
-        const { value, done } = await lettore.read()
-        if (done) break
-        riarma()
-        resto += dec.decode(value, { stream: true })
-        let i: number
-        while ((i = resto.indexOf('\n')) >= 0) {
-          riga(resto.slice(0, i))
-          resto = resto.slice(i + 1)
-        }
-      }
-      resto += dec.decode()
-      if (resto) riga(resto)
-      if (dati.length) evento(dati.join('\n'))
-    } catch (e) {
-      if (controllo.signal.aborted) throw erroreDiRete(e, perche)
-      throw e
-    }
-
-    const tool_calls = [...chiamate.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({
-      id: v.id, type: 'function', function: { name: v.name, arguments: v.arguments }
-    }))
-    return inMessaggio({
-      id, model, usage: usato,
-      choices: [{
-        message: { role: 'assistant', content: testo, tool_calls, ...(rifiuto ? { refusal: 'refusal' } : {}) },
-        finish_reason: finish
-      }]
-    }, f.modello)
+    const nativo = await eOllama(f.url)
+    return nativo
+      ? await flussoOllama(f, p, onTesto, controllo, () => perche, riarma)
+      : await flussoOA(f, p, onTesto, controllo, () => perche, riarma)
   } finally {
     clearTimeout(sveglia)
   }
+}
+
+/** Il flusso nella lingua nativa di Ollama: NDJSON, una riga per pezzo. */
+async function flussoOllama(
+  f: Fornitore,
+  p: Richiesta,
+  onTesto: (delta: string) => void,
+  controllo: AbortController,
+  quando: () => 'attesa' | 'silenzio' | null,
+  riarma: () => void
+): Promise<Anthropic.Message> {
+  const r = await spedisci(f, `${origine(f.url)}/api/chat`, corpoOllama(f, p, true), controllo.signal, quando, false)
+  riarma()
+  const pezzi: PezzoOllama[] = []
+  try {
+    await perRiga(r, riarma, l => {
+      const pezzo = pezzoOllama(l)
+      if (!pezzo) return
+      pezzi.push(pezzo)
+      if (pezzo.message?.content) onTesto(pezzo.message.content)
+    })
+  } catch (e) {
+    if (controllo.signal.aborted) throw erroreDiRete(e, quando())
+    throw e
+  }
+  return daOllama(pezzi, f.modello)
+}
+
+/** Il flusso nella lingua di OpenAI: SSE, un evento per blocco di righe. */
+async function flussoOA(
+  f: Fornitore,
+  p: Richiesta,
+  onTesto: (delta: string) => void,
+  controllo: AbortController,
+  quando: () => 'attesa' | 'silenzio' | null,
+  riarma: () => void
+): Promise<Anthropic.Message> {
+  const r = await spedisci(f, `${base(f.url)}/chat/completions`, corpo(f, p, true), controllo.signal, quando)
+  riarma()
+
+  // quello che si accumula
+  let id: string | undefined
+  let model: string | undefined
+  let testo = ''
+  let finish: string | null = null
+  let rifiuto = false
+  let usato: UsoOA | null | undefined
+  const chiamate = new Map<number, { id: string; name: string; arguments: string }>()
+
+  const evento = (dato: string) => {
+    if (dato === '[DONE]') return
+    let j: RispostaOA & { choices?: (SceltaOA & { delta?: SceltaOA['message'] & { tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: unknown } }[] } })[] }
+    try { j = JSON.parse(dato) } catch { return }   // una riga rotta non ferma le altre
+    if (j.error) throw erroreDelFornitore(500, JSON.stringify({ error: j.error }))
+    if (j.id) id = j.id
+    if (j.model) model = j.model
+    if (j.usage) usato = j.usage
+    const s = j.choices?.[0]
+    if (!s) return
+    const d = s.delta ?? {}
+    const pezzo = testoDi(d.content ?? '')
+    if (pezzo) { testo += pezzo; onTesto(pezzo) }
+    if (d.refusal) rifiuto = true
+    for (const tc of d.tool_calls ?? []) {
+      // per indice quando c'è; altrimenti per id, e un id mai visto è una
+      // chiamata nuova — due chiamate parallele senza indice si fondevano in una
+      const i = tc.index ?? (tc.id ? ([...chiamate].find(([, v]) => v.id === tc.id)?.[0] ?? chiamate.size) : 0)
+      const voce = chiamate.get(i) ?? { id: '', name: '', arguments: '' }
+      if (tc.id) voce.id = tc.id
+      // si assegna e non si accoda: qualche server rimanda il nome intero a
+      // ogni pezzo, e accodarlo darebbe «cercacercacerca»
+      if (tc.function?.name) voce.name = tc.function.name
+      const a = tc.function?.arguments
+      if (typeof a === 'string') voce.arguments += a
+      else if (a && typeof a === 'object') voce.arguments += JSON.stringify(a)
+      chiamate.set(i, voce)
+    }
+    if (s.finish_reason) finish = s.finish_reason
+  }
+
+  let dati: string[] = []
+  const riga = (l: string) => {
+    const pulita = l.replace(/\r$/, '')
+    if (pulita === '') {
+      if (dati.length) { evento(dati.join('\n')); dati = [] }
+      return
+    }
+    if (pulita.startsWith(':')) return                        // un battito
+    if (pulita.startsWith('data:')) dati.push(pulita.slice(5).replace(/^ /, ''))
+  }
+  try {
+    await perRiga(r, riarma, riga)
+    if (dati.length) evento(dati.join('\n'))
+  } catch (e) {
+    if (controllo.signal.aborted) throw erroreDiRete(e, quando())
+    throw e
+  }
+
+  const tool_calls = [...chiamate.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({
+    id: v.id, type: 'function', function: { name: v.name, arguments: v.arguments }
+  }))
+  return inMessaggio({
+    id, model, usage: usato,
+    choices: [{
+      message: { role: 'assistant', content: testo, tool_calls, ...(rifiuto ? { refusal: 'refusal' } : {}) },
+      finish_reason: finish
+    }]
+  }, f.modello)
 }
 
 // — collegarlo —
@@ -635,13 +954,7 @@ export function indirizzoAmmesso(url: string, ospitato: boolean): string | null 
    * chi lo ospita e leggersi la risposta. `ospitato.hostRaggiungibile` fa lo
    * stesso per la posta: le due difese devono dire la stessa cosa.
    */
-  const inCasa =
-    host === 'localhost' || host.endsWith('.localhost') ||
-    host.endsWith('.local') || host.endsWith('.internal') ||
-    host === '::1' || /^fe80:/i.test(host) || /^fd/i.test(host) ||
-    /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^169\.254\./.test(host) ||
-    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || /^0\./.test(host)
+  const inCasa = hostInCasa(host)
   if (ospitato && (inCasa || u.protocol === 'http:')) {
     return 'Su un server il fornitore deve stare su https, fuori dalla rete interna.'
   }
@@ -659,15 +972,41 @@ export function indirizzoAmmesso(url: string, ospitato: boolean): string | null 
  * perché quelli sono i parametri di Claude, e qui la differenza la fa il
  * fornitore, non il lavoro.
  */
-export async function prova(f: Fornitore): Promise<{ ok: true } | { ok: false; errore: string }> {
+export async function prova(f: Fornitore): Promise<{ ok: true; latenzaMs: number } | { ok: false; errore: string }> {
+  const partito = Date.now()
   try {
     await crea(f, {
-      model: f.modello, max_tokens: 1,
+      model: f.modello, max_tokens: 4,
       messages: [{ role: 'user', content: 'ok' }]
     }, 30_000)
-    return { ok: true }
+    return { ok: true, latenzaMs: Date.now() - partito }
   } catch (e) {
     return { ok: false, errore: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * C'è qualcuno, adesso?
+ *
+ * Due secondi, una GET, niente ragionamento. Serve prima di una domanda in
+ * chat: con Ollama spento il `fetch` fallisce subito, ma dentro il giro degli
+ * strumenti quel fallimento diventava «non riesco a raggiungere il fornitore»
+ * dopo che la persona aveva già guardato la rotella. Chiederlo prima costa un
+ * decimo di secondo in casa, e permette di dire la cosa vera: *accendilo*.
+ *
+ * Una risposta qualunque basta. Un 401 vuol dire che il server c'è e la chiave
+ * no, ed è un'altra frase — quella la dirà la richiesta vera. Qui si risponde
+ * solo a «c'è qualcuno in ascolto su quella porta».
+ */
+export async function risponde(f: Pick<Fornitore, 'url' | 'chiave'>, attesa = 2_000): Promise<boolean> {
+  const dove = (await eOllama(f.url)) ? `${origine(f.url)}/api/tags` : `${base(f.url)}/models`
+  try {
+    const r = await chiama(dove, {
+      headers: intestazioni({ ...f, modello: '' }), signal: AbortSignal.timeout(attesa)
+    })
+    return !!r
+  } catch {
+    return false
   }
 }
 

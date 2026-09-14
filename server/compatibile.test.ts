@@ -363,11 +363,17 @@ test('troppo tempo per cominciare: si lascia perdere', async () => {
   )
 })
 
-test('prova: un no del fornitore torna come frase, non come eccezione', async () => {
+test('prova: un no del fornitore torna come frase, e un sì porta il cronometro', async () => {
   fornitoreFinto([() => new Response('{}', { status: 401 })])
   assert.deepEqual(await c.prova(F), { ok: false, errore: 'La chiave del fornitore non è valida.' })
-  fornitoreFinto([() => rispostaOA({ content: '' })])
-  assert.deepEqual(await c.prova(F), { ok: true })
+  const viste = fornitoreFinto([() => rispostaOA({ content: 'ok' })])
+  const esito = await c.prova(F)
+  assert.equal(esito.ok, true)
+  // il numero che la scheda mostra: quanto ha messo a dire la prima parola
+  assert.ok(esito.ok && Number.isFinite(esito.latenzaMs) && esito.latenzaMs >= 0)
+  // quattro token, non uno: uno può uscire dalla cache del server e non
+  // misurare niente
+  assert.equal(viste[0].corpo.max_completion_tokens, 4)
 })
 
 test('i modelli: la lista del fornitore, in ordine, o niente', async () => {
@@ -375,6 +381,159 @@ test('i modelli: la lista del fornitore, in ordine, o niente', async () => {
   assert.deepEqual(await c.modelli({ url: 'http://127.0.0.1:11434/v1' }), ['llama3.1:8b', 'qwen2.5:14b'])
   fornitoreFinto([() => new Response('', { status: 500 })])
   assert.deepEqual(await c.modelli({ url: 'http://127.0.0.1:11434/v1' }), [])
+})
+
+// — Ollama, nella sua lingua —
+//
+// Sulla porta `/v1` Ollama fa finta di essere OpenAI e funziona, ma due cose
+// da lì non passano: spegnere il pensiero a voce alta e dire quanta finestra
+// allocare. Sono le due che decidono se la prima parola arriva in un secondo
+// o in venti, e sono la ragione per cui esiste questa strada.
+
+const OLLAMA: c.Fornitore = { url: 'http://127.0.0.1:11434/v1', modello: 'qwen3.5:9b' }
+
+/** Un pezzo di NDJSON come lo scrive `/api/chat`. */
+const pezzoOllama = (o: Record<string, unknown>) => JSON.stringify(o) + '\n'
+
+test('Ollama si riconosce dalla porta e si parla in nativo, senza pensiero e con la finestra detta', async () => {
+  c.scordaOllama()
+  const viste = fornitoreFinto([() => new Response(
+    pezzoOllama({ message: { content: 'Ciao' } }) +
+    pezzoOllama({ message: { content: ' Tobia' }, done: true, done_reason: 'stop', prompt_eval_count: 40, eval_count: 3 })
+  )])
+
+  let uscito = ''
+  const m = await c.flusso(OLLAMA, {
+    model: 'qwen3.5:9b', max_tokens: 300,
+    system: 'Sei Myynd.',
+    messages: [{ role: 'user', content: 'ciao' }]
+  }, d => { uscito += d })
+
+  assert.equal(viste.length, 1, 'una chiamata sola: la porta 11434 non si va a chiedere a nessuno')
+  assert.equal(viste[0].url, 'http://127.0.0.1:11434/api/chat', 'la porta nativa, non quella compatibile')
+  assert.equal(viste[0].corpo.stream, true)
+  assert.equal(viste[0].corpo.think, false, 'il monologo prima della risposta è il grosso dell’attesa')
+  assert.deepEqual(viste[0].corpo.options, { num_ctx: c.CTX_FISSO, num_predict: 300 })
+  assert.deepEqual(viste[0].corpo.messages, [
+    { role: 'system', content: 'Sei Myynd.' },
+    { role: 'user', content: 'ciao' }
+  ])
+
+  assert.equal(uscito, 'Ciao Tobia', 'il testo arriva a pezzi anche di qui')
+  assert.deepEqual(m.content, [{ type: 'text', text: 'Ciao Tobia', citations: null }])
+  assert.equal(m.stop_reason, 'end_turn')
+  assert.equal(m.usage.input_tokens, 40)
+  assert.equal(m.usage.output_tokens, 3)
+})
+
+test('un fornitore che non è Ollama resta su /chat/completions', async () => {
+  c.scordaOllama()
+  const viste = fornitoreFinto([() => new Response(
+    'data: ' + JSON.stringify({ choices: [{ delta: { content: 'ok' } }] }) + '\n\ndata: [DONE]\n\n',
+    { headers: { 'content-type': 'text/event-stream' } }
+  )])
+  await c.flusso(F, { model: 'm', max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, () => {})
+  assert.equal(viste.length, 1)
+  assert.equal(viste[0].url, 'https://esempio.test/v1/chat/completions')
+  assert.equal(viste[0].corpo.think, undefined)
+})
+
+test('una porta di casa che non è la 11434: si bussa a /api/tags, e la risposta vale dieci minuti', async () => {
+  c.scordaOllama()
+  const fuoriPorta: c.Fornitore = { url: 'http://127.0.0.1:12345/v1', modello: 'qwen3.5:9b' }
+  const viste = fornitoreFinto([
+    () => Response.json({ models: [{ name: 'qwen3.5:9b' }] }),
+    () => new Response(pezzoOllama({ message: { content: 'ok' }, done: true, done_reason: 'stop' }))
+  ])
+  await c.flusso(fuoriPorta, { model: 'q', max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, () => {})
+  assert.deepEqual(viste.map(v => v.url), [
+    'http://127.0.0.1:12345/api/tags',
+    'http://127.0.0.1:12345/api/chat'
+  ])
+  // la seconda domanda non bussa più: il ricordo dura dieci minuti
+  await c.flusso(fuoriPorta, { model: 'q', max_tokens: 10, messages: [{ role: 'user', content: 'y' }] }, () => {})
+  assert.equal(viste.filter(v => v.url.endsWith('/api/tags')).length, 1)
+})
+
+test('un server di casa che dice 200 a tutto non è Ollama', async () => {
+  c.scordaOllama()
+  const lmStudio: c.Fornitore = { url: 'http://127.0.0.1:1234/v1', modello: 'x' }
+  const viste = fornitoreFinto([
+    () => Response.json({ va: 'bene' }),                           // niente `models`: non è lui
+    () => new Response('data: ' + JSON.stringify({ choices: [{ delta: { content: 'ok' } }] }) + '\n\ndata: [DONE]\n\n')
+  ])
+  await c.flusso(lmStudio, { model: 'x', max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, () => {})
+  assert.equal(viste[1].url, 'http://127.0.0.1:1234/v1/chat/completions')
+})
+
+test('di là gli attrezzi portano gli argomenti come oggetti, e tornano come tool_use', async () => {
+  c.scordaOllama()
+  const viste = fornitoreFinto([() => new Response(
+    pezzoOllama({ message: { content: '', tool_calls: [{ function: { name: 'cerca', arguments: { query: 'Rossi' } } }] } }) +
+    pezzoOllama({ done: true, done_reason: 'stop' })
+  )])
+  const m = await c.flusso(OLLAMA, {
+    model: 'q', max_tokens: 100,
+    messages: [
+      { role: 'user', content: 'cerca Rossi' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'call_1', name: 'cerca', input: { query: 'prima' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1', content: 'niente' }] }
+    ],
+    tools: [{ name: 'cerca', description: 'cerca', input_schema: { type: 'object', properties: { query: { type: 'string' } } } }]
+  }, () => {})
+
+  const righe = viste[0].corpo.messages as Record<string, unknown>[]
+  assert.deepEqual(righe[1], {
+    role: 'assistant', content: '',
+    tool_calls: [{ function: { name: 'cerca', arguments: { query: 'prima' } } }]
+  }, 'gli argomenti come oggetto: di là non è una stringa JSON')
+  assert.deepEqual(righe[2], { role: 'tool', content: 'niente' })
+  assert.ok(Array.isArray(viste[0].corpo.tools), 'gli attrezzi passano')
+
+  assert.equal(m.stop_reason, 'tool_use')
+  const chiamata = m.content.find(b => b.type === 'tool_use')
+  assert.equal(chiamata?.type === 'tool_use' && chiamata.name, 'cerca')
+  assert.deepEqual(chiamata?.type === 'tool_use' ? chiamata.input : null, { query: 'Rossi' })
+})
+
+test('gli errori di Ollama sono le stesse frasi', async () => {
+  c.scordaOllama()
+  fornitoreFinto([() => Response.json({ error: 'model "boh" not found' }, { status: 404 })])
+  await assert.rejects(
+    c.flusso(OLLAMA, { model: 'boh', max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, () => {}),
+    /non conosce questo modello/
+  )
+  c.scordaOllama()
+  fornitoreFinto([() => { throw new TypeError('fetch failed') }])
+  await assert.rejects(
+    c.flusso(OLLAMA, { model: 'q', max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, () => {}),
+    /Non riesco a raggiungere il fornitore/
+  )
+})
+
+test('la finestra di Ollama è una sola, e un prompt che non ci sta si accorcia da solo', async () => {
+  const c = await import('./compatibile.ts')
+  // sempre la stessa: cambiare num_ctx fra una richiesta e l'altra ricarica il modello
+  assert.equal(c.finestra([{ role: 'user', content: 'ciao' }], 300), c.CTX_FISSO)
+  assert.equal(c.finestra([{ role: 'user', content: 'x'.repeat(60_000) }], 4000), c.CTX_FISSO)
+  // un materiale enorme si taglia in mezzo, con il segno che manca un pezzo
+  const righe = c.entroLaFinestra([{ role: 'system', content: 'Sei Myynd.' }, { role: 'user', content: 'a'.repeat(120_000) }], 2000)
+  const corpo = righe[1].content as string
+  assert.ok(corpo.includes('[…]'), 'manca il segno del taglio')
+  assert.ok(corpo.length < 60_000, 'non si è accorciato abbastanza')
+  // uno piccolo non si tocca
+  const piccole = c.entroLaFinestra([{ role: 'user', content: 'ciao' }], 300)
+  assert.equal(piccole[0].content, 'ciao')
+})
+
+test('risponde: una GET sola, e un fornitore spento è un no', async () => {
+  c.scordaOllama()
+  const viste = fornitoreFinto([() => Response.json({ models: [] })])
+  assert.equal(await c.risponde(OLLAMA), true)
+  assert.equal(viste[0].url, 'http://127.0.0.1:11434/api/tags')
+  c.scordaOllama()
+  fornitoreFinto([() => { throw new TypeError('fetch failed') }])
+  assert.equal(await c.risponde(OLLAMA), false)
 })
 
 // — l'indirizzo —

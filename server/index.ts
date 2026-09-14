@@ -1226,7 +1226,8 @@ app.post('/api/connettori/compatibile', async (req, res) => {
     const esito = await compatibile.prova(f)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ compatibile: f, motore: 'compatibile' })
-    res.json({ ok: true, motore: 'compatibile' })
+    // la latenza misurata dal server: è quella che la chat sentirà davvero
+    res.json({ ok: true, motore: 'compatibile', ...('latenzaMs' in esito && esito.latenzaMs !== undefined ? { latenzaMs: esito.latenzaMs } : {}) })
   } catch (e) { errore(res, e) }
 })
 
@@ -3542,7 +3543,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   setInterval(imparaDaSolo, 6 * 3600_000)
 
   // Check periodically even when the home page is closed. The per-account
-  // cache and retry cooldown prevent repeated feed/model requests.
+  // cache and retry cooldown prevent repeated feed/model requests. The morning
+  // rule in rassegna.ts (`daRifare`) rebuilds the edition on the first check of
+  // a new local day past 06:00, so the run 10 s after launch is already enough:
+  // an app opened at eight after a night closed refreshes in the background,
+  // and one left open crosses 06:00 on this same 60 s loop.
   const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
   setTimeout(giornali, 10_000)
   setInterval(giornali, 60_000)

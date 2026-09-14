@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { Hov } from '../ui'
 import { IconSu } from '../icons'
@@ -70,6 +71,34 @@ function Intervista({ v }: { v: Vals }) {
   )
 }
 
+/**
+ * «Annulla», accanto alla rotella — ma non subito.
+ *
+ * Con Claude la prima parola arriva in un paio di secondi e un bottone per
+ * fermarla sarebbe rumore: c'è e sparisce prima che uno lo legga. Con un
+ * modello sul proprio computer no, e lì l'attesa è la cosa che lui ha
+ * raccontato per prima. Cinque secondi sono la soglia in cui uno smette di
+ * aspettare e comincia a chiedersi se si è rotto qualcosa: è lì che deve
+ * comparire il modo di fermarla, e non prima.
+ *
+ * Sottovoce: è un'uscita, non un invito. Chi vuole aspettare deve continuare a
+ * poterlo fare senza che niente gli dica che sta sbagliando.
+ */
+function Annulla({ su }: { su: () => void }) {
+  const [visibile, setVisibile] = useState(false)
+  useEffect(() => {
+    const s = setTimeout(() => setVisibile(true), 5000)
+    return () => { clearTimeout(s); setVisibile(false) }
+  }, [])
+  if (!visibile) return null
+  return (
+    <Hov as="button" type="button" onClick={su} style={{
+      alignSelf: 'center', marginLeft: 10, border: 'none', background: 'none', padding: '4px 2px',
+      fontFamily: 'inherit', fontSize: 12.5, color: 'rgba(34,39,31,.5)', cursor: 'pointer'
+    }} hover={{ color: '#8E3F1F' }}>{t('Annulla')}</Hov>
+  )
+}
+
 /** La chat sul tuo materiale: bolle, fonti citate sotto ogni risposta. */
 export function Chat({ v }: { v: Vals }) {
   // mentre Myynd fa le sue domande si risponde a lui, anche senza un motore collegato
@@ -111,6 +140,7 @@ export function Chat({ v }: { v: Vals }) {
           <div style={v.bolla.rigaSua}>
             <Mascotte size={LATO_MASCOTTE} style={AVATAR} />
             <Stato tipo="cerco" testo={t('Cerco tra le fonti')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
+            <Annulla su={v.annulla} />
           </div>
         )}
       </div>

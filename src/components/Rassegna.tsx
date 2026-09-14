@@ -9,6 +9,22 @@ import './rassegna.css'
 const PER_PAGINA = 5
 const MASSIMO = 10
 
+/*
+ * The stamp of the last edition actually opened.
+ *
+ * Without it the dot would bounce at every reload — that is, always, that is,
+ * never again: a mark that is always on stops meaning anything. It lives in
+ * `localStorage` because it has to survive a reload, not a new machine, and
+ * every access is guarded: a private window throws instead of returning null.
+ */
+const CHIAVE_VISTA = 'myynd.rassegna.vista'
+const vistaSalvata = (): string => {
+  try { return localStorage.getItem(CHIAVE_VISTA) ?? '' } catch { return '' }
+}
+const segnaVista = (q: string) => {
+  try { localStorage.setItem(CHIAVE_VISTA, q) } catch { /* no storage: the dot bounces once too often, and that is all */ }
+}
+
 function eta(iso: string): string {
   const minuti = (Date.now() - Date.parse(iso)) / 60_000
   if (!Number.isFinite(minuti)) return ''
@@ -112,6 +128,7 @@ export function Rassegna() {
   const [carico, setCarico] = useState(false)
   const [guaio, setGuaio] = useState('')
   const [aperta, setAperta] = useState(false)
+  const [vista, setVista] = useState(vistaSalvata)
   const [occupata, setOccupata] = useState<string | null>(null)
   const viva = useRef(true)
   const caricando = useRef(false)
@@ -137,6 +154,15 @@ export function Rassegna() {
     return () => { viva.current = false; clearInterval(timer) }
   }, [carica])
 
+  // Opened means read: the stamp is written while the dialog is up, and again
+  // if a fresher edition lands while it is open — otherwise it would keep
+  // bouncing over news she is looking at.
+  useEffect(() => {
+    if (!aperta || !quando) return
+    segnaVista(quando)
+    setVista(v => quando > v ? quando : v)
+  }, [aperta, quando])
+
   useEffect(() => {
     if (!aperta || !aggiornando) return
     const timer = setInterval(() => void carica(), 3_000)
@@ -161,10 +187,13 @@ export function Rassegna() {
     finally { modificando.current = false; if (viva.current) setOccupata(null) }
   }
 
+  // Something new, and not yet opened: the only case worth a moving dot.
+  const fresca = !!quando && quando > vista && notizie.length > 0
+
   return <>
     <button type="button" className="news-pill" onClick={() => { setAperta(true); void carica() }} aria-haspopup="dialog" aria-expanded={aperta}
-      aria-label={t('Notizie')}>
-      <span className={notizie.length ? 'news-dot has-news' : 'news-dot'} aria-hidden="true" />{t('Notizie')}
+      aria-label={fresca ? t('Notizie nuove') : t('Notizie')}>
+      <span className={`news-dot${notizie.length ? ' has-news' : ''}${fresca ? ' pallino-salta' : ''}`} aria-hidden="true" />{t('Notizie')}
     </button>
     {aperta && <SalaNotizie notizie={notizie.length ? notizie : recenti} archivio={!notizie.length && !!recenti.length} quando={quando} carico={carico || aggiornando} guaio={guaio}
       aggiorna={() => void carica(true)} togli={togli} occupata={occupata ?? (carico ? 'loading' : null)} chiudi={() => setAperta(false)} />}

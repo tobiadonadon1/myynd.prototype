@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { BottoneSicuro, Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconDoc, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
+import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
@@ -124,6 +124,60 @@ const PASTIGLIA: CSSProperties = {
   background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
 }
 
+/** Il titolo di una fonte, senza il «[7]» con cui la cita il modello. */
+function nomeFonte(label: string): string {
+  return label.replace(/^\[\d+\]\s*/, '')
+}
+
+/**
+ * Le prove di una riga: da dove viene, e cosa ha letto per farla.
+ *
+ * È la risposta a «quando affido una cosa, non la trovo utile come dovrebbe».
+ * Una riga affidata tornava con un testo e basta: da dove venisse — la mail a
+ * cui rispondere — e su cosa avesse lavorato restavano scritti nel database e
+ * invisibili sullo schermo. Qui stanno tutti e due, in chiaro e piano: un
+ * link alla cosa da cui è nata, e i documenti che ha davvero aperto.
+ *
+ * Sono link, non pastiglie: la riga resta quello che conta, e le prove le
+ * legge chi le cerca. Il click non risale — dentro una riga della lista
+ * aprirebbe anche la riga — e ogni titolo si ferma con i tre puntini invece
+ * di spingere fuori la card.
+ */
+function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
+  const fonti = c.fonti ?? []
+  if (!c.doc && !fonti.length) return null
+  const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
+  const acceso = scuro ? '#FFF7F0' : '#8E3F1F'
+  const link: CSSProperties = {
+    maxWidth: 190, minWidth: 0, padding: 0, border: 'none', background: 'none',
+    fontFamily: 'inherit', fontSize: '12.5px', color: quieto, cursor: 'pointer', textAlign: 'left',
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
+  }
+  const apri = (id: string) => (e: MouseEvent) => { e.stopPropagation(); v.apriFonte(id) }
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 14px', marginTop: 12, minWidth: 0 }}>
+      {c.doc && (
+        <Hov as="button" type="button" onClick={apri(c.doc)}
+          style={{ ...link, flex: 'none', color: acceso }}
+          hover={{ textDecorationColor: 'currentColor' }}>{t('Apri la fonte')}</Hov>
+      )}
+      {fonti.length > 0 && (
+        <span style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', minWidth: 0 }}>
+          <span style={{ flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: quieto }}>{t('Fonti usate')}</span>
+          {fonti.slice(0, 3).map(f => (
+            <Hov key={f.id} as="button" type="button" onClick={apri(f.id)} title={nomeFonte(f.label)}
+              style={link} hover={{ color: acceso, textDecorationColor: 'currentColor' }}>{nomeFonte(f.label)}</Hov>
+          ))}
+          {fonti.length > 3 && (
+            <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>+{fonti.length - 3}</span>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** Cosa c'è scritto accanto a «DA FARE»: cosa sta succedendo, o dove sta. */
 function didascalia(c: Compito): string {
   if (c.stato === 'delegato') return t('ci sta lavorando')
@@ -166,7 +220,7 @@ function attesaDi(c: Compito): string {
  * un feed — se per chiudere una riga devi cambiare stanza, quella riga lì non
  * ci stava davvero.
  */
-function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void }) {
+function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: () => void }) {
   const { attiva, props } = useAttiva()
   const attesa = attesaDi(c)
   const testo = corpo(c)
@@ -192,6 +246,9 @@ function RigaCompito({ c, l, apri }: { c: Compito; l: Lista; apri: () => void })
             {taglia(testo, 140)}
           </div>
         )}
+        {/* da dove viene e cosa ha letto: la riga si apre in cima, il documento
+            si apre solo da qui — e da nessun altro punto della riga */}
+        <Prove c={c} v={v} />
       </div>
 
       {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso, e sta
@@ -275,6 +332,8 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           )}
         </div>
       )}
+
+      <Prove c={c} v={v} scuro />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
         {/* quello che si fa quasi sempre. Su una bozza pronta «Fatto» sarebbe
@@ -363,6 +422,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
    * riempie cliccando una riga, e si svuota cliccando una delle sue.
    */
   const [inCima, setInCima] = useState<string | null>(null)
+  /** Mentre la riga nasce e parte: il bottone non si preme due volte. */
+  const [affidando, setAffidando] = useState(false)
   const compiti = lista?.compiti ?? []
   const inTesta = compiti.find(c => c.id === inCima) ?? (v.hasHero ? null : compiti[0] ?? null)
   // quando in cima ci va una cosa tua, la voce che stava lì scende fra le righe
@@ -370,17 +431,19 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
   const voci = inTesta && v.rigaHero ? [v.rigaHero, ...v.resto] : v.resto
   const righe = [
     /*
-     * La freccia porta alla cosa, non alla riga.
+     * La riga porta la riga in cima. Sempre.
      *
-     * Una riga che viene da una mail — il punto le nota e le scrive qui, con
-     * dentro il documento da cui vengono — si apre su quella mail: è quello
-     * che serve per rispondere, ed è quello che ha chiesto lui. Una riga che
-     * si è scritto da solo non ha niente dietro, e allora sale in cima come
-     * sempre, dove c'è lo spazio per farci qualcosa.
+     * Prima una riga nata da una mail apriva quella mail, e le altre salivano
+     * in cima: lo stesso gesto faceva due cose diverse a seconda di una cosa
+     * che non si vede: se il modello le avesse segnato un documento dietro.
+     * Ci si trovava davanti un foglio che non si era chiesto — «mi apre
+     * documenti a caso, il mio CV» — invece della riga da chiudere. Adesso
+     * la riga si apre in cima, dove c'è spazio per farci qualcosa, e il
+     * documento si apre da «Apri la fonte»: scritto, e voluto.
      */
     ...compiti.filter(c => c.id !== inTesta?.id).slice(0, 6).map(c => ({
       chiave: c.id,
-      nodo: <RigaCompito c={c} l={lista!} apri={() => (c.doc ? v.apriFonte(c.doc) : setInCima(c.id))} />
+      nodo: <RigaCompito c={c} l={lista!} v={v} apri={() => setInCima(c.id)} />
     })),
     ...voci.map(r => ({
       chiave: r.id,
@@ -389,6 +452,29 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
       nodo: <Riga riga={{ ...r, onPromote: () => { setInCima(null); r.onPromote() } }} />
     }))
   ]
+
+  /**
+   * «Affidalo a Myynd»: la voce diventa una riga tua, e parte.
+   *
+   * Prima lì c'era «Chiedi a Myynd», che apriva la chat con scritto dentro
+   * «dimmi di più su…»: una domanda, non un lavoro. Adesso il bottone fa
+   * quello che dice — nasce la riga con dentro il documento da cui viene, la
+   * prende lui, e te la ritrovi in cima con sopra scritto che ci sta
+   * lavorando. Parlarne è rimasto, dietro il «⋯», dov'è giusto che stia
+   * quello che si fa di rado.
+   */
+  const affidaHero = async () => {
+    if (!lista || affidando) return
+    const voce = v.heroId
+    setAffidando(true)
+    const id = await lista.affidaNuovo(v.heroTitolo, { doc: v.heroDoc, voce })
+    setAffidando(false)
+    if (!id) return
+    // il server ha già chiuso la voce: qui si toglie da quello che si ha davanti
+    v.viaDalFeed(voce)
+    setInCima(id)
+    v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
+  }
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -485,7 +571,33 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
               hover={{ color: '#FFF7F0' }}>{t('Non mi interessa')}</Hov>
           </div>
 
-          <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
+          {/*
+            Il titolo è il link, e dice cosa c'è dietro.
+
+            Sotto la card c'era un «Apri il documento» con un'icona: una
+            parola che non prometteva niente — e quello che si apriva poteva
+            essere un `.md` pieno di cancelletti. Adesso il posto da cliccare
+            è la cosa stessa, e l'etichetta dice se dietro c'è una mail, un
+            file o una pagina: si sa dove si va prima di andarci.
+          */}
+          {v.heroHaDoc ? (
+            <Hov as="button" type="button" onClick={v.apriDoc}
+              title={v.heroApreCosa} aria-label={`${v.heroApreCosa}: ${v.heroTitolo}`}
+              style={{
+                display: 'block', width: '100%', maxWidth: 600, minWidth: 0, marginTop: 20, padding: 0,
+                border: 'none', background: 'none', textAlign: 'left', fontFamily: 'inherit', color: '#FFF7F0',
+                fontSize: 22, lineHeight: 1.35, fontWeight: 500, textWrap: 'pretty', overflowWrap: 'anywhere',
+                cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(255,247,240,.3)',
+                textUnderlineOffset: 5, textDecorationThickness: 1
+              }}
+              hover={{ textDecorationColor: '#FFF7F0' }}>
+              {v.heroTitolo}
+              {/* inline-block apposta: la sottolineatura del titolo non lo tocca */}
+              <span style={{ display: 'inline-block', marginLeft: 10, fontSize: '13px', fontWeight: 400, color: 'rgba(255,247,240,.66)', whiteSpace: 'nowrap' }}>{v.heroApreCosa} →</span>
+            </Hov>
+          ) : (
+            <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
+          )}
           <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
             {v.heroTesto}
             {v.heroTagliato && (
@@ -497,15 +609,6 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           {/* il perché: per quale progetto o obiettivo conta, in una riga quieta */}
           {v.heroPerche && (
             <div style={{ fontSize: '13px', lineHeight: 1.5, marginTop: 8, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.heroPerche}</div>
-          )}
-
-          {v.heroHaDoc && (
-            <Hov as="button" type="button" onClick={v.apriDoc}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(255,247,240,.75)', alignSelf: 'flex-start', fontFamily: 'inherit' }}
-              hover={{ color: '#FFF7F0' }}>
-              <IconDoc size={16} style={{ flex: 'none', color: '#FFF7F0' }} />
-              <span style={{ fontSize: '13px' }}>{t('Apri il documento')}</span>
-            </Hov>
           )}
 
           {/*
@@ -521,36 +624,44 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             <Hov as="button" onClick={v.heroPrimary}
               style={primario(!v.scriviAperto)}
               hover={v.scriviAperto ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{t('Fatto')}</Hov>
-            <Hov as="button" onClick={v.heroAsk}
-              style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-              hover={{ background: 'rgba(255,247,240,.16)' }}>{t('Chiedi a Myynd')}</Hov>
+            {lista && (
+              <Hov as="button" onClick={affidaHero} disabled={affidando}
+                style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: affidando ? 'default' : 'pointer', fontFamily: 'inherit', opacity: affidando ? 0.62 : 1 }}
+                hover={{ background: 'rgba(255,247,240,.16)' }}>{t('Affidalo a Myynd')}</Hov>
+            )}
 
-            <Hov as="button" onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
-              style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: v.menuAperto ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-              hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
+            {/* Il menù si appende al «⋯», non a un numero di pixel.
+                Stava a `left: 178` dal bordo della fascia, cioè alla larghezza
+                che avevano quei due bottoni con quelle due parole dentro: la
+                prima traduzione un po' più lunga lo spostava sotto il nulla. */}
+            <div style={{ position: 'relative' }}>
+              <Hov as="button" onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
+                style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: v.menuAperto ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
+                hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
+
+              {v.menuAperto && (
+                <>
+                  <div onClick={v.chiudiMenu} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+                  <div role="menu" style={{
+                    position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 190,
+                    borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
+                    boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
+                    animation: 'fadein .14s ease'
+                  }}>
+                    {v.correzioni.map(c => (
+                      <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
+                        style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
+                        hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             <div style={{ flex: 1 }} />
             <Hov as="button" onClick={v.heroSkip} title={t('Rimandala in fondo')}
               style={{ padding: '12px 4px', border: 'none', background: 'none', color: 'rgba(255,247,240,.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               hover={{ color: '#FFFFFF' }}>{t('Più tardi')}</Hov>
-
-            {v.menuAperto && (
-              <>
-                <div onClick={v.chiudiMenu} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div role="menu" style={{
-                  position: 'absolute', bottom: 'calc(100% + 8px)', left: 178, zIndex: 21, minWidth: 190,
-                  borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
-                  boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
-                  animation: 'fadein .14s ease'
-                }}>
-                  {v.correzioni.map(c => (
-                    <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
-                      style={VOCE_MENU}
-                      hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
 
           {v.scriviAperto && (

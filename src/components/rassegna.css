@@ -1,7 +1,11 @@
 .news-pill { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; min-height: 30px; padding: 5px 12px; border-radius: 99px; border: 1px solid rgba(255,255,255,.9); background: rgba(255,253,249,.8); color: #3c503f; font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; box-shadow: 0 4px 12px -8px #45362466; }
 .news-pill:hover { background: #fffdf9; }
-.news-dot { width: 6px; height: 6px; border-radius: 50%; background: #708773; }
+.news-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #708773; }
 .news-dot.has-news { background: #ad5635; animation: news-pulse 2.8s ease-in-out 3; }
+/* Non lette: salta finché non le apre. Il salto è una trasformazione — il
+   pallino si muove, la parola accanto no — e vince sul battito, che dura tre
+   giri e poi sparisce. `salta` sta in index.css, con il pallino della chat. */
+.news-dot.has-news.pallino-salta { animation: salta 1.8s ease-in-out infinite; animation-play-state: var(--mo, running); }
 .news-room::backdrop { background: #242b2547; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .news-room { box-sizing: border-box; padding: 0; margin: auto; width: min(880px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); flex-direction: column; overflow: hidden; color: #22271f; background: #faf7f0; border: 1px solid #fffdf9; border-radius: 26px; box-shadow: 0 32px 100px -25px #2f352a77, inset 0 1px #ffffff; }
 .news-room[open] { display: flex; }
@@ -56,5 +60,5 @@
   .news-article { padding: 22px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .news-dot.has-news, .news-overlay, .news-article, .news-spinning { animation: none; }
+  .news-dot.has-news, .news-dot.has-news.pallino-salta, .news-overlay, .news-article, .news-spinning { animation: none; }
 }

@@ -222,7 +222,18 @@ function fornitoreFinto(giri: Giro[]) {
   cfg.scrivi({ motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
   const ricevute: Record<string, unknown>[] = []
   let n = 0
-  compatibile.usaRete((async (_url: string | URL | Request, init?: RequestInit) => {
+  compatibile.usaRete((async (url: string | URL | Request, init?: RequestInit) => {
+    /*
+     * Il controllo «c'è qualcuno?» non è un giro del modello.
+     *
+     * Prima di ogni domanda la chat bussa all'elenco dei modelli: due secondi
+     * di GET, per poter dire «accendi Ollama» invece di far girare a vuoto un
+     * giro di strumenti. Qui va risposto — se no la chat si ferma prima di
+     * cominciare — ma non va *contato*: contarlo spostava di uno tutte le
+     * risposte preparate, e ogni prova sulla lista falliva per il motivo
+     * sbagliato.
+     */
+    if (String(url).endsWith('/models')) return Response.json({ data: [{ id: 'gpt-prova' }] })
     ricevute.push(init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {})
     const g = giri[Math.min(n++, giri.length - 1)] ?? {}
     const eventi: unknown[] = []
@@ -279,6 +290,112 @@ test('la lista con gli id entra nel prompt solo con gli strumenti in mano', () =
   assert.doesNotMatch(senza, /chiudi_compito/)
 
   store.scordaCompito('c-lista-1')
+})
+
+/*
+ * — il prompt compatto —
+ *
+ * Il numero da cui nasce tutto, misurato sul suo Mac con Ollama e un modello
+ * da nove miliardi di parametri: la preparazione del prompt va a
+ * seicentocinquanta token al secondo. Due token di sistema, e la prima parola
+ * arriva in sei decimi di secondo; settemila token di sistema, e ne servono
+ * dieci e mezzo. Quindi la lunghezza del prompt *è* il tempo di attesa, e
+ * seimila caratteri — millecinquecento token scarsi — sono i due secondi e
+ * mezzo che rendono la chat una chat.
+ *
+ * Il tetto qui sotto non è un'opinione sullo stile: è quel conto.
+ */
+
+/** Un conto pieno: venti righe in lista, il ritratto lungo e qualche convinzione. */
+function contoCarico() {
+  cfg.scrivi({ nome: 'Tobia', ruolo: 'fondatore di un’azienda di software' })
+  store.scriviBlocco({
+    etichetta: 'scrittura',
+    descrizione: 'Il tono e le abitudini di scrittura',
+    valore: 'Apre con «Ciao» e il nome, chiude con «Un caro saluto». Non usa mai il punto esclamativo. ' +
+      'Preferisce le frasi corte. Con i clienti dà del lei, con i fornitori del tu. '.repeat(6),
+    tetto: 2000
+  })
+  store.scriviBlocco({
+    etichetta: 'lavoro',
+    descrizione: 'Come lavora',
+    valore: 'Lavora al mattino presto e non risponde alle mail dopo le sette di sera. '.repeat(12),
+    tetto: 2000
+  })
+  for (let i = 0; i < 12; i++) {
+    store.ricorda({
+      enunciato: `Con il cliente numero ${i} non si fanno sconti sul prezzo di listino, mai, per nessuna ragione.`,
+      ambito: i % 2 ? 'persona' : 'azienda', genere: 'esplicita', fiducia: 0.9, origine: 'prova'
+    })
+  }
+  for (let i = 0; i < 20; i++) {
+    store.scriviCompito({
+      id: `c-carico-${i}`, ordine: `z${i}`, quando: ['oggi', 'settimana', 'poi'][i % 3],
+      testo: `Riga numero ${i} della sua lista, scritta lunga come le scrive lei davvero`
+    })
+  }
+}
+
+function scaricaIlConto() {
+  for (let i = 0; i < 20; i++) store.scordaCompito(`c-carico-${i}`)
+}
+
+test('con un modello di casa il prompt sta sotto i seimila caratteri, con Claude resta intero', () => {
+  contoCarico()
+  const domanda = 'cosa devo al cliente numero 3'
+
+  const compatto = claude.sistema(domanda, true, true)
+  const intero = claude.sistema(domanda, true)
+
+  assert.ok(compatto.length < 6000,
+    `il prompt compatto è ${compatto.length} caratteri: sopra i seimila la prima parola arriva dopo dieci secondi`)
+  // e non è compatto per caso: quello intero, con questo conto, è ben oltre
+  assert.ok(intero.length > 6000, `il prompt intero è solo ${intero.length} caratteri: la prova non sta misurando niente`)
+  assert.ok(intero.length > compatto.length * 2)
+
+  // quello che resta: la voce, il ritratto, la lista con gli id, gli strumenti
+  assert.match(compatto, /Sei Myynd/)
+  assert.match(compatto, /Cita le fonti col numero fra parentesi quadre/)
+  assert.match(compatto, /Tobia/)
+  assert.match(compatto, /\[c-carico-\d+\]/)
+  assert.match(compatto, /chiudi_compito/)
+  // otto righe di lista, non venticinque
+  assert.equal([...compatto.matchAll(/\[c-carico-\d+\]/g)].length, 8)
+  assert.equal([...intero.matchAll(/\[c-carico-\d+\]/g)].length, 20)
+
+  /*
+   * L'ordine, che vale quanto la lunghezza.
+   *
+   * Ollama tiene in cache il prefisso comune fra due domande della stessa
+   * chat. Se la parte che cambia — la lista, chi c'entra con la domanda —
+   * stesse in mezzo, quella cache non servirebbe a niente e ogni giro
+   * ripagherebbe il prompt intero.
+   */
+  assert.ok(compatto.indexOf('Chi ti parla') < compatto.indexOf('Quello che ha in lista'),
+    'prima quello che non cambia, poi quello che cambia a ogni domanda')
+
+  scaricaIlConto()
+})
+
+test('il prompt compatto arriva davvero al fornitore, e con lui tre documenti e non sedici', async () => {
+  contoCarico()
+  store.salvaDocumenti(Array.from({ length: 8 }, (_, i) =>
+    doc(`posta:INBOX:compatto-${i}`, `Preventivo numero ${i} per il cliente`, {
+      corpo: `Il corpo del preventivo numero ${i}, lungo come sono lunghe le email vere. `.repeat(60)
+    })
+  ))
+  const ricevute = fornitoreFinto([{ testo: 'Ecco.' }])
+  await claude.rispondiInStreaming('preventivo cliente', [], () => {}, attrezziFinti())
+
+  const s = sistemi(ricevute)[0] ?? ''
+  assert.ok(s.length < 6000, `il prompt arrivato al modello è ${s.length} caratteri`)
+
+  const materiale = turni(ricevute[0]).find(m => m.role === 'user' && /Materiale:/.test(String(m.content)))
+  const quanti = [...String(materiale?.content ?? '').matchAll(/^\[\d+\] /gm)].length
+  assert.ok(quanti > 0 && quanti <= 3, `documenti nel materiale: ${quanti}`)
+
+  store.svuotaFonte('posta')
+  scaricaIlConto()
 })
 
 test('«l’ho fatta» detto in chat chiude davvero la riga', async () => {

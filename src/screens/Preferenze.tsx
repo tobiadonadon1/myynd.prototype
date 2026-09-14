@@ -756,6 +756,11 @@ function CampoArgomenti({ v }: { v: Vals }) {
  * scegliere l'altra si può, ma con l'avviso scritto sotto e non in una nota
  * a piè di pagina: la qualità non deve calare in silenzio.
  */
+/** «Ollama · qwen3.5:9b»: il nome che gli ha dato lei, e il modello che lavora davvero. */
+function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
+  return [f.nome, f.modello].filter(Boolean).join(' · ')
+}
+
 function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   type Via = 'chiave' | 'abbonamento' | 'compatibile'
   const [s, setS] = useState<ClaudeCon | null>(null)
@@ -767,6 +772,38 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile])
 
   const f = v.compatibile
+
+  /*
+   * Il modello di casa, provato davvero, all'apertura della scheda.
+   *
+   * Finora questa riga diceva solo *cosa* era collegato — nome, modello,
+   * indirizzo — e non se funzionava. Ma un modello sul proprio computer è una
+   * cosa che si spegne: si chiude Ollama, si riavvia il portatile, e la riga
+   * continua a dire «In uso» mentre la chat non risponde più. Adesso si prova,
+   * e si dice in quanto ha risposto — che è l'altra metà della domanda, perché
+   * un modello troppo grosso per quella macchina «funziona» e non si può usare.
+   *
+   * Solo in casa. La rotta che prova è la stessa che collega, e riscrive la
+   * configurazione con quello che le si manda: la chiave di un fornitore in
+   * rete qui non ce l'abbiamo — non esce mai dal server — e mandarla via
+   * vorrebbe dire scollegare qualcuno per mostrargli un numero.
+   */
+  const inCasa = !!f && /^https?:\/\/(127\.|localhost|\[?::1\]?|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(f.url)
+  const [velocita, setVelocita] = useState<{ ok: boolean; ms: number } | null>(null)
+  const [provando, setProvando] = useState(false)
+  useEffect(() => {
+    if (v.motore !== 'compatibile' || !f || !inCasa) { setVelocita(null); return }
+    let ancora = true
+    setProvando(true)
+    api.provaMotore({ url: f.url, modello: f.modello, ...(f.nome ? { nome: f.nome } : {}) })
+      .then(r => { if (ancora) setVelocita({ ok: r.ok, ms: r.ms }) })
+      .finally(() => { if (ancora) setProvando(false) })
+    return () => { ancora = false }
+  }, [v.motore, f?.url, f?.modello, f?.nome, inCasa])
+
+  /** Sopra i dieci secondi non è un dettaglio: è la chat che sembra rotta. */
+  const LENTO = 10_000
+
   // ospitati l'abbonamento non esiste: la riga non si mostra, e la scelta non ci cade mai
   const abbonamentoPossibile = !!s?.abbonamentoPossibile
   const attuale: Via = v.motore === 'compatibile' ? 'compatibile'
@@ -815,8 +852,18 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     {
       id: 'compatibile', titolo: t('Un altro fornitore, o un modello sul tuo computer'),
       nota: t('OpenAI, OpenRouter, Groq, Mistral — o Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.'),
-      // l'indirizzo può essere lungo: si spezza, non sfora
-      dettaglio: f ? [f.nome, f.modello, f.url].filter(Boolean).join(' · ') : undefined,
+      // l'indirizzo può essere lungo: si spezza, non sfora. E davanti, quando
+      // si è potuto misurare, quello che conta di più: risponde, e in quanto
+      dettaglio: f
+        ? [
+          provando ? t('Provo…')
+            : velocita ? (velocita.ok
+              ? frasi.motoreRisponde(chiEComeSiChiama(f), (velocita.ms / 1000).toFixed(1))
+              : frasi.motoreGiu(chiEComeSiChiama(f)))
+            : chiEComeSiChiama(f),
+          f.url
+        ].filter(Boolean).join(' · ')
+        : undefined,
       azione: { testo: f ? t('Cambia') : t('Collega'), apri: () => v.apriConnessioni('compatibile') }
     }
   ]
@@ -876,6 +923,17 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                   <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
                     <span>{t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}</span>
                     <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
+                  </div>
+                )}
+                {/*
+                  Un modello che ci mette più di dieci secondi a cominciare non
+                  è «un po' lento»: è la chat che sembra rotta, ed è la cosa che
+                  lui ha raccontato per prima. Dirlo qui, con la via d'uscita,
+                  invece di lasciarlo scoprire una domanda alla volta.
+                */}
+                {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
+                  <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8, textWrap: 'pretty' }}>
+                    {t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}
                   </div>
                 )}
                 {scelto && x.id === 'compatibile' && (

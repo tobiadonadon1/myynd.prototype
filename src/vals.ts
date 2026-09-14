@@ -40,6 +40,25 @@ export function taglia(t: string, max: number): string {
 // e su un progetto che distingue le maiuscole i due nomi si scontrerebbero.
 export { primoParagrafo }
 
+/**
+ * Cosa si apre, detto con la parola giusta.
+ *
+ * «Apri il documento» era vero e non serviva a niente: dietro c'è una mail a
+ * cui rispondere, un file sul disco o una pagina di Notion, e dirlo cambia se
+ * uno clicca o no. La fonte la porta già la voce; quando manca, la si legge
+ * dall'id del documento, che comincia sempre col nome del connettore
+ * (`posta:INBOX:11`, `desktop:/Users/...`, `notion:…`).
+ */
+const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook'])
+const FILE = new Set(['desktop', 'drive', 'dropbox', 'mac'])
+
+export function etichettaFonte(fonte: string | null | undefined, doc: string | null | undefined): string {
+  const nome = (fonte || (doc ?? '').split(':')[0] || '').toLowerCase()
+  if (POSTA.has(nome)) return t('Apri la mail')
+  if (FILE.has(nome)) return t('Apri il file')
+  return t('Apri la pagina')
+}
+
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
 const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
 const BOLLA_MIA: CSSProperties = {
@@ -367,6 +386,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // un contatore di generazione: la risposta di una richiesta vecchia non
   // deve sovrascrivere quella nuova, né cancellare la bolla ottimistica
   const gen = useRef(0)
+  /**
+   * Il filo aperto adesso, per poterlo tagliare.
+   *
+   * Serve a un gesto solo: «Annulla» sotto la rotella. Con un modello sul
+   * proprio computer l'attesa prima della prima parola si misura in secondi
+   * veri, e finché non c'era questo l'unico modo di fermarla era ricaricare la
+   * pagina — cioè perdere la chat. Chiudendo la connessione il server vede
+   * `close` e ferma anche il modello.
+   */
+  const filoChat = useRef<AbortController | null>(null)
   /*
    * Il filo che `chiedi` ha appena creato.
    *
@@ -440,6 +469,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const idScritta = `tmp${Date.now()}`
     setMessaggi(m => [...m, { id: idScritta, role: 'u', text: testo }])
     setPensando(true)
+    // il filo di prima, se ce n'era uno appeso, non serve più a nessuno
+    filoChat.current?.abort()
+    const filo = new AbortController()
+    filoChat.current = filo
     try {
       // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
       // un messaggio finto che si riempie a ogni frammento, sostituito da
@@ -461,15 +494,25 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         cresciuta = ''
         setPensando(true)
         setMessaggi(m => m.filter(x => x.id !== idVivo))
-      })
+      }, filo.signal)
       if (gen.current === mio) setMessaggi(r.messaggi)
     } catch (e) {
-      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
+      /*
+       * «Annulla» non è un guasto.
+       *
+       * Chi l'ha premuto sa già cos'è successo: mostrargli un cartellino rosso
+       * sarebbe dirgli che è andato storto un gesto che ha fatto lui. Si toglie
+       * la domanda rimasta appesa e le si rimette in mano il testo, che è
+       * l'unica cosa che gli serve per riprovare — magari con un altro modello.
+       */
+      const suo = filo.signal.aborted
+      if (!suo) mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a rispondere.'))
       if (gen.current === mio) {
         setMessaggi(m => m.filter(x => !x.id.startsWith('tmp')))
         setDraftMsg(d => d || bozza)   // il testo scritto non si perde
       }
     }
+    if (filoChat.current === filo) filoChat.current = null
     // l'elenco delle chat si rinfresca fuori dal try: un elenco che non torna
     // faceva dire «non sono riuscito a rispondere» di una risposta arrivata intera
     caricaChat().catch(() => {})
@@ -874,11 +917,21 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     heroLong,
     heroToggle: () => setHeroLong(x => !x),
     heroHaDoc: !!hero?.doc,
+    // chi è e cosa ha dietro: servono a chi la prende in carico dal feed
+    heroId: hero?.id ?? '',
+    heroDoc: hero?.doc ?? null,
+    /** Il titolo in cima è il link, e dice cosa apre: la mail, il file, la pagina. */
+    heroApreCosa: etichettaFonte(hero?.fonte, hero?.doc),
     heroPrimary: hero ? risolvi(hero) : noop,
-    // la coda è testo che finisce nella *sua* bolla e resta scritto nella
-    // chat: va nella lingua dell'app come tutto il resto
-    heroAsk: hero ? () => chiedi(frasi.dimmiDiPiu(hero.titolo)) : noop,
     heroSkip: hero ? () => setAperti(a => [...a.slice(1), a[0]]) : noop,
+    /**
+     * La voce è diventata una riga della lista: via dal feed, senza ricaricarlo.
+     *
+     * Il server l'ha già chiusa — gliel'ha detto `voce` quando è nato il
+     * compito — e qui si allinea quello che si ha davanti. Ricaricare il feed
+     * intero per una riga farebbe sparire la pagina per mezzo secondo.
+     */
+    viaDalFeed: (id: string) => setAperti(a => a.filter(x => x.id !== id)),
 
     // — rispondere alla voce in cima, e indirizzare tutto il resto —
     risposta,
@@ -905,6 +958,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     scartaHero: () => { if (hero) void scarta(hero) },
     correzioni: hero ? [
       { id: 'lista', label: t('Mettila in lista'), onClick: () => mettiInLista(hero) },
+      // Parlarne è diventato il gesto raro: il bottone in chiaro adesso
+      // affida davvero la cosa a Myynd invece di scrivergli «dimmi di più».
+      // La coda è testo che finisce nella *sua* bolla e resta scritto nella
+      // chat: va nella lingua dell'app come tutto il resto.
+      { id: 'chat', label: t('Parlane in chat'), onClick: () => { setMenuAperto(false); chiedi(frasi.dimmiDiPiu(hero.titolo)) } },
       { id: 'altrove', label: t('Aggiornato altrove'), onClick: () => mandaRisposta(t("L'ho aggiornato altrove: il documento qui è indietro."), 'fonte_vecchia') },
       { id: 'parole', label: t('Altro…'), onClick: () => { setMenuAperto(false); setScriviAperto(true) } }
     ] : [],
@@ -1051,6 +1109,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // la conversazione con Myynd ha il suo nome
     chatTitolo: passo !== null || intervistaFinita ? 'Myynd' : th?.titolo ?? 'Nuova chat',
     pensando,
+    /** Taglia la risposta che sta arrivando. Vale solo mentre `pensando` è acceso. */
+    annulla: () => { filoChat.current?.abort() },
     messages: messaggi.map(m => ({
       id: m.id, text: m.text, mio: m.role === 'u',
       hasSources: !!(m.sources && m.sources.length), sources: m.sources ?? [],

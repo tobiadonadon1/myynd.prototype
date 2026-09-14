@@ -29,6 +29,7 @@ import * as store from './store.ts'
 import { ultimo } from './punto.ts'
 import * as progetti from './progetti.ts'
 import { fuoco } from './timone.ts'
+import { fusoDi, giornoIn, oraIn } from './fuso.ts'
 
 /** Quante notizie fanno una rassegna. Poche: si legge in tre minuti o non si legge. */
 export const QUANTE = 8
@@ -675,6 +676,38 @@ function risposta(focus: Fuoco[], e: Edizione | null, fatta = false): Esito {
   }
 }
 
+/** L'ora in cui, per chi legge, comincia la mattina. */
+export const ORA_MATTINA = 6
+
+/**
+ * Se l'edizione è da rifare adesso.
+ *
+ * Due regole, in oppure. La prima è la finestra di sempre: sei ore, o i minuti
+ * che il giro precedente ha chiesto di aspettare. La seconda è la mattina.
+ *
+ * Con la sola finestra, una rassegna fatta alle 22 valeva fino alle 4, e chi
+ * apriva l'app alle 8 leggeva le notizie della sera prima: giuste secondo
+ * l'orologio, vecchie secondo chiunque — «la mattina non è pronta» è
+ * esattamente questo. Così invece il primo controllo di un giorno nuovo,
+ * passate le sei del mattino di chi legge, la rifà comunque. Prima delle sei
+ * no: di notte non si sveglia nessun giornale e non si paga nessun modello.
+ *
+ * Il giorno è quello dell'orologio di chi legge, non quello della macchina:
+ * su un server in UTC il giorno nuovo di Roma comincia due ore prima.
+ */
+export function daRifare(
+  e: { controllata?: string; ids: string[]; riprovaMinuti?: number },
+  adesso: number,
+  oraLocale: { giorno: string; ora: number }
+): boolean {
+  const quando = Date.parse(e.controllata ?? '')
+  // senza una data buona non si sa nemmeno quanto è vecchia: si rifà
+  if (!Number.isFinite(quando)) return true
+  const minuti = e.riprovaMinuti ?? (e.ids.length ? ORE_VALIDA * 60 : 60)
+  if (adesso - quando >= minuti * 60_000) return true
+  return oraLocale.ora >= ORA_MATTINA && giornoIn(new Date(quando)) !== oraLocale.giorno
+}
+
 /** Aprire la pagina avvia il controllo senza bloccare la risposta della cache. */
 export function prepara(): void {
   void aggiorna(false).catch(e => {
@@ -694,9 +727,13 @@ export async function aggiorna(forza = false): Promise<Esito> {
   const e = leggiEdizione()
   const focus = contesto()
   const chiave = cartella()
-  if (!forza && Date.now() < (dopoErrore.get(chiave) ?? 0)) return risposta(focus, e)
-  const minuti = e?.riprovaMinuti ?? (e?.ids.length ? ORE_VALIDA * 60 : 60)
-  if (!forza && e?.copertura === 1 && e.focus === improntaFocus(focus) && Date.now() - Date.parse(e.controllata ?? e.quando) < minuti * 60_000) {
+  const adesso = Date.now()
+  if (!forza && adesso < (dopoErrore.get(chiave) ?? 0)) return risposta(focus, e)
+  // che ore sono per chi legge: «stamattina» lo dice il suo orologio
+  const fuso = fusoDi()
+  const oraLocale = { giorno: giornoIn(new Date(adesso), fuso), ora: Number(oraIn(new Date(adesso).toISOString(), fuso).slice(11, 13)) }
+  if (!forza && e?.copertura === 1 && e.focus === improntaFocus(focus)
+    && !daRifare({ controllata: e.controllata ?? e.quando, ids: e.ids, riprovaMinuti: e.riprovaMinuti }, adesso, oraLocale)) {
     return risposta(focus, e)
   }
   // Il bottone e l'orologio possono cadere insieme: due giri in parallelo

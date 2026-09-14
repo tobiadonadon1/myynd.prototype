@@ -1092,6 +1092,32 @@ export const api = {
   collegaCompatibile: (p: { url: string; chiave?: string; modello: string; nome?: string }) =>
     json<{ ok: true; motore: string }>('/api/connettori/compatibile', { method: 'POST', body: JSON.stringify(p) }),
 
+  /**
+   * «Risponde adesso, e in quanto?»
+   *
+   * È la stessa rotta che collega — cioè l'unica che fa una richiesta vera al
+   * modello e aspetta una parola — richiamata con quello che c'è già scritto
+   * nelle preferenze. Il numero non torna dal server: lo misura qui il
+   * cronometro attorno alla chiamata, e con un modello sul proprio computer
+   * quello che si aggiunge è il tempo di un giro su `localhost`, cioè niente.
+   *
+   * Si chiama solo quando il fornitore è in casa. La rotta riscrive la
+   * configurazione con quello che le si manda, e la chiave qui non ce l'ha
+   * nessuno: su un fornitore in rete una misura di velocità costerebbe la
+   * chiave salvata. In casa la chiave non c'è — è quello che dice la scheda
+   * stessa — e non c'è niente da perdere.
+   */
+  provaMotore: async (p: { url: string; modello: string; nome?: string }) => {
+    const partito = Date.now()
+    try {
+      await json<{ ok: true; motore: string }>('/api/connettori/compatibile',
+        { method: 'POST', body: JSON.stringify(p) })
+      return { ok: true as const, ms: Date.now() - partito }
+    } catch (e) {
+      return { ok: false as const, ms: Date.now() - partito, guaio: e instanceof Error ? e.message : String(e) }
+    }
+  },
+
   /** I modelli che il fornitore dice di avere. Vuoto se non risponde: non è un errore. */
   // POST e non GET: la chiave sta nel corpo. È la stessa ragione per cui il
   // token della sessione non viaggia più nell'indirizzo — quello che sta nella
@@ -1480,7 +1506,17 @@ export const api = {
     testo: string,
     onDelta: (delta: string) => void,
     /** «Butta quello che ti ho detto finora»: il motore è cambiato a metà risposta. */
-    onRicomincia?: () => void
+    onRicomincia?: () => void,
+    /**
+     * «Lascia perdere».
+     *
+     * Con un modello sul proprio computer l'attesa prima della prima parola è
+     * una cosa che si *vede*, e finché non c'era un modo di fermarla l'unico
+     * gesto possibile era ricaricare la pagina — cioè perdere la conversazione.
+     * Interrompendo qui il server vede chiudersi la connessione e ferma anche
+     * il modello: la richiesta che nessuno legge non si finisce di pagare.
+     */
+    segnale?: AbortSignal
   ): Promise<{ messaggi: Messaggio[] }> => {
     const t = sessione.token()
     let r: Response
@@ -1488,9 +1524,13 @@ export const api = {
       r = await fetch(`/api/chat/${chat}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(t ? { authorization: `Bearer ${t}` } : {}) },
-        body: JSON.stringify({ testo })
+        body: JSON.stringify({ testo }),
+        ...(segnale ? { signal: segnale } : {})
       })
     } catch (e) {
+      // chi ha premuto «Annulla» non ha avuto un guasto: l'errore esce com'è,
+      // e chi chiama lo riconosce dal nome invece di mostrare un cartellino
+      if (segnale?.aborted) throw e
       throw new MotoreGiu(e instanceof Error ? e.message : String(e))
     }
     if (r.status === 401) { sessione.pulisci(); suScaduta() }

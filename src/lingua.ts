@@ -137,7 +137,7 @@ const EN: Record<string, string> = {
   'La tua agenda, sempre aggiornata.': 'Your calendar, always up to date.',
   'Le cartelle che scegli, o tutto il Mac, in sola lettura.': 'The folders you choose, or your whole Mac, read-only.',
   'La chiave con cui Myynd ragiona.': 'The key Myynd thinks with.',
-  'Un altro fornitore AI, o un modello sul tuo computer.': 'Another AI provider, or a model on your own computer.',
+  'Ollama, LM Studio, llama.cpp, o un altro servizio con API in stile OpenAI.': 'Ollama, LM Studio, llama.cpp, or another service with an OpenAI-style API.',
   'La tua lista, sempre collegata.': 'Your to-do list, always connected.',
   'Microsoft Teams: arriva presto.': 'Microsoft Teams: coming soon.',
   'Le chat esportate da ChatGPT e Claude.': 'Chats exported from ChatGPT and Claude.',
@@ -1807,7 +1807,7 @@ const EN: Record<string, string> = {
   'Ogni lunedì dimmi quali preventivi in @ sono ancora senza risposta': 'Every Monday tell me which quotes in @ are still unanswered',
 
   // — il fornitore compatibile con OpenAI —
-  'Fornitore compatibile con OpenAI': 'OpenAI-compatible provider',
+  'Modello locale o altro fornitore': 'Local model or other provider',
   'La chiave del fornitore non è valida.': 'The provider’s key is not valid.',
   'Il conto del fornitore è senza credito.': 'The provider account is out of credit.',
   'Il fornitore non conosce questo modello.': 'The provider doesn’t know this model.',
@@ -1927,6 +1927,17 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  // — la carta in cima: il titolo è il link, e dice cosa apre —
+  'Apri la mail': 'Open the email',
+  'Apri il file': 'Open the file',
+  'Apri la pagina': 'Open the page',
+  'Affidalo a Myynd': 'Delegate to Myynd',
+  'Affidata a Myynd: la trovi nella lista.': 'Delegated to Myynd: you will find it in the list.',
+  'Parlane in chat': 'Talk about it in chat',
+  'Apri la fonte': 'Open the source',
+  'Fonti usate': 'Sources used',
+  // il pallino che salta sulla pastiglia delle notizie: quello che legge chi non vede il pallino
+  'Notizie nuove': 'New stories',
   // le quattro sezioni del punto: «Progetti», «Da leggere» e «Risposte» il dizionario le ha già
   'GitHub': 'GitHub',
   'Niente di nuovo da quando ci siamo visti.': 'Nothing new since we last met.',
@@ -2010,6 +2021,26 @@ const EN: Record<string, string> = {
     'Myynd reads documents: PDF, Word, Excel, PowerPoint, text, Markdown, HTML and RTF. Images, video, code and system files are not documents.',
   'Collega il mio PC': 'Connect my PC',
   'Solo alcune cartelle': 'Only some folders',
+
+  /*
+   * — un modello sul suo computer: quando non c'è, quando è lento, e come si annulla —
+   *
+   * Sono le righe che si leggono nel momento peggiore: la chat ferma. Devono
+   * dire due cose e nient'altro — cosa sta succedendo, e cosa può fare lui —
+   * perché chi le legge non sta leggendo, sta aspettando.
+   */
+  'Il modello sul tuo computer non risponde: controlla che Ollama (o LM Studio) sia acceso.':
+    'The model on your computer isn’t answering: check that Ollama (or LM Studio) is running.',
+  'Il modello ha impiegato più di quindici secondi per cominciare: prova un modello più piccolo, o passa a Claude.':
+    'The model took more than fifteen seconds to start: try a smaller model, or switch to Claude.',
+  'Questo modello è lento sul tuo computer: prova uno più piccolo.':
+    'This model is slow on your computer: try a smaller one.',
+  'Risponde': 'Answering',
+  'Non risponde': 'Not answering',
+  // il numero gli sta accanto in un campo suo: «Prima parola in» «0,8 s».
+  // Spezzato così perché le due lingue mettono la cifra nello stesso posto, e
+  // una chiave con un buco in mezzo sarebbe una chiave che nessuno sa tradurre
+  'Prima parola in': 'First word in',
 
   // chi ha scritto il fuoco: la stessa nota che sta sotto gli argomenti
   'L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.':
@@ -2299,6 +2330,28 @@ export const frasi = {
   nonSembraPerLeApp: (n: number) => corrente === 'en'
     ? `That looks like your account password (${n} character${n === 1 ? '' : 's'}). An app password is 16 letters. Connecting with this one will not work.`
     : `Questa sembra la password del tuo account (${n} caratter${n === 1 ? 'e' : 'i'}). Una password per le app è di 16 lettere. Con questa non si collegherà.`,
+
+  // — il modello sul suo computer —
+  //
+  // Quanti ne ha installati: con Ollama è l'unica conferma che l'indirizzo è
+  // quello giusto, e serve a chi non ricorda come si scrive il nome del
+  // modello che ha scaricato.
+  modelliTrovati: (n: number) => corrente === 'en'
+    ? `${n} model${n === 1 ? '' : 's'} found`
+    : `${n} modell${n === 1 ? 'o trovato' : 'i trovati'}`,
+
+  /**
+   * Cosa sta lavorando, e quanto ci mette: la riga sotto la scelta del motore.
+   *
+   * Il nome e il modello escono dalla configurazione e non si traducono — sono
+   * quello che ha scritto lui. Il numero è misurato, non dichiarato.
+   */
+  motoreRisponde: (chi: string, secondi: string) => corrente === 'en'
+    ? `${chi} · answers in ${secondi} s`
+    : `${chi} · risponde in ${secondi} s`,
+  motoreGiu: (chi: string) => corrente === 'en'
+    ? `${chi} · not answering`
+    : `${chi} · non risponde`,
 
   eventiLetti: (n: number) => corrente === 'en'
     ? `Connected: ${n} event${n === 1 ? '' : 's'} read.`

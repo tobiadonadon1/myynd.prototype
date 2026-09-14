@@ -115,7 +115,18 @@ export const CATALOGO: VoceConnettore[] = [
   // Un'altra testa al posto di Claude, non un'altra fonte: OpenAI e chi parla
   // come lei, compresi i modelli che girano su questa macchina. Sta nel
   // catalogo perché si collega da qui come tutto il resto, con una scheda.
-  { id: 'compatibile', nome: 'Fornitore compatibile con OpenAI', gruppo: 'Ragionamento', pronto: true, nota: 'Un altro fornitore AI, o un modello sul tuo computer.' },
+  /*
+   * Il nome dice cosa fa, non con quale specifica parla.
+   *
+   * Si chiamava «Fornitore compatibile con OpenAI», che è vero e non aiuta
+   * nessuno: chi lo apre non sa se è un modo per usare OpenAI, e chi cerca
+   * dove si collega il modello che ha già scaricato sul suo computer passa
+   * oltre. Lui l'ha detto in una riga — «l'ho collegato ma non credo sia il
+   * nome vero, dovrebbe essere LLM o qualcosa» — dopo averlo usato per un
+   * modello di casa. La lingua della specifica sta nella nota, dove serve a
+   * chi deve sapere se il suo servizio ci parla.
+   */
+  { id: 'compatibile', nome: 'Modello locale o altro fornitore', gruppo: 'Ragionamento', pronto: true, nota: 'Ollama, LM Studio, llama.cpp, o un altro servizio con API in stile OpenAI.' },
   // La lista è una fonte come le altre: quello che decidi di fare dice di te
   // quanto un documento — e sta qui perché chi guarda le fonti si aspetta di
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.

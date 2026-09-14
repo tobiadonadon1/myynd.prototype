@@ -17,8 +17,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  cernita, contestoDi, entita, impronta, leggiFeed, pulisciLink, ricuciScelte, rilevanza, ripulisci, sceltaAMano, selezioneVisibile, sensato, simili, QUANTE, type Grezza
+  cernita, contestoDi, daRifare, entita, impronta, leggiFeed, pulisciLink, ricuciScelte, rilevanza, ripulisci, sceltaAMano, selezioneVisibile, sensato, simili, QUANTE, type Grezza
 } from './rassegna.ts'
+import { giornoIn } from './fuso.ts'
 import type { Notizia } from './store.ts'
 
 const FONTE = { nome: 'Prova', url: 'https://x', argomento: 'mondo', lingua: '*' } as const
@@ -363,4 +364,49 @@ test('una deprecazione ufficiale macOS resta utile per due settimane, la cronaca
   const scaduto = { ...rilascio, quando: fa(15 * 24) }
   assert.deepEqual(cernita([scaduto], ora), [])
   assert.deepEqual(selezioneVisibile([notizia(scaduto)], focus, [scaduto.id], ora), [])
+})
+
+// — quando si rifà —
+//
+// La regola non guarda l'orologio da sola: le si dice che ore sono. Qui il
+// giorno «di oggi» si costruisce con `giornoIn`, lo stesso che usa il codice,
+// così le prove valgono a Roma, a Tokyo e su un server in UTC senza cambiare
+// una riga — e il giorno «nuovo» è un giorno che non esiste per nessuno.
+
+const QUANDO = '2026-09-14T22:00:00.000Z'
+const T = Date.parse(QUANDO)
+const ORA = 3600_000
+/** Lo stesso giorno di `QUANDO`, comunque sia messo l'orologio di chi prova. */
+const stessoGiorno = (ora: number) => ({ giorno: giornoIn(new Date(T)), ora })
+const giornoNuovo = (ora: number) => ({ giorno: '1999-01-01', ora })
+
+test('dentro le sei ore non si rifà, dopo sì', () => {
+  const e = { controllata: QUANDO, ids: ['a', 'b'] }
+  assert.equal(daRifare(e, T + ORA, stessoGiorno(10)), false)
+  assert.equal(daRifare(e, T + 7 * ORA, stessoGiorno(10)), true)
+})
+
+test('il giorno nuovo la rifà dalle sei in poi, e prima di dormire no', () => {
+  const e = { controllata: QUANDO, ids: ['a', 'b'] }
+  // le cinque e mezza: è un altro giorno, ma non è ancora mattina per nessuno
+  assert.equal(daRifare(e, T + ORA, giornoNuovo(5)), false)
+  // le sei e dieci: un'ora sola dall'ultimo controllo, e si rifà lo stesso —
+  // è l'unico modo perché alle otto le notizie ci siano già
+  assert.equal(daRifare(e, T + ORA, giornoNuovo(6)), true)
+})
+
+test('una rassegna vuota si riprova dopo un’ora, non dopo sei', () => {
+  const e = { controllata: QUANDO, ids: [] }
+  assert.equal(daRifare(e, T + 30 * 60_000, stessoGiorno(10)), false)
+  assert.equal(daRifare(e, T + 61 * 60_000, stessoGiorno(10)), true)
+})
+
+test('i minuti chiesti dal giro precedente valgono più della finestra', () => {
+  const e = { controllata: QUANDO, ids: ['a'], riprovaMinuti: 20 }
+  assert.equal(daRifare(e, T + 10 * 60_000, stessoGiorno(10)), false)
+  assert.equal(daRifare(e, T + 21 * 60_000, stessoGiorno(10)), true)
+})
+
+test('senza la data dell’ultimo controllo si rifà e basta', () => {
+  assert.equal(daRifare({ ids: ['a'] }, T, stessoGiorno(10)), true)
 })
