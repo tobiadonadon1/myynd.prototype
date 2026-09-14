@@ -1432,7 +1432,7 @@ Scrivi in ${nellaLingua()}.`),
       ).join('\n\n---\n\n')
     }]
   }, attesaDi('lettura'))
-  segnaUso('lettura', risposta.usage)
+  segnaUso('lettura', risposta.usage, m.nome)
 
   if (risposta.stop_reason === 'refusal') return []
   const testo = risposta.content.filter(b => b.type === 'text').map(b => (b as Anthropic.TextBlock).text).join('')
