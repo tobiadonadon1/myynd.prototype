@@ -1219,3 +1219,52 @@ test('«porta» dice solo i posti veri: un progetto non è un posto', () => {
   store.scordaDocumenti(['pl-file'])
   assert.equal(porta('pl1'), null)
 })
+
+/*
+ * La ricerca che si allarga, ma non fino a «una parola qualunque».
+ *
+ * Il quattordici settembre una domanda su H-Farm è tornata con dei contratti
+ * d'affitto: l'AND non trovava niente, l'OR faceva passare qualunque documento
+ * contenesse «systems» o «deadline», e quei documenti arrivavano al modello
+ * sotto la parola «Materiale:» — cioè come roba pertinente. La risposta
+ * cominciava con «in base ai contratti d'affitto di CERU Boca Raton».
+ *
+ * Allargare serve e resta: una domanda di sei parole non sta in un documento
+ * solo. Quello che non deve passare è il documento che ne prende una su sei.
+ */
+test('allargando la ricerca non passa chi ha una parola sola su sei', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('ms-affitto', {
+      titolo: 'Lease agreement CERU Boca Raton',
+      corpo: 'Renters insurance setup and move-in logistics for the Boca Raton unit. Systems check on arrival.'
+    }),
+    doc('ms-hfarm', {
+      titolo: 'H-Farm AI systems audit',
+      corpo: 'The deadline for the H-Farm AI systems audit is the end of October.'
+    })
+  ])
+
+  const trovati = store.cerca('deadline for H-Farm AI systems audit', 20, undefined, true).map(d => d.id)
+  assert.ok(trovati.includes('ms-hfarm'), 'il documento che risponde davvero deve esserci')
+  assert.ok(!trovati.includes('ms-affitto'), 'una parola su sei non è un risultato: è un altro documento')
+
+  // e quando non c'è niente che risponda, non torna niente: è quella la
+  // risposta che diventa «non ho trovato niente su questo», in una riga
+  assert.deepEqual(store.cerca('deadline for H-Farm AI systems certification plan', 20, undefined, true)
+    .map(d => d.id).filter(id => id === 'ms-affitto'), [])
+
+  // ma la ricerca continua ad allargarsi dove deve: due parole su tre bastano
+  assert.ok(store.cerca('H-Farm audit ottobre', 20, undefined, true).map(d => d.id).includes('ms-hfarm'))
+  // e una parola sola resta una ricerca normale, senza soglie
+  assert.ok(store.cerca('Boca', 20, undefined, true).map(d => d.id).includes('ms-affitto'))
+
+  // le parole chiave di un'automazione sono sinonimi in fila: lì una su tre è
+  // la risposta giusta, e la soglia non c'è
+  // «lease» c'è solo nel primo, «quote» e «deadline» non ci sono: una su tre,
+  // e senza soglia passa comunque
+  assert.ok(store.cerca('quote lease renewal').map(d => d.id).includes('ms-affitto'),
+    'senza «stretta» la ricerca larga deve continuare ad allargarsi')
+  assert.ok(!store.cerca('quote lease renewal', 20, undefined, true).map(d => d.id).includes('ms-affitto'),
+    'con «stretta» una parola su tre non basta')
+})

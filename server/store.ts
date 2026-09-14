@@ -1996,7 +1996,33 @@ function terminiCheContengono(pezzo: string, tetto = TERMINI_SIMILI): string[] {
  * titolo conta più della stessa parola persa a pagina quaranta. E il tempo
  * conta: fra due listini prezzi, quello dell'anno scorso non è la risposta.
  */
-export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
+/**
+ * Quante delle parole cercate compaiono davvero in un documento.
+ *
+ * Si guarda sulle radici — la stessa colonna su cui cerca l'indice — così
+ * «sistemi» conta per «sistema» come conterebbe nella query. Il titolo e
+ * l'autore ci entrano perché una parola nel titolo vale quanto una nel corpo,
+ * e l'indice la tratta già così.
+ */
+function quanteParole(d: Documento & { punti: number }, parole: string[]): number {
+  const dove = ` ${radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`)} `
+  return parole.filter(t => dove.includes(` ${radice(t)} `) || dove.includes(radice(t))).length
+}
+
+/**
+ * Cercare per una domanda, o cercare per delle parole chiave.
+ *
+ * Sono due mestieri diversi, e la differenza sta tutta in cosa vuol dire
+ * allargare. «preventivo offerta inviato» è la ricerca di un'automazione: tre
+ * sinonimi, e un documento che ne contiene uno solo è esattamente quello che
+ * si cercava. «deadline for H-Farm AI systems» è una domanda: un documento che
+ * contiene solo «systems» non è un risultato debole, è un altro documento.
+ *
+ * `stretta` dice quale dei due. Sta qui e non in due funzioni perché la
+ * ricerca è una sola e cambia di un passo; e sta come parametro e non come
+ * indovinello sul numero di parole perché chi chiama lo sa, e la ricerca no.
+ */
+export function cerca(q: string, limite = 20, fonti?: string[], stretta = false): Documento[] {
   const parole = termini(q)
   if (!parole.length) return []
 
@@ -2032,12 +2058,35 @@ export function cerca(q: string, limite = 20, fonti?: string[]): Documento[] {
     }
   }
 
-  // prima tutte le parole insieme; se stringe troppo, si allarga
+  /*
+   * Prima tutte le parole insieme; se stringe troppo, si allarga — ma non fino
+   * a «una qualunque».
+   *
+   * L'OR secco è come una domanda di sei parole torna con dei contratti
+   * d'affitto: basta che un documento contenga «systems», o «deadline», o
+   * «AI», e passa. Da lì in poi il guasto non è più della ricerca. Quei
+   * documenti arrivano al modello sotto la parola «Materiale:», cioè come
+   * roba pertinente, e un modello piccolo fa l'unica cosa che può fare — li
+   * legge e scrive due paragrafi su come mai non c'entrano niente. Il
+   * quattordici settembre la risposta a una domanda su H-Farm cominciava con
+   * «in base ai contratti d'affitto di CERU Boca Raton».
+   *
+   * Allargare serve, e resta: una domanda di sei parole non sta tutta in un
+   * documento solo. Ma un documento che ne prende una su sei non è un
+   * risultato debole, è un documento diverso. La soglia è la metà, arrotondata
+   * per eccesso, e mai sotto due: con due parole servono entrambe, con sei ne
+   * bastano tre. È la regola che qualunque motore di ricerca chiama «minimum
+   * should match», e costa una passata sui titoli.
+   *
+   * Solo per le domande, però: `stretta`. Le parole di un'automazione sono
+   * sinonimi messi in fila apposta, e lì una su tre è la risposta giusta.
+   */
   let trovati = conQuery(parole.map(clausola).join(' AND '))
   if (trovati.length < 5 && parole.length > 1) {
     const visti = new Set(trovati.map(d => d.id))
+    const soglia = stretta ? Math.max(2, Math.ceil(parole.length / 2)) : 1
     for (const d of conQuery(parole.map(clausola).join(' OR '))) {
-      if (!visti.has(d.id)) trovati.push(d)
+      if (!visti.has(d.id) && quanteParole(d, parole) >= soglia) trovati.push(d)
     }
   }
 

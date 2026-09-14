@@ -26,7 +26,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
-import { nomePorta, portaAlProgetto } from '../vals'
+import { nomePorta, portaAlProgetto, portaInChat, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
@@ -34,13 +34,21 @@ import { desktop } from '../desktop'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
-/** I tre modi, in colonna. L'ordine è quanto lavoro passa a lui. */
+/**
+ * I tre modi, in colonna. L'ordine è quanto lavoro passa a lui.
+ *
+ * `cosa` è la riga che compare passandoci sopra e che leggono gli assistivi.
+ * «Se ne occupa Myynd, ma dove? E come? Non è chiaro» — e aveva ragione: la
+ * colonna era un pallino, il pallino non diceva niente, e quello che succedeva
+ * dopo si scopriva solo quando tornava indietro qualcosa. Una riga ciascuna
+ * non è una schermata di aiuto: è il minimo perché premere sia una scelta.
+ */
 const MODI = [
-  { id: 'io', nome: 'io' },
-  { id: 'bozza', nome: 'bozza' },
+  { id: 'io', nome: 'io', cosa: 'La fai tu. Myynd non la tocca.' },
+  { id: 'bozza', nome: 'bozza', cosa: 'Cerca nel tuo materiale e scrive la cosa. La rileggi tu prima che esca.' },
   // la terza colonna porta il suo nome: è lui che se ne occupa, e «tutto» non
   // diceva di chi
-  { id: 'tutto', nome: 'Myynd' }
+  { id: 'tutto', nome: 'Myynd', cosa: 'Come la bozza, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.' }
 ] as const
 
 // `useLarghezza` sta in ui.tsx: la usa anche l'impaginato intero, e due copie
@@ -137,12 +145,14 @@ function frasePasso(p: PassoCompito): string {
  * *è* delegare, e tornare su «io» è richiamarlo indietro. Un gesto solo, e la
  * riga dice sempre da sola in che mani sta.
  */
-function Casella({ scelto, lavora, onClick, id, nome, riga }: {
-  scelto: boolean; lavora: boolean; onClick: () => void; id: string; nome: string; riga: string
+function Casella({ scelto, lavora, onClick, id, nome, cosa, riga }: {
+  scelto: boolean; lavora: boolean; onClick: () => void; id: string; nome: string; cosa: string; riga: string
 }) {
   return (
     <Hov as="button" type="button" onClick={onClick}
-      role="radio" aria-checked={scelto} aria-label={`${nome}: ${riga}`}
+      // il nome della colonna, cosa fa, e su quale riga: chi non vede il
+      // pallino sente tutte e tre, e chi lo vede legge la seconda passandoci sopra
+      role="radio" aria-checked={scelto} aria-label={`${nome}: ${cosa} (${riga})`} title={cosa}
       style={{
         height: 30, border: 'none', background: 'none', cursor: 'pointer', padding: 0,
         display: 'grid', placeItems: 'center', fontFamily: 'inherit'
@@ -190,7 +200,7 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
     <div className="task-planning-footer">
       <select aria-label={`${t('Assegnazione')}: ${c.testo}`} value={c.modo}
         onChange={e => { if (e.target.value === 'io') l.richiama(c.id); else l.delega(c.id, e.target.value) }}>
-        {MODI.map(m => <option key={m.id} value={m.id}>{t(m.nome)}</option>)}
+        {MODI.map(m => <option key={m.id} value={m.id} title={t(m.cosa)}>{t(m.nome)}</option>)}
       </select>
       {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
         : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
@@ -429,6 +439,22 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                   <div>{t('Preparami il prompt')}</div>
                   <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Da incollare in Claude o ChatGPT')}</div>
                 </Hov>
+                {/* prima di affidarla, non dopo: una riga che è un obiettivo si
+                    smonta parlandone, e affidarla torna indietro con un piano */}
+                {siPuoParlarne() && (
+                  <Hov as="button" type="button" role="menuitem"
+                    onClick={() => { setMenu(false); portaInChat(frasi.scomponi(c.testo)) }}
+                    onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
+                      padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                      color: '#22271F', fontSize: '13px'
+                    }}
+                    hover={{ background: 'rgba(34,39,31,.06)' }}>
+                    <div>{t('Scomponila in chat')}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Se è un obiettivo e non un compito')}</div>
+                  </Hov>
+                )}
               </MenuGiu>
             )}
           </span>
@@ -440,7 +466,7 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
 
       <div role="radiogroup" aria-label={c.testo} style={{ display: 'contents' }}>
         {MODI.map(m => (
-          <Casella key={m.id} id={m.id} nome={t(m.nome)} riga={c.testo}
+          <Casella key={m.id} id={m.id} nome={t(m.nome)} cosa={t(m.cosa)} riga={c.testo}
             scelto={c.modo === m.id}
             lavora={delegato && c.modo === m.id}
             onClick={() => (m.id === 'io' ? l.richiama(c.id) : l.delega(c.id, m.id))} />
@@ -572,6 +598,30 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
           cursor: qualcosa ? 'pointer' : 'default'
         }}>{chieste.length ? t('Vai') : t('Manda')}</button>
       </div>
+
+      {/*
+        L'altra strada, quando rispondere non è la cosa giusta.
+
+        Certe righe non si sbloccano con un dato: non sono compiti. «Non c'è
+        una vera intenzione dietro il compito che aggiunge. Per compiti così
+        dovrebbe chiedermelo in chat: come pensi di farlo? dentro quali
+        progetti? Poi lo scomponiamo.» Rispondere in questa casella a una riga
+        così vuol dire rimandarla a lavorare su un obiettivo, e torna un altro
+        piano. Di là si parla, e da una conversazione escono cose da fare vere.
+      */}
+      {siPuoParlarne() && (
+        <Hov as="button" type="button"
+          onClick={() => portaInChat(frasi.scomponi(c.testo))}
+          title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
+          style={{
+            marginTop: 10, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.55)',
+            textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
+          }}
+          hover={{ color: '#8E3F1F', textDecorationColor: 'currentColor' }}>
+          {t('Scomponila in chat')}
+        </Hov>
+      )}
     </div>
   )
 }
@@ -1550,7 +1600,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
           <div style={{ ...griglia(stretta), ...FERMO, marginTop: 30, padding: stretta ? '0 11px 0 19px' : '0 16px 0 23px' }}>
             <span />
             {MODI.map(m => (
-              <span key={m.id} style={{
+              <span key={m.id} title={t(m.cosa)} style={{
                 ...LABEL, textAlign: 'center', color: 'rgba(34,39,31,.4)',
                 // con la spaziatura piena «MYYND» è più largo della sua colonna
                 // e le tre etichette si toccano

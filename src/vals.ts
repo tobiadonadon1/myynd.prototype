@@ -179,6 +179,26 @@ export function registraPortaProgetto(f: ((id: string) => void) | null) { portaA
 export function portaAlProgetto(id: string) { (portaAllaMemoria ?? chiediProgetto)(id) }
 
 /**
+ * «Scomponila in chat», detto dalla lista.
+ *
+ * «Non c'è una vera intenzione dietro il compito che aggiunge. Per compiti
+ * così dovrebbe chiedermelo in chat: come pensi di farlo? dentro quali
+ * progetti? Poi lo scomponiamo in cose da fare, alcune le fa lui e alcune le
+ * faccio io.»
+ *
+ * Una riga come «solidificare i sistemi» non è un compito: è un obiettivo, e
+ * un obiettivo non si affida — si smonta parlandone. Il posto dove si parla è
+ * la chat, e questa è la porta. Stessa mano di `portaAlProgetto`, per la
+ * stessa ragione: `Oggi` è montata con la lista e niente altro, e non conosce
+ * la colonna delle schermate.
+ */
+let portaAllaChat: ((testo: string) => void) | null = null
+export function registraPortaChat(f: ((testo: string) => void) | null) { portaAllaChat = f }
+/** Vera quando c'è chi sa aprirla: senza, il bottone non si disegna. */
+export function siPuoParlarne(): boolean { return !!portaAllaChat }
+export function portaInChat(testo: string) { portaAllaChat?.(testo) }
+
+/**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
  *
  * «Portami lì» era una parola sola per tre posti diversi, e su una riga che non
@@ -962,6 +982,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     registraPortaProgetto(apriProgetto)
     return () => registraPortaProgetto(null)
   }, [apriProgetto])
+
+  // e la porta della chat, per le righe che non sono compiti: vedi `portaInChat`
+  useEffect(() => {
+    registraPortaChat((testo: string) => { void chiedi(testo) })
+    return () => registraPortaChat(null)
+  })
 
   return {
     threadRef, cvA, cvB,

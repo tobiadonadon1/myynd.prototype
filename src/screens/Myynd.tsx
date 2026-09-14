@@ -7,7 +7,7 @@ import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { MenuGiu, VOCE_MENU } from '../components/MenuGiu'
-import { generePrimoDocumento, nomeDelFile, nomePorta, primoParagrafo, taglia, type Vals } from '../vals'
+import { generePrimoDocumento, nomeDelFile, nomePorta, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -505,6 +505,22 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             cursor: risposta.trim() ? 'pointer' : 'default'
           }}>{t('Manda')}</button>
         </div>
+      )}
+
+      {/* l'altra strada: certe righe non si sbloccano con un dato, perché non
+          sono compiti — vedi il bottone gemello in `Oggi` */}
+      {chiede && siPuoParlarne() && (
+        <Hov as="button" type="button"
+          onClick={() => portaInChat(frasi.scomponi(c.testo))}
+          title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
+          style={{
+            marginTop: 12, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(255,247,240,.68)',
+            textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
+          }}
+          hover={{ color: '#FFF7F0', textDecorationColor: 'currentColor' }}>
+          {t('Scomponila in chat')}
+        </Hov>
       )}
     </div>
   )

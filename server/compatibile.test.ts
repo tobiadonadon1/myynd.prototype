@@ -526,6 +526,37 @@ test('la finestra di Ollama è una sola, e un prompt che non ci sta si accorcia 
   assert.equal(piccole[0].content, 'ciao')
 })
 
+/*
+ * Il tetto della risposta non è la misura della risposta.
+ *
+ * La chat passa `max_tokens: 16000` perché è il numero oltre il quale si
+ * smette. Tenendo da parte *quello* dentro una finestra da 16384 restavano
+ * centoventotto token per tutto il resto, e il prompt di sistema — duemila
+ * caratteri di regole su come si scrive — usciva da qui con trecento e un
+ * «[…]» in mezzo. Il modello non leggeva più né le regole né il materiale, e
+ * la risposta era quella del quattordici settembre: cancelletti, emoji, e due
+ * paragrafi per dire che non sapeva.
+ *
+ * Questa prova è quella richiesta lì, con le misure vere.
+ */
+test('col tetto di una risposta lunga il prompt resta intero: è la chat vera', async () => {
+  const c = await import('./compatibile.ts')
+  const sistema = 'REGOLA. '.repeat(260)
+  const materiale = `Materiale:\n\n${'x'.repeat(1100)}\n\n---\n\nDomanda: quando scade?`
+
+  const righe = c.entroLaFinestra(
+    [{ role: 'system', content: sistema }, { role: 'user', content: materiale }],
+    16_000
+  )
+  assert.equal(righe[0].content, sistema, 'le regole sono state tagliate a metà')
+  assert.equal(righe[1].content, materiale, 'il materiale è stato tagliato a metà')
+
+  // e quello che davvero non ci sta si accorcia ancora: la rete resta
+  const enorme = c.entroLaFinestra([{ role: 'user', content: 'a'.repeat(200_000) }], 16_000)
+  assert.ok(String(enorme[0].content).includes('[…]'))
+  assert.ok(String(enorme[0].content).length < 60_000)
+})
+
 test('risponde: una GET sola, e un fornitore spento è un no', async () => {
   c.scordaOllama()
   const viste = fornitoreFinto([() => Response.json({ models: [] })])

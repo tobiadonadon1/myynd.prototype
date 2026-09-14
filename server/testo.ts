@@ -124,6 +124,81 @@ export function senzaTrattini(testo: string): string {
     .replace(new RegExp(SEGNAPOSTO, 'g'), '–')
 }
 
+/*
+ * Una domanda sola, e che si legga.
+ *
+ * Quando una riga della lista si ferma, quello che compare sotto è quello che
+ * le serve per andare avanti. Il quattordici settembre era un piano in quattro
+ * punti con tre domande in coda, e non si capiva a quale rispondere.
+ *
+ * Il modello che la riscrive è piccolo e ogni tanto ci ricasca: rimette il
+ * cappello («Per assisterti avrei bisogno di sapere:»), rimette il grassetto,
+ * ne infila due nella stessa riga. Qui non si spera: si prende la prima
+ * domanda vera e si butta il resto. Se non c'è nessun punto interrogativo si
+ * prende la prima frase, che è comunque una riga sola e non un documento.
+ *
+ * Pura apposta: è la differenza fra provare dodici testi storti in un secondo
+ * e affidare una riga a un modello per vedere cosa ne esce.
+ */
+
+/** Oltre questa lunghezza non è più una domanda: è un paragrafo col punto interrogativo. */
+const DOMANDA_MAX = 180
+
+/** Le parole con cui comincia una domanda, nelle due lingue dell'app. */
+const INTERROGATIVE = /^\s*(?:che|cosa|chi|quale|quali|quanto|quanta|quanti|quante|come|quando|dove|perch|what|which|who|whom|whose|when|where|why|how|do|does|did|is|are|was|were|can|could|should|would|will|shall|have|has)\b/i
+
+function togliIlCappello(riga: string): string {
+  const due = riga.indexOf(':')
+  if (due < 0 || due > 60) return riga
+  const davanti = riga.slice(0, due)
+  const dietro = riga.slice(due + 1).trim()
+  // «What is the focus: …»: i due punti stanno dentro la domanda, non prima
+  if (!dietro || INTERROGATIVE.test(davanti)) return riga
+  // e quello che resta deve essere ancora una domanda, se lo era
+  if (riga.includes('?') && !dietro.includes('?')) return riga
+  return dietro
+}
+
+export function soloDomanda(testo: string): string {
+  const piana = testo
+    .replace(/\r\n?/g, '\n')
+    // i segni che nessuno ha chiesto: il grassetto, il corsivo, gli apici, i cancelletti
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/[*_`#]/g, '')
+    // i numerini delle fonti non hanno senso dentro una domanda
+    .replace(/\s*\[\d{1,2}\]/g, '')
+    // il segno di elenco, o il numero, in testa a una riga
+    .replace(/^[ \t]*(?:[-•·]|\d{1,3}[.)])[ \t]+/gm, '')
+    .trim()
+
+  // la prima riga che è davvero una domanda, fra tutte quelle che ha scritto
+  const righe = piana.split('\n').map(r => r.trim()).filter(Boolean)
+  const chiede = righe.find(r => r.includes('?'))
+  const riga = chiede ?? righe[0] ?? ''
+
+  // dentro la riga può essercene più di una: si tiene la prima e si chiude lì
+  const fino = riga.indexOf('?')
+  const una = fino >= 0 ? riga.slice(0, fino + 1) : riga
+
+  /*
+   * Il cappello davanti: «Per andare avanti: di quale unità parliamo?».
+   *
+   * Solo quando è davvero un cappello. Il primo tentativo tagliava tutto
+   * quello che stava prima di un due punti, e su «What is the focus: technical
+   * deployment or compliance?» — che il modello ha scritto davvero, alla prima
+   * prova — restava «technical deployment or compliance?», cioè la domanda
+   * senza la domanda. Se quello che sta prima comincia con una parola
+   * interrogativa, i due punti sono dentro la frase e non davanti.
+   */
+  const pulita = togliIlCappello(una).trim()
+
+  if (pulita.length <= DOMANDA_MAX) return pulita
+  // troppo lunga per essere una domanda: si taglia all'ultimo spazio, non a metà parola
+  const tagliata = pulita.slice(0, DOMANDA_MAX)
+  const spazio = tagliata.lastIndexOf(' ')
+  return `${(spazio > 40 ? tagliata.slice(0, spazio) : tagliata).replace(/[.,;:\s]+$/, '')}?`
+}
+
 // — la lingua in cui è nato un testo —
 //
 // Il difetto che si vede in faccia: l'app in inglese, e in mezzo al feed una

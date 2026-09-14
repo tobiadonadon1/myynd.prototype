@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata } from './testo.ts'
+import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -158,4 +158,81 @@ test('linguaSbagliata risponde per l\'app, non per il testo', () => {
   assert.equal(linguaSbagliata(it, 'it'), false)
   assert.equal(linguaSbagliata(en, 'it'), true)
   assert.equal(linguaSbagliata(en, 'en'), false)
+})
+
+// — la domanda sola —
+//
+// Il quattordici settembre, sotto una riga della lista: un piano in quattro
+// punti, un curriculum che non c'entrava, e in coda tre domande insieme. La
+// parola di Tobia: «non può farmi una domanda diretta?». Questi casi sono
+// quel testo, e le forme storte in cui un modello piccolo ci ricasca.
+
+test('della sua schermata resta la prima domanda, e basta quella', () => {
+  const suo = [
+    "To assist you in solidifying the H-Farm AI Systems project, I'll need to analyze your materials.",
+    '',
+    '1. **Understand Your Goal**: Clarify what "solidification" entails.',
+    '2. **Review Existing Materials**: Check documents like `CV Resume.pdf`.',
+    '',
+    'Please confirm:',
+    '- Is the focus on technical deployment, compliance, or strategic planning?',
+    '- Do you need help drafting a timeline?'
+  ].join('\n')
+  assert.equal(
+    soloDomanda(suo),
+    'Is the focus on technical deployment, compliance, or strategic planning?'
+  )
+})
+
+test('due domande nella stessa riga diventano una', () => {
+  assert.equal(
+    soloDomanda('Di quale unità parliamo? E chi tiene il numero?'),
+    'Di quale unità parliamo?'
+  )
+})
+
+test('il cappello davanti alla domanda se ne va', () => {
+  assert.equal(
+    soloDomanda('Per andare avanti: di quale unità di H-Farm parliamo?'),
+    'di quale unità di H-Farm parliamo?'
+  )
+})
+
+test('i segni del modello non arrivano sulla riga', () => {
+  assert.equal(
+    soloDomanda('### Domanda\n**A chi** va il `preventivo` [2]?'),
+    'A chi va il preventivo?'
+  )
+})
+
+test('senza punto interrogativo resta comunque una riga sola', () => {
+  assert.equal(
+    soloDomanda('Mi manca l’indirizzo di Rossi.\nPoi posso scrivere.'),
+    'Mi manca l’indirizzo di Rossi.'
+  )
+})
+
+test('una domanda lunga un paragrafo si taglia, e resta una domanda', () => {
+  const lunga = `Vorrei capire se ${'x '.repeat(120)}va bene?`
+  const fuori = soloDomanda(lunga)
+  assert.ok(fuori.length <= 181, `lunga ${fuori.length}`)
+  assert.ok(fuori.endsWith('?'))
+  assert.ok(!fuori.includes('\n'))
+})
+
+test('il testo vuoto non diventa una domanda inventata', () => {
+  assert.equal(soloDomanda(''), '')
+  assert.equal(soloDomanda('   \n  '), '')
+})
+
+test('i due punti dentro la domanda non le portano via l’inizio', () => {
+  // il modello l'ha scritta così davvero, alla prima prova sul suo Mac
+  assert.equal(
+    soloDomanda('What is the focus: technical deployment, compliance, or strategic planning?'),
+    'What is the focus: technical deployment, compliance, or strategic planning?'
+  )
+  assert.equal(
+    soloDomanda('Quale unità: quella di Treviso o quella di Roma?'),
+    'Quale unità: quella di Treviso o quella di Roma?'
+  )
 })

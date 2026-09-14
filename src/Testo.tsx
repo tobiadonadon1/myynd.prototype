@@ -11,6 +11,7 @@
 // alto accanto alla parola, che al passaggio dice da dove viene.
 
 import { useState, type ReactNode } from 'react'
+import { IMPAGINATO, leggibile, type Blocco } from './leggibile.ts'
 
 export type Fonte = { id: string; label: string }
 
@@ -106,41 +107,94 @@ function attacca(testo: string): string {
 /**
  * Il testo di una risposta, impaginato.
  *
- * Volutamente minuscolo: grassetto, corsivo, codice, elenchi e citazioni. Non
- * serve altro, perché al modello si chiede di scrivere in prosa — e una
- * risposta che ha bisogno di titoli e tabelle è una risposta troppo lunga.
+ * Restava minuscolo di proposito — grassetto, corsivo, codice, citazioni — con
+ * la ragione scritta qui sopra: al modello si chiede la prosa, e una risposta
+ * che ha bisogno di titoli è una risposta troppo lunga. La ragione è giusta e
+ * resta. Quello che era sbagliato è la conseguenza che se ne traeva: *siccome*
+ * non deve arrivare un cancelletto, se arriva lo si stampa. Un modello piccolo
+ * sul portatile i cancelletti li scrive, e sullo schermo si leggeva
+ * «### Key Observations: 1. **No Reference to H-Farm**: - Rental move-in»,
+ * tutto su una riga, con i rientri dentro.
+ *
+ * Adesso i segni li riconosce `leggibile`, che è la grammatica del
+ * visualizzatore dei documenti e li conosce tutti. Qui si decide solo come
+ * vestirli, e il verdetto sui titoli non cambia: un titolo non diventa un
+ * titolo, diventa una riga di stacco. Chi ne scrive quattro non guadagna
+ * quattro capitoli, guadagna quattro righe in grassetto — che è esattamente
+ * quello che era, senza i cancelletti davanti.
+ *
+ * Le voci di elenco si raggruppano guardando quelle attorno, non il blocco
+ * intero: prima bastava una riga fuori posto — un'introduzione, un titolo —
+ * perché l'elenco intero smettesse di essere un elenco e finisse appiattito in
+ * un paragrafo con dentro i trattini e gli spazi del rientro.
  */
 export function Testo({ testo, fonti = [], onApri }: {
   testo: string
   fonti?: Fonte[]
   onApri?: (id: string) => void
 }) {
-  const blocchi = attacca(testo.trim()).split(/\n{2,}/)
-  return (
-    <>
-      {blocchi.map((b, i) => {
-        const righe = b.split('\n')
-        const elenco = righe.every(r => /^\s*[-*•]\s+/.test(r)) && righe.length > 0
-        const numerato = righe.every(r => /^\s*\d+[.)]\s+/.test(r)) && righe.length > 0
+  const blocchi = leggibile(attacca(testo.trim()), IMPAGINATO)
+  const pezzi: ReactNode[] = []
+  let i = 0
+  // `primo` e non `i`: l'aria in cima si toglie guardando cosa si è già messo
+  // in pagina, non quante righe si sono lette
+  const primo = () => pezzi.length === 0
 
-        if (elenco || numerato) {
-          const El = numerato ? 'ol' : 'ul'
-          return (
-            <El key={i} style={{ margin: i ? '10px 0 0' : 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {righe.map((r, j) => (
-                <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>
-                  {inline(r.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, ''), fonti, onApri)}
-                </li>
-              ))}
-            </El>
-          )
-        }
-        return (
-          <p key={i} style={{ margin: i ? '10px 0 0' : 0, lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-            {inline(b.replace(/\n/g, ' '), fonti, onApri)}
-          </p>
-        )
-      })}
-    </>
-  )
+  while (i < blocchi.length) {
+    const b = blocchi[i]
+
+    if (b.tipo === 'vuota') { i++; continue }
+
+    if (b.tipo === 'voce') {
+      // tutte quelle di fila, e basta il primo numero a dire di che elenco si tratta
+      const voci: Blocco[] = []
+      const numerato = b.numero !== null && b.numero !== undefined
+      while (i < blocchi.length && blocchi[i].tipo === 'voce') { voci.push(blocchi[i]); i++ }
+      const El = numerato ? 'ol' : 'ul'
+      pezzi.push(
+        <El key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {voci.map((v, j) => (
+            <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>{inline(v.testo, fonti, onApri)}</li>
+          ))}
+        </El>
+      )
+      continue
+    }
+
+    i++
+
+    if (b.tipo === 'codice') {
+      pezzi.push(
+        <pre key={pezzi.length} style={{
+          margin: primo() ? 0 : '10px 0 0', padding: '10px 12px', borderRadius: 8,
+          background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.09)',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px',
+          lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre'
+        }}>{b.testo}</pre>
+      )
+      continue
+    }
+
+    // il titolo: una riga di stacco, non un capitolo
+    if (b.tipo === 'titolo') {
+      pezzi.push(
+        <p key={pezzi.length} style={{
+          margin: primo() ? 0 : '12px 0 0', lineHeight: 1.5, fontWeight: 600,
+          textWrap: 'pretty', overflowWrap: 'anywhere'
+        }}>{inline(b.testo, fonti, onApri)}</p>
+      )
+      continue
+    }
+
+    // la prosa: le righe di seguito stanno nello stesso paragrafo, come prima
+    const righe = [b.testo]
+    while (i < blocchi.length && blocchi[i].tipo === 'riga') { righe.push(blocchi[i].testo); i++ }
+    pezzi.push(
+      <p key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+        {inline(righe.join(' '), fonti, onApri)}
+      </p>
+    )
+  }
+
+  return <>{pezzi}</>
 }

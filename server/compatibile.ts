@@ -620,6 +620,26 @@ export function finestra(_righe: Record<string, unknown>[], _max = 0): number {
 const stimaToken = (testo: string) => Math.ceil(testo.length / 3.5)
 
 /**
+ * Quanto si tiene da parte per la risposta, al massimo.
+ *
+ * `max_tokens` è il *tetto* di una risposta, non la sua misura: la chat lo
+ * passa a sedicimila perché è il numero oltre il quale si smette, non perché
+ * una risposta sia lunga così. Tenendo da parte il tetto, dentro una finestra
+ * di sedicimila restavano centoventotto token per tutto il resto — e
+ * `entroLaFinestra` faceva il suo mestiere: tagliava. Misurato il 14 settembre
+ * sul suo Mac: il prompt di sistema entrava con 2080 caratteri e usciva con
+ * 305, con un «[…]» in mezzo alle regole. Il modello non leggeva più né come
+ * doveva scrivere né quasi niente del materiale, e la risposta era quella che
+ * si è visto: cancelletti, emoji, e due paragrafi per dire che non sapeva.
+ *
+ * Una risposta vera qui dentro sta in poche centinaia di token — «mai più di
+ * otto righe» — e un JSON del punto in qualche migliaio. Quattromila è
+ * abbondante per tutti e due, e lascia dodicimila token di prompt: che è la
+ * ragione per cui la finestra è sedicimila.
+ */
+const PER_LA_RISPOSTA = 4096
+
+/**
  * Le righe accorciate quanto basta a stare nella finestra, con un margine per
  * la risposta. Si taglia in mezzo alla riga più lunga (di solito il materiale
  * dentro il messaggio della persona), e si lascia scritto che manca un pezzo:
@@ -627,7 +647,7 @@ const stimaToken = (testo: string) => Math.ceil(testo.length / 3.5)
  * la testa del prompt non lo sa nemmeno.
  */
 export function entroLaFinestra(righe: Record<string, unknown>[], max = 0): Record<string, unknown>[] {
-  const spazio = CTX_FISSO - Math.max(max, 512) - 256
+  const spazio = CTX_FISSO - Math.min(Math.max(max, 512), PER_LA_RISPOSTA) - 256
   const peso = () => stimaToken(JSON.stringify(righe))
   let giri = 0
   while (peso() > spazio && giri++ < 8) {
@@ -653,7 +673,10 @@ export function corpoOllama(f: Fornitore, p: Richiesta, inStreaming: boolean): R
     options: {
       num_ctx: finestra(righe, p.max_tokens),
       ...(typeof p.temperature === 'number' ? { temperature: p.temperature } : {}),
-      ...(p.max_tokens ? { num_predict: p.max_tokens } : {}),
+      // lo stesso tetto con cui si è fatto il conto qui sopra: chiedere una
+      // risposta più lunga dello spazio che le si è lasciato vuol dire farsela
+      // tagliare da Ollama, che è la cosa che non si vede
+      ...(p.max_tokens ? { num_predict: Math.min(p.max_tokens, PER_LA_RISPOSTA) } : {}),
       ...(p.stop_sequences?.length ? { stop: p.stop_sequences } : {})
     }
   }

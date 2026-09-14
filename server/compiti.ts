@@ -26,7 +26,7 @@ import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as invio from './invio.ts'
 import * as progetti from './progetti.ts'
-import { senzaTrattini } from './testo.ts'
+import { senzaTrattini, soloDomanda } from './testo.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -295,12 +295,30 @@ async function svolgiUno(id: string) {
     // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
     // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
     // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
-    const { chiede } = await ferri.chiedeAiuto(c.testo, testo)
+    const { chiede, domanda } = await ferri.chiedeAiuto(c.testo, testo)
     if (richiamati.has(chiave(id))) return
+
+    /*
+     * Quando chiede, sotto la riga ci va la domanda. Solo quella.
+     *
+     * Ci andava tutto quello che aveva scritto, e quando un modello si ferma
+     * quello che ha scritto non è lavoro: è il ragionamento sul lavoro. Il
+     * quattordici settembre erano quattro punti numerati, un file di curriculum
+     * che non c'entrava niente, e in coda tre domande insieme. Sotto, la
+     * casella per rispondere. Per rispondere bisognava leggere duecento parole
+     * e capire quale delle tre contava.
+     *
+     * Adesso quelle duecento parole restano dove sono nate — servono a
+     * `domandeDaFare`, che da lì ricava le risposte da toccare — e sulla riga
+     * compare la domanda sola. Se il modello non riesce a formularla si tiene
+     * quello che c'era: una riga che chiede male è meglio di una riga che non
+     * chiede niente.
+     */
+    const detto = chiede && domanda ? soloDomanda(domanda) : testo
 
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
-    if (!store.risultatoCompito(id, testo, fonti, chiede ? 'chiede' : 'pronto')) return
+    if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
     ritentati.delete(chiave(id))
 
     // Se si è fermato, le stesse cose dette come si dicono a voce: tre domande

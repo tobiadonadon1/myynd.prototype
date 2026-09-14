@@ -1929,6 +1929,16 @@ const EN: Record<string, string> = {
   // — «portami lì»: il posto vero, non una copia dentro Myynd. Il bottone dice
   //   quale dei tre apre, perché da una mail si risponde e una pagina si guarda —
   'Portami lì': 'Take me there',
+  // la riga che non è un compito: si smonta parlandone, non affidandola
+  // le tre colonne, e cosa fa ciascuna: si legge passandoci sopra, e la sente chi non vede il pallino
+  'La fai tu. Myynd non la tocca.': 'You do it. Myynd does not touch it.',
+  'Cerca nel tuo materiale e scrive la cosa. La rileggi tu prima che esca.':
+    'Searches your material and writes the thing. You read it before it goes out.',
+  'Come la bozza, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.':
+    'Like the draft, plus what you need to close it. The last step stays yours.',
+  'Scomponila in chat': 'Break it down in chat',
+  'Se è un obiettivo e non un compito': 'If it is a goal, not a task',
+  'Non è un compito? Parlane in chat e scomponilo insieme a Myynd.': 'Not a task? Talk it through in chat and break it down with Myynd.',
   'Aperto.': 'Opened.',
   'Non sono riuscito ad aprirlo.': 'I could not open it.',
   'Posso portarti lì solo sul Mac.': 'I can only take you there on the Mac.',
@@ -2304,6 +2314,21 @@ export function t(s: string): string {
 export const frasi = {
   // la domanda che parte da una carta: la coda è testo suo, e resta scritta
   dimmiDiPiu: (titolo: string) => corrente === 'en' ? `${titolo}: tell me more` : `${titolo}: dimmi di più`,
+
+  /*
+   * Quando una riga non è un compito: la frase con cui comincia la chat.
+   *
+   * La scrive lui, non Myynd — finisce nel filo come un suo messaggio — e
+   * quindi è scritta come la direbbe lui. Dice le due cose che ha chiesto il
+   * quattordici settembre: fammi le domande, e scomponiamolo.
+   */
+  scomponi: (riga: string) => corrente === 'en'
+    ? `"${riga}" is not a task yet, it is a goal. Ask me what you need to know to break it ` +
+      `down, one question at a time: how I mean to get there, and which project it belongs to. ` +
+      `Then let's turn it into real things to do, and say which ones you can take.`
+    : `«${riga}» non è ancora un compito, è un obiettivo. Fammi le domande che ti servono per ` +
+      `scomporlo, una alla volta: come penso di arrivarci, e dentro quale progetto sta. Poi ` +
+      `trasformiamolo in cose da fare vere, e dimmi quali puoi prenderti tu.`,
 
   /**
    * «Annulla» dell'avviso, che in inglese non è «Cancel».

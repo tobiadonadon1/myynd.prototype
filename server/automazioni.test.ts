@@ -626,7 +626,7 @@ test('una ricetta può chiedere il prompt: si accetta, la riga si affida in quel
   const modi: string[] = []
   compiti.perProva({
     svolgi: async (_c, _n, modo) => { modi.push(modo ?? ''); return { testo: 'Un prompt.', fonti: [] } },
-    chiedeAiuto: async () => ({ chiede: false, manca: [] }),
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }),
     domandeDaFare: async () => []
   })
   try {

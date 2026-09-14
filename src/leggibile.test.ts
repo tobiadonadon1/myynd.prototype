@@ -116,3 +116,98 @@ test('un asterisco fra due spazi non è corsivo', () => {
 test('il testo vuoto non produce niente', () => {
   assert.deepEqual(leggibile(''), [])
 })
+
+// — come la vuole la chat: i segni restano, gli elenchi sono elenchi —
+//
+// Il quattordici settembre Tobia ha mandato due schermate. Nella prima, una
+// risposta in chat che sullo schermo diceva «### Key Observations: 1. **No
+// Reference to H-Farm**: The content focuses on:    - Rental move-in
+// logistics» — tutto su una riga, con i cancelletti scritti e i rientri
+// dentro. Nella seconda, una riga della lista che chiedeva una cosa e la
+// chiedeva con un piano numerato appiattito allo stesso modo. Erano la stessa
+// cosa: `Testo` conosceva quattro segni su dodici, e gli altri li stampava.
+//
+// Questi casi sono quelle due schermate, parola per parola.
+
+import { IMPAGINATO } from './leggibile.ts'
+
+const impaginate = (md: string) =>
+  leggibile(md, IMPAGINATO).map(b => `${b.tipo}${b.numero != null ? `(${b.numero})` : ''}:${b.testo}`)
+
+test('impaginata: il cancelletto non arriva mai sullo schermo', () => {
+  assert.deepEqual(impaginate('### Key Observations:\nIl resto.'), [
+    'titolo:Key Observations:',
+    'riga:Il resto.'
+  ])
+})
+
+test('impaginata: il grassetto resta al suo posto, che lo disegna Testo', () => {
+  assert.deepEqual(impaginate('Il **listino** è *nuovo*.'), ['riga:Il **listino** è *nuovo*.'])
+})
+
+test('impaginata: la schermata della chat, riga per riga', () => {
+  const suo = [
+    '### Key Observations:',
+    '1. **No Reference to H-Farm**: The content focuses on:',
+    '   - Rental move-in logistics, lease signing.',
+    '   - Tobia Donadon\'s "Myynd" personal AI tool prototype.',
+    '2. **Possible Context Confusion**: details are not available here.'
+  ].join('\n')
+  assert.deepEqual(impaginate(suo), [
+    'titolo:Key Observations:',
+    'voce(1):**No Reference to H-Farm**: The content focuses on:',
+    'voce:Rental move-in logistics, lease signing.',
+    'voce:Tobia Donadon\'s "Myynd" personal AI tool prototype.',
+    'voce(2):**Possible Context Confusion**: details are not available here.'
+  ])
+})
+
+test('impaginata: il piano numerato della riga che chiede', () => {
+  const suo = [
+    "Here's a step-by-step approach:",
+    '1. **Understand Your Goal**: Clarify what "solidification" entails.',
+    '2. **Review Existing Materials**: Check documents for relevant details.'
+  ].join('\n')
+  assert.deepEqual(impaginate(suo), [
+    "riga:Here's a step-by-step approach:",
+    'voce(1):**Understand Your Goal**: Clarify what "solidification" entails.',
+    'voce(2):**Review Existing Materials**: Check documents for relevant details.'
+  ])
+})
+
+test('impaginata: una voce senza riga vuota davanti resta una voce', () => {
+  assert.deepEqual(impaginate('Tre cose:\n- una\n- due'), [
+    'riga:Tre cose:',
+    'voce:una',
+    'voce:due'
+  ])
+})
+
+test('impaginata: una tabella non arriva con le pipe', () => {
+  assert.deepEqual(impaginate('| Voce | Prezzo |\n| --- | --- |\n| Sito | 2000 |'), [
+    'riga:Voce · Prezzo',
+    'riga:Sito · 2000'
+  ])
+})
+
+test('impaginata: il codice recintato non lascia in giro i tre apici', () => {
+  assert.deepEqual(impaginate('Prima.\n```\nnpm run build\n```\nDopo.'), [
+    'riga:Prima.',
+    'codice:npm run build',
+    'riga:Dopo.'
+  ])
+})
+
+test('impaginata: un numero dentro una frase non è un elenco', () => {
+  assert.deepEqual(impaginate('Ne restano 3. Poi si vede.'), ['riga:Ne restano 3. Poi si vede.'])
+})
+
+test('per il visualizzatore niente cambia: gli elenchi restano righe col puntino', () => {
+  assert.deepEqual(righe('Tre cose:\n- una\n- due'), [
+    'riga:Tre cose:',
+    'riga:· una',
+    'riga:· due'
+  ])
+  // e un numerato resta numerato, come è sempre stato
+  assert.deepEqual(righe('1. prima\n2. seconda'), ['riga:1. prima', 'riga:2. seconda'])
+})

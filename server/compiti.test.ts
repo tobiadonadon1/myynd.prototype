@@ -66,7 +66,7 @@ function orecchio(id: string, di?: string | null) {
 
 const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-const nonChiede = async () => ({ chiede: false, manca: [] })
+const nonChiede = async () => ({ chiede: false, manca: [], domanda: '' })
 const nessunaDomanda = async () => []
 
 test('la delega riceve il progetto attuale per ID e conserva le note della riga', async () => {
@@ -268,7 +268,7 @@ test('un modello che esplode lascia la riga aperta, con il perché', async () =>
 test('una risposta che chiede qualcosa finisce in «chiede», non in «pronto»', async () => {
   compiti.perProva({
     svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }),
-    chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'] }),
+    chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'], domanda: 'A quale indirizzo scrivo a Rossi?' }),
     domandeDaFare: async () => [{ domanda: 'A chi va?', opzioni: ['Rossi', 'Bianchi'], multipla: false }]
   })
   const id = riga('Scrivere a Rossi')
@@ -371,7 +371,7 @@ test('su una riga che chiede non si prepara: non c’è ancora niente da mandare
   let preparate = 0
   compiti.perProva({
     svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }),
-    chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'] }),
+    chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'], domanda: 'A quale indirizzo scrivo a Rossi?' }),
     domandeDaFare: nessunaDomanda,
     postaCollegata: () => true,
     preparaEmail: async () => { preparate++; return emailFinta() }

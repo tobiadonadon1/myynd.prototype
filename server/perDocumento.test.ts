@@ -116,7 +116,7 @@ type Svolgi = NonNullable<NonNullable<Parameters<typeof compiti.perProva>[0]>['s
 function leBozzeLeScrive(svolgi: Svolgi) {
   compiti.perProva({
     svolgi,
-    chiedeAiuto: async () => ({ chiede: false, manca: [] }),
+    chiedeAiuto: async () => ({ chiede: false, manca: [], domanda: '' }),
     domandeDaFare: async () => []
   })
 }
