@@ -102,3 +102,26 @@ test('quindici secondi per cominciare, e poi si dice che il modello è troppo gr
     (e: Error) => e.name === compatibile.ATTESA_SCADUTA && /Ci ha messo troppo/.test(e.message)
   )
 })
+
+test('con un modello locale i lavori di fondo aspettano che nessuno stia guardando', async () => {
+  const cfg = await import('./config.ts')
+  const m = await import('./modello.ts')
+  cfg.aggiorna({ motore: 'compatibile', compatibile: { url: 'http://127.0.0.1:11434/v1', modello: 'prova' } })
+  m.calma.ms = 300
+  m.perProvaCalma.guardato.inCorso = 1
+  m.perProvaCalma.guardato.ultimo = Date.now()
+  let servito = false
+  const attesa = m.cediAChiGuarda('titolo').then(() => { servito = true })
+  await new Promise(r => setTimeout(r, 200))
+  assert.equal(servito, false, 'è partito mentre qualcuno guardava')
+  m.perProvaCalma.guardato.inCorso = 0
+  m.perProvaCalma.guardato.ultimo = Date.now() - 1000
+  await attesa
+  assert.equal(servito, true)
+  // la chat non aspetta mai
+  const t0 = Date.now()
+  m.perProvaCalma.guardato.inCorso = 1
+  await m.cediAChiGuarda('risposta')
+  assert.ok(Date.now() - t0 < 100)
+  m.perProvaCalma.guardato.inCorso = 0
+})

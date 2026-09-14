@@ -623,7 +623,9 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
+        segnaGuardato(true)
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
+          .finally(() => segnaGuardato(false))
           .catch(e => {
             /*
              * Il tetto sulla prima parola, detto per quello che è.
@@ -814,6 +816,32 @@ export function conLaLingua(system: string): string {
     'citazioni testuali e le cifre restano come sono.'
 }
 
+/*
+ * — La precedenza a chi guarda —
+ *
+ * Un modello sul suo computer serve una richiesta per volta. Dopo ogni
+ * risposta in chat partono tre lavori di fondo (il titolo, l'estrazione dei
+ * ricordi, il ritratto) e la domanda successiva si metteva in coda dietro a
+ * loro: dieci secondi di attesa, misurati. Quindi i lavori di fondo aspettano
+ * che nessuno stia guardando lo schermo: nessuna risposta in corso, e un po'
+ * di calma dall'ultima. Con Claude non serve: le richieste vanno in parallelo.
+ */
+const guardato = { inCorso: 0, ultimo: 0 }
+export const calma = { ms: 15_000 }
+function segnaGuardato(inizio: boolean) {
+  guardato.inCorso = inizio ? guardato.inCorso + 1 : Math.max(0, guardato.inCorso - 1)
+  guardato.ultimo = Date.now()
+}
+export async function cediAChiGuarda(lavoro: Lavoro): Promise<void> {
+  if (lavoro === 'risposta' || !fornitore()) return
+  const t0 = Date.now()
+  while ((guardato.inCorso > 0 || Date.now() - guardato.ultimo < calma.ms) && Date.now() - t0 < 120_000) {
+    await new Promise(r => setTimeout(r, 250))
+  }
+}
+/** Per le prove: lo stato di chi guarda. */
+export const perProvaCalma = { guardato }
+
 export async function chiedi(o: {
   lavoro: Lavoro
   system: string
@@ -869,6 +897,7 @@ export async function chiedi(o: {
   // parametri restano quelli di Claude — `parametri()` sa cosa accetta il
   // modello scelto — e se dall'altra parte c'è un altro fornitore è
   // `compatibile.ts` a tradurli, non chi chiama.
+  await cediAChiGuarda(o.lavoro)
   const m = motore()
   if (!m) {
     // Due situazioni diverse, e mandare la seconda a collegare Claude sarebbe
