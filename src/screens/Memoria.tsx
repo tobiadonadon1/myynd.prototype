@@ -28,6 +28,7 @@ import { DOMANDE } from '../data'
 import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva, useConferma } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
+import { ascoltaProgetto, dimenticaProgetto, progettoAtteso } from '../vals'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
 function quanto(f: number): string {
@@ -300,7 +301,12 @@ const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string }> = {
   chiuso: { testo: 'rgba(34,39,31,.55)', fondo: 'rgba(34,39,31,.08)' }
 }
 
-function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void> }) {
+function RigaProgetto({ p, cambia, acceso }: {
+  p: Progetto
+  cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void>
+  /** Arrivato adesso da una riga della lista: un anello di rame per un attimo, e basta. */
+  acceso?: boolean
+}) {
   const [obiettivo, setObiettivo] = useState(p.obiettivo)
   useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
   const chiuso = p.stato === 'chiuso'
@@ -325,7 +331,13 @@ function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { ob
   )
 
   return (
-    <div style={{ padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)', opacity: chiuso ? 0.55 : 1 }}>
+    // l'id è la maniglia con cui la prima pagina porta questa riga sotto gli occhi
+    <div id={`progetto-${p.id}`} style={{
+      padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)', opacity: chiuso ? 0.55 : 1,
+      // l'anello sta fuori dal flusso: acceso non sposta di un pixel quello che c'è sotto
+      borderRadius: 10, outline: acceso ? '2px solid #C4623B' : '2px solid transparent',
+      outlineOffset: 6, transition: 'outline-color .3s'
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         <span style={{ flex: 1, minWidth: 0, fontSize: '14.5px', fontWeight: 500, color: '#22271F', overflowWrap: 'anywhere',
           textDecoration: chiuso ? 'line-through' : 'none' }}>{p.nome}</span>
@@ -390,6 +402,17 @@ function RigaProgetto({ p, cambia }: { p: Progetto; cambia: (id: string, c: { ob
 function Progetti() {
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
   const [nuovo, setNuovo] = useState(false)
+  /**
+   * La riga da portare sotto gli occhi, e quella accesa.
+   *
+   * Il biglietto lo lascia la prima pagina — «Da il progetto H-Farm» — e qui
+   * si legge quando la schermata si monta, o mentre è già aperta. Si strappa
+   * solo quando la riga esiste davvero: prima dei progetti caricati non c'è
+   * niente su cui scorrere, e strapparlo lì vorrebbe dire arrivare in Memoria
+   * senza sapere quale riga si era chiesta.
+   */
+  const [daMostrare, setDaMostrare] = useState<string | null>(progettoAtteso)
+  const [acceso, setAcceso] = useState<string | null>(null)
   const [nome, setNome] = useState('')
   const [obiettivo, setObiettivo] = useState('')
   const [guaio, setGuaio] = useState('')
@@ -398,6 +421,19 @@ function Progetti() {
     try { setProgetti((await api.progetti()).progetti) } catch { /* la pagina resta com'è */ }
   }, [])
   useEffect(() => { carica() }, [carica])
+  useEffect(() => ascoltaProgetto(() => setDaMostrare(progettoAtteso())), [])
+  useEffect(() => {
+    if (!daMostrare || !progetti?.length) return
+    const riga = document.getElementById(`progetto-${daMostrare}`)
+    if (!riga) return
+    riga.scrollIntoView({ block: 'center' })
+    dimenticaProgetto()
+    setDaMostrare(null)
+    setAcceso(daMostrare)
+    // un secondo e mezzo: il tempo di vedere quale riga, non di doverla spegnere
+    const via = setTimeout(() => setAcceso(null), 1500)
+    return () => clearTimeout(via)
+  }, [daMostrare, progetti])
 
   const cambia = async (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => {
     // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
@@ -463,7 +499,7 @@ function Progetti() {
         </div>
       )}
       <div style={{ marginTop: progetti?.length ? 10 : 0 }}>
-        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} cambia={cambia} />)}
+        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} cambia={cambia} acceso={acceso === p.id} />)}
       </div>
       {guaio && <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
     </div>

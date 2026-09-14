@@ -531,7 +531,11 @@ test('una cosa da fare che ripete una cosa chiusa la settimana scorsa non fa nas
 })
 
 test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga diventano una', () => {
-  const riga = (testo: string, doc: string | null = null) => ({ testo, doc })
+  // il tipo esatto di quello che `ancoraAlleRighe` riceve: qui `punto` è un
+  // import dinamico, e i suoi tipi si raggiungono solo passando dalla firma
+  type Notata = Parameters<typeof punto.ancoraAlleRighe>[0][number]
+  const riga = (testo: string, doc: string | null = null, sopra: Partial<Notata> = {}): Notata =>
+    ({ testo, doc, progetto: null, compito: null, ...sopra })
 
   // le tre mosse del tredici settembre, e la riga della lista che le conteneva
   const chiede = { id: 'c1', testo: 'Rispondere alle quattro domande sull’ambito per H-Farm' }
@@ -569,6 +573,59 @@ test('ancoraAlleRighe: tre righe nuove al massimo, e due cose sulla stessa riga 
   assert.deepEqual(sparita, [])
 })
 
+test('ancoraAlleRighe: una cosa nata da una riga ne eredita il progetto e il documento', () => {
+  // la riga che chiedeva le quattro cose su H-Farm: sa dove sta, e le figlie no
+  const chiede = { id: 'avvio-h', testo: 'Rispondere alle quattro domande sull’ambito', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd' }
+  const nate: { testo: string; doc: string | null; progetto: string | null }[] = []
+  const prese = punto.ancoraAlleRighe(
+    [
+      { testo: 'Conferma quale unità guarda l’audit.', doc: null, progetto: null, compito: 'avvio-h' },
+      // la riga da cui dice di venire non esiste: nasce nuda, non nasce sbagliata
+      { testo: 'Decidi il passo dopo l’unità scelta.', doc: null, progetto: null, compito: 'mai-esistita' }
+    ],
+    { aperti: [chiede], chiuse: [], crea: (testo, doc, progetto) => { nate.push({ testo, doc, progetto }); return `n${nate.length}` } }
+  )
+  assert.deepEqual(prese, ['n1', 'n2'])
+  assert.deepEqual(nate[0], { testo: 'Conferma quale unità guarda l’audit', doc: 'posta:INBOX:3', progetto: 'p93ddacbed1bd' })
+  assert.deepEqual(nate[1], { testo: 'Decidi il passo dopo l’unità scelta', doc: null, progetto: null })
+
+  // quello che dice il modello viene prima di quello che si eredita
+  const suo: { doc: string | null; progetto: string | null }[] = []
+  punto.ancoraAlleRighe(
+    [{ testo: 'Manda il modulo firmato al notaio.', doc: 'posta:INBOX:9', progetto: 'pAltro', compito: 'avvio-h' }],
+    { aperti: [chiede], chiuse: [], crea: (_t, doc, progetto) => { suo.push({ doc, progetto }); return 'n1' } }
+  )
+  assert.deepEqual(suo, [{ doc: 'posta:INBOX:9', progetto: 'pAltro' }])
+})
+
+test('la provenienza dal vivo: la riga madre passa il progetto, un id inventato non passa', async () => {
+  pulisci()
+  const pr = progetti.scrivi({ nome: 'H-Farm', obiettivo: 'Chiudere l’audit sull’AI.' })
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Ambito dell’audit')])
+  store.scriviCompito({ id: 'avvio-h', testo: 'Rispondere alle quattro domande sull’ambito', ordine: 'a', quando: 'oggi', progetto: pr.id })
+  store.affidaCompito('avvio-h', 'bozza')
+  store.risultatoCompito('avvio-h', 'Mi manca l’unità a cui guarda l’audit.', [], 'chiede')
+
+  const ricevute = fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [],
+    compiti: [
+      { testo: 'Conferma quale unità guarda l’audit.', doc: '', compito: 'avvio-h', progetto: '' },
+      { testo: 'Chiama il commercialista per la fattura.', doc: '', compito: '', progetto: 'pInventato' }
+    ]
+  })
+  await punto.punto({}, adesso())
+
+  // gli id devono essere arrivati al modello: senza, non può nominarli
+  assert.ok(istruzioneDi(ricevute[0]).includes(`— [${pr.id}] H-Farm`), 'il progetto è andato al modello senza il suo id')
+  assert.match(testoDi(ricevute[0]), new RegExp(`\\[avvio-h\\].*progetto \\[${pr.id}\\]`), 'la riga aperta non dice su che progetto sta')
+
+  const nate = store.elencoCompiti().filter(c => c.origine === 'punto')
+  assert.equal(nate.length, 2, 'le cose da fare non sono finite in lista')
+  assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.progetto, pr.id, 'la cosa nata dalle domande di una riga non ne ha ereditato il progetto')
+  assert.equal(nate.find(c => c.testo.startsWith('Chiama'))?.progetto, null, 'un progetto inventato è entrato in lista')
+})
+
 test('rifare il punto sulla stessa cosa da fare non raddoppia la riga', async () => {
   pulisci()
   seminaProgetto()
@@ -598,7 +655,9 @@ test('l’istruzione dice le quattro sezioni, dove finiscono i compiti, e la lin
   const lingua = cfg.nellaLingua()
   assert.match(istr, /Le quattro sezioni, e cosa ci va:/)
   assert.match(istr, /«progetti»[\s\S]*«github»[\s\S]*«daLeggere»[\s\S]*«risposte»/)
-  assert.match(istr, /finiranno nella sua lista, con il\n  documento da cui vengono; non sono righe del punto/)
+  assert.match(istr, /finiranno nella sua lista, con dentro da\n  dove vengono; non sono righe del punto/)
+  // le tre strade della provenienza: senza, le righe nate dal punto non aprono niente
+  assert.match(istr, /Da dove viene una cosa da fare: è obbligatorio dirlo[\s\S]*Almeno uno dei tre va riempito/)
   assert.match(istr, new RegExp(`Scrivi in ${lingua}: ogni campo, i compiti compresi`))
   // e le regole di stile viaggiano con l'istruzione
   assert.match(istr, /Quello che ha fatto Myynd da solo/)
@@ -808,7 +867,7 @@ test('il punto sta in punto.json, e al giro dopo il modello riceve i progetti da
   const secondo = await punto.punto({ forza: true }, t0 + ore(4))
   const giorno = new Date(mio.dal).toISOString().slice(0, 10)
   assert.match(istruzioneDi(ricevute[1]),
-    new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  l'ultima volta hai detto: Il punto adesso ha quattro sezioni`))
+    new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— \\[${mio.id}\\] Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  l'ultima volta hai detto: Il punto adesso ha quattro sezioni`))
   assert.match(istruzioneDi(ricevute[1]), /Non inventarne di nuovi/)
   assert.equal(secondo.punto?.progetti[0].id, mio.id)
   assert.equal(progetti.elenco().length, 1, 'il punto ha scritto un progetto in tabella')

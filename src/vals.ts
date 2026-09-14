@@ -52,11 +52,59 @@ export { primoParagrafo }
 const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook'])
 const FILE = new Set(['desktop', 'drive', 'dropbox', 'mac'])
 
+/** Il connettore da cui viene: dalla voce se ce l'ha, altrimenti dall'id del documento. */
+const connettoreDi = (fonte: string | null | undefined, doc: string | null | undefined) =>
+  (fonte || (doc ?? '').split(':')[0] || '').toLowerCase()
+
 export function etichettaFonte(fonte: string | null | undefined, doc: string | null | undefined): string {
-  const nome = (fonte || (doc ?? '').split(':')[0] || '').toLowerCase()
+  const nome = connettoreDi(fonte, doc)
   if (POSTA.has(nome)) return t('Apri la mail')
   if (FILE.has(nome)) return t('Apri il file')
   return t('Apri la pagina')
+}
+
+/**
+ * Lo stesso, senza il verbo: «la mail», «il file», «la pagina».
+ *
+ * Serve alla riga che dice da dove viene una cosa da fare: «Da» e poi il link.
+ * Stesso elenco di connettori del bottone, così il giorno che ne arriva uno
+ * nuovo la parola giusta la impara un posto solo.
+ */
+export function generePrimoDocumento(fonte: string | null | undefined, doc: string | null | undefined): string {
+  const nome = connettoreDi(fonte, doc)
+  if (POSTA.has(nome)) return t('la mail')
+  if (FILE.has(nome)) return t('il file')
+  return t('la pagina')
+}
+
+/**
+ * Il progetto che la Memoria deve portare sotto gli occhi.
+ *
+ * Sta fuori dal hook perché chi lo scrive e chi lo legge non si conoscono: lo
+ * chiede la prima pagina da una riga della lista, lo trova la Memoria quando
+ * si monta. È un biglietto, non uno stato: si guarda senza consumarlo, e si
+ * strappa quando la riga è stata portata davvero sotto gli occhi.
+ */
+let atteso: string | null = null
+const inAscolto = new Set<() => void>()
+
+/** «Portami su questo progetto»: lo dice la prima pagina, lo legge la Memoria. */
+export function chiediProgetto(id: string) {
+  atteso = id
+  for (const f of inAscolto) f()
+}
+/** Guardare non consuma: la Memoria può montarsi due volte e trovarlo ancora. */
+export function progettoAtteso(): string | null {
+  return atteso
+}
+/** Portato sotto gli occhi: il biglietto si strappa, così tornarci non rifà il giro. */
+export function dimenticaProgetto() {
+  atteso = null
+}
+/** Per la Memoria già aperta: il biglietto è arrivato adesso. */
+export function ascoltaProgetto(f: () => void): () => void {
+  inAscolto.add(f)
+  return () => { inAscolto.delete(f) }
 }
 
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
@@ -994,6 +1042,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     /** Aprire il documento dietro una citazione, dal segno nel testo. */
     apriFonte: (id: string) => {
       api.documento(id).then(setDoc).catch(() => mostraToast(t('Non trovo più il documento.')))
+    },
+    /** I progetti come li conosce il client: servono a dare un nome a un id. */
+    progetti: progetti ?? [],
+    /**
+     * Aprire il progetto dietro una riga.
+     *
+     * Un progetto non ha una schermata sua: vive nella Memoria, in mezzo agli
+     * altri. Portarci e basta vorrebbe dire lasciarlo cercare la riga giusta
+     * in un elenco — quindi si lascia il biglietto, e la Memoria porta quella
+     * riga sotto gli occhi appena si disegna.
+     */
+    apriProgetto: (id: string) => {
+      chiediProgetto(id)
+      setScreen('memoria'); setSearch(false); setMenu(false)
     },
     apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => {
         // il bottone sparisce insieme all'errore: invitarti a riprovare su una

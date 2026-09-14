@@ -6,7 +6,7 @@ import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
-import { primoParagrafo, taglia, type Vals } from '../vals'
+import { generePrimoDocumento, primoParagrafo, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -130,13 +130,46 @@ function nomeFonte(label: string): string {
 }
 
 /**
+ * Da dove viene una riga, detto in una cosa sola e apribile.
+ *
+ * «I compiti non mi riportano alla fonte vera. Deve dirmi esattamente da dove
+ * viene, così posso agirci.» Due righe scritte dal punto quella mattina — «di'
+ * quale unità di H-Farm guarda l'audit», «decidi il passo dopo» — non avevano
+ * né documento né progetto: nascevano dalle domande di un'altra riga, e sulla
+ * carta non c'era niente da premere. Adesso il filo si scrive sempre, e questa
+ * funzione lo legge nell'ordine in cui è utile: il documento, che è la cosa
+ * più vicina al lavoro; il progetto, che dice almeno dove sta; e in ultimo il
+ * posto in cui la riga è nata.
+ *
+ * «mano» non torna niente: l'ha scritta lui, e dirgli da dove viene sarebbe
+ * una presa in giro.
+ */
+function provenienza(c: Compito, v: Vals): { testo: string; apri?: () => void } | null {
+  if (c.doc) {
+    const doc = c.doc
+    return { testo: generePrimoDocumento(null, doc), apri: () => v.apriFonte(doc) }
+  }
+  if (c.progetto) {
+    const id = c.progetto
+    const nome = v.progetti.find(p => p.id === id)?.nome ?? ''
+    return { testo: nome ? `${t('il progetto')} ${nome}` : t('il progetto'), apri: () => v.apriProgetto(id) }
+  }
+  if (c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
+  if (c.origine === 'punto') return { testo: t('il punto del giorno') }
+  if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
+  if (c.origine === 'automazione') return { testo: t('un’automazione') }
+  if (c.origine === 'feed') return { testo: t('il feed') }
+  return null
+}
+
+/**
  * Le prove di una riga: da dove viene, e cosa ha letto per farla.
  *
  * È la risposta a «quando affido una cosa, non la trovo utile come dovrebbe».
  * Una riga affidata tornava con un testo e basta: da dove venisse — la mail a
  * cui rispondere — e su cosa avesse lavorato restavano scritti nel database e
- * invisibili sullo schermo. Qui stanno tutti e due, in chiaro e piano: un
- * link alla cosa da cui è nata, e i documenti che ha davvero aperto.
+ * invisibili sullo schermo. Qui stanno tutti e due, in chiaro e piano: la cosa
+ * da cui è nata, e i documenti che ha davvero aperto.
  *
  * Sono link, non pastiglie: la riga resta quello che conta, e le prove le
  * legge chi le cerca. Il click non risale — dentro una riga della lista
@@ -144,8 +177,10 @@ function nomeFonte(label: string): string {
  * di spingere fuori la card.
  */
 function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
-  const fonti = c.fonti ?? []
-  if (!c.doc && !fonti.length) return null
+  const da = provenienza(c, v)
+  // quello che la riga apre già non si ripete fra le fonti: un link per cosa
+  const citate = (c.fonti ?? []).filter(f => f.id !== c.doc)
+  if (!da && !citate.length) return null
   const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
   const acceso = scuro ? '#FFF7F0' : '#8E3F1F'
   const link: CSSProperties = {
@@ -156,23 +191,36 @@ function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
   }
   const apri = (id: string) => (e: MouseEvent) => { e.stopPropagation(); v.apriFonte(id) }
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 14px', marginTop: 12, minWidth: 0 }}>
-      {c.doc && (
-        <Hov as="button" type="button" onClick={apri(c.doc)}
-          style={{ ...link, flex: 'none', color: acceso }}
-          hover={{ textDecorationColor: 'currentColor' }}>{t('Apri la fonte')}</Hov>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, marginTop: 12, minWidth: 0 }}>
+      {da && (
+        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', maxWidth: '100%', minWidth: 0 }}>
+          <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>{t('Da')}</span>
+          {da.apri
+            ? (
+              <Hov as="button" type="button" title={da.testo}
+                onClick={(e: MouseEvent) => { e.stopPropagation(); da.apri?.() }}
+                style={{ ...link, flex: 'none', color: acceso }}
+                hover={{ textDecorationColor: 'currentColor' }}>{da.testo}</Hov>
+            )
+            : (
+              // il punto del giorno, il primo progetto, un'automazione: posti
+              // che non si aprono, e un link che non porta da nessuna parte è
+              // peggio di una parola scritta
+              <span style={{ ...link, flex: 'none', cursor: 'default', textDecoration: 'none' }}>{da.testo}</span>
+            )}
+        </div>
       )}
-      {fonti.length > 0 && (
-        <span style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', minWidth: 0 }}>
+      {citate.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px 10px', maxWidth: '100%', minWidth: 0 }}>
           <span style={{ flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: quieto }}>{t('Fonti usate')}</span>
-          {fonti.slice(0, 3).map(f => (
+          {citate.slice(0, 3).map(f => (
             <Hov key={f.id} as="button" type="button" onClick={apri(f.id)} title={nomeFonte(f.label)}
               style={link} hover={{ color: acceso, textDecorationColor: 'currentColor' }}>{nomeFonte(f.label)}</Hov>
           ))}
-          {fonti.length > 3 && (
-            <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>+{fonti.length - 3}</span>
+          {citate.length > 3 && (
+            <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>+{citate.length - 3}</span>
           )}
-        </span>
+        </div>
       )}
     </div>
   )
@@ -362,7 +410,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
               <>
                 <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
                 <div role="menu" style={{
-                  position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 210,
+                  position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 210,
                   borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
                   boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
                   animation: 'fadein .14s ease'
@@ -438,8 +486,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
      * che non si vede: se il modello le avesse segnato un documento dietro.
      * Ci si trovava davanti un foglio che non si era chiesto — «mi apre
      * documenti a caso, il mio CV» — invece della riga da chiudere. Adesso
-     * la riga si apre in cima, dove c'è spazio per farci qualcosa, e il
-     * documento si apre da «Apri la fonte»: scritto, e voluto.
+     * la riga si apre in cima, dove c'è spazio per farci qualcosa, e la fonte
+     * si apre dalla riga «Da» sotto il testo: scritta, e voluta.
      */
     ...compiti.filter(c => c.id !== inTesta?.id).slice(0, 6).map(c => ({
       chiave: c.id,
@@ -643,7 +691,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 <>
                   <div onClick={v.chiudiMenu} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
                   <div role="menu" style={{
-                    position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 190,
+                    position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 190,
                     borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
                     boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
                     animation: 'fadein .14s ease'
@@ -716,7 +764,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           serviva anche da riferimento a quello che qui dentro si posiziona da
           sé, e toglierla e basta avrebbe spostato i menù delle righe.
         */
-        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)', overflow: 'hidden' }}>
+        <div style={{ flex: 'none', position: 'relative', marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)' }}>
           {/* le tue righe stanno DENTRO la stessa lista delle sue, vestite
               uguali. Il filo va per posizione, non per specie: la prima non ha
               bordo sopra e tutte le altre sì — chiunque sia la prima. */}

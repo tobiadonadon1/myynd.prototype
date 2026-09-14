@@ -1927,6 +1927,17 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
+  // — da dove viene una riga della lista: «Da» e poi la cosa che apre —
+  'Da': 'From',
+  'la mail': 'the email',
+  'il file': 'the file',
+  'la pagina': 'the page',
+  'il progetto': 'the project',
+  'la chat': 'the chat',
+  'il punto del giorno': 'today’s briefing',
+  'il primo progetto': 'the first project',
+  'un’automazione': 'an automation',
+  'il feed': 'the feed',
   // — la carta in cima: il titolo è il link, e dice cosa apre —
   'Apri la mail': 'Open the email',
   'Apri il file': 'Open the file',
@@ -1934,7 +1945,6 @@ const EN: Record<string, string> = {
   'Affidalo a Myynd': 'Delegate to Myynd',
   'Affidata a Myynd: la trovi nella lista.': 'Delegated to Myynd: you will find it in the list.',
   'Parlane in chat': 'Talk about it in chat',
-  'Apri la fonte': 'Open the source',
   'Fonti usate': 'Sources used',
   // il pallino che salta sulla pastiglia delle notizie: quello che legge chi non vede il pallino
   'Notizie nuove': 'New stories',
