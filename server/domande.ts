@@ -16,7 +16,7 @@
 //
 // Solo chi passa tutti e cinque diventa una domanda. In pratica: pochissime.
 
-import { nellaLingua } from './config.ts'
+import { lingua, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
 
@@ -189,7 +189,10 @@ export async function forseChiedi(): Promise<Proposta> {
       })
       // anche quello che ha capito da solo glielo si dice: un sistema che
       // impara in silenzio è indistinguibile da uno che non impara
-      scriviInChat(`Ho notato una cosa: ${e.deduzione.trim()} Me la segno, e smetto di riproportela.`)
+      // nella lingua dell'app: la cornice è nostra, la frase in mezzo è del modello
+      scriviInChat(lingua() === 'en'
+        ? `I noticed something: ${e.deduzione.trim()} I am noting it, and I will stop suggesting it.`
+        : `Ho notato una cosa: ${e.deduzione.trim()} Me la segno, e smetto di riproportela.`)
       // il tema si segna come già affrontato: dedotto una volta, basta.
       // `apriDomanda` può tornare null se il tema c'era già — e chiudere la
       // stringa vuota non chiude niente, ma non rompe nulla: il controllo qui
