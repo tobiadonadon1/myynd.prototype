@@ -1926,7 +1926,8 @@ const EN: Record<string, string> = {
   // — il punto: la carta di quando torni —
   'Il punto': 'The briefing',
   'Dieci secondi.': 'Ten seconds.',
-  // — «portami lì»: il posto vero, non una copia dentro Myynd —
+  // — «portami lì»: il posto vero, non una copia dentro Myynd. Il bottone dice
+  //   quale dei tre apre, perché da una mail si risponde e una pagina si guarda —
   'Portami lì': 'Take me there',
   'Aperto.': 'Opened.',
   'Non sono riuscito ad aprirlo.': 'I could not open it.',

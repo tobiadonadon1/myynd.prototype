@@ -1175,3 +1175,47 @@ test('l’email pronta si scrive e si legge com’è, e sparisce con la bozza', 
   store.scriviEmailCompito('ce1', null)
   assert.equal(store.compito('ce1')!.email, null)
 })
+
+/*
+ * «Portami lì» che non porta lì.
+ *
+ * Il quattordici settembre: «dove dice *portami lì* mi apre un compito, e non
+ * mi porta alla mail, non mi porta al documento, non mi porta da nessuna
+ * parte». Il bottone si disegnava per ogni riga che avesse un documento, una
+ * riga madre o un progetto — e le ultime due sono posti dentro Myynd, non
+ * posti veri. `porta` dice solo dei posti veri, e null è quello che spegne il
+ * bottone: una riga di un progetto non deve avere un bottone che promette il
+ * Mac e apre una scheda.
+ */
+test('«porta» dice solo i posti veri: un progetto non è un posto', () => {
+  store.salvaDocumenti([
+    doc('pl-file', { percorso: '/Utenti/prova/audit.pages' }),
+    // l'id vero di una mail comincia col connettore: è da lì che `connettoreDi` la riconosce
+    doc('google:INBOX:7', { fonte: 'google', tipo: 'email', percorso: null, messageId: 'audit@hfarm.it' }),
+    doc('notion:pl-pagina', { fonte: 'notion', tipo: 'pagina', percorso: 'https://notion.so/audit' })
+  ])
+  store.scriviCompito({ id: 'pl1', testo: 'Il file', ordine: 'zp1', doc: 'pl-file' })
+  store.scriviCompito({ id: 'pl2', testo: 'La mail', ordine: 'zp2', doc: 'google:INBOX:7' })
+  store.scriviCompito({ id: 'pl3', testo: 'La pagina', ordine: 'zp3', doc: 'notion:pl-pagina' })
+  // le due che facevano sembrare rotto il bottone: nessun documento sotto
+  store.scriviCompito({ id: 'pl4', testo: 'Il passo dopo', ordine: 'zp4', progetto: 'hfarm' })
+  store.scriviCompito({ id: 'pl5', testo: 'Nata da un’altra riga', ordine: 'zp5', madre: 'pl4' })
+  store.scriviCompito({ id: 'pl6', testo: 'Scritta a mano', ordine: 'zp6' })
+
+  const porta = (id: string) => store.compito(id)!.porta
+  assert.equal(porta('pl1'), 'file')
+  assert.equal(porta('pl2'), 'posta')
+  assert.equal(porta('pl3'), 'pagina')
+  assert.equal(porta('pl4'), null)
+  assert.equal(porta('pl5'), null)
+  assert.equal(porta('pl6'), null)
+
+  // e l'elenco dice la stessa cosa della singola: è da lì che legge la carta
+  const elenco = store.elencoCompiti()
+  assert.equal(elenco.find(c => c.id === 'pl2')!.porta, 'posta')
+  assert.equal(elenco.find(c => c.id === 'pl4')!.porta, null)
+
+  // il documento cancellato non lascia in giro un bottone che apre il vuoto
+  store.scordaDocumenti(['pl-file'])
+  assert.equal(porta('pl1'), null)
+})

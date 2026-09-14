@@ -178,6 +178,20 @@ let portaAllaMemoria: ((id: string) => void) | null = null
 export function registraPortaProgetto(f: ((id: string) => void) | null) { portaAllaMemoria = f }
 export function portaAlProgetto(id: string) { (portaAllaMemoria ?? chiediProgetto)(id) }
 
+/**
+ * Come si chiama il bottone che porta lì: dice *cosa* apre.
+ *
+ * «Portami lì» era una parola sola per tre posti diversi, e su una riga che non
+ * aveva nessuno dei tre non voleva dire niente. Il nome del posto è anche la
+ * prova che il posto c'è: si legge sul bottone prima di premerlo.
+ *
+ * È una funzione e non una tabella perché la lingua si cambia dalle preferenze
+ * e deve valere subito, senza ricaricare — vedi `ricordaLingua`.
+ */
+export function nomePorta(p: 'posta' | 'file' | 'pagina'): string {
+  return p === 'posta' ? t('Apri la mail') : p === 'file' ? t('Apri il file') : t('Apri la pagina')
+}
+
 const RIGA_MIA: CSSProperties = { display: 'flex', justifyContent: 'flex-end' }
 const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' }
 const BOLLA_MIA: CSSProperties = {

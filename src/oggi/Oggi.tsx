@@ -13,11 +13,12 @@
 // materiale. Sta sotto i tre puntini della riga, perché è una cosa che si
 // chiede ogni tanto, non una che si guarda a colpo d'occhio.
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Cestino, Hov, LABEL, PILL, useAttiva, useLarghezza } from '../ui'
 import { frasi, loc, t } from '../lingua'
 import { IconAvanti, IconGiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
+import { MenuGiu } from '../components/MenuGiu'
 import { Testo } from '../Testo'
 import { SECCHI, type Lista, type Secchio } from './useCompiti'
 import { Barra, type Modo } from './Barra'
@@ -25,7 +26,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito } from '../api'
-import { portaAlProgetto } from '../vals'
+import { nomePorta, portaAlProgetto } from '../vals'
 import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
@@ -206,13 +207,19 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
  * riga, di fianco a quello che dice di chi è il turno, e c'è solo quando c'è
  * davvero un posto — un documento, la riga che l'ha fatta nascere, un progetto.
  *
+ * C'è *solo* quando là fuori c'è qualcosa: il server lo dice in `porta`.
+ * Prima bastava una riga madre o un progetto, e allora il bottone apriva la
+ * scheda di un'altra riga o la Memoria — cioè restava dentro Myynd, che è
+ * l'unica cosa che aveva promesso di non fare.
+ *
  * Questa schermata non ha `v`: è la lista e basta, montata con la lista e
- * niente altro. Quando il posto è un progetto, la strada passa da
+ * niente altro. Quando il documento sparisce fra la lista e il dito il server
+ * ripiega ancora sul filo, e allora la strada per il progetto passa da
  * `portaAlProgetto` — la mano che `useVals` lascia in `vals.ts` apposta per
  * chi non ha la colonna sotto mano.
  */
 function Portami({ c, l }: { c: Compito; l: Lista }) {
-  if (!c.doc && !c.madre && !c.progetto) return null
+  if (!c.porta) return null
   const vai = async () => {
     const r = await l.portami(c.id)
     // quello che non è andato l'ha già detto la lista, con un avviso
@@ -223,13 +230,13 @@ function Portami({ c, l }: { c: Compito; l: Lista }) {
   return (
     <Hov as="button" type="button"
       onClick={(e: React.MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={t('Portami lì')}
+      title={nomePorta(c.porta)}
       style={{
         flex: 'none', whiteSpace: 'nowrap', padding: '4px 11px', borderRadius: 99,
         border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)',
         color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
       }}
-      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Portami lì')}</Hov>
+      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{nomePorta(c.porta)}</Hov>
   )
 }
 
@@ -251,6 +258,8 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
   /** Ha chiesto il prompt, non la cosa: nessuna delle tre caselle è sua, e la riga lo dice a parole. */
   const prompt = c.modo === 'prompt'
   const [menu, setMenu] = useState(false)
+  const bottoneAltro = useRef<HTMLButtonElement | null>(null)
+  const chiudiMenu = useCallback(() => setMenu(false), [])
 
   return (
     <li
@@ -385,8 +394,8 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
           c'è già «Rifallo».
         */}
         {!delegato && !aspetta && (
-          <span style={{ position: 'relative', flex: 'none', display: 'flex' }}>
-            <Hov as="button" type="button"
+          <span style={{ flex: 'none', display: 'flex' }}>
+            <Hov as="button" type="button" ref={bottoneAltro}
               onClick={(e: React.MouseEvent) => { e.stopPropagation(); setMenu(m => !m) }}
               onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }}
               aria-label={t('Altro')} title={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
@@ -398,20 +407,19 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                 transition: 'opacity .15s, color .15s'
               }}
               hover={{ color: '#8E3F1F' }}>⋯</Hov>
+            {/*
+              Non più dentro la riga: ogni riga è una lastra di vetro sfocato,
+              cioè un piano per conto suo, e la riga che viene dopo si disegnava
+              *sopra* questo menù qualunque `zIndex` gli si desse da qui. Adesso
+              sta in fondo alla pagina e nessuna riga gli va davanti — `MenuGiu`.
+            */}
             {menu && (
-              <div role="menu" style={{
-                position: 'absolute', right: 0, top: 24, zIndex: 5, minWidth: 200,
-                padding: 5, borderRadius: 11, background: '#FFFDF9',
-                border: '1px solid rgba(34,39,31,.14)', boxShadow: '0 12px 28px -12px rgba(84,64,44,.4)',
-                animation: 'fadein .12s ease'
-              }}>
+              <MenuGiu ancora={bottoneAltro.current} chiudi={chiudiMenu} minLarghezza={200} allinea="destra">
                 <Hov as="button" type="button" role="menuitem" autoFocus
                   onClick={() => { setMenu(false); l.delega(c.id, 'prompt') }}
                   // il fuoco resta sulla voce mentre la si preme: Safari non
                   // lo dà ai bottoni, e il blur chiuderebbe il menù prima del clic
                   onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
-                  onBlur={() => setMenu(false)}
-                  onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(false) } }}
                   style={{
                     display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
                     padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
@@ -421,7 +429,7 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                   <div>{t('Preparami il prompt')}</div>
                   <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Da incollare in Claude o ChatGPT')}</div>
                 </Hov>
-              </div>
+              </MenuGiu>
             )}
           </span>
         )}

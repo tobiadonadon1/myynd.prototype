@@ -8,6 +8,7 @@ import { cartella } from './config.ts'
 import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
 import { radici, radice, termini } from './lingua.ts'
+import { dovePortare } from './scrivania.ts'
 
 /*
  * Un indice per persona, aperto quando serve.
@@ -2827,6 +2828,14 @@ export type Compito = {
   voce: string | null
   doc: string | null
   /**
+   * Il posto vero che questa riga apre sul Mac, se ce n'è uno.
+   *
+   * Non sta su disco: si calcola leggendo il documento, e vale per «Portami
+   * lì» — vedi `portaDi`. Null vuol dire che non c'è niente da aprire fuori da
+   * Myynd, e allora quel bottone non si disegna.
+   */
+  porta?: 'posta' | 'file' | 'pagina' | null
+  /**
    * La riga della lista da cui questa è nata, quando è nata da un'altra.
    *
    * Solo quando c'è un filo vero: il punto legge le domande di una riga aperta
@@ -2924,9 +2933,35 @@ export type Proposta =
       eventi: { titolo: string; inizio: string; minuti?: number; dove?: string; perche: string }[]
     }
 
+/**
+ * Dove porta questa riga *fuori* da Myynd: la mail, il file, la pagina.
+ *
+ * Null vuol dire «in nessun posto vero», e la carta lo usa per non disegnare
+ * affatto il bottone. Prima non lo sapeva: «Portami lì» compariva su ogni riga
+ * che avesse un documento, una riga madre o un progetto, e su due terzi di
+ * quelle il server ripiegava su un posto *dentro* l'app — apriva la scheda
+ * della riga da cui era nata, o la Memoria sul progetto. Da fuori si vedeva
+ * comparire una scheda: «mi apre un compito, non mi porta alla mail».
+ *
+ * Quei due ripieghi restano dove sono — `dovePortare` li decide ancora, e
+ * l'endpoint li esegue se il documento sparisce fra la lista e il dito — ma
+ * non sono una promessa da scrivere su un bottone. Chi vuole il progetto o la
+ * riga madre ha già il link «Da …» sotto il testo, che dice dove va prima di
+ * essere premuto.
+ */
+function portaDi(doc: unknown): 'posta' | 'file' | 'pagina' | null {
+  const id = typeof doc === 'string' && doc ? doc : null
+  if (!id) return null
+  const d = documento(id)
+  if (!d) return null
+  const dove = dovePortare({ doc: id }, d).dove
+  return dove === 'posta' || dove === 'file' || dove === 'pagina' ? dove : null
+}
+
 function compitoDaRiga(r: Record<string, unknown>): Compito {
   return {
     ...r,
+    porta: portaDi(r.doc),
     fonti: r.fonti ? JSON.parse(String(r.fonti)) : null,
     proposta: r.proposta ? JSON.parse(String(r.proposta)) : null,
     chieste: r.chieste ? JSON.parse(String(r.chieste)) : null,

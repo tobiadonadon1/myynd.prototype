@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type MouseEvent } from 'react'
+import { useCallback, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { BottoneSicuro, Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
@@ -6,7 +6,8 @@ import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
-import { generePrimoDocumento, nomeDelFile, primoParagrafo, taglia, type Vals } from '../vals'
+import { MenuGiu, VOCE_MENU } from '../components/MenuGiu'
+import { generePrimoDocumento, nomeDelFile, nomePorta, primoParagrafo, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
@@ -33,12 +34,6 @@ const CONTORNO_SCURO: CSSProperties = {
 }
 /** Un solo bottone pieno per card: quando si apre un rigo per scrivere, il pieno passa a «Manda». */
 const primario = (pieno: boolean) => (pieno ? PIENO_SCURO : CONTORNO_SCURO)
-
-/** Una voce di menù: un bottone largo quanto il menù, senza vestito suo. */
-const VOCE_MENU: CSSProperties = {
-  display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10,
-  border: 'none', background: 'none', cursor: 'pointer', fontSize: '13.5px', fontFamily: 'inherit', color: '#22271F'
-}
 
 /**
  * Una riga del resto.
@@ -224,15 +219,27 @@ function Prove({ c, v, scuro }: { c: Compito; v: Vals; scuro?: boolean }) {
  * Myynd — e le due restano separate apposta: una copia della mail non è la
  * mail, e alla mail si risponde dal programma di posta. Questo bottone apre il
  * posto vero: Mail sul messaggio giusto, il Finder sul file, il browser sulla
- * pagina. Quando dietro la riga non c'è niente da aprire sul Mac, porta dove
- * porta il filo — la riga che l'ha fatta nascere, o il progetto.
+ * pagina.
+ *
+ * E *solo* quello. Compariva su ogni riga che avesse un documento, una riga
+ * madre o un progetto, e le ultime due non sono posti: premendolo si apriva la
+ * scheda della riga da cui era nata, o la Memoria. «Mi apre un compito, non mi
+ * porta alla mail, non mi porta al documento, non mi porta da nessuna parte.»
+ * Aveva ragione — era lo stesso bottone con due promesse diverse. Adesso ne fa
+ * una: il server dice in `porta` se là fuori c'è davvero qualcosa, e senza
+ * quello il bottone non c'è. Il progetto e la riga madre restano dove erano
+ * già: nel link «Da …», che dice dove va prima che lo si prema.
+ *
+ * Il nome dice cosa apre — «Apri la mail», non «Portami lì» — perché la
+ * differenza fra le tre cose è tutta lì: da una mail si risponde, un file si
+ * legge, una pagina si guarda.
  *
  * Di contorno, mai pieno: su ogni carta il pieno è uno solo, ed è quello che
  * chiude la riga. E non sta sotto il «⋯»: quello che serve adesso non si
  * nasconde dietro tre puntini.
  */
 function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: boolean }) {
-  if (!c.doc && !c.madre && !c.progetto) return null
+  if (!c.porta) return null
 
   const vai = async () => {
     const r = await l.portami(c.id)
@@ -256,10 +263,10 @@ function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: bo
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={t('Portami lì')}
+      title={nomePorta(c.porta)}
       style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
       hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
-      {t('Portami lì')}
+      {nomePorta(c.porta)}
     </Hov>
   )
 }
@@ -375,6 +382,8 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
  */
 function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const [menu, setMenu] = useState(false)
+  const bottone = useRef<HTMLButtonElement | null>(null)
+  const chiudiMenu = useCallback(() => setMenu(false), [])
   const [lungo, setLungo] = useState(false)
   const [risposta, setRisposta] = useState('')
   const pronto = c.stato === 'pronto'
@@ -449,29 +458,22 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         <Portami c={c} l={l} v={v} scuro />
 
         {altro.length > 0 && (
-          <div style={{ position: 'relative' }}>
-            <Hov as="button" onClick={() => setMenu(m => !m)} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
+          <>
+            <Hov as="button" ref={bottone} onClick={() => setMenu(m => !m)} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
               style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: menu ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
               hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
 
+            {/* fuori dalla carta: qui dentro l'avrebbe tagliato il suo `overflow: hidden` — vedi `MenuGiu` */}
             {menu && (
-              <>
-                <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div role="menu" style={{
-                  position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 210,
-                  borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
-                  boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
-                  animation: 'fadein .14s ease'
-                }}>
-                  {altro.map(a => (
-                    <Hov key={a.id} as="button" type="button" role="menuitem" onClick={() => { setMenu(false); a.fai() }}
-                      style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
-                      hover={{ background: 'rgba(196,98,59,.09)' }}>{a.label}</Hov>
-                  ))}
-                </div>
-              </>
+              <MenuGiu ancora={bottone.current} chiudi={chiudiMenu} minLarghezza={210}>
+                {altro.map(a => (
+                  <Hov key={a.id} as="button" type="button" role="menuitem" onClick={() => { setMenu(false); a.fai() }}
+                    style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
+                    hover={{ background: 'rgba(196,98,59,.09)' }}>{a.label}</Hov>
+                ))}
+              </MenuGiu>
             )}
-          </div>
+          </>
         )}
 
         <div style={{ flex: 1 }} />
@@ -520,6 +522,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
   const [inCima, setInCima] = useState<string | null>(null)
   /** Mentre la riga nasce e parte: il bottone non si preme due volte. */
   const [affidando, setAffidando] = useState(false)
+  /** Il «⋯» della carta grande: il menù si misura su di lui — vedi `MenuGiu`. */
+  const altroHero = useRef<HTMLButtonElement | null>(null)
   const compiti = lista?.compiti ?? []
   const inTesta = compiti.find(c => c.id === inCima) ?? (v.hasHero ? null : compiti[0] ?? null)
   // quando in cima ci va una cosa tua, la voce che stava lì scende fra le righe
@@ -731,29 +735,22 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
                 Stava a `left: 178` dal bordo della fascia, cioè alla larghezza
                 che avevano quei due bottoni con quelle due parole dentro: la
                 prima traduzione un po' più lunga lo spostava sotto il nulla. */}
-            <div style={{ position: 'relative' }}>
-              <Hov as="button" onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
+            <>
+              <Hov as="button" ref={altroHero} onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
                 style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: v.menuAperto ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
                 hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
 
+              {/* fuori dalla carta, per la stessa ragione dell'altro: `MenuGiu` */}
               {v.menuAperto && (
-                <>
-                  <div onClick={v.chiudiMenu} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                  <div role="menu" style={{
-                    position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 21, minWidth: 190,
-                    borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
-                    boxShadow: '0 24px 56px rgba(30,20,14,.34)', overflow: 'hidden', padding: 5,
-                    animation: 'fadein .14s ease'
-                  }}>
-                    {v.correzioni.map(c => (
-                      <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
-                        style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
-                        hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
-                    ))}
-                  </div>
-                </>
+                <MenuGiu ancora={altroHero.current} chiudi={v.chiudiMenu} minLarghezza={190}>
+                  {v.correzioni.map(c => (
+                    <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
+                      style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
+                      hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
+                  ))}
+                </MenuGiu>
               )}
-            </div>
+            </>
 
             <div style={{ flex: 1 }} />
             <Hov as="button" onClick={v.heroSkip} title={t('Rimandala in fondo')}

@@ -596,6 +596,12 @@ export type Compito = {
   origine: string
   voce: string | null
   doc: string | null
+  /**
+   * Il posto vero che apre, fuori da Myynd: la mail, il file, la pagina.
+   * Lo calcola il server leggendo il documento. Null vuol dire che non c'è
+   * niente da aprire là fuori, e allora «Portami lì» non si disegna.
+   */
+  porta?: 'posta' | 'file' | 'pagina' | null
   /** La riga da cui è nata, quando è nata dalle domande di un'altra: la terza strada di «Portami lì». */
   madre?: string | null
   chiesto: string | null

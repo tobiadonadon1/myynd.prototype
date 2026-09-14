@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useRef, useState,
-  type CSSProperties, type ElementType, type ComponentPropsWithoutRef,
+  type CSSProperties, type ElementType, type ComponentPropsWithRef,
   type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject
 } from 'react'
 import { GRADIENTE, RAME_CUPO } from './tema'
@@ -47,11 +47,15 @@ export function taglia(l: number): Taglia {
   }
 }
 
+// `WithRef` e non `WithoutRef`: da React 19 il `ref` è un attributo come gli
+// altri e passa da solo dentro `...rest`. Serve a chi deve *misurare* il
+// bottone — il menù che gli scende sotto — e senza questa riga il tipo lo
+// rifiutava pur funzionando.
 type HovProps<T extends ElementType> = {
   as?: T
   style?: CSSProperties
   hover?: CSSProperties
-} & Omit<ComponentPropsWithoutRef<T>, 'style' | 'as'>
+} & Omit<ComponentPropsWithRef<T>, 'style' | 'as'>
 
 /**
  * Il bordo scritto per esteso.
