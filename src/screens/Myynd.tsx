@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
-import { BottoneSicuro, Hov, daTastiera, useAttiva } from '../ui'
+import { Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
@@ -494,8 +494,11 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         )}
 
         <div style={{ flex: 1 }} />
-        <BottoneSicuro fai={() => l.elimina(c.id)} titolo={t('Toglila')} chiaro subito
-          style={{ padding: '12px 4px', fontSize: 13 }}>{t('Toglila')}</BottoneSicuro>
+        {/* niente «Sicuro?»: toglierla è la decisione, non l'inizio di una domanda */}
+        <Hov as="button" type="button" title={t('Toglila')}
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); void l.elimina(c.id) }}
+          style={{ border: 'none', background: 'none', padding: '12px 4px', fontSize: 13, color: 'rgba(255,247,240,.6)', cursor: 'pointer', fontFamily: 'inherit', transition: 'color .15s' }}
+          hover={{ color: '#FFFFFF' }}>{t('Toglila')}</Hov>
       </div>
 
       {/* una domanda senza il rigo per rispondere è un vicolo cieco: qui sotto

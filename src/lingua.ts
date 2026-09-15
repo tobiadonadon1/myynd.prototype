@@ -2731,6 +2731,21 @@ export const frasi = {
   coseNuove: (n: number) => corrente === 'en'
     ? (n === 1 ? 'One new thing in the feed.' : `${n} new things in the feed.`)
     : (n === 1 ? 'Una cosa nuova nel feed.' : `${n} cose nuove nel feed.`),
+  /** Il feed vuoto spiegato in numeri: solo le voci che non sono zero. */
+  feedVuoto: (v: { guardati: number; candidati: number; vecchi: number; inSerie: number; letti: number; giaVisti: number; aperti: number }) => {
+    const en = corrente === 'en'
+    const pezzi = [
+      v.vecchi ? (en ? `${v.vecchi} older than the window` : `${v.vecchi} più vecchi della finestra`) : '',
+      v.inSerie ? (en ? `${v.inSerie} bulk or service mail` : `${v.inSerie} in serie o di servizio`) : '',
+      v.letti ? (en ? `${v.letti} read or sent` : `${v.letti} letti o inviati`) : '',
+      v.giaVisti ? (en ? `${v.giaVisti} already on the feed` : `${v.giaVisti} già passati dal feed`) : '',
+      v.candidati ? (en ? `${v.candidati} read without a clear request` : `${v.candidati} letti senza una richiesta chiara`) : ''
+    ].filter(Boolean).join(', ')
+    const lista = v.aperti ? (en ? ` Your list still has ${v.aperti} open.` : ` In lista ne hai ancora ${v.aperti} aperte.`) : ''
+    return (en
+      ? `Nothing new to flag among ${v.guardati} documents${pezzi ? `: ${pezzi}.` : '.'}`
+      : `Niente di nuovo da segnalare fra ${v.guardati} documenti${pezzi ? `: ${pezzi}.` : '.'}`) + lista
+  },
   segnatoRicordo: (cosa: string) => corrente === 'en'
     ? `Noted. And I will remember: ${cosa}` : `Segnato. E me lo ricordo: ${cosa}`,
   documentiEGruppi: (docs: string, gruppi: number) => corrente === 'en'

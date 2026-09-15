@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { Documento } from './store.ts'
-import { classificaAttenzione, contieneRichiesta, contestoAttenzione, stessaRichiesta, validaVoceFeed, tempoFondato } from './rilevanza.ts'
+import { classificaAttenzione, contieneRichiesta, contestoAttenzione, corpoAttuale, stessaRichiesta, validaVoceFeed, tempoFondato } from './rilevanza.ts'
 
 const ORA = Date.parse('2026-09-14T16:00:00Z')
 const mail = (sopra: Partial<Documento> = {}): Documento => ({
@@ -26,9 +26,22 @@ test('recent human mail is eligible, including shared mailboxes and already-read
 })
 
 test('old, missing and impossible source dates are excluded even if just imported', () => {
-  for (const quando of ['2023-01-01', '2026-09-06T15:59:00Z', '2027-01-01', '', 'yesterday', null]) {
+  for (const quando of ['2023-01-01', '2026-08-10T15:59:00Z', '2027-01-01', '', 'yesterday', null]) {
     assert.equal(classifica(mail({ quando })), 'ignora', String(quando))
   }
+  // read mail keeps the one-week window; unread mail from a person stays for a month
+  assert.equal(classifica(mail({ quando: '2026-09-06T15:59:00Z', letto: true })), 'ignora')
+  assert.equal(classifica(mail({ quando: '2026-09-06T15:59:00Z' })), 'feed')
+  assert.equal(classifica(mail({ quando: '2026-09-06T15:59:00Z', massa: true })), 'ignora')
+})
+
+test('a forwarded problem from a person is a request even without "please"', () => {
+  const prova = 'There is an issue with your Evermute extension: it blocks the wrong videos.'
+  const d = mail({ corpo: `Hi Tobia,\n${prova}\nTommaso` })
+  const voce = { titolo: 'Fix the Evermute extension issue Tommaso reported', testo: 'Tommaso reports that the Evermute extension blocks the wrong videos.', perche: 'Tommaso forwarded a problem that needs your answer.', prova }
+  assert.equal(validaVoceFeed(voce, d), true)
+  // from an automated sender the same quote is not enough
+  assert.equal(validaVoceFeed(voce, mail({ corpo: d.corpo, autore: 'Alerts <alerts@nextas.example>' })), false)
 })
 
 test('service updates belong to Brief even with bulk headers; promotions never become work', () => {
@@ -103,4 +116,14 @@ test('source identity survives folder moves, while new requests stay distinct', 
   assert.equal(stessaRichiesta(mail({ id: 'mail:copy' }), contestoAttenzione(prima)), true)
   assert.equal(stessaRichiesta(mail({ id: 'mail:new', filo: 'thread-1', titolo: 'Website meeting', corpo: 'Can you share the website meeting notes?' }), contestoAttenzione(prima)), false)
   assert.equal(stessaRichiesta(mail({ id: 'mail:revision', titolo: 'Nextas contract review 2', corpo: 'Could you review the Nextas contract version 2 and confirm your approval?' }), contestoAttenzione(prima)), false)
+})
+
+test('a bare forward is the forwarded message, minus its headers', () => {
+  const corpo = '---------- Forwarded message ---------\nFrom: App Store Connect <no_reply@email.apple.com> Date: Tue, Sep 15, 2026 at 1:42 AM Subject: There is an issue with your submission.\nTo: <tommaso@example.com>\n\nHello Tommaso,\n\nWe noticed an issue with your submission that requires your attention.\n\nOn Monday Sara wrote:\n> old stuff'
+  const attuale = corpoAttuale({ corpo })
+  assert.ok(attuale.startsWith('Hello Tommaso'), attuale)
+  assert.ok(attuale.includes('requires your attention'))
+  assert.ok(!attuale.includes('old stuff'))
+  // a forward with a note on top: the note is the message, as before
+  assert.equal(corpoAttuale({ corpo: `Can you look at this one for me? It blocks the launch.\n\n${corpo}` }), 'Can you look at this one for me? It blocks the launch.')
 })

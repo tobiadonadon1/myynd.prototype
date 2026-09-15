@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
-import { feedAttuale, compitiAttuali } from './attenzione.ts'
+import { feedAttuale, compitiAttuali, percheVuoto } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
 import * as compatibile from './compatibile.ts'
@@ -2192,7 +2192,8 @@ app.post('/api/feed/genera', async (_req, res) => {
     // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
     // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
     const nuove = store.salvaFeed(voci)
-    res.json({ ok: true, generate: nuove, feed: feedAttuale() })
+    // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
+    res.json({ ok: true, generate: nuove, feed: feedAttuale(), ...(nuove ? {} : { vuoto: percheVuoto() }) })
     // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
     compiti.annunciaFeed()
 

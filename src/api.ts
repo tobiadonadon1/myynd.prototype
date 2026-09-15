@@ -901,6 +901,9 @@ export type ChatGPT = {
   errore?: string | null
 }
 
+/** Perché la lettura non ha trovato niente: i conti di quello che ha guardato. */
+export type PercheVuoto = { guardati: number; candidati: number; vecchi: number; inSerie: number; letti: number; giaVisti: number; aperti: number }
+
 export type AccessoChatGPT = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; errore?: string }
 /** L'accesso all'account Claude, fatto da Claude Code: `url` è l'indirizzo di riserva se il browser non si apre. */
 export type AccessoClaude = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; url?: string; errore?: string }
@@ -1575,7 +1578,7 @@ export const api = {
   }),
 
   feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[] }>('/api/feed'),
-  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[] }>('/api/feed/genera', { method: 'POST' }),
+  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
   segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json(`/api/feed/${id}/${stato}`, { method: 'POST' }),
 
   chat: () => json<{ id: string; titolo: string; quando: string }[]>('/api/chat'),

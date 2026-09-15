@@ -139,6 +139,13 @@ export function disponibile(): boolean {
  */
 let accesso = { entrato: false, quando: 0 }
 const ACCESSO_VALE = 30_000
+/**
+ * Quanto si aspetta `claude auth status`. Erano cinque secondi, e un Mac
+ * occupato li passa: la risposta che non arrivava diventava «non sei
+ * entrato», e Anthropic si spegneva sullo schermo per mezzo minuto senza che
+ * fosse cambiato niente. Quindici, e una mancata risposta non è un «no».
+ */
+const ACCESSO_ATTESA = 15_000
 
 export async function entrato(): Promise<boolean> {
   const exe = installato()
@@ -149,23 +156,33 @@ export async function entrato(): Promise<boolean> {
 
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
-  const sì = await new Promise<boolean>(risolvi => {
+  // tre risposte, non due: «sì», «no», e «non ha risposto». Solo il «no»
+  // detto da Claude Code spegne la strada; un silenzio tiene quello che si
+  // sapeva e si richiede fra poco
+  const esito = await new Promise<'si' | 'no' | 'boh'>(risolvi => {
     const p = spawn(exe, ['auth', 'status'], { cwd: VUOTA, env: ambiente() })
     let fuori = ''
-    // non dovrebbe metterci niente; se ci mette, la risposta è «non lo so»,
-    // che qui si dice «no» — e il primo lavoro vero lo scoprirà davvero
-    const tetto = setTimeout(() => { p.kill('SIGTERM'); risolvi(false) }, 5_000)
+    let male = ''
+    const tetto = setTimeout(() => { p.kill('SIGTERM'); male = 'nessuna risposta in ' + ACCESSO_ATTESA / 1000 + ' s'; risolvi('boh') }, ACCESSO_ATTESA)
     p.stdout.on('data', d => { if (fuori.length < 8000) fuori += String(d) })
-    p.on('error', () => { clearTimeout(tetto); risolvi(false) })
+    p.stderr?.on('data', d => { if (male.length < 500) male += String(d) })
+    p.on('error', e => { clearTimeout(tetto); male = e.message; risolvi('boh') })
     p.on('close', () => {
       clearTimeout(tetto)
-      try { risolvi((JSON.parse(fuori) as { loggedIn?: boolean }).loggedIn === true) }
-      catch { risolvi(false) }
+      try { risolvi((JSON.parse(fuori) as { loggedIn?: boolean }).loggedIn === true ? 'si' : 'no') }
+      catch { risolvi('boh') }
     })
+    p.on('close', () => { if (male && !fuori) console.warn(`myynd · «claude auth status» non ha risposto: ${male.trim().slice(0, 200)}`) })
   })
 
-  accesso = { entrato: sì, quando: ora }
-  return sì
+  if (esito === 'boh') {
+    // si tiene lo stato di prima e si richiede fra cinque secondi, non fra trenta
+    accesso = { entrato: accesso.entrato, quando: ora - ACCESSO_VALE + 5_000 }
+    return accesso.entrato
+  }
+  if (accesso.entrato !== (esito === 'si') && accesso.quando) console.log(`myynd · Claude Code: ${esito === 'si' ? 'entrato' : 'non entrato'} (prima era il contrario)`)
+  accesso = { entrato: esito === 'si', quando: ora }
+  return accesso.entrato
 }
 
 /** Cosa dire nelle preferenze, senza spendere un token per saperlo. */

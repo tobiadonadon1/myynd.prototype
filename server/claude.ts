@@ -1782,13 +1782,23 @@ Scrivi in ${nellaLingua()}.`),
       // ignore JSON schema. A plausible title is not a document identifier.
       const veri = new Map(docs.map(d => [d.id, d]))
       const usati = new Set<string>()
+      // una voce che il modello propone e la verifica butta via si scrive nel
+      // registro: «niente da segnalare» senza questa riga non si può indagare
+      const scarta = (v: VoceFeed, perche: string) => {
+        console.warn(`myynd · lettura · scartata «${String(v?.titolo ?? '').slice(0, 80)}»: ${perche}`)
+        return false
+      }
+      console.log(`myynd · lettura · ${docs.length} documenti guardati, ${voci.length} voci proposte`)
+      // con MYYND_DEBUG_LETTURA=1 si vede anche cosa ha detto il modello: è
+      // l'unico modo di capire un feed vuoto che non dovrebbe esserlo
+      if (process.env.MYYND_DEBUG_LETTURA === '1') console.log(`myynd · lettura · risposta del modello: ${testo.slice(0, 2000)}`)
       return voci.filter(v => {
-        if (!v || typeof v.doc !== 'string' || !veri.has(v.doc) || usati.has(v.doc)) return false
-        if (!['Da decidere', 'Da leggere', 'Scadenza'].includes(v.tipo) || typeof v.urgenza !== 'string' || v.urgenza.length > 60) return false
-        if (!validaVoceFeed(v, veri.get(v.doc)!)) return false
+        if (!v || typeof v.doc !== 'string' || !veri.has(v.doc) || usati.has(v.doc)) return scarta(v, 'documento non fra quelli letti, o già usato')
+        if (!['Da decidere', 'Da leggere', 'Scadenza'].includes(v.tipo) || typeof v.urgenza !== 'string' || v.urgenza.length > 60) return scarta(v, 'tipo o urgenza fuori forma')
+        if (!validaVoceFeed(v, veri.get(v.doc)!)) return scarta(v, 'la prova non regge (citazione, verbo o numeri)')
         const fonte = `${veri.get(v.doc)!.titolo}\n${corpoAttuale(veri.get(v.doc)!)}`
-        if (!tempoFondato(v.urgenza, fonte)) return false
-        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return false
+        if (!tempoFondato(v.urgenza, fonte)) return scarta(v, 'urgenza con un giorno che la fonte non nomina')
+        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return scarta(v, 'scadenza senza una data nella prova')
         usati.add(v.doc)
         return true
       }).slice(0, VOCI_PER_LETTURA).map(v => ({

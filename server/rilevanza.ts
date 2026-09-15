@@ -3,6 +3,12 @@ import { documentoVero } from './veri.ts'
 
 /** Arrival/indexing time never substitutes for the date of the source. */
 export const GIORNI_ATTENZIONE = 7
+/**
+ * Unread mail from a person stays in view for a month, not a week: a request
+ * nobody has opened is still a request. Read mail, bulk mail and files keep
+ * the short window, or the feed fills with the past.
+ */
+export const GIORNI_POSTA_NON_LETTA = 30
 const GIORNO = 86_400_000
 const normalizza = (s: string) => s.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -27,9 +33,26 @@ const AZIONE = /\b(?:reply|respond|answer|confirm|approve|review|sign|send|share
 const RICHIESTA = /\b(?:can|could|would|will) you\b|\b(?:please|kindly|ti chiedo|potresti|puoi|per favore|ti va|mi serve|ci serve|need your|needs your|awaiting your|waiting for your|aspetto (?:la tua|una)|attendo (?:la tua|una)|review requested|requested (?:your|a) review|assigned to you|assegnat[oa] a te|action required|richiesta (?:la tua|una)|(?:mi|ci) (?:confermi|confermate|mandi|mandate|dici|dite|fai sapere|fate sapere))\b/i
 const DOMANDA_DIRETTA = /\b(?:are you|do you|did you|have you|what (?:do you|are your)|does .{0,65} work|is .{0,65} (?:ok|okay)|sei disponibile|siete disponibili|che ne pensi|cosa ne pensi|ti (?:va|torna)|vi (?:va|torna))\b[^?]{0,200}\?/i
 
-/** Only the current message is evidence; old quoted correspondence is context. */
+const MARCATORE_INOLTRO = /[- ]{2,}\s*(?:Forwarded message|Messaggio inoltrato)\s*[- ]{2,}/i
+const INTESTAZIONI = /^(?:(?:From|Da|Date|Data|Sent|Inviato|Subject|Oggetto|To|A|Cc):.*\n?)+/i
+
+/**
+ * Only the current message is evidence; old quoted correspondence is context.
+ *
+ * A forward with nothing written above it is the exception: what was
+ * forwarded *is* the message. Tommaso's «Fwd: There's an issue with your
+ * submission» began with the marker line, so the current message was the
+ * marker and nothing else; no quote could come from it, and the feed said
+ * «nothing to flag». The forwarded body, minus its headers, is the message.
+ */
 export function corpoAttuale(d: Pick<Documento, 'corpo'>): string {
-  return d.corpo.split(/\n(?:On .{0,160}wrote:|Il .{0,160}(?:ha scritto|scrisse):|[- ]{2,}(?:Original Message|Messaggio originale|Forwarded message)|From:|Da:|>)/i)[0].trim()
+  const attuale = d.corpo.split(/\n(?:On .{0,160}wrote:|Il .{0,160}(?:ha scritto|scrisse):|[- ]{2,}(?:Original Message|Messaggio originale|Forwarded message|Messaggio inoltrato)|From:|Da:|>)/i)[0].trim()
+  const inoltro = d.corpo.match(new RegExp(`${MARCATORE_INOLTRO.source}\\s*\\n([\\s\\S]*)`, 'i'))
+  if (inoltro && attuale.replace(MARCATORE_INOLTRO, '').trim().length < 40) {
+    const dentro = inoltro[1].replace(INTESTAZIONI, '')
+    return dentro.split(/\n(?:On .{0,160}wrote:|Il .{0,160}(?:ha scritto|scrisse):|>)/i)[0].trim()
+  }
+  return attuale
 }
 
 export function contieneRichiesta(testo: string): boolean {
@@ -47,11 +70,13 @@ export function classificaAttenzione(
   const adesso = opzioni.adesso ?? Date.now()
   const quando = Date.parse(d.quando ?? '')
   const giorni = Math.max(1, Math.min(30, opzioni.giorniMax ?? GIORNI_ATTENZIONE))
-  if (!Number.isFinite(quando) || quando < adesso - giorni * GIORNO || quando > adesso + GIORNO) return no('fonte_non_recente')
+  const email = eEmail(d)
+  const dallaPersona = email && !d.massa && !mittenteAutomatico(d.autore)
+  const finestra = dallaPersona && !d.letto && !d.inviato ? Math.max(giorni, GIORNI_POSTA_NON_LETTA) : giorni
+  if (!Number.isFinite(quando) || quando < adesso - finestra * GIORNO || quando > adesso + GIORNO) return no('fonte_non_recente')
   if (d.inviato) return no('gia_inviato')
   const testo = `${d.titolo}\n${corpoAttuale(d).slice(0, 6000)}`
   if (istruzioniInterne(testo, d)) return no('istruzioni_interne')
-  const email = eEmail(d)
   if (!email && (ARCHIVIO.test(d.titolo) || ARCHIVIO.test(d.percorso ?? ''))) return no('materiale_di_riferimento')
   if (email) {
     if (!indirizzoAttenzione(d.autore)) return no('mittente_sconosciuto')
@@ -104,12 +129,17 @@ export function validaVoceFeed(
     if (typeof voce.prova !== 'string' || voce.prova.trim().length < 12 || voce.prova.length > 500) return false
     const prova = normalizza(voce.prova)
     const fonte = normalizza(`${d.titolo}\n${corpoAttuale(d)}`)
-    if (!fonte.includes(prova) || !contieneRichiesta(prova) || istruzioniInterne(prova, d)) return false
+    // The quote must be in the current message. From a person it need not
+    // contain "please" or "can you": a forwarded problem is a request too.
+    // From files and automated mail the request phrasing is still required.
+    const dallaPersona = eEmail(d) && !d.massa && !mittenteAutomatico(d.autore)
+    if (!fonte.includes(prova) || (!dallaPersona && !contieneRichiesta(prova)) || istruzioniInterne(prova, d)) return false
     // An unrelated request cannot be used as evidence for a fabricated action.
     const famiglie = [
       /\b(?:sign|signature|firm(?:a|are))\b/i,
       /\b(?:pay|payment|pag(?:a|are)|pagamento)\b/i,
-      /\b(?:update|fix|resolve|aggiorn(?:a|are)|corregg(?:i|ere)|risolv(?:i|ere))\b/i,
+      // a reported problem grounds a «fix» card: «there is an issue with X» is how people ask for one
+      /\b(?:update|fix|resolve|aggiorn(?:a|are)|corregg(?:i|ere)|risolv(?:i|ere)|issues?|problems?|bugs?|errors?|broken|not working|fail(?:s|ed|ing)?|problem[ai]|error[ei]|non funziona|guast[oa])\b/i,
       /\b(?:send|share|provide|submit|return|invi(?:a|are)|mand(?:a|are)|condivid(?:i|ere)|restitui(?:sci|re))\b/i
     ]
     if (famiglie.some(f => f.test(titolo) && !f.test(prova))) return false

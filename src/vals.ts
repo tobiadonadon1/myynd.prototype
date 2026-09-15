@@ -719,7 +719,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     try {
       const r = await api.generaFeed()
       await caricaFeed()
-      mostraToast(r.generate ? frasi.coseNuove(r.generate) : t('Non ho trovato niente da segnalare.'))
+      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
     } catch (e) {
       mostraToast(e instanceof Error ? t(e.message) : t('La lettura non è riuscita.'))
     }

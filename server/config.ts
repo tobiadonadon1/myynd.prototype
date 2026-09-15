@@ -1048,6 +1048,17 @@ export function scrivi(c: Config, opz: { togli?: readonly string[] } = {}) {
   if (base && base.cartella !== cartella()) throw new Error('A configuration from another account cannot be saved here.')
   const unita = base ? fondi(base.config, c, prima) : c
   const dopo = conservaCredenziali(prima, unita, opz.togli ?? [])
+  /*
+   * La scelta di come si paga Claude è una connessione, anche se non è un
+   * segreto: `claudeCon: 'abbonamento'` che sparisce da una scrittura che non
+   * l'ha tolto apposta è Anthropic che si spegne sullo schermo senza che
+   * nessuno abbia premuto «Scollega». Si tiene, e si scrive nel registro chi
+   * ha provato: è la riga che mancava per capire «perché si scollega».
+   */
+  if (prima.claudeCon && dopo.claudeCon === undefined && !(opz.togli ?? []).includes('claudeCon')) {
+    dopo.claudeCon = prima.claudeCon
+    console.warn(`myynd · una scrittura senza «claudeCon» conserva la scelta «${prima.claudeCon}».`)
+  }
   if (postgres.ATTIVO && u) {
     tenuta(u).config = dopo
     segnaSporco(u)
