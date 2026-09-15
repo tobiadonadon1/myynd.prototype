@@ -775,6 +775,18 @@ export type Blocco = { etichetta: string; descrizione: string; valore: string; t
  * è se tenerla accesa, e la storia di quello che ha fatto su questa macchina.
  */
 export type Passo = { id: string; tipo: 'condizione' | 'trasforma'; testo: string }
+/** Quello che il costruttore tiene in mano: i campi di una ricetta, prima e dopo il salvataggio. */
+export type RicettaComposta = {
+  nome: string
+  spiega: string
+  quando: { ogni: 'giorno'; ora: number } | { ogni: 'settimana'; giorno: number; ora: number } | { quandoArriva: true }
+  guarda: { cerca?: string; soloNuovi?: boolean; limite?: number }
+  fai: string
+  passi?: Passo[]
+  metti: { inLista: 'oggi' | 'settimana' | 'poi'; modo?: 'io' | 'bozza' | 'tutto' | 'prompt'; perDocumento?: boolean }
+  attrezzi?: string[]
+  cartella?: string
+}
 /**
  * Una proposta, con dentro i campi di una ricetta vera.
  *
@@ -1473,6 +1485,15 @@ export const api = {
       '/api/automazioni/aggiorna', { method: 'POST' }),
 
   /** Da una frase a un'automazione. Nasce in pausa: prima la guardi. */
+  /** La frase composta, non ancora scritta: torna la ricetta da mettere sui binari. */
+  componiAutomazione: (descrizione: string, attrezzi?: string[]) =>
+    json<{ ok: true; ricetta: RicettaComposta }>('/api/automazioni/componi',
+      { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),
+  /** Una ricetta assemblata sui binari, salvata: nasce in pausa. */
+  nuovaAutomazione: (ricetta: Record<string, unknown>) =>
+    json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni/nuova',
+      { method: 'POST', body: JSON.stringify(ricetta) }),
+
   creaAutomazione: (descrizione: string, attrezzi?: string[]) =>
     json<{ ok: true; id: string; automazioni: Automazione[] }>('/api/automazioni',
       { method: 'POST', body: JSON.stringify({ descrizione, attrezzi }) }),

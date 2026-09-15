@@ -190,3 +190,76 @@
   /* un collegamento resta un collegamento, ma il dito vuole lo stesso la sua area */
   .auto-header-actions .auto-link,.auto-coda-suggerimenti .auto-link{min-height:39px}
 }
+
+/* — i binari: un colore solo, il rame, e solo dove distingue — */
+.auto-binari{--inchiostro:#22271F;--rame:#C4623B;--rame-cupo:#8E3F1F;--avorio:#FFF7F0;--bordo:rgba(34,39,31,.16);color:var(--inchiostro)}
+.auto-frase{margin:0 0 18px;padding:14px 16px;border-radius:14px;background:var(--inchiostro);color:var(--avorio);font-size:14.5px;line-height:1.55;letter-spacing:-.1px;text-wrap:pretty}
+.auto-tratto{position:relative;padding:0 0 18px 26px}
+.auto-tratto:before{content:'';position:absolute;left:7px;top:6px;bottom:-6px;width:2px;background:var(--bordo)}
+.auto-tratto:last-of-type:before{bottom:auto;height:8px}
+.auto-tratto-eyebrow{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.auto-tratto-eyebrow span{position:absolute;left:2px;width:12px;height:12px;border-radius:50%;background:var(--avorio);border:2px solid var(--inchiostro);box-sizing:border-box}
+.auto-tratto.attivo .auto-tratto-eyebrow span{border-color:var(--rame);background:var(--rame)}
+.auto-tratto-eyebrow b{font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--rame-cupo)}
+.auto-tratto-body{display:flex;flex-direction:column;gap:10px}
+.auto-pillole{display:flex;flex-wrap:wrap;gap:6px}
+.auto-pillola{padding:7px 13px;border-radius:99px;border:1px solid var(--bordo);background:rgba(255,255,255,.55);color:var(--inchiostro);font:inherit;font-size:12.5px;cursor:pointer}
+.auto-pillola:hover{border-color:var(--inchiostro)}
+.auto-pillola.on{background:var(--inchiostro);border-color:var(--inchiostro);color:var(--avorio);font-weight:500}
+.auto-orario{display:flex;align-items:center;gap:8px;font-size:12.5px;color:rgba(34,39,31,.7)}
+.auto-orario select,.auto-campo select,.auto-campo input{font:inherit;font-size:13px;color:var(--inchiostro);padding:8px 11px;border:1px solid var(--bordo);border-radius:10px;background:rgba(255,255,255,.72)}
+.auto-cala{display:flex;flex-wrap:wrap;gap:6px;min-height:52px;padding:8px;border:1.5px dashed var(--bordo);border-radius:14px;background:rgba(255,255,255,.35);transition:border-color .15s,background .15s}
+.auto-cala.vuota{align-items:center}
+.auto-cala.sopra{border-color:var(--rame);background:rgba(196,98,59,.07)}
+.auto-cala-vuota{font-size:12.5px;color:rgba(34,39,31,.55);padding:2px 6px;text-wrap:pretty}
+.auto-tavolozza{display:flex;flex-wrap:wrap;gap:6px}
+.auto-tessera{display:inline-flex;align-items:center;gap:7px;padding:6px 10px 6px 8px;border-radius:99px;border:1px solid var(--bordo);background:rgba(255,255,255,.7);color:var(--inchiostro);font:inherit;font-size:12.5px;cursor:grab;user-select:none}
+.auto-tessera:active{cursor:grabbing}
+.auto-tessera:hover{border-color:var(--inchiostro)}
+.auto-tessera.dentro{cursor:pointer;background:var(--avorio);border-color:var(--inchiostro)}
+.auto-tessera.manca{color:rgba(34,39,31,.55)}
+.auto-tessera small{font-size:10px;color:var(--rame-cupo)}
+.auto-tessera i{font-style:normal;color:rgba(34,39,31,.5);margin-left:2px}
+.auto-tessera.dentro:hover i{color:var(--rame-cupo)}
+.auto-campo{display:flex;flex-direction:column;gap:5px}
+.auto-campo>span{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(34,39,31,.55)}
+.auto-campo small{font-size:11.5px;line-height:1.5;color:rgba(34,39,31,.5);text-wrap:pretty}
+.auto-passo{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--bordo);border-radius:14px;background:rgba(255,255,255,.6)}
+.auto-passo.trascinato{opacity:.45;border-style:dashed}
+.auto-maniglia{cursor:grab;color:rgba(34,39,31,.4);font-size:14px;line-height:1.2;letter-spacing:-2px;padding-top:6px;user-select:none}
+.auto-passo textarea,.auto-fai{width:100%;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.55;color:var(--inchiostro);padding:9px 11px;border:1px solid var(--bordo);border-radius:11px;background:rgba(255,255,255,.8);resize:vertical}
+.auto-passo-testo{text-align:left;font:inherit;font-size:13px;line-height:1.55;color:var(--inchiostro);background:none;border:0;padding:6px 0;cursor:text;text-wrap:pretty}
+.auto-passo-comandi{display:flex;gap:2px}
+.auto-passo-comandi button{width:28px;height:28px;border:0;border-radius:8px;background:none;color:rgba(34,39,31,.6);font:inherit;cursor:pointer}
+.auto-passo-comandi button:hover:not(:disabled){background:rgba(34,39,31,.07);color:var(--inchiostro)}
+.auto-aggiungi-passo{display:flex;align-items:center;gap:6px;margin:-6px 0 18px 26px}
+.auto-aggiungi-passo button{padding:7px 12px;border-radius:99px;border:1px dashed var(--bordo);background:none;color:rgba(34,39,31,.7);font:inherit;font-size:12px;cursor:pointer}
+.auto-aggiungi-passo button:hover:not(:disabled){border-color:var(--rame);color:var(--rame-cupo)}
+.auto-aggiungi-passo span{margin-left:auto;font-size:10.5px;color:rgba(34,39,31,.45)}
+.auto-spunta{display:flex;align-items:center;gap:9px;font-size:12.5px;color:rgba(34,39,31,.75)}
+.auto-spunta input{accent-color:var(--rame-cupo)}
+@media(max-width:650px){.auto-tratto{padding-left:22px}.auto-passo{grid-template-columns:auto 1fr;grid-template-rows:auto auto}.auto-passo-comandi{grid-column:1/-1;justify-content:flex-end}}
+.auto-dettatura{margin-bottom:16px}
+.auto-dettatura textarea{width:100%;box-sizing:border-box;font:inherit;font-size:15px;line-height:1.5;color:#22271F;padding:12px 14px;border:1.5px solid rgba(34,39,31,.2);border-radius:14px;background:rgba(255,255,255,.85);resize:vertical}
+.auto-dettatura textarea:focus{border-color:#C4623B;outline:none}
+.auto-dettatura-riga{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px}
+.auto-spunti{display:flex;gap:6px;flex-wrap:wrap}
+.auto-spunti button{padding:6px 11px;border-radius:99px;border:1px dashed rgba(34,39,31,.25);background:none;color:rgba(34,39,31,.6);font:inherit;font-size:11.5px;cursor:pointer}
+.auto-spunti button:hover{border-color:#C4623B;color:#8E3F1F}
+.auto-nome{margin-bottom:18px}
+.auto-nome input{max-width:420px}
+
+/* — le schede: inchiostro su avorio, il rame solo per quello che chiede attenzione — */
+.auto-card,.auto-card.active,.auto-card.attention,.auto-card.paused{background:#fffdf9d9;border-color:#d9d3c57a}
+.auto-card:before{background:#c9c3b4}
+.auto-card.active:before{background:#22271F}
+.auto-card.attention:before{background:#C4623B}
+.auto-card.paused{opacity:.82}
+.auto-switch{background:#cfcabd}
+.auto-switch[aria-checked=true]{background:#22271F}
+.auto-switch-word{font-size:11px;color:#6b6e63}.auto-switch-word.on{color:#22271F;font-weight:500}
+.auto-status.on{color:#22271F}
+.auto-card-sources>span{border-color:#22271f1f;background:#fffdf7cc;color:#22271F}
+.auto-card-sources>span.missing{border-style:dashed;border-color:#C4623B66;color:#8E3F1F}
+.auto-health{color:#8E3F1F}.auto-health .auto-button{color:#8E3F1F}
+.auto-filtri button[aria-pressed=true]{color:#8E3F1F}

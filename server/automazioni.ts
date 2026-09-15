@@ -1457,6 +1457,18 @@ async function generaRicetta(o: Parameters<typeof chiediJSON>[0], concessi?: str
 
 /** Dalla frase alla ricetta. Torna quella salvata, già valida. */
 export async function daUnaFrase(descrizione: string, concessi?: unknown): Promise<Automazione> {
+  return scrivi(await componi(descrizione, concessi))
+}
+
+/**
+ * La stessa ricetta, composta e non ancora scritta.
+ *
+ * Serve al costruttore: chi descrive un'automazione in una frase la vede
+ * prendere forma sui binari — quando, cosa legge, cosa fa — e la crea solo
+ * dopo averla guardata. Prima la frase diventava un file all'istante e la si
+ * correggeva dopo, che è il verso sbagliato per una cosa che poi gira da sola.
+ */
+export async function componi(descrizione: string, concessi?: unknown): Promise<Automazione> {
   const detto = descrizione.trim()
   if (detto.length < 8) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
   // senza un modello `chiediJSON` torna null in silenzio, e la frase sotto
@@ -1481,7 +1493,7 @@ export async function daUnaFrase(descrizione: string, concessi?: unknown): Promi
       : { ogni: 'giorno', ora }
 
   const esistenti = new Set(ricette().map(x => x.id))
-  return scrivi({
+  return valida({
     id: idPer(r.nome, esistenti),
     ...(selezioneRichiesta(detto) === 'richieste-dirette' ? { selezione: 'richieste-dirette' } : {}),
     nome: r.nome,
@@ -1498,6 +1510,43 @@ export async function daUnaFrase(descrizione: string, concessi?: unknown): Promi
     attrezzi: permessi ?? r.attrezzi,
     ...(r.cartella?.trim() ? { cartella: r.cartella.trim() } : {}),
     en: { nome: r.en.nome, spiega: r.en.spiega, fai: r.en.fai, ...(r.en.cerca?.trim() ? { cerca: r.en.cerca.trim() } : {}) }
+  }, 'la tua automazione')
+}
+
+/**
+ * Una ricetta scritta a mano sui binari, senza modello.
+ *
+ * Gli stessi campi di `cambia`, per una ricetta che ancora non c'è. L'inglese
+ * è quello che ha scritto: una ricetta composta a mano è nella sua lingua, e
+ * se un giorno cambia lingua la riga resta quella, che è meglio di niente.
+ */
+export function daCampi(patch: Record<string, unknown>): Automazione {
+  const nome = String(patch.nome ?? '').trim()
+  const spiega = String(patch.spiega ?? '').trim()
+  const fai = String(patch.fai ?? '').trim()
+  const cerca = String(patch.cerca ?? '').trim()
+  if (nome.length < 3) throw new Error('Dalle un nome.')
+  if (fai.length < 8) throw new Error('Dille cosa deve fare con quello che trova.')
+  let suoi: string[] = []
+  if (patch.attrezzi !== undefined) {
+    if (!Array.isArray(patch.attrezzi)) throw new Error('Gli attrezzi devono essere un elenco.')
+    const storto = patch.attrezzi.map(String).find(x => !attrezzi.esiste(x))
+    if (storto) throw new Error(`Non conosco l’attrezzo «${storto}».`)
+    suoi = attrezzi.ripulisci(patch.attrezzi)
+  }
+  const cartella = String(patch.cartella ?? '').trim()
+  const metti = (patch.metti ?? { inLista: 'oggi', modo: 'io' }) as Automazione['metti']
+  const esistenti = new Set(ricette().map(x => x.id))
+  return scrivi({
+    id: idPer(nome, esistenti),
+    nome, spiega: spiega || nome, fai,
+    passi: patch.passi !== undefined ? validaPassi(patch.passi) : [],
+    quando: (patch.quando as Quando) ?? { quandoArriva: true },
+    guarda: { ...(cerca ? { cerca } : { soloNuovi: true }), limite: 8 },
+    metti,
+    attrezzi: suoi,
+    ...(cartella ? { cartella } : {}),
+    en: { nome, spiega: spiega || nome, fai, ...(cerca ? { cerca } : {}) }
   })
 }
 

@@ -184,6 +184,52 @@ export async function cancellaAccesso(loginId: string): Promise<StatoAccesso | n
   return statoAccesso(loginId)
 }
 
+/**
+ * Codex accetta solo schemi «stretti»: ogni proprietà in `required`, niente
+ * proprietà in più. I nostri schemi hanno campi facoltativi — «giorno» solo se
+ * ogni=settimana, «cerca» se serve — e mandati così tornavano un 400 e nessuna
+ * automazione si poteva comporre con ChatGPT. Qui il facoltativo diventa
+ * «obbligatorio ma può essere null», e `senzaNulli` toglie i null prima che
+ * la risposta arrivi a chi la legge: per il resto dell'app niente è cambiato.
+ */
+export function rigido(schema: Obj): Obj {
+  const s: Obj = { ...schema }
+  if (s.type === 'object' && s.properties && typeof s.properties === 'object') {
+    const originali = new Set<string>(Array.isArray(s.required) ? s.required : [])
+    const props: Obj = {}
+    for (const [k, v] of Object.entries(s.properties as Obj)) {
+      const dentro = rigido(v as Obj)
+      props[k] = originali.has(k) ? dentro : ammettiNull(dentro)
+    }
+    s.properties = props
+    s.required = Object.keys(props)
+    s.additionalProperties = false
+  }
+  if (s.type === 'array' && s.items && typeof s.items === 'object') s.items = rigido(s.items as Obj)
+  if (Array.isArray(s.anyOf)) s.anyOf = s.anyOf.map((x: Obj) => rigido(x))
+  return s
+}
+function ammettiNull(s: Obj): Obj {
+  if (Array.isArray(s.anyOf)) return { ...s, anyOf: [...s.anyOf, { type: 'null' }] }
+  const tipi = Array.isArray(s.type) ? s.type : s.type ? [s.type] : []
+  const fuori: Obj = { ...s, type: tipi.includes('null') ? tipi : [...tipi, 'null'] }
+  if (Array.isArray(s.enum) && !s.enum.includes(null)) fuori.enum = [...s.enum, null]
+  return fuori
+}
+/** I null messi al posto dei campi facoltativi spariscono: chi legge vede il campo assente, com'era. */
+export function senzaNulli(valore: unknown, schema: Obj | undefined): unknown {
+  if (!schema || valore === null || typeof valore !== 'object') return valore
+  if (Array.isArray(valore)) return valore.map(x => senzaNulli(x, schema.items as Obj))
+  if (schema.type !== 'object' || !schema.properties) return valore
+  const originali = new Set<string>(Array.isArray(schema.required) ? schema.required : [])
+  const fuori: Obj = {}
+  for (const [k, v] of Object.entries(valore as Obj)) {
+    if (v === null && !originali.has(k)) continue
+    fuori[k] = senzaNulli(v, (schema.properties as Obj)[k] as Obj)
+  }
+  return fuori
+}
+
 /** Function calls are data for Myynd, never native Codex tool execution. */
 export function prepara(p: Richiesta): { system: string; input: string; schema?: Obj; tools: ReturnType<typeof attrezzi> } {
   const history = messaggi(p.system, p.messages)
@@ -282,7 +328,9 @@ async function rispondi(p: Richiesta, onTesto?: (s: string) => void, attesa = 18
         try {
           const complete = [...items.values()]
           const final = complete.filter(i => i.phase === 'final_answer')
-          const answer = final.length ? final.map(i => i.text).join('\n\n') : complete.at(-1)?.text || text
+          let answer = final.length ? final.map(i => i.text).join('\n\n') : complete.at(-1)?.text || text
+          // lo schema stretto ha messo dei null dove i nostri campi erano facoltativi: via
+          if (q.schema && !q.tools.length) { try { answer = JSON.stringify(senzaNulli(JSON.parse(answer), q.schema)) } catch { /* non era JSON: lo dirà chi legge */ } }
           const result = converti(answer, p, model, usage)
           if (q.tools.length) for (const b of result.content) if (b.type === 'text') scriviRisposta(b.text)
           ok(result)
@@ -317,7 +365,7 @@ async function rispondi(p: Richiesta, onTesto?: (s: string) => void, attesa = 18
     if (signal?.aborted) return abort()
     c.chiama('turn/start', { threadId, input: [{ type: 'text', text: q.input }], effort: 'low',
       approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false },
-      ...(q.schema ? { outputSchema: q.schema } : {}) }).then(r => {
+      ...(q.schema ? { outputSchema: rigido(q.schema) } : {}) }).then(r => {
       turnId = r.turn?.id ?? ''
       if (finished && turnId) void c.chiama('turn/interrupt', { threadId, turnId }).catch(() => {})
     }).catch(e => {

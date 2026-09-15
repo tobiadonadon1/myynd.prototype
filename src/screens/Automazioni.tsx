@@ -270,6 +270,6 @@ export function Automazioni({ v }: { v: Vals }) {
       {repo && <button className="auto-link" disabled={!!occupato} onClick={() => azione('recipes', async () => { const r = await api.aggiornaRicette(); setTutte(r.automazioni) })}>{t('Cerca automazioni nuove')}</button>}
     </footer>
     {scelta && <Editor key={scelta.id} a={scelta} catalogo={catalogo} cartelle={cartelle} raccolte={raccolte} cambiata={setTutte} chiudi={() => setAperto(null)} spostata={sposta} />}
-    {aperto === '' && <Nuova catalogo={catalogo} chiudi={() => setAperto(null)} fatta={(a, id) => { setTutte(a); setAperto(id) }} />}
+    {aperto === '' && <Nuova catalogo={catalogo} cartelle={cartelle} chiudi={() => setAperto(null)} fatta={(a, id) => { setTutte(a); setAperto(id) }} />}
   </main>
 }

@@ -23,16 +23,15 @@
 // che hai scritto tu senza che tu l'abbia chiesto non è un aiuto.
 
 import { useEffect, useRef, useState } from 'react'
-import { Flusso } from './Flusso'
-import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta } from '../api'
+import { Costruttore } from './Costruttore'
+import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta, type RicettaComposta } from '../api'
+import { interpreta } from './interpreta'
 import { frasi, loc, t } from '../lingua'
 import { Cestino, Hov, LABEL, useFocoDialogo } from '../ui'
 import { Glifo } from '../components/Stato'
 import { IconCroce, IconGiro } from '../icons'
-import { Casella, Pastiglia, RIGO } from './Chiocciola'
+import { Casella, RIGO } from './Chiocciola'
 import { quandoData, quandoGira } from './Scheda'
-
-const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato']
 
 const PIENO: React.CSSProperties = {
   padding: '10px 19px', borderRadius: 99, border: 'none',
@@ -69,7 +68,7 @@ function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' 
       display: 'inline-flex', gap: 2, padding: 3, borderRadius: 99, flex: 'none',
       background: 'rgba(34,39,31,.055)'
     }}>
-      {([['parole', 'A parole'], ['campi', 'Flusso']] as const).map(([id, testo]) => (
+      {([['parole', 'A parole'], ['campi', 'Binari']] as const).map(([id, testo]) => (
         <button key={id} type="button" role="tab" aria-selected={dove === id} onClick={() => vai(id)}
           style={{
             padding: '5px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12px',
@@ -215,7 +214,6 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
   const [confermaChiusura, setConfermaChiusura] = useState(false)
   const chiediChiusura = () => { if (modificata) setConfermaChiusura(true); else chiudi() }
-  const [avanzati, setAvanzati] = useState(false)
   const [passi, setPassi] = useState(a.passi ?? [])
   const campiRef = useRef<HTMLDivElement>(null)
   const [nome, setNome] = useState(a.nome)
@@ -248,8 +246,6 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const finestra = useRef<HTMLDivElement>(null)
   useFocoDialogo(finestra, chiediChiusura)
 
-  const ogni = 'quandoArriva' in quando ? 'arrivo' : quando.ogni
-  const ora = 'quandoArriva' in quando ? 8 : quando.ora
   const vuoleCartella = suoi.includes('claude.lavora')
 
   /** Ricarica i campi da quello che è tornato dal server. */
@@ -328,7 +324,6 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
   }
 
-  const attaccati = suoi.map(n => catalogo.find(x => x.nome === n)).filter((x): x is Attrezzo => !!x)
   const occupato = !!penso || salvo || gira
 
   return (
@@ -446,152 +441,27 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             </div>
           ) : (
             <div>
-              <Flusso a={{ ...a, nome, fai, quando, attrezzi: suoi, guarda: { ...a.guarda, cerca }, metti: { inLista, modo, perDocumento } }} catalogo={catalogo} passi={passi} cambia={setPassi}
-                dettagli={() => { setAvanzati(true); requestAnimationFrame(() => campiRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }} />
-              <button className="auto-button" aria-expanded={avanzati} onClick={() => setAvanzati(!avanzati)}>{avanzati ? t('Nascondi dettagli') : t('Modifica dettagli')}</button>
-              <div className="auto-editor-settings" ref={campiRef} hidden={!avanzati}>
+              {/*
+                I binari: la ricetta a pezzi, con le mani. Sopra c'è la frase
+                che si riscrive da sola; sotto i tratti — quando, legge, i
+                passaggi, fa, mette — che si toccano o si trascinano. Il nome
+                e la riga che lo spiega stanno in un riquadro a parte, perché
+                non sono la ricetta: sono come la si chiama.
+              */}
+              <Costruttore catalogo={catalogo} cartelle={cartelle}
+                r={{ nome, spiega, quando, guarda: { ...a.guarda, cerca }, fai, passi, metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) }, attrezzi: suoi, cartella }}
+                cambia={n => {
+                  setQuando(n.quando); setCerca(n.guarda.cerca ?? ''); setFai(n.fai); setPassi(n.passi ?? [])
+                  setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
+                  setSuoi(n.attrezzi ?? []); setCartella(n.cartella ?? '')
+                }}
+                coda={modificata ? <p className="auto-muted">{t('Salva le modifiche per vedere quali documenti leggerà.')}</p> : <Anteprima id={a.id} catalogo={catalogo} chiave={provata} />} />
+              <div className="auto-editor-settings" ref={campiRef}>
               <Campo etichetta={t('Come si chiama')}>
                 <input aria-label={t('Come si chiama')} value={nome} onChange={e => setNome(e.target.value)} style={RIGO} />
               </Campo>
-
               <Campo etichetta={t('Cosa fa, in una riga')}>
                 <input aria-label={t('Cosa fa, in una riga')} value={spiega} onChange={e => setSpiega(e.target.value)} style={RIGO} />
-              </Campo>
-
-              {/*
-                Cosa può aprire. Sta qui in mezzo e non in fondo apposta: è la
-                metà che decide se questa automazione troverà qualcosa, ed è
-                anche la sola che dice cosa tocca mentre non la guardi.
-              */}
-              <Campo etichetta={t('Cosa può aprire')}
-                nota={attaccati.some(x => !x.collegato)
-                  ? t('Uno di questi non è collegato: finché non lo colleghi, quell’automazione non troverà niente.')
-                  : t('Solo quello che le serve: ognuno è un permesso.')}>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {catalogo.map(x => {
-                    const on = suoi.includes(x.nome)
-                    return (
-                      <Hov key={x.nome} as="button" type="button"
-                        onClick={() => setSuoi(s => on ? s.filter(y => y !== x.nome) : [...s, x.nome])}
-                        title={x.spiega}
-                        aria-pressed={on}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px',
-                          borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontSize: '12px',
-                          background: on ? `${x.tinta}16` : 'rgba(255,255,255,.5)',
-                          border: `1px solid ${on ? `${x.tinta}4D` : 'rgba(34,39,31,.14)'}`,
-                          color: on ? x.tinta : 'rgba(34,39,31,.55)',
-                          fontWeight: on ? 500 : 400
-                        }}
-                        hover={{ borderColor: on ? `${x.tinta}77` : 'rgba(34,39,31,.28)' }}>
-                        <span style={{
-                          width: 6, height: 6, borderRadius: '50%', flex: 'none',
-                          background: on ? x.tinta : 'transparent',
-                          border: on ? 'none' : '1px solid rgba(34,39,31,.28)'
-                        }} />
-                        {x.etichetta}
-                        {!x.collegato && <span style={{ fontSize: '10px', color: '#8E3F1F' }}>· {t('Da collegare')}</span>}
-                      </Hov>
-                    )
-                  })}
-                </div>
-              </Campo>
-
-              {vuoleCartella && (
-                <Campo etichetta={t('In che cartella lavora Claude Code')}
-                  nota={cartelle.length
-                    ? t('Legge il progetto e scrive cosa farebbe. Non tocca un file: quello lo decidi tu.')
-                    : t('Collega una cartella del desktop e potrà lavorarci.')}>
-                  <select value={cartella} onChange={e => setCartella(e.target.value)}
-                    aria-label={t('In che cartella lavora Claude Code')}
-                    style={{ ...RIGO, cursor: 'pointer' }}>
-                    <option value="">{t('— scegline una —')}</option>
-                    {cartelle.map(c => <option key={c} value={c}>{c}</option>)}
-                    {/* quella già scritta può stare più in dentro di una radice */}
-                    {cartella && !cartelle.includes(cartella) && <option value={cartella}>{cartella}</option>}
-                  </select>
-                </Campo>
-              )}
-
-              <Campo etichetta={t('Quando gira')}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <select value={ogni} aria-label={t('Quando gira')}
-                    onChange={e => setQuando(
-                      e.target.value === 'arrivo' ? { quandoArriva: true }
-                        : e.target.value === 'settimana' ? { ogni: 'settimana', giorno: 1, ora }
-                          : { ogni: 'giorno', ora }
-                    )}
-                    style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
-                    <option value="giorno">{t('ogni giorno')}</option>
-                    <option value="settimana">{t('ogni settimana')}</option>
-                    <option value="arrivo">{t('quando arriva qualcosa')}</option>
-                  </select>
-
-                  {ogni === 'settimana' && (
-                    <select value={'giorno' in quando ? quando.giorno : 1} aria-label={t('In che giorno')}
-                      onChange={e => setQuando({ ogni: 'settimana', giorno: Number(e.target.value), ora })}
-                      style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
-                      {GIORNI.map((giorno, i) => <option key={giorno} value={i}>{t(giorno)}</option>)}
-                    </select>
-                  )}
-
-                  {ogni !== 'arrivo' && (
-                    <select value={ora} aria-label={t('A che ora')}
-                      onChange={e => setQuando(q => 'quandoArriva' in q ? q
-                        : q.ogni === 'settimana' ? { ...q, ora: Number(e.target.value) } : { ogni: 'giorno', ora: Number(e.target.value) })}
-                      style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
-                      {Array.from({ length: 24 }, (_, h) => (
-                        <option key={h} value={h}>{`${String(h).padStart(2, '0')}:00`}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </Campo>
-
-              <Campo etichetta={t('Che parole cercare')}
-                nota={t('Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: guarda tutto.')}>
-                <input aria-label={t('Che parole cercare')} value={cerca} onChange={e => setCerca(e.target.value)} style={RIGO}
-                  placeholder={t('le parole da cercare nei tuoi documenti — vuoto: guarda tutto')} />
-              </Campo>
-
-              {/* subito sotto le parole, perché è di quelle che è la risposta */}
-              {modificata ? <p className="auto-muted">{t('Salva le modifiche per vedere quali documenti leggerà.')}</p> : <Anteprima id={a.id} catalogo={catalogo} chiave={provata} />}
-
-              <Campo etichetta={t('Cosa deve farne')}>
-                <textarea aria-label={t('Cosa deve farne')} value={fai} onChange={e => setFai(e.target.value)} rows={5}
-                  style={{ ...RIGO, resize: 'vertical', lineHeight: 1.55 }} />
-              </Campo>
-
-              <Campo etichetta={t('E poi')}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <select value={modo} aria-label={t('Cosa ne fa')}
-                    onChange={e => setModo(e.target.value as 'io' | 'bozza' | 'prompt')}
-                    style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
-                    <option value="io">{t('mette solo una riga')}</option>
-                    <option value="bozza">{t('prepara anche la bozza')}</option>
-                    <option value="prompt">{t('prepara il prompt')}</option>
-                  </select>
-                  <select value={inLista} aria-label={t('Dove la mette')}
-                    onChange={e => setInLista(e.target.value as 'oggi' | 'settimana' | 'poi')}
-                    style={{ ...RIGO, width: 'auto', cursor: 'pointer' }}>
-                    <option value="oggi">{t('in Oggi')}</option>
-                    <option value="settimana">{t('in Questa settimana')}</option>
-                    <option value="poi">{t('in Prima o poi')}</option>
-                  </select>
-                </div>
-                {/*
-                  Una riga per documento, o una riga con l'elenco. Sta qui,
-                  accanto a «cosa ne fa», perché è la stessa domanda: cosa
-                  compare in lista quando gira.
-                */}
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 8, marginTop: 9,
-                  fontSize: '12.5px', color: 'rgba(34,39,31,.75)', cursor: 'pointer'
-                }}>
-                  <input type="checkbox" checked={perDocumento}
-                    onChange={e => setPerDocumento(e.target.checked)} />
-                  {t('Una riga per ogni documento')}
-                </label>
               </Campo>
               </div>
               <details className="auto-history"><summary>{t('Cronologia esecuzioni')}</summary>
@@ -702,109 +572,139 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 }
 
 /** La scheda per scrivertene una nuova: la stessa finestra, con dentro una casella. */
-export function Nuova({ catalogo, chiudi, fatta }: {
+/**
+ * Nuova automazione: una frase, e i binari sotto.
+ *
+ * Erano una casella vuota con dentro un «@» da scoprire, e un bottone «Creala»
+ * che scriveva un file al buio: si vedeva cosa era venuto fuori solo dopo, in
+ * pausa, dentro una scheda. Adesso la frase è in cima e i binari sotto, e i
+ * due si parlano: mentre si scrive «ogni lunedì mattina guarda nella posta»
+ * il tratto «quando» e il tratto «legge» si riempiono da soli — senza nessun
+ * modello, è lettura di due parole — e «Componi con Myynd» fa il resto, il
+ * nome, l'istruzione, le parole con cui cercare. Si crea quando la frase in
+ * cima ai binari dice quello che si voleva, non prima.
+ *
+ * Le fonti si trascinano, o si toccano. Non c'è più una «@» da sapere.
+ */
+export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
   catalogo: Attrezzo[]
+  cartelle: string[]
   chiudi: () => void
   fatta: (tutte: Automazione[], id: string) => void
 }) {
-  const [testo, setTesto] = useState('')
-  const [suoi, setSuoi] = useState<string[]>([])
-  const [faccio, setFaccio] = useState(false)
+  const [frase, setFrase] = useState('')
+  const [r, setR] = useState<RicettaComposta>({ nome: '', spiega: '', quando: { quandoArriva: true }, guarda: {}, fai: '', passi: [], metti: { inLista: 'oggi', modo: 'io' }, attrezzi: [] })
+  const [compongo, setCompongo] = useState(false)
+  const [creo, setCreo] = useState(false)
   const [guaio, setGuaio] = useState('')
-  // la casella ha già il fuoco con `autoFocus`; qui Esc chiude e il fuoco torna a chi ha aperto
+  const [detto, setDetto] = useState('')
   const finestra = useRef<HTMLDivElement>(null)
-  useFocoDialogo(finestra, () => { if (!faccio) chiudi() })
+  const occupato = compongo || creo
+  useFocoDialogo(finestra, () => { if (!occupato) chiudi() })
 
-  const crea = async () => {
-    if (faccio || testo.trim().length < 8) return
-    setFaccio(true); setGuaio('')
-    try {
-      const r = await api.creaAutomazione(testo, suoi.length ? suoi : undefined)
-      fatta(r.automazioni, r.id)
-    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    setFaccio(false)
+  /** La frase letta subito: quando e dove, senza modello. */
+  const scrivi = (testo: string) => {
+    setFrase(testo)
+    const letta = interpreta(testo, catalogo)
+    setR(x => ({
+      ...x,
+      ...(letta.quando ? { quando: letta.quando } : {}),
+      attrezzi: [...new Set([...(x.attrezzi ?? []), ...letta.attrezzi])]
+    }))
   }
 
-  const attaccati = suoi.map(n => catalogo.find(x => x.nome === n)).filter((x): x is Attrezzo => !!x)
-  const corto = testo.trim().length < 8
+  const componi = async () => {
+    if (occupato || frase.trim().length < 8) return
+    setCompongo(true); setGuaio(''); setDetto('')
+    try {
+      const { ricetta } = await api.componiAutomazione(frase, r.attrezzi?.length ? r.attrezzi : undefined)
+      setR({ nome: ricetta.nome, spiega: ricetta.spiega, quando: ricetta.quando, guarda: ricetta.guarda, fai: ricetta.fai, passi: ricetta.passi ?? [], metti: ricetta.metti, attrezzi: ricetta.attrezzi ?? [], ...(ricetta.cartella ? { cartella: ricetta.cartella } : {}) })
+      setDetto(t('Composta. Guarda i binari: se dicono quello che volevi, creala.'))
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    setCompongo(false)
+  }
+
+  // un nome, se non gliel'ha dato nessuno: la frase stessa, corta
+  const nomeProposto = r.nome.trim() || frase.trim().split(/[.\n]/)[0].slice(0, 60).trim()
+  const pronta = nomeProposto.length >= 3 && r.fai.trim().length >= 8
+
+  const crea = async () => {
+    if (occupato || !pronta) return
+    setCreo(true); setGuaio('')
+    try {
+      const esito = await api.nuovaAutomazione({
+        nome: nomeProposto, spiega: r.spiega, fai: r.fai, cerca: r.guarda.cerca ?? '', quando: r.quando,
+        metti: r.metti, attrezzi: r.attrezzi ?? [], cartella: r.cartella ?? '', passi: r.passi ?? []
+      })
+      fatta(esito.automazioni, esito.id)
+    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    setCreo(false)
+  }
 
   return (
     <>
-      <div onClick={() => { if (!faccio) chiudi() }} style={{
+      <div onClick={() => { if (!occupato) chiudi() }} style={{
         position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
-      <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="nuova-titolo" style={{
+      <div ref={finestra} className="auto-editor" role="dialog" aria-modal="true" aria-labelledby="nuova-titolo" style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        width: 560, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100vh - 64px)',
+        width: 860, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 48px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
-        background: 'linear-gradient(180deg,rgba(255,253,249,.97),rgba(255,251,245,.95))',
-        backdropFilter: 'blur(40px) saturate(1.6)', WebkitBackdropFilter: 'blur(40px) saturate(1.6)',
+        background: 'linear-gradient(180deg,rgba(255,253,249,.98),rgba(255,251,245,.96))',
         border: '1px solid rgba(255,255,255,.95)',
         boxShadow: '0 44px 100px -24px rgba(60,44,30,.46)',
         animation: 'editoresu .3s cubic-bezier(.2,.8,.25,1) both'
       }}>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '16px 15px 15px 18px',
+          display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '18px 18px 16px 24px',
           borderBottom: '1px solid rgba(34,39,31,.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div id="nuova-titolo" style={{ fontSize: '15px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>
-              {t('Crea automazione')}
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>
-              {t('Cosa vuoi delegare?')}
-            </div>
+            <div id="nuova-titolo" style={{ fontSize: '17px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>{t('Nuova automazione')}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.55)', marginTop: 2 }}>{t('Dilla in una frase, o componila sui binari. Nasce in pausa.')}</div>
           </div>
-          <Hov as="button" onClick={() => { if (!faccio) chiudi() }} title={t('Chiudi')} aria-label={t('Chiudi')}
-            style={{
-              display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0,
-              borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)',
-              color: 'rgba(34,39,31,.5)', cursor: 'pointer'
-            }}
+          <Hov as="button" onClick={() => { if (!occupato) chiudi() }} title={t('Chiudi')} aria-label={t('Chiudi')}
+            style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0, borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)', color: 'rgba(34,39,31,.5)', cursor: 'pointer' }}
             hover={{ background: 'rgba(34,39,31,.13)', color: '#22271F' }}><IconCroce size={12} /></Hov>
         </div>
 
-        <div inert={faccio} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px 18px' }}>
-          <Casella
-            testo={testo} cambia={setTesto} righe={4} autoFocus
-            attaccati={suoi} catalogo={catalogo}
-            attacca={n => setSuoi(s => s.includes(n) ? s : [...s, n])}
-            stacca={n => setSuoi(s => s.filter(x => x !== n))}
-            invio={crea}
-            segnaposto={t('Ogni lunedì dimmi quali preventivi in @ sono ancora senza risposta')} />
-
-          <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(34,39,31,.52)', marginTop: 13, textWrap: 'pretty' }}>
-            {t('Usa @ per scegliere le fonti. Nasce in pausa.')}
+        <div className="auto-editor-body" inert={occupato} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div className="auto-dettatura">
+            <textarea rows={2} autoFocus value={frase} onChange={e => scrivi(e.target.value)} aria-label={t('Dilla in una frase')}
+              placeholder={t('Ogni lunedì mattina dimmi quali preventivi nella posta sono ancora senza risposta')}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void componi() } }} />
+            <div className="auto-dettatura-riga">
+              <button type="button" className="auto-button" disabled={occupato || frase.trim().length < 8} onClick={componi}>
+                {compongo && <Glifo tipo="penso" dim={11} colore="#8E3F1F" />}{compongo ? t('La compongo…') : t('Componi con Myynd')}
+              </button>
+              <div className="auto-spunti">
+                {SPUNTI.map(([label, s]) => (
+                  <button key={s} type="button" onClick={() => scrivi(t(s))}>{t(label)}</button>
+                ))}
+              </div>
+            </div>
+            {detto && <p className="auto-muted" role="status">{detto}</p>}
           </div>
 
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 14 }}>
-            {SPUNTI.map(([label, s]) => (
-              <Hov key={s} as="button" onClick={() => setTesto(t(s))}
-                style={{
-                  padding: '6px 11px', borderRadius: 99, cursor: 'pointer', textAlign: 'left',
-                  border: '1px dashed rgba(34,39,31,.2)', background: 'none',
-                  color: 'rgba(34,39,31,.55)', fontSize: '11.5px', fontFamily: 'inherit', maxWidth: '100%'
-                }}
-                hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t(label)}</Hov>
-            ))}
-          </div>
+          <label className="auto-campo auto-nome">
+            <span>{t('Come si chiama')}</span>
+            <input value={r.nome} onChange={e => setR({ ...r, nome: e.target.value })} placeholder={nomeProposto || t('Preventivi fermi')} />
+          </label>
+
+          <Costruttore r={r} cambia={setR} catalogo={catalogo} cartelle={cartelle} />
         </div>
 
         <div style={{
           flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          padding: '13px 18px', borderTop: '1px solid rgba(34,39,31,.08)', background: 'rgba(255,255,255,.4)'
+          padding: '13px 24px', borderTop: '1px solid rgba(34,39,31,.08)', background: 'rgba(255,255,255,.4)'
         }}>
-          <button onClick={crea} disabled={faccio || corto}
-            style={{ ...PIENO, display: 'inline-flex', alignItems: 'center', gap: 7, opacity: faccio || corto ? 0.5 : 1, cursor: faccio || corto ? 'default' : 'pointer' }}>
-            {faccio && <Glifo tipo="penso" dim={11} colore="#FFF7F0" />}
-            {faccio ? t('La scrivo…') : t('Creala')}
+          <button onClick={crea} disabled={occupato || !pronta}
+            style={{ ...PIENO, display: 'inline-flex', alignItems: 'center', gap: 7, opacity: occupato || !pronta ? 0.5 : 1, cursor: occupato || !pronta ? 'default' : 'pointer' }}>
+            {creo && <Glifo tipo="penso" dim={11} colore="#FFF7F0" />}
+            {creo ? t('La creo…') : t('Creala')}
           </button>
-          {!!attaccati.length && (
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-              {attaccati.map(x => <Pastiglia key={x.nome} a={x} dim="piccola" />)}
-            </div>
-          )}
+          <span className="auto-muted">{pronta ? t('Nasce in pausa: la accendi dalla sua scheda.') : t('Le manca cosa deve fare: scrivilo nel tratto «Fa», o componila con Myynd.')}</span>
           {guaio && <span style={{ fontSize: '12px', color: '#8E3F1F', textWrap: 'pretty' }}>{t(guaio)}</span>}
         </div>
       </div>

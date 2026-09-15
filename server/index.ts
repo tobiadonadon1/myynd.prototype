@@ -3054,6 +3054,23 @@ app.post('/api/automazioni/aggiorna', async (_req, res) => {
  * arrivate con l'azienda. Nasce spenta di proposito — vedi il commento nel
  * client: prima la si guarda e la si prova, poi la si accende.
  */
+/** La frase diventa una ricetta da guardare, non ancora un file: il costruttore la mostra sui binari. */
+app.post('/api/automazioni/componi', async (req, res) => {
+  try {
+    const a = await automazioni.componi(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
+    res.json({ ok: true, ricetta: a })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/** Una ricetta composta sui binari, a mano o dopo la frase: nasce in pausa, come le altre. */
+app.post('/api/automazioni/nuova', (req, res) => {
+  try {
+    const a = automazioni.daCampi(req.body ?? {})
+    store.accendiAutomazione(a.id, false)
+    res.json({ ok: true, id: a.id, automazioni: automazioni.elenco() })
+  } catch (e) { errore(res, e, 400) }
+})
+
 app.post('/api/automazioni', async (req, res) => {
   try {
     const a = await automazioni.daUnaFrase(String(req.body?.descrizione ?? ''), req.body?.attrezzi)
