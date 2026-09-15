@@ -34,12 +34,13 @@
 // quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { leggi, lingua, modello, nellaLingua } from './config.ts'
+import { leggi, lingua, modello, modelloDelLivello, nellaLingua } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
 import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
+import * as chatgpt from './chatgpt.ts'
 
 // — chi c'è —
 
@@ -69,8 +70,25 @@ function conLaChiave(): boolean {
  * uno scollega non deve mandare le richieste nel vuoto: torna `null`, e si va
  * da Claude come se niente fosse.
  */
+/** L'indirizzo di OpenAI: l'unico che la scheda «OpenAI» conosca. */
+export const URL_OPENAI = 'https://api.openai.com/v1'
+
+/**
+ * OpenAI con la chiave, se è lei a lavorare.
+ *
+ * È la seconda strada della scheda «OpenAI» — la prima è l'account ChatGPT,
+ * che passa dal ponte — e parla la stessa lingua di un fornitore compatibile:
+ * l'indirizzo è fisso, la chiave e il modello sono suoi. Senza chiave non c'è
+ * niente da chiamare, e si torna `null` come per una scelta rimasta nel file.
+ */
+export function fornitoreOpenAI(c = leggi()): compatibile.Fornitore | null {
+  const o = c.openai
+  return o?.modello && o.chiave ? { url: URL_OPENAI, chiave: o.chiave, modello: o.modello, nome: 'OpenAI' } : null
+}
+
 function fornitore(): compatibile.Fornitore | null {
   const c = leggi()
+  if (c.motore === 'openai') return fornitoreOpenAI(c)
   if (c.motore !== 'compatibile') return null
   const f = c.compatibile
   return f?.url && f.modello ? f : null
@@ -94,6 +112,7 @@ function fornitore(): compatibile.Fornitore | null {
  * OpenAI scelto come motore: anche lui fa ragionare Myynd per intero.
  */
 export function collegato(): boolean {
+  if (chatgpt.scelto()) return chatgpt.pronto()
   return conClaude() || !!fornitore()
 }
 
@@ -543,7 +562,7 @@ function traduci(e: unknown): Error {
  * strada sua, senza strumenti, e chi la vuole la chiede prima.
  */
 export type Motore = {
-  tipo: 'claude' | 'compatibile'
+  tipo: 'claude' | 'compatibile' | 'chatgpt'
   /** Come si chiama, per i registri: il modello di Claude, o il nome dato al fornitore. */
   nome: string
   /**
@@ -558,21 +577,19 @@ export type Motore = {
    */
   pronto(): Promise<void>
   crea(p: Anthropic.MessageCreateParamsNonStreaming, attesa?: number): Promise<Anthropic.Message>
-  flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number, segnale?: AbortSignal): Promise<Anthropic.Message>
+  flusso(p: Anthropic.MessageStreamParams, onTesto: (delta: string) => void, attesa?: number, segnale?: AbortSignal, conversazione?: boolean): Promise<Anthropic.Message>
 }
 
-/**
- * Quanto si aspetta la *prima parola* in chat, da un modello di casa.
- *
- * Misurato sul suo Mac, con Ollama e un modello da nove miliardi di parametri:
- * la preparazione del prompt va a seicentocinquanta token al secondo, quindi
- * ogni migliaio di token di prompt è un secondo e mezzo prima che cominci a
- * scrivere. Quindici secondi sono già un prompt enorme o un modello troppo
- * grosso per quella macchina: tenere la rotella accesa oltre non scopre niente
- * di nuovo, e quello che va detto non è «riprova» — è «prendine uno più
- * piccolo, o torna su Claude».
- */
-export const PRIMA_PAROLA = 15_000
+/** A slow first response can be model loading or queueing, not a bad model.
+ * Keep one cancellable request alive instead of forcing a retry after 15s. */
+export const PRIMA_PAROLA = 60_000
+export function attesaPrimaParola(url = fornitore()?.url ?? ''): number {
+  try {
+    const host = new URL(url).hostname
+    if (host === 'localhost' || host === '[::1]' || /^127\./.test(host)) return 90_000
+  } catch { /* unknown providers use the bounded ordinary budget */ }
+  return PRIMA_PAROLA
+}
 
 /**
  * Il filo che si spegne senza dirlo.
@@ -611,6 +628,17 @@ function senzaSilenzi(f: ReturnType<Anthropic['messages']['stream']>): Promise<A
 }
 
 export function motore(): Motore | null {
+  if (chatgpt.scelto()) {
+    const m = chatgpt.motore()
+    return { ...m,
+      crea: (p, attesa) => { controllaIlTetto(); return m.crea(p, attesa) },
+      flusso: (p, onTesto, attesa, segnale, conversazione) => {
+        controllaIlTetto()
+        segnaGuardato(true)
+        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => segnaGuardato(false))
+      }
+    }
+  }
   const f = fornitore()
   if (f) {
     return {
@@ -627,18 +655,7 @@ export function motore(): Motore | null {
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
           .finally(() => segnaGuardato(false))
           .catch(e => {
-            /*
-             * Il tetto sulla prima parola, detto per quello che è.
-             *
-             * Chi passa un `attesa` corto — la chat, e solo lei — sta dicendo
-             * «entro qui, o cambiamo modello». La frase generica («ci ha messo
-             * troppo, riprova») manderebbe a riprovare la stessa cosa che ha
-             * appena fallito, che è il modo più sicuro di far perdere un altro
-             * quarto di minuto.
-             */
-            if (attesa && attesa <= PRIMA_PAROLA && e instanceof Error && e.name === compatibile.ATTESA_SCADUTA) {
-              throw tradotto(new Error('Il modello ha impiegato più di quindici secondi per cominciare: prova un modello più piccolo, o passa a Claude.'))
-            }
+            if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
             throw tradotto(e)
           })
       }
@@ -678,6 +695,7 @@ export function motore(): Motore | null {
 
 /** Il nome del motore che risponde adesso, per il registro dell'uso. */
 function nomeMotore(lavoro = ''): string {
+  if (chatgpt.scelto()) return 'ChatGPT subscription'
   const f = fornitore()
   return f ? (f.nome || f.modello) : modelloPer(lavoro)
 }
@@ -716,7 +734,7 @@ function controllaIlTetto() {
 
 // — la richiesta —
 
-export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'abbonamento' | 'compatibile' }
+export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'abbonamento' | 'compatibile' | 'chatgpt' }
 
 /**
  * I parametri giusti per il modello che ci si trova in mano.
@@ -729,22 +747,17 @@ export type Esito = { testo: string; rifiutata: boolean; da: 'claude' | 'abbonam
 export type Parametri = Omit<Anthropic.MessageCreateParamsNonStreaming, 'messages' | 'system'>
 
 /**
- * Il modello per il lavoro piccolo, quando quello di casa non c'è.
+ * Il modello per un lavoro: quello che la persona ha scelto per il suo livello.
  *
  * La tabella dice che un titolo o una cernita non hanno bisogno di un modello
- * di frontiera — e finora, senza Ollama, ci andavano lo stesso: ospitati
- * ogni traduzione, ogni ritratto delle sei ore e ogni «è una domanda o un
- * fatto?» passava da Sonnet. Il più piccolo della famiglia fa lo stesso lavoro
- * a un decimo, ed è più capace di qualunque cosa giri su un portatile.
+ * di frontiera, e la scelta di *quale* modello per ciascun livello sta nelle
+ * preferenze (`modelli` in config.ts). Senza una scelta vale la regola di
+ * sempre: le manovre interne sull'economico, il resto sul modello principale.
+ * Un lavoro che non conosciamo è di frontiera: è il caso in cui non si
+ * risparmia.
  */
-const ECONOMICO = 'claude-haiku-4-5'
-
 export function modelloPer(lavoro: string): string {
-  // Solo `casa` scende all'economico. `media` è passata da `frontiera: true` a
-  // un livello suo, ma *in rete* deve continuare a costare e valere quello di
-  // prima: la lettura del feed su Haiku sarebbe un peggioramento che nessuno
-  // ha chiesto. Il livello nuovo apre una strada in più, non ne chiude una.
-  return LAVORI[lavoro as Lavoro]?.livello === 'casa' ? ECONOMICO : modello()
+  return modelloDelLivello(LAVORI[lavoro as Lavoro]?.livello ?? 'frontiera')
 }
 
 /** Quanto si aspetta questo lavoro, per chi chiama il motore da sé. */
@@ -901,9 +914,9 @@ export async function chiedi(o: {
    * E se il motore scelto è un altro fornitore, di qui non si passa: l'abbonamento
    * è un modo di pagare Claude di meno, non un motore in più.
    */
-  if (abbonamento.disponibile() && !fornitore()) {
+  if (!chatgpt.scelto() && abbonamento.disponibile() && !fornitore()) {
     try {
-      const testo = await abbonamento.chiedi({ ...o, attesa })
+      const testo = await abbonamento.chiedi({ ...o, attesa, modello: modelloPer(o.lavoro) })
       return { testo, rifiutata: false, da: 'abbonamento' }
     } catch (e) {
       abbonamento.nonRisponde()

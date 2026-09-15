@@ -72,7 +72,7 @@ test('con Claude non si bussa a nessuno prima di rispondere', async () => {
   assert.equal(bussate, 0, 'chiedere ad Anthropic «ci sei?» prima di ogni domanda è una chiamata sprecata')
 })
 
-test('quindici secondi per cominciare, e poi si dice che il modello è troppo grosso', async () => {
+test('a first-response timeout reports the wait without diagnosing the model as too large', async () => {
   colFornitore()
   // non comincia mai: il filo resta aperto finché non lo si taglia
   compatibile.usaRete(((_: unknown, init?: RequestInit) => new Promise<Response>((_r, rifiuta) => {
@@ -85,7 +85,7 @@ test('quindici secondi per cominciare, e poi si dice che il modello è troppo gr
   // con il budget della chat: la frase parla del modello e di cosa fare
   await assert.rejects(
     () => m.flusso(richiesta, () => {}, 30),
-    /più di quindici secondi per cominciare/
+    /Ci ha messo troppo/
   )
 
   /*
@@ -101,6 +101,47 @@ test('quindici secondi per cominciare, e poi si dice che il modello è troppo gr
     () => compatibile.flusso(f, richiesta, () => {}, 30),
     (e: Error) => e.name === compatibile.ATTESA_SCADUTA && /Ci ha messo troppo/.test(e.message)
   )
+})
+
+test('compatible chat waits past fifteen seconds with one request and remains cancellable', async t => {
+  colFornitore()
+  assert.equal(modello.attesaPrimaParola('http://127.0.0.1:11434/v1'), 90_000)
+  assert.equal(modello.attesaPrimaParola('http://localhost:1234/v1'), 90_000)
+  assert.equal(modello.attesaPrimaParola('https://provider.example/v1'), 60_000)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let calls = 0
+  let signal: AbortSignal | null = null
+  let finish!: (r: Response) => void
+  compatibile.usaRete(((_: unknown, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+    calls++
+    signal = init?.signal ?? null
+    finish = resolve
+    signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true })
+  })) as typeof fetch)
+  const request = { model: 'q', max_tokens: 10, messages: [{ role: 'user' as const, content: 'hello' }] }
+  const controller = new AbortController()
+  const result = modello.motore()!.flusso(request, () => {}, modello.attesaPrimaParola(), controller.signal)
+  await new Promise(resolve => setImmediate(resolve))
+  t.mock.timers.tick(20_000)
+  assert.equal(calls, 1)
+  assert.equal((signal as AbortSignal | null)?.aborted, false, 'a valid slow first response must not be cut off at fifteen seconds')
+  finish(new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n'))
+  assert.equal((await result).content[0].type, 'text')
+  assert.equal(calls, 1)
+  const cancelled = modello.motore()!.flusso(request, () => {}, modello.attesaPrimaParola(), controller.signal)
+  await new Promise(resolve => setImmediate(resolve))
+  controller.abort()
+  await assert.rejects(cancelled, { name: 'AbortError' })
+  assert.equal(calls, 2, 'cancellation must not retry the request')
+})
+
+test('explicit ChatGPT selection has precedence over retained API providers and exposes its own capabilities', () => {
+  cfg.scrivi({ motore: 'chatgpt', chatgpt: { attivo: true }, claude: { apiKey: 'retained-api-key' },
+    compatibile: { url: 'https://old-provider.example/v1', modello: 'old' } })
+  const selected = modello.motore()
+  assert.equal(selected?.tipo, 'chatgpt', 'a selected subscription must not silently use a retained API provider')
+  assert.equal(selected?.nome, 'ChatGPT subscription')
+  cfg.scrivi({ motore: 'compatibile' })
 })
 
 test('con un modello locale i lavori di fondo aspettano che nessuno stia guardando', async () => {

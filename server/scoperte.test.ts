@@ -6,6 +6,17 @@ import { join } from 'node:path'
 const dati = mkdtempSync(join(tmpdir(), 'myynd-discovery-'))
 process.env.MYYND_DATI = dati
 writeFileSync(join(dati, 'config.json'), JSON.stringify({ lingua: 'en' }))
+const storeProve = await import('./store.ts')
+const progettiProve = await import('./progetti.ts')
+progettiProve.scrivi({ nome: 'Nextas', obiettivo: 'Review supplier documents and client proposals' })
+const recente = (giorni = 0) => new Date(Date.now() - giorni * 86_400_000).toISOString()
+function salvaProve(docs: import('./store.ts').Documento[]) {
+  return storeProve.salvaDocumenti(docs.map(d => ({
+    ...d, corpo: `Nextas: Please review this document. ${d.corpo}`,
+    autore: d.autore ?? `${d.id}@example.com`, quando: d.quando ?? recente(),
+    percorso: d.percorso ?? `/Users/test/Documents/${d.id}.pdf`
+  })))
+}
 const { rileva } = await import('./scoperte.ts')
 after(() => rmSync(dati, { recursive: true, force: true }))
 const docs = [{ id: '1', titolo: 'Invoice for September', fonte: 'desktop' }, { id: '2', titolo: 'Invoice for August', fonte: 'desktop' }]
@@ -29,7 +40,7 @@ test('adoption persists a paused workflow, is idempotent, and dismissal persists
   const auto = await import('./automazioni.ts')
   const discovery = await import('./scoperte.ts')
   cfg.scrivi({ ...cfg.leggi(), desktop: { cartelle: [dati] } })
-  store.salvaDocumenti(docs.map(d => ({ ...d, tipo: 'file', corpo: 'Example invoice', quando: new Date().toISOString() })))
+  salvaProve(docs.map(d => ({ ...d, tipo: 'file', corpo: 'Example invoice', quando: new Date().toISOString() })))
   assert.equal((await discovery.suggerimenti()).length, 1)
   const a = discovery.adotta('mind-invoices')
   assert.equal(auto.elenco().find(x => x.id === a.id)?.accesa, false)
@@ -37,7 +48,7 @@ test('adoption persists a paused workflow, is idempotent, and dismissal persists
   assert.equal((await discovery.suggerimenti()).length, 0)
   assert.equal(discovery.adotta(a.id).id, a.id)
   assert.equal(auto.elenco().filter(x => x.id === a.id).length, 1)
-  store.salvaDocumenti([
+  salvaProve([
     { id: 'm1', fonte: 'desktop', titolo: 'Meeting notes one', corpo: '', tipo: 'file' },
     { id: 'm2', fonte: 'desktop', titolo: 'Meeting notes two', corpo: '', tipo: 'file' }
   ])
@@ -67,7 +78,7 @@ let idea = ''
 test('senza modello la frase locale nomina la fonte e il conto, in una riga sola', async () => {
   const store = await import('./store.ts')
   const discovery = await import('./scoperte.ts')
-  store.salvaDocumenti([
+  salvaProve([
     { id: 'p1', fonte: 'desktop', titolo: 'Proposal for Rossi', corpo: '', tipo: 'file' },
     { id: 'p2', fonte: 'desktop', titolo: 'Proposal for Bianchi', corpo: '', tipo: 'file' }
   ])
@@ -96,14 +107,14 @@ const PROVE = ['ev-aruba', 'ev-fastweb']
 
 test('le prove citate dal modello stanno nell’indice, con mittente e giorno', async () => {
   const store = await import('./store.ts')
-  store.salvaDocumenti([
+  salvaProve([
     {
       id: 'ev-aruba', fonte: 'desktop', tipo: 'file', titolo: 'Supplier bill, hosting',
-      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: '2026-09-01T09:00:00.000Z'
+      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: recente(2)
     },
     {
       id: 'ev-fastweb', fonte: 'desktop', tipo: 'file', titolo: 'Supplier bill, line',
-      corpo: 'line', autore: 'Fastweb <billing@fastweb.it>', quando: '2026-09-02T09:00:00.000Z'
+      corpo: 'line', autore: 'Fastweb <billing@fastweb.it>', quando: recente(1)
     }
   ])
   assert.equal(store.documento('ev-aruba')?.autore, 'Aruba S.p.A. <fatture@aruba.it>')
@@ -124,7 +135,7 @@ test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno
             perche: 'fatture di fornitori diversi, ogni mese',
             prove: PROVE,
             quando: { ogni: 'settimana', giorno: 2, ora: 17 },
-            guarda: { cerca: 'invoice september' },
+            guarda: { cerca: 'supplier bill' },
             attrezzi: ['desktop.leggi'],
             metti: { inLista: 'settimana', modo: 'io' }
           },
@@ -132,14 +143,14 @@ test('con un modello collegato i suggerimenti li scrive lui, una volta al giorno
           {
             nome: 'Roba inventata', spiega: 'Ogni mattina, quello che vuoi.',
             perche: 'niente', prove: PROVE,
-            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'invoice september' },
+            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'supplier bill' },
             attrezzi: ['posta.manda'], metti: { inLista: 'oggi', modo: 'bozza' }
           },
           // uno vero ma non collegato: girerebbe ogni mattina senza trovare niente
           {
             nome: 'Posta che non c’è', spiega: 'Ogni mattina, le richieste dalla posta.',
             perche: 'niente', prove: PROVE,
-            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'invoice september' },
+            quando: { ogni: 'giorno', giorno: 1, ora: 7 }, guarda: { cerca: 'supplier bill' },
             attrezzi: ['posta.leggi'], metti: { inLista: 'oggi', modo: 'bozza' }
           }
         ]
@@ -171,9 +182,9 @@ test('adottata, tiene la sua ora e le sue fonti', async () => {
   const a = discovery.adotta(idea)
   assert.deepEqual(a.quando, { ogni: 'settimana', giorno: 2, ora: 17 })
   assert.deepEqual(a.attrezzi, ['desktop.leggi'])
-  assert.equal(a.guarda.cerca, 'invoice september')
+  assert.equal(a.guarda.cerca, 'supplier bill')
   assert.equal(a.metti.inLista, 'settimana')
-  assert.equal(a.en.cerca, 'invoice september')
+  assert.equal(a.en.cerca, 'supplier bill')
   // e nasce spenta, come tutte: l'interruttore lo tira lei
   assert.equal(auto.elenco().find(x => x.id === a.id)?.accesa, false)
 })
@@ -229,7 +240,7 @@ test('scarta su una vera proposta la toglie, ricorda il nome, e il modello la sa
           nome: 'Solleciti clienti in ritardo',
           spiega: 'Ogni mattina, i preventivi senza risposta dal desktop nella lista di oggi.',
           perche: 'preventivi aperti con clienti diversi',
-          prove: PROVE,
+          prove: ['p1', 'p2'],
           quando: { ogni: 'giorno', ora: 8 },
           guarda: { cerca: 'proposal' },
           attrezzi: ['desktop.leggi'],
@@ -291,12 +302,12 @@ test('senza modello, "on my Mac/PC" in inglese e "nel mio Mac/PC" in italiano', 
   const store = await import('./store.ts')
   const cfg = await import('./config.ts')
   const discovery = await import('./scoperte.ts')
-  store.salvaDocumenti([
+  salvaProve([
     { id: 'w1', fonte: 'desktop', titolo: 'Proposal for Verdi', corpo: '', tipo: 'file' },
     { id: 'w2', fonte: 'desktop', titolo: 'Proposal for Neri', corpo: '', tipo: 'file' }
   ])
 
-  const en = await discovery.suggerimenti()
+  const en = discovery.rileva(store.recenti(200), catalogo, new Set(), true)
   const enProposta = en.find(x => x.id === 'mind-proposals')
   assert.ok(enProposta, 'la proposta in inglese compare')
   assert.match(enProposta.spiega, /on my (Mac|PC)/)
@@ -305,7 +316,7 @@ test('senza modello, "on my Mac/PC" in inglese e "nel mio Mac/PC" in italiano', 
   // e `lingua()` la rileggono a ogni chiamata
   cfg.aggiorna({ lingua: 'it' })
   try {
-    const it = await discovery.suggerimenti()
+    const it = discovery.rileva(store.recenti(200), catalogo, new Set(), false)
     const itProposta = it.find(x => x.id === 'mind-proposals')
     assert.ok(itProposta, 'la proposta in italiano compare')
     assert.match(itProposta.spiega, /nel mio (Mac|PC)/)
@@ -328,11 +339,11 @@ test('senza modello, "on my Mac/PC" in inglese e "nel mio Mac/PC" in italiano', 
  */
 
 const IDEE = [
-  { id: 'danno-1', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-08-20T09:00:00.000Z', titolo: 'Turo damage claim, first message' },
-  { id: 'danno-2', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-08-20T11:00:00.000Z', titolo: 'Turo damage claim, second message' },
-  { id: 'danno-3', autore: 'kyrylo@example.com', quando: '2026-08-20T15:00:00.000Z', titolo: 'Turo damage claim, third message' },
-  { id: 'danno-altro', autore: 'Anna Rossi <anna@example.com>', quando: '2026-08-20T16:00:00.000Z', titolo: 'Turo damage claim, another renter' },
-  { id: 'danno-tardi', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: '2026-09-01T09:00:00.000Z', titolo: 'Turo damage claim, twelve days later' }
+  { id: 'danno-1', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: recente(1), titolo: 'Turo damage claim, first message' },
+  { id: 'danno-2', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: recente(1), titolo: 'Turo damage claim, second message' },
+  { id: 'danno-3', autore: 'kyrylo@example.com', quando: recente(1), titolo: 'Turo damage claim, third message' },
+  { id: 'danno-altro', autore: 'Anna Rossi <anna@example.com>', quando: recente(1), titolo: 'Turo damage claim, another renter' },
+  { id: 'danno-tardi', autore: 'Kyrylo Turo <kyrylo@example.com>', quando: recente(13), titolo: 'Turo damage claim, twelve days later' }
 ]
 
 /** Una proposta finta, con quello che serve a passare tutto il resto. */
@@ -356,7 +367,7 @@ async function conModello(automazioni: unknown[]) {
 
 test('sei messaggi dello stesso mittente nello stesso giorno non sono un’automazione', async () => {
   const store = await import('./store.ts')
-  store.salvaDocumenti(IDEE.map(d => ({ ...d, fonte: 'desktop', tipo: 'file', corpo: 'nissan kicks reservation' })))
+  salvaProve(IDEE.map(d => ({ ...d, fonte: 'desktop', tipo: 'file', corpo: 'nissan kicks reservation' })))
   // la ricerca trova eccome — è l'unica cosa che il caso singolo ha da offrire
   assert.ok(store.cerca('turo damage', 20, ['desktop']).length >= 2)
   const s = await conModello([proposta({ prove: ['danno-1', 'danno-2', 'danno-3'] })])
@@ -404,18 +415,18 @@ test('un numero di pratica nel nome o nella frase fa cadere la proposta', async 
 test('il materiale porta gli id, i mittenti e il conto per mittente', async () => {
   const store = await import('./store.ts')
   const discovery = await import('./scoperte.ts')
-  store.salvaDocumenti([
+  salvaProve([
     ...Array.from({ length: 3 }, (_, i) => ({
       id: `posta-aruba-${i}`, fonte: 'posta', tipo: 'mail', titolo: `Fattura di settembre ${i}`,
-      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: `2026-09-0${i + 1}T09:00:00.000Z`
+      corpo: 'hosting', autore: 'Aruba S.p.A. <fatture@aruba.it>', quando: recente(1)
     })),
     ...Array.from({ length: 2 }, (_, i) => ({
       id: `posta-fastweb-${i}`, fonte: 'posta', tipo: 'mail', titolo: `Bolletta della linea ${i}`,
-      corpo: 'linea', autore: 'Fastweb <billing@fastweb.it>', quando: `2026-09-0${i + 5}T09:00:00.000Z`
+      corpo: 'linea', autore: 'Fastweb <billing@fastweb.it>', quando: recente(1)
     })),
     {
       id: 'posta-uno', fonte: 'posta', tipo: 'mail', titolo: 'Una domanda sola',
-      corpo: 'domanda', autore: 'Carla Neri <carla@example.com>', quando: '2026-09-07T09:00:00.000Z'
+      corpo: 'domanda', autore: 'Carla Neri <carla@example.com>', quando: recente(1)
     }
   ])
   let materiale = ''
@@ -428,8 +439,8 @@ test('il materiale porta gli id, i mittenti e il conto per mittente', async () =
   // il conto, che è la riga che si legge per prima
   assert.match(materiale, /posta: 6 messaggi da 3 mittenti; 3 da Aruba S\.p\.A\., 2 da Fastweb/)
   // e ogni documento con il suo id, chi lo manda e il giorno
-  assert.match(materiale, /— \[posta-aruba-0\] \[posta\] Fattura di settembre 0 · da Aruba S\.p\.A\. · 2026-09-01/)
-  assert.match(materiale, /— \[posta-uno\] \[posta\] Una domanda sola · da Carla Neri · 2026-09-07/)
+  assert.match(materiale, /— \[posta-aruba-0\] \[posta\] Fattura di settembre 0 · da Aruba S\.p\.A\. · \d{4}-\d{2}-\d{2}/)
+  assert.match(materiale, /— \[posta-uno\] \[posta\] Una domanda sola · da Carla Neri · \d{4}-\d{2}-\d{2}/)
   // i tre di Aruba stanno in fila, non sparsi: la ripetizione si deve vedere
   const righe = materiale.split('\n').filter(r => r.startsWith('— [posta-'))
   assert.deepEqual(righe.slice(0, 3).map(r => r.slice(3, r.indexOf(']'))).sort(),

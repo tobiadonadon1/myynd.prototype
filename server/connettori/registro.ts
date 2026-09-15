@@ -111,7 +111,15 @@ export const CATALOGO: VoceConnettore[] = [
    * si leggono premendo un interruttore.
    */
   { id: 'conversazioni', nome: 'Conversazioni', gruppo: 'Note', pronto: true, legge: true, nota: 'Le chat esportate da ChatGPT e Claude.' },
-  { id: 'claude', nome: 'Claude', gruppo: 'Ragionamento', pronto: true, nota: 'La chiave con cui Myynd ragiona.' },
+  /*
+   * Le due teste con cui Myynd ragiona, una scheda per casa: Anthropic e
+   * OpenAI. Ognuna si collega in due modi — con l'account che uno paga già,
+   * o con una chiave API a consumo — e la scheda tiene tutt'e due. Prima
+   * ChatGPT stava in una fascia sopra la griglia, e Claude in una tessera
+   * che diceva solo «la chiave»: due fornitori uguali disegnati in due modi.
+   */
+  { id: 'claude', nome: 'Anthropic', gruppo: 'Ragionamento', pronto: true, nota: 'Claude, con il tuo account o con una chiave API.' },
+  { id: 'openai', nome: 'OpenAI', gruppo: 'Ragionamento', pronto: true, nota: 'ChatGPT, con il tuo account o con una chiave API.' },
   // Un'altra testa al posto di Claude, non un'altra fonte: OpenAI e chi parla
   // come lei, compresi i modelli che girano su questa macchina. Sta nel
   // catalogo perché si collega da qui come tutto il resto, con una scheda.

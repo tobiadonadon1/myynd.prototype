@@ -1,8 +1,9 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Hov, LABEL, useFocoDialogo, useLarghezza } from '../ui'
 import { t } from '../lingua'
 import { IconEspandi, IconSu } from '../icons'
 import type { Vals } from '../vals'
+import './mappa.css'
 
 export function Legenda({ v }: { v: Vals }) {
   return (
@@ -17,19 +18,51 @@ export function Legenda({ v }: { v: Vals }) {
 }
 
 function Pannello({ v, scuro }: { v: Vals; scuro?: boolean }) {
+  const [cerca, setCerca] = useState('')
   const testo = scuro ? 'rgba(244,239,232,.72)' : 'rgba(34,39,31,.75)'
   const etichetta = scuro ? { ...LABEL, color: 'rgba(244,239,232,.5)' } : LABEL
+  const documenti = v.mappaDocumenti.filter(n => `${n.titolo} ${n.autore ?? ''}`.toLocaleLowerCase().includes(cerca.trim().toLocaleLowerCase())).slice(0, 12)
   return (
-    <>
+    <div className={`map-details${scuro ? ' dark' : ''}`} aria-live="polite">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={etichetta}>{v.selTipo}</div>
-          <div style={{ fontSize: scuro ? 20 : 21, lineHeight: 1.3, letterSpacing: '-.02em', marginTop: 6 }}>{v.selNome}</div>
+          <div style={{ fontSize: scuro ? 20 : 21, lineHeight: 1.3, letterSpacing: '-.02em', marginTop: 6, overflowWrap: 'anywhere' }}>{v.selNome}</div>
         </div>
         <span style={v.selDot} />
       </div>
-      <div style={{ fontSize: scuro ? 13 : '13.5px', lineHeight: 1.6, color: testo, marginTop: 10, textWrap: 'pretty' }}>{v.selTesto}</div>
-    </>
+      {v.selAutore && <div className="map-source-meta">{v.selAutore}</div>}
+      {v.selPercorso && <div className="map-source-meta"><span>{t('Posizione originale')}: </span>{v.selPercorso}</div>}
+      {v.selDocumento && <div className="map-source-actions">
+        <button type="button" className="map-source-open" onClick={v.apriSelezionato}>{t('Portami lì')}</button>
+        <button type="button" onClick={v.leggiSelezionato}>{t('Vedi la fonte')}</button>
+      </div>}
+      <div style={{ fontSize: scuro ? 13 : '13.5px', lineHeight: 1.6, color: testo, marginTop: 10, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.selTesto}</div>
+      {v.selErrore && <p className="map-source-meta" role="status">{v.selErrore}</p>}
+      {v.selDocumento ? <>
+        {(v.selFeedback || v.selAttenzione) && <div className="map-knowledge-status">{v.selFeedback || v.selAttenzione}</div>}
+        {v.selMotivo && <div className="map-source-meta">{v.selMotivo}</div>}
+        {!!v.selProgetti.length && <div className="map-related">
+          <div style={etichetta}>{t('Progetti collegati')}</div>
+          {v.selProgetti.map(p => <button type="button" key={p.id} onClick={() => { v.closeMap(); v.apriProgetto(p.id) }}>
+            <span>{p.nome}</span><small>{p.obiettivo}{p.stato === 'chiuso' ? ` · ${t('Progetto chiuso')}` : ''}</small>
+          </button>)}
+        </div>}
+        {!!v.selCollegati.length && <div className="map-related">
+          <div style={etichetta}>{t('Argomenti in comune')}</div>
+          {v.selCollegati.map(n => <button type="button" key={n.id} onClick={() => v.scegliDocumentoMappa(n.id)}>{n.titolo}</button>)}
+        </div>}
+        <button type="button" className="map-back" onClick={v.tornaAlGruppo}>{t('Sfoglia i documenti')}</button>
+      </> : <>
+        <input className="map-document-search" type="search" value={cerca} onChange={e => setCerca(e.target.value)} placeholder={t('Cerca un documento…')} aria-label={t('Cerca un documento…')} />
+        <div className="map-related">
+          {documenti.map(n => <button type="button" key={n.id} onClick={() => v.scegliDocumentoMappa(n.id)}>
+            <span>{n.titolo}</span>{n.autore && <small>{n.autore}</small>}
+          </button>)}
+          {!documenti.length && <p className="map-source-meta">{t('Nessun risultato')}</p>}
+        </div>
+      </>}
+    </div>
   )
 }
 
@@ -95,13 +128,17 @@ export function Mappa({ v }: { v: Vals }) {
   const disegnata = !v.guastoMappa && !v.costruendoMappa && !v.mappaVuota
   return (
     <div style={{ width: 1010, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 10px' }}>
         <span style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em' }}>{t('Mappa')}</span>
         <span style={{ fontSize: 13, color: 'rgba(34,39,31,.65)' }}>{v.mappaMeta}</span>
       </div>
+      <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(34,39,31,.65)', maxWidth: 760 }}>
+        {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
+      </p>
       <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexDirection: stretta ? 'column' : 'row' }}>
         <div style={{ flex: 1, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(255,247,240,.14)', boxShadow: '0 30px 70px rgba(50,36,24,.32)', overflow: 'hidden', position: 'relative' }}>
-          <canvas ref={v.cvA} style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
+          <canvas ref={v.cvA} tabIndex={0} role="img" aria-label={t('Mappa dei documenti. Usa le frecce per selezionare un documento.')}
+            style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
           <Sopra v={v} />
           {disegnata && (
             <>
@@ -112,12 +149,12 @@ export function Mappa({ v }: { v: Vals }) {
               <div style={{ position: 'absolute', left: 14, bottom: 12, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: '78%' }}>
                 <Legenda v={v} />
               </div>
-              <div style={{ position: 'absolute', right: 16, bottom: 14, fontSize: 11, color: 'rgba(255,247,240,.4)' }}>{t('trascina per girare · rotella per lo zoom')}</div>
+              <div style={{ position: 'absolute', left: 16, top: 20, maxWidth: '55%', fontSize: 11, color: 'rgba(255,247,240,.5)' }}>{t('trascina per girare · rotella per lo zoom')}</div>
             </>
           )}
         </div>
 
-        <div style={{ width: stretta ? '100%' : 308, flex: 'none', borderRadius: 20, background: 'rgba(255,253,249,.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: stretta ? '100%' : 308, boxSizing: 'border-box', maxHeight: stretta ? 620 : 480, flex: 'none', borderRadius: 20, background: 'rgba(255,253,249,.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
           <Pannello v={v} />
           <div style={{ flex: 1, minHeight: 12 }} />
           <BarraNodo v={v} />
@@ -133,20 +170,26 @@ export function MappaPiena({ v }: { v: Vals }) {
   return (
     <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="mappa-piena-titolo"
       style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#191715', display: 'flex', flexDirection: 'column', animation: 'fadein .22s ease' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 22px', flex: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14, padding: '18px 22px', flex: 'none' }}>
         <span id="mappa-piena-titolo" style={{ fontSize: 15, color: 'rgba(255,247,240,.9)' }}>{t('Mappa')}</span>
         <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.5)' }}>{v.mappaMeta} · {t('trascina per girare, rotella per lo zoom')}</span>
         <div style={{ flex: 1 }} />
         <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.34)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
         <button onClick={v.closeMap} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.55)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>{t('Chiudi')}</button>
+        <p style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'rgba(255,247,240,.6)' }}>
+          {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
+        </p>
       </div>
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <canvas ref={v.cvB} style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }} />
+      <div className="map-full-layout">
+        <div className="map-full-canvas">
+        <canvas ref={v.cvB} tabIndex={0} role="img" aria-label={t('Mappa dei documenti. Usa le frecce per selezionare un documento.')}
+          style={{ display: 'block', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' }} />
         <Sopra v={v} />
         <div style={{ position: 'absolute', left: 22, bottom: 20, display: 'flex', flexWrap: 'wrap', gap: 7, maxWidth: 520 }}>
           <Legenda v={v} />
         </div>
-        <div style={{ position: 'absolute', right: 22, top: 14, width: 330, borderRadius: 20, background: 'rgba(28,25,23,.9)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: '1px solid rgba(255,247,240,.16)', boxShadow: '0 30px 70px rgba(0,0,0,.5)', padding: 20, color: '#F4EFE8', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100% - 34px)' }}>
+        </div>
+        <div className="map-full-details" style={{ borderRadius: 20, background: 'rgba(28,25,23,.9)', border: '1px solid rgba(255,247,240,.16)', padding: 20, color: '#F4EFE8', display: 'flex', flexDirection: 'column' }}>
           <Pannello v={v} scuro />
           <div style={{ flex: 1, minHeight: 10 }} />
           <BarraNodo v={v} scuro />

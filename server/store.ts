@@ -9,6 +9,7 @@ import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
 import { radici, radice, termini } from './lingua.ts'
 import { dovePortare } from './scrivania.ts'
+import { contestoAttenzione, stessaRichiesta, mittenteAutomatico, indirizzoAttenzione, type ContestoAttenzione } from './rilevanza.ts'
 
 /*
  * Un indice per persona, aperto quando serve.
@@ -1232,6 +1233,17 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
    */
   d => {
     colonna(d, 'compiti', 'madre', 'TEXT')
+  },
+
+  // 35 → 36 · user feedback retains its source identity after reindexing.
+  d => {
+    colonna(d, 'feed', 'contesto', 'TEXT')
+    colonna(d, 'compiti', 'contesto', 'TEXT')
+    for (const tabella of ['feed', 'compiti']) {
+      const righe = d.prepare(`SELECT f.id AS voce, d.* FROM ${tabella} f JOIN documenti d ON d.id = f.doc WHERE f.contesto IS NULL`).all() as unknown as (Documento & { voce: string })[]
+      const salva = d.prepare(`UPDATE ${tabella} SET contesto = ? WHERE id = ?`)
+      for (const r of righe) salva.run(JSON.stringify(contestoAttenzione(r)), r.voce)
+    }
   }
 
 ]
@@ -1313,8 +1325,8 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT']],
-  feed: [['perche', 'TEXT']]
+  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
+  feed: [['perche', 'TEXT'], ['contesto', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -1755,6 +1767,13 @@ export function eventi(da: string, a: string, limite = 60): Documento[] {
 /** Le voci del feed che puntavano a un documento sparito smettono di prometterlo. */
 function scollegaDalFeed(ids: string[]) {
   if (!ids.length) return
+  for (const id of ids) {
+    const d = documento(id)
+    if (!d) continue
+    const contesto = JSON.stringify(contestoAttenzione(d))
+    db.prepare('UPDATE feed SET contesto = COALESCE(contesto, ?) WHERE doc = ?').run(contesto, id)
+    db.prepare('UPDATE compiti SET contesto = COALESCE(contesto, ?) WHERE doc = ?').run(contesto, id)
+  }
   const upd = db.prepare('UPDATE feed SET doc = NULL WHERE doc = ?')
   for (const id of ids) upd.run(id)
 }
@@ -2448,11 +2467,12 @@ const OMBRA_GIORNI = 60
  */
 export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string }[]): number {
   const ins = db.prepare(`
-    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, stato, quando)
-    VALUES (?,?,?,?,?,?,?,?,'aperto',?)
+    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, contesto, stato, quando)
+    VALUES (?,?,?,?,?,?,?,?,?,'aperto',?)
     ON CONFLICT(id) DO UPDATE SET
       tipo=excluded.tipo, testo=excluded.testo, urgenza=excluded.urgenza,
-      fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche)
+      fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche),
+      contesto=COALESCE(feed.contesto, excluded.contesto)
   `)
   const ora = new Date().toISOString()
   // Un `doc` che non corrisponde a nessuna riga è un bottone «apri» che non
@@ -2461,16 +2481,19 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
   // con un nome e un contenuto che non si parlano.
   const esiste = db.prepare('SELECT 1 FROM documenti WHERE id = ?')
   const puliti = items.map(i => ({ ...i, doc: i.doc && esiste.get(i.doc) ? i.doc : undefined }))
+  const documenti = puliti.flatMap(i => i.doc ? [documento(i.doc)!] : [])
+  const ignorati = docsIgnoratiDalFeed(documenti)
+  const giaInLista = docsConRiga(documenti.map(d => d.id))
 
   const soglia = new Date(Date.now() - OMBRA_GIORNI * 86_400_000).toISOString()
   const giaConId = db.prepare('SELECT 1 FROM feed WHERE id = ?')
   const stessoDoc = db.prepare(`
-    SELECT 1 FROM feed WHERE doc = ? AND id != ? AND (stato = 'aperto' OR COALESCE(risposto, quando) >= ?)
+    SELECT 1 FROM feed WHERE doc = ? AND id != ? AND (stato IN ('aperto', 'fatto', 'scartato') OR COALESCE(risposto, quando) >= ?)
   `)
   // quelle con cui confrontare i titoli: aperte, o chiuse da poco
   const vicine = db.prepare(`
-    SELECT id, titolo, doc FROM feed WHERE stato = 'aperto' OR COALESCE(risposto, quando) >= ?
-  `).all(soglia) as { id: string; titolo: string; doc: string | null }[]
+    SELECT id, titolo, doc, stato, contesto FROM feed WHERE stato IN ('aperto', 'fatto', 'scartato') OR COALESCE(risposto, quando) >= ?
+  `).all(soglia) as { id: string; titolo: string; doc: string | null; stato: string; contesto: string | null }[]
   /*
    * Le parole decidono solo quando un documento non può: due voci nate da
    * due documenti diversi sono due cose anche se si assomigliano — due
@@ -2478,8 +2501,11 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
    * stesso mese — e la rete che le confondeva lasciava fuori la seconda in
    * silenzio, e la rimandava al modello a ogni lettura.
    */
-  const stessaCosa = (v: { id: string; titolo: string; doc: string | null }, i: { doc?: string; titolo: string }, id: string) => {
+  const stessaCosa = (v: { id: string; titolo: string; doc: string | null; stato: string; contesto: string | null }, i: { doc?: string; titolo: string }, id: string) => {
     if (v.id === id) return false
+    // Closed source-grounded work was already compared by source identity
+    // above. A new human request can legitimately use the same action title.
+    if (['fatto', 'scartato'].includes(v.stato) && (v.doc || v.contesto) && i.doc) return false
     // lo stesso titolo con una parola cambiata è lo stesso titolo, qualunque
     // documento gli abbiano appeso: vedi `titoloRiscritto`
     if (titoloRiscritto(v.titolo, i.titolo)) return true
@@ -2492,14 +2518,16 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
     for (const i of puliti) {
       const id = idFeed(i)
       if (!giaConId.get(id)) {
+        if (i.doc && (ignorati.has(i.doc) || giaInLista.has(i.doc))) continue
         if (i.doc && stessoDoc.get(i.doc, id, soglia)) continue
         if (vicine.some(v => stessaCosa(v, i, id))) continue
         nuove++
         // anche fra quelle di questo giro: il modello ne scrive due uguali più
         // spesso di quanto si creda
-        vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null })
+        vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null, stato: 'aperto', contesto: null })
       }
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, ora)
+      const d = i.doc ? documento(i.doc) : undefined
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()
@@ -2566,11 +2594,61 @@ export function docsSulFeed(ids: string[], entroGiorni = OMBRA_GIORNI): Set<stri
     const righe = db.prepare(`
       SELECT DISTINCT doc FROM feed
       WHERE doc IN (${pezzo.map(() => '?').join(',')})
-        AND (stato = 'aperto' OR COALESCE(risposto, quando) >= ?)
+        AND (stato IN ('aperto', 'fatto', 'scartato') OR COALESCE(risposto, quando) >= ?)
     `).all(...pezzo, soglia) as { doc: string }[]
     for (const r of righe) fuori.add(r.doc)
   }
   return fuori
+}
+
+type RispostaAttenzione = { doc: string | null; contesto: string | null; stato: string; motivo: string | null }
+function risposteAttenzione(): RispostaAttenzione[] {
+  return db.prepare(`
+    SELECT doc, contesto, stato, motivo FROM feed WHERE stato IN ('fatto', 'scartato')
+    UNION ALL
+    SELECT doc, contesto, CASE WHEN sparito IS NOT NULL OR stato = 'lasciato' THEN 'scartato' ELSE 'fatto' END AS stato, esito AS motivo
+    FROM compiti WHERE stato IN ('fatto', 'lasciato') OR sparito IS NOT NULL
+  `).all() as RispostaAttenzione[]
+}
+
+function contestoRisposta(r: RispostaAttenzione): ContestoAttenzione | null {
+  if (r.contesto) {
+    try {
+      const c = JSON.parse(r.contesto) as ContestoAttenzione
+      if (typeof c.id === 'string' && typeof c.corpo === 'string' && typeof c.titolo === 'string') return c
+    } catch { /* An old malformed snapshot does not prevent normal reads. */ }
+  }
+  const d = r.doc ? documento(r.doc) : undefined
+  return d ? contestoAttenzione(d) : null
+}
+
+function ricordaFonteAttenzione(tabella: 'feed' | 'compiti', id: string) {
+  const r = db.prepare(`SELECT doc FROM ${tabella} WHERE id = ? AND contesto IS NULL`).get(id) as { doc: string | null } | undefined
+  const d = r?.doc ? documento(r.doc) : undefined
+  if (d) db.prepare(`UPDATE ${tabella} SET contesto = ? WHERE id = ?`).run(JSON.stringify(contestoAttenzione(d)), id)
+}
+
+/** Explicit feedback never expires. Open cards do not match themselves;
+ * reopening/undo withdraws the feedback because current state is authoritative. */
+export type FeedbackAttenzione = { stato: 'fatto' | 'scartato'; motivo: string | null }
+export function feedbackAttenzione(docs: Documento[]): Map<string, FeedbackAttenzione> {
+  const fuori = new Map<string, FeedbackAttenzione>()
+  if (!docs.length) return fuori
+  const risposte = risposteAttenzione().map(r => ({ ...r, fonte: contestoRisposta(r) }))
+  for (const d of docs) {
+    for (const r of risposte) {
+      if (r.doc !== d.id && !(r.fonte && stessaRichiesta(d, r.fonte))) continue
+      const stato = r.stato === 'scartato' ? 'scartato' : 'fatto'
+      // Both suppress further tasks. Keep a dismissal visible if duplicate
+      // copies have conflicting historical states, rather than hiding it.
+      if (fuori.get(d.id)?.stato !== 'scartato') fuori.set(d.id, { stato, motivo: r.motivo })
+    }
+  }
+  return fuori
+}
+
+export function docsIgnoratiDalFeed(docs: Documento[]): Set<string> {
+  return new Set(feedbackAttenzione(docs).keys())
 }
 
 /**
@@ -2590,21 +2668,16 @@ export function docsSulFeed(ids: string[], entroGiorni = OMBRA_GIORNI): Set<stri
  * gmail.com non chiude gmail.com. Un indirizzo può stare sotto un dominio
  * che non conta, ed è esattamente il caso di tenerlo per indirizzo.
  */
-export function mittentiScartati(giorni = 90): { indirizzi: string[]; domini: string[] } {
-  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  const righe = db.prepare(`
-    SELECT DISTINCT d.autoreIndirizzo AS indirizzo FROM feed f
-    JOIN documenti d ON d.id = f.doc
-    WHERE f.stato = 'scartato' AND COALESCE(f.risposto, f.quando) >= ? AND d.autoreIndirizzo IS NOT NULL
-    ORDER BY COALESCE(f.risposto, f.quando) DESC
-  `).all(soglia) as { indirizzo: string }[]
-  const indirizzi = righe.map(r => r.indirizzo.toLowerCase())
-  const domini = new Set<string>()
-  for (const i of indirizzi) {
-    const dominio = i.slice(i.indexOf('@') + 1)
-    if (dominio && MITTENTE_MACCHINA.test(i) && !DOMINI_DI_TUTTI.has(dominio)) domini.add(dominio)
+export function mittentiScartati(_giorni = 90): { indirizzi: string[]; domini: string[] } {
+  const indirizzi = new Set<string>()
+  for (const r of risposteAttenzione()) {
+    if (r.stato !== 'scartato') continue
+    const c = contestoRisposta(r)
+    // One irrelevant request is not permission to silence a person, a
+    // shared team mailbox, or their whole company domain indefinitely.
+    if (c && mittenteAutomatico(c.autore)) indirizzi.add(indirizzoAttenzione(c.autore))
   }
-  return { indirizzi, domini: [...domini] }
+  return { indirizzi: [...indirizzi], domini: [] }
 }
 
 /**
@@ -2665,6 +2738,7 @@ export function elencoFeed(stato = 'aperto', oreMax = 0) {
  * detto: l'ho già mandato»), e per non riproporre la stessa cosa.
  */
 export function cambiaStatoFeed(id: string, stato: string, motivo?: string) {
+  ricordaFonteAttenzione('feed', id)
   const ora = new Date().toISOString()
   if (motivo === undefined) {
     /**
@@ -2823,10 +2897,15 @@ export function notiziePreseDal(quando: string): number {
  * rassegna di domani le ripesca dal feed e te le rimette davanti. Una riga che
  * resta è l'unico modo che ha una cosa di non tornare.
  */
-export function notizieScartate(giorni = 30): string[] {
-  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  return (db.prepare('SELECT id FROM notizie WHERE presa >= ? AND scartata IS NOT NULL')
-    .all(soglia) as { id: string }[]).map(r => r.id)
+export function notizieScartate(_giorni = 30): string[] {
+  return (db.prepare('SELECT id FROM notizie WHERE scartata IS NOT NULL')
+    .all() as { id: string }[]).map(r => r.id)
+}
+
+/** Permanent event identities for explicit reading/dismissal feedback. */
+export function notizieFeedback(): Pick<Notizia, 'id' | 'titolo' | 'letta' | 'scartata'>[] {
+  return db.prepare('SELECT id, titolo, letta, scartata FROM notizie WHERE letta IS NOT NULL OR scartata IS NOT NULL')
+    .all() as unknown as Pick<Notizia, 'id' | 'titolo' | 'letta' | 'scartata'>[]
 }
 
 /**
@@ -2870,10 +2949,9 @@ export function segnaNotiziaLetta(id: string) {
  */
 export function potaNotizie(giorni: number): number {
   const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  const vecchie = new Date(Date.now() - giorni * 3 * 86_400_000).toISOString()
   const r = db.prepare(
-    'DELETE FROM notizie WHERE (scartata IS NULL AND presa < ?) OR presa < ?'
-  ).run(soglia, vecchie)
+    'DELETE FROM notizie WHERE scartata IS NULL AND letta IS NULL AND presa < ?'
+  ).run(soglia)
   return Number(r.changes ?? 0)
 }
 
@@ -2998,7 +3076,12 @@ export type EmailPronta = {
 }
 
 /** Quello che una riga nata da un'automazione ha il permesso di aprire. */
-export type Concessione = { nomi: string[]; cartella?: string | null }
+export type Concessione = {
+  nomi: string[]
+  cartella?: string | null
+  selezione?: 'richieste-dirette'
+  ambitoSelezione?: string
+}
 
 /** Una domanda con le risposte già pronte da toccare. */
 export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
@@ -3330,6 +3413,7 @@ export function sbozzaCompito(id: string) {
 }
 
 export function cambiaStatoCompito(id: string, stato: string, esito?: string) {
+  if (stato === 'fatto' || stato === 'lasciato') ricordaFonteAttenzione('compiti', id)
   const ora = new Date().toISOString()
   const chiuso = stato === 'fatto' || stato === 'lasciato' ? ora : null
   if (esito === undefined) {
@@ -3422,6 +3506,7 @@ export function riapriGliAppesi(guaio: string): number {
  * esplicita e non un effetto collaterale.
  */
 export function scordaCompito(id: string) {
+  ricordaFonteAttenzione('compiti', id)
   const ora = new Date().toISOString()
   // anche togliere è una scrittura: una pietra tombale che non fa avanzare la
   // versione, il giorno della sincronizzazione perde contro qualunque modifica

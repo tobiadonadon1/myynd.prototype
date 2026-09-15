@@ -30,10 +30,49 @@ export type Nodo = {
 
 export type Ball = { nodes: Nodo[]; edges: [number, number][] }
 
+/** A document selection focuses only its own connections, across any source. */
+export function evidenzaMappa(ball: Ball, selezione: string, filtro: string | null): { nodi: Set<number>; archi: Set<number> } {
+  const nodi = new Set<number>(), archi = new Set<number>()
+  const documento = ball.nodes.findIndex(n => n.doc === selezione)
+  if (documento >= 0) {
+    nodi.add(documento)
+    ball.edges.forEach(([a, b], i) => {
+      if (a !== documento && b !== documento) return
+      archi.add(i); nodi.add(a); nodi.add(b)
+    })
+  } else if (filtro) {
+    ball.nodes.forEach((n, i) => { if (n.cluster === filtro) nodi.add(i) })
+    ball.edges.forEach(([a, b], i) => { if (nodi.has(a) || nodi.has(b)) archi.add(i) })
+  }
+  return { nodi, archi }
+}
+
 /** Il grafo come arriva dal server. */
 export type Grafo = {
-  nodi: { id: string; titolo: string; gruppo: string; fonte: string; quando: string | null }[]
+  nodi: NodoGrafo[]
   archi: [number, number, number][]
+}
+
+export type NodoGrafo = {
+  id: string; titolo: string; gruppo: string; fonte: string; quando: string | null
+  autore?: string | null; estratto?: string
+  progetti?: { id: string; nome: string; obiettivo: string; stato: string }[]
+  attenzione?: 'feed' | 'brief' | 'ignora'; motivoAttenzione?: string
+  feedback?: 'fatto' | 'scartato' | null
+}
+
+/** Actual neighbouring documents, ordered by the graph's shared-topic weight. */
+export function documentiCollegati(g: Grafo | null, id: string, limite = 6): NodoGrafo[] {
+  if (!g) return []
+  const i = g.nodi.findIndex(n => n.id === id)
+  if (i < 0) return []
+  const pesi = new Map<number, number>()
+  for (const [a, b, peso] of g.archi) {
+    if (!Number.isInteger(a) || !Number.isInteger(b) || !Number.isFinite(peso) || peso <= 0) continue
+    const altro = a === i ? b : b === i ? a : -1
+    if (altro >= 0 && altro !== i && g.nodi[altro]) pesi.set(altro, Math.max(pesi.get(altro) ?? 0, peso))
+  }
+  return [...pesi].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, limite).map(([j]) => g.nodi[j])
 }
 
 const MAX_NODI = 2600
@@ -87,7 +126,7 @@ export function costruisciDaGrafo(g: Grafo): Ball {
     z[i] = c[2] + (rnd() - 0.5) * 0.5
   }
 
-  const archi = g.archi.filter(([i, j]) => i < n && j < n)
+  const archi = g.archi.filter(([i, j, peso]) => Number.isInteger(i) && Number.isInteger(j) && i >= 0 && j >= 0 && i < n && j < n && i !== j && Number.isFinite(peso) && peso > 0)
   const pesoMax = archi.reduce((m, a) => Math.max(m, a[2]), 1)
 
   const GIRI = 240

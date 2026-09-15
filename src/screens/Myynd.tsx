@@ -613,8 +613,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Titolo sopra, data sotto — identico alla finestra dell'app. Sono due
           facce della stessa cosa e devono aprirsi con la stessa immagine. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '52px 4px 26px' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: '52px 4px 26px' }}>
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
             margin: 0, padding: '0 0 0 3px', fontWeight: 400, textWrap: 'pretty'
@@ -724,14 +724,15 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           */}
           {v.heroHaDoc && (
             <Hov as="button" type="button" onClick={v.apriDoc}
-              aria-label={`${v.heroApreCosa}: ${v.heroTitolo}`}
+              aria-label={`${t('Vedi la fonte')}: ${v.heroFonteDettaglio || v.heroTitolo}`}
               style={{
                 alignSelf: 'flex-start', maxWidth: '100%', marginTop: 9, padding: 0, border: 'none',
                 background: 'none', fontFamily: 'inherit', fontSize: '13px', fontWeight: 500,
                 color: 'rgba(255,247,240,.74)', textAlign: 'left', textDecoration: 'none', cursor: 'pointer'
               }}
-              hover={{ color: '#FFF7F0' }}>{v.heroApreCosa}</Hov>
+              hover={{ color: '#FFF7F0' }}>{v.heroFonteDettaglio || t('Vedi la fonte')}</Hov>
           )}
+          {!v.heroHaDoc && <div style={{ marginTop: 9, fontSize: 13, color: 'rgba(255,247,240,.74)' }}>{t('Nessun collegamento alla fonte disponibile.')}</div>}
           <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
             {v.heroTesto}
             {v.heroTagliato && (
@@ -753,11 +754,17 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             stessa cosa del bottone Fatto due centimetri più in su. Adesso c'è
             quello che si fa quasi sempre, e un «⋯» per il resto.
           */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 20, position: 'relative' }}>
             {/* uno solo pieno: con il rigo aperto il pieno è «Manda», e «Fatto» si fa di contorno */}
             <Hov as="button" onClick={v.heroPrimary}
               style={primario(!v.scriviAperto)}
               hover={v.scriviAperto ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{t('Fatto')}</Hov>
+            {v.heroHaDoc && (
+              <Hov as="button" type="button" onClick={v.portamiHero} disabled={v.heroAprendoFonte}
+                title={v.heroFonteDettaglio || v.heroApreCosa}
+                style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.6)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: v.heroAprendoFonte ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: v.heroAprendoFonte ? .65 : 1 }}
+                hover={{ background: 'rgba(255,247,240,.16)' }}>{v.heroAprendoFonte ? t('Un momento…') : t('Portami lì')}</Hov>
+            )}
             {lista && (
               <Hov as="button" onClick={affidaHero} disabled={affidando}
                 style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: affidando ? 'default' : 'pointer', fontFamily: 'inherit', opacity: affidando ? 0.62 : 1 }}

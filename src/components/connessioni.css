@@ -50,3 +50,5 @@
 .connections-group-heading:after{content:'';flex:1;height:1px;background:#22271f0f}
 .connections-group.da-collegare .connections-group-heading{color:#8e3f1f}
 .connections-group.da-collegare .connections-group-heading:after{background:#c4623b1f}
+
+.connector-tile.connected.needs-access{--connector-face:#fff4e4;background:linear-gradient(145deg,#fff8eeee,#f4e5cfd9);border-color:#bd915880;color:#805b32}.needs-access .connector-tile-status{color:#805b32}.needs-access .connector-tile-status i{background:#b7803c}

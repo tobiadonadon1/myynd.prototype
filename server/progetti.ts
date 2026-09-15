@@ -25,6 +25,7 @@ import { join } from 'node:path'
 import { cartella } from './config.ts'
 import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
 import db, { compito, type Compito } from './store.ts'
+import { compitiAttuali } from './attenzione.ts'
 
 export type Stato = 'attivo' | 'fermo' | 'chiuso'
 export const STATI: Stato[] = ['attivo', 'fermo', 'chiuso']
@@ -39,7 +40,7 @@ export type Progetto = {
   aggiornato: string
   note: string
   /** Chi l'ha scritto: lui, o il punto dal materiale. */
-  origine: 'mano' | 'punto'
+  origine: 'mano' | 'punto' | 'conversazione'
 }
 
 /** Quanti se ne nominano al modello: oltre, non è più «su cosa sta lavorando». */
@@ -58,7 +59,7 @@ const daRiga = (r: Riga): Progetto => ({
   dal: r.dal,
   aggiornato: r.aggiornato,
   note: r.note ?? '',
-  origine: r.origine === 'punto' ? 'punto' : 'mano'
+  origine: r.origine === 'punto' || r.origine === 'conversazione' ? r.origine : 'mano'
 })
 
 const chiave = (s: string) => s.trim().toLowerCase()
@@ -113,6 +114,23 @@ export function vivi(): Progetto[] {
   return elenco().filter(p => p.stato !== 'chiuso')
 }
 
+/** Imported goals were sometimes used as project names. Keep the original
+ * records editable, but do not give a second vote to an inferred alias. */
+function eUnAlias(nome: string, base: Progetto): boolean {
+  const [prefisso, ...resto] = nome.split(/\s*[:—–]\s*/)
+  const coda = resto.join(' ').trim()
+  if (!coda || nomeNormalizzato(prefisso) !== nomeNormalizzato(base.nome)) return false
+  return /\b(?:i want|i am|my goal|we want|our goal|voglio|vogliamo|il mio obiettivo|obiettivo)\b/i.test(coda) || eLObiettivo(base, coda)
+}
+
+export function perContesto(includiChiusi = false): Progetto[] {
+  const tutti = elenco()
+  return tutti.filter(p => {
+    if (!includiChiusi && p.stato === 'chiuso') return false
+    return p.origine === 'mano' || !tutti.some(base => base.id !== p.id && base.nome.length < p.nome.length && eUnAlias(p.nome, base))
+  })
+}
+
 export function trovaPerNome(nome: string): Progetto | undefined {
   const k = chiave(nome)
   if (!k) return undefined
@@ -134,16 +152,18 @@ export function trova(id: string): Progetto | null {
  * passa di qui per un nome chiuso: lo filtra prima, ed è la promessa che un
  * progetto che ha detto di non essere non ricompare.
  */
-export function scrivi(p: { nome: string; obiettivo?: string; origine?: 'mano' | 'punto'; dal?: string; note?: string }): Progetto {
+export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto['origine']; dal?: string; note?: string }): Progetto {
   const nome = p.nome.trim()
   if (!nome) throw new Error('Un progetto ha bisogno di un nome.')
   const ora = new Date().toISOString()
-  const gia = trovaPerNome(nome)
+  const gia = trovaPerNome(nome) ?? (p.origine && p.origine !== 'mano'
+    ? elenco().find(base => eUnAlias(nome, base)) : undefined)
   if (gia) {
     const obiettivo = gia.obiettivo || (p.obiettivo ?? '').trim()
-    const stato: Stato = p.origine === 'punto' ? gia.stato : (gia.stato === 'chiuso' ? 'attivo' : gia.stato)
-    db.prepare('UPDATE progetti SET obiettivo = ?, stato = ?, aggiornato = ? WHERE id = ?')
-      .run(obiettivo || null, stato, ora, gia.id)
+    const stato: Stato = p.origine && p.origine !== 'mano' ? gia.stato : (gia.stato === 'chiuso' ? 'attivo' : gia.stato)
+    const origine = !p.origine || p.origine === 'mano' ? 'mano' : gia.origine
+    db.prepare('UPDATE progetti SET obiettivo = ?, stato = ?, origine = ?, aggiornato = ? WHERE id = ?')
+      .run(obiettivo || null, stato, origine, ora, gia.id)
     return trova(gia.id)!
   }
   const id = nuovoId()
@@ -165,11 +185,13 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
   if (c.stato !== undefined && !(STATI as string[]).includes(c.stato)) {
     throw new Error('Lo stato di un progetto è attivo, fermo o chiuso.')
   }
-  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, aggiornato = ? WHERE id = ?').run(
+  const origine = c.nome !== undefined || c.obiettivo !== undefined ? 'mano' : p.origine
+  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, aggiornato = ? WHERE id = ?').run(
     nome,
     (c.obiettivo !== undefined ? c.obiettivo.trim() : p.obiettivo) || null,
     c.stato ?? p.stato,
     (c.note !== undefined ? c.note.trim() : p.note) || null,
+    origine,
     new Date().toISOString(),
     id
   )
@@ -201,7 +223,11 @@ export function progresso(id: string): Progresso {
     ORDER BY CASE stato WHEN 'chiede' THEN 0 WHEN 'pronto' THEN 1 WHEN 'delegato' THEN 2
       WHEN 'aperto' THEN 3 ELSE 4 END, CASE WHEN giorno IS NULL THEN 1 ELSE 0 END,
       giorno ASC, aggiornato DESC`).all(id) as { id: string }[]
-  const tutte = ids.flatMap(r => compito(r.id) ?? [])
+  const attuali = new Set(compitiAttuali().map(c => c.id))
+  // The same current work as To do, plus its completed/left history. Hidden,
+  // untouched Brief suggestions stay stored without inflating project work.
+  const tutte = ids.flatMap(r => compito(r.id) ?? []).filter(c =>
+    c.stato === 'fatto' || c.stato === 'lasciato' || attuali.has(c.id))
   const conta = (...stati: string[]) => tutte.filter(c => stati.includes(c.stato)).length
   return {
     aperte: conta('aperto'), inCorso: conta('delegato'), daRivedere: conta('pronto', 'chiede'),
@@ -218,12 +244,18 @@ export function progresso(id: string): Progresso {
  * Non è un limite tecnico — è che «su cosa sta lavorando» con venti voci non
  * vuol dire più niente, e ogni riga è prompt pagato tre volte al giorno.
  */
-export function perIlModello(): string {
-  return vivi().slice(0, PER_IL_MODELLO)
+export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati = false): string {
+  const tutti = perContesto()
+  const nominati = tutti.filter(p => nominaAmbito(discorso, p.nome))
+  const rilevanza = (p: Progetto) => nominaAmbito(discorso, p.nome) ? 2 : Number(tocca(p, discorso))
+  return (soloNominati && nominati.length ? nominati : tutti)
+    .sort((a, b) => rilevanza(b) - rilevanza(a)).slice(0, tetto)
     .map(p => {
       const a = progresso(p.id)
       const stato = a.attivita.length ? ` · ${a.completate} attività concluse${a.prossima ? `; prossima: ${a.prossima.testo.slice(0, 160)} [${a.prossima.stato}]` : ''}` : ''
-      return `— ${p.nome}${p.obiettivo ? `: ${p.obiettivo}` : ''} (${p.stato})${stato}`
+      const origine = p.origine === 'mano' ? 'registrato dalla persona' : p.origine === 'conversazione' ? 'dichiarato nella conversazione'
+        : p.obiettivo ? 'progetto inizialmente inferito dalle fonti; obiettivo salvato in Memoria' : 'inferito dalle fonti, non confermato'
+      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}`
     })
     .join('\n')
 }

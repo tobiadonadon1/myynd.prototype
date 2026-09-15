@@ -175,7 +175,7 @@ test('dovePortare: le sei strade, decise senza toccare niente', () => {
   // la stessa mail senza Message-ID: si apre il programma, e si smette di promettere
   assert.deepEqual(
     s.dovePortare({ ...RIGA, doc: 'posta:INBOX:123' }, { fonte: 'posta', percorso: 'INBOX', messageId: null }),
-    { dove: 'posta', url: '' }
+    { dove: 'niente', errore: 'Questa riga non viene da nessun posto che possa aprire.' }
   )
 
   // (b) un file sul disco

@@ -40,10 +40,11 @@ after(() => {
   rmSync(CASA, { recursive: true, force: true })
 })
 
+const RECENTE = new Date(Date.now() - 3_600_000).toISOString()
 const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Documento => ({
-  id, fonte: 'posta', tipo: 'email', titolo, corpo: `Il testo di ${titolo}.`,
+  id, fonte: 'posta', tipo: 'email', titolo, corpo: `Puoi confermare i dettagli di ${titolo}? Attendo una risposta.`,
   autore: 'Rossi <rossi@esempio.it>', percorso: 'INBOX',
-  quando: '2026-09-01T10:00:00.000Z', gruppo: 'posta', ...sopra
+  quando: RECENTE, gruppo: 'posta', ...sopra
 })
 
 const voce = (titolo: string, doc?: string) =>
@@ -151,14 +152,14 @@ const testoDi = (r: Record<string, unknown>) =>
 test('quello che è già sul feed non si rilegge e si dice al modello per titolo', async () => {
   store.azzeraTutto()
   store.salvaDocumenti([
-    doc('posta:INBOX:10', 'Preventivo Rossi', { quando: '2026-09-03T10:00:00.000Z' }),
-    doc('posta:INBOX:11', 'Fattura Bianchi', { quando: '2026-09-02T10:00:00.000Z' })
+    doc('posta:INBOX:10', 'Preventivo Rossi'),
+    doc('posta:INBOX:11', 'Fattura Bianchi', { corpo: 'Puoi pagare la fattura entro venerdì?' })
   ])
   // la voce di ieri, ancora aperta, nata dal preventivo
   store.salvaFeed([voce('Preventivo Rossi da confermare', 'posta:INBOX:10')])
 
   const ricevute = fornitoreFinto([
-    { tipo: 'Da decidere', titolo: 'Fattura Bianchi da pagare', testo: 'Scade venerdì.', urgenza: 'entro venerdì', fonte: 'posta', doc: 'posta:INBOX:11' }
+    { tipo: 'Da decidere', titolo: 'Paga la fattura di Bianchi', testo: 'Bianchi chiede il pagamento della fattura entro venerdì.', urgenza: 'entro venerdì', fonte: 'posta', doc: 'posta:INBOX:11', perche: 'Bianchi attende il pagamento della fattura.', prova: 'Puoi pagare la fattura entro venerdì?' }
   ])
   const voci = await claude.generaFeed()
   assert.equal(ricevute.length, 1, 'il modello va chiamato una volta')
@@ -205,7 +206,7 @@ test('la posta di massa, quella scritta da lui e quella letta da giorni non si l
   store.salvaDocumenti([
     doc('posta:INBOX:40', 'Offerta Chase', { autore: 'Chase <no-reply@chase.com>', massa: true, quando: stamattina }),
     doc('posta:INBOX:41', 'Re: preventivo', { inviato: true, quando: stamattina }),
-    doc('posta:INBOX:42', 'Verbale di lunedì', { letto: true, quando: ieriLAltro }),
+    doc('posta:INBOX:42', 'Verbale di lunedì', { letto: true, quando: ieriLAltro, corpo: 'Il verbale della riunione, per conoscenza.' }),
     doc('posta:INBOX:43', 'Conferma per giovedì?', { letto: true, quando: stamattina }),
     doc('posta:INBOX:44', 'Contratto da firmare', { letto: false, quando: ieriLAltro })
   ])
@@ -220,11 +221,11 @@ test('la posta di massa, quella scritta da lui e quella letta da giorni non si l
   assert.match(mandato, /id: posta:INBOX:44/)
 })
 
-test('chi ha scartato non torna: per indirizzo, e per dominio se scriveva una macchina', async () => {
+test('lo scarto ricorda la richiesta e il mittente automatico, senza bloccare persone o domini', async () => {
   store.azzeraTutto()
   store.salvaDocumenti([
     doc('posta:INBOX:50', 'Promo caffè', { autore: 'Caffè <promo@caffe.it>' }),
-    doc('posta:INBOX:51', 'Novità caffè', { autore: 'Caffè <novita@caffe.it>' }),
+    doc('posta:INBOX:51', 'Novità caffè', { autore: 'Caffè <novita@caffe.it>', massa: true }),
     doc('posta:INBOX:52', 'Ciao', { autore: 'Bianchi <bianchi@gmail.com>' }),
     doc('posta:INBOX:53', 'Ci sei?', { autore: 'Verdi <verdi@gmail.com>' }),
     doc('posta:INBOX:54', 'Preventivo', { autore: 'Rossi <rossi@esempio.it>' })
@@ -233,9 +234,9 @@ test('chi ha scartato non torna: per indirizzo, e per dominio se scriveva una ma
   for (const v of store.elencoFeed('aperto')) store.cambiaStatoFeed(v.id, 'scartato', 'Non mi interessa.')
 
   const m = store.mittentiScartati()
-  assert.deepEqual(m.indirizzi.sort(), ['bianchi@gmail.com', 'promo@caffe.it'])
+  assert.deepEqual(m.indirizzi.sort(), ['promo@caffe.it'])
   // gmail.com è di tutti: scartare Bianchi non chiude Verdi
-  assert.deepEqual(m.domini, ['caffe.it'])
+  assert.deepEqual(m.domini, [])
 
   const ricevute = fornitoreFinto([])
   await claude.generaFeed()
@@ -244,14 +245,14 @@ test('chi ha scartato non torna: per indirizzo, e per dominio se scriveva una ma
   assert.doesNotMatch(mandato, /id: posta:INBOX:52/)
   assert.match(mandato, /id: posta:INBOX:53/, 'una persona su gmail è stata chiusa fuori con un\'altra')
   assert.match(mandato, /id: posta:INBOX:54/)
-  assert.match(mandato, /Ha scartato la posta di questi mittenti[^\n]*\n[^\n]*promo@caffe\.it/, 'i mittenti scartati non si dicono al modello')
+  assert.match(mandato, /Ha scartato la posta di questi mittenti automatici[^\n]*\n[^\n]*promo@caffe\.it/, 'i mittenti scartati non si dicono al modello')
 })
 
 test('al massimo cinque voci: nello schema, nel prompt, e su quello che torna', async () => {
   store.azzeraTutto()
-  store.salvaDocumenti([doc('posta:INBOX:60', 'Sette cose')])
+  store.salvaDocumenti(Array.from({ length: 7 }, (_, i) => doc(`posta:INBOX:${60 + i}`, `Cosa ${i}`)))
   const sette = Array.from({ length: 7 }, (_, i) =>
-    ({ tipo: 'Da decidere', titolo: `Cosa ${i}`, testo: 'x', urgenza: 'oggi', fonte: 'posta', doc: 'posta:INBOX:60' }))
+    ({ tipo: 'Da decidere', titolo: `Conferma a Rossi i dettagli di Cosa ${i}`, testo: `Rossi chiede di confermare i dettagli di Cosa ${i}.`, urgenza: 'nessuna fretta', fonte: 'posta', doc: `posta:INBOX:${60 + i}`, perche: 'Rossi attende la tua conferma.', prova: `Puoi confermare i dettagli di Cosa ${i}?` }))
   const ricevute = fornitoreFinto(sette)
   const voci = await claude.generaFeed()
   assert.equal(voci.length, 5, 'un fornitore che ha ignorato il tetto ha riempito il feed')
@@ -273,18 +274,18 @@ test('gli obiettivi entrano nel prompt, il documento che tocca un progetto passa
   progetti.chiudi(chiuso.id)
   // la posta della luce è più recente, e senza i progetti verrebbe letta per prima
   store.salvaDocumenti([
-    doc('posta:INBOX:80', 'Fattura della luce di settembre', { autore: 'Enel <fatture@enel.it>', quando: '2026-09-07T10:00:00.000Z' }),
-    doc('posta:INBOX:81', 'Re: seed', { autore: 'Bianchi <bianchi@fondo.it>', corpo: 'Confermo il round: ci vediamo martedì.', quando: '2026-09-06T10:00:00.000Z' }),
-    doc('posta:INBOX:82', 'Aggiornamento su Myynd per papà', { quando: '2026-09-05T10:00:00.000Z' })
+    doc('posta:INBOX:80', 'Fattura della luce di settembre', { autore: 'Enel <fatture@enel.it>', quando: new Date(Date.now() - 3_600_000).toISOString() }),
+    doc('posta:INBOX:81', 'Re: seed', { autore: 'Bianchi <bianchi@fondo.it>', corpo: 'Puoi confermare il round seed di Nextas per martedì?', quando: new Date(Date.now() - 7_200_000).toISOString() }),
+    doc('posta:INBOX:82', 'Aggiornamento su Myynd per papà', { quando: new Date(Date.now() - 10_800_000).toISOString() })
   ])
   const ricevute = fornitoreFinto([
-    { tipo: 'Da decidere', titolo: 'Bianchi conferma il round', testo: 'Martedì.', urgenza: 'entro martedì', fonte: 'posta', doc: 'posta:INBOX:81', perche: ' Muove il round seed di Nextas: serve una data. ' }
+    { tipo: 'Da decidere', titolo: 'Conferma a Bianchi il round seed', testo: 'Bianchi chiede la conferma del round seed di Nextas per martedì.', urgenza: 'entro martedì', fonte: 'posta', doc: 'posta:INBOX:81', perche: ' Muove il round seed di Nextas: serve una data. ', prova: 'Puoi confermare il round seed di Nextas per martedì?' }
   ])
   const voci = await claude.generaFeed()
   assert.equal(ricevute.length, 1)
   const mandato = testoDi(ricevute[0])
-  assert.match(mandato, /Su cosa sta lavorando, e a cosa punta ciascuno[^\n]*\n— Nextas: Chiudere il round seed con Bianchi entro ottobre \(attivo\)/)
-  assert.doesNotMatch(mandato, /Myynd per papà: Non è un progetto/, 'un progetto chiuso è arrivato al modello come obiettivo')
+  assert.match(mandato, /Su cosa sta lavorando, e a cosa punta ciascuno[^\n]*\n— Progetto: Nextas \(attivo; registrato dalla persona\)\. Obiettivo di Nextas: Chiudere il round seed con Bianchi entro ottobre/)
+  assert.doesNotMatch(mandato, /Obiettivo di Myynd per papà:/, 'un progetto chiuso è arrivato al modello come obiettivo')
   // l'ordine del materiale: prima quello che tocca il progetto
   const ordine = [...mandato.matchAll(/^id: (\S+)/gm)].map(m => m[1])
   assert.deepEqual(ordine, ['posta:INBOX:81', 'posta:INBOX:80', 'posta:INBOX:82'], `l'ordine è ${ordine.join(', ')}`)
@@ -305,7 +306,7 @@ test('gli obiettivi entrano nel prompt, il documento che tocca un progetto passa
   assert.equal(store.elencoFeed('aperto')[0].perche, 'Muove il round seed di Nextas: serve una data.')
 })
 
-test('senza progetti scritti il prompt non ne parla, e una voce senza perché passa lo stesso', async () => {
+test('senza progetti il prompt non ne parla, e una voce vaga senza perché viene rifiutata', async () => {
   store.azzeraTutto()
   store.salvaDocumenti([doc('posta:INBOX:90', 'Una cosa')])
   const ricevute = fornitoreFinto([
@@ -313,9 +314,8 @@ test('senza progetti scritti il prompt non ne parla, e una voce senza perché pa
   ])
   const voci = await claude.generaFeed()
   assert.doesNotMatch(testoDi(ricevute[0]), /Su cosa sta lavorando/)
-  assert.equal(voci[0].perche, '')
-  assert.equal(store.salvaFeed(voci), 1)
-  assert.equal(store.elencoFeed('aperto')[0].perche, null)
+  assert.deepEqual(voci, [])
+  assert.equal(store.salvaFeed(voci), 0)
 })
 
 // — il feed si tiene corto —
@@ -400,8 +400,8 @@ test('«feed» arriva sul filo dei compiti, e solo a chi è la stessa persona', 
 const file = (percorso: string): Documento => ({
   id: `desktop:${percorso}`, fonte: 'desktop', tipo: 'documento',
   titolo: percorso.slice(percorso.lastIndexOf('/') + 1),
-  corpo: 'Il testo del file, abbastanza lungo da contare come documento.',
-  autore: null, percorso, quando: '2026-09-01T10:00:00.000Z', gruppo: 'documenti'
+  corpo: 'Per il progetto Nextas: puoi firmare il contratto allegato entro venerdì?',
+  autore: null, percorso, quando: new Date(Date.now() - 3_600_000).toISOString(), gruppo: 'documenti'
 })
 
 const DA_ATTREZZI = '/Users/tobia/pinokio/bin/miniforge/pkgs/git-2.55.0/share/doc/git/large-object-promisors.html'
@@ -409,6 +409,7 @@ const CONTRATTO = '/Users/tobia/Documents/Contratto.pdf'
 
 test('un file di un albero di attrezzi non arriva al modello, un contratto sì', async () => {
   store.azzeraTutto()
+  progetti.scrivi({ nome: 'Nextas', obiettivo: 'Firmare il contratto del round seed' })
   store.salvaDocumenti([file(DA_ATTREZZI), file(CONTRATTO), file('/Users/tobia/Documents/Archivio/2024/2023/Vecchia.pdf')])
   const ricevute = fornitoreFinto([])
   await claude.generaFeed()
@@ -437,16 +438,16 @@ test('con il solo rumore dal disco non si chiama nessun modello', async () => {
 // ancora la voce si butta: una voce in meno non la nota nessuno.
 
 const IN_ITALIANO = [{
-  tipo: 'Da decidere', titolo: 'Il preventivo di Rossi non è ancora firmato',
-  testo: 'La scadenza è venerdì e non ha ancora risposto alla mail.',
-  urgenza: 'entro venerdì', fonte: 'posta', doc: 'posta:INBOX:95',
-  perche: 'Serve una risposta per il progetto di Rossi.'
+  tipo: 'Da decidere', titolo: 'Rispondi a Rossi sui dettagli del preventivo',
+  testo: 'Rossi chiede la conferma dei dettagli del preventivo. Rispondi alla sua email.',
+  urgenza: 'nessuna fretta', fonte: 'posta', doc: 'posta:INBOX:95',
+  perche: 'Serve una risposta per il progetto di Rossi.', prova: 'Puoi confermare i dettagli di Preventivo Rossi?'
 }]
 const IN_INGLESE = [{
-  tipo: 'Da decidere', titolo: 'The Rossi quote is not signed yet',
-  testo: 'The deadline is Friday and there is no reply to the email.',
-  urgenza: 'by Friday', fonte: 'posta', doc: 'posta:INBOX:95',
-  perche: 'A reply is needed for the Rossi project.'
+  tipo: 'Da decidere', titolo: 'Reply to Rossi about the quote details',
+  testo: 'Rossi asks you to confirm the quote details. Reply with your confirmation.',
+  urgenza: 'no rush', fonte: 'posta', doc: 'posta:INBOX:95',
+  perche: 'A reply is needed for the Rossi project.', prova: 'Puoi confermare i dettagli di Preventivo Rossi?'
 }]
 /** L'ultimo messaggio mandato al modello: quello dove finisce l'ordine urlato. */
 const ultimoMessaggio = (r: Record<string, unknown>) =>
@@ -470,7 +471,7 @@ test('una voce nella lingua giusta passa con una chiamata sola', async () => {
   const voci = await claude.generaFeed()
   assert.equal(ricevute.length, 1, 'ha richiesto una risposta che andava bene')
   assert.equal(voci.length, 1)
-  assert.equal(voci[0].titolo, 'The Rossi quote is not signed yet')
+  assert.equal(voci[0].titolo, 'Reply to Rossi about the quote details')
 })
 
 test('e la stessa regola al contrario: un\'app in italiano non tiene una voce inglese', async () => {
@@ -514,4 +515,94 @@ test('ma due cose davvero diverse restano due, anche se si somigliano', () => {
     voce('Fattura di marzo a Rossi da pagare', 'posta:INBOX:11'),
     voce('Fattura di aprile a Rossi da pagare', 'posta:INBOX:12')
   ]), 2, 'due mesi diversi sono diventati una voce sola')
+})
+
+test('done and never mind survive months, source removal and folder reindexing', () => {
+  for (const stato of ['fatto', 'scartato']) {
+    store.azzeraTutto()
+    const originale = doc('posta:INBOX:501', 'Nextas contract review', { messageId: 'same-message', filo: 'nextas-thread', corpo: 'Could you review the Nextas contract and confirm the proposed terms?' })
+    store.salvaDocumenti([originale])
+    store.salvaFeed([voce('Review the Nextas contract for Sara', originale.id)])
+    const v = store.elencoFeed()[0]
+    store.cambiaStatoFeed(v.id, stato)
+    store.default.prepare('UPDATE feed SET risposto = ? WHERE id = ?').run('2020-01-01T00:00:00Z', v.id)
+    assert.ok(store.docsSulFeed([originale.id]).has(originale.id))
+    store.scordaDocumenti([originale.id])
+    store.chiudiIndici()
+    const copia = { ...originale, id: 'posta:Archive:77', quando: new Date().toISOString() }
+    store.salvaDocumenti([copia])
+    assert.ok(store.docsIgnoratiDalFeed([copia]).has(copia.id), stato)
+    assert.equal(store.salvaFeed([voce('Confirm the proposal terms with Sara', copia.id)]), 0)
+  }
+})
+
+test('done and deleted tasks retain their source feedback permanently', () => {
+  for (const gesto of ['fatto', 'lasciato', 'elimina']) {
+    store.azzeraTutto()
+    const originale = doc('posta:INBOX:601', 'Nextas contract', { messageId: 'task-message', corpo: 'Could you review the Nextas contract and confirm your approval?' })
+    store.salvaDocumenti([originale])
+    store.scriviCompito({ id: 'task-feedback', testo: 'Review the Nextas contract', ordine: 'a', origine: 'punto', doc: originale.id })
+    if (gesto === 'elimina') store.scordaCompito('task-feedback')
+    else store.cambiaStatoCompito('task-feedback', gesto)
+    store.default.prepare('UPDATE compiti SET chiuso = ?, aggiornato = ?, sparito = CASE WHEN sparito IS NULL THEN NULL ELSE ? END WHERE id = ?')
+      .run('2020-01-01', '2020-01-01', '2020-01-01', 'task-feedback')
+    store.scordaDocumenti([originale.id])
+    const copia = { ...originale, id: 'posta:Archive:601' }
+    store.salvaDocumenti([copia])
+    assert.ok(store.docsIgnoratiDalFeed([copia]).has(copia.id), gesto)
+    assert.equal(store.salvaFeed([voce('Sara is waiting for the contract decision', copia.id)]), 0)
+  }
+})
+
+test('feedback is scoped: new work from the same person is not silenced, and Undo withdraws learning', () => {
+  store.azzeraTutto()
+  const precedente = doc('posta:INBOX:701', 'Contract review', { filo: 'same-thread', corpo: 'Could you review the Nextas contract for our seed investment?' })
+  const nuova = doc('posta:INBOX:702', 'Contract review', { filo: 'same-thread', corpo: 'Could you review the supplier agreement for the website redesign?' })
+  store.salvaDocumenti([precedente, nuova])
+  store.salvaFeed([voce('Review the contract for Rossi', precedente.id)])
+  const prima = store.elencoFeed()[0]
+  store.cambiaStatoFeed(prima.id, 'scartato')
+  assert.ok(!store.docsIgnoratiDalFeed([nuova]).has(nuova.id))
+  assert.equal(store.salvaFeed([voce('Review the contract for Rossi', nuova.id)]), 1, 'identical action labels do not erase distinct source requests')
+  store.cambiaStatoFeed(prima.id, 'aperto')
+  assert.ok(!store.docsIgnoratiDalFeed([precedente]).has(precedente.id), 'Undo must undo source-level learning too')
+})
+
+test('already answered email is not resurfaced as needing a reply', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:801', 'Contract question', { filo: 'answered-thread', quando: new Date(Date.now() - 7_200_000).toISOString() }),
+    doc('posta:SENT:802', 'Re: Contract question', { filo: 'answered-thread', inviato: true, quando: new Date(Date.now() - 3_600_000).toISOString() })
+  ])
+  const richieste = fornitoreFinto([])
+  assert.deepEqual(await claude.generaFeed(), [])
+  assert.equal(richieste.length, 0)
+})
+
+test('model output cannot attach a vague or fabricated action to a real source', async () => {
+  store.azzeraTutto()
+  const d = doc('posta:INBOX:901', 'Nextas approval', { corpo: 'Could you review the Nextas contract and confirm your approval?' })
+  store.salvaDocumenti([d])
+  const valida = { tipo: 'Da decidere', titolo: 'Review the Nextas contract', testo: 'Rossi asks you to review the Nextas contract and confirm your approval.', urgenza: 'no rush', fonte: 'made-up-source', doc: d.id, perche: 'Rossi is waiting for your approval.', prova: d.corpo }
+  fornitoreFinto([
+    null, {}, { ...valida, doc: 'nonexistent-source' }, { ...valida, testo: 'Random gibberish' },
+    { ...valida, titolo: 'Update the Nextas repository' }, { ...valida, prova: 'Please send a payment today.' },
+    { ...valida, urgenza: 'by tomorrow' }, valida, { ...valida, titolo: 'Reply to Rossi about Nextas' }
+  ] as object[], 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 1)
+  assert.equal(voci[0].doc, d.id)
+  assert.equal(voci[0].fonte, 'posta', 'source provenance comes from the indexed source, not the model')
+})
+
+test('a task created while the model is answering prevents a duplicate feed card at save time', async () => {
+  store.azzeraTutto()
+  const d = doc('posta:INBOX:950', 'Nextas review', { corpo: 'Could you review the Nextas contract and confirm your approval?' })
+  store.salvaDocumenti([d])
+  fornitoreFinto([{ tipo: 'Da decidere', titolo: 'Review the Nextas contract', testo: 'Rossi asks you to review the Nextas contract and confirm your approval.', urgenza: 'no rush', fonte: 'posta', doc: d.id, perche: 'Rossi is waiting for your approval.', prova: d.corpo }], 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 1)
+  store.scriviCompito({ id: 'race-task', testo: 'Review the Nextas contract', ordine: 'a', origine: 'punto', doc: d.id })
+  assert.equal(store.salvaFeed(voci), 0)
+  assert.equal(store.elencoFeed().length, 0)
 })

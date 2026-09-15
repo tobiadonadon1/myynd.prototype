@@ -159,13 +159,13 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
    *
    * È l'unico gesto rimasto nella finestra, ed è sempre lo stesso: la mail che
    * ha ricevuto, la pagina del repository, il file arrivato. Il documento si
-   * apre nel visore dell'app, quindi la finestra si chiude prima.
+   * apre alla fonte originale; la copia salvata è un ripiego dichiarato.
    */
-  const apriDoc = (id: string) => { p.nascondi(); v.apriFonte(id) }
+  const apriDoc = (id: string) => { p.nascondi(); void v.portamiFonte(id) }
   const righe = (xs: RigaPunto[]) => xs.map((r, i) =>
     <Voce key={i} testo={r.testo} doc={r.doc} apriDoc={apriDoc} />)
 
-  const quante = punto.progetti.length + punto.github.length + punto.daLeggere.length + punto.risposte.length
+  const quante = punto.progetti.length + punto.github.length + punto.daLeggere.length + punto.risposte.length + (punto.aggiornamenti?.length ?? 0)
   const vuoto = quante === 0
   const data = new Date(punto.quando).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
   const sotto = [
@@ -232,6 +232,9 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         {punto.risposte.length > 0 && (
           <Sezione etichetta={t('Risposte')}>{righe(punto.risposte)}</Sezione>
         )}
+        {!!punto.aggiornamenti?.length && (
+          <Sezione etichetta={t('Aggiornamenti')}>{righe(punto.aggiornamenti)}</Sezione>
+        )}
 
         <div style={{
           marginTop: 30, paddingTop: 16, borderTop: '1px solid rgba(34,39,31,.08)',
@@ -287,7 +290,7 @@ export function Punto({ v }: { v: Vals }) {
   const p = usePunto()
   if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
   if (p.daVedere) return <Finestra v={v} p={p} />
-  const quante = p.punto.progetti.length + p.punto.github.length + p.punto.daLeggere.length + p.punto.risposte.length
+  const quante = p.punto.progetti.length + p.punto.github.length + p.punto.daLeggere.length + p.punto.risposte.length + (p.punto.aggiornamenti?.length ?? 0)
   return (
     <div style={CARTA}>
       <div style={{ flex: 1, minWidth: 220 }}>

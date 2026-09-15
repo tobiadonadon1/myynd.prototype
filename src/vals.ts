@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AUTONOMIE, ESEMPIO_TONO, LINGUE, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { DOMANDE, type Campo } from './intervista'
 import type { Progetto } from './api'
 import { sulTavolo } from './tavolo'
-import { costruisci, costruisciDaGrafo, type Ball, type Grafo } from './brain'
+import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 import { primoParagrafo } from './essenza.ts'
+import { preparaApertura } from './navigazione.ts'
+import { dataFonte, testoCarta } from './feed-carta.ts'
+import { leggibile } from './leggibile.ts'
+import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
 
 type Toast = { text: string; undo: boolean } | null
 
@@ -348,6 +352,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [filtro, setFiltro] = useState<string | null>(null)
   const [mapFull, setMapFull] = useState(false)
   const [nodeMsg, setNodeMsg] = useState('')
+  const [documentoMappa, setDocumentoMappa] = useState<Record<string, string> | null>(null)
+  const [caricoNodo, setCaricoNodo] = useState(false)
+  const [erroreNodo, setErroreNodo] = useState('')
 
   const [threads, setThreads] = useState<Thread[]>([])
   const [thread, setThread] = useState<string | null>(null)
@@ -357,6 +364,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [pensando, setPensando] = useState(false)
 
   const [doc, setDoc] = useState<Record<string, string> | null>(null)
+  const [aprendoFonte, setAprendoFonte] = useState<string | null>(null)
+  const aperturaFonte = useRef(false)
   const [toast, setToast] = useState<Toast>(null)
   const [sincronizzando, setSincronizzando] = useState<string | null>(null)
 
@@ -416,14 +425,24 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // il grafo non è arrivato — o se non è arrivato affatto — non si disegna
       // niente e lo si dice: prima al suo posto compariva la forma costruita
       // sui conteggi, una scenografia che chi guardava prendeva per i propri
-      // documenti. Quella resta solo per un grafo arrivato e vuoto.
+      // documenti. Anche un grafo vuoto resta vuoto.
       : !grafo ? PALLA_VUOTA
-      : grafo.nodi.length ? costruisciDaGrafo(grafo)
-      : costruisci(gruppi)),
+      : costruisciDaGrafo(grafo)),
     [mappaInVista, grafo, gruppi]
   )
   const onPick = useCallback((s: string, cluster: string) => { setSel(s); setFiltro(cluster) }, [])
   const mappa = useMappa(cvA, cvB, mappaInVista, mapFull, filtro, sel, onPick, ball, gruppi)
+  const nodoSelezionato = grafo?.nodi.find(n => n.id === sel)
+  useEffect(() => {
+    let attuale = true
+    setDocumentoMappa(null); setErroreNodo(''); setCaricoNodo(false)
+    if (!mappaInVista || !nodoSelezionato) return
+    setCaricoNodo(true)
+    api.documento(nodoSelezionato.id).then(d => { if (attuale) setDocumentoMappa(d) })
+      .catch(() => { if (attuale) setErroreNodo(t('Non trovo più il documento.')) })
+      .finally(() => { if (attuale) setCaricoNodo(false) })
+    return () => { attuale = false }
+  }, [mappaInVista, nodoSelezionato])
 
   // — caricamento iniziale —
 
@@ -710,7 +729,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // — valori derivati —
 
   const hero = aperti[0]
-  const cl = gruppi.find(g => g.id === sel) ?? gruppi[0]
+  const heroCarta = hero ? testoCarta(hero) : { titolo: '', testo: '', perche: '' }
+  const cl = gruppi.find(g => g.id === (nodoSelezionato?.gruppo ?? sel)) ?? gruppi[0]
+  const documentoCorrente = documentoMappa?.id === nodoSelezionato?.id ? documentoMappa : null
+  const testoNodo = anteprimaDocumentoMappa(leggibile(documentoCorrente?.corpo ?? nodoSelezionato?.estratto ?? '').map(r => r.testo).filter(Boolean).join(' '))
   const connettori = stato.connettori
   // «Da fare» è dentro l'app e si dichiara collegato sempre: contarlo fra le
   // fonti diceva «1 fonte» a chi non aveva collegato niente, e la stessa
@@ -718,9 +740,35 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const connOn = connettori.filter(c => c.collegato && c.id !== 'mind2do')
   // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
   // motore la chat e le domande funzionano uguale, e devono aprirsi
-  const claudeOn = !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
+  const claudeOn = stato.config.motore === 'chatgpt' ? !!stato.config.chatgpt?.attivo
+    : stato.config.motore === 'openai' ? !!stato.config.openai?.collegato
+    : !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
   const th = threads.find(t => t.id === thread)
   const noop = () => {}
+
+  /** Reach the original; a saved copy is an explicit fallback, never a fake destination. */
+  const portamiFonte = async (id: string) => {
+    if (aperturaFonte.current) return
+    aperturaFonte.current = true
+    setAprendoFonte(id)
+    const apertura = preparaApertura()
+    const copiaFonte = async (motivo: string) => {
+      apertura.annulla()
+      const salvata = await api.documento(id)
+      setDoc({ ...salvata, _avviso: `${t('Non posso aprire l’originale. Questa è la copia salvata della fonte.')} ${motivo}` })
+    }
+    try {
+      const r = await apertura.completa(await api.portamiDocumento(id))
+      if (!r.ok) await copiaFonte(t(r.errore))
+    } catch {
+      try { await copiaFonte('') }
+      catch { mostraToast(t('Non trovo più il documento.')) }
+    } finally {
+      apertura.annulla()
+      aperturaFonte.current = false
+      setAprendoFonte(null)
+    }
+  }
 
 
   /**
@@ -902,9 +950,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    */
   const righe = aperti.map((i, ix) => {
     const aperto = restoAperti.has(i.id)
-    const testo = i.testo ?? ''
+    const carta = testoCarta(i)
+    const testo = carta.testo
     return {
-      id: i.id, tipo: i.tipo, titolo: i.titolo, ora: quando(i.quando),
+      id: i.id, tipo: i.tipo, titolo: carta.titolo, ora: quando(dataFonte(i)),
       // una parola, non un percorso: vale qui come sulla carta in cima
       fonte: i.doc || i.fonte ? parolaFonte(i.fonte, i.doc) : '',
       onInLista: () => mettiInLista(i as unknown as VoceFeed),
@@ -918,7 +967,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       espandibile: testo.length > 150,
       urgenza: i.urgenza ?? '',
       // perché sta sul feed, e per quale obiettivo: la riga che rende la scelta controllabile
-      perche: i.perche ?? '',
+      perche: carta.perche,
       /**
        * La freccia accanto a «Da leggere».
        *
@@ -1076,7 +1125,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       overflow: 'hidden', overflowWrap: 'anywhere'
     } as CSSProperties,
     heroTipo: hero?.tipo ?? '',
-    heroTitolo: hero?.titolo ?? '',
+    heroTitolo: heroCarta.titolo,
     /**
      * Accanto all'ora ci va una parola: «mail», «documento», «pagina».
      *
@@ -1086,7 +1135,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * dove sta esattamente non è una domanda che si fa leggendo il feed.
      */
     heroFonte: hero && (hero.doc || hero.fonte) ? parolaFonte(hero.fonte, hero.doc) : '',
-    heroOra: quando(hero?.quando),
+    heroOra: hero ? quando(dataFonte(hero)) : '',
     // non si disegna più sulla card in cima; resta per le righe sotto
     heroUrgenza: hero?.urgenza ?? '',
     // il modello a volte sfora il tetto che gli si chiede: qui si taglia
@@ -1094,12 +1143,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // Chiuso di default: il titolo dice di cosa si tratta, e quasi sempre
     // basta per decidere. Il testo lungo si apre se serve, non prima —
     // sette righe di paragrafo per ogni voce sono un muro, non un feed.
-    heroTesto: heroLong ? (hero?.testo ?? '') : taglia(hero?.testo ?? '', 96),
-    heroTagliato: (hero?.testo ?? '').length > 96,
-    heroPerche: hero?.perche ?? '',
+    heroTesto: heroLong ? heroCarta.testo : taglia(heroCarta.testo, 320),
+    heroTagliato: heroCarta.testo.length > 320,
+    heroPerche: heroCarta.perche,
+    heroFonteDettaglio: [hero?.fonteAutore, hero?.fonteTitolo].filter(Boolean).join(' · '),
     heroLong,
     heroToggle: () => setHeroLong(x => !x),
     heroHaDoc: !!hero?.doc,
+    heroAprendoFonte: !!hero?.doc && aprendoFonte === hero.doc,
+    portamiHero: () => { if (hero?.doc) void portamiFonte(hero.doc) },
+    portamiFonte,
     // chi è e cosa ha dietro: servono a chi la prende in carico dal feed
     heroId: hero?.id ?? '',
     heroDoc: hero?.doc ?? null,
@@ -1357,7 +1410,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     mappaMeta: gruppi.length
       ? frasi.documentiEGruppi(stato.conteggi.totale.toLocaleString(loc()), gruppi.length)
       : t('ancora nessun documento'),
-    mappaVuota: !gruppi.length,
+    mappaVuota: !!grafo && !grafo.nodi.length,
     guastoMappa,
     // «costruisco» solo finché non c'è niente: sopra a una mappa che c'è già si rilegge in silenzio
     costruendoMappa: costruendoMappa && !grafo,
@@ -1381,17 +1434,47 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         onClick: () => { setFiltro(f => (f === g.id ? null : g.id)); setSel(g.id) }
       }
     }),
-    selTipo: cl ? frasi.nDocumenti(cl.nodi.toLocaleString(loc())) : '',
-    selNome: cl ? t(cl.nome) : t('Niente ancora'),
+    selTipo: nodoSelezionato ? [parolaFonte(nodoSelezionato.fonte, nodoSelezionato.id), dataDocumentoMappa(nodoSelezionato.quando)].filter(Boolean).join(' · ')
+      : cl ? frasi.nDocumenti(cl.nodi.toLocaleString(loc())) : '',
+    selNome: nodoSelezionato?.titolo || (cl ? t(cl.nome) : t('Niente ancora')),
     selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
-    selTesto: cl
-      ? frasi.tuttoDa(t(cl.nome).toLowerCase())
+    selTesto: nodoSelezionato ? taglia(testoNodo, 580) || (caricoNodo ? t('Leggo il documento…') : t('Apri la fonte per leggere il documento.'))
+      : cl ? t('Scegli un documento per leggerne il contenuto e i collegamenti.')
       : t('Collega una fonte e qui comparirà quello che Myynd ha letto.'),
-    nodePlaceholder: cl ? frasi.chiediSu(t(cl.nome).toLowerCase()) : t('Chiedi…'),
+    selDocumento: nodoSelezionato?.id ?? null,
+    selAutore: documentoCorrente?.autore || nodoSelezionato?.autore || '',
+    selPercorso: nodoSelezionato?.fonte === 'desktop' ? documentoCorrente?.percorso || '' : '',
+    selCarico: caricoNodo,
+    selErrore: erroreNodo,
+    selProgetti: nodoSelezionato?.progetti ?? [],
+    selFeedback: nodoSelezionato?.feedback === 'fatto' ? t('Già completato') : nodoSelezionato?.feedback === 'scartato' ? t('Escluso dai suggerimenti') : '',
+    selAttenzione: nodoSelezionato?.attenzione === 'brief' ? t('Aggiornamento per il punto')
+      : nodoSelezionato?.attenzione === 'feed' ? t('Possibile azione') : nodoSelezionato?.attenzione === 'ignora' ? t('Materiale di riferimento') : '',
+    selMotivo: motivoMappa(nodoSelezionato?.motivoAttenzione),
+    selCollegati: documentiCollegati(grafo, sel),
+    mappaDocumenti: (grafo?.nodi ?? []).filter(n => !cl || n.gruppo === (filtro ?? cl.id)),
+    scegliDocumentoMappa: (id: string) => {
+      const n = grafo?.nodi.find(x => x.id === id)
+      if (n) onPick(n.id, n.gruppo)
+    },
+    apriSelezionato: () => { if (nodoSelezionato) void portamiFonte(nodoSelezionato.id) },
+    leggiSelezionato: () => { if (nodoSelezionato) { setMapFull(false); api.documento(nodoSelezionato.id).then(setDoc).catch(() => mostraToast(t('Non trovo più il documento.'))) } },
+    tornaAlGruppo: () => { if (cl) setSel(cl.id) },
+    nodePlaceholder: nodoSelezionato ? t('Chiedi di questo documento…') : cl ? frasi.chiediSu(t(cl.nome).toLowerCase()) : t('Chiedi…'),
     nodeMsg,
     onNodeType: (e: { target: { value: string } }) => setNodeMsg(e.target.value),
-    onNodeKey: (e: React.KeyboardEvent) => { if (e.key === 'Enter' && nodeMsg.trim()) chiedi(nodeMsg.trim()) },
-    askNode: () => { if (nodeMsg.trim()) chiedi(nodeMsg.trim()) },
+    onNodeKey: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && nodeMsg.trim()) {
+        chiedi(nodoSelezionato ? `${nodeMsg.trim()}\n\n${t('Documento selezionato')}: «${nodoSelezionato.titolo}» [doc:${nodoSelezionato.id}]` : nodeMsg.trim())
+        setMapFull(false); setNodeMsg('')
+      }
+    },
+    askNode: () => {
+      if (nodeMsg.trim()) {
+        chiedi(nodoSelezionato ? `${nodeMsg.trim()}\n\n${t('Documento selezionato')}: «${nodoSelezionato.titolo}» [doc:${nodoSelezionato.id}]` : nodeMsg.trim())
+        setMapFull(false); setNodeMsg('')
+      }
+    },
 
     // — preferenze —
     toni: TONI.map(x => ({
@@ -1406,6 +1489,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // — chi fa il lavoro grosso: Claude, o un fornitore compatibile con OpenAI —
     motore: stato.config.motore ?? 'claude',
     compatibile: stato.config.compatibile,
+    openai: stato.config.openai ?? null,
     /*
      * Rileggere lo stato dal server, da un pannello che ha appena cambiato
      * qualcosa fuori dal suo giardino.
@@ -1416,22 +1500,36 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     ricaricaStato,
 
-    scegliMotore: async (m: 'claude' | 'compatibile') => {
-      if ((stato.config.motore ?? 'claude') === m) return
+    scegliMotore: async (m: 'claude' | 'compatibile' | 'chatgpt' | 'openai') => {
+      if ((stato.config.motore ?? 'claude') === m && !(m === 'chatgpt' && !stato.config.chatgpt?.attivo)) return
       // senza un fornitore collegato non c'è niente da scegliere: si apre la
       // scheda per collegarlo, e collegarlo lo sceglie da sé
       if (m === 'compatibile' && !stato.config.compatibile) { apriConnessioni('compatibile'); return }
+      if (m === 'openai' && !stato.config.openai?.collegato) { apriConnessioni('openai'); return }
+      if (m === 'chatgpt') {
+        try { await api.usaChatGPT(true); await ricaricaStato() }
+        catch (e) { mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare motore.')) }
+        return
+      }
       setStato(s => ({ ...s, config: { ...s.config, motore: m } }))
       try { await api.scegliMotore(m) } catch { mostraToast(t('Non sono riuscito a cambiare motore.')); ricaricaStato() }
     },
 
-    // — il modello di Claude, la lingua, e quanto tengono le fatte —
-    modelli: MODELLI.map(m => ({
-      ...m, nota: t(m.nota),
-      scelto: (stato.config.modello ?? 'claude-sonnet-5') === m.id,
-      onClick: () => {
-        setStato(s => ({ ...s, config: { ...s.config, modello: m.id } }))
-        api.profilo({ modello: m.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
+    // — i modelli di Claude, uno per livello di lavoro; la lingua; quanto tengono le fatte —
+    modelli: MODELLI.map(m => ({ id: m.id, nome: m.nome, nota: t(m.nota) })),
+    /*
+     * Un modello per livello. Si manda sempre la terna intera: il server la
+     * vuole così, e la schermata la vede così. Il campo `modello` di prima
+     * resta allineato alla frontiera, e lo fa il server.
+     */
+    livelli: LIVELLI.map(l => ({
+      id: l.id, titolo: t(l.titolo), nota: t(l.nota),
+      scelto: stato.config.modelli?.[l.id] ?? (l.id === 'casa' ? 'claude-haiku-4-5' : stato.config.modello ?? 'claude-sonnet-5'),
+      scegli: (modello: string) => {
+        const attuali = stato.config.modelli ?? { casa: 'claude-haiku-4-5', media: stato.config.modello ?? 'claude-sonnet-5', frontiera: stato.config.modello ?? 'claude-sonnet-5' }
+        const modelli = { ...attuali, [l.id]: modello }
+        setStato(s => ({ ...s, config: { ...s.config, modelli, modello: modelli.frontiera } }))
+        api.profilo({ modelli }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
       }
     })),
     lingue: LINGUE.map(l => ({
@@ -1487,9 +1585,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     connMeta: frasi.attiviDaCollegare(connOn.length, connettori.filter(c => c.pronto).length - connOn.length),
     connAttivi: connOn.map(c => ({
       id: c.id, nome: c.nome,
+      problema: c.id === 'note' && stato.accessoDisco === 'no',
       // il desktop dice anche se lo sta guardando dal vivo: è la differenza
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
-      stato: [frasi.statoConnettore(c.documenti), c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+      stato: [frasi.statoConnettore(c.documenti), c.id === 'note' && stato.accessoDisco === 'no' ? t('La lettura è sospesa: manca l’accesso al disco.') : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
       // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
       // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto

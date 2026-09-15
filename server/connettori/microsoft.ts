@@ -24,7 +24,8 @@
 
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
-import { filoDi } from '../filo.ts'
+import { filoDi, idPulito } from '../filo.ts'
+import { postaAutomatica } from './segnaliPosta.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { APP_MICROSOFT } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
@@ -254,6 +255,9 @@ type Messaggio = {
   bodyPreview?: string
   receivedDateTime?: string
   isDraft?: boolean
+  isRead?: boolean
+  webLink?: string
+  internetMessageId?: string
   from?: { emailAddress?: { name?: string; address?: string } }
   toRecipients?: { emailAddress?: { name?: string; address?: string } }[]
   body?: { contentType?: string; content?: string }
@@ -308,7 +312,7 @@ export async function sincronizzaPosta(
   // `internetMessageHeaders` per il filo della conversazione: Message-ID,
   // In-Reply-To e References sono lì, e sono la stessa chiave che usano gli
   // altri due connettori di posta
-  u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft,internetMessageHeaders')
+  u.searchParams.set('$select', 'id,subject,receivedDateTime,from,toRecipients,body,isDraft,isRead,webLink,internetMessageId,internetMessageHeaders')
   u.searchParams.set('$top', '50')
 
   const docs: Documento[] = []
@@ -333,15 +337,19 @@ export async function sincronizzaPosta(
         titolo: m.subject?.trim() || '(senza oggetto)',
         corpo: testo.slice(0, 20_000),
         autore: da ? (da.name ? `${da.name} <${da.address ?? ''}>` : da.address ?? null) : null,
-        percorso: 'Posta in arrivo',
+        percorso: m.webLink ?? 'Posta in arrivo',
         quando: m.receivedDateTime ?? null,
         gruppo: 'posta',
         filo: filoDi({
-          messageId: intestazione(m, 'Message-ID'),
+          messageId: m.internetMessageId ?? intestazione(m, 'Message-ID'),
           inReplyTo: intestazione(m, 'In-Reply-To'),
           references: intestazione(m, 'References'),
           oggetto: m.subject
-        })
+        }),
+        messageId: idPulito(m.internetMessageId ?? intestazione(m, 'Message-ID')) || null,
+        letto: m.isRead ?? false,
+        inviato: !!c.email && da?.address?.toLowerCase() === c.email.toLowerCase(),
+        massa: postaAutomatica(m.internetMessageHeaders)
       })
       avanzamento?.(++fatti, MAX_MESSAGGI)
       if (docs.length >= MAX_MESSAGGI) { troncato = true; return { docs, troncato } }

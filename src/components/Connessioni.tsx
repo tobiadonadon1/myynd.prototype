@@ -6,7 +6,7 @@ import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import './connessioni.css'
 
-const MOTORI = ['claude', 'compatibile']
+const MOTORI = ['claude', 'openai', 'compatibile']
 
 /**
  * Le fonti che si possono cambiare senza scollegarle prima.
@@ -16,7 +16,8 @@ const MOTORI = ['claude', 'compatibile']
  * senza un «Cambia» l'unica strada per passare da tre cartelle a tutto il Mac
  * era proprio quella — cioè nessuna, per chi non se la sente.
  */
-const CAMBIABILI = ['compatibile', 'desktop']
+// Anthropic e OpenAI hanno due strade: «Cambia» riapre la scheda per scegliere l'altra, o cambiare chiave
+const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop']
 
 /** A quiet source picker; credentials and account controls appear only after choosing. */
 export function Connessioni({ fonte, chiudi, cambiato }: {
@@ -144,6 +145,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
               <p>{scelta.collegato
                 ? scelta.id === 'compatibile' && s?.config.compatibile
                   ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
+                  // le due teste dicono da quale strada passano: l'account, o la chiave
+                  : scelta.id === 'claude'
+                    ? (s?.config.claudeCon === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
+                  : scelta.id === 'openai'
+                    ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
                   : [
                     scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null,
                     // il computer dice se è la macchina intera, e se la sta guardando

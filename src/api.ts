@@ -39,6 +39,8 @@ export type Stato = {
     tono: string
     autonomia: string
     modello: string
+    /** Un modello di Claude per ogni livello di lavoro: manovre interne, letture di ogni giorno, frontiera. */
+    modelli: Record<'casa' | 'media' | 'frontiera', string>
     lingua: string
     /** Il fuso in cui ragiona il server per questa persona; `null` finché il browser non glielo dice. */
     fuso?: string | null
@@ -65,10 +67,15 @@ export type Stato = {
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
     calendario: { collegato: boolean; nome: string | null; giorni: number } | null
     claude: { collegato: boolean } | null
+    /** Con cosa lavora Claude, quando è lui: l'account (tramite Claude Code) o la chiave. */
+    claudeCon?: 'abbonamento' | 'chiave'
     /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
-    motore: 'claude' | 'compatibile'
+    motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
+    chatgpt?: { attivo: boolean }
+    /** OpenAI con la chiave: il modello esce, la chiave no. */
+    openai?: { collegato: boolean; modello: string; chiaveSalvata: boolean } | null
     /** Il fornitore compatibile, senza la chiave: quella non esce mai. */
-    compatibile: { collegato: boolean; url: string; modello: string; nome: string | null } | null
+    compatibile: { collegato: boolean; url: string; modello: string; nome: string | null; chiaveSalvata?: boolean } | null
     /*
       Il `clientId` c'è perché serve a riempire un campo, non a autenticare:
       è il nome pubblico dell'app registrata, e sta già in chiaro in ogni
@@ -602,6 +609,8 @@ export type Compito = {
    * niente da aprire là fuori, e allora «Portami lì» non si disegna.
    */
   porta?: 'posta' | 'file' | 'pagina' | null
+  /** True only when the account has an outgoing email transport. */
+  puoInviare?: boolean
   /** La riga da cui è nata, quando è nata dalle domande di un'altra: la terza strada di «Portami lì». */
   madre?: string | null
   chiesto: string | null
@@ -627,12 +636,13 @@ export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
 /**
  * Dov'è andato «Portami lì».
  *
- * `posta`, `file` e `pagina` sono già successi: il Mac ha aperto qualcosa e non
- * resta che dirlo. `compito` e `progetto` sono una consegna, non un risultato —
+ * `posta` e `file` sono già successi. Una `pagina` con URL va aperta sul
+ * dispositivo della persona. `compito` e `progetto` sono una consegna —
  * quei due posti stanno dentro Myynd, e li apre la schermata che ha premuto.
  */
 export type Portato =
-  | { ok: true; dove: 'posta' | 'file' | 'pagina' }
+  | { ok: true; dove: 'posta' | 'file' }
+  | { ok: true; dove: 'pagina'; url?: string }
   | { ok: true; dove: 'compito' | 'progetto'; id: string }
   | { ok: false; errore: string }
 
@@ -881,6 +891,19 @@ export type Abbonamento = {
   acceso: boolean
   inRiposo: boolean
 }
+
+export type ChatGPT = {
+  installato: boolean
+  entrato: boolean
+  acceso: boolean
+  email?: string | null
+  piano?: string | null
+  errore?: string | null
+}
+
+export type AccessoChatGPT = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; errore?: string }
+/** L'accesso all'account Claude, fatto da Claude Code: `url` è l'indirizzo di riserva se il browser non si apre. */
+export type AccessoClaude = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; url?: string; errore?: string }
 
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
@@ -1260,7 +1283,7 @@ export const api = {
     json<{ ok: true; id: string; nome: string; punto: Punto | null }>('/api/punto/avvia', { method: 'POST', body: JSON.stringify({ frase }) }),
 
   // — i progetti: su cosa lavora, e a cosa punta ciascuno —
-  progetti: () => json<{ progetti: Progetto[] }>('/api/progetti'),
+  progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
   nuovoProgetto: (nome: string, obiettivo = '') =>
     json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
@@ -1285,6 +1308,23 @@ export const api = {
   /** Le due strade di Claude — l'abbonamento e la chiave — con lo stato di ciascuna. */
   claude: () => json<ClaudeCon>('/api/modello/claude'),
 
+  chatgpt: (signal?: AbortSignal) => json<ChatGPT>('/api/modello/chatgpt', { signal }),
+  accediChatGPT: (signal?: AbortSignal) => json<{ authUrl: string; loginId: string }>('/api/modello/chatgpt/login', { method: 'POST', signal }),
+  statoAccessoChatGPT: (id: string, signal?: AbortSignal) => json<AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}`, { signal }),
+  annullaAccessoChatGPT: (id: string) => json<{ ok: true } & AccessoChatGPT>(`/api/modello/chatgpt/login/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  usaChatGPT: (attivo: boolean) => json<{ ok: true } & ChatGPT>('/api/modello/chatgpt', { method: 'POST', body: JSON.stringify({ attivo }) }),
+
+  /** L'account Claude, dalla scheda: parte `claude auth login`, e si guarda come va. */
+  accediClaude: () => json<{ loginId: string; url: string | null }>('/api/modello/abbonamento/accesso', { method: 'POST', body: '{}' }),
+  statoAccessoClaude: (id: string, signal?: AbortSignal) => json<AccessoClaude>(`/api/modello/abbonamento/accesso/${encodeURIComponent(id)}`, { signal }),
+  annullaAccessoClaude: (id: string) => json<{ ok: true } & AccessoClaude>(`/api/modello/abbonamento/accesso/${encodeURIComponent(id)}/annulla`, { method: 'POST', body: '{}' }),
+
+  /** OpenAI con la chiave: si prova e si sceglie, come il fornitore compatibile. */
+  collegaOpenAI: (p: { chiave?: string; modello: string }) =>
+    json<{ ok: true; motore: 'openai'; latenzaMs?: number }>('/api/connettori/openai', { method: 'POST', body: JSON.stringify(p) }),
+  modelliOpenAI: (chiave: string) =>
+    json<{ modelli: string[] }>('/api/connettori/openai/modelli', { method: 'POST', body: JSON.stringify({ chiave }) }),
+
   /** Con quale dei due lavora. Si cambia idea quando si vuole. */
   claudeCon: (con: 'abbonamento' | 'chiave') =>
     json<{ ok: true; con: string }>('/api/modello/claude-con',
@@ -1303,8 +1343,13 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ attivo }) }),
 
   /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile collegato. */
-  scegliMotore: (motore: 'claude' | 'compatibile') =>
-    json<{ ok: true; motore: string }>('/api/modello/motore', { method: 'POST', body: JSON.stringify({ motore }) }),
+  scegliMotore: async (motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai') => {
+    if (motore === 'chatgpt') {
+      await json<{ ok: true } & ChatGPT>('/api/modello/chatgpt', { method: 'POST', body: JSON.stringify({ attivo: true }) })
+      return { ok: true as const, motore }
+    }
+    return json<{ ok: true; motore: string }>('/api/modello/motore', { method: 'POST', body: JSON.stringify({ motore }) })
+  },
 
   // — le automazioni —
 
@@ -1510,7 +1555,7 @@ export const api = {
     totale: number
     gruppi: { id: string; nome: string; colore: string; nodi: number }[]
     grafo: {
-      nodi: { id: string; titolo: string; gruppo: string; fonte: string; quando: string | null }[]
+      nodi: import('./brain').NodoGrafo[]
       archi: [number, number, number][]
     } | null
   }>(conGrafo ? '/api/mente?grafo=1' : '/api/mente'),
@@ -1520,6 +1565,9 @@ export const api = {
       `/api/cerca?q=${encodeURIComponent(q)}`),
 
   documento: (id: string) => json<Record<string, string>>(`/api/documento?id=${encodeURIComponent(id)}`),
+  portamiDocumento: (id: string) => json<Portato>('/api/documento/portami', {
+    method: 'POST', body: JSON.stringify({ id })
+  }),
 
   feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[] }>('/api/feed'),
   generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[] }>('/api/feed/genera', { method: 'POST' }),
@@ -1624,8 +1672,8 @@ export type Messaggio = { id: string; role: string; text: string; sources?: { id
 /**
  * Il punto: quello che Myynd dice quando torni.
  *
- * Quattro sezioni e nient'altro: i progetti che si sono mossi, cosa è successo
- * su GitHub, una notizia o due, chi ha risposto per email. Una riga porta l'id
+ * I progetti che si sono mossi, cosa è successo su GitHub, una notizia o due,
+ * chi ha risposto per email e gli aggiornamenti pratici. Una riga porta l'id
  * del documento da cui viene, e cliccarla apre quello — la mail, la pagina,
  * il file. Le cose da fare non stanno qui: quelle il server le mette nella
  * lista, e si aprono dal feed.
@@ -1641,6 +1689,8 @@ export type Punto = {
   github: RigaPunto[]
   daLeggere: { titolo: string; perche: string; link: string | null }[]
   risposte: RigaPunto[]
+  /** Deliveries, orders and subscriptions belong in the Brief, without tasks. */
+  aggiornamenti?: RigaPunto[]
 }
 /**
  * `tetto` è vero quando ne ha chiesto uno nuovo e per oggi il conto è finito.
@@ -1678,5 +1728,5 @@ export type Progetto = {
   dal: string
   aggiornato: string
   note: string
-  origine: 'mano' | 'punto'
+  origine: 'mano' | 'punto' | 'conversazione'
 }

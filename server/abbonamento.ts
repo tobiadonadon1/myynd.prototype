@@ -58,9 +58,8 @@ const NEGATI = [
   'WebSearch', 'WebFetch', 'Task', 'TodoWrite', 'Bash'
 ]
 
-/** Il nome che Claude Code dà ai modelli. */
-function alias(): string {
-  const m = modello()
+/** Il nome che Claude Code dà ai modelli. Senza un modello detto, quello principale. */
+function alias(m = modello()): string {
   if (m.includes('haiku')) return 'haiku'
   if (m.includes('opus')) return 'opus'
   return 'sonnet'
@@ -236,7 +235,7 @@ function conLoSchema(system: string, formato?: object): string {
  * domani si aggiunge un attrezzo da negare, si aggiunge per entrambe: il modo
  * in cui un recinto si buca è che qualcuno ne costruisca un secondo.
  */
-function argomenti(system: string, uscita: 'json' | 'stream-json'): string[] {
+function argomenti(system: string, uscita: 'json' | 'stream-json', modello?: string): string[] {
   return [
     '-p',
     '--restricted',
@@ -245,7 +244,7 @@ function argomenti(system: string, uscita: 'json' | 'stream-json'): string[] {
     // risposta comparirebbe tutta insieme alla fine, che è esattamente il
     // difetto per cui questa strada esiste
     ...(uscita === 'stream-json' ? ['--include-partial-messages', '--verbose'] : []),
-    '--model', alias(),
+    '--model', alias(modello),
     // la cartella di lavoro è vuota apposta, ma dirlo esplicitamente costa una
     // riga: nessuna impostazione di progetto, nessun server MCP. Vedi `lavoro.ts`
     '--setting-sources', 'user',
@@ -311,6 +310,8 @@ export async function chiedi(o: {
   messages: Messaggio[]
   formato?: object
   attesa: number
+  /** Il modello del lavoro, scelto nelle preferenze per il suo livello. */
+  modello?: string
 }): Promise<string> {
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è su questa macchina.')
@@ -318,7 +319,7 @@ export async function chiedi(o: {
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
   return await new Promise<string>((risolvi, rifiuta) => {
-    const p = spawn(exe, argomenti(conLoSchema(o.system, o.formato), 'json'), { cwd: VUOTA, env: ambiente() })
+    const p = spawn(exe, argomenti(conLoSchema(o.system, o.formato), 'json', o.modello), { cwd: VUOTA, env: ambiente() })
 
     /*
       La domanda entra dallo stdin, non dagli argomenti.
@@ -516,3 +517,82 @@ export function nonRisponde() {
 export function riprova() {
   spento = 0
 }
+
+// — l'accesso, dalla scheda —
+
+/**
+ * Entrare nell'account Claude senza passare dal Terminale.
+ *
+ * `claude auth login` fa da sé quello che una persona faceva a mano: apre il
+ * browser sulla pagina di Anthropic, aspetta il ritorno su una porta locale e
+ * scrive le credenziali dove Claude Code le tiene — le sue, non nostre: Myynd
+ * non le vede e non le copia. Qui si lancia il programma, si tiene a mente
+ * l'esito, e si dice alla scheda a che punto è. Senza terminale il programma
+ * stampa anche l'indirizzo di riserva, che si passa alla scheda per il caso in
+ * cui il browser non si sia aperto.
+ *
+ * Provato a mano il 15 settembre 2026 senza terminale: apre il browser, stampa
+ * l'indirizzo, resta in attesa del ritorno. Tre minuti sono il tetto: oltre,
+ * si spegne e la scheda dice di riprovare.
+ */
+export type StatoAccesso = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; url?: string; errore?: string }
+
+type Accesso = StatoAccesso & { p: ReturnType<typeof spawn>; quando: number }
+const accessi = new Map<string, Accesso>()
+const ACCESSO_TETTO = 3 * 60_000
+
+export function iniziaAccesso(): { loginId: string; url: string | null } {
+  const exe = installato()
+  if (!exe) throw new Error('Claude Code non è su questo computer.')
+  // uno alla volta: un secondo browser aperto sopra al primo confonde e basta
+  for (const [id, a] of accessi) {
+    if (a.stato === 'pending') { a.p.kill('SIGTERM'); a.stato = 'cancelled' }
+    if (Date.now() - a.quando > 10 * 60_000) accessi.delete(id)
+  }
+  try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
+  const loginId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  const p = spawn(exe, ['auth', 'login', '--claudeai'], { cwd: VUOTA, env: ambiente(), stdio: ['pipe', 'pipe', 'pipe'] })
+  const a: Accesso = { stato: 'pending', p, quando: Date.now() }
+  accessi.set(loginId, a)
+  let fuori = ''
+  p.stdout?.on('data', d => {
+    if (fuori.length > 8000) return
+    fuori += String(d)
+    const m = fuori.match(/https:\/\/\S+/)
+    if (m && !a.url) a.url = m[0]
+  })
+  p.stderr?.resume()
+  p.stdin?.on('error', () => { /* chiuso dall'altra parte */ })
+  const tetto = setTimeout(() => {
+    if (a.stato !== 'pending') return
+    p.kill('SIGTERM')
+    a.stato = 'failed'; a.errore = 'Il tempo per l’accesso è terminato. Riprova.'
+  }, ACCESSO_TETTO)
+  p.on('error', e => { clearTimeout(tetto); if (a.stato === 'pending') { a.stato = 'failed'; a.errore = e.message } })
+  p.on('close', codice => {
+    clearTimeout(tetto)
+    if (a.stato !== 'pending') return
+    a.stato = codice === 0 ? 'completed' : 'failed'
+    if (codice !== 0) a.errore = 'L’accesso a Claude non è riuscito. Riprova.'
+    // la risposta di «ci sei entrato?» vale mezzo minuto: dopo un accesso
+    // appena fatto si chiede di nuovo subito
+    accesso = { entrato: false, quando: 0 }
+  })
+  return { loginId, url: a.url ?? null }
+}
+
+export function statoAccesso(loginId: string): StatoAccesso | null {
+  const a = accessi.get(loginId)
+  if (!a) return null
+  return { stato: a.stato, ...(a.url ? { url: a.url } : {}), ...(a.errore ? { errore: a.errore } : {}) }
+}
+
+export function annullaAccesso(loginId: string): StatoAccesso | null {
+  const a = accessi.get(loginId)
+  if (!a) return null
+  if (a.stato === 'pending') { a.p.kill('SIGTERM'); a.stato = 'cancelled' }
+  return statoAccesso(loginId)
+}
+
+/** Se resta un accesso a metà quando Myynd si chiude, non deve restare un processo orfano. */
+process.once('exit', () => { for (const a of accessi.values()) if (a.stato === 'pending') a.p.kill('SIGTERM') })

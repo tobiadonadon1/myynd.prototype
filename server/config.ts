@@ -5,6 +5,7 @@
 // Non finiscono mai nelle risposte dell'API né nei log.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, copyFileSync, renameSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as chi from './chi.ts'
@@ -24,10 +25,52 @@ export const MODELLI = [
   { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti, e costa cinque volte tanto.' }
 ] as const
 
-/** Quello scelto nelle preferenze, o il predefinito. */
-export function modello(): string {
-  const m = leggi().modello
-  return MODELLI.some(x => x.id === m) ? m! : 'claude-sonnet-5'
+/** Un nome di modello che conosciamo, o niente. */
+function modelloValido(m: string | undefined): string | null {
+  return m && MODELLI.some(x => x.id === m) ? m : null
+}
+
+/**
+ * Quello scelto nelle preferenze per il lavoro di frontiera, o il predefinito.
+ *
+ * È il modello «principale»: quello della chat, delle bozze e del punto. I
+ * livelli sotto hanno il loro, vedi `modelloDelLivello`.
+ */
+export function modello(c: Config = leggi()): string {
+  return modelloValido(c.modelli?.frontiera) ?? modelloValido(c.modello) ?? 'claude-sonnet-5'
+}
+
+/**
+ * I tre livelli di lavoro, e cosa ci finisce dentro.
+ *
+ * Rispecchiano `LAVORI` in modello.ts: `casa` sono le manovre interne che
+ * nessuno legge, `media` le letture di ogni giorno che restano dentro l'app,
+ * `frontiera` quello che lei legge e firma. La persona sceglie un modello per
+ * ciascuno nelle preferenze: è il modo di dire «per i titoli spendi poco, per
+ * le bozze spendi quello che serve» senza dover conoscere la tabella.
+ */
+export type Livello = 'casa' | 'media' | 'frontiera'
+export const LIVELLI: readonly Livello[] = ['casa', 'media', 'frontiera']
+
+/** Il modello economico della famiglia: il predefinito delle manovre interne. */
+export const ECONOMICO = 'claude-haiku-4-5'
+
+/**
+ * Il modello per un livello.
+ *
+ * Senza una scelta: le manovre interne vanno sull'economico, le letture di
+ * ogni giorno seguono la frontiera — che è quello che è sempre successo, e
+ * `livelli.test.ts` lo pretende — e la frontiera è `modello()`.
+ */
+export function modelloDelLivello(livello: Livello, c: Config = leggi()): string {
+  const scelto = modelloValido(c.modelli?.[livello])
+  if (scelto) return scelto
+  return livello === 'casa' ? ECONOMICO : modello(c)
+}
+
+/** Tutti e tre insieme, come li mostra la schermata. */
+export function modelliPerLivello(c: Config = leggi()): Record<Livello, string> {
+  return { casa: modelloDelLivello('casa', c), media: modelloDelLivello('media', c), frontiera: modelloDelLivello('frontiera', c) }
 }
 
 /**
@@ -198,6 +241,12 @@ type Tenuta = {
 }
 const inMemoria = new Map<string, Tenuta>()
 const sporchi = new Set<string>()
+const scrivendo = new Set<string>()
+const basiLette = new WeakMap<Config, { cartella: string; config: Config }>()
+function ricorda(c: Config): Config {
+  basiLette.set(c, { cartella: cartella(), config: structuredClone(c) })
+  return c
+}
 let scaricoInCorso: Promise<void> | null = null
 let scaricoProgrammato: ReturnType<typeof setTimeout> | null = null
 
@@ -221,29 +270,40 @@ function segnaSporco(utente: string) {
  * Le tre configurazioni messe insieme: quella da cui siamo partiti, la nostra,
  * e quella che nel frattempo ha scritto un'altra replica.
  *
- * Si fonde per chiave di primo livello, e non è una semplificazione: quelle
- * chiavi sono le sezioni della configurazione — `posta`, `google`, `tono`,
- * `argomenti` — e sono indipendenti fra loro. Chi ha collegato la posta su una
- * replica e ha cambiato tono sull'altra deve ritrovarsi tutt'e due, che è
- * quello che è successo davvero; scendere più in fondo vorrebbe dire decidere
- * chi vince dentro `posta`, e lì una risposta giusta non c'è.
+ * Si fondono anche i campi di una sezione: cambiare il modello non deve
+ * ripristinare la vecchia chiave che un'altra scrittura ha appena ruotato.
+ * Quando cambia l'identità del servizio o dell'account, invece, quella
+ * sezione si sostituisce: una credenziale non si eredita da un altro server.
  *
  * Quello che noi non abbiamo toccato lo prende da loro. Quello che abbiamo
  * toccato noi vince, perché è la modifica che una persona ha appena fatto e
  * che sta guardando sullo schermo.
  */
 function fondi(base: Config, nostro: Config, loro: Config): Config {
-  const fuso = { ...loro } as Record<string, unknown>
-  const b = base as Record<string, unknown>
-  const n = nostro as Record<string, unknown>
-  for (const k of new Set([...Object.keys(b), ...Object.keys(n)])) {
-    const prima = JSON.stringify(b[k])
-    const adesso = JSON.stringify(n[k])
-    if (prima === adesso) continue          // non l'abbiamo toccata noi: vale la loro
-    if (adesso === undefined) delete fuso[k]  // l'abbiamo tolta noi
-    else fuso[k] = n[k]
+  const oggetto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+  const unisci = (b: unknown, n: unknown, l: unknown, percorso = ''): unknown => {
+    if (JSON.stringify(b) === JSON.stringify(n)) return structuredClone(l)
+    if (l === undefined && oggetto(b) && oggetto(n) && ['claude', 'compatibile'].includes(percorso)) {
+      // Changing an old model/name snapshot is not permission to restore a
+      // credential explicitly disconnected after that snapshot was read.
+      const cambiata = [...CAMPI_SEGRETI].some(k => segretoPresente(n[k]) && n[k] !== b[k])
+      if (!cambiata) return undefined
+    }
+    if (oggetto(n) && oggetto(l) && (b === undefined || oggetto(b))) {
+      const fuso = { ...l }
+      const prima = oggetto(b) ? b : {}
+      const identita = percorso === 'compatibile' ? ['url'] : percorso === 'posta' ? ['host', 'utente'] : ['clientId', 'tenant']
+      if (identita.some(k => n[k] !== undefined && n[k] !== prima[k] && n[k] !== l[k])) return structuredClone(n)
+      for (const k of new Set([...Object.keys(prima), ...Object.keys(n)])) {
+        const v = unisci(prima[k], n[k], l[k], percorso ? `${percorso}.${k}` : k)
+        if (v === undefined) delete fuso[k]
+        else fuso[k] = v
+      }
+      return fuso
+    }
+    return structuredClone(n)
   }
-  return fuso as Config
+  return unisci(base, nostro, loro) as Config
 }
 
 async function scarica(): Promise<void> {
@@ -256,7 +316,9 @@ async function scarica(): Promise<void> {
       if (!t) continue
       const quando = new Date().toISOString()
       const nuova = t.versione + 1
-      const cifrato = postgres.cifra(JSON.stringify(t.config))
+      const inviata = structuredClone(t.config)
+      const cifrato = postgres.cifra(JSON.stringify(inviata))
+      scrivendo.add(utente)
       try {
         /*
          * Si scrive **solo se la riga è ancora quella da cui siamo partiti.**
@@ -282,7 +344,7 @@ async function scarica(): Promise<void> {
         if (vinto) {
           t.versione = nuova
           t.aggiornato = quando
-          t.base = structuredClone(t.config)
+          t.base = inviata
           continue
         }
         /*
@@ -309,6 +371,8 @@ async function scarica(): Promise<void> {
         sporchi.add(utente)
         setTimeout(() => void scarica(), 5000).unref()
         break
+      } finally {
+        scrivendo.delete(utente)
       }
     }
   })().finally(() => { scaricoInCorso = null })
@@ -348,7 +412,7 @@ function accogli(r: Riga) {
    * com'è, quella scrittura perde e passa dalla fusione, che è il posto in cui
    * quel conflitto si risolve senza perdere niente.
    */
-  if (sporchi.has(r.utente)) return
+  if (sporchi.has(r.utente) || scrivendo.has(r.utente)) return
   const config = JSON.parse(postgres.decifra(r.cifrato)) as Config
   inMemoria.set(r.utente, {
     config,
@@ -617,8 +681,10 @@ export type Config = {
   claude?: ConfigClaude
   tono?: string
   autonomia?: string
-  /** Il modello con cui ragiona. Vuoto = quello predefinito. */
+  /** Il modello con cui ragiona il lavoro di frontiera. Vuoto = quello predefinito. */
   modello?: string
+  /** Un modello per livello di lavoro; quello che manca segue la regola di `modelloDelLivello`. */
+  modelli?: Partial<Record<Livello, string>>
   /** In che lingua risponde: 'it' | 'en'. */
   lingua?: string
   /** Il fuso di chi usa (IANA, es. Europe/Rome): lo manda il browser. Senza, quello della macchina. */
@@ -710,7 +776,17 @@ export type Config = {
    * — e vale solo se il fornitore c'è davvero: una scelta senza un indirizzo
    * dietro torna a Claude senza dirlo due volte.
    */
-  motore?: 'claude' | 'compatibile'
+  motore?: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
+  /** Consent to use the locally managed ChatGPT account; no OAuth tokens here. */
+  chatgpt?: { attivo: boolean; email?: string }
+  /**
+   * OpenAI con una chiave, a consumo: l'altra strada della stessa scheda.
+   *
+   * L'account ChatGPT passa dal ponte in `chatgpt.ts`; la chiave passa da
+   * `compatibile.ts` con l'indirizzo di OpenAI, ed è per questo che qui non
+   * c'è un `url`: è sempre quello. La chiave si conserva come le altre.
+   */
+  openai?: { modello: string; chiave?: string }
   /**
    * Un fornitore che parla la lingua di OpenAI: OpenAI stessa, OpenRouter,
    * Groq, Mistral — o Ollama e LM Studio su questa macchina.
@@ -720,6 +796,8 @@ export type Config = {
    * preferenze: «il mio Ollama», non un indirizzo.
    */
   compatibile?: { url: string; chiave?: string; modello: string; nome?: string }
+  /** Saved provider keys, scoped by exact endpoint. Never returned by pubblica(). */
+  credenzialiModelli?: Record<string, { chiave: string }>
   /**
    * Di che azienda è questa installazione.
    *
@@ -860,9 +938,9 @@ export function leggi(): Config {
   const u = chi.adesso()
   // una copia, non l'oggetto in memoria: chi lo modificasse senza passare da
   // `scrivi()` cambierebbe la configurazione senza che il database lo sappia
-  if (postgres.ATTIVO && u) return structuredClone(inMemoria.get(u)?.config ?? {})
+  if (postgres.ATTIVO && u) return ricorda(structuredClone(inMemoria.get(u)?.config ?? {}))
   assicuraDir()
-  if (!existsSync(file())) return {}
+  if (!existsSync(file())) return ricorda({})
   try {
     const c = JSON.parse(readFileSync(file(), 'utf8')) as unknown
     // `JSON.parse('"ciao"')` e `JSON.parse('null')` non lanciano: tornano un
@@ -871,7 +949,7 @@ export function leggi(): Config {
       mettiDaParte('non è un oggetto')
       return {}
     }
-    return c as Config
+    return ricorda(c as Config)
   } catch (e) {
     mettiDaParte(e instanceof Error ? e.message : String(e))
     return {}
@@ -888,7 +966,71 @@ export function leggi(): Config {
  * quello nuovo, mai una via di mezzo.
  */
 /** I campi che portano una credenziale: non spariscono da una scrittura qualunque. */
-export const CON_SEGRETI = ['claude', 'posta', 'notion', 'slack', 'github', 'compatibile', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
+export const CON_SEGRETI = ['claude', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
+const CAMPI_SEGRETI = new Set(['apiKey', 'chiave', 'password', 'token', 'refresh', 'clientSecret', 'segreto', 'parola'])
+const segretoPresente = (v: unknown): v is string => typeof v === 'string' && !!v.trim()
+  && !/^[*•●…\.\s]+$/.test(v) && v !== '[credenziale rimossa / credential removed]'
+
+/** Exact endpoint identity: never reuse one provider's credential on another URL. */
+function endpointCredenziale(url: string): string | null {
+  try {
+    const u = new URL(url.trim())
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return null
+    u.hash = ''
+    return u.href.replace(/\/$/, '')
+  } catch { return null }
+}
+
+export function chiaveCompatibile(url: string, c: Config = leggi()): string | undefined {
+  const endpoint = endpointCredenziale(url)
+  if (!endpoint) return undefined
+  if (c.compatibile && endpointCredenziale(c.compatibile.url) === endpoint && segretoPresente(c.compatibile.chiave)) return c.compatibile.chiave
+  const chiave = c.credenzialiModelli?.[endpoint]?.chiave
+  return segretoPresente(chiave) ? chiave : undefined
+}
+
+function conservaCredenziali(prima: Config, c: Config, togli: readonly string[]): Config {
+  const dopo = structuredClone(c) as Record<string, unknown>
+  const vecchia = prima as Record<string, unknown>
+  const permessi = new Set(togli)
+  for (const k of CON_SEGRETI) {
+    if (permessi.has(k) || k === 'credenzialiModelli') continue
+    const p = vecchia[k]
+    if (p === undefined) continue
+    if (dopo[k] == null) {
+      dopo[k] = structuredClone(p)
+      console.warn(`myynd · una scrittura senza «${k}» conserva la connessione salvata.`)
+      continue
+    }
+    if (!p || typeof p !== 'object' || Array.isArray(p) || typeof dopo[k] !== 'object' || Array.isArray(dopo[k])) continue
+    const nuovo = dopo[k] as Record<string, unknown>
+    const vecchio = p as Record<string, unknown>
+    // A different server/account needs its own secret, never an inherited one.
+    const identita = k === 'compatibile' ? ['url'] : k === 'posta' ? ['host', 'utente'] : ['clientId', 'tenant']
+    if (identita.some(id => nuovo[id] !== undefined && nuovo[id] !== vecchio[id])) continue
+    for (const [campo, valore] of Object.entries(vecchio)) {
+      if ((CAMPI_SEGRETI.has(campo) || (k === 'calendario' && campo === 'url')) && segretoPresente(valore) && !segretoPresente(nuovo[campo])) nuovo[campo] = valore
+    }
+  }
+
+  const risultato = dopo as Config
+  const archivio = { ...(!permessi.has('credenzialiModelli') ? prima.credenzialiModelli : {}), ...risultato.credenzialiModelli }
+  const precedente = prima.compatibile && endpointCredenziale(prima.compatibile.url)
+  if (precedente && segretoPresente(prima.compatibile?.chiave) && !permessi.has('credenzialiModelli')) archivio[precedente] = { chiave: prima.compatibile.chiave }
+  if (permessi.has('compatibile') && precedente) delete archivio[precedente]
+  const attuale = risultato.compatibile && endpointCredenziale(risultato.compatibile.url)
+  if (attuale && risultato.compatibile) {
+    if (!segretoPresente(risultato.compatibile.chiave)) {
+      const salvata = archivio[attuale]?.chiave
+      if (segretoPresente(salvata)) risultato.compatibile.chiave = salvata
+      else delete risultato.compatibile.chiave
+    }
+    if (segretoPresente(risultato.compatibile.chiave)) archivio[attuale] = { chiave: risultato.compatibile.chiave }
+  }
+  if (Object.keys(archivio).length) risultato.credenzialiModelli = archivio
+  else delete risultato.credenzialiModelli
+  return risultato
+}
 
 /**
  * Scrive la configurazione.
@@ -901,26 +1043,25 @@ export const CON_SEGRETI = ['claude', 'posta', 'notion', 'slack', 'github', 'com
  */
 export function scrivi(c: Config, opz: { togli?: readonly string[] } = {}) {
   const u = chi.adesso()
+  const prima = leggi()
+  const base = basiLette.get(c)
+  if (base && base.cartella !== cartella()) throw new Error('A configuration from another account cannot be saved here.')
+  const unita = base ? fondi(base.config, c, prima) : c
+  const dopo = conservaCredenziali(prima, unita, opz.togli ?? [])
   if (postgres.ATTIVO && u) {
-    tenuta(u).config = structuredClone(c)
+    tenuta(u).config = dopo
     segnaSporco(u)
-    return
+    basiLette.set(c, { cartella: cartella(), config: structuredClone(c) })
+    return ricorda(structuredClone(dopo))
   }
   assicuraDir()
-  const prima = leggi() as Record<string, unknown>
-  const dopo = c as Record<string, unknown>
-  const permessi = new Set(opz.togli ?? [])
-  for (const k of CON_SEGRETI) {
-    if (prima[k] !== undefined && dopo[k] === undefined && !permessi.has(k)) {
-      dopo[k] = prima[k]
-      console.warn(`myynd · qualcuno ha provato a scrivere la configurazione senza «${k}»: l'ho tenuta.`, new Error().stack?.split('\n').slice(2, 5).join(' | '))
-    }
-  }
-  const accanto = `${file()}.nuovo`
-  writeFileSync(accanto, JSON.stringify(c, null, 2), { mode: 0o600 })
+  const accanto = `${file()}.nuovo-${process.pid}-${randomUUID()}`
+  writeFileSync(accanto, JSON.stringify(dopo, null, 2), { mode: 0o600, flush: true })
   chmodSync(accanto, 0o600)
   renameSync(accanto, file())
   chmodSync(file(), 0o600)
+  basiLette.set(c, { cartella: cartella(), config: structuredClone(c) })
+  return ricorda(structuredClone(dopo))
 }
 
 export function aggiorna(patch: Partial<Config>): Config {
@@ -928,9 +1069,9 @@ export function aggiorna(patch: Partial<Config>): Config {
   const puliti = Object.fromEntries(
     Object.entries(patch).filter(([, v]) => v !== undefined)
   ) as Partial<Config>
-  const c = { ...leggi(), ...puliti }
-  scrivi(c)
-  return c
+  const c = leggi()
+  Object.assign(c, puliti)
+  return scrivi(c)
 }
 
 /** La configurazione senza nessun segreto — questa sì può uscire dall'API. */
@@ -944,7 +1085,8 @@ export function pubblica(c: Config = leggi()) {
     // per un file scritto quando i nomi erano altri
     tono: tono(c),
     autonomia: autonomia(c),
-    modello: c.modello ?? 'claude-sonnet-5',
+    modello: modello(c),
+    modelli: modelliPerLivello(c),
     lingua: c.lingua ?? 'en',
     fuso: c.fuso ?? null,
     oreFatte: c.oreFatte ?? 48,
@@ -962,10 +1104,13 @@ export function pubblica(c: Config = leggi()) {
     claudeCon: c.claudeCon ?? (c.abbonamento?.attivo === true ? 'abbonamento' : 'chiave'),
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo
     // uno scollega non deve far credere alla schermata che ci sia un motore
-    motore: c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
+    motore: c.motore === 'chatgpt' ? 'chatgpt' : c.motore === 'openai' && segretoPresente(c.openai?.chiave) ? 'openai' : c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
+    chatgpt: { attivo: c.chatgpt?.attivo === true },
+    // il modello esce, la chiave no
+    openai: c.openai && segretoPresente(c.openai.chiave) ? { collegato: true, modello: c.openai.modello, chiaveSalvata: true } : null,
     // l'indirizzo e il modello escono, la chiave no
     compatibile: c.compatibile
-      ? { collegato: true, url: c.compatibile.url, modello: c.compatibile.modello, nome: c.compatibile.nome ?? null }
+      ? { collegato: true, url: c.compatibile.url, modello: c.compatibile.modello, nome: c.compatibile.nome ?? null, chiaveSalvata: !!chiaveCompatibile(c.compatibile.url, c) }
       : null,
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle, tutto: c.desktop.tutto === true } : null,
@@ -989,7 +1134,7 @@ export function pubblica(c: Config = leggi()) {
      * qualcuno legge questo campo senza passare di lì, deve trovare scritto
      * cosa vuol dire davvero.
      */
-    claude: c.claude ? { collegato: true } : null,
+    claude: segretoPresente(c.claude?.apiKey) ? { collegato: true } : null,
     // di questi esce solo come si chiamano: token, refresh e segreti non
     // attraversano mai questa funzione, ed è l'unica ragione per cui esiste
     slack: c.slack ? { collegato: true, squadra: c.slack.squadra ?? null } : null,

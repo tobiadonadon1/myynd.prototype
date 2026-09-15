@@ -125,8 +125,8 @@ const SEZIONI: Sezione[] = [
             en: 'Create your login. An email address and a password of at least eight characters are enough. If you already have a Myynd on another machine, you can bring its file over at this step ({{portaloQui}}).'
           },
           {
-            it: 'Collega Claude. Myynd ragiona con Claude: prendi una chiave API su [console.anthropic.com](https://console.anthropic.com) e incollala quando te la chiede. La chiave deve avere credito sul conto Anthropic: su console.anthropic.com apri Billing e aggiungi credito, altrimenti ogni richiesta fallisce. Se su questo Mac c’è Claude Code con l’accesso fatto, puoi usare il tuo abbonamento al posto della chiave ({{usaAbbonamento}}).',
-            en: 'Connect Claude. Myynd thinks with Claude: get an API key at [console.anthropic.com](https://console.anthropic.com) and paste it when asked. The key needs credit on the Anthropic account: on console.anthropic.com open Billing and add credit, otherwise every request fails. If Claude Code is installed and signed in on this Mac, you can use your subscription instead of the key ({{usaAbbonamento}}).'
+            it: 'Scegli con chi ragiona. In Fonti ci sono due schede, Anthropic e OpenAI: ognuna si collega con l’account che paghi già (Claude tramite Claude Code su questo computer, ChatGPT dal browser) o con una chiave API a consumo. Puoi collegare tutt’e due le strade e scegliere quale lavora. C’è anche un modello sul tuo computer, o un altro fornitore.',
+            en: 'Choose what it thinks with. Sources has two cards, Anthropic and OpenAI: each connects with the account you already pay for (Claude through Claude Code on this computer, ChatGPT from the browser) or with a pay-as-you-go API key. You can connect both ways and choose which one works. There is also a model on your own computer, or another provider.'
           },
           {
             it: 'Collega le fonti. Almeno una: la posta, una cartella, Notion. Ognuna si legge e basta. Puoi aggiungerne e toglierne quando vuoi da {{connettori}}, nel menù sotto il tuo nome.',
@@ -469,8 +469,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Motore e modello', en: 'Engine and model' },
             testo: {
-              it: 'Sotto {{motore}} scegli chi fa il lavoro: Claude con la tua chiave API, a consumo; Claude con l’abbonamento che paghi già, se su questo Mac c’è Claude Code con l’accesso fatto; oppure {{fornitore}} — OpenAI, OpenRouter, Groq, Mistral, o un modello che hai installato tu con Ollama, LM Studio o llama.cpp, collegato con un indirizzo e il nome del modello. Myynd non installa nessun modello. Sotto {{modello}}, quando lavora Claude, scegli quale: Haiku 4.5, il più rapido ed economico; Sonnet 5, il predefinito; Opus 5, il più capace e il più caro.',
-              en: 'Under {{motore}} you choose who does the work: Claude with your API key, pay as you go; Claude with the subscription you already pay for, if Claude Code is installed and signed in on this Mac; or {{fornitore}} — OpenAI, OpenRouter, Groq, Mistral, or a model you installed yourself with Ollama, LM Studio or llama.cpp, connected with an address and the model name. Myynd installs no model. Under {{modello}}, when Claude is working, you pick which one: Haiku 4.5, the fastest and cheapest; Sonnet 5, the default; Opus 5, the most capable and the most expensive.'
+              it: 'Sotto {{motore}} scegli ChatGPT con il tuo piano collegato da Fonti, Claude con una chiave API, oppure {{fornitore}}. La chat usa un modello rapido quando il tuo account lo rende disponibile; i lavori più lunghi usano il modello predefinito del conto. Myynd conserva le connessioni quando cambi motore e non passa automaticamente da ChatGPT a un’API a pagamento.',
+              en: 'Under {{motore}}, choose ChatGPT with your plan connected through Sources, Claude with an API key, or {{fornitore}}. Chat uses a fast model when your account offers one; longer work uses the account’s default model. Myynd keeps connections when you switch engines and never automatically falls back from ChatGPT to a paid API.'
             }
           },
           {

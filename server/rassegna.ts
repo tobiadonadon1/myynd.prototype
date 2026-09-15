@@ -27,10 +27,10 @@ import { chiediJSON } from './modello.ts'
 import { linguaSbagliata, soloInLingua } from './testo.ts'
 import { affinita, gusto, perIlModello, type Gusto } from './gusto.ts'
 import * as store from './store.ts'
-import { ultimo } from './punto.ts'
 import * as progetti from './progetti.ts'
 import { fuoco } from './timone.ts'
 import { fusoDi, giornoIn, oraIn } from './fuso.ts'
+import { contestoOperativo } from './memoria.ts'
 
 /** Quante notizie fanno una rassegna. Poche: si legge in tre minuti o non si legge. */
 export const QUANTE = 8
@@ -237,7 +237,7 @@ function link(dentro: string): string {
 function quando(dentro: string): string {
   const grezza = tag(dentro, 'pubDate') || tag(dentro, 'published') || tag(dentro, 'updated') || tag(dentro, 'dc:date')
   const d = grezza ? new Date(grezza) : null
-  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString()
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : ''
 }
 
 export type Grezza = {
@@ -257,7 +257,8 @@ export function leggiFeed(xml: string, fonte: Fonte): Grezza[] {
   for (const p of pezzi.slice(0, PER_FONTE)) {
     const titolo = ripulisci(tag(p, 'title'), 200)
     const indirizzo = pulisciLink(link(p))
-    if (!titolo || !/^https?:\/\//i.test(indirizzo)) continue
+    const pubblicata = quando(p)
+    if (!titolo || !/^https?:\/\//i.test(indirizzo) || !pubblicata) continue
     fuori.push({
       id: createHash('sha1').update(indirizzo).digest('hex').slice(0, 16),
       titolo,
@@ -265,7 +266,7 @@ export function leggiFeed(xml: string, fonte: Fonte): Grezza[] {
       fonte: fonte.nome,
       link: indirizzo,
       argomento: fonte.argomento,
-      quando: quando(p)
+      quando: pubblicata
     })
   }
   return fuori
@@ -317,7 +318,7 @@ export function fontiPer(lingua: string): Fonte[] {
 export function impronta(titolo: string): Set<string> {
   return new Set(
     titolo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(p => p.length >= 4)
+      .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(p => p.length >= 4 || /^\d+$/.test(p))
   )
 }
 
@@ -334,6 +335,8 @@ export function impronta(titolo: string): Set<string> {
  * due titoli di quattro parole si somiglierebbero per caso — è lo stesso fatto.
  */
 export function simili(a: Set<string>, b: Set<string>): boolean {
+  const numeri = (s: Set<string>) => [...s].filter(p => /^\d+$/.test(p)).sort().join(',')
+  if (numeri(a) !== numeri(b)) return false
   const piccolo = Math.min(a.size, b.size)
   if (!piccolo) return false
   let insieme = 0
@@ -448,15 +451,12 @@ export function contestoDi(progetti: { nome: string; doveSei: string }[], compit
   return attivi.length ? attivi : preferenze.trim() ? [{ nome: 'Interessi', testo: preferenze.trim().slice(0, 1000) }] : []
 }
 
-function contesto(): Fuoco[] {
-  // i progetti con il loro obiettivo, dalla tabella: è l'obiettivo che dice
-  // se una notizia muove qualcosa. Quelli del punto restano il ripiego per
-  // chi non ne ha ancora scritto uno
-  const vivi = progetti.vivi().map(p => ({ nome: p.nome, doveSei: p.obiettivo || p.nome }))
-  // dal punto adesso arriva la novità, che è quello che il progetto ha fatto
-  // di recente: come contesto vale quanto il «dove sei» di prima
-  const dalPunto = (ultimo()?.progetti ?? []).map(p => ({ nome: p.nome, doveSei: p.novita }))
-  return contestoDi(vivi.length ? vivi : dalPunto, store.elencoCompiti(), fuoco(), interessi())
+export function contesto(): Fuoco[] {
+  // Registered state wins over old Brief snapshots and inferred interests.
+  const vivi = progetti.perContesto().filter(p => p.stato === 'attivo').map(p => ({ nome: p.nome, doveSei: p.obiettivo || p.nome }))
+  const compiti = store.elencoCompiti().filter(c => ['mano', 'voce', 'chat', 'feed'].includes(c.origine))
+  const preferenze = leggi().argomentiDaMe ? '' : interessi()
+  return contestoDi(vivi, compiti, fuoco(), preferenze)
 }
 
 /** Fallback prudente: una parola generica in comune non basta a creare rilevanza. */
@@ -570,6 +570,7 @@ export async function scegli(candidate: Grezza[], interessi: string, g?: Gusto):
     .join('\n')
 
   const contenuto =
+    `${contestoOperativo(interessi)}\n\n` +
     (interessi.trim()
       ? `Progetti, compiti e focus attivi:\n${interessi.trim()}\n\n`
       : 'Non ci sono progetti o interessi noti: restituisci scelte vuote.\n\n') +
@@ -687,7 +688,7 @@ export type Esito = { notizie: store.Notizia[]; recenti: store.Notizia[]; quando
 
 type Edizione = { versione: 1; focus: string; quando: string; ids: string[]; controllata?: string; riprovaMinuti?: number; copertura?: 1 }
 const EDIZIONE = () => join(cartella(), 'rassegna-edizione.json')
-const improntaFocus = (focus: Fuoco[]) => createHash('sha256').update(JSON.stringify([lingua(), focus])).digest('hex')
+const improntaFocus = (focus: Fuoco[]) => createHash('sha256').update(JSON.stringify([lingua(), focus, contestoOperativo()])).digest('hex')
 
 function leggiEdizione(): Edizione | null {
   try {
@@ -710,7 +711,8 @@ function salvaEdizione(focus: Fuoco[], ids: string[], opzioni: { quando?: string
 
 function risposta(focus: Fuoco[], e: Edizione | null, fatta = false): Esito {
   const ids = e?.focus === improntaFocus(focus) ? e.ids : undefined
-  const tutte = store.notizie()
+  const ignorate = store.notizieFeedback().filter(n => n.scartata)
+  const tutte = store.notizie().filter(n => !ignorate.some(v => v.id !== n.id && simili(impronta(v.titolo), impronta(n.titolo))))
   return {
     notizie: selezioneVisibile(tutte, focus, ids),
     recenti: selezioneVisibile(tutte.filter(n => n.letta), focus, ids, Date.now(), true),
@@ -783,7 +785,13 @@ export async function aggiorna(forza = false): Promise<Esito> {
   // una rassegna sola. Chi arriva secondo aspetta il primo e ne prende l'esito.
   let giroInCorso = inCorso.get(chiave)
   if (!giroInCorso) {
-    giroInCorso = giro().catch(e => {
+    // GET chiama prepara() e subito elenco(): un giro già risolto resterebbe
+    // in questa mappa fino alla prossima microtask, mostrando «aggiornando»
+    // a ogni richiesta anche senza nessun lavoro in corso.
+    if (!focus.length) return risposta(focus, salvaEdizione(focus, []), true)
+    const posti = postiOggi(adesso)
+    if (!posti) return risposta(focus, e, true)
+    giroInCorso = giro(focus, posti).catch(e => {
       // Un server giù non deve essere richiamato da ogni GET della pagina.
       dopoErrore.set(chiave, Date.now() + 15 * 60_000)
       throw e
@@ -801,16 +809,7 @@ export async function aggiorna(forza = false): Promise<Esito> {
 const inCorso = new Map<string, Promise<Esito>>()
 const dopoErrore = new Map<string, number>()
 
-async function giro(): Promise<Esito> {
-  const focus = contesto()
-  if (!focus.length) {
-    const e = salvaEdizione(focus, [])
-    return risposta(focus, e, true)
-  }
-  // il tetto del giorno è finito: non si chiedono i giornali, non si chiama
-  // nessuno, resta quello che c'è
-  const posti = postiOggi()
-  if (!posti) return risposta(focus, leggiEdizione(), true)
+async function giro(focus: Fuoco[], posti: number): Promise<Esito> {
   const fonti = fontiPer(lingua())
   const tutte = (await Promise.all(fonti.map(prendi))).flat()
   if (!tutte.length) {
@@ -821,9 +820,10 @@ async function giro(): Promise<Esito> {
 
   // quello che è già uscito negli ultimi due giorni, per non raccontarlo due volte
   const recenti = store.notizie()
-  const lette = new Set(recenti.filter(n => n.letta).map(n => n.id))
+  const feedback = store.notizieFeedback()
+  const lette = new Set(feedback.filter(n => n.letta).map(n => n.id))
   const sogliaGia = new Date(Date.now() - 2 * 86_400_000).toISOString()
-  const gia = recenti.filter(n => n.presa >= sogliaGia).map(n => ({ id: n.id, parole: impronta(n.titolo) }))
+  const gia = [...recenti.filter(n => n.presa >= sogliaGia), ...feedback].map(n => ({ id: n.id, parole: impronta(n.titolo) }))
   // e quello che hai buttato via non rientra dalla finestra: `notizie()` non
   // lo elenca più, quindi senza questa riga sarebbe l'unica cosa che la
   // rassegna può riproporti all'infinito
@@ -841,21 +841,26 @@ async function giro(): Promise<Esito> {
   const selezionate = (dalModello === null ? pertinenti.slice(0, QUANTE) : dalModello.map(s => candidate[s.n - 1]))
     .slice(0, posti)
 
-  store.salvaNotizie(selezionate.map(n => ({ ...n, perche: null })))
+  // Feedback or project changes while a provider was answering must win.
+  const adesso = contesto()
+  const feedbackAdesso = store.notizieFeedback()
+  const confermate = improntaFocus(adesso) !== improntaFocus(focus) ? [] : selezionate.filter(n =>
+    !feedbackAdesso.some(v => v.id === n.id || simili(impronta(v.titolo), impronta(n.titolo))))
+  store.salvaNotizie(confermate.map(n => ({ ...n, perche: null })))
   store.potaNotizie(GIORNI_ARCHIVIO)
   const precedente = leggiEdizione()
-  const prima = risposta(focus, precedente)
+  const prima = risposta(adesso, precedente)
   // Le fonti possono non pubblicare novità o il modello essere irraggiungibile.
   // Conserviamo una selezione ancora pertinente, senza farla sembrare appena uscita.
   const conservate = [...prima.notizie, ...prima.recenti].slice(0, QUANTE)
-  const ids = selezionate.length ? selezionate.map(n => n.id) : conservate.map(n => n.id)
-  const e = salvaEdizione(focus, ids, {
+  const ids = confermate.length ? confermate.map(n => n.id) : conservate.map(n => n.id)
+  const e = salvaEdizione(adesso, ids, {
     ...(!selezionate.length && conservate.length && precedente ? { quando: precedente.quando } : {}),
     ...(!selezionate.length || dalModello === null ? { riprovaMinuti: dalModello === null ? 20 : 60 } : {})
   })
   dopoErrore.delete(cartella())
 
-  return risposta(focus, e, true)
+  return risposta(adesso, e, true)
 }
 
 /** Quello che c'è adesso, senza andare a prendere niente. */

@@ -194,7 +194,7 @@ export function Automazioni({ v }: { v: Vals }) {
       Adesso è quello che è — un collegamento con il suo conto.
     */}
     <header className="auto-header">
-      <h1>{t('Automazioni')}</h1>
+      <h1 id="auto-library-title">{t('Le tue automazioni')}</h1>
       <div className="auto-header-actions">
         <button className="auto-link" onClick={() => v.apriConnessioni()}>{t('Connessioni')}<span className="auto-link-count">{v.connAttivi.length}</span></button>
         <button className="auto-button primary" onClick={() => setAperto('')}><IconPiu size={14} />{t('Crea automazione')}</button>
@@ -203,10 +203,6 @@ export function Automazioni({ v }: { v: Vals }) {
     {errore && <div className="auto-error" role="alert">{t(errore)} <button className="auto-button" onClick={carica}>{t('Riprova')}</button></div>}
     {scoperteErrore && <p role="alert" className="auto-error">{t(scoperteErrore)}</p>}
     <section aria-labelledby="auto-library-title">
-      <div className="auto-section-heading auto-library-heading">
-        <h2 id="auto-library-title">{t('Le tue automazioni')}{!!tutte.length && <span className="auto-count">{tutte.length}</span>}</h2>
-        {!semplice && <span className="auto-muted">{tutte.filter(a => a.accesa).length} {t('attive')}</span>}
-      </div>
       {/*
         Una riga sola, e quello che si usa una volta al mese sta dietro i tre
         punti. I filtri erano quattro piastrelle dentro un contenitore grigio —

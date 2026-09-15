@@ -89,6 +89,34 @@ test('la delega riceve il progetto attuale per ID e conserva le note della riga'
   o.smetti()
 })
 
+test('saved email policy reaches delegation and dismissal during classification prevents saving', async () => {
+  const d = { id: 'posta:policy-race', fonte: 'posta', tipo: 'email', titolo: 'Sequoia pilot scope', corpo: 'Could you confirm the Sequoia pilot scope?', autore: 'Lee <lee@example.com>', quando: new Date().toISOString() }
+  store.salvaDocumenti([d])
+  store.scriviCompito({ id: 'policy-feedback', testo: 'Pilot scope', doc: d.id, ordine: 'policy-feedback' })
+  const policy = { nomi: ['posta.leggi'], selezione: 'richieste-dirette' as const, ambitoSelezione: 'Sequoia' }
+  store.scriviCompito({ id: 'policy-work', testo: 'Summarize direct email', origine: 'auto:human-mail', doc: d.id, attrezzi: policy, ordine: 'policy-work' })
+  let ricevuta: unknown
+  compiti.perProva({
+    svolgi: async (_c, _n, _m, _a, _cart, _passo, _doc, vincolo) => {
+      ricevuta = vincolo
+      return { testo: 'Lee asks for scope confirmation.', fonti: [{ id: d.id, label: '[1] Scope' }], verificaDocumenti: [d.id] }
+    },
+    chiedeAiuto: async () => {
+      store.cambiaStatoCompito('policy-feedback', 'lasciato')
+      return { chiede: false, manca: [], domanda: '' }
+    },
+    domandeDaFare: nessunaDomanda
+  })
+  const o = orecchio('policy-work')
+  compiti.affida('policy-work', 'bozza')
+  await o.aspetta('guaio')
+  assert.deepEqual(ricevuta, policy)
+  assert.equal(store.compito('policy-work')?.risultato, null)
+  assert.notEqual(store.compito('policy-work')?.stato, 'pronto')
+  assert.ok(!o.sentiti.some(e => e.fase === 'pronto'))
+  o.smetti()
+})
+
 test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affidata', async () => {
   compiti.perProva({
     svolgi: async (_c, _n, _m, _a, _cart, onPasso) => {

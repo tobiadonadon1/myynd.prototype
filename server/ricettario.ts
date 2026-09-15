@@ -32,7 +32,7 @@ import { cartella } from './config.ts'
 // una funzione e non una costante: la cartella dipende da chi sta chiedendo
 export const DOVE = () => join(cartella(), 'automazioni')
 
-const INDICE = join(DOVE(), 'indice.json')
+const INDICE = () => join(DOVE(), 'indice.json')
 
 /** Il tetto per file e per cartella: un repository ostile non riempie il disco. */
 const TETTO_FILE = 64 * 1024
@@ -65,13 +65,13 @@ export type Esito = {
 type Indice = { quando: string; guaio: string | null; sha: Record<string, Record<string, string>> }
 
 function leggiIndice(): Indice {
-  try { return JSON.parse(readFileSync(INDICE, 'utf8')) as Indice }
+  try { return JSON.parse(readFileSync(INDICE(), 'utf8')) as Indice }
   catch { return { quando: '', guaio: null, sha: {} } }
 }
 
 function scriviIndice(i: Indice) {
   if (!existsSync(DOVE())) mkdirSync(DOVE(), { recursive: true, mode: 0o700 })
-  writeFileSync(INDICE, JSON.stringify(i, null, 2), { mode: 0o600 })
+  writeFileSync(INDICE(), JSON.stringify(i, null, 2), { mode: 0o600 })
 }
 
 /** Quand'è andata l'ultima volta, e com'è finita. Per la schermata. */

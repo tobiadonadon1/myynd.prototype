@@ -147,7 +147,7 @@ test('quello che una replica toglie resta tolto anche fondendo', async () => {
   chi.dentro(ugo, () => {
     const c = B.leggi()
     delete c.posta
-    B.scrivi(c)
+    B.scrivi(c, { togli: ['posta'] })
   })
   await B.scaricato(5_000)
 
@@ -168,4 +168,43 @@ test('dieci scritture di fila da due repliche arrivano tutte', async () => {
   // l'ultima di ognuna delle due, e nessuna delle due sopra l'altra
   assert.equal(chi.dentro(vera, () => A.leggi().oreFatte), 9)
   assert.equal(chi.dentro(vera, () => A.leggi().tetto), 1000)
+})
+
+test('a provider model edit on a stale replica preserves the key rotated by another replica', async () => {
+  const url = 'https://replica-provider.example/v1'
+  await scrive(A, ugo, { compatibile: { url, modello: 'first', chiave: 'test-key-before-rotation' } })
+  await B.avvia()
+  await scrive(A, ugo, { compatibile: { url, modello: 'first', chiave: 'test-key-after-rotation' } })
+  await scrive(B, ugo, { compatibile: { url, modello: 'second', chiave: '' } })
+  A.perProva.dimentica(); await A.avvia()
+  const current = chi.dentro(ugo, () => A.leggi())
+  assert.equal(current.compatibile?.chiave, 'test-key-after-rotation')
+  assert.equal(current.compatibile?.modello, 'second')
+  assert.equal(chi.dentro(ugo, () => A.chiaveCompatibile(url)), 'test-key-after-rotation')
+})
+
+test('refreshing hosted configuration during a pending write cannot discard the newly saved key', async () => {
+  await scrive(A, vera, { claude: { apiKey: 'test-before-pending-write' } })
+  let started!: () => void; let release!: () => void
+  const waiting = new Promise<void>(r => { started = r })
+  const gate = new Promise<void>(r => { release = r })
+  let intercepted = false
+  postgres.usa({ query: async (sql, params) => {
+    if (!intercepted && sql.startsWith('UPDATE myynd_configurazioni')) {
+      intercepted = true; started(); await gate
+    }
+    return pg.query(sql, params)
+  } })
+  try {
+    chi.dentro(vera, () => A.aggiorna({ claude: { apiKey: 'test-during-pending-write' } }))
+    const saving = A.scaricato()
+    await waiting
+    await A.avvia()
+    assert.equal(chi.dentro(vera, () => A.leggi().claude?.apiKey), 'test-during-pending-write')
+    chi.dentro(vera, () => A.aggiorna({ tono: 'formale' }))
+    release(); await saving; await A.scaricato()
+    A.perProva.dimentica(); await A.avvia()
+    assert.equal(chi.dentro(vera, () => A.leggi().claude?.apiKey), 'test-during-pending-write')
+    assert.equal(chi.dentro(vera, () => A.leggi().tono), 'formale')
+  } finally { release(); postgres.usa(pg as unknown as import('./postgres.ts').Esecutore) }
 })

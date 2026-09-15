@@ -118,11 +118,11 @@ test('la riga per il modello: nome, obiettivo, stato; senza i chiusi, e al massi
   const righe = progetti.perIlModello().split('\n')
   assert.equal(righe.length, 8, `${righe.length} righe: il tetto è otto`)
   assert.ok(righe.every(r => r.startsWith('— ')))
-  assert.ok(righe.some(r => r === '— Progetto 1: Arrivare a 1 (attivo)'), righe.join('\n'))
-  assert.ok(righe.some(r => r === '— Progetto 2 (attivo)'), 'senza obiettivo la riga ha solo il nome')
+  assert.ok(righe.some(r => r.includes('Progetto 1 (attivo; registrato dalla persona). Obiettivo di Progetto 1: Arrivare a 1.')), righe.join('\n'))
+  assert.ok(righe.some(r => r.includes('Obiettivo di Progetto 2: non registrato; non dedurlo da altri progetti')), 'un obiettivo mancante deve essere esplicito')
   assert.ok(!righe.some(r => r.includes('Progetto 0')), 'un chiuso è arrivato al modello')
   // gli attivi prima dei fermi: con nove vivi e otto posti, resta fuori il fermo
-  assert.ok(!righe.some(r => r.includes('(fermo)')), 'un fermo è passato davanti a un attivo')
+  assert.ok(!righe.some(r => r.includes('(fermo;')), 'un fermo è passato davanti a un attivo')
 })
 
 // — cosa tocca un progetto —

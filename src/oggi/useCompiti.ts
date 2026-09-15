@@ -18,6 +18,7 @@ import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
 import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
+import { preparaApertura } from '../navigazione.ts'
 
 export const SECCHI = ['oggi', 'settimana', 'poi'] as const
 export type Secchio = (typeof SECCHI)[number]
@@ -464,8 +465,8 @@ export function useCompiti(
    * dice: un bottone premuto che non fa niente è peggio di un errore.
    */
   const copia = useCallback(async (testo: string) => {
-    try { await negliAppunti(testo); mostraToast(t('Copiato.')) }
-    catch { mostraToast(t('Non sono riuscito a copiarlo.')) }
+    try { await negliAppunti(testo); mostraToast(t('Copiato.')); return true }
+    catch { mostraToast(t('Non sono riuscito a copiarlo.')); return false }
   }, [mostraToast])
 
   /**
@@ -478,8 +479,9 @@ export function useCompiti(
    * la lista non conosce la colonna delle schermate, e non deve.
    */
   const portami = useCallback(async (id: string): Promise<Portato | null> => {
+    const apertura = preparaApertura()
     try {
-      const r = await api.portami(id)
+      const r = await apertura.completa(await api.portami(id))
       if (!r.ok) { mostraToast(t(r.errore)); return null }
       // i posti dell'app non sono «aperti» finché non ci si è arrivati: il
       // «Aperto.» lo dice solo quello che è successo davvero sul Mac
@@ -488,7 +490,7 @@ export function useCompiti(
     } catch (e) {
       mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito ad aprirlo.'))
       return null
-    }
+    } finally { apertura.annulla() }
   }, [mostraToast])
 
   const salvaFuoco = useCallback(async (testo: string) => {

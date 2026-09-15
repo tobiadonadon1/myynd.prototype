@@ -59,6 +59,7 @@ test('un entry Atom ha il link in un attributo, non nel testo', () => {
 test('il link «self» del feed non diventa il link della notizia', () => {
   const [n] = leggiFeed(`<feed><entry>
     <title>Una cosa</title>
+    <published>2026-09-14T10:00:00Z</published>
     <link rel="self" type="application/atom+xml" href="https://esempio.it/feed.xml" />
     <link rel="alternate" type="text/html" href="https://esempio.it/articolo" />
   </entry></feed>`, FONTE)
@@ -68,7 +69,7 @@ test('il link «self» del feed non diventa il link della notizia', () => {
 test('una voce senza link non entra: sarebbe un titolo che non si apre', () => {
   const fuori = leggiFeed(`<rss><channel>
     <item><title>Senza indirizzo</title></item>
-    <item><title>Con indirizzo</title><link>https://esempio.it/a</link></item>
+    <item><title>Con indirizzo</title><link>https://esempio.it/a</link><pubDate>2026-09-14T10:00:00Z</pubDate></item>
   </channel></rss>`, FONTE)
   assert.equal(fuori.length, 1)
   assert.equal(fuori[0].titolo, 'Con indirizzo')
@@ -98,7 +99,7 @@ test('la coda di tracciamento non cambia l’identità di un articolo', () => {
   const a = pulisciLink('https://esempio.it/a?utm_source=rss&utm_medium=feed&id=7')
   assert.equal(a, 'https://esempio.it/a?id=7', 'ha tolto anche quello che serve')
 
-  const stesso = (u: string) => leggiFeed(`<rss><item><title>T</title><link>${u}</link></item></rss>`, FONTE)[0].id
+  const stesso = (u: string) => leggiFeed(`<rss><item><title>T</title><link>${u}</link><pubDate>2026-09-14T10:00:00Z</pubDate></item></rss>`, FONTE)[0].id
   assert.equal(
     stesso('https://esempio.it/a?utm_source=rss'),
     stesso('https://esempio.it/a#commenti'),

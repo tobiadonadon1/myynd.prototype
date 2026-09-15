@@ -14,7 +14,7 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   const [nota, setNota] = useState(c.nota ?? '')
   const [progetti, setProgetti] = useState<Progetto[]>([])
   const [progetto, setProgetto] = useState(c.progetto ?? '')
-  useEffect(() => { let vivo = true; api.progetti().then(r => { if (vivo) setProgetti(r.progetti) }).catch(() => {}); return () => { vivo = false } }, [])
+  useEffect(() => { let vivo = true; api.progetti(c.progetto ?? undefined).then(r => { if (vivo) setProgetti(r.progetti) }).catch(() => {}); return () => { vivo = false } }, [c.progetto])
   const oggi = giornoLocale()
   const [giorno, setGiorno] = useState(giornoCompito(c, oggi) ?? '')
   const [salvando, setSalvando] = useState(false)

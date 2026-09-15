@@ -237,7 +237,10 @@ const VERI: Ferri = {
   chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
   domandeDaFare: (...a) => claude.domandeDaFare(...a),
   preparaEmail: (...a) => claude.preparaEmail(...a),
-  postaCollegata: () => !!cfg.leggi().posta
+  postaCollegata: () => {
+    const c = cfg.leggi()
+    return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
+  }
 }
 let ferri: Ferri = VERI
 
@@ -270,7 +273,7 @@ async function svolgiUno(id: string) {
     const nota = progetto && progetto.stato !== 'chiuso'
       ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
       : c.nota
-    const { testo: grezzo, fonti } = await ferri.svolgi(
+    const { testo: grezzo, fonti, verificaDocumenti } = await ferri.svolgi(
       c.testo, nota, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
       dato?.cartella ?? null,
@@ -280,7 +283,8 @@ async function svolgiUno(id: string) {
       p => { if (!richiamati.has(chiave(id))) annuncia({ fase: 'lavoro', id, passo: p }) },
       // la riga può essere nata da un documento preciso — «rispondere a
       // Rossi» — e allora la bozza parte da lì, non da una ricerca
-      c.doc
+      c.doc,
+      dato
     )
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano
@@ -315,6 +319,13 @@ async function svolgiUno(id: string) {
      * chiede niente.
      */
     const detto = chiede && domanda ? soloDomanda(domanda) : testo
+
+    // Classification is asynchronous too: feedback arriving after drafting
+    // must still win before an automated current-email summary becomes ready.
+    const controlla = verificaDocumenti ?? [...fonti.map(f => f.id), ...(c.doc ? [c.doc] : [])]
+    if (!claude.verificaFontiSelezione(controlla, dato, `${c.testo}\n${nota ?? ''}`)) {
+      throw new Error('Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.')
+    }
 
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre

@@ -209,7 +209,7 @@ test('il recinto lo decide una funzione sola, e gli attrezzi che non leggono non
 const compatibile = await import('./compatibile.ts')
 
 /** Un giro del modello finto: un po' di testo, e le chiamate da fare. */
-type Giro = { testo?: string; chiamate?: { name: string; input: unknown }[] }
+type Giro = { testo?: string; chiamate?: { name: string; input: unknown }[]; fine?: string; prima?: () => void }
 
 /**
  * Un fornitore compatibile finto, in streaming.
@@ -236,13 +236,14 @@ function fornitoreFinto(giri: Giro[]) {
     if (String(url).endsWith('/models')) return Response.json({ data: [{ id: 'gpt-prova' }] })
     ricevute.push(init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {})
     const g = giri[Math.min(n++, giri.length - 1)] ?? {}
+    g.prima?.()
     const eventi: unknown[] = []
     if (g.testo) eventi.push({ id: 'x', model: 'gpt-prova', choices: [{ index: 0, delta: { content: g.testo } }] })
     for (const [i, c] of (g.chiamate ?? []).entries()) {
       eventi.push({ choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: `t${n}-${i}`, function: { name: c.name, arguments: JSON.stringify(c.input) } }] } }] })
     }
     eventi.push({
-      choices: [{ index: 0, delta: {}, finish_reason: g.chiamate?.length ? 'tool_calls' : 'stop' }],
+      choices: [{ index: 0, delta: {}, finish_reason: g.fine ?? (g.chiamate?.length ? 'tool_calls' : 'stop') }],
       usage: { prompt_tokens: 10, completion_tokens: 10 }
     })
     const corpo = eventi.map(e => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n'
@@ -398,6 +399,49 @@ test('il prompt compatto arriva davvero al fornitore, e con lui tre documenti e 
   scaricaIlConto()
 })
 
+test('concise cloud chat preserves full saved memory, project goals and task identities', async () => {
+  contoCarico()
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Quietbridge', obiettivo: 'Validate the complete customer workflow' })
+  store.scriviBlocco({ etichetta: 'decisioni', descrizione: 'Decision rules', valore: 'PRESERVE_EXPLICIT_RULE: Never publish customer details.', tetto: 1000 })
+  const domanda = 'Help me think through Quietbridge'
+  const full = claude.sistema(domanda, true)
+  const short = claude.sistema(domanda, true, false, true)
+  assert.ok(short.length < full.length - 2500, `${short.length} vs ${full.length}`)
+  assert.match(short, /PRESERVE_EXPLICIT_RULE: Never publish customer details/)
+  assert.match(short, /cliente numero 11/)
+  assert.match(short, /Quietbridge: Validate the complete customer workflow/)
+  assert.equal([...short.matchAll(/\[c-carico-\d+\]/g)].length, 20)
+  const request = claude.corpoRichiesta(domanda, [], [], true)
+  assert.match(claude.testoDi(request.system), /PRESERVE_EXPLICIT_RULE/)
+  assert.ok(claude.testoDi(request.system).length < full.length - 2000)
+  progetti.chiudi(p.id)
+  scaricaIlConto()
+})
+
+test('bounded initial chat evidence can expand an already numbered source through search', async () => {
+  const documents = Array.from({ length: 8 }, (_, i) => doc(`desktop:widechat-${i}`, `Widechat specification ${i}`, {
+    fonte: 'desktop', tipo: 'documento', corpo: 'Widechat specification context. '.repeat(65) + `DEEPLY_READ_${i}: Customer approval is required.`
+  }))
+  store.salvaDocumenti(documents)
+  const docs = claude.materialeChat('Widechat specification', [])
+  assert.equal(docs.length, 6)
+  const request = claude.corpoRichiesta('Widechat specification', [], docs)
+  const initial = claude.testoDi(request.messages.at(-1)?.content)
+  assert.doesNotMatch(initial, /DEEPLY_READ_/)
+  assert.match(claude.testoDi(request.system), /stesso numero/)
+  const first = claude.materialeChat('Widechat specification', [], true)[0]
+  const marker = first.corpo.match(/DEEPLY_READ_\d+/)![0]
+  const ricevute = fornitoreFinto([
+    { chiamate: [{ name: 'cerca', input: { query: first.titolo } }] },
+    { testo: 'Customer approval is required. [1]' }
+  ])
+  const result = await claude.rispondiInStreaming('Widechat specification', [], () => {})
+  assert.ok(risultati(ricevute).some(s => s.includes(marker) && s.includes(`[1] ${first.titolo}`)))
+  assert.deepEqual(result.fonti.map(f => f.id), [first.id])
+  for (const d of documents) store.default.prepare('DELETE FROM documenti WHERE id = ?').run(d.id)
+})
+
 test('«l’ho fatta» detto in chat chiude davvero la riga', async () => {
   store.scriviCompito({ id: 'c-chiudi', testo: 'Mandare il preventivo a Rossi', ordine: 'a', quando: 'oggi' })
   const ricevute = fornitoreFinto([
@@ -491,4 +535,161 @@ test('«questa la faccio venerdì» sposta il giorno, e cambiare scaffale porta 
   await claude.rispondiInStreaming('il contratto al diciotto', [], () => {}, attrezziFinti())
   assert.ok(risultati(ricevute).some(t => /AAAA-MM-GG/.test(t)), 'il giorno storto si rifiuta')
   assert.equal(store.compito('c-sposta')?.giorno, null)
+})
+
+test('a conversation-only follow-up carries prior project and client context without unrelated documents', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Nebulosa', obiettivo: 'Validate the portal with three customers' })
+  store.ricorda({ enunciato: 'Zyphora requires the compact proposal format', ambito: 'cliente:Zyphora', genere: 'esplicita', fiducia: 1, origine: 'test' })
+  const ricevute = fornitoreFinto([{ testo: 'Your Nebulosa goal is to validate the portal with three customers.' }])
+  const r = await claude.rispondiInStreaming('And what is my goal?', [{ ruolo: 'u', testo: 'I am working on Nebulosa with Zyphora.' }], () => {})
+  assert.match(r.testo, /Nebulosa/)
+  assert.ok(sistemi(ricevute).some(s => s.includes('Nebulosa: Validate the portal with three customers')))
+  assert.ok(sistemi(ricevute).some(s => s.includes('Zyphora requires the compact proposal format')))
+  progetti.chiudi(p.id)
+})
+
+test('delegation delivers only final work and preserves the exact originating note', async () => {
+  const d = doc('desktop:delegation-note', 'Portal release decision', { fonte: 'desktop', tipo: 'note', corpo: 'Release only after customer validation.', percorso: '/portal.md' })
+  store.salvaDocumenti([d])
+  const ricevute = fornitoreFinto([
+    { testo: 'First I will open the source and inspect it. ', chiamate: [{ name: 'apri', input: { id: d.id } }] },
+    { testo: 'Release checklist\n\nValidate with three customers before launch. Source [1].' }
+  ])
+  const r = await claude.svolgi('Prepare the release checklist', null, 'bozza', [], null, undefined, d.id)
+  assert.doesNotMatch(r.testo, /First I will/)
+  assert.match(r.testo, /^Release checklist/)
+  assert.deepEqual(r.fonti.map(f => f.id), [d.id])
+  const materiale = turni(ricevute[0]).filter(m => m.role === 'user').map(m => m.content).join('\n')
+  assert.match(materiale, /fonte precisa della riga/)
+  assert.doesNotMatch(materiale, /Rispondi a questo messaggio/)
+})
+
+test('delegation does not mark truncated prose or a missing source as finished work', async () => {
+  fornitoreFinto([{ testo: 'The half-written artifact', fine: 'length' }])
+  await assert.rejects(() => claude.svolgi('Prepare a release plan'), /interrotto prima di essere completo/)
+  const ricevute = fornitoreFinto([{ testo: 'A different message would be a wrong source.' }])
+  await assert.rejects(() => claude.svolgi('Reply to the email', null, 'bozza', [], null, undefined, 'missing-source-id'), /source.*no longer available|fonte.*più disponibile/)
+  assert.equal(ricevute.length, 0)
+})
+
+test('compatible delegation starts with bounded evidence and can read the exact source more deeply', async () => {
+  const d = doc('desktop:compact-work-evidence', 'Lunarbridge release specification', {
+    fonte: 'desktop', tipo: 'documento', corpo: 'Lunarbridge customer validation. '.repeat(130) + 'Release condition: written customer approval.'
+  })
+  store.salvaDocumenti([d])
+  const ricevute = fornitoreFinto([
+    { chiamate: [{ name: 'apri', input: { id: d.id } }] },
+    { testo: 'Release only with written customer approval. [1]' }
+  ])
+  const r = await claude.svolgi('Prepare the Lunarbridge release decision', null, 'bozza', [], null, undefined, d.id)
+  const first = turni(ricevute[0]).filter(m => m.role === 'user').map(m => m.content).join('\n')
+  assert.match(first, /estratti: usa apri/)
+  assert.doesNotMatch(first, /Release condition: written customer approval/)
+  assert.ok(risultati(ricevute).some(s => s.includes('Release condition: written customer approval.')))
+  assert.deepEqual(r.fonti.map(f => f.id), [d.id])
+})
+
+test('project planning cannot retrieve archived or completed work through later tools', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Cedarwing', obiettivo: 'Improve internal AI support systems' })
+  const old = doc('posta:cedar-archive', 'Cedarwing culture academy', { corpo: 'ARCHIVE_ONLY: Please review the old school courses.', quando: new Date(Date.now() - 90 * 86_400_000).toISOString() })
+  const done = doc('posta:cedar-done', 'Cedarwing finished pilot', { corpo: 'DONE_ONLY: Could you review the completed pilot?', quando: new Date().toISOString() })
+  store.salvaDocumenti([old, done])
+  store.scriviCompito({ id: 'cedar-finished', testo: 'Review pilot', doc: done.id, ordine: 'cedar' })
+  store.cambiaStatoCompito('cedar-finished', 'fatto')
+  cfg.scrivi({ posta: { host: 'imap.example.test', porta: 993, utente: 'me@example.test', password: 'test' } })
+  const question = 'Prepare three practical next steps for Cedarwing from its saved goal.'
+  const ricevute = fornitoreFinto([
+    { chiamate: [
+      { name: 'cerca', input: { query: 'Cedarwing' } },
+      { name: 'posta_leggi', input: { query: 'Cedarwing' } },
+      { name: 'apri', input: { id: old.id } },
+      { name: 'apri', input: { id: done.id } }
+    ] },
+    { testo: 'Proposed plan from your saved goal: choose one support workflow, measure its baseline, test a small pilot. Current status is unknown.' }
+  ])
+  await claude.svolgi(question, null, 'bozza', ['posta.leggi'])
+  const initial = turni(ricevute[0]).filter(m => m.role === 'user').map(m => m.content).join('\n')
+  assert.match(initial, /obiettivo registrato/)
+  assert.doesNotMatch(initial, /Prova a cercare con altre parole|ARCHIVE_ONLY|DONE_ONLY/)
+  assert.equal(risultati(ricevute).length, 4)
+  assert.ok(risultati(ricevute).every(t => t.includes('Non ci sono nuove fonti attuali pertinenti')))
+  assert.ok(risultati(ricevute).every(t => !/ARCHIVE_ONLY|DONE_ONLY/.test(t)))
+  const pin = fornitoreFinto([
+    { chiamate: [{ name: 'apri', input: { id: old.id } }] },
+    { testo: 'The explicitly selected archive describes old courses. [1]' }
+  ])
+  const pinned = await claude.svolgi(question, null, 'bozza', [], null, undefined, old.id)
+  assert.ok(risultati(pin).some(t => t.includes('ARCHIVE_ONLY')))
+  assert.deepEqual(pinned.fonti.map(f => f.id), [old.id])
+  progetti.chiudi(p.id)
+})
+
+test('current-project chat planning filters its initial evidence and later searches without claiming universal knowledge', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Firhaven', obiettivo: 'Improve internal AI support systems' })
+  const recent = new Date().toISOString()
+  const old = doc('posta:fir-old', 'Firhaven old academy', { corpo: 'OLD_FIR_EVIDENCE: Please prepare educational content.', quando: new Date(Date.now() - 90 * 86_400_000).toISOString() })
+  const done = doc('posta:fir-done', 'Firhaven completed builder pilot', { corpo: 'DONE_FIR_EVIDENCE: Could you review this pilot?', quando: recent })
+  const bulk = doc('posta:fir-bulk', 'Firhaven academy newsletter', { corpo: 'BULK_FIR_EVIDENCE: Join our courses. Unsubscribe from this newsletter.', autore: 'News <newsletter@example.test>', quando: recent })
+  const unrelated = doc('posta:fir-other', 'Otherstudio approval request', { corpo: 'OTHER_FIR_EVIDENCE: Could you approve this pilot?', quando: recent })
+  store.salvaDocumenti([old, done, bulk, unrelated])
+  store.scriviCompito({ id: 'fir-completed', testo: 'Review the pilot', doc: done.id, ordine: 'fir' })
+  store.cambiaStatoCompito('fir-completed', 'fatto')
+  const question = 'What should I work on next for Firhaven based on my saved goal and current evidence? If there is no fresh evidence, clearly separate your proposal from things I actually owe someone. Do not create tasks or send anything.'
+  assert.deepEqual(claude.materiale(question, []), [])
+  const ricevute = fornitoreFinto([
+    { chiamate: [{ name: 'cerca', input: { query: 'Firhaven' } }, { name: 'cerca', input: { query: 'Otherstudio' } }] },
+    { testo: 'I found no current assigned request in connected sources. Proposed next step: select one internal support workflow to validate against your saved goal.' }
+  ])
+  const result = await claude.rispondiInStreaming(question, [{ ruolo: 'a', testo: 'PREVIOUS_FIR_CLAIM: The old academy announcement is your current obligation. [1]' }], () => {})
+  const prompts = ricevute.flatMap(r => turni(r).map(t => t.content)).join('\n')
+  assert.doesNotMatch(prompts, /OLD_FIR_EVIDENCE|DONE_FIR_EVIDENCE|BULK_FIR_EVIDENCE|OTHER_FIR_EVIDENCE|PREVIOUS_FIR_CLAIM/)
+  assert.match(prompts, /Non ho trovato richieste assegnate attuali nelle fonti collegate/)
+  assert.match(prompts, /non concludere che la persona non deve nulla a nessuno/)
+  assert.equal(risultati(ricevute).length, 2)
+  assert.ok(risultati(ricevute).every(r => r.includes('La copertura delle fonti è limitata')))
+  assert.deepEqual(result.fonti, [])
+  assert.ok(claude.materiale('Summarize the historical Firhaven academy announcement', []).some(d => d.id === old.id))
+  const current = doc('posta:fir-current', 'Firhaven support pilot approval', { corpo: 'CURRENT_FIR_EVIDENCE: Could you approve the internal support pilot?', quando: recent })
+  store.salvaDocumenti([current])
+  assert.deepEqual(claude.materiale(question, []).map(d => d.id), [current.id])
+  progetti.chiudi(p.id)
+})
+
+test('saved direct-email policy constrains summary tools and an automatic origin is not a manual pin', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Redwood', obiettivo: 'Improve customer support' })
+  const base = { quando: new Date().toISOString(), autore: 'Alex <alex@example.com>' }
+  const current = doc('posta:red-current', 'Redwood approval request', { ...base, corpo: 'CURRENT_OK: Could you confirm the Redwood pilot?' })
+  const old = doc('posta:red-old', 'Redwood old school programme', { ...base, corpo: 'EXCLUDED_ARCHIVE: Please review the course.', quando: new Date(Date.now() - 90 * 86_400_000).toISOString() })
+  const dismissed = doc('posta:red-dismissed', 'Redwood outdated scope', { ...base, corpo: 'EXCLUDED_DISMISSED: Could you confirm the obsolete scope?' })
+  const unrelated = doc('posta:red-unrelated', 'Maple supplier approval', { ...base, corpo: 'EXCLUDED_OTHER: Could you approve the unrelated supplier?' })
+  store.salvaDocumenti([current, old, dismissed, unrelated])
+  store.scriviCompito({ id: 'red-dismissal', testo: 'Old scope', doc: dismissed.id, ordine: 'red' })
+  store.cambiaStatoCompito('red-dismissal', 'lasciato')
+  const policy = { selezione: 'richieste-dirette' as const, ambitoSelezione: 'Redwood' }
+  const question = 'Summarize new direct human email requests.'
+  const requests = fornitoreFinto([
+    { chiamate: [
+      { name: 'cerca', input: { query: 'approval' } },
+      { name: 'posta_leggi', input: { query: 'Redwood' } },
+      { name: 'apri', input: { id: old.id } },
+      { name: 'apri', input: { id: unrelated.id } }
+    ] },
+    { testo: 'Alex asks you to confirm the Redwood pilot. [1]' }
+  ])
+  const result = await claude.svolgi(question, null, 'bozza', ['posta.leggi'], null, undefined, current.id, policy)
+  assert.deepEqual(result.fonti.map(f => f.id), [current.id])
+  assert.deepEqual(result.verificaDocumenti, [current.id])
+  assert.ok(risultati(requests).every(t => !/EXCLUDED_/.test(t)))
+  const noCalls = fornitoreFinto([{ testo: 'Must never run for a stale automatic origin.' }])
+  await assert.rejects(() => claude.svolgi(question, null, 'bozza', [], null, undefined, old.id, policy), /non è più una richiesta attuale/)
+  assert.equal(noCalls.length, 0)
+  // Feedback received while the model is writing must invalidate the result.
+  store.scriviCompito({ id: 'red-race', testo: 'Review current pilot', doc: current.id, ordine: 'red-race' })
+  fornitoreFinto([{ prima: () => store.cambiaStatoCompito('red-race', 'fatto'), testo: 'Reply about Redwood. [1]' }])
+  await assert.rejects(() => claude.svolgi(question, null, 'bozza', [], null, undefined, current.id, policy), /mentre preparavo il risultato/)
+  progetti.chiudi(p.id)
 })

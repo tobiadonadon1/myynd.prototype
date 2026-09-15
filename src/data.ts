@@ -23,6 +23,10 @@ export type VoceFeed = {
   quando: string
   /** Perché sta sul feed, e per quale obiettivo. Vuoto per le voci di prima. */
   perche?: string | null
+  /** Verified document metadata, rather than a model-generated source label. */
+  fonteTitolo?: string | null
+  fonteQuando?: string | null
+  fonteAutore?: string | null
 }
 
 export type Gruppo = { id: string; nome: string; colore: string; nodi: number }
@@ -45,12 +49,25 @@ export const AUTONOMIE = [
   { id: 'fare', titolo: "Fino all'ultimo passo", nota: 'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.' }
 ]
 
-/** I modelli fra cui scegliere. Rispecchia MODELLI in server/config.ts. */
+/** I modelli fra cui scegliere, dal più economico al più capace. Rispecchia MODELLI in server/config.ts. */
 export const MODELLI = [
   { id: 'claude-haiku-4-5', nome: 'Haiku 4.5', nota: 'Il più rapido e il più economico. Basta finché le domande sono semplici.' },
   { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'Il predefinito. Quasi la qualità di Opus sul tuo materiale, a meno della metà.' },
   { id: 'claude-opus-5', nome: 'Opus 5', nota: 'Il più capace. Si sente sulle domande che intrecciano più documenti; costa cinque volte tanto.' }
 ]
+
+/**
+ * I tre livelli di lavoro, per scegliere un modello a ciascuno.
+ *
+ * Rispecchiano `LAVORI` in server/modello.ts, ma detti come li vede chi paga:
+ * cosa ci finisce dentro, non come si chiama nella tabella. `id` è la chiave
+ * che il server conosce.
+ */
+export const LIVELLI = [
+  { id: 'casa', titolo: 'Lavoro di servizio', nota: 'Titoli, smistamento della posta, traduzioni, rassegna, ritratto.' },
+  { id: 'media', titolo: 'Letture di ogni giorno', nota: 'Il feed, la cernita della posta, le domande che ti fa.' },
+  { id: 'frontiera', titolo: 'Quello che leggi e firmi', nota: 'La chat, le bozze, le email, il punto, le ricette.' }
+] as const
 
 export const LINGUE = [
   { id: 'it', nome: 'Italiano' },

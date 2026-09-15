@@ -89,7 +89,7 @@ test('scelto l’abbonamento, ci passa tutto il lavoro e non solo quello grosso'
   // la seconda condizione — `!fornitore()` — è arrivata con il fornitore
   // compatibile con OpenAI: se è lui il motore scelto, l'abbonamento non
   // c'entra, perché è un modo di pagare Claude di meno e non un motore in più
-  assert.match(m, /if \(abbonamento\.disponibile\(\) && !fornitore\(\)\) \{/,
+  assert.match(m, /if \(!chatgpt\.scelto\(\) && abbonamento\.disponibile\(\) && !fornitore\(\)\) \{/,
     'la catena è cambiata: rileggere perché prima di riscriverla')
   // sull'`if`, non su tutto il file: il commento qui sopra la vecchia regola la
   // cita apposta, e una prova che legge i commenti non prova niente
@@ -117,7 +117,7 @@ test('le bozze passano dall’abbonamento quando è quello scelto', () => {
   // finché non lo facevano, «lavora con l'abbonamento» non valeva per la cosa
   // che l'app fa di più — e nessuna schermata lo diceva
   const c = readFileSync(join(QUI, 'claude.ts'), 'utf8')
-  assert.match(c, /const soloAbbonamento = abbonamento\.disponibile\(\)/,
+  assert.match(c, /const soloAbbonamento = !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/,
     'le bozze non guardano più l’abbonamento: tornano tutte sulla chiave')
   // senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice che
   // quello che ha davanti è tutto quello che avrà

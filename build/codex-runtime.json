@@ -1,0 +1,31 @@
+{
+  "version": "0.145.0",
+  "source": "https://github.com/openai/codex/tree/rust-v0.145.0",
+  "license": "Apache-2.0",
+  "targets": {
+    "darwin-arm64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-darwin-arm64.tgz",
+      "integrity": "sha512-h6aQ0UxnaP8mIM/9/qPAH9MNkRliJo88toq1T36IxNM2L5JSU0TFamu+MZn7YkFgDsrp0RfiI+97Tm8AVVxqtA=="
+    },
+    "darwin-x64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-darwin-x64.tgz",
+      "integrity": "sha512-FCYzVKCa9VoLtg9gVyzKpqylonfgZrfcWZN6HsXAZPeuo8CukdMqdgTUOhDn2V6h3MbqS0z6VqQVKUllN/yKhA=="
+    },
+    "win32-x64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-win32-x64.tgz",
+      "integrity": "sha512-u0h9lk094CaXRSqE34SBW2dRaQTPa6fASXqehczWH9QdsU62mBsiAgAdp6tCG4i+YzPmmhjD8FdXNnYGNmwuMg=="
+    },
+    "win32-arm64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-win32-arm64.tgz",
+      "integrity": "sha512-sub61rjEFevi1i3Zx7nAd4JM5XxoNFqMqFc5LfTo2xSI8ixHjFvEYDFDXwXOftT04n3Ht1Wh271ioUZpDiEjEg=="
+    },
+    "linux-x64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-linux-x64.tgz",
+      "integrity": "sha512-u8w8LLv3DvsfrDCoswLIemZ0SoNEXyi511WsfFsSiYUazk9qMsB/NtU8N9vhAfN7mZAxLFoMex4v66JjHuZWwA=="
+    },
+    "linux-arm64": {
+      "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.145.0-linux-arm64.tgz",
+      "integrity": "sha512-8OLcPXaAol/FOrRoDxWhIiHIFa73KRsM41EKocjRZOwiT4TcelzJWn3dHyiuSb7teWF25rrslvSPyvhULYRRCQ=="
+    }
+  }
+}

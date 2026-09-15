@@ -36,6 +36,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import * as store from './store.ts'
 import * as attrezzi from './attrezzi.ts'
 import * as auto from './automazioni.ts'
@@ -44,6 +45,8 @@ import { cartella, leggi, lingua, nellaLingua, tono, autonomia } from './config.
 import { fuoco } from './timone.ts'
 import { chiediJSON, collegato } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
+import { classificaAttenzione } from './rilevanza.ts'
+import { contestoOperativo } from './memoria.ts'
 
 /**
  * Una proposta, con dentro tutto quello che servirà a scriverla davvero.
@@ -59,6 +62,8 @@ export type Suggerimento = {
   /** Quante prove ci sono nell'indice: si vede solo nel dettaglio. */
   quanti: number
   esempi: string[]
+  /** Exact source IDs, retained for review and revalidation before adoption. */
+  prove?: string[]
   attrezzi: string[]
   quando: auto.Quando
   guarda: { cerca?: string; soloNuovi?: boolean; limite?: number }
@@ -150,9 +155,10 @@ export function rileva(docs: Pick<store.Documento, 'id' | 'titolo' | 'fonte'>[],
       spiega: senzaTrattini(frase(prove.length, fonteScritta(suoi, inglese))),
       quanti: prove.length,
       esempi: prove.slice(0, 2).map(d => d.titolo),
+      prove: prove.map(d => d.id),
       attrezzi: suoi,
       quando: { ogni: 'giorno', ora: 8 },
-      guarda: { soloNuovi: true, limite: 8 },
+      guarda: { ...(m.pattern ? { cerca: m.id === 'invoices' ? 'invoice fattura billing' : m.id === 'meetings' ? 'meeting riunione verbale minutes' : 'proposal quote preventivo quotation' } : {}), soloNuovi: true, limite: 8 },
       metti: { inLista: 'oggi', modo: 'bozza' }
     }
     return [s]
@@ -178,6 +184,8 @@ type Archivio = {
   suggerimenti: Suggerimento[]
   /** I nomi che ha rifiutato: non si ripropongono, e il modello lo sa. */
   scartati: string[]
+  regoleScartate?: string[]
+  contesto?: string
 }
 
 const VUOTO: Archivio = { quando: null, lingua: '', suggerimenti: [], scartati: [] }
@@ -422,10 +430,24 @@ function documentiScritti(docs: store.Documento[]): string {
  * di riassunto: è esattamente il materiale su cui una proposta può nominare
  * qualcosa invece di raccontare.
  */
+export function documentiPerSuggerimenti(docs: store.Documento[], adesso = Date.now()): store.Documento[] {
+  const attivi = progetti.elenco('attivo')
+  const ignorati = store.docsIgnoratiDalFeed(docs)
+  return docs.filter(d => !ignorati.has(d.id) && classificaAttenzione(d, {
+    adesso, giorniMax: 30,
+    progettoAttivo: progetti.toccaUnProgetto(`${d.titolo}\n${d.corpo.slice(0, 1500)}`, attivi)
+  }).destinazione === 'feed')
+}
+
+const improntaContesto = () => createHash('sha256').update(JSON.stringify([
+  lingua(), contestoOperativo(), progetti.elenco('attivo').map(p => [p.id, p.obiettivo, p.note]),
+  store.feedGiaVisto(40), leggi().argomentiDaMe ? '' : leggi().argomenti
+])).digest('hex')
+
 function materiale(scartati: string[]): string {
   const c = leggi()
   const collegati = attrezzi.catalogo().filter(a => a.collegato)
-  const docs = store.recenti(40)
+  const docs = documentiPerSuggerimenti(store.recenti(200)).slice(0, 40)
   const righe = store.elencoCompiti().slice(0, 15)
   const tolte = store.automazioniTolte()
   const gia = auto.ricette().filter(r => !tolte.has(r.id)).map(r => auto.nella(r))
@@ -433,14 +455,16 @@ function materiale(scartati: string[]): string {
   return [
     `CHI LA USA: ${[c.nome, c.ruolo].filter(Boolean).join(', ') || 'non l’ha detto'}.`,
     `Come vuole che si lavori: tono ${tono(c)}; autonomia ${autonomia(c)}.`,
+    contestoOperativo(),
     f ? `Le ha chiesto di concentrarsi su questo:\n${f}` : '',
-    c.argomenti ? `Argomenti che segue: ${c.argomenti}` : '',
+    c.argomenti && !c.argomentiDaMe ? `Argomenti che ha scelto: ${c.argomenti}` : '',
     `ATTREZZI COLLEGATI (puoi usare solo questi):\n${
       collegati.map(a => `— ${a.nome} (${a.etichetta})`).join('\n') || 'nessuno'}`,
-    `PROGETTI E OBIETTIVI:\n${progetti.perIlModello() || 'nessuno'}`,
+    `PROGETTI E OBIETTIVI ATTIVI:\n${progetti.elenco('attivo').map(p => `${p.nome}: ${p.obiettivo}`).join('\n') || 'nessuno'}`,
     'DOCUMENTI ARRIVATI DI RECENTE (prima il conto per fonte e per mittente; poi uno per riga, ' +
       'con il suo id fra parentesi quadre — è quello da copiare in «prove» — chi lo manda e il giorno):\n' +
       documentiScritti(docs),
+    `FEEDBACK ESPLICITO (non trasformare queste richieste in automazioni):\n${store.feedGiaVisto(20).map(v => `${v.titolo}: ${v.stato}${v.motivo ? ` — ${v.motivo}` : ''}`).join('\n') || 'nessuno'}`,
     `RIGHE ANCORA APERTE NELLA SUA LISTA:\n${
       righe.map(r => `— ${r.testo} [${r.stato}]`).join('\n') || 'nessuna'}`,
     `AUTOMAZIONI CHE HA GIÀ (non riproporle):\n${
@@ -536,6 +560,10 @@ function proveVere(x: unknown): store.Documento[] {
  */
 function siRipete(prove: store.Documento[]): boolean {
   if (prove.length < 2) return false
+  if (!prove.some(d => Date.parse(d.quando ?? '') >= Date.now() - 7 * 86_400_000)) return false
+  // Several people replying to the same thread are still a single case.
+  const fili = new Set(prove.map(d => d.filo).filter(Boolean))
+  if (prove.every(d => !!d.filo) && fili.size === 1) return false
   const mittenti = new Set(prove.map(d => chiNudo(d.autore)).filter(Boolean))
   if (mittenti.size >= 2) return true
   const giorni = prove.map(d => (d.quando ? Date.parse(d.quando) : NaN)).filter(t => Number.isFinite(t))
@@ -565,7 +593,8 @@ function ripulisci(g: Grezza, collegati: Set<string>): Suggerimento | null {
   const suoi = attrezzi.ripulisci(g.attrezzi).filter(n => collegati.has(n))
   if (!suoi.length) return null
 
-  const prove = proveVere(g.prove)
+  const recinto = attrezzi.recinto(suoi) ?? []
+  const prove = documentiPerSuggerimenti(proveVere(g.prove)).filter(d => recinto.includes(d.fonte))
   if (!siRipete(prove)) return null
 
   const ora = Math.min(23, Math.max(0, Math.round(Number(g.quando?.ora) || 8)))
@@ -588,14 +617,16 @@ function ripulisci(g: Grezza, collegati: Set<string>): Suggerimento | null {
   // quanto ne troverà davvero: si conta nell'indice, dentro il recinto degli
   // attrezzi che ha chiesto. Meno di due e la ricerca non ha una materia:
   // girerebbe ogni mattina su un documento solo, o su nessuno
-  const trovati = cerca ? store.cerca(cerca, 20, attrezzi.recinto(suoi) ?? undefined) : []
-  if (trovati.length < 2) return null
+  const trovati = cerca ? documentiPerSuggerimenti(store.cerca(cerca, 40, recinto)) : []
+  const idTrovati = new Set(trovati.map(d => d.id))
+  if (trovati.length < 2 || !siRipete(prove.filter(d => idTrovati.has(d.id)))) return null
   return {
     id: `idea-${auto.idPer(nome, new Set())}`,
     nome,
     spiega,
     quanti: trovati.length,
     esempi: trovati.slice(0, 2).map(d => d.titolo),
+    prove: prove.map(d => d.id),
     attrezzi: suoi,
     quando,
     guarda: { ...(cerca ? { cerca } : {}), soloNuovi: true, limite: 8 },
@@ -612,11 +643,25 @@ function giaCe(s: Suggerimento, gia: { nome: string; attrezzi: string[]; cerca: 
       a.attrezzi.every(n => s.attrezzi.includes(n))))
 }
 
+/** The work/source scope is stable when the model renames its suggestion. */
+function firmaRegola(s: Suggerimento): string {
+  const cerca = nudo(s.guarda.cerca ?? '').replace(/\b(?:invoices?|fattur[ae]|billing)\b/g, 'invoice')
+    .replace(/\b(?:proposals?|quotes?|preventiv[oi]|quotation)\b/g, 'proposal')
+    .replace(/\b(?:meetings?|riunion[ei]|verbal[ei]|minutes)\b/g, 'meeting')
+  return JSON.stringify([[...s.attrezzi].sort(), [...new Set(cerca.split(' ').filter(Boolean))].sort()])
+}
+
+function rifiutata(s: Suggerimento, a = leggiArchivio()): boolean {
+  return a.scartati.some(n => nudo(n) === nudo(s.nome)) || (a.regoleScartate ?? []).includes(firmaRegola(s))
+}
+
 async function componi(scartati: string[]): Promise<Suggerimento[] | null> {
   const collegati = attrezzi.catalogo().filter(a => a.collegato)
   // niente di collegato vuol dire niente da guardare: la chiamata sarebbe una
   // spesa per una risposta che si sa già
   if (!collegati.length) return []
+  const prove = documentiPerSuggerimenti(store.recenti(200))
+  if (prove.length < 2 || !prove.some(d => Date.parse(d.quando ?? '') >= Date.now() - 7 * 86_400_000)) return []
 
   const r = await ferri.chiediJSON({
     lavoro: 'ricetta',
@@ -638,7 +683,7 @@ async function componi(scartati: string[]): Promise<Suggerimento[] | null> {
   const fuori: Suggerimento[] = []
   for (const g of r.automazioni ?? []) {
     const s = ripulisci(g, nomi)
-    if (!s || visti.has(s.id) || rifiutati.has(nudo(s.nome)) || giaCe(s, gia)) continue
+    if (!s || visti.has(s.id) || rifiutati.has(nudo(s.nome)) || rifiutata(s) || giaCe(s, gia)) continue
     visti.add(s.id)
     fuori.push(s)
     if (fuori.length === 3) break
@@ -650,7 +695,12 @@ async function componi(scartati: string[]): Promise<Suggerimento[] | null> {
 
 /** Quelle che valgono ancora: già adottate e già rifiutate escono. */
 function vivi(quali: Suggerimento[], esistenti: Set<string>): Suggerimento[] {
-  return quali.filter(s => !esistenti.has(s.id)).slice(0, 3)
+  const collegati = new Set<string>(attrezzi.catalogo().filter(a => a.collegato).map(a => a.nome))
+  return quali.filter(s => {
+    if (esistenti.has(s.id) || rifiutata(s) || !s.attrezzi.every(a => collegati.has(a))) return false
+    const docs = documentiPerSuggerimenti(proveVere(s.prove))
+    return siRipete(docs)
+  }).slice(0, 3)
 }
 
 /*
@@ -680,13 +730,14 @@ export function suggerimenti(forza = false): Promise<Suggerimento[]> {
 async function fai(forza: boolean): Promise<Suggerimento[]> {
   const esistenti = new Set([...auto.ricette().map(a => a.id), ...store.automazioniTolte()])
   const lin = lingua()
-  const locali = () => rileva(store.recenti(200), attrezzi.catalogo(), esistenti, lin !== 'it')
+  const locali = () => vivi(rileva(documentiPerSuggerimenti(store.recenti(200)), attrezzi.catalogo(), esistenti, lin !== 'it'), esistenti)
   // senza modello si resta ai cinque modelli, e non si scrive niente sul
   // foglio: una passata che non costa nulla non ha bisogno di una cache
   if (!ferri.collegato()) return locali()
 
   const a = leggiArchivio()
-  const fresco = !!a.quando && Date.now() - new Date(a.quando).getTime() < ORE_VALIDE * 3_600_000 && a.lingua === lin
+  const contesto = improntaContesto()
+  const fresco = !!a.quando && Date.now() - new Date(a.quando).getTime() < ORE_VALIDE * 3_600_000 && a.lingua === lin && a.contesto === contesto
   if (!forza && fresco) return vivi(a.suggerimenti, esistenti)
 
   /*
@@ -697,11 +748,11 @@ async function fai(forza: boolean): Promise<Suggerimento[]> {
    * ritenterebbe a ogni apertura della pagina. Il bottone resta la strada per
    * riprovare subito.
    */
-  scriviArchivio({ ...a, quando: new Date().toISOString(), lingua: lin })
+  scriviArchivio({ ...a, quando: new Date().toISOString(), lingua: lin, contesto })
   const nuovi = await componi(a.scartati)
   if (!nuovi) return a.suggerimenti.length ? vivi(a.suggerimenti, esistenti) : locali()
   // riletto adesso, non da prima della chiamata: uno scarto arrivato nel frattempo resterebbe fuori
-  scriviArchivio({ ...leggiArchivio(), quando: new Date().toISOString(), lingua: lin, suggerimenti: nuovi })
+  scriviArchivio({ ...leggiArchivio(), quando: new Date().toISOString(), lingua: lin, contesto, suggerimenti: nuovi })
   return vivi(nuovi, esistenti)
 }
 
@@ -709,8 +760,8 @@ async function fai(forza: boolean): Promise<Suggerimento[]> {
 function trova(id: string): Suggerimento | undefined {
   const esistenti = new Set([...auto.ricette().map(a => a.id), ...store.automazioniTolte()])
   const dal = leggiArchivio().suggerimenti.find(s => s.id === id)
-  if (dal) return dal
-  return rileva(store.recenti(200), attrezzi.catalogo(), esistenti, lingua() !== 'it').find(s => s.id === id)
+  if (dal) return vivi([dal], esistenti)[0]
+  return vivi(rileva(documentiPerSuggerimenti(store.recenti(200)), attrezzi.catalogo(), esistenti, lingua() !== 'it'), esistenti).find(s => s.id === id)
 }
 
 /**
@@ -723,7 +774,7 @@ function trova(id: string): Suggerimento | undefined {
  */
 export function scarta(id: string): boolean {
   const a = leggiArchivio()
-  const s = a.suggerimenti.find(x => x.id === id)
+  const s = a.suggerimenti.find(x => x.id === id) ?? trova(id)
   // una proposta locale non sta nell'archivio: il suo nome lo dà il modello di
   // partenza, nella lingua di adesso, così anche quella il modello la legge rifiutata
   const locale = MODELLI.find(m => `mind-${m.id}` === id)
@@ -732,7 +783,8 @@ export function scarta(id: string): boolean {
   scriviArchivio({
     ...a,
     suggerimenti: a.suggerimenti.filter(x => x.id !== id),
-    scartati: [...new Set([...a.scartati, nome])].slice(-20)
+    scartati: [...new Set([...a.scartati, nome])],
+    regoleScartate: [...new Set([...(a.regoleScartate ?? []), ...(s ? [firmaRegola(s)] : [])])]
   })
   store.togliAutomazione(id)
   return true
@@ -774,6 +826,7 @@ export function adotta(id: string): auto.Automazione {
 
   const a = auto.scrivi({
     id,
+    suggerita: true,
     nome: due.it.nome, spiega: due.it.spiega, fai: due.it.spiega,
     quando: s.quando,
     guarda: s.guarda,

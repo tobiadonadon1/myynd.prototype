@@ -6,8 +6,8 @@ import '../components/connessioni.css'
 /** Only available integrations are in the catalog; planned sources stay secondary. */
 export function Connettori({ v }: { v: Vals }) {
   const fonti = [
-    ...v.connAttivi.map(c => ({ id: c.id, nome: c.nome, nota: c.stato, collegata: true })),
-    ...v.connSpenti.map(c => ({ id: c.id, nome: c.nome, nota: t(c.nota), collegata: false }))
+    ...v.connAttivi.map(c => ({ id: c.id, nome: c.nome, nota: c.stato, collegata: true, problema: c.problema })),
+    ...v.connSpenti.map(c => ({ id: c.id, nome: c.nome, nota: t(c.nota), collegata: false, problema: false }))
   ]
   // niente filtro e niente ricerca: sono una dozzina di tessere, e i due gruppi
   // dicono già l'unica cosa che uno cerca — cosa è acceso, cosa manca
@@ -33,7 +33,7 @@ export function Connettori({ v }: { v: Vals }) {
     <section className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
       <h2 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h2>
       <div className="connector-tiles">
-        {quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={c.nota} collegata={c.collegata} apri={() => v.apriConnessioni(c.id)} />)}
+        {quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={c.nota} collegata={c.collegata} problema={c.problema} apri={() => v.apriConnessioni(c.id)} />)}
       </div>
     </section>
 

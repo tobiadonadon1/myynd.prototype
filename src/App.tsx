@@ -222,10 +222,10 @@ export default function App() {
         Sopra tutto il resto, perché è l'unica cosa che spiega perché il resto
         non risponde. Sotto le connessioni no: ci si arriva anche da lì.
       */}
-      {stato.credito && stato.credito !== creditoVisto && (
+      {stato.config.motore !== 'chatgpt' && stato.credito && stato.credito !== creditoVisto && (
         <Credito
           motivo={stato.credito}
-          claude={stato.config.motore !== 'compatibile'}
+          claude={stato.config.motore === 'claude'}
           chiudi={() => setCreditoVisto(stato.credito)}
         />
       )}

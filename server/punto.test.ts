@@ -50,10 +50,11 @@ function pulisci() {
   rmSync(punto.perProva.file(), { force: true })
 }
 
+const DATA_DOC = new Date().toISOString()
 const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Documento => ({
   id, fonte: 'posta', tipo: 'email', titolo, corpo: `Il testo di ${titolo}. `.repeat(40),
   autore: 'Rossi <rossi@esempio.it>', percorso: 'INBOX',
-  quando: '2026-09-07T10:00:00.000Z', gruppo: 'posta', ...sopra
+  quando: DATA_DOC, gruppo: 'posta', ...sopra
 })
 
 /** Una notizia da GitHub, come la porta il connettore: «repo #12: titolo». */
@@ -157,8 +158,8 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
   assert.match(mandato, /id: posta:INBOX:1\n  Preventivo Rossi/)
   assert.doesNotMatch(mandato, /Offerte della settimana/, 'la posta in massa è entrata nel punto')
   assert.equal((mandato.match(/— id: /g) ?? []).length, 20, 'i documenti non sono tagliati a venti')
-  // duecento caratteri di corpo, non il documento intero
-  assert.ok(!mandato.includes('Il testo di Preventivo Rossi. '.repeat(10)), 'il corpo intero è finito nel prompt')
+  // Enough source text to include the request, with a bounded excerpt.
+  assert.ok(mandato.length < 40000, 'il materiale supera il limite ragionevole')
 
   assert.match(mandato, /Aspettano lui:[\s\S]*\[c1\] Rispondere a Bianchi \(pronto, per oggi\)\n  bozza: Gentile Bianchi/)
   assert.match(mandato, /\[c2\] Preparare il contratto \(chiede/)
@@ -183,15 +184,16 @@ test('il materiale: i documenti arrivati (senza la posta in massa, al massimo ve
 })
 
 /** Un file sul disco, con il percorso che decide se è una notizia. */
-const file = (percorso: string, quando = '2026-09-07T10:00:00.000Z'): Documento => ({
+const file = (percorso: string, quando = new Date().toISOString()): Documento => ({
   id: `desktop:${percorso}`, fonte: 'desktop', tipo: 'documento',
   titolo: percorso.slice(percorso.lastIndexOf('/') + 1),
-  corpo: 'Il testo del file, abbastanza lungo da contare come documento.',
+  corpo: 'Myynd: il testo del file, abbastanza lungo da contare come documento.',
   autore: null, percorso, quando, gruppo: 'documenti'
 })
 
-test('dal disco entra un documento vero, non un log di terminale', () => {
+test('dal disco entra un documento vero del progetto attivo, non un log di terminale', () => {
   pulisci()
+  seminaProgetto()
   const dal = new Date(Date.now() - 60_000).toISOString()
   store.salvaDocumenti([
     file('/Users/x/terminals/1.txt'),
@@ -214,6 +216,7 @@ test('dal disco entra un documento vero, non un log di terminale', () => {
 
 test('dal disco al massimo cinque, i più recenti', () => {
   pulisci()
+  seminaProgetto()
   const dal = new Date(Date.now() - 60_000).toISOString()
   store.salvaDocumenti([
     ...Array.from({ length: 8 }, (_, i) => file(`/Users/x/Documents/Contratto ${i}.pdf`)),
@@ -301,7 +304,7 @@ test('un id che non sta nel materiale non passa, nemmeno se il modello lo scrive
     progetti: [{ nome: 'Myynd', novita: 'Una cosa.', doc: 'posta:INBOX:999' }]
   })
   const e = await punto.punto({}, adesso())
-  assert.equal(e.punto?.progetti[0].doc, null)
+  assert.deepEqual(e.punto?.progetti, [], 'una novità senza fonte apribile non va nel Brief')
 })
 
 test('un progetto che non sta in tabella non entra: il punto ne parla, non ne inventa', async () => {
@@ -409,7 +412,7 @@ test('la stessa cosa detta in due sezioni esce una volta sola', async () => {
     suGithub('github:tobiaweb#3', 'tobiaweb #3: il deploy')
   ])
   fornitoreFinto({
-    progetti: [{ nome: 'tobiadonadon.com', novita: 'Il server di tobiaweb è ripartito più volte.', doc: '' }],
+    progetti: [{ nome: 'tobiadonadon.com', novita: 'Il server di tobiaweb è ripartito più volte.', doc: 'github:tobiaweb#3' }],
     github: [{ testo: 'Controlla il server di tobiaweb, ripartito più volte.', doc: 'github:tobiaweb#3' }],
     daLeggere: [],
     risposte: [{ testo: 'Anna chiede la data della prova sul campo.', doc: 'posta:INBOX:20' }],
@@ -451,9 +454,9 @@ test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano',
 
   fornitoreFinto({
     progetti: [
-      { nome: 'H-Farm', novita: 'Quattro domande senza risposta.', doc: '' },
-      { nome: 'tobiadonadon.com', novita: 'Il sito è in linea da lunedì.', doc: '' },
-      { nome: 'Nextas', novita: 'Il term sheet arriva venerdì.', doc: '' }
+      { nome: 'H-Farm', novita: 'Quattro domande senza risposta.', doc: 'posta:INBOX:20' },
+      { nome: 'tobiadonadon.com', novita: 'Il sito è in linea da lunedì.', doc: 'posta:INBOX:21' },
+      { nome: 'Nextas', novita: 'Il term sheet arriva venerdì.', doc: 'posta:INBOX:22' }
     ],
     github: [
       { testo: 'La #12 è stata unita.', doc: 'github:myynd#12' },
@@ -490,10 +493,10 @@ test('otto righe in tutto: quando il modello riempie tutto, le notizie saltano',
 test('una cosa da fare vista in una mail diventa una riga della lista con dentro quella mail', async () => {
   pulisci()
   seminaProgetto()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi', { corpo: 'Puoi mandare a Rossi il preventivo aggiornato, per favore?' })])
   fornitoreFinto({
     ...RISPOSTA,
-    compiti: [{ testo: 'Manda a Rossi il preventivo aggiornato.', doc: 'posta:INBOX:1' }]
+    compiti: [{ testo: 'Manda a Rossi il preventivo aggiornato.', doc: 'posta:INBOX:1', nota: 'Rossi aspetta il preventivo aggiornato per confermare il lavoro.', prova: 'Puoi mandare a Rossi il preventivo aggiornato, per favore?' }]
   })
 
   const e = await punto.punto({}, adesso())
@@ -640,28 +643,16 @@ test('la provenienza dal vivo: la riga madre passa il progetto, un id inventato 
   assert.match(testoDi(ricevute[0]), new RegExp(`\\[avvio-h\\].*progetto \\[${pr.id}\\]`), 'la riga aperta non dice su che progetto sta')
 
   const nate = store.elencoCompiti().filter(c => c.origine === 'punto')
-  // «Chiama il commercialista» citava un progetto inventato e nient'altro:
-  // senza documento, senza progetto vero e senza madre non nasce più
-  assert.equal(nate.length, 1, 'una riga senza nessuna provenienza è entrata in lista')
-  assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.progetto, pr.id, 'la cosa nata dalle domande di una riga non ne ha ereditato il progetto')
-  assert.equal(nate.find(c => c.testo.startsWith('Chiama')), undefined, 'un progetto inventato è entrato in lista')
-  /*
-   * E il filo resta scritto sul disco, non solo dedotto al volo.
-   *
-   * È quello che tiene in piedi «Portami lì» su una riga come «di' quale unità
-   * di H-Farm guarda l'audit»: non c'è nessun documento da aprire, ma la riga
-   * che l'ha fatta nascere è un posto, ed è quello giusto.
-   */
-  assert.equal(nate.find(c => c.testo.startsWith('Conferma'))?.madre, 'avvio-h', 'la riga nata dalle domande di un’altra non sa più da chi viene')
+  assert.deepEqual(nate, [], 'le domande di una riga già aperta non devono creare altri compiti senza una nuova richiesta documentata')
 })
 
 test('rifare il punto sulla stessa cosa da fare non raddoppia la riga', async () => {
   pulisci()
   seminaProgetto()
-  store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
+  store.salvaDocumenti([doc('posta:INBOX:1', 'Responsabile della prova', { corpo: 'Puoi scegliere chi tiene il numero della prova?' })])
   fornitoreFinto({
     ...RISPOSTA,
-    compiti: [{ testo: 'Scegli chi tiene il numero della prova.', doc: 'posta:INBOX:1' }]
+    compiti: [{ testo: 'Scegli chi tiene il numero della prova.', doc: 'posta:INBOX:1', nota: 'Rossi chiede di scegliere chi tiene il numero della prova.', prova: 'Puoi scegliere chi tiene il numero della prova?' }]
   })
   const t0 = adesso()
   await punto.punto({}, t0)
@@ -898,7 +889,7 @@ test('il punto sta in punto.json, e al giro dopo il modello riceve i progetti da
   assert.match(istruzioneDi(ricevute[1]),
     new RegExp(`I suoi progetti, e a cosa punta ciascuno[\\s\\S]*— \\[${mio.id}\\] Myynd: Un gemello che sceglie per lui\\. \\(attivo, dal ${giorno}\\)\\n  l'ultima volta hai detto: Il punto adesso ha quattro sezioni`))
   assert.match(istruzioneDi(ricevute[1]), /Non inventarne di nuovi/)
-  assert.equal(secondo.punto?.progetti[0].id, mio.id)
+  assert.deepEqual(secondo.punto?.progetti, [], 'una fonte del giro precedente non è una nuova novità')
   assert.equal(progetti.elenco().length, 1, 'il punto ha scritto un progetto in tabella')
   assert.equal(punto.ultimo()?.quando, secondo.punto?.quando)
 })
@@ -1025,7 +1016,7 @@ test('quello che ha scartato non torna nel punto', async () => {
   assert.ok(e.generatoAdesso)
   const mandato = JSON.stringify(ricevute[0])
   assert.doesNotMatch(mandato, /posta:INBOX:10/, 'la mail scartata dal feed non è nel materiale')
-  assert.doesNotMatch(mandato, /posta:INBOX:11/, 'nemmeno l’altra dello stesso mittente')
+  assert.match(mandato, /posta:INBOX:11/, 'un argomento diverso dello stesso mittente umano resta leggibile')
   assert.doesNotMatch(mandato, /posta:INBOX:12/, 'né quella della riga lasciata perdere')
   assert.match(mandato, /posta:INBOX:13/, 'quella buona sì')
   assert.match(mandato, /NON gli interessano[\s\S]*Il gestore dello stabile ha scritto[\s\S]*Sistemare il flusso in CSV/)
@@ -1208,4 +1199,37 @@ test('una riga inventata non ne fa nascere altre, e una madre parla una volta so
     { aperti: [vera], chiuse: [], madri: new Set(['c-vera']), crea: t => { dopo.push(t); return 'n2' } }
   )
   assert.deepEqual(dopo, [], 'la stessa riga ha fatto nascere figlie a ogni giro del punto')
+})
+
+test('the real local-model failure cannot restate a goal or silently omit a service receipt', async () => {
+  pulisci()
+  progetti.scrivi({ nome: 'Lunarbridge', obiettivo: 'Ship the finished site copy and offers live.' })
+  const receipt = doc('posta:receipt-proof', 'Your receipt from Developer Platform', {
+    corpo: 'Payment received. Your subscription has renewed.', massa: true, autore: 'Billing <noreply@example.test>'
+  })
+  store.salvaDocumenti([receipt])
+  fornitoreFinto({
+    progetti: [{ nome: 'Lunarbridge', novita: 'Ship the finished site copy and offers live.', doc: '' }],
+    github: [], risposte: [], daLeggere: [], aggiornamenti: [], compiti: []
+  }, 'en')
+  const result = await punto.punto({ forza: true }, adesso())
+  assert.deepEqual(result.punto?.progetti, [])
+  assert.deepEqual(result.punto?.aggiornamenti, [{ testo: receipt.titolo, doc: receipt.id }])
+  assert.deepEqual(store.elencoCompiti(), [])
+})
+
+test('new service updates remain visible when the daily model allowance is exhausted', async () => {
+  pulisci()
+  store.salvaDocumenti([doc('posta:brief-seed', 'A direct update')])
+  const requests = fornitoreFinto({ progetti: [], github: [], risposte: [], daLeggere: [], aggiornamenti: [], compiti: [] }, 'en')
+  const now = adesso()
+  for (let i = 0; i < 3; i++) await punto.punto({ forza: true }, now + minuti(i))
+  const receipt = doc('posta:new-service-after-cap', 'Your package has arrived', {
+    corpo: 'Your package has been delivered.', massa: true, autore: 'Delivery <noreply@example.test>'
+  })
+  store.salvaDocumenti([receipt])
+  const r = await punto.punto({ forza: true }, now + minuti(3))
+  assert.equal(requests.length, 3, 'showing a factual service subject does not make another model call')
+  assert.equal(r.tetto, true)
+  assert.deepEqual(r.punto?.aggiornamenti, [{ testo: receipt.titolo, doc: receipt.id }])
 })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, sessione, type ClaudeCon } from '../api'
+import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
 import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
 import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
@@ -7,11 +7,7 @@ import { IconAvanti } from '../icons'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
 import './preferenze.css'
-
-/** Una riga che si sceglie, scritta come bottone: perde il vestito del bottone e tiene il suo. */
-const RIGA_BOTTONE: React.CSSProperties = {
-  border: 'none', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left', width: '100%'
-}
+import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
 
 /** Il bottone di seconda fila, com'è in «Il tuo accesso» e nel fascicolo. */
 const SECONDARIO: React.CSSProperties = {
@@ -741,20 +737,20 @@ function CampoArgomenti({ v }: { v: Vals }) {
 /**
  * Con chi ragiona Myynd: una scelta sola, con tre strade.
  *
- * Erano tre carte — il motore, come si paga Claude, il modello di casa — e
- * rispondevano a una domanda sola, «chi fa il lavoro», da tre punti diversi:
- * per capire cosa stesse succedendo bisognava leggerle tutte. Adesso è una
- * riga per strada. Claude con la chiave, Claude con l'abbonamento che si paga
- * già, o un fornitore che parla la lingua di OpenAI — in rete, o un modello
- * sul proprio computer con Ollama, LM Studio, llama.cpp. Myynd non installa
- * niente: il modello di casa che scaricava e accendeva da sé è stato tolto, e
- * un modello locale si collega con un indirizzo come tutti gli altri.
+ * Anthropic, OpenAI, o un modello sul proprio computer (e chiunque parli la
+ * lingua di OpenAI). Le prime due sono le due schede delle Fonti: ognuna si
+ * collega con l'account che uno paga già o con una chiave a consumo, e
+ * *come* è collegata lo dice la riga sotto il nome. Qui si sceglie solo chi
+ * lavora; per collegare o cambiare strada c'è il bottone, che apre la scheda.
  *
- * La strada non collegata si collega da qui: scegliendola si apre la sua
- * scheda, e collegarla la sceglie. Collegata, si vede cosa è, e «Cambia»
- * riapre la stessa scheda. Siccome Myynd è stato messo a punto su Claude,
- * scegliere l'altra si può, ma con l'avviso scritto sotto e non in una nota
- * a piè di pagina: la qualità non deve calare in silenzio.
+ * Era una riga per ogni modo di pagare — ChatGPT, Claude con la chiave,
+ * Claude Code, un altro fornitore — con tre righe di spiegazione ciascuna.
+ * Quattro righe per tre fornitori: si leggevano tutte per capire quale fosse
+ * accesa. Adesso è un fornitore per riga, e una riga per fornitore.
+ *
+ * Siccome Myynd è stato messo a punto su Claude, scegliere un altro si può,
+ * ma con l'avviso scritto sotto e non in una nota a piè di pagina: la
+ * qualità non deve calare in silenzio.
  */
 /** «Ollama · qwen3.5:9b»: il nome che gli ha dato lei, e il modello che lavora davvero. */
 function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
@@ -762,31 +758,35 @@ function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
 }
 
 function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
-  type Via = 'chiave' | 'abbonamento' | 'compatibile'
+  type Via = 'claude' | 'openai' | 'compatibile'
   const [s, setS] = useState<ClaudeCon | null>(null)
+  const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
   const [occupato, setOccupato] = useState(false)
   const guarda = useCallback(() => { api.claude().then(setS).catch(() => setS(null)) }, [])
-  // e si rilegge quando cambia quello che è collegato: la scheda di Claude si
-  // apre sopra questa schermata, e chiudendola la riga deve dire «pronto»
-  // senza che uno esca e rientri
-  useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile])
+  // e si rilegge quando cambia quello che è collegato: la scheda si apre
+  // sopra questa schermata, e chiudendola la riga deve dire «pronto» senza
+  // che uno esca e rientri
+  useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile, v.motore])
+  useEffect(() => {
+    const controller = new AbortController()
+    api.chatgpt(controller.signal).then(r => { if (!controller.signal.aborted) setChatgpt(r) })
+      .catch(() => { if (!controller.signal.aborted) setChatgpt(null) })
+    return () => controller.abort()
+  }, [v.motore, v.claudeOn, v.openai])
 
   const f = v.compatibile
+  const o = v.openai
 
   /*
    * Il modello di casa, provato davvero, all'apertura della scheda.
    *
-   * Finora questa riga diceva solo *cosa* era collegato — nome, modello,
-   * indirizzo — e non se funzionava. Ma un modello sul proprio computer è una
-   * cosa che si spegne: si chiude Ollama, si riavvia il portatile, e la riga
-   * continua a dire «In uso» mentre la chat non risponde più. Adesso si prova,
-   * e si dice in quanto ha risposto — che è l'altra metà della domanda, perché
-   * un modello troppo grosso per quella macchina «funziona» e non si può usare.
-   *
-   * Solo in casa. La rotta che prova è la stessa che collega, e riscrive la
-   * configurazione con quello che le si manda: la chiave di un fornitore in
-   * rete qui non ce l'abbiamo — non esce mai dal server — e mandarla via
-   * vorrebbe dire scollegare qualcuno per mostrargli un numero.
+   * Questa riga diceva solo *cosa* era collegato — nome, modello, indirizzo —
+   * e non se funzionava. Ma un modello sul proprio computer è una cosa che si
+   * spegne: si chiude Ollama, si riavvia il portatile, e la riga continua a
+   * dire «In uso» mentre la chat non risponde più. Si prova, e si dice in
+   * quanto ha risposto. Solo in casa: la rotta che prova riscrive la
+   * configurazione con quello che le si manda, e la chiave di un fornitore
+   * in rete qui non ce l'abbiamo.
    */
   const inCasa = !!f && /^https?:\/\/(127\.|localhost|\[?::1\]?|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(f.url)
   const [velocita, setVelocita] = useState<{ ok: boolean; ms: number } | null>(null)
@@ -804,68 +804,78 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   /** Sopra i dieci secondi non è un dettaglio: è la chat che sembra rotta. */
   const LENTO = 10_000
 
-  // ospitati l'abbonamento non esiste: la riga non si mostra, e la scelta non ci cade mai
-  const abbonamentoPossibile = !!s?.abbonamentoPossibile
-  const attuale: Via = v.motore === 'compatibile' ? 'compatibile'
-    : abbonamentoPossibile && s?.con === 'abbonamento' ? 'abbonamento' : 'chiave'
+  const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : 'claude'
+  // Claude è collegato con la chiave, o con l'account scelto e in cui si è entrati
+  const conAccountClaude = !!s?.abbonamentoPossibile && s.con === 'abbonamento' && s.abbonamento.entrato
+  const claudeCollegato = !!s && (s.chiave.collegata || conAccountClaude)
+  const accountChatGPT = !!chatgpt?.entrato
+  const openaiCollegato = accountChatGPT || !!o?.collegato
+  const accountChatGPTInUso = v.motore === 'chatgpt' && !!chatgpt?.acceso
+
+  /** Da quale strada passa, detto in una riga. Vuoto = niente da dire. */
+  const dettaglio = (via: Via): string | undefined => {
+    if (via === 'claude') {
+      if (!claudeCollegato) return undefined
+      return conAccountClaude && (s?.con === 'abbonamento') ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
+    }
+    if (via === 'openai') {
+      if (accountChatGPTInUso || (accountChatGPT && v.motore !== 'openai')) {
+        return [t('ChatGPT, con il tuo account'), chatgpt?.email, nomePianoChatGPT(chatgpt?.piano)].filter(Boolean).join(' · ')
+      }
+      return o?.collegato ? [t('Con la chiave API'), o.modello].join(' · ') : undefined
+    }
+    if (!f) return undefined
+    // l'indirizzo può essere lungo: si spezza, non sfora. E davanti, quando
+    // si è potuto misurare, quello che conta di più: risponde, e in quanto
+    return [
+      provando ? t('Provo…')
+        : velocita ? (velocita.ok
+          ? frasi.motoreRisponde(chiEComeSiChiama(f), (velocita.ms / 1000).toFixed(1))
+          : frasi.motoreGiu(chiEComeSiChiama(f)))
+        : chiEComeSiChiama(f),
+      f.url
+    ].filter(Boolean).join(' · ')
+  }
 
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
   const manca = (via: Via): string => {
-    if (via === 'compatibile') return f ? '' : t('Non ancora collegato.')
-    if (via === 'chiave') return s?.chiave.collegata ? '' : t('Manca la chiave: collegala dalla scheda di Claude.')
-    if (!s?.abbonamento.installato) return t('Claude Code non è su questo computer.')
-    if (!s.abbonamento.entrato) return t('Apri il Terminale, scrivi «claude» e fai l’accesso.')
-    return ''
+    if (via === 'claude') return claudeCollegato || !s ? '' : t('Non ancora collegato.')
+    if (via === 'openai') return openaiCollegato || !chatgpt ? '' : t('Non ancora collegato.')
+    return f ? '' : t('Non ancora collegato.')
   }
 
   const scegli = async (via: Via) => {
+    if (occupato) return
     // finché non si sa cosa c'è, un clic non deve aprire schede a caso
-    if (occupato || !s) return
+    if (via === 'claude' && !s) return
+    // premere di nuovo la riga scelta serve solo a svegliare l'account dopo un
+    // guasto: il server azzera il riposo e riprova alla richiesta successiva
+    if (via === attuale) {
+      if (via === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo) {
+        setOccupato(true)
+        try { await api.claudeCon('abbonamento') } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
+        finally { setOccupato(false); guarda() }
+      }
+      return
+    }
     // non collegata: si apre la scheda, e collegarla la sceglie
     if (via === 'compatibile') { void v.scegliMotore('compatibile'); return }
-    if (via === 'chiave' && !s.chiave.collegata) { v.apriConnessioni('claude'); return }
-    // l'abbonamento senza Claude Code entrato non si sceglie: la riga dice già
-    // cosa manca, e scriverlo lo stesso spegnerebbe tutta l'app
-    if (via === 'abbonamento' && manca(via)) return
-    // premere di nuovo l'abbonamento serve anche a svegliarlo dopo un guasto:
-    // il server azzera il riposo e riprova alla richiesta successiva
-    if (via === attuale && !(via === 'abbonamento' && s?.abbonamento.inRiposo)) return
+    if (via === 'claude' && !claudeCollegato) { v.apriConnessioni('claude'); return }
+    if (via === 'openai' && !openaiCollegato) { v.apriConnessioni('openai'); return }
     setOccupato(true)
     try {
-      if (v.motore !== 'claude') await v.scegliMotore('claude')
-      if (s && (s.con !== via || via === 'abbonamento')) await api.claudeCon(via)
-    } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare.')) }
+      if (via === 'claude') await v.scegliMotore('claude')
+      // l'account prima della chiave: è quello che non manda una bolletta
+      else if (accountChatGPT) { await api.usaChatGPT(true); await v.ricaricaStato() }
+      else await v.scegliMotore('openai')
+    } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare motore.')) }
     finally { setOccupato(false); guarda(); v.ricaricaStato() }
   }
 
-  const vie: { id: Via; titolo: string; nota: string; dettaglio?: string; azione?: { testo: string; apri: () => void } }[] = [
-    {
-      id: 'chiave', titolo: t('Claude, con la tua chiave API'),
-      nota: t('A consumo, sul credito Anthropic. È il modello su cui Myynd è stato messo a punto.'),
-      dettaglio: s?.chiave.collegata ? t('Chiave collegata') : undefined,
-      azione: { testo: s?.chiave.collegata ? t('Cambia chiave') : t('Collega'), apri: () => v.apriConnessioni('claude') }
-    },
-    ...(abbonamentoPossibile ? [{
-      id: 'abbonamento' as Via, titolo: t('Claude, con l’abbonamento che paghi già'),
-      nota: t('Usa Claude Code su questo computer. È incluso nel tuo piano; le bozze lavorano sul materiale che Myynd ha già trovato.')
-    }] : []),
-    {
-      id: 'compatibile', titolo: t('Un altro fornitore, o un modello sul tuo computer'),
-      nota: t('OpenAI, OpenRouter, Groq, Mistral — o Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.'),
-      // l'indirizzo può essere lungo: si spezza, non sfora. E davanti, quando
-      // si è potuto misurare, quello che conta di più: risponde, e in quanto
-      dettaglio: f
-        ? [
-          provando ? t('Provo…')
-            : velocita ? (velocita.ok
-              ? frasi.motoreRisponde(chiEComeSiChiama(f), (velocita.ms / 1000).toFixed(1))
-              : frasi.motoreGiu(chiEComeSiChiama(f)))
-            : chiEComeSiChiama(f),
-          f.url
-        ].filter(Boolean).join(' · ')
-        : undefined,
-      azione: { testo: f ? t('Cambia') : t('Collega'), apri: () => v.apriConnessioni('compatibile') }
-    }
+  const vie: { id: Via; titolo: string; collegato: boolean; apri: () => void }[] = [
+    { id: 'claude', titolo: 'Anthropic', collegato: claudeCollegato, apri: () => v.apriConnessioni('claude') },
+    { id: 'openai', titolo: 'OpenAI', collegato: openaiCollegato, apri: () => v.apriConnessioni('openai') },
+    { id: 'compatibile', titolo: t('Un modello sul tuo computer, o un altro fornitore'), collegato: !!f, apri: () => v.apriConnessioni('compatibile') }
   ]
 
   return (
@@ -875,8 +885,10 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
         {vie.map(x => {
           const scelto = attuale === x.id
           const guaio = manca(x.id)
+          const riga = dettaglio(x.id)
+          const spento = x.id === 'openai' && scelto && v.motore === 'chatgpt' && chatgpt && !chatgpt.acceso
           return (
-            // dentro c'è il bottone «Collega»: la riga tiene il ruolo, non il tag
+            // dentro c'è il bottone «Gestisci»: la riga tiene il ruolo, non il tag
             <div key={x.id} role="radio" aria-checked={scelto} tabIndex={0}
               onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))} style={{
                 display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
@@ -889,37 +901,25 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 background: scelto ? '#FFF7F0' : 'transparent'
               }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{x.titolo}</span>
-                  <span className={`prefs-status ${guaio ? 'needs-attention' : 'ready'}`}>
-                    {guaio ? t('Da configurare') : scelto ? t('In uso') : t('Pronto')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{x.titolo}</span>
+                  <span className={`prefs-status ${guaio || spento ? 'needs-attention' : 'ready'}`}>
+                    {spento ? t('Disattivato in Myynd') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
+                  <Hov as="button" type="button"
+                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.apri() }}
+                    style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '5px 12px', color: '#22271F', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                    {x.collegato ? t('Gestisci') : t('Collega')}
+                  </Hov>
                 </div>
-                <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty' }}>
-                  {x.nota}
-                </div>
-                {/*
-                  Quello che manca si dice sotto la strada che l'ha scelta, non
-                  in cima alla scheda: è di quella riga che parla, e chi legge
-                  deve poter capire quale delle tre non è pronta. Accanto, il
-                  bottone che la collega.
-                */}
-                {(x.dettaglio || guaio || x.azione) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: guaio ? '#8E3F1F' : 'rgba(34,39,31,.78)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
-                      {x.dettaglio ?? guaio}
-                    </div>
-                    {x.azione && (
-                      <Hov as="button" type="button"
-                        onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.azione?.apri() }}
-                        style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '6px 13px', color: '#22271F', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
-                        hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
-                        {x.azione.testo}
-                      </Hov>
-                    )}
+                {/* da quale strada passa, o cosa manca: sotto il nome, in una riga */}
+                {(riga || guaio) && (
+                  <div style={{ fontSize: '12.5px', marginTop: 5, color: guaio ? '#8E3F1F' : 'rgba(34,39,31,.65)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
+                    {riga ?? guaio}
                   </div>
                 )}
-                {scelto && x.id === 'abbonamento' && s?.abbonamento.inRiposo && (
+                {scelto && x.id === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo && (
                   <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
                     <span>{t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}</span>
                     <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
@@ -928,15 +928,14 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                 {/*
                   Un modello che ci mette più di dieci secondi a cominciare non
                   è «un po' lento»: è la chat che sembra rotta, ed è la cosa che
-                  lui ha raccontato per prima. Dirlo qui, con la via d'uscita,
-                  invece di lasciarlo scoprire una domanda alla volta.
+                  lui ha raccontato per prima. Dirlo qui, con la via d'uscita.
                 */}
                 {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
                   <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8, textWrap: 'pretty' }}>
                     {t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}
                   </div>
                 )}
-                {scelto && x.id === 'compatibile' && (
+                {scelto && x.id !== 'claude' && (
                   <div style={{
                     fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
                     border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
@@ -949,6 +948,54 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/** La pastiglia di un modello: scelta, di rame; altrimenti solo il bordo. */
+function pastigliaModello(scelta: boolean): React.CSSProperties {
+  return scelta
+    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
+    : { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }
+}
+
+/**
+ * Quale modello di Claude, per quale lavoro.
+ *
+ * Era una scelta sola — un modello per tutto — con tre righe di spiegazione
+ * per modello. Ma il lavoro non è uno: dare un titolo a una chat e scrivere
+ * una bozza che esce dall'azienda non valgono la stessa spesa, e chi paga
+ * deve poterlo dire senza conoscere la tabella dei lavori. Tre righe, una
+ * per livello, e su ognuna i tre modelli come pastiglie: si legge in un
+ * colpo d'occhio dove si spende, e si cambia con un clic.
+ *
+ * Sta nelle preferenze e non nel codice perché è una scelta di costo. Si vede
+ * solo quando è Claude a lavorare: con un altro motore il modello lo dice la
+ * sua scheda.
+ */
+function Modelli({ v }: { v: Vals }) {
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
+      <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
+      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
+        {t('Haiku costa un decimo di Sonnet, Opus cinque volte tanto. Scegli dove spendere.')}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        {v.livelli.map(l => (
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 14 }}>{l.titolo}</div>
+              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+            </div>
+            <div role="radiogroup" aria-label={l.titolo} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {v.modelli.map(m => (
+                <button key={m.id} type="button" role="radio" aria-checked={l.scelto === m.id} title={m.nota}
+                  onClick={() => { if (l.scelto !== m.id) l.scegli(m.id) }} style={pastigliaModello(l.scelto === m.id)}>{m.nome}</button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -1058,36 +1105,11 @@ export function Preferenze({ v }: { v: Vals }) {
 
       {sezione === 'intelligenza' && <>
 
-      {/* Chi ragiona: Claude con la chiave, Claude con l'abbonamento, o un fornitore — anche in casa. */}
+      {/* Chi ragiona: Anthropic, OpenAI, o un modello in casa. */}
       <Motore v={v} avvisa={v.mostraToast} />
 
-      {/* Il modello di Claude. Sta nelle preferenze e non nel codice perché è
-          una scelta di costo, e chi paga deve poterla fare senza chiedere a
-          nessuno. Si vede solo quando è Claude a lavorare: con un altro
-          motore il modello lo dice la sua scheda. */}
-      {v.motore === 'claude' && <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Con quale modello ragiona')}</div>
-        <div role="radiogroup" aria-label={t('Con quale modello ragiona')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
-          {v.modelli.map(m => (
-            <button key={m.id} type="button" role="radio" aria-checked={m.scelto} onClick={m.onClick} style={{
-              ...RIGA_BOTTONE,
-              display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-              background: m.scelto ? 'rgba(255,255,255,.85)' : 'transparent',
-              boxShadow: m.scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
-            }}>
-              <span style={{
-                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-                border: m.scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
-                background: m.scelto ? '#FFF7F0' : 'transparent'
-              }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15 }}>{m.nome}</div>
-                <div style={{ fontSize: '12.5px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{m.nota}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>}
+      {/* I modelli di Claude, uno per livello di lavoro: solo quando è Claude a lavorare. */}
+      {v.motore === 'claude' && <Modelli v={v} />}
 
       <Uso />
       </>}

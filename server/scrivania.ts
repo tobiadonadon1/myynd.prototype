@@ -212,7 +212,7 @@ export function linkMail(connettore: string, messaggio: string | null | undefine
   if (POSTA_WEB.has(connettore)) {
     return id
       ? `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(id)}`
-      : 'https://mail.google.com/mail/u/0/'
+      : ''
   }
   return id ? `message://%3C${id}%3E` : ''
 }
@@ -221,7 +221,10 @@ export function linkMail(connettore: string, messaggio: string | null | undefine
 export function paginaBuona(url: string | null | undefined): string {
   const s = String(url ?? '').trim()
   if (!/^https?:\/\//i.test(s)) return ''
-  try { return new URL(s).toString() } catch { return '' }
+  try {
+    const u = new URL(s)
+    return u.username || u.password ? '' : u.toString()
+  } catch { return '' }
 }
 
 /** Dove porta una riga. Deciso prima di toccare qualunque cosa. */
@@ -258,7 +261,15 @@ export type Fonte = { fonte?: string | null; percorso?: string | null; messageId
 export function dovePortare(r: Riga, d: Fonte): Destinazione {
   if (r.doc && d) {
     const connettore = connettoreDi(r.doc, d.fonte)
-    if (POSTA.has(connettore)) return { dove: 'posta', url: linkMail(connettore, d.messageId) }
+    if (POSTA.has(connettore)) {
+      // Outlook supplies the exact message URL. Prefer it to a local Mail link.
+      const pagina = paginaBuona(d.percorso)
+      if (pagina) return { dove: 'pagina', url: pagina }
+      const url = linkMail(connettore, d.messageId)
+      if (url) return { dove: 'posta', url }
+      // Opening a generic inbox would not fulfil “Take me to it”.
+      return { dove: 'niente', errore: DA_NESSUN_POSTO }
+    }
     const percorso = String(d.percorso ?? '').trim()
     // un file vero comincia dalla radice; una pagina comincia da http. Non si
     // guarda il nome del connettore: ne arriva uno nuovo ogni mese, e la forma

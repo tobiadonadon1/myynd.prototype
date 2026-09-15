@@ -31,6 +31,7 @@ import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { desktop } from '../desktop'
+import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -819,7 +820,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
 
       {/* un prompt non ha un destinatario né un file da diventare: va negli
           appunti, o dritto a Claude Code se c'è un progetto in cui lavorare */}
-      {!spezzato && <Manda c={c} l={l} aperto={pannello === 'manda'} apri={() => setPannello('manda')} chiudi={() => setPannello('')} />}
+      {!spezzato && <Manda c={c} l={l} testo={testo} aperto={pannello === 'manda'} apri={() => setPannello('manda')} chiudi={() => setPannello('')} />}
       {!spezzato && <Salva c={c} l={l} testo={testo} aperto={pannello === 'salva'} apri={() => setPannello('salva')} chiudi={() => setPannello('')} />}
       <Lavora c={c} l={l} richiesta={spezzato?.prompt}
         aperto={pannello === 'lavora'} apri={() => setPannello('lavora')} chiudi={() => setPannello('')} />
@@ -1084,7 +1085,39 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
  */
 type Email = { a: string; oggetto: string; corpo: string; conosciuto: boolean }
 
-function Manda({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
+function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
+  const azione = azioneEmail(p.c, p.testo)
+  if (azione.tipo === 'nessuna') return null
+  if (azione.tipo === 'copia') return <CopiaEmail c={p.c} l={p.l} bozza={azione} />
+  return <InvioEmail {...p} />
+}
+
+function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopiare }) {
+  const [occupato, setOccupato] = useState(false)
+  const [esito, setEsito] = useState('')
+  const inCorso = useRef(false)
+  const vai = async () => {
+    if (inCorso.current) return
+    inCorso.current = true; setOccupato(true); setEsito('')
+    try {
+      const r = await copiaBozzaEApri(bozza, { copia: l.copia, apri: () => l.portami(c.id) })
+      setEsito(r === 'non-copiata' ? t('Non sono riuscito a copiarlo.')
+        : r === 'non-aperta' ? t('Bozza copiata. Non ho potuto aprire l’email: aprila dal tuo programma di posta.')
+          : t('Bozza copiata. Incollala nella risposta, rileggila e inviala dal tuo programma di posta.'))
+    } catch { setEsito(t('Non sono riuscito ad aprirlo.')) }
+    finally { inCorso.current = false; setOccupato(false) }
+  }
+  return <div style={{ marginTop: 12, padding: '13px 15px', borderRadius: 13, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)' }}>
+    <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.65)' }}>{t('Invia questa bozza dal tuo programma di posta dopo averla riletta.')}</p>
+    {c.email && <div style={{ fontSize: 12, marginBottom: 10, overflowWrap: 'anywhere', color: 'rgba(34,39,31,.65)' }}>{[c.email.a, c.email.oggetto].filter(Boolean).join(' · ')}</div>}
+    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
+      {occupato ? t('Un momento…') : bozza.apri ? t('Copia la bozza e apri l’email') : t('Copia la bozza')}
+    </button>
+    {esito && <div role="status" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 9, overflowWrap: 'anywhere' }}>{esito}</div>}
+  </div>
+}
+
+function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & Pannello) {
   const pronta = c.email
   const [preparo, setPreparo] = useState(false)
   const [mando, setMando] = useState(false)

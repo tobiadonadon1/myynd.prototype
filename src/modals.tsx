@@ -28,6 +28,7 @@ export function Documento({ v }: { v: Vals }) {
           <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('Chiudi')}</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', background: '#FFFFFF', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
+          {d._avviso && <div role="status" style={{ fontSize: 13, lineHeight: 1.5, padding: '12px 14px', marginBottom: 20, background: '#FFF4E8', borderRadius: 8, color: '#69432A' }}>{d._avviso}</div>}
           <div style={{ paddingBottom: 20, borderBottom: '2px solid #22271F' }}>
             <div id="documento-titolo" style={{ fontSize: 21, fontWeight: 500, letterSpacing: '-.015em', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.titolo}</div>
             <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.7 }}>

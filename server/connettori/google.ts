@@ -32,6 +32,7 @@ import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
 import { filoDi, idPulito } from '../filo.ts'
+import { postaAutomatica } from './segnaliPosta.ts'
 import { riflua } from '../testo.ts'
 
 const esegui = promisify(execFile)
@@ -384,7 +385,9 @@ export async function sincronizza(
         // l'etichetta SENT, ed è voluto — le sue email sono l'unico esempio
         // vero di come scrive lei, e senza di quelle una bozza «nella sua voce»
         // è nella voce di chiunque altro
-        percorso: (m.labelIds ?? []).includes('SENT') ? 'Inviata' : 'Posta in arrivo',
+        percorso: idPulito(intestazione(m, 'Message-ID'))
+          ? `https://mail.google.com/mail/${g.email ? `?authuser=${encodeURIComponent(g.email)}` : 'u/0/'}#search/rfc822msgid:${encodeURIComponent(idPulito(intestazione(m, 'Message-ID')))}`
+          : ((m.labelIds ?? []).includes('SENT') ? 'Inviata' : 'Posta in arrivo'),
         quando: new Date(Number(m.internalDate ?? Date.now())).toISOString(),
         gruppo: 'posta',
         // la conversazione, dalle stesse intestazioni che userebbe un client di
@@ -399,7 +402,10 @@ export async function sincronizza(
         // «Portami lì» può far aprire *questa* mail a Mail.app o a Gmail. L'IMAP
         // lo scriveva già, Gmail no — e le righe nate da una mail letta da qui
         // non portavano da nessuna parte
-        messageId: idPulito(intestazione(m, 'Message-ID')) || null
+        messageId: idPulito(intestazione(m, 'Message-ID')) || null,
+        inviato: (m.labelIds ?? []).includes('SENT'),
+        letto: !(m.labelIds ?? []).includes('UNREAD'),
+        massa: postaAutomatica(m.payload?.headers) || (m.labelIds ?? []).some(l => ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_FORUMS', 'SPAM', 'TRASH'].includes(l))
       })
     } catch { /* un messaggio illeggibile non ferma la lettura degli altri */ }
     avanzamento?.(++fatti, ids.length)

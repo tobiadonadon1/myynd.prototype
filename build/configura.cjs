@@ -13,6 +13,7 @@ const { readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { join } = require('node:path')
 const yaml = require('js-yaml')
 const binari = require('./binari.cjs')
+const chatgpt = require('./chatgpt-runtime.cjs')
 
 const fissa = yaml.load(readFileSync(join(__dirname, '..', 'electron-builder.yml'), 'utf8'))
 const amb = process.env
@@ -51,6 +52,8 @@ if (!firmata) mac.identity = '-'
 // esplicita, altrimenti builder ripiega su **/* (anche fuori da dist-app).
 mac.files = [...fissa.files, ...(mac.files ?? []), ...binari.voci('darwin')]
 const win = { ...fissa.win, files: [...fissa.files, ...(fissa.win.files ?? []), ...binari.voci('win32')] }
+mac.extraResources = [...(mac.extraResources ?? []), ...chatgpt.voci('darwin')]
+win.extraResources = [...(win.extraResources ?? []), ...chatgpt.voci('win32')]
 
 /*
  * Gli aggiornamenti, se c'è un posto da cui scaricarli.
@@ -89,5 +92,7 @@ module.exports = {
   ...fissa,
   mac,
   win,
+  beforePack: async ctx => { await binari.beforePack(ctx); await chatgpt.beforePack(ctx) },
+  afterPack: async ctx => { await binari.afterPack(ctx); await chatgpt.afterPack(ctx) },
   publish
 }

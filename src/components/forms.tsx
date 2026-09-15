@@ -3,12 +3,14 @@
 //
 // Le credenziali le digiti tu, nella tua app, e vanno al tuo server locale.
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
-import type { ClaudeCon, Stato } from '../api'
+import type { ChatGPT, ClaudeCon, Stato } from '../api'
 import { frasi, t } from '../lingua'
 import { desktop } from '../desktop'
 import { knob, track } from '../ui'
+import { preparaApertura } from '../navigazione.ts'
+import { controllaAccessoChatGPT, nomePianoChatGPT } from '../chatgpt-accesso.ts'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -185,7 +187,172 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
 
 type Props = { tema: Tema; ok: () => void }
 
+/** Una pastiglia di stato accanto al titolo di una strada: «in uso», «pronto», «da collegare». */
+function pastigliaStato(tema: Tema, pronto: boolean): CSSProperties {
+  const scuro = tema === 'scuro'
+  return {
+    display: 'inline-flex', alignItems: 'center', minHeight: 18, padding: '1px 7px', borderRadius: 99,
+    fontSize: '9.5px', fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase',
+    background: pronto ? (scuro ? 'rgba(118,144,101,.25)' : '#607f6818') : (scuro ? 'rgba(196,98,59,.22)' : '#c4623b17'),
+    color: pronto ? (scuro ? '#B9CDAA' : '#45604b') : (scuro ? '#E8A87C' : '#8e3f1f')
+  }
+}
+
+/** Il colore di un collegamento dentro una nota. */
+function link(tema: Tema): CSSProperties {
+  return { color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F' }
+}
+
+/**
+ * Una strada dentro una scheda: il titolo, lo stato accanto, e sotto quello che serve.
+ *
+ * Anthropic e OpenAI hanno due strade ciascuna — l'account e la chiave — e
+ * questa è la riga che le separa. Lo stato sta accanto al titolo, non in fondo:
+ * è la prima cosa che si cerca aprendo la scheda.
+ */
+function Strada({ tema, titolo, stato, children }: {
+  tema: Tema; titolo: string; stato?: { testo: string; pronto: boolean } | null; children: React.ReactNode
+}) {
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.14)' : 'rgba(34,39,31,.1)'}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+        <div style={{ ...guida(tema), fontWeight: 500 }}>{titolo}</div>
+        {stato && <span style={pastigliaStato(tema, stato.pronto)}>{stato.testo}</span>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/** Lo stato di una strada, detto in una parola. */
+function statoStrada(collegata: boolean, inUso: boolean, mancante?: string): { testo: string; pronto: boolean } {
+  if (mancante) return { testo: mancante, pronto: false }
+  if (!collegata) return { testo: t('Da collegare'), pronto: false }
+  return inUso ? { testo: t('In uso'), pronto: true } : { testo: t('Pronto'), pronto: true }
+}
+
+/**
+ * Anthropic: Claude in due modi, nella stessa scheda.
+ *
+ * Con il tuo account, attraverso Claude Code su questo computer — è lui a
+ * fare l'accesso nel browser e a tenere le credenziali, Myynd non le vede —
+ * o con una chiave API a consumo. Si possono collegare tutt'e due, e la
+ * scheda dice quale sta lavorando; l'altra si sceglie con un clic.
+ *
+ * Prima l'account era una nota a piè di pagina e ChatGPT stava in una fascia
+ * sopra la griglia delle fonti: due fornitori uguali disegnati in due modi.
+ * Adesso Anthropic e OpenAI sono due schede uguali, con le stesse due strade.
+ */
 export function FormClaude({ tema, ok }: Props) {
+  const [s, setS] = useState<ClaudeCon | null>(null)
+  const guarda = useCallback(() => { api.claude().then(setS).catch(() => {}) }, [])
+  useEffect(() => { guarda() }, [guarda])
+  return (
+    <div>
+      <div style={guida(tema)}>{t('Claude, con il tuo account o con una chiave API. Puoi collegare tutt’e due e scegliere quale lavora.')}</div>
+      <ConAccountClaude tema={tema} s={s} ok={ok} ricarica={guarda} />
+      <ConChiaveClaude tema={tema} s={s} ok={ok} ricarica={guarda} />
+    </div>
+  )
+}
+
+/**
+ * L'account Claude, con Claude Code che fa l'accesso.
+ *
+ * «Accedi con Claude» lancia `claude auth login`: si apre il browser sulla
+ * pagina di Anthropic, e quando si torna la strada è pronta e scelta. Se il
+ * browser non si apre, la via di sempre — il Terminale — è scritta sotto.
+ * Solo in casa: ospitati non c'è nessun Claude Code, e la strada non si mostra.
+ */
+function ConAccountClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | null; ricarica: () => void }) {
+  const [attesa, setAttesa] = useState<{ id: string; scade: number } | null>(null)
+  const [occupato, setOccupato] = useState(false)
+  const [err, setErr] = useState('')
+  const [avviso, setAvviso] = useState('')
+  const vivo = useRef(true)
+  const loginId = useRef<string | null>(null)
+  useEffect(() => {
+    vivo.current = true
+    return () => {
+      vivo.current = false
+      if (loginId.current) { void api.annullaAccessoClaude(loginId.current).catch(() => {}); loginId.current = null }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!attesa) return
+    return controllaAccessoChatGPT({
+      leggi: signal => api.statoAccessoClaude(attesa.id, signal),
+      entrato: () => { loginId.current = null; setAttesa(null); setErr(''); ricarica(); ok() },
+      terminato: esito => {
+        loginId.current = null; setAttesa(null)
+        if (esito.stato === 'failed') setErr(esito.errore || 'L’accesso a Claude non è riuscito. Riprova.')
+        else setAvviso(t('Accesso annullato.'))
+      },
+      errore: e => setErr(e instanceof Error ? e.message : String(e)),
+      scaduto: () => {
+        const id = loginId.current
+        loginId.current = null; setAttesa(null)
+        if (id) void api.annullaAccessoClaude(id).catch(() => {})
+        setAvviso(t('Il tempo per l’accesso è terminato. Riprova.'))
+      }
+    }, { durata: attesa.scade - Date.now() })
+  }, [attesa])
+
+  const accedi = async () => {
+    setOccupato(true); setErr(''); setAvviso('')
+    try {
+      const r = await api.accediClaude()
+      if (!vivo.current) { void api.annullaAccessoClaude(r.loginId).catch(() => {}); return }
+      loginId.current = r.loginId
+      setAttesa({ id: r.loginId, scade: Date.now() + 180_000 })
+    } catch (e) { if (vivo.current) setErr(e instanceof Error ? e.message : String(e)) }
+    finally { if (vivo.current) setOccupato(false) }
+  }
+  const annulla = async () => {
+    const id = loginId.current
+    loginId.current = null; setAttesa(null)
+    if (id) { try { await api.annullaAccessoClaude(id) } catch { /* era già finito */ } }
+    if (vivo.current) setAvviso(t('Accesso annullato.'))
+  }
+  const usa = async () => {
+    setOccupato(true); setErr('')
+    try { await api.claudeCon('abbonamento'); ricarica(); ok() }
+    catch (e) { if (vivo.current) setErr(e instanceof Error ? e.message : String(e)) }
+    finally { if (vivo.current) setOccupato(false) }
+  }
+
+  // ospitati l'account non esiste: la strada non si disegna
+  if (s && !s.abbonamentoPossibile) return null
+  const a = s?.abbonamento
+  const inUso = !!a?.entrato && s?.con === 'abbonamento'
+  const stato = !s ? null : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
+
+  return (
+    <Strada tema={tema} titolo={t('Con il tuo account Claude')} stato={stato}>
+      <div style={{ ...nota(tema), marginTop: 6 }}>{t('Passa da Claude Code su questo computer: è lui a fare l’accesso e a tenere le credenziali. Non costa niente oltre al tuo piano.')}</div>
+      {s && !a?.installato && (
+        <div style={{ ...nota(tema), marginTop: 8 }}>
+          {t('Claude Code non è su questo computer.')}{' '}
+          <a href="https://claude.com/claude-code" target="_blank" rel="noreferrer" style={link(tema)}>{t('Come si installa')}</a>
+        </div>
+      )}
+      {attesa && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{t('Completa l’accesso nel browser e torna qui. Se il browser non si è aperto: Terminale, scrivi «claude», fai l’accesso.')}</div>}
+      {avviso && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{avviso}</div>}
+      <Errore testo={err} />
+      {a?.installato && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {!attesa && <button type="button" onClick={accedi} disabled={occupato} style={azione(tema)}>{a.entrato ? t('Accedi con un altro account') : t('Accedi con Claude')}</button>}
+          {a.entrato && !inUso && !attesa && <button type="button" onClick={usa} disabled={occupato} style={azione(tema)}>{t('Usa il mio account')}</button>}
+          {attesa && <button type="button" onClick={annulla} style={azione(tema)}>{t('Annulla')}</button>}
+        </div>
+      )}
+    </Strada>
+  )
+}
+
+/** Claude con la chiave API, a consumo. */
+function ConChiaveClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | null; ricarica: () => void }) {
   const [apiKey, setApiKey] = useState('')
   const [err, setErr] = useState('')
   // la chiave è buona ma il conto non ha credito: si salva, e prima di andare
@@ -197,6 +364,8 @@ export function FormClaude({ tema, ok }: Props) {
   const [dettaglio, setDettaglio] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [nellAmbiente, setNellAmbiente] = useState(false)
+  const chiaveSalvata = !!s?.chiave.collegata
+  const inUso = chiaveSalvata && s?.con === 'chiave'
 
   // se la chiave è già nell'ambiente non c'è motivo di farla incollare di nuovo
   useEffect(() => {
@@ -207,6 +376,7 @@ export function FormClaude({ tema, ok }: Props) {
     setOccupato(true); setErr('')
     try {
       const r = await api.usaChiaveAmbiente()
+      ricarica()
       if (r.avviso) { setAvviso(r.avviso); setDettaglio(r.dettaglio ?? '') } else ok()
     }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
@@ -218,8 +388,18 @@ export function FormClaude({ tema, ok }: Props) {
     try {
       const r = await api.collegaClaude(apiKey)
       setApiKey('')
+      // una chiave appena collegata è quella che lavora: chi la incolla lo fa per quello
+      if (s?.con === 'abbonamento') await api.claudeCon('chiave').catch(() => {})
+      ricarica()
       if (r.avviso) { setAvviso(r.avviso); setDettaglio(r.dettaglio ?? '') } else ok()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  const usa = async () => {
+    setOccupato(true); setErr('')
+    try { await api.claudeCon('chiave'); ricarica(); ok() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
 
@@ -234,8 +414,8 @@ export function FormClaude({ tema, ok }: Props) {
    */
   if (avviso) {
     return (
-      <div>
-        <div style={guida(tema)}>{t('La chiave è salvata, ma c’è una cosa da sapere.')}</div>
+      <Strada tema={tema} titolo={t('Con una chiave API')} stato={statoStrada(true, true)}>
+        <div style={{ ...guida(tema), marginTop: 8 }}>{t('La chiave è salvata, ma c’è una cosa da sapere.')}</div>
         <Avviso tema={tema}>{t(avviso)}</Avviso>
         <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
         {dettaglio && (
@@ -243,16 +423,16 @@ export function FormClaude({ tema, ok }: Props) {
             <div style={{ ...nota(tema), maxHeight: 96, overflowY: 'auto' }}>{dettaglio}</div>
           </Aiuto>
         )}
-      </div>
+      </Strada>
     )
   }
 
   return (
-    <div>
-      <div style={guida(tema)}>{t('La chiave con cui Myynd ragiona: risposte, bozze e rassegna.')}</div>
+    <Strada tema={tema} titolo={t('Con una chiave API')} stato={s ? statoStrada(chiaveSalvata, inUso) : null}>
+      <div style={{ ...nota(tema), marginTop: 6 }}>{t('A consumo, sul credito Anthropic. È il modello su cui Myynd è stato messo a punto.')}</div>
       {/* la chiave che c'è già nell'ambiente: un avviso che vale adesso, e il
           suo bottone piccolo — il primario resta uno, ed è quello sotto */}
-      {nellAmbiente && (
+      {nellAmbiente && !chiaveSalvata && (
         <Avviso tema={tema}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>{t('Ne ho trovata una in ANTHROPIC_API_KEY.')}</div>
@@ -262,11 +442,14 @@ export function FormClaude({ tema, ok }: Props) {
       )}
       <Campo tema={tema} nome={t('Chiave API')}>
         <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-          placeholder="sk-ant-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          placeholder={chiaveSalvata ? t('Lascia vuoto per mantenere la chiave salvata') : 'sk-ant-…'} autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && apiKey) collega() }} />
       </Campo>
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} disabilitato={!apiKey} tema={tema}>{t('Collega Claude')}</Conferma>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Conferma onClick={collega} occupato={occupato} disabilitato={!apiKey.trim()} tema={tema}>{chiaveSalvata ? t('Cambia chiave') : t('Collega con la chiave')}</Conferma>
+        {chiaveSalvata && !inUso && <button type="button" onClick={usa} disabled={occupato} style={{ ...azione(tema), marginTop: 18 }}>{t('Usa la chiave')}</button>}
+      </div>
       <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
         <Passi tema={tema} passi={[
           t('Su console.anthropic.com apri «API keys» e creane una.'),
@@ -274,54 +457,212 @@ export function FormClaude({ tema, ok }: Props) {
           t('Incolla qui la chiave: comincia per sk-ant-.')
         ]} />
       </Aiuto>
-      <ConAbbonamento tema={tema} ok={ok} />
+    </Strada>
+  )
+}
+
+/**
+ * OpenAI: ChatGPT in due modi, nella stessa scheda.
+ *
+ * Con l'account ChatGPT — l'accesso si fa nel browser, e i limiti sono quelli
+ * del piano che uno paga già — o con una chiave API OpenAI a consumo. La
+ * stessa forma della scheda di Anthropic: due strade, uno stato per ciascuna,
+ * e la scelta di quale lavora.
+ */
+export function FormOpenAI({ tema, ok }: Props) {
+  const [s, setS] = useState<Stato | null>(null)
+  const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
+  const [erroreChatgpt, setErroreChatgpt] = useState('')
+  const guarda = useCallback(() => {
+    api.stato().then(setS).catch(() => {})
+    api.chatgpt().then(c => { setChatgpt(c); setErroreChatgpt('') })
+      .catch(e => setErroreChatgpt(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'))
+  }, [])
+  useEffect(() => { guarda() }, [guarda])
+  const accountInUso = s?.config.motore === 'chatgpt' && !!s.config.chatgpt?.attivo && !!chatgpt?.acceso
+  return (
+    <div>
+      <div style={guida(tema)}>{t('ChatGPT, con il tuo account o con una chiave API OpenAI. Puoi collegare tutt’e due e scegliere quale lavora.')}</div>
+      <ConAccountChatGPT tema={tema} chatgpt={chatgpt} errore={erroreChatgpt} inUso={accountInUso} ok={ok} ricarica={guarda} />
+      <ConChiaveOpenAI tema={tema} s={s} ok={ok} ricarica={guarda} />
     </div>
   )
 }
 
 /**
- * L'altra strada, detta dove si collega la prima.
+ * L'account ChatGPT, dal browser.
  *
- * Chi apre questa scheda ha in testa «collego Claude», e fino a ieri l'unica
- * risposta era «incolla una chiave» — mentre sul suo computer c'era Claude Code
- * già installato e già entrato, cioè un modo di far lavorare Myynd senza pagare
- * niente in più. Non dirglielo qui vuol dire fargli incollare una chiave che
- * poteva non servirgli.
- *
- * Compare solo quando c'è davvero: su un server non esiste, e su un computer
- * senza Claude Code sarebbe l'offerta di una cosa che non si può prendere.
+ * Trovare l'account è una lettura; entrare è un gesto esplicito nel browser;
+ * e appena si è dentro l'account è la strada scelta — ci si è collegati per
+ * quello. Il ponte tiene le credenziali, Myynd non le vede. Chi vuole tornare
+ * alla chiave lo sceglie sotto, con un clic.
  */
-function ConAbbonamento({ tema, ok }: Props) {
-  const [s, setS] = useState<ClaudeCon | null>(null)
+function ConAccountChatGPT({ tema, chatgpt, errore, inUso, ok, ricarica }: Props & {
+  chatgpt: ChatGPT | null; errore: string; inUso: boolean; ricarica: () => void
+}) {
   const [occupato, setOccupato] = useState(false)
-  useEffect(() => { api.claude().then(setS).catch(() => {}) }, [])
+  const [err, setErr] = useState('')
+  const [avviso, setAvviso] = useState('')
+  const [attesa, setAttesa] = useState<{ id: string; scade: number } | null>(null)
+  const vivo = useRef(true)
+  const login = useRef<AbortController | null>(null)
+  const loginId = useRef<string | null>(null)
+  useEffect(() => {
+    vivo.current = true
+    return () => {
+      vivo.current = false; login.current?.abort()
+      if (loginId.current) { void api.annullaAccessoChatGPT(loginId.current).catch(() => {}); loginId.current = null }
+    }
+  }, [])
 
-  if (!s || !s.abbonamentoPossibile || !s.abbonamento.installato) return null
-
-  const scegli = async () => {
-    setOccupato(true)
-    try { await api.claudeCon('abbonamento'); ok() } catch { /* resta la chiave */ }
-    setOccupato(false)
+  const usa = async (attivo: boolean) => {
+    setOccupato(true); setErr(''); setAvviso('')
+    try { await api.usaChatGPT(attivo); ricarica(); ok() }
+    catch (e) { if (vivo.current) setErr(e instanceof Error ? e.message : 'Non sono riuscito a cambiare motore.') }
+    finally { if (vivo.current) setOccupato(false) }
   }
 
+  useEffect(() => {
+    if (!attesa) return
+    return controllaAccessoChatGPT({
+      leggi: signal => api.statoAccessoChatGPT(attesa.id, signal),
+      // dentro: l'account diventa la strada scelta, senza un secondo clic
+      entrato: () => { loginId.current = null; setAttesa(null); setErr(''); void usa(true) },
+      terminato: esito => {
+        loginId.current = null; setAttesa(null)
+        if (esito.stato === 'failed') setErr(esito.errore || 'L’accesso a ChatGPT non è riuscito. Riprova.')
+        else setAvviso(t('Accesso annullato.'))
+      },
+      errore: e => setErr(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'),
+      scaduto: () => {
+        const id = loginId.current
+        loginId.current = null; setAttesa(null)
+        if (id) void api.annullaAccessoChatGPT(id).catch(() => {})
+        setAvviso(t('Il tempo per l’accesso è terminato. Riprova.'))
+      }
+    }, { durata: attesa.scade - Date.now() })
+  }, [attesa])
+
+  const accedi = async () => {
+    const apertura = preparaApertura()
+    const controller = new AbortController(); login.current = controller
+    setOccupato(true); setErr(''); setAvviso(''); setAttesa(null)
+    try {
+      const { authUrl, loginId: id } = await api.accediChatGPT(controller.signal)
+      if (!vivo.current || controller.signal.aborted) { void api.annullaAccessoChatGPT(id).catch(() => {}); return }
+      loginId.current = id
+      const r = await apertura.completa({ ok: true, dove: 'pagina', url: authUrl })
+      if (!r.ok) throw new Error(r.errore)
+      if (vivo.current) setAttesa({ id, scade: Date.now() + 120_000 })
+    } catch (e) {
+      if (loginId.current) { void api.annullaAccessoChatGPT(loginId.current).catch(() => {}); loginId.current = null }
+      if (vivo.current && !controller.signal.aborted) setErr(e instanceof Error ? e.message : 'Non sono riuscito ad aprire l’accesso a ChatGPT.')
+    } finally { apertura.annulla(); if (vivo.current) setOccupato(false) }
+  }
+  const annulla = async () => {
+    const id = loginId.current
+    loginId.current = null; setAttesa(null); setOccupato(true); setErr('')
+    try {
+      const esito = id ? await api.annullaAccessoChatGPT(id) : null
+      if (esito?.stato === 'completed') { await usa(true); return }
+      ricarica()
+      if (vivo.current) setAvviso(t('Accesso annullato.'))
+    } catch (e) { if (vivo.current) setErr(e instanceof Error ? e.message : String(e)) }
+    finally { if (vivo.current) setOccupato(false) }
+  }
+
+  const piano = nomePianoChatGPT(chatgpt?.piano)
+  const manca = chatgpt && !chatgpt.installato ? t('Non disponibile') : undefined
+  const stato = !chatgpt ? (errore ? statoStrada(false, false, t('Da verificare')) : null) : statoStrada(chatgpt.entrato, inUso, manca)
+
   return (
-    <Aiuto tema={tema} titolo={t('Oppure con l’abbonamento che paghi già')}>
-      {s.abbonamento.entrato ? (
-        <>
-          <div style={nota(tema)}>{t('Claude Code è qui e sei già entrato: Myynd ragiona di lì, senza chiave.')}</div>
-          <button type="button" onClick={scegli} disabled={occupato}
-            style={{ ...azione(tema), marginTop: 10 }}>
-            {occupato ? t('Provo…') : t('Usa il mio abbonamento')}
-          </button>
-        </>
-      ) : (
-        <Passi tema={tema} passi={[
-          t('Apri il Terminale e scrivi «claude».'),
-          t('Fai l’accesso con il tuo account.'),
-          t('Torna qui: si ragiona senza chiave.')
-        ]} />
+    <Strada tema={tema} titolo={t('Con il tuo account ChatGPT')} stato={stato}>
+      <div style={{ ...nota(tema), marginTop: 6 }}>{t('Entri dal browser e usi i limiti del tuo piano. Non serve una chiave, e non si passa mai a una chiave a pagamento da soli.')}</div>
+      {chatgpt?.entrato && <div style={{ ...nota(tema), marginTop: 8 }}>{[chatgpt.email || t('Account ChatGPT collegato'), piano].filter(Boolean).join(' · ')}</div>}
+      {manca && <div style={{ ...nota(tema), marginTop: 8 }}>{t('La connessione ChatGPT non è disponibile in questa installazione. Aggiorna Myynd e riprova.')}</div>}
+      {attesa && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{t('Completa l’accesso nel browser e torna qui.')}</div>}
+      {avviso && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{avviso}</div>}
+      <Errore testo={err || (chatgpt?.errore ?? '') || errore} />
+      {chatgpt?.installato && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {!attesa && <button type="button" onClick={accedi} disabled={occupato} style={azione(tema)}>{chatgpt.entrato ? t('Accedi con un altro account') : t('Accedi con ChatGPT')}</button>}
+          {chatgpt.entrato && !inUso && !attesa && <button type="button" onClick={() => usa(true)} disabled={occupato} style={azione(tema)}>{t('Usa il mio account')}</button>}
+          {attesa && <button type="button" onClick={annulla} disabled={occupato} style={azione(tema)}>{t('Annulla')}</button>}
+        </div>
       )}
-    </Aiuto>
+    </Strada>
+  )
+}
+
+/** OpenAI con la chiave API, a consumo: la chiave, e il modello. */
+function ConChiaveOpenAI({ tema, s, ok, ricarica }: Props & { s: Stato | null; ricarica: () => void }) {
+  const [chiave, setChiave] = useState('')
+  const [modello, setModello] = useState('')
+  const [modelli, setModelli] = useState<string[]>([])
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  const o = s?.config.openai ?? null
+  const collegata = !!o?.collegato
+  const inUso = collegata && s?.config.motore === 'openai'
+
+  // se è già collegata si parte da com'è: cambiare la chiave non deve voler dire riscrivere il modello
+  useEffect(() => { if (o?.modello) setModello(m => m || o.modello) }, [o?.modello])
+
+  // i modelli di OpenAI, con un po' di calma: non a ogni tasto. Senza una
+  // chiave — nuova o salvata — non c'è niente da chiedere
+  useEffect(() => {
+    if (!chiave.trim() && !o?.chiaveSalvata) { setModelli([]); return }
+    let ancora = true
+    const sveglia = setTimeout(() => {
+      api.modelliOpenAI(chiave.trim()).then(r => { if (ancora) setModelli(r.modelli) }).catch(() => { if (ancora) setModelli([]) })
+    }, 600)
+    return () => { ancora = false; clearTimeout(sveglia) }
+  }, [chiave, o?.chiaveSalvata])
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      await api.collegaOpenAI({ modello: modello.trim(), ...(chiave.trim() ? { chiave: chiave.trim() } : {}) })
+      setChiave(''); ricarica(); ok()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  const usa = async () => {
+    setOccupato(true); setErr('')
+    try { await api.scegliMotore('openai'); ricarica(); ok() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  const pronto = !!modello.trim() && (!!chiave.trim() || !!o?.chiaveSalvata)
+
+  return (
+    <Strada tema={tema} titolo={t('Con una chiave API')} stato={s ? statoStrada(collegata, inUso) : null}>
+      <div style={{ ...nota(tema), marginTop: 6 }}>{t('A consumo, sul credito OpenAI. Il modello lo scegli tu.')}</div>
+      <Campo tema={tema} nome={t('Chiave API')}>
+        <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
+          placeholder={o?.chiaveSalvata ? t('Lascia vuoto per mantenere la chiave salvata') : 'sk-…'} autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+      </Campo>
+      <Campo tema={tema} nome={t('Modello')}>
+        <input list="modelli-openai" value={modello} onChange={e => setModello(e.target.value)}
+          placeholder="gpt-5.4 · gpt-5.4-mini" autoComplete="off" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && pronto) collega() }} />
+        <datalist id="modelli-openai">
+          {modelli.map(m => <option key={m} value={m} />)}
+        </datalist>
+      </Campo>
+      <Errore testo={err} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{collegata ? t('Cambia chiave o modello') : t('Collega con la chiave')}</Conferma>
+        {collegata && !inUso && <button type="button" onClick={usa} disabled={occupato} style={{ ...azione(tema), marginTop: 18 }}>{t('Usa la chiave')}</button>}
+      </div>
+      <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+        <Passi tema={tema} passi={[
+          t('Su platform.openai.com apri «API keys» e creane una.'),
+          t('In «Billing» metti del credito sul conto.'),
+          t('Incolla qui la chiave: comincia per sk-.')
+        ]} />
+      </Aiuto>
+    </Strada>
   )
 }
 
@@ -355,6 +696,7 @@ const FORNITORI = [
 export function FormCompatibile({ tema, ok }: Props) {
   const [url, setUrl] = useState('')
   const [chiave, setChiave] = useState('')
+  const [chiaveSalvataPer, setChiaveSalvataPer] = useState('')
   const [modello, setModello] = useState('')
   const [nome, setNome] = useState('')
   const [modelli, setModelli] = useState<string[]>([])
@@ -376,7 +718,7 @@ export function FormCompatibile({ tema, ok }: Props) {
   useEffect(() => {
     api.stato().then(s => {
       const f = s.config.compatibile
-      if (f) { setUrl(f.url); setModello(f.modello); setNome(f.nome ?? '') }
+      if (f) { setUrl(f.url); setModello(f.modello); setNome(f.nome ?? ''); if (f.chiaveSalvata) setChiaveSalvataPer(f.url.replace(/\/+$/, '')) }
     }).catch(() => {})
   }, [])
 
@@ -441,7 +783,7 @@ export function FormCompatibile({ tema, ok }: Props) {
       </Campo>
       <Campo tema={tema} nome={t('Chiave API (se serve)')} sotto={t('In casa di solito non serve.')}>
         <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
-          placeholder="sk-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
+          placeholder={chiaveSalvataPer && url.trim().replace(/\/+$/, '') === chiaveSalvataPer ? t('Lascia vuoto per mantenere la chiave salvata') : 'sk-…'} autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)} />
       </Campo>
       {/*
         Se c'è qualcuno, detto sotto l'indirizzo mentre lo si scrive.
@@ -1800,6 +2142,7 @@ export function FormWhatsapp({ tema, ok }: Props) {
 export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} />
   if (id === 'claude') return <FormClaude tema={tema} ok={ok} />
+  if (id === 'openai') return <FormOpenAI tema={tema} ok={ok} />
   if (id === 'compatibile') return <FormCompatibile tema={tema} ok={ok} />
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />

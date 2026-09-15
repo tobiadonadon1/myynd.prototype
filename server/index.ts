@@ -8,11 +8,14 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
+import { feedAttuale, compitiAttuali } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
 import * as compatibile from './compatibile.ts'
 import * as abbonamento from './abbonamento.ts'
+import * as chatgpt from './chatgpt.ts'
 import * as memoria from './memoria.ts'
+import * as conoscenza from './conoscenza.ts'
 import * as timone from './timone.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
@@ -588,6 +591,9 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'claude' ? mod.conClaude() :
         // collegato vuol dire «c'è», non «è lui che lavora»: quello lo dice il motore
         v.id === 'compatibile' ? !!c.compatibile :
+        // la scheda parla di OpenAI: la chiave salvata, o l'account ChatGPT
+        // scelto e acceso — la stessa regola di Claude con l'abbonamento
+        v.id === 'openai' ? !!c.openai?.chiave || chatgpt.pronto() :
         v.id === 'google' ? google.collegato() :
         v.id === 'slack' ? slack.collegato(c) :
         v.id === 'github' ? github.collegato(c) :
@@ -719,6 +725,21 @@ app.post('/api/profilo', async (req, res) => {
       return res.status(400).json({ errore: `Non so cosa sia «${String(patch[campo])}» per ${campo}.` })
     }
   }
+  /*
+   * Un modello per livello di lavoro. Si scrive per intero, non a pezzi: la
+   * schermata manda sempre tutti e tre, e un livello che manca non è «lascia
+   * com'è», è un client che non sappiamo leggere.
+   */
+  if (b.modelli !== undefined) {
+    const m = b.modelli
+    const validi = cfg.MODELLI.map(x => x.id) as string[]
+    if (!m || typeof m !== 'object' || cfg.LIVELLI.some(l => !validi.includes(String(m[l])))) {
+      return res.status(400).json({ errore: 'Non so quale modello usare per uno dei livelli di lavoro.' })
+    }
+    patch.modelli = Object.fromEntries(cfg.LIVELLI.map(l => [l, String(m[l])]))
+    // il modello «principale» resta allineato alla frontiera, per chi legge il campo vecchio
+    patch.modello = String(m.frontiera)
+  }
   if (patch.oreFatte !== undefined) {
     const n = Number(patch.oreFatte)
     if (!Number.isFinite(n) || n < 0 || n > 8760) {
@@ -790,8 +811,72 @@ app.get('/api/uso', (_req, res) => {
  * con nessun modello e non costa un token: è la differenza fra offrire una
  * strada pronta e offrirne una che fallirà al primo lavoro vero.
  */
+app.get('/api/modello/chatgpt', async (_req, res) => {
+  try { res.json(await chatgpt.stato()) } catch (e) { errore(res, e) }
+})
+app.post('/api/modello/chatgpt/login', async (_req, res) => {
+  const controller = new AbortController()
+  res.on('close', () => { if (!res.writableEnded) controller.abort() })
+  try { res.json(await chatgpt.iniziaAccesso(controller.signal)) } catch (e) { if (!controller.signal.aborted) errore(res, e) }
+})
+app.get('/api/modello/chatgpt/login/:id', async (req, res) => {
+  try {
+    const s = await chatgpt.statoAccesso(req.params.id)
+    if (!s) return res.status(404).json({ errore: 'Sign-in expired. Please try again.' })
+    res.json(s)
+  } catch (e) { errore(res, e) }
+})
+app.post('/api/modello/chatgpt/login/:id/cancel', async (req, res) => {
+  try {
+    const s = await chatgpt.cancellaAccesso(req.params.id)
+    if (!s) return res.status(404).json({ errore: 'Sign-in expired. Please try again.' })
+    res.json({ ok: true, ...s })
+  } catch (e) { errore(res, e) }
+})
+app.post('/api/modello/chatgpt', async (req, res) => {
+  try {
+    const attivo = req.body?.attivo === true
+    if (attivo) {
+      const stato = await chatgpt.stato()
+      if (!stato.entrato) return res.status(400).json({ errore: stato.errore || 'Sign in with ChatGPT first.' })
+      cfg.aggiorna({ motore: 'chatgpt', chatgpt: { attivo: true, email: stato.email } })
+    } else {
+      // This is only Myynd's selection. Never log out the user's Codex apps.
+      cfg.aggiorna({ chatgpt: { attivo: false } })
+    }
+    res.json({ ok: true, ...await chatgpt.stato() })
+  } catch (e) { errore(res, e) }
+})
+
 app.get('/api/modello/abbonamento', async (_req, res) => {
   try { res.json(await abbonamento.stato()) } catch (e) { errore(res, e) }
+})
+
+/**
+ * Entrare nell'account Claude dalla scheda.
+ *
+ * Lancia `claude auth login`: è Claude Code ad aprire il browser e a tenere
+ * le credenziali, Myynd guarda solo se è andata. Quando è andata, l'account
+ * diventa la strada scelta: si è collegato per quello. Solo in casa: su un
+ * server non c'è nessun Claude Code, e nessun browser da aprire.
+ */
+app.post('/api/modello/abbonamento/accesso', (_req, res) => {
+  if (ospitato.OSPITATO) return res.status(400).json({ errore: 'Su un server l’abbonamento non si può usare: qui ragiona con una chiave API.' })
+  try { res.json(abbonamento.iniziaAccesso()) } catch (e) { errore(res, e) }
+})
+app.get('/api/modello/abbonamento/accesso/:id', (req, res) => {
+  const s = abbonamento.statoAccesso(req.params.id)
+  if (!s) return res.status(404).json({ errore: 'Questo accesso non c’è più.' })
+  if (s.stato === 'completed') {
+    const c = cfg.leggi()
+    if (c.claudeCon !== 'abbonamento') { cfg.aggiorna({ claudeCon: 'abbonamento', abbonamento: { attivo: true }, motore: 'claude' }); abbonamento.riprova() }
+  }
+  res.json(s)
+})
+app.post('/api/modello/abbonamento/accesso/:id/annulla', (req, res) => {
+  const s = abbonamento.annullaAccesso(req.params.id)
+  if (!s) return res.status(404).json({ errore: 'Questo accesso non c’è più.' })
+  res.json({ ok: true, ...s })
 })
 
 app.post('/api/modello/abbonamento', async (req, res) => {
@@ -1182,12 +1267,13 @@ app.post('/api/connettori/calendario', async (req, res) => {
 })
 
 app.post('/api/connettori/claude', async (req, res) => {
-  const apiKey: string = req.body?.apiKey ?? ''
+  const nuova = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
+  const apiKey = nuova || cfg.leggi().claude?.apiKey || ''
   if (!apiKey) return res.status(400).json({ errore: 'Serve la chiave API.' })
   try {
     const esito = await claude.prova(apiKey)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ claude: { apiKey } })
+    if (nuova) cfg.aggiorna({ claude: { apiKey: nuova } })
     // `avviso` è una frase nostra e passa dal dizionario; `dettaglio` è la frase
     // di Anthropic, e va riportata com'è — è quella che dice cosa fare
     res.json({ ok: true, ...(esito.avviso ? { avviso: esito.avviso } : {}), ...(esito.dettaglio ? { dettaglio: esito.dettaglio } : {}) })
@@ -1211,7 +1297,8 @@ app.post('/api/connettori/claude', async (req, res) => {
  */
 app.post('/api/connettori/compatibile', async (req, res) => {
   const url = compatibile.base(String(req.body?.url ?? ''))
-  const chiave = String(req.body?.chiave ?? '').trim()
+  const nuovaChiave = String(req.body?.chiave ?? '').trim()
+  const chiave = nuovaChiave || cfg.chiaveCompatibile(url)
   const modello = String(req.body?.modello ?? '').trim()
   const nome = String(req.body?.nome ?? '').trim()
   if (!url || !modello) return res.status(400).json({ errore: 'Servono l’indirizzo e il nome del modello.' })
@@ -1225,17 +1312,53 @@ app.post('/api/connettori/compatibile', async (req, res) => {
   try {
     const esito = await compatibile.prova(f)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ compatibile: f, motore: 'compatibile' })
+    // A reused key may have been rotated during the provider check. Only an
+    // explicitly entered replacement may overwrite the latest stored value.
+    cfg.aggiorna({ compatibile: { ...f, chiave: nuovaChiave || undefined }, motore: 'compatibile' })
     // la latenza misurata dal server: è quella che la chat sentirà davvero
     res.json({ ok: true, motore: 'compatibile', ...('latenzaMs' in esito && esito.latenzaMs !== undefined ? { latenzaMs: esito.latenzaMs } : {}) })
   } catch (e) { errore(res, e) }
+})
+
+/**
+ * OpenAI con una chiave: la seconda strada della scheda «OpenAI».
+ *
+ * Stessa prova e stessa regola del fornitore compatibile — un token per
+ * scoprire chiave e modello sbagliati mentre la persona ha ancora le mani
+ * sulla tastiera — e collegarla la sceglie come motore. L'indirizzo non si
+ * chiede: è quello di OpenAI e basta.
+ */
+app.post('/api/connettori/openai', async (req, res) => {
+  const nuovaChiave = String(req.body?.chiave ?? '').trim()
+  const chiave = nuovaChiave || cfg.leggi().openai?.chiave || cfg.chiaveCompatibile(mod.URL_OPENAI)
+  const modello = String(req.body?.modello ?? '').trim()
+  if (!modello) return res.status(400).json({ errore: 'Serve il nome del modello.' })
+  if (!chiave) return res.status(400).json({ errore: 'Serve la chiave API.' })
+  const f: compatibile.Fornitore = { url: mod.URL_OPENAI, chiave, modello, nome: 'OpenAI' }
+  try {
+    const esito = await compatibile.prova(f)
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    cfg.aggiorna({ openai: { modello, chiave }, motore: 'openai' })
+    res.json({ ok: true, motore: 'openai', ...('latenzaMs' in esito && esito.latenzaMs !== undefined ? { latenzaMs: esito.latenzaMs } : {}) })
+  } catch (e) { errore(res, e) }
+})
+
+/** I modelli di OpenAI, per il menu del modulo. Vuoto senza chiave o se non risponde. */
+app.post('/api/connettori/openai/modelli', async (req, res) => {
+  const chiave = String(req.body?.chiave ?? '').trim() || cfg.leggi().openai?.chiave || cfg.chiaveCompatibile(mod.URL_OPENAI)
+  if (!chiave) return res.json({ modelli: [] })
+  const tutti = await compatibile.modelli({ url: mod.URL_OPENAI, chiave })
+  // il catalogo di OpenAI è lungo e pieno di modelli che non parlano: davanti
+  // quelli che servono a ragionare, in ordine di nome
+  const parlano = tutti.filter(m => /^(gpt|o\d)/.test(m) && !/(audio|realtime|transcribe|tts|image|embedding|moderation|search|instruct|codex)/.test(m))
+  res.json({ modelli: (parlano.length ? parlano : tutti).sort() })
 })
 
 /** I modelli che il fornitore dice di avere, per il menu del modulo. Vuoto se non risponde. */
 // POST perché porta una chiave: nell'indirizzo finirebbe nei registri
 app.post('/api/connettori/compatibile/modelli', async (req, res) => {
   const url = compatibile.base(String(req.body?.url ?? ''))
-  const chiave = String(req.body?.chiave ?? '').trim()
+  const chiave = String(req.body?.chiave ?? '').trim() || cfg.chiaveCompatibile(url)
   if (!url || compatibile.indirizzoAmmesso(url, ospitato.OSPITATO)) return res.json({ modelli: [] })
   res.json({ modelli: await compatibile.modelli({ url, ...(chiave ? { chiave } : {}) }) })
 })
@@ -1246,8 +1369,18 @@ app.post('/api/connettori/compatibile/modelli', async (req, res) => {
  * Si può scegliere il fornitore solo se c'è: una scelta senza niente dietro
  * si rifiuta qui, invece di lasciare che ogni chiamata vada a vuoto.
  */
-app.post('/api/modello/motore', (req, res) => {
-  const scelto = req.body?.motore === 'compatibile' ? 'compatibile' : 'claude'
+app.post('/api/modello/motore', async (req, res) => {
+  const scelto = req.body?.motore
+  if (!['claude', 'compatibile', 'chatgpt', 'openai'].includes(scelto)) return res.status(400).json({ errore: 'Choose an available model provider.' })
+  if (scelto === 'openai' && !mod.fornitoreOpenAI()) {
+    return res.status(400).json({ errore: 'Prima collega OpenAI con una chiave API.' })
+  }
+  if (scelto === 'chatgpt') {
+    const s = await chatgpt.stato()
+    if (!s.entrato) return res.status(400).json({ errore: s.errore || 'Connect ChatGPT in Sources first.' })
+    cfg.aggiorna({ motore: 'chatgpt', chatgpt: { attivo: true, email: s.email } })
+    return res.json({ ok: true, motore: scelto })
+  }
   if (scelto === 'compatibile' && !cfg.leggi().compatibile) {
     return res.status(400).json({ errore: 'Prima collega un fornitore compatibile.' })
   }
@@ -1445,6 +1578,17 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'claude') abbonamento.scollega(c)
   // via il fornitore, e via anche la scelta: il lavoro grosso torna a Claude
   else if (id === 'compatibile') { delete c.compatibile; delete c.motore }
+  /*
+    «Scollega» su OpenAI spegne tutt'e due le strade, come per Claude: via la
+    chiave, e l'account ChatGPT smette di lavorare per Myynd. Non lo fa uscire
+    dall'account — quello resta al ponte, e si rientra con un clic — ma la
+    scheda deve dire «da collegare», e con una strada accesa mentirebbe.
+  */
+  else if (id === 'openai') {
+    delete c.openai
+    c.chatgpt = { attivo: false }
+    if (c.motore === 'openai' || c.motore === 'chatgpt') delete c.motore
+  }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
   else if (id === 'slack') delete c.slack
   else if (id === 'github') delete c.github
@@ -1465,8 +1609,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   else return res.status(400).json({ errore: 'Connettore sconosciuto.' })
   // si dice nel registro: una credenziale che sparisce senza una riga è quello che è successo il 13 settembre
   console.log(`myynd · scollegata la fonte «${id}» su richiesta`)
-  cfg.scrivi(c, { togli: [id, ...(id === 'claude' ? ['claudeCon'] : []), ...(id === 'compatibile' ? ['motore'] : [])] })
-  if (id !== 'claude' && id !== 'compatibile') store.svuotaFonte(id)
+  cfg.scrivi(c, { togli: [id, ...(id === 'claude' ? ['claudeCon'] : []), ...(id === 'compatibile' || id === 'openai' ? ['motore'] : [])] })
+  if (id !== 'claude' && id !== 'compatibile' && id !== 'openai') store.svuotaFonte(id)
   res.json({ ok: true })
 })
 
@@ -1928,7 +2072,7 @@ const GRUPPI_MENTE: Record<string, { nome: string; colore: string }> = {
 }
 app.get('/api/mente', (req, res) => {
   const n = store.conteggi()
-  const g = req.query.grafo === '1' ? store.mappa() : null
+  const g = req.query.grafo === '1' ? conoscenza.mappa() : null
   res.json({
     totale: n.totale,
     gruppi: n.perGruppo.map(gr => ({
@@ -1962,11 +2106,37 @@ app.get('/api/documento', (req, res) => {
   res.json({ ...d, corpo: riflua(d.corpo ?? '') })
 })
 
+/** Open the document itself, wherever the person is using Myynd. */
+app.post('/api/documento/portami', async (req, res) => {
+  const id = String(req.body?.id ?? '')
+  const d = store.documento(id)
+  if (!d) return res.status(404).json({ errore: 'Non trovato.' })
+  return portaAllaFonte(scrivania.dovePortare({ doc: id }, d), res)
+})
+
+async function portaAllaFonte(meta: scrivania.Destinazione, res: express.Response) {
+  if (meta.dove === 'compito' || meta.dove === 'progetto') return res.json({ ok: true, dove: meta.dove, id: meta.id })
+  if (meta.dove === 'niente') return res.json({ ok: false, errore: meta.errore })
+  // URLs must open on the user's device, never the server hosting their account.
+  if (meta.dove === 'pagina' || (meta.dove === 'posta' && scrivania.paginaBuona(meta.url))) {
+    return res.json({ ok: true, dove: 'pagina', url: scrivania.paginaBuona(meta.url) })
+  }
+  if (ospitato.OSPITATO || process.platform !== 'darwin') {
+    return res.json({ ok: false, errore: 'Posso portarti lì solo sul Mac.' })
+  }
+  try {
+    await scrivania.porta(cfg.leggi().desktop, meta)
+    return res.json({ ok: true, dove: meta.dove })
+  } catch (e) {
+    return res.json({ ok: false, errore: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 // — feed —
 
 app.get('/api/feed', (_req, res) => {
   const ore = cfg.leggi().oreFatte ?? 48
-  res.json({ aperti: store.elencoFeed('aperto'), fatte: store.elencoFeed('fatto', ore) })
+  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore) })
 })
 
 app.post('/api/feed/genera', async (_req, res) => {
@@ -1986,7 +2156,7 @@ app.post('/api/feed/genera', async (_req, res) => {
     // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
     // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
     const nuove = store.salvaFeed(voci)
-    res.json({ ok: true, generate: nuove, feed: store.elencoFeed('aperto') })
+    res.json({ ok: true, generate: nuove, feed: feedAttuale() })
     // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
     compiti.annunciaFeed()
 
@@ -2023,7 +2193,7 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
     const stato = req.body?.stato ? String(req.body.stato) : undefined
     const esito = await timone.rispondiAVoce(req.params.id, testo, stato)
     const ore = cfg.leggi().oreFatte ?? 48
-    res.json({ ...esito, aperti: store.elencoFeed('aperto'), fatte: store.elencoFeed('fatto', ore) })
+    res.json({ ...esito, aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore) })
     compiti.annunciaFeed()
   } catch (e) { errore(res, e) }
 })
@@ -2141,7 +2311,14 @@ app.post('/api/punto/avvia', async (req, res) => {
 // un cambiamento, e la chiusura — che non cancella mai: un progetto chiuso
 // resta scritto, ed è quello che impedisce al punto di reinventarlo.
 
-app.get('/api/progetti', (_req, res) => res.json({ progetti: progetti.elenco() }))
+app.get('/api/progetti', (req, res) => {
+  const elenco = req.query.includiAlias === '1' ? progetti.elenco() : progetti.perContesto(true)
+  // Existing tasks can still display/edit their exact linked legacy record.
+  // Ordinary lists use the same canonical projects as chat and the map.
+  const collegato = typeof req.query.collegato === 'string' ? progetti.trova(req.query.collegato) : null
+  if (collegato && !elenco.some(p => p.id === collegato.id)) elenco.push(collegato)
+  res.json({ progetti: elenco })
+})
 
 app.get('/api/progetti/:id/attivita', (req, res) => {
   if (!progetti.trova(req.params.id)) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
@@ -2189,7 +2366,7 @@ app.delete('/api/progetti/:id', (req, res) => {
 
 app.get('/api/compiti', (_req, res) => {
   res.json({
-    compiti: store.elencoCompiti(),
+    compiti: compitiAttuali(),
     chiusi: store.compitiChiusi(),
     fuoco: timone.fuoco()
   })
@@ -2251,7 +2428,7 @@ app.post('/api/compiti', (req, res) => {
   }
   } catch (e) { return errore(res, e) }
 
-  res.json({ ok: true, id, compiti: store.elencoCompiti() })
+  res.json({ ok: true, id, compiti: compitiAttuali() })
   compiti.annunciaCambio()
   // la voce promossa è sparita dal feed: anche il feed va riletto
   if (req.body?.voce) compiti.annunciaFeed()
@@ -2298,7 +2475,7 @@ app.patch('/api/compiti/:id', (req, res) => {
     }
   } catch (e) { return errore(res, e) }
 
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 
@@ -2337,7 +2514,7 @@ app.post('/api/compiti/:id/sposta', (req, res) => {
     } catch (e) { return errore(res, e) }
   }
 
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 
@@ -2363,7 +2540,7 @@ app.post('/api/compiti/:id/delega', (req, res) => {
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
   compiti.affida(c.id, modo)
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 
@@ -2383,7 +2560,7 @@ app.post('/api/compiti/:id/richiama', (req, res) => {
     return res.status(400).json({ errore: 'Questo non è in mano a Myynd.' })
   }
   compiti.richiama(req.params.id)
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   // come tutte le altre rotte dei compiti: l'altra finestra deve saperlo,
   // altrimenti resta con la colonna sbagliata accesa
   compiti.annunciaCambio()
@@ -2412,7 +2589,7 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
   } catch (e) { return errore(res, e) }
 
   compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 
@@ -2439,7 +2616,10 @@ app.post('/api/compiti/:id/prepara-email', async (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   if (c.email) return res.json(c.email)
   if (!c.risultato?.trim()) return res.status(400).json({ errore: 'Non c\'è ancora niente da mandare.' })
-  if (!cfg.leggi().posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
+  const conf = cfg.leggi()
+  if (!(conf.posta || conf.google || conf.microsoft?.parti.includes('posta'))) {
+    return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
+  }
 
   try {
     // dalle fonti che la bozza ha citato, non da una ricerca nuova: il
@@ -2474,7 +2654,7 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
     await invio.manda(c, conf.posta, d.m)
   } catch (e) { return errore(res, e) }
 
-  res.json({ ok: true, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
   // quello che hai tenuto davvero passa alla memoria come per ogni altra chiusura
   compiti.imparaSeCorretto(c.risultato, d.m.corpo)
@@ -2512,7 +2692,7 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
       store.registraAzione({ tipo: 'agenda', cosa, compito: c.id, esito: 'fatta' })
       store.scordaProposta(c.id)
       store.cambiaStatoCompito(c.id, 'fatto', `${quanti} in agenda.`)
-      res.json({ ok: true, spostati: quanti, dove: 'Calendario', compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+      res.json({ ok: true, spostati: quanti, dove: 'Calendario', compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
       compiti.annunciaCambio()
     } catch (e) {
       store.registraAzione({
@@ -2543,7 +2723,7 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
       })
       store.scordaProposta(c.id)
       store.cambiaStatoCompito(c.id, 'fatto', `${quanti} ${cestinaG ? 'nel cestino' : 'archiviati'}.`)
-      res.json({ ok: true, spostati: quanti, dove: cestinaG ? 'Cestino' : 'Archiviati', compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+      res.json({ ok: true, spostati: quanti, dove: cestinaG ? 'Cestino' : 'Archiviati', compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
       compiti.annunciaCambio()
     } catch (e) {
       store.registraAzione({
@@ -2572,7 +2752,7 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
     })
     store.scordaProposta(c.id)
     store.cambiaStatoCompito(c.id, 'fatto', `${spostati} in «${dove}».`)
-    res.json({ ok: true, spostati, dove, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+    res.json({ ok: true, spostati, dove, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
     compiti.annunciaCambio()
   } catch (e) {
     // anche qui il fallimento va nel registro: se una casella rifiuta lo
@@ -2620,7 +2800,7 @@ app.post('/api/compiti/:id/documento', async (req, res) => {
     }
     store.tieniLaTua(c.id, testo)
     store.cambiaStatoCompito(c.id, 'fatto', `Salvato in «${f.nome}».`)
-    res.json({ ok: true, ...f, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+    res.json({ ok: true, ...f, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
     compiti.annunciaCambio()
   } catch (e) {
     store.registraAzione({
@@ -2655,19 +2835,7 @@ app.post('/api/compiti/:id/portami', async (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   const meta = scrivania.dovePortare(c, c.doc ? store.documento(c.doc) : null)
-  // due posti dell'app: li apre chi ha lo schermo, e funzionano ovunque
-  if (meta.dove === 'compito' || meta.dove === 'progetto') return res.json({ ok: true, dove: meta.dove, id: meta.id })
-  if (meta.dove === 'niente') return res.json({ ok: false, errore: meta.errore })
-  if (ospitato.OSPITATO || process.platform !== 'darwin') {
-    return res.json({ ok: false, errore: 'Posso portarti lì solo sul Mac.' })
-  }
-
-  try {
-    await scrivania.porta(cfg.leggi().desktop, meta)
-    res.json({ ok: true, dove: meta.dove })
-  } catch (e) {
-    res.json({ ok: false, errore: e instanceof Error ? e.message : String(e) })
-  }
+  return portaAllaFonte(meta, res)
 })
 
 /**
@@ -2723,7 +2891,7 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
     // con la differenza che i file nella cartella adesso sono cambiati
     store.risultatoCompito(c.id, senzaTrattini(e.testo), [], 'pronto')
     const dopo = store.compito(c.id)
-    res.json({ ok: true, passo, finito: e.finito, compiti: store.elencoCompiti(), compito: dopo })
+    res.json({ ok: true, passo, finito: e.finito, compiti: compitiAttuali(), compito: dopo })
     compiti.annunciaCambio()
   } catch (e) { errore(res, e) }
 })
@@ -2752,7 +2920,7 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
     store.tieniLaTua(c.id, tenuto.trim())
   }
   store.cambiaStatoCompito(c.id, stato, esito || undefined)
-  res.json({ ok: true, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
 
   // Dopo la risposta, mai davanti: chiudere non deve aspettare che impari.
@@ -2777,7 +2945,7 @@ app.post('/api/compiti/:id/riapri', (req, res) => {
     // un'altra riga mentre lei era fra le fatte
     store.riordina(req.params.id, c.quando, ordine.dopo(store.ultimoOrdine(c.quando)))
   } catch (e) { return errore(res, e) }
-  res.json({ ok: true, compiti: store.elencoCompiti(), chiusi: store.compitiChiusi() })
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
 })
 
@@ -2789,7 +2957,7 @@ app.delete('/api/compiti/:id', (req, res) => {
   // risultatoCompito controlla lo stato, non se la riga è sparita.
   compiti.richiama(req.params.id)
   store.scordaCompito(req.params.id)
-  res.json({ ok: true, compiti: store.elencoCompiti() })
+  res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
 })
 
@@ -2887,7 +3055,7 @@ app.post('/api/automazioni/:id/adesso', async (req, res) => {
     // a mano: un dito che preme non è la spesa ricorrente che il tetto del
     // giorno tiene a bada, e «ha guardato e non c'era niente» sarebbe una bugia
     const esito = await automazioni.fai(a, { aMano: true })
-    res.json({ ok: true, esito, automazioni: automazioni.elenco(), compiti: store.elencoCompiti() })
+    res.json({ ok: true, esito, automazioni: automazioni.elenco(), compiti: compitiAttuali() })
   } catch (e) {
     store.automazioneGirata(a.id, 'guaio', e instanceof Error ? e.message : String(e))
     errore(res, e)
@@ -3204,9 +3372,9 @@ app.post('/api/chat/:id', async (req, res) => {
   res.on('close', () => { clearInterval(battito); if (!res.writableEnded) controllo.abort() })
 
   try {
-    if (!store.esisteChat(chat)) {
+    const nuovaChat = !store.esisteChat(chat)
+    if (nuovaChat) {
       store.creaChat(chat, domanda.slice(0, 40))
-      claude.titoloChat(domanda).then(t => store.rinominaChat(chat, t)).catch(() => {})
     }
     // la conversazione precedente, così i seguiti hanno senso
     const storico = store.messaggi(chat).map(m => ({ ruolo: m.role, testo: m.text }))
@@ -3236,12 +3404,14 @@ app.post('/api/chat/:id', async (req, res) => {
     // E se se n'è andato prima della fine, non si riflette su una risposta che
     // non ha letto.
     if (!controllo.signal.aborted) {
+      // Title generation must never occupy the local model before the reply.
+      if (nuovaChat) claude.titoloChat(domanda).then(t => store.rinominaChat(chat, t)).catch(() => {})
       memoria.distilla([{ ruolo: 'u', testo: domanda }, { ruolo: 'a', testo: r.testo }])
         .catch(() => {})
     }
   } catch (e) {
-    // niente domanda orfana se la risposta non arriva
-    store.togliMessaggio(idUtente)
+    // Preserve the user's words across timeouts/restarts so they can retry or
+    // correct them. A failed provider call must not erase their request.
     invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
   } finally {
     clearInterval(battito)

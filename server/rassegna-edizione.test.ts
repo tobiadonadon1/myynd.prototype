@@ -42,6 +42,8 @@ test('edizione vuota, fallback e cache restano focalizzati anche con notizie pre
   }
   store.salvaNotizie([{ id: 'precedente', titolo: 'Canada changes tariffs', riassunto: 'Canadian tariffs increase.', perche: 'Lebanon opens peace talks.', fonte: 'Test', link: 'https://example.test/old', argomento: 'mondo', quando }])
 
+  rassegna.prepara()
+  assert.equal(rassegna.elenco().aggiornando, false, 'senza focus il GET non mostra un aggiornamento inesistente')
   const vuota = await rassegna.aggiorna(true)
   assert.equal(vuota.fatta, true)
   assert.deepEqual(vuota.notizie, [])
@@ -104,4 +106,30 @@ test('edizione vuota, fallback e cache restano focalizzati anche con notizie pre
   await rassegna.aggiorna(false)
   assert.ok(richieste > richiestePrimaDelRetry)
   assert.equal(rassegna.elenco().aggiornando, false)
+})
+
+test('il tetto giornaliero esaurito non lascia ogni GET in aggiornamento', async () => {
+  let richieste = 0
+  globalThis.fetch = async () => { richieste++; throw new Error('nessuna richiesta prevista') }
+  const quando = new Date().toISOString()
+  store.salvaNotizie(Array.from({ length: rassegna.AL_GIORNO }, (_, i) => ({
+    id: `quota-${i}`, titolo: `Kubernetes cluster migration release ${i}`, riassunto: 'Kubernetes cluster migration update.',
+    perche: null, fonte: 'Test', link: `https://example.test/quota-${i}`, argomento: 'tecnologia', quando
+  })))
+  assert.equal(rassegna.postiOggi(), 0)
+  const file = join(cfg.cartella(), 'rassegna-edizione.json')
+  const edizione = JSON.parse(readFileSync(file, 'utf8'))
+  edizione.controllata = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+  writeFileSync(file, JSON.stringify(edizione))
+  const prima = rassegna.elenco()
+  for (let i = 0; i < 3; i++) {
+    // Stesso ordine del route handler: non aspettare la promise prima della risposta.
+    rassegna.prepara()
+    assert.equal(rassegna.elenco().aggiornando, false)
+    await Promise.resolve()
+  }
+  const forzata = await rassegna.aggiorna(true)
+  assert.deepEqual(forzata.notizie, prima.notizie, 'resta disponibile la selezione precedente')
+  assert.equal(rassegna.elenco().aggiornando, false)
+  assert.equal(richieste, 0, 'anche il bottone rispetta il tetto senza chiamare le fonti')
 })

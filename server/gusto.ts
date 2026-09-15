@@ -126,7 +126,7 @@ export function gusto(giorni = 30): Gusto {
   }
 
   return {
-    vale: lette.length + scartate.length >= MINIMO && lette.length >= 2,
+    vale: lette.length + scartate.length >= MINIMO && (lette.length >= 2 || scartate.length >= 3),
     lette: lette.length,
     scartate: scartate.length,
     piace: inOrdine(buone),
@@ -171,8 +171,8 @@ export function perIlModello(g: Gusto): string {
   if (g.stufa.length) parti.push(`Ha buttato via, senza mai aprirne una, notizie su: ${g.stufa.join(', ')}.`)
   if (g.fonti.length) parti.push(`Legge più spesso: ${g.fonti.join(', ')}.`)
   parti.push(
-    'Usalo per inclinare la scelta, non per restringerla: se una cosa importante ' +
-    'succede fuori dai suoi interessi, quella va messa lo stesso.'
+    'Usalo per ordinare soltanto le notizie pertinenti al lavoro attuale. ' +
+    'Non riempire la selezione con cronaca generica e non ripetere un fatto già scartato.'
   )
   return parti.join(' ')
 }
@@ -269,7 +269,7 @@ export function evidenzaDalLavoro(giorni = 30): Evidenza {
 
   const tutti = progetti.elenco()
   const nomeDi = new Map(tutti.map(p => [p.id, p.nome]))
-  const vivi = tutti.filter(p => p.stato !== 'chiuso')
+  const vivi = tutti.filter(p => p.stato === 'attivo')
 
   const riga = (c: { testo: string; nota: string | null; progetto?: string | null }) => {
     const nome = c.progetto ? nomeDi.get(c.progetto) : ''
@@ -280,8 +280,8 @@ export function evidenzaDalLavoro(giorni = 30): Evidenza {
     ].filter(Boolean).join(' — ')
   }
 
-  const aperti = store.elencoCompiti().slice(0, QUANTI_COMPITI)
-  const chiusi = store.compitiChiusi(QUANTI_COMPITI).filter(c => (c.chiuso ?? '') >= soglia)
+  const aperti = store.elencoCompiti().filter(c => ['mano', 'voce', 'chat', 'feed'].includes(c.origine)).slice(0, QUANTI_COMPITI)
+  const chiusi = store.compitiChiusi(QUANTI_COMPITI).filter(c => c.stato === 'fatto' && (c.chiuso ?? '') >= soglia)
   const domande = ultimeDomande()
 
   const quante = aperti.length + chiusi.length + vivi.length + domande.length
