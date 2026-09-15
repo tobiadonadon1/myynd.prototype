@@ -245,7 +245,10 @@ async function rispondi(p: Richiesta, onTesto?: (s: string) => void, attesa = 18
   if (email && email !== a.account.email) throw new Error('The ChatGPT account on this computer changed. Choose the current account in Sources before using it in Myynd.')
   const q = prepara(p)
   const models = await attendi(c.chiama('model/list', { includeHidden: false }), signal)
-  const model = scegliModello(models.data ?? [], conversazione)
+  // il modello scelto per questo livello nelle preferenze, se il piano ce l'ha;
+  // altrimenti quello di sempre
+  const catalogo: Obj[] = models.data ?? []
+  const model = (p.model && catalogo.some(m => m.model === p.model) ? p.model : undefined) ?? scegliModello(catalogo, conversazione)
   if (!model) throw new Error('No model is available for this ChatGPT account.')
   const currentConfig = await attendi(c.chiama('config/read', { includeLayers: false, cwd: c.cwd }), signal)
   c.config = recinto(currentConfig.config ?? {})
@@ -325,6 +328,18 @@ async function rispondi(p: Richiesta, onTesto?: (s: string) => void, attesa = 18
     })
   })
 }
+/** I modelli che il piano offre, per la scelta nelle preferenze. Vuoto se non si è dentro. */
+export async function catalogo(): Promise<string[]> {
+  if (!installato()) return []
+  try {
+    const c = await connessione()
+    const a = await c.chiama('account/read', { refreshToken: false })
+    if (a.account?.type !== 'chatgpt') return []
+    const r = await c.chiama('model/list', { includeHidden: false })
+    return ((r.data ?? []) as Obj[]).map(m => String(m.model)).filter(Boolean)
+  } catch { return [] }
+}
+
 export function motore(): Motore {
   return { tipo: 'chatgpt', nome: 'ChatGPT subscription',
     pronto: async () => { const s = await stato(); if (!s.acceso || !s.entrato) throw new Error(s.errore || 'Connect and turn on ChatGPT in Sources.') },

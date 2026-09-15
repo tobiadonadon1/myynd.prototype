@@ -71,9 +71,9 @@ export type Stato = {
     claudeCon?: 'abbonamento' | 'chiave'
     /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
     motore: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
-    chatgpt?: { attivo: boolean }
+    chatgpt?: { attivo: boolean; modelli?: Record<'casa' | 'media' | 'frontiera', string> }
     /** OpenAI con la chiave: il modello esce, la chiave no. */
-    openai?: { collegato: boolean; modello: string; chiaveSalvata: boolean } | null
+    openai?: { collegato: boolean; modello: string; chiaveSalvata: boolean; modelli?: Record<'casa' | 'media' | 'frontiera', string> } | null
     /** Il fornitore compatibile, senza la chiave: quella non esce mai. */
     compatibile: { collegato: boolean; url: string; modello: string; nome: string | null; chiaveSalvata?: boolean } | null
     /*
@@ -1324,6 +1324,11 @@ export const api = {
     json<{ ok: true; motore: 'openai'; latenzaMs?: number }>('/api/connettori/openai', { method: 'POST', body: JSON.stringify(p) }),
   modelliOpenAI: (chiave: string) =>
     json<{ modelli: string[] }>('/api/connettori/openai/modelli', { method: 'POST', body: JSON.stringify({ chiave }) }),
+  /** Quale modello di OpenAI per quale lavoro: il catalogo della strada in uso, e le scelte. */
+  modelliMotoreOpenAI: (signal?: AbortSignal) =>
+    json<{ via: 'chiave' | 'account' | null; modelli: string[]; scelti: Record<'casa' | 'media' | 'frontiera', string> | null }>('/api/modello/openai/modelli', { signal }),
+  scegliModelliOpenAI: (modelli: Record<'casa' | 'media' | 'frontiera', string>) =>
+    json<{ ok: true }>('/api/modello/openai/modelli', { method: 'POST', body: JSON.stringify({ modelli }) }),
 
   /** Con quale dei due lavora. Si cambia idea quando si vuole. */
   claudeCon: (con: 'abbonamento' | 'chiave') =>

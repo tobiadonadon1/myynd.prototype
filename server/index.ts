@@ -1343,15 +1343,51 @@ app.post('/api/connettori/openai', async (req, res) => {
   } catch (e) { errore(res, e) }
 })
 
+/** Il catalogo di OpenAI è lungo e pieno di modelli che non parlano: solo quelli che ragionano, in ordine di nome. */
+function modelliOpenAIParlanti(tutti: string[]): string[] {
+  const parlano = tutti.filter(m => /^(gpt|o\d)/.test(m) && !/(audio|realtime|transcribe|tts|image|embedding|moderation|search|instruct|codex)/.test(m))
+  return (parlano.length ? parlano : tutti).sort()
+}
+
 /** I modelli di OpenAI, per il menu del modulo. Vuoto senza chiave o se non risponde. */
 app.post('/api/connettori/openai/modelli', async (req, res) => {
   const chiave = String(req.body?.chiave ?? '').trim() || cfg.leggi().openai?.chiave || cfg.chiaveCompatibile(mod.URL_OPENAI)
   if (!chiave) return res.json({ modelli: [] })
-  const tutti = await compatibile.modelli({ url: mod.URL_OPENAI, chiave })
-  // il catalogo di OpenAI è lungo e pieno di modelli che non parlano: davanti
-  // quelli che servono a ragionare, in ordine di nome
-  const parlano = tutti.filter(m => /^(gpt|o\d)/.test(m) && !/(audio|realtime|transcribe|tts|image|embedding|moderation|search|instruct|codex)/.test(m))
-  res.json({ modelli: (parlano.length ? parlano : tutti).sort() })
+  res.json({ modelli: modelliOpenAIParlanti(await compatibile.modelli({ url: mod.URL_OPENAI, chiave })) })
+})
+
+/**
+ * Quale modello di OpenAI per quale lavoro, quando è OpenAI a lavorare.
+ *
+ * La strada decide da dove viene il catalogo: con la chiave dall'API di
+ * OpenAI, con l'account dal piano. La scelta si scrive nella strada in uso —
+ * `openai.modelli` o `chatgpt.modelli` — e un livello vuoto vuol dire «il
+ * modello della scheda» con la chiave, «quello del piano» con l'account.
+ */
+app.get('/api/modello/openai/modelli', async (_req, res) => {
+  const c = cfg.leggi()
+  const via = c.motore === 'openai' && c.openai?.chiave ? 'chiave' : c.motore === 'chatgpt' ? 'account' : null
+  if (!via) return res.json({ via, modelli: [], scelti: null })
+  try {
+    const modelli = via === 'chiave'
+      ? modelliOpenAIParlanti(await compatibile.modelli({ url: mod.URL_OPENAI, chiave: c.openai!.chiave! }))
+      : await chatgpt.catalogo()
+    const scelti = Object.fromEntries(cfg.LIVELLI.map(l => [l, (via === 'chiave' ? c.openai?.modelli?.[l] || c.openai!.modello : c.chatgpt?.modelli?.[l]) || '']))
+    res.json({ via, modelli, scelti })
+  } catch (e) { errore(res, e) }
+})
+app.post('/api/modello/openai/modelli', (req, res) => {
+  const c = cfg.leggi()
+  const via = c.motore === 'openai' && c.openai?.chiave ? 'chiave' : c.motore === 'chatgpt' ? 'account' : null
+  if (!via) return res.status(400).json({ errore: 'Prima scegli OpenAI come motore.' })
+  const m = req.body?.modelli
+  if (!m || typeof m !== 'object' || cfg.LIVELLI.some(l => typeof m[l] !== 'string' || m[l].length > 120)) {
+    return res.status(400).json({ errore: 'Non so quale modello usare per uno dei livelli di lavoro.' })
+  }
+  const modelli = Object.fromEntries(cfg.LIVELLI.map(l => [l, String(m[l]).trim()]))
+  if (via === 'chiave') cfg.aggiorna({ openai: { ...c.openai!, modelli } })
+  else cfg.aggiorna({ chatgpt: { ...(c.chatgpt ?? { attivo: true }), modelli } })
+  res.json({ ok: true, via, modelli })
 })
 
 /** I modelli che il fornitore dice di avere, per il menu del modulo. Vuoto se non risponde. */

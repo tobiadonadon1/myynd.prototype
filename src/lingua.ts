@@ -2439,6 +2439,11 @@ const EN: Record<string, string> = {
   'Il feed, la cernita della posta, le domande che ti fa.': 'The feed, mail triage, the questions it asks you.',
   'Quello che leggi e firmi': 'What you read and sign',
   'La chat, le bozze, le email, il punto, le ricette.': 'Chat, drafts, emails, the briefing, automation recipes.',
+  'I modelli del tuo piano ChatGPT. Vuoto: quello predefinito del piano.': 'The models of your ChatGPT plan. Empty: the plan’s default.',
+  'I modelli della tua chiave OpenAI. Il più piccolo per il lavoro di servizio, il migliore per quello che firmi.': 'The models of your OpenAI key. The smallest for housekeeping, the best for what you sign.',
+  'Il modello del piano': 'The plan’s model',
+  'Non riesco a leggere i modelli.': 'I could not read the models.',
+  'Prima scegli OpenAI come motore.': 'Choose OpenAI as the engine first.',
 }
 
 

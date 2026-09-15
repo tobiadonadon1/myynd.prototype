@@ -34,7 +34,7 @@
 // quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { leggi, lingua, modello, modelloDelLivello, nellaLingua } from './config.ts'
+import { leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
@@ -83,7 +83,22 @@ export const URL_OPENAI = 'https://api.openai.com/v1'
  */
 export function fornitoreOpenAI(c = leggi()): compatibile.Fornitore | null {
   const o = c.openai
-  return o?.modello && o.chiave ? { url: URL_OPENAI, chiave: o.chiave, modello: o.modello, nome: 'OpenAI' } : null
+  // `perLivello`: il modello lo dice ogni richiesta, scelto per il suo livello in `parametri()`
+  return o?.modello && o.chiave ? { url: URL_OPENAI, chiave: o.chiave, modello: o.modello, nome: 'OpenAI', perLivello: true } : null
+}
+
+/**
+ * Il modello di OpenAI per un livello, quando è OpenAI a lavorare.
+ *
+ * Con la chiave: quello scelto per il livello, o quello della scheda. Con
+ * l'account ChatGPT: quello scelto, o niente — e niente vuol dire il modello
+ * predefinito del piano, che lo decide `chatgpt.ts` guardando il catalogo.
+ * Con Claude o un altro fornitore non c'è niente da dire.
+ */
+export function modelloOpenAIPer(livello: LivelloConfig, c = leggi()): string | null {
+  if (c.motore === 'openai') return c.openai?.modelli?.[livello] || c.openai?.modello || null
+  if (c.motore === 'chatgpt') return c.chatgpt?.modelli?.[livello] || null
+  return null
 }
 
 function fornitore(): compatibile.Fornitore | null {
@@ -769,7 +784,9 @@ export function parametri(lavoro: Lavoro, max_tokens: number, formato?: object):
   const p = LAVORI[lavoro]
   const m = modelloPer(lavoro)
   const cap = capacita(m)
-  const fuori: Record<string, unknown> = { model: m, max_tokens }
+  // con OpenAI al lavoro il modello lo sceglie il livello, e il fornitore lo
+  // legge da qui (`perLivello`); con Claude resta il suo
+  const fuori: Record<string, unknown> = { model: modelloOpenAIPer(p.livello) ?? m, max_tokens }
 
   if (p.ragiona) {
     if (cap.adattivo) {

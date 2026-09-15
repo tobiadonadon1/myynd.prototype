@@ -21,7 +21,16 @@
 
 import type Anthropic from '@anthropic-ai/sdk'
 
-export type Fornitore = { url: string; chiave?: string; modello: string; nome?: string }
+export type Fornitore = {
+  url: string; chiave?: string; modello: string; nome?: string
+  /** Il modello lo porta ogni richiesta (`p.model`), scelto per il suo livello: `modello` è solo il ripiego. */
+  perLivello?: boolean
+}
+
+/** Il modello di questa richiesta: quello del livello se il fornitore lo vuole così, altrimenti il suo. */
+export function modelloDi(f: Fornitore, p: Pick<Richiesta, 'model'>): string {
+  return f.perLivello && p.model ? p.model : f.modello
+}
 
 /**
  * Una richiesta come la costruisce `claude.ts`.
@@ -189,7 +198,7 @@ export function ragiona(modello: string): boolean {
  */
 export function corpo(f: Fornitore, p: Richiesta, inStreaming: boolean): Record<string, unknown> {
   const fuori: Record<string, unknown> = {
-    model: f.modello,
+    model: modelloDi(f, p),
     messages: messaggi(p.system, p.messages),
     // il nome nuovo, che i modelli che ragionano esigono; se il server non lo
     // conosce, `ritocca` lo rimette a quello vecchio al primo 400
@@ -211,7 +220,7 @@ export function corpo(f: Fornitore, p: Richiesta, inStreaming: boolean): Record<
     fuori.response_format = { type: 'json_schema', json_schema: { name: 'risposta', schema, strict: false } }
   }
   const sforzo = p.output_config?.effort
-  if (sforzo && ragiona(f.modello)) {
+  if (sforzo && ragiona(modelloDi(f, p))) {
     fuori.reasoning_effort = sforzo === 'xhigh' || sforzo === 'max' ? 'high' : sforzo
   }
   return fuori

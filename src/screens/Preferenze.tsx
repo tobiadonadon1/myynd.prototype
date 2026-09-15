@@ -1001,6 +1001,64 @@ function Modelli({ v }: { v: Vals }) {
   )
 }
 
+/**
+ * Quale modello di OpenAI, per quale lavoro.
+ *
+ * La stessa carta di Claude, con una differenza che decide la forma: i modelli
+ * non sono tre nostri, sono quelli del catalogo — dell'API con la chiave, del
+ * piano con l'account — e possono essere venti. Quindi un menù per riga, non
+ * le pastiglie. Con l'account, la prima voce è «il modello del piano»: è
+ * quello che lavora finché non si sceglie altro.
+ */
+function ModelliOpenAI({ v }: { v: Vals }) {
+  const [via, setVia] = useState<'chiave' | 'account' | null>(null)
+  const [catalogo, setCatalogo] = useState<string[]>([])
+  const [scelti, setScelti] = useState<Record<'casa' | 'media' | 'frontiera', string> | null>(null)
+  const [guaio, setGuaio] = useState('')
+  useEffect(() => {
+    const controller = new AbortController()
+    api.modelliMotoreOpenAI(controller.signal)
+      .then(r => { if (!controller.signal.aborted) { setVia(r.via); setCatalogo(r.modelli); setScelti(r.scelti) } })
+      .catch(e => { if (!controller.signal.aborted) setGuaio(e instanceof Error ? t(e.message) : t('Non riesco a leggere i modelli.')) })
+    return () => controller.abort()
+  }, [v.motore, v.openai])
+  if (!via || !scelti) return null
+
+  const scegli = (livello: 'casa' | 'media' | 'frontiera', modello: string) => {
+    const nuovi = { ...scelti, [livello]: modello }
+    setScelti(nuovi)
+    api.scegliModelliOpenAI(nuovi).catch(() => { v.mostraToast(t('Non sono riuscito a salvare la preferenza.')); v.ricaricaStato() })
+  }
+  // il modello scelto resta in lista anche se il catalogo non è arrivato: un
+  // menù che non mostra quello che c'è scritto sembra rotto
+  const opzioni = (attuale: string) => [...new Set([...(attuale && !catalogo.includes(attuale) ? [attuale] : []), ...catalogo])]
+
+  return (
+    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
+      <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
+      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
+        {via === 'account' ? t('I modelli del tuo piano ChatGPT. Vuoto: quello predefinito del piano.') : t('I modelli della tua chiave OpenAI. Il più piccolo per il lavoro di servizio, il migliore per quello che firmi.')}
+      </div>
+      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8 }}>{guaio}</div>}
+      <div style={{ marginTop: 8 }}>
+        {v.livelli.map(l => (
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 14 }}>{l.titolo}</div>
+              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+            </div>
+            <select aria-label={l.titolo} value={scelti[l.id]} onChange={e => scegli(l.id, e.target.value)}
+              className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 'auto', minWidth: 200, maxWidth: '100%', padding: '8px 12px', fontSize: '13px' }}>
+              {via === 'account' && <option value="">{t('Il modello del piano')}</option>}
+              {opzioni(scelti[l.id]).map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function Preferenze({ v }: { v: Vals }) {
   type Sezione = 'myynd' | 'intelligenza' | 'dati' | 'account'
   const [sezione, setSezione] = useState<Sezione>('myynd')
@@ -1110,6 +1168,7 @@ export function Preferenze({ v }: { v: Vals }) {
 
       {/* I modelli di Claude, uno per livello di lavoro: solo quando è Claude a lavorare. */}
       {v.motore === 'claude' && <Modelli v={v} />}
+      {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
 
       <Uso />
       </>}

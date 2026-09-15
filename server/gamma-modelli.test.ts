@@ -69,13 +69,13 @@ test('la configurazione pubblica porta la terna, senza segreti', () => {
   const p = cfg.pubblica() as Record<string, unknown>
   assert.deepEqual(p.modelli, { casa: 'claude-haiku-4-5', media: 'claude-sonnet-5', frontiera: 'claude-opus-5' })
   assert.equal(p.modello, 'claude-opus-5')
-  assert.deepEqual(p.openai, { collegato: true, modello: 'gpt-5.4', chiaveSalvata: true })
+  assert.deepEqual(p.openai, { collegato: true, modello: 'gpt-5.4', chiaveSalvata: true, modelli: { casa: 'gpt-5.4', media: 'gpt-5.4', frontiera: 'gpt-5.4' } })
   assert.ok(!JSON.stringify(p).includes('sk-test-openai'), 'la chiave di OpenAI non esce dalla configurazione pubblica')
 })
 
 test('OpenAI con la chiave è un fornitore compatibile con l’indirizzo fisso, e solo se scelto', () => {
   cfg.scrivi({ openai: { modello: 'gpt-5.4', chiave: 'sk-test-openai' }, motore: 'openai' })
-  assert.deepEqual(mod.fornitoreOpenAI(), { url: 'https://api.openai.com/v1', chiave: 'sk-test-openai', modello: 'gpt-5.4', nome: 'OpenAI' })
+  assert.deepEqual(mod.fornitoreOpenAI(), { url: 'https://api.openai.com/v1', chiave: 'sk-test-openai', modello: 'gpt-5.4', nome: 'OpenAI', perLivello: true })
   assert.equal(mod.collegato(), true, 'con OpenAI scelto Myynd può ragionare')
   const m = mod.motore()
   assert.equal(m?.tipo, 'compatibile')
@@ -98,4 +98,24 @@ test('la chiave di OpenAI si conserva quando una scrittura non ce l’ha in mano
   const c = cfg.leggi(); delete c.openai
   cfg.scrivi(c, { togli: ['openai'] })
   assert.equal(cfg.leggi().openai, undefined)
+})
+
+test('con OpenAI al lavoro ogni richiesta porta il modello di OpenAI del suo livello', async () => {
+  const compatibile = await import('./compatibile.ts')
+  cfg.scrivi({ openai: { modello: 'gpt-5.4', chiave: 'sk-test-openai', modelli: { casa: 'gpt-5.4-mini', frontiera: 'gpt-5.4-pro' } }, motore: 'openai' })
+  assert.equal((mod.parametri('titolo', 400) as Record<string, unknown>).model, 'gpt-5.4-mini')
+  // un livello senza scelta usa il modello della scheda
+  assert.equal((mod.parametri('lettura', 8000) as Record<string, unknown>).model, 'gpt-5.4')
+  assert.equal((mod.parametri('risposta', 8000) as Record<string, unknown>).model, 'gpt-5.4-pro')
+  const f = mod.fornitoreOpenAI()!
+  const corpo = compatibile.corpo(f, { ...mod.parametri('risposta', 8000), messages: [{ role: 'user', content: 'ciao' }] } as never, false)
+  assert.equal(corpo.model, 'gpt-5.4-pro', 'il corpo della richiesta porta il modello del livello, non quello della scheda')
+  assert.deepEqual((cfg.pubblica() as unknown as Record<string, Record<string, unknown>>).openai.modelli, { casa: 'gpt-5.4-mini', media: 'gpt-5.4', frontiera: 'gpt-5.4-pro' })
+
+  // con Claude al lavoro i parametri restano quelli di Claude
+  cfg.scrivi({ openai: { modello: 'gpt-5.4', chiave: 'sk-test-openai', modelli: { casa: 'gpt-5.4-mini' } }, motore: 'claude', modello: 'claude-sonnet-5' })
+  assert.equal((mod.parametri('titolo', 400) as Record<string, unknown>).model, 'claude-haiku-4-5')
+  // e un fornitore compatibile qualunque tiene il suo modello, qualunque cosa dica la richiesta
+  const generico = { url: 'http://127.0.0.1:11434/v1', modello: 'qwen3.5:9b' }
+  assert.equal(compatibile.corpo(generico, { model: 'claude-sonnet-5', max_tokens: 10, messages: [{ role: 'user', content: 'ciao' }] } as never, false).model, 'qwen3.5:9b')
 })

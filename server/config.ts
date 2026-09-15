@@ -778,7 +778,7 @@ export type Config = {
    */
   motore?: 'claude' | 'compatibile' | 'chatgpt' | 'openai'
   /** Consent to use the locally managed ChatGPT account; no OAuth tokens here. */
-  chatgpt?: { attivo: boolean; email?: string }
+  chatgpt?: { attivo: boolean; email?: string; modelli?: Partial<Record<Livello, string>> }
   /**
    * OpenAI con una chiave, a consumo: l'altra strada della stessa scheda.
    *
@@ -786,7 +786,7 @@ export type Config = {
    * `compatibile.ts` con l'indirizzo di OpenAI, ed è per questo che qui non
    * c'è un `url`: è sempre quello. La chiave si conserva come le altre.
    */
-  openai?: { modello: string; chiave?: string }
+  openai?: { modello: string; chiave?: string; modelli?: Partial<Record<Livello, string>> }
   /**
    * Un fornitore che parla la lingua di OpenAI: OpenAI stessa, OpenRouter,
    * Groq, Mistral — o Ollama e LM Studio su questa macchina.
@@ -1105,9 +1105,12 @@ export function pubblica(c: Config = leggi()) {
     // «compatibile» solo se il fornitore c'è: una scelta rimasta nel file dopo
     // uno scollega non deve far credere alla schermata che ci sia un motore
     motore: c.motore === 'chatgpt' ? 'chatgpt' : c.motore === 'openai' && segretoPresente(c.openai?.chiave) ? 'openai' : c.motore === 'compatibile' && c.compatibile ? 'compatibile' : 'claude',
-    chatgpt: { attivo: c.chatgpt?.attivo === true },
-    // il modello esce, la chiave no
-    openai: c.openai && segretoPresente(c.openai.chiave) ? { collegato: true, modello: c.openai.modello, chiaveSalvata: true } : null,
+    // vuoto = il modello predefinito del piano
+    chatgpt: { attivo: c.chatgpt?.attivo === true, modelli: Object.fromEntries(LIVELLI.map(l => [l, c.chatgpt?.modelli?.[l] ?? ''])) as Record<Livello, string> },
+    // il modello esce, la chiave no; un livello senza scelta usa il modello della scheda
+    openai: c.openai && segretoPresente(c.openai.chiave)
+      ? { collegato: true, modello: c.openai.modello, chiaveSalvata: true, modelli: Object.fromEntries(LIVELLI.map(l => [l, c.openai?.modelli?.[l] || c.openai!.modello])) as Record<Livello, string> }
+      : null,
     // l'indirizzo e il modello escono, la chiave no
     compatibile: c.compatibile
       ? { collegato: true, url: c.compatibile.url, modello: c.compatibile.modello, nome: c.compatibile.nome ?? null, chiaveSalvata: !!chiaveCompatibile(c.compatibile.url, c) }
