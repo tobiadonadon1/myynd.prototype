@@ -127,3 +127,9 @@ test('a bare forward is the forwarded message, minus its headers', () => {
   // a forward with a note on top: the note is the message, as before
   assert.equal(corpoAttuale({ corpo: `Can you look at this one for me? It blocks the launch.\n\n${corpo}` }), 'Can you look at this one for me? It blocks the launch.')
 })
+
+
+test('Myynd desktop deliveries cannot resurface as fresh project requests', () => {
+ const d=mail({fonte:'desktop',tipo:'file',percorso:'/Users/person/Desktop/Myynd/review.pages',corpo:'Please review this project proposal tomorrow.'})
+ assert.equal(classifica(d,true),'ignora')
+})

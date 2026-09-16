@@ -1,3 +1,4 @@
+import { suppressSender } from './sender-rules.ts'
 import type { Documento } from './store.ts'
 import { documentoVero } from './veri.ts'
 
@@ -67,6 +68,8 @@ export function classificaAttenzione(
   opzioni: { adesso?: number; progettoAttivo?: boolean; giorniMax?: number } = {}
 ): Attenzione {
   const no = (motivo: string): Attenzione => ({ destinazione: 'ignora', motivo })
+  if (suppressSender(d)) return no('mittente_archiviato_dalla_persona')
+  if (/(?:^|[/\\])Desktop[/\\]Myynd(?:[/\\]|$)|(?:^|[/\\])\.myynd[/\\]deliverables(?:[/\\]|$)/i.test(d.percorso ?? '')) return no('consegna_gia_preparata')
   const adesso = opzioni.adesso ?? Date.now()
   const quando = Date.parse(d.quando ?? '')
   const giorni = Math.max(1, Math.min(30, opzioni.giorniMax ?? GIORNI_ATTENZIONE))

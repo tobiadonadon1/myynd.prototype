@@ -134,7 +134,7 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
   compiti.affida(id, 'bozza')
   const pronto = await mio.aspetta('pronto')
 
-  assert.deepEqual(mio.sentiti.map(e => e.fase), ['preso', 'lavoro', 'lavoro', 'pronto'])
+  assert.deepEqual(mio.sentiti.map(e => e.fase), ['preso', 'lavoro', 'lavoro', 'lavoro', 'pronto'])
   assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Gentile Rossi, ecco il preventivo.')
   assert.equal(pronto.fase === 'pronto' && pronto.compito.stato, 'pronto')
 
@@ -237,7 +237,7 @@ test('i passi arrivano strutturati, non come frasi', async () => {
   await o.aspetta('pronto')
 
   const lavoro = o.sentiti.filter(e => e.fase === 'lavoro').map(e => e.fase === 'lavoro' && e.passo)
-  assert.deepEqual(lavoro, passi)
+  assert.deepEqual(lavoro, [{ passo: 'preparo' }, ...passi])
   o.smetti()
 })
 
@@ -265,7 +265,7 @@ test('una riga richiamata mentre il modello scrive butta il risultato in ritardo
   await pausa(80)
 
   assert.ok(!o.sentiti.some(e => e.fase === 'pronto'), 'ha annunciato una bozza su una riga richiamata')
-  assert.ok(!o.sentiti.some(e => e.fase === 'lavoro'), 'ha annunciato un passo dopo il richiamo')
+  assert.ok(!o.sentiti.slice(o.sentiti.findIndex(e => e.fase === 'richiamato') + 1).some(e => e.fase === 'lavoro'), 'ha annunciato un passo dopo il richiamo')
   const c = store.compito(id)!
   assert.equal(c.stato, 'aperto')
   assert.equal(c.risultato, null)
@@ -285,7 +285,7 @@ test('un modello che esplode lascia la riga aperta, con il perché', async () =>
   const g = await o.aspetta('guaio')
 
   assert.equal(g.fase === 'guaio' && g.guaio, 'Il modello non risponde. Riprova.')
-  assert.deepEqual(o.sentiti.map(e => e.fase), ['preso', 'guaio'])
+  assert.deepEqual(o.sentiti.map(e => e.fase), ['preso', 'lavoro', 'guaio'])
   const c = store.compito(id)!
   assert.equal(c.stato, 'aperto')
   assert.equal(c.guaio, 'Il modello non risponde. Riprova.')
@@ -493,4 +493,168 @@ test('madre si scrive, si rilegge, e una riscrittura non taglia il filo', () => 
   // riscritta senza `madre`: chi non la manda non sta dicendo «dimenticala»
   store.scriviCompito({ id: 'm-figlia', testo: 'Di’ quale unità guarda l’audit', ordine: 'z002' })
   assert.equal(store.compito('m-figlia')?.madre, 'm-madre', 'una riscrittura si è portata via il filo')
+})
+
+test('verified native delivery skips speculative classification; execution is cancellable and replayed only to its owner', async () => {
+  let signal: AbortSignal | undefined
+  let resolveWork: (value: {testo: string; fonti: never[]; eseguito: boolean}) => void = () => {}
+  compiti.perProva({ svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, execution) => {
+    signal = execution?.signal
+    assert.equal(execution?.nativa, true)
+    passo?.({ passo: 'apro', dettaglio: 'Pages' })
+    return new Promise(r => { resolveWork = r })
+  }, chiedeAiuto: async () => { throw new Error('Verified execution must not be reclassified') } })
+  const id = riga('Write an essay in Pages')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('lavoro')
+  const replay: Evento[] = []
+  const stop = compiti.ascolta(e => replay.push(e))
+  assert.ok(replay.some(e => e.fase === 'lavoro' && e.id === id))
+  const stranger: Evento[] = []
+  const stopOther = compiti.ascolta(e => stranger.push(e), 'different-user')
+  assert.equal(stranger.length, 0)
+  assert.equal(signal?.aborted, false)
+  resolveWork({ testo: 'Created and saved in Pages: /verified/document.pages', fonti: [], eseguito: true })
+  await o.aspetta('pronto')
+  assert.equal(store.compito(id)?.stato, 'pronto')
+  stop(); stopOther(); o.smetti()
+  await pausa(10)
+
+  compiti.perProva({ svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, execution) => {
+    signal = execution?.signal
+    return new Promise(r => { resolveWork = r })
+  } })
+  const cancelled = riga('Write another essay in Pages')
+  compiti.affida(cancelled, 'tutto')
+  await pausa(10)
+  compiti.richiama(cancelled)
+  assert.equal(signal?.aborted, true)
+  resolveWork({testo: 'Late result',fonti: [],eseguito: true})
+  await pausa(10)
+  assert.equal(store.compito(cancelled)?.stato, 'aperto')
+  assert.equal(store.compito(cancelled)?.risultato, null)
+})
+
+test('created artifact is not ready when actual visual review failed or was unavailable', async () => {
+ for (const esito of ['revise','unavailable'] as const) {
+  compiti.perProva({svolgi:async()=>({testo:'Saved for review.',fonti:[],eseguito:true,consegna:{app:'Pages',titolo:'Review sample',percorso:'/verified/sample.pages',verificato:true,caratteri:100,revisione:{esito,problemi:['Review did not pass.']}}}),chiedeAiuto:async()=>{throw Error('Do not reclassify evidence')}})
+  const id=riga('Write an essay in Pages');const o=orecchio(id)
+  compiti.affida(id,'tutto');await o.aspetta('chiede')
+  assert.equal(store.compito(id)?.stato,'chiede')
+  assert.equal(store.compito(id)?.consegna?.revisione?.esito,esito)
+  o.smetti();await pausa(10)
+ }
+})
+
+test('preparation is immediate and replayable before production reports a stage', async () => {
+ let finish: (value: {testo:string;fonti:never[];eseguito:boolean}) => void = () => {}
+ compiti.perProva({svolgi: () => new Promise(resolve => { finish = resolve })})
+ const id = riga('Private request text must not be logged')
+ const o = orecchio(id)
+ compiti.affida(id, 'tutto')
+ const event = await o.aspetta('lavoro')
+ assert.deepEqual(event, {fase:'lavoro',id,passo:{passo:'preparo'}})
+ const replay: Evento[]=[]
+ const stop=compiti.ascolta(e => replay.push(e))
+ assert.ok(replay.some(e => e.fase==='lavoro' && e.id===id && e.passo.passo==='preparo'))
+ compiti.richiama(id)
+ const after: Evento[]=[];const stopAfter=compiti.ascolta(e=>after.push(e))
+ assert.ok(!after.some(e=>'id' in e && e.id===id))
+ finish({testo:'Cancelled',fonti:[],eseguito:true})
+ await pausa(10)
+ stop();stopAfter();o.smetti()
+})
+
+test('an explicitly delegated email reply is saved as a real mailbox draft', async () => {
+  const doc = { id: 'posta:INBOX:reply-verification', fonte: 'posta', tipo: 'email', titolo: 'Question', corpo: 'Could you confirm the proposal?', autore: 'sender@example.com', quando: new Date().toISOString(), messageId: 'source@example.com' }
+  store.salvaDocumenti([doc])
+  const id='explicit-mailbox-reply'
+  store.scriviCompito({id,testo:'Reply to this email with the proposal',doc:doc.id,ordine:'z'})
+  let writes=0
+  compiti.perProva({svolgi:async()=>({testo:'Dear Sender, here is the proposal.',fonti:[]}),chiedeAiuto:nonChiede,domandeDaFare:nessunaDomanda,postaCollegata:()=>true,
+    preparaEmail:async()=>({a:'sender@example.com',oggetto:'Re: Question',corpo:'Here is the proposal.'}),
+    salvaBozzaCasella:async(task,source,email)=>{writes++;assert.equal(task,id);assert.equal(source,doc.id);assert.equal(email.rispondeA?.messageId,doc.messageId);return{stato:'salvata',id:'draft1',url:'message://draft1'}}})
+  const o=orecchio(id);compiti.affida(id,'bozza');await o.aspetta('pronto');o.smetti()
+  assert.equal(writes,1);assert.equal(store.compito(id)?.email?.casella?.stato,'salvata')
+})
+
+test('restart recovers one bounded read-only initiative attempt, never arbitrary/native work', async () => {
+  const cfg=await import('./config.ts');const initiative=await import('./iniziativa.ts')
+  cfg.scrivi({lingua:'en',autonomia:'preparare'});initiative.imposta(true)
+  const doc={id:'posta:recovery',fonte:'posta',tipo:'email',titolo:'Review the proposal',corpo:'Could you review the project proposal and reply with your feedback?',autore:'Jane <jane@example.com>',quando:new Date().toISOString()}
+  store.salvaDocumenti([doc])
+  store.scriviCompito({id:'recovery-safe',testo:'Prepare a reply',ordine:'rec-a',origine:'iniziativa',doc:doc.id})
+  store.affidaCompito('recovery-safe','bozza')
+  store.scriviCompito({id:'recovery-manual',testo:'Write an essay in Pages',ordine:'rec-b',origine:'chat'})
+  store.affidaCompito('recovery-manual','tutto')
+  let calls=0
+  compiti.perProva({svolgi:async (_t,_n,_m,_a,_folder,_step,_doc,_selection,execution)=>{
+    calls++;assert.equal(execution?.nativa,false);return {testo:'A recovered draft.',fonti:[],eseguito:true}
+  },postaCollegata:()=>false})
+  const listener=orecchio('recovery-safe')
+  assert.equal(compiti.riprendiAppesi(()=>true),2)
+  await listener.aspetta('pronto');await pausa(10)
+  assert.equal(calls,1);assert.equal(store.compito('recovery-manual')?.stato,'aperto')
+  store.affidaCompito('recovery-safe','bozza')
+  compiti.riprendiAppesi(()=>true);await pausa(10)
+  assert.equal(calls,1);assert.equal(store.compito('recovery-safe')?.stato,'aperto')
+  listener.smetti();initiative.imposta(false)
+})
+
+test('restart does not resume proactive work after opt-out or loss of provider', async () => {
+  const initiative=await import('./iniziativa.ts')
+  for(const [id,enabled,ready] of [['recovery-off',false,true],['recovery-offline',true,false]] as const){
+    initiative.imposta(enabled)
+    store.scriviCompito({id,testo:'Reply',ordine:id,origine:'iniziativa',doc:'posta:recovery'})
+    store.affidaCompito(id,'bozza')
+    compiti.riprendiAppesi(()=>ready)
+    assert.equal(store.compito(id)?.stato,'aperto')
+  }
+  initiative.imposta(false)
+})
+
+test('mail revision conflict after email preparation emits chiede with visible error and never saves or announces ready', async () => {
+  const {rivediDallaChat}=await import('./revisioni.ts')
+  const doc={id:'posta:revision-race',fonte:'posta',tipo:'email',titolo:'Proposal review',corpo:'Could you reply with the revised proposal?',autore:'client@example.com',quando:new Date().toISOString(),messageId:'revision-source@example.com'}
+  store.salvaDocumenti([doc])
+  const parent='mail-revision-race-parent'
+  store.scriviCompito({id:parent,testo:'Reply to the proposal email',doc:doc.id,ordine:'race-parent'})
+  store.affidaCompito(parent,'bozza')
+  store.risultatoCompito(parent,'Dear Client, Tuesday works for me.',[],'pronto')
+  const {id}=await rivediDallaChat({id:parent,feedback:'Change the proposed day to Wednesday'},'Change the proposed day to Wednesday',()=>{})
+  let writes=0,preparations=0
+  compiti.perProva({
+    svolgi:async()=>({testo:'Dear Client, Wednesday works for me.',fonti:[]}),
+    chiedeAiuto:nonChiede,domandeDaFare:nessunaDomanda,postaCollegata:()=>true,
+    preparaEmail:async()=>{
+      preparations++
+      store.tieniLaTua(parent,'Dear Client, I manually changed this draft to Friday.')
+      return {a:'client@example.com',oggetto:'Re: Proposal review',corpo:'Wednesday works for me.'}
+    },
+    salvaBozzaCasella:async()=>{writes++;return {stato:'salvata',id:'must-not-exist'}}
+  })
+  const o=orecchio(id)
+  compiti.affida(id,'bozza')
+  const event=await o.aspetta('chiede')
+  assert.equal(preparations,1)
+  assert.equal(writes,0)
+  assert.equal(event.fase==='chiede' && event.compito.stato,'chiede')
+  assert.match(store.compito(id)?.risultato||'',/previous draft changed/i)
+  assert.equal(store.compito(id)?.email,null)
+  assert.ok(!o.sentiti.some(e=>e.fase==='pronto'))
+  assert.match(store.compito(parent)?.risultato||'',/manually changed/)
+  o.smetti();await pausa(10)
+})
+
+test('ordinary parent-linked follow-up completes without requiring a revision baseline', async () => {
+  const parent=riga('Discuss the launch plan')
+  const id='ordinary-follow-up-no-revision'
+  store.scriviCompito({id,testo:'Prepare the next meeting agenda',madre:parent,origine:'chat',ordine:'follow-up'})
+  compiti.perProva({svolgi:async()=>({testo:'Agenda prepared.',fonti:[],eseguito:true})})
+  const o=orecchio(id);compiti.affida(id,'bozza');await o.aspetta('pronto')
+  assert.equal(store.compito(id)?.stato,'pronto')
+  assert.equal(store.compito(id)?.risultato,'Agenda prepared.')
+  assert.ok(!o.sentiti.some(e=>e.fase==='guaio'))
+  o.smetti();await pausa(10)
 })

@@ -105,6 +105,7 @@ export function risolviPATH(): Promise<string> {
 /* --------------------------------------------------------------------- server */
 
 export type Ascolto = {
+  suLavoro?: (message: unknown) => void
   /** La porta è arrivata: il server ascolta lì. */
   suPorta(porta: number): void
   /** Il server è morto e non lo si riavvia da soli: tocca alla persona. */
@@ -181,6 +182,7 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
   p.stdout?.on('data', d => ricorda('server ·', d))
   p.stderr?.on('data', d => ricorda('server !', d))
   p.on('message', (m: unknown) => {
+    ascolto.suLavoro?.(m)
     const porta = (m as { porta?: unknown })?.porta
     if (typeof porta === 'number') {
       portaDetta = true
@@ -192,6 +194,7 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
   p.on('exit', codice => {
     if (figlio !== p) return
     figlio = null
+    ascolto.suLavoro?.({tipo:'lavoro-background',attivo:false})
     scriviRegistro(`guscio · il server è uscito con ${codice}`)
     if (fermando) return
     if (!portaDetta && portaChiesta) {

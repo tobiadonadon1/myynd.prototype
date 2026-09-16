@@ -56,6 +56,7 @@ mac:
   # quella integrata di electron-builder fallirebbe senza dire perché.
   notarize: false
   extendInfo:
+    NSAppleEventsUsageDescription: Myynd creates and saves documents in the app you choose when you delegate a task.
     NSHumanReadableCopyright: © 2026 Myynd
     LSMinimumSystemVersion: "13.0"
     # Le frasi che macOS mostra quando l'app apre una di queste cartelle.

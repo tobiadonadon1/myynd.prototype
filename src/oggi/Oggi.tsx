@@ -25,7 +25,7 @@ import { Barra, type Modo } from './Barra'
 import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
-import { api, type Compito, type PassoCompito } from '../api'
+import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
 import { nomePorta, portaAlProgetto, portaInChat, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Dettaglio } from './Dettaglio'
@@ -844,10 +844,18 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
   /** Un testo già scritto per lui — il prompt della riga — al posto del titolo. */
   richiesta?: string
 } & Pannello) {
-  const [pronto, setPronto] = useState<{ pronto: boolean; cartelle: string[] } | null>(null)
+  const [pronto, setPronto] = useState<{ pronto: boolean; cartelle: string[]; runtimes?: ProjectRuntime[] } | null>(null)
   const [cartella, setCartella] = useState('')
+  const [runtime, setRuntime] = useState<'claude' | 'hermes'>('claude')
+  const [hermesFiles, setHermesFiles] = useState('')
+  const [hermesModel, setHermesModel] = useState('')
+  const [hermesProvider, setHermesProvider] = useState('')
+  const [goal, setGoal] = useState(richiesta || c.testo)
+  const [team,setTeam] = useState(false)
+  const [acceptanceCriteria,setAcceptanceCriteria] = useState('')
   const [gira, setGira] = useState<'' | 'piano' | 'fai'>('')
   const [guaio, setGuaio] = useState('')
+  const [esecuzione, setEsecuzione] = useState<ProjectExecutionReport | null>(null)
   // vero dopo il primo passo: è quello che sblocca «fallo davvero»
   const [pianoFatto, setPianoFatto] = useState(false)
 
@@ -857,7 +865,13 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
   // per saperlo prima di mostrarlo bisogna chiederlo prima.
   useEffect(() => {
     if ((!aperto && !richiesta) || pronto) return
-    api.lavoroPronto().then(setPronto).catch(() => setPronto({ pronto: false, cartelle: [] }))
+    api.lavoroPronto().then(result => {
+      setPronto(result)
+      const hermes = result.runtimes?.find(r => r.id === 'hermes')
+      setHermesModel(hermes?.defaults?.model || '')
+      setHermesProvider(hermes?.defaults?.provider || '')
+      if (!result.pronto && hermes?.status === 'supported') setRuntime('hermes')
+    }).catch(() => setPronto({ pronto: false, cartelle: [] }))
   }, [aperto, pronto, richiesta])
 
   const vai = async (passo: 'piano' | 'fai') => {
@@ -867,10 +881,16 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
       // che il server ha già sotto mano
       const r = await l.lavora(c.id, {
         cartella: cartella || pronto?.cartelle[0] || '', passo,
+        runtime,
+        team,acceptanceCriteria,
+        ...(runtime === 'hermes' ? { richiesta: goal, hermes: {
+          files: hermesFiles.split(/[,\n]/).map(x => x.trim()).filter(Boolean), model: hermesModel, provider: hermesProvider
+        } } : {}),
         ...(passo === 'piano' && richiesta?.trim() ? { richiesta } : {})
       })
-      if (passo === 'piano') setPianoFatto(true)
-      if (!r.finito) setGuaio('Si è fermato dopo il tempo massimo: quello che ha fatto è qui sopra.')
+      if (passo === 'piano' && r.finito) setPianoFatto(true)
+      if (passo === 'fai') setEsecuzione(r.esecuzione ?? null)
+      if (!r.finito && !r.esecuzione) setGuaio(t('Il lavoro si è fermato prima di finire.'))
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     setGira('')
   }
@@ -883,7 +903,7 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
 
   if (!aperto) {
     // sotto un prompt il verso compare solo se c'è dove andare
-    if (richiesta && !(pronto?.pronto && pronto.cartelle.length)) return null
+    if (richiesta && !((pronto?.pronto || pronto?.runtimes?.some(r => r.status === 'supported')) && pronto.cartelle.length)) return null
     return (
       <div style={{ marginTop: 4 }}>
         <Hov as="button" type="button" onClick={apri}
@@ -891,23 +911,32 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
           }}
-          hover={{ color: '#C4623B' }}>{richiesta ? t('Apri in Claude Code…') : t('Falla fare a Claude Code…')}</Hov>
+          hover={{ color: '#C4623B' }}>{t('Affida a un agente locale…')}</Hov>
       </div>
     )
   }
 
   const cartelle = pronto?.cartelle ?? []
+  const runtimeReady = runtime === 'claude' ? pronto?.pronto : pronto?.runtimes?.some(r => r.id === 'hermes' && r.status === 'supported' && r.inferenceCredentialConfigured !== false)
   return (
     <div style={{
       marginTop: 12, padding: '13px 15px', borderRadius: 13,
       background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)'
     }}>
-      {pronto && !pronto.pronto ? (
+      {pronto && !pronto.pronto && !pronto.runtimes?.some(r => r.status === 'supported') ? (
         <div style={{ fontSize: '12.5px', color: '#8E3F1F' }}>
-          {t('Claude Code non è installato su questo computer.')}
+          {t('Non c’è un agente locale compatibile su questo computer.')}
         </div>
       ) : (
         <>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 5 }}>{t('Agente locale')}</label>
+          <select value={runtime} onChange={e => { setRuntime(e.target.value as 'claude' | 'hermes'); setPianoFatto(false); setEsecuzione(null) }}
+            aria-label={t('Agente locale')} style={{ ...campo, marginBottom: 10 }} disabled={!!gira}>
+            <option value="claude" disabled={!pronto?.pronto}>Claude Code</option>
+            <option value="hermes" disabled={!pronto?.runtimes?.some(r => r.id === 'hermes' && r.status === 'supported')}>Hermes</option>
+          </select>
+          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticated===false && <div style={{fontSize:12,color:'#8E3F1F',marginBottom:10}}>{t('Claude Code è installato, ma manca l’accesso al suo account. Collegalo nelle Fonti per affidargli il progetto.')}</div>}
+          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticationPending && <div style={{fontSize:12,color:'#8E3F1F',marginBottom:10}}>{t('L’accesso a Claude Code non è ancora verificato. Riprova tra poco.')}</div>}
           <div style={{
             fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
             color: 'rgba(34,39,31,.45)', marginBottom: 5
@@ -917,29 +946,99 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             {cartelle.map((x: string) => <option key={x} value={x}>{x.replace(/^.*\/(?=[^/]+\/[^/]+$)/, '')}</option>)}
           </select>
 
+          {runtime === 'hermes' && <div style={{ marginTop: 10, display: 'grid', gap: 7 }}>
+            <label style={{ fontSize: 12 }}>{t('Risultato da ottenere')}
+              <textarea value={goal} onChange={e => setGoal(e.target.value)} style={{ ...campo, minHeight: 65 }} disabled={!!gira} />
+            </label>
+            <label style={{ fontSize: 12 }}>{t('File da affidare a Hermes')}
+              <textarea value={hermesFiles} onChange={e => setHermesFiles(e.target.value)} placeholder={t('src/esempio.ts, package.json')}
+                style={{ ...campo, minHeight: 45 }} disabled={!!gira} />
+            </label>
+            <label style={{ fontSize: 12 }}>{t('Modello Hermes')}
+              <input value={hermesModel} onChange={e => setHermesModel(e.target.value)} style={campo} disabled={!!gira} />
+            </label>
+            <label style={{ fontSize: 12 }}>{t('Fornitore Hermes')}
+              <input value={hermesProvider} onChange={e => setHermesProvider(e.target.value)} style={campo} disabled={!!gira} />
+            </label>
+            <div style={{ fontSize: 12, color: 'rgba(34,39,31,.65)' }}>{t('Hermes propone modifiche solo ai file indicati. Myynd le applica nella copia e le verifica. Le impostazioni dell’agente restano come sono.')}</div>
+            <div style={{fontSize:12,color:'rgba(34,39,31,.65)'}}>{t('Questa modalità usa le credenziali di inferenza già presenti nel file .env di Hermes. Un accesso solo OAuth non è supportato. L’installazione non conferma che l’account sia collegato.')}</div>
+            {pronto?.runtimes?.find(r=>r.id==='hermes')?.inferenceCredentialConfigured===false && <div style={{fontSize:12,color:'#8E3F1F'}}>{t('Mancano le credenziali di inferenza richieste per questa modalità di Hermes.')}</div>}
+          </div>}
+
+          <label style={{display:'flex',gap:7,alignItems:'center',fontSize:12,marginTop:10}}>
+            <input type="checkbox" checked={team} onChange={e=>setTeam(e.target.checked)} disabled={!!gira || !pronto?.pronto}/>
+            {t('Agente esecutore + revisore Claude')}
+          </label>
+          {!pronto?.pronto && <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginTop:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>}
+          {team && <div style={{marginTop:7}}>
+            <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginBottom:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>
+            <label style={{fontSize:12}}>{t('Criteri per accettare il risultato')}
+              <textarea value={acceptanceCriteria} onChange={e=>setAcceptanceCriteria(e.target.value)} maxLength={4000}
+                style={{...campo,minHeight:65}} disabled={!!gira}/>
+            </label>
+            <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginTop:5}}>{t('L’esecutore lavora nella copia, poi il revisore controlla file e test. Un controllo incompleto ferma il risultato.')}</div>
+          </div>}
+
           <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 9, lineHeight: 1.5 }}>
-            {t(pianoFatto
-              ? 'Adesso cambia i file davvero, come nel piano qui sopra.'
-              : 'Legge il progetto e scrive cosa farebbe. Non tocca niente.')}
+            {runtime === 'hermes' || pianoFatto
+              ? t('Adesso lavora in una copia del progetto. Il progetto collegato resta com’è.')
+              : t('Legge il progetto e scrive cosa farebbe. Non tocca niente.')}
           </div>
 
           {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9 }}>{t(guaio)}</div>}
 
+          {esecuzione && <div style={{ marginTop: 12, padding: '11px 12px', borderRadius: 10,
+            border: '1px solid rgba(34,39,31,.12)', background: 'rgba(255,255,255,.72)',
+            fontSize: 12, lineHeight: 1.55, color: '#22271F' }}>
+            <strong>{esecuzione.state === 'verified' ? t('Modifiche verificate nella copia')
+              : esecuzione.state === 'unverified' ? t('Modifiche da verificare nella copia')
+              : esecuzione.state === 'no_changes' ? t('Nessun file cambiato')
+              : esecuzione.state === 'cancelled' ? t('Lavoro interrotto; copia salvata')
+              : t('La verifica non è riuscita; copia salvata')}</strong>
+            {esecuzione.changedFiles.length > 0 && <div style={{ marginTop: 6 }}>
+              {t('File cambiati')}: {esecuzione.changedFiles.map(f => f.path).join(', ')}
+            </div>}
+            <div style={{ marginTop: 4, color: 'rgba(34,39,31,.65)' }}>
+              {t('Verifica')}: {esecuzione.verification.status === 'passed' ? t('superata')
+                : esecuzione.verification.status === 'failed' ? t('non superata')
+                : esecuzione.verification.status === 'cancelled' ? t('interrotta') : t('non disponibile')}
+            </div>
+            {esecuzione.verification.status === 'failed' && esecuzione.verification.output &&
+              <pre style={{ maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', margin: '6px 0 0',
+                fontSize: 11, color: '#8E3F1F' }}>{esecuzione.verification.output.slice(0, 2000)}</pre>}
+            {esecuzione.team && <div style={{marginTop:7}}>
+              <strong>{esecuzione.team.accepted ? t('Revisione accettata') : t('Revisione da completare')}</strong>
+              {esecuzione.team.roles.map(role=><div key={role.role} style={{marginTop:4}}>
+                {role.role==='worker' ? t('Esecutore') : t('Revisore')}: {role.runtime} · {role.outcome==='verified' || role.outcome==='approved' ? t('superata') : role.outcome==='cancelled' ? t('interrotta') : role.outcome==='not_run' ? t('non eseguita') : role.outcome==='rejected' ? t('non accettata') : role.outcome==='incomplete' || role.outcome==='unverified' ? t('incompleta') : t('non superata')}
+                {role.findings?.map((finding,i)=><div key={i} style={{color:'rgba(34,39,31,.65)'}}>{finding}</div>)}
+              </div>)}
+            </div>}
+            <div style={{ marginTop: 5, color: 'rgba(34,39,31,.5)', overflowWrap: 'anywhere' }}>
+              {t('Copia')}: {esecuzione.workspace}
+            </div>
+            <button type="button" onClick={() => api.apriCopiaProgetto(esecuzione.reportFile).catch(e =>
+              setGuaio(e instanceof Error ? e.message : String(e)))} style={{ marginTop: 8, padding: '6px 10px',
+                borderRadius: 8, border: '1px solid rgba(34,39,31,.2)', background: '#FFF',
+                color: '#22271F', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {t('Apri la copia')}
+            </button>
+          </div>}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => vai('piano')} disabled={!!gira || !cartelle.length} style={{
+            {runtime === 'claude' && <button type="button" onClick={() => vai('piano')} disabled={!!gira || !cartelle.length || !runtimeReady || (team && !acceptanceCriteria.trim())} style={{
               padding: '9px 18px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
               background: 'rgba(255,255,255,.8)', color: '#22271F',
               fontSize: '13px', fontFamily: 'inherit', cursor: gira ? 'default' : 'pointer'
-            }}>{gira === 'piano' ? t('Guardo il progetto…') : t('Guarda e dimmi cosa faresti')}</button>
+            }}>{gira === 'piano' ? t('Guardo il progetto…') : t('Guarda e dimmi cosa faresti')}</button>}
 
-            {pianoFatto && (
-              <button type="button" onClick={() => vai('fai')} disabled={!!gira} style={{
+            {(pianoFatto || runtime === 'hermes') && (
+              <button type="button" onClick={() => vai('fai')} disabled={!!gira || !cartelle.length || !runtimeReady || (team && !acceptanceCriteria.trim()) || (runtime === 'hermes' && (!goal.trim() || !hermesFiles.trim() || !hermesModel.trim() || !hermesProvider.trim()))} style={{
                 padding: '9px 18px', borderRadius: 99, border: 'none',
                 background: gira ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#B24E2E,#D98A5A)',
                 color: gira ? 'rgba(34,39,31,.35)' : '#FFF7F0',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
                 cursor: gira ? 'default' : 'pointer'
-              }}>{gira === 'fai' ? t('Lo sto facendo…') : t('Fallo davvero')}</button>
+              }}>{gira === 'fai' ? t('Lo sto facendo…') : runtime === 'hermes' ? t('Affida a Hermes nella copia') : t('Fallo davvero')}</button>
             )}
 
             <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
@@ -1086,6 +1185,11 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
 type Email = { a: string; oggetto: string; corpo: string; conosciuto: boolean }
 
 function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
+  const casella = p.c.email?.casella
+  if (casella) return <div style={{ marginTop: 12, fontSize: 13 }}>
+    {casella.stato === 'salvata' ? <><p>{t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
+      : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {casella.errore}</p>}
+  </div>
   const azione = azioneEmail(p.c, p.testo)
   if (azione.tipo === 'nessuna') return null
   if (azione.tipo === 'copia') return <CopiaEmail c={p.c} l={p.l} bozza={azione} />

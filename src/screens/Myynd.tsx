@@ -12,6 +12,9 @@ import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
 import type { Compito } from '../api'
+import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
+import { compitoInEsecuzione } from '../compito-attivo'
+import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from '../consegna-ui'
 
 // Sulla riga aperta la freccia lascia il posto al pallino di prima: mentre
 // leggi, «vai qui» non è più il consiglio giusto — ci sei già.
@@ -167,6 +170,7 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
   // scrive più — `origine` vale 'chat', e un'automazione scrive 'auto:<id>' —
   // quindi quelle righe non dicevano da dove venivano
   if (c.origine === 'chat' || c.origine === 'conversazione') return { testo: t('la chat'), apri: () => v.goChat() }
+  if (c.origine === 'iniziativa') return { testo: t('Prepara in anticipo') }
   if (c.origine === 'punto') return { testo: t('il punto del giorno') }
   if (c.origine === 'avvio' || c.origine === 'onboarding') return { testo: t('il primo progetto') }
   if (c.origine?.startsWith('auto:') || c.origine === 'automazione') return { testo: t('un’automazione') }
@@ -255,11 +259,11 @@ function Prove({ c, v, l, scuro }: { c: Compito; v: Vals; l?: Lista; scuro?: boo
  * chiude la riga. E non sta sotto il «⋯»: quello che serve adesso non si
  * nasconde dietro tre puntini.
  */
-function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: boolean }) {
-  if (!c.porta) return null
+function Portami({ c, l, v, scuro, anteprima = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean; anteprima?: boolean }) {
+  if ((!c.porta && !c.consegna) || (anteprima && !c.consegna?.anteprima)) return null
 
   const vai = async () => {
-    const r = await l.portami(c.id)
+    const r = await l.portami(c.id, anteprima ? { anteprima: true } : undefined)
     // il perché l'ha già detto la lista, con un avviso: qui non si aggiunge niente
     if (!r || !r.ok) return
     // i due posti che stanno dentro l'app: li apre chi ha lo schermo
@@ -267,6 +271,7 @@ function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: bo
     else if (r.dove === 'progetto') v.apriProgetto(r.id)
   }
 
+  const etichetta = anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF') : c.consegna ? `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}` : nomePorta(c.porta!)
   const vestito: CSSProperties = scuro
     ? {
         padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.32)',
@@ -280,17 +285,65 @@ function Portami({ c, l, v, scuro }: { c: Compito; l: Lista; v: Vals; scuro?: bo
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={nomePorta(c.porta)}
+      title={c.consegna?.titolo ?? etichetta}
       style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
       hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
-      {nomePorta(c.porta)}
+      {etichetta}
     </Hov>
   )
 }
 
+function BozzaInPosta({ c }: { c: Compito }) {
+  const b = c.email?.casella
+  if (!b) return null
+  return <div style={{ marginTop: 10, fontSize: 13 }} onClick={e => e.stopPropagation()}>
+    {b.stato === 'salvata' ? <><span>{t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</span>{' '}<a href={b.url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{t('Apri la bozza nella posta')}</a></>
+      : <span role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {b.errore}</span>}
+  </div>
+}
+
+function Consegna({ c, l, v, scuro = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean }) {
+  const d = c.consegna
+  if (!d) return null
+  const en = lingua() === 'en'
+  const revisione = statoRevisione(d.revisione, en)
+  return <section className={`task-delivery${scuro ? ' task-delivery-dark' : ''}`} aria-label={en ? 'Document' : 'Documento'}>
+    <div className="task-delivery-title">{d.titolo}</div>
+    <div className="task-delivery-meta">{[d.app, d.pagine ? `${d.pagine} ${en ? (d.pagine === 1 ? 'page' : 'pages') : (d.pagine === 1 ? 'pagina' : 'pagine')}` : null, d.stile].filter(Boolean).join(' · ')}</div>
+    <div className="task-delivery-review" data-review={d.revisione?.esito ?? 'unavailable'}>{revisione}</div>
+    {d.revisione?.esito !== 'pass' && !!d.revisione?.problemi.length && <ul className="task-delivery-issues">{d.revisione.problemi.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+    <div className="task-delivery-actions"><Portami c={c} l={l} v={v} scuro={scuro} /><Portami c={c} l={l} v={v} scuro={scuro} anteprima /></div>
+  </section>
+}
+
+/** Completed artifacts are a short hand-off, with technical details available on demand. */
+function ConsegnaPronta({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; richiudi?: () => void }) {
+  const d = c.consegna!
+  const en = lingua() === 'en'
+  return <section className={`task-completed${richiudi ? ' task-completed-hero' : ''}`} aria-label={t('È pronto.')}>
+    <div className="task-completed-heading">
+      <span className="task-completed-check"><IconSpunta size={14} /></span>
+      <strong>{t('È pronto.')}</strong>
+      <span className="task-completed-name" title={d.titolo}>{d.titolo}</span>
+      {richiudi && <button type="button" className="task-completed-collapse" onClick={richiudi} aria-label={t('Richiudi')}><IconGiu size={14} /></button>}
+    </div>
+    <p className="task-completed-message">{messaggioConsegna(d, en)}</p>
+    <div className="task-completed-actions">
+      <Portami c={c} l={l} v={v} />
+      <button type="button" className="task-completed-discuss" onClick={() => v.discutiCompito(c)}>{t('Parlane in chat')}</button>
+      <button type="button" className="task-completed-dismiss" onClick={() => l.chiudi(c.id, t('Va bene così.'), c.risultato ?? '')}>{t('Va bene')}</button>
+      <details className="task-completed-details">
+        <summary>{t('Dettagli')}</summary>
+        <div className="task-completed-review">{statoRevisione(d.revisione, en)}{d.pagine ? ` · ${d.pagine} ${en ? 'pages' : 'pagine'}` : ''}</div>
+        <Portami c={c} l={l} v={v} anteprima />
+      </details>
+    </div>
+  </section>
+}
+
 /** Cosa c'è scritto accanto a «DA FARE»: cosa sta succedendo, o dove sta. */
-function didascalia(c: Compito): string {
-  if (c.stato === 'delegato') return t('ci sta lavorando')
+function didascalia(c: Compito, attivo = false): string {
+  if (c.stato === 'delegato') return attivo ? t('ci sta lavorando') : t('In coda')
   // lo scaffale che si vede è quello di oggi, non quello scritto: una cosa pianificata
   // per un giorno passato è di oggi anche qui, come nella lista
   const secchio = secchioVivo(c, giornoLocale())
@@ -307,8 +360,9 @@ function didascalia(c: Compito): string {
  */
 function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
+  if (c.consegna) return ''
   if (c.stato === 'pronto' || c.stato === 'chiede') return primoParagrafo(c.risultato ?? '')
-  return c.nota ?? ''
+  return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
 }
 
 /** Quello che aspetta te, detto in una parola. */
@@ -316,31 +370,21 @@ function attesaDi(c: Compito): string {
   return c.stato === 'pronto' ? t('pronta') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
 
-/**
- * Le cose della lista, dentro il feed, vestite ESATTAMENTE come le altre.
- *
- * Niente card a parte, niente alone che respira sul bordo: una riga della lista
- * è una riga del feed — stesso tipo in maiuscoletto, stesso corpo, stessa
- * pastiglia a destra. Quello che la distingue è quello che c'è *scritto* —
- * «DA FARE», nello stesso posto in cui le sue dicono «DA LEGGERE». Un'etichetta
- * al posto di un trucco grafico: si legge, invece di doverla imparare.
- *
- * E si comporta come le altre: cliccandola sale in cima, dove c'è lo spazio per
- * farci qualcosa. Prima ti portava nell'altra schermata, che è il contrario di
- * un feed — se per chiudere una riga devi cambiare stanza, quella riga lì non
- * ci stava davvero.
- */
 function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: () => void }) {
   const { attiva, props } = useAttiva()
   const attesa = attesaDi(c)
   const testo = corpo(c)
+  const attivo = compitoInEsecuzione(c, l.passi[c.id])
+
+  if (consegnaPronta(c)) return <ConsegnaPronta c={c} l={l} v={v} />
 
   return (
-    <div role="button" tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)}
+    <div className="task-aurora-host task-aurora-row" data-working={attivo || undefined} role="button" tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)}
       style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer' }}
       {...props}>
+      {attivo && <AuroraCompito />}
       <span style={{ flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center', color: 'rgba(62,81,64,.6)' }}>
-        {c.stato === 'delegato'
+        {attivo
           ? <Glifo tipo="penso" dim={13} colore="#C4623B" />
           : <IconFrecciaDx size={13} />}
       </span>
@@ -348,9 +392,9 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: '#3E5140' }}>{t('Da fare')}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)' }}>{didascalia(c)}</span>
+          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)' }}>{didascalia(c, attivo)}</span>
         </div>
-        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{c.testo}</div>
+        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}</div>
         {testo && (
           <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
             {taglia(testo, 140)}
@@ -358,19 +402,21 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
         )}
         {/* da dove viene e cosa ha letto: la riga si apre in cima, il documento
             si apre solo da qui — e da nessun altro punto della riga */}
+        {attivo && <PassoAttivo passo={l.passi[c.id]} />}
+        <Consegna c={c} l={l} v={v} /><BozzaInPosta c={c} />
         <Prove c={c} v={v} l={l} />
       </div>
 
       {/* il posto vero da cui viene, aperto sul Mac. Sempre visibile — al
           contrario di «fatta», che compare col mouse: è la cosa che mancava, e
           una cosa che si scopre solo passandoci sopra continua a mancare */}
-      <Portami c={c} l={l} v={v} />
+      {!c.consegna && <Portami c={c} l={l} v={v} />}
 
       {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso, e sta
           nello stesso punto in cui le voci di Myynd offrono «in lista» */}
       <Hov as="button"
         onClick={(e: MouseEvent) => { e.stopPropagation(); l.chiudi(c.id) }}
-        title={t('Fatto')} aria-label={`${t('Fatto')}: ${c.testo}`}
+        title={t('Fatto')} aria-label={`${t('Fatto')}: ${presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}`}
         style={{
           flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
           background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
@@ -397,7 +443,7 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
  * esiste è che il feed non deve mai mandarti da un'altra parte per finire una
  * cosa che sta guardando.
  */
-function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
+function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; richiudi: () => void }) {
   const [menu, setMenu] = useState(false)
   const bottone = useRef<HTMLButtonElement | null>(null)
   const chiudiMenu = useCallback(() => setMenu(false), [])
@@ -406,6 +452,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const pronto = c.stato === 'pronto'
   const chiede = c.stato === 'chiede'
   const delegato = c.stato === 'delegato'
+  const attivo = compitoInEsecuzione(c, l.passi[c.id])
   // `testo` è l'essenza — quello che sta sotto al titolo, un paragrafo solo.
   // `completo` è quello che ha scritto per intero: quello che «di più» apre, e
   // quello che si tiene quando accetti la bozza, perché è da lì che impara
@@ -424,12 +471,16 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
 
   const rispondi = () => { if (risposta.trim()) l.rispondi(c.id, risposta.trim()) }
 
+  if (consegnaPronta(c)) return <ConsegnaPronta c={c} l={l} v={v} richiudi={richiudi} />
+
   return (
-    <div style={{ ...v.heroStyle, position: 'relative', zIndex: menu ? 30 : undefined }}>
+    <div className="task-aurora-host task-aurora-hero" data-working={attivo || undefined} style={{ ...v.heroStyle, position: 'relative', zIndex: menu ? 30 : undefined }}>
+      {attivo && <AuroraCompito />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Glifo tipo="penso" dim={15} colore="#FFF7F0" />
+        {attivo ? <Glifo tipo="penso" dim={15} colore="#FFF7F0" /> : <IconFrecciaDx size={15} />}
         <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t('Da fare')}</span>
-        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{didascalia(c)}</span>
+        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{didascalia(c, attivo)}</span>
+        <Hov as="button" type="button" onClick={richiudi} aria-label={t('Richiudi')} title={t('Richiudi')} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: '#FFF7F0', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 6px', fontSize: 12 }}>{t('Richiudi')} <IconGiu size={12} /></Hov>
         {attesaDi(c) && (
           <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#FFF7F0', background: 'rgba(255,247,240,.2)', border: '1px solid rgba(255,247,240,.4)', borderRadius: 99, padding: '3px 10px' }}>
             {attesaDi(c)}
@@ -437,7 +488,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         )}
       </div>
 
-      <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{c.testo}</div>
+      <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}</div>
 
       {testo && (
         <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>
@@ -450,6 +501,8 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
         </div>
       )}
 
+      {attivo && <PassoAttivo passo={l.passi[c.id]} />}
+      <Consegna c={c} l={l} v={v} scuro /><BozzaInPosta c={c} />
       <Prove c={c} v={v} l={l} scuro />
 
       {/* a capo invece che fuori: con un bottone in più questa fascia, in una
@@ -472,7 +525,7 @@ function HeroCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           {pronto ? t('Rifallo') : delegato ? t('Richiamala') : t('Se ne occupa Myynd')}
         </Hov>
 
-        <Portami c={c} l={l} v={v} scuro />
+        {!c.consegna && <Portami c={c} l={l} v={v} scuro />}
 
         {altro.length > 0 && (
           <>
@@ -555,13 +608,13 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
    * niente mentre hai sei cose da fare è una pagina che non ti guarda. Si
    * riempie cliccando una riga, e si svuota cliccando una delle sue.
    */
-  const [inCima, setInCima] = useState<string | null>(null)
+  const [inCima, setInCima] = useState<string | null | false>(null)
   /** Mentre la riga nasce e parte: il bottone non si preme due volte. */
   const [affidando, setAffidando] = useState(false)
   /** Il «⋯» della carta grande: il menù si misura su di lui — vedi `MenuGiu`. */
   const altroHero = useRef<HTMLButtonElement | null>(null)
   const compiti = lista?.compiti ?? []
-  const inTesta = compiti.find(c => c.id === inCima) ?? (v.hasHero ? null : compiti[0] ?? null)
+  const inTesta = inCima === false ? null : compiti.find(c => c.id === inCima) ?? (v.hasHero ? null : compiti[0] ?? null)
   // quando in cima ci va una cosa tua, la voce che stava lì scende fra le righe
   // invece di sparire: è ancora aperta, e deve restare raggiungibile
   const voci = inTesta && v.rigaHero ? [v.rigaHero, ...v.resto] : v.resto
@@ -678,7 +731,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           cose da fare non stanno lì dentro, stanno qui sotto. */}
       <Punto v={v} />
 
-      {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} />}
+      {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} richiudi={() => setInCima(false)} />}
 
       {!inTesta && v.hasHero && (
         <div style={v.heroStyle}>
@@ -832,6 +885,27 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           )}
         </div>
       )}
+
+      {v.guastoLettura && <div role="alert" style={{ marginTop: 14, padding: '14px 18px', borderRadius: 16, background: 'rgba(255,253,249,.85)', border: '1px solid rgba(142,63,31,.25)', color: '#8E3F1F', fontSize: 13, lineHeight: 1.5 }}>
+        {v.guastoLettura}
+        <button onClick={v.genera} disabled={v.generando} style={{ ...BOTTONE, marginLeft: 12 }}>{t('Riprova')}</button>
+      </div>}
+      {!!v.iniziative.length && !v.guastoLettura && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+        <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
+      </div>}
+      {v.iniziative.map(item => <section key={item.id} aria-label={t('Un passo per il tuo progetto')} style={{ padding: '18px 22px', marginTop: 14, borderRadius: 20, background: 'rgba(255,253,249,.78)', border: '1px solid rgba(92,118,96,.20)' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={() => v.apriProgetto(item.projectId)} style={{ border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12, color: '#5C7660', cursor: 'pointer' }}>{item.projectName} · {t('Il tuo obiettivo')}</button>
+          <button onClick={() => void v.scartaIniziativa(item.id)} style={{ border: 0, background: 'none', padding: '4px 0', font: 'inherit', fontSize: 12, color: 'rgba(34,39,31,.6)', cursor: 'pointer' }}>{t('Non mi interessa')}</button>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 17, fontWeight: 500, overflowWrap: 'anywhere' }}>{item.title}</div>
+        <div style={{ marginTop: 5, fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.68)', overflowWrap: 'anywhere' }}>{item.description}</div>
+        {item.question && <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>{item.question}</div>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+          <button style={BOTTONE} onClick={() => v.discutiIniziativa(item)}>{t('Parliamone in chat')}</button>
+          {item.taskId && lista && <button style={BOTTONE} onClick={() => { lista.chiediDiAprire(item.taskId!); v.goOggi() }}>{t('Apri il compito')}</button>}
+        </div>
+      </section>)}
 
       <Domanda v={v} />
 
@@ -1012,7 +1086,7 @@ function Vuoto({ v }: { v: Vals }) {
   const senzaDocumenti = v.totaleDocumenti === 0
   // Prima della risposta non si dice niente; dopo un errore si dice l'errore.
   // Prima questa carta diceva «La tua mente è ancora vuota» anche a un 500.
-  if (!v.feedCaricato) return null
+  if (!v.feedCaricato || v.guastoLettura) return null
   if (v.guastoFeed) {
     return (
       <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '32px 28px' }}>

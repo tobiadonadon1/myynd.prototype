@@ -195,7 +195,12 @@ async function copia(sorgente: string): Promise<{ db: DatabaseSync; butta: () =>
   try {
     await copyFile(sorgente, join(dove, 'NoteStore.sqlite'))
     for (const coda of ['-wal', '-shm']) {
-      try { await copyFile(`${sorgente}${coda}`, join(dove, `NoteStore.sqlite${coda}`)) } catch { /* non c'è: va bene */ }
+      try { await copyFile(`${sorgente}${coda}`, join(dove, `NoteStore.sqlite${coda}`)) }
+      catch (err) {
+        // An absent sidecar is normal. A denied or failed sidecar copy is not
+        // an empty archive: the WAL may contain the current user edits.
+        if ((err as NodeJS.ErrnoException).code!=='ENOENT') throw err
+      }
     }
     const db = new DatabaseSync(join(dove, 'NoteStore.sqlite'), { readOnly: true })
     return { db, butta: async () => { db.close(); await butta() } }

@@ -119,7 +119,7 @@ test('a fresh process reads persisted keys after model and source-setting change
   cfg.scrivi({ claude: { apiKey: 'test-restart-claude' }, compatibile: { url: 'https://restart.example/v1', modello: 'first', chiave: 'test-restart-provider' } }, { togli: [...cfg.CON_SEGRETI] })
   cfg.aggiorna({ desktop: { cartelle: ['/tmp/documents'] }, abbonamento: { attivo: true }, claudeCon: 'abbonamento' })
   cfg.aggiorna({ compatibile: { url: 'http://localhost:11434/v1', modello: 'local' }, motore: 'compatibile' })
-  const code = `import assert from 'node:assert/strict'; const c = await import(${JSON.stringify(new URL('./config.ts', import.meta.url).href)}); assert.equal(c.leggi().claude.apiKey, 'test-restart-claude'); assert.equal(c.chiaveCompatibile('https://restart.example/v1'), 'test-restart-provider'); assert.equal(c.leggi().compatibile.chiave, undefined);`
+  const code = `import assert from 'node:assert/strict'; const c = await import(${JSON.stringify(new URL('./config.ts', import.meta.url).href)}); assert.equal(c.leggi().claude.apiKey, 'test-restart-claude'); assert.equal(c.chiaveCompatibile('https://restart.example/v1'), 'test-restart-provider'); assert.equal(c.leggi().compatibile.chiave, undefined); assert.equal(c.leggi().claudeCon, 'abbonamento'); assert.equal(c.leggi().abbonamento.attivo, true);`
   const child = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, MYYND_DATI: dati } })
   assert.equal(child.status, 0, child.stderr)
   assert.equal(statSync(join(dati, 'config.json')).mode & 0o777, 0o600)

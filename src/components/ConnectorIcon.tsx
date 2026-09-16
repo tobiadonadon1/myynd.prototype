@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { t } from '../lingua'
 import { IconAvanti } from '../icons'
 import { MARCHI } from './marchi'
+import { COLORE_NOTE } from '../../server/colori-fonti.ts'
 
 export function connectorPerAttrezzo(nome: string, serve?: string | null) {
   const id = serve ?? nome.split('.')[0]
@@ -49,7 +50,7 @@ export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; s
   const marchio = MARCHI[DI_MARCA[id] ?? '']
   if (marchio) {
     return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d={marchio.d} fill={spenta ? 'currentColor' : marchio.colore} />
+      <path d={marchio.d} fill={spenta ? 'currentColor' : id === 'note' ? COLORE_NOTE : marchio.colore} />
     </svg>
   }
 

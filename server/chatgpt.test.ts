@@ -101,3 +101,11 @@ test('fast chat uses an available model while delegated work retains the account
   assert.equal(g.scegliModello(catalog.slice(0, 1), true), 'gpt-5.6-sol')
   assert.equal(g.scegliModello([], true), undefined)
 })
+
+test('rendered images are real native image inputs, never silently reduced to text', () => {
+  const r = g.prepara({ ...base, messages: [{role: 'user', content: [{type:'text',text:'Review page one'}, {type:'image',source:{type:'base64',media_type:'image/png',data:'aW1hZ2U='}}]}] })
+  assert.deepEqual(r.immagini, [{type:'image',url:'data:image/png;base64,aW1hZ2U='}])
+  assert.ok(r.input.includes('Attached image 1'))
+  assert.ok(!r.input.includes('aW1hZ2U='))
+  assert.throws(() => g.prepara({...base, messages:[{role:'user',content:[{type:'image',source:{type:'url',url:'https://private.test/image.png'}}]}]}), /inline image/)
+})

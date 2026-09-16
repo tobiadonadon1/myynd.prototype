@@ -19,6 +19,7 @@ const FUORI = join(CASA, 'Segreti')
 mkdirSync(COLLEGATA, { recursive: true })
 mkdirSync(FUORI, { recursive: true })
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const s = await import('./scrivania.ts')
 after(() => rmSync(CASA, { recursive: true, force: true }))

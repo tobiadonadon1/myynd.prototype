@@ -137,7 +137,8 @@ export function disponibile(): boolean {
  * Vale mezzo minuto: chi fa l'accesso in un'altra finestra deve vederlo
  * comparire senza riavviare Myynd, e non serve chiederlo a ogni giro.
  */
-let accesso = { entrato: false, quando: 0 }
+let accesso = { entrato: false, quando: 0, verificato: false }
+let verificaAccesso: Promise<boolean> | null = null
 const ACCESSO_VALE = 30_000
 /**
  * Quanto si aspetta `claude auth status`. Erano cinque secondi, e un Mac
@@ -147,7 +148,12 @@ const ACCESSO_VALE = 30_000
  */
 const ACCESSO_ATTESA = 15_000
 
-export async function entrato(): Promise<boolean> {
+export function entrato(): Promise<boolean> {
+  // Concurrent startup requests share one native check.
+  return verificaAccesso ??= verificaEntrato().finally(() => { verificaAccesso = null })
+}
+
+async function verificaEntrato(): Promise<boolean> {
   const exe = installato()
   if (!exe) return false
 
@@ -169,7 +175,10 @@ export async function entrato(): Promise<boolean> {
     p.on('error', e => { clearTimeout(tetto); male = e.message; risolvi('boh') })
     p.on('close', () => {
       clearTimeout(tetto)
-      try { risolvi((JSON.parse(fuori) as { loggedIn?: boolean }).loggedIn === true ? 'si' : 'no') }
+      try {
+        const loggedIn = (JSON.parse(fuori) as { loggedIn?: unknown }).loggedIn
+        risolvi(loggedIn === true ? 'si' : loggedIn === false ? 'no' : 'boh')
+      }
       catch { risolvi('boh') }
     })
     p.on('close', () => { if (male && !fuori) console.warn(`myynd · «claude auth status» non ha risposto: ${male.trim().slice(0, 200)}`) })
@@ -177,22 +186,23 @@ export async function entrato(): Promise<boolean> {
 
   if (esito === 'boh') {
     // si tiene lo stato di prima e si richiede fra cinque secondi, non fra trenta
-    accesso = { entrato: accesso.entrato, quando: ora - ACCESSO_VALE + 5_000 }
+    accesso = { ...accesso, verificato: false, quando: Date.now() - ACCESSO_VALE + 5_000 }
     return accesso.entrato
   }
   if (accesso.entrato !== (esito === 'si') && accesso.quando) console.log(`myynd · Claude Code: ${esito === 'si' ? 'entrato' : 'non entrato'} (prima era il contrario)`)
-  accesso = { entrato: esito === 'si', quando: ora }
+  accesso = { entrato: esito === 'si', quando: Date.now(), verificato: true }
   return accesso.entrato
 }
 
 /** Cosa dire nelle preferenze, senza spendere un token per saperlo. */
 export async function stato(): Promise<{
-  installato: boolean; entrato: boolean; acceso: boolean; inRiposo: boolean
+  installato: boolean; entrato: boolean; acceso: boolean; inRiposo: boolean; verificaInSospeso: boolean
 }> {
   const c = !!installato()
   return {
     installato: c,
     entrato: c ? await entrato() : false,
+    verificaInSospeso: c && !accesso.verificato,
     acceso: scelto(),
     inRiposo: Date.now() <= spento
   }
@@ -593,7 +603,7 @@ export function iniziaAccesso(): { loginId: string; url: string | null } {
     if (codice !== 0) a.errore = 'L’accesso a Claude non è riuscito. Riprova.'
     // la risposta di «ci sei entrato?» vale mezzo minuto: dopo un accesso
     // appena fatto si chiede di nuovo subito
-    accesso = { entrato: false, quando: 0 }
+    accesso = { entrato: false, quando: 0, verificato: false }
   })
   return { loginId, url: a.url ?? null }
 }

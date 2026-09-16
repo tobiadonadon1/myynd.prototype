@@ -29,6 +29,7 @@ writeFileSync(join(CASA, '.myynd', 'config.json'),
   JSON.stringify({ nome: 'Tobia', ruolo: 'CEO', tono: 'diretto', autonomia: 'preparare' }))
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const store = await import('./store.ts')
 const memoria = await import('./memoria.ts')

@@ -19,26 +19,15 @@ const fissa = yaml.load(readFileSync(join(__dirname, '..', 'electron-builder.yml
 const amb = process.env
 
 /*
- * La firma, e cosa succede quando non c'è.
- *
- * electron-builder cerca un «Developer ID Application» nel portachiavi solo
- * quando `identity` non è impostata. Su una macchina che ha soltanto un
- * certificato «Apple Development» non lo trova — ed è giusto: quel
- * certificato non vale per distribuire, e su un DMG non va usato — ma nella
- * 26 non c'è nessun ripiego automatico: l'app resta *senza* firma, e su un
- * Mac con chip Apple un'app senza firma non parte nemmeno.
- *
- * Quindi: con CSC_NAME (o CSC_LINK, il .p12) si lascia decidere a lui, che
- * trova il Developer ID e firma davvero; senza, si firma ad hoc (`-`), che è
- * la firma di cui un Mac ha bisogno per far partire l'app in casa. Ad hoc
- * vuol dire senza identità: sugli altri Mac Gatekeeper la rifiuta lo stesso
- * («danneggiata»), finché non arriva il certificato vero. Con hardened
- * runtime la firma ad hoc chiede `disable-library-validation` fra i diritti,
- * che c'è già in build/entitlements.mac.plist perché la chiede Electron.
+ * Release builds use CSC_NAME / CSC_LINK and a distribution certificate.
+ * Local development can pin an existing Apple Development identity in the
+ * ignored .myynd-local-signing.json file. This preserves the designated
+ * requirement across rebuilds, which macOS privacy grants depend on.
+ * This local certificate does not make a distributable/notarized release.
+ * Without either configuration, use ad-hoc signing for first-time local use.
  */
-const firmata = !!(amb.CSC_NAME || amb.CSC_LINK)
-const mac = { ...fissa.mac }
-if (!firmata) mac.identity = '-'
+const { signingConfiguration } = require('./signing.cjs')
+const mac = signingConfiguration(fissa.mac, amb, join(__dirname, '..', '.myynd-local-signing.json'))
 
 /*
  * Il binario di canvas, uno per pacchetto.

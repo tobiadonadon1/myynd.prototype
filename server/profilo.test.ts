@@ -31,6 +31,7 @@ const RADICE = join(import.meta.dirname, '..')
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-profilo-'))
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const cfg = await import('./config.ts')
 const { sistema } = await import('./claude.ts')

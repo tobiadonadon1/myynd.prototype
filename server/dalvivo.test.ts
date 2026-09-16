@@ -39,6 +39,7 @@ const salta = { skip: !VIVO ? 'serve MYYND_VIVO=1' : !CHIAVE ? 'nessuna chiave d
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-vivo-'))
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')

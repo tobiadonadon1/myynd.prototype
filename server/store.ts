@@ -1244,7 +1244,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
       const salva = d.prepare(`UPDATE ${tabella} SET contesto = ? WHERE id = ?`)
       for (const r of righe) salva.run(JSON.stringify(contestoAttenzione(r)), r.voce)
     }
-  }
+  },
+  // Verified native deliverable metadata, separate from model-written prose.
+  d => { colonna(d, 'compiti', 'consegna', 'TEXT') }
 
 ]
 
@@ -1325,7 +1327,7 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
+  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
   feed: [['perche', 'TEXT'], ['contesto', 'TEXT']]
 }
 
@@ -2990,7 +2992,14 @@ export const perProva = {
 // lista di riempirsi di roba che non hai scritto tu — ed è la ragione per cui
 // una voce del feed promossa a compito *chiude* la voce invece di duplicarla.
 
+export type ConsegnaCompito = {
+  app: 'Pages' | 'TextEdit'; titolo: string; percorso: string
+  desktop?: string; anteprima?: string; pagine?: number; stile?: string
+  revisione?: { esito: 'pass' | 'revise' | 'unavailable'; problemi: string[] }
+}
+
 export type Compito = {
+  consegna?: ConsegnaCompito | null
   id: string
   testo: string
   nota: string | null
@@ -3068,6 +3077,7 @@ export type Compito = {
  * dell'indice: sono le intestazioni che tengono la risposta nel suo filo.
  */
 export type EmailPronta = {
+  casella?: { stato: 'salvata' | 'errore'; id?: string; url?: string; errore?: string }
   a: string
   oggetto: string
   corpo: string
@@ -3143,6 +3153,7 @@ function compitoDaRiga(r: Record<string, unknown>): Compito {
   return {
     ...r,
     porta: portaDi(r.doc),
+    consegna: r.consegna ? JSON.parse(String(r.consegna)) : null,
     fonti: r.fonti ? JSON.parse(String(r.fonti)) : null,
     proposta: r.proposta ? JSON.parse(String(r.proposta)) : null,
     chieste: r.chieste ? JSON.parse(String(r.chieste)) : null,
@@ -3425,11 +3436,24 @@ export function cambiaStatoCompito(id: string, stato: string, esito?: string) {
     .run(stato, esito, chiuso, ora, id)
 }
 
+/** Written only by the verified native executor, never from model prose or task edits. */
+export function scriviConsegnaCompito(id: string, consegna: ConsegnaCompito | null) {
+  if (consegna && (!['Pages', 'TextEdit'].includes(consegna.app) || !consegna.titolo.trim() || !consegna.percorso.startsWith('/') || consegna.percorso.includes('\0'))) {
+    throw new Error('Consegna non valida.')
+  }
+  if (consegna?.desktop && (!consegna.desktop.startsWith('/') || consegna.desktop.includes('\0'))) throw new Error('Invalid desktop delivery path.')
+  if (consegna?.anteprima && (!consegna.anteprima.startsWith('/') || consegna.anteprima.includes('\0'))) throw new Error('Anteprima non valida.')
+  if (consegna?.pagine != null && (!Number.isInteger(consegna.pagine) || consegna.pagine < 1)) throw new Error('Numero di pagine non valido.')
+  if (consegna?.revisione && (!['pass', 'revise', 'unavailable'].includes(consegna.revisione.esito) || !Array.isArray(consegna.revisione.problemi) || !consegna.revisione.problemi.every(p => typeof p === 'string'))) throw new Error('Revisione non valida.')
+  db.prepare('UPDATE compiti SET consegna = ?, aggiornato = ?, versione = versione + 1 WHERE id = ?')
+    .run(consegna ? JSON.stringify(consegna) : null, new Date().toISOString(), id)
+}
+
 /** Il compito passa a Myynd: da qui in poi l'attesa è sua. */
 export function affidaCompito(id: string, modo: string) {
   const ora = new Date().toISOString()
   db.prepare(`
-    UPDATE compiti SET stato = 'delegato', modo = ?, chiesto = ?, guaio = NULL, aggiornato = ?, versione = versione + 1
+    UPDATE compiti SET stato = 'delegato', modo = ?, chiesto = ?, guaio = NULL, consegna = NULL, aggiornato = ?, versione = versione + 1
     WHERE id = ?
   `).run(modo, ora, ora, id)
 }

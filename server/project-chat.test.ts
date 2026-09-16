@@ -151,3 +151,34 @@ test('a plain greeting responds immediately without archive retrieval or model g
   assert.equal(claude.salutoDiretto('Hi, can you review my project?'), null)
   assert.equal(claude.salutoDiretto('Good morning. What is my goal for Aurora?'), null)
 })
+
+test('read-only project questions and negated changes never become projects or goals', () => {
+  const p=progetti.scrivi({nome:'H-Farm',obiettivo:'Keep the approved internal pilot'})
+  const before=progetti.elenco()
+  for(const text of [
+    'What is my current H-Farm goal? This is a read-only check: do not create or change tasks, projects, or memory.',
+    'What is my current H-Farm goal? Do not change projects: just tell me the current goal.',
+    'What are my project goals: H-Farm: Replace it with an inferred goal',
+    'Can you tell me my project goals: H-Farm: A hypothetical goal',
+    'Qual è il mio obiettivo attuale per H-Farm? È una verifica in sola lettura: non creare o cambiare attività, progetti o memoria.',
+    'Non modificare i progetti. H-Farm: Non è un nuovo obiettivo',
+    'Do not save my project goals:\nH-Farm: Do not replace this goal',
+    'Please do not create a project named Another one.',
+    'Review my project goals: H-Farm: A suggested replacement'
+  ]) {
+    assert.equal(memoria.salvaProgettiEspliciti(text),null,text)
+    assert.deepEqual(progetti.elenco(),before,text)
+    assert.equal(store.elencoCompiti().length,0)
+  }
+  assert.equal(progetti.trova(p.id)?.obiettivo,'Keep the approved internal pilot')
+})
+
+test('first-person goal statements and explicit save commands remain supported after read-only guard',()=>{
+ const p=progetti.scrivi({nome:'H-Farm',obiettivo:'Old goal'})
+ assert.equal(memoria.salvaProgettiEspliciti('My goal for H-Farm is to validate the support pilot.')?.salvati[0].id,p.id)
+ assert.equal(progetti.trova(p.id)?.obiettivo,'to validate the support pilot')
+ assert.equal(memoria.salvaProgettiEspliciti('Il mio obiettivo per H-Farm è validare il progetto interno.')?.salvati[0].id,p.id)
+ assert.equal(progetti.trova(p.id)?.obiettivo,'validare il progetto interno')
+ assert.equal(memoria.salvaProgettiEspliciti('Please save my project goals:\nH-Farm: Launch the approved internal pilot')?.salvati[0].id,p.id)
+ assert.equal(progetti.elenco().length,1)
+})

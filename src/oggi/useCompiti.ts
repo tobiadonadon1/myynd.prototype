@@ -12,7 +12,7 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato } from '../api'
+import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type ProjectWorkRequest } from '../api'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
@@ -77,6 +77,16 @@ export function useCompiti(
       .catch(() => { /* si riprova al prossimo annuncio */ })
   }, [])
 
+  // Native apps can take focus while a terminal stream event is missed.
+  // Reconcile active work with persisted state so the Aurora cannot imply
+  // continued execution after the server has finished or failed.
+  const lavoroInCorso = compiti.some(c => c.stato === 'delegato')
+  useEffect(() => {
+    if (!lavoroInCorso) return
+    const timer = setInterval(rileggi, 5_000)
+    return () => clearInterval(timer)
+  }, [lavoroInCorso, rileggi])
+
   /**
    * Rilettura anche al ritorno sulla finestra.
    *
@@ -120,6 +130,7 @@ export function useCompiti(
         attesa = setTimeout(rileggi, 160)
       }
       if (e.fase === 'preso') {
+        setPassi(p => { const { [e.id]: _via, ...resto } = p; return resto })
         setCompiti(cs => cs.map(c => (c.id === e.id ? { ...c, stato: 'delegato', guaio: null } : c)))
       }
       if (e.fase === 'lavoro') {
@@ -451,7 +462,7 @@ export function useCompiti(
    * guarda prima di dire che è finita. Chiuderla qui vorrebbe dire fidarsi di
    * un lavoro che nessuno ha ancora aperto.
    */
-  const lavora = useCallback(async (id: string, m: { cartella: string; passo: 'piano' | 'fai'; richiesta?: string }) => {
+  const lavora = useCallback(async (id: string, m: ProjectWorkRequest) => {
     const r = await api.lavora(id, m)
     setCompiti(r.compiti)
     return r
@@ -478,10 +489,10 @@ export function useCompiti(
    * posti che stanno dentro l'app. Chi chiama naviga con quello che torna —
    * la lista non conosce la colonna delle schermate, e non deve.
    */
-  const portami = useCallback(async (id: string): Promise<Portato | null> => {
+  const portami = useCallback(async (id: string, opzioni?: { anteprima?: boolean }): Promise<Portato | null> => {
     const apertura = preparaApertura()
     try {
-      const r = await apertura.completa(await api.portami(id))
+      const r = await apertura.completa(await api.portami(id, opzioni))
       if (!r.ok) { mostraToast(t(r.errore)); return null }
       // i posti dell'app non sono «aperti» finché non ci si è arrivati: il
       // «Aperto.» lo dice solo quello che è successo davvero sul Mac

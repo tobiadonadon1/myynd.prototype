@@ -24,6 +24,7 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-perdoc-'))
 mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 // quelle del pacchetto accese, e in italiano: qui si guarda anche la ricetta
 // di serie, e i testi che le righe portano in lista
 writeFileSync(join(CASA, '.myynd', 'config.json'),

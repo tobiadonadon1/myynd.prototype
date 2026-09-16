@@ -19,6 +19,7 @@
 // quelli stanno già nella memoria, sotto `progetto:<nome>`, ed è lì che
 // restano.
 
+import { recordProjectField, recordTaskOutcome, projectMemoryContext } from './project-memory.ts'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -164,6 +165,7 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
     const origine = !p.origine || p.origine === 'mano' ? 'mano' : gia.origine
     db.prepare('UPDATE progetti SET obiettivo = ?, stato = ?, origine = ?, aggiornato = ? WHERE id = ?')
       .run(obiettivo || null, stato, origine, ora, gia.id)
+    if (obiettivo !== gia.obiettivo && origine !== 'punto') recordProjectField(gia.id, 'goal', obiettivo, ora, origine === 'conversazione' ? 'user-chat' : 'user-field')
     return trova(gia.id)!
   }
   const id = nuovoId()
@@ -171,6 +173,10 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
     INSERT INTO progetti (id, nome, obiettivo, stato, dal, aggiornato, note, origine)
     VALUES (?, ?, ?, 'attivo', ?, ?, ?, ?)
   `).run(id, nome, (p.obiettivo ?? '').trim() || null, p.dal ?? ora, ora, (p.note ?? '').trim() || null, p.origine ?? 'mano')
+  if (p.origine !== 'punto') {
+    if (p.obiettivo?.trim()) recordProjectField(id, 'goal', p.obiettivo.trim(), ora, p.origine === 'conversazione' ? 'user-chat' : 'user-field')
+    if (p.note?.trim()) recordProjectField(id, 'note', p.note.trim(), ora, p.origine === 'conversazione' ? 'user-chat' : 'user-field')
+  }
   return trova(id)!
 }
 
@@ -195,6 +201,8 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
     new Date().toISOString(),
     id
   )
+  if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim())
+  if (c.note !== undefined && c.note.trim() !== p.note) recordProjectField(id, 'note', c.note.trim())
   if (nome !== p.nome) {
     db.prepare('UPDATE convinzioni SET ambito = ? WHERE ambito = ?')
       .run(`progetto:${nome}`, `progetto:${p.nome}`)
@@ -254,8 +262,12 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
       const a = progresso(p.id)
       const stato = a.attivita.length ? ` · ${a.completate} attività concluse${a.prossima ? `; prossima: ${a.prossima.testo.slice(0, 160)} [${a.prossima.stato}]` : ''}` : ''
       const origine = p.origine === 'mano' ? 'registrato dalla persona' : p.origine === 'conversazione' ? 'dichiarato nella conversazione'
-        : p.obiettivo ? 'progetto inizialmente inferito dalle fonti; obiettivo salvato in Memoria' : 'inferito dalle fonti, non confermato'
-      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}`
+        : 'inferito dalle fonti, non confermato dalla persona'
+      for (const task of a.attivita) recordTaskOutcome(task.id)
+      const evidence = projectMemoryContext(p.id)
+      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato} · Aggiornato ${p.aggiornato}` +
+        (p.note ? `\n${p.origine === 'punto' ? 'Note inferite, non confermate' : 'Note salvate dalla persona'}: ${JSON.stringify(p.note.slice(0,900))}` : '') +
+        (evidence ? `\n${evidence}` : '')
     })
     .join('\n')
 }

@@ -12,11 +12,37 @@
 // permesso c'è; se risponde EPERM, non c'è. Non si legge niente di quello che
 // c'è dentro — la domanda è «posso», non «cosa».
 
-import { readdirSync } from 'node:fs'
+import { readdirSync, openSync, closeSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export type Accesso = 'si' | 'no' | 'non-mac'
+export type AccessoNote = {
+  stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac'
+  verificato:string
+  fase?:'database'|'wal'|'shm'
+  codice?:string
+}
+type Sonda = {apri:(path:string)=>number;chiudi:(fd:number)=>void}
+/** Fresh test of this running process, on the exact files Notes needs. Open
+ * read-only and close immediately; do not query the DB or inspect note text.
+ * macOS Settings can show a grant for a different signed build, so it cannot
+ * substitute for this result. Optional sidecars are absent only on ENOENT. */
+export function accessoNote(casa=homedir(),piattaforma=process.platform,sonda:Sonda={apri:p=>openSync(p,'r'),chiudi:closeSync}):AccessoNote {
+  const verificato=new Date().toISOString()
+  if (piattaforma!=='darwin') return {stato:'non-mac',verificato}
+  const file=join(casa,'Library','Group Containers','group.com.apple.notes','NoteStore.sqlite')
+  for (const [suffix,fase] of [['','database'],['-wal','wal'],['-shm','shm']] as const) {
+    let fd:number|undefined
+    try {fd=sonda.apri(file+suffix)}
+    catch(err) {
+      const codice=(err as NodeJS.ErrnoException).code??'UNKNOWN'
+      if (codice==='ENOENT' && suffix) continue
+      return {stato:codice==='EPERM'||codice==='EACCES'?'negato':codice==='ENOENT'?'assente':'errore',fase,codice,verificato}
+    } finally {if(fd!==undefined)sonda.chiudi(fd)}
+  }
+  return {stato:'leggibile',verificato}
+}
 
 /**
  * Le cartelle che macOS protegge, e che a noi servono davvero.
@@ -43,6 +69,9 @@ export function cartelleProtette(casa = homedir()): string[] {
  */
 export function accessoCompleto(casa = homedir(), piattaforma = process.platform): Accesso {
   if (piattaforma !== 'darwin') return 'non-mac'
+  const notes=accessoNote(casa,piattaforma)
+  if (notes.stato==='negato') return 'no'
+  if (notes.stato==='leggibile') return 'si'
   for (const cartella of cartelleProtette(casa)) {
     try {
       readdirSync(cartella)

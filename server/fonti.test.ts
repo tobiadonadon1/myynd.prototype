@@ -33,6 +33,7 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-fonti-'))
 mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const SEGRETO = 'un-segreto-che-solo-meta-conosce'
 writeFileSync(join(CASA, '.myynd', 'config.json'), JSON.stringify({

@@ -22,6 +22,7 @@ mkdirSync(join(CASA, '.myynd'), { recursive: true })
 writeFileSync(join(CASA, '.myynd', 'config.json'), JSON.stringify({ lingua: 'it' }), { mode: 0o600 })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const conv = await import('./connettori/conversazioni.ts')
 const registro = await import('./connettori/registro.ts')

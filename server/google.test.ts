@@ -17,6 +17,7 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-google-'))
 mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const g = await import('./connettori/google.ts')
 const VERA = globalThis.fetch

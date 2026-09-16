@@ -1,3 +1,11 @@
+import { listSenderRules, enableSenderRule, disableSenderRule, runSenderRules } from './sender-rules.ts'
+import { copiaVerificata } from './apri-copia.ts'
+import { execFile } from 'node:child_process'
+import { capabilities, proofValid } from './capacita-verificate.ts'
+import { projectEvidence } from './project-memory.ts'
+import { runScheduled, scheduledStatus } from './pianificazione-durevole.ts'
+import { withBackgroundWork } from './lavoro-background.ts'
+import { COLORE_NOTE } from './colori-fonti.ts'
 // Il server locale di Myynd. Gira solo su 127.0.0.1: le credenziali che
 // scrivi nell'onboarding restano su questa macchina.
 
@@ -8,7 +16,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
-import { feedAttuale, compitiAttuali, percheVuoto } from './attenzione.ts'
+import { feedAttuale, compitiAttuali, percheVuoto, iniziativeProgetti } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
 import * as compatibile from './compatibile.ts'
@@ -24,6 +32,7 @@ import * as progetti from './progetti.ts'
 import * as avvio from './avvio.ts'
 import * as compiti from './compiti.ts'
 import * as automazioni from './automazioni.ts'
+import * as iniziativa from './iniziativa.ts'
 import * as scoperte from './scoperte.ts'
 import * as ordine from './ordine.ts'
 import * as attrezzi from './attrezzi.ts'
@@ -32,8 +41,10 @@ import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
+import { apriDocumento } from './native-document.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
+import { detectRuntime, hermesDefaults, hasHermesInferenceCredentials, type RuntimeDetection, type RuntimeId } from './agent-runtime.ts'
 import * as google from './connettori/google.ts'
 import * as desktop from './connettori/desktop.ts'
 import * as desktopRemoto from './connettori/desktopRemoto.ts'
@@ -43,6 +54,7 @@ import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
+import {generaDaFontiFresche,ErroreLetturaFeed} from './lettura-feed.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -637,6 +649,7 @@ app.get('/api/stato', async (_req, res) => {
      * il bottone. Su un server non ha senso: le Note non si offrono.
      */
     accessoDisco: ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto(),
+    accessoNote: ospitato.OSPITATO ? {stato:'non-mac',verificato:new Date().toISOString()} : accesso.accessoNote(),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -2102,7 +2115,7 @@ async function rileggiDaSola() {
 const GRUPPI_MENTE: Record<string, { nome: string; colore: string }> = {
   posta: { nome: 'Posta', colore: '#C4553C' },
   documenti: { nome: 'Documenti', colore: '#E0A44A' },
-  note: { nome: 'Note', colore: '#5B9BC9' },
+  note: { nome: 'Note', colore: COLORE_NOTE },
   agenda: { nome: 'Agenda', colore: '#8E6FB8' },
   conversazioni: { nome: 'Conversazioni', colore: '#3E8F86' }
 }
@@ -2168,11 +2181,23 @@ async function portaAllaFonte(meta: scrivania.Destinazione, res: express.Respons
   }
 }
 
+import { feedbackProjectInitiative } from './project-initiative.ts'
+
 // — feed —
 
 app.get('/api/feed', (_req, res) => {
   const ore = cfg.leggi().oreFatte ?? 48
-  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore) })
+  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti() })
+})
+
+app.post('/api/feed/iniziative/:id/feedback', (req, res) => {
+  const outcome = req.body?.outcome
+  if (!['dismissed', 'answered', 'done'].includes(outcome)) return errore(res, new Error('Invalid initiative feedback'), 400)
+  try {
+    if (!feedbackProjectInitiative(req.params.id, outcome)) return errore(res, new Error('Project suggestion is no longer current'), 409)
+    res.json({ iniziative: iniziativeProgetti() })
+    compiti.annunciaFeed()
+  } catch (e) { errore(res, e) }
 })
 
 app.post('/api/feed/genera', async (_req, res) => {
@@ -2186,21 +2211,25 @@ app.post('/api/feed/genera', async (_req, res) => {
       : 'Collega Claude e potrò lavorarci.'), 400)
   }
   try {
-    const voci = await claude.generaFeed()
+    const voci = await generaDaFontiFresche(chi.adesso()??'',sincronizzazioniInCorso,
+      avvisa=>leggiTutto(null,avvisa),()=>claude.generaFeed())
     // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
     // è quello che impedisce a una rilettura di duplicare il feed. Quello che
     // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
     // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
     const nuove = store.salvaFeed(voci)
     // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
-    res.json({ ok: true, generate: nuove, feed: feedAttuale(), ...(nuove ? {} : { vuoto: percheVuoto() }) })
+    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), ...(nuove ? {} : { vuoto: percheVuoto() }) })
     // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
     compiti.annunciaFeed()
 
     // Dopo aver risposto, non prima: capire se c'è qualcosa da chiedere non deve
     // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
     domande.forseChiedi().catch(() => {})
-  } catch (e) { errore(res, e) }
+  } catch (e) {
+    if(e instanceof ErroreLetturaFeed)res.status(e.status).json({errore:e.perLingua(cfg.lingua()),fonti:e.fonti})
+    else errore(res,e)
+  }
 })
 
 // — quello che chiede lui —
@@ -2357,6 +2386,11 @@ app.get('/api/progetti', (req, res) => {
   res.json({ progetti: elenco })
 })
 
+app.get('/api/progetti/:id/memoria', (req, res) => {
+  if (!progetti.trova(req.params.id)) return res.status(404).json({errore:'Project not found.'})
+  res.json({records:projectEvidence(req.params.id,{history:true})})
+})
+
 app.get('/api/progetti/:id/attivita', (req, res) => {
   if (!progetti.trova(req.params.id)) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
   res.json(progetti.progresso(req.params.id))
@@ -2503,6 +2537,7 @@ app.patch('/api/compiti/:id', (req, res) => {
   }
 
   try {
+    if(Object.keys(patch).length && stopProjectWork(req.params.id)) compiti.richiama(req.params.id)
     if (Object.keys(patch).length) store.cambiaCompito(req.params.id, patch)
     // Cambiare secchio vuol dire cambiare fila, e una chiave nata nell'altra
     // fila lì non vuol dire niente: può essere identica a una che c'è già, e da
@@ -2596,6 +2631,7 @@ app.post('/api/compiti/:id/richiama', (req, res) => {
   if (c.stato !== 'delegato' && c.stato !== 'pronto' && c.stato !== 'chiede') {
     return res.status(400).json({ errore: 'Questo non è in mano a Myynd.' })
   }
+  stopProjectWork(req.params.id)
   compiti.richiama(req.params.id)
   res.json({ ok: true, compiti: compitiAttuali() })
   // come tutte le altre rotte dei compiti: l'altra finestra deve saperlo,
@@ -2725,8 +2761,9 @@ app.post('/api/compiti/:id/esegui', async (req, res) => {
     if (!p.eventi?.length) return res.status(400).json({ errore: 'Non c\'è niente da eseguire.' })
     const cosa = `${p.eventi.length} ${p.eventi.length === 1 ? 'evento' : 'eventi'}`
     try {
-      const quanti = await agenda.aggiungi(p.eventi)
-      store.registraAzione({ tipo: 'agenda', cosa, compito: c.id, esito: 'fatta' })
+      const prova = await agenda.aggiungiVerificati(p.eventi, c.id)
+      const quanti = prova.length
+      store.registraAzione({ tipo: 'agenda', cosa, compito: c.id, esito: 'fatta', dettaglio: JSON.stringify(prova) })
       store.scordaProposta(c.id)
       store.cambiaStatoCompito(c.id, 'fatto', `${quanti} in agenda.`)
       res.json({ ok: true, spostati: quanti, dove: 'Calendario', compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
@@ -2871,6 +2908,10 @@ app.post('/api/compiti/:id/portami', async (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
+  if (c.consegna) {
+    try { await apriDocumento(c.consegna, req.body?.anteprima === true); return res.json({ ok: true, dove: 'file' }) }
+    catch (e) { return errore(res, e) }
+  }
   const meta = scrivania.dovePortare(c, c.doc ? store.documento(c.doc) : null)
   return portaAllaFonte(meta, res)
 })
@@ -2887,14 +2928,35 @@ app.post('/api/compiti/:id/portami', async (req, res) => {
  * chiudere. Un agente che lavora in una cartella non ha bisogno di una
  * schermata sua — ha bisogno di consegnare dove consegnano gli altri.
  */
+const lavoriInCorso = new Map<string,AbortController>()
+function stopProjectWork(id:string):boolean {
+  const controller=lavoriInCorso.get(cfg.cartella()+':'+id)
+  if(!controller) return false
+  controller.abort()
+  return true
+}
 app.post('/api/compiti/:id/lavora', async (req, res) => {
   if (ospitato.OSPITATO) {
     return res.status(400).json({ errore: 'Su un server non posso lavorare in una cartella: serve Myynd sul tuo computer.' })
   }
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  const runKey = cfg.cartella() + ':' + c.id
+  if (lavoriInCorso.has(runKey) || c.stato === 'delegato') return res.status(409).json({errore:'This task is already running.'})
+  if (c.sparito) return res.status(404).json({errore:'Task unavailable.'})
   const conf = cfg.leggi()
   const passo = req.body?.passo === 'fai' ? 'fai' : 'piano'
+  const runtime: RuntimeId = req.body?.runtime === undefined ? 'claude' : req.body.runtime
+  if (runtime !== 'claude' && runtime !== 'hermes') return res.status(400).json({errore:'Choose an installed project agent.'})
+  const team=req.body?.team===true
+  const acceptanceCriteria=typeof req.body?.acceptanceCriteria==='string' ? req.body.acceptanceCriteria.trim() : ''
+  if(team && (!acceptanceCriteria || acceptanceCriteria.length>4000)) return res.status(400).json({errore:'Write explicit acceptance criteria for the worker and reviewer team (up to 4000 characters).'})
+  let hermes: {files:string[]; model:string; provider:string} | undefined
+  if (runtime === 'hermes') {
+    const options = req.body?.hermes
+    if (passo !== 'fai' || !options || !Array.isArray(options.files) || options.files.length < 1 || options.files.length > 20 || options.files.some((file:unknown) => typeof file !== 'string' || !file.trim()) || new Set(options.files).size !== options.files.length || typeof options.model !== 'string' || typeof options.provider !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9./:_-]{0,149}$/.test(options.model) || !/^[a-zA-Z0-9][a-zA-Z0-9./:_-]{0,149}$/.test(options.provider)) return res.status(400).json({errore:'Choose 1 to 20 existing project files and a Hermes model and provider.'})
+    hermes = {files:options.files,model:options.model,provider:options.provider}
+  }
   const cartella = String(req.body?.cartella ?? '').trim()
   if (!cartella) return res.status(400).json({ errore: 'Dimmi in quale cartella lavorare.' })
 
@@ -2916,26 +2978,72 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
     passo === 'fai' && c.risultato ? `\n\nIl piano approvato:\n${c.risultato}` : ''
   ].join('')
 
+  const controller=new AbortController()
+  lavoriInCorso.set(runKey,controller)
+  store.affidaCompito(c.id, 'tutto')
+  const delegatedVersion=store.compito(c.id)!.versione
+  const stillCurrent=()=>{
+    const current=store.compito(c.id)
+    return !controller.signal.aborted && current?.stato==='delegato' && !current.sparito && current.versione===delegatedVersion
+  }
+  compiti.annunciaCambio()
   try {
-    const e = await lavoro.fai(conf.desktop, { cartella, richiesta, passo })
+    const e = await withBackgroundWork(() => lavoro.fai(conf.desktop, { cartella, richiesta, passo, runtime, hermes, team, acceptanceCriteria,signal:controller.signal }))
+    if (e.esecuzione && e.finito && !await proofValid({id:'project.edit',report:e.esecuzione})) {
+      e.finito=false
+      e.testo += '\nThe saved working copy no longer matches its verification report. Review it before accepting.'
+    }
+    const current=stillCurrent()
+    if(!current) e.finito=false
     store.registraAzione({
       tipo: passo === 'piano' ? 'lavoro.piano' : 'lavoro.fatto',
       verso: e.cartella, cosa: c.testo, compito: c.id,
       esito: e.finito ? 'fatta' : 'fallita',
-      dettaglio: e.finito ? undefined : 'fermato dopo il tetto di tempo'
+      dettaglio: e.esecuzione ? JSON.stringify(e.esecuzione) : e.finito ? undefined : 'Execution did not finish.'
     })
     // il piano si legge come una bozza; quello che ha fatto davvero anche —
     // con la differenza che i file nella cartella adesso sono cambiati
-    store.risultatoCompito(c.id, senzaTrattini(e.testo), [], 'pronto')
+    const evidence = e.esecuzione ? `\n\nWorking copy: ${e.esecuzione.workspace}\nVerification: ${e.esecuzione.state}\nChanged files: ${e.esecuzione.changedFiles.map(f => f.path).join(', ') || 'none'}\nReport: ${e.esecuzione.reportFile}` : ''
+    if(current) store.risultatoCompito(c.id, senzaTrattini(e.testo) + evidence, [], e.finito ? 'pronto' : 'chiede')
     const dopo = store.compito(c.id)
-    res.json({ ok: true, passo, finito: e.finito, compiti: compitiAttuali(), compito: dopo })
+    res.json({ ok: true, passo, finito: e.finito, esecuzione: e.esecuzione, compiti: compitiAttuali(), compito: dopo })
     compiti.annunciaCambio()
-  } catch (e) { errore(res, e) }
+  } catch (e) {
+    if(stillCurrent()) store.guaioCompito(c.id, e instanceof Error ? e.message : String(e)); compiti.annunciaCambio(); errore(res, e)
+  } finally { lavoriInCorso.delete(runKey) }
 })
 
 /** C'è Claude Code su questa macchina? Serve alla schermata, per non offrirlo a vuoto. */
-app.get('/api/lavoro/pronto', (_req, res) => {
-  res.json({ pronto: !!lavoro.installato(), cartelle: cfg.leggi().desktop?.cartelle ?? [] })
+app.get('/api/capacita', async (_req, res) => {
+  try {
+    const conf=cfg.leggi()
+    const [runtimes,claudeState,hermesCredentials]=await Promise.all([projectRuntimes(),abbonamento.stato(),hasHermesInferenceCredentials()])
+    res.json({capabilities:capabilities({desktop:!ospitato.OSPITATO,macCalendarAvailable:process.platform==='darwin' && !ospitato.OSPITATO,macCalendarPermission:false,claudeInstalled:runtimes.some(r=>r.id==='claude' && r.status==='supported') && claudeState.entrato && !claudeState.verificaInSospeso,hermesInstalled:runtimes.some(r=>r.id==='hermes' && r.status==='supported') && hermesCredentials,connectedFolders:conf.desktop?.cartelle.length ?? 0,googleConnected:!!conf.google,mailConnected:!!conf.posta,nativeDocuments:process.platform==='darwin' && !ospitato.OSPITATO})})
+  } catch(e) {errore(res,e)}
+})
+app.post('/api/lavoro/copia/apri', async (req,res) => {
+  try {
+    if(ospitato.OSPITATO) throw new Error('Open this copy on your computer.')
+    const path=await copiaVerificata(String(req.body?.reportFile ?? ''))
+    await new Promise<void>((resolve,reject)=>execFile(process.platform==='darwin'?'/usr/bin/open':'explorer.exe',[path],e=>e?reject(e):resolve()))
+    res.json({ok:true})
+  } catch(e){errore(res,e)}
+})
+
+let runtimeCache: {expires:number; result:Promise<RuntimeDetection[]>} | undefined
+function projectRuntimes(): Promise<RuntimeDetection[]> {
+  if (!runtimeCache || runtimeCache.expires < Date.now()) runtimeCache = {
+    expires:Date.now()+60_000,
+    result:Promise.all([detectRuntime('claude'),detectRuntime('hermes')])
+  }
+  return runtimeCache.result
+}
+app.get('/api/lavoro/pronto', async (_req, res) => {
+  try {
+    const [detected,defaults,inferenceCredentialConfigured,claudeState] = await Promise.all([projectRuntimes(),hermesDefaults(),hasHermesInferenceCredentials(),abbonamento.stato()])
+    const runtimes = detected.map(runtime => runtime.id === 'hermes' ? {...runtime,defaults,inferenceCredentialConfigured} : {...runtime,authenticated:claudeState.verificaInSospeso ? undefined : claudeState.entrato,authenticationPending:claudeState.verificaInSospeso})
+    res.json({ pronto: runtimes.some(runtime => runtime.id === 'claude' && runtime.status === 'supported') && claudeState.entrato && !claudeState.verificaInSospeso, cartelle: cfg.leggi().desktop?.cartelle ?? [], runtimes })
+  } catch(e) { errore(res,e) }
 })
 
 /** Quello che è uscito da qui, per giorno. Il brief la chiama la pagina del sì. */
@@ -2944,6 +3052,7 @@ app.get('/api/azioni', (_req, res) => res.json({ azioni: store.azioni(120) }))
 app.post('/api/compiti/:id/chiudi', (req, res) => {
   const c = store.compito(req.params.id)
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  stopProjectWork(c.id)
 
   const stato = req.body?.stato === 'lasciato' ? 'lasciato' : 'fatto'
   const esito = String(req.body?.esito ?? '').trim()
@@ -2992,6 +3101,7 @@ app.delete('/api/compiti/:id', (req, res) => {
   // Al contrario, una delega già partita andava avanti per conto suo e mezzo
   // minuto dopo scriveva la bozza sopra a un compito che avevi cancellato:
   // risultatoCompito controlla lo stato, non se la riga è sparita.
+  stopProjectWork(req.params.id)
   compiti.richiama(req.params.id)
   store.scordaCompito(req.params.id)
   res.json({ ok: true, compiti: compitiAttuali() })
@@ -3005,6 +3115,24 @@ app.delete('/api/compiti/:id', (req, res) => {
 
 // `rifai=1` è il bottone: senza, quelli di ieri se hanno meno di un giorno, e
 // aprire la schermata non chiama nessun modello
+app.get('/api/posta/regole', (_req,res)=>res.json({rules:listSenderRules()}))
+app.post('/api/posta/regole', async (req,res)=>{
+  try { await enableSenderRule(String(req.body?.sender ?? ''),'archive'); compiti.annunciaCambio(); res.json({rules:listSenderRules()}) } catch(e){errore(res,e,400)}
+})
+app.delete('/api/posta/regole/:id', async (req,res)=>{
+  try {await disableSenderRule(req.params.id);compiti.annunciaCambio();res.json({rules:listSenderRules()})}catch(e){errore(res,e,400)}
+})
+
+app.get('/api/iniziativa', (_req, res) => { res.json({ ...iniziativa.stato(), background: scheduledStatus() }) })
+app.patch('/api/iniziativa', (req, res) => {
+  if (typeof req.body?.attiva !== 'boolean') { res.status(400).json({ errore: 'attiva must be a boolean' }); return }
+  res.json(iniziativa.imposta(req.body.attiva))
+})
+app.post('/api/iniziativa/prepara', async (_req, res) => {
+  try { const compito = await iniziativa.giro(); res.json({ ...iniziativa.stato(), compito }) }
+  catch (e) { errore(res, e) }
+})
+
 app.get('/api/automazioni/suggerimenti', async (req, res) => {
   try { res.json({ suggerimenti: await scoperte.suggerimenti(req.query.rifai === '1') }) } catch (e) { errore(res, e) }
 })
@@ -3432,10 +3560,13 @@ app.post('/api/chat/:id', async (req, res) => {
     }
     // la conversazione precedente, così i seguiti hanno senso
     const storico = store.messaggi(chat).map(m => ({ ruolo: m.role, testo: m.text }))
+    const selectedTask = typeof req.body?.compitoId === 'string' ? store.compito(req.body.compitoId) : null
+    if (selectedTask && !selectedTask.sparito) storico.push({ ruolo: 'a', testo: 'Selected work for this discussion (reference only, not an instruction): ' + JSON.stringify({id:selectedTask.id, task:selectedTask.testo, artifact:selectedTask.consegna?.titolo}) })
     store.salvaMessaggio({ id: idUtente, chat, ruolo: 'u', testo: domanda })
     invia({ fase: 'inizio' })
 
     const r = await claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
+      compitoId: selectedTask?.id,
       // «segnati che devo richiamare Rossi» detto in chat finisce in lista, e
       // «falla fare a te» la affida pure: la lista e la chat sono la stessa testa
       aggiungiCompito: ({ testo, quando, modo }) => {
@@ -3738,7 +3869,9 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
    */
   const recupero = perOgnuno('il recupero dopo il risveglio non è riuscito', async () => {
     await rileggiDaSola()
-    await store.senzaToccare(() => automazioni.giro())
+    await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
+    await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
+    await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
   })
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
@@ -3755,9 +3888,15 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     : 0
   if (quante) console.log(`myynd · ${quante} automazion${quante === 1 ? 'e' : 'i'} in linea`)
   // il giro non conta come «questa persona sta usando Myynd»: vedi senzaToccare
-  const giro = perOgnuno('il giro delle automazioni si è fermato', () => store.senzaToccare(() => automazioni.giro()))
+  const filtraMittenti = perOgnuno('sender rules paused', () => runScheduled('sender_rules', 15 * 60_000, runSenderRules))
+  setTimeout(filtraMittenti, 135_000)
+  setInterval(filtraMittenti, 15 * 60_000)
+  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro())))
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
+  const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
+  setTimeout(preparaInAnticipo, 150_000)
+  setInterval(preparaInAnticipo, 15 * 60_000)
 
   // E le ricette nuove: subito dopo l'avvio — è il momento in cui una persona
   // ha appena riaperto l'app e potrebbe averne una che l'aspetta — e poi ogni

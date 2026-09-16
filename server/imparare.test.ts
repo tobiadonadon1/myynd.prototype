@@ -30,6 +30,7 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-imparare-'))
 mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')

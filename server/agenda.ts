@@ -20,6 +20,7 @@
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 
 const esegui = promisify(execFile)
 
@@ -152,12 +153,13 @@ export async function calendari(): Promise<string[]> {
 function comeData(nome: string, d: Date): string[] {
   return [
     `set ${nome} to current date`,
+    `set day of ${nome} to 1`,
     `set year of ${nome} to ${d.getFullYear()}`,
     `set month of ${nome} to ${d.getMonth() + 1}`,
     `set day of ${nome} to ${d.getDate()}`,
     `set hours of ${nome} to ${d.getHours()}`,
     `set minutes of ${nome} to ${d.getMinutes()}`,
-    `set seconds of ${nome} to 0`
+    `set seconds of ${nome} to ${d.getSeconds()}`
   ]
 }
 
@@ -170,41 +172,52 @@ function comeData(nome: string, d: Date): string[] {
  * l'evento c'è e sembra giusto.
  */
 export function quando(iso: string): Date {
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?)?$/)
   if (!m) throw new Error('Non ho capito la data.')
-  return new Date(
-    Number(m[1]), Number(m[2]) - 1, Number(m[3]),
-    Number(m[4] ?? 9), Number(m[5] ?? 0), 0, 0
-  )
+  const [y,mo,d,h,mi,se] = [Number(m[1]),Number(m[2]),Number(m[3]),Number(m[4] ?? 9),Number(m[5] ?? 0),Number(m[6] ?? 0)]
+  const check = new Date(Date.UTC(y,mo-1,d,h,mi,se))
+  if (y < 1900 || check.getUTCFullYear() !== y || check.getUTCMonth() !== mo-1 || check.getUTCDate() !== d || h>23 || mi>59 || se>59) throw new Error('Data non valida.')
+  const date = m[7] ? new Date(iso.replace(' ', 'T')) : new Date(y,mo-1,d,h,mi,se)
+  if (!Number.isFinite(date.getTime()) || (!m[7] && (date.getHours() !== h || date.getDate() !== d))) throw new Error('Ora non valida nel fuso locale.')
+  return date
 }
 
-/**
- * Mette gli eventi in agenda. Uno script solo per tutti.
- *
- * Un `osascript` per evento vorrebbe dire aprire e chiudere il dialogo con
- * Calendario cinque volte: lento, e con cinque occasioni di fallire a metà
- * lasciando tre eventi su cinque. Così o entrano tutti o non entra nessuno.
- */
-export async function aggiungi(eventi: Evento[], predefinito?: string): Promise<number> {
-  if (!eventi.length) return 0
-  const righe: string[] = ['tell application "Calendar"']
-
-  eventi.forEach((e, i) => {
-    const inizio = quando(e.inizio)
-    const fine = new Date(inizio.getTime() + Math.max(5, e.minuti ?? 60) * 60_000)
-    const dove = e.calendario || predefinito
-    righe.push(
-      ...comeData(`i${i}`, inizio),
-      ...comeData(`f${i}`, fine),
-      dove ? `tell calendar "${fuga(dove)}"` : 'tell calendar 1',
-      `make new event with properties {summary:"${fuga(e.titolo)}", start date:i${i}, end date:f${i}` +
-        (e.dove ? `, location:"${fuga(e.dove)}"` : '') +
-        (e.note ? `, description:"${fuga(e.note)}"` : '') + '}',
-      'end tell'
-    )
-  })
-
-  righe.push('end tell')
-  await osascript(righe)
-  return eventi.length
+/** Stable per-task markers make partial batches recoverable without duplicates.
+ * Every event is read back before success; a script is not a transaction. */
+export type ProvaAgenda = {id:string; verificato:true}
+const inCorso = new Map<string,Promise<ProvaAgenda[]>>()
+export async function aggiungiVerificati(eventi:Evento[], operazione:string, predefinito?:string, run=osascript):Promise<ProvaAgenda[]> {
+  if (!eventi.length || eventi.length>50 || !operazione.trim()) throw new Error('Invalid calendar operation.')
+  const key=createHash('sha256').update(operazione+'\0'+JSON.stringify(eventi)).digest('hex')
+  if(inCorso.has(key))return inCorso.get(key)!
+  const promise=(async()=>{
+    const righe=['set prove to ""','tell application "Calendar"']
+    eventi.forEach((e,i)=>{
+      if(!e.titolo?.trim() || !Number.isFinite(e.minuti ?? 60) || (e.minuti ?? 60)<5 || (e.minuti ?? 60)>10080) throw new Error('Invalid event title or duration.')
+      const start=quando(e.inizio),end=new Date(start.getTime()+(e.minuti ?? 60)*60_000)
+      const marker='[Myynd:'+key+':'+i+']',calendar=e.calendario || predefinito
+      righe.push(...comeData('inizio',start),...comeData('fine',end),
+        calendar ? `tell calendar "${fuga(calendar)}"` : 'tell calendar 1',
+        `set trovati to every event whose description contains "${marker}"`,
+        'if (count of trovati) > 1 then error "Duplicate calendar proof"',
+        'if (count of trovati) = 0 then',
+        `set ev to make new event with properties {summary:"${fuga(e.titolo)}", start date:inizio, end date:fine, location:"${fuga(e.dove || '')}", description:"${fuga((e.note ? e.note+'\n' : '')+marker)}"}`,
+        'else','set ev to item 1 of trovati','end if',
+        `if (summary of ev as string) is not "${fuga(e.titolo)}" then error "Calendar event changed"`,
+        'if (start date of ev) is not inizio then error "Calendar start mismatch"',
+        'if (end date of ev) is not fine then error "Calendar end mismatch"',
+        `if (location of ev as string) is not "${fuga(e.dove || '')}" then error "Calendar location mismatch"`,
+        'set prove to prove & (uid of ev as string) & linefeed','end tell')
+    })
+    righe.push('end tell','return prove')
+    const ids=(await run(righe)).split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
+    if(ids.length!==eventi.length || new Set(ids).size!==ids.length)throw new Error('Calendar did not verify every event. Review Calendar before retrying.')
+    return ids.map(id=>({id,verificato:true as const}))
+  })()
+  inCorso.set(key,promise)
+  try{return await promise}finally{inCorso.delete(key)}
+}
+export async function aggiungi(eventi:Evento[],predefinito?:string):Promise<number>{
+  if(!eventi.length)return 0
+  return (await aggiungiVerificati(eventi,'legacy:'+JSON.stringify(eventi),predefinito)).length
 }

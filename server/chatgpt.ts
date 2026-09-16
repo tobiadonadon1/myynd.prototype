@@ -231,8 +231,20 @@ export function senzaNulli(valore: unknown, schema: Obj | undefined): unknown {
 }
 
 /** Function calls are data for Myynd, never native Codex tool execution. */
-export function prepara(p: Richiesta): { system: string; input: string; schema?: Obj; tools: ReturnType<typeof attrezzi> } {
-  const history = messaggi(p.system, p.messages)
+export function prepara(p: Richiesta): { system: string; input: string; immagini: {type: 'image'; url: string}[]; schema?: Obj; tools: ReturnType<typeof attrezzi> } {
+  const immagini: {type: 'image'; url: string}[] = []
+  let imageBytes = 0
+  const messages = p.messages.map(message => ({ ...message, content: typeof message.content === 'string' ? message.content : message.content.map(block => {
+    if (block.type !== 'image') return block
+    const source = block.source
+    if (source.type !== 'base64' || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(source.media_type)
+      || !source.data || !/^[A-Za-z0-9+/]+={0,2}$/.test(source.data)) throw new Error('ChatGPT requires a supported inline image for visual review.')
+    imageBytes += Buffer.byteLength(source.data, 'base64')
+    if (immagini.length >= 12 || imageBytes > 20 * 1024 * 1024) throw new Error('Too many or oversized images for one visual review.')
+    immagini.push({ type: 'image', url: `data:${source.media_type};base64,${source.data}` })
+    return { type: 'text' as const, text: `[Attached image ${immagini.length}; inspect the matching image supplied with this request.]` }
+  }) }))
+  const history = messaggi(p.system, messages)
   const tools = p.tool_choice?.type === 'none' ? [] : attrezzi(p.tools)
   const schema = tools.length ? {
     type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
@@ -248,7 +260,7 @@ export function prepara(p: Richiesta): { system: string; input: string; schema?:
     + (tools.length ? '\nReturn an object with text (the answer for the user) and calls (requested Myynd functions). Each arguments value must be a JSON object encoded as a string matching that function schema. Use an empty calls array when answering. These are the only functions available:\n' + JSON.stringify(tools)
       + '\nRequested tool choice: ' + JSON.stringify(p.tool_choice ?? { type: 'auto' }) : '')
     + `\nKeep the response within ${p.max_tokens} tokens.`
-  return { system, input: JSON.stringify(history.filter(m => m.role !== 'system')), schema, tools }
+  return { system, input: JSON.stringify(history.filter(m => m.role !== 'system')), schema, tools, immagini }
 }
 export function converti(testo: string, p: Richiesta, model: string, usage: Obj = {}): Anthropic.Message {
   const tools = prepara(p).tools
@@ -363,7 +375,7 @@ async function rispondi(p: Richiesta, onTesto?: (s: string) => void, attesa = 18
     }
     c.eventi.add(event); signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) return abort()
-    c.chiama('turn/start', { threadId, input: [{ type: 'text', text: q.input }], effort: 'low',
+    c.chiama('turn/start', { threadId, input: [{ type: 'text', text: q.input }, ...q.immagini], effort: 'low',
       approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false },
       ...(q.schema ? { outputSchema: rigido(q.schema) } : {}) }).then(r => {
       turnId = r.turn?.id ?? ''

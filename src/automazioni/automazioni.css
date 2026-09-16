@@ -263,3 +263,10 @@
 .auto-card-sources>span.missing{border-style:dashed;border-color:#C4623B66;color:#8E3F1F}
 .auto-health{color:#8E3F1F}.auto-health .auto-button{color:#8E3F1F}
 .auto-filtri button[aria-pressed=true]{color:#8E3F1F}
+
+.auto-initiative { display:flex; align-items:center; flex-wrap:wrap; gap:18px; padding:20px 0; margin-bottom:20px; border-bottom:1px solid var(--line, #ddd6cd); }
+.auto-initiative > div:first-child { flex:1; min-width:240px; }
+.auto-initiative h2 { font-size:16px; margin:0 0 6px; }
+.auto-initiative p { font-size:13px; line-height:1.5; max-width:620px; margin:0 0 6px; }
+.auto-initiative small { font-size:11px; opacity:.65; }
+.auto-initiative-controls { display:flex; align-items:center; gap:10px; font-size:12px; }

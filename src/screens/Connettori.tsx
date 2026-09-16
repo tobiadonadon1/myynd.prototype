@@ -41,7 +41,7 @@ export function Connettori({ v }: { v: Vals }) {
     <header className="connections-header">
       <div>
         <h1>{t('Connettori')}</h1>
-        <p className="connections-lead">{t('Collega quello che usi già. Myynd lo legge, non lo tocca.')}</p>
+        <p className="connections-lead">{t('Collega quello che usi già. Myynd legge le fonti ed esegue le azioni che abiliti.')}</p>
       </div>
       {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando}>{v.sincronizzando ?? t('Rileggi tutto')}</button>}
     </header>

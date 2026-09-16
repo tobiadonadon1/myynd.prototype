@@ -349,7 +349,7 @@ export async function sincronizza(
   avanzamento?: (fatti: number, totale: number) => void
 ): Promise<EsitoGoogle> {
   const giorni = g.giorni ?? 30
-  const q = `newer_than:${giorni}d -in:chats -in:spam -in:trash`
+  const q = `newer_than:${giorni}d -in:chats -in:spam -in:trash -in:drafts`
   const docs: Documento[] = []
   let pagina: string | undefined
   let troncato = false
@@ -478,4 +478,81 @@ export function quando(iso: string): Date {
 function locale(d: Date): string {
   const due = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}T${due(d.getHours())}:${due(d.getMinutes())}:00`
+}
+
+/** Save a reply in Gmail Drafts. There is deliberately no send operation. */
+export async function salvaBozza(sourceId: string, e: import('../store.ts').EmailPronta, messageId: string): Promise<{ id: string; url: string }> {
+  const { mimeBozza, destinatarioVerificato } = await import('../mailbox-drafts.ts')
+  const original = await api<Messaggio>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceId)}?format=metadata`)
+  if ((original.labelIds ?? []).some(l => ['SENT', 'DRAFT', 'TRASH'].includes(l))) throw new Error('The source email is no longer an incoming request.')
+  destinatarioVerificato(e.a, intestazione(original, 'Reply-To') || intestazione(original, 'From'))
+  const replyId = idPulito(intestazione(original, 'Message-ID'))
+  if (!replyId || !original.threadId || idPulito(e.rispondeA?.messageId ?? '') !== replyId) throw new Error('Cannot verify the original message in this email account.')
+  const raw = mimeBozza(leggi().google?.email ?? '', { ...e, oggetto: /^(re|r):/i.test(intestazione(original, 'Subject')) ? intestazione(original, 'Subject') : `Re: ${intestazione(original, 'Subject')}`,  rispondeA: { messageId: replyId } }, messageId)
+  const draft = await api<{ id: string; message: { id: string } }>('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+    method: 'POST', body: JSON.stringify({ message: { threadId: original.threadId, raw: Buffer.from(raw).toString('base64url') } })
+  })
+  if (!draft.id || !draft.message?.id) throw new Error('Gmail did not confirm the saved draft. Check Drafts before retrying.')
+  return { id: draft.id, url: `https://mail.google.com/mail/?authuser=${encodeURIComponent(leggi().google?.email ?? '')}#drafts?compose=${encodeURIComponent(draft.message.id)}` }
+}
+
+/** Read the exact saved Gmail draft by its provider id. A 404 means it was
+ * deleted, sent, or otherwise moved out of Drafts; never infer its old body. */
+export async function leggiBozza(id: string): Promise<{stato:'presente'|'sparita';corpo?:string;oggetto?:string;a?:string;messageId?:string}> {
+  const { simpleParser } = await import('mailparser')
+  const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/drafts/${encodeURIComponent(id)}?format=raw`, {
+    headers:{authorization:`Bearer ${await token()}`},signal:AbortSignal.timeout(30_000)
+  })
+  if (r.status === 404) return {stato:'sparita'}
+  if (!r.ok) throw new Error('Gmail could not confirm the current saved draft.')
+  const draft = await r.json() as {id?:string;message?:{raw?:string}}
+  if (draft.id !== id || !draft.message?.raw) throw new Error('Gmail did not return the current draft body.')
+  const parsed = await simpleParser(Buffer.from(draft.message.raw,'base64url'))
+  if (typeof parsed.text !== 'string') throw new Error('The current Gmail draft has no readable text body.')
+  return {stato:'presente',corpo:parsed.text,oggetto:parsed.subject ?? '',a:Array.isArray(parsed.to) ? parsed.to.map(x=>x.text).join(', ') : parsed.to?.text ?? '',messageId:idPulito(parsed.messageId ?? '')}
+}
+
+/** Re-read the exact Gmail message before a sender rule removes INBOX. */
+export async function verificaEArchiviaPerRegola(id: string, sender: string, expectedMessageId: string | null): Promise<number> {
+  if (!/^google:[^\s:]+$/.test(id) || !expectedMessageId) throw new Error('Gmail message lacks a stable indexed identity.')
+  const remote = id.slice('google:'.length)
+  const url=`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(remote)}`
+  const metadata=url+'?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID'
+  const verify=(message:Messaggio)=>{
+    if(message.id!==remote)throw new Error('Gmail returned a different message identity.')
+    const from=intestazione(message,'From')
+    const addresses=from.match(/[^\s<>()[\],;:"']+@[^\s<>()[\],;:"']+/g)
+    if((from.match(/@/g)??[]).length!==1 || addresses?.length!==1 || addresses[0].toLowerCase()!==sender)throw new Error('Gmail sender changed or is ambiguous.')
+    if(idPulito(intestazione(message,'Message-ID'))!==idPulito(expectedMessageId))throw new Error('Gmail Message-ID changed.')
+    if((message.labelIds??[]).some(l=>['SENT','DRAFT','TRASH','SPAM'].includes(l)))throw new Error('Gmail message is no longer incoming mail.')
+  }
+  const message=await api<Messaggio>(metadata);verify(message)
+  if(!(message.labelIds??[]).includes('INBOX'))throw new Error('Gmail message is not incoming Inbox mail.')
+  await api(url+'/modify',{method:'POST',body:JSON.stringify({removeLabelIds:['INBOX']})})
+  const saved=await api<Messaggio>(metadata);verify(saved)
+  if((saved.labelIds??[]).includes('INBOX'))throw new Error('Gmail did not confirm removal from Inbox.')
+  return 1
+}
+
+/** PUT replaces this exact Gmail draft id. A second read happens next to the
+ * mutation, so a user edit made during model work cannot be silently lost. */
+export async function aggiornaBozza(sourceId:string,draftId:string,e:import('../store.ts').EmailPronta,messageId:string,
+  baseline:import('../mailbox-drafts.ts').BozzaAttuale):Promise<{id:string;url:string}> {
+  const {mimeBozza,destinatarioVerificato,verificaBozzaInvariata}=await import('../mailbox-drafts.ts')
+  const original=await api<Messaggio>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceId)}?format=metadata`)
+  if ((original.labelIds??[]).some(l=>['SENT','DRAFT','TRASH'].includes(l))) throw new Error('The source email is no longer an incoming request.')
+  destinatarioVerificato(e.a,intestazione(original,'Reply-To')||intestazione(original,'From'))
+  const replyId=idPulito(intestazione(original,'Message-ID'))
+  if (!replyId || !original.threadId || idPulito(e.rispondeA?.messageId??'')!==replyId) throw new Error('Cannot verify the original message in this email account.')
+  const raw=mimeBozza(leggi().google?.email??'',{...e,oggetto:/^(re|r):/i.test(intestazione(original,'Subject'))?intestazione(original,'Subject'):`Re: ${intestazione(original,'Subject')}`,rispondeA:{messageId:replyId}},messageId)
+  await verificaBozzaInvariata(baseline)
+  const draft=await api<{id:string;message:{id:string}}>(`https://gmail.googleapis.com/gmail/v1/users/me/drafts/${encodeURIComponent(draftId)}`,{
+    method:'PUT',body:JSON.stringify({message:{threadId:original.threadId,raw:Buffer.from(raw).toString('base64url')}})
+  })
+  if (draft.id!==draftId || !draft.message?.id) throw new Error('Gmail did not confirm the same saved draft. Check Drafts before retrying.')
+  const current=await leggiBozza(draftId)
+  if (current.stato!=='presente' || current.corpo?.trim()!==e.corpo.trim() || idPulito(current.messageId??'')!==idPulito(messageId))
+    throw new Error('Gmail did not return the complete revised body after updating the same draft. Check Drafts before retrying.')
+  destinatarioVerificato(e.a,current.a??'')
+  return {id:draft.id,url:`https://mail.google.com/mail/?authuser=${encodeURIComponent(leggi().google?.email??'')}#drafts?compose=${encodeURIComponent(draft.message.id)}`}
 }

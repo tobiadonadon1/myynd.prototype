@@ -12,10 +12,17 @@
 //
 //   node --test server/abbonamento.test.ts
 
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+// This suite mutates provider settings, including explicit disconnection.
+// Never let its dynamic config import point at the customer's real profile.
+const dati = mkdtempSync(join(tmpdir(), 'myynd-abbonamento-test-'))
+process.env.MYYND_DATI = dati
+after(() => rmSync(dati, { recursive: true, force: true }))
 
 const QUI = new URL('.', import.meta.url).pathname
 const sorgente = readFileSync(join(QUI, 'abbonamento.ts'), 'utf8')

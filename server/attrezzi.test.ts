@@ -22,6 +22,7 @@ import type { Documento } from './store.ts'
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-attrezzi-'))
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 /*
  * Un config con la posta e il disco collegati, e Notion no.

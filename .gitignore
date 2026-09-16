@@ -15,3 +15,5 @@ dist-app/
 
 # il feed degli aggiornamenti, scritto da build/configura.cjs quando c'è
 desktop/feed.json
+
+/.myynd-local-signing.json

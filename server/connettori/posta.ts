@@ -2,6 +2,7 @@
 // password della casella — niente OAuth.
 
 import { ImapFlow } from 'imapflow'
+import { createHash } from 'node:crypto'
 import { simpleParser, type ParsedMail } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
@@ -875,4 +876,150 @@ export async function sincronizza(
       aGiorno: arretrato === 0 && !cartelleFallite.length
     }
   }
+}
+
+/** APPEND with the Draft flag, never SMTP. Only an existing server Drafts
+ * folder is used; no guessed folders or new message windows. */
+export async function salvaBozza(c: ConfigPosta, source: string, e: import('../store.ts').EmailPronta, messageId: string): Promise<{ id: string; url: string }> {
+  const { mimeBozza, destinatarioVerificato } = await import('../mailbox-drafts.ts')
+  const m = source.match(/^posta:(.+):(\d+)$/)
+  if (!m) throw new Error('Cannot locate the original email.')
+  const { cl } = await apri(c)
+  try {
+    const folders = await cl.list()
+    const drafts = folders.find(f => f.specialUse === '\\Drafts') ?? folders.find(f => /^(drafts|bozze|INBOX\.Drafts|INBOX\.Bozze)$/i.test(f.path))
+    if (!drafts) throw new Error('No Drafts folder was found in your email account.')
+    const lock = await cl.getMailboxLock(m[1])
+    let raw: string
+    try {
+      const original = await cl.fetchOne(Number(m[2]), { source: true }, { uid: true })
+      if (!original || !original.source) throw new Error('The original email is no longer available.')
+      const parsed = await simpleParser(original.source)
+      destinatarioVerificato(e.a, parsed.replyTo?.text || parsed.from?.text || '')
+      if (!parsed.messageId || !e.rispondeA?.messageId || idPulito(e.rispondeA.messageId) !== idPulito(parsed.messageId)) throw new Error('Cannot verify the original message in this email account.')
+      raw = mimeBozza(c.utente, { ...e, oggetto: /^(re|r):/i.test(parsed.subject ?? '') ? parsed.subject! : `Re: ${parsed.subject ?? e.oggetto}`,  rispondeA: { messageId: idPulito(parsed.messageId), references: Array.isArray(parsed.references) ? parsed.references.map(idPulito) : [] } }, messageId)
+    } finally { lock.release() }
+    const result = await cl.append(drafts.path, raw, ['\\Draft', '\\Seen'])
+    if (!result) throw new Error('The mailbox did not confirm the saved draft. Check Drafts before retrying.')
+    if (!Number.isSafeInteger(result.uid) || !result.uid) throw new Error('The mailbox did not return a stable draft identity. Check Drafts before retrying.')
+    return { id: `${drafts.path}:${result.uid}`, url: `message://${encodeURIComponent(`<${messageId}>`)}` }
+  } finally { await cl.logout().catch(() => cl.close()) }
+}
+
+/** Exact IMAP Drafts UID readback. A missing UID is a conflict, not a cue to
+ * append a replacement. */
+export async function leggiBozza(c: ConfigPosta, id: string):Promise<{stato:'presente'|'sparita';corpo?:string;oggetto?:string;a?:string;messageId?:string;uidValidity?:string}> {
+  const m = id.match(/^(.+):(\d+)$/)
+  if (!m) throw new Error('Cannot locate the saved mailbox draft.')
+  const {cl} = await apri(c)
+  try {
+    const folders = await cl.list()
+    const folder = folders.find(f => f.path === m[1] && (f.specialUse === '\\Drafts' || /^(drafts|bozze|INBOX\.Drafts|INBOX\.Bozze)$/i.test(f.path)))
+    if (!folder) return {stato:'sparita'}
+    const lock = await cl.getMailboxLock(m[1])
+    try {
+      const found = await cl.fetchOne(Number(m[2]),{source:true,flags:true},{uid:true})
+      if (!found || !found.source) return {stato:'sparita'}
+      const parsed = await simpleParser(found.source)
+      if (typeof parsed.text !== 'string') throw new Error('The current mailbox draft has no readable text body.')
+      return {stato:'presente',corpo:parsed.text,oggetto:parsed.subject ?? '',a:Array.isArray(parsed.to) ? parsed.to.map(x=>x.text).join(', ') : parsed.to?.text ?? '',messageId:idPulito(parsed.messageId ?? ''),...(cl.mailbox && cl.mailbox.uidValidity ? {uidValidity:String(cl.mailbox.uidValidity)}:{})}
+    } finally {lock.release()}
+  } finally {await cl.logout().catch(()=>cl.close())}
+}
+
+/** Read live From and Message-ID under the same UID mailbox lock as moving. */
+export async function verificaEArchiviaPerRegola(c: ConfigPosta, id: string, sender: string, expectedMessageId: string | null): Promise<number> {
+  const moves=mosseDa([id])
+  if(moves.length!==1 || !expectedMessageId)throw new Error('IMAP message lacks a stable indexed identity.')
+  const {cartella,uid}=moves[0]
+  if(cartella.toUpperCase()!=='INBOX')throw new Error('Only incoming Inbox mail can match a sender rule.')
+  const {cl}=await apri(c)
+  try {
+    if(!cl.capabilities.has('MOVE'))throw new Error('This IMAP server cannot safely move the exact message without a delete fallback.')
+    const archive=await cartellaConRuolo(cl,'\\Archive')
+    if(!archive || archive===cartella)throw new Error('IMAP Archive folder unavailable for this message.')
+    const verify=async(raw:Buffer)=>{
+      const parsed=await simpleParser(raw)
+      const addresses=parsed.from?.value??[]
+      if(addresses.length!==1 || addresses[0].address?.toLowerCase()!==sender)throw new Error('IMAP sender changed or is ambiguous.')
+      if(idPulito(parsed.messageId??'')!==idPulito(expectedMessageId))throw new Error('IMAP Message-ID changed.')
+    }
+    let destinationUid:number|undefined,destinationValidity:string|undefined
+    const lock=await cl.getMailboxLock(cartella)
+    try {
+      const box=cl.mailbox as false|{uidValidity?:bigint}
+      const validity=box && box.uidValidity!==undefined?String(box.uidValidity):''
+      if(!validity || c.validita?.[cartella]!==validity)throw new Error('IMAP UIDVALIDITY changed since indexing.')
+      const live=await cl.fetchOne(uid,{source:true},{uid:true})
+      if(!live || !live.source)throw new Error('IMAP source message is missing.')
+      await verify(live.source)
+      const moved=await cl.messageMove([uid],archive,{uid:true})
+      if(!moved || !moved.uidMap?.get(uid) || !moved.uidValidity)throw new Error('IMAP did not confirm a stable archived message identity.')
+      destinationUid=moved.uidMap.get(uid);destinationValidity=String(moved.uidValidity)
+      if(await cl.fetchOne(uid,{uid:true},{uid:true}))throw new Error('IMAP source message remains in Inbox after moving.')
+    }finally{lock.release()}
+    const destinationLock=await cl.getMailboxLock(archive)
+    try {
+      if(!cl.mailbox || String(cl.mailbox.uidValidity)!==destinationValidity)throw new Error('IMAP Archive identity changed before verification.')
+      const saved=await cl.fetchOne(destinationUid!,{source:true},{uid:true})
+      if(!saved || !saved.source)throw new Error('IMAP archived message could not be read back.')
+      await verify(saved.source)
+      return 1
+    }finally{destinationLock.release()}
+  }finally{try{await cl.logout()}catch{/* socket may already be gone */}}
+}
+
+/** IMAP has no in-place draft edit. Append one replacement, then expunge only
+ * the exact old UID with UIDPLUS, after a second body/UIDVALIDITY check. Never
+ * use plain EXPUNGE, which can delete other users' already-deleted messages. */
+export async function aggiornaBozza(c:ConfigPosta,source:string,oldId:string,e:import('../store.ts').EmailPronta,messageId:string,
+  baseline:import('../mailbox-drafts.ts').BozzaAttuale):Promise<{id:string;url:string}> {
+  const {mimeBozza,destinatarioVerificato}=await import('../mailbox-drafts.ts')
+  const originalId=source.match(/^posta:(.+):(\d+)$/), draftId=oldId.match(/^(.+):(\d+)$/)
+  if (!originalId || !draftId || baseline.source!==source || baseline.id!==oldId || !baseline.uidValidity) throw new Error('The saved IMAP draft has no stable source and UID validity for safe replacement.')
+  const {cl}=await apri(c)
+  try {
+    if (!cl.capabilities.has('UIDPLUS')) throw new Error('This IMAP server cannot replace only the exact old draft safely. The existing draft was preserved.')
+    const folders=await cl.list()
+    const folder=folders.find(f=>f.path===draftId[1] && (f.specialUse==='\\Drafts'||/^(drafts|bozze|INBOX\.Drafts|INBOX\.Bozze)$/i.test(f.path)))
+    if (!folder) throw new Error('The previous Drafts folder is no longer available.')
+    let raw:string
+    const sourceLock=await cl.getMailboxLock(originalId[1])
+    try {
+      const original=await cl.fetchOne(Number(originalId[2]),{source:true},{uid:true})
+      if (!original || !original.source) throw new Error('The original email is no longer available.')
+      const parsed=await simpleParser(original.source)
+      destinatarioVerificato(e.a,parsed.replyTo?.text||parsed.from?.text||'')
+      if (!parsed.messageId || !e.rispondeA?.messageId || idPulito(e.rispondeA.messageId)!==idPulito(parsed.messageId)) throw new Error('Cannot verify the original message in this email account.')
+      raw=mimeBozza(c.utente,{...e,oggetto:/^(re|r):/i.test(parsed.subject??'')?parsed.subject!:`Re: ${parsed.subject??e.oggetto}`,rispondeA:{messageId:idPulito(parsed.messageId),references:Array.isArray(parsed.references)?parsed.references.map(idPulito):[]}},messageId)
+    } finally {sourceLock.release()}
+    const draftLock=await cl.getMailboxLock(folder.path)
+    try {
+      const validity=cl.mailbox && cl.mailbox.uidValidity ? String(cl.mailbox.uidValidity):''
+      if (!validity || validity!==baseline.uidValidity) throw new Error('The Drafts mailbox identity changed; the old draft was preserved.')
+      const oldUid=Number(draftId[2])
+      const readOld=async()=>{
+        const found=await cl.fetchOne(oldUid,{source:true},{uid:true})
+        if (!found || !found.source) return ''
+        const parsed=await simpleParser(found.source)
+        if (typeof parsed.text!=='string') return ''
+        const body={source,id:oldId,corpo:parsed.text,oggetto:parsed.subject??'',a:Array.isArray(parsed.to)?parsed.to.map(x=>x.text).join(', '):parsed.to?.text??'',messageId:idPulito(parsed.messageId??''),uidValidity:validity}
+        return createHash('sha256').update(JSON.stringify(body)).digest('hex')
+      }
+      if (await readOld()!==baseline.impronta) throw new Error('The old mailbox draft was edited or removed. Its current version was preserved.')
+      const appended=await cl.append(folder.path,raw,['\\Draft','\\Seen'])
+      if (!appended || !Number.isSafeInteger(appended.uid) || !appended.uid || (appended.uidValidity && String(appended.uidValidity)!==validity)) throw new Error('The mailbox did not confirm the replacement draft UID. Check Drafts; the old draft was preserved.')
+      const replacement=`${folder.path}:${appended.uid}`
+      const saved=await cl.fetchOne(appended.uid,{source:true},{uid:true})
+      if (!saved || !saved.source) throw new Error(`The replacement (${replacement}) could not be read back. The old draft was preserved; review Drafts before retrying.`)
+      const expected=await simpleParser(raw),actual=await simpleParser(saved.source)
+      if (actual.text?.trim()!==expected.text?.trim() || actual.subject!==expected.subject || idPulito(actual.messageId??'')!==idPulito(messageId)
+        || (Array.isArray(actual.to)?actual.to.map(x=>x.text).join(', '):actual.to?.text??'')!==(Array.isArray(expected.to)?expected.to.map(x=>x.text).join(', '):expected.to?.text??''))
+        throw new Error(`The replacement (${replacement}) did not contain the complete requested draft. The old draft was preserved; review both drafts.`)
+      if (await readOld()!==baseline.impronta) throw new Error(`The old draft changed after the replacement was saved (${replacement}). Both drafts were preserved for review; Myynd will not retry automatically.`)
+      if (!await cl.messageDelete(oldUid,{uid:true})) throw new Error(`The replacement was saved (${replacement}), but the old exact UID could not be removed. Review both drafts; Myynd will not retry automatically.`)
+      if (await readOld()) throw new Error(`The replacement was saved (${replacement}), but removal of the old UID is uncertain. Check Drafts before retrying.`)
+      return {id:replacement,url:`message://${encodeURIComponent(`<${messageId}>`)}`}
+    } finally {draftLock.release()}
+  } finally {await cl.logout().catch(()=>cl.close())}
 }

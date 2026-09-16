@@ -22,6 +22,7 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-auto-'))
 mkdirSync(join(CASA, '.myynd'), { recursive: true })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 /*
  * Quelle del pacchetto, accese apposta.

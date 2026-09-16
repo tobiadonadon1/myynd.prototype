@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { DOMANDE, type Campo } from './intervista'
-import type { Progetto } from './api'
+import type { Progetto, Compito, ProjectInitiative } from './api'
 import { sulTavolo } from './tavolo'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
@@ -10,9 +10,11 @@ import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 import { primoParagrafo } from './essenza.ts'
 import { preparaApertura } from './navigazione.ts'
+import { projectInitiativeDraft } from './project-initiative-ui.ts'
 import { dataFonte, testoCarta } from './feed-carta.ts'
 import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
+import {statoAccessoNote} from './note-access.ts'
 
 type Toast = { text: string; undo: boolean } | null
 
@@ -252,6 +254,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [risultati, setRisultati] = useState<{ id: string; titolo: string; fonte: string; gruppo: string; quando: string; estratto: string }[]>([])
 
   const [aperti, setAperti] = useState<VoceFeed[]>([])
+  const [iniziative, setIniziative] = useState<ProjectInitiative[]>([])
   const [fatte, setFatte] = useState<VoceFeed[]>([])
   /**
    * L'ultima voce buttata via, e dov'era.
@@ -453,6 +456,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * finito — prima della risposta il titolone non deve dire niente di falso.
    */
   const [guastoFeed, setGuastoFeed] = useState<string | null>(null)
+  const [guastoLettura, setGuastoLettura] = useState<string | null>(null)
   const [feedCaricato, setFeedCaricato] = useState(false)
 
   const caricaFeed = useCallback(async () => {
@@ -467,6 +471,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       setFeedCaricato(true)
     }
     setAperti(f.aperti as unknown as VoceFeed[])
+    setIniziative(f.iniziative ?? [])
     setFatte(f.fatte as unknown as VoceFeed[])
     // solo il valore vero: la bozza del campo NON si tocca da qui. Prima ogni
     // ricaricamento del feed — una lettura, un cambio lingua, qualunque cosa —
@@ -627,6 +632,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     setScreen(s); setSearch(false); setMenu(false)
   }
 
+  const discussioniCompiti = useRef(new Map<string, string>())
+  const compitoDiscussione = (chat: string): string | undefined => {
+    const known = discussioniCompiti.current.get(chat)
+    if (known) return known
+    try { return localStorage.getItem(`myynd:discussion:${chat}`) || undefined } catch { return undefined }
+  }
   const chiedi = async (testo: string, chatId?: string) => {
     // una domanda vera chiude l'intervista: le risposte date sono già salvate
     chiudiIntervista()
@@ -666,7 +677,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         cresciuta = ''
         setPensando(true)
         setMessaggi(m => m.filter(x => x.id !== idVivo))
-      }, filo.signal)
+      }, filo.signal, compitoDiscussione(id))
       if (gen.current === mio) setMessaggi(r.messaggi)
     } catch (e) {
       /*
@@ -688,6 +699,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // l'elenco delle chat si rinfresca fuori dal try: un elenco che non torna
     // faceva dire «non sono riuscito a rispondere» di una risposta arrivata intera
     caricaChat().catch(() => {})
+    // Explicit project goals are saved before the reply; update the feed too.
+    caricaFeed().catch(() => {})
     /*
      * Sempre, non solo se è ancora la mia generazione.
      *
@@ -718,10 +731,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     setGenerando(true)
     try {
       const r = await api.generaFeed()
+      setGuastoLettura(null)
       await caricaFeed()
-      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.iniziative?.length ? t('C’è un prossimo passo da chiarire per i tuoi progetti.') : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
     } catch (e) {
-      mostraToast(e instanceof Error ? t(e.message) : t('La lettura non è riuscita.'))
+      const message = e instanceof Error ? t(e.message) : t('La lettura non è riuscita.')
+      setGuastoLettura(message)
+      mostraToast(message)
     }
     setGenerando(false)
   }
@@ -1066,9 +1082,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     ospitato: !!stato.ospitato,
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
     connCount: connOn.length,
-    apertiCount: aperti.length,
+    apertiCount: aperti.length + iniziative.length,
     totaleDocumenti: stato.conteggi.totale,
-    badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length ? 1 : 0.35 } as CSSProperties,
+    badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length + iniziative.length ? 1 : 0.35 } as CSSProperties,
     sincronizzando,
     sincronizza: () => sincronizza(),
     claudeOn,
@@ -1079,10 +1095,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // Il titolone non può dire «niente che richieda te» mentre sotto lui ti sta
     // chiedendo una cosa: la contraddizione fa sembrare che una delle due parti
     // dell'app non sappia cosa fa l'altra.
-    headline: guastoFeed ? t('Non riesco a leggere il feed.')
+    headline: guastoLettura ? t('La lettura non è riuscita.') : guastoFeed ? t('Non riesco a leggere il feed.')
       : !feedCaricato ? t('Un momento…')
       : aperti.length === 0
-      ? (domanda ? t('Una cosa da chiarire.')
+      ? (iniziative.length ? t('Facciamo avanzare i tuoi progetti.') : domanda ? t('Una cosa da chiarire.')
         : stato.conteggi.totale ? t('Niente che richieda te, adesso.')
         : t('La tua mente è ancora vuota.'))
       : frasi.daGuardare(aperti.length, parole(aperti.length)),
@@ -1096,17 +1112,30 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * fa `sulTavolo`, con le stesse regole con cui la pagina le dispone.
      */
     sulTavolo: (compiti: number, inCimaUnCompito: boolean) => {
-      const n = sulTavolo({ voci: aperti.length, compiti, domanda: !!domanda, inCimaUnCompito })
+      const n = sulTavolo({ voci: aperti.length + iniziative.length, compiti, domanda: !!domanda, inCimaUnCompito })
       return frasi.daGuardare(n, parole(n))
     },
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
+    guastoLettura,
     feedCaricato,
     ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },
     hasHero: !!hero,
     // Basta che non ci sia niente di aperto. Prima serviva anche zero fatte,
     // quindi chi aveva appena sistemato tutto restava con un elenco di cose
     // chiuse e nessuna indicazione su cosa succede adesso.
-    feedVuoto: aperti.length === 0,
+    feedVuoto: aperti.length === 0 && iniziative.length === 0,
+    iniziative,
+    discutiIniziativa: (item: ProjectInitiative) => {
+      chiudiIntervista()
+      const chat = `th${Date.now()}`
+      filoNuovo.current = chat
+      setThread(chat); setMessaggi([]); setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
+      setDraftMsg(projectInitiativeDraft(item, stato.config.lingua === 'it' ? 'it' : 'en'))
+    },
+    scartaIniziativa: async (id: string) => {
+      try { const r = await api.feedbackIniziativa(id, 'dismissed'); setIniziative(r.iniziative) }
+      catch { mostraToast(t('Non sono riuscito a salvare la preferenza.')) }
+    },
     haFatte: fatte.length > 0,
     generando, genera,
     heroStyle: {
@@ -1319,6 +1348,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       })
     },
 
+    discutiCompito: (c: Compito) => {
+      const id = c.id
+      chiudiIntervista()
+      const chat = `th${Date.now()}`
+      discussioniCompiti.current.set(chat, id)
+      try { localStorage.setItem(`myynd:discussion:${chat}`, id) } catch { /* session binding still works */ }
+      filoNuovo.current = chat
+      setThread(chat); setMessaggi([]); setScreen('chat'); setSearch(false); setMenu(false)
+      setDraftMsg(`${stato.config.lingua === 'en' ? 'About' : 'A proposito di'} «${c.consegna?.titolo || c.testo}»: `)
+    },
     // — chat —
     threads: threads.map(ch => ({
       id: ch.id, titolo: ch.titolo, quando: quando(ch.quando),
@@ -1585,10 +1624,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     connMeta: frasi.attiviDaCollegare(connOn.length, connettori.filter(c => c.pronto).length - connOn.length),
     connAttivi: connOn.map(c => ({
       id: c.id, nome: c.nome,
-      problema: c.id === 'note' && stato.accessoDisco === 'no',
+      problema: c.id === 'note' && statoAccessoNote(stato).problema,
       // il desktop dice anche se lo sta guardando dal vivo: è la differenza
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
-      stato: [frasi.statoConnettore(c.documenti), c.id === 'note' && stato.accessoDisco === 'no' ? t('La lettura è sospesa: manca l’accesso al disco.') : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+      stato: [frasi.statoConnettore(c.documenti), c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
       // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
       // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto

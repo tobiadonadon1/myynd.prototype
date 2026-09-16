@@ -21,6 +21,7 @@ import type { Documento } from './store.ts'
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-test-'))
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const store = await import('./store.ts')
 const ordine = await import('./ordine.ts')

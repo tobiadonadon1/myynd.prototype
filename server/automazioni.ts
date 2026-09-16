@@ -936,7 +936,7 @@ async function faiPerDocumento(
     })
     if (!scrive) continue
     if (opzioni.aMano || bozze < BOZZE_AL_GIORNO) {
-      compiti.affida(id, modo)
+      compiti.affida(id, modo, false)
       bozze = store.segnaBozza(a.id, giorno)
     } else {
       lasciate++
@@ -1160,7 +1160,7 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
   } else {
     const modo = a.metti.modo ?? 'io'
     if (faScrivere(modo)) {
-      compiti.affida(id, modo)
+      compiti.affida(id, modo, false)
       // il tetto del giorno si conta qui, dove la bozza parte davvero
       if (!a.passi?.length) store.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
     }

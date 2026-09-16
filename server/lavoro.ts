@@ -1,4 +1,4 @@
-// Dare un lavoro a Claude Code, dentro una cartella vera.
+// Dare un lavoro a Claude Code dentro un progetto collegato.
 //
 // È il verbo che cambia natura a questa applicazione. Fino a qui Myynd
 // *scriveva*: testo che una persona legge, corregge, manda. Da qui Myynd può
@@ -14,21 +14,34 @@
 //
 //   1. `--permission-mode plan` — legge il progetto e scrive cosa farebbe.
 //      Non tocca un file. Quello che torna si legge come una bozza qualsiasi.
-//   2. `--permission-mode acceptEdits` — lo fa davvero, e solo dopo che una
-//      persona ha letto il piano e ha premuto.
+//   2. `--permission-mode acceptEdits` — lo fa in una copia del progetto,
+//      dopo che una persona ha letto il piano e ha premuto.
 //
 // Un solo passo — «fai» e basta — sarebbe stato metà del lavoro e il doppio del
-// rischio: modifiche dentro un progetto che nessuno ha visto arrivare.
+// rischio: modifiche di cui nessuno ha visto il piano.
 //
-// E il recinto è quello di sempre: solo dentro le cartelle collegate. Myynd non
-// sceglie dove lavorare, lo scegli tu una volta e vale per tutto.
+// E il recinto è quello di sempre: solo le cartelle collegate, mai la copia
+// originale per il passo che cambia file.
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { realpath } from 'node:fs/promises'
+import { realpath, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { ConfigDesktop } from './config.ts'
 import { OSPITATO } from './ospitato.ts'
+import { executeInCopy, type ExecutionReport } from './esecuzione-isolata.ts'
+import { detectRuntime, runHermesPatch, type RuntimeId, type RuntimeProvenance } from './agent-runtime.ts'
+import { reviewProjectReport, type TeamEvidence } from './project-review.ts'
+
+type ProjectReport = ExecutionReport & {runtimeProvenance?:RuntimeProvenance; team?:TeamEvidence}
+async function saveOutcome(report:ProjectReport, options:{runtime?:RuntimeId; team?:boolean; acceptanceCriteria?:string; signal?:AbortSignal}):Promise<void> {
+  await writeFile(report.reportFile,JSON.stringify(report,null,2),{mode:0o600})
+  if(options.team) {
+    report.team=await reviewProjectReport(report,options.acceptanceCriteria!,{worker:options.runtime ?? 'claude',signal:options.signal})
+    if(!report.team.accepted && report.state==='verified') report.state='unverified'
+    await writeFile(report.reportFile,JSON.stringify(report,null,2),{mode:0o600})
+  }
+}
 
 /** Dove sta `claude`. Non si cerca nella PATH: un'app impacchettata non ce l'ha. */
 const DOVE = [
@@ -61,6 +74,8 @@ export type Esito = {
   /** Vero se è finito da solo, falso se l'abbiamo fermato noi. */
   finito: boolean
   cartella: string
+  /** Present only for edits: files and tests in the isolated project copy. */
+  esecuzione?: ProjectReport
 }
 
 /**
@@ -84,7 +99,7 @@ const TETTO_MINUTI = { piano: 5, fai: 20 }
 const TETTO_TESTO = 200_000
 
 /**
- * Fa girare Claude Code e riporta indietro quello che ha detto.
+ * Fa girare Claude Code e riporta indietro ciò che ha fatto nella copia.
  *
  * `spawn` con gli argomenti in un elenco, mai una stringa di shell: la
  * richiesta è testo di una persona, e in una shell un testo con dentro un punto
@@ -129,41 +144,81 @@ export function argomentiDi(passo: Passo, richiesta = ''): string[] {
     '--setting-sources', 'user',
     '--strict-mcp-config',
 
-    // In modalità piano legge e ragiona, e basta: niente shell, niente rete.
-    // È il passo che un'automazione fa alle sette di mattina con nessuno a
-    // guardare, e la richiesta può portarsi dietro un'email scritta apposta.
-    ...(passo === 'piano' ? ['--disallowedTools', 'Bash', 'WebFetch', 'WebSearch'] : [])
+    // The agent edits only files in the task copy. Shell and network actions
+    // are outside that scope; verification runs separately with fixed argv.
+    '--disallowedTools', 'Bash', 'WebFetch', 'WebSearch'
   ]
 }
 
 export async function fai(
   desktop: ConfigDesktop | null | undefined,
-  o: { cartella: string; richiesta: string; passo: Passo }
+  o: { cartella: string; richiesta: string; passo: Passo; signal?: AbortSignal; runtime?: RuntimeId; hermes?: { files: string[]; model: string; provider: string }; team?:boolean; acceptanceCriteria?:string }
 ): Promise<Esito> {
   // Prima quello che riguarda la richiesta, poi quello che riguarda la
   // macchina: se la cartella è fuori dal recinto va detto *quello*, anche su un
   // computer dove Claude Code manca. Sono due notizie diverse, e la prima è
   // quella che si può correggere.
   if (!o.richiesta.trim()) throw new Error('Non c’è niente da chiedergli.')
+  if(o.team && (!o.acceptanceCriteria?.trim() || o.acceptanceCriteria.length>4000)) throw new Error('Write explicit acceptance criteria for the worker and reviewer team.')
   const cartella = await dentroLeTue(o.cartella, desktop)
+  const workerRequest=o.team ? `${o.richiesta}\n\nUser acceptance criteria: ${o.acceptanceCriteria}` : o.richiesta
+  if (o.runtime === 'hermes') {
+    if (o.passo !== 'fai') throw new Error('Discuss the goal first; Hermes supports a scoped patch in the project copy.')
+    if (!o.hermes) throw new Error('Choose the project files, model and provider for Hermes.')
+    const runtime = await detectRuntime('hermes')
+    if (runtime.status !== 'supported' || !runtime.executable) throw new Error('A compatible Hermes CLI is not installed on this computer.')
+    const report = await executeInCopy(cartella, async (workspace, signal) => runHermesPatch(runtime, workspace, workerRequest, { ...o.hermes!, signal }), { signal: o.signal }) as ProjectReport
+    report.runtimeProvenance = { runtime: 'hermes', executable: runtime.executable, version: runtime.version, scope: 'copy-files', model: o.hermes.model, provider: o.hermes.provider }
+    await saveOutcome(report,o)
+    return { passo: 'fai', testo: `Hermes · ${report.state}\nWorking copy: ${report.workspace}\n${report.agentText}`, finito: report.state === 'verified', cartella: report.workspace, esecuzione: report }
+  }
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è installato su questo computer.')
 
-  const args = argomentiDi(o.passo, o.richiesta)
+  if (o.passo === 'fai') {
+    const report = await executeInCopy(cartella, async (workspace, signal) => {
+      const request = `${workerRequest}\n\nLavora esclusivamente nella cartella corrente, che è una copia isolata del progetto collegato. Non modificare la cartella originale; non creare commit, non inviare modifiche e non distribuire il progetto. Cambia i file necessari e descrivi brevemente ciò che hai fatto.`
+      const result = await runClaude(exe, workspace, 'fai', request, signal)
+      return { exitCode: result.exitCode, finished: result.finished, text: result.text }
+    }, { signal: o.signal }) as ProjectReport
+    report.runtimeProvenance = { runtime: 'claude', executable: exe, scope: 'copy-files' }
+    await saveOutcome(report,o)
+    return {
+      passo: 'fai',
+      testo: report.state === 'verified'
+        ? `Modifiche nella copia ${report.workspace}: ${report.changedFiles.map(f => f.path).join(', ')}. Verifica superata.\n\n${report.agentText}`
+        : `Il lavoro nella copia ${report.workspace} richiede una revisione: ${report.state}. ${report.verification.output ?? ''}\n\n${report.agentText}`,
+      finito: report.state === 'verified', cartella: report.workspace, esecuzione: report
+    }
+  }
+  const result = await runClaude(exe, cartella, 'piano', o.richiesta, o.signal)
+  if (result.exitCode !== 0 && !result.text) throw new Error('Claude Code non ce l’ha fatta.')
+  return { passo: 'piano', testo: result.text, finito: result.finished && result.exitCode === 0, cartella }
+}
 
-
+async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
+  const args = argomentiDi(passo, richiesta)
   const { ANTHROPIC_API_KEY: _mia, ...ambiente } = process.env
-
-  return await new Promise<Esito>((risolvi, rifiuta) => {
-    const p = spawn(exe, args, { cwd: cartella, env: ambiente })
+  if (signal?.aborted) return { text: '', exitCode: null, finished: false }
+  return await new Promise((risolvi, rifiuta) => {
+    const p = spawn(exe, args, { cwd, env: ambiente, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     let fuori = ''
     let male = ''
     let finito = true
+    let settled = false
+
+    const stop = () => {
+      finito = false
+      try { if (p.pid && process.platform !== 'win32') process.kill(-p.pid, 'SIGTERM'); else p.kill('SIGTERM') } catch { /* already gone */ }
+      setTimeout(() => {
+        try { if (p.pid && process.platform !== 'win32') process.kill(-p.pid, 'SIGKILL'); else p.kill('SIGKILL') } catch { /* already gone */ }
+      }, 2000).unref()
+    }
 
     const tetto = setTimeout(() => {
-      finito = false
-      p.kill('SIGTERM')
-    }, TETTO_MINUTI[o.passo] * 60_000)
+      stop()
+    }, TETTO_MINUTI[passo] * 60_000)
+    signal?.addEventListener('abort', stop, { once: true })
 
     p.stdout.on('data', d => {
       if (fuori.length < TETTO_TESTO) fuori += String(d)
@@ -171,22 +226,21 @@ export async function fai(
     p.stderr.on('data', d => { if (male.length < 4000) male += String(d) })
 
     p.on('error', e => {
+      if (settled) return
+      settled = true
       clearTimeout(tetto)
+      signal?.removeEventListener('abort', stop)
       rifiuta(new Error(`Non sono riuscito ad avviare Claude Code: ${e.message}`))
     })
 
     p.on('close', codice => {
+      if (settled) return
+      settled = true
       clearTimeout(tetto)
+      signal?.removeEventListener('abort', stop)
       const testo = fuori.trim()
-      if (!testo && codice !== 0) {
-        // il messaggio di stderr è per chi sviluppa; qui serve la riga corta
-        return rifiuta(new Error(
-          /not logged in|authentication/i.test(male)
-            ? 'Claude Code non è collegato: apri un terminale e fai «claude» una volta.'
-            : 'Claude Code non ce l’ha fatta.'
-        ))
-      }
-      risolvi({ passo: o.passo, testo, finito, cartella })
+      if (!testo && /not logged in|authentication/i.test(male)) return rifiuta(new Error('Claude Code non è collegato: apri un terminale e fai «claude» una volta.'))
+      risolvi({ text: testo, exitCode: codice, finished: finito })
     })
   })
 }

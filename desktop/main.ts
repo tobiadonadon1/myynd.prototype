@@ -22,7 +22,9 @@
 // quindi qui valgono le stesse regole di `server/` — niente enum, niente
 // namespace, import con l'estensione `.ts`.
 
-import { app, dialog, ipcMain, Notification, powerMonitor, shell, session } from 'electron'
+import { workPowerLease } from './lavoro-background.ts'
+import { mailMessageLink } from './mail-link.ts'
+import { app, dialog, ipcMain, Notification, powerMonitor, powerSaveBlocker, shell, session } from 'electron'
 import { join } from 'node:path'
 import * as server from './server.ts'
 import * as finestra from './finestra.ts'
@@ -73,6 +75,8 @@ if (!app.requestSingleInstanceLock()) {
 let staUscendo = false
 let serverFermato = false
 let dialogoAperto = false
+const workLease = workPowerLease(powerSaveBlocker)
+let workLeaseTimer: ReturnType<typeof setInterval> | undefined
 
 /** L'ordine conta: registro e impostazioni prima di tutto, così ogni pezzo dopo può parlarne. */
 async function avvio() {
@@ -97,6 +101,8 @@ async function avvio() {
   app.on('second-instance', finestra.mostra)
 
   await app.whenReady()
+  workLeaseTimer = setInterval(() => workLease.tick(), 10_000)
+  workLeaseTimer.unref()
   lingua.imposta(impostazioni.leggi().lingua ?? lingua.daLocale(app.getLocale()))
   // aperta dal sistema all'accesso: si carica tutto, ma la finestra non compare
   const nascosto = avvioNascosto(process.argv, app.getLoginItemSettings())
@@ -151,6 +157,7 @@ async function avvio() {
     richiamo.prepara(url, argomenti)
   }
   const ascolto: server.Ascolto = {
+    suLavoro: message => workLease.message(message),
     suPorta: porta => caricaApp(`http://127.0.0.1:${porta}/`),
     suMorte: righe => chiediRiapertura(righe, ascolto)
   }
@@ -180,6 +187,8 @@ async function spegniSenzaUscire() {
   serverFermato = true
   staUscendo = true
   finestra.lasciaChiudere()
+  workLease.release()
+  clearInterval(workLeaseTimer)
   scorciatoia.spegni()
   richiamo.distruggi()
   tray.distruggi()
@@ -243,6 +252,7 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
      * quell'indirizzo e basta. E lo apre solo chi preme il bottone.
      */
     if (String(url) === PANNELLO_ACCESSO_DISCO) { await shell.openExternal(PANNELLO_ACCESSO_DISCO); return }
+    if (mailMessageLink(url)) { await shell.openExternal(url); return }
     let u: URL
     try { u = new URL(String(url)) } catch { throw new Error(t('Questo indirizzo non si apre fuori da Myynd.')) }
     if (!['http:', 'https:', 'mailto:'].includes(u.protocol)) throw new Error(t('Questo indirizzo non si apre fuori da Myynd.'))

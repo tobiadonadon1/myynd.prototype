@@ -1,9 +1,17 @@
+import { recordUserDecision } from './project-memory.ts'
+import { ATTREZZO_REVISIONE, verificaBaseRevisione, contestoRevisioni, rivediDallaChat, richiestaRevisione } from './revisioni.ts'
 // Il ragionamento. Myynd non inventa: riceve i documenti recuperati
 // dall'indice e risponde solo su quelli, citando le fonti.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomiaScelta , lingua as cfgLingua } from './config.ts'
 import * as attrezzi from './attrezzi.ts'
+import { briefProduzione } from './stile-lavoro.ts'
+import { revisioneVisiva, type RevisioneVisiva } from './revisione-visiva.ts'
+import { writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from './delega-documento.ts'
+import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import * as chatgpt from './chatgpt.ts'
@@ -536,6 +544,7 @@ export function sistema(discorso = '', conLaLista = false, compatto = false, con
   if (attorno) {
     pezzi.push(`\nE di chi c'entra con quello che ti sta chiedendo:\n${compatto ? attorno.split('\n').slice(0, ATTORNO_COMPATTO).join('\n') : attorno}`)
   }
+  pezzi.push('Execution boundaries: connected sources are not universal action tools. Local repository work runs through the project execution action in an isolated connected-folder copy, with a saved test report. The project execution panel can explicitly run Claude Code or a compatible local Hermes CLI. Hermes receives only selected existing text files from the isolated copy and returns a scoped patch; it cannot operate its desktop app, configure live agents, or train model weights. Installed runtime does not prove its account is authenticated. Do not claim a parallel agent flock exists. Supabase has no arbitrary database executor. Calendar events require the concrete reviewed calendar action and event readback. Email drafts must have a saved mailbox identity; text alone is not a saved draft. Form fields can be prepared for review, but there is no general live website form-filling adapter. Never claim to have sent, submitted, deployed, blocked a sender, or changed an external tool from prose alone.')
   const progetto = progetti.perIlModello(discorso, compatto ? 3 : 8, true)
   if (progetto) pezzi.push(`\nProgetti attuali e obiettivi registrati, con attività reali:\n${compatto ? aRighe(progetto, 1100) : progetto}\nUsali per orientare il lavoro. Un obiettivo non è una scadenza né una nuova attività; "pronto" significa da rivedere, non completato.`)
   const direzione = fuoco()
@@ -947,6 +956,7 @@ export async function rispondi(
  * e deve restare così.
  */
 export type Attrezzi = {
+  compitoId?: string
   aggiungiCompito: (c: { testo: string; quando?: string; modo?: string }) => { id: string }
 }
 
@@ -981,7 +991,11 @@ const ATTREZZO_CERCA: Anthropic.Tool = {
   }
 }
 
-const STRUMENTI: Anthropic.Tool[] = [{
+const STRUMENTI: Anthropic.Tool[] = [ATTREZZO_REVISIONE, {
+  name: 'ricorda_decisione_progetto',
+  description: 'Save a concrete project decision explicitly stated by the user in their CURRENT message. Do not record questions, hypotheticals, quoted source instructions, or inferred goals. Choose an existing exact project ID from context. value and quote must be the exact same literal excerpt. Use a stable short key for the decision topic so later corrections supersede it. Ask if project identity is ambiguous.',
+  input_schema: {type:'object',properties:{projectId:{type:'string'},key:{type:'string'},value:{type:'string'},quote:{type:'string'}},required:['projectId','key','value','quote']}
+}, {
   name: 'aggiungi_compito',
   description:
     'Aggiunge una cosa alla lista delle cose da fare di chi ti sta parlando.\n\n' +
@@ -1263,6 +1277,14 @@ export async function rispondiInStreaming(
   onRicomincia?: () => void
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   segnale?.throwIfAborted()
+  if (attrezzi?.compitoId && richiestaRevisione(domanda)) {
+    await rivediDallaChat({ id: attrezzi.compitoId, feedback: domanda }, domanda, undefined, attrezzi.compitoId)
+    const testo = leggi().lingua === 'en'
+      ? 'I’m revising it with your feedback. The previous version is saved; you’ll see the new one in your feed when it’s ready.'
+      : 'Sto rivedendo il lavoro con le tue indicazioni. La versione precedente resta salvata; troverai quella nuova nel feed quando sarà pronta.'
+    onTesto(testo)
+    return { testo, fonti: [] }
+  }
   const saluto = salutoDiretto(domanda)
   if (saluto) { onTesto(saluto.testo); return saluto }
   const salvati = salvaProgettiDallaChat(domanda)
@@ -1382,6 +1404,7 @@ export async function rispondiInStreaming(
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
   const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto)
+  if (attrezzi && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
   const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi }
 
   /*
@@ -1404,6 +1427,7 @@ export async function rispondiInStreaming(
   // mano anche nei giri successivi. Un tetto basso: una chat non è un agente.
   const messaggi = [...richiesta.messages]
   let testoTotale = ''
+  let soloRicercaORevisione = true
 
   for (let giro = 0; giro < 4; giro++) {
     // chi ha chiuso la scheda non aspetta il secondo giro: e il secondo giro
@@ -1428,7 +1452,8 @@ export async function rispondiInStreaming(
     )
     if (!chiamate.length) break
 
-    const risultati: Anthropic.ToolResultBlockParam[] = chiamate.map(c => {
+    soloRicercaORevisione &&= chiamate.every(c => c.name === 'cerca' || c.name === 'rivedi_compito')
+    const risultati: Anthropic.ToolResultBlockParam[] = await Promise.all(chiamate.map(async c => {
       try {
         if (c.name === 'cerca') {
           const q = String((c.input as { query?: string }).query ?? '').trim()
@@ -1457,6 +1482,16 @@ export async function rispondiInStreaming(
         // Toccare una riga che c'è già non passa da `attrezzi`: la lista la
         // conosce lo store, e chiudere è la stessa identica cosa che fa la
         // rotta — stato, annuncio, e quello che si impara chiudendo.
+        if (c.name === 'ricorda_decisione_progetto') {
+          const input = c.input as {projectId:string;key:string;value:string;quote:string}
+          if (![input?.projectId,input?.key,input?.value,input?.quote].every(v => typeof v === 'string')) throw new Error('Invalid project decision.')
+          const saved = recordUserDecision(input, domanda)
+          return {type:'tool_result' as const, tool_use_id:c.id, content:JSON.stringify({saved:true,id:saved.id,projectId:saved.projectId,value:saved.value})}
+        }
+        if (c.name === 'rivedi_compito') {
+          const revision = await rivediDallaChat(c.input, domanda, undefined, attrezzi.compitoId)
+          return { type: 'tool_result' as const, tool_use_id: c.id, content: JSON.stringify({ ...revision, status: 'Revision queued; the original is preserved. Do not claim completion.' }) }
+        }
         if (c.name === 'chiudi_compito') return chiudiDallaChat(c.id, c.input)
         if (c.name === 'sposta_compito') return spostaDallaChat(c.id, c.input)
         const dati = c.input as { testo?: string; quando?: string; modo?: string; richiesta?: string }
@@ -1486,7 +1521,19 @@ export async function rispondiInStreaming(
           content: e instanceof Error ? e.message : 'non è riuscito'
         }
       }
-    })
+    }))
+
+    // A successful revision already has a concrete queued result. Replace any
+    // provisional streamed narration instead of asking the model to repeat it.
+    // Other mutations/multiple calls still complete the normal conversation.
+    if (soloRicercaORevisione && chiamate.length === 1 && chiamate[0].name === 'rivedi_compito' && !risultati[0].is_error) {
+      const testo = leggi().lingua === 'en'
+        ? 'I’m revising it with your feedback. The previous version is saved; you’ll see the new one in your feed when it’s ready.'
+        : 'Sto rivedendo il lavoro con le tue indicazioni. La versione precedente resta salvata; troverai quella nuova nel feed quando sarà pronta.'
+      if (onRicomincia) { onRicomincia(); onTesto(testo) }
+      else if (!testoTotale) onTesto(testo)
+      return { testo, fonti: [] }
+    }
 
     messaggi.push({ role: 'assistant', content: finale.content })
     messaggi.push({ role: 'user', content: risultati })
@@ -2177,7 +2224,7 @@ const GIRI = { bozza: 4, tutto: 7, prompt: 7 } as const
  * comparirebbe «Cerco «listino»» e nessun dizionario potrebbe recuperarla —
  * `dettaglio` cambia a ogni giro, e una chiave che cambia non è una chiave.
  */
-export type Passo = { passo: 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+export type Passo = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
 
 export async function svolgi(
   compito: string,
@@ -2218,9 +2265,14 @@ export async function svolgi(
    * funzionare com'era.
    */
   doc?: string | null,
-  selezione?: SelezioneLavoro | null
-): Promise<{ testo: string; fonti: Fonte[]; verificaDocumenti?: string[] }> {
+  selezione?: SelezioneLavoro | null,
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string }
+): Promise<{ testo: string; fonti: Fonte[]; verificaDocumenti?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>} }> {
+  const produzioneIniziata = Date.now()
+  const tracciaProduzione = (fase: string) => console.info(`myynd · production · run=${produzioneIniziata} · ${fase} · elapsed_ms=${Date.now() - produzioneIniziata}`)
+  tracciaProduzione('provider-selection-start')
   const m = motore()
+  tracciaProduzione('provider-selection-end')
   /*
    * Le bozze sull'abbonamento, quando è quello che ha scelto.
    *
@@ -2244,6 +2296,9 @@ export async function svolgi(
 
   const passo = (p: Passo) => { try { onPasso?.(p) } catch { /* chi guarda si arrangia */ } }
 
+  esecuzione?.signal.throwIfAborted()
+  const appNativa = esecuzione?.nativa ? appDocumento(compito, modo) : null
+  if (appNativa === 'Word') throw new Error('Direct document creation in Word is not supported yet. Choose Pages or TextEdit.')
   const domanda = nota?.trim() ? `${compito}\n\nDettaglio: ${nota.trim()}` : compito
   // The local model must read the task and its evidence before its first-token
   // deadline. Start with a few useful excerpts; `apri` still reads deeply.
@@ -2279,6 +2334,7 @@ export async function svolgi(
     : 'Non ci sono nuove fonti attuali pertinenti per questo progetto. Usa il suo obiettivo registrato per consegnare un piano proposto, indica che lo stato attuale non è verificato e distingui le ipotesi dai fatti. Non cercare vecchie menzioni per riempire i vuoti.'
   if (dalla.length) passo({ passo: 'apro', dettaglio: dalla[0].titolo })
   const giaDentro = new Set(dalla.map(d => d.id))
+  tracciaProduzione('material-start')
   const partenza = [
     ...dalla,
     ...perQuestoLavoro(materiale(domanda, [], recinto)).filter(d => !giaDentro.has(d.id))
@@ -2293,6 +2349,7 @@ export async function svolgi(
    * Se questa numerazione si sfalsa, le fonti puntano al documento sbagliato —
    * e una fonte che mente è peggio di nessuna fonte.
    */
+  tracciaProduzione('material-end')
   const visti: Documento[] = [...partenza]
   const risultatoVerificato = (testo: string) => {
     const ids = visti.map(d => d.id)
@@ -2340,16 +2397,26 @@ export async function svolgi(
    * dove si può guardare affatto, e i due devono dire la stessa cosa, o la
    * riga scritta sulla scheda non vuol dire niente.
    */
-  const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi)]
+  tracciaProduzione('style-brief-start')
+  const brief = await briefProduzione({compito, nota: nota ?? undefined}, {signal: esecuzione?.signal})
+  tracciaProduzione('style-brief-end')
+  esecuzione?.signal.throwIfAborted()
+  const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...(appNativa ? [CREA_DOCUMENTO] : [])]
 
   const tettoGiri = GIRI[modo as keyof typeof GIRI] ?? GIRI.bozza
-  const sistemaLavoro = sistema(domanda, false, compatto) + SVOLGERE +
+  let sistemaLavoro = sistema(domanda, false, compatto) + SVOLGERE +
     (MODI[modo] ?? MODI.bozza) + inMano() + conQuali(concessi) +
     '\n\nSe la persona chiede esplicitamente un piano, una scaletta o prossimi passi ' +
     'proposti, quello è il risultato da consegnare. Usa il suo obiettivo registrato ' +
     'e il materiale pertinente; distingui proposte da fatti verificati e indica i dati ' +
     'mancanti. La mancanza di un aggiornamento sullo stato non impedisce una proposta ' +
     'dichiarata come tale. Non sostenere di aver eseguito i passi proposti.'
+  sistemaLavoro += '\n\n' + brief.testo
+  let ultimaConsegna: (DocumentoCreato & {revisione: Pick<RevisioneVisiva, 'esito' | 'problemi'>}) | undefined
+  let tentativiVisivi = 0
+  if (appNativa) sistemaLavoro += `\n\nLa persona ti ha delegato un documento in ${appNativa}. Hai crea_documento_app: usalo per produrre il documento completo nell'app e salvarlo, non limitarti a descriverlo. Questa creazione locale è già autorizzata. Usa un titolo e una struttura ragionevoli senza chiedere preferenze facoltative. Chiedi solo se manca il tema o un dato indispensabile. Non inventare ricerche, citazioni o fatti personali. Il testo dello strumento contiene solo il documento, senza il riepilogo iniziale previsto per le bozze in chat. Non dichiarare successo senza la verifica dello strumento.`
+  const pagineRichieste = appNativa ? pagineDocumento(compito) : 0
+  if (pagineRichieste > 0) sistemaLavoro += `\nLa lunghezza richiesta è ${pagineRichieste} pagine. In un documento standard usa circa ${pagineRichieste * 280} parole, non superare ${pagineRichieste * 320} parole inclusi i titoli. Pochi paragrafi e pochi titoli, senza lunghe sezioni ripetitive.`
   let testo = ''
 
   /*
@@ -2360,7 +2427,7 @@ export async function svolgi(
    * risposta giusta è chiedere — che è la stessa cosa che farebbe con gli
    * attrezzi dopo aver cercato invano, e `chiedeAiuto` la riconosce uguale.
    */
-  if (soloAbbonamento) {
+  if (soloAbbonamento && !appNativa) {
     passo({ passo: 'scrivo' })
     const senzaAttrezzi = sistemaLavoro +
       '\n\nQuesto è tutto il materiale che avrai: non puoi cercarne altro. Se per fare il ' +
@@ -2387,6 +2454,8 @@ export async function svolgi(
   if (!m) throw new Error('Collega Claude e potrò lavorarci.')
 
   for (let giro = 0; giro < tettoGiri; giro++) {
+    esecuzione?.signal.throwIfAborted()
+    passo({ passo: 'scrivo' })
     // All'ultimo giro può solo scrivere: senza questo un modello che sta
     // ancora cercando finirebbe il budget senza consegnare niente, e il compito
     // tornerebbe indietro vuoto dopo cinque minuti di lavoro vero. Gli attrezzi
@@ -2404,17 +2473,19 @@ export async function svolgi(
     // risposta lenta. Gli errori arrivano già in italiano: li traduce lui. Il
     // blocco di sistema è segnato per la cache: su Claude si rilegge a un
     // decimo dal secondo giro, e il fornitore compatibile lo appiattisce.
+    tracciaProduzione(`provider-turn-${giro + 1}-start`)
     const finale = await m.flusso({
       ...parametri('bozza', 16000),
       system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
       messages: messaggi,
       tools: ferri,
-      ...(ultimo ? { tool_choice: { type: 'none' } } : {})
+      ...(ultimo && !appNativa ? { tool_choice: { type: 'none' } } : {})
     } as Anthropic.MessageStreamParams, delta => {
       if (dettoScrivo || !delta.trim()) return
       dettoScrivo = true
       passo({ passo: 'scrivo' })
-    })
+    }, undefined, esecuzione?.signal)
+    tracciaProduzione(`provider-turn-${giro + 1}-end`)
     segnaUso('bozza', finale.usage, `giro ${giro + 1} di ${tettoGiri} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') throw new Error('Su questo compito non posso lavorare.')
@@ -2428,7 +2499,7 @@ export async function svolgi(
     const chiamate = finale.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
     // Tool-round prose is a progress note, not part of the finished artifact.
     if (!chiamate.length) { testo = scritto; break }
-    if (ultimo) throw new Error('Il lavoro non ha prodotto un risultato completo. Riprova.')
+    if (ultimo && !appNativa) throw new Error('Il lavoro non ha prodotto un risultato completo. Riprova.')
 
     /**
      * Gli attrezzi dichiarati sono asincroni, i due di sempre no.
@@ -2443,6 +2514,48 @@ export async function svolgi(
      */
     const risultati: Anthropic.ToolResultBlockParam[] = []
     for (const c of chiamate) {
+      esecuzione?.signal.throwIfAborted()
+      if (c.name === CREA_DOCUMENTO.name) {
+        if (!appNativa) throw new Error('Native document creation was not authorized for this task.')
+        const input = validaDocumento(c.input, appNativa)
+        if (pagineRichieste > 0 && input.testo.trim().split(/\s+/).length > pagineRichieste * 320) {
+          risultati.push({ type: 'tool_result', tool_use_id: c.id, is_error: true, content: `The document exceeds the requested length. Revise the complete body to at most ${pagineRichieste * 320} words, then call crea_documento_app again. No file has been created.` })
+          continue
+        }
+        // Verification is checked before the side effect and again on return.
+        risultatoVerificato('')
+        passo({ passo: 'apro', dettaglio: appNativa })
+        const documentoCreato = await creaDocumento({...input, stile: {pagine:pagineRichieste, corpo: brief.tipografia.font, titolo: brief.tipografia.font, dimensione: brief.tipografia.punti, nome: brief.tipografia.origine === 'documento' ? 'From a relevant reference' : brief.tipografia.origine === 'preferenza_esplicita' ? 'Your requested style' : 'Editorial'}}, esecuzione?.signal)
+        esecuzione?.signal.throwIfAborted()
+        passo({passo:'scrivo', dettaglio: cfgLingua() === 'en' ? 'Checking the rendered pages' : 'Controllo le pagine impaginate'})
+        const revisione = await revisioneVisiva({lingua:cfgLingua(),pagine:documentoCreato.immagini ?? [],titolo:input.titolo,richiesta:compito + '\n' + brief.testo}, esecuzione?.signal)
+        if (pagineRichieste > 0 && documentoCreato.pagine !== pagineRichieste) {
+          revisione.esito = 'revise'
+          revisione.problemi.push(`Requested ${pagineRichieste} pages; actual rendered document has ${documentoCreato.pagine ?? 'unknown'} pages. Adjust length while preserving readable typography.`)
+        }
+        writeFileSync(join(dirname(documentoCreato.percorso), 'review.json'), JSON.stringify({brief, revisione}, null, 2), {mode:0o600})
+        ultimaConsegna = {...documentoCreato, revisione:{esito:revisione.esito,problemi:revisione.problemi}}
+        tentativiVisivi++
+        if (revisione.esito === 'revise' && tentativiVisivi < 2 && !ultimo) {
+          risultati.push({type:'tool_result',tool_use_id:c.id,is_error:true,content: `A provisional document was created, but its rendered review failed: ${revisione.problemi.join('; ')}. Fix these issues and call crea_documento_app with the revised complete document. Preserve the purpose and facts. Do not claim the delivery is ready.`})
+          continue
+        }
+        if (revisione.esito === 'pass') {
+          if (esecuzione?.taskId) {
+            const current = compitoDi(esecuzione.taskId)
+            if (!current) throw new Error('The task is no longer available.')
+            await verificaBaseRevisione(current)
+          }
+          try { ultimaConsegna.desktop = pubblicaDocumentoDesktop(documentoCreato) }
+          catch { /* Keep the verified private file accessible; UI must not claim Desktop. */ }
+          try { await apriDocumento(ultimaConsegna) }
+          catch { /* The saved final delivery remains available through its Open action. */ }
+        }
+        const conferma = cfgLingua() === 'en'
+          ? `Created and saved in ${appNativa}: ${documentoCreato.percorso}`
+          : `Creato e salvato in ${appNativa}: ${documentoCreato.percorso}`
+        return { ...risultatoVerificato(conferma), eseguito: true, consegna: ultimaConsegna }
+      }
       const dichiarato = attrezzi.daNomeTool(c.name)
       if (dichiarato) {
         // un attrezzo dichiarato con una `query` è comunque una ricerca, e si dice
@@ -2544,8 +2657,12 @@ export async function svolgi(
     messaggi.push({ role: 'user', content: risultati })
   }
 
+  if (ultimaConsegna) return {...risultatoVerificato(cfgLingua() === 'en' ? 'The document was saved but needs review.' : 'Il documento è salvato ma deve essere rivisto.'), eseguito:true, consegna:ultimaConsegna}
   if (!testo.trim()) throw new Error('È tornata una risposta vuota. Riprova.')
-  return risultatoVerificato(testo)
+  if (appNativa && !testo.trim().endsWith('?')) throw new Error(cfgLingua() === 'en'
+    ? `The document was not created in ${appNativa}. No completed delivery was recorded. Try again.`
+    : `Il documento non è stato creato in ${appNativa}. Nessuna consegna completata è stata registrata. Riprova.`)
+  return { ...risultatoVerificato(testo), ...(appNativa ? { daChiedere: true } : {}) }
 }
 
 /**

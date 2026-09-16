@@ -30,6 +30,7 @@ mkdirSync(join(CASA, '.myynd'), { recursive: true })
 writeFileSync(join(CASA, '.myynd', 'config.json'), JSON.stringify({ lingua: 'it' }), { mode: 0o600 })
 const CASA_VERA = process.env.HOME
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const note = await import('./connettori/note.ts')
 const accesso = await import('./connettori/accesso.ts')
@@ -198,6 +199,44 @@ test('l’accesso completo al disco si legge dai fatti: EPERM è «no», una car
   chmodSync(notes, 0o700)
   // sulla macchina vera la risposta è una delle tre, senza lanciare
   assert.ok(['si', 'no', 'non-mac'].includes(accesso.accessoCompleto()))
+})
+
+test('fresh Notes diagnosis opens exact files read-only, closes descriptors, and ignores only absent sidecars',()=>{
+ const opened:string[]=[],closed:number[]=[]
+ const current=accesso.accessoNote(CASA,'darwin',{
+  apri:p=>{opened.push(p);if(p.endsWith('-shm'))throw Object.assign(new Error('missing'),{code:'ENOENT'});return opened.length},
+  chiudi:fd=>{closed.push(fd)}
+ })
+ assert.equal(current.stato,'leggibile')
+ assert.equal(opened.length,3)
+ assert.match(opened[0]!,/group\.com\.apple\.notes\/NoteStore\.sqlite$/)
+ assert.deepEqual(closed,[1,2])
+ assert.ok(Number.isFinite(Date.parse(current.verificato)))
+ const denied=accesso.accessoNote(CASA,'darwin',{
+  apri:p=>{if(p.endsWith('-wal'))throw Object.assign(new Error('denied'),{code:'EPERM'});return 1},chiudi:()=>{}
+ })
+ assert.equal(denied.stato,'negato')
+ assert.equal(denied.fase,'wal')
+ assert.equal(denied.codice,'EPERM')
+})
+
+test('Notes permission diagnosis distinguishes missing archive, current denial and IO failure and never caches a denial',()=>{
+ let code='EPERM'
+ const probe={apri:()=>{throw Object.assign(new Error('fixture'),{code})},chiudi:()=>assert.fail('nothing was opened')}
+ assert.equal(accesso.accessoNote(CASA,'darwin',probe).stato,'negato')
+ code='ENOENT';assert.equal(accesso.accessoNote(CASA,'darwin',probe).stato,'assente')
+ code='EIO';assert.equal(accesso.accessoNote(CASA,'darwin',probe).stato,'errore')
+ assert.equal(accesso.accessoNote(CASA,'win32',probe).stato,'non-mac')
+ assert.equal(accesso.accessoNote(CASA,'darwin',{apri:()=>1,chiudi:()=>{}}).stato,'leggibile')
+})
+
+test('an unreadable Notes WAL fails honestly rather than silently indexing an old base database',async()=>{
+ if(process.getuid?.()===0)return
+ const p=scriviDb(join(CASA,'wal-denied'),[],[{pk:1,titolo:'Fixture',cartella:null,corpo:corpoNota('fixture private text')}])
+ writeFileSync(p+'-wal','fixture WAL')
+ chmodSync(p+'-wal',0o000);CHIUSE.push(p+'-wal')
+ await assert.rejects(note.leggi(p),/accesso completo al disco/)
+ chmodSync(p+'-wal',0o600)
 })
 
 // — nel catalogo, nel recinto, in casa —

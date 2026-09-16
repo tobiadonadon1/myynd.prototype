@@ -1,3 +1,7 @@
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { join } from 'node:path'
+import { withBackgroundWork } from './lavoro-background.ts'
+import { verificaBaseRevisione } from './revisioni.ts'
 // La delega: quando un compito passa a Myynd.
 //
 // È il punto in cui la lista smette di essere una lista. Scrivi «mandare il
@@ -26,6 +30,8 @@ import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as invio from './invio.ts'
 import * as progetti from './progetti.ts'
+import { fonteValida } from './iniziativa.ts'
+import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import { senzaTrattini, soloDomanda } from './testo.ts'
 
 export type Evento =
@@ -56,6 +62,9 @@ const ascoltatori = new Set<Ascoltatore>()
 export function ascolta(f: (e: Evento) => void, di: string | null = chi.adesso()): () => void {
   const a: Ascoltatore = { f, di }
   ascoltatori.add(a)
+  for (const lavoro of passiAttivi.values()) {
+    if (lavoro.di === di) { try { f(lavoro.evento) } catch { /* listener owns errors */ } }
+  }
   return () => { ascoltatori.delete(a) }
 }
 
@@ -102,8 +111,12 @@ export function annunciaPronto(id: string) {
   if (c) annuncia({ fase: 'pronto', id, compito: c })
 }
 
+const passiAttivi = new Map<string, { di: string | null; evento: Extract<Evento, { fase: 'lavoro' }> }>()
+
 function annuncia(e: Evento) {
   const di = chi.adesso()
+  if (e.fase === 'lavoro') passiAttivi.set(chiave(e.id, di), { di, evento: e })
+  else if ('id' in e) passiAttivi.delete(chiave(e.id, di))
   for (const a of ascoltatori) {
     if (a.di !== di) continue
     // un ascoltatore che esplode non deve fermare gli altri né il lavoro
@@ -121,7 +134,7 @@ function annuncia(e: Evento) {
  * riavvio. Qui la persona si segna quando la riga entra, e si rimette prima di
  * lavorarla. Gli id li fa il client, quindi da soli non bastano a distinguere.
  */
-type Voce = { utente: string | null; id: string }
+type Voce = { utente: string | null; id: string; nativa: boolean; accodato: number }
 const coda: Voce[] = []
 /**
  * Su cosa sta lavorando adesso, per persona. Una riga alla volta per ciascuno
@@ -146,6 +159,7 @@ const inLavoro = (k: string, utente: string | null) => inCorsoDi.get(utente ?? '
  * risultato non lo vuoi più, e quando arriva si butta.
  */
 const richiamati = new Set<string>()
+const interruzioni = new Map<string, AbortController>()
 
 /**
  * Affida un compito a Myynd.
@@ -154,7 +168,7 @@ const richiamati = new Set<string>()
  * ad aspettarlo. Riaffidare un compito già in coda non lo mette due volte —
  * capita, cliccando due volte, e due bozze per la stessa riga sono un difetto.
  */
-export function affida(id: string, modo: string) {
+export function affida(id: string, modo: string, nativa = true) {
   const c = store.compito(id)
   if (!c) return
 
@@ -169,13 +183,14 @@ export function affida(id: string, modo: string) {
 
   // quello che sta girando adesso non serve più: si butta invece di lasciarlo
   // scrivere una bozza del modo vecchio sopra a quella che stai per chiedere
-  if (inLavoro(k, utente)) richiamati.add(k)
+  if (inLavoro(k, utente)) { richiamati.add(k); interruzioni.get(k)?.abort() }
 
   const dove = coda.findIndex(v => v.id === id && v.utente === utente)
   if (dove >= 0) coda.splice(dove, 1)
 
+  console.info(`myynd · worker · queued · ${id} · busy=${inCorsoDi.has(utente ?? '')} · native=${nativa}`)
   store.affidaCompito(id, modo)
-  coda.push({ utente, id })
+  coda.push({ utente, id, nativa, accodato: Date.now() })
   gira()
 }
 
@@ -192,13 +207,17 @@ function gira() {
     const [voce] = coda.splice(dove, 1)
     const k = chiave(voce.id, voce.utente)
     inCorsoDi.set(voce.utente ?? '', k)
+    console.info(`myynd · worker · starting · ${voce.id} · queue_ms=${Date.now() - voce.accodato}`)
     // si lavora come la persona che l'ha affidato, non come chi ha acceso il
     // giro: è la differenza fra il suo indice e quello di un altro
     void Promise.resolve()
-      .then(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id)) : svolgiUno(voce.id))
+      .then(() => withBackgroundWork(() => voce.utente ? chi.dentro(voce.utente, () => svolgiUno(voce.id, voce.nativa)) : svolgiUno(voce.id, voce.nativa)))
       .catch(e => console.error('myynd · compito', voce.id, e))
       .finally(() => {
+        console.info(`myynd · worker · released · ${voce.id}`)
         inCorsoDi.delete(voce.utente ?? '')
+        interruzioni.delete(k)
+        passiAttivi.delete(k)
         richiamati.delete(k)
         gira()
       })
@@ -230,9 +249,11 @@ type Ferri = {
   /** Da bozza pronta a email pronta: quarta chiamata, stesso motivo delle altre tre. */
   preparaEmail: typeof claude.preparaEmail
   /** Se c'è una casella da cui mandare: senza, non si prepara niente. */
+  salvaBozzaCasella: typeof salvaBozzaCasella
   postaCollegata: () => boolean
 }
 const VERI: Ferri = {
+  salvaBozzaCasella,
   svolgi: (...a) => claude.svolgi(...a),
   chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
   domandeDaFare: (...a) => claude.domandeDaFare(...a),
@@ -249,7 +270,7 @@ export function perProva(f: Partial<Ferri> | null) {
   ferri = f ? { ...VERI, ...f } : VERI
 }
 
-async function svolgiUno(id: string) {
+async function svolgiUno(id: string, nativa: boolean) {
   // tutto dentro il try, compresa la lettura: `compito()` può fallire come
   // qualunque altra query, e se fallisce fuori di qui si porta via la coda
   let c: store.Compito | null = null
@@ -262,29 +283,47 @@ async function svolgiUno(id: string) {
   // può essere stato tolto o richiamato mentre era in fila: non è un errore
   if (!c || c.stato !== 'delegato' || richiamati.has(chiave(id))) return
 
+  const controller = new AbortController()
+  interruzioni.set(chiave(id), controller)
   annuncia({ fase: 'preso', id })
+  annuncia({ fase: 'lavoro', id, passo: { passo: 'preparo' } })
+  const iniziato = Date.now()
+  let ultimoPasso: string | undefined
 
   try {
     // Il permesso viaggia con la riga: qui non si va a rileggere niente, si
     // usa quello che c'era scritto quando la riga è nata. Un compito scritto a
     // mano non ne ha, e lavora come ha sempre lavorato.
+    if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
+      // Withdraw automatic work without inventing user dismissal feedback.
+      store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
+      annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+    }
     const dato = c.attrezzi
     const progetto = c.progetto ? progetti.trova(c.progetto) : null
     const nota = progetto && progetto.stato !== 'chiuso'
       ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
       : c.nota
-    const { testo: grezzo, fonti, verificaDocumenti } = await ferri.svolgi(
+    console.info(`myynd · worker · entering-production · ${id} · elapsed_ms=${Date.now() - iniziato}`)
+    const { testo: grezzo, fonti, verificaDocumenti, eseguito, daChiedere, consegna } = await ferri.svolgi(
       c.testo, nota, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
       dato?.cartella ?? null,
       // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
       // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
       // richiamo si tace: quella riga non è più sua
-      p => { if (!richiamati.has(chiave(id))) annuncia({ fase: 'lavoro', id, passo: p }) },
+      p => { if (!richiamati.has(chiave(id))) {
+        if (p.passo !== ultimoPasso) {
+          console.info(`myynd · worker · stage=${p.passo} · ${id} · elapsed_ms=${Date.now() - iniziato}`)
+          ultimoPasso = p.passo
+        }
+        annuncia({ fase: 'lavoro', id, passo: p })
+      } },
       // la riga può essere nata da un documento preciso — «rispondere a
       // Rossi» — e allora la bozza parte da lì, non da una ricerca
       c.doc,
-      dato
+      dato,
+      { nativa, signal: controller.signal, taskId: c.id }
     )
     // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
     // butta invece di comparire sotto una riga che hai già ripreso in mano
@@ -299,7 +338,7 @@ async function svolgiUno(id: string) {
     // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
     // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
     // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
-    const { chiede, domanda } = await ferri.chiedeAiuto(c.testo, testo)
+    const { chiede, domanda } = eseguito ? { chiede: !!consegna?.revisione && consegna.revisione.esito !== 'pass', domanda: '' } : daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo)
     if (richiamati.has(chiave(id))) return
 
     /*
@@ -327,36 +366,46 @@ async function svolgiUno(id: string) {
       throw new Error('Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.')
     }
 
+    if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
+      // Withdraw automatic work without inventing user dismissal feedback.
+      store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
+      annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+    }
+
+    await verificaBaseRevisione(c)
+
     // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
     if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
+    if (consegna) store.scriviConsegnaCompito(id, consegna)
     ritentati.delete(chiave(id))
 
     // Se si è fermato, le stesse cose dette come si dicono a voce: tre domande
     // con le risposte da toccare. Se non ci riesce resta il paragrafo di prima,
     // che funzionava già — non vale la pena bloccare una riga per delle opzioni.
-    if (chiede) {
+    if (chiede && !eseguito) {
       const righe = await ferri.domandeDaFare(c.testo, testo).catch(() => [])
       if (righe.length && !richiamati.has(chiave(id))) store.chiediSuCompito(id, righe)
-    } else {
+    } else if (!eseguito) {
       // e se è pronta, l'email lo è già: si annuncia dopo, così il «pronto»
       // arriva con dentro a chi va — un gesto solo, non due attese
       await preparaLaMail(c, testo, fonti)
     }
 
     const fatto = store.compito(id)
-    if (fatto) annuncia({ fase: chiede ? 'chiede' : 'pronto', id, compito: fatto })
+    if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
   } catch (e) {
     if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
     const k = chiave(id)
     if (PASSEGGERO.test(guaio) && !ritentati.has(k)) {
       ritentati.add(k)
+      annuncia({ fase: 'preso', id })
       console.warn(`myynd · compito ${id}: ${guaio} — riprovo fra due minuti`)
       const utente = chi.adesso()
       setTimeout(() => {
         const ancora = () => store.compito(id)?.stato === 'delegato'
-        if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id }); gira() }
+        if (utente ? chi.dentro(utente, ancora) : ancora()) { coda.push({ utente, id, nativa, accodato: Date.now() }); gira() }
         else ritentati.delete(k)
       }, RIPROVA_FRA).unref()
       return
@@ -395,9 +444,26 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
     const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc)
     if (!e || richiamati.has(chiave(c.id))) return
     if (store.compito(c.id)?.stato !== 'pronto') return
-    store.scriviEmailCompito(c.id, { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false })
+    const email: store.EmailPronta = { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
+    if (c.doc && (c.origine !== 'iniziativa' || fonteValida(c.doc))) {
+      const source = store.documento(c.doc)
+      if (source?.messageId) email.rispondeA = { messageId: source.messageId }
+      await verificaBaseRevisione(c)
+      email.casella = c.madre && /REVISION BASELINE: .*"tipo":"bozza"/.test(c.nota || '')
+        ? await salvaRevisioneCasella(c, email)
+        : await ferri.salvaBozzaCasella(c.id, c.doc, email)
+    }
+    if (c.madre && email.casella?.stato === 'errore') throw new Error(email.casella.errore || 'Mailbox revision could not be verified.')
+    store.scriviEmailCompito(c.id, email)
   } catch (e) {
-    console.warn(`myynd · compito ${c.id}: la bozza è pronta, l'email no —`, e instanceof Error ? e.message : e)
+    const message = e instanceof Error ? e.message : String(e)
+    if (c.madre) {
+      store.cambiaStatoCompito(c.id, 'chiede', message)
+      store.traduciRisultato(c.id, message)
+      store.scriviEmailCompito(c.id, null)
+      return
+    }
+    console.warn(`myynd · compito ${c.id}: la bozza è pronta, l'email no —`, message)
   }
 }
 
@@ -416,7 +482,7 @@ export function richiama(id: string) {
   // lasciava id nell'insieme per sempre, e — peggio — un riaffido subito dopo
   // ripuliva il segno di un lavoro ancora in volo, che quindi tornava a scrivere
   const k = chiave(id, utente)
-  if (inLavoro(k, utente)) richiamati.add(k)
+  if (inLavoro(k, utente)) { richiamati.add(k); interruzioni.get(k)?.abort() }
   const c = store.compito(id)
   // 'chiede' mancava, ed è lo stato in cui si preme «richiama» più spesso:
   // la riga ti fa una domanda, tu decidi di fartela da solo, e la riga
@@ -437,8 +503,32 @@ export function richiama(id: string) {
  * processo non tornerà da solo: senza questa riga resta lì a girare per sempre,
  * e la lista mente a chi la guarda.
  */
-export function riprendiAppesi(): number {
-  return store.riapriGliAppesi('Il lavoro si è interrotto. Riaffidamelo quando vuoi.')
+export function riprendiAppesi(pronto = claude.collegato): number {
+  const interrupted = store.compitiAppesi()
+  const reopened = store.riapriGliAppesi('Il lavoro si è interrotto. Riaffidamelo quando vuoi.')
+  // Only opt-in, read-only proactive email drafts recover automatically. A
+  // persistent attempt marker prevents a repeatedly crashing task looping.
+  if (!pronto()) return reopened
+  const path = join(cfg.cartella(), 'initiative-recovery.json')
+  let attempts: Record<string, number> = {}
+  try {
+    if (existsSync(path)) {
+      const value = JSON.parse(readFileSync(path, 'utf8'))
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return reopened
+      attempts = value
+    }
+  } catch { return reopened }
+  const candidates = interrupted.filter(c => c.origine === 'iniziativa' && c.modo === 'bozza' &&
+    !c.attrezzi && !c.consegna && !attempts[c.id] && fonteValida(c.doc)).slice(0, 2)
+  for (const c of candidates) {
+    attempts[c.id] = Date.now()
+    // Persist before queueing; after a crash, never duplicate uncertain work.
+    writeFileSync(path + '.tmp', JSON.stringify(attempts), { mode: 0o600 })
+    renameSync(path + '.tmp', path)
+    affida(c.id, 'bozza', false)
+    console.info(`myynd · worker · recovered-read-only-draft · ${c.id}`)
+  }
+  return reopened
 }
 
 /**

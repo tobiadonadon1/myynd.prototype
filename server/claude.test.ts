@@ -693,3 +693,25 @@ test('saved direct-email policy constrains summary tools and an automatic origin
   await assert.rejects(() => claude.svolgi(question, null, 'bozza', [], null, undefined, current.id, policy), /mentre preparavo il risultato/)
   progetti.chiudi(p.id)
 })
+
+test('native delegation rejects prose-only claims and unrequested app writes', async () => {
+  fornitoreFinto([{ testo: 'I have created your essay in Pages.' }])
+  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null, null,
+    { nativa: true, signal: new AbortController().signal }), /not created|non è stato creato/)
+  fornitoreFinto([{ chiamate: [{ name: 'crea_documento_app', input: { app: 'TextEdit', titolo: 'Garden', testo: 'An essay.' } }] }])
+  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages', null, 'tutto', [], null, undefined, null, null,
+    { nativa: true, signal: new AbortController().signal }), /Pages only/)
+  fornitoreFinto([{ chiamate: [{ name: 'crea_documento_app', input: { app: 'Pages', titolo: 'Garden', testo: 'An essay.' } }] }])
+  await assert.rejects(() => claude.svolgi('Write an essay about gardens in Pages'), /not authorized/)
+})
+
+test('native delegation can ask for an essential topic, but cancellation prevents model and app work', async () => {
+  fornitoreFinto([{ testo: 'What topic should the essay cover?' }])
+  const r = await claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
+    { nativa: true, signal: new AbortController().signal })
+  assert.equal(r.eseguito, undefined)
+  assert.match(r.testo, /topic/)
+  const stop = new AbortController(); stop.abort()
+  await assert.rejects(() => claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
+    { nativa: true, signal: stop.signal }), /abort/i)
+})

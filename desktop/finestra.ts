@@ -9,6 +9,7 @@
 // I link verso fuori escono nel browser. Tutto quello che non è la nostra
 // origine e non è http(s) resta fuori e basta: la finestra non è un browser.
 
+import { mailMessageLink } from './mail-link.ts'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import * as impostazioni from './impostazioni.ts'
@@ -81,6 +82,7 @@ function visibile(r: impostazioni.Riquadro): boolean {
 }
 
 function apriFuoriSePuoi(url: string) {
+  if (mailMessageLink(url)) { void shell.openExternal(url); return }
   try {
     const u = new URL(url)
     if (u.protocol === 'http:' || u.protocol === 'https:') void shell.openExternal(url)

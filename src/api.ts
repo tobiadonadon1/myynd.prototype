@@ -114,6 +114,7 @@ export type Stato = {
   sessioniCodice: number
   /** L'accesso completo al disco per Myynd: le Note si leggono solo con «si». «non-mac» = non parlarne. */
   accessoDisco: 'si' | 'no' | 'non-mac'
+  accessoNote?: {stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac';verificato:string;fase?:string;codice?:string}
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
   /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
@@ -126,14 +127,14 @@ export type Stato = {
   oauth: { google: boolean; microsoft: boolean; ritorno: string | null }
 }
 
-import { frasi, lingua, t } from './lingua'
-import { desktop } from './desktop'
+import { frasi, lingua, t } from './lingua.ts'
+import { desktop } from './desktop.ts'
 
 const CHIAVE = 'myynd.token'
 
 // Con MYYND_DEV il server apre all'avvio una sessione da questo token: serve a
 // non ripassare dall'accesso a ogni riavvio, ma resta un token come gli altri.
-const TOKEN_SVILUPPO = import.meta.env.VITE_MYYND_DEV === '1' ? 'sviluppo-non-in-produzione' : ''
+const TOKEN_SVILUPPO = import.meta.env?.VITE_MYYND_DEV === '1' ? 'sviluppo-non-in-produzione' : ''
 
 export const sessione = {
   token: () => localStorage.getItem(CHIAVE) || TOKEN_SVILUPPO,
@@ -583,6 +584,7 @@ export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
  * letta; `rispondeA` che partirà dentro il filo del messaggio a cui risponde.
  */
 export type EmailPronta = {
+  casella?: { stato: 'salvata' | 'errore'; id?: string; url?: string; errore?: string }
   a: string
   oggetto: string
   corpo: string
@@ -591,6 +593,11 @@ export type EmailPronta = {
 }
 
 export type Compito = {
+  /** Verified native artifact; never inferred from the response text. */
+  consegna?: { app: 'Pages' | 'TextEdit'; titolo: string; percorso: string
+  anteprima?: string; pagine?: number; stile?: string; desktop?: string
+  revisione?: { esito: 'pass' | 'revise' | 'unavailable'; problemi: string[] }
+  } | null
   id: string
   testo: string
   nota: string | null
@@ -653,7 +660,7 @@ export type Portato =
  * esce in inglese sotto una riga inglese, cosa che una frase già scritta dal
  * server non potrebbe fare.
  */
-export type PassoCompito = { passo: 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
+export type PassoCompito = { passo: 'preparo' | 'cerco' | 'apro' | 'scrivo'; dettaglio?: string }
 
 /** Come va un compito affidato a Myynd, mentre ci lavora. */
 export type EventoCompito =
@@ -920,6 +927,22 @@ export type AccessoChatGPT = { stato: 'pending' | 'completed' | 'failed' | 'canc
 /** L'accesso all'account Claude, fatto da Claude Code: `url` è l'indirizzo di riserva se il browser non si apre. */
 export type AccessoClaude = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; url?: string; errore?: string }
 
+export type ProjectExecutionReport = {
+  id: string
+  state: 'verified' | 'unverified' | 'failed' | 'cancelled' | 'no_changes'
+  source: string
+  workspace: string
+  reportFile: string
+  changedFiles: { path: string; kind: 'added' | 'modified' | 'deleted' }[]
+  verification: { status: 'passed' | 'failed' | 'unavailable' | 'cancelled'; command?: string[]; exitCode?: number | null; output?: string }
+  agentFinished: boolean
+  runtimeProvenance?: { runtime: 'claude' | 'hermes'; executable: string; version?: string; scope: 'copy-files'; model?: string; provider?: string }
+  team?: {mode:'worker-reviewer'; acceptanceCriteria:string; accepted:boolean; roles: {role:'worker'|'reviewer'; runtime:'claude'|'hermes'; outcome:string; findings?:string[]}[]}
+}
+
+export type ProjectRuntime = { id: 'claude' | 'hermes'; executable: string | null; status: 'supported' | 'missing' | 'incompatible'; version?: string; reason?: string; defaults?: { model?: string; provider?: string }; inferenceCredentialConfigured?:boolean; authenticated?:boolean; authenticationPending?:boolean }
+export type ProjectWorkRequest = { cartella: string; passo: 'piano' | 'fai'; richiesta?: string; runtime?: 'claude' | 'hermes'; hermes?: { files: string[]; model: string; provider: string }; team?:boolean; acceptanceCriteria?:string }
+
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
@@ -1018,7 +1041,7 @@ export const api = {
     json<EmailPronta>(`/api/compiti/${encodeURIComponent(id)}/prepara-email`, { method: 'POST' }),
 
   /** C'è Claude Code su questa macchina, e in quali cartelle può lavorare. */
-  lavoroPronto: () => json<{ pronto: boolean; cartelle: string[] }>('/api/lavoro/pronto'),
+  lavoroPronto: () => json<{ pronto: boolean; cartelle: string[]; runtimes?: ProjectRuntime[] }>('/api/lavoro/pronto'),
 
   /**
    * Affida la riga a Claude Code dentro un progetto.
@@ -1028,9 +1051,13 @@ export const api = {
    * `richiesta` è un testo già scritto apposta per lui — il prompt di una riga
    * in modo prompt — al posto del titolo della riga.
    */
-  lavora: (id: string, m: { cartella: string; passo: 'piano' | 'fai'; richiesta?: string }) =>
-    json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito }>(
+  lavora: (id: string, m: ProjectWorkRequest) =>
+    json<{ ok: true; passo: string; finito: boolean; compiti: Compito[]; compito: Compito; esecuzione?: ProjectExecutionReport }>(
       `/api/compiti/${encodeURIComponent(id)}/lavora`, { method: 'POST', body: JSON.stringify(m) }),
+
+  /** Apre nel Finder la copia verificabile, mai la cartella originale. */
+  apriCopiaProgetto: (reportFile: string) =>
+    json<{ ok: true }>('/api/lavoro/copia/apri', { method: 'POST', body: JSON.stringify({ reportFile }) }),
 
   /**
    * «Portami lì»: il posto vero, non una copia dentro Myynd.
@@ -1040,8 +1067,8 @@ export const api = {
    * `dove: 'progetto'` non c'era niente da aprire sul sistema: quei due posti
    * stanno dentro l'app, e ce li porta chi ha lo schermo.
    */
-  portami: (id: string) =>
-    json<Portato>(`/api/compiti/${encodeURIComponent(id)}/portami`, { method: 'POST' }),
+  portami: (id: string, opzioni?: { anteprima?: boolean }) =>
+    json<Portato>(`/api/compiti/${encodeURIComponent(id)}/portami`, { method: 'POST', body: JSON.stringify(opzioni ?? {}) }),
 
   /** Dalla bozza a un file vero, in una cartella collegata, aperto sul Mac. */
   salvaDocumento: (id: string, m: { testo: string; nome: string; formato: string; cartella?: string }) =>
@@ -1299,6 +1326,7 @@ export const api = {
 
   // — i progetti: su cosa lavora, e a cosa punta ciascuno —
   progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
+  memoriaProgetto: (id: string) => json<{ records: ProjectEvidence[] }>(`/api/progetti/${encodeURIComponent(id)}/memoria`),
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
   nuovoProgetto: (nome: string, obiettivo = '') =>
     json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
@@ -1477,6 +1505,12 @@ export const api = {
     json<{ suggerimenti: SuggerimentoAutomazione[] }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`),
   adottaAutomazione: (id: string) => json<{ id: string; automazioni: Automazione[] }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'POST' }),
   ignoraAutomazione: (id: string) => json<{ ok: true }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  regoleMittenti: () => json<{ rules: SenderRule[] }>('/api/posta/regole'),
+  aggiungiRegolaMittente: (sender: string) => json<{ rules: SenderRule[] }>('/api/posta/regole', { method: 'POST', body: JSON.stringify({ sender }) }),
+  rimuoviRegolaMittente: (id: string) => json<{ rules: SenderRule[] }>(`/api/posta/regole/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  iniziativa: () => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa'),
+  impostaIniziativa: (attiva: boolean) => json<{ attiva: boolean; inPausa: boolean; oggi: number; limiteGiornaliero: number; prossima: number | null }>('/api/iniziativa', { method: 'PATCH', body: JSON.stringify({ attiva }) }),
+  preparaInAnticipo: () => json<{ compito: string | null }>('/api/iniziativa/prepara', { method: 'POST' }),
   automazioni: () => json<{ automazioni: Automazione[]; ricette: StatoRicette }>('/api/automazioni'),
 
   /** Va a vedere adesso se il repository ne ha di nuove. */
@@ -1598,8 +1632,9 @@ export const api = {
     method: 'POST', body: JSON.stringify({ id })
   }),
 
-  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[] }>('/api/feed'),
-  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
+  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[] }>('/api/feed'),
+  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
+  feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json(`/api/feed/${id}/${stato}`, { method: 'POST' }),
 
   chat: () => json<{ id: string; titolo: string; quando: string }[]>('/api/chat'),
@@ -1624,7 +1659,8 @@ export const api = {
      * Interrompendo qui il server vede chiudersi la connessione e ferma anche
      * il modello: la richiesta che nessuno legge non si finisce di pagare.
      */
-    segnale?: AbortSignal
+    segnale?: AbortSignal,
+    compitoId?: string
   ): Promise<{ messaggi: Messaggio[] }> => {
     const t = sessione.token()
     let r: Response
@@ -1632,7 +1668,7 @@ export const api = {
       r = await fetch(`/api/chat/${chat}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(t ? { authorization: `Bearer ${t}` } : {}) },
-        body: JSON.stringify({ testo }),
+        body: JSON.stringify({ testo, ...(compitoId ? { compitoId } : {}) }),
         ...(segnale ? { signal: segnale } : {})
       })
     } catch (e) {
@@ -1692,7 +1728,7 @@ export type ClaudeCon = {
   con: 'abbonamento' | 'chiave'
   /** Ospitati l'abbonamento non esiste: la scheda mostra solo la chiave. */
   abbonamentoPossibile: boolean
-  abbonamento: { installato: boolean; entrato: boolean; acceso: boolean; inRiposo: boolean }
+  abbonamento: { installato: boolean; entrato: boolean; acceso: boolean; inRiposo: boolean; verificaInSospeso?: boolean }
   chiave: { collegata: boolean }
 }
 
@@ -1749,6 +1785,18 @@ export type ProgressoProgetto = {
   aperte: number; inCorso: number; daRivedere: number; completate: number; lasciate: number
   prossima: Compito | null; attivita: Compito[]
 }
+export type SenderRule = {
+  id: string; sender: string; action: 'archive'; enabled: boolean; createdAt: string; updatedAt: string
+  lastCheckedAt?: string; archivedCount?: number; lastError?: string
+}
+
+export type ProjectEvidence = {
+  id: string; projectId: string; key: string; kind: 'goal' | 'note' | 'decision' | 'observation' | 'work'
+  value: string; provenance: 'user-field' | 'user-chat' | 'source-inference' | 'task-record'
+  recordedAt: string; evidenceAt: string; quote?: string; sourceId?: string; taskId?: string
+  supersededBy?: string; stale: boolean; reason?: string
+}
+
 export type Progetto = {
   id: string
   nome: string
@@ -1759,3 +1807,5 @@ export type Progetto = {
   note: string
   origine: 'mano' | 'punto' | 'conversazione'
 }
+
+export type ProjectInitiative = { id: string; projectId: string; projectName: string; goal: string; kind: 'next-step' | 'question'; title: string; description: string; question?: string; taskId?: string; provenance: 'explicit-project'; urgent: false }

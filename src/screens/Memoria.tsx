@@ -21,7 +21,8 @@
 //     può falsificare.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Blocco, type Convinzione, type Memoria as Dati, type Progetto, type StatoProgetto } from '../api'
+import { api, type Blocco, type Convinzione, type Memoria as Dati, type Progetto, type StatoProgetto, type ProjectEvidence } from '../api'
+import './project-evidence.css'
 import { AttivitaProgetto } from '../components/AttivitaProgetto'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
@@ -301,6 +302,44 @@ const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string }> = {
   chiuso: { testo: 'rgba(34,39,31,.55)', fondo: 'rgba(34,39,31,.08)' }
 }
 
+/** Fetch only when expanded; old claims remain visible without looking current. */
+function MemoriaProgetto({p}: {p: Progetto}) {
+  const [open,setOpen]=useState(false)
+  const [records,setRecords]=useState<ProjectEvidence[] | null>(null)
+  const [error,setError]=useState(false)
+  const en=loc().startsWith('en')
+  useEffect(()=>{
+    if(!open)return
+    let alive=true
+    setError(false)
+    api.memoriaProgetto(p.id).then(r=>{if(alive)setRecords(r.records)}).catch(()=>{if(alive)setError(true)})
+    return ()=>{alive=false}
+  },[open,p.id,p.aggiornato])
+  const labels:Record<ProjectEvidence['provenance'],string>={
+    'user-field':en?'You saved this':'Salvato da te', 'user-chat':en?'You said this in chat':t('Dalla tua chat'),
+    'source-inference':en?'Inferred from a source':t('Dedotto da una fonte'), 'task-record':en?'Recorded work outcome':'Risultato del lavoro'
+  }
+  const kinds:Record<ProjectEvidence['kind'],string>={goal:en?'Goal':'Obiettivo',note:en?'Note':'Nota',decision:en?'Decision':'Decisione',observation:en?'Observation':'Osservazione',work:en?'Work':'Lavoro'}
+  const date=(value:string)=>Number.isFinite(Date.parse(value))?new Date(value).toLocaleDateString(loc(),{day:'numeric',month:'short',year:'numeric'}):(en?'Date unknown':'Data sconosciuta')
+  const row=(r:ProjectEvidence)=><li key={r.id} className="project-evidence-item" data-history={!!r.supersededBy}>
+    <div className="project-evidence-meta"><strong>{kinds[r.kind]}</strong><span>{r.supersededBy?(en?'Replaced':'Sostituito'):r.stale?(en?'Needs rechecking':'Da ricontrollare'):(en?'Current record':'Attuale')}</span></div>
+    <p>{r.value || (en?'Removed from the current project':'Rimosso dal progetto')}</p>
+    <div className="project-evidence-origin">{labels[r.provenance]} · <time dateTime={r.evidenceAt || undefined}>{date(r.evidenceAt)}</time></div>
+    {r.stale && <small className="project-evidence-warning">{en?'Not used as current knowledge. The source or task changed, is missing, or is too old.':t('Non usato come informazione attuale: fonte o attività cambiata, mancante o datata.')}</small>}
+    {r.quote && r.quote!==r.value && <blockquote>{r.quote}</blockquote>}
+  </li>
+  const current=records?.filter(r=>!r.supersededBy)??[]
+  const history=records?.filter(r=>r.supersededBy)??[]
+  return <details className="project-evidence" onToggle={e=>setOpen(e.currentTarget.open)}>
+    <summary>{en?'What Myynd remembers':'Cosa ricorda Myynd'}</summary>
+    {error?<p role="alert">{en?'Could not load this project’s memory. Close and reopen to retry.':t('Memoria non disponibile. Chiudi e riapri per riprovare.')}</p>:!records?<p role="status">{en?'Loading…':'Caricamento…'}</p>:<>
+      {!records.length && <p>{en?'No evidence history yet. Your saved goal and notes remain above.':'Nessuna cronologia. Obiettivo e note restano salvati.'}</p>}
+      <ul className="project-evidence-list">{current.map(row)}</ul>
+      {!!history.length && <details className="project-evidence-history"><summary>{en?'Previous versions':'Versioni precedenti'} <small>{history.length}</small></summary><ul className="project-evidence-list">{history.map(row)}</ul></details>}
+    </>}
+  </details>
+}
+
 function RigaProgetto({ p, cambia, acceso }: {
   p: Progetto
   cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void>
@@ -395,6 +434,7 @@ function RigaProgetto({ p, cambia, acceso }: {
           color: '#22271F', fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'none'
         }} />
       <AttivitaProgetto id={p.id} chiuso={chiuso} />
+      <MemoriaProgetto p={p} />
     </div>
   )
 }

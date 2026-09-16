@@ -1,3 +1,4 @@
+import { SenderRules } from '../components/SenderRules'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Attrezzo, type Automazione, type Raccolta, type SuggerimentoAutomazione } from '../api'
 import { loc, t } from '../lingua'
@@ -26,6 +27,8 @@ import '../automazioni/automazioni.css'
 const SOGLIA = 8
 
 export function Automazioni({ v }: { v: Vals }) {
+  const [iniziativa, setIniziativa] = useState<Awaited<ReturnType<typeof api.iniziativa>> | null>(null)
+  const [iniziativaEsito, setIniziativaEsito] = useState('')
   const [tutte, setTutte] = useState<Automazione[]>([])
   const [catalogo, setCatalogo] = useState<Attrezzo[]>([])
   const [cartelle, setCartelle] = useState<string[]>([])
@@ -46,8 +49,8 @@ export function Automazioni({ v }: { v: Vals }) {
   const connessioni = v.connAttivi.map(c => c.id).sort().join(',')
   const carica = useCallback(async () => {
     setCarico(true); setErrore('')
-    const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.suggerimentiAutomazioni()])
-    const [a, c, r, s] = risultati
+    const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.suggerimentiAutomazioni(), api.iniziativa()])
+    const [a, c, r, s, i] = risultati
     if (a.status === 'fulfilled') { setTutte(a.value.automazioni); setRepo(!!a.value.ricette.repo) }
     else setErrore(String(a.reason?.message ?? a.reason))
     if (c.status === 'fulfilled') { setCatalogo(c.value.attrezzi); setCartelle(c.value.cartelle) }
@@ -56,6 +59,8 @@ export function Automazioni({ v }: { v: Vals }) {
     else setErrore(String(r.reason?.message ?? r.reason))
     if (s.status === 'fulfilled') { setSuggerimenti(s.value.suggerimenti); setScoperteErrore('') }
     else setScoperteErrore(String(s.reason?.message ?? s.reason))
+    if (i.status === 'fulfilled') setIniziativa(i.value)
+    else setErrore(String(i.reason?.message ?? i.reason))
     setCarico(false)
   }, [])
   useEffect(() => { void carica() }, [carica, connessioni])
@@ -200,6 +205,19 @@ export function Automazioni({ v }: { v: Vals }) {
         <button className="auto-button primary" onClick={() => setAperto('')}><IconPiu size={14} />{t('Crea automazione')}</button>
       </div>
     </header>
+    {iniziativa && <section className="auto-initiative" aria-label={t('Prepara in anticipo')}>
+      <div><h2>{t('Prepara in anticipo')}</h2><p>{t('Fino a due preparazioni al giorno: risposte nella tua posta, prossimi passi, fatture e campi di moduli da rivedere. Nessun invio, pagamento o finestra aperta.')}</p>
+      {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}
+      <small>{t('Funziona mentre Myynd è aperto e il Mac è sveglio.')}</small></div>
+      <div className="auto-initiative-controls"><button className="auto-switch" role="switch" aria-checked={iniziativa.attiva} aria-label={t('Prepara in anticipo')} disabled={!!occupato}
+        onClick={() => azione('iniziativa', async () => { setIniziativa(await api.impostaIniziativa(!iniziativa.attiva)); setIniziativaEsito('') })}><span /></button>
+      <span>{iniziativa.attiva ? t('Attiva') : t('In pausa')}</span>
+      {iniziativa.attiva && <button className="auto-button" disabled={!!occupato || iniziativa.inPausa} onClick={() => azione('iniziativa', async () => {
+        const r = await api.preparaInAnticipo(); setIniziativa(await api.iniziativa()); setIniziativaEsito(r.compito ? t('Preparo il lavoro da rivedere.') : t('Nessun nuovo lavoro da preparare adesso.'))
+      })}>{t('Prepara ora')}</button>}</div>
+      {iniziativaEsito && <p role="status">{iniziativaEsito}</p>}
+    </section>}
+    <SenderRules />
     {errore && <div className="auto-error" role="alert">{t(errore)} <button className="auto-button" onClick={carica}>{t('Riprova')}</button></div>}
     {scoperteErrore && <p role="alert" className="auto-error">{t(scoperteErrore)}</p>}
     <section aria-labelledby="auto-library-title">

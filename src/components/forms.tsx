@@ -11,6 +11,7 @@ import { desktop } from '../desktop'
 import { knob, track } from '../ui'
 import { preparaApertura } from '../navigazione.ts'
 import { controllaAccessoChatGPT, nomePianoChatGPT } from '../chatgpt-accesso.ts'
+import {statoAccessoNote} from '../note-access.ts'
 
 export type Tema = 'scuro' | 'chiaro'
 
@@ -244,13 +245,23 @@ function statoStrada(collegata: boolean, inUso: boolean, mancante?: string): { t
  * Adesso Anthropic e OpenAI sono due schede uguali, con le stesse due strade.
  */
 export function FormClaude({ tema, ok }: Props) {
+  const verifiche = useRef(0)
   const [s, setS] = useState<ClaudeCon | null>(null)
   const guarda = useCallback(() => { api.claude().then(setS).catch(() => {}) }, [])
   useEffect(() => { guarda() }, [guarda])
+  // A cold native credential check can time out without losing the account.
+  useEffect(() => {
+    if (!s?.abbonamento.verificaInSospeso) { verifiche.current = 0; return }
+    if (verifiche.current >= 3) return
+    verifiche.current++
+    const timer = setTimeout(guarda, 5_000)
+    return () => clearTimeout(timer)
+  }, [s, guarda])
   return (
     <div>
       <div style={guida(tema)}>{t('Claude, con il tuo account o con una chiave API. Puoi collegare tutt’e due e scegliere quale lavora.')}</div>
       <ConAccountClaude tema={tema} s={s} ok={ok} ricarica={guarda} />
+      {s?.abbonamento.verificaInSospeso && <button type="button" onClick={() => { verifiche.current = 0; guarda() }} style={azione(tema)}>{t('Riprova')}</button>}
       <ConChiaveClaude tema={tema} s={s} ok={ok} ricarica={guarda} />
     </div>
   )
@@ -326,7 +337,7 @@ function ConAccountClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nu
   if (s && !s.abbonamentoPossibile) return null
   const a = s?.abbonamento
   const inUso = !!a?.entrato && s?.con === 'abbonamento'
-  const stato = !s ? null : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
+  const stato = !s ? null : a?.verificaInSospeso ? { testo: t('Verifica della connessione in corso…'), pronto: false } : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
 
   return (
     <Strada tema={tema} titolo={t('Con il tuo account Claude')} stato={stato}>
@@ -342,7 +353,7 @@ function ConAccountClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nu
       <Errore testo={err} />
       {a?.installato && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          {!attesa && <button type="button" onClick={accedi} disabled={occupato} style={azione(tema)}>{a.entrato ? t('Accedi con un altro account') : t('Accedi con Claude')}</button>}
+          {!attesa && !a.verificaInSospeso && <button type="button" onClick={accedi} disabled={occupato} style={azione(tema)}>{a.entrato ? t('Accedi con un altro account') : t('Accedi con Claude')}</button>}
           {a.entrato && !inUso && !attesa && <button type="button" onClick={usa} disabled={occupato} style={azione(tema)}>{t('Usa il mio account')}</button>}
           {attesa && <button type="button" onClick={annulla} style={azione(tema)}>{t('Annulla')}</button>}
         </div>
@@ -1319,9 +1330,19 @@ export function FormNote({ tema, ok }: Props) {
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
+  const [diagnosiNote,setDiagnosiNote]=useState<string|null>(null)
 
   useEffect(() => {
-    api.stato().then(s => setAccesso(s.accessoDisco)).catch(() => {})
+    let live = true
+    const refresh = () => api.stato().then(s => { if (live) {
+      const diagnosis=statoAccessoNote(s)
+      setAccesso(diagnosis.permessoNegato?'no':s.accessoNote?.stato==='non-mac'?'non-mac':'si')
+      setDiagnosiNote(diagnosis.permessoNegato?null:diagnosis.messaggio)
+      if (s.accessoNote?.stato === 'leggibile') setErr('')
+    } }).catch(() => {})
+    void refresh()
+    window.addEventListener('focus', refresh)
+    return () => {live = false; window.removeEventListener('focus', refresh)}
   }, [])
 
   const collega = async () => {
@@ -1334,7 +1355,8 @@ export function FormNote({ tema, ok }: Props) {
   return (
     <div>
       <div style={guida(tema)}>{t('Le note dell’app Note di Apple su questo Mac.')}</div>
-      {accesso === 'no' && <AccessoDisco tema={tema} />}
+      {accesso === 'no' && <AccessoDisco tema={tema} coda={t('Il Mac nega l’accesso a questa copia di Myynd. Se il permesso è già attivo, chiudi Myynd completamente e riapri la copia in Applicazioni.')} />}
+      {diagnosiNote && <div style={nota(tema)}>{t(diagnosiNote)}</div>}
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega le Note')}</Conferma>
       <Aiuto tema={tema} titolo={t('Cosa legge, e cosa no')}>

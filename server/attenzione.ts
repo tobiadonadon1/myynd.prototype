@@ -1,6 +1,7 @@
 import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import { leggi } from './config.ts'
+import { projectInitiatives } from './project-initiative.ts'
 import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
@@ -13,7 +14,8 @@ function pertinente(d: store.Documento, adesso: number) {
 /** Apply the same admission rules to old cached cards as to a new reading.
  * Keep the stored evidence and feedback intact; this is only a view. */
 export function feedAttuale(adesso = Date.now()) {
-  const voci = store.elencoFeed('aperto')
+  const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa').map(c => c.doc))
+  const voci = store.elencoFeed('aperto').filter(v => !preparati.has(v.doc))
   const docs = new Map(voci.flatMap(v => {
     const d = v.doc ? store.documento(v.doc) : null
     return d ? [[d.id, d] as const] : []
@@ -66,3 +68,6 @@ export function percheVuoto(adesso = Date.now()): PercheVuoto {
   }
   return conto
 }
+
+/** Non-urgent project progress, separate from source-backed feed cards. */
+export function iniziativeProgetti() { return projectInitiatives(compitiAttuali()) }

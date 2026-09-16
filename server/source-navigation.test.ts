@@ -107,3 +107,27 @@ test('project API uses canonical records without deleting legacy associations or
   assert.equal(edited.status, 200)
   assert.ok((await list()).progetti.some(p => p.id === idsProgetto.alias), 'explicitly confirming a legacy record restores it to the ordinary list')
 })
+
+test('sender rule API waits for persistence and removal and rejects wildcard scope',async()=>{
+  const bad=await post('/api/posta/regole',{sender:'*@example.com'})
+  assert.equal(bad.status,400)
+  const added=await post('/api/posta/regole',{sender:'newsletter@example.com'})
+  assert.equal(added.status,200)
+  const rules=added.body.rules as {id:string;sender:string;enabled:boolean}[]
+  assert.equal(rules.length,1)
+  assert.equal(rules[0].enabled,true)
+  assert.equal(rules[0].sender,'newsletter@example.com')
+  const gone=await fetch(`${base}/api/posta/regole/${rules[0].id}`,{method:'DELETE',headers:{authorization:`Bearer ${token}`}})
+  assert.equal(gone.status,200)
+  assert.equal((await gone.json() as {rules:{enabled:boolean}[]}).rules[0].enabled,false)
+  const unauthorized=await fetch(`${base}/api/posta/regole`)
+  assert.equal(unauthorized.status,401)
+})
+test('project evidence API returns persisted goal provenance and protects missing projects',async()=>{
+  const response=await fetch(`${base}/api/progetti/${idsProgetto.base}/memoria`,{headers:{authorization:`Bearer ${token}`}})
+  assert.equal(response.status,200)
+  const {records}=await response.json() as {records:{kind:string;value:string;provenance:string}[]}
+  assert.ok(records.some(r=>r.kind==='goal' && r.value==='Improve internal AI systems' && r.provenance==='user-field'))
+  const missing=await fetch(`${base}/api/progetti/does-not-exist/memoria`,{headers:{authorization:`Bearer ${token}`}})
+  assert.equal(missing.status,404)
+})

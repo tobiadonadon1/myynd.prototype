@@ -1,3 +1,4 @@
+import { COLORE_NOTE } from './colori-fonti.ts'
 // Quello che un'automazione ha il permesso di aprire.
 //
 // Fino a qui un'automazione guardava «l'indice»: un mucchio solo con dentro la
@@ -175,7 +176,7 @@ export const ATTREZZI: Attrezzo[] = [
     etichetta: { it: 'Note', en: 'Notes' },
     spiega: { it: 'Legge le tue Note di Apple.', en: 'Reads your Apple Notes.' },
     serve: 'note',
-    tinta: '#B08D2B',
+    tinta: COLORE_NOTE,
     tool: cercaIn('note.leggi', 'le sue Note di Apple', 'una nota')
   },
   {

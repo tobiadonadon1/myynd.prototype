@@ -20,6 +20,7 @@ const FUORI = join(CASA, 'Altrui')
 mkdirSync(PROGETTO, { recursive: true })
 mkdirSync(FUORI, { recursive: true })
 process.env.HOME = CASA
+process.env.MYYND_DATI = join(CASA, '.myynd')
 
 const l = await import('./lavoro.ts')
 after(() => rmSync(CASA, { recursive: true, force: true }))
@@ -101,12 +102,12 @@ test('in modalità piano non c’è né shell né rete', () => {
   }
 })
 
-test('il passo che tocca i file lo chiede una persona, e allora può scrivere', () => {
+test('il passo che tocca i file scrive nella copia senza shell o rete', () => {
   const a = l.argomentiDi('fai')
   assert.equal(dopo(a, '--permission-mode'), 'acceptEdits')
-  // qui `Bash` serve — è come si fa girare una prova dopo aver cambiato un file —
-  // e la differenza è che questo passo lo ha letto e premuto qualcuno
-  assert.ok(!a.includes('--disallowedTools'), 'nessun attrezzo negato dopo l’approvazione')
+  const i = a.indexOf('--disallowedTools')
+  assert.ok(i > 0)
+  for (const n of ['Bash', 'WebFetch', 'WebSearch']) assert.ok(a.slice(i + 1).includes(n))
 })
 
 test('la richiesta è un argomento, non un pezzo di riga di comando', () => {

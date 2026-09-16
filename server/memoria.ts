@@ -315,16 +315,21 @@ export function salvaProgettiEspliciti(testo: string): { salvati: progetti.Proge
     .replace(/^\s*>.*$/gm, '')
     .replace(/<(?:document|attachment|untrusted_text)\b[^>]*>[\s\S]*?<\/(?:document|attachment|untrusted_text)>/gi, '').trim()
   if (!diretto) return null
-  const richiesta = /\b(?:save|set|update|change|correct|fix|remember|record|salva|imposta|aggiorna|cambia|correggi|ricorda|registra)\b.{0,65}\b(?:goals?|objectives?|projects?|obiettiv[oi]|progett[oi])\b/i.test(diretto)
+  // A read-only request or an explicit prohibition cannot become permission
+  // because it happens to contain verbs such as "create" or "change".
+  if (/\bread[ -]only\b|\b(?:sola|solo in) lettura\b|\bnon (?:creare|aggiungere|cambiare|modificare|salvare|aggiornare|registrare)\b|\b(?:do not|don['’]t|never)\s+(?:create|add|save|set|update|change|correct|fix|remember|record|modify)\b/i.test(diretto)) return null
+  const prefisso = /^(?:(?:please|per favore)[, ]+|(?:can|could|would) you\s+|(?:i want(?: you)? to|i['’]d like(?: you)? to|vorrei|voglio)\s+|(?:remember|record) that\s+)+/i
+  const domandaDiLettura = /^(?:what|which|why|how|where|when|is|are|was|were|do|does|did|qual(?:e|i)|cos['’]è|cosa|come|perch[eé]|dove|quando)\b|^(?:(?:can|could|would) you|puoi|potresti)\s+(?:tell|show|explain|summari[sz]e|list|read|dire|dirmi|mostrare|mostrarmi|spiegare|riassumere|leggere)\b/i
+  const richiesta = diretto.split(/\n/).some(line => /^(?:save|set|update|change|correct|fix|remember|record|salva|imposta|aggiorna|cambia|correggi|ricorda|registra)\b.{0,65}\b(?:goals?|objectives?|projects?|obiettiv[oi]|progett[oi])\b/i.test(line.trim().replace(prefisso,'')))
   if (!richiesta && /^(?:(?:can|could) you\s+)?(?:summari[sz]e|translate|review|critique|suggest|explain|riassumi|traduci|rivedi|spiega)\b/i.test(diretto)) return null
-  const elencoObiettivi = /\b(?:these|following|my|our|questi|seguenti|miei|nostri)\s+(?:project\s+)?(?:goals|objectives|obiettivi)\b/i.test(diretto)
+  const elencoObiettivi = /^(?:these|following|my|our|questi|seguenti|miei|nostri)\s+(?:project\s+)?(?:goals|objectives|obiettivi)\s*:/i.test(diretto)
   const pulisci = (s: string) => s.trim().replace(/[.!;]+$/, '').replace(/^["“«]|["”»]$/g, '').trim()
   const righe = diretto.split(/\n|(?<=[.!?])\s+(?=(?:My goal|Our goal|The goal|For |Set |Update |Change |Il mio obiettivo|Per |Imposta |Aggiorna ))/i)
   const modifiche: { nome: string; obiettivo?: string; stato?: progetti.Stato; nuovoNome?: string; crea?: boolean }[] = []
   let riconosciuta = richiesta
   for (const originale of righe) {
     const riga = originale.trim().replace(/^[-*•]\s+|^\d+[.)]\s+/, '').replace(/^(?:(?:please|per favore)[, ]+|(?:can|could|would) you\s+|(?:i want(?: you)? to|i['’]d like(?: you)? to|vorrei|voglio)\s+|(?:remember|record) that\s+)+/i, '').trim()
-    if (!riga || /^(?:don't|do not|never|non|evita)\b/i.test(riga)) continue
+    if (!riga || domandaDiLettura.test(riga) || /^(?:don't|do not|never|non|evita)\b/i.test(riga)) continue
     let m: RegExpMatchArray | null
     if ((m = riga.match(/^(?:my|our|the)\s+(?:goal|objective)\s+(?:for|of)\s+(.+?)(?:\s+is\s*:?\s*|:\s*)(.+)$/i)) ||
         (m = riga.match(/^(?:il mio|il nostro|l['’])?\s*obiettivo\s+(?:per|di)\s+(.+?)\s+(?:è|e'|:)\s*(.+)$/i)) ||
