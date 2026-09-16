@@ -55,6 +55,7 @@ import * as granola from './connettori/granola.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
 import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import { aperturaProgetto } from './apertura-progetto.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -3557,6 +3558,24 @@ app.post('/api/memoria/correzione', async (req, res) => {
 app.get('/api/chat', (_req, res) => res.json(store.elencoChat()))
 app.get('/api/chat/:id', (req, res) => res.json(store.messaggi(req.params.id)))
 app.delete('/api/chat/:id', (req, res) => { store.eliminaChat(req.params.id); res.json({ ok: true }) })
+
+/**
+ * «Parliamone» su un progetto: una chat nuova in cui Myynd scrive per primo.
+ *
+ * Il messaggio è scritto, non generato (`apertura-progetto.ts`): arriva
+ * all'istante e anche senza un modello. Da lì in poi è una chat come le
+ * altre, e la risposta di lui passa da `POST /api/chat/:id` con questo
+ * messaggio nello storico.
+ */
+app.post('/api/chat/:id/progetto', (req, res) => {
+  const chat = req.params.id
+  const item = iniziativeProgetti().find(i => i.id === String(req.body?.iniziativa ?? ''))
+  if (!item) return res.status(404).json({ errore: 'Questo passo non è più attuale.' })
+  if (store.esisteChat(chat)) return res.status(409).json({ errore: 'Questa chat esiste già.' })
+  store.creaChat(chat, item.projectName)
+  store.salvaMessaggio({ id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, chat, ruolo: 'a', testo: aperturaProgetto(item, cfg.lingua()) })
+  res.json({ ok: true, messaggi: store.messaggi(chat) })
+})
 
 /**
  * La risposta, mentre nasce.

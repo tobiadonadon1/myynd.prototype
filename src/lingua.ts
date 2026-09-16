@@ -115,7 +115,10 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
-  'Niente di nuovo. I tuoi progetti aspettano un passo, qui sotto.': 'Nothing new. Your projects are waiting for a step, below.',
+  'I tuoi progetti aspettano un passo, qui sotto.': 'Your projects are waiting for a step, below.',
+  'Non sono riuscito ad aprire la chat.': 'I could not open the chat.',
+  'Questo passo non è più attuale.': 'This step is no longer current.',
+  'Questa chat esiste già.': 'This chat already exists.',
   'Colore del progetto': 'Project colour',
   'Facciamo avanzare i tuoi progetti.': 'Let’s move your projects forward.',
   'Un passo per il tuo progetto': 'A step for your project',

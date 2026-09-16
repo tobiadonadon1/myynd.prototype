@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { frasi, t } from '../lingua'
 import { Hov } from '../ui'
 import { IconSu } from '../icons'
@@ -154,11 +154,9 @@ export function Chat({ v }: { v: Vals }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px 12px 18px', borderRadius: 20, background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 14px 12px 18px', borderRadius: 20, background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
         {scrivibile ? (
-          <input value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
-            placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
-            style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 15, color: '#22271F' }} />
+          <Campo v={v} rispondendo={rispondendo} />
         ) : (
           // un campo spento che dice «collega Claude» senza un posto dove farlo
           // è una porta chiusa: la riga stessa apre le connessioni su Claude
@@ -177,5 +175,31 @@ export function Chat({ v }: { v: Vals }) {
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Il campo in cui scrive, che cresce con quello che scrive.
+ *
+ * Era un `<input>` di una riga: una frase lunga finiva fuori dal bordo e non
+ * si vedeva più, «un bug». Adesso è un textarea che si alza fino a sei
+ * righe e poi scorre; Invio manda, Maiusc+Invio va a capo. L'altezza si
+ * misura a ogni resa, così torna a una riga quando il campo si svuota.
+ */
+function Campo({ v, rispondendo }: { v: Vals; rispondendo: boolean }) {
+  const el = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const x = el.current
+    if (!x) return
+    x.style.height = 'auto'
+    x.style.height = Math.min(x.scrollHeight, 6 * 22 + 4) + 'px'
+  }, [v.draftMsg])
+  return (
+    <textarea ref={el} rows={1} value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
+      placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
+      style={{
+        flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none', padding: 0, margin: 0,
+        fontFamily: 'inherit', fontSize: 15, lineHeight: '22px', color: '#22271F', overflowY: 'auto', display: 'block'
+      }} />
   )
 }

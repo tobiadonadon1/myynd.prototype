@@ -11,7 +11,6 @@ import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 import { primoParagrafo } from './essenza.ts'
 import { preparaApertura } from './navigazione.ts'
-import { projectInitiativeDraft } from './project-initiative-ui.ts'
 import { dataFonte, testoCarta } from './feed-carta.ts'
 import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
@@ -745,7 +744,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       await caricaFeed()
       // «dice che c'è un passo da chiarire, ma non mi ci porta»: la frase dice
       // dove, e la pagina porta le carte sotto gli occhi e le accende un attimo
-      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.iniziative?.length ? t('Niente di nuovo. I tuoi progetti aspettano un passo, qui sotto.') : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+      mostraToast(r.generate ? frasi.coseNuove(r.generate)
+        : (r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+          + (r.iniziative?.length ? ' ' + t('I tuoi progetti aspettano un passo, qui sotto.') : ''))
       if (!r.generate && r.iniziative?.length) setEvidenziaProgetti(Date.now())
     } catch (e) {
       const message = e instanceof Error ? t(e.message) : t('La lettura non è riuscita.')
@@ -1153,12 +1154,27 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     evidenziaProgetti,
     /** Il colore del progetto, scelto o stabile: le carte della prima pagina si vestono con questo. */
     coloreProgetto: (id: string) => coloreProgetto(progetti?.find(p => p.id === id) ?? { id }, progetti ?? []),
-    discutiIniziativa: (item: ProjectInitiative) => {
+    /*
+     * «Parliamone»: una chat nuova in cui Myynd scrive per primo.
+     *
+     * Prima si apriva una chat vuota con un messaggio *suo* già scritto nel
+     * campo, da mandare: «una frase strana, con le freccette attorno alle
+     * parole», e il campo non la mostrava nemmeno tutta. «Preferirei che
+     * Myynd mi scrivesse lui.» Le prime parole le scrive il server; qui si
+     * apre la chat con quelle dentro e il campo vuoto, pronto per lui.
+     */
+    discutiIniziativa: async (item: ProjectInitiative) => {
       chiudiIntervista()
       const chat = `th${Date.now()}`
-      filoNuovo.current = chat
-      setThread(chat); setMessaggi([]); setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
-      setDraftMsg(projectInitiativeDraft(item, stato.config.lingua === 'it' ? 'it' : 'en'))
+      try {
+        const r = await api.apriChatProgetto(chat, item.id)
+        filoNuovo.current = chat
+        setMessaggi(r.messaggi); setThread(chat); setDraftMsg('')
+        setScreen('chat'); setSearch(false); setMapFull(false); setMenu(false)
+        caricaChat().catch(() => {})
+      } catch (e) {
+        mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito ad aprire la chat.'))
+      }
     },
     scartaIniziativa: async (id: string) => {
       try { const r = await api.feedbackIniziativa(id, 'dismissed'); setIniziative(r.iniziative) }
@@ -1464,7 +1480,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // il bottone era già disabilitato mentre risponde; Invio no, e mandava due volte
     // durante l'intervista Invio risponde a Myynd, non interroga il materiale
     onKey: (e: React.KeyboardEvent) => {
-      if (e.key !== 'Enter') return
+      if (e.key !== 'Enter' || e.shiftKey) return
+      // il campo è un textarea: Invio manda, e non va a capo
+      e.preventDefault()
       if (passo !== null) { if (draftMsg.trim()) { void rispondiIntervista(draftMsg.trim()); setDraftMsg('') } return }
       if (!pensando && draftMsg.trim()) chiedi(draftMsg.trim())
     },

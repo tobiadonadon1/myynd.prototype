@@ -1645,6 +1645,9 @@ export const api = {
   chat: () => json<{ id: string; titolo: string; quando: string }[]>('/api/chat'),
   messaggi: (id: string) => json<{ id: string; role: string; text: string; sources?: { id: string; label: string }[] }[]>(`/api/chat/${id}`),
   eliminaChat: (id: string) => json(`/api/chat/${id}`, { method: 'DELETE' }),
+  /** «Parliamone» su un progetto: la chat nasce con le prime parole di Myynd già dentro. */
+  apriChatProgetto: (chat: string, iniziativa: string) =>
+    json<{ ok: true; messaggi: { id: string; role: string; text: string }[] }>(`/api/chat/${chat}/progetto`, { method: 'POST', body: JSON.stringify({ iniziativa }) }),
   /**
    * La risposta arriva a pezzi. `onDelta` viene chiamata a ogni frammento; la
    * promessa si chiude quando il messaggio è completo e salvato.
