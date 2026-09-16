@@ -1335,7 +1335,7 @@ export const api = {
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
   nuovoProgetto: (nome: string, obiettivo = '') =>
     json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
-  cambiaProgetto: (id: string, c: { nome?: string; obiettivo?: string; stato?: StatoProgetto; note?: string }) =>
+  cambiaProgetto: (id: string, c: { nome?: string; obiettivo?: string; stato?: StatoProgetto; note?: string; colore?: string }) =>
     json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(c) }),
   /** Chiudere, non cancellare: la riga resta, e un chiuso non torna nel punto. */
   chiudiProgetto: (id: string) =>
@@ -1637,7 +1637,7 @@ export const api = {
     method: 'POST', body: JSON.stringify({ id })
   }),
 
-  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[] }>('/api/feed'),
+  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[] }>('/api/feed'),
   generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
   feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json(`/api/feed/${id}/${stato}`, { method: 'POST' }),
@@ -1811,6 +1811,8 @@ export type Progetto = {
   aggiornato: string
   note: string
   origine: 'mano' | 'punto' | 'conversazione'
+  /** Il colore scelto in Memoria, `#RRGGBB`, o vuoto: allora ne ha uno stabile dall'id (`colori-progetto.ts`). */
+  colore: string
 }
 
 export type ProjectInitiative = { id: string; projectId: string; projectName: string; goal: string; kind: 'next-step' | 'question'; title: string; description: string; question?: string; taskId?: string; provenance: 'explicit-project'; urgent: false }

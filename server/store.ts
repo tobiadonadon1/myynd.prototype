@@ -1246,7 +1246,10 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     }
   },
   // Verified native deliverable metadata, separate from model-written prose.
-  d => { colonna(d, 'compiti', 'consegna', 'TEXT') }
+  d => { colonna(d, 'compiti', 'consegna', 'TEXT') },
+
+  // Un colore per progetto, scelto da lui in Memoria. In fondo, come tutte.
+  d => { colonna(d, 'progetti', 'colore', 'TEXT') }
 
 ]
 

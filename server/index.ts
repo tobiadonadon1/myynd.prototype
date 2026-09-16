@@ -54,7 +54,7 @@ import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
-import { generaDaFontiFresche, LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -2207,7 +2207,9 @@ import { feedbackProjectInitiative } from './project-initiative.ts'
 
 app.get('/api/feed', (_req, res) => {
   const ore = cfg.leggi().oreFatte ?? 48
-  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti() })
+  // e le fonti che l'ultima lettura non ha letto: la riga fissa della prima
+  // pagina si aggiorna con il feed, cioè anche dopo una rilettura di fondo
+  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(chi.adesso() ?? '') })
 })
 
 app.post('/api/feed/iniziative/:id/feedback', (req, res) => {
@@ -2231,8 +2233,18 @@ app.post('/api/feed/genera', async (_req, res) => {
       : 'Collega Claude e potrò lavorarci.'), 400)
   }
   try {
+    /*
+     * Prima si rileggevano tutte le fonti, e poi si generava: «quando premo
+     * Leggi adesso ci mette un'eternità». Adesso si genera subito da quello
+     * che c'è in indice — la risposta arriva in pochi secondi — e le fonti si
+     * rileggono dopo, di fondo, con lo stesso giro delle sei ore: quello che
+     * arriva passa da `dopoLArrivo` e compare da solo, e la riga delle fonti
+     * non lette si aggiorna con il feed. Una lettura già in corso resta un
+     * 409: due letture insieme non hanno mai senso.
+     */
     const conto = chi.adesso() ?? ''
-    const voci = await generaDaFontiFresche(conto, sincronizzazioniInCorso, () => leggiTutto(null, () => {}), () => claude.generaFeed())
+    if (sincronizzazioniInCorso.has(conto)) throw new LetturaInCorso()
+    const voci = await claude.generaFeed()
     // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
     // è quello che impedisce a una rilettura di duplicare il feed. Quello che
     // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
@@ -2248,6 +2260,12 @@ app.post('/api/feed/genera', async (_req, res) => {
     // Dopo aver risposto, non prima: capire se c'è qualcosa da chiedere non deve
     // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
     domande.forseChiedi().catch(() => {})
+    // e la rilettura delle fonti, dopo e di fondo; alla fine si avvisa la
+    // pagina, così la riga delle fonti dice quello che questa lettura ha visto
+    const utente = chi.adesso()
+    const rileggi = async () => { await rileggiDaSola(); compiti.annunciaFeed() }
+    void (utente ? chi.dentro(utente, rileggi) : rileggi())
+      .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
   } catch (e) {
     if (e instanceof LetturaInCorso) res.status(e.status).json({ errore: e.perLingua(cfg.lingua()) })
     else errore(res, e)
@@ -2425,8 +2443,8 @@ app.post('/api/progetti', (req, res) => {
 })
 
 app.patch('/api/progetti/:id', (req, res) => {
-  const c: { nome?: string; obiettivo?: string; stato?: string; note?: string } = {}
-  for (const k of ['nome', 'obiettivo', 'stato', 'note'] as const) {
+  const c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string } = {}
+  for (const k of ['nome', 'obiettivo', 'stato', 'note', 'colore'] as const) {
     if (req.body?.[k] !== undefined) c[k] = String(req.body[k])
   }
   try {

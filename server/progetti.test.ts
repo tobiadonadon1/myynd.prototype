@@ -136,7 +136,7 @@ test('«tocca»: il nome intero, o due parole distintive dell’obiettivo; una s
   assert.ok(!progetti.tocca(p, 'Fattura della luce di settembre'))
   // un obiettivo di una parola non ha «due parole distintive»: solo il nome conta
   assert.ok(!progetti.tocca({ nome: 'Casa', obiettivo: 'Traslocare' }, 'traslocare traslocare'))
-  assert.ok(progetti.toccaUnProgetto('nextas', [{ ...p, id: 'x', stato: 'attivo', dal: '', aggiornato: '', note: '', origine: 'mano' }]))
+  assert.ok(progetti.toccaUnProgetto('nextas', [{ ...p, id: 'x', stato: 'attivo', dal: '', aggiornato: '', note: '', origine: 'mano', colore: '' }]))
 })
 
 test('un nome simile non collega materiale di un altro progetto', () => {

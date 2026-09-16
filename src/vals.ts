@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { DOMANDE, type Campo } from './intervista'
 import type { Progetto, Compito, ProjectInitiative } from './api'
+import { coloreProgetto } from './colori-progetto'
 import { sulTavolo } from './tavolo'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
@@ -313,7 +314,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [intervistaFinita, setIntervistaFinita] = useState(false)
   /** I progetti: se non ce n'è nessuno, la prima pagina lo dice e offre di farne uno. */
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
-  useEffect(() => { api.progetti().then(r => setProgetti(r.progetti)).catch(() => {}) }, [])
+  // e di nuovo ogni volta che si torna sulla prima pagina: un colore scelto in
+  // Memoria deve vedersi sulle carte dei progetti senza ricaricare l'app
+  useEffect(() => { if (screen === 'myynd') api.progetti().then(r => setProgetti(r.progetti)).catch(() => {}) }, [screen])
 
   const chiudiIntervista = () => { setPasso(null); setIntervistaFinita(false); setBattute([]) }
   const avviaIntervista = (tutte: boolean) => {
@@ -380,7 +383,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const mostraToast = useCallback((text: string, undo?: boolean) => {
     clearTimeout(tt.current)
     setToast({ text, undo: !!undo })
-    tt.current = setTimeout(() => setToast(null), 4200)
+    // cinque secondi: «sparisce dopo un secondo, a malapena» — il tempo di leggerla
+    tt.current = setTimeout(() => setToast(null), 5000)
   }, [])
   useEffect(() => () => clearTimeout(tt.current), [])
 
@@ -457,6 +461,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    */
   const [guastoFeed, setGuastoFeed] = useState<string | null>(null)
   const [guastoLettura, setGuastoLettura] = useState<string | null>(null)
+  /** L'ultima volta che «Leggi adesso» non ha trovato niente ma i progetti aspettano: la pagina li porta sotto gli occhi. */
+  const [evidenziaProgetti, setEvidenziaProgetti] = useState(0)
   const [feedCaricato, setFeedCaricato] = useState(false)
 
   const caricaFeed = useCallback(async () => {
@@ -472,6 +478,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
     setAperti(f.aperti as unknown as VoceFeed[])
     setIniziative(f.iniziative ?? [])
+    if (f.fonti) setStato(s => ({ ...s, letturaIncompleta: f.fonti }))
     setFatte(f.fatte as unknown as VoceFeed[])
     // solo il valore vero: la bozza del campo NON si tocca da qui. Prima ogni
     // ricaricamento del feed — una lettura, un cambio lingua, qualunque cosa —
@@ -736,7 +743,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // una fonte che è tornata a posto sparisce da lì nello stesso momento
       setStato(s => ({ ...s, letturaIncompleta: r.fonti ?? [] }))
       await caricaFeed()
-      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.iniziative?.length ? t('C’è un prossimo passo da chiarire per i tuoi progetti.') : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+      // «dice che c'è un passo da chiarire, ma non mi ci porta»: la frase dice
+      // dove, e la pagina porta le carte sotto gli occhi e le accende un attimo
+      mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.iniziative?.length ? t('Niente di nuovo. I tuoi progetti aspettano un passo, qui sotto.') : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+      if (!r.generate && r.iniziative?.length) setEvidenziaProgetti(Date.now())
     } catch (e) {
       const message = e instanceof Error ? t(e.message) : t('La lettura non è riuscita.')
       setGuastoLettura(message)
@@ -1085,9 +1095,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     ospitato: !!stato.ospitato,
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
     connCount: connOn.length,
-    apertiCount: aperti.length + iniziative.length,
+    // le voci, e basta: «mi dice che ci sono due cose sul tavolo, ma non ce
+    // n'è nessuna». Una domanda sui progetti non è una cosa arrivata.
+    apertiCount: aperti.length,
+    vociAperte: aperti.length,
     totaleDocumenti: stato.conteggi.totale,
-    badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length + iniziative.length ? 1 : 0.35 } as CSSProperties,
+    badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length ? 1 : 0.35 } as CSSProperties,
     sincronizzando,
     sincronizza: () => sincronizza(),
     claudeOn,
@@ -1115,7 +1128,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * fa `sulTavolo`, con le stesse regole con cui la pagina le dispone.
      */
     sulTavolo: (compiti: number, inCimaUnCompito: boolean) => {
-      const n = sulTavolo({ voci: aperti.length + iniziative.length, compiti, domanda: !!domanda, inCimaUnCompito })
+      const n = sulTavolo({ voci: aperti.length, compiti, domanda: !!domanda, inCimaUnCompito })
       return frasi.daGuardare(n, parole(n))
     },
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
@@ -1137,6 +1150,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // chiuse e nessuna indicazione su cosa succede adesso.
     feedVuoto: aperti.length === 0 && iniziative.length === 0,
     iniziative,
+    evidenziaProgetti,
+    /** Il colore del progetto, scelto o stabile: le carte della prima pagina si vestono con questo. */
+    coloreProgetto: (id: string) => coloreProgetto(progetti?.find(p => p.id === id) ?? { id }, progetti ?? []),
     discutiIniziativa: (item: ProjectInitiative) => {
       chiudiIntervista()
       const chat = `th${Date.now()}`

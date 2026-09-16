@@ -92,19 +92,3 @@ export class LetturaInCorso extends Error {
     return lingua === 'en' ? 'A source read is already running. Wait for it to finish and try again.' : this.message
   }
 }
-
-/**
- * Una lettura a mano rilegge le fonti prima di chiedere al modello, con lo
- * stesso lucchetto della sincronizzazione: non può correre insieme a una
- * lettura già partita. Quello che non si è letto non ferma niente: lo dice
- * `fontiIncomplete`, e la pagina lo scrive accanto a quello che ha trovato.
- */
-export async function generaDaFontiFresche<T>(conto: string, lock: Set<string>,
-  leggi: () => Promise<unknown>, genera: () => Promise<T>): Promise<T> {
-  if (lock.has(conto)) throw new LetturaInCorso()
-  lock.add(conto)
-  try {
-    await leggi()
-    return await genera()
-  } finally { lock.delete(conto) }
-}

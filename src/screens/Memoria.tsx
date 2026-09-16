@@ -30,6 +30,7 @@ import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva, useConferma } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
 import { ascoltaProgetto, dimenticaProgetto, progettoAtteso } from '../vals'
+import { TAVOLOZZA, coloreProgetto } from '../colori-progetto'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
 function quanto(f: number): string {
@@ -340,9 +341,11 @@ function MemoriaProgetto({p}: {p: Progetto}) {
   </details>
 }
 
-function RigaProgetto({ p, cambia, acceso }: {
+function RigaProgetto({ p, tutti, cambia, acceso }: {
   p: Progetto
-  cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => Promise<void>
+  /** Gli altri: il colore assegnato a chi non l'ha scelto non deve ripetere il loro. */
+  tutti: Progetto[]
+  cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto; colore?: string }) => Promise<void>
   /** Arrivato adesso da una riga della lista: un anello di rame per un attimo, e basta. */
   acceso?: boolean
 }) {
@@ -350,6 +353,14 @@ function RigaProgetto({ p, cambia, acceso }: {
   useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
   const chiuso = p.stato === 'chiuso'
   const salva = () => { if (obiettivo.trim() !== p.obiettivo.trim()) cambia(p.id, { obiettivo: obiettivo.trim() }) }
+  /*
+   * Il colore del progetto: un pallino accanto al nome, che aperto mostra la
+   * tavolozza. È il colore con cui la prima pagina veste la carta di questo
+   * progetto — «lo cambierei nelle impostazioni»: le impostazioni di un
+   * progetto sono la sua riga, qui.
+   */
+  const colore = coloreProgetto(p, tutti)
+  const [tavolozza, setTavolozza] = useState(false)
 
   // chiudere chiede una volta — è lì che si è rotto; riaprire no, perché non distrugge niente
   const { armato, chiedi, disarma } = useConferma()
@@ -378,6 +389,10 @@ function RigaProgetto({ p, cambia, acceso }: {
       outlineOffset: 6, transition: 'outline-color .3s'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <Hov as="button" type="button" onClick={() => setTavolozza(x => !x)} title={t('Colore del progetto')} aria-label={t('Colore del progetto')}
+          aria-expanded={tavolozza}
+          style={{ flex: 'none', width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,.9)', background: colore, padding: 0, cursor: 'pointer', boxShadow: '0 0 0 1px rgba(34,39,31,.15)' }}
+          hover={{ boxShadow: '0 0 0 2px ' + colore }} />
         <span style={{ flex: 1, minWidth: 0, fontSize: '14.5px', fontWeight: 500, color: '#22271F', overflowWrap: 'anywhere',
           textDecoration: chiuso ? 'line-through' : 'none' }}>{p.nome}</span>
         {p.origine === 'punto' && (
@@ -419,6 +434,19 @@ function RigaProgetto({ p, cambia, acceso }: {
           </div>
         )}
       </div>
+      {tavolozza && (
+        <div role="radiogroup" aria-label={t('Colore del progetto')} style={{ display: 'flex', gap: 8, marginTop: 9, marginLeft: 24 }}>
+          {TAVOLOZZA.map(c => (
+            <Hov key={c} as="button" type="button" role="radio" aria-checked={c === colore} title={c}
+              onClick={() => { setTavolozza(false); if (c !== colore) void cambia(p.id, { colore: c }) }}
+              style={{
+                width: 18, height: 18, borderRadius: '50%', background: c, padding: 0, cursor: 'pointer',
+                border: '2px solid rgba(255,255,255,.9)', boxShadow: c === colore ? '0 0 0 2px ' + c : '0 0 0 1px rgba(34,39,31,.15)'
+              }}
+              hover={{ boxShadow: '0 0 0 2px ' + c }} />
+          ))}
+        </div>
+      )}
       {/* una riga sola: l'obiettivo non è un documento, è la frase che decide cosa conta */}
       <textarea
         value={obiettivo}
@@ -475,7 +503,7 @@ function Progetti() {
     return () => clearTimeout(via)
   }, [daMostrare, progetti])
 
-  const cambia = async (id: string, c: { obiettivo?: string; stato?: StatoProgetto }) => {
+  const cambia = async (id: string, c: { obiettivo?: string; stato?: StatoProgetto; colore?: string }) => {
     // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
     setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
     try { await api.cambiaProgetto(id, c); setGuaio('') }
@@ -539,7 +567,7 @@ function Progetti() {
         </div>
       )}
       <div style={{ marginTop: progetti?.length ? 10 : 0 }}>
-        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} cambia={cambia} acceso={acceso === p.id} />)}
+        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} acceso={acceso === p.id} />)}
       </div>
       {guaio && <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
     </div>

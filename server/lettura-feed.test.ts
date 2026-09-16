@@ -1,17 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dimenticaLetture, fontiIncomplete, generaDaFontiFresche, LetturaInCorso, motivoLettura, osservaLettura } from './lettura-feed.ts'
+import { dimenticaLetture, fontiIncomplete, LetturaInCorso, motivoLettura, osservaLettura } from './lettura-feed.ts'
 
-test('la lettura a mano rilegge le fonti una volta, e poi genera con quello che ha letto', async () => {
-  const ordine: string[] = [], lock = new Set<string>()
-  let fonte = 'old indexed body'
-  const r = await generaDaFontiFresche('conto', lock,
-    async () => { assert.equal(lock.has('conto'), true); ordine.push('read'); fonte = 'fresh provider body' },
-    async () => { ordine.push('generate'); return fonte })
-  assert.equal(r, 'fresh provider body'); assert.deepEqual(ordine, ['read', 'generate']); assert.equal(lock.size, 0)
-})
-
-test('una fonte che non risponde o letta a metà non ferma la lettura: si segna, e si genera lo stesso', async () => {
+test('una fonte che non risponde o letta a metà si segna, per conto, con il suo motivo', () => {
   for (const evento of [{ fase: 'note', stato: 'guaio', errore: 'Current access denied' },
     { fase: 'posta', stato: 'fatto', cartelleFallite: ['Drafts'] },
     { fase: 'slack', stato: 'fatto', falliti: ['channel'] }, { fase: 'github', stato: 'fatto', falliti: ['repo'] },
@@ -19,9 +10,7 @@ test('una fonte che non risponde o letta a metà non ferma la lettura: si segna,
     { fase: 'desktop', stato: 'fatto', illeggibili: ['/Users/private/folder'] }]) {
     dimenticaLetture('conto')
     const oss = osservaLettura('conto', null)
-    let generato = false
-    await generaDaFontiFresche('conto', new Set(), async () => { oss.avvisa(evento); oss.chiudi() }, async () => { generato = true })
-    assert.equal(generato, true, evento.fase)
+    oss.avvisa(evento); oss.chiudi()
     assert.deepEqual(fontiIncomplete('conto'), [{ fonte: evento.fase, motivo: evento.stato === 'guaio' ? 'non-disponibile' : 'incompleta' }])
   }
 })
@@ -68,12 +57,9 @@ test('il nome della fonte non porta fuori un percorso o un segreto', () => {
   assert.deepEqual(motivoLettura({ fase: '/private/account/notes', stato: 'guaio', errore: 'token=private-secret' }), { fonte: 'source', motivo: 'non-disponibile' })
 })
 
-test('la lettura a mano condivide il lucchetto del conto, e lo lascia anche quando va storta', async () => {
-  const lock = new Set(['conto'])
-  await assert.rejects(generaDaFontiFresche('conto', lock, async () => assert.fail('no second import'), async () => assert.fail('no generation')),
-    e => e instanceof LetturaInCorso && e.status === 409 && e.perLingua('en') === 'A source read is already running. Wait for it to finish and try again.')
-  assert.equal(lock.has('conto'), true)
-  lock.clear()
-  await assert.rejects(generaDaFontiFresche('conto', lock, async () => { throw new Error('network') }, async () => assert.fail('no generation')), /network/)
-  assert.equal(lock.size, 0)
+test('una lettura già in corso è un 409 nella lingua scelta', () => {
+  const e = new LetturaInCorso()
+  assert.equal(e.status, 409)
+  assert.equal(e.perLingua('en'), 'A source read is already running. Wait for it to finish and try again.')
+  assert.equal(e.perLingua('it'), 'Una lettura delle fonti è già in corso. Attendi che finisca e riprova.')
 })

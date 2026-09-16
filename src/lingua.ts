@@ -115,7 +115,8 @@ export function lingua(): string {
 }
 
 const EN: Record<string, string> = {
-  'C’è un prossimo passo da chiarire per i tuoi progetti.': 'There is a next step to clarify for your projects.',
+  'Niente di nuovo. I tuoi progetti aspettano un passo, qui sotto.': 'Nothing new. Your projects are waiting for a step, below.',
+  'Colore del progetto': 'Project colour',
   'Facciamo avanzare i tuoi progetti.': 'Let’s move your projects forward.',
   'Un passo per il tuo progetto': 'A step for your project',
   'Parliamone in chat': 'Discuss in chat',
@@ -2495,6 +2496,7 @@ const EN: Record<string, string> = {
   'Non è un progetto': 'Not a project',
   'Un progetto ha bisogno di un nome.': 'A project needs a name.',
   'Lo stato di un progetto è attivo, fermo o chiuso.': 'A project’s state is active, paused or closed.',
+  'Il colore di un progetto si scrive #RRGGBB.': 'A project colour is written #RRGGBB.',
   'Questo progetto non c’è.': 'This project does not exist.',
 
   // — le due teste: Anthropic e OpenAI, con l'account o con la chiave —

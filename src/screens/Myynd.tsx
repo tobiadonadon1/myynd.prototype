@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
@@ -15,6 +15,7 @@ import type { Compito } from '../api'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from '../consegna-ui'
+import { velato } from '../colori-progetto'
 
 // Sulla riga aperta la freccia lascia il posto al pallino di prima: mentre
 // leggi, «vai qui» non è più il consiglio giusto — ci sei già.
@@ -674,11 +675,13 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
             margin: 0, padding: '0 0 0 3px', fontWeight: 400, textWrap: 'pretty'
-          }}>{v.feedVuoto && (lista?.compiti.length ?? 0) > 0 && !v.domanda
+          }}>{v.vociAperte === 0 && (lista?.compiti.length ?? 0) > 0 && !v.domanda
             ? frasi.daFare(lista!.compiti.length)
-            : v.feedCaricato && !v.guastoFeed && (!v.feedVuoto || v.domanda)
+            : v.feedCaricato && !v.guastoFeed && (v.vociAperte > 0 || v.domanda)
             /* quello che c'è in pagina, contato con le regole di `righe` qui sopra:
-               «due cose» sopra nove righe era il titolo di un'altra pagina */
+               «due cose» sopra nove righe era il titolo di un'altra pagina. Le
+               domande sui progetti non si contano: «due cose sul tavolo» sopra
+               due domande e nessuna cosa arrivata era una bugia che preoccupa */
             ? v.sulTavolo(compiti.length, !!inTesta)
             : v.headline}</h1>
           <div style={{
@@ -893,22 +896,16 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
       </div>}
 
       {/*
-        I progetti che aspettano un passo, in una scheda sola.
+        I progetti che aspettano un passo: carte una accanto all'altra.
 
-        Erano una carta a testa — etichetta, titolo, l'obiettivo riscritto, la
-        domanda, un bottone pieno — e due di fila si leggevano come la stessa
-        carta due volte: tanto scritto, e niente che dicesse a colpo d'occhio
-        che una parlava di Myynd e l'altra di H-Farm. Adesso sono righe, come
-        il resto del feed: il nome del progetto in maiuscoletto verde è la
-        prima cosa che si vede, la domanda è il titolo, e il perché sta sotto,
-        piccolo. Un bottone solo per riga, e solo quando la riga è sotto mano.
+        Erano una carta a testa, piena, una sotto l'altra; poi righe in una
+        scheda sola. «Le pensavo una accanto all'altra, piccole carte, per
+        spezzare un po' il disegno» — e con un colore per progetto, che sceglie
+        lui in Memoria. Il colore è la prima cosa che si vede: fondo velato,
+        bordo, nome. La domanda è il titolo, il perché sta sotto piccolo, e
+        c'è un bottone solo. La carta intera apre la chat.
       */}
-      {!!v.iniziative.length && (
-        <section aria-label={t('Un passo per il tuo progetto')} style={{ marginTop: 14, borderRadius: 20, background: 'rgba(255,253,249,.78)', border: '1px solid rgba(92,118,96,.20)', overflow: 'hidden' }}>
-          <div style={{ padding: '15px 21px 4px', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)' }}>{t('I tuoi progetti')}</div>
-          {v.iniziative.map(item => <RigaIniziativa key={item.id} item={item} v={v} lista={lista} />)}
-        </section>
-      )}
+      {!!v.iniziative.length && <Progetti v={v} lista={lista} />}
 
       <Domanda v={v} />
 
@@ -997,50 +994,84 @@ function Avviso({ v }: { v: Vals }) {
 }
 
 /**
- * Un progetto che aspetta un passo, come riga: la riga intera apre la chat
- * con la domanda già scritta, e la pastiglia dice che lo farà. Con un compito
- * dietro, la pastiglia porta al compito e la chat resta sul clic della riga.
+ * Le carte dei progetti, una accanto all'altra.
+ *
+ * Quando «Leggi adesso» non trova niente di nuovo ma i progetti aspettano, la
+ * pagina le porta sotto gli occhi e le accende per un attimo: l'avviso dice
+ * «qui sotto», e questo è il «qui».
  */
-function RigaIniziativa({ item, v, lista }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista }) {
+function Progetti({ v, lista }: { v: Vals; lista?: Lista }) {
+  const griglia = useRef<HTMLDivElement | null>(null)
+  const [accese, setAccese] = useState(false)
+  useEffect(() => {
+    if (!v.evidenziaProgetti) return
+    griglia.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setAccese(true)
+    const via = setTimeout(() => setAccese(false), 1600)
+    return () => clearTimeout(via)
+  }, [v.evidenziaProgetti])
+  return (
+    <div ref={griglia} aria-label={t('Un passo per il tuo progetto')} style={{
+      display: 'grid', gap: 12, marginTop: 14,
+      // due o più stanno di fianco; una sola prende la riga, come le altre carte
+      gridTemplateColumns: v.iniziative.length > 1 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr'
+    }}>
+      {v.iniziative.map(item => <CartaProgetto key={item.id} item={item} v={v} lista={lista} accesa={accese} />)}
+    </div>
+  )
+}
+
+/**
+ * Un progetto che aspetta un passo, come carta col suo colore: la carta
+ * intera apre la chat con la domanda già scritta, e il bottone dice che lo
+ * farà. Con un compito dietro, il bottone porta al compito e la chat resta
+ * sul clic della carta.
+ */
+function CartaProgetto({ item, v, lista, accesa }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista; accesa: boolean }) {
   const { attiva, props } = useAttiva()
+  const colore = v.coloreProgetto(item.projectId)
   const parla = () => v.discutiIniziativa(item)
-  const PASTIGLIA_RIGA: CSSProperties = {
-    flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
-    background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
-    fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-    opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+  const BOTTONE_CARTA: CSSProperties = {
+    flex: 'none', padding: '6px 13px', borderRadius: 99, border: `1px solid ${velato(colore, .45)}`,
+    background: 'rgba(255,255,255,.55)', color: colore, fontSize: '12.5px', fontWeight: 500,
+    fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap'
   }
   return (
-    <div role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)}
-      style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '14px 21px 17px', cursor: 'pointer', borderTop: '1px solid rgba(34,39,31,.09)' }} {...props}>
-      <span style={{ flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center', color: 'rgba(62,81,64,.6)' }}><IconFrecciaDx size={13} /></span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: '#3E5140', overflowWrap: 'anywhere' }}>{item.projectName}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0 }}>{t('Il tuo obiettivo')}</span>
-          <div style={{ flex: 1 }} />
-          <Hov as="button" type="button"
-            onClick={(e: MouseEvent) => { e.stopPropagation(); void v.scartaIniziativa(item.id) }}
-            title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
-            style={{
-              flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
-              color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-              opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
-            }}
-            hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
-        </div>
-        {/* la domanda è il titolo: è la cosa a cui si risponde. Il resto — l'obiettivo
-            com'è scritto, perché lo chiede — sta sotto, piccolo, come il «perché» delle altre righe */}
-        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.question ?? item.title}</div>
-        {item.description && (
-          <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.description}</div>
-        )}
+    <div role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 0, padding: '16px 18px 15px', borderRadius: 18, cursor: 'pointer',
+        // il colore del progetto, velato sull'avorio: è quello che distingue una carta dall'altra
+        background: `linear-gradient(0deg, ${velato(colore, attiva ? .16 : .11)}, ${velato(colore, attiva ? .16 : .11)}), rgba(255,253,249,.88)`,
+        border: `1px solid ${velato(colore, .38)}`, transition: 'background .2s, outline-color .3s',
+        outline: accesa ? `2px solid ${colore}` : '2px solid transparent', outlineOffset: 3
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: colore }} />
+        <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: colore, minWidth: 0, overflowWrap: 'anywhere' }}>{item.projectName}</span>
+        <div style={{ flex: 1 }} />
+        <Hov as="button" type="button"
+          onClick={(e: MouseEvent) => { e.stopPropagation(); void v.scartaIniziativa(item.id) }}
+          title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
+          style={{
+            flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
+            color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+            opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+          }}
+          hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
       </div>
-      {item.taskId && lista
-        ? <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); lista.chiediDiAprire(item.taskId!); v.goOggi() }}
-            title={t('Apri il compito')} style={PASTIGLIA_RIGA} hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Apri il compito')}</Hov>
-        : <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); parla() }}
-            title={t('Parliamone in chat')} style={PASTIGLIA_RIGA} hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Parliamone')}</Hov>}
+      {/* la domanda è il titolo: è la cosa a cui si risponde. Il perché sta sotto, piccolo */}
+      <div style={{ fontSize: '15px', fontWeight: 500, lineHeight: 1.4, marginTop: 10, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.question ?? item.title}</div>
+      {item.description && (
+        <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.55)', marginTop: 5, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.description}</div>
+      )}
+      <div style={{ flex: 1 }} />
+      <div style={{ display: 'flex', marginTop: 14 }}>
+        {item.taskId && lista
+          ? <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); lista.chiediDiAprire(item.taskId!); v.goOggi() }}
+              title={t('Apri il compito')} style={BOTTONE_CARTA} hover={{ background: '#FFFFFF' }}>{t('Apri il compito')}</Hov>
+          : <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); parla() }}
+              title={t('Parliamone in chat')} style={BOTTONE_CARTA} hover={{ background: '#FFFFFF' }}>{t('Parliamone')}</Hov>}
+      </div>
     </div>
   )
 }

@@ -42,14 +42,18 @@ export type Progetto = {
   note: string
   /** Chi l'ha scritto: lui, o il punto dal materiale. */
   origine: 'mano' | 'punto' | 'conversazione'
+  /** Il colore scelto da lui, `#RRGGBB`, o vuoto: allora la pagina ne prende uno stabile dall'id. */
+  colore: string
 }
+
+const COLORE_VALIDO = /^#[0-9a-f]{6}$/i
 
 /** Quanti se ne nominano al modello: oltre, non è più «su cosa sta lavorando». */
 const PER_IL_MODELLO = 8
 
 type Riga = {
   id: string; nome: string; obiettivo: string | null; stato: string; dal: string
-  aggiornato: string; note: string | null; origine: string | null
+  aggiornato: string; note: string | null; origine: string | null; colore?: string | null
 }
 
 const daRiga = (r: Riga): Progetto => ({
@@ -60,7 +64,8 @@ const daRiga = (r: Riga): Progetto => ({
   dal: r.dal,
   aggiornato: r.aggiornato,
   note: r.note ?? '',
-  origine: r.origine === 'punto' || r.origine === 'conversazione' ? r.origine : 'mano'
+  origine: r.origine === 'punto' || r.origine === 'conversazione' ? r.origine : 'mano',
+  colore: r.colore && COLORE_VALIDO.test(r.colore) ? r.colore : ''
 })
 
 const chiave = (s: string) => s.trim().toLowerCase()
@@ -181,7 +186,7 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
 }
 
 /** Cambia quello che c'è da cambiare. Torna `null` se il progetto non esiste. */
-export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato?: string; note?: string }): Progetto | null {
+export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string }): Progetto | null {
   const p = trova(id)
   if (!p) return null
   const nome = c.nome !== undefined ? c.nome.trim() : p.nome
@@ -191,6 +196,11 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
   if (c.stato !== undefined && !(STATI as string[]).includes(c.stato)) {
     throw new Error('Lo stato di un progetto è attivo, fermo o chiuso.')
   }
+  // vuoto toglie la scelta: la pagina torna al colore stabile dall'id
+  if (c.colore !== undefined && c.colore !== '' && !COLORE_VALIDO.test(c.colore)) {
+    throw new Error('Il colore di un progetto si scrive #RRGGBB.')
+  }
+  if (c.colore !== undefined) db.prepare('UPDATE progetti SET colore = ? WHERE id = ?').run(c.colore || null, id)
   const origine = c.nome !== undefined || c.obiettivo !== undefined ? 'mano' : p.origine
   db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, aggiornato = ? WHERE id = ?').run(
     nome,
