@@ -732,6 +732,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     try {
       const r = await api.generaFeed()
       setGuastoLettura(null)
+      // la riga fissa delle fonti non lette viene dallo stato: si rilegge, così
+      // una fonte che è tornata a posto sparisce da lì nello stesso momento
+      setStato(s => ({ ...s, letturaIncompleta: r.fonti ?? [] }))
       await caricaFeed()
       mostraToast(r.generate ? frasi.coseNuove(r.generate) : r.iniziative?.length ? t('C’è un prossimo passo da chiarire per i tuoi progetti.') : r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
     } catch (e) {
@@ -1117,6 +1120,15 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     },
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
     guastoLettura,
+    /*
+     * Le fonti che l'ultima lettura non ha letto per intero, col nome che ha
+     * la scheda nelle Fonti. Non è l'esito di *questo* clic: è quello che il
+     * server sa dell'ultima lettura, a mano o automatica, e resta scritto in
+     * pagina finché una lettura non trova la fonte a posto.
+     */
+    fontiIncomplete: (stato.letturaIncompleta ?? []).map(f => ({
+      nome: t(connettori.find(c => c.id === f.fonte)?.nome ?? f.fonte), motivo: f.motivo
+    })),
     feedCaricato,
     ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },
     hasHero: !!hero,

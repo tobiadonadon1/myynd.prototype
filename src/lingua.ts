@@ -2604,10 +2604,11 @@ const EN: Record<string, string> = {
   'e': 'and',
   'Dalle un nome.': 'Give it a name.',
   'Dille cosa deve fare con quello che trova.': 'Tell it what to do with what it finds.',
-  'La fonte non ha risposto.': 'The source is currently unavailable.',
-  'La lettura della fonte non è stata completata.': 'The source read did not complete.',
-  'Non ho potuto aggiornare tutte le fonti.': 'I could not refresh every source.',
   'Una lettura delle fonti è già in corso. Attendi che finisca e riprova.': 'A source read is already running. Wait for it to finish and try again.',
+  // — la riga fissa delle fonti non lette, e i progetti in una scheda sola —
+  'Vai alle Fonti': 'Go to Sources',
+  'I tuoi progetti': 'Your projects',
+  'Parliamone': 'Discuss',
 }
 
 
@@ -2896,6 +2897,17 @@ export const frasi = {
     ? (n === 1 ? 'One new thing in the feed.' : `${n} new things in the feed.`)
     : (n === 1 ? 'Una cosa nuova nel feed.' : `${n} cose nuove nel feed.`),
   /** Il feed vuoto spiegato in numeri: solo le voci che non sono zero. */
+  /**
+   * Le fonti che l'ultima lettura non ha letto per intero, in una frase sola:
+   * «Non ho letto tutto: Note non si legge, Il mio Mac letto solo in parte.»
+   * Il nome è quello della scheda nelle Fonti, che è dove porta il link accanto.
+   */
+  fontiNonLette: (fonti: { nome: string; motivo: 'non-disponibile' | 'incompleta' }[]) => {
+    const parti = fonti.map(f => corrente === 'en'
+      ? (f.motivo === 'incompleta' ? `${f.nome} was only partly read` : `${f.nome} can’t be read`)
+      : (f.motivo === 'incompleta' ? `${f.nome} letto solo in parte` : `${f.nome} non si legge`))
+    return (corrente === 'en' ? 'I could not read everything: ' : 'Non ho letto tutto: ') + parti.join(', ') + '.'
+  },
   feedVuoto: (v: { guardati: number; candidati: number; vecchi: number; inSerie: number; letti: number; giaVisti: number; aperti: number }) => {
     const en = corrente === 'en'
     const pezzi = [

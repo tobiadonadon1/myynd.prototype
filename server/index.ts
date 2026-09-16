@@ -54,7 +54,7 @@ import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
-import {generaDaFontiFresche,ErroreLetturaFeed} from './lettura-feed.ts'
+import { generaDaFontiFresche, LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -650,6 +650,9 @@ app.get('/api/stato', async (_req, res) => {
      */
     accessoDisco: ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto(),
     accessoNote: ospitato.OSPITATO ? {stato:'non-mac',verificato:new Date().toISOString()} : accesso.accessoNote(),
+    // le fonti che l'ultima lettura non ha letto per intero: la prima pagina
+    // le scrive in una riga fissa finché una lettura non le trova a posto
+    letturaIncompleta: fontiIncomplete(chi.adesso() ?? ''),
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -1687,6 +1690,23 @@ async function leggiTutto(
   avvisa: (d: unknown) => void,
   fermo: () => boolean = () => false
 ): Promise<number> {
+  /*
+   * Quello che non si è letto si tiene a mente per conto, in `lettura-feed`:
+   * la pagina lo scrive in una riga fissa con la strada per le Fonti, e la
+   * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
+   * la fonte a posto. Per questo si osserva qui, dove passano tutte.
+   */
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte)
+  try {
+    return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
+  } finally { oss.chiudi(fermo()) }
+}
+
+async function leggiTuttoDentro(
+  soloFonte: string | null,
+  avvisa: (d: unknown) => void,
+  fermo: () => boolean
+): Promise<number> {
   const c = cfg.leggi()
   let totale = 0
 
@@ -2211,15 +2231,17 @@ app.post('/api/feed/genera', async (_req, res) => {
       : 'Collega Claude e potrò lavorarci.'), 400)
   }
   try {
-    const voci = await generaDaFontiFresche(chi.adesso()??'',sincronizzazioniInCorso,
-      avvisa=>leggiTutto(null,avvisa),()=>claude.generaFeed())
+    const conto = chi.adesso() ?? ''
+    const voci = await generaDaFontiFresche(conto, sincronizzazioniInCorso, () => leggiTutto(null, () => {}), () => claude.generaFeed())
     // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
     // è quello che impedisce a una rilettura di duplicare il feed. Quello che
     // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
     // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
     const nuove = store.salvaFeed(voci)
     // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
-    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), ...(nuove ? {} : { vuoto: percheVuoto() }) })
+    // e quello che la lettura non ha letto, perché la pagina lo dica accanto
+    // a quello che ha trovato invece di fermarsi lì
+    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto), ...(nuove ? {} : { vuoto: percheVuoto() }) })
     // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
     compiti.annunciaFeed()
 
@@ -2227,8 +2249,8 @@ app.post('/api/feed/genera', async (_req, res) => {
     // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
     domande.forseChiedi().catch(() => {})
   } catch (e) {
-    if(e instanceof ErroreLetturaFeed)res.status(e.status).json({errore:e.perLingua(cfg.lingua()),fonti:e.fonti})
-    else errore(res,e)
+    if (e instanceof LetturaInCorso) res.status(e.status).json({ errore: e.perLingua(cfg.lingua()) })
+    else errore(res, e)
   }
 })
 

@@ -569,7 +569,8 @@ function RigaChat({ ch }: { ch: Vals['threads'][number] }) {
         <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.titolo}</div>
         <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{ch.quando}</div>
       </div>
-      <Cestino fai={ch.onDelete} titolo={t('Elimina')} visibile={attiva || ch.sopra} icona={13} />
+      {/* il cestino basta: «voglio che sia il cestino a dire che si cancella», e non una domanda dopo */}
+      <Cestino fai={ch.onDelete} titolo={t('Elimina')} visibile={attiva || ch.sopra} icona={13} subito />
     </div>
   )
 }

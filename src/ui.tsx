@@ -289,8 +289,13 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
    * su un gesto che si fa dieci volte al giorno.
    *
    * Resta dov'è invece per quello che non torna: scollegare una casella,
-   * buttare un'automazione scritta a mano, dimenticare una convinzione,
-   * cancellare una chat. Lì la domanda non è attrito, è l'ultima occasione.
+   * buttare un'automazione scritta a mano, dimenticare una convinzione. Lì
+   * la domanda non è attrito, è l'ultima occasione.
+   *
+   * Una chat no, dal 16 settembre: «voglio che sia il cestino a dire che si
+   * cancella». Il cestino compare solo sulla riga sotto mano e si preme
+   * apposta: per lui è già la decisione, e la domanda dopo era un clic in
+   * più su un gesto che aveva già fatto.
    */
   subito?: boolean
   style?: CSSProperties

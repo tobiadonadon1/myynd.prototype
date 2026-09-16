@@ -1,54 +1,79 @@
-import {test} from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {generaDaFontiFresche,ErroreLetturaFeed} from './lettura-feed.ts'
+import { dimenticaLetture, fontiIncomplete, generaDaFontiFresche, LetturaInCorso, motivoLettura, osservaLettura } from './lettura-feed.ts'
 
-test('manual scan reads configured sources once before generating with their current evidence',async()=>{
- const order:string[]=[],lock=new Set<string>()
- let source='old indexed body'
- const result=await generaDaFontiFresche('account',lock,async()=>{assert.equal(lock.has('account'),true);order.push('read');source='fresh provider body'},async()=>{order.push('generate');return source})
- assert.equal(result,'fresh provider body');assert.deepEqual(order,['read','generate']);assert.equal(lock.size,0)
+test('la lettura a mano rilegge le fonti una volta, e poi genera con quello che ha letto', async () => {
+  const ordine: string[] = [], lock = new Set<string>()
+  let fonte = 'old indexed body'
+  const r = await generaDaFontiFresche('conto', lock,
+    async () => { assert.equal(lock.has('conto'), true); ordine.push('read'); fonte = 'fresh provider body' },
+    async () => { ordine.push('generate'); return fonte })
+  assert.equal(r, 'fresh provider body'); assert.deepEqual(ordine, ['read', 'generate']); assert.equal(lock.size, 0)
 })
-test('a current source failure or partial folder read cannot become a false all-clear',async()=>{
- for(const event of [{fase:'note',stato:'guaio',errore:'Current access denied'},
-  {fase:'posta',stato:'fatto',cartelleFallite:['Drafts']},{fase:'drive',stato:'fatto',falliti:1},
-  {fase:'slack',stato:'fatto',falliti:['channel']},{fase:'github',stato:'fatto',falliti:['repo']},
-  {fase:'notion',stato:'fatto',parziali:1},{fase:'notion',stato:'fatto',interrotto:true},
-  {fase:'desktop',stato:'fatto',illeggibili:['private-file']},{fase:'note',stato:'fatto',illeggibili:1}]) {
-  const lock=new Set<string>()
-  await assert.rejects(generaDaFontiFresche('account',lock,async report=>{report(event)},async()=>assert.fail('must not generate stale all-clear')),
-   e=>e instanceof ErroreLetturaFeed&&e.status===502&&e.message.includes(event.fase))
-  assert.equal(lock.size,0)
- }
+
+test('una fonte che non risponde o letta a metà non ferma la lettura: si segna, e si genera lo stesso', async () => {
+  for (const evento of [{ fase: 'note', stato: 'guaio', errore: 'Current access denied' },
+    { fase: 'posta', stato: 'fatto', cartelleFallite: ['Drafts'] },
+    { fase: 'slack', stato: 'fatto', falliti: ['channel'] }, { fase: 'github', stato: 'fatto', falliti: ['repo'] },
+    { fase: 'notion', stato: 'fatto', interrotto: true },
+    { fase: 'desktop', stato: 'fatto', illeggibili: ['/Users/private/folder'] }]) {
+    dimenticaLetture('conto')
+    const oss = osservaLettura('conto', null)
+    let generato = false
+    await generaDaFontiFresche('conto', new Set(), async () => { oss.avvisa(evento); oss.chiudi() }, async () => { generato = true })
+    assert.equal(generato, true, evento.fase)
+    assert.deepEqual(fontiIncomplete('conto'), [{ fonte: evento.fase, motivo: evento.stato === 'guaio' ? 'non-disponibile' : 'incompleta' }])
+  }
 })
-test('normal source caps and zero failures stay distinct from failed source reads',async()=>{
- const result=await generaDaFontiFresche('account',new Set(),async report=>{
-  report({fase:'slack',stato:'fatto',falliti:[],troncato:true})
-  report({fase:'note',stato:'fatto',illeggibili:0,troncato:true})
-  report({fase:'notion',stato:'fatto',parziali:0,interrotto:false})
-  report({fase:'posta',stato:'fatto',cartelleFallite:[],troncato:true})
- },async()=>'fresh bounded evidence')
- assert.equal(result,'fresh bounded evidence')
+
+test('un file che non si apre in mezzo a cento non è una fonte che non si legge; un tetto nemmeno', () => {
+  for (const evento of [
+    { fase: 'desktop', stato: 'fatto', falliti: 3, illeggibili: [], troncato: true },
+    { fase: 'note', stato: 'fatto', illeggibili: 1, troncato: true },
+    { fase: 'drive', stato: 'fatto', falliti: 2 },
+    { fase: 'notion', stato: 'fatto', parziali: 1, interrotto: false },
+    { fase: 'posta', stato: 'fatto', cartelleFallite: [], troncato: true },
+    { fase: 'desktop', stato: '12 documenti', fatti: 12 },
+    { fase: 'fine', totale: 3 }
+  ]) assert.equal(motivoLettura(evento), null, JSON.stringify(evento))
 })
-test('manual scan shares account sync lock and always releases it after unexpected failure',async()=>{
- const lock=new Set(['account'])
- await assert.rejects(generaDaFontiFresche('account',lock,async()=>assert.fail('no second import'),async()=>assert.fail('no generation')),e=>e instanceof ErroreLetturaFeed&&e.status===409)
- assert.equal(lock.has('account'),true)
- lock.clear()
- await assert.rejects(generaDaFontiFresche('account',lock,async()=>{throw new Error('network')},async()=>assert.fail('no generation')),/network/)
- assert.equal(lock.size,0)
+
+test('la lettura dopo pulisce quello che si è sistemato; una fonte sola tocca solo se stessa; fermata a metà, aggiunge e basta', () => {
+  dimenticaLetture('conto')
+  let oss = osservaLettura('conto', null)
+  oss.avvisa({ fase: 'note', stato: 'guaio', errore: 'x' })
+  oss.avvisa({ fase: 'desktop', stato: 'fatto', illeggibili: ['/a'] })
+  // il guaio pesa più della lettura a metà, in qualunque ordine arrivino
+  oss.avvisa({ fase: 'note', stato: 'fatto', illeggibili: ['/b'] })
+  oss.chiudi()
+  assert.deepEqual(fontiIncomplete('conto'), [{ fonte: 'note', motivo: 'non-disponibile' }, { fonte: 'desktop', motivo: 'incompleta' }])
+
+  oss = osservaLettura('conto', 'desktop')
+  oss.avvisa({ fase: 'desktop', stato: 'fatto', illeggibili: [] })
+  oss.chiudi()
+  assert.deepEqual(fontiIncomplete('conto'), [{ fonte: 'note', motivo: 'non-disponibile' }])
+
+  oss = osservaLettura('conto', null)
+  oss.avvisa({ fase: 'slack', stato: 'guaio', errore: 'token' })
+  oss.chiudi(true)
+  assert.deepEqual(fontiIncomplete('conto'), [{ fonte: 'note', motivo: 'non-disponibile' }, { fonte: 'slack', motivo: 'non-disponibile' }])
+
+  oss = osservaLettura('conto', null)
+  oss.chiudi()
+  assert.deepEqual(fontiIncomplete('conto'), [])
+  assert.deepEqual(fontiIncomplete('altro'), [])
 })
-test('source failures use the selected language without exposing private provider diagnostics',async()=>{
- for(const phase of ['note','/private/account/notes']) {
-  await assert.rejects(generaDaFontiFresche('account',new Set(),async report=>report({fase:phase,stato:'guaio',errore:'token=private-secret /Users/private'}),async()=>assert.fail('must not generate')),
-   e=>{
-    assert.ok(e instanceof ErroreLetturaFeed)
-    assert.deepEqual(e.fonti,[{fonte:phase==='note'?'note':'source',motivo:'non-disponibile'}])
-    assert.match(e.perLingua('en'),/^I could not refresh every source\./)
-    assert.match(e.perLingua('it'),/^Non ho potuto aggiornare tutte le fonti\./)
-    assert.doesNotMatch(e.perLingua('en'),/private|Non ho|La fonte|token=/)
-    return true
-   })
- }
- const busy=new ErroreLetturaFeed('Una lettura delle fonti è già in corso. Attendi che finisca e riprova.',409)
- assert.equal(busy.perLingua('en'),'A source read is already running. Wait for it to finish and try again.')
+
+test('il nome della fonte non porta fuori un percorso o un segreto', () => {
+  assert.deepEqual(motivoLettura({ fase: '/private/account/notes', stato: 'guaio', errore: 'token=private-secret' }), { fonte: 'source', motivo: 'non-disponibile' })
+})
+
+test('la lettura a mano condivide il lucchetto del conto, e lo lascia anche quando va storta', async () => {
+  const lock = new Set(['conto'])
+  await assert.rejects(generaDaFontiFresche('conto', lock, async () => assert.fail('no second import'), async () => assert.fail('no generation')),
+    e => e instanceof LetturaInCorso && e.status === 409 && e.perLingua('en') === 'A source read is already running. Wait for it to finish and try again.')
+  assert.equal(lock.has('conto'), true)
+  lock.clear()
+  await assert.rejects(generaDaFontiFresche('conto', lock, async () => { throw new Error('network') }, async () => assert.fail('no generation')), /network/)
+  assert.equal(lock.size, 0)
 })

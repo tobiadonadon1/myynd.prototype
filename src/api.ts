@@ -1,6 +1,9 @@
 // Il ponte con il server locale. Niente dati finti: se non c'è ancora niente
 // collegato, le risposte tornano vuote e l'interfaccia lo dice.
 
+/** Una fonte che l'ultima lettura non ha letto per intero, e perché: non ha risposto, o solo in parte. */
+export type FonteIncompleta = { fonte: string; motivo: 'non-disponibile' | 'incompleta' }
+
 export type Connettore = {
   id: string
   nome: string
@@ -115,6 +118,8 @@ export type Stato = {
   /** L'accesso completo al disco per Myynd: le Note si leggono solo con «si». «non-mac» = non parlarne. */
   accessoDisco: 'si' | 'no' | 'non-mac'
   accessoNote?: {stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac';verificato:string;fase?:string;codice?:string}
+  /** Le fonti che l'ultima lettura non ha letto per intero: la prima pagina le dice in una riga fissa. */
+  letturaIncompleta?: FonteIncompleta[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
   /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
@@ -1633,7 +1638,7 @@ export const api = {
   }),
 
   feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[] }>('/api/feed'),
-  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
+  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto }>('/api/feed/genera', { method: 'POST' }),
   feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json(`/api/feed/${id}/${stato}`, { method: 'POST' }),
 

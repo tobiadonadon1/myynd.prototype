@@ -697,6 +697,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         </div>
       </div>
 
+      <Avviso v={v} />
+
       {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
           cima a tutto, perché rispondergli viene prima del resto. */}
       {v.chatDaLeggere && (
@@ -886,26 +888,27 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         </div>
       )}
 
-      {v.guastoLettura && <div role="alert" style={{ marginTop: 14, padding: '14px 18px', borderRadius: 16, background: 'rgba(255,253,249,.85)', border: '1px solid rgba(142,63,31,.25)', color: '#8E3F1F', fontSize: 13, lineHeight: 1.5 }}>
-        {v.guastoLettura}
-        <button onClick={v.genera} disabled={v.generando} style={{ ...BOTTONE, marginLeft: 12 }}>{t('Riprova')}</button>
-      </div>}
-      {!!v.iniziative.length && !v.guastoLettura && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+      {!!v.iniziative.length && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
         <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
       </div>}
-      {v.iniziative.map(item => <section key={item.id} aria-label={t('Un passo per il tuo progetto')} style={{ padding: '18px 22px', marginTop: 14, borderRadius: 20, background: 'rgba(255,253,249,.78)', border: '1px solid rgba(92,118,96,.20)' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => v.apriProgetto(item.projectId)} style={{ border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12, color: '#5C7660', cursor: 'pointer' }}>{item.projectName} · {t('Il tuo obiettivo')}</button>
-          <button onClick={() => void v.scartaIniziativa(item.id)} style={{ border: 0, background: 'none', padding: '4px 0', font: 'inherit', fontSize: 12, color: 'rgba(34,39,31,.6)', cursor: 'pointer' }}>{t('Non mi interessa')}</button>
-        </div>
-        <div style={{ marginTop: 8, fontSize: 17, fontWeight: 500, overflowWrap: 'anywhere' }}>{item.title}</div>
-        <div style={{ marginTop: 5, fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.68)', overflowWrap: 'anywhere' }}>{item.description}</div>
-        {item.question && <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>{item.question}</div>}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-          <button style={BOTTONE} onClick={() => v.discutiIniziativa(item)}>{t('Parliamone in chat')}</button>
-          {item.taskId && lista && <button style={BOTTONE} onClick={() => { lista.chiediDiAprire(item.taskId!); v.goOggi() }}>{t('Apri il compito')}</button>}
-        </div>
-      </section>)}
+
+      {/*
+        I progetti che aspettano un passo, in una scheda sola.
+
+        Erano una carta a testa — etichetta, titolo, l'obiettivo riscritto, la
+        domanda, un bottone pieno — e due di fila si leggevano come la stessa
+        carta due volte: tanto scritto, e niente che dicesse a colpo d'occhio
+        che una parlava di Myynd e l'altra di H-Farm. Adesso sono righe, come
+        il resto del feed: il nome del progetto in maiuscoletto verde è la
+        prima cosa che si vede, la domanda è il titolo, e il perché sta sotto,
+        piccolo. Un bottone solo per riga, e solo quando la riga è sotto mano.
+      */}
+      {!!v.iniziative.length && (
+        <section aria-label={t('Un passo per il tuo progetto')} style={{ marginTop: 14, borderRadius: 20, background: 'rgba(255,253,249,.78)', border: '1px solid rgba(92,118,96,.20)', overflow: 'hidden' }}>
+          <div style={{ padding: '15px 21px 4px', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)' }}>{t('I tuoi progetti')}</div>
+          {v.iniziative.map(item => <RigaIniziativa key={item.id} item={item} v={v} lista={lista} />)}
+        </section>
+      )}
 
       <Domanda v={v} />
 
@@ -960,6 +963,88 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
  * vero. Ma quando non c'è lavoro resta l'unica cosa sullo schermo, ed è il
  * momento migliore per chiedere qualcosa a qualcuno.
  */
+/**
+ * La riga fissa di quello che non va, sopra a tutto.
+ *
+ * Stava in una carta fra la voce in cima e i progetti, con «Riprova» — e
+ * diceva «desktop: The source read did not complete. note: The source is
+ * currently unavailable.» mentre nelle Fonti «Il mio Mac» era collegato e
+ * andava benissimo. Un guaio delle fonti non è una voce del feed: è una cosa
+ * da sistemare altrove, e qui va solo detta, in una riga che resta finché
+ * non è sistemata, con la strada per andarci. Niente «Riprova»: riprovare
+ * senza aver cambiato niente ridà la stessa riga.
+ *
+ * Porta anche il motivo per cui l'ultima lettura a mano non è partita — la
+ * chiave che manca, una lettura già in corso — perché è lo stesso genere di
+ * cosa, e si sistema nello stesso posto.
+ */
+function Avviso({ v }: { v: Vals }) {
+  const frase = v.guastoLettura ?? (v.fontiIncomplete.length ? frasi.fontiNonLette(v.fontiIncomplete) : null)
+  if (!frase) return null
+  return (
+    <div role="status" style={{
+      flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
+      padding: '10px 16px', borderRadius: 14, background: 'rgba(196,98,59,.10)', border: '1px solid rgba(196,98,59,.28)',
+      color: '#8E3F1F', fontSize: 13, lineHeight: 1.5
+    }}>
+      <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: '#C4623B' }} />
+      <span style={{ flex: '1 1 220px', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{frase}</span>
+      <Hov as="a" href="#" onClick={v.goConn}
+        style={{ flex: 'none', color: '#8E3F1F', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+        hover={{ color: '#22271F' }}>{t('Vai alle Fonti')}</Hov>
+    </div>
+  )
+}
+
+/**
+ * Un progetto che aspetta un passo, come riga: la riga intera apre la chat
+ * con la domanda già scritta, e la pastiglia dice che lo farà. Con un compito
+ * dietro, la pastiglia porta al compito e la chat resta sul clic della riga.
+ */
+function RigaIniziativa({ item, v, lista }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista }) {
+  const { attiva, props } = useAttiva()
+  const parla = () => v.discutiIniziativa(item)
+  const PASTIGLIA_RIGA: CSSProperties = {
+    flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
+    background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
+    fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+    opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+  }
+  return (
+    <div role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)}
+      style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '14px 21px 17px', cursor: 'pointer', borderTop: '1px solid rgba(34,39,31,.09)' }} {...props}>
+      <span style={{ flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center', color: 'rgba(62,81,64,.6)' }}><IconFrecciaDx size={13} /></span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: '#3E5140', overflowWrap: 'anywhere' }}>{item.projectName}</span>
+          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0 }}>{t('Il tuo obiettivo')}</span>
+          <div style={{ flex: 1 }} />
+          <Hov as="button" type="button"
+            onClick={(e: MouseEvent) => { e.stopPropagation(); void v.scartaIniziativa(item.id) }}
+            title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
+            style={{
+              flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
+              color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+              opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+            }}
+            hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
+        </div>
+        {/* la domanda è il titolo: è la cosa a cui si risponde. Il resto — l'obiettivo
+            com'è scritto, perché lo chiede — sta sotto, piccolo, come il «perché» delle altre righe */}
+        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.question ?? item.title}</div>
+        {item.description && (
+          <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.description}</div>
+        )}
+      </div>
+      {item.taskId && lista
+        ? <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); lista.chiediDiAprire(item.taskId!); v.goOggi() }}
+            title={t('Apri il compito')} style={PASTIGLIA_RIGA} hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Apri il compito')}</Hov>
+        : <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); parla() }}
+            title={t('Parliamone in chat')} style={PASTIGLIA_RIGA} hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('Parliamone')}</Hov>}
+    </div>
+  )
+}
+
 function Domanda({ v }: { v: Vals }) {
   // Dopo la risposta, l'esito prende il posto della domanda e resta lì. Non è
   // un avviso che sfarfalla: è la prova che rispondere è servito a qualcosa.
