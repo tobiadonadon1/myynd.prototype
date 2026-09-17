@@ -328,7 +328,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
   }
   const [fuocoAperto, setFuocoAperto] = useState(false)
-  const [domanda, setDomanda] = useState<{ id: string; testo: string; spunto: string[] } | null>(null)
+  const [domanda, setDomanda] = useState<{ id: string; testo: string; spunto: string[]; tema?: string } | null>(null)
   const [rispostaDom, setRispostaDom] = useState('')
   const [esitoDom, setEsitoDom] = useState('')
   const [spuntoAperto, setSpuntoAperto] = useState(false)

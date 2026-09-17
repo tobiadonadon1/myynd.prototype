@@ -994,6 +994,9 @@ function Domanda({ v }: { v: Vals }) {
   }
 
   if (!v.domanda) return null
+  // il riferimento non sta in cinque parole: è una riga per progetto, e si
+  // scrive in una casella che va a capo, con la domanda sopra
+  const lunga = v.domanda.tema === 'riferimento'
 
   return (
     <div style={{
@@ -1017,8 +1020,8 @@ function Domanda({ v }: { v: Vals }) {
         viene dopo, essendo un fratello successivo, gli finiva sopra. Si alza
         la fascia intera, non il figlio.
       */
-      position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13,
-      margin: '14px 0 4px', padding: '10px 14px 10px 15px',
+      position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13, flexWrap: lunga ? 'wrap' : 'nowrap',
+      margin: '14px 0 4px', padding: lunga ? '14px 16px' : '10px 14px 10px 15px',
       borderRadius: 16,
       background: 'linear-gradient(258deg, rgba(255,253,249,.82) 0%, rgba(255,253,249,.46) 55%, rgba(255,253,249,.16) 100%)',
       backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
@@ -1029,24 +1032,40 @@ function Domanda({ v }: { v: Vals }) {
     }}>
       <Marchio dim={14} animato={false} />
 
-      <span style={{ fontSize: '15px', color: '#22271F', flex: 'none', maxWidth: 300, textWrap: 'pretty', lineHeight: 1.3 }}>
+      <span style={{ fontSize: '15px', color: '#22271F', flex: lunga ? '1 1 100%' : 'none', maxWidth: lunga ? 640 : 300, textWrap: 'pretty', lineHeight: 1.35 }}>
         {v.domanda.testo}
       </span>
 
-      {/* il rigo su cui si risponde, non una casella */}
-      <input
-        value={v.rispostaDom}
-        onChange={e => v.setRispostaDom(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') v.rispondiADomanda()
-          if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
-        }}
-        placeholder={t('Bastano cinque parole')}
-        style={{
-          flex: 1, minWidth: 90, padding: '5px 2px', border: 'none',
-          borderBottom: '1px solid rgba(34,39,31,.2)', background: 'none',
-          color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
-        }} />
+      {/* il rigo su cui si risponde, non una casella; per il riferimento una casella che va a capo */}
+      {lunga ? (
+        <textarea
+          value={v.rispostaDom}
+          onChange={e => v.setRispostaDom(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); v.rispondiADomanda() }
+            if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
+          }}
+          rows={5}
+          placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
+          style={{
+            flex: '1 1 100%', minWidth: 0, padding: '8px 10px', border: '1px solid rgba(34,39,31,.16)', borderRadius: 10,
+            background: 'rgba(255,255,255,.55)', color: '#22271F', fontSize: '14px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
+          }} />
+      ) : (
+        <input
+          value={v.rispostaDom}
+          onChange={e => v.setRispostaDom(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') v.rispondiADomanda()
+            if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
+          }}
+          placeholder={t('Bastano cinque parole')}
+          style={{
+            flex: 1, minWidth: 90, padding: '5px 2px', border: 'none',
+            borderBottom: '1px solid rgba(34,39,31,.2)', background: 'none',
+            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+          }} />
+      )}
 
       <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')} aria-label={t('Rispondi')}
         style={{

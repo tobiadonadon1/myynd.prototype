@@ -177,7 +177,9 @@ function documentiScritti(docs: store.Documento[]): string {
     `id: ${d.id}\nfonte: ${d.fonte} · quando: ${(d.quando ?? '').slice(0, 10) || 'sconosciuto'}${d.autore ? ` · da: ${unaRiga(d.autore, 60)}` : ''}${d.letto ? ' · letta' : ''}${d.inviato ? ' · scritta da lei' : ''}\n` +
     // una cartella di lavoro porta i commit, una chat porta il ragionamento:
     // serve più spazio di una mail
-    `titolo: ${unaRiga(d.titolo, 120)}\n${SUE.has(d.fonte) ? corpoAttuale(d).slice(0, 1200) : unaRiga(corpoAttuale(d), 350)}`
+    // le sue fonti si leggono intere: `corpoAttuale` taglia a una riga che
+    // comincia con «>» o «From:», e una chat con una citazione finiva lì
+    `titolo: ${unaRiga(d.titolo, 120)}\n${SUE.has(d.fonte) ? d.corpo.replace(/[ \t]+/g, ' ').slice(0, 1200) : unaRiga(corpoAttuale(d), 350)}`
   ).join('\n\n')
 }
 

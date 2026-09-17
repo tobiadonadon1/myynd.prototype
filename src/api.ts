@@ -1289,7 +1289,7 @@ export const api = {
       `/api/feed/${encodeURIComponent(id)}/rispondi`,
       { method: 'POST', body: JSON.stringify({ testo, stato }) }
     ),
-  domanda: () => json<{ domanda: null | { id: string; testo: string; spunto: string[] } }>('/api/domanda'),
+  domanda: () => json<{ domanda: null | { id: string; testo: string; spunto: string[]; tema?: string } }>('/api/domanda'),
   rispondiDomanda: (id: string, testo: string) =>
     json<{ ok: true; esito: string }>(`/api/domanda/${encodeURIComponent(id)}/rispondi`, { method: 'POST', body: JSON.stringify({ testo }) }),
   ignoraDomanda: (id: string) =>

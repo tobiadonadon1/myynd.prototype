@@ -1356,6 +1356,7 @@ const EN: Record<string, string> = {
   // — quando è lui a chiedere —
   'Myynd chiede': 'Myynd asks',
   'Bastano cinque parole': 'Five words is plenty',
+  'Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.': 'One line per project: what you are on, what is dead, what is blocked. Cmd+Enter to send.',
   'Rispondi': 'Answer',
   'Perché me lo chiedi?': 'Why are you asking?',
   'Hai tolto di mezzo queste senza dirmi perché:': "You pushed these away without telling me why:",
