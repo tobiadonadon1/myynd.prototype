@@ -22,6 +22,8 @@ const cfg = await import('./config.ts')
 const claude = await import('./claude.ts')
 const compatibile = await import('./compatibile.ts')
 const revisione = await import('./revisione-lavoro.ts')
+// niente attesa fra i due tentativi nelle prove: il secondo tentativo esiste, il tempo no
+revisione.attesaRitentativoPerProva(0)
 
 beforeEach(() => { store.azzeraTutto(); revisione.perProva(null) })
 after(() => {

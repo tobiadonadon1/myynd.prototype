@@ -520,8 +520,9 @@ async function proponiIlSeguito(c: store.Compito, risultato: string, progetto: p
       progetto: progetto && progetto.stato !== 'chiuso' ? progetto : null,
       inLista: vivi.filter(v => !c.progetto || v.progetto === c.progetto).map(v => v.testo)
     })
-    if (!passo || richiamati.has(chiave(c.id))) return
-    if (vivi.some(v => simili(v.testo, passo))) return
+    if (!passo) { console.info(`myynd · seguito · ${c.id} · niente da proporre`); return }
+    if (richiamati.has(chiave(c.id))) return
+    if (vivi.some(v => simili(v.testo, passo))) { console.info(`myynd · seguito · ${c.id} · già in lista: «${passo.slice(0, 80)}»`); return }
     // la riga può essere stata chiusa o richiamata mentre il modello pensava
     if (store.compito(c.id)?.stato !== 'pronto') return
     // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso

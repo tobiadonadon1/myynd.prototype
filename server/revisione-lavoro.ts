@@ -149,6 +149,10 @@ function estratto(d: store.Documento, n: number, tetto: number): string {
 }
 
 /** Il verdetto quando non c'è nessuno che possa darlo: si dice, non si finge. */
+/** Quanto si aspetta prima del secondo tentativo, in millisecondi: nelle prove si azzera. */
+export let ATTESA_RITENTATIVO = 4000
+export function attesaRitentativoPerProva(ms: number) { ATTESA_RITENTATIVO = ms }
+
 function nonDisponibile(per: string): Giudizio {
   return { esito: 'unavailable', per, comeTe: '', comeLoro: '', problemi: [], verificato: [] }
 }
@@ -247,13 +251,21 @@ export async function giudica(o: {
     fonti
   ].filter((r, i, tutte) => r !== '' || tutte[i - 1] !== '').join('\n')
 
-  const out = await ferri.chiediJSON<Uscita>({
-    lavoro: 'revisione',
+  const richiesta = {
+    lavoro: 'revisione' as const,
     max_tokens: 2500,
     system: conLaLingua(sistema),
     formato: SCHEMA_GIUDIZIO,
-    messages: [{ role: 'user', content: messaggio }]
-  })
+    messages: [{ role: 'user' as const, content: messaggio }]
+  }
+  let out = await ferri.chiediJSON<Uscita>(richiesta)
+  // «Selected model is at capacity»: un revisore che si arrende al primo
+  // rifiuto del fornitore lascia uscire il lavoro senza rilettura. Un secondo
+  // tentativo dopo qualche secondo, uno solo; poi si dice che non c'era.
+  if (!out) {
+    await new Promise(r => setTimeout(r, ATTESA_RITENTATIVO))
+    out = await ferri.chiediJSON<Uscita>(richiesta)
+  }
   if (!out || (out.esito !== 'pass' && out.esito !== 'revise')) return nonDisponibile(stimato)
 
   const problemi = righe(out.problemi, 400, 8)
