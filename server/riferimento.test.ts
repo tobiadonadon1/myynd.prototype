@@ -93,3 +93,21 @@ test('scrivi: vuoto non si accetta, e il tetto vale', () => {
   riferimento.scrivi('x'.repeat(2000))
   assert.equal(riferimento.leggi().testo.length, 1500)
 })
+
+test('i nomi in testa alle righe del riferimento che sono cartelle di lavoro diventano progetti; gli altri no', async () => {
+  const store = await import('./store.ts')
+  const progetti = await import('./progetti.ts')
+  const r = await import('./riferimento.ts')
+  assert.deepEqual(r.nomiNelRiferimento('x-engine: on: posting. dead: nothing.\nNextas, H-Brain and soleagencyweb: status unknown\nEvermute (everwave): on: the review\nno colon here\nNote: nothing else'),
+    ['x-engine', 'Nextas', 'H-Brain', 'soleagencyweb', 'Evermute', 'Note'])
+  store.salvaDocumenti([
+    { id: 'lavoro:/Users/t/x-engine', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: x-engine', corpo: 'Cartella di lavoro', percorso: '/Users/t/x-engine', quando: new Date().toISOString() },
+    { id: 'lavoro:/Users/t/nextas-outreach-agent', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: nextas-outreach-agent', corpo: 'Cartella di lavoro', percorso: '/Users/t/nextas-outreach-agent', quando: new Date().toISOString() },
+    { id: 'lavoro:/Users/t/Desktop/everwave', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: everwave', corpo: 'Cartella di lavoro', percorso: '/Users/t/Desktop/everwave', quando: new Date().toISOString() }
+  ] as never)
+  progetti.scrivi({ nome: 'Evermute deck', obiettivo: 'Ship the deck' })
+  const creati = r.registraProgettiNominati('x-engine: on: posting.\nNextas, H-Brain: status unknown\nEvermute (everwave): on: the review\nNote: nothing else')
+  assert.deepEqual(creati, ['x-engine', 'Nextas'], 'H-Brain non ha cartella qui, Evermute esiste già, everwave è fra parentesi, Note non è una cartella')
+  assert.ok(progetti.trovaPerNome('x-engine'))
+  assert.equal(r.registraProgettiNominati('x-engine: still on').length, 0, 'la seconda volta non ne crea un altro')
+})

@@ -357,7 +357,11 @@ export type Giro = { voci: Priorita[]; domande: DomandaDelGiro[]; guardati: numb
  * vedere le carte prima di metterle sul feed, o misurarle (`valuta-feed.ts`).
  */
 export async function proponi(): Promise<Giro | null> {
-  const tutti = store.recenti(160)
+  // ottocento e non centosessanta: i post di X e le chat, che sono tanti e
+  // datati oggi, si mangiavano da soli la finestra dei più recenti e la
+  // posta e i file di due settimane fa restavano fuori. I tetti per fonte
+  // stanno in `documentiPerLePriorita`: qui si pesca largo, lì si sceglie.
+  const tutti = store.recenti(800)
   const docs = documentiPerLePriorita(tutti)
   const suoi = progetti.elenco('attivo')
   const nomi = new Map(suoi.map(p => [p.nome.trim().toLowerCase(), p.id]))

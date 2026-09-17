@@ -48,6 +48,53 @@ export function scrivi(testo: string) {
     valore: pulito,
     tetto: TETTO
   })
+  registraProgettiNominati(pulito)
+}
+
+/**
+ * I nomi in testa alle righe del riferimento («x-engine: …», «Nextas, H-Brain: …»).
+ *
+ * Una riga comincia col nome e i due punti; una lista con le virgole sono
+ * più nomi; quello fra parentesi è un altro nome della stessa cosa, e non
+ * conta. Serve a `registraProgettiNominati`, ed è puro.
+ */
+export function nomiNelRiferimento(testo: string): string[] {
+  const nomi: string[] = []
+  for (const riga of testo.split(/\n+/)) {
+    const m = riga.match(/^\s*([^:\n]{2,60}?)\s*:/)
+    if (!m) continue
+    for (const pezzo of m[1].split(/\s*(?:,|\/|\be\b|\band\b)\s*/)) {
+      const nome = pezzo.replace(/\(.*?\)/g, '').trim()
+      if (nome.length >= 2 && nome.length <= 40 && !/\s{2,}/.test(nome) && nome.split(/\s+/).length <= 4) nomi.push(nome)
+    }
+  }
+  return [...new Set(nomi)]
+}
+
+/**
+ * Un nome del riferimento che è anche una cartella di lavoro sul disco, e
+ * non è ancora un progetto, diventa un progetto.
+ *
+ * Le priorità su x-engine, Everwave e Nextas finivano in «Il resto» perché
+ * quelle cose esistevano come cartelle, non come progetti: lui le conosce,
+ * Myynd no. Il riferimento è l'elenco dei suoi progetti scritto da lui, e
+ * una cartella con quel nome è la prova che non è una parola qualsiasi:
+ * «Note: …» non diventa un progetto, «x-engine: …» sì.
+ */
+export function registraProgettiNominati(testo: string): string[] {
+  const cartelle = store.idsConPrefisso('lavoro:').map(id => id.slice(id.lastIndexOf('/') + 1).toLowerCase())
+  const normale = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const creati: string[] = []
+  for (const nome of nomiNelRiferimento(testo)) {
+    if (progetti.trovaPerNome(nome)) continue
+    const n = normale(nome)
+    if (n.length < 3 || !cartelle.some(c => { const k = normale(c); return k === n || k.startsWith(n) || n.startsWith(k) })) continue
+    if (progetti.vivi().some(p => normale(p.nome).startsWith(n) || n.startsWith(normale(p.nome)))) continue
+    progetti.scrivi({ nome, origine: 'conversazione' })
+    creati.push(nome)
+  }
+  if (creati.length) console.log(`myynd · riferimento · progetti nuovi dalle sue righe: ${creati.join(', ')}`)
+  return creati
 }
 
 /** Vero se c'è un riferimento e non ha ancora l'età per essere richiesto. */

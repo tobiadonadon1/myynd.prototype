@@ -3995,8 +3995,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
      * chi le spegne non se le ritrova accese all'avvio dopo. La prima lettura
      * la fa la rilettura automatica, un minuto dopo l'avvio.
      */
-    if (!ospitato.OSPITATO) {
-      const c0 = cfg.leggi()
+    // e solo per un conto che ha già una fonte sua: i conti di prova di
+    // questa installazione non devono leggersi le sue chat e i suoi post
+    const c0 = cfg.leggi()
+    const conFonti = !!(c0.desktop || c0.posta || c0.note || c0.google || c0.microsoft || c0.granola || c0.notion)
+    if (!ospitato.OSPITATO && conFonti) {
       const accesi = [...(c0.accesiDaSoli ?? [])]
       if (!c0.conversazioni && !accesi.includes('conversazioni') && conversazioni.agentiPossibili()) {
         accesi.push('conversazioni')

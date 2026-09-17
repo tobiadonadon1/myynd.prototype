@@ -4,6 +4,7 @@ import { leggi } from './config.ts'
 import { projectInitiatives } from './project-initiative.ts'
 import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 import { eProposta } from './priorita.ts'
+import { nominaAmbito } from './ambiti-memoria.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
   return classificaAttenzione(d, {
@@ -23,9 +24,13 @@ export function feedAttuale(adesso = Date.now()) {
    * progetto attivo. È quello che permette alla prima pagina di mettere ogni
    * voce nel blocco del suo progetto invece che in una lista sola.
    */
-  const attivi = progetti.elenco('attivo')
+  // Solo se lo nomina: `tocca` accetta anche due parole dell'obiettivo, e
+  // con quello «Review x-engine's posting cycle» finiva sotto Myynd e
+  // «H-Brain» sotto H-Farm. Il nome più lungo vince, così «H-Farm audit»
+  // batte «H-Farm».
+  const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
   const progettoDi = (v: Record<string, string | null>) => v.progetto
-    || attivi.find(p => progetti.toccaUnProgetto(`${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`, [p]))?.id
+    || attivi.find(p => nominaAmbito(`${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`, p.nome))?.id
     || null
   const docs = new Map(voci.flatMap(v => {
     const d = v.doc ? store.documento(v.doc) : null
