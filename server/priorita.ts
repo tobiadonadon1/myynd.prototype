@@ -133,11 +133,11 @@ const FORMA = {
         properties: {
           genere: { type: 'string', enum: ['priorita', 'proposta'] },
           titolo: { type: 'string', description: 'Comincia con un verbo. Preciso: nomi, cifre e date lette davvero.' },
-          testo: { type: 'string', description: 'Due righe: cosa, perché adesso, e da dove lo sai.' },
+          testo: { type: 'string', description: 'Una frase, venti parole al massimo: perché adesso, e da dove lo sai.' },
           perche: { type: 'string', description: 'Dodici parole al massimo: quale progetto o obiettivo muove.' },
           progetto: { type: 'string', description: 'Il nome esatto di uno dei progetti, o una stringa vuota.' },
           doc: { type: 'string', description: 'L\'id esatto del documento da cui nasce, o una stringa vuota.' },
-          offerta: { type: 'string', description: 'Cosa faresti tu da solo per portarla avanti, in prima persona, una frase concreta.' }
+          offerta: { type: 'string', description: 'Cosa faresti tu da solo per portarla avanti, in prima persona, una frase corta di dodici parole al massimo.' }
         },
         required: ['genere', 'titolo', 'testo', 'perche', 'progetto', 'doc', 'offerta'],
         additionalProperties: false
@@ -197,9 +197,11 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
     return s.length >= min && s.length <= max ? s : null
   }
   const titolo = testoDi(g.titolo, 10, 140)
-  const testo = testoDi(g.testo, 24, 320)
+  // corti apposta: la carta in cima è piccola, e «molto pesante di testo» è
+  // la prima cosa che ha detto vedendola
+  const testo = testoDi(g.testo, 24, 200)
   const perche = testoDi(g.perche, 12, 200)
-  const offerta = testoDi(g.offerta, 12, 300)
+  const offerta = testoDi(g.offerta, 12, 160)
   if (!titolo || !testo || !perche || !offerta) return null
   if ([titolo, testo, perche, offerta].some(conGergo)) return null
   if (gia.some(t => stessaCosa(t, titolo))) return null
@@ -239,7 +241,7 @@ Scrivi da zero a ${AL_GIRO} priorità, le più importanti prima. Ognuna nasce da
 — «priorita»: una cosa che dovrebbe fare adesso e che non è in lista. Un problema segnalato in una mail e lasciato lì, un passo che l'obiettivo di un progetto chiede e nessuno ha messo in lista, una cosa cominciata e lasciata a metà.
 — «proposta»: un'idea concreta che porta avanti un suo progetto o un suo obiettivo: un prodotto da un materiale che ha già, un miglioramento a una cosa sua, una mossa che le sue fonti suggeriscono. Solo se è ancorata a qualcosa di suo che hai letto qui.
 
-Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa; un testo di due righe che dice cosa, perché adesso, e da dove lo sai; un perché di dodici parole, cioè quale progetto o obiettivo muove; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase concreta, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
+Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa; un testo di UNA frase, venti parole al massimo, che dice perché adesso e da dove lo sai (la carta è piccola: non ripetere il titolo); un perché di dodici parole, cioè quale progetto o obiettivo muove; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase corta, dodici parole al massimo, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
 
 Le parole: semplici, dirette, come si parla a un collega. Frasi corte. Dì la cosa da fare e perché, con i nomi delle cose sue. Niente gergo di prodotto o di consulenza: niente «specifica», «criteri di accettazione», «gerarchia», «flusso», «stakeholder», «rubrica di valutazione», «UX». Se una frase la capirebbe solo chi lavora in un'agenzia, riscrivila. L'offerta dice cosa consegni, in una frase che lui capisce al volo: «Ti preparo la risposta ad Apple con il video e le istruzioni», non «una specifica con criteri di accettazione».
 

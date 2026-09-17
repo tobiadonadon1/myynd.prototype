@@ -849,27 +849,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
   }
 
-  const mettiInLista = async (v: VoceFeed) => {
-    setMenuAperto(false)
-    // sparisce subito dal feed: aspettare il giro completo del server su un
-    // gesto così piccolo fa sembrare l'app lenta proprio dove è più veloce
-    setAperti(a => a.filter(x => x.id !== v.id))
-    try {
-      await api.aggiungiCompito({
-        id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        testo: v.titolo,
-        quando: 'oggi',
-        origine: 'feed',
-        voce: v.id,
-        ...(v.doc ? { doc: v.doc } : {})
-      })
-      mostraToast(t('Messa in lista.'))
-    } catch (e) {
-      // rimetterla dov'era è meglio che farla sparire in silenzio
-      setAperti(a => [v, ...a])
-      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a metterla in lista.'))
-    }
-  }
 
   const mandaRisposta = async (testo: string, stato?: string) => {
     if (!hero || !testo.trim()) return
@@ -987,7 +966,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       id: i.id, tipo: i.tipo, titolo: carta.titolo, ora: quando(dataFonte(i)),
       // una parola, non un percorso: vale qui come sulla carta in cima
       fonte: i.doc || i.fonte ? parolaFonte(i.fonte, i.doc) : '',
-      onInLista: () => mettiInLista(i as unknown as VoceFeed),
       // Aperta è tutta; chiusa si ferma dov'è ancora una frase e non un
       // troncone. Il chevron sta attaccato a questo punto, in fondo alle
       // parole — è lì che ti accorgi che ne mancano, non in cima alla riga.
@@ -1219,7 +1197,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // sette righe di paragrafo per ogni voce sono un muro, non un feed.
     heroTesto: heroLong ? heroCarta.testo : taglia(heroCarta.testo, 320),
     heroTagliato: heroCarta.testo.length > 320,
-    heroPerche: heroCarta.perche,
+    // con l'offerta sotto, il perché è una riga di troppo: la carta era «molto pesante di testo»
+    heroPerche: hero?.offerta ? '' : heroCarta.perche,
     // una priorità proposta da Myynd porta la sua offerta: cosa farebbe lui
     heroOfferta: hero?.offerta ?? '',
     heroFonteDettaglio: [hero?.fonteAutore, hero?.fonteTitolo].filter(Boolean).join(' · '),
@@ -1268,8 +1247,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     chiudiMenu: () => setMenuAperto(false),
     /** Il gesto della carta grande: la stessa funzione delle righe. */
     scartaHero: () => { if (hero) void scarta(hero) },
+    // niente «Mettila in lista»: una voce del feed è già una cosa da fare —
+    // «perché dovrebbe chiedermi di metterla in lista? è già in lista»
     correzioni: hero ? [
-      { id: 'lista', label: t('Mettila in lista'), onClick: () => mettiInLista(hero) },
       // Parlarne è diventato il gesto raro: il bottone in chiaro adesso
       // affida davvero la cosa a Myynd invece di scrivergli «dimmi di più».
       // La coda è testo che finisce nella *sua* bolla e resta scritto nella

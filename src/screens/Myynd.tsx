@@ -97,18 +97,7 @@ function Riga({ riga }: { riga: Vals['resto'][number] }) {
           <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.perche}</div>
         )}
       </div>
-      {/* prendere in carico una cosa che lui ha notato: è il gesto che unisce le
-          due schermate, e va fatto da qui — dove la cosa la stai leggendo */}
-      <Hov as="button"
-        onClick={(e: MouseEvent) => { e.stopPropagation(); riga.onInLista() }}
-        title={t('Mettila in lista')} aria-label={t('Mettila in lista')}
-        style={{
-          flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
-          background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
-          fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
-        }}
-        hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('in lista')}</Hov>
+      {/* niente «in lista» qui: una riga del feed è già una cosa da fare */}
 
       {riga.urgenza && <span style={riga.pill}>{riga.urgenza}</span>}
     </div>
