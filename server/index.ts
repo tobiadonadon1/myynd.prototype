@@ -2288,9 +2288,12 @@ app.post('/api/feed/genera', async (_req, res) => {
     // e la rilettura delle fonti, dopo e di fondo; alla fine si avvisa la
     // pagina, così la riga delle fonti dice quello che questa lettura ha visto
     const utente = chi.adesso()
+    // prima le fonti, poi il quadro: le priorità devono vedere quello che
+    // la rilettura ha appena portato — le cartelle di lavoro, la posta di
+    // oggi — non il materiale di ieri. La pagina lo sa comunque subito.
     const rileggi = async () => {
-      if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
       await rileggiDaSola(); compiti.annunciaFeed()
+      if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
     }
     void (utente ? chi.dentro(utente, rileggi) : rileggi())
       .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))

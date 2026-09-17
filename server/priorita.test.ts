@@ -19,7 +19,10 @@ store.salvaDocumenti([
   { id: 'posta:INBOX:1', fonte: 'posta', tipo: 'email', titolo: 'App Store review: Evermute needs more information', corpo: 'Hello, we need a recording of the app on a physical device and setup instructions before we can continue the review of Evermute.', autore: 'App Review <review@apple.example>', quando: giorniFa(12), letto: 1 },
   { id: 'posta:INBOX:2', fonte: 'posta', tipo: 'email', titolo: 'Follow the money. Get 60% off.', corpo: 'Unsubscribe here. Promo code inside, limited offer, buy now.', autore: 'News <news@promo.example>', quando: giorniFa(1), massa: 1 },
   { id: 'desktop:/Users/t/Desktop/note.md', fonte: 'desktop', tipo: 'documento', titolo: 'Website offers', corpo: 'Three offers for tobiadonadon.com: audit, workshop, retainer. Draft pricing pending.', percorso: '/Users/t/Desktop/note.md', quando: giorniFa(20) },
-  { id: 'desktop:/Users/t/x/node_modules/a/README.md', fonte: 'desktop', tipo: 'documento', titolo: 'README', corpo: 'npm install this package to use it in your project', percorso: '/Users/t/x/node_modules/a/README.md', quando: giorniFa(1) }
+  { id: 'desktop:/Users/t/x/node_modules/a/README.md', fonte: 'desktop', tipo: 'documento', titolo: 'README', corpo: 'npm install this package to use it in your project', percorso: '/Users/t/x/node_modules/a/README.md', quando: giorniFa(1) },
+  { id: 'posta:INBOX:3', fonte: 'posta', tipo: 'email', titolo: 'Living in Ceru: the contract', corpo: 'Hi Tobia, we still need your signature on the contract before we can hand over the keys.', autore: 'Marta <marta@ceru.example>', quando: giorniFa(60), letto: 1 },
+  { id: 'posta:INBOX:4', fonte: 'posta', tipo: 'email', titolo: 'Old thread', corpo: 'This was a long time ago and does not matter now.', autore: 'Luca <luca@example.com>', quando: giorniFa(120) },
+  { id: 'lavoro:/Users/t/x-engine', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: x-engine', corpo: 'Cartella di lavoro: x-engine. Ultimi commit:\n2026-09-17  browser reply path working', percorso: '/Users/t/x-engine', quando: giorniFa(0) }
 ] as never)
 
 test('per le priorità contano anche le mail lette e i file vecchi, non la posta in serie e la roba di macchina', () => {
@@ -28,6 +31,9 @@ test('per le priorità contano anche le mail lette e i file vecchi, non la posta
   assert.ok(ids.includes('desktop:/Users/t/Desktop/note.md'), 'un appunto di venti giorni fa è ancora il quadro')
   assert.ok(!ids.includes('posta:INBOX:2'), 'una promozione non dice niente su cosa fare')
   assert.ok(!ids.includes('desktop:/Users/t/x/node_modules/a/README.md'), 'un README di una libreria non è roba sua')
+  assert.ok(ids.includes('posta:INBOX:3'), 'una mail di due mesi fa su un contratto ancora da firmare conta')
+  assert.ok(!ids.includes('posta:INBOX:4'), 'oltre i novanta giorni è archeologia')
+  assert.ok(ids.includes('lavoro:/Users/t/x-engine'), 'una cartella di lavoro con i suoi commit è il quadro')
 })
 
 test('ripulisci chiude la porta: verbo, misure, documento fra quelli letti, progetto per nome, niente doppioni, niente lineette', () => {
@@ -59,6 +65,8 @@ test('forse: con un modello mette le priorità sul feed, con l’offerta, e non 
       chiamate++
       assert.match(o.system, /Evermute/, 'il progetto e il suo obiettivo stanno nel prompt')
       assert.match(o.messages[0].content, /App Store review/, 'la mail letta di dodici giorni fa sta nel materiale')
+      assert.match(o.messages[0].content, /browser reply path working/, 'i commit della cartella di lavoro stanno nel materiale, per intero')
+      assert.match(o.system, /cartelle di lavoro/, 'e il prompt dice come usarli')
       return { priorita: [
         { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions; nothing went back yet.', perche: 'Unblocks the Evermute App Store release', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist and the setup steps.' },
         { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide with a price.', perche: 'Moves tobiadonadon.com from copy to products', progetto: '', doc: 'desktop:/Users/t/Desktop/note.md', offerta: 'I outline the three products with a price and a first chapter each.' },

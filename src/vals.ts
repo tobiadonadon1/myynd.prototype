@@ -749,9 +749,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       await caricaFeed()
       // «dice che c'è un passo da chiarire, ma non mi ci porta»: la frase dice
       // dove, e la pagina porta le carte sotto gli occhi e le accende un attimo
+      // «213 più vecchi della finestra» è una regola raccontata come scusa, e
+      // a chi lavora su otto progetti suona ridicola: quando il quadro sta per
+      // essere guardato, si dice quello, e basta. I numeri restano solo per
+      // chi non ha un modello che possa dire altro.
       mostraToast(r.generate ? frasi.coseNuove(r.generate)
+        : r.cerco ? t('Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.')
         : (r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
-          + (r.cerco ? ' ' + t('Guardo tutto il resto: quello che trovo compare qui da sé.') : '')
           + (r.iniziative?.length ? ' ' + t('I tuoi progetti aspettano un passo, qui sotto.') : ''))
       if (!r.generate && r.iniziative?.length) setEvidenziaProgetti(Date.now())
     } catch (e) {

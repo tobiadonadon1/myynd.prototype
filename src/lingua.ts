@@ -874,7 +874,7 @@ const EN: Record<string, string> = {
   'Priorità': 'Priority',
   'Proposta': 'Proposal',
   'Posso farlo io:': 'I can do this:',
-  'Guardo tutto il resto: quello che trovo compare qui da sé.': 'Looking over everything else: what I find will show up here by itself.',
+  'Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.': 'Nothing new came in from your sources. I am going over your projects, work folders and mail now: what I find will show up here by itself.',
   // — i gruppi della mappa —
   'Documenti': 'Documents',
   'Altre fonti': 'Other sources',
