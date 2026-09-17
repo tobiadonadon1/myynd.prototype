@@ -186,9 +186,21 @@ type Archivio = {
   scartati: string[]
   regoleScartate?: string[]
   contesto?: string
+  /**
+   * Gli id che ha già avuto sotto gli occhi.
+   *
+   * È quello che fa accendere il fulmine in colonna: una proposta che non sta
+   * qui è nuova, e la schermata la segna vista appena la mostra. L'id di una
+   * proposta viene dal suo nome, quindi la stessa proposta riscritta domani
+   * resta vista: non si riaccende per una cosa già letta.
+   */
+  visti?: string[]
 }
 
-const VUOTO: Archivio = { quando: null, lingua: '', suggerimenti: [], scartati: [] }
+const VUOTO: Archivio = { quando: null, lingua: '', suggerimenti: [], scartati: [], visti: [] }
+
+/** Quanti id visti si tengono: bastano a coprire mesi di proposte da tre al giorno. */
+const VISTI_MAX = 60
 const FILE = () => join(cartella(), 'scoperte.json')
 
 function leggiArchivio(): Archivio {
@@ -703,11 +715,25 @@ function vivi(quali: Suggerimento[], esistenti: Set<string>): Suggerimento[] {
   }).slice(0, 3)
 }
 
+/** Un giro: quello che ha da mostrare, e se l'ha scritto adesso o l'ha solo riletto. */
+type Giro = { lista: Suggerimento[]; composti: boolean }
+
 /*
  * Uno per persona: due richieste vicine — la schermata e un aggiornamento
  * arrivato addosso — non devono pagare due giri.
  */
-const inCorso = new Map<string, Promise<Suggerimento[]>>()
+const inCorso = new Map<string, Promise<Giro>>()
+
+function giro(forza: boolean): Promise<Giro> {
+  const chiave = cartella()
+  let g = inCorso.get(chiave)
+  // chi chiede di rifare non si accoda a un giro che magari sta solo leggendo la cache
+  if (!g || forza) {
+    g = fai(forza).finally(() => { inCorso.delete(chiave) })
+    inCorso.set(chiave, g)
+  }
+  return g
+}
 
 /**
  * I suggerimenti, secondo il cancello.
@@ -717,28 +743,38 @@ const inCorso = new Map<string, Promise<Suggerimento[]>>()
  * questa schermata. Con `forza`: si rifanno.
  */
 export function suggerimenti(forza = false): Promise<Suggerimento[]> {
-  const chiave = cartella()
-  let giro = inCorso.get(chiave)
-  // chi chiede di rifare non si accoda a un giro che magari sta solo leggendo la cache
-  if (!giro || forza) {
-    giro = fai(forza).finally(() => { inCorso.delete(chiave) })
-    inCorso.set(chiave, giro)
-  }
-  return giro
+  return giro(forza).then(g => g.lista)
 }
 
-async function fai(forza: boolean): Promise<Suggerimento[]> {
+/**
+ * Il giro di sfondo: lo stesso cancello, senza nessuno che guardi.
+ *
+ * Prima le proposte nascevano solo aprendo la schermata, e la schermata
+ * restava vuota per i secondi in cui il modello le scriveva: chi entrava non
+ * capiva perché comparissero dopo. Adesso le scrive la rilettura automatica,
+ * a sue spese e con la sua regola — una volta al giorno per conto — e la
+ * schermata le trova pronte. Non forza mai: se il foglio è fresco, o non c'è
+ * un modello, non costa niente e torna `null`. Torna la lista solo quando
+ * l'ha scritta adesso: è il segnale per dirlo in colonna.
+ */
+export async function inSottofondo(): Promise<Suggerimento[] | null> {
+  if (!ferri.collegato()) return null
+  const g = await giro(false)
+  return g.composti ? g.lista : null
+}
+
+async function fai(forza: boolean): Promise<Giro> {
   const esistenti = new Set([...auto.ricette().map(a => a.id), ...store.automazioniTolte()])
   const lin = lingua()
   const locali = () => vivi(rileva(documentiPerSuggerimenti(store.recenti(200)), attrezzi.catalogo(), esistenti, lin !== 'it'), esistenti)
   // senza modello si resta ai cinque modelli, e non si scrive niente sul
   // foglio: una passata che non costa nulla non ha bisogno di una cache
-  if (!ferri.collegato()) return locali()
+  if (!ferri.collegato()) return { lista: locali(), composti: false }
 
   const a = leggiArchivio()
   const contesto = improntaContesto()
   const fresco = !!a.quando && Date.now() - new Date(a.quando).getTime() < ORE_VALIDE * 3_600_000 && a.lingua === lin && a.contesto === contesto
-  if (!forza && fresco) return vivi(a.suggerimenti, esistenti)
+  if (!forza && fresco) return { lista: vivi(a.suggerimenti, esistenti), composti: false }
 
   /*
    * Si segna il giro *prima* di chiederlo.
@@ -750,10 +786,52 @@ async function fai(forza: boolean): Promise<Suggerimento[]> {
    */
   scriviArchivio({ ...a, quando: new Date().toISOString(), lingua: lin, contesto })
   const nuovi = await componi(a.scartati)
-  if (!nuovi) return a.suggerimenti.length ? vivi(a.suggerimenti, esistenti) : locali()
+  if (!nuovi) return { lista: a.suggerimenti.length ? vivi(a.suggerimenti, esistenti) : locali(), composti: false }
   // riletto adesso, non da prima della chiamata: uno scarto arrivato nel frattempo resterebbe fuori
   scriviArchivio({ ...leggiArchivio(), quando: new Date().toISOString(), lingua: lin, contesto, suggerimenti: nuovi })
-  return vivi(nuovi, esistenti)
+  return { lista: vivi(nuovi, esistenti), composti: true }
+}
+
+// — le nuove: quello che accende il fulmine —
+
+/**
+ * Le proposte che non ha ancora visto.
+ *
+ * Si legge il foglio e basta: niente modello, niente giro. Lo chiede
+ * `/api/stato`, cioè ogni apertura dell'app, e deve costare quanto leggere un
+ * file. Senza modello il foglio non conta — la schermata mostrerebbe i cinque
+ * modelli, non queste — e un fulmine acceso su cose che poi non compaiono
+ * insegna a non guardarlo.
+ */
+export function nuovi(): Suggerimento[] {
+  try {
+    if (!ferri.collegato()) return []
+    const a = leggiArchivio()
+    if (!a.suggerimenti.length) return []
+    const esistenti = new Set([...auto.ricette().map(x => x.id), ...store.automazioniTolte()])
+    const visti = new Set(a.visti ?? [])
+    return vivi(a.suggerimenti, esistenti).filter(s => !visti.has(s.id))
+  } catch {
+    // il fulmine non vale un errore sullo stato intero dell'app
+    return []
+  }
+}
+
+/**
+ * Le ha viste: tutte quelle sul foglio, adesso.
+ *
+ * Lo dice la schermata quando le ha mostrate, non quando le ha lette dal
+ * server: così una proposta scritta durante l'apertura della pagina — foglio
+ * vecchio, giro rifatto — è vista insieme alle altre. Si tengono gli ultimi
+ * sessanta id: sono mesi di proposte, e il file non cresce per sempre.
+ */
+export function segnaVisti(): void {
+  const a = leggiArchivio()
+  const ids = a.suggerimenti.map(s => s.id)
+  if (!ids.length) return
+  const visti = [...new Set([...(a.visti ?? []), ...ids])].slice(-VISTI_MAX)
+  if (visti.length === (a.visti ?? []).length && visti.every((id, i) => id === (a.visti ?? [])[i])) return
+  scriviArchivio({ ...a, visti })
 }
 
 /** Quella con questo id, senza chiamare nessuno: dal foglio, o dai modelli. */

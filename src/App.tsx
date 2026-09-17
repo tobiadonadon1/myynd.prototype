@@ -443,9 +443,12 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             </div>
           )}
 
-          <a href="#" onClick={v.goAuto} style={nav(v.navAuto)} title={rail ? t('Automazioni') : undefined}>
-            <IconFulmine style={{ flex: 'none' }} />
+          <a href="#" onClick={v.goAuto} style={nav(v.navAuto)} title={rail ? (v.suggerimentiNuovi > 0 ? t('Nuove automazioni proposte') : t('Automazioni')) : undefined}>
+            {/* Myynd ha una proposta nuova: il fulmine si accende di rame e il pallino dice
+                quello che dice dappertutto, qualcosa aspetta una persona; si spegne quando la guarda */}
+            <IconFulmine style={{ flex: 'none', ...(v.suggerimentiNuovi > 0 && !v.isAuto ? { color: '#C4623B' } : {}) }} />
             {!rail && <span style={{ flex: 1 }}>{t('Automazioni')}</span>}
+            {v.suggerimentiNuovi > 0 && <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: v.isAuto ? '#FFF7F0' : '#C4623B' }} />}
           </a>
         </div>
 

@@ -43,26 +43,46 @@ export function Automazioni({ v }: { v: Vals }) {
   const [nomeCartella, setNomeCartella] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
   const [carico, setCarico] = useState(true)
+  const [cercoSuggerimenti, setCercoSuggerimenti] = useState(true)
   const [errore, setErrore] = useState('')
   const [occupato, setOccupato] = useState('')
   const [scoperteErrore, setScoperteErrore] = useState('')
   const connessioni = v.connAttivi.map(c => c.id).sort().join(',')
+  const segnaVisti = v.segnaSuggerimentiVisti
+  /*
+    Le proposte si caricano per conto loro.
+
+    Stavano nello stesso `Promise.allSettled` delle automazioni, e la pagina
+    aspettava la più lenta: quando il foglio delle proposte era vecchio, il
+    modello le riscriveva, e per quei secondi la pagina restava vuota; poi
+    comparivano tutte insieme, senza che si capisse perché. Adesso le
+    automazioni arrivano subito e le proposte quando ci sono, e nel mezzo una
+    riga dice cosa si sta guardando. Appena sono sotto gli occhi si segnano
+    viste: è quello che spegne il fulmine in colonna.
+  */
+  const caricaSuggerimenti = useCallback(async (rifai = false) => {
+    setCercoSuggerimenti(true); setScoperteErrore('')
+    try {
+      setSuggerimenti((await api.suggerimentiAutomazioni(rifai)).suggerimenti)
+      segnaVisti().catch(() => {})
+    } catch (e) { setScoperteErrore(e instanceof Error ? e.message : String(e)) }
+    finally { setCercoSuggerimenti(false) }
+  }, [segnaVisti])
   const carica = useCallback(async () => {
     setCarico(true); setErrore('')
-    const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.suggerimentiAutomazioni(), api.iniziativa()])
-    const [a, c, r, s, i] = risultati
+    void caricaSuggerimenti()
+    const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.iniziativa()])
+    const [a, c, r, i] = risultati
     if (a.status === 'fulfilled') { setTutte(a.value.automazioni); setRepo(!!a.value.ricette.repo) }
     else setErrore(String(a.reason?.message ?? a.reason))
     if (c.status === 'fulfilled') { setCatalogo(c.value.attrezzi); setCartelle(c.value.cartelle) }
     else setErrore(String(c.reason?.message ?? c.reason))
     if (r.status === 'fulfilled') setRaccolte(r.value.raccolte)
     else setErrore(String(r.reason?.message ?? r.reason))
-    if (s.status === 'fulfilled') { setSuggerimenti(s.value.suggerimenti); setScoperteErrore('') }
-    else setScoperteErrore(String(s.reason?.message ?? s.reason))
     if (i.status === 'fulfilled') setIniziativa(i.value)
     else setErrore(String(i.reason?.message ?? i.reason))
     setCarico(false)
-  }, [])
+  }, [caricaSuggerimenti])
   useEffect(() => { void carica() }, [carica, connessioni])
   const azione = async (id: string, fai: () => Promise<void>) => {
     if (occupato) return
@@ -129,10 +149,8 @@ export function Automazioni({ v }: { v: Vals }) {
   })}{nomi.length > 4 && <span className="auto-source-more">+{nomi.length - 4}</span>}</div>
   const rinfresca = async () => {
     if (occupato) return
-    setOccupato('suggerimenti'); setScoperteErrore('')
-    try { setSuggerimenti((await api.suggerimentiAutomazioni(true)).suggerimenti) }
-    catch (e) { setScoperteErrore(e instanceof Error ? e.message : String(e)) }
-    finally { setOccupato('') }
+    setOccupato('suggerimenti')
+    try { await caricaSuggerimenti(true) } finally { setOccupato('') }
   }
   const schedaSuggerita = (s: SuggerimentoAutomazione) => <article className="auto-card suggestion" key={s.id}>
     <div className="auto-card-top"><span className="auto-status suggested">{t('Suggerita')}</span></div>
@@ -205,11 +223,17 @@ export function Automazioni({ v }: { v: Vals }) {
         <button className="auto-button primary" onClick={() => setAperto('')}><IconPiu size={14} />{t('Crea automazione')}</button>
       </div>
     </header>
-    {iniziativa && <section className="auto-initiative" aria-label={t('Prepara in anticipo')}>
-      <div><h2>{t('Prepara in anticipo')}</h2><p>{t('Fino a due preparazioni al giorno: risposte nella tua posta, prossimi passi, fatture e campi di moduli da rivedere. Nessun invio, pagamento o finestra aperta.')}</p>
+    {/*
+      Si chiamava «Prepara in anticipo», e non diceva cosa preparasse né in
+      anticipo su cosa. Il titolo adesso è la cosa che fa, e la frase sotto
+      dice quando, quanto e cosa non fa mai: le tre domande di chi vede un
+      interruttore.
+    */}
+    {iniziativa && <section className="auto-initiative" aria-label={t('Bozze pronte prima che le chieda')}>
+      <div><h2>{t('Bozze pronte prima che le chieda')}</h2><p>{t('Quando sul feed arriva una cosa che vuole una risposta o un passo, Myynd la prepara in sottofondo: al massimo due al giorno, e non manda mai niente.')}</p>
       {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}
       <small>{t('Funziona mentre Myynd è aperto e il Mac è sveglio.')}</small></div>
-      <div className="auto-initiative-controls"><button className="auto-switch" role="switch" aria-checked={iniziativa.attiva} aria-label={t('Prepara in anticipo')} disabled={!!occupato}
+      <div className="auto-initiative-controls"><button className="auto-switch" role="switch" aria-checked={iniziativa.attiva} aria-label={t('Bozze pronte prima che le chieda')} disabled={!!occupato}
         onClick={() => azione('iniziativa', async () => { setIniziativa(await api.impostaIniziativa(!iniziativa.attiva)); setIniziativaEsito('') })}><span /></button>
       <span>{iniziativa.attiva ? t('Attiva') : t('In pausa')}</span>
       {iniziativa.attiva && <button className="auto-button" disabled={!!occupato || iniziativa.inPausa} onClick={() => azione('iniziativa', async () => {
@@ -282,6 +306,12 @@ export function Automazioni({ v }: { v: Vals }) {
         <p>{tutte.length ? t('Nessun risultato') : t('Nessuna automazione ancora. Descrivine una, o accendi un suggerimento quando compare.')}</p>
         <button className={`auto-button ${tutte.length ? '' : 'primary'}`} onClick={() => { if (tutte.length) { setFiltro('tutte'); setCerca(''); setRaccolta('') } else setAperto('') }}>{tutte.length ? t('Mostra tutte') : t('Crea automazione')}</button>
       </div>}
+      {/*
+        Le proposte stanno arrivando: una riga, non un vuoto. Solo quando non
+        ce n'è ancora nessuna e nessun filtro le terrebbe fuori comunque.
+      */}
+      {!carico && cercoSuggerimenti && !suggerimenti.length && !cercaVera && !raccoltaVera && filtroVero === 'tutte' &&
+        <p role="status" style={{ fontSize: 13, color: '#64675e', margin: '14px 2px 0' }}>{t('Guardo cosa si ripete nel tuo lavoro…')}</p>}
     </section>
     <footer className="auto-page-footer">
       <span>{v.ospitato ? t('Le automazioni girano nel tuo spazio.') : t('Le automazioni girano mentre Myynd è aperto su questo computer.')}</span>

@@ -111,6 +111,8 @@ export type Stato = {
   /** Le cartelle del desktop guardate dal vivo: se è in ascolto, e su quante. */
   vedetta: { attiva: boolean; cartelle: number }
   suggerimentiDesktop: string[]
+  /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende finché non apre la schermata. */
+  suggerimentiNuovi: number
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
   codiceConversazioni: boolean
   /** Quante sessioni di Claude Code ci sono lì: la scheda lo dice prima di accendere l'interruttore. */
@@ -1519,6 +1521,8 @@ export const api = {
     json<{ suggerimenti: SuggerimentoAutomazione[] }>(`/api/automazioni/suggerimenti${rifai ? '?rifai=1' : ''}`),
   adottaAutomazione: (id: string) => json<{ id: string; automazioni: Automazione[] }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'POST' }),
   ignoraAutomazione: (id: string) => json<{ ok: true }>(`/api/automazioni/suggerimenti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Le proposte sono state mostrate: il fulmine in colonna si spegne. */
+  segnaSuggerimentiVisti: () => json<{ nuovi: number }>('/api/scoperte/viste', { method: 'POST' }),
   regoleMittenti: () => json<{ rules: SenderRule[] }>('/api/posta/regole'),
   aggiungiRegolaMittente: (sender: string) => json<{ rules: SenderRule[] }>('/api/posta/regole', { method: 'POST', body: JSON.stringify({ sender }) }),
   rimuoviRegolaMittente: (id: string) => json<{ rules: SenderRule[] }>(`/api/posta/regole/${encodeURIComponent(id)}`, { method: 'DELETE' }),

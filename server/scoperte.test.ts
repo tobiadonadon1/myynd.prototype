@@ -1,6 +1,6 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const dati = mkdtempSync(join(tmpdir(), 'myynd-discovery-'))
@@ -445,4 +445,82 @@ test('il materiale porta gli id, i mittenti e il conto per mittente', async () =
   const righe = materiale.split('\n').filter(r => r.startsWith('— [posta-'))
   assert.deepEqual(righe.slice(0, 3).map(r => r.slice(3, r.indexOf(']'))).sort(),
     ['posta-aruba-0', 'posta-aruba-1', 'posta-aruba-2'])
+})
+
+/*
+ * Le nuove: quello che accende il fulmine in colonna.
+ *
+ * Il foglio ricorda gli id che ha già mostrato. `nuovi()` legge il foglio e
+ * basta — niente modello — e `segnaVisti()` ci scrive sopra. La stessa
+ * proposta riscritta dal giro di domani ha lo stesso id, e non torna nuova.
+ */
+test('le proposte nuove si contano dal foglio, e viste una volta restano viste', async () => {
+  const discovery = await import('./scoperte.ts')
+  let chiamate = 0
+  discovery.perProva({
+    collegato: () => true,
+    chiediJSON: async () => { chiamate++; return { automazioni: [proposta({ prove: ['danno-1', 'danno-altro'] })] } }
+  })
+  try {
+    const s = await discovery.suggerimenti(true)
+    assert.equal(s.length, 1)
+    assert.deepEqual(discovery.nuovi().map(x => x.id), [s[0].id])
+    assert.equal(chiamate, 1, 'contare le nuove non chiama nessuno')
+
+    discovery.segnaVisti()
+    assert.deepEqual(discovery.nuovi(), [])
+    const foglio = JSON.parse(readFileSync(join(dati, 'scoperte.json'), 'utf8')) as { visti: string[] }
+    assert.ok(foglio.visti.includes(s[0].id), 'l’id visto sta sul foglio')
+
+    // il giro di domani riscrive la stessa proposta con lo stesso id: non torna nuova
+    await discovery.suggerimenti(true)
+    assert.equal(chiamate, 2)
+    assert.deepEqual(discovery.nuovi(), [])
+  } finally { discovery.perProva(null) }
+  // senza modello il foglio non conta: la schermata mostrerebbe altro
+  assert.deepEqual(discovery.nuovi(), [])
+})
+
+test('il giro di sfondo rispetta il foglio: fresco non chiama, vecchio scrive e lo dice', async () => {
+  const discovery = await import('./scoperte.ts')
+  let chiamate = 0
+  discovery.perProva({
+    collegato: () => true,
+    chiediJSON: async () => { chiamate++; return { automazioni: [proposta({ prove: ['danno-1', 'danno-altro'] })] } }
+  })
+  try {
+    await discovery.suggerimenti(true)
+    assert.equal(chiamate, 1)
+    // il foglio è di adesso: il giro di sfondo non paga e non ha niente da dire
+    assert.equal(await discovery.inSottofondo(), null)
+    assert.equal(chiamate, 1)
+
+    // il foglio è di due giorni fa: il giro di sfondo lo rifà, e torna quello che ha scritto
+    const via = join(dati, 'scoperte.json')
+    const foglio = JSON.parse(readFileSync(via, 'utf8')) as { quando: string }
+    foglio.quando = new Date(Date.now() - 2 * 86_400_000).toISOString()
+    writeFileSync(via, JSON.stringify(foglio))
+    const scritte = await discovery.inSottofondo()
+    assert.equal(chiamate, 2)
+    assert.deepEqual(scritte?.map(x => x.nome), ['Le richieste di rimborso'])
+    // ed erano già viste: il fulmine non si riaccende per la stessa cosa
+    assert.deepEqual(discovery.nuovi(), [])
+  } finally { discovery.perProva(null) }
+  // senza modello il giro di sfondo non fa niente, e non lo dice
+  assert.equal(await discovery.inSottofondo(), null)
+})
+
+/*
+ * Le due rotte che il fulmine usa stanno in `index.ts`, che non si può
+ * importare senza far partire il server: qui si legge il sorgente. È una
+ * prova povera, ma è quella che manca quando qualcuno sposta una riga.
+ */
+test('lo stato porta il conto delle nuove, e la schermata può segnarle viste', () => {
+  const sorgente = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+  const stato = sorgente.slice(sorgente.indexOf("app.get('/api/stato'"), sorgente.indexOf("app.post('/api/argomenti/proposta'"))
+  assert.match(stato, /suggerimentiNuovi: scoperte\.nuovi\(\)\.length/)
+  assert.match(sorgente, /app\.post\('\/api\/scoperte\/viste'/)
+  // e la rilettura automatica dà l'occasione al giro di sfondo
+  const rilettura = sorgente.slice(sorgente.indexOf('async function rileggiDaSola'), sorgente.indexOf('// — la mente —'))
+  assert.match(rilettura, /scoperte\.inSottofondo\(\)/)
 })

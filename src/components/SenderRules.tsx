@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type SenderRule } from '../api'
 import { loc, t } from '../lingua'
+import { mostraRegoleMittenti } from './sender-rules'
 import './sender-rules.css'
 
 /** Every mailbox-changing rule starts with an explicit submit, never on typing. */
@@ -13,8 +14,9 @@ export function SenderRules() {
   const [error,setError]=useState('')
   const [reload,setReload]=useState(0)
   const [notice,setNotice]=useState('')
+  // si leggono subito, non all'apertura: senza regole la riga non c'è proprio,
+  // e per saperlo bisogna averle lette. È un file locale: costa niente
   useEffect(()=>{
-    if(!open)return
     let live=true
     const version=++requestVersion.current
     api.regoleMittenti().then(r=>{if(live && version===requestVersion.current){setRules(r.rules.filter(x=>x.enabled));setError('')}})
@@ -38,9 +40,10 @@ export function SenderRules() {
     catch(e){setError(e instanceof Error?t(e.message):t('Impossibile rimuovere la regola mittente.'))}
     finally{setBusy(false)}
   }
+  if(!mostraRegoleMittenti(rules,open,error))return null
   return <details className="sender-rules" onToggle={e=>setOpen(e.currentTarget.open)}>
-    <summary>{t('Regole mittenti')}{!!rules?.length && <small>{rules.length}</small>}</summary>
-    <p className="sender-rules-description">{t('Le nuove email da questi indirizzi vengono archiviate mentre Myynd è in esecuzione. I messaggi restano nella casella: non vengono eliminati e il mittente non viene bloccato dal provider.')}</p>
+    <summary>{t('Mittenti che hai messo via')}{!!rules?.length && <small>{rules.length}</small>}</summary>
+    <p className="sender-rules-description">{t('La posta di questi mittenti va dritta in archivio.')}</p>
     <form onSubmit={add}>
       <label>{t('Indirizzo esatto del mittente')}<input type="email" required maxLength={254} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" value={sender} disabled={busy} onChange={e=>setSender(e.target.value)} /></label>
       <button type="submit" disabled={busy || rules===null || !sender.trim()}>{busy?t('Salvo…'):t('Archivia le prossime email')}</button>
