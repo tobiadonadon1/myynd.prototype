@@ -1,0 +1,144 @@
+// Il riferimento: quello che dice lui, progetto per progetto.
+//
+// Le priorità leggono la posta, i file, le cartelle di lavoro e le chat, e da
+// lì deducono a che punto è ogni cosa. I documenti però sono in ritardo sulla
+// realtà quasi sempre: un progetto con dieci commit può essere stato
+// abbandonato ieri a voce, e uno fermo da un mese può essere bloccato da una
+// firma che aspetta. Chi lo sa è lui, e finora non gli si chiedeva.
+//
+// Qui gli si chiede, una volta ogni due settimane: su cosa sta lavorando
+// adesso per ogni progetto, cosa è morto, cosa è bloccato. La risposta è un
+// blocco della memoria, con le sue parole, e vale più dei file: un progetto
+// che ha detto morto non si propone, uno bloccato riceve il passo che lo
+// sblocca. Ed è anche il metro con cui si misurano le priorità
+// (`valuta-feed.ts`): quante sono attuali, quante parlano di roba finita.
+//
+// La domanda passa dal meccanismo delle domande (`domande.ts`), con un tema
+// solo che si riapre: sulla prima pagina compare come le altre, e la risposta
+// arriva da lì.
+
+import * as store from './store.ts'
+import * as progetti from './progetti.ts'
+import { lingua } from './config.ts'
+import { nominaAmbito } from './ambiti-memoria.ts'
+
+/** L'etichetta del blocco dove vive: uno solo, si riscrive. */
+export const ETICHETTA = 'riferimento'
+/** Il tema della domanda: uno, che si riapre quando il riferimento invecchia. */
+export const TEMA = 'riferimento'
+/** Dopo tanti giorni il riferimento è vecchio e si richiede. */
+export const GIORNI_VALIDO = 14
+/** Se l'ha lasciata cadere (o risposta) da meno di tanti giorni, non si insiste. */
+export const GIORNI_SILENZIO = 7
+const TETTO = 1500
+
+export type Riferimento = { testo: string; aggiornato: string | null }
+
+export function leggi(): Riferimento {
+  const b = store.blocchi().find(b => b.etichetta === ETICHETTA)
+  return { testo: b?.valore?.trim() ?? '', aggiornato: b?.aggiornato ?? null }
+}
+
+export function scrivi(testo: string) {
+  const pulito = testo.trim()
+  if (!pulito) throw new Error('Scrivi qualcosa.')
+  store.scriviBlocco({
+    etichetta: ETICHETTA,
+    descrizione: 'Su cosa sta lavorando adesso, progetto per progetto; cosa è morto; cosa è bloccato.',
+    valore: pulito,
+    tetto: TETTO
+  })
+}
+
+/** Vero se c'è un riferimento e non ha ancora l'età per essere richiesto. */
+export function fresco(adesso = Date.now()): boolean {
+  const r = leggi()
+  if (!r.testo || !r.aggiornato) return false
+  return adesso - Date.parse(r.aggiornato) < GIORNI_VALIDO * 86_400_000
+}
+
+/** La domanda, nella lingua dell'app, con i nomi dei suoi progetti dentro. */
+export function domandaDiRiferimento(): string {
+  const nomi = progetti.vivi().map(p => p.nome)
+  if (lingua() === 'en') {
+    return 'To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked? Write it as it comes: it counts more than the files.' +
+      (nomi.length ? ` The projects I know: ${nomi.join(', ')}.` : '')
+  }
+  return 'Per orientarmi: per ogni progetto, su cosa stai lavorando adesso? Cosa è morto, e cosa è bloccato? Scrivilo come viene: vale più dei file.' +
+    (nomi.length ? ` I progetti che conosco: ${nomi.join(', ')}.` : '')
+}
+
+/**
+ * Chiede il riferimento, se è il momento. Torna vero se ha aperto la domanda.
+ *
+ * Il momento: nessun riferimento, o uno più vecchio di due settimane; e
+ * nessuna domanda sul tema già aperta, né lasciata cadere (o risposta) da
+ * meno di una settimana. Chi non risponde ha detto qualcosa anche lui, e non
+ * gli si rifà la stessa domanda il giorno dopo.
+ */
+export function chiediRiferimento(adesso = Date.now()): boolean {
+  if (fresco(adesso)) return false
+  const gia = store.domandaPerTema(TEMA)
+  if (gia) {
+    if (gia.stato === 'aperta') return false
+    const chiusa = Date.parse(gia.chiusa ?? '')
+    if (Number.isFinite(chiusa) && adesso - chiusa < GIORNI_SILENZIO * 86_400_000) return false
+  }
+  const testo = domandaDiRiferimento()
+  const spunto = progetti.vivi().map(p => p.nome)
+  if (gia) store.riapriDomanda(gia.id, testo, spunto)
+  else if (!store.apriDomanda({ tema: TEMA, testo, spunto })) return false
+  return true
+}
+
+/** Quello che gli si dice quando ha risposto: cosa cambia da adesso. */
+export function esitoDelRiferimento(): string {
+  return lingua() === 'en'
+    ? 'Noted. From now on the priorities start from what you wrote: dead projects will not come back, and for the blocked ones I look for the step that unblocks them.'
+    : 'Segnato. Da adesso le priorità partono da quello che hai scritto: i progetti morti non te li ripropongo, e su quelli bloccati cerco il passo che li sblocca.'
+}
+
+// — leggere il riferimento —
+//
+// Il riferimento è testo libero, e la lettura vera la fa il modello nel
+// prompt delle priorità. Ma «un progetto morto non si propone» è una regola,
+// non un consiglio: quando nel testo un progetto è nominato in una frase che
+// lo dice morto, la carta si ferma qui, a prescindere da cosa ha capito il
+// modello. La stessa lettura serve al prompt per dire quali sono i bloccati.
+
+const MORTO = /\b(?:mort[oa]|abbandonat[oa]|chius[oa]|finit[oa]|archiviat[oa]|dead|abandoned|killed|dropped|shelved|closed|finished|done|over|scrapped)\b/i
+const BLOCCATO = /\b(?:bloccat[oa]|ferm[oa]|in attesa|aspett[oa]|blocked|stuck|waiting|on hold|stalled)\b/i
+const NEGATO = /\b(?:non|not|isn'?t|aren'?t|never|mai|nemmeno)\b/i
+
+/** Le frasi del riferimento, una per riga o per punto. */
+function frasi(testo: string): string[] {
+  return testo.split(/\n+|(?<=[.;!?])\s+/).map(s => s.trim()).filter(Boolean)
+}
+
+/** Vero se la frase nomina il progetto e lo dice come dice `come`, senza negarlo. */
+function detto(frase: string, nome: string, come: RegExp): boolean {
+  if (!nominaAmbito(frase, nome)) return false
+  const m = come.exec(frase)
+  if (!m) return false
+  // «non è morto, va solo piano»: la negazione davanti alla parola la spegne
+  const prima = frase.slice(Math.max(0, m.index - 24), m.index)
+  return !NEGATO.test(prima)
+}
+
+/** Gli id dei progetti che il riferimento dice morti. */
+export function progettiMorti(testo: string, suoi: { id: string; nome: string }[]): Set<string> {
+  const out = new Set<string>()
+  if (!testo.trim()) return out
+  const f = frasi(testo)
+  for (const p of suoi) if (f.some(s => detto(s, p.nome, MORTO))) out.add(p.id)
+  return out
+}
+
+/** Gli id dei progetti che il riferimento dice bloccati. */
+export function progettiBloccati(testo: string, suoi: { id: string; nome: string }[]): Set<string> {
+  const out = new Set<string>()
+  if (!testo.trim()) return out
+  const f = frasi(testo)
+  for (const p of suoi) if (f.some(s => detto(s, p.nome, BLOCCATO))) out.add(p.id)
+  return out
+}

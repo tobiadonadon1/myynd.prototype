@@ -222,6 +222,7 @@ export type Lavoro =
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
   | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
+  | 'valutazione'   // il voto alle priorità, contro quello che lui ha scritto di suo pugno: attuali, morte, nel progetto giusto
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
   | 'revisione'     // rileggere il lavoro consegnato come lei e come chi lo riceve, prima di dirlo pronto
 
@@ -301,6 +302,12 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // fonti non chiedono niente: frontiera, e con il pensiero acceso. Il conto
   // lo tiene `priorita.ts`: al massimo due volte al giorno per conto.
   priorita:   { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  // La valutazione delle priorità: ogni carta contro il riferimento che ha
+  // scritto lui («su cosa sono, cosa è morto, cosa è bloccato»). È un voto,
+  // non una cosa che esce di qui: `media` perché deve leggere bene un testo
+  // lungo e rispondere con quattro sì o no, e non serve che ragioni. Il
+  // conto lo tiene chi la chiede: `valuta-feed.ts`, a mano o da una rotta.
+  valutazione: { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
   // Frontiera, e per una volta non per il costo di sbagliare in pubblico: una
   // ricetta scritta male gira ogni mattina per mesi, e il modo in cui sbaglia è
   // il peggiore — non si rompe, fa *quasi* quello che avevi chiesto. Si scrive

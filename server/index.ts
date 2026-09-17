@@ -58,6 +58,8 @@ import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.
 import { aperturaProgetto } from './apertura-progetto.ts'
 import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
+import * as riferimento from './riferimento.ts'
+import * as valutaFeed from './valuta-feed.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -2350,6 +2352,30 @@ app.post('/api/feed/fuoco', (req, res) => {
    */
   cfg.aggiorna({ fuocoDaMe: false })
   res.json({ ok: true, fuoco: timone.fuoco() })
+})
+
+/**
+ * Il riferimento: quello che ha scritto lui su a che punto è ogni progetto.
+ * Le priorità partono da qui, e la valutazione lo usa come metro.
+ */
+app.get('/api/riferimento', (_req, res) => res.json(riferimento.leggi()))
+
+app.post('/api/riferimento', (req, res) => {
+  try {
+    riferimento.scrivi(String(req.body?.testo ?? ''))
+    res.json({ ok: true, ...riferimento.leggi() })
+  } catch (e) { errore(res, e, 400) }
+})
+
+/**
+ * Il voto alle priorità: un giro nuovo (non salvato) più quello che è sul
+ * feed, giudicati contro il riferimento. Costa due chiamate al modello.
+ */
+app.post('/api/feed/valutazione', async (req, res) => {
+  try {
+    const testo = typeof req.body?.riferimento === 'string' && req.body.riferimento.trim() ? String(req.body.riferimento) : undefined
+    res.json(await valutaFeed.valuta({ riferimento: testo, secco: req.body?.secco === true }))
+  } catch (e) { errore(res, e) }
 })
 
 app.post('/api/feed/:id/:stato', (req, res) => {

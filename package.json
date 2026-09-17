@@ -20,7 +20,8 @@
     "pacchetto": "npm run build && electron-builder --config build/configura.cjs --mac --win",
     "pacchetto:mac": "npm run build && electron-builder --config build/configura.cjs --mac",
     "pacchetto:win": "npm run build && electron-builder --config build/configura.cjs --win --x64",
-    "prova:app": "node prove/app.mjs"
+    "prova:app": "node prove/app.mjs",
+    "valuta:feed": "node server/valuta-feed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -3751,6 +3751,9 @@ export function temiScartati(minimo = 3): Tema[] {
 export type Domanda = {
   id: string; tema: string; testo: string; spunto: string[]
   stato: string; risposta: string | null; esito: string | null; creata: string
+  chiusa?: string | null
+  /** Il progetto su cui chiede, se ne riguarda uno: la prima pagina la mette nel suo blocco. */
+  progetto?: string | null
 }
 
 function daRiga(r: Record<string, unknown> | undefined): Domanda | null {
@@ -3777,17 +3780,46 @@ export function ultimaDomanda(): string | null {
   return r?.creata ?? null
 }
 
-export function apriDomanda(d: { tema: string; testo: string; spunto: string[] }): Domanda | null {
+export function apriDomanda(d: { tema: string; testo: string; spunto: string[]; progetto?: string | null }): Domanda | null {
   // il solo tempo non basta: due domande nello stesso millisecondo avrebbero
   // lo stesso id e la seconda sparirebbe in silenzio dentro il catch qui sotto
   const id = 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
   try {
-    db.prepare(`INSERT INTO domande (id, tema, testo, spunto, stato, creata) VALUES (?,?,?,?, 'aperta', ?)`)
-      .run(id, d.tema, d.testo, JSON.stringify(d.spunto), new Date().toISOString())
+    db.prepare(`INSERT INTO domande (id, tema, testo, spunto, stato, creata, progetto) VALUES (?,?,?,?, 'aperta', ?, ?)`)
+      .run(id, d.tema, d.testo, JSON.stringify(d.spunto), new Date().toISOString(), d.progetto ?? null)
   } catch {
     return null   // il tema era già stato chiesto: l'UNIQUE ha fatto il suo lavoro
   }
   return domandaAperta()
+}
+
+/** Una domanda precisa, in qualunque stato sia. */
+export function domanda(id: string): Domanda | null {
+  return daRiga(db.prepare('SELECT * FROM domande WHERE id = ?').get(id) as Record<string, unknown> | undefined)
+}
+
+/** La domanda su un tema, se è mai stata fatta: aperta, risposta o ignorata che sia. */
+export function domandaPerTema(tema: string): Domanda | null {
+  return daRiga(db.prepare('SELECT * FROM domande WHERE tema = ?').get(tema) as Record<string, unknown> | undefined)
+}
+
+/** Le domande il cui tema comincia così, le più recenti prima. */
+export function domandeConTema(prefisso: string): Domanda[] {
+  return (db.prepare('SELECT * FROM domande WHERE tema LIKE ? ORDER BY creata DESC, rowid DESC')
+    .all(prefisso.replace(/[%_]/g, '') + '%') as Record<string, unknown>[]).map(r => daRiga(r)!)
+}
+
+/**
+ * La stessa domanda, fatta di nuovo.
+ *
+ * `tema` è unico e resta unico: sulle cose che si chiedono una volta sola è
+ * la garanzia giusta. Ma il riferimento (su cosa sta lavorando, cosa è morto)
+ * invecchia, e dopo due settimane si richiede: si riapre la riga di allora
+ * invece di inventare un tema nuovo per ogni giro.
+ */
+export function riapriDomanda(id: string, testo: string, spunto: string[]) {
+  db.prepare(`UPDATE domande SET testo = ?, spunto = ?, stato = 'aperta', risposta = NULL, esito = NULL, chiusa = NULL, creata = ? WHERE id = ?`)
+    .run(testo, JSON.stringify(spunto), new Date().toISOString(), id)
 }
 
 export function chiudiDomanda(id: string, stato: 'risposta' | 'ignorata', risposta?: string, esito?: string) {
