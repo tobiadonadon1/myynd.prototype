@@ -1,4 +1,4 @@
-// Le conversazioni: quello che hai già detto a ChatGPT, a Claude e a Claude Code.
+// Le conversazioni: quello che hai già detto a ChatGPT, a Claude, a Claude Code e a Codex.
 //
 // Una persona che lavora con un modello ci lascia dentro mesi di ragionamenti
 // — cosa ha provato, cosa ha scartato, come voleva scritta una cosa — e tutto
@@ -6,11 +6,30 @@
 // file e riunioni e non sa niente della metà del lavoro che è stata pensata
 // a voce alta con un altro modello. Questo connettore la porta dentro.
 //
-// **Tre fonti, un documento per conversazione.** ChatGPT e Claude non hanno
+// **Quattro fonti, un documento per conversazione.** ChatGPT e Claude non hanno
 // un'API per rileggere le proprie chat, ma tutti e due mandano via email un
 // archivio con dentro un `conversations.json`: è quel file che si sceglie qui.
-// Claude Code invece scrive ogni sessione in `~/.claude/projects`, sul disco
-// di chi lo usa, e si legge da lì — come Granola, senza chiedere niente.
+// Claude Code invece scrive ogni sessione in `~/.claude/projects`, e Codex in
+// `~/.codex/sessions`, sul disco di chi li usa: si leggono da lì — come
+// Granola, senza chiedere niente — e l'interruttore `codice` li accende tutti
+// e due, perché sono la stessa cosa: un agente di codice che ha lavorato con
+// lei in una cartella. Ogni sessione sa in quale (`cwd`), e il documento la
+// porta nel corpo e in `percorso`, così le priorità la legano alla cartella
+// di lavoro giusta.
+//
+// **Non si rilegge quello che non è cambiato.** Le sessioni sono un gigabyte
+// e passa, e un giro ogni sei ore che le riapre tutte per scoprire che sono
+// uguali è il modo in cui l'app scalda il computer a vuoto. Per ogni file si
+// ricorda la data di modifica letta e il documento che ne è uscito — nel
+// cursore della fonte, per conto — e un file con la stessa data si dichiara
+// vivo senza aprirlo. Si guardano solo gli ultimi novanta giorni: quello che
+// è più vecchio esce dall'indice, com'è giusto per un quadro di adesso.
+//
+// **Le sessioni di Myynd non sono sue.** Myynd parla con Claude Code e con
+// Codex — sono due delle sue teste — da una cartella vuota sotto `~/.myynd`,
+// e le prove dell'app girano in profili usa e getta nella cartella
+// temporanea. Sono sessioni vere, ma è il programma che parla con un modello:
+// se entrassero, la mente si riempirebbe dei prompt di Myynd.
 //
 // **Le chat di claude.ai non stanno su questo disco.** L'app Claude per Mac
 // è una finestra sul sito: quello che ci si scrive vive dai loro, e l'unica
@@ -36,13 +55,13 @@
 import { createReadStream, existsSync } from 'node:fs'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, extname, isAbsolute, join } from 'node:path'
 import type { Documento } from '../store.ts'
 import { lingua, type ConfigConversazioni } from '../config.ts'
 
-/** Da quale delle tre arriva una conversazione: finisce nell'id del documento. */
-export type Origine = 'chatgpt' | 'claude' | 'codice'
+/** Da quale delle quattro arriva una conversazione: finisce nell'id del documento. */
+export type Origine = 'chatgpt' | 'claude' | 'codice' | 'codex'
 /** I due formati che un file può avere. */
 export type Formato = 'chatgpt' | 'claude'
 
@@ -56,10 +75,12 @@ export type Conversazione = {
   battute: Battuta[]
   /** Quando è stata aggiornata secondo il file: serve se nessuna battuta ha una data. */
   quando: number | null
-  /** Solo Claude Code: la cartella del progetto, com'è scritta nel file. */
+  /** Solo Claude Code e Codex: la cartella del progetto, com'è scritta nel file. È il `percorso` del documento. */
   cartella?: string
-  /** Solo Claude Code: il file della sessione, che è il `percorso` del documento. */
+  /** Solo Claude Code e Codex: il file della sessione, la chiave della memoria di lettura. */
   percorso?: string
+  /** Solo Claude Code e Codex: la data di modifica del file, quella che la memoria ricorda. */
+  modificata?: string
 }
 
 /** Quanto testo si tiene per conversazione. Oltre, si tengono l'inizio e la fine. */
@@ -71,6 +92,17 @@ const TITOLO_MAX = 80
 const TETTO = 6000
 /** Una sessione di Claude Code oltre questa taglia è quasi tutta uscita di comandi: si salta. */
 const SESSIONE_MAX = 64 * 1024 * 1024
+/**
+ * Una sessione di Codex tiene dentro anche le schermate che le si mandano, e
+ * pesa dieci volte tanto: le battute vere stanno proprio nei file più grossi,
+ * quindi il tetto è largo. Si legge in streaming, e il peso costa tempo, non
+ * memoria.
+ */
+const SESSIONE_CODEX_MAX = 512 * 1024 * 1024
+/** Le sessioni modificate prima di così non si leggono, ed escono dall'indice: il quadro guarda novanta giorni. */
+export const GIORNI_SESSIONI = 90
+/** Un filo le cui battute stanno tutte nello stesso istante non è stato scritto lì: è un'importazione. */
+const STESSO_ISTANTE = 2_000
 
 // — il tempo —
 
@@ -366,8 +398,28 @@ const RIGA_UTILE = /"type":\s*"(?:user|assistant|ai-title)"/
  * processo muore in silenzio. Si salta il ramo `isSidechain` — i sotto-agenti,
  * che parlano fra loro — e le righe `isMeta`, che sono del programma.
  */
+/**
+ * Le cartelle in cui una sessione non è sua.
+ *
+ * Myynd stesso parla con Claude Code e con Codex da una cartella vuota sotto
+ * `~/.myynd` (o sotto `MYYND_DATI`), e le prove dell'app girano in profili
+ * usa e getta nella cartella temporanea. Sono sessioni vere, ma è il
+ * programma che parla con un modello, non lei: fuori.
+ */
+export function cartellaNonSua(cwd: string): boolean {
+  if (!cwd) return false
+  const radici = [
+    join(homedir(), '.myynd'), (process.env.MYYND_DATI ?? '').trim(),
+    tmpdir(), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'
+  ].filter(Boolean).map(r => r.replace(/\/+$/, ''))
+  return radici.some(r => cwd === r || cwd.startsWith(`${r}/`))
+}
+
 export async function sessione(percorso: string): Promise<Conversazione | null> {
-  const righe = createInterface({ input: createReadStream(percorso, 'utf8'), crlfDelay: Infinity })
+  // il flusso si tiene a parte: se si esce prima della fine — una sessione di
+  // Myynd, riconosciuta dalla prima riga — va chiuso a mano, o il file resta aperto
+  const flusso = createReadStream(percorso, 'utf8')
+  const righe = createInterface({ input: flusso, crlfDelay: Infinity })
   let id = ''
   let cartella = ''
   let titolo = ''
@@ -379,7 +431,10 @@ export async function sessione(percorso: string): Promise<Conversazione | null> 
       try { o = oggetto(JSON.parse(riga)) } catch { continue }
       if (!o) continue
       if (!id && typeof o.sessionId === 'string') id = o.sessionId
-      if (!cartella && typeof o.cwd === 'string') cartella = o.cwd
+      if (!cartella && typeof o.cwd === 'string') {
+        cartella = o.cwd
+        if (cartellaNonSua(cartella)) return null
+      }
       if (o.type === 'ai-title') {
         if (typeof o.aiTitle === 'string') titolo = o.aiTitle.trim()
         continue
@@ -392,6 +447,7 @@ export async function sessione(percorso: string): Promise<Conversazione | null> 
     }
   } finally {
     righe.close()
+    flusso.destroy()
   }
   if (!battute.length) return null
   return {
@@ -404,7 +460,94 @@ export async function sessione(percorso: string): Promise<Conversazione | null> 
   }
 }
 
-export type EsitoCodice = { conversazioni: Conversazione[]; saltate: number; troncato: boolean }
+// — la memoria di quello che si è letto —
+
+/**
+ * Per file di sessione: la data di modifica letta e l'id del documento che ne
+ * è uscito — vuoto se il file si è letto ma non valeva un documento, così non
+ * si riapre nemmeno quello.
+ *
+ * Sta nel cursore della fonte (`store.cursore`), che è per conto e non si
+ * interpreta lì: qui è un JSON. Non è la data del documento: `quando` di una
+ * sessione è l'ultima battuta, e la data del file le va dietro anche di
+ * giorni — Claude Code ci scrive una riga di sistema quando la si riapre.
+ */
+export type Memoria = Record<string, { m: string; id: string }>
+/** La chiave con cui la memoria sta fra i cursori dell'indice. */
+export const CURSORE = 'conversazioni:sessioni'
+
+export function memoriaDa(grezzo: string | null | undefined): Memoria {
+  if (!grezzo) return {}
+  let dati: unknown
+  try { dati = JSON.parse(grezzo) } catch { return {} }
+  const fuori: Memoria = {}
+  for (const [k, v] of Object.entries(oggetto(dati) ?? {})) {
+    const e = oggetto(v)
+    if (e && typeof e.m === 'string' && typeof e.id === 'string') fuori[k] = { m: e.m, id: e.id }
+  }
+  return fuori
+}
+
+export function memoriaScritta(m: Memoria): string {
+  return JSON.stringify(m)
+}
+
+export type OpzioniSessioni = {
+  /** Che cosa si sapeva al giro prima, per file. Senza, si legge tutto. */
+  memoria?: Memoria
+  /**
+   * Il documento è ancora nell'indice. Senza questa risposta la memoria da
+   * sola non basta a saltare un file: un indice svuotato e ricostruito ha
+   * ancora il cursore di prima, e fidarsi vorrebbe dire dichiarare vivo un
+   * documento che non c'è.
+   */
+  inIndice?: (id: string) => boolean
+  giorni?: number
+  adesso?: number
+}
+
+export type EsitoCodice = {
+  conversazioni: Conversazione[]
+  saltate: number
+  troncato: boolean
+  /** File uguali a com'erano: l'id del documento che ne era uscito, da dichiarare vivo. */
+  invariate: { percorso: string; m: string; id: string }[]
+  /** File letti da cui non è uscito niente: si ricordano, per non riaprirli. */
+  vuote: { percorso: string; m: string }[]
+  /** Più vecchie della finestra: non lette, e non più vive. */
+  vecchie: number
+}
+
+const esitoVuoto = (): EsitoCodice => ({ conversazioni: [], saltate: 0, troncato: false, invariate: [], vuote: [], vecchie: 0 })
+
+/**
+ * Un file di sessione: si salta se è vecchio, si dichiara vivo se è uguale a
+ * com'era, e si legge solo altrimenti. Uguale a Claude Code e a Codex.
+ */
+async function unaSessione(
+  f: string, max: number, apri: (f: string) => Promise<Conversazione | null>,
+  o: OpzioniSessioni, fuori: EsitoCodice, adesso: number
+): Promise<void> {
+  let s
+  try { s = await stat(f) } catch { fuori.saltate++; return }
+  if (s.mtimeMs < adesso - (o.giorni ?? GIORNI_SESSIONI) * 86_400_000) { fuori.vecchie++; return }
+  const m = s.mtime.toISOString()
+  const prima = o.memoria?.[f]
+  if (prima && prima.m === m && (!prima.id || o.inIndice?.(prima.id))) {
+    fuori.invariate.push({ percorso: f, m, id: prima.id })
+    return
+  }
+  if (s.size > max) { fuori.saltate++; return }
+  try {
+    const c = await apri(f)
+    if (c) {
+      c.modificata = m
+      fuori.conversazioni.push(c)
+    } else {
+      fuori.vuote.push({ percorso: f, m })
+    }
+  } catch { fuori.saltate++ }
+}
 
 /**
  * Tutte le sessioni sotto la cartella: una sottocartella per progetto, dentro i `.jsonl`.
@@ -413,10 +556,9 @@ export type EsitoCodice = { conversazioni: Conversazione[]; saltate: number; tro
  * non ha un titolo suo, perché quello del file l'ha scritto il modello
  * guardando la conversazione e quello dell'app è lo stesso o più vecchio.
  */
-export async function sessioni(cartella = cartellaCodice(), tetto = TETTO, titoli?: Map<string, string>): Promise<EsitoCodice> {
-  const conversazioni: Conversazione[] = []
-  let saltate = 0
-  let troncato = false
+export async function sessioni(cartella = cartellaCodice(), tetto = TETTO, titoli?: Map<string, string>, opzioni: OpzioniSessioni = {}): Promise<EsitoCodice> {
+  const fuori = esitoVuoto()
+  const adesso = opzioni.adesso ?? Date.now()
   let progetti: string[] = []
   try {
     progetti = (await readdir(cartella, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => join(cartella, d.name))
@@ -431,19 +573,156 @@ export async function sessioni(cartella = cartellaCodice(), tetto = TETTO, titol
         .map(d => join(progetto, d.name))
     } catch { continue }
     for (const f of file) {
-      if (conversazioni.length >= tetto) { troncato = true; break }
-      try {
-        if ((await stat(f)).size > SESSIONE_MAX) { saltate++; continue }
-        const c = await sessione(f)
-        if (c) {
-          if (!c.titolo && titoli?.has(c.id)) c.titolo = titoli.get(c.id)!
-          conversazioni.push(c)
-        }
-      } catch { saltate++ }
+      if (fuori.conversazioni.length >= tetto) { fuori.troncato = true; break }
+      await unaSessione(f, SESSIONE_MAX, sessione, opzioni, fuori, adesso)
     }
-    if (troncato) break
+    if (fuori.troncato) break
   }
-  return { conversazioni, saltate, troncato }
+  for (const c of fuori.conversazioni) if (!c.titolo && titoli?.has(c.id)) c.titolo = titoli.get(c.id)!
+  return fuori
+}
+
+// — Codex —
+
+/** Dove Codex tiene le sessioni: una cartella per giorno, `anno/mese/giorno`, e un `rollout-*.jsonl` per filo. */
+export function cartellaCodex(): string {
+  return join(homedir(), '.codex', 'sessions')
+}
+
+export function codexPossibile(): boolean {
+  return existsSync(cartellaCodex())
+}
+
+/** C'è un agente di codice su questo computer, l'uno o l'altro: è quello che fa accendere la fonte da sola. */
+export function agentiPossibili(): boolean {
+  return codicePossibile() || codexPossibile()
+}
+
+/** Le righe che possono portare la testata o una battuta: le altre — attrezzi, ragionamento, token — non si parsano. */
+const RIGA_UTILE_CODEX = /"type":\s*"session_meta"|"role":\s*"(?:user|assistant)"/
+
+/**
+ * Quello che ha scritto la persona, senza quello che Codex ci mette intorno.
+ *
+ * Codex infila nel ruolo `user` anche roba sua: il contesto d'ambiente, i
+ * plugin consigliati, lo stato del browser dell'app, e le risposte a una
+ * domanda fatta con un modulo, che arrivano come JSON. I blocchi con un tag
+ * in testa si tolgono; se resta un «## My request:» — è come l'app scrive
+ * una richiesta con dei file allegati — si tiene quello che viene dopo; di
+ * una risposta a un modulo si tengono la domanda e la risposta, che sono le
+ * uniche parole sue lì dentro.
+ */
+function testoUtenteCodex(grezzo: string): string {
+  let t = grezzo.trim()
+  const risposta = t.match(/^<send_user_message_question_reply>\s*([\s\S]*?)\s*<\/send_user_message_question_reply>$/)
+  if (risposta) {
+    let voci: unknown
+    try { voci = JSON.parse(risposta[1]!) } catch { return '' }
+    if (!Array.isArray(voci)) return ''
+    return voci.map(v => {
+      const o = oggetto(v)
+      const q = typeof o?.question === 'string' ? o.question.trim() : ''
+      const a = typeof o?.answer === 'string' ? o.answer.trim() : ''
+      return a ? (q ? `${q}\n${a}` : a) : ''
+    }).filter(Boolean).join('\n').trim()
+  }
+  t = t.replace(/^(?:<([a-z_][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>\s*)+/, '').trim()
+  const i = t.indexOf('## My request:')
+  if (i >= 0) t = t.slice(i + '## My request:'.length).trim()
+  else if (t.startsWith('# Files mentioned by the user:')) return ''
+  return t.startsWith('<') ? '' : t
+}
+
+/** Il testo di un messaggio di Codex: i blocchi `input_text` e `output_text`, non le immagini. */
+function testoCodex(contenuto: unknown): string {
+  if (typeof contenuto === 'string') return contenuto.trim()
+  if (!Array.isArray(contenuto)) return ''
+  return contenuto.map(b => {
+    const o = oggetto(b)
+    return o && (o.type === 'input_text' || o.type === 'output_text' || o.type === 'text') && typeof o.text === 'string' ? o.text : ''
+  }).filter(Boolean).join('\n').trim()
+}
+
+/**
+ * Un filo di Codex, letto riga per riga.
+ *
+ * La prima riga è `session_meta`, con la cartella (`cwd`), l'id del filo e da
+ * dove viene: `thread_source` è `user` per quelli aperti da lei e `subagent`
+ * per quelli che Codex apre da solo. Un sotto-agente riceve il compito da un
+ * altro agente, non da lei, quindi entra solo se ha battute sue davvero. Un
+ * messaggio può comparire due volte con lo stesso id — quando un filo viene
+ * ripreso — e si tiene una volta.
+ */
+export async function sessioneCodex(percorso: string): Promise<Conversazione | null> {
+  const flusso = createReadStream(percorso, 'utf8')
+  const righe = createInterface({ input: flusso, crlfDelay: Infinity })
+  let id = ''
+  let cartella = ''
+  let quando: number | null = null
+  let sottoAgente = false
+  const visti = new Set<string>()
+  const battute: Battuta[] = []
+  try {
+    for await (const riga of righe) {
+      if (!RIGA_UTILE_CODEX.test(riga)) continue
+      let o: Record<string, unknown> | null
+      try { o = oggetto(JSON.parse(riga)) } catch { continue }
+      const p = oggetto(o?.payload)
+      if (!o || !p) continue
+      if (o.type === 'session_meta') {
+        if (typeof p.id === 'string') id = p.id
+        if (typeof p.cwd === 'string') cartella = p.cwd
+        quando = istante(p.timestamp) ?? istante(o.timestamp)
+        sottoAgente = p.thread_source === 'subagent'
+        if (cartellaNonSua(cartella)) return null
+        continue
+      }
+      if (o.type !== 'response_item' || p.type !== 'message') continue
+      if (p.role !== 'user' && p.role !== 'assistant') continue
+      if (typeof p.id === 'string' && p.id) {
+        if (visti.has(p.id)) continue
+        visti.add(p.id)
+      }
+      const grezzo = testoCodex(p.content)
+      const testo = p.role === 'user' ? testoUtenteCodex(grezzo) : grezzo
+      if (!testo) continue
+      battute.push({ tu: p.role === 'user', testo, quando: istante(o.timestamp) })
+    }
+  } finally {
+    righe.close()
+    flusso.destroy()
+  }
+  if (!battute.length) return null
+  if (sottoAgente && !battute.some(b => b.tu)) return null
+  // tutte le battute nello stesso istante: un filo importato da altrove, non scritto qui
+  const tempi = battute.map(b => b.quando).filter((t): t is number => t != null)
+  if (battute.length >= 3 && tempi.length === battute.length && Math.max(...tempi) - Math.min(...tempi) < STESSO_ISTANTE) return null
+  return { id: id || basename(percorso, extname(percorso)), titolo: '', battute, quando, cartella, percorso }
+}
+
+/** Tutti i fili sotto la cartella, a qualunque profondità: Codex li mette per giorno. */
+export async function sessioniCodex(cartella = cartellaCodex(), tetto = TETTO, opzioni: OpzioniSessioni = {}): Promise<EsitoCodice> {
+  const fuori = esitoVuoto()
+  const adesso = opzioni.adesso ?? Date.now()
+  const file: string[] = []
+  const cammina = async (dir: string, profondita: number): Promise<void> => {
+    let voci
+    try { voci = await readdir(dir, { withFileTypes: true }) } catch {
+      if (!profondita) throw new Error('Non trovo le sessioni di Codex su questo computer.')
+      return
+    }
+    for (const v of voci) {
+      const p = join(dir, v.name)
+      if (v.isDirectory()) { if (profondita < 4) await cammina(p, profondita + 1) }
+      else if (v.isFile() && v.name.endsWith('.jsonl')) file.push(p)
+    }
+  }
+  await cammina(cartella, 0)
+  for (const f of file) {
+    if (fuori.conversazioni.length >= tetto) { fuori.troncato = true; break }
+    await unaSessione(f, SESSIONE_CODEX_MAX, sessioneCodex, opzioni, fuori, adesso)
+  }
+  return fuori
 }
 
 // — il documento —
@@ -502,8 +781,12 @@ export function trascrizione(battute: Battuta[], lui: string, tetto = CORPO_MAX)
  *
  * Il nome di chi risponde sta nel corpo perché è quello che si cerca: «cosa
  * mi aveva detto Claude sul contratto» trova questa e non quella di ChatGPT.
- * Per Claude Code ci sta anche la cartella del progetto, per la stessa
- * ragione per cui Granola mette dentro chi c'era: l'indice cerca nel testo.
+ * Per Claude Code e Codex ci sta anche la cartella del progetto, per la
+ * stessa ragione per cui Granola mette dentro chi c'era: l'indice cerca nel
+ * testo. E la cartella è anche il `percorso` del documento — non il file
+ * della sessione, che non apre nessuno — perché è così che le priorità
+ * legano una conversazione alla cartella di lavoro, come fanno con le righe
+ * `lavoro:`. Il file resta la chiave della memoria di lettura, e basta.
  */
 export function documento(c: Conversazione, origine: Origine, percorso: string): Documento | null {
   const battute = unisci(c.battute)
@@ -511,12 +794,13 @@ export function documento(c: Conversazione, origine: Origine, percorso: string):
   if (tuo < MINIMO_TUO) return null
 
   const it = lingua() === 'it'
-  const lui = origine === 'chatgpt' ? 'ChatGPT' : 'Claude'
+  const agente = origine === 'codice' || origine === 'codex'
+  const lui = origine === 'chatgpt' ? 'ChatGPT' : origine === 'codex' ? 'Codex' : 'Claude'
   let titolo = c.titolo || titoloDa(battute) || (it ? 'Conversazione senza titolo' : 'Untitled conversation')
   let corpo = trascrizione(battute, lui)
-  if (origine === 'codice') {
+  if (agente) {
     const progetto = c.cartella ? basename(c.cartella) : ''
-    titolo = progetto ? `${progetto} · ${titolo}` : `Claude Code · ${titolo}`
+    titolo = progetto ? `${progetto} · ${titolo}` : `${origine === 'codex' ? 'Codex' : 'Claude Code'} · ${titolo}`
     if (c.cartella) corpo = `${it ? 'Progetto' : 'Project'}: ${c.cartella}\n\n${corpo}`
   }
 
@@ -531,7 +815,7 @@ export function documento(c: Conversazione, origine: Origine, percorso: string):
     titolo,
     corpo,
     autore: null,
-    percorso,
+    percorso: agente && c.cartella ? c.cartella : percorso,
     quando: quando != null ? new Date(quando).toISOString() : null,
     gruppo: 'note'
   }
@@ -549,6 +833,19 @@ export type EsitoConversazioni = {
   perFile: { file: string; formato: Formato; conversazioni: number }[]
   /** Le sessioni di Claude Code lette. */
   codice: number
+  /** Le sessioni di Codex lette. */
+  codex: number
+  /** Le sessioni lasciate com'erano perché il file non è cambiato. */
+  invariate: number
+  /** Gli id dei documenti delle sessioni invariate: vivi, da dichiarare a `riconcilia`. */
+  visti: string[]
+  /** La memoria da scrivere nel cursore per il giro dopo. */
+  memoria: Memoria
+}
+
+export type OpzioniLettura = OpzioniSessioni & {
+  /** La cartella delle sessioni di Codex, se non è quella di casa. */
+  codex?: string
 }
 
 /**
@@ -557,9 +854,10 @@ export type EsitoConversazioni = {
  * Un file che non si apre non ferma gli altri, ma va fino a `riconcilia`: se
  * un file manca oggi, i suoi documenti non sono spariti — non li abbiamo
  * visti — e cancellarli vorrebbe dire perdere un anno di chat perché qualcuno
- * ha spostato una cartella.
+ * ha spostato una cartella. Le cartelle degli agenti invece si leggono solo
+ * se ci sono: chi ha solo Codex non deve vedere un guaio su Claude Code.
  */
-export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice(), schede = cartellaSchedeClaude()): Promise<EsitoConversazioni> {
+export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice(), schede = cartellaSchedeClaude(), opzioni: OpzioniLettura = {}): Promise<EsitoConversazioni> {
   // per id, non in una lista: due esportazioni dello stesso conto — quella di
   // marzo e quella di oggi — contengono le stesse chat, e l'ultima vince
   const docs = new Map<string, Documento>()
@@ -583,25 +881,63 @@ export async function leggi(cfg: ConfigConversazioni, cartella = cartellaCodice(
   }
 
   let codice = 0
+  let codex = 0
+  let invariate = 0
+  const visti: string[] = []
+  const memoria: Memoria = {}
   if (cfg.codice) {
-    try {
-      const s = await sessioni(cartella, Math.max(0, TETTO - docs.size), await titoliClaude(schede))
+    /**
+     * Le sessioni di un agente diventano documenti, e la memoria si riscrive:
+     * solo i file visti stavolta.
+     *
+     * Una sessione ripresa (`claude --resume`) è un file nuovo con lo stesso
+     * `sessionId` e dentro le battute di prima più quelle nuove: due file, un
+     * id, una conversazione. Vince quella che arriva più avanti nel tempo, che
+     * è quella intera — non l'ultima che il disco ha elencato.
+     */
+    const raccogli = (s: EsitoCodice, origine: 'codice' | 'codex'): number => {
+      let n = 0
       if (s.troncato) troncato = true
       saltate += s.saltate
       for (const c of s.conversazioni) {
-        const d = documento(c, 'codice', c.percorso ?? cartella)
-        if (d) { docs.set(d.id, d); codice++ } else saltate++
+        const d = documento(c, origine, c.percorso ?? '')
+        if (d) {
+          const prima = docs.get(d.id)
+          if (!prima || (d.quando ?? '') >= (prima.quando ?? '')) docs.set(d.id, d)
+          n++
+        } else saltate++
+        if (c.percorso && c.modificata) memoria[c.percorso] = { m: c.modificata, id: d?.id ?? '' }
       }
-    } catch (e) {
-      guasti.push({ file: cartella, errore: e instanceof Error ? e.message : String(e) })
+      for (const v of s.vuote) memoria[v.percorso] = { m: v.m, id: '' }
+      for (const v of s.invariate) {
+        memoria[v.percorso] = { m: v.m, id: v.id }
+        if (v.id) visti.push(v.id)
+      }
+      invariate += s.invariate.length
+      return n
+    }
+    if (existsSync(cartella)) {
+      try {
+        codice = raccogli(await sessioni(cartella, Math.max(0, TETTO - docs.size), await titoliClaude(schede), opzioni), 'codice')
+      } catch (e) {
+        guasti.push({ file: cartella, errore: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    const cartellaDiCodex = opzioni.codex ?? cartellaCodex()
+    if (existsSync(cartellaDiCodex)) {
+      try {
+        codex = raccogli(await sessioniCodex(cartellaDiCodex, Math.max(0, TETTO - docs.size), opzioni), 'codex')
+      } catch (e) {
+        guasti.push({ file: cartellaDiCodex, errore: e instanceof Error ? e.message : String(e) })
+      }
     }
   }
 
-  return { docs: [...docs.values()], saltate, troncato, guasti, perFile, codice }
+  return { docs: [...docs.values()], saltate, troncato, guasti, perFile, codice, codex, invariate, visti, memoria }
 }
 
-export async function sincronizza(cfg: ConfigConversazioni): Promise<EsitoConversazioni> {
-  return leggi(cfg)
+export async function sincronizza(cfg: ConfigConversazioni, opzioni: OpzioniLettura = {}): Promise<EsitoConversazioni> {
+  return leggi(cfg, cartellaCodice(), cartellaSchedeClaude(), opzioni)
 }
 
 /**
@@ -649,7 +985,8 @@ export async function prova(cfg: ConfigConversazioni): Promise<Prova> {
   }
   let codice = 0
   if (cfg.codice) {
-    if (!codicePossibile()) return { ok: false, errore: 'Non trovo le sessioni di Claude Code su questo computer.' }
+    // basta uno dei due agenti: chi ha solo Codex accende lo stesso interruttore
+    if (!agentiPossibili()) return { ok: false, errore: 'Non trovo le sessioni di Claude Code su questo computer.' }
     // la cartella c'è ma non si sfoglia: zero, e lo dirà la lettura
     codice = await contaSessioni()
   }
