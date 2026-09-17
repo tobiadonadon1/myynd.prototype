@@ -20,6 +20,8 @@ import { lingua, nellaLingua } from './config.ts'
 import { chiediJSON } from './modello.ts'
 import { linguaSbagliata, soloInLingua } from './testo.ts'
 import * as store from './store.ts'
+import * as riferimento from './riferimento.ts'
+import * as progetti from './progetti.ts'
 
 /**
  * Quanti scarti muti sullo stesso tema prima di considerarlo un segnale.
@@ -95,6 +97,13 @@ non torna.`
 
 export type Proposta = { chiesta: boolean; deduzione?: string }
 
+/** Le mani con cui chiede, sostituibili solo nelle prove. */
+type Ferri = { chiediJSON: typeof chiediJSON }
+const VERI: Ferri = { chiediJSON: o => chiediJSON(o) }
+let ferri: Ferri = VERI
+/** Solo per le prove: sostituisce il modello, o lo rimette (con `null`). */
+export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
+
 /**
  * Guarda se c'è qualcosa che vale la pena chiedere, e nel caso lo apre.
  *
@@ -166,7 +175,7 @@ export async function forseChiedi(): Promise<Proposta> {
     `Ha tolto di mezzo queste ${tema.quanti} voci senza spiegare perché:\n` +
     tema.titoli.map(t => `— ${t}`).join('\n') +
     `\n\nHanno in comune la radice «${tema.tema}».`
-  const chiama = (aggiunta: string) => chiediJSON<{ vaChiesto: boolean; deduzione: string; domanda: string }>({
+  const chiama = (aggiunta: string) => ferri.chiediJSON<{ vaChiesto: boolean; deduzione: string; domanda: string }>({
     lavoro: 'giudizio',
     max_tokens: 700,
     system: ISTRUZIONI,
@@ -253,6 +262,20 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
   const pulita = risposta.trim()
   if (!pulita) throw new Error('Scrivi qualcosa.')
 
+  /*
+   * Il riferimento non passa dal modello: quello che scrive è il blocco,
+   * parola per parola. Non c'è una regola da tirarne fuori — è lui che dice a
+   * che punto è ogni cosa, e la lettura la fanno le priorità ogni volta che
+   * partono. L'esito dice cosa cambia, perché possa controllare che sia vero.
+   */
+  const questa = store.domanda(id)
+  if (questa?.tema === riferimento.TEMA) {
+    riferimento.scrivi(pulita)
+    const esito = riferimento.esitoDelRiferimento()
+    store.chiudiDomanda(id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
   const segnatoEStop = () => {
     store.chiudiDomanda(id, 'risposta', pulita, 'Me lo sono segnato.')
     return { esito: 'Me lo sono segnato.' }
@@ -278,7 +301,7 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
     additionalProperties: false
   } as const
 
-  const e = await chiediJSON<{ convinzione: string; esito: string }>({
+  const e = await ferri.chiediJSON<{ convinzione: string; esito: string }>({
     lavoro: 'giudizio',
     max_tokens: 700,
     system:
@@ -291,9 +314,13 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
   if (!e) return segnatoEStop()
 
   if (e.convinzione?.trim()) {
+    // una domanda su un progetto (le fanno le priorità, quando non sanno a
+    // che punto è) lascia la convinzione nell'ambito di quel progetto, non
+    // nel ritratto: `cartaPerContesto` la ripesca quando se ne parla
+    const suo = aperta.progetto ? progetti.elenco().find(p => p.id === aperta.progetto) : null
     store.ricorda({
       enunciato: e.convinzione.trim(),
-      ambito: 'persona',
+      ambito: suo ? `progetto:${suo.nome}` : 'persona',
       genere: 'esplicita',          // gliel'ha detto lei, rispondendo
       fiducia: 0.95,
       prova: { citazione: pulita },

@@ -887,6 +887,12 @@ const EN: Record<string, string> = {
   'Email o password non corrispondono.': 'Email and password do not match.',
   'Nessun account.': 'No account.',
   'Sessione scaduta.': 'Session expired.',
+  // il riferimento e il voto alle priorità (riferimento.ts, valuta-feed.ts)
+  'Manca il riferimento: scrivi a che punto è ogni progetto, o passalo nel corpo della richiesta.':
+    'The reference is missing: write where each project stands, or pass it in the request body.',
+  'Il modello non ha risposto: la valutazione non si può fare.': 'The model did not answer: the evaluation cannot be done.',
+  'Su cosa sta lavorando adesso, progetto per progetto; cosa è morto; cosa è bloccato.':
+    'What they are working on right now, project by project; what is dead; what is blocked.',
 
   // — confermare l'indirizzo, e rimettere la password —
   'Ho dimenticato la password': 'I forgot my password',
