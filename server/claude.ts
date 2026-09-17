@@ -18,7 +18,7 @@ import * as abbonamento from './abbonamento.ts'
 import * as chatgpt from './chatgpt.ts'
 import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, stessoFilo, type Concessione, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
-import { linguaSbagliata, riflua, soloInLingua } from './testo.ts'
+import { linguaSbagliata, riflua, senzaTrattini, soloInLingua } from './testo.ts'
 import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
@@ -1986,7 +1986,36 @@ Scrivi in ${nellaLingua()}.`),
  * quello che Myynd ha imparato di lei restano identici, perché una bozza
  * scritta in una voce diversa da quella della chat sarebbe due prodotti.
  */
-const SVOLGERE = `
+/**
+ * La regola della domanda, in un posto solo.
+ *
+ * La legge chi svolge il compito, e la rilegge chi classifica quello che ha
+ * scritto (`chiedeAiuto`): le due metà devono dire la stessa cosa, o una
+ * domanda scritta bene viene riscritta male. Le sue parole, del diciassette
+ * settembre: «mi dice cosa ha visto, mi fa l'unica domanda che gli serve per
+ * essere sicuro di aver capito, propone la strada o dice che se ne occupa».
+ *
+ * Tre cose, quindi, e nell'ordine: cosa ha visto, in una riga; una domanda
+ * sola, e solo se la risposta cambia il risultato; altrimenti niente domanda,
+ * si va avanti e lo si dice. Esportata per le prove: una regola che non si
+ * può leggere da fuori non si può provare.
+ */
+export const UNA_DOMANDA =
+  'Quando ti fermi, quello che scrivi sono due righe e basta. La prima dice cosa hai ' +
+  'visto: cosa hai letto, cosa hai trovato e cosa no, in una riga sola. La seconda è la ' +
+  'domanda: una sola, come la farebbe un collega alzando la testa dalla scrivania, «Di ' +
+  'quale unità parliamo?». Non un piano, non dei passi numerati, non «per aiutarti dovrei ' +
+  'prima analizzare», non tre domande insieme sperando che una sia quella giusta. Chi ' +
+  'legge deve poter rispondere in cinque parole senza rileggere niente. Se ti mancano tre ' +
+  'cose, chiedi quella senza cui non si comincia: le altre due si chiedono dopo, se servono ' +
+  'ancora.\n\n' +
+  'E chiedi solo se la risposta cambia quello che consegni. Se non lo cambia, o se una ' +
+  'strada è chiaramente più ragionevole delle altre, non fermarti: prendila, fai il lavoro, ' +
+  'e nella riga finale per lei di\' in una riga cosa hai scelto e perché, così sa che te ne ' +
+  'stai occupando e può correggerti dopo. Una domanda che non cambia niente le costa ' +
+  'un\'attesa, e a te un giro.'
+
+export const SVOLGERE = `
 
 Adesso non ti è stata fatta una domanda: ti è stato affidato un compito dalla
 sua lista di cose da fare.
@@ -2020,13 +2049,7 @@ proposta richiesta è già un risultato utile, anche senza un rapporto sullo
 stato attuale. Fai UNA domanda solo quando manca un dato indispensabile per
 produrre il tipo di risultato richiesto.
 
-Quando ti fermi, quello che scrivi è la domanda. Solo quella, una riga, come
-la farebbe un collega alzando la testa dalla scrivania: «Di quale unità
-parliamo?». Non un piano, non dei passi numerati, non «per aiutarti dovrei
-prima analizzare», non tre domande insieme sperando che una sia quella
-giusta. Chi legge deve poter rispondere in cinque parole senza rileggere
-niente. Se ti mancano tre cose, chiedi quella senza cui non si comincia: le
-altre due si chiedono dopo, se servono ancora.
+${UNA_DOMANDA}
 
 E non è sempre colpa del materiale. Certe righe non sono compiti: sono
 obiettivi, intenzioni, titoli di cose grosse — «solidificare i sistemi»,
@@ -2798,18 +2821,25 @@ export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
  * funzionava già.
  */
 export async function domandeDaFare(compito: string, risposta: string): Promise<Chiesta[]> {
+  /*
+   * Una, dal diciassette settembre. Erano tre o quattro, e tre domande con le
+   * opzioni si rispondono in fretta — ma sono comunque tre cose da decidere
+   * davanti a una riga che doveva farne una. La sua regola è «l'unica domanda
+   * che gli serve per essere sicuro di aver capito»: quella la cui risposta
+   * cambia il risultato. Le altre, se servono ancora, si chiedono dopo.
+   */
   const out = await chiediJSON<{ righe: Chiesta[] }>({
     lavoro: 'domande',
-    max_tokens: 1500,
+    max_tokens: 800,
     system: conLaLingua(
       'Un assistente si è fermato su un compito perché gli manca qualcosa. Trasforma ' +
-      'quello che ha scritto in tre o quattro domande a scelta multipla, quelle che ' +
-      'servono davvero per andare avanti — non di più.\n\n' +
-      'Ogni domanda ha da due a quattro opzioni: concrete, diverse fra loro, e ognuna ' +
+      'quello che ha scritto in UNA domanda a scelta multipla: quella senza la cui risposta ' +
+      'non si può andare avanti, e la cui risposta cambia il risultato. Una sola, non di ' +
+      'più: se gliene mancano tre, la prima; le altre si chiedono dopo, se servono ancora.\n\n' +
+      'La domanda ha da due a quattro opzioni: concrete, diverse fra loro, e ognuna ' +
       'una scelta che si può fare davvero. Niente «altro» fra le opzioni: chi risponde ' +
       'ha comunque una casella per scrivere.\n\n' +
-      'Metti per prima quella senza la cui risposta non si può cominciare. Se una ' +
-      'domanda ha una risposta ovvia dal compito stesso, non la fai: sarebbe far ' +
+      'Se la risposta è ovvia dal compito stesso, non fare nessuna domanda: sarebbe far ' +
       'perdere tempo per sembrare accurato.'
     ),
     formato: SCHEMA_CHIESTE,
@@ -2825,7 +2855,9 @@ export async function domandeDaFare(compito: string, risposta: string): Promise<
       multipla: !!r.multipla
     }))
     .filter(r => r.opzioni.length >= 2)
-    .slice(0, 4)
+    // una: se il modello ne ha scritte tre lo stesso, vale la prima, che è
+    // quella che gli si è chiesto di mettere per prima
+    .slice(0, 1)
 }
 
 const SCHEMA_ESITO = {
@@ -2851,9 +2883,16 @@ const SCHEMA_ESITO = {
         'dalla scrivania. Una frase, sotto le venti parole, che finisce col punto ' +
         'interrogativo. Niente premesse, niente elenchi, niente piani, niente «per ' +
         'assisterti dovrei». Nomina la cosa vera che gli manca. Vuota se non chiede.'
+    },
+    visto: {
+      type: 'string',
+      description:
+        'Se chiede: cosa ha visto prima di fermarsi, in una riga sola sotto le venti ' +
+        'parole: cosa ha letto, cosa ha trovato e cosa no. Presa da quello che ha scritto, ' +
+        'non inventata. Vuota se non chiede, o se non l\'ha detto.'
     }
   },
-  required: ['chiede', 'manca', 'domanda'],
+  required: ['chiede', 'manca', 'domanda', 'visto'],
   additionalProperties: false
 } as const
 
@@ -2870,21 +2909,32 @@ const SCHEMA_ESITO = {
  * Può. Una riga che si è fermata ha una cosa sola da dire — cosa le serve per
  * andare avanti — e quella è una domanda, non un documento. Qui si tira fuori
  * quella, e `compiti.ts` mette in pagina quella.
+ *
+ * Dal diciassette settembre, con una riga davanti: `visto`, cosa ha letto e
+ * cosa non ha trovato prima di fermarsi. È la prima delle tre cose che lui ha
+ * chiesto — «mi dice cosa ha visto» — e senza quella la domanda arriva nuda:
+ * «Di quale unità parliamo?» si capisce solo se prima c'è «ho letto il filo
+ * con H-Farm e l'audit nomina due unità». Il campo c'è solo quando c'è
+ * qualcosa: chi confronta il risultato con `{ chiede, manca, domanda }` non
+ * deve vedersi comparire una chiave vuota.
  */
-export async function chiedeAiuto(compito: string, risposta: string): Promise<{ chiede: boolean; manca: string[]; domanda: string }> {
+export async function chiedeAiuto(compito: string, risposta: string): Promise<{ chiede: boolean; manca: string[]; domanda: string; visto?: string }> {
   // Lavoro da modello piccolo: è una domanda con due risposte possibili su un
   // testo che è già stato scritto. Se c'è un modello su questa macchina lo fa
   // lui, gratis; se non c'è, o se sbaglia, si passa a Claude senza che nessuno
   // se ne accorga. Se fallisce tutto si dà per fatta — meglio una domanda
   // mostrata come bozza che un compito bloccato perché la classifica non arriva.
-  const chiama = (aggiunta = '') => chiediJSON<{ chiede: boolean; manca: string[]; domanda: string }>({
+  const chiama = (aggiunta = '') => chiediJSON<{ chiede: boolean; manca: string[]; domanda: string; visto?: string }>({
     lavoro: 'classifica',
     max_tokens: 700,
     system: conLaLingua(
       'Guardi il risultato di un compito affidato a un assistente e dici se è la cosa ' +
       'fatta o una richiesta di aiuto. Se è una richiesta di aiuto, la riscrivi come ' +
-      'una domanda sola e diretta: quello che ha scritto lui è lungo, e chi legge deve ' +
-      'poter rispondere in cinque parole.'
+      'deve essere: una riga che dice cosa ha visto, e una domanda sola e diretta, quella ' +
+      'la cui risposta cambia il risultato. Quello che ha scritto lui è lungo, e chi legge ' +
+      'deve poter rispondere in cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
+      'di chiedere, è la cosa fatta: non trasformare una scelta dichiarata in una domanda.\n\n' +
+      'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + UNA_DOMANDA
     ),
     formato: SCHEMA_ESITO,
     messages: [{ role: 'user', content: `Il compito era: ${compito}\n\nHa risposto:\n${risposta.slice(0, 4000)}${aggiunta}` }]
@@ -2913,11 +2963,14 @@ export async function chiedeAiuto(compito: string, risposta: string): Promise<{ 
   const l = cfgLingua(leggi())
   if (e.domanda && linguaSbagliata(e.domanda, l)) e = await chiama(`\n\n${soloInLingua(l)}`) ?? e
   const domanda = typeof e.domanda === 'string' ? e.domanda.trim() : ''
+  // la riga di cosa ha visto vale solo con una domanda accanto, e nella lingua giusta
+  const visto = e.chiede && domanda && typeof e.visto === 'string' ? senzaTrattini(e.visto).trim().slice(0, 240) : ''
 
   return {
     chiede: !!e.chiede,
     manca: Array.isArray(e.manca) ? e.manca : [],
-    domanda: domanda && !linguaSbagliata(domanda, l) ? domanda : ''
+    domanda: domanda && !linguaSbagliata(domanda, l) ? domanda : '',
+    ...(visto && !linguaSbagliata(visto, l) ? { visto } : {})
   }
 }
 

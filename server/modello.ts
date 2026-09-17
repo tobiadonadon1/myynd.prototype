@@ -223,6 +223,7 @@ export type Lavoro =
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
   | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
+  | 'revisione'     // rileggere il lavoro consegnato come lei e come chi lo riceve, prima di dirlo pronto
 
 /*
  * Tre livelli, non due.
@@ -325,6 +326,19 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * Non ragiona e non ha bisogno di sforzo: deve solo tagliare bene.
    */
   email:      { livello: 'frontiera',  ragiona: false, sforzo: 'low',    attesa: 90_000 },
+  /*
+   * La revisione: rileggere quello che ha scritto prima di dirlo pronto, come
+   * lo rileggerebbe lei prima di firmarlo e come lo leggerebbe chi lo riceve.
+   *
+   * Frontiera, e con il pensiero acceso, per la ragione più semplice di tutta
+   * la tabella: è la chiamata che ferma la bozza con la cifra sbagliata prima
+   * che esca. Sta a un decimo del costo della bozza che controlla, e la bozza
+   * che controlla è il lavoro che esce dall'azienda con la sua firma sotto.
+   * Un revisore economico che dice «va bene» a tutto non è un risparmio: è la
+   * stessa bozza di prima con una spunta accanto. Gira una volta per consegna,
+   * due se la prima stesura non passa; il tetto lo tiene `compiti.ts`.
+   */
+  revisione:  { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
 
   // Manovre interne: il locale le fa uguale.
   //

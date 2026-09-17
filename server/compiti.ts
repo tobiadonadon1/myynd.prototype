@@ -33,6 +33,8 @@ import * as progetti from './progetti.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import { senzaTrattini, soloDomanda } from './testo.ts'
+import { feedbackPer, giudica, prossimoPasso, simili, type Giudizio } from './revisione-lavoro.ts'
+import * as ordine from './ordine.ts'
 
 export type Evento =
   | { fase: 'preso'; id: string }
@@ -251,6 +253,10 @@ type Ferri = {
   /** Se c'è una casella da cui mandare: senza, non si prepara niente. */
   salvaBozzaCasella: typeof salvaBozzaCasella
   postaCollegata: () => boolean
+  /** La rilettura del lavoro, come lei e come chi lo riceve: quinta chiamata, stesso motivo. */
+  giudica: typeof giudica
+  /** La cosa dopo, in una riga: sesta, e l'ultima. */
+  prossimoPasso: typeof prossimoPasso
 }
 const VERI: Ferri = {
   salvaBozzaCasella,
@@ -258,6 +264,8 @@ const VERI: Ferri = {
   chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
   domandeDaFare: (...a) => claude.domandeDaFare(...a),
   preparaEmail: (...a) => claude.preparaEmail(...a),
+  giudica: (...a) => giudica(...a),
+  prossimoPasso: (...a) => prossimoPasso(...a),
   postaCollegata: () => {
     const c = cfg.leggi()
     return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
@@ -305,44 +313,91 @@ async function svolgiUno(id: string, nativa: boolean) {
       ? [`Progetto: ${progetto.nome}`, `Obiettivo: ${progetto.obiettivo}`, c.nota].filter(Boolean).join('\n')
       : c.nota
     console.info(`myynd · worker · entering-production · ${id} · elapsed_ms=${Date.now() - iniziato}`)
-    const { testo: grezzo, fonti, verificaDocumenti, eseguito, daChiedere, consegna } = await ferri.svolgi(
-      c.testo, nota, c.modo,
+    // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
+    // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
+    // richiamo si tace: quella riga non è più sua
+    const passo = (p: claude.Passo) => { if (!richiamati.has(chiave(id))) {
+      if (p.passo !== ultimoPasso) {
+        console.info(`myynd · worker · stage=${p.passo} · ${id} · elapsed_ms=${Date.now() - iniziato}`)
+        ultimoPasso = p.passo
+      }
+      annuncia({ fase: 'lavoro', id, passo: p })
+    } }
+    const lavora = (notaGiro: string | null) => ferri.svolgi(
+      c.testo, notaGiro, c.modo,
       (dato?.nomi ?? []) as attrezzi.Nome[],
       dato?.cartella ?? null,
-      // ogni passo esce sul filo, a chi ha affidato la riga: la rotella da
-      // sola non diceva se stesse cercando, leggendo o scrivendo. Dopo un
-      // richiamo si tace: quella riga non è più sua
-      p => { if (!richiamati.has(chiave(id))) {
-        if (p.passo !== ultimoPasso) {
-          console.info(`myynd · worker · stage=${p.passo} · ${id} · elapsed_ms=${Date.now() - iniziato}`)
-          ultimoPasso = p.passo
-        }
-        annuncia({ fase: 'lavoro', id, passo: p })
-      } },
+      passo,
       // la riga può essere nata da un documento preciso — «rispondere a
       // Rossi» — e allora la bozza parte da lì, non da una ricerca
       c.doc,
       dato,
       { nativa, signal: controller.signal, taskId: c.id }
     )
-    // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
-    // butta invece di comparire sotto una riga che hai già ripreso in mano
-    if (richiamati.has(chiave(id))) return
-
-    // Via le lineette prima che questo testo vada da qualunque parte: dalla
-    // domanda che classifica se è una bozza pronta, dalla riga che finisce
-    // salvata, dall'email che ne nasce. Un posto solo, una volta sola — non
-    // una bozza pulita e un'email che porta ancora gli incisi del modello.
-    const testo = senzaTrattini(grezzo)
-
-    // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
-    // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
-    // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
-    const { chiede, domanda } = eseguito ? { chiede: !!consegna?.revisione && consegna.revisione.esito !== 'pass', domanda: '' } : daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo)
-    if (richiamati.has(chiave(id))) return
 
     /*
-     * Quando chiede, sotto la riga ci va la domanda. Solo quella.
+     * Il giro della rilettura.
+     *
+     * Una bozza non è pronta perché il modello ha smesso di scrivere: è pronta
+     * quando qualcuno l'ha riletta. Qui la rilegge `giudica`, come lei e come
+     * chi la riceve, e se non passa si riscrive una volta con i problemi in
+     * coda alla nota. Una volta, non finché passa: un lavoro che non passa
+     * due giri ha un problema che una terza stesura non risolve, e a quel
+     * punto la cosa onesta è consegnarlo con il verdetto accanto, così chi
+     * legge sa dove guardare. Il tetto è `GIRI_MAX`.
+     *
+     * Non si rilegge tutto. Una domanda non è un lavoro da giudicare; un
+     * documento creato in Pages l'ha già guardato la revisione visiva; un
+     * prompt non esce dall'azienda. Restano la bozza e il «tutto», cioè le due
+     * cose che portano la sua firma.
+     */
+    let giri = 1
+    let notaGiro = nota
+    let verdetto: Giudizio | null = null
+    let uscita = await lavora(notaGiro)
+    let testo = ''
+    let esito: { chiede: boolean; domanda: string; visto?: string }
+    for (;;) {
+      // il richiamo può essere arrivato mentre il modello scriveva: la bozza si
+      // butta invece di comparire sotto una riga che hai già ripreso in mano
+      if (richiamati.has(chiave(id))) return
+
+      // Via le lineette prima che questo testo vada da qualunque parte: dalla
+      // domanda che classifica se è una bozza pronta, dalla rilettura, dalla
+      // riga che finisce salvata, dall'email che ne nasce. Un posto solo, una
+      // volta sola — non una bozza pulita e un'email che porta ancora gli
+      // incisi del modello.
+      testo = senzaTrattini(uscita.testo)
+
+      // Una risposta che dice «mi manca il tuo indirizzo» non è una bozza pronta,
+      // ed è quello che stava succedendo: la riga si accendeva come se ci fosse
+      // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
+      esito = uscita.eseguito
+        ? { chiede: !!uscita.consegna?.revisione && uscita.consegna.revisione.esito !== 'pass', domanda: '' }
+        : uscita.daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo)
+      if (richiamati.has(chiave(id))) return
+      if (esito.chiede || uscita.eseguito || !RILETTI.has(c.modo)) break
+
+      verdetto = await ferri.giudica({
+        compito: c, nota: notaGiro, risultato: testo,
+        doc: c.doc ? store.documento(c.doc) : null,
+        progetto: progetto && progetto.stato !== 'chiuso' ? progetto : null,
+        fonti: uscita.fonti
+      })
+      if (richiamati.has(chiave(id))) return
+      if (verdetto.esito !== 'revise' || giri >= GIRI_MAX) break
+
+      giri++
+      console.info(`myynd · revisione · ${id} · revise · riscrivo (giro ${giri})`)
+      notaGiro = [nota, feedbackPer(verdetto.problemi)].filter(Boolean).join('\n\n')
+      uscita = await lavora(notaGiro)
+    }
+    const { fonti, verificaDocumenti, eseguito, consegna } = uscita
+    const { chiede, domanda } = esito
+
+    /*
+     * Quando chiede, sotto la riga ci va la domanda. Solo quella, e davanti
+     * la riga di cosa ha visto, se c'è.
      *
      * Ci andava tutto quello che aveva scritto, e quando un modello si ferma
      * quello che ha scritto non è lavoro: è il ragionamento sul lavoro. Il
@@ -355,9 +410,10 @@ async function svolgiUno(id: string, nativa: boolean) {
      * `domandeDaFare`, che da lì ricava le risposte da toccare — e sulla riga
      * compare la domanda sola. Se il modello non riesce a formularla si tiene
      * quello che c'era: una riga che chiede male è meglio di una riga che non
-     * chiede niente.
+     * chiede niente. La riga di cosa ha visto sta sopra, sulla stessa
+     * paragrafata: è quella che fa capire perché la domanda è quella.
      */
-    const detto = chiede && domanda ? soloDomanda(domanda) : testo
+    const detto = chiede && domanda ? [esito.visto ?? '', soloDomanda(domanda)].filter(Boolean).join('\n') : testo
 
     // Classification is asynchronous too: feedback arriving after drafting
     // must still win before an automated current-email summary becomes ready.
@@ -378,6 +434,11 @@ async function svolgiUno(id: string, nativa: boolean) {
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
     if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
     if (consegna) store.scriviConsegnaCompito(id, consegna)
+    // il verdetto si riscrive a ogni giro, anche quando non c'è: una riga
+    // riaffidata che stavolta chiede non deve portarsi dietro il «passa» di ieri
+    const revisione = verdetto ? { ...verdetto, giri } : null
+    store.scriviRevisioneCompito(id, revisione)
+    if (revisione) console.info(`myynd · revisione · ${id} · ${revisione.esito} · ${giri} giri`)
     ritentati.delete(chiave(id))
 
     // Se si è fermato, le stesse cose dette come si dicono a voce: tre domande
@@ -394,6 +455,9 @@ async function svolgiUno(id: string, nativa: boolean) {
 
     const fatto = store.compito(id)
     if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
+    // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
+    // non deve aspettare una riga in più che quasi sempre non c'è
+    if (fatto?.stato === 'pronto') await proponiIlSeguito(c, testo, progetto)
   } catch (e) {
     if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
@@ -418,6 +482,59 @@ async function svolgiUno(id: string, nativa: boolean) {
       return
     }
     annuncia({ fase: 'guaio', id, guaio })
+  }
+}
+
+/** I modi che passano dalla rilettura: quelli che portano la sua firma. */
+const RILETTI = new Set(['bozza', 'tutto'])
+/** Quante stesure al massimo: la prima, e una riscritta con i problemi in coda. */
+const GIRI_MAX = 2
+
+/**
+ * La cosa dopo, in lista.
+ *
+ * «Torna con il risultato e con la cosa dopo»: l'ultima delle sue tre
+ * richieste. Quando un lavoro è pronto si chiede in una riga cosa viene dopo
+ * dentro quel progetto, e la si scrive in lista come figlia della riga
+ * finita — con `madre`, così «Da …» porta lì — senza affidarla a nessuno:
+ * è una cosa da fare sua, proposta, non un lavoro che parte da solo.
+ *
+ * Quando non si scrive, ed è la parte che conta di più:
+ *   · una riga nata così non ne genera un'altra — niente catene di catene,
+ *     che è il modo in cui una lista si riempie di cose che nessuno ha
+ *     chiesto;
+ *   · una madre che ha già figli non ne fa altri: «rifallo» sulla stessa riga
+ *     non deve raddoppiare il seguito (`madriUsate`, la stessa rete del punto);
+ *   · una riga simile è già in lista, in qualunque stato vivo;
+ *   · un prompt non ha un dopo che non sia «incollalo», e non vale una riga.
+ * E non fallisce mai: la riga pronta resta pronta anche se il modello che
+ * propone è giù.
+ */
+async function proponiIlSeguito(c: store.Compito, risultato: string, progetto: progetti.Progetto | null) {
+  try {
+    if (c.origine === 'seguito' || c.modo === 'prompt' || !risultato.trim()) return
+    if (store.madriUsate().has(c.id)) return
+    const vivi = store.elencoCompiti().filter(v => v.id !== c.id)
+    const passo = await ferri.prossimoPasso({
+      compito: c, risultato,
+      progetto: progetto && progetto.stato !== 'chiuso' ? progetto : null,
+      inLista: vivi.filter(v => !c.progetto || v.progetto === c.progetto).map(v => v.testo)
+    })
+    if (!passo || richiamati.has(chiave(c.id))) return
+    if (vivi.some(v => simili(v.testo, passo))) return
+    // la riga può essere stata chiusa o richiamata mentre il modello pensava
+    if (store.compito(c.id)?.stato !== 'pronto') return
+    // l'id come quello della rotta: l'ora in base trentasei e un pizzico di caso
+    const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    store.scriviCompito({
+      id, testo: passo, quando: 'oggi', origine: 'seguito', madre: c.id,
+      progetto: c.progetto ?? null,
+      ordine: ordine.dopo(store.ultimoOrdine('oggi'))
+    })
+    console.info(`myynd · seguito · ${c.id} → ${id}`)
+    annunciaCambio()
+  } catch (e) {
+    console.warn(`myynd · compito ${c.id}: il risultato è pronto, la cosa dopo no —`, e instanceof Error ? e.message : e)
   }
 }
 

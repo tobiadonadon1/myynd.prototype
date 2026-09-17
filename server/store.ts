@@ -3023,6 +3023,17 @@ export type ConsegnaCompito = {
   revisione?: { esito: 'pass' | 'revise' | 'unavailable'; problemi: string[] }
 }
 
+/** Il giudizio sul lavoro consegnato: chi l'ha dato, cosa ha controllato, quanti giri ci sono voluti. */
+export type RevisioneLavoro = {
+  esito: 'pass' | 'revise' | 'unavailable'
+  comeTe: string
+  comeLoro: string
+  per: string
+  problemi: string[]
+  verificato: string[]
+  giri: number
+}
+
 export type Compito = {
   consegna?: ConsegnaCompito | null
   id: string
@@ -3053,6 +3064,13 @@ export type Compito = {
    * un documento né un progetto ha comunque un posto da cui viene, ed è quella.
    */
   madre?: string | null
+  /**
+   * Com'è stato riletto il lavoro prima di dirlo pronto: come lei e come chi
+   * lo riceve. Lo scrive `compiti.ts` da `revisione-lavoro.ts`; null vuol dire
+   * che questa riga non è passata da una rilettura (una domanda, un prompt, un
+   * documento già rivisto a vista).
+   */
+  revisione?: RevisioneLavoro | null
   chiesto: string | null
   risultato: string | null
   fonti: { id: string; label: string }[] | null
@@ -3179,6 +3197,7 @@ function compitoDaRiga(r: Record<string, unknown>): Compito {
     ...r,
     porta: portaDi(r.doc),
     consegna: r.consegna ? JSON.parse(String(r.consegna)) : null,
+    revisione: r.revisione ? JSON.parse(String(r.revisione)) : null,
     fonti: r.fonti ? JSON.parse(String(r.fonti)) : null,
     proposta: r.proposta ? JSON.parse(String(r.proposta)) : null,
     chieste: r.chieste ? JSON.parse(String(r.chieste)) : null,
@@ -3397,6 +3416,12 @@ export function proponi(id: string, p: Proposta, riassunto: string) {
 export function scriviEmailCompito(id: string, email: EmailPronta | null) {
   db.prepare('UPDATE compiti SET email = ? WHERE id = ?')
     .run(email ? JSON.stringify(email) : null, id)
+}
+
+/** Il giudizio sul lavoro consegnato, scritto da `compiti.ts` quando la riga diventa pronta; null la ripulisce. */
+export function scriviRevisioneCompito(id: string, revisione: RevisioneLavoro | null) {
+  db.prepare('UPDATE compiti SET revisione = ?, aggiornato = ? WHERE id = ?')
+    .run(revisione ? JSON.stringify(revisione) : null, new Date().toISOString(), id)
 }
 
 /**

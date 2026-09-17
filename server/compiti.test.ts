@@ -69,11 +69,23 @@ const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 const nonChiede = async () => ({ chiede: false, manca: [], domanda: '' })
 const nessunaDomanda = async () => []
 
+type Giudizio = import('./revisione-lavoro.ts').Giudizio
+type Ferri = NonNullable<Parameters<typeof compiti.perProva>[0]>
+const nonDisponibile = async (): Promise<Giudizio> => ({ esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
+/**
+ * Le mani per le prove: la rilettura e la cosa dopo stanno zitte se la prova
+ * non le nomina. Senza questo, una chiave ANTHROPIC_API_KEY nell'ambiente
+ * basterebbe a far partire un revisore vero in mezzo a una prova sulla coda.
+ */
+function prova(f: Ferri) {
+  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, ...f })
+}
+
 test('la delega riceve il progetto attuale per ID e conserva le note della riga', async () => {
   const progetti = await import('./progetti.ts')
   const p = progetti.scrivi({ nome: 'Aurora', obiettivo: 'Lanciare con cinque clienti' })
   let notaRicevuta: string | null = null
-  compiti.perProva({ svolgi: async (_testo, nota) => {
+  prova({ svolgi: async (_testo, nota) => {
     notaRicevuta = nota ?? null
     return { testo: 'Traccia pronta da rivedere.', fonti: [] }
   }, chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
@@ -96,7 +108,7 @@ test('saved email policy reaches delegation and dismissal during classification 
   const policy = { nomi: ['posta.leggi'], selezione: 'richieste-dirette' as const, ambitoSelezione: 'Sequoia' }
   store.scriviCompito({ id: 'policy-work', testo: 'Summarize direct email', origine: 'auto:human-mail', doc: d.id, attrezzi: policy, ordine: 'policy-work' })
   let ricevuta: unknown
-  compiti.perProva({
+  prova({
     svolgi: async (_c, _n, _m, _a, _cart, _passo, _doc, vincolo) => {
       ricevuta = vincolo
       return { testo: 'Lee asks for scope confirmation.', fonti: [{ id: d.id, label: '[1] Scope' }], verificaDocumenti: [d.id] }
@@ -118,7 +130,7 @@ test('saved email policy reaches delegation and dismissal during classification 
 })
 
 test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affidata', async () => {
-  compiti.perProva({
+  prova({
     svolgi: async (_c, _n, _m, _a, _cart, onPasso) => {
       onPasso?.({ passo: 'cerco', dettaglio: 'listino Rossi' })
       onPasso?.({ passo: 'scrivo' })
@@ -152,7 +164,7 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
 
 test('un risultato con le lineette arriva pulito, in fonte come nell\'email', async () => {
   let bozzaVistaDaEmail = ''
-  compiti.perProva({
+  prova({
     svolgi: async () => ({
       testo: 'Il succo in una riga — la parte che conta.\n\nGentile Rossi — ecco il preventivo — a presto.',
       fonti: []
@@ -187,7 +199,7 @@ test('una riga in modo prompt arriva a «pronto» senza che nessuno prepari una 
   // in qualunque altro risultato
   const pulito = 'Scrivi un\'email a Rossi.\n\nComincia con «Gentile Rossi» e chiudi con «Cordiali saluti».\n\nFonti:\n- [1] Listino 2026: il prezzo\n\nManca il preventivo di marzo.'
   let preparate = 0
-  compiti.perProva({
+  prova({
     svolgi: async (_c, _n, modo) => {
       assert.equal(modo, 'prompt', 'il modo non è arrivato a chi scrive')
       return { testo: prompt, fonti: [{ id: 'desktop:listino', label: '[1] Listino 2026' }] }
@@ -223,7 +235,7 @@ test('i passi arrivano strutturati, non come frasi', async () => {
     { passo: 'apro', dettaglio: 'Preventivo di marzo' },
     { passo: 'scrivo' }
   ]
-  compiti.perProva({
+  prova({
     svolgi: async (_c, _n, _m, _a, _cart, onPasso) => {
       for (const p of passi) onPasso?.(p)
       return { testo: 'Fatto.', fonti: [] }
@@ -244,7 +256,7 @@ test('i passi arrivano strutturati, non come frasi', async () => {
 test('una riga richiamata mentre il modello scrive butta il risultato in ritardo', async () => {
   let finisci: (r: { testo: string; fonti: [] }) => void = () => {}
   let onPassoVivo: ((p: Passo) => void) | undefined
-  compiti.perProva({
+  prova({
     svolgi: (_c, _n, _m, _a, _cart, onPasso) => new Promise(r => { finisci = r; onPassoVivo = onPasso }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda
@@ -274,7 +286,7 @@ test('una riga richiamata mentre il modello scrive butta il risultato in ritardo
 })
 
 test('un modello che esplode lascia la riga aperta, con il perché', async () => {
-  compiti.perProva({
+  prova({
     svolgi: async () => { throw new Error('Il modello non risponde. Riprova.') },
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda
@@ -294,7 +306,7 @@ test('un modello che esplode lascia la riga aperta, con il perché', async () =>
 })
 
 test('una risposta che chiede qualcosa finisce in «chiede», non in «pronto»', async () => {
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }),
     chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'], domanda: 'A quale indirizzo scrivo a Rossi?' }),
     domandeDaFare: async () => [{ domanda: 'A chi va?', opzioni: ['Rossi', 'Bianchi'], multipla: false }]
@@ -313,7 +325,7 @@ test('una risposta che chiede qualcosa finisce in «chiede», non in «pronto»'
 
 test('riaffidare la stessa riga nello stesso modo non la mette in fila due volte', async () => {
   let volte = 0
-  compiti.perProva({
+  prova({
     svolgi: async () => { volte++; await pausa(30); return { testo: 'Ok.', fonti: [] } },
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda
@@ -340,7 +352,7 @@ const emailFinta = async () => ({ a: 'rossi@esempio.it', oggetto: 'Preventivo', 
 
 test('con la posta collegata il «pronto» porta già l’email, e la riga la tiene', async () => {
   let preparate = 0
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Gentile Rossi, ecco il preventivo.\n\n(per te: l\'ho preso dal listino)', fonti: [] }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda,
@@ -361,7 +373,7 @@ test('con la posta collegata il «pronto» porta già l’email, e la riga la ti
 
 test('senza la posta collegata non si prepara niente', async () => {
   let preparate = 0
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda,
@@ -379,7 +391,7 @@ test('senza la posta collegata non si prepara niente', async () => {
 
 test('una bozza che non sembra un messaggio non paga il modello che la smonta', async () => {
   let preparate = 0
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: '- lunedì: riunione\n- martedì: fiera', fonti: [] }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda,
@@ -397,7 +409,7 @@ test('una bozza che non sembra un messaggio non paga il modello che la smonta', 
 
 test('su una riga che chiede non si prepara: non c’è ancora niente da mandare', async () => {
   let preparate = 0
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }),
     chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'], domanda: 'A quale indirizzo scrivo a Rossi?' }),
     domandeDaFare: nessunaDomanda,
@@ -414,7 +426,7 @@ test('su una riga che chiede non si prepara: non c’è ancora niente da mandare
 })
 
 test('se smontarla fallisce la bozza è pronta lo stesso, senza email', async () => {
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda,
@@ -433,7 +445,7 @@ test('se smontarla fallisce la bozza è pronta lo stesso, senza email', async ()
 })
 
 test('richiamare la riga porta via anche l’email, e una risposta pure', async () => {
-  compiti.perProva({
+  prova({
     svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }),
     chiedeAiuto: nonChiede,
     domandeDaFare: nessunaDomanda,
@@ -498,7 +510,7 @@ test('madre si scrive, si rilegge, e una riscrittura non taglia il filo', () => 
 test('verified native delivery skips speculative classification; execution is cancellable and replayed only to its owner', async () => {
   let signal: AbortSignal | undefined
   let resolveWork: (value: {testo: string; fonti: never[]; eseguito: boolean}) => void = () => {}
-  compiti.perProva({ svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, execution) => {
+  prova({ svolgi: async (_t, _n, _m, _a, _c, passo, _d, _s, execution) => {
     signal = execution?.signal
     assert.equal(execution?.nativa, true)
     passo?.({ passo: 'apro', dettaglio: 'Pages' })
@@ -521,7 +533,7 @@ test('verified native delivery skips speculative classification; execution is ca
   stop(); stopOther(); o.smetti()
   await pausa(10)
 
-  compiti.perProva({ svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, execution) => {
+  prova({ svolgi: async (_t, _n, _m, _a, _c, _p, _d, _s, execution) => {
     signal = execution?.signal
     return new Promise(r => { resolveWork = r })
   } })
@@ -538,7 +550,7 @@ test('verified native delivery skips speculative classification; execution is ca
 
 test('created artifact is not ready when actual visual review failed or was unavailable', async () => {
  for (const esito of ['revise','unavailable'] as const) {
-  compiti.perProva({svolgi:async()=>({testo:'Saved for review.',fonti:[],eseguito:true,consegna:{app:'Pages',titolo:'Review sample',percorso:'/verified/sample.pages',verificato:true,caratteri:100,revisione:{esito,problemi:['Review did not pass.']}}}),chiedeAiuto:async()=>{throw Error('Do not reclassify evidence')}})
+  prova({svolgi:async()=>({testo:'Saved for review.',fonti:[],eseguito:true,consegna:{app:'Pages',titolo:'Review sample',percorso:'/verified/sample.pages',verificato:true,caratteri:100,revisione:{esito,problemi:['Review did not pass.']}}}),chiedeAiuto:async()=>{throw Error('Do not reclassify evidence')}})
   const id=riga('Write an essay in Pages');const o=orecchio(id)
   compiti.affida(id,'tutto');await o.aspetta('chiede')
   assert.equal(store.compito(id)?.stato,'chiede')
@@ -549,7 +561,7 @@ test('created artifact is not ready when actual visual review failed or was unav
 
 test('preparation is immediate and replayable before production reports a stage', async () => {
  let finish: (value: {testo:string;fonti:never[];eseguito:boolean}) => void = () => {}
- compiti.perProva({svolgi: () => new Promise(resolve => { finish = resolve })})
+ prova({svolgi: () => new Promise(resolve => { finish = resolve })})
  const id = riga('Private request text must not be logged')
  const o = orecchio(id)
  compiti.affida(id, 'tutto')
@@ -572,7 +584,7 @@ test('an explicitly delegated email reply is saved as a real mailbox draft', asy
   const id='explicit-mailbox-reply'
   store.scriviCompito({id,testo:'Reply to this email with the proposal',doc:doc.id,ordine:'z'})
   let writes=0
-  compiti.perProva({svolgi:async()=>({testo:'Dear Sender, here is the proposal.',fonti:[]}),chiedeAiuto:nonChiede,domandeDaFare:nessunaDomanda,postaCollegata:()=>true,
+  prova({svolgi:async()=>({testo:'Dear Sender, here is the proposal.',fonti:[]}),chiedeAiuto:nonChiede,domandeDaFare:nessunaDomanda,postaCollegata:()=>true,
     preparaEmail:async()=>({a:'sender@example.com',oggetto:'Re: Question',corpo:'Here is the proposal.'}),
     salvaBozzaCasella:async(task,source,email)=>{writes++;assert.equal(task,id);assert.equal(source,doc.id);assert.equal(email.rispondeA?.messageId,doc.messageId);return{stato:'salvata',id:'draft1',url:'message://draft1'}}})
   const o=orecchio(id);compiti.affida(id,'bozza');await o.aspetta('pronto');o.smetti()
@@ -589,7 +601,7 @@ test('restart recovers one bounded read-only initiative attempt, never arbitrary
   store.scriviCompito({id:'recovery-manual',testo:'Write an essay in Pages',ordine:'rec-b',origine:'chat'})
   store.affidaCompito('recovery-manual','tutto')
   let calls=0
-  compiti.perProva({svolgi:async (_t,_n,_m,_a,_folder,_step,_doc,_selection,execution)=>{
+  prova({svolgi:async (_t,_n,_m,_a,_folder,_step,_doc,_selection,execution)=>{
     calls++;assert.equal(execution?.nativa,false);return {testo:'A recovered draft.',fonti:[],eseguito:true}
   },postaCollegata:()=>false})
   const listener=orecchio('recovery-safe')
@@ -624,7 +636,7 @@ test('mail revision conflict after email preparation emits chiede with visible e
   store.risultatoCompito(parent,'Dear Client, Tuesday works for me.',[],'pronto')
   const {id}=await rivediDallaChat({id:parent,feedback:'Change the proposed day to Wednesday'},'Change the proposed day to Wednesday',()=>{})
   let writes=0,preparations=0
-  compiti.perProva({
+  prova({
     svolgi:async()=>({testo:'Dear Client, Wednesday works for me.',fonti:[]}),
     chiedeAiuto:nonChiede,domandeDaFare:nessunaDomanda,postaCollegata:()=>true,
     preparaEmail:async()=>{
@@ -651,10 +663,237 @@ test('ordinary parent-linked follow-up completes without requiring a revision ba
   const parent=riga('Discuss the launch plan')
   const id='ordinary-follow-up-no-revision'
   store.scriviCompito({id,testo:'Prepare the next meeting agenda',madre:parent,origine:'chat',ordine:'follow-up'})
-  compiti.perProva({svolgi:async()=>({testo:'Agenda prepared.',fonti:[],eseguito:true})})
+  prova({svolgi:async()=>({testo:'Agenda prepared.',fonti:[],eseguito:true})})
   const o=orecchio(id);compiti.affida(id,'bozza');await o.aspetta('pronto')
   assert.equal(store.compito(id)?.stato,'pronto')
   assert.equal(store.compito(id)?.risultato,'Agenda prepared.')
   assert.ok(!o.sentiti.some(e=>e.fase==='guaio'))
   o.smetti();await pausa(10)
+})
+
+/*
+ * La rilettura: una bozza non è pronta perché il modello ha smesso di scrivere.
+ *
+ * «Quando affido una cosa a Myynd devo sapere che è di qualità, e cioè che
+ * non accetta la sua prima stesura.» Qui si prova la meccanica attorno al
+ * revisore, che nelle prove è finto: una stesura bocciata si riscrive una
+ * volta sola con i problemi nella nota, il verdetto finisce sulla riga con il
+ * conto dei giri, un revisore assente non ferma niente, e le righe che non
+ * portano la sua firma — una domanda, un prompt — non passano di qui.
+ */
+const passa = async (): Promise<Giudizio> => ({ esito: 'pass', per: 'Rossi', comeTe: 'Va bene così.', comeLoro: 'Chiaro, rispondo.', problemi: [], verificato: ['prezzo contro il listino'] })
+const boccia = async (): Promise<Giudizio> => ({ esito: 'revise', per: 'Rossi', comeTe: 'Il prezzo non torna.', comeLoro: 'Mi aspettavo 980.', problemi: ['il prezzo dice 890, il listino dice 980'], verificato: ['prezzo contro il listino'] })
+
+test('una stesura bocciata si riscrive una volta, con i problemi nella nota, e il verdetto resta sulla riga', async () => {
+  const note: (string | null | undefined)[] = []
+  const giudicati: string[] = []
+  prova({
+    svolgi: async (_t, nota) => { note.push(nota); return { testo: note.length === 1 ? 'Gentile Rossi, l\'impianto costa 890 euro.' : 'Gentile Rossi, l\'impianto costa 980 euro.', fonti: [] } },
+    chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
+    giudica: async ({ risultato, nota }) => { giudicati.push(risultato); return nota?.startsWith('Rivedi:') ? passa() : boccia() }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const pronto = await o.aspetta('pronto')
+
+  assert.equal(note.length, 2, 'una stesura bocciata si riscrive una volta, non zero e non due')
+  assert.equal(note[0], null)
+  assert.match(note[1] ?? '', /^Rivedi:/, 'il feedback non comincia con «Rivedi:»')
+  assert.match(note[1] ?? '', /- il prezzo dice 890, il listino dice 980/, 'il problema non è arrivato a chi riscrive')
+  assert.deepEqual(giudicati, ['Gentile Rossi, l\'impianto costa 890 euro.', 'Gentile Rossi, l\'impianto costa 980 euro.'])
+
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.equal(c.risultato, 'Gentile Rossi, l\'impianto costa 980 euro.')
+  assert.deepEqual(c.revisione, { esito: 'pass', per: 'Rossi', comeTe: 'Va bene così.', comeLoro: 'Chiaro, rispondo.', problemi: [], verificato: ['prezzo contro il listino'], giri: 2 })
+  // e il «pronto» lo porta già con sé: chi guarda non deve rileggere la lista
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.revisione?.giri, 2)
+  o.smetti()
+})
+
+test('se non passa nemmeno la seconda si consegna lo stesso, con il verdetto accanto: mai un terzo giro', async () => {
+  let stesure = 0
+  prova({ svolgi: async () => { stesure++; return { testo: 'Gentile Rossi, ecco.', fonti: [] } }, chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, giudica: boccia })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('pronto')
+  assert.equal(stesure, 2)
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.equal(c.revisione?.esito, 'revise')
+  assert.equal(c.revisione?.giri, 2)
+  assert.deepEqual(c.revisione?.problemi, ['il prezzo dice 890, il listino dice 980'])
+  o.smetti()
+})
+
+test('una stesura che passa al primo giro resta com\'è, con il verdetto e un giro solo', async () => {
+  let stesure = 0
+  prova({ svolgi: async () => { stesure++; return { testo: 'Gentile Rossi, ecco.', fonti: [] } }, chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, giudica: passa })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.equal(stesure, 1)
+  const c = store.compito(id)!
+  assert.equal(c.revisione?.esito, 'pass')
+  assert.equal(c.revisione?.giri, 1)
+  assert.equal(c.revisione?.comeTe, 'Va bene così.')
+  assert.equal(c.revisione?.comeLoro, 'Chiaro, rispondo.')
+  assert.equal(store.elencoCompiti().find(x => x.id === id)?.revisione?.esito, 'pass', 'la lista che va al client non porta il verdetto')
+  o.smetti()
+})
+
+test('senza un revisore la riga è pronta come prima, e lo dice: unavailable', async () => {
+  let stesure = 0
+  prova({ svolgi: async () => { stesure++; return { testo: 'Gentile Rossi, ecco.', fonti: [] } }, chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const id = riga('Mandare il preventivo a Rossi')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.equal(stesure, 1)
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.equal(c.risultato, 'Gentile Rossi, ecco.')
+  assert.deepEqual(c.revisione, { esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [], giri: 1 })
+  assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
+  o.smetti()
+})
+
+test('una domanda e un prompt non si rileggono, e una riga riaffidata che stavolta chiede perde il verdetto di ieri', async () => {
+  let giudicate = 0
+  const conta = async () => { giudicate++; return passa() }
+  prova({ svolgi: async () => ({ testo: 'Mi manca l\'indirizzo di Rossi.', fonti: [] }), chiedeAiuto: async () => ({ chiede: true, manca: ['indirizzo'], domanda: 'A quale indirizzo scrivo a Rossi?' }), domandeDaFare: nessunaDomanda, giudica: conta })
+  const chiede = riga('Scrivere a Rossi')
+  const o1 = orecchio(chiede)
+  compiti.affida(chiede, 'bozza')
+  await o1.aspetta('chiede')
+  assert.equal(giudicate, 0, 'ha riletto una domanda')
+  assert.equal(store.compito(chiede)!.revisione, null)
+  o1.smetti()
+
+  prova({ svolgi: async () => ({ testo: 'Scrivi a Rossi.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, giudica: conta })
+  const prompt = riga('Mandare il preventivo a Rossi')
+  const o2 = orecchio(prompt)
+  compiti.affida(prompt, 'prompt')
+  await o2.aspetta('pronto')
+  assert.equal(giudicate, 0, 'ha riletto un prompt')
+  assert.equal(store.compito(prompt)!.revisione, null)
+  o2.smetti()
+
+  prova({ svolgi: async () => ({ testo: 'Gentile Rossi, ecco.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, giudica: conta })
+  const ieri = riga('Mandare il preventivo a Rossi')
+  const o3 = orecchio(ieri)
+  compiti.affida(ieri, 'bozza')
+  await o3.aspetta('pronto')
+  assert.equal(giudicate, 1)
+  assert.equal(store.compito(ieri)!.revisione?.esito, 'pass')
+  o3.smetti()
+  prova({ svolgi: async () => ({ testo: 'Mi manca il listino.', fonti: [] }), chiedeAiuto: async () => ({ chiede: true, manca: ['listino'], domanda: 'Quale listino uso?' }), domandeDaFare: nessunaDomanda, giudica: conta })
+  const o4 = orecchio(ieri)
+  compiti.affida(ieri, 'tutto')
+  await o4.aspetta('chiede')
+  assert.equal(giudicate, 1)
+  assert.equal(store.compito(ieri)!.revisione, null, 'il «passa» di ieri è rimasto sotto una domanda')
+  o4.smetti()
+})
+
+test('quando chiede, sulla riga c\'è prima cosa ha visto e poi la domanda sola', async () => {
+  prova({
+    svolgi: async () => ({ testo: 'Ho letto il filo con H-Farm.\n\n1. Analizzo il perimetro\n2. Chiedo: di quale unità parliamo? E quando?', fonti: [] }),
+    chiedeAiuto: async () => ({ chiede: true, manca: ['unità'], domanda: 'Di quale unità parliamo?', visto: 'Ho letto il filo con H-Farm: l\'audit nomina due unità.' }),
+    domandeDaFare: nessunaDomanda
+  })
+  const id = riga('Rispondere a H-Farm sull\'audit')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('chiede')
+  assert.equal(store.compito(id)!.risultato, 'Ho letto il filo con H-Farm: l\'audit nomina due unità.\nDi quale unità parliamo?')
+  o.smetti()
+})
+
+/*
+ * La cosa dopo.
+ *
+ * «Torna con il risultato e con la cosa dopo.» Si prova che la riga nasca una
+ * volta, figlia della riga finita e nel suo progetto, e soprattutto quando
+ * NON nasce: da una riga nata così, da una madre che ha già figli, quando una
+ * simile è già in lista, quando il modello non ha niente da proporre.
+ */
+test('a lavoro pronto la cosa dopo entra in lista una volta sola, figlia della riga e nel suo progetto', async () => {
+  const progetti = await import('./progetti.ts')
+  const p = progetti.scrivi({ nome: 'Preventivi', obiettivo: 'Chiudere Rossi entro il mese' })
+  let proposte = 0
+  prova({
+    svolgi: async () => ({ testo: 'Gentile Rossi, ecco il preventivo.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
+    prossimoPasso: async ({ compito, progetto, inLista }) => {
+      proposte++
+      assert.equal(compito.testo, 'Mandare il preventivo a Rossi')
+      assert.equal(progetto?.id, p.id)
+      assert.ok(!inLista.includes('Mandare il preventivo a Rossi'), 'la riga stessa sta fra quelle «già in lista»')
+      return 'Fissare la chiamata con Rossi sul preventivo'
+    }
+  })
+  const id = riga('Mandare il preventivo a Rossi')
+  store.cambiaCompito(id, { progetto: p.id })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  await pausa(60)
+
+  const figlie = store.elencoCompiti().filter(c => c.madre === id)
+  assert.equal(figlie.length, 1)
+  const f = figlie[0]
+  assert.equal(f.testo, 'Fissare la chiamata con Rossi sul preventivo')
+  assert.equal(f.origine, 'seguito')
+  assert.equal(f.progetto, p.id)
+  assert.equal(f.quando, 'oggi')
+  assert.equal(f.modo, 'io')
+  assert.equal(f.stato, 'aperto')
+  o.smetti()
+
+  // «rifallo»: la madre ha già una figlia, non se ne fa un'altra e non si chiede nemmeno
+  const o2 = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o2.aspetta('pronto')
+  await pausa(60)
+  assert.equal(proposte, 1)
+  assert.equal(store.elencoCompiti().filter(c => c.madre === id).length, 1)
+  o2.smetti()
+})
+
+test('la cosa dopo non nasce da una riga nata così, né se una simile è già in lista, né dal niente', async () => {
+  let proposte = 0
+  prova({ svolgi: async () => ({ testo: 'Fatto.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, prossimoPasso: async () => { proposte++; return 'Mandare il contratto firmato a Rossi' } })
+
+  store.scriviCompito({ id: 'seguito-1', testo: 'Fissare la chiamata con Rossi', origine: 'seguito', madre: 'qualcuno', ordine: 'seg-1' })
+  const o1 = orecchio('seguito-1')
+  compiti.affida('seguito-1', 'bozza')
+  await o1.aspetta('pronto')
+  await pausa(40)
+  assert.equal(proposte, 0, 'ha proposto un seguito a un seguito')
+  assert.equal(store.elencoCompiti().filter(c => c.madre === 'seguito-1').length, 0)
+  o1.smetti()
+
+  const prima = store.elencoCompiti().length
+  store.scriviCompito({ id: 'gia-in-lista', testo: 'Manda a Rossi il contratto firmato', ordine: 'gia-1' })
+  const id = riga('Preparare il contratto per Rossi')
+  const o2 = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o2.aspetta('pronto')
+  await pausa(40)
+  assert.equal(proposte, 1)
+  assert.equal(store.elencoCompiti().filter(c => c.madre === id).length, 0, 'ha messo in lista una riga che c\'era già, detta in altre parole')
+  assert.equal(store.elencoCompiti().length, prima + 2)
+  o2.smetti()
+
+  prova({ svolgi: async () => ({ testo: 'Fatto.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, prossimoPasso: async () => null })
+  const niente = riga('Riassumere la settimana')
+  const o3 = orecchio(niente)
+  compiti.affida(niente, 'bozza')
+  await o3.aspetta('pronto')
+  await pausa(40)
+  assert.equal(store.elencoCompiti().filter(c => c.madre === niente).length, 0)
+  o3.smetti()
 })
