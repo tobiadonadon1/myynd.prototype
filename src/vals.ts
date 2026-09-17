@@ -3,7 +3,6 @@ import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TENUTE, TONI, parole
 import { DOMANDE, type Campo } from './intervista'
 import type { Progetto, Compito, ProjectInitiative } from './api'
 import { coloreProgetto } from './colori-progetto'
-import { sulTavolo } from './tavolo'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
@@ -11,7 +10,6 @@ import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 import { primoParagrafo } from './essenza.ts'
 import { preparaApertura } from './navigazione.ts'
-import { dataFonte, testoCarta } from './feed-carta.ts'
 import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
 import {statoAccessoNote} from './note-access.ts'
@@ -85,18 +83,8 @@ function genereDi(fonte: string | null | undefined, doc: string | null | undefin
   return 'pagina'
 }
 
-export function etichettaFonte(fonte: string | null | undefined, doc: string | null | undefined): string {
-  const g = genereDi(fonte, doc)
-  if (g === 'mail') return t('Apri la mail')
-  if (g === 'file') return t('Apri il file')
-  if (g === 'cartella') return t('Apri la cartella')
-  if (g === 'nota') return t('Apri la nota')
-  if (g === 'calendario') return t('Apri il calendario')
-  return t('Apri la pagina')
-}
-
 /**
- * Lo stesso, senza il verbo: «la mail», «il file», «la pagina».
+ * Il posto da cui viene, senza il verbo: «la mail», «il file», «la pagina».
  *
  * Serve alla riga che dice da dove viene una cosa da fare: «Da» e poi il link.
  * Stesso elenco di connettori del bottone, così il giorno che ne arriva uno
@@ -276,15 +264,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // non c'era più niente da fare — l'opposto di quello che serve lì.
   const [doneOpen, setDoneOpen] = useState(false)
   const [openDone, setOpenDone] = useState<string | null>(null)
-  const [heroLong, setHeroLong] = useState(false)
-  // Quali righe del resto hanno il testo aperto. Un insieme e non un id
-  // solo: aprirne una non è scegliere, è leggere — e mentre leggi la
-  // seconda non ha senso che la prima ti si richiuda sotto il dito.
-  const [restoAperti, setRestoAperti] = useState<Set<string>>(new Set())
-  const [risposta, setRisposta] = useState('')
-  const [rispondendo, setRispondendo] = useState(false)
-  const [scriviAperto, setScriviAperto] = useState(false)
-  const [menuAperto, setMenuAperto] = useState(false)
   const [fuoco, setFuoco] = useState('')
 
   /*
@@ -768,8 +747,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   // — valori derivati —
 
-  const hero = aperti[0]
-  const heroCarta = hero ? testoCarta(hero) : { titolo: '', testo: '', perche: '' }
   const cl = gruppi.find(g => g.id === (nodoSelezionato?.gruppo ?? sel)) ?? gruppi[0]
   const documentoCorrente = documentoMappa?.id === nodoSelezionato?.id ? documentoMappa : null
   const testoNodo = anteprimaDocumentoMappa(leggibile(documentoCorrente?.corpo ?? nodoSelezionato?.estratto ?? '').map(r => r.testo).filter(Boolean).join(' '))
@@ -784,7 +761,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     : stato.config.motore === 'openai' ? !!stato.config.openai?.collegato
     : !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
   const th = threads.find(t => t.id === thread)
-  const noop = () => {}
 
   /** Reach the original; a saved copy is an explicit fallback, never a fake destination. */
   const portamiFonte = async (id: string) => {
@@ -812,35 +788,18 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
 
   /**
-   * Rispondere alla voce in cima con parole tue. Non aggiorno l'elenco a mano:
-   * il server rimanda quello vero, perché è lui che decide se «l'ho già
-   * mandato» chiude la voce o la lascia aperta.
-   */
-  /**
-   * Da una voce del feed a una riga della lista.
-   *
-   * È il ponte fra le due schermate, ed è quello che le rende un organismo solo
-   * invece di due app che condividono un database. Lui nota una cosa; tu decidi
-   * che è tua e la prendi in carico.
-   *
-   * La voce si chiude nello stesso momento — lo fa il server — perché la stessa
-   * cosa in due posti con due stati diversi diverge al primo tocco: la chiuderesti
-   * in lista e resterebbe aperta nel feed, a chiederti di nuovo la stessa cosa.
-   */
-  /**
    * «Non mi interessa»: via dal feed, e non torna domani.
    *
    * Stava dentro il menù «⋯», che è il posto dove si mettono le cose che non si
    * vuole far vedere. Ma questo è il gesto che tiene pulito il feed — se costa
    * due clic e una scoperta, non lo fa nessuno, e dopo una settimana la
-   * schermata è piena di roba che non interessa a nessuno. Adesso sta in
-   * chiaro, in un angolo, scritto piccolo.
+   * schermata è piena di roba che non interessa a nessuno. Adesso sta su ogni
+   * riga, quando la riga è sotto il dito, scritto piccolo.
    *
    * Sparisce subito e si scusa dopo: aspettare il server su un gesto così
    * piccolo fa sembrare lenta l'app proprio dove è più veloce.
    */
   const scarta = async (v: VoceFeed) => {
-    setMenuAperto(false)
     const dove = aperti.findIndex(x => x.id === v.id)
     setAperti(a => a.filter(x => x.id !== v.id))
     setScartata({ voce: v, dove: dove < 0 ? 0 : dove })
@@ -858,32 +817,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     }
   }
 
-
-  const mandaRisposta = async (testo: string, stato?: string) => {
-    if (!hero || !testo.trim()) return
-    setRispondendo(true)
-    try {
-      const r = await api.rispondiFeed(hero.id, testo, stato)
-      setAperti(r.aperti as unknown as VoceFeed[])
-      setFatte(r.fatte as unknown as VoceFeed[])
-      setRisposta('')
-      setScriviAperto(false)
-      setMenuAperto(false)
-      setHeroLong(false)
-      mostraToast(
-        r.fonteVecchia
-          ? t('Segnato. Il documento è indietro rispetto a te: rileggo la fonte alla prossima lettura.')
-          : r.daRicordare
-            ? frasi.segnatoRicordo(r.daRicordare)
-            : t('Segnato.')
-      )
-    } catch (e) {
-      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
-    }
-    setRispondendo(false)
-  }
-
-  const rispondiAlHero = () => mandaRisposta(risposta)
 
   /**
    * Rispondere a quello che ha chiesto lui. L'esito non finisce in un avviso
@@ -944,10 +877,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     } catch { mostraToast(t('Non sono riuscito a salvarlo.')) }
   }
 
-  const risolvi = (v: VoceFeed) => async () => {
+  /** «Fatto» su una voce: via dalle aperte, fra le fatte, e il server lo sa un attimo dopo. */
+  const risolvi = async (v: VoceFeed) => {
     setAperti(a => a.filter(x => x.id !== v.id))
     setFatte(f => [v, ...f])
-    setHeroLong(false)
     try {
       await api.segnaFeed(v.id, 'fatto')
       mostraToast(t('Segnata come fatta.'), true)
@@ -958,83 +891,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       mostraToast(t('Non sono riuscito a segnarla.'))
     }
   }
-
-  /**
-   * Le voci del feed, vestite da riga.
-   *
-   * Si mappano tutte, non solo quelle sotto la prima: quando in cima ci va una
-   * cosa della tua lista, la voce che stava lì scende fra le righe — e per
-   * scendere le serve la stessa vestizione delle altre. Chi la disegna prende
-   * `rigaHero`; chi disegna il resto prende `resto`, che è quella dopo.
-   */
-  const righe = aperti.map((i, ix) => {
-    const aperto = restoAperti.has(i.id)
-    const carta = testoCarta(i)
-    const testo = carta.testo
-    return {
-      id: i.id, tipo: i.tipo, titolo: carta.titolo, ora: quando(dataFonte(i)),
-      // una parola, non un percorso: vale qui come sulla carta in cima
-      fonte: i.doc || i.fonte ? parolaFonte(i.fonte, i.doc) : '',
-      // Aperta è tutta; chiusa si ferma dov'è ancora una frase e non un
-      // troncone. Il chevron sta attaccato a questo punto, in fondo alle
-      // parole — è lì che ti accorgi che ne mancano, non in cima alla riga.
-      testo: aperto ? testo : taglia(testo, 150),
-      aperto,
-      // Sotto la soglia non c'è niente da aprire: il chevron non compare,
-      // invece di girare a vuoto.
-      espandibile: testo.length > 150,
-      urgenza: i.urgenza ?? '',
-      // perché sta sul feed, e per quale obiettivo: la riga che rende la scelta controllabile
-      perche: carta.perche,
-      /**
-       * La freccia accanto a «Da leggere».
-       *
-       * Il pallino era decorazione: stava lì, non diceva niente, e la riga
-       * sembrava una voce di elenco puntato invece di una cosa su cui si
-       * clicca. Questa punta alla voce e alla riga che ci porta sopra — e
-       * resta ferma: quella che gira è l'altra, in fondo al testo.
-       */
-      freccia: {
-        flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center',
-        color: 'rgba(62,81,64,.6)'
-      } as CSSProperties,
-      // Il chevron in fondo alla frase: giù quando c'è altro da vedere, su
-      // quando sei già in fondo.
-      chevron: {
-        display: 'inline-flex', verticalAlign: '-2px', marginLeft: 5, padding: 0, border: 'none',
-        background: 'none', cursor: 'pointer', color: 'rgba(34,39,31,.5)',
-        transform: aperto ? 'rotate(180deg)' : 'rotate(0deg)',
-        transition: 'transform .28s cubic-bezier(.22,.61,.36,1), color .2s ease'
-      } as CSSProperties,
-      // «Da decidere», «Da leggere»: è la prima cosa che dice se la riga ti
-      // riguarda, e stava scritta come una didascalia qualsiasi accanto alla
-      // fonte. Adesso pesa quanto quello che dice — maiuscoletto spaziato,
-      // il verde dell'app, staccata dal grigio della fonte.
-      tipoStyle: {
-        fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em',
-        textTransform: 'uppercase', color: '#3E5140'
-      } as CSSProperties,
-      pill: {
-        flex: 'none', fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#8E3F1F',
-        background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
-      } as CSSProperties,
-      row: {
-        display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer',
-        borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.09)'
-      } as CSSProperties,
-      // Vedere il resto della frase e prendere in carico la voce sono due
-      // gesti diversi, e adesso hanno due bersagli diversi: il chevron in
-      // fondo al testo apre, la riga porta la voce in cima. Prima l'unico
-      // modo di leggere tutto era spostarsela sotto il naso.
-      onToggle: () => setRestoAperti(s => {
-        const n = new Set(s)
-        n.has(i.id) ? n.delete(i.id) : n.add(i.id)
-        return n
-      }),
-      onPromote: () => { setAperti(a => [i, ...a.filter(x => x.id !== i.id)]); setHeroLong(false) },
-      onScarta: () => void scarta(i as unknown as VoceFeed)
-    }
-  })
 
   /*
    * Portare su un progetto: un biglietto per la Memoria e la schermata che
@@ -1112,12 +968,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      *
      * `headline` conosce solo le voci, e diceva «due cose» sopra una pagina
      * di nove: sotto le voci la prima pagina mostra anche le righe della
-     * lista e la domanda. Le righe della lista qui non ci sono — le ha chi
-     * disegna la pagina — quindi è lui a passare quante sono, e il conto lo
-     * fa `sulTavolo`, con le stesse regole con cui la pagina le dispone.
+     * lista. Le righe della lista qui non ci sono — le ha chi disegna la
+     * pagina — quindi è lui a passare quante cose ha messo in pagina, e qui
+     * si aggiunge solo la domanda in sospeso.
      */
-    sulTavolo: (compiti: number, inCimaUnCompito: boolean) => {
-      const n = sulTavolo({ voci: aperti.length, compiti, domanda: !!domanda, inCimaUnCompito })
+    sulTavolo: (inPagina: number) => {
+      const n = inPagina + (domanda ? 1 : 0)
       return frasi.daGuardare(n, parole(n))
     },
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
@@ -1133,7 +989,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     })),
     feedCaricato,
     ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },
-    hasHero: !!hero,
     // Basta che non ci sia niente di aperto. Prima serviva anche zero fatte,
     // quindi chi aveva appena sistemato tutto restava con un elenco di cose
     // chiuse e nessuna indicazione su cosa succede adesso.
@@ -1170,7 +1025,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     },
     haFatte: fatte.length > 0,
     generando, genera,
-    heroStyle: {
+    /** La carta scura: quella in cui si apre una riga della lista per lavorarci. */
+    cartaScura: {
       borderRadius: 20,
       background: 'linear-gradient(138deg,rgba(176,82,46,.9),rgba(154,100,55,.88) 46%,rgba(74,58,49,.92))',
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
@@ -1185,45 +1041,25 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // da un nome di file senza spazi non deve poterne uscire
       overflow: 'hidden', overflowWrap: 'anywhere'
     } as CSSProperties,
-    heroTipo: hero?.tipo ?? '',
-    heroTitolo: heroCarta.titolo,
-    /**
-     * Accanto all'ora ci va una parola: «mail», «documento», «pagina».
-     *
-     * Ci andava `fonte` com'era scritta, e il giorno che il modello ci ha
-     * messo dentro l'id del documento in cima alla prima pagina è comparso un
-     * percorso lungo tre righe. Da dove viene una cosa si dice con una parola;
-     * dove sta esattamente non è una domanda che si fa leggendo il feed.
+    /*
+     * Le voci del feed, come arrivano: chi disegna la pagina le mette ognuna
+     * nel blocco del suo progetto (`blocchi-feed.ts`) e le veste lì. Niente
+     * «carta in cima» e niente «resto»: erano la stessa voce vestita in due
+     * modi, e la pagina non ha più una voce che conta più delle altre.
      */
-    heroFonte: hero && (hero.doc || hero.fonte) ? parolaFonte(hero.fonte, hero.doc) : '',
-    heroOra: hero ? quando(dataFonte(hero)) : '',
-    // non si disegna più sulla card in cima; resta per le righe sotto
-    heroUrgenza: hero?.urgenza ?? '',
-    // il modello a volte sfora il tetto che gli si chiede: qui si taglia
-    // comunque, perché la card in cima non deve mai diventare un muro di testo
-    // Chiuso di default: il titolo dice di cosa si tratta, e quasi sempre
-    // basta per decidere. Il testo lungo si apre se serve, non prima —
-    // sette righe di paragrafo per ogni voce sono un muro, non un feed.
-    heroTesto: heroLong ? heroCarta.testo : taglia(heroCarta.testo, 320),
-    heroTagliato: heroCarta.testo.length > 320,
-    // con l'offerta sotto, il perché è una riga di troppo: la carta era «molto pesante di testo»
-    heroPerche: hero?.offerta ? '' : heroCarta.perche,
-    // una priorità proposta da Myynd porta la sua offerta: cosa farebbe lui
-    heroOfferta: hero?.offerta ?? '',
-    heroFonteDettaglio: [hero?.fonteAutore, hero?.fonteTitolo].filter(Boolean).join(' · '),
-    heroLong,
-    heroToggle: () => setHeroLong(x => !x),
-    heroHaDoc: !!hero?.doc,
-    heroAprendoFonte: !!hero?.doc && aprendoFonte === hero.doc,
-    portamiHero: () => { if (hero?.doc) void portamiFonte(hero.doc) },
+    voci: aperti,
+    /** «Fatto» su una voce. */
+    risolviVoce: (v: VoceFeed) => { void risolvi(v) },
+    /** «Non mi interessa» su una voce: via, e non torna. */
+    scartaVoce: (v: VoceFeed) => { void scarta(v) },
+    // «Parlane in chat»: la coda è testo che finisce nella *sua* bolla e resta
+    // scritto nella chat, quindi va nella lingua dell'app come tutto il resto.
+    // Niente «Mettila in lista»: una voce del feed è già una cosa da fare —
+    // «perché dovrebbe chiedermi di metterla in lista? è già in lista»
+    parlaneDi: (v: VoceFeed) => { void chiedi(frasi.dimmiDiPiu(v.titolo)) },
     portamiFonte,
-    // chi è e cosa ha dietro: servono a chi la prende in carico dal feed
-    heroId: hero?.id ?? '',
-    heroDoc: hero?.doc ?? null,
-    /** Il titolo in cima è il link, e dice cosa apre: la mail, il file, la pagina. */
-    heroApreCosa: etichettaFonte(hero?.fonte, hero?.doc),
-    heroPrimary: hero ? risolvi(hero) : noop,
-    heroSkip: hero ? () => setAperti(a => [...a.slice(1), a[0]]) : noop,
+    /** Il documento che «Portami lì» sta aprendo adesso, se ce n'è uno: il link dice «Un momento…». */
+    aprendoFonte,
     /**
      * La voce è diventata una riga della lista: via dal feed, senza ricaricarlo.
      *
@@ -1233,40 +1069,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     viaDalFeed: (id: string) => setAperti(a => a.filter(x => x.id !== id)),
 
-    // — rispondere alla voce in cima, e indirizzare tutto il resto —
-    risposta,
-    setRisposta,
-    rispondendo,
-    rispondiAlHero,
-    scriviAperto,
-    apriScrivi: () => setScriviAperto(true),
-    chiudiScrivi: () => { setScriviAperto(false); setRisposta('') },
-
-    /**
-     * Le correzioni, dietro un «⋯».
-     *
-     * Prima erano quattro pastiglie sempre in vista, e una di quelle — «Già
-     * fatto» — faceva esattamente quello che fa il bottone Fatto qui accanto.
-     * Un doppione in mezzo a una fila di controlli è la definizione di
-     * ingombro: le tre che restano sono quelle che il bottone principale *non*
-     * sa dire, e stanno via finché non servono.
-     */
-    menuAperto,
-    apriMenu: () => setMenuAperto(v => !v),
-    chiudiMenu: () => setMenuAperto(false),
-    /** Il gesto della carta grande: la stessa funzione delle righe. */
-    scartaHero: () => { if (hero) void scarta(hero) },
-    // niente «Mettila in lista»: una voce del feed è già una cosa da fare —
-    // «perché dovrebbe chiedermi di metterla in lista? è già in lista»
-    correzioni: hero ? [
-      // Parlarne è diventato il gesto raro: il bottone in chiaro adesso
-      // affida davvero la cosa a Myynd invece di scrivergli «dimmi di più».
-      // La coda è testo che finisce nella *sua* bolla e resta scritto nella
-      // chat: va nella lingua dell'app come tutto il resto.
-      { id: 'chat', label: t('Parlane in chat'), onClick: () => { setMenuAperto(false); chiedi(frasi.dimmiDiPiu(hero.titolo)) } },
-      { id: 'altrove', label: t('Aggiornato altrove'), onClick: () => mandaRisposta(t("L'ho aggiornato altrove: il documento qui è indietro."), 'fonte_vecchia') },
-      { id: 'parole', label: t('Altro…'), onClick: () => { setMenuAperto(false); setScriviAperto(true) } }
-    ] : [],
     // — la domanda che fa lui —
     domanda,
     rispostaDom,
@@ -1307,16 +1109,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * riga sotto gli occhi appena si disegna.
      */
     apriProgetto,
-    apriDoc: hero?.doc ? () => { api.documento(hero.doc!).then(setDoc).catch(() => {
-        // il bottone sparisce insieme all'errore: invitarti a riprovare su una
-        // cosa che non c'è è il modo di far sembrare rotta tutta l'app
-        setAperti(a => a.map(v => (v.id === hero?.id ? { ...v, doc: null } : v)))
-        mostraToast(t('Non trovo più il documento.'))
-      }) } : noop,
-
-    resto: righe.slice(1),
-    // la voce in cima, pronta a scendere fra le altre se le passi davanti
-    rigaHero: righe[0] ?? null,
 
     hasDone: fatte.length > 0, doneCount: fatte.length, doneOpen,
     toggleDone: () => setDoneOpen(v => !v),
