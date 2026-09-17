@@ -644,6 +644,9 @@ app.get('/api/stato', async (_req, res) => {
     // la vedetta: le cartelle del desktop guardate dal vivo, per questa persona
     vedetta: vedetta.stato(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
+    // le automazioni proposte che non ha ancora visto: accendono il fulmine
+    // in colonna. Si legge il foglio e basta, mai un modello
+    suggerimentiNuovi: scoperte.nuovi().length,
     // la scheda delle conversazioni offre l'interruttore di Claude Code solo se
     // la sua cartella c'è: un interruttore su una cartella vuota è un bottone che fallisce
     codiceConversazioni: !ospitato.OSPITATO && conversazioni.codicePossibile(),
@@ -2172,6 +2175,15 @@ async function rileggiDaSola() {
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
     if (await priorita.forse()) compiti.annunciaFeed()
+    // e le automazioni che non si è ancora scritto. Il cancello — un giro al
+    // giorno per conto, mai senza modello — sta dentro `inSottofondo`: qui si
+    // dà l'occasione, e quando ne ha scritte di nuove lo si dice in colonna,
+    // sullo stesso filo che rilegge lo stato: il fulmine si accende da sé
+    const proposte = await scoperte.inSottofondo().catch(() => null)
+    if (proposte) {
+      console.log(`myynd · scoperte · ${proposte.length} proposte`)
+      if (proposte.length) compiti.annunciaCambio()
+    }
   } catch (e) {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
@@ -3286,6 +3298,10 @@ app.delete('/api/automazioni/suggerimenti/:id', (req, res) => {
   // `scarta` controlla da sé che l'id sia di una proposta e non di
   // un'automazione vera, e non chiama nessun modello per accorgersene
   try { res.json({ ok: scoperte.scarta(req.params.id) }) } catch (e) { errore(res, e) }
+})
+// le ha viste: la schermata lo dice appena le mostra, e il fulmine si spegne
+app.post('/api/scoperte/viste', (_req, res) => {
+  try { scoperte.segnaVisti(); res.json({ nuovi: 0 }) } catch (e) { errore(res, e) }
 })
 
 app.get('/api/automazioni', (_req, res) => {

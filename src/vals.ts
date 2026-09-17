@@ -615,6 +615,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return s
   }, [])
 
+  /**
+   * Le proposte di automazione sono state mostrate: il fulmine si spegne.
+   *
+   * Lo dice la schermata delle automazioni appena le ha sotto gli occhi. Si
+   * chiama sempre, anche quando lo stato dice zero: una proposta scritta
+   * durante l'apertura della pagina lo stato non l'ha ancora contata. Stabile
+   * apposta, senza dipendenze: la schermata la mette fra le dipendenze del suo
+   * caricamento, e non deve rifarlo a ogni disegno.
+   */
+  const segnaSuggerimentiVisti = useCallback(async () => {
+    await api.segnaSuggerimentiVisti()
+    setStato(s => ({ ...s, suggerimentiNuovi: 0 }))
+  }, [])
+
   // — azioni —
 
   const go = (s: Screen) => (e?: { preventDefault?: () => void }) => {
@@ -925,6 +939,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     mostraToast,
     navChat: screen === 'chat' ? NAV_ON : NAV_OFF,
     navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
+    /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende. */
+    suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
+    segnaSuggerimentiVisti,
     menuPref: screen === 'pref' ? MENU_ON : MENU_OFF,
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
     menuConn: screen === 'conn' ? MENU_ON : MENU_OFF,
