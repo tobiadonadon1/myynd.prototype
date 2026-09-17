@@ -46,6 +46,9 @@ test('ripulisci chiude la porta: verbo, misure, documento fra quelli letti, prog
   // senza offerta non è una priorità di Myynd: è un appunto
   assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked for a recording on a physical device and setup instructions.', perche: 'Unblocks the Evermute App Store release', progetto: '', doc: '', offerta: '' }, ids, nomi, []), null)
   assert.equal(priorita.ripulisci({ genere: 'boh', titolo: 'x', testo: 'y', perche: 'z', progetto: '', doc: '', offerta: 'w' }, ids, nomi, []), null)
+  // il gergo non arriva sulla prima pagina: «non capisco, parole semplici e dirette»
+  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Redesign the two text-heavy cards', testo: 'The note asks for a cleaner layout of the two project cards on the first page.', perche: 'Moves Myynd toward a finished product', progetto: '', doc: '', offerta: 'I will turn the note into a concise UI specification with layout, hierarchy, and acceptance criteria.' }, ids, nomi, []), null)
+  assert.equal(priorita.conGergo('Ti preparo la risposta ad Apple con il video e le istruzioni'), false)
 })
 
 test('forse: con un modello mette le priorità sul feed, con l’offerta, e non le rifà per mezz’ora', async () => {

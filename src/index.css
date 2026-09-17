@@ -77,7 +77,7 @@ input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(34,39,31,.
 .scuro:focus-visible{outline-color:rgba(255,247,240,.75)}
 
 /* La selezione, nei colori di casa invece che nel blu di sistema */
-::selection{background:rgba(196,98,59,.22)}
+::selection{background:#3E5140;color:#FFF7F0}
 
 /* Le barre di scorrimento interne: presenti quando servono, mai ingombranti */
 *{scrollbar-width:thin;scrollbar-color:rgba(34,39,31,.22) transparent}

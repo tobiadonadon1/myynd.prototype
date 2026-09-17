@@ -903,18 +903,6 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
         <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
       </div>}
 
-      {/*
-        I progetti che aspettano un passo: carte una accanto all'altra.
-
-        Erano una carta a testa, piena, una sotto l'altra; poi righe in una
-        scheda sola. «Le pensavo una accanto all'altra, piccole carte, per
-        spezzare un po' il disegno» — e con un colore per progetto, che sceglie
-        lui in Memoria. Il colore è la prima cosa che si vede: fondo velato,
-        bordo, nome. La domanda è il titolo, il perché sta sotto piccolo, e
-        c'è un bottone solo. La carta intera apre la chat.
-      */}
-      {!!v.iniziative.length && <Progetti v={v} lista={lista} />}
-
       <Domanda v={v} />
 
 
@@ -946,6 +934,22 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           ))}
         </div>
       )}
+
+      {/*
+        I progetti che aspettano un passo: carte una accanto all'altra.
+
+        Erano una carta a testa, piena, una sotto l'altra; poi righe in una
+        scheda sola. «Le pensavo una accanto all'altra, piccole carte, per
+        spezzare un po' il disegno» — e con un colore per progetto, che sceglie
+        lui in Memoria. Il colore è la prima cosa che si vede: fondo velato,
+        bordo, nome. La domanda è il titolo, il perché sta sotto piccolo, e
+        c'è un bottone solo. La carta intera apre la chat.
+
+        Stanno SOTTO le righe, non sopra: una domanda di Myynd su un progetto
+        viene dopo le cose da fare — «la carta di H-Farm dove mi fa domande
+        deve stare sotto le priorità».
+      */}
+      {!!v.iniziative.length && <Progetti v={v} lista={lista} />}
 
       {v.feedVuoto && !(lista?.compiti.length) && <Vuoto v={v} />}
 
