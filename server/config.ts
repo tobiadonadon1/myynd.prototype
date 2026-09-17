@@ -644,14 +644,24 @@ export type ConfigGithub = { token: string; repos?: string[] }
 export type ConfigGranola = { note?: number }
 
 /**
- * Le conversazioni con ChatGPT, Claude e Claude Code.
+ * Le conversazioni con ChatGPT, Claude, Claude Code e Codex.
  *
  * `file` sono i `conversations.json` esportati — percorsi di *questo* disco,
- * scelti da chi collega — e `codice` dice se leggere anche le sessioni di
- * Claude Code in `~/.claude/projects`. Non c'è nessuna credenziale: i file
- * sono già suoi, e stanno dove li ha messi.
+ * scelti da chi collega — e `codice` dice se leggere anche le sessioni degli
+ * agenti di codice: Claude Code in `~/.claude/projects` e Codex in
+ * `~/.codex/sessions`, quelle che ci sono. Non c'è nessuna credenziale: i
+ * file sono già suoi, e stanno dove li ha messi.
  */
 export type ConfigConversazioni = { file: string[]; codice: boolean }
+
+/**
+ * X, letto dal database del motore che ci scrive per lei.
+ *
+ * `db` è il percorso dell'SQLite di `x-engine` su questo disco. Si apre in
+ * sola lettura e non ci vuole nessuna credenziale: le credenziali di X le
+ * tiene il motore, e Myynd non ne ha bisogno per leggere quello che ha fatto.
+ */
+export type ConfigX = { db: string }
 
 /**
  * Il calendario, letto da un indirizzo invece che da un'API.
@@ -677,6 +687,13 @@ export type Config = {
   granola?: ConfigGranola
   note?: ConfigNote
   conversazioni?: ConfigConversazioni
+  x?: ConfigX
+  /**
+   * Le fonti che si sono accese da sole, una volta: le conversazioni degli
+   * agenti di codice e X, quando le loro cartelle ci sono. Chi le spegne
+   * dalle Fonti non se le ritrova accese all'avvio dopo: il nome resta qui.
+   */
+  accesiDaSoli?: string[]
   calendario?: ConfigCalendario
   claude?: ConfigClaude
   tono?: string

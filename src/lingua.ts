@@ -2014,6 +2014,11 @@ const EN: Record<string, string> = {
   'Collega le conversazioni': 'Connect conversations',
   'Togli': 'Remove',
   'rileggo le chat': 're-reading the chats',
+  'leggo X': 'reading X',
+  'Non trovo le sessioni di Codex su questo computer.': 'I cannot find Codex sessions on this computer.',
+  'Non trovo il database di X su questo computer.': 'I cannot find the X database on this computer.',
+  'Non riesco ad aprire il database di X.': 'I cannot open the X database.',
+  'Non riesco a leggere il database di X.': 'I cannot read the X database.',
   'Questo file non è un JSON: non è un’esportazione di ChatGPT né di Claude.':
     'This file is not JSON: it is not a ChatGPT or Claude export.',
   'Questo file non è un’esportazione di ChatGPT né di Claude.': 'This file is not a ChatGPT or Claude export.',

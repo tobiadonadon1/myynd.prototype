@@ -1846,11 +1846,44 @@ async function leggiTuttoDentro(
   const conv = c.conversazioni
   if (conv && !ospitato.OSPITATO) await fonte('conversazioni', async () => {
     avvisa({ fase: 'conversazioni', stato: 'rileggo le chat' })
-    const e = await conversazioni.sincronizza(conv)
+    /*
+     * Le sessioni di Claude Code e di Codex si riaprono solo se il file è
+     * cambiato. La memoria di che cosa si è letto — per file, la data di
+     * modifica e il documento che ne è uscito — sta nel cursore della fonte,
+     * per conto; e un file uguale a com'era si dichiara vivo solo se il suo
+     * documento è ancora qui, perché un indice svuotato ha ancora il cursore
+     * di prima. Così un giro delle sei ore su un disco fermo costa uno stat
+     * a file, non un gigabyte di lettura.
+     */
+    const inIndice = store.quandoPerPrefisso('conversazioni:')
+    const e = await conversazioni.sincronizza(conv, {
+      memoria: conversazioni.memoriaDa(store.cursore(conversazioni.CURSORE)),
+      inIndice: id => inIndice.has(id)
+    })
     await store.salvaDocumentiAPezzi(e.docs)
-    const tolti = store.riconcilia('conversazioni', { completo: !e.troncato && !e.guasti.length }, e.docs.map(d => d.id))
+    // i documenti delle sessioni invariate contano fra i vivi: non li abbiamo
+    // riletti, ma il file c'è, uguale
+    const tolti = store.riconcilia('conversazioni', { completo: !e.troncato && !e.guasti.length }, [...e.docs.map(d => d.id), ...e.visti])
+    store.segnaCursore(conversazioni.CURSORE, conversazioni.memoriaScritta(e.memoria))
     for (const g of e.guasti) console.error(`myynd · conversazioni · ${g.file}: ${g.errore}`)
-    avvisa({ fase: 'conversazioni', stato: 'fatto', documenti: e.docs.length, falliti: e.guasti.length, troncato: e.troncato, tolti })
+    avvisa({ fase: 'conversazioni', stato: 'fatto', documenti: e.docs.length, falliti: e.guasti.length, troncato: e.troncato, tolti, invariati: e.invariate, codice: e.codice, codex: e.codex })
+    return e.docs.length
+  })
+  /*
+   * X, dal database del motore che ci scrive per lei: in casa e basta, come
+   * le conversazioni, perché è un file di questo disco. Il connettore si
+   * carica qui e non in testa al file: è una fonte che si accende da sola e
+   * non ha una scheda, e la lista degli import non deve saperne niente.
+   */
+  const x = c.x
+  if (x && !ospitato.OSPITATO) await fonte('x', async () => {
+    avvisa({ fase: 'x', stato: 'leggo X' })
+    const motore = await import('./connettori/x.ts')
+    const e = await motore.sincronizza(x)
+    await store.salvaDocumentiAPezzi(e.docs)
+    // il database è un insieme intero: quello che non c'è più dentro non c'è più
+    const tolti = store.riconcilia('x', { completo: true }, e.docs.map(d => d.id))
+    avvisa({ fase: 'x', stato: 'fatto', documenti: e.docs.length, post: e.post, bozze: e.bozze, note: e.note, settimane: e.settimane, tolti })
     return e.docs.length
   })
   const cal = c.calendario
@@ -3922,6 +3955,35 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // vivo, e quello che arriva passa dalla stessa strada del giro delle sei ore.
   vedetta.quandoSiCalma(dopoLArrivo)
   perOgnuno('la vedetta non è partita', async () => {
+    /*
+     * Prima ancora: le conversazioni degli agenti di codice e X si accendono
+     * da sole, una volta.
+     *
+     * Chi ha Claude Code o Codex su questo Mac ha in `~/.claude/projects` e
+     * in `~/.codex/sessions` mesi di ragionamenti su quello a cui sta
+     * lavorando adesso, e chi fa girare il motore di X ha lì quello che ha
+     * pubblicato: sono le fonti che dicono meglio di tutte «a che punto è»,
+     * e nessuno le aveva mai accese dalle Fonti. Si accendono qui, come «Il
+     * mio Mac» qui sotto: solo se la cartella c'è, solo se nessuno le ha mai
+     * configurate, e una volta sola — il nome resta in `accesiDaSoli`, così
+     * chi le spegne non se le ritrova accese all'avvio dopo. La prima lettura
+     * la fa la rilettura automatica, un minuto dopo l'avvio.
+     */
+    if (!ospitato.OSPITATO) {
+      const c0 = cfg.leggi()
+      const accesi = [...(c0.accesiDaSoli ?? [])]
+      if (!c0.conversazioni && !accesi.includes('conversazioni') && conversazioni.agentiPossibili()) {
+        accesi.push('conversazioni')
+        cfg.aggiorna({ conversazioni: { file: [], codice: true }, accesiDaSoli: accesi })
+        console.log(`myynd · le sessioni di Claude Code e di Codex entrano nella mente per ${chi.adesso() ?? 'questo conto'}`)
+      }
+      const motoreX = await import('./connettori/x.ts')
+      if (!c0.x && !accesi.includes('x') && motoreX.possibile()) {
+        accesi.push('x')
+        cfg.aggiorna({ x: { db: motoreX.percorsoPredefinito() }, accesiDaSoli: accesi })
+        console.log(`myynd · quello che il motore di X ha pubblicato entra nella mente per ${chi.adesso() ?? 'questo conto'}`)
+      }
+    }
     /*
      * Prima della vedetta: il computer collegato «a tre cartelle» diventa il
      * computer intero.
