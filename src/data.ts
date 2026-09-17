@@ -25,6 +25,8 @@ export type VoceFeed = {
   perche?: string | null
   /** Per una priorità proposta da Myynd: cosa farebbe lui da solo, se gliela affidi. */
   offerta?: string | null
+  /** Il progetto di cui è, se si sa: la prima pagina la mette nel suo blocco. */
+  progetto?: string | null
   /** Verified document metadata, rather than a model-generated source label. */
   fonteTitolo?: string | null
   fonteQuando?: string | null

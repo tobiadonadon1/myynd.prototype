@@ -82,6 +82,7 @@ test('forse: con un modello mette le priorità sul feed, con l’offerta, e non 
   assert.ok(voce, 'una priorità sta sul feed anche se la sua mail ha dodici giorni')
   assert.equal(voce.doc, 'posta:INBOX:1')
   assert.match(String(voce.offerta), /^I draft the reply/)
+  assert.equal(voce.progetto, p.id, 'la voce sa di quale progetto è, e la prima pagina la mette nel suo blocco')
   const proposta = feed.find(v => v.tipo === 'Proposta')
   assert.ok(proposta && proposta.doc === 'desktop:/Users/t/Desktop/note.md')
   // subito dopo: niente, né da sola né su richiesta

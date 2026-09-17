@@ -275,7 +275,7 @@ Scrivi in ${nellaLingua()}.`)
 /** Da priorità a voce del feed: la fonte è il documento, se c'è; altrimenti nessuna. */
 export function voceDelFeed(p: Priorita) {
   const d = p.doc ? store.documento(p.doc) : null
-  return { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: '', perche: p.perche, offerta: p.offerta, ...(d ? { doc: d.id, fonte: d.fonte } : {}) }
+  return { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: '', perche: p.perche, offerta: p.offerta, progetto: p.progetto, ...(d ? { doc: d.id, fonte: d.fonte } : {}) }
 }
 
 const inCorso = new Set<string>()

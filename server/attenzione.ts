@@ -17,6 +17,16 @@ function pertinente(d: store.Documento, adesso: number) {
 export function feedAttuale(adesso = Date.now()) {
   const preparati = new Set(store.elencoCompiti().filter(c => c.origine === 'iniziativa').map(c => c.doc))
   const voci = store.elencoFeed('aperto').filter(v => !preparati.has(v.doc))
+  /*
+   * Di quale progetto è una voce: la colonna, se chi l'ha scritta lo sapeva
+   * (le priorità); altrimenti si guarda se titolo e testo nominano un
+   * progetto attivo. È quello che permette alla prima pagina di mettere ogni
+   * voce nel blocco del suo progetto invece che in una lista sola.
+   */
+  const attivi = progetti.elenco('attivo')
+  const progettoDi = (v: Record<string, string | null>) => v.progetto
+    || attivi.find(p => progetti.toccaUnProgetto(`${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`, [p]))?.id
+    || null
   const docs = new Map(voci.flatMap(v => {
     const d = v.doc ? store.documento(v.doc) : null
     return d ? [[d.id, d] as const] : []
@@ -27,9 +37,9 @@ export function feedAttuale(adesso = Date.now()) {
     // Una priorità proposta da Myynd non nasce da una richiesta in un
     // documento recente: nasce dal quadro. Le regole della fonte non la
     // riguardano, e un documento vecchio o assente non la toglie di mezzo.
-    if (eProposta(v)) return [{ ...v, doc: d?.id ?? null, fonte: d?.fonte ?? null, fonteTitolo: d?.titolo ?? null, fonteQuando: d?.quando ?? null, fonteAutore: d?.autore ?? null }]
+    if (eProposta(v)) return [{ ...v, progetto: progettoDi(v), doc: d?.id ?? null, fonte: d?.fonte ?? null, fonteTitolo: d?.titolo ?? null, fonteQuando: d?.quando ?? null, fonteAutore: d?.autore ?? null }]
     if (!d || !pertinente(d, adesso) || ignorati.has(d.id) || !validaVoceFeed(v, d, { richiediProva: false })) return []
-    return [{ ...v, doc: d.id, fonte: d.fonte, fonteTitolo: d.titolo, fonteQuando: d.quando ?? null, fonteAutore: d.autore ?? null }]
+    return [{ ...v, progetto: progettoDi(v), doc: d.id, fonte: d.fonte, fonteTitolo: d.titolo, fonteQuando: d.quando ?? null, fonteAutore: d.autore ?? null }]
   })
 }
 
