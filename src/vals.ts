@@ -64,6 +64,7 @@ export { primoParagrafo }
  */
 const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook'])
 const FILE = new Set(['desktop', 'drive', 'dropbox', 'sharepoint', 'mac'])
+const CARTELLE = new Set(['lavoro'])
 const NOTE = new Set(['note', 'granola', 'conversazioni'])
 const AGENDA = new Set(['calendario', 'agenda', 'ical'])
 
@@ -72,12 +73,13 @@ const connettoreDi = (fonte: string | null | undefined, doc: string | null | und
   ((doc ?? '').split(':')[0] || (fonte ?? '').split(':')[0] || '').trim().toLowerCase()
 
 /** Di che cosa si tratta, in una parola sola che non è mai un percorso. */
-type Genere = 'mail' | 'file' | 'nota' | 'calendario' | 'pagina'
+type Genere = 'mail' | 'file' | 'cartella' | 'nota' | 'calendario' | 'pagina'
 
 function genereDi(fonte: string | null | undefined, doc: string | null | undefined): Genere {
   const nome = connettoreDi(fonte, doc)
   if (POSTA.has(nome)) return 'mail'
   if (FILE.has(nome)) return 'file'
+  if (CARTELLE.has(nome)) return 'cartella'
   if (NOTE.has(nome)) return 'nota'
   if (AGENDA.has(nome)) return 'calendario'
   return 'pagina'
@@ -87,6 +89,7 @@ export function etichettaFonte(fonte: string | null | undefined, doc: string | n
   const g = genereDi(fonte, doc)
   if (g === 'mail') return t('Apri la mail')
   if (g === 'file') return t('Apri il file')
+  if (g === 'cartella') return t('Apri la cartella')
   if (g === 'nota') return t('Apri la nota')
   if (g === 'calendario') return t('Apri il calendario')
   return t('Apri la pagina')
@@ -103,6 +106,7 @@ export function generePrimoDocumento(fonte: string | null | undefined, doc: stri
   const g = genereDi(fonte, doc)
   if (g === 'mail') return t('la mail')
   if (g === 'file') return t('il file')
+  if (g === 'cartella') return t('la cartella')
   if (g === 'nota') return t('la nota')
   if (g === 'calendario') return t('il calendario')
   return t('la pagina')
@@ -121,6 +125,7 @@ export function parolaFonte(fonte: string | null | undefined, doc: string | null
   const g = genereDi(fonte, doc)
   if (g === 'mail') return t('mail')
   if (g === 'file') return t('documento')
+  if (g === 'cartella') return t('cartella di lavoro')
   if (g === 'nota') return t('nota')
   if (g === 'calendario') return t('calendario')
   return t('pagina')

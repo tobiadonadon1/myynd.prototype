@@ -18,6 +18,8 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, extname, basename, dirname, resolve, relative, sep } from 'node:path'
 import { existsSync, type Stats } from 'node:fs'
 import { homedir } from 'node:os'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { ConfigDesktop } from '../config.ts'
 import type { Documento } from '../store.ts'
 import * as store from '../store.ts'
@@ -77,8 +79,10 @@ const SALTA = new Set([
 const SEGNI_PROGETTO = [
   'package.json', 'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
   'requirements.txt', 'pyproject.toml', 'Gemfile', 'composer.json',
-  'CMakeLists.txt', 'Makefile', '.git', 'conda-meta', 'pyvenv.cfg'
+  'CMakeLists.txt', 'Makefile', '.git', 'conda-meta', 'pyvenv.cfg',
+  'Package.swift', 'pubspec.yaml'
 ]
+const execFileP = promisify(execFile)
 
 /**
  * Con tutto il computer, in più: cartelle della casa dove i documenti non stanno.
@@ -750,27 +754,44 @@ export async function sincronizza(
 
 // — le cartelle di lavoro —
 
-/** Una cartella in cui sta lavorando: un progetto di codice, con la sua data. */
-export type CartellaDiLavoro = { nome: string; percorso: string; modificata: string; readme: string }
+/** Una cartella in cui sta lavorando: un progetto di codice, con la sua storia. */
+export type CartellaDiLavoro = {
+  nome: string; percorso: string; modificata: string; readme: string
+  /** Gli ultimi commit, dal più recente: la data e la riga di chi l'ha scritto. */
+  commit: { quando: string; messaggio: string }[]
+  /** I file toccati per ultimi, in cima alla cartella. */
+  recenti: string[]
+  /** Un TODO o un CHANGELOG, se ce l'ha: la parte in cima. */
+  appunti: string
+}
 
 /** Le sottocartelle di una radice dove la gente tiene i progetti. */
 const DOVE_STANNO_I_PROGETTI = ['Desktop', 'Documents', 'Documenti', 'Developer', 'Projects', 'Progetti', 'Code', 'Lavoro', 'Work', 'src']
+
+/** Gli ultimi commit di una cartella, se è un repository: senza git, o senza storia, niente. */
+async function commitDi(cartella: string, quanti = 20): Promise<{ quando: string; messaggio: string }[]> {
+  try {
+    const { stdout } = await execFileP('git', ['-C', cartella, 'log', `-${quanti}`, '--date=short', '--format=%ad\t%s'], { timeout: 5000, maxBuffer: 1 << 20 })
+    return stdout.split('\n').filter(Boolean).map(r => {
+      const [quando, ...resto] = r.split('\t')
+      return { quando: quando!, messaggio: resto.join('\t').replace(/\s+/g, ' ').trim().slice(0, 160) }
+    })
+  } catch { return [] }
+}
 
 /**
  * Le cartelle di lavoro: quello che la lettura salta apposta, letto di striscio.
  *
  * `cammina` salta un progetto di codice intero, e fa bene: dentro non ci sono
- * documenti suoi. Ma il *fatto* che quella cartella esista, e che sia stata
- * toccata ieri, è la cosa più chiara che il disco sa dire su cosa sta
- * facendo una persona — «lavora con Hermes» sta scritto nel nome di una
- * cartella e nella sua data, non in un PDF. Chi deve proporre delle
- * priorità senza questa riga vede la scrivania e non il banco da lavoro.
- *
- * Si guardano la radice e le cartelle dove di solito stanno i progetti, a
- * un livello solo: niente ricorsione, niente contenuto, uno `stat` per voce
- * e il README se c'è. Le cartelle col punto restano fuori come ovunque.
+ * documenti suoi. Ma è lì che sta scritto a che punto è un progetto — nei
+ * commit, che sono righe datate scritte da una persona, nel README, in un
+ * TODO — e senza quelle righe Myynd «ha accesso a tutto il disco» e non sa
+ * dire dove sei con niente. Qui si guardano la radice e le cartelle dove di
+ * solito stanno i progetti, a un livello solo: niente ricorsione, niente
+ * sorgenti, uno `stat` per voce, il README, gli ultimi venti commit. Le
+ * cartelle col punto restano fuori come ovunque.
  */
-export async function cartelleDiLavoro(radiciScelte: string[], limite = 15): Promise<CartellaDiLavoro[]> {
+export async function cartelleDiLavoro(radiciScelte: string[], limite = 20): Promise<CartellaDiLavoro[]> {
   const trovate = new Map<string, CartellaDiLavoro>()
   const guarda = async (dir: string) => {
     let voci
@@ -782,18 +803,28 @@ export async function cartelleDiLavoro(radiciScelte: string[], limite = 15): Pro
       let dentro
       try { dentro = await readdir(p, { withFileTypes: true }) } catch { continue }
       if (!await eProgetto(p, dentro)) continue
-      let ultima = 0
+      const tempi: { nome: string; mtime: number }[] = []
       for (const d of dentro.slice(0, 200)) {
         if (d.name.startsWith('.') || SALTA.has(d.name)) continue
-        try { ultima = Math.max(ultima, (await stat(join(p, d.name))).mtimeMs) } catch { /* sparito nel frattempo */ }
+        try { tempi.push({ nome: d.name, mtime: (await stat(join(p, d.name))).mtimeMs }) } catch { /* sparito nel frattempo */ }
       }
+      tempi.sort((a, b) => b.mtime - a.mtime)
+      let ultima = tempi[0]?.mtime ?? 0
       if (!ultima) { try { ultima = (await stat(p)).mtimeMs } catch { continue } }
-      let readme = ''
-      const nomeReadme = dentro.find(d => d.isFile() && /^readme(?:\.(?:md|txt|markdown))?$/i.test(d.name))?.name
-      if (nomeReadme) {
-        try { readme = (await readFile(join(p, nomeReadme), 'utf8')).replace(/\s+/g, ' ').trim().slice(0, 400) } catch { readme = '' }
+      const leggiTesto = async (nomi: RegExp, quanto: number) => {
+        const nome = dentro.find(d => d.isFile() && nomi.test(d.name))?.name
+        if (!nome) return ''
+        try { return (await readFile(join(p, nome), 'utf8')).replace(/\s+/g, ' ').trim().slice(0, quanto) } catch { return '' }
       }
-      trovate.set(p, { nome: v.name, percorso: p, modificata: new Date(ultima).toISOString(), readme })
+      const readme = await leggiTesto(/^readme(?:\.(?:md|txt|markdown))?$/i, 1500)
+      const appunti = await leggiTesto(/^(?:todo|changelog|roadmap|notes?)(?:\.(?:md|txt))?$/i, 800)
+      const commit = await commitDi(p)
+      const quando = commit[0] ? Math.max(Date.parse(commit[0].quando), 0) : 0
+      trovate.set(p, {
+        nome: v.name, percorso: p, readme, appunti, commit,
+        modificata: new Date(Math.max(ultima, quando)).toISOString(),
+        recenti: tempi.slice(0, 8).map(t => t.nome)
+      })
     }
   }
   for (const radice of radiciScelte) {
@@ -801,4 +832,25 @@ export async function cartelleDiLavoro(radiciScelte: string[], limite = 15): Pro
     for (const sotto of DOVE_STANNO_I_PROGETTI) await guarda(join(radice, sotto))
   }
   return [...trovate.values()].sort((a, b) => b.modificata.localeCompare(a.modificata)).slice(0, limite)
+}
+
+/**
+ * Le cartelle di lavoro come documenti dell'indice: uno per cartella,
+ * `lavoro:` più il percorso, con dentro la storia. Così li trova la ricerca
+ * della chat, li vede il punto, li leggono le priorità — cioè Myynd può dire
+ * a che punto è x-engine senza chiederlo.
+ */
+export async function documentiDiLavoro(radiciScelte: string[]): Promise<Documento[]> {
+  const cartelle = await cartelleDiLavoro(radiciScelte)
+  return cartelle.map(c => ({
+    id: `lavoro:${c.percorso}`, fonte: 'lavoro', tipo: 'cartella', gruppo: 'documenti',
+    titolo: `Lavoro: ${c.nome}`, percorso: c.percorso, quando: c.modificata,
+    corpo: [
+      `Cartella di lavoro: ${c.nome} (${c.percorso}). Ultima modifica: ${c.modificata.slice(0, 10)}.`,
+      c.commit.length ? `Ultimi commit:\n${c.commit.map(x => `${x.quando}  ${x.messaggio}`).join('\n')}` : 'Nessuna storia git.',
+      c.recenti.length ? `File toccati per ultimi: ${c.recenti.join(', ')}` : '',
+      c.readme ? `README: ${c.readme}` : '',
+      c.appunti ? `Appunti: ${c.appunti}` : ''
+    ].filter(Boolean).join('\n\n')
+  }))
 }

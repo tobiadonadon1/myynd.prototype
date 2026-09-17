@@ -2172,6 +2172,9 @@ const EN: Record<string, string> = {
   // — la carta in cima: sotto il titolo, una riga sola che dice cosa apre —
   'Apri la mail': 'Open the email',
   'Apri il file': 'Open the file',
+  'Apri la cartella': 'Open the folder',
+  'la cartella': 'the folder',
+  'cartella di lavoro': 'work folder',
   'Apri la pagina': 'Open the page',
   'Apri la nota': 'Open the note',
   'Apri il calendario': 'Open the calendar',

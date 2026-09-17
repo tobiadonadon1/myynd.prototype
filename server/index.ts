@@ -1762,6 +1762,17 @@ async function leggiTuttoDentro(
     // non abbiamo riletto non è un file cancellato
     const tolti = store.riconcilia('desktop', { completo: !!e.complete.length, radiciViste: e.complete },
       [...e.docs.map(d => d.id), ...e.visti])
+    // e le cartelle di lavoro, quelle che la lettura salta intere: una riga
+    // per cartella con i commit e il README, così sa a che punto è ogni cosa.
+    // Un guaio qui non è un guaio del desktop: si dice e si va avanti.
+    try {
+      const lavoro = await desktop.documentiDiLavoro(desktop.radici(desk))
+      await store.salvaDocumentiAPezzi(lavoro)
+      store.riconcilia('lavoro', { completo: true }, lavoro.map(d => d.id))
+      avvisa({ fase: 'lavoro', stato: 'fatto', documenti: lavoro.length })
+    } catch (err) {
+      console.error('myynd · le cartelle di lavoro non si sono lette:', err instanceof Error ? err.message : err)
+    }
     avvisa({
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,

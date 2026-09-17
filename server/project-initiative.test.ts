@@ -46,9 +46,10 @@ test('completed or discarded work is never reconstructed by recalculation or pro
   store.scriviCompito({id:'old-step',testo:'Write essay',ordine:'a',progetto:p.id})
   store.cambiaStatoCompito('old-step','fatto')
   projects.cambia(p.id,{note:'Updated my preferred font'})
-  // steps done and none open: Myynd works out where the project stands by
-  // itself (the priorities pass), it does not ask «is the goal complete?»
-  assert.deepEqual(projectInitiatives(),[])
+  // steps done and none open: the question comes back, naming what was done
+  assert.equal(projectInitiatives()[0].kind,'question')
+  assert.match(projectInitiatives()[0].question!,/complete, or what remains/)
+  assert.match(projectInitiatives()[0].description,/^Done: Write essay\./)
   assert.equal(store.compito('old-step')?.stato,'fatto')
   store.cambiaStatoCompito('old-step','lasciato')
   assert.deepEqual(projectInitiatives(),[])
