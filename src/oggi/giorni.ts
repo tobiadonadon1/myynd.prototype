@@ -26,8 +26,16 @@ export function secchioDelGiorno(giorno: string | null, oggi = giornoLocale()): 
   return !giorno ? 'poi' : giorno <= oggi ? 'oggi' : 'settimana'
 }
 
+/**
+ * Quante colonne di giorni: tre al massimo.
+ *
+ * Su una finestra larga ne mostrava sette, e sette colonne strette sono una
+ * settimana che non si legge: «potrebbe farmene vedere tre, così i giorni
+ * sono più alti e più larghi e ci sta più roba». La striscia della settimana
+ * sopra resta per muoversi; le colonne sono oggi, domani, dopodomani.
+ */
 export function quantiGiorni(larghezza: number): number {
-  return larghezza >= 1220 ? 7 : larghezza >= 650 ? 3 : larghezza >= 400 ? 2 : 1
+  return larghezza >= 650 ? 3 : larghezza >= 400 ? 2 : 1
 }
 
 export function giorniVisibili(giorno: string, quanti: number): string[] {

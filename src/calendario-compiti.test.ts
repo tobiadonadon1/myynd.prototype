@@ -10,11 +10,11 @@ test('calendar days cross month/year and leap days without UTC conversion', () =
   assert.equal(inizioSettimana('2026-09-13'), '2026-09-07')
 })
 
-test('planner shows readable adjacent days and a complete week when the container has room', () => {
+test('planner shows readable adjacent days: three at most, so each day is tall and wide, even on a wide window', () => {
   assert.equal(quantiGiorni(380), 1)
   assert.equal(quantiGiorni(520), 2)
   assert.equal(quantiGiorni(760), 3)
-  assert.equal(quantiGiorni(1280), 7)
+  assert.equal(quantiGiorni(1280), 3)
   assert.deepEqual(giorniVisibili('2026-09-30', 3), ['2026-09-30', '2026-10-01', '2026-10-02'])
   assert.deepEqual(giorniVisibili('2026-09-09', 7), ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'])
 })

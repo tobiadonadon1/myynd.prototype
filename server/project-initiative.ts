@@ -42,6 +42,15 @@ export function projectInitiatives(tasks: Compito[] = elencoCompiti()): ProjectI
     const linked = tasks.filter(t => t.progetto === project.id)
     if (linked.some(t => ['delegato', 'pronto', 'chiede'].includes(t.stato))) continue
     const next = linked.find(t => t.stato === 'aperto' && (t.origine !== 'punto' || t.versione > 1) && !t.sparito)
+    /*
+     * Con un passo aperto in lista non c'è niente da chiedere: la carta lo
+     * ripeteva sotto la lista stessa — «perché me lo chiede due volte?». E
+     * con dei passi fatti e nessuno aperto non si chiede «l'obiettivo è
+     * completo?»: quello lo capisce da solo guardando il progetto, ed è il
+     * lavoro delle priorità. Qui resta una domanda sola: il primo risultato
+     * concreto, quando non se n'è mai parlato.
+     */
+    if (next) continue
     // If the person closed or discarded the project's work, don't invent the
     // same work again. A genuinely changed goal can start a new conversation.
     const goalSince = projectEvidence(project.id).find(e => e.kind === 'goal' && e.value === project.obiettivo)?.evidenceAt ?? project.dal
@@ -49,22 +58,17 @@ export function projectInitiatives(tasks: Compito[] = elencoCompiti()): ProjectI
       (stato IN ('fatto','lasciato') OR sparito IS NOT NULL) AND aggiornato >= ? LIMIT 1`)
       .get(project.id, goalSince)
     const completed = !!db.prepare("SELECT 1 FROM compiti WHERE progetto = ? AND stato = 'fatto' AND sparito IS NULL AND aggiornato >= ? LIMIT 1").get(project.id, goalSince)
-    if (!next && closed && !completed) continue
-    const id = 'pi-' + hash(`${project.id}:${goalKey}:${next?.id ?? 'clarify'}`)
+    if (closed || completed) continue
+    const id = 'pi-' + hash(`${project.id}:${goalKey}:clarify`)
     if (feedback.some(f => f.id === id)) continue
-    const question = completed && !next
-      ? (it ? `L'obiettivo di ${project.nome} è completato, oppure cosa resta da fare?` : `Is the goal for ${project.nome} complete, or what remains to be done?`)
-      : it
+    const question = it
       ? `Qual è il prossimo risultato concreto che vuoi ottenere per ${project.nome}, e cosa manca per considerarlo completato?`
       : `What concrete result should we work toward next for ${project.nome}, and what would make it complete?`
     result.push({ id, projectId: project.id, projectName: project.nome, goal: project.obiettivo,
-      kind: next ? 'next-step' : 'question',
-      title: next?.testo ?? (completed ? (it ? `A che punto è ${project.nome}?` : `Where does ${project.nome} stand?`) : (it ? `Facciamo avanzare ${project.nome}` : `Move ${project.nome} forward`)),
-      description: next
-        ? (it ? `Un passo aperto verso il tuo obiettivo: ${project.obiettivo}` : `An open step toward your goal: ${project.obiettivo}`)
-        : completed ? (it ? `Ci sono passi segnati come fatti, ma questo obiettivo è ancora attivo: ${project.obiettivo}` : `Some steps are marked done, but this goal is still active: ${project.obiettivo}`)
-        : (it ? `Il tuo obiettivo: ${project.obiettivo}. Non ho ancora un prossimo passo concordato.` : `Your goal: ${project.obiettivo}. I don't yet have an agreed next step.`),
-      ...(next ? { taskId: next.id } : { question }), provenance: 'explicit-project', urgent: false })
+      kind: 'question',
+      title: it ? `Facciamo avanzare ${project.nome}` : `Move ${project.nome} forward`,
+      description: it ? `Il tuo obiettivo: ${project.obiettivo}. Non ho ancora un prossimo passo concordato.` : `Your goal: ${project.obiettivo}. I don't yet have an agreed next step.`,
+      question, provenance: 'explicit-project', urgent: false })
   }
   return result
 }

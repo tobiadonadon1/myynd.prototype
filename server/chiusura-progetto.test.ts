@@ -27,6 +27,24 @@ test('si chiude alla terza risposta, o prima se dice di sì a un passo proposto'
   assert.equal(chiusura.toccaConcludere('yes', [apertura]), false, 'un sì alla prima domanda non è un sì a un passo')
   assert.equal(chiusura.toccaConcludere('yes', [apertura, u('one'), a('Shall we start with X?')]), true)
   assert.equal(chiusura.toccaConcludere('and something else entirely', [apertura, u('one'), a('q'), u('two'), a('q')]), true, 'la terza risposta chiude comunque')
+  // una carta incollata con «dimmi di più», o una domanda: non è una risposta, non si chiude sopra
+  const lungo = [apertura, u('one'), a('q'), u('two'), a('q'), u('yes'), a('q')]
+  assert.equal(chiusura.toccaConcludere('Build Myynd’s choose-project, connect-source, get-work start: tell me more', lungo), false)
+  assert.equal(chiusura.toccaConcludere('what do you mean by this?  like what does the task mean', lungo), false)
+  assert.equal(chiusura.toccaConcludere('I want the first three users to install it alone', lungo), true)
+})
+
+test('un passo che comincia con «definisci» o «decidi» è una domanda travestita, e non va in lista', async () => {
+  const p = progetti.scrivi({ nome: 'Aurora', obiettivo: 'Launch the portal' })
+  chiusura.perProva({ chiediJSON: (async () => ({ risultato: 'The portal live for the first client in October.', passi: [
+    'Define what “choose-project” must decide and what counts as a successful choice.',
+    'Decide which source to connect first.',
+    'Write the welcome email for the first client'
+  ] })) as never })
+  const messi: { testo: string }[] = []
+  const esito = await chiusura.concludiDaTrascrizione(p.id, 'yes', [a('q'), u('one'), a('Shall we?')], c => { messi.push(c); return { id: 'x' } })
+  assert.deepEqual(esito?.passi, ['Write the welcome email for the first client'])
+  assert.deepEqual(messi.map(m => m.testo), ['Write the welcome email for the first client'])
 })
 
 test('la chiusura legge la conversazione, salva il risultato sul progetto e mette i passi in lista', async () => {
@@ -40,7 +58,7 @@ test('la chiusura legge la conversazione, salva il risultato sul progetto e mett
   ]
   chiusura.perProva({ chiediJSON: (async (o: { messages: { content: string }[] }) => {
     assert.match(o.messages[0].content, /Persona: yes/)
-    return { risultato: 'Myynd detects one task on its own, offers to do it, and delivers it — this week.', passi: ['Pick one recurring workflow to pilot', 'Define what Myynd may complete without approval', ''] }
+    return { risultato: 'Myynd detects one task on its own, offers to do it, and delivers it — this week.', passi: ['Pick one recurring workflow to pilot', 'Write down what Myynd may complete without approval', ''] }
   }) as never })
   const messi: { testo: string; progetto?: string; modo?: string }[] = []
   store.creaChat('th-c', 'Myynd', { progetto: p.id, iniziativa: 'pi-1' })
@@ -49,7 +67,7 @@ test('la chiusura legge la conversazione, salva il risultato sul progetto e mett
   const esito = await chiusura.concludiDaTrascrizione(p.id, 'yes', storico, c => { messi.push(c); return { id: `c${messi.length}` } })
   assert.ok(esito)
   assert.doesNotMatch(esito.risultato, /—/, 'niente lineette nel testo generato')
-  assert.deepEqual(esito.passi, ['Pick one recurring workflow to pilot', 'Define what Myynd may complete without approval'])
+  assert.deepEqual(esito.passi, ['Pick one recurring workflow to pilot', 'Write down what Myynd may complete without approval'])
   assert.deepEqual(messi.map(m => [m.progetto, m.modo]), [[p.id, 'io'], [p.id, 'io']])
   assert.match(pm.projectMemoryContext(p.id), /detects one task on its own/)
   // e la chat sa di aver concluso: da qui il modello non chiude due volte

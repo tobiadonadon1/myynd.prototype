@@ -28,11 +28,32 @@ export function accordoBreve(s: string): boolean {
     /^(?:yes|yeah|yep|yup|sure|ok(?:ay)?|s[iì]|va bene|perfetto|good|great|sounds good|d'accordo|certo|esatto|fine|deal|let'?s (?:do it|go)|go(?: ahead)?|agreed|correct)\b/i.test(t)
 }
 
-/** È il momento di chiudere: terza risposta, o un sì a quello che le è stato proposto. */
+/** Una domanda, o una carta incollata con «dimmi di più»: non è una risposta, e non si chiude sopra. */
+export function nonEUnaRisposta(s: string): boolean {
+  const t = s.trim()
+  return t.includes('?') || /(?::\s*)?\b(?:tell me more|dimmi di più|what do you mean|cosa (?:vuol dire|intendi|significa)|spiega(?:mi)?|explain)\b/i.test(t)
+}
+
+/**
+ * È il momento di chiudere: terza risposta, o un sì a quello che le è stato
+ * proposto. Mai sopra una domanda: «Build Myynd's choose-project…: tell me
+ * more» incollato da una carta non è la sua risposta, e chiudere lì ha messo
+ * in memoria un titolo di carta come risultato e tre «definisci» in lista.
+ */
 export function toccaConcludere(domanda: string, storico: Turno[]): boolean {
+  if (nonEUnaRisposta(domanda)) return false
   const risposte = storico.filter(t => t.ruolo === 'u').length + 1
   return risposte >= RISPOSTE_MASSIME || (risposte >= 2 && accordoBreve(domanda))
 }
+
+/**
+ * Un passo che comincia con «definisci», «chiarisci», «decidi cosa» è una
+ * domanda travestita: la rigira a lei. «Perché non ha contesto? È lui
+ * stesso: dovrebbe fare un po' di ricerca prima di chiedermi queste cose.»
+ * Un passo è una cosa che si fa; se serve capire, il passo è il lavoro che
+ * lo fa capire.
+ */
+export const DOMANDA_TRAVESTITA = /^(?:define|clarify|decide|determine|identify|specify|figure out|establish|agree on|confirm|defini(?:sci|re)|chiari(?:sci|re)|decid(?:i|ere)|stabili(?:sci|re)|individua(?:re)?|specifica(?:re)?|concorda(?:re)?)\b/i
 
 const FORMA = {
   type: 'object',
@@ -65,14 +86,14 @@ export async function concludiDaTrascrizione(
     .map(t => `${t.ruolo === 'u' ? 'Persona' : 'Myynd'}: ${t.testo.trim()}`).join('\n\n')
   const out = await ferri.chiediJSON<{ risultato?: unknown; passi?: unknown }>({
     lavoro: 'estrazione', max_tokens: 800, formato: FORMA,
-    system: `Sei Myynd. Qui sotto c'è una conversazione fra te e la persona sul suo progetto «${p.nome}»${p.obiettivo ? ` (obiettivo registrato: ${p.obiettivo})` : ''}: le hai chiesto su cosa sta lavorando e qual è il prossimo risultato concreto. La conversazione è finita: scrivi il prossimo risultato concreto da inseguire, in una riga, con le sue parole quando possibile, e da uno a tre primi passi che può fare da subito, ognuno una riga che comincia con un verbo. Se lei ha detto di sì a un passo che tu avevi proposto, quello è il primo passo. Niente domande, niente inventato: solo quello che sta nella conversazione. Se non c'è niente di concreto, risultato vuoto e nessun passo. Scrivi in ${nellaLingua()}.`,
+    system: `Sei Myynd. Qui sotto c'è una conversazione fra te e la persona sul suo progetto «${p.nome}»${p.obiettivo ? ` (obiettivo registrato: ${p.obiettivo})` : ''}: le hai chiesto su cosa sta lavorando e qual è il prossimo risultato concreto. La conversazione è finita: scrivi il prossimo risultato concreto da inseguire, in una riga, con le SUE parole (quello che LEI ha detto di voler ottenere, non un titolo che hai proposto tu o che ha incollato da una carta), e da uno a tre primi passi che può fare da subito, ognuno una riga che comincia con un verbo. I passi sono cose che si fanno, con parole semplici e dirette: mai «definire», «chiarire», «decidere cosa», «stabilire i criteri», che sono domande rigirate a lei. Se per fare un passo serve capire qualcosa, il passo è il lavoro che lo fa capire, e lo fai tu («Preparo…», «Cerco…»). Se lei ha detto di sì a un passo che tu avevi proposto, quello è il primo passo. Niente domande, niente gergo, niente inventato: solo quello che sta nella conversazione. Se non c'è niente di concreto, risultato vuoto e nessun passo. Scrivi in ${nellaLingua()}.`,
     messages: [{ role: 'user', content: trascrizione }]
   })
   const risultato = typeof out?.risultato === 'string' ? senzaTrattini(out.risultato.replace(/\s+/g, ' ').trim()).slice(0, 300) : ''
   if (risultato.length < 8) return null
   const passi = (Array.isArray(out?.passi) ? out!.passi : [])
     .map(x => typeof x === 'string' ? senzaTrattini(x.replace(/\s+/g, ' ').trim()).slice(0, 200) : '')
-    .filter(x => x.length >= 6).slice(0, 3)
+    .filter(x => x.length >= 6 && !DOMANDA_TRAVESTITA.test(x)).slice(0, 3)
   recordNextResult(progettoId, risultato)
   for (const testo of passi) aggiungiCompito({ testo, quando: 'oggi', modo: 'io', progetto: progettoId })
   return { risultato, passi }
