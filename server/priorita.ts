@@ -485,11 +485,14 @@ export function pronta(forza = false): boolean {
  * prima pagina glielo domanda, e dal giro dopo le priorità partono da lì.
  */
 export async function forse(forza = false): Promise<number> {
+  // il riferimento si chiede prima dei cancelli: non costa un modello, e
+  // senza di lui ogni giro ragiona sui file invece che su quello che dice
+  // lui. Con otto voci aperte il giro non parte, la domanda sì.
+  if (riferimento.chiediRiferimento()) console.log('myynd · priorità · chiesto il riferimento: a che punto è ogni progetto')
   if (!pronta(forza)) return 0
   const conto = cartella()
   inCorso.add(conto)
   try {
-    if (riferimento.chiediRiferimento()) console.log('myynd · priorità · chiesto il riferimento: a che punto è ogni progetto')
     const esito = await proponi()
     scriviArchivio({ ultimo: new Date().toISOString(), proposte: esito?.voci.length ?? 0 })
     if (!esito) return 0
