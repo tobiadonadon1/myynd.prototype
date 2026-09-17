@@ -1,19 +1,23 @@
-.sender-rules {margin:16px 0 0;padding:14px 16px;border:1px solid rgba(34,39,31,.1);border-radius:14px;background:rgba(255,255,255,.48);color:#30392e;font-size:12px}
-.sender-rules>summary {cursor:pointer;font-size:13px;font-weight:550;list-style-position:inside}
-.sender-rules>summary small {margin-left:8px;color:#74806d;font-weight:400}
-.sender-rules-description {max-width:600px;line-height:1.55;color:#626b5d;margin:12px 0}
+/* Le regole sui mittenti: una riga che si apre, nei colori della pagina.
+   Stava addosso alla prima scheda — niente spazio sotto — e con i suoi verdi
+   sembrava di un'altra app. */
+.sender-rules {margin:16px 0 22px;padding:14px 18px;border:1px solid #d9d3c57a;border-radius:18px;background:linear-gradient(150deg,#fcfaf4,#f1ede3);color:#30392e;font-size:12px;box-sizing:border-box}
+.sender-rules>summary {cursor:pointer;font-size:13px;font-weight:500;list-style-position:inside}
+.sender-rules>summary small {margin-left:8px;color:#74796b;font-weight:400}
+.sender-rules-description {max-width:600px;line-height:1.55;color:#65695e;margin:12px 0}
 .sender-rules form {display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:14px 0}
-.sender-rules label {display:grid;gap:5px;flex:1;min-width:190px;font-size:11px;color:#626b5d}
-.sender-rules input {min-width:0;padding:9px 10px;border:1px solid rgba(34,39,31,.16);border-radius:8px;background:rgba(255,255,255,.85);font:inherit;color:#30392e}
-.sender-rules button {padding:9px 12px;border:1px solid rgba(34,39,31,.14);border-radius:8px;background:#eef0e9;color:#3f5338;font:inherit;cursor:pointer;white-space:nowrap}
+.sender-rules label {display:grid;gap:5px;flex:1;min-width:190px;font-size:11px;color:#65695e}
+.sender-rules input {min-width:0;padding:9px 10px;border:1px solid #22271f1a;border-radius:10px;background:#fffdf9cc;font:inherit;color:#30392e}
+.sender-rules button {padding:9px 12px;border:1px solid #22271f14;border-radius:10px;background:#fffdf9;color:#34392e;font:inherit;cursor:pointer;white-space:nowrap}
+.sender-rules button:hover {border-color:#c4623b66}
 .sender-rules button:disabled {opacity:.5;cursor:default}
-.sender-rules :is(button,input,summary):focus-visible {outline:2px solid #748d67;outline-offset:3px}
+.sender-rules :is(button,input,summary):focus-visible {outline:2px solid #a54f30;outline-offset:3px}
 .sender-rules ul {padding:0;margin:10px 0 0;list-style:none;display:grid;gap:6px}
-.sender-rules li {display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(34,39,31,.07)}
+.sender-rules li {display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #22271f10}
 .sender-rule-text {flex:1;min-width:0;display:grid;gap:4px}
 .sender-rule-text strong {font-size:12px;font-weight:500;overflow-wrap:anywhere}
-.sender-rule-text small {color:#718069;line-height:1.4}
-.sender-rule-text .sender-rule-error,.sender-rules-error {color:#a74b3a}
+.sender-rule-text small {color:#74796b;line-height:1.4}
+.sender-rule-text .sender-rule-error,.sender-rules-error {color:#8e3f1f}
 .sender-rules-error {line-height:1.5;margin:8px 0}
-.sender-rules-empty {color:#7b8375;margin:10px 0}
+.sender-rules-empty {color:#74796b;margin:10px 0}
 @media(max-width:480px){.sender-rules form>button{width:100%}.sender-rules li{align-items:flex-start}}

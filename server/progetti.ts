@@ -123,6 +123,11 @@ export function vivi(): Progetto[] {
 /** Imported goals were sometimes used as project names. Keep the original
  * records editable, but do not give a second vote to an inferred alias. */
 function eUnAlias(nome: string, base: Progetto): boolean {
+  // «Myynd for Dad», «Myynd per la casa»: è il progetto, con dentro una cosa
+  // da fare. Il punto lo faceva nascere come progetto a sé, e lui lo vedeva
+  // doppio: «è lo stesso progetto, è solo una delle attività»
+  const perQualcuno = nome.match(/^(.+?)\s+(?:for|per|di|del|della|dei|delle|of)\s+\S/i)
+  if (perQualcuno && nomeNormalizzato(perQualcuno[1]) === nomeNormalizzato(base.nome)) return true
   const [prefisso, ...resto] = nome.split(/\s*[:—–]\s*/)
   const coda = resto.join(' ').trim()
   if (!coda || nomeNormalizzato(prefisso) !== nomeNormalizzato(base.nome)) return false

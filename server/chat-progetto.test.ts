@@ -37,3 +37,20 @@ test('una chat nata da «Parliamone» sa di quale progetto parla, e la risposta 
   assert.doesNotMatch(ctx, /Setting up the intelligence/)
   assert.match(progetti.perIlModello('Myynd'), /Now the project cards\./)
 })
+
+test('«Myynd for Dad» è Myynd: il punto non lo fa nascere come progetto a sé', () => {
+  const myynd = progetti.trovaPerNome('Myynd')!
+  const doppio = progetti.scrivi({ nome: 'Myynd for Dad', origine: 'punto' })
+  assert.equal(doppio.id, myynd.id)
+  assert.ok(!progetti.perContesto().some(p => p.nome === 'Myynd for Dad'))
+  // ma un nome che condivide solo una parola non è un alias
+  assert.notEqual(progetti.scrivi({ nome: 'Myynd Studio', origine: 'punto' }).id, myynd.id)
+})
+
+test('il prossimo risultato concordato entra nel contesto del progetto, e l’ultimo vale', () => {
+  const p = progetti.trovaPerNome('Myynd')!
+  pm.recordNextResult(p.id, 'A build the first three users can install alone.')
+  const ctx = pm.projectMemoryContext(p.id)
+  assert.match(ctx, /A build the first three users can install alone\./)
+  assert.match(ctx, /Now the project cards\./)
+})

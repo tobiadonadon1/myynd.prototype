@@ -3647,10 +3647,12 @@ app.post('/api/chat/:id', async (req, res) => {
       progetto: sul?.progetto,
       // «segnati che devo richiamare Rossi» detto in chat finisce in lista, e
       // «falla fare a te» la affida pure: la lista e la chat sono la stessa testa
-      aggiungiCompito: ({ testo, quando, modo }) => {
+      aggiungiCompito: ({ testo, quando, modo, progetto }) => {
         const dove = SECCHI.includes(String(quando)) ? String(quando) : 'oggi'
         const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-        store.scriviCompito({ id, testo, quando: dove, ordine: ordine.dopo(store.ultimoOrdine(dove)), origine: 'chat' })
+        // nata in una chat sul progetto: resta legata al progetto, così la
+        // Memoria la conta fra le sue attività e il modello vede a che punto è
+        store.scriviCompito({ id, testo, quando: dove, ordine: ordine.dopo(store.ultimoOrdine(dove)), origine: 'chat', progetto: progetto ?? sul?.progetto ?? null })
         if (modo === 'bozza' || modo === 'tutto') compiti.affida(id, modo)
         compiti.annunciaCambio()
         return { id }

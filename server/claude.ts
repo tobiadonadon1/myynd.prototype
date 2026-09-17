@@ -1,4 +1,4 @@
-import { recordUserDecision } from './project-memory.ts'
+import { recordUserDecision, recordNextResult } from './project-memory.ts'
 import { ATTREZZO_REVISIONE, verificaBaseRevisione, contestoRevisioni, rivediDallaChat, richiestaRevisione } from './revisioni.ts'
 // Il ragionamento. Myynd non inventa: riceve i documenti recuperati
 // dall'indice e risponde solo su quelli, citando le fonti.
@@ -789,8 +789,10 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
    * detto, una domanda sola se manca qualcosa, e il primo passo quando c'è.
    */
   const sulProgetto = progettoInChat ? progetti.trova(progettoInChat) : null
+  // la risposta di adesso più quelle già date: alla terza si chiude, punto
+  const risposte = storico.filter(t => t.ruolo === 'u').length + 1
   const conversazioneProgetto = sulProgetto
-    ? `\nQuesta conversazione l'hai aperta tu, sul progetto «${sulProgetto.nome}» (obiettivo registrato: ${sulProgetto.obiettivo || 'nessuno'}), chiedendo su cosa sta lavorando adesso e qual è il prossimo risultato concreto. La persona ti sta rispondendo: non è una domanda sul materiale. Rispondi a quello che ha detto, in due o tre frasi, riprendendo le sue parole. Se il prossimo risultato concreto non è ancora chiaro, fai una sola domanda per arrivarci. Se è chiaro, dillo e proponi il primo passo da fare questa settimana, chiedendo se va bene. Non chiedere di ripetere, non chiedere il nome del progetto, non dire di aver salvato niente: quello che dice si salva da sé sul progetto.`
+    ? `\nQuesta conversazione l'hai aperta tu, sul progetto «${sulProgetto.nome}» (obiettivo registrato: ${sulProgetto.obiettivo || 'nessuno'}), chiedendo su cosa sta lavorando adesso e qual è il prossimo risultato concreto. La persona ti sta rispondendo: non è una domanda sul materiale. Questa è la sua risposta numero ${risposte}. È uno strumento di lavoro, non una chiacchierata: lo scopo è arrivare in fretta a un risultato concreto da inseguire insieme e ai primi passi, e salvarli. Se con questa risposta il prossimo risultato concreto è chiaro, non fare altre domande: chiama concludi_progetto con il risultato in una riga, nelle sue parole, e da uno a tre primi passi concreti; poi rispondi in due frasi, riprendendo le sue parole: cosa hai segnato come risultato, e che i passi sono nella sua lista sulla prima pagina. Se non è ancora chiaro, rispondi a quello che ha detto in una frase e fai una sola domanda, breve.${risposte >= 3 ? ' Hai già fatto abbastanza domande: concludi adesso con quello che sai, chiamando concludi_progetto, senza altre domande.' : ''} Non chiedere di ripetere, non chiedere il nome del progetto, non dire di aver salvato niente che non hai salvato con lo strumento.`
     : ''
   // Earlier generated answers and their old citations are not current evidence.
   const conversazione = pianoAttuale ? storico.filter(t => t.ruolo === 'u') : storico
@@ -971,7 +973,33 @@ export type Attrezzi = {
   compitoId?: string
   /** La chat è nata da «Parliamone» su questo progetto: il modello lo sa, e sa cosa gli si è chiesto. */
   progetto?: string
-  aggiungiCompito: (c: { testo: string; quando?: string; modo?: string }) => { id: string }
+  aggiungiCompito: (c: { testo: string; quando?: string; modo?: string; progetto?: string }) => { id: string }
+}
+
+/**
+ * La fine di una chat su un progetto: il risultato da inseguire e i primi passi.
+ *
+ * «Continua a farmi domande senza una fine. Deve essere uno strumento di
+ * lavoro: dopo un po' ha finito, ha le informazioni che gli servono, e
+ * salva.» Esiste solo nelle chat nate da «Parliamone»: il risultato entra
+ * nella memoria del progetto, i passi nella lista, legati al progetto —
+ * e la prima pagina li mostra da sé, senza «Leggi adesso».
+ */
+const ATTREZZO_CONCLUDI: Anthropic.Tool = {
+  name: 'concludi_progetto',
+  description:
+    'Chiude la conversazione sul progetto salvando quello che si è capito: il prossimo risultato concreto da ' +
+    'raggiungere (una riga, nelle parole della persona) e da uno a tre primi passi concreti, che finiscono ' +
+    'nella sua lista legati al progetto. Chiamalo appena il risultato è chiaro, senza chiedere conferma: ' +
+    'te l\'ha già chiesto aprendo la conversazione. Dopo, rispondi in due frasi e non fare altre domande.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      risultato: { type: 'string', description: 'Il prossimo risultato concreto, in una riga.' },
+      passi: { type: 'array', items: { type: 'string' }, description: 'Da uno a tre primi passi concreti, ciascuno una riga che comincia con un verbo.' }
+    },
+    required: ['risultato', 'passi']
+  }
 }
 
 /**
@@ -1414,7 +1442,7 @@ export async function rispondiInStreaming(
    * lista si tocca dalla chat solo con Claude, che ha i secondi per farlo.
    */
   const locale = m?.tipo === 'compatibile'
-  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI] : [ATTREZZO_CERCA]
+  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto ? [ATTREZZO_CONCLUDI] : [])] : [ATTREZZO_CERCA]
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
   const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto, undefined, attrezzi?.progetto)
@@ -1501,6 +1529,16 @@ export async function rispondiInStreaming(
           if (![input?.projectId,input?.key,input?.value,input?.quote].every(v => typeof v === 'string')) throw new Error('Invalid project decision.')
           const saved = recordUserDecision(input, domanda)
           return {type:'tool_result' as const, tool_use_id:c.id, content:JSON.stringify({saved:true,id:saved.id,projectId:saved.projectId,value:saved.value})}
+        }
+        if (c.name === 'concludi_progetto') {
+          if (!attrezzi.progetto) throw new Error('Questa non è una conversazione su un progetto.')
+          const input = c.input as { risultato?: string; passi?: unknown }
+          const risultato = String(input?.risultato ?? '').trim()
+          const passi = (Array.isArray(input?.passi) ? input.passi : []).map(x => String(x).trim()).filter(Boolean).slice(0, 3)
+          if (!risultato) throw new Error('manca il risultato')
+          const salvato = recordNextResult(attrezzi.progetto, risultato)
+          const righe = passi.map(testo => attrezzi.aggiungiCompito({ testo, quando: 'oggi', modo: 'io', progetto: attrezzi.progetto }).id)
+          return { type: 'tool_result' as const, tool_use_id: c.id, content: JSON.stringify({ saved: true, id: salvato.id, risultato, passiInLista: righe.length }) }
         }
         if (c.name === 'rivedi_compito') {
           const revision = await rivediDallaChat(c.input, domanda, undefined, attrezzi.compitoId)

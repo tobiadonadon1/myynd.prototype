@@ -140,6 +140,8 @@ const INTERNI = new Set([
   // tornano al modello dentro il giro degli strumenti, non a una persona
   'manca la query',
   'manca il testo',
+  'manca il risultato',
+  'Questa non è una conversazione su un progetto.',
   'non posso mettere niente in lista da qui',
   // un'etichetta per una corsa persa contro il cronometro, presa lì accanto
   'troppo lento',

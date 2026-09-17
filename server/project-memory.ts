@@ -36,6 +36,15 @@ function record(input:Omit<ProjectMemory,'id'|'recordedAt'|'supersededBy'>):Proj
 export function recordCurrentWork(projectId:string,value:string) {
  return record({projectId,key:'lavoro-attuale',kind:'work',value:value.trim().slice(0,2000),provenance:'user-chat',evidenceAt:new Date().toISOString()})
 }
+/**
+ * Il prossimo risultato concreto, concordato in una chat sul progetto.
+ *
+ * È quello che si insegue insieme da qui in poi: l'ultimo vale, i
+ * precedenti restano come storia. Il modello lo vede come evidenza «work».
+ */
+export function recordNextResult(projectId:string,value:string) {
+ return record({projectId,key:'prossimo-risultato',kind:'work',value:value.trim().slice(0,2000),provenance:'user-chat',evidenceAt:new Date().toISOString()})
+}
 /** Only called by the actual project-field write path, never source extraction. */
 export function recordProjectField(projectId:string,kind:'goal'|'note',value:string,evidenceAt=new Date().toISOString(),provenance:'user-field'|'user-chat'='user-field') {
  return record({projectId,key:kind,kind,value:value.slice(0,2000),provenance,evidenceAt})
