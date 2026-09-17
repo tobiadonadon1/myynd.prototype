@@ -5,6 +5,7 @@ import { projectInitiatives } from './project-initiative.ts'
 import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
 import { eProposta } from './priorita.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
+import * as riferimento from './riferimento.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
   return classificaAttenzione(d, {
@@ -29,9 +30,13 @@ export function feedAttuale(adesso = Date.now()) {
   // «H-Brain» sotto H-Farm. Il nome più lungo vince, così «H-Farm audit»
   // batte «H-Farm».
   const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
-  const progettoDi = (v: Record<string, string | null>) => v.progetto
-    || attivi.find(p => nominaAmbito(`${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`, p.nome))?.id
-    || null
+  // e gli altri nomi delle sue cose, dal riferimento: «Evermute (everwave)»
+  const alias = [...riferimento.alias()]
+  const progettoDi = (v: Record<string, string | null>) => {
+    if (v.progetto) return v.progetto
+    const testo = `${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`
+    return attivi.find(p => nominaAmbito(testo, p.nome))?.id || alias.find(([nome]) => nominaAmbito(testo, nome))?.[1] || null
+  }
   const docs = new Map(voci.flatMap(v => {
     const d = v.doc ? store.documento(v.doc) : null
     return d ? [[d.id, d] as const] : []

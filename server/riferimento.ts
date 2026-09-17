@@ -72,6 +72,35 @@ export function nomiNelRiferimento(testo: string): string[] {
 }
 
 /**
+ * Gli altri nomi delle sue cose: «Evermute (everwave)» dice che la cartella
+ * everwave è il progetto Evermute. Torna alias in minuscolo → id del
+ * progetto, letti dal riferimento salvato; una voce che nomina «Everwave»
+ * finisce così sotto Evermute invece che in «Il resto». Puro sul testo,
+ * risolve i nomi sui progetti vivi.
+ */
+export function aliasDalTesto(testo: string, suoi = progetti.vivi()): Map<string, string> {
+  const normale = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const idDi = (nome: string) => {
+    const n = normale(nome)
+    if (n.length < 3) return null
+    return suoi.find(p => normale(p.nome) === n)?.id ?? suoi.find(p => normale(p.nome).startsWith(n) || n.startsWith(normale(p.nome)))?.id ?? null
+  }
+  const alias = new Map<string, string>()
+  for (const riga of testo.split(/\n+/)) {
+    const m = riga.match(/^\s*([^:(\n]{2,40}?)\s*\(([^)]{2,80})\)\s*:/)
+    if (!m) continue
+    const id = idDi(m[1])
+    if (!id) continue
+    for (const a of m[2].split(/\s*(?:,|\/|\bo\b|\bor\b)\s*/)) {
+      const nome = a.trim().toLowerCase()
+      if (nome.length >= 3 && nome.length <= 40) alias.set(nome, id)
+    }
+  }
+  return alias
+}
+export function alias(): Map<string, string> { return aliasDalTesto(leggi().testo) }
+
+/**
  * Un nome del riferimento che è anche una cartella di lavoro sul disco, e
  * non è ancora un progetto, diventa un progetto.
  *

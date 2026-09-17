@@ -111,3 +111,14 @@ test('i nomi in testa alle righe del riferimento che sono cartelle di lavoro div
   assert.ok(progetti.trovaPerNome('x-engine'))
   assert.equal(r.registraProgettiNominati('x-engine: still on').length, 0, 'la seconda volta non ne crea un altro')
 })
+
+test('«Evermute (everwave)» nel riferimento fa di everwave un altro nome di Evermute', async () => {
+  const progetti = await import('./progetti.ts')
+  const r = await import('./riferimento.ts')
+  // il nome esatto vince sul prefisso: se una prova prima ha creato «Evermute», è quello
+  const ev = progetti.trovaPerNome('Evermute') ?? progetti.trovaPerNome('Evermute deck')!
+  const a = r.aliasDalTesto('Evermute (everwave, EverMute app): on: the review\nx-engine: on: posting\nNote (irrelevant): nothing', progetti.vivi())
+  assert.equal(a.get('everwave'), ev.id)
+  assert.equal(a.get('evermute app'), ev.id)
+  assert.equal(a.has('irrelevant'), false, 'un nome che non è un progetto non porta alias')
+})

@@ -364,7 +364,7 @@ export async function proponi(): Promise<Giro | null> {
   const tutti = store.recenti(800)
   const docs = documentiPerLePriorita(tutti)
   const suoi = progetti.elenco('attivo')
-  const nomi = new Map(suoi.map(p => [p.nome.trim().toLowerCase(), p.id]))
+  const nomi = new Map([...suoi.map(p => [p.nome.trim().toLowerCase(), p.id] as const), ...riferimento.alias()])
   const lista = store.compitiPerIlModello(20)
   const aperte = store.feedAperto(20).map(v => v.titolo)
   const gia = store.feedGiaVisto(30)

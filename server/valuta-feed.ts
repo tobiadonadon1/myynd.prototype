@@ -274,6 +274,15 @@ async function main() {
     return
   }
   try {
+    // `--dati` deve valere davvero: il conto risolve la sua cartella da
+    // conti.db, e una copia di quel file punta ancora ai dati veri. Se la
+    // cartella del conto sta fuori da --dati, ci si ferma prima di leggere o
+    // scrivere qualsiasi cosa: è successo, e ha scritto sui dati veri.
+    if (a.dati) {
+      const dentro = await chi.dentro(id, () => config.cartella())
+      const { resolve: risolvi } = await import('node:path')
+      if (!risolvi(dentro).startsWith(risolvi(a.dati))) throw new Error('La cartella del conto sta fuori da --dati: mi fermo, per non toccare i dati veri.')
+    }
     const r = await chi.dentro(id, () => valuta({ riferimento: testo, secco: a.secco }))
     console.log(tabella(r, chi.dentro(id, () => config.lingua()) === 'en'))
   } catch (e) {
