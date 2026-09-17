@@ -2621,6 +2621,12 @@ const EN: Record<string, string> = {
   'Vai alle Fonti': 'Go to Sources',
   'I tuoi progetti': 'Your projects',
   'Parliamone': 'Discuss',
+  // — la prima pagina a blocchi: un blocco per progetto, e in fondo quello
+  //   che non sta in nessuno; il nome in cima apre il progetto; «Poi:» è la
+  //   cosa che Myynd propone dopo una riga finita —
+  'Il resto': 'Everything else',
+  'Apri il progetto': 'Open the project',
+  'Poi:': 'Next:',
 }
 
 

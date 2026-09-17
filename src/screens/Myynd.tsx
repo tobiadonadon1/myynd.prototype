@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
@@ -7,22 +7,19 @@ import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
 import { MenuGiu, VOCE_MENU } from '../components/MenuGiu'
-import { generePrimoDocumento, nomeDelFile, nomePorta, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
+import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
 import type { Compito } from '../api'
+import type { VoceFeed } from '../data'
+import { quando } from '../data'
+import { dataFonte, testoCarta } from '../feed-carta'
+import { blocchiFeed, type Blocco as BloccoFeed } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
-
-// Sulla riga aperta la freccia lascia il posto al pallino di prima: mentre
-// leggi, «vai qui» non è più il consiglio giusto — ci sei già.
-const PUNTINO: CSSProperties = {
-  width: 7, height: 7, borderRadius: '50%', margin: '3px 0',
-  background: '#FFFDF9', boxShadow: '0 0 0 1px rgba(34,39,31,.16)'
-}
 
 /**
  * I due pesi dei bottoni sulla card scura: uno pieno, gli altri di contorno.
@@ -39,77 +36,161 @@ const CONTORNO_SCURO: CSSProperties = {
 /** Un solo bottone pieno per card: quando si apre un rigo per scrivere, il pieno passa a «Manda». */
 const primario = (pieno: boolean) => (pieno ? PIENO_SCURO : CONTORNO_SCURO)
 
-/**
- * Una riga del resto.
+/*
+ * Il vestito di una riga dentro un blocco.
  *
- * La riga intera porta la voce in cima; il chevron in fondo alla frase apre il
- * testo e basta, e per questo si ferma il click prima che risalga. Sono due
- * gesti che stanno nello stesso rettangolo, quindi devono essere due bersagli
- * distinti e non due interpretazioni dello stesso.
+ * Due righe di testo: cosa, e perché conta adesso. Tutto il resto — da dove
+ * viene, cosa farne — sta su una riga sola scritta piccola che compare quando
+ * la riga è sotto il dito (o sotto il cursore, con la tastiera). Sempre
+ * accesa, su dieci righe, sarebbe una colonna di bottoni: cioè la pagina
+ * «pesante di testo» che lui non vuole.
  */
-function Riga({ riga }: { riga: Vals['resto'][number] }) {
-  const { attiva, props } = useAttiva()
-  return (
-    <div role="button" tabIndex={0} onClick={riga.onPromote} onKeyDown={daTastiera(riga.onPromote)}
-      style={{ ...riga.row, borderTop: 'none' }} {...props}>
-      <span style={riga.freccia}>
-        {riga.aperto ? <span style={PUNTINO} /> : <IconFrecciaDx size={13} />}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={riga.tipoStyle}>{t(riga.tipo)}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)', minWidth: 0 }}>{[riga.fonte, riga.ora].filter(Boolean).join(' · ')}</span>
-          {/*
-            Lo stesso gesto della carta grande, nello stesso angolo. Qui però si
-            fa vedere quando la riga è sotto il dito — come «in lista» qui
-            accanto: sempre acceso su otto righe sarebbe una colonna di
-            «non mi interessa», cioè il contrario di humble. `useAttiva` lo
-            accende anche col tocco e con la tastiera, quindi non è un gesto
-            che esiste solo per chi ha un mouse.
-          */}
-          <div style={{ flex: 1 }} />
-          <Hov as="button" type="button"
-            onClick={(e: MouseEvent) => { e.stopPropagation(); riga.onScarta() }}
-            title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
-            style={{
-              flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
-              color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
-            }}
-            hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
-        </div>
-        {/* titoli e testi li scrive il modello da oggetti di email e nomi di
-            file: una parola senza spazi non deve poter uscire dalla riga */}
-        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{riga.titolo}</div>
-        <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-          {riga.testo}
-          {riga.espandibile && (
-            <Hov as="button" onClick={(e: MouseEvent) => { e.stopPropagation(); riga.onToggle() }}
-              title={riga.aperto ? t('Richiudi') : t('Vedi tutto')}
-              style={riga.chevron} hover={{ color: '#22271F' }}>
-              <IconGiu size={13} stroke="currentColor" />
-            </Hov>
-          )}
-        </div>
-        {/* perché sta qui, e per quale obiettivo: una riga sotto, piana, senza colore */}
-        {riga.perche && (
-          <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.5)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.perche}</div>
-        )}
-      </div>
-      {/* niente «in lista» qui: una riga del feed è già una cosa da fare */}
+const RIGA: CSSProperties = { position: 'relative', padding: '12px 21px 7px', transition: 'background .15s' }
+const TITOLO: CSSProperties = { fontSize: '14.5px', fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere', textWrap: 'pretty' }
+const PERCHE: CSSProperties = { fontSize: '13px', lineHeight: 1.5, color: 'rgba(34,39,31,.64)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }
+const OFFERTA: CSSProperties = { ...PERCHE, color: 'rgba(34,39,31,.78)', marginTop: 5 }
+const QUANDO: CSSProperties = { flex: 'none', fontSize: 12, color: 'rgba(34,39,31,.5)', marginTop: 2, whiteSpace: 'nowrap' }
+/** La pastiglia a destra: l'urgenza di una voce, o quello che una riga aspetta da te. */
+const PASTIGLIA: CSSProperties = {
+  flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.02em', color: '#8E3F1F',
+  background: 'rgba(196,98,59,.14)', border: '1px solid rgba(196,98,59,.3)', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap'
+}
+/** Il nome del progetto in cima al blocco: maiuscoletto spaziato, nel suo colore. */
+const NOME: CSSProperties = { fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' }
+/** Un gesto scritto piccolo, senza bordo: quello che si fa di rado. */
+const GESTO: CSSProperties = { padding: '2px 0', border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }
+/** Il bottone della riga: uno solo per riga, ed è quello che si fa quasi sempre. */
+const PILLOLA: CSSProperties = {
+  padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)',
+  color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap'
+}
+const PILLOLA_SOPRA: CSSProperties = { borderColor: '#C4623B', color: '#8E3F1F' }
+/** Un link scritto nel rame: la sottolineatura c'è solo sotto il dito. */
+const LINK: CSSProperties = {
+  padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F', cursor: 'pointer',
+  textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', textAlign: 'left'
+}
 
-      {riga.urgenza && <span style={riga.pill}>{riga.urgenza}</span>}
+/** Un gesto dentro una riga che è essa stessa un bersaglio: il clic non deve risalire. */
+const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai() }
+
+/**
+ * La riga piccola sotto il testo: da dove viene a sinistra, cosa farne a destra.
+ *
+ * Occupa il suo posto anche quando non si vede — opacità, non `display` —
+ * così passare col mouse non fa saltare le righe sotto. E i bottoni restano
+ * raggiungibili con Tab anche da spenti: appena uno prende il fuoco la riga
+ * si accende, perché `useAttiva` ascolta anche il fuoco.
+ */
+function Fascia({ attiva, sinistra, destra }: { attiva: boolean; sinistra?: ReactNode; destra: ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4, minHeight: 22,
+      opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.55)' }}>{sinistra}</div>
+      <div style={{ flex: 1 }} />
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px' }}>{destra}</div>
     </div>
   )
 }
 
-/** Il feed: la cosa più urgente in grande, il resto sotto, le fatte in fondo. */
+/**
+ * Una voce del feed, in due righe.
+ *
+ * «Corte, dirette e piane: una riga per il cosa e una per il perché conta
+ * adesso.» Il titolo è il cosa. La seconda riga è il perché, scritto apposta
+ * da chi ha messo la voce sul feed; per una priorità il testo dice già cosa
+ * e perché, e il perché ripeterebbe l'obiettivo. Il tipo — da decidere, da
+ * leggere — non si scrive: il titolo lo dice da sé, e un'etichetta in più
+ * sopra ogni riga pesava quanto il titolo del blocco.
+ *
+ * La fonte compare solo sotto il dito: una parola, la data, e «Portami lì»
+ * che apre il posto vero. Le azioni stanno lì accanto: un bottone solo —
+ * «Affidalo a Myynd» su una priorità, «Fatto» sulle altre — e il resto
+ * scritto piccolo. Niente «Mettila in lista»: una voce del feed è già una
+ * cosa da fare.
+ *
+ * Il clic sulla riga apre il testo intero, se ce n'è di più: leggere e
+ * decidere sono due gesti diversi, e hanno due bersagli diversi.
+ */
+function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }) {
+  const { attiva, props } = useAttiva()
+  const [aperta, setAperta] = useState(false)
+  const [affidando, setAffidando] = useState(false)
+  const carta = testoCarta(voce)
+  const priorita = voce.tipo === 'Priorità'
+  const proposta = priorita || voce.tipo === 'Proposta'
+  const perche = proposta ? (carta.testo || carta.perche) : (carta.perche || carta.testo)
+  const altro = [carta.testo, carta.perche].filter(x => x && x !== perche)
+  const corta = taglia(perche, 150)
+  const espandibile = corta !== perche || altro.length > 0
+  const apri = () => { if (espandibile) setAperta(x => !x) }
+  const offerta = voce.offerta ?? ''
+  const fonte = voce.doc || voce.fonte ? parolaFonte(voce.fonte, voce.doc) : ''
+  const ora = quando(dataFonte(voce))
+  const dettaglio = [voce.fonteAutore, voce.fonteTitolo].filter(Boolean).join(' · ')
+  const aprendo = !!voce.doc && v.aprendoFonte === voce.doc
 
-/** La pastiglia a destra della riga: la stessa che porta l'urgenza delle sue. */
-const PASTIGLIA: CSSProperties = {
-  flex: 'none', fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#8E3F1F',
-  background: 'rgba(196,98,59,.16)', border: '1px solid rgba(196,98,59,.32)', borderRadius: 99, padding: '5px 11px'
+  /**
+   * «Affidalo a Myynd»: la voce diventa una riga tua, e parte.
+   *
+   * Nasce la riga con dentro il documento da cui viene e l'offerta come
+   * nota — «preparo la risposta ad Apple con…» è il compito — la prende lui,
+   * e la voce se ne va dal feed: il server l'ha già chiusa.
+   */
+  const affida = async () => {
+    if (!lista || affidando) return
+    setAffidando(true)
+    const id = await lista.affidaNuovo(carta.titolo, { doc: voce.doc, voce: voce.id, nota: offerta || null })
+    setAffidando(false)
+    if (!id) return
+    v.viaDalFeed(voce.id)
+    v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
+  }
+
+  const fatto = <Hov as="button" type="button" onClick={fermo(() => v.risolviVoce(voce))} style={proposta && lista ? GESTO : PILLOLA} hover={proposta && lista ? { color: '#8E3F1F' } : PILLOLA_SOPRA}>{t('Fatto')}</Hov>
+  const affidalo = lista && (
+    <Hov as="button" type="button" onClick={fermo(() => { void affida() })} disabled={affidando}
+      style={{ ...(proposta ? PILLOLA : GESTO), opacity: affidando ? .6 : 1 }} hover={proposta ? PILLOLA_SOPRA : { color: '#8E3F1F' }}>{t('Affidalo a Myynd')}</Hov>
+  )
+
+  return (
+    <div role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
+      aria-expanded={espandibile ? aperta : undefined}
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={TITOLO}>{carta.titolo}</div>
+          {perche && <div style={PERCHE}>{aperta ? perche : corta}</div>}
+          {aperta && altro.map((x, i) => <div key={i} style={{ ...PERCHE, marginTop: 6 }}>{x}</div>)}
+          {/* cosa farebbe lui: sotto una priorità sempre, sulle altre quando la riga è sotto il dito */}
+          {offerta && (priorita || attiva || aperta) && (
+            <div style={OFFERTA}><span style={{ fontWeight: 600 }}>{t('Posso farlo io:')}</span> {offerta}</div>
+          )}
+        </div>
+        {voce.urgenza && <span style={PASTIGLIA}>{voce.urgenza}</span>}
+      </div>
+      <Fascia attiva={attiva}
+        sinistra={(fonte || ora) && (
+          <>
+            <span>{[fonte, ora].filter(Boolean).join(' · ')}</span>
+            {voce.doc && (
+              <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo}
+                onClick={fermo(() => { void v.portamiFonte(voce.doc!) })}
+                style={{ ...LINK, cursor: aprendo ? 'wait' : 'pointer' }} hover={{ textDecorationColor: 'currentColor' }}>{aprendo ? t('Un momento…') : t('Portami lì')}</Hov>
+            )}
+          </>
+        )}
+        destra={
+          <>
+            {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
+            <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Parlane in chat')}</Hov>
+            <Hov as="button" type="button" onClick={fermo(() => v.scartaVoce(voce))} title={t('Toglila dal feed')} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
+          </>
+        } />
+    </div>
+  )
 }
 
 /**
@@ -184,8 +265,11 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
  * È un link, non una pastiglia: la riga resta quello che conta. Il click non
  * risale — dentro una riga della lista aprirebbe anche la riga — e il nome si
  * ferma con i tre puntini invece di spingere fuori la card.
+ *
+ * `inRiga`: dentro la fascia piccola di una riga, senza lo spazio sopra che
+ * ha sulla carta scura.
  */
-function Prove({ c, v, l, scuro }: { c: Compito; v: Vals; l?: Lista; scuro?: boolean }) {
+function Prove({ c, v, l, scuro, inRiga }: { c: Compito; v: Vals; l?: Lista; scuro?: boolean; inRiga?: boolean }) {
   const da = provenienza(c, v, l)
   if (!da) return null
   const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
@@ -200,7 +284,7 @@ function Prove({ c, v, l, scuro }: { c: Compito; v: Vals; l?: Lista; scuro?: boo
     textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', marginTop: 12, maxWidth: '100%', minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', marginTop: inRiga ? 0 : 12, maxWidth: '100%', minWidth: 0 }}>
       <span style={{ flex: 'none', fontSize: '12.5px', color: quieto }}>{t('Da')}</span>
       {da.apri
         ? (
@@ -247,9 +331,10 @@ function Prove({ c, v, l, scuro }: { c: Compito; v: Vals; l?: Lista; scuro?: boo
  *
  * Di contorno, mai pieno: su ogni carta il pieno è uno solo, ed è quello che
  * chiude la riga. E non sta sotto il «⋯»: quello che serve adesso non si
- * nasconde dietro tre puntini.
+ * nasconde dietro tre puntini. Dentro la fascia di una riga (`piatto`) è
+ * scritto e basta: lì il bottone è uno solo, ed è «Fatto».
  */
-function Portami({ c, l, v, scuro, anteprima = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean; anteprima?: boolean }) {
+function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean; piatto?: boolean; anteprima?: boolean }) {
   if ((!c.porta && !c.consegna) || (anteprima && !c.consegna?.anteprima)) return null
 
   const vai = async () => {
@@ -267,7 +352,7 @@ function Portami({ c, l, v, scuro, anteprima = false }: { c: Compito; l: Lista; 
         padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.32)',
         background: 'none', color: 'rgba(255,247,240,.9)', fontSize: 14
       }
-    : {
+    : piatto ? LINK : {
         padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
         background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12
       }
@@ -277,7 +362,7 @@ function Portami({ c, l, v, scuro, anteprima = false }: { c: Compito; l: Lista; 
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
       title={c.consegna?.titolo ?? etichetta}
       style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
-      hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
+      hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : piatto ? { textDecorationColor: 'currentColor' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
       {etichetta}
     </Hov>
   )
@@ -331,7 +416,7 @@ function ConsegnaPronta({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; 
   </section>
 }
 
-/** Cosa c'è scritto accanto a «DA FARE»: cosa sta succedendo, o dove sta. */
+/** Cosa c'è scritto accanto al titolo di una riga tua: cosa sta succedendo, o quando è. */
 function didascalia(c: Compito, attivo = false): string {
   if (c.stato === 'delegato') return attivo ? t('ci sta lavorando') : t('In coda')
   // lo scaffale che si vede è quello di oggi, non quello scritto: una cosa pianificata
@@ -360,78 +445,83 @@ function attesaDi(c: Compito): string {
   return c.stato === 'pronto' ? t('pronta') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
 
+/**
+ * Una riga della tua lista, dentro il blocco del suo progetto.
+ *
+ * Vestita come una voce del feed — il titolo, una riga sotto — perché nel
+ * blocco sono tutte cose da fare per quel progetto, e non serve dire quale
+ * l'ha scritta lui e quale l'hai scritta tu. Quello che cambia sono i gesti
+ * sotto il dito: «Fatto», «Se ne occupa Myynd», e il posto vero da cui viene.
+ * La riga intera la apre nella carta scura, dove c'è spazio per lavorarci.
+ */
 function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: () => void }) {
   const { attiva, props } = useAttiva()
   const attesa = attesaDi(c)
   const testo = corpo(c)
   const attivo = compitoInEsecuzione(c, l.passi[c.id])
+  const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
 
-  if (consegnaPronta(c)) return <ConsegnaPronta c={c} l={l} v={v} />
+  if (consegnaPronta(c)) return <div style={{ padding: 8 }}><ConsegnaPronta c={c} l={l} v={v} /></div>
 
   return (
     <div className="task-aurora-host task-aurora-row" data-working={attivo || undefined} role="button" tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)}
-      style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '17px 21px', cursor: 'pointer' }}
+      style={{ ...RIGA, cursor: 'pointer', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
       {...props}>
       {attivo && <AuroraCompito />}
-      <span style={{ flex: 'none', width: 14, marginTop: 4, display: 'flex', justifyContent: 'center', color: 'rgba(62,81,64,.6)' }}>
-        {attivo
-          ? <Glifo tipo="penso" dim={13} colore="#C4623B" />
-          : <IconFrecciaDx size={13} />}
-      </span>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: '#3E5140' }}>{t('Da fare')}</span>
-          <span style={{ fontSize: 12, color: 'rgba(34,39,31,.6)' }}>{didascalia(c, attivo)}</span>
-        </div>
-        <div style={{ fontSize: '14.5px', fontWeight: 500, marginTop: 6, overflowWrap: 'anywhere' }}>{presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}</div>
-        {testo && (
-          <div style={{ fontSize: '14px', lineHeight: 1.5, color: 'rgba(34,39,31,.7)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-            {taglia(testo, 140)}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {attivo && <Glifo tipo="penso" dim={12} colore="#C4623B" />}
+            <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
-        )}
-        {/* da dove viene e cosa ha letto: la riga si apre in cima, il documento
-            si apre solo da qui — e da nessun altro punto della riga */}
-        {attivo && <PassoAttivo passo={l.passi[c.id]} />}
-        <Consegna c={c} l={l} v={v} /><BozzaInPosta c={c} />
-        <Prove c={c} v={v} l={l} />
+          {testo && <div style={PERCHE}>{taglia(testo, 150)}</div>}
+          {attivo && <PassoAttivo passo={l.passi[c.id]} />}
+          <Consegna c={c} l={l} v={v} /><BozzaInPosta c={c} />
+        </div>
+        {attesa
+          ? <span style={PASTIGLIA}>{attesa}</span>
+          : <span style={QUANDO}>{didascalia(c, attivo)}</span>}
       </div>
-
-      {/* il posto vero da cui viene, aperto sul Mac. Sempre visibile — al
-          contrario di «fatta», che compare col mouse: è la cosa che mancava, e
-          una cosa che si scopre solo passandoci sopra continua a mancare */}
-      {!c.consegna && <Portami c={c} l={l} v={v} />}
-
-      {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso, e sta
-          nello stesso punto in cui le voci di Myynd offrono «in lista» */}
-      <Hov as="button"
-        onClick={(e: MouseEvent) => { e.stopPropagation(); l.chiudi(c.id) }}
-        title={t('Fatto')} aria-label={`${t('Fatto')}: ${presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}`}
-        style={{
-          flex: 'none', padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
-          background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12,
-          fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
-        }}
-        hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{t('fatta')}</Hov>
-
-      {attesa && <span style={PASTIGLIA}>{attesa}</span>}
+      <Fascia attiva={attiva}
+        sinistra={<Prove c={c} v={v} l={l} inRiga />}
+        destra={
+          <>
+            {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso */}
+            <Hov as="button" type="button" onClick={fermo(() => l.chiudi(c.id))} aria-label={`${t('Fatto')}: ${titolo}`}
+              style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Fatto')}</Hov>
+            {c.stato === 'aperto' && (
+              <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Se ne occupa Myynd')}</Hov>
+            )}
+            {!c.consegna && <Portami c={c} l={l} v={v} piatto />}
+          </>
+        } />
     </div>
   )
 }
 
 /**
- * Una cosa della tua lista, in cima.
+ * La cosa dopo: quello che Myynd propone di fare quando questa è finita.
  *
- * Stessa card di quelle che nota lui — stesso vetro caldo, stesso titolo
- * grande, stessa fascia di bottoni in fondo — perché in cima ci va quello che
- * conta adesso, e quello che conta adesso può benissimo essere una cosa che ti
- * sei segnato tu.
+ * Una riga piccola sotto la riga da cui nasce, non una riga sua: è la stessa
+ * cosa, un passo avanti. La riga vera sta in lista, e là si può prendere.
+ */
+function Seguito({ c }: { c: Compito }) {
+  return (
+    <div style={{ padding: '0 21px 12px', marginTop: -2, fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', overflowWrap: 'anywhere' }}>
+      <span style={{ fontWeight: 600 }}>{t('Poi:')}</span> {c.testo}
+    </div>
+  )
+}
+
+/**
+ * Una cosa della tua lista, aperta.
  *
- * Quello che cambia sono i verbi. Una voce si risolve; un compito si chiude, si
- * affida, si rimanda o si toglie. Tutto da qui: la ragione per cui questa card
- * esiste è che il feed non deve mai mandarti da un'altra parte per finire una
- * cosa che sta guardando.
+ * Stessa carta scura di prima, ma al posto della riga, dentro il blocco del
+ * suo progetto: si apre dove sta, così non si perde di vista di cosa è.
+ * Una voce si risolve; un compito si chiude, si affida, si rimanda o si
+ * toglie. Tutto da qui: la ragione per cui questa card esiste è che il feed
+ * non deve mai mandarti da un'altra parte per finire una cosa che sta
+ * guardando.
  */
 function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; richiudi: () => void }) {
   const [menu, setMenu] = useState(false)
@@ -464,7 +554,10 @@ function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; ric
   if (consegnaPronta(c)) return <ConsegnaPronta c={c} l={l} v={v} richiudi={richiudi} />
 
   return (
-    <div className="task-aurora-host task-aurora-hero" data-working={attivo || undefined} style={{ ...v.heroStyle, position: 'relative', zIndex: menu ? 30 : undefined }}>
+    <div className="task-aurora-host task-aurora-hero" data-working={attivo || undefined}
+      // dritta e senza l'entrata dal basso: dentro un blocco la carta prende
+      // il posto di una riga, e una riga non arriva storta
+      style={{ ...v.cartaScura, transform: 'none', animation: 'fadein .25s ease', position: 'relative', zIndex: menu ? 30 : undefined }}>
       {attivo && <AuroraCompito />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {attivo ? <Glifo tipo="penso" dim={15} colore="#FFF7F0" /> : <IconFrecciaDx size={15} />}
@@ -589,72 +682,129 @@ function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; ric
   )
 }
 
+/**
+ * La domanda di Myynd su un progetto: l'ultima riga del suo blocco.
+ *
+ * Era una carta a sé, sotto la lista, col nome del progetto scritto sopra.
+ * Adesso il progetto ce l'ha già il blocco, e la domanda sta in fondo alle
+ * sue cose — mai sopra: «la carta di H-Farm dove mi fa domande deve stare
+ * sotto le priorità». Il marchio davanti dice che è lui a chiedere. Un
+ * bottone solo: «Parliamone», o «Apri il compito» se c'è già una riga.
+ *
+ * Quando «Leggi adesso» non trova niente di nuovo ma i progetti aspettano,
+ * la pagina la porta sotto gli occhi e la accende per un attimo: l'avviso
+ * dice «qui sotto», e questo è il «qui».
+ */
+function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista; colore: string; prima: boolean }) {
+  const { attiva, props } = useAttiva()
+  const riga = useRef<HTMLDivElement | null>(null)
+  const [accesa, setAccesa] = useState(false)
+  useEffect(() => {
+    if (!v.evidenziaProgetti) return
+    if (prima) riga.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setAccesa(true)
+    const via = setTimeout(() => setAccesa(false), 1600)
+    return () => clearTimeout(via)
+  }, [v.evidenziaProgetti, prima])
+  const parla = () => v.discutiIniziativa(item)
+  const bottone: CSSProperties = { ...PILLOLA, border: `1px solid ${velato(colore, .45)}`, color: colore }
+  return (
+    <div ref={riga} role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
+      style={{
+        ...RIGA, padding: '13px 21px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+        background: attiva ? 'rgba(255,255,255,.34)' : 'transparent',
+        boxShadow: accesa ? `inset 0 0 0 2px ${colore}` : 'inset 0 0 0 2px transparent', transition: 'background .15s, box-shadow .3s'
+      }}>
+      <Marchio dim={14} animato={false} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={TITOLO}>{item.question ?? item.title}</div>
+        {item.description && <div style={PERCHE}>{taglia(item.description, 150)}</div>}
+      </div>
+      {item.taskId && lista
+        ? <Hov as="button" type="button" onClick={fermo(() => { lista.chiediDiAprire(item.taskId!); v.goOggi() })} title={t('Apri il compito')} style={bottone} hover={{ background: '#FFFFFF' }}>{t('Apri il compito')}</Hov>
+        : <Hov as="button" type="button" onClick={fermo(parla)} title={t('Parliamone in chat')} style={bottone} hover={{ background: '#FFFFFF' }}>{t('Parliamone')}</Hov>}
+      <Hov as="button" type="button" onClick={fermo(() => { void v.scartaIniziativa(item.id) })}
+        title={t('Toglila dal feed')}
+        style={{ ...GESTO, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}
+        hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
+    </div>
+  )
+}
+
+type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][number]>
+
+/**
+ * Un progetto, un blocco.
+ *
+ * «Raggruppate per progetto, ogni progetto un blocco suo, così vedo a colpo
+ * d'occhio dove stanno le cose.» Il colore del progetto — quello che sceglie
+ * lui in Memoria — è la prima cosa che si vede: fondo velato, bordo, nome in
+ * cima. Dentro, le righe una sotto l'altra, vestite uguali: le voci che ha
+ * notato Myynd, le righe della tua lista, e in fondo la sua domanda.
+ *
+ * «Il resto» è il blocco di quello che non sta in nessun progetto: senza
+ * colore, e sempre in fondo.
+ */
+function Blocco({ b, v, lista, inCima, setInCima, primaDomanda }: {
+  b: BloccoPagina; v: Vals; lista?: Lista; inCima: string | null; setInCima: (id: string | null) => void; primaDomanda: string | null
+}) {
+  const suo = b.progetto !== null
+  const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(34,39,31,.5)'
+  const filo = suo ? velato(colore, .18) : 'rgba(34,39,31,.09)'
+  const apriProgetto = () => { if (b.progetto) v.apriProgetto(b.progetto) }
+  return (
+    <section aria-label={b.nome} style={{
+      flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'hidden',
+      background: suo ? `linear-gradient(0deg, ${velato(colore, .10)}, ${velato(colore, .10)}), rgba(255,253,249,.84)` : 'rgba(255,253,249,.66)',
+      backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+      border: `1px solid ${suo ? velato(colore, .34) : 'rgba(255,255,255,.7)'}`,
+      boxShadow: '0 22px 52px rgba(84,64,44,.09)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 21px 3px' }}>
+        {suo && <span style={{ width: 8, height: 8, borderRadius: '50%', background: colore, flex: 'none' }} />}
+        {suo
+          ? (
+            // il nome porta al progetto, nella Memoria: è l'unico posto in cui si legge l'obiettivo
+            <Hov as="button" type="button" onClick={apriProgetto} title={t('Apri il progetto')}
+              style={{ ...NOME, color: colore, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3 }}
+              hover={{ textDecorationColor: 'currentColor' }}>{b.nome}</Hov>
+          )
+          : <span style={{ ...NOME, color: colore }}>{b.nome}</span>}
+      </div>
+      {b.righe.map((r, i) => {
+        const chiave = r.genere === 'voce' ? r.voce.id : r.genere === 'compito' ? r.compito.id : r.domanda.id
+        return (
+          <div key={chiave} style={{ borderTop: i === 0 ? 'none' : `1px solid ${filo}` }}>
+            {r.genere === 'voce' && <RigaVoce voce={r.voce} v={v} lista={lista} />}
+            {r.genere === 'compito' && (r.compito.id === inCima
+              ? <div style={{ padding: 8 }}><HeroCompito c={r.compito} l={lista!} v={v} richiudi={() => setInCima(null)} /></div>
+              : <RigaCompito c={r.compito} l={lista!} v={v} apri={() => setInCima(r.compito.id)} />)}
+            {r.genere === 'compito' && r.seguito && <Seguito c={r.seguito} />}
+            {r.genere === 'domanda' && <RigaDomanda item={r.domanda} v={v} lista={lista} colore={colore} prima={primaDomanda === r.domanda.id} />}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
   /**
-   * Quale cosa della tua lista sta in cima.
+   * Quale riga della tua lista è aperta nella carta scura.
    *
-   * Vuoto vuol dire «decidi tu»: se lui ha qualcosa da dire ci va la sua voce,
-   * altrimenti ci va la prima della lista — perché una pagina che si apre su
-   * niente mentre hai sei cose da fare è una pagina che non ti guarda. Si
-   * riempie cliccando una riga, e si svuota cliccando una delle sue.
+   * Nessuna, finché non ne clicchi una: la pagina si apre sui blocchi, che
+   * si leggono a colpo d'occhio, e la carta scura arriva quando serve
+   * spazio per lavorarci. Se la riga sparisce dalla pagina — chiusa, o
+   * scivolata sotto il tetto — la carta sparisce con lei.
    */
-  const [inCima, setInCima] = useState<string | null | false>(null)
-  /** Mentre la riga nasce e parte: il bottone non si preme due volte. */
-  const [affidando, setAffidando] = useState(false)
-  /** Il «⋯» della carta grande: il menù si misura su di lui — vedi `MenuGiu`. */
-  const altroHero = useRef<HTMLButtonElement | null>(null)
+  const [inCima, setInCima] = useState<string | null>(null)
   const compiti = lista?.compiti ?? []
-  const inTesta = inCima === false ? null : compiti.find(c => c.id === inCima) ?? (v.hasHero ? null : compiti[0] ?? null)
-  // quando in cima ci va una cosa tua, la voce che stava lì scende fra le righe
-  // invece di sparire: è ancora aperta, e deve restare raggiungibile
-  const voci = inTesta && v.rigaHero ? [v.rigaHero, ...v.resto] : v.resto
-  const righe = [
-    /*
-     * La riga porta la riga in cima. Sempre.
-     *
-     * Prima una riga nata da una mail apriva quella mail, e le altre salivano
-     * in cima: lo stesso gesto faceva due cose diverse a seconda di una cosa
-     * che non si vede: se il modello le avesse segnato un documento dietro.
-     * Ci si trovava davanti un foglio che non si era chiesto — «mi apre
-     * documenti a caso, il mio CV» — invece della riga da chiudere. Adesso
-     * la riga si apre in cima, dove c'è spazio per farci qualcosa, e la fonte
-     * si apre dalla riga «Da» sotto il testo: scritta, e voluta.
-     */
-    ...compiti.filter(c => c.id !== inTesta?.id).slice(0, 6).map(c => ({
-      chiave: c.id,
-      nodo: <RigaCompito c={c} l={lista!} v={v} apri={() => setInCima(c.id)} />
-    })),
-    ...voci.map(r => ({
-      chiave: r.id,
-      // cliccare una sua voce le ridà il posto in cima: un solo gesto, e vale
-      // per tutte e due le specie di riga
-      nodo: <Riga riga={{ ...r, onPromote: () => { setInCima(null); r.onPromote() } }} />
-    }))
-  ]
-
-  /**
-   * «Affidalo a Myynd»: la voce diventa una riga tua, e parte.
-   *
-   * Prima lì c'era «Chiedi a Myynd», che apriva la chat con scritto dentro
-   * «dimmi di più su…»: una domanda, non un lavoro. Adesso il bottone fa
-   * quello che dice — nasce la riga con dentro il documento da cui viene, la
-   * prende lui, e te la ritrovi in cima con sopra scritto che ci sta
-   * lavorando. Parlarne è rimasto, dietro il «⋯», dov'è giusto che stia
-   * quello che si fa di rado.
-   */
-  const affidaHero = async () => {
-    if (!lista || affidando) return
-    const voce = v.heroId
-    setAffidando(true)
-    // l'offerta di una priorità è il compito: «preparo la risposta ad Apple con…»
-    const id = await lista.affidaNuovo(v.heroTitolo, { doc: v.heroDoc, voce, nota: v.heroOfferta || null })
-    setAffidando(false)
-    if (!id) return
-    // il server ha già chiuso la voce: qui si toglie da quello che si ha davanti
-    v.viaDalFeed(voce)
-    setInCima(id)
-    v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
-  }
+  const blocchi: BloccoPagina[] = blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
+  // quello che c'è in pagina, contato con le stesse regole dei blocchi: le
+  // domande sui progetti non si contano — «due cose sul tavolo» sopra due
+  // domande e nessuna cosa arrivata era una bugia che preoccupa
+  const inPagina = blocchi.reduce((n, b) => n + b.righe.filter(r => r.genere !== 'domanda').length, 0)
+  const primaDomanda = blocchi.flatMap(b => b.righe).map(r => (r.genere === 'domanda' ? r.domanda.id : null)).find(Boolean) ?? null
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -665,14 +815,10 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
             margin: 0, padding: '0 0 0 3px', fontWeight: 400, textWrap: 'pretty'
-          }}>{v.vociAperte === 0 && (lista?.compiti.length ?? 0) > 0 && !v.domanda
-            ? frasi.daFare(lista!.compiti.length)
+          }}>{v.vociAperte === 0 && compiti.length > 0 && !v.domanda
+            ? frasi.daFare(compiti.length)
             : v.feedCaricato && !v.guastoFeed && (v.vociAperte > 0 || v.domanda)
-            /* quello che c'è in pagina, contato con le regole di `righe` qui sopra:
-               «due cose» sopra nove righe era il titolo di un'altra pagina. Le
-               domande sui progetti non si contano: «due cose sul tavolo» sopra
-               due domande e nessuna cosa arrivata era una bugia che preoccupa */
-            ? v.sulTavolo(compiti.length, !!inTesta)
+            ? v.sulTavolo(inPagina)
             : v.headline}</h1>
           <div style={{
             marginTop: 9, paddingLeft: 3, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
@@ -718,229 +864,37 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
       )}
 
       {/* Cosa è cambiato mentre non c'era, se c'è qualcosa da dire: sta sopra
-          alla card scura perché è la risposta alla domanda con cui si torna.
-          È una carta come le due qui sopra — titolo, una riga, un bottone — e
-          non più un rigo scritto piccolo: aprendola si apre il foglio da
-          leggere. Il vestito ce l'ha dentro, in `components/Punto.tsx`. */}
+          ai blocchi perché è la risposta alla domanda con cui si torna.
+          È una carta — titolo, una riga, un bottone — e non un rigo scritto
+          piccolo: aprendola si apre il foglio da leggere. Il vestito ce l'ha
+          dentro, in `components/Punto.tsx`. */}
       {/* Una riga del punto apre il documento da cui viene, e niente altro: le
           cose da fare non stanno lì dentro, stanno qui sotto. */}
       <Punto v={v} />
 
-      {inTesta && <HeroCompito c={inTesta} l={lista!} v={v} richiudi={() => setInCima(false)} />}
-
-      {!inTesta && v.hasHero && (
-        <div style={v.heroStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Glifo tipo="penso" dim={15} colore="#FFF7F0" />
-            <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t(v.heroTipo)}</span>
-            {/* una parola e l'ora: il percorso del file non compare da nessuna
-                parte, e il puntino c'è solo se ha due cose da separare */}
-            <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)', minWidth: 0 }}>{[v.heroFonte, v.heroOra].filter(Boolean).join(' · ')}</span>
-            {/*
-              «Non mi interessa», in alto a destra e scritto piccolo.
-              Stava dentro il «⋯» in fondo, e lì non lo trovava nessuno: è il
-              gesto che tiene pulito il feed, e un feed che non si può pulire in
-              un attimo si riempie di roba che non riguarda più niente. Qui è in
-              chiaro e fuori strada — lontano dai bottoni che *fanno* qualcosa,
-              nell'angolo dove si guarda solo quando si è deciso di lasciar
-              perdere. L'avviso che segue porta «Annulla»: è l'unico gesto del
-              feed che non lascia traccia da nessun'altra parte.
-            */}
-            <div style={{ flex: 1 }} />
-            <Hov as="button" type="button" onClick={v.scartaHero}
-              title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
-              style={{
-                flex: 'none', padding: '3px 2px', border: 'none', background: 'none',
-                color: 'rgba(255,247,240,.55)', fontSize: '12.5px', fontFamily: 'inherit',
-                cursor: 'pointer', whiteSpace: 'nowrap'
-              }}
-              hover={{ color: '#FFF7F0' }}>{t('Non mi interessa')}</Hov>
-          </div>
-
-          {/*
-            Il titolo è una frase, non un link.
-
-            Era cliccabile, sottolineato, e si portava dietro «Apri la pagina →»
-            in fondo: tre segni per un gesto solo, sulla riga che serve a capire
-            di cosa si tratta. «Perché è sottolineato?» — perché un titolo che
-            si comporta da link chiede di decidere prima ancora di aver letto.
-            Adesso si legge e basta.
-          */}
-          <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{v.heroTitolo}</div>
-          {/*
-            Aprire la cosa è un gesto solo, e sta sotto il titolo: una riga
-            piccola che dice cosa apre — la mail, il file, la pagina — e niente
-            freccia. Non è un bottone da fascia: quelli in fondo alla carta
-            sono le decisioni, questo è solo «fammela vedere».
-          */}
-          {v.heroHaDoc && (
-            <Hov as="button" type="button" onClick={v.apriDoc}
-              aria-label={`${t('Vedi la fonte')}: ${v.heroFonteDettaglio || v.heroTitolo}`}
-              style={{
-                alignSelf: 'flex-start', maxWidth: '100%', marginTop: 9, padding: 0, border: 'none',
-                background: 'none', fontFamily: 'inherit', fontSize: '13px', fontWeight: 500,
-                color: 'rgba(255,247,240,.74)', textAlign: 'left', textDecoration: 'none', cursor: 'pointer'
-              }}
-              hover={{ color: '#FFF7F0' }}>{v.heroFonteDettaglio || t('Vedi la fonte')}</Hov>
-          )}
-          {!v.heroHaDoc && <div style={{ marginTop: 9, fontSize: 13, color: 'rgba(255,247,240,.74)' }}>{t('Nessun collegamento alla fonte disponibile.')}</div>}
-          <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
-            {v.heroTesto}
-            {v.heroTagliato && (
-              <Hov as="button" onClick={v.heroToggle}
-                style={{ border: 'none', background: 'none', padding: '0 0 0 6px', fontFamily: 'inherit', fontSize: '13.5px', color: 'rgba(255,247,240,.6)', cursor: 'pointer' }}
-                hover={{ color: '#FFF7F0' }}>{v.heroLong ? t('meno') : t('di più')}</Hov>
-            )}
-          </div>
-          {/* il perché: per quale progetto o obiettivo conta, in una riga quieta */}
-          {v.heroPerche && (
-            <div style={{ fontSize: '13px', lineHeight: 1.5, marginTop: 8, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.heroPerche}</div>
-          )}
-          {/* l'offerta: cosa farebbe Myynd da solo, se glielo affidi — è la
-              riga che rende «Affidalo a Myynd» una promessa precisa */}
-          {v.heroOfferta && (
-            <div style={{ fontSize: '13.5px', lineHeight: 1.5, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.86)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-              <span style={{ fontWeight: 600, marginRight: 6 }}>{t('Posso farlo io:')}</span>{v.heroOfferta}
-            </div>
-          )}
-
-          {/*
-            Una fascia sola di azioni, non tre.
-
-            Prima c'erano il bottone Fatto, una riga di quattro pastiglie e un
-            campo di testo, tutti visibili insieme — e «Già fatto» faceva la
-            stessa cosa del bottone Fatto due centimetri più in su. Adesso c'è
-            quello che si fa quasi sempre, e un «⋯» per il resto.
-          */}
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 20, position: 'relative' }}>
-            {/* uno solo pieno: con il rigo aperto il pieno è «Manda», e «Fatto» si fa di contorno */}
-            <Hov as="button" onClick={v.heroPrimary}
-              style={primario(!v.scriviAperto)}
-              hover={v.scriviAperto ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{t('Fatto')}</Hov>
-            {v.heroHaDoc && (
-              <Hov as="button" type="button" onClick={v.portamiHero} disabled={v.heroAprendoFonte}
-                title={v.heroFonteDettaglio || v.heroApreCosa}
-                style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.6)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: v.heroAprendoFonte ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: v.heroAprendoFonte ? .65 : 1 }}
-                hover={{ background: 'rgba(255,247,240,.16)' }}>{v.heroAprendoFonte ? t('Un momento…') : t('Portami lì')}</Hov>
-            )}
-            {lista && (
-              <Hov as="button" onClick={affidaHero} disabled={affidando}
-                style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: affidando ? 'default' : 'pointer', fontFamily: 'inherit', opacity: affidando ? 0.62 : 1 }}
-                hover={{ background: 'rgba(255,247,240,.16)' }}>{t('Affidalo a Myynd')}</Hov>
-            )}
-
-            {/* Il menù si appende al «⋯», non a un numero di pixel.
-                Stava a `left: 178` dal bordo della fascia, cioè alla larghezza
-                che avevano quei due bottoni con quelle due parole dentro: la
-                prima traduzione un po' più lunga lo spostava sotto il nulla. */}
-            <>
-              <Hov as="button" ref={altroHero} onClick={v.apriMenu} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={v.menuAperto}
-                style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: v.menuAperto ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-                hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
-
-              {/* fuori dalla carta, per la stessa ragione dell'altro: `MenuGiu` */}
-              {v.menuAperto && (
-                <MenuGiu ancora={altroHero.current} chiudi={v.chiudiMenu} minLarghezza={190}>
-                  {v.correzioni.map(c => (
-                    <Hov key={c.id} as="button" type="button" role="menuitem" onClick={c.onClick}
-                      style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
-                      hover={{ background: 'rgba(196,98,59,.09)' }}>{c.label}</Hov>
-                  ))}
-                </MenuGiu>
-              )}
-            </>
-
-            <div style={{ flex: 1 }} />
-            <Hov as="button" onClick={v.heroSkip} title={t('Rimandala in fondo')}
-              style={{ padding: '12px 4px', border: 'none', background: 'none', color: 'rgba(255,247,240,.6)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-              hover={{ color: '#FFFFFF' }}>{t('Più tardi')}</Hov>
-          </div>
-
-          {v.scriviAperto && (
-            <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-              <input
-                autoFocus
-                className="scuro"
-                value={v.risposta}
-                onChange={e => v.setRisposta(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); v.rispondiAlHero() }
-                  if (e.key === 'Escape') { e.stopPropagation(); v.chiudiScrivi() }
-                }}
-                placeholder={t("L'ho mandato lunedì col listino nuovo")}
-                style={{
-                  flex: 1, minWidth: 0, padding: '11px 15px', borderRadius: 13,
-                  border: '1px solid rgba(255,247,240,.34)', background: 'rgba(20,14,10,.24)',
-                  color: '#FFF7F0', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
-                }} />
-              <button onClick={v.rispondiAlHero} disabled={v.rispondendo || !v.risposta.trim()} style={{
-                flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
-                background: v.risposta.trim() && !v.rispondendo ? '#FFF7F0' : 'rgba(255,247,240,.22)',
-                color: v.risposta.trim() && !v.rispondendo ? '#22271F' : 'rgba(255,247,240,.7)',
-                fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
-                cursor: v.risposta.trim() && !v.rispondendo ? 'pointer' : 'default'
-              }}>{v.rispondendo ? t('Segno…') : t('Manda')}</button>
-              <Hov as="button" onClick={v.chiudiScrivi} title={t('Annulla (Esc)')} aria-label={t('Annulla')}
-                style={{ flex: 'none', padding: '11px 6px', border: 'none', background: 'none', color: 'rgba(255,247,240,.55)', fontSize: 18, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }}
-                hover={{ color: '#FFF7F0' }}>×</Hov>
-            </div>
-          )}
+      {blocchi.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
         </div>
       )}
-
-      {!!v.iniziative.length && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-        <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
-      </div>}
 
       <Domanda v={v} />
 
-
-      {righe.length > 0 && (
-        /*
-          Questa scheda non è inclinata, e le altre sì. Non è una dimenticanza.
-
-          Un quinto di grado su una card che si vede tutta insieme è la mano
-          che l'ha posata storta: si legge come carattere. Ma questa è la lista
-          intera — duemila pixel, spesso tremila — e di una cosa così alta non
-          si vede mai la forma, si vede solo il bordo che passa. Inclinato, quel
-          bordo non è più verticale: scende di dieci pixel verso sinistra dal
-          primo rigo all'ultimo, e mentre si scorre lo spazio fra la colonna e
-          la lista si stringe piano piano, senza motivo apparente. Sembra che
-          si muova la finestra.
-
-          `position: relative` prende il posto che aveva la trasformazione:
-          serviva anche da riferimento a quello che qui dentro si posiziona da
-          sé, e toglierla e basta avrebbe spostato i menù delle righe.
-        */
-        <div style={{ flex: 'none', position: 'relative', zIndex: v.menuAperto ? 30 : undefined, marginTop: 16, borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)', border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 22px 52px rgba(84,64,44,.11)' }}>
-          {/* le tue righe stanno DENTRO la stessa lista delle sue, vestite
-              uguali. Il filo va per posizione, non per specie: la prima non ha
-              bordo sopra e tutte le altre sì — chiunque sia la prima. */}
-          {righe.map((r, i) => (
-            <div key={r.chiave} style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(34,39,31,.09)' }}>
-              {r.nodo}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/*
-        I progetti che aspettano un passo: carte una accanto all'altra.
+        I blocchi non sono inclinati, e le altre carte sì. Non è una dimenticanza.
 
-        Erano una carta a testa, piena, una sotto l'altra; poi righe in una
-        scheda sola. «Le pensavo una accanto all'altra, piccole carte, per
-        spezzare un po' il disegno» — e con un colore per progetto, che sceglie
-        lui in Memoria. Il colore è la prima cosa che si vede: fondo velato,
-        bordo, nome. La domanda è il titolo, il perché sta sotto piccolo, e
-        c'è un bottone solo. La carta intera apre la chat.
-
-        Stanno SOTTO le righe, non sopra: una domanda di Myynd su un progetto
-        viene dopo le cose da fare — «la carta di H-Farm dove mi fa domande
-        deve stare sotto le priorità».
+        Un quinto di grado su una card che si vede tutta insieme è la mano
+        che l'ha posata storta: si legge come carattere. Ma questi sono la
+        pagina intera — duemila pixel, spesso tremila — e di una cosa così
+        alta non si vede mai la forma, si vede solo il bordo che passa.
+        Inclinato, quel bordo non è più verticale, e mentre si scorre sembra
+        che si muova la finestra.
       */}
-      {!!v.iniziative.length && <Progetti v={v} lista={lista} />}
+      {blocchi.map(b => (
+        <Blocco key={b.progetto ?? 'resto'} b={b} v={v} lista={lista} inCima={inCima} setInCima={setInCima} primaDomanda={primaDomanda} />
+      ))}
 
-      {v.feedVuoto && !(lista?.compiti.length) && <Vuoto v={v} />}
+      {blocchi.length === 0 && <Vuoto v={v} />}
 
       {/* niente elenco delle fatte qui: quello che hai chiuso è chiuso.
           Il conto restava lì a crescere — «Done · 14» — come un cassetto che
@@ -949,18 +903,6 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
   )
 }
 
-/**
- * Quando è lui a chiedere.
- *
- * Deliberatamente diversa da una voce del feed: chiara, ma non urgente. Una
- * voce è lavoro che ti aspetta; questa è un collega che alza la testa dalla
- * scrivania. Se avesse l'aria di un compito, in tre giorni la salteresti come
- * si saltano i compiti — e allora tanto varrebbe non chiedere.
- *
- * Sta sotto la card in cima, mai sopra: non deve mettersi in mezzo al lavoro
- * vero. Ma quando non c'è lavoro resta l'unica cosa sullo schermo, ed è il
- * momento migliore per chiedere qualcosa a qualcuno.
- */
 /**
  * La riga fissa di quello che non va, sopra a tutto.
  *
@@ -995,88 +937,17 @@ function Avviso({ v }: { v: Vals }) {
 }
 
 /**
- * Le carte dei progetti, una accanto all'altra.
+ * Quando è lui a chiedere.
  *
- * Quando «Leggi adesso» non trova niente di nuovo ma i progetti aspettano, la
- * pagina le porta sotto gli occhi e le accende per un attimo: l'avviso dice
- * «qui sotto», e questo è il «qui».
+ * Deliberatamente diversa da una voce del feed: chiara, ma non urgente. Una
+ * voce è lavoro che ti aspetta; questa è un collega che alza la testa dalla
+ * scrivania. Se avesse l'aria di un compito, in tre giorni la salteresti come
+ * si saltano i compiti — e allora tanto varrebbe non chiedere.
+ *
+ * Sta sopra i blocchi, mai in mezzo: non deve mettersi in mezzo al lavoro
+ * vero. Ma quando non c'è lavoro resta l'unica cosa sullo schermo, ed è il
+ * momento migliore per chiedere qualcosa a qualcuno.
  */
-function Progetti({ v, lista }: { v: Vals; lista?: Lista }) {
-  const griglia = useRef<HTMLDivElement | null>(null)
-  const [accese, setAccese] = useState(false)
-  useEffect(() => {
-    if (!v.evidenziaProgetti) return
-    griglia.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setAccese(true)
-    const via = setTimeout(() => setAccese(false), 1600)
-    return () => clearTimeout(via)
-  }, [v.evidenziaProgetti])
-  return (
-    <div ref={griglia} aria-label={t('Un passo per il tuo progetto')} style={{
-      display: 'grid', gap: 12, marginTop: 14,
-      // due o più stanno di fianco; una sola prende la riga, come le altre carte
-      gridTemplateColumns: v.iniziative.length > 1 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr'
-    }}>
-      {v.iniziative.map(item => <CartaProgetto key={item.id} item={item} v={v} lista={lista} accesa={accese} />)}
-    </div>
-  )
-}
-
-/**
- * Un progetto che aspetta un passo, come carta col suo colore: la carta
- * intera apre la chat con la domanda già scritta, e il bottone dice che lo
- * farà. Con un compito dietro, il bottone porta al compito e la chat resta
- * sul clic della carta.
- */
-function CartaProgetto({ item, v, lista, accesa }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista; accesa: boolean }) {
-  const { attiva, props } = useAttiva()
-  const colore = v.coloreProgetto(item.projectId)
-  const parla = () => v.discutiIniziativa(item)
-  const BOTTONE_CARTA: CSSProperties = {
-    flex: 'none', padding: '6px 13px', borderRadius: 99, border: `1px solid ${velato(colore, .45)}`,
-    background: 'rgba(255,255,255,.55)', color: colore, fontSize: '12.5px', fontWeight: 500,
-    fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap'
-  }
-  return (
-    <div role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
-      style={{
-        display: 'flex', flexDirection: 'column', gap: 0, padding: '16px 18px 15px', borderRadius: 18, cursor: 'pointer',
-        // il colore del progetto, velato sull'avorio: è quello che distingue una carta dall'altra
-        background: `linear-gradient(0deg, ${velato(colore, attiva ? .16 : .11)}, ${velato(colore, attiva ? .16 : .11)}), rgba(255,253,249,.88)`,
-        border: `1px solid ${velato(colore, .38)}`, transition: 'background .2s, outline-color .3s',
-        outline: accesa ? `2px solid ${colore}` : '2px solid transparent', outlineOffset: 3
-      }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: colore }} />
-        <span style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', color: colore, minWidth: 0, overflowWrap: 'anywhere' }}>{item.projectName}</span>
-        <div style={{ flex: 1 }} />
-        <Hov as="button" type="button"
-          onClick={(e: MouseEvent) => { e.stopPropagation(); void v.scartaIniziativa(item.id) }}
-          title={t('Toglila dal feed')} aria-label={t('Non mi interessa')}
-          style={{
-            flex: 'none', padding: '2px 2px', border: 'none', background: 'none',
-            color: 'rgba(34,39,31,.45)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-            opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
-          }}
-          hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
-      </div>
-      {/* la domanda è il titolo: è la cosa a cui si risponde. Il perché sta sotto, piccolo */}
-      <div style={{ fontSize: '15px', fontWeight: 500, lineHeight: 1.4, marginTop: 10, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.question ?? item.title}</div>
-      {item.description && (
-        <div style={{ fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.55)', marginTop: 5, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{item.description}</div>
-      )}
-      <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', marginTop: 14 }}>
-        {item.taskId && lista
-          ? <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); lista.chiediDiAprire(item.taskId!); v.goOggi() }}
-              title={t('Apri il compito')} style={BOTTONE_CARTA} hover={{ background: '#FFFFFF' }}>{t('Apri il compito')}</Hov>
-          : <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); parla() }}
-              title={t('Parliamone in chat')} style={BOTTONE_CARTA} hover={{ background: '#FFFFFF' }}>{t('Parliamone')}</Hov>}
-      </div>
-    </div>
-  )
-}
-
 function Domanda({ v }: { v: Vals }) {
   // Dopo la risposta, l'esito prende il posto della domanda e resta lì. Non è
   // un avviso che sfarfalla: è la prova che rispondere è servito a qualcosa.
@@ -1110,17 +981,17 @@ function Domanda({ v }: { v: Vals }) {
         rispondere e la freccia stanno tutti sulla stessa linea, e in verticale
         costa un terzo.
 
-        Il gradiente va al contrario di quello della card sopra — quella parte
-        opaca in alto a sinistra e si spegne in basso a destra, questa fa
-        l'inverso: quasi trasparente dove comincia, densa dove finisce. Le due
-        superfici si passano la luce invece di ripeterla.
+        Il gradiente va al contrario di quello delle carte sopra — quelle
+        partono opache in alto a sinistra e si spengono in basso a destra,
+        questa fa l'inverso: quasi trasparente dove comincia, densa dove
+        finisce. Le due superfici si passano la luce invece di ripeterla.
       */
       /*
         Lo z-index del pannello «perché» non bastava: questa fascia ha un
         backdrop-filter, e un filtro crea un contesto di impilamento — quindi
-        il 25 del pannello valeva solo *dentro* la fascia, e la card che viene
-        dopo, essendo un fratello successivo, gli finiva sopra. Si alza la
-        fascia intera, non il figlio.
+        il 25 del pannello valeva solo *dentro* la fascia, e il blocco che
+        viene dopo, essendo un fratello successivo, gli finiva sopra. Si alza
+        la fascia intera, non il figlio.
       */
       position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13,
       margin: '14px 0 4px', padding: '10px 14px 10px 15px',
@@ -1188,14 +1059,6 @@ function Domanda({ v }: { v: Vals }) {
     </div>
   )
 }
-
-/**
- * Il fuoco: una riga che vale per tutte le letture che verranno.
- *
- * Diversa dalla risposta a una voce — quella riguarda una cosa sola e la
- * chiude, questa dice a Myynd dove guardare da qui in avanti. Sta in alto e
- * discreta perché è una scelta che si fa di rado e si cambia ancora più di rado.
- */
 
 /** Quando non c'è niente: dice cosa manca, non finge. */
 function Vuoto({ v }: { v: Vals }) {
