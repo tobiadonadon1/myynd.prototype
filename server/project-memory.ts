@@ -80,6 +80,20 @@ export function recordSourceObservation(input:{projectId:string;key:string;value
  return record({projectId:input.projectId,key:'observation:'+input.key,kind:'observation',value:input.value,quote:input.quote,sourceId:source.id,
   fingerprint:fingerprint(source.corpo),provenance:'source-inference',evidenceAt:source.quando || ''})
 }
+/**
+ * Una cosa che lei ha segnato fatta, con le sue mani.
+ *
+ * È diverso da `recordTaskOutcome`, che fotografa lo *stato* di una riga e
+ * invecchia con lei: se la riga si riapre o si tocca, quella prova si
+ * ritira. Qui si scrive il fatto in sé, un traguardo, con la chiave
+ * `fatto:<id>` e senza `taskId`, così resta vero anche quando la riga che
+ * l'ha prodotto cambia. Vale per una riga della lista come per una voce del
+ * feed, che una riga non ce l'ha. La provenienza resta `task-record`: è un
+ * esito di lavoro registrato, e la scheda della memoria sa già come dirlo.
+ */
+export function recordDoneByUser(projectId:string,text:string,ref:string):ProjectMemory {
+ return record({projectId,key:'fatto:'+ref,kind:'work',value:`Completed by the user: ${text.trim().slice(0,500)}`,provenance:'task-record',evidenceAt:new Date().toISOString()})
+}
 /** A delivered draft is not a completed user commitment. Facts come from task state. */
 export function recordTaskOutcome(taskId:string):ProjectMemory|null {
  const task=compito(taskId)

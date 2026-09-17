@@ -882,8 +882,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     setAperti(a => a.filter(x => x.id !== v.id))
     setFatte(f => [v, ...f])
     try {
-      await api.segnaFeed(v.id, 'fatto')
-      mostraToast(t('Segnata come fatta.'), true)
+      const r = await api.segnaFeed(v.id, 'fatto')
+      // con un progetto l'avviso dice anche che si è segnato il traguardo e
+      // che guarda il passo dopo: quello arriva da solo, dal filo
+      mostraToast(r.registrato?.progetto ? frasi.segnataPer(r.registrato.progetto) : t('Segnata come fatta.'), true)
     } catch {
       // rimetto le cose come stavano invece di mentire
       setFatte(f => f.filter(x => x.id !== v.id))

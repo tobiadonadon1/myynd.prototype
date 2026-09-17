@@ -22,6 +22,7 @@ import { linguaSbagliata, soloInLingua } from './testo.ts'
 import * as store from './store.ts'
 import * as riferimento from './riferimento.ts'
 import * as progetti from './progetti.ts'
+import * as dopoFatto from './dopo-fatto.ts'
 
 /**
  * Quanti scarti muti sullo stesso tema prima di considerarlo un segnale.
@@ -272,6 +273,17 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
   if (questa?.tema === riferimento.TEMA) {
     riferimento.scrivi(pulita)
     const esito = riferimento.esitoDelRiferimento()
+    store.chiudiDomanda(id, 'risposta', pulita, esito)
+    return { esito }
+  }
+
+  /*
+   * «Qual è il passo dopo?» nemmeno: la risposta è il passo, con le sue
+   * parole, e va in lista sotto il progetto. Non c'è una regola da tirarne
+   * fuori, e l'esito dice dove è finita.
+   */
+  if (questa?.tema.startsWith(dopoFatto.TEMA)) {
+    const esito = dopoFatto.rispostaSulPasso(questa, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)
     return { esito }
   }

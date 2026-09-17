@@ -31,6 +31,7 @@ import * as punto from './punto.ts'
 import * as progetti from './progetti.ts'
 import * as avvio from './avvio.ts'
 import * as compiti from './compiti.ts'
+import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
 import * as iniziativa from './iniziativa.ts'
 import * as scoperte from './scoperte.ts'
@@ -2375,8 +2376,13 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
     const stato = req.body?.stato ? String(req.body.stato) : undefined
     const esito = await timone.rispondiAVoce(req.params.id, testo, stato)
     const ore = cfg.leggi().oreFatte ?? 48
-    res.json({ ...esito, aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore) })
+    // di quale progetto è, subito: l'avviso sotto il bottone lo dice
+    const fatto: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
+    const registrato = { progetto: esito.stato === 'fatto' ? dopoFatto.progettoDelFatto(fatto) : null }
+    res.json({ ...esito, aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), registrato })
     compiti.annunciaFeed()
+    // dopo la risposta: il traguardo in memoria, e il passo dopo o la domanda
+    if (esito.stato === 'fatto') void dopoFatto.registraFatto(fatto)
   } catch (e) { errore(res, e) }
 })
 
@@ -2435,8 +2441,12 @@ app.post('/api/feed/:id/:stato', (req, res) => {
    */
   const fatto = req.params.stato === 'fatto'
   store.cambiaStatoFeed(req.params.id, fatto ? 'fatto' : 'aperto', fatto ? 'Già fatto.' : '')
-  res.json({ ok: true })
+  // di quale progetto è, subito: l'avviso sotto il bottone lo dice
+  const cosa: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
+  res.json({ ok: true, registrato: { progetto: fatto ? dopoFatto.progettoDelFatto(cosa) : null } })
   compiti.annunciaFeed()
+  // dopo la risposta: il traguardo in memoria, e il passo dopo o la domanda
+  if (fatto) void dopoFatto.registraFatto(cosa)
 })
 
 // — la rassegna —
@@ -3206,7 +3216,10 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
     store.tieniLaTua(c.id, tenuto.trim())
   }
   store.cambiaStatoCompito(c.id, stato, esito || undefined)
-  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
+  // di quale progetto è, subito e senza modello: l'avviso sotto il bottone lo dice
+  const fatto: dopoFatto.Fatto = { genere: 'compito', id: c.id }
+  const registrato = { progetto: stato === 'fatto' ? dopoFatto.progettoDelFatto(fatto) : null }
+  res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi(), registrato })
   compiti.annunciaCambio()
 
   // Dopo la risposta, mai davanti: chiudere non deve aspettare che impari.
@@ -3217,6 +3230,9 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // più rara — e tutte le righe chiuse a mano passavano senza lasciare niente.
   if (tenuto) compiti.imparaSeCorretto(c.risultato, tenuto)
   compiti.imparaDallaChiusura(c, stato, esito)
+  // E il traguardo: si segna nella memoria del progetto, e si guarda il passo
+  // dopo, o glielo si chiede. Una riga lasciata perdere non è un traguardo.
+  if (stato === 'fatto') void dopoFatto.registraFatto(fatto)
 })
 
 app.post('/api/compiti/:id/riapri', (req, res) => {

@@ -2925,6 +2925,10 @@ export const frasi = {
   // — frasi con un numero o un nome dentro: non si possono mettere nel dizionario
   //   come chiavi, perché la chiave cambierebbe a ogni valore —
   scollegato: (nome: string) => corrente === 'en' ? `${nome} disconnected.` : `${nome} scollegato.`,
+  /** Dopo «Fatto» su una cosa di un progetto: si è segnato il traguardo, e va a guardare il passo dopo. */
+  segnataPer: (progetto: string) => corrente === 'en'
+    ? `Marked done for ${progetto}. Looking at the next step.`
+    : `Segnata come fatta per ${progetto}. Guardo il passo dopo.`,
   coseNuove: (n: number) => corrente === 'en'
     ? (n === 1 ? 'One new thing in the feed.' : `${n} new things in the feed.`)
     : (n === 1 ? 'Una cosa nuova nel feed.' : `${n} cose nuove nel feed.`),

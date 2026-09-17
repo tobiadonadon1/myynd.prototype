@@ -265,6 +265,9 @@ export function useCompiti(
     try {
       const r = await api.chiudiCompito(id, { esito, tenuto })
       setCompiti(r.compiti); setChiusi(r.chiusi)
+      // con un progetto si dice che il traguardo è segnato e che guarda il
+      // passo dopo: la riga nuova, o la domanda, arrivano da sole dal filo
+      if (r.registrato?.progetto) mostraToast(frasi.segnataPer(r.registrato.progetto))
     } catch {
       indietro(prima, id, t('Non sono riuscito a chiuderlo.'))
     }

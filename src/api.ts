@@ -597,6 +597,13 @@ export type EmailPronta = {
   rispondeA?: { messageId: string; references?: string[] } | null
 }
 
+/**
+ * Cosa ha registrato il server quando hai segnato una cosa fatta: il nome
+ * del progetto, se ne ha uno. Il passo dopo, o la domanda, arrivano da soli
+ * dal filo: qui c'è solo quello che l'avviso sotto il bottone può dire subito.
+ */
+export type Registrato = { progetto: string | null }
+
 export type Compito = {
   /** Verified native artifact; never inferred from the response text. */
   consegna?: { app: 'Pages' | 'TextEdit'; titolo: string; percorso: string
@@ -1102,7 +1109,7 @@ export const api = {
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/richiama`, { method: 'POST' }),
 
   chiudiCompito: (id: string, c: { esito?: string; stato?: 'fatto' | 'lasciato'; tenuto?: string }) =>
-    json<{ ok: true; compiti: Compito[]; chiusi: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/chiudi`,
+    json<{ ok: true; compiti: Compito[]; chiusi: Compito[]; registrato?: Registrato }>(`/api/compiti/${encodeURIComponent(id)}/chiudi`,
       { method: 'POST', body: JSON.stringify(c) }),
 
   riapriCompito: (id: string) =>
@@ -1285,7 +1292,7 @@ export const api = {
 
   /** `stato` presente = risposta pronta, non passa dal modello. */
   rispondiFeed: (id: string, testo: string, stato?: string) =>
-    json<{ stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[] }>(
+    json<{ stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[]; registrato?: Registrato }>(
       `/api/feed/${encodeURIComponent(id)}/rispondi`,
       { method: 'POST', body: JSON.stringify({ testo, stato }) }
     ),
@@ -1642,7 +1649,7 @@ export const api = {
   feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[] }>('/api/feed'),
   generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto; cerco?: boolean }>('/api/feed/genera', { method: 'POST' }),
   feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
-  segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json(`/api/feed/${id}/${stato}`, { method: 'POST' }),
+  segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json<{ ok: true; registrato?: Registrato }>(`/api/feed/${id}/${stato}`, { method: 'POST' }),
 
   chat: () => json<{ id: string; titolo: string; quando: string }[]>('/api/chat'),
   messaggi: (id: string) => json<{ id: string; role: string; text: string; sources?: { id: string; label: string }[] }[]>(`/api/chat/${id}`),
