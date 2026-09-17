@@ -442,10 +442,23 @@ function documentiScritti(docs: store.Documento[]): string {
  * di riassunto: è esattamente il materiale su cui una proposta può nominare
  * qualcosa invece di raccontare.
  */
+/**
+ * Da dove si pesca: ottocento recenti, senza X, chat e cartelle di lavoro.
+ *
+ * Duecento non bastavano più: i post di X e le sessioni con i modelli sono
+ * duecento da soli e stanno tutti in cima per data, e le mail e i file, che
+ * sono l'unica cosa che un'automazione può prendere in mano, restavano fuori.
+ * Il giro tornava «0 proposte» su un disco pieno di fatture.
+ */
+const NON_AUTOMATIZZABILI = new Set(['x', 'conversazioni', 'lavoro'])
+export function materialeGrezzo(): store.Documento[] {
+  return store.recenti(800).filter(d => !NON_AUTOMATIZZABILI.has(d.fonte))
+}
+
 export function documentiPerSuggerimenti(docs: store.Documento[], adesso = Date.now()): store.Documento[] {
   const attivi = progetti.elenco('attivo')
   const ignorati = store.docsIgnoratiDalFeed(docs)
-  return docs.filter(d => !ignorati.has(d.id) && classificaAttenzione(d, {
+  return docs.filter(d => !ignorati.has(d.id) && !NON_AUTOMATIZZABILI.has(d.fonte) && classificaAttenzione(d, {
     adesso, giorniMax: 30,
     progettoAttivo: progetti.toccaUnProgetto(`${d.titolo}\n${d.corpo.slice(0, 1500)}`, attivi)
   }).destinazione === 'feed')
@@ -459,7 +472,7 @@ const improntaContesto = () => createHash('sha256').update(JSON.stringify([
 function materiale(scartati: string[]): string {
   const c = leggi()
   const collegati = attrezzi.catalogo().filter(a => a.collegato)
-  const docs = documentiPerSuggerimenti(store.recenti(200)).slice(0, 40)
+  const docs = documentiPerSuggerimenti(materialeGrezzo()).slice(0, 40)
   const righe = store.elencoCompiti().slice(0, 15)
   const tolte = store.automazioniTolte()
   const gia = auto.ricette().filter(r => !tolte.has(r.id)).map(r => auto.nella(r))
@@ -672,7 +685,7 @@ async function componi(scartati: string[]): Promise<Suggerimento[] | null> {
   // niente di collegato vuol dire niente da guardare: la chiamata sarebbe una
   // spesa per una risposta che si sa già
   if (!collegati.length) return []
-  const prove = documentiPerSuggerimenti(store.recenti(200))
+  const prove = documentiPerSuggerimenti(materialeGrezzo())
   if (prove.length < 2 || !prove.some(d => Date.parse(d.quando ?? '') >= Date.now() - 7 * 86_400_000)) return []
 
   const r = await ferri.chiediJSON({
@@ -766,7 +779,7 @@ export async function inSottofondo(): Promise<Suggerimento[] | null> {
 async function fai(forza: boolean): Promise<Giro> {
   const esistenti = new Set([...auto.ricette().map(a => a.id), ...store.automazioniTolte()])
   const lin = lingua()
-  const locali = () => vivi(rileva(documentiPerSuggerimenti(store.recenti(200)), attrezzi.catalogo(), esistenti, lin !== 'it'), esistenti)
+  const locali = () => vivi(rileva(documentiPerSuggerimenti(materialeGrezzo()), attrezzi.catalogo(), esistenti, lin !== 'it'), esistenti)
   // senza modello si resta ai cinque modelli, e non si scrive niente sul
   // foglio: una passata che non costa nulla non ha bisogno di una cache
   if (!ferri.collegato()) return { lista: locali(), composti: false }
@@ -839,7 +852,7 @@ function trova(id: string): Suggerimento | undefined {
   const esistenti = new Set([...auto.ricette().map(a => a.id), ...store.automazioniTolte()])
   const dal = leggiArchivio().suggerimenti.find(s => s.id === id)
   if (dal) return vivi([dal], esistenti)[0]
-  return vivi(rileva(documentiPerSuggerimenti(store.recenti(200)), attrezzi.catalogo(), esistenti, lingua() !== 'it'), esistenti).find(s => s.id === id)
+  return vivi(rileva(documentiPerSuggerimenti(materialeGrezzo()), attrezzi.catalogo(), esistenti, lingua() !== 'it'), esistenti).find(s => s.id === id)
 }
 
 /**
