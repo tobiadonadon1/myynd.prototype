@@ -56,6 +56,10 @@ import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
 import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
+import { recordCurrentWork } from './project-memory.ts'
+
+/** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
+const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
 import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
@@ -3572,7 +3576,7 @@ app.post('/api/chat/:id/progetto', (req, res) => {
   const item = iniziativeProgetti().find(i => i.id === String(req.body?.iniziativa ?? ''))
   if (!item) return res.status(404).json({ errore: 'Questo passo non è più attuale.' })
   if (store.esisteChat(chat)) return res.status(409).json({ errore: 'Questa chat esiste già.' })
-  store.creaChat(chat, item.projectName)
+  store.creaChat(chat, item.projectName, { progetto: item.projectId, iniziativa: item.id })
   store.salvaMessaggio({ id: `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, chat, ruolo: 'a', testo: aperturaProgetto(item, cfg.lingua()) })
   res.json({ ok: true, messaggi: store.messaggi(chat) })
 })
@@ -3624,8 +3628,23 @@ app.post('/api/chat/:id', async (req, res) => {
     store.salvaMessaggio({ id: idUtente, chat, ruolo: 'u', testo: domanda })
     invia({ fase: 'inizio' })
 
+    /*
+     * Una chat nata da «Parliamone»: quello che risponde è la risposta alle
+     * due domande di Myynd, e vale prima ancora che il modello dica la sua.
+     * Si scrive sul progetto come «su cosa sta lavorando», e la carta che ha
+     * fatto la domanda se ne va dalla prima pagina: «dovrebbe togliere la
+     * carta, perché abbiamo risposto». Senza aspettare il modello, che può
+     * anche non esserci.
+     */
+    const sul = store.chatSulProgetto(chat)
+    if (sul && rispostaSostanziosa(domanda)) {
+      try { recordCurrentWork(sul.progetto, domanda) } catch (e) { console.error('myynd · non ho salvato la risposta sul progetto:', e instanceof Error ? e.message : e) }
+      if (sul.iniziativa && feedbackProjectInitiative(sul.iniziativa, 'answered')) compiti.annunciaFeed()
+    }
+
     const r = await claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
       compitoId: selectedTask?.id,
+      progetto: sul?.progetto,
       // «segnati che devo richiamare Rossi» detto in chat finisce in lista, e
       // «falla fare a te» la affida pure: la lista e la chat sono la stessa testa
       aggiungiCompito: ({ testo, quando, modo }) => {

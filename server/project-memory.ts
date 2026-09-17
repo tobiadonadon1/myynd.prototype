@@ -25,6 +25,17 @@ function record(input:Omit<ProjectMemory,'id'|'recordedAt'|'supersededBy'>):Proj
  if(current)current.supersededBy=next.id
  rows.push(next);save(rows);return next
 }
+/**
+ * Su cosa sta lavorando adesso, detto da lei in una chat sul progetto.
+ *
+ * Non è un obiettivo (quello lo scrive nel campo) e non è una decisione
+ * citata: è la risposta alla domanda «su cosa stai lavorando?». L'ultima
+ * risposta vale, le precedenti restano come storia. Entra nel contesto del
+ * modello come evidenza «work», con la provenienza «user-chat».
+ */
+export function recordCurrentWork(projectId:string,value:string) {
+ return record({projectId,key:'lavoro-attuale',kind:'work',value:value.trim().slice(0,2000),provenance:'user-chat',evidenceAt:new Date().toISOString()})
+}
 /** Only called by the actual project-field write path, never source extraction. */
 export function recordProjectField(projectId:string,kind:'goal'|'note',value:string,evidenceAt=new Date().toISOString(),provenance:'user-field'|'user-chat'='user-field') {
  return record({projectId,key:kind,kind,value:value.slice(0,2000),provenance,evidenceAt})

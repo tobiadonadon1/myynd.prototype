@@ -1249,7 +1249,12 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => { colonna(d, 'compiti', 'consegna', 'TEXT') },
 
   // Un colore per progetto, scelto da lui in Memoria. In fondo, come tutte.
-  d => { colonna(d, 'progetti', 'colore', 'TEXT') }
+  d => { colonna(d, 'progetti', 'colore', 'TEXT') },
+
+  // Una chat aperta da «Parliamone» sa di quale progetto parla, e da quale
+  // carta è nata: così quello che lui risponde si salva sul progetto giusto
+  // e la carta se ne va. In fondo, come tutte.
+  d => { colonna(d, 'chat', 'progetto', 'TEXT'); colonna(d, 'chat', 'iniziativa', 'TEXT') }
 
 ]
 
@@ -2280,8 +2285,15 @@ export function conteggi() {
 
 // — chat —
 
-export function creaChat(id: string, titolo: string) {
-  db.prepare('INSERT OR REPLACE INTO chat (id, titolo, quando) VALUES (?,?,?)').run(id, titolo, new Date().toISOString())
+export function creaChat(id: string, titolo: string, sul?: { progetto: string; iniziativa: string }) {
+  db.prepare('INSERT OR REPLACE INTO chat (id, titolo, quando, progetto, iniziativa) VALUES (?,?,?,?,?)')
+    .run(id, titolo, new Date().toISOString(), sul?.progetto ?? null, sul?.iniziativa ?? null)
+}
+
+/** Di quale progetto parla una chat nata da «Parliamone», o null. */
+export function chatSulProgetto(id: string): { progetto: string; iniziativa: string } | null {
+  const r = db.prepare('SELECT progetto, iniziativa FROM chat WHERE id = ?').get(id) as { progetto: string | null; iniziativa: string | null } | undefined
+  return r?.progetto ? { progetto: r.progetto, iniziativa: r.iniziativa ?? '' } : null
 }
 
 export function rinominaChat(id: string, titolo: string) {

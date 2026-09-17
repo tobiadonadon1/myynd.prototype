@@ -310,6 +310,9 @@ export type ProgettoDaConversazione = { nome: string; obiettivo: string; citazio
 
 /** Explicit edits are committed before chat acknowledges them. Background
  * distillation remains conservative and never overwrites an existing goal. */
+/** Un nome di progetto: corto, senza virgole, al massimo cinque parole. */
+const sembraUnNome = (s: string) => s.trim().length <= 40 && !/[,;]/.test(s) && s.trim().split(/\s+/).length <= 5
+
 export function salvaProgettiEspliciti(testo: string): { salvati: progetti.Progetto[]; incompleta: boolean } | null {
   const diretto = testo.replace(/```[\s\S]*?(?:```|$)/g, '')
     .replace(/^\s*>.*$/gm, '')
@@ -341,11 +344,17 @@ export function salvaProgettiEspliciti(testo: string): { salvati: progetti.Proge
       riconosciuta = true
       modifiche.push({ nome: pulisci(m[1]), obiettivo: pulisci(m[2]), crea: richiesta || /\b(?:my|our|mio|nostro)\b/i.test(riga) })
     } else if ((m = riga.match(/^(?:create|add)\s+(?:a\s+)?project\s+["“]?(.+?)["”]?\s+with\s+(?:the\s+)?goal\s*:?\s+(.+)$/i)) ||
-               (m = riga.match(/^(?:i am|i'm|we are|we're)\s+working on\s+(?:the\s+)?(?:project\s+)?(.+?)\s+to\s+(.+)$/i))) {
+               // «I am working on Aurora to launch the portal» è una dichiarazione;
+               // «I am working on setting up the intelligence in a way in which it
+               // is autonomous, it works by itself, and helps me to…» è una risposta
+               // a una domanda. La differenza è che un nome è corto e non ha virgole:
+               // prima anche la seconda finiva qui, e Myynd rispondeva «dimmi il nome
+               // del progetto» a chi gli aveva appena raccontato su cosa lavora.
+               (m = riga.match(/^(?:i am|i'm|we are|we're)\s+working on\s+(?:the\s+)?(?:project\s+)?(.+?)\s+to\s+(.+)$/i)) && sembraUnNome(m[1])) {
       riconosciuta = true
       modifiche.push({ nome: pulisci(m[1]), obiettivo: pulisci(m[2]), crea: true })
     } else if ((m = riga.match(/^(?:create|add)\s+(?:a\s+)?project\s+(?:(?:called|named)\s+)?(.+)$/i)) ||
-               (m = riga.match(/^(?:i am|i'm|we are|we're)\s+working on\s+(?:the\s+)?project\s+(.+)$/i)) ||
+               (m = riga.match(/^(?:i am|i'm|we are|we're)\s+working on\s+(?:the\s+)?project\s+(.+)$/i)) && sembraUnNome(m[1]) ||
                (m = riga.match(/^(?:crea|aggiungi)\s+(?:(?:il|un)\s+)?progetto\s+(.+)$/i))) {
       riconosciuta = true
       modifiche.push({ nome: pulisci(m[1]), crea: true })

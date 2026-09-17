@@ -192,14 +192,22 @@ function Campo({ v, rispondendo }: { v: Vals; rispondendo: boolean }) {
     const x = el.current
     if (!x) return
     x.style.height = 'auto'
-    x.style.height = Math.min(x.scrollHeight, 6 * 22 + 4) + 'px'
+    // sei righe al massimo, più i 7 px sopra e sotto che fanno una riga alta come il bottone
+    x.style.height = Math.min(x.scrollHeight, 6 * 22 + 14) + 'px'
   }, [v.draftMsg])
   return (
     <textarea ref={el} rows={1} value={v.draftMsg} onChange={v.onType} onKeyDown={v.onKey} autoFocus={rispondendo}
       placeholder={rispondendo ? t('Rispondi qui…') : t('Chiedi qualcosa al tuo materiale…')}
       style={{
-        flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none', padding: 0, margin: 0,
-        fontFamily: 'inherit', fontSize: 15, lineHeight: '22px', color: '#22271F', overflowY: 'auto', display: 'block'
+        /*
+          Sette sopra e sotto: una riga sola è alta 36, quanto il bottone
+          accanto, e sta al centro invece che appoggiata in fondo. Tre a
+          sinistra: senza, la prima lettera si mangiava il bordo — la «I» e
+          la «L» uscivano tagliate, perché il glifo sporge un pixel oltre il
+          suo riquadro e il campo lo ritaglia.
+        */
+        flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none', padding: '7px 0 7px 3px', margin: 0,
+        fontFamily: 'inherit', fontSize: 15, lineHeight: '22px', color: '#22271F', overflowY: 'auto', display: 'block', boxSizing: 'border-box'
       }} />
   )
 }

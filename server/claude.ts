@@ -778,8 +778,20 @@ export function materialeChat(domanda: string, storico: Turno[], compatto = fals
 
 const PIANO_SENZA_FONTI = 'Non ho trovato richieste assegnate attuali nelle fonti collegate per questo progetto. La copertura delle fonti è limitata: questo NON significa che la persona non debba nulla a nessuno. Usa l’obiettivo registrato per proporre passi pratici, indica che sono proposte e che lo stato attuale non è verificato. Non cercare vecchie menzioni per riempire i vuoti.'
 
-export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto): Anthropic.MessageCreateParamsNonStreaming {
+export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string): Anthropic.MessageCreateParamsNonStreaming {
   const pianoAttuale = progettiPerPiano(domanda).length > 0
+  /*
+   * Una chat nata da «Parliamone»: Myynd ha fatto due domande, e lei sta
+   * rispondendo. Senza dirglielo, il modello leggeva la risposta come una
+   * domanda qualsiasi sul materiale, non trovava niente, e chiudeva: «non
+   * è più una conversazione, finisce da sola». Qui gli si dice che cosa sta
+   * succedendo e come si sta in una conversazione: riprendi quello che ha
+   * detto, una domanda sola se manca qualcosa, e il primo passo quando c'è.
+   */
+  const sulProgetto = progettoInChat ? progetti.trova(progettoInChat) : null
+  const conversazioneProgetto = sulProgetto
+    ? `\nQuesta conversazione l'hai aperta tu, sul progetto «${sulProgetto.nome}» (obiettivo registrato: ${sulProgetto.obiettivo || 'nessuno'}), chiedendo su cosa sta lavorando adesso e qual è il prossimo risultato concreto. La persona ti sta rispondendo: non è una domanda sul materiale. Rispondi a quello che ha detto, in due o tre frasi, riprendendo le sue parole. Se il prossimo risultato concreto non è ancora chiaro, fai una sola domanda per arrivarci. Se è chiaro, dillo e proponi il primo passo da fare questa settimana, chiedendo se va bene. Non chiedere di ripetere, non chiedere il nome del progetto, non dire di aver salvato niente: quello che dice si salva da sé sul progetto.`
+    : ''
   // Earlier generated answers and their old citations are not current evidence.
   const conversazione = pianoAttuale ? storico.filter(t => t.ruolo === 'u') : storico
   const discorso = pianoAttuale ? domanda : [domanda, ...storico.filter(t => t.ruolo === 'u').slice(-3).map(t => t.testo), ...docs.map(d => d.titolo)].join(' ')
@@ -790,7 +802,7 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
     // è segnato da tenere in cache: nel giro degli strumenti si rimanda tale e
     // quale a ogni giro, e fra un messaggio e l'altro della stessa chat cambia
     // solo il materiale — riletto dalla cache costa un decimo.
-    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + conversazioneProgetto + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
     messages: [
       ...conversazione.slice(-8).map(t => ({
         role: (t.ruolo === 'u' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -957,6 +969,8 @@ export async function rispondi(
  */
 export type Attrezzi = {
   compitoId?: string
+  /** La chat è nata da «Parliamone» su questo progetto: il modello lo sa, e sa cosa gli si è chiesto. */
+  progetto?: string
   aggiungiCompito: (c: { testo: string; quando?: string; modo?: string }) => { id: string }
 }
 
@@ -1340,7 +1354,7 @@ export async function rispondiInStreaming(
     let detto = 0
     const conta = (pezzo: string) => { detto += pezzo.length; onTesto(pezzo) }
     try {
-      const b = corpoRichiesta(domanda, storico, docs, false, false, false)
+      const b = corpoRichiesta(domanda, storico, docs, false, false, false, attrezzi?.progetto)
       const testo = await abbonamento.inStreaming({
         // L'ha già avvolto `corpoRichiesta`, e si riavvolge qui: la funzione è
         // idempotente apposta, e una garanzia sulla lingua deve vedersi dove il
@@ -1403,7 +1417,7 @@ export async function rispondiInStreaming(
   const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI] : [ATTREZZO_CERCA]
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
-  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto)
+  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto, undefined, attrezzi?.progetto)
   if (attrezzi && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
   const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi }
 
