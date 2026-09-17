@@ -45,6 +45,10 @@ export function recordCurrentWork(projectId:string,value:string) {
 export function recordNextResult(projectId:string,value:string) {
  return record({projectId,key:'prossimo-risultato',kind:'work',value:value.trim().slice(0,2000),provenance:'user-chat',evidenceAt:new Date().toISOString()})
 }
+/** Il risultato salvato dopo un certo momento: se c'è, quella chat ha già concluso. */
+export function nextResultSince(projectId:string,since:string):ProjectMemory|null {
+ return read().findLast(r=>r.projectId===projectId && r.key==='prossimo-risultato' && !r.supersededBy && r.recordedAt>=since) ?? null
+}
 /** Only called by the actual project-field write path, never source extraction. */
 export function recordProjectField(projectId:string,kind:'goal'|'note',value:string,evidenceAt=new Date().toISOString(),provenance:'user-field'|'user-chat'='user-field') {
  return record({projectId,key:kind,kind,value:value.slice(0,2000),provenance,evidenceAt})

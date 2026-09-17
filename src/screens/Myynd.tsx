@@ -657,7 +657,8 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
     if (!lista || affidando) return
     const voce = v.heroId
     setAffidando(true)
-    const id = await lista.affidaNuovo(v.heroTitolo, { doc: v.heroDoc, voce })
+    // l'offerta di una priorità è il compito: «preparo la risposta ad Apple con…»
+    const id = await lista.affidaNuovo(v.heroTitolo, { doc: v.heroDoc, voce, nota: v.heroOfferta || null })
     setAffidando(false)
     if (!id) return
     // il server ha già chiuso la voce: qui si toglie da quello che si ha davanti
@@ -805,6 +806,13 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           {/* il perché: per quale progetto o obiettivo conta, in una riga quieta */}
           {v.heroPerche && (
             <div style={{ fontSize: '13px', lineHeight: 1.5, marginTop: 8, maxWidth: 600, color: 'rgba(255,247,240,.62)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.heroPerche}</div>
+          )}
+          {/* l'offerta: cosa farebbe Myynd da solo, se glielo affidi — è la
+              riga che rende «Affidalo a Myynd» una promessa precisa */}
+          {v.heroOfferta && (
+            <div style={{ fontSize: '13.5px', lineHeight: 1.5, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.86)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>
+              <span style={{ fontWeight: 600, marginRight: 6 }}>{t('Posso farlo io:')}</span>{v.heroOfferta}
+            </div>
           )}
 
           {/*

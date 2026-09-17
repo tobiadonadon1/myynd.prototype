@@ -1,4 +1,5 @@
 import { recordUserDecision, recordNextResult } from './project-memory.ts'
+import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
 import { ATTREZZO_REVISIONE, verificaBaseRevisione, contestoRevisioni, rivediDallaChat, richiestaRevisione } from './revisioni.ts'
 // Il ragionamento. Myynd non inventa: riceve i documenti recuperati
 // dall'indice e risponde solo su quelli, citando le fonti.
@@ -778,7 +779,7 @@ export function materialeChat(domanda: string, storico: Turno[], compatto = fals
 
 const PIANO_SENZA_FONTI = 'Non ho trovato richieste assegnate attuali nelle fonti collegate per questo progetto. La copertura delle fonti è limitata: questo NON significa che la persona non debba nulla a nessuno. Usa l’obiettivo registrato per proporre passi pratici, indica che sono proposte e che lo stato attuale non è verificato. Non cercare vecchie menzioni per riempire i vuoti.'
 
-export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string): Anthropic.MessageCreateParamsNonStreaming {
+export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string, risultatoSalvato?: string): Anthropic.MessageCreateParamsNonStreaming {
   const pianoAttuale = progettiPerPiano(domanda).length > 0
   /*
    * Una chat nata da «Parliamone»: Myynd ha fatto due domande, e lei sta
@@ -791,7 +792,9 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
   const sulProgetto = progettoInChat ? progetti.trova(progettoInChat) : null
   // la risposta di adesso più quelle già date: alla terza si chiude, punto
   const risposte = storico.filter(t => t.ruolo === 'u').length + 1
-  const conversazioneProgetto = sulProgetto
+  const conversazioneProgetto = sulProgetto && risultatoSalvato
+    ? `\nQuesta conversazione l'hai aperta tu, sul progetto «${sulProgetto.nome}», e ha già concluso: il risultato da inseguire è salvato sul progetto («${risultatoSalvato}») e i primi passi sono nella sua lista. Da qui è una conversazione normale sul progetto: rispondi a quello che dice, corto, senza domande di intervista e senza chiamare concludi_progetto. Se cambia il risultato, dillo e basta: non dire di aver salvato niente.`
+    : sulProgetto
     ? `\nQuesta conversazione l'hai aperta tu, sul progetto «${sulProgetto.nome}» (obiettivo registrato: ${sulProgetto.obiettivo || 'nessuno'}), chiedendo su cosa sta lavorando adesso e qual è il prossimo risultato concreto. La persona ti sta rispondendo: non è una domanda sul materiale. Questa è la sua risposta numero ${risposte}. È uno strumento di lavoro, non una chiacchierata: lo scopo è arrivare in fretta a un risultato concreto da inseguire insieme e ai primi passi, e salvarli. Se con questa risposta il prossimo risultato concreto è chiaro, non fare altre domande: chiama concludi_progetto con il risultato in una riga, nelle sue parole, e da uno a tre primi passi concreti; poi rispondi in due frasi, riprendendo le sue parole: cosa hai segnato come risultato, e che i passi sono nella sua lista sulla prima pagina. Se non è ancora chiaro, rispondi a quello che ha detto in una frase e fai una sola domanda, breve.${risposte >= 3 ? ' Hai già fatto abbastanza domande: concludi adesso con quello che sai, chiamando concludi_progetto, senza altre domande.' : ''} Non chiedere di ripetere, non chiedere il nome del progetto, non dire di aver salvato niente che non hai salvato con lo strumento.`
     : ''
   // Earlier generated answers and their old citations are not current evidence.
@@ -973,6 +976,8 @@ export type Attrezzi = {
   compitoId?: string
   /** La chat è nata da «Parliamone» su questo progetto: il modello lo sa, e sa cosa gli si è chiesto. */
   progetto?: string
+  /** Il risultato già salvato in questa chat: la conversazione ha concluso, e da qui è una chat normale. */
+  risultatoSalvato?: string
   aggiungiCompito: (c: { testo: string; quando?: string; modo?: string; progetto?: string }) => { id: string }
 }
 
@@ -1442,12 +1447,30 @@ export async function rispondiInStreaming(
    * lista si tocca dalla chat solo con Claude, che ha i secondi per farlo.
    */
   const locale = m?.tipo === 'compatibile'
-  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto ? [ATTREZZO_CONCLUDI] : [])] : [ATTREZZO_CERCA]
+  /*
+   * La chiusura di una chat su un progetto la decidiamo noi, prima di
+   * chiedere al modello: alla terza risposta, o a un «sì» a un passo
+   * proposto, si legge la conversazione con una chiamata a schema, si salva
+   * il risultato e i passi vanno in lista (`chiusura-progetto.ts`). Il
+   * modello lo sa, e risponde senza strumenti: non c'è più niente da
+   * chiamare, e non deve chiedere altro.
+   */
+  let chiusura: Chiusura | null = null
+  if (attrezzi?.progetto && !attrezzi.risultatoSalvato && toccaConcludere(domanda, storico)) {
+    segnale?.throwIfAborted()
+    chiusura = await concludiDaTrascrizione(attrezzi.progetto, domanda, storico, attrezzi.aggiungiCompito)
+      .catch(e => { console.error('myynd · non sono riuscito a chiudere la chat sul progetto:', e instanceof Error ? e.message : e); return null })
+  }
+  const concluso = attrezzi?.risultatoSalvato || chiusura?.risultato
+  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto && !concluso ? [ATTREZZO_CONCLUDI] : [])] : [ATTREZZO_CERCA]
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
-  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto, undefined, attrezzi?.progetto)
+  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto, undefined, attrezzi?.progetto, concluso)
   if (attrezzi && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
-  const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi }
+  if (chiusura && Array.isArray(base.system)) {
+    base.system.push({ type: 'text', text: `Hai appena salvato, davvero, con lo strumento: il risultato da inseguire sul progetto è «${chiusura.risultato}»${chiusura.passi.length ? `, e in lista, sulla sua prima pagina, ci sono questi primi passi: ${chiusura.passi.map(p => `«${p}»`).join(', ')}` : ''}. Rispondi in due frasi al massimo, riprendendo le sue parole: cosa hai segnato come risultato, e che i passi sono nella sua lista sulla prima pagina. Nessuna domanda, nessun altro strumento.` })
+  }
+  const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi, ...(chiusura && arnesi.length ? { tool_choice: { type: 'none' } } : {}) }
 
   /*
    * Prima di tutto: c'è qualcuno dall'altra parte?

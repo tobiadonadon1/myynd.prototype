@@ -306,13 +306,13 @@ export function useCompiti(
    */
   const affidaNuovo = useCallback(async (
     testo: string,
-    da?: { doc?: string | null; voce?: string | null }
+    da?: { doc?: string | null; voce?: string | null; nota?: string | null }
   ): Promise<string | null> => {
     const pulito = testo.trim()
     if (!pulito) return null
     const ora = new Date().toISOString()
     const finto: Compito = {
-      id: nuovoId(), testo: pulito, nota: null, quando: 'oggi', giorno: null,
+      id: nuovoId(), testo: pulito, nota: da?.nota ?? null, quando: 'oggi', giorno: null,
       // nasce aperta e la passa ad affidata `delega`, un respiro dopo: se
       // l'affido non riesce, quello a cui si torna è una riga vera e aperta,
       // non una riga che dice di essere in lavorazione mentre non lo è
@@ -326,6 +326,7 @@ export function useCompiti(
     try {
       await api.aggiungiCompito({
         id: finto.id, testo: pulito, quando: 'oggi', origine: 'feed',
+        ...(da?.nota ? { nota: da.nota } : {}),
         ...(da?.doc ? { doc: da.doc } : {}),
         ...(da?.voce ? { voce: da.voce } : {})
       })

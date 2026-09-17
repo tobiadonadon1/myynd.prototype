@@ -23,6 +23,8 @@ export type VoceFeed = {
   quando: string
   /** Perché sta sul feed, e per quale obiettivo. Vuoto per le voci di prima. */
   perche?: string | null
+  /** Per una priorità proposta da Myynd: cosa farebbe lui da solo, se gliela affidi. */
+  offerta?: string | null
   /** Verified document metadata, rather than a model-generated source label. */
   fonteTitolo?: string | null
   fonteQuando?: string | null

@@ -746,6 +746,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // dove, e la pagina porta le carte sotto gli occhi e le accende un attimo
       mostraToast(r.generate ? frasi.coseNuove(r.generate)
         : (r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
+          + (r.cerco ? ' ' + t('Guardo tutto il resto: quello che trovo compare qui da sé.') : '')
           + (r.iniziative?.length ? ' ' + t('I tuoi progetti aspettano un passo, qui sotto.') : ''))
       if (!r.generate && r.iniziative?.length) setEvidenziaProgetti(Date.now())
     } catch (e) {
@@ -1219,6 +1220,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     heroTesto: heroLong ? heroCarta.testo : taglia(heroCarta.testo, 320),
     heroTagliato: heroCarta.testo.length > 320,
     heroPerche: heroCarta.perche,
+    // una priorità proposta da Myynd porta la sua offerta: cosa farebbe lui
+    heroOfferta: hero?.offerta ?? '',
     heroFonteDettaglio: [hero?.fonteAutore, hero?.fonteTitolo].filter(Boolean).join(' · '),
     heroLong,
     heroToggle: () => setHeroLong(x => !x),

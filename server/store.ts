@@ -1254,7 +1254,11 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // Una chat aperta da «Parliamone» sa di quale progetto parla, e da quale
   // carta è nata: così quello che lui risponde si salva sul progetto giusto
   // e la carta se ne va. In fondo, come tutte.
-  d => { colonna(d, 'chat', 'progetto', 'TEXT'); colonna(d, 'chat', 'iniziativa', 'TEXT') }
+  d => { colonna(d, 'chat', 'progetto', 'TEXT'); colonna(d, 'chat', 'iniziativa', 'TEXT') },
+  // Una priorità proposta da Myynd porta con sé cosa farebbe lui da solo per
+  // portarla avanti: è la riga che rende «Affidalo a Myynd» una promessa
+  // precisa e non un bottone. In fondo, come tutte.
+  d => colonna(d, 'feed', 'offerta', 'TEXT')
 
 ]
 
@@ -2291,9 +2295,9 @@ export function creaChat(id: string, titolo: string, sul?: { progetto: string; i
 }
 
 /** Di quale progetto parla una chat nata da «Parliamone», o null. */
-export function chatSulProgetto(id: string): { progetto: string; iniziativa: string } | null {
-  const r = db.prepare('SELECT progetto, iniziativa FROM chat WHERE id = ?').get(id) as { progetto: string | null; iniziativa: string | null } | undefined
-  return r?.progetto ? { progetto: r.progetto, iniziativa: r.iniziativa ?? '' } : null
+export function chatSulProgetto(id: string): { progetto: string; iniziativa: string; quando: string } | null {
+  const r = db.prepare('SELECT progetto, iniziativa, quando FROM chat WHERE id = ?').get(id) as { progetto: string | null; iniziativa: string | null; quando: string } | undefined
+  return r?.progetto ? { progetto: r.progetto, iniziativa: r.iniziativa ?? '', quando: r.quando } : null
 }
 
 export function rinominaChat(id: string, titolo: string) {
@@ -2482,14 +2486,14 @@ const OMBRA_GIORNI = 60
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
  */
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string }[]): number {
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string; offerta?: string }[]): number {
   const ins = db.prepare(`
-    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, contesto, stato, quando)
-    VALUES (?,?,?,?,?,?,?,?,?,'aperto',?)
+    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, contesto, offerta, stato, quando)
+    VALUES (?,?,?,?,?,?,?,?,?,?,'aperto',?)
     ON CONFLICT(id) DO UPDATE SET
       tipo=excluded.tipo, testo=excluded.testo, urgenza=excluded.urgenza,
       fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche),
-      contesto=COALESCE(feed.contesto, excluded.contesto)
+      contesto=COALESCE(feed.contesto, excluded.contesto), offerta=COALESCE(excluded.offerta, feed.offerta)
   `)
   const ora = new Date().toISOString()
   // Un `doc` che non corrisponde a nessuna riga è un bottone «apri» che non
@@ -2544,7 +2548,7 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
         vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null, stato: 'aperto', contesto: null })
       }
       const d = i.doc ? documento(i.doc) : undefined
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, ora)
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, i.offerta?.trim() || null, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()

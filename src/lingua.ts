@@ -871,6 +871,10 @@ const EN: Record<string, string> = {
   'Da leggere': 'To read',
   'Scadenza': 'Deadline',
   'Già gestito': 'Already handled',
+  'Priorità': 'Priority',
+  'Proposta': 'Proposal',
+  'Posso farlo io:': 'I can do this:',
+  'Guardo tutto il resto: quello che trovo compare qui da sé.': 'Looking over everything else: what I find will show up here by itself.',
   // — i gruppi della mappa —
   'Documenti': 'Documents',
   'Altre fonti': 'Other sources',

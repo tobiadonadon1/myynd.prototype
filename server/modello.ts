@@ -221,6 +221,7 @@ export type Lavoro =
   | 'ritratto'      // mettere in ordine quello che ha già capito di come lavora
   | 'smistamento'   // quali di questi documenti meritano una riga, e con che titolo
   | 'punto'         // cosa è cambiato mentre non c'era, e da dove riprendere
+  | 'priorita'      // cosa dovrebbe fare adesso, guardando tutto: le fonti non lo chiedono, lo propone lui
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
 
 /*
@@ -293,6 +294,12 @@ const LAVORI: Record<Lavoro, Profilo> = {
   // il pensiero acceso. Il conto lo tiene `punto.ts`: tre al giorno, mai a
   // meno di tre ore, mai se non è successo niente.
   punto:      { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  // Le priorità: con tutto davanti — i progetti, la lista, la posta, le
+  // cartelle in cui lavora — dire cosa dovrebbe fare adesso e cosa può fare
+  // Myynd da solo. È l'intelligenza che si vede sulla prima pagina quando le
+  // fonti non chiedono niente: frontiera, e con il pensiero acceso. Il conto
+  // lo tiene `priorita.ts`: al massimo due volte al giorno per conto.
+  priorita:   { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
   // Frontiera, e per una volta non per il costo di sbagliare in pubblico: una
   // ricetta scritta male gira ogni mattina per mesi, e il modo in cui sbaglia è
   // il peggiore — non si rompe, fa *quasi* quello che avevi chiesto. Si scrive

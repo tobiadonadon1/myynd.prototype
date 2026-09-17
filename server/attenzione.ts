@@ -3,6 +3,7 @@ import * as progetti from './progetti.ts'
 import { leggi } from './config.ts'
 import { projectInitiatives } from './project-initiative.ts'
 import { classificaAttenzione, validaVoceFeed } from './rilevanza.ts'
+import { eProposta } from './priorita.ts'
 
 function pertinente(d: store.Documento, adesso: number) {
   return classificaAttenzione(d, {
@@ -23,6 +24,10 @@ export function feedAttuale(adesso = Date.now()) {
   const ignorati = store.docsIgnoratiDalFeed([...docs.values()])
   return voci.flatMap(v => {
     const d = v.doc ? docs.get(v.doc) : null
+    // Una priorità proposta da Myynd non nasce da una richiesta in un
+    // documento recente: nasce dal quadro. Le regole della fonte non la
+    // riguardano, e un documento vecchio o assente non la toglie di mezzo.
+    if (eProposta(v)) return [{ ...v, doc: d?.id ?? null, fonte: d?.fonte ?? null, fonteTitolo: d?.titolo ?? null, fonteQuando: d?.quando ?? null, fonteAutore: d?.autore ?? null }]
     if (!d || !pertinente(d, adesso) || ignorati.has(d.id) || !validaVoceFeed(v, d, { richiediProva: false })) return []
     return [{ ...v, doc: d.id, fonte: d.fonte, fonteTitolo: d.titolo, fonteQuando: d.quando ?? null, fonteAutore: d.autore ?? null }]
   })

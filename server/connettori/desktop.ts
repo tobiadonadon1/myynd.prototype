@@ -222,7 +222,7 @@ export type Regole = { profondita: number; salta: (nome: string) => boolean }
 const daMacchina = (n: string) => SALTA_MACCHINA.has(n.toLowerCase())
 const REGOLE: Regole = { profondita: MAX_PROFONDITA, salta: n => SALTA.has(n) || daMacchina(n) }
 const REGOLE_TUTTO: Regole = { profondita: MAX_PROFONDITA_TUTTO, salta: n => SALTA.has(n) || SALTA_TUTTO.has(n) || daMacchina(n) }
-const regoleDi = (tutto?: boolean): Regole => (tutto ? REGOLE_TUTTO : REGOLE)
+export const regoleDi = (tutto?: boolean): Regole => (tutto ? REGOLE_TUTTO : REGOLE)
 
 export function suggerimenti(): string[] {
   const h = homedir()
@@ -746,4 +746,59 @@ export async function sincronizza(
   }
   delete esito.versa
   return esito
+}
+
+// — le cartelle di lavoro —
+
+/** Una cartella in cui sta lavorando: un progetto di codice, con la sua data. */
+export type CartellaDiLavoro = { nome: string; percorso: string; modificata: string; readme: string }
+
+/** Le sottocartelle di una radice dove la gente tiene i progetti. */
+const DOVE_STANNO_I_PROGETTI = ['Desktop', 'Documents', 'Documenti', 'Developer', 'Projects', 'Progetti', 'Code', 'Lavoro', 'Work', 'src']
+
+/**
+ * Le cartelle di lavoro: quello che la lettura salta apposta, letto di striscio.
+ *
+ * `cammina` salta un progetto di codice intero, e fa bene: dentro non ci sono
+ * documenti suoi. Ma il *fatto* che quella cartella esista, e che sia stata
+ * toccata ieri, è la cosa più chiara che il disco sa dire su cosa sta
+ * facendo una persona — «lavora con Hermes» sta scritto nel nome di una
+ * cartella e nella sua data, non in un PDF. Chi deve proporre delle
+ * priorità senza questa riga vede la scrivania e non il banco da lavoro.
+ *
+ * Si guardano la radice e le cartelle dove di solito stanno i progetti, a
+ * un livello solo: niente ricorsione, niente contenuto, uno `stat` per voce
+ * e il README se c'è. Le cartelle col punto restano fuori come ovunque.
+ */
+export async function cartelleDiLavoro(radiciScelte: string[], limite = 15): Promise<CartellaDiLavoro[]> {
+  const trovate = new Map<string, CartellaDiLavoro>()
+  const guarda = async (dir: string) => {
+    let voci
+    try { voci = await readdir(dir, { withFileTypes: true }) } catch { return }
+    for (const v of voci) {
+      if (!v.isDirectory() || v.name.startsWith('.') || SALTA.has(v.name)) continue
+      const p = join(dir, v.name)
+      if (trovate.has(p)) continue
+      let dentro
+      try { dentro = await readdir(p, { withFileTypes: true }) } catch { continue }
+      if (!await eProgetto(p, dentro)) continue
+      let ultima = 0
+      for (const d of dentro.slice(0, 200)) {
+        if (d.name.startsWith('.') || SALTA.has(d.name)) continue
+        try { ultima = Math.max(ultima, (await stat(join(p, d.name))).mtimeMs) } catch { /* sparito nel frattempo */ }
+      }
+      if (!ultima) { try { ultima = (await stat(p)).mtimeMs } catch { continue } }
+      let readme = ''
+      const nomeReadme = dentro.find(d => d.isFile() && /^readme(?:\.(?:md|txt|markdown))?$/i.test(d.name))?.name
+      if (nomeReadme) {
+        try { readme = (await readFile(join(p, nomeReadme), 'utf8')).replace(/\s+/g, ' ').trim().slice(0, 400) } catch { readme = '' }
+      }
+      trovate.set(p, { nome: v.name, percorso: p, modificata: new Date(ultima).toISOString(), readme })
+    }
+  }
+  for (const radice of radiciScelte) {
+    await guarda(radice)
+    for (const sotto of DOVE_STANNO_I_PROGETTI) await guarda(join(radice, sotto))
+  }
+  return [...trovate.values()].sort((a, b) => b.modificata.localeCompare(a.modificata)).slice(0, limite)
 }

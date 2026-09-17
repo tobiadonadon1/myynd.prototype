@@ -97,7 +97,7 @@ test('quello che arriva dal server ha una traduzione', () => {
     if (!definite.has(k)) manca.push(k)
   }
   // il vocabolario chiuso delle voci del feed
-  for (const k of ['Da decidere', 'Da leggere', 'Scadenza', 'Già gestito']) {
+  for (const k of ['Da decidere', 'Da leggere', 'Scadenza', 'Già gestito', 'Priorità', 'Proposta']) {
     if (!definite.has(k)) manca.push(k)
   }
   /*

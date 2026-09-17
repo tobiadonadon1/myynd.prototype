@@ -56,7 +56,8 @@ import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
 import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
-import { recordCurrentWork } from './project-memory.ts'
+import { recordCurrentWork, nextResultSince } from './project-memory.ts'
+import * as priorita from './priorita.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -2111,6 +2112,10 @@ async function rileggiDaSola() {
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
     await dopoLArrivo(daQuando, nuovi)
+    // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
+    // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
+    // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
+    if (await priorita.forse()) compiti.annunciaFeed()
   } catch (e) {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
@@ -2258,7 +2263,11 @@ app.post('/api/feed/genera', async (_req, res) => {
     // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
     // e quello che la lettura non ha letto, perché la pagina lo dica accanto
     // a quello che ha trovato invece di fermarsi lì
-    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto), ...(nuove ? {} : { vuoto: percheVuoto() }) })
+    // niente di nuovo dalle fonti: si guarda il quadro intero, subito dopo
+    // aver risposto, e la pagina lo sa («guardo tutto il resto») — così il
+    // «niente» non è l'ultima parola quando c'è un modello per dirne un'altra
+    const cerco = !nuove && priorita.pronta(true)
+    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto), ...(nuove ? {} : { vuoto: percheVuoto(), cerco }) })
     // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
     compiti.annunciaFeed()
 
@@ -2268,7 +2277,10 @@ app.post('/api/feed/genera', async (_req, res) => {
     // e la rilettura delle fonti, dopo e di fondo; alla fine si avvisa la
     // pagina, così la riga delle fonti dice quello che questa lettura ha visto
     const utente = chi.adesso()
-    const rileggi = async () => { await rileggiDaSola(); compiti.annunciaFeed() }
+    const rileggi = async () => {
+      if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
+      await rileggiDaSola(); compiti.annunciaFeed()
+    }
     void (utente ? chi.dentro(utente, rileggi) : rileggi())
       .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
   } catch (e) {
@@ -3645,6 +3657,8 @@ app.post('/api/chat/:id', async (req, res) => {
     const r = await claude.rispondiInStreaming(domanda, storico, delta => invia({ fase: 'testo', delta }), {
       compitoId: selectedTask?.id,
       progetto: sul?.progetto,
+      // già concluso in questa chat: il modello lo sa, e non chiude due volte
+      risultatoSalvato: sul ? nextResultSince(sul.progetto, sul.quando)?.value : undefined,
       // «segnati che devo richiamare Rossi» detto in chat finisce in lista, e
       // «falla fare a te» la affida pure: la lista e la chat sono la stessa testa
       aggiungiCompito: ({ testo, quando, modo, progetto }) => {
