@@ -440,6 +440,29 @@ function corpo(c: Compito): string {
   return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
 }
 
+/**
+ * Il verdetto sulla bozza, in una riga: «riletta come te e come Rossi: regge».
+ *
+ * «Quando affido una cosa a Myynd devo sapere che è di qualità.» La rilettura
+ * la fa il server (`revisione-lavoro.ts`); qui si dice che è stata fatta e
+ * com'è andata, e se restano punti aperti si elencano, corti. Senza modello
+ * non si dice niente: una riga che dice «non riletta» è una scusa.
+ */
+function Riletta({ c }: { c: Compito }) {
+  const r = c.revisione
+  if (c.stato !== 'pronto' || !r || r.esito === 'unavailable') return null
+  return (
+    <div style={{ marginTop: 12, maxWidth: 600, fontSize: '13px', lineHeight: 1.5, color: 'rgba(255,247,240,.72)', textWrap: 'pretty' }}>
+      {frasi.riletta(r.per || t('chi la riceve'), r.esito, r.giri)}
+      {r.esito === 'revise' && r.problemi.length > 0 && (
+        <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+          {r.problemi.slice(0, 3).map((p, i) => <li key={i}>{p}</li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /** Quello che aspetta te, detto in una parola. */
 function attesaDi(c: Compito): string {
   return c.stato === 'pronto' ? t('pronta') : c.stato === 'chiede' ? t('ti chiede') : ''
@@ -587,6 +610,7 @@ function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; ric
       {attivo && <PassoAttivo passo={l.passi[c.id]} />}
       <Consegna c={c} l={l} v={v} scuro /><BozzaInPosta c={c} />
       <Prove c={c} v={v} l={l} scuro />
+      <Riletta c={c} />
 
       {/* a capo invece che fuori: con un bottone in più questa fascia, in una
           finestra stretta, usciva dalla carta — e il testo che sfora non è un

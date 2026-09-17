@@ -874,6 +874,7 @@ const EN: Record<string, string> = {
   'Priorità': 'Priority',
   'Proposta': 'Proposal',
   'Posso farlo io:': 'I can do this:',
+  'chi la riceve': 'the reader',
   'Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.': 'Nothing new came in from your sources. I am going over your projects, work folders and mail now: what I find will show up here by itself.',
   // — i gruppi della mappa —
   'Documenti': 'Documents',
@@ -2926,6 +2927,14 @@ export const frasi = {
    * «Non ho letto tutto: Note non si legge, Il mio Mac letto solo in parte.»
    * Il nome è quello della scheda nelle Fonti, che è dove porta il link accanto.
    */
+  /** Il verdetto sul lavoro consegnato, in una riga: chi l'ha riletta e com'è andata. */
+  riletta: (per: string, esito: 'pass' | 'revise', giri: number) => corrente === 'en'
+    ? (esito === 'pass'
+      ? `Reread as you and as ${per}: it holds${giri > 1 ? ', after one rewrite' : ''}.`
+      : `Reread as you and as ${per}: still open points after ${giri} rounds.`)
+    : (esito === 'pass'
+      ? `Riletta come te e come ${per}: regge${giri > 1 ? ', dopo una riscrittura' : ''}.`
+      : `Riletta come te e come ${per}: restano punti aperti dopo ${giri} giri.`),
   fontiNonLette: (fonti: { nome: string; motivo: 'non-disponibile' | 'incompleta' }[]) => {
     const parti = fonti.map(f => corrente === 'en'
       ? (f.motivo === 'incompleta' ? `${f.nome} was only partly read` : `${f.nome} can’t be read`)

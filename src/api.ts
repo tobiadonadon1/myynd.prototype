@@ -627,6 +627,8 @@ export type Compito = {
   madre?: string | null
   chiesto: string | null
   risultato: string | null
+  /** Il giudizio di Myynd sul lavoro consegnato: come te e come chi lo riceve. Nullo se non riletto. */
+  revisione?: { esito: 'pass' | 'revise' | 'unavailable'; comeTe: string; comeLoro: string; per: string; problemi: string[]; verificato: string[]; giri: number } | null
   fonti: { id: string; label: string }[] | null
   /** Quello che si offre di fare, se è più di un testo da rileggere. */
   proposta: Proposta | null
