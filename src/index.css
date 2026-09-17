@@ -101,3 +101,5 @@ html.app-darwin body::before{content:'';position:fixed;top:0;left:0;right:0;heig
 html.app-darwin :is(button,a,input,textarea,select,[role=button],[role=switch],.app-presa){-webkit-app-region:no-drag}
 /* Il marchio non ha più bisogno di scendere: i semafori hanno la loro fascia
    sopra le colonne, che App.tsx aggiunge come margine (`striscia`). */
+
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}

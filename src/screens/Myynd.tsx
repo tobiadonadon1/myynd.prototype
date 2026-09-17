@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconFrecciaDx, IconGiu, IconSpunta } from '../icons'
+import { IconAvanti, IconFrecciaDx, IconGiu, IconOcchio, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
@@ -857,6 +857,21 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
             {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
           </Hov>
+          {/* «Leggi adesso» era un bottone pieno di rame che chiedeva attenzione:
+              «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
+              la lettura ormai parte da sola ogni dieci minuti, questo è per
+              chi non vuole aspettarli. Il nome lo dice al passaggio. */}
+          <Hov as="button" type="button" onClick={v.genera} disabled={v.generando}
+            title={v.generando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+            style={{
+              flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '50%', border: '1px solid rgba(196,98,59,.35)', background: 'rgba(255,255,255,.7)',
+              color: '#C4623B', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
+              opacity: v.generando ? 0.55 : 1, animation: v.generando ? 'pulse 1.2s ease-in-out infinite' : undefined
+            }}
+            hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>
+            <IconOcchio size={15} />
+          </Hov>
         </div>
       </div>
 
@@ -895,12 +910,6 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
       {/* Una riga del punto apre il documento da cui viene, e niente altro: le
           cose da fare non stanno lì dentro, stanno qui sotto. */}
       <Punto v={v} />
-
-      {blocchi.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={v.genera} disabled={v.generando} style={BOTTONE}>{v.generando ? t('Leggo…') : t('Fai una lettura')}</button>
-        </div>
-      )}
 
       <Domanda v={v} />
 

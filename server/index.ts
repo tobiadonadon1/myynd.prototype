@@ -2087,7 +2087,17 @@ app.get('/api/sincronizza', async (req, res) => {
  * salta il giro invece di accodarsene un'altra: due letture insieme sulla
  * stessa casella non vanno il doppio più veloci, vanno il doppio peggio.
  */
-const OGNI = 6 * 60 * 60 * 1000
+/*
+ * Ogni dieci minuti, non ogni sei ore.
+ *
+ * «Leggere le fonti e mettere le cose sul feed deve succedere di continuo,
+ * ogni dieci minuti, di base.» La rilettura costa poco: il disco si
+ * rilegge solo dove la data di modifica è cambiata, la posta scarica solo
+ * gli uid nuovi, le chat e X sono incrementali; il modello si chiama solo
+ * se è arrivato qualcosa, e le priorità hanno i loro cancelli. Quello che
+ * cambia è che una mail delle 9:04 sta sul feed alle 9:14, non alle 15.
+ */
+const OGNI = 10 * 60 * 1000
 
 /**
  * La rilettura che nessuno chiede, e cosa succede dopo.
