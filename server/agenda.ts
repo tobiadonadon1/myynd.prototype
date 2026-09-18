@@ -21,6 +21,10 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
+import * as apple from './agenda-apple.ts'
+import * as store from './store.ts'
+import { leggi as leggiConfig } from './config.ts'
+import { daDocumento } from './connettori/calendario.ts'
 
 const esegui = promisify(execFile)
 
@@ -220,4 +224,223 @@ export async function aggiungiVerificati(eventi:Evento[], operazione:string, pre
 export async function aggiungi(eventi:Evento[],predefinito?:string):Promise<number>{
   if(!eventi.length)return 0
   return (await aggiungiVerificati(eventi,'legacy:'+JSON.stringify(eventi),predefinito)).length
+}
+
+// — la settimana: il Calendario del Mac e l'agenda iCal, in una vista sola —
+//
+// Quello che sta qui sopra scrive in agenda da una proposta della lista. Quello
+// che sta qui sotto serve alla vista della settimana: i calendari e gli eventi
+// di un intervallo, da due fonti che non si somigliano. Il Calendario del Mac
+// (`agenda-apple.ts`) si legge e si scrive; l'agenda collegata con un
+// indirizzo iCal sta già nell'indice e si legge da lì, e basta. Per chi guarda
+// è una settimana: le due fonti si distinguono per `fonte`, e per il fatto che
+// una si può trascinare e l'altra no.
+
+export type Calendario = apple.Calendario
+export type EventoAgenda = apple.EventoAgenda
+export type RispostaAgenda = {
+  calendari: Calendario[]
+  eventi: EventoAgenda[]
+  /** Vero quando il Calendario del Mac risponde: allora si può creare, spostare, cancellare. */
+  scrivibile: boolean
+  /** Perché il Mac non risponde, quando non risponde: la frase da mostrare, già nel dizionario. */
+  avviso?: string
+}
+export { statoDi, GuaioAgenda, PREDEFINITO } from './agenda-apple.ts'
+
+/** L'agenda iCal come calendario della vista: uno solo, con il colore del gruppo «agenda». */
+export const ID_ICAL = 'ical'
+const COLORE_ICAL = '#8E6FB8'
+
+/** Quanto può essere larga una finestra. Oltre l'anno non è una vista, è un'esportazione. */
+const FINESTRA_MAX = 366 * 864e5
+
+const ordina = (x: EventoAgenda, y: EventoAgenda) =>
+  x.inizio.localeCompare(y.inizio) || x.titolo.localeCompare(y.titolo) || x.id.localeCompare(y.id)
+
+/**
+ * La risposta della vista, messa insieme da quello che le due fonti hanno dato.
+ *
+ * Pura, e per questo provabile senza un Mac: le rotte le passano quello che
+ * hanno ricevuto. Il Mac che non risponde non è un errore della settimana: è
+ * una fonte in meno, e la frase sta in `avviso` perché la vista la dica una
+ * volta, in alto, invece di rifiutare anche gli eventi dell'altra.
+ */
+export function rispostaAgenda(
+  mac: { calendari: Calendario[]; eventi: EventoAgenda[] } | { guaio: string },
+  ical: { nome: string; eventi: EventoAgenda[] } | null
+): RispostaAgenda {
+  const calendari: Calendario[] = []
+  const eventi: EventoAgenda[] = []
+  let scrivibile = false
+  let avviso: string | undefined
+  if ('guaio' in mac) {
+    avviso = mac.guaio
+  } else {
+    calendari.push(...mac.calendari)
+    eventi.push(...mac.eventi)
+    scrivibile = true
+  }
+  if (ical) {
+    calendari.push({ id: ID_ICAL, nome: ical.nome, colore: COLORE_ICAL, scrivibile: false, fonte: 'ical' })
+    eventi.push(...ical.eventi)
+  }
+  eventi.sort(ordina)
+  return { calendari, eventi, scrivibile, ...(avviso ? { avviso } : {}) }
+}
+
+/** Un istante scritto bene, o niente. */
+function istanteDa(v: unknown): Date | null {
+  if (typeof v !== 'string' || !v.trim()) return null
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** Da e a, letti dalla query: senza, i prossimi sette giorni. */
+export function finestra(daIso: string, aIso: string): { da: Date; a: Date } {
+  const da = istanteDa(daIso) ?? new Date()
+  const a = istanteDa(aIso) ?? new Date(da.getTime() + 7 * 864e5)
+  if (a <= da || a.getTime() - da.getTime() > FINESTRA_MAX) throw new apple.GuaioAgenda('Non ho capito la data.', 400)
+  return { da, a }
+}
+
+/**
+ * Gli eventi dell'agenda iCal, dall'indice.
+ *
+ * L'indice ha solo l'inizio come colonna: si chiede un giorno in più indietro
+ * e si scarta dopo, così un impegno cominciato ieri sera che finisce stanotte
+ * sta nella settimana giusta. Gli id sono quelli dei documenti («quale, e
+ * quando»), quindi stabili, e la vista li usa solo per aprire.
+ */
+export function eventiIcal(da: Date, a: Date): { nome: string; eventi: EventoAgenda[] } | null {
+  const c = leggiConfig().calendario
+  if (!c?.url) return null
+  const docs = store.eventi(new Date(da.getTime() - 864e5).toISOString(), a.toISOString(), 500)
+  const eventi: EventoAgenda[] = []
+  for (const d of docs) {
+    const x = daDocumento(d)
+    if (!x || x.fine <= da || x.inizio >= a) continue
+    eventi.push({
+      id: d.id, calendario: ID_ICAL, titolo: d.titolo,
+      inizio: x.inizio.toISOString(), fine: x.fine.toISOString(), tuttoIlGiorno: x.tuttoIlGiorno,
+      luogo: x.luogo, note: x.note, fonte: 'ical'
+    })
+  }
+  return { nome: c.nome?.trim() || 'Calendario', eventi }
+}
+
+/** La settimana intera: il Mac se risponde, l'agenda iCal se c'è. */
+export async function leggiAgenda(daIso: string, aIso: string): Promise<RispostaAgenda> {
+  const { da, a } = finestra(daIso, aIso)
+  let mac: { calendari: Calendario[]; eventi: EventoAgenda[] } | { guaio: string }
+  if (!apple.disponibile()) {
+    mac = { guaio: apple.NON_QUI }
+  } else {
+    try {
+      const [calendari, eventi] = await Promise.all([apple.calendari(), apple.eventi(da, a)])
+      mac = { calendari, eventi }
+    } catch (e) {
+      mac = { guaio: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  return rispostaAgenda(mac, eventiIcal(da, a))
+}
+
+// — scrivere: quello che arriva dal browser, controllato prima di passarlo al Mac —
+
+const TITOLO_MAX = 300
+const LUOGO_MAX = 500
+const NOTE_MAX = 4000
+
+/** Mezzanotte UTC del giorno di calendario di quell'istante: la convenzione dei giorni interi. */
+const aMezzanotteUtc = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+
+function testoCorto(v: unknown, massimo: number): string | undefined {
+  if (v === undefined || v === null) return undefined
+  return String(v).trim().slice(0, massimo)
+}
+
+/**
+ * I due istanti di un evento, letti e rimessi in ordine.
+ *
+ * Un giorno intero sta a mezzanotte UTC e finisce il giorno dopo: se il
+ * browser manda le 15 di quel giorno, o una fine uguale all'inizio, si
+ * aggiusta invece di rifiutare, perché è chiaro cosa voleva dire. Un'ora di
+ * fine prima dell'inizio no: quella non si può indovinare.
+ */
+function istanti(inizioV: unknown, fineV: unknown, tuttoIlGiorno: boolean): { inizio: string; fine: string } {
+  const inizio = istanteDa(inizioV)
+  const fine = istanteDa(fineV)
+  if (!inizio || !fine) throw new apple.GuaioAgenda('Non ho capito la data.', 400)
+  if (tuttoIlGiorno) {
+    const i = aMezzanotteUtc(inizio)
+    let f = aMezzanotteUtc(fine)
+    if (f <= i) f = new Date(i.getTime() + 864e5)
+    return { inizio: i.toISOString(), fine: f.toISOString() }
+  }
+  if (fine <= inizio) throw new apple.GuaioAgenda('La fine deve venire dopo l’inizio.', 400)
+  return { inizio: inizio.toISOString(), fine: fine.toISOString() }
+}
+
+export function nuovoEvento(corpo: unknown): apple.NuovoEvento {
+  const b = (corpo && typeof corpo === 'object' ? corpo : {}) as Record<string, unknown>
+  const titolo = testoCorto(b.titolo, TITOLO_MAX)
+  if (!titolo) throw new apple.GuaioAgenda('Serve un titolo.', 400)
+  const tuttoIlGiorno = !!b.tuttoIlGiorno
+  const { inizio, fine } = istanti(b.inizio, b.fine, tuttoIlGiorno)
+  return {
+    titolo, inizio, fine, tuttoIlGiorno,
+    calendario: testoCorto(b.calendario, 200) || undefined,
+    luogo: testoCorto(b.luogo, LUOGO_MAX),
+    note: testoCorto(b.note, NOTE_MAX)
+  }
+}
+
+/**
+ * Un ritocco: solo i campi che ci sono.
+ *
+ * Con tutti e due gli istanti si controlla l'ordine qui; con uno solo lo
+ * controlla Calendario, che conosce l'altro. `tuttoIlGiorno` da solo vale:
+ * lo script rilegge gli istanti che ha e li rimette sulla convenzione giusta.
+ */
+export function ritocco(corpo: unknown): apple.Ritocco {
+  const b = (corpo && typeof corpo === 'object' ? corpo : {}) as Record<string, unknown>
+  const fuori: apple.Ritocco = {}
+  if (b.titolo !== undefined) {
+    const t = testoCorto(b.titolo, TITOLO_MAX)
+    if (!t) throw new apple.GuaioAgenda('Serve un titolo.', 400)
+    fuori.titolo = t
+  }
+  if (b.tuttoIlGiorno !== undefined) fuori.tuttoIlGiorno = !!b.tuttoIlGiorno
+  if (b.inizio !== undefined && b.fine !== undefined) {
+    Object.assign(fuori, istanti(b.inizio, b.fine, !!b.tuttoIlGiorno))
+  } else {
+    for (const k of ['inizio', 'fine'] as const) {
+      if (b[k] === undefined) continue
+      const d = istanteDa(b[k])
+      if (!d) throw new apple.GuaioAgenda('Non ho capito la data.', 400)
+      fuori[k] = (b.tuttoIlGiorno ? aMezzanotteUtc(d) : d).toISOString()
+    }
+  }
+  if (b.luogo !== undefined) fuori.luogo = testoCorto(b.luogo, LUOGO_MAX) ?? ''
+  if (b.note !== undefined) fuori.note = testoCorto(b.note, NOTE_MAX) ?? ''
+  if (!Object.keys(fuori).length) throw new apple.GuaioAgenda('Dimmi cosa vuoi cambiare.', 400)
+  return fuori
+}
+
+export async function creaEvento(corpo: unknown): Promise<EventoAgenda> {
+  return apple.crea(nuovoEvento(corpo))
+}
+
+/** Gli id dell'agenda iCal sono documenti dell'indice: si leggono, non si toccano. */
+const soloLettura = (id: string) => id === ID_ICAL || id.startsWith('calendario:')
+
+export async function modificaEvento(id: string, corpo: unknown): Promise<EventoAgenda> {
+  if (soloLettura(id)) throw new apple.GuaioAgenda('Questa agenda si legge e basta.', 400)
+  return apple.modifica(id, ritocco(corpo))
+}
+
+export async function eliminaEvento(id: string): Promise<void> {
+  if (soloLettura(id)) throw new apple.GuaioAgenda('Questa agenda si legge e basta.', 400)
+  await apple.elimina(id)
 }
