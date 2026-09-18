@@ -715,3 +715,79 @@ test('native delegation can ask for an essential topic, but cancellation prevent
   await assert.rejects(() => claude.svolgi('Write an essay in Pages', null, 'tutto', [], null, undefined, null, null,
     { nativa: true, signal: stop.signal }), /abort/i)
 })
+
+/*
+ * — le mani —
+ *
+ * Una riga scritta a mano riceve le mani di `mani.ts`, oltre a cerca e apri;
+ * quello che una mano legge torna al modello, e ogni mano segna un fatto che
+ * esce con il risultato. Un'automazione no. E un obiettivo nudo non torna più
+ * come domanda: il modello riceve l'istruzione di produrre, e quello che
+ * scrive è il risultato.
+ */
+const mani = await import('./mani.ts')
+const nomiAttrezzi = (r: Record<string, unknown>) => ((r.tools ?? []) as { function: { name: string } }[]).map(t => t.function.name)
+
+test('una riga scritta a mano ha le mani: legge una pagina con leggi_pagina, e il fatto esce con il risultato', async () => {
+  const chieste: string[] = []
+  mani.perProva({
+    rete: (async (url: string | URL | Request) => { chieste.push(String(url)); return new Response('<html><head><title>Example Domain</title></head><body><p>This domain is for use in illustrative examples in documents.</p></body></html>', { headers: { 'content-type': 'text/html' } }) }) as typeof fetch,
+    risolvi: async () => [{ address: '93.184.216.34' }]
+  })
+  try {
+    const ricevute = fornitoreFinto([
+      { chiamate: [{ name: 'leggi_pagina', input: { url: 'https://example.com' } }] },
+      { testo: 'Done: the three-line summary is below, after reading the page.\n\nExample Domain is a placeholder site.\nIt exists for use in documents.\nIt has no other content.' }
+    ])
+    const r = await claude.svolgi('Summarise what https://example.com says in three lines')
+    assert.deepEqual(chieste, ['https://example.com/'])
+    assert.ok(nomiAttrezzi(ricevute[0]).includes('leggi_pagina'))
+    assert.ok(nomiAttrezzi(ricevute[0]).includes('cerca_web'))
+    assert.ok(!nomiAttrezzi(ricevute[0]).includes('crea_nota'), 'una riga che non parla di note non riceve crea_nota')
+    assert.ok(risultati(ricevute).some(t => t.startsWith('Pagina: https://example.com/\n\nExample Domain\n\nThis domain is for use in illustrative examples')))
+    assert.match(r.testo, /^Done: the three-line summary/)
+    assert.deepEqual(r.fatti?.map(({ testo: _t, ...f }) => f), [{ attrezzo: 'leggi_pagina', esito: 'ok', dettaglio: 'https://example.com/' }])
+    assert.match(r.fatti?.[0].testo ?? '', /^Example Domain\n\nThis domain is for use in illustrative examples/, 'la pagina letta deve uscire con il fatto, per chi rilegge')
+    assert.ok(sistemi(ricevute).some(s => s.includes('hai delle mani fuori dall\'indice')))
+
+    // un guasto della mano torna al modello come errore, e resta un fatto
+    mani.perProva({ rete: (async () => { throw new Error('giù') }) as typeof fetch, risolvi: async () => [{ address: '93.184.216.34' }] })
+    const giu = fornitoreFinto([
+      { chiamate: [{ name: 'leggi_pagina', input: { url: 'https://example.com' } }] },
+      { testo: 'Done: I could not read the page; what I know is below.\n\nThe site did not answer.' }
+    ])
+    const r2 = await claude.svolgi('Summarise what https://example.com says in three lines')
+    assert.ok(risultati(giu).some(t => /entro quindici secondi/.test(t)))
+    assert.deepEqual(r2.fatti, [{ attrezzo: 'leggi_pagina', esito: 'errore', dettaglio: 'https://example.com' }])
+  } finally { mani.perProva(null) }
+})
+
+test('un obiettivo nudo si produce: il modello riceve l\'istruzione di scegliere il risultato, e quello che scrive resta', async () => {
+  const ricevute = fornitoreFinto([{ testo: 'Done: the pilot definition is below.\n\nMyynd pilot inside H-Farm\n\n1. One team, four weeks.\n2. Daily briefs.\n3. Review with the CEO.\n\nAssumption: the innovation unit is the pilot team.' }])
+  const r = await claude.svolgi('Define a Myynd pilot inside H-Farm', 'Progetto: H-Farm\nObiettivo: Improve internal AI systems')
+  assert.match(r.testo, /^Done: the pilot definition is below\./)
+  assert.match(r.testo, /Review with the CEO/)
+  assert.doesNotMatch(r.testo, /What should exist/)
+  assert.ok(sistemi(ricevute).some(s => s.includes('Non fermarti a chiedere cosa deve esserci alla fine')))
+  // una riga con una cosa da consegnare non riceve quell'istruzione
+  const normale = fornitoreFinto([{ testo: 'Done: the summary is below.\n\nThree lines.' }])
+  await claude.svolgi('Summarise the H-Farm thread for Marta')
+  assert.ok(!sistemi(normale).some(s => s.includes('Non fermarti a chiedere')))
+})
+
+test('le mani seguono il compito: una nota chiede crea_nota, un file scrivi_file, un\'automazione e un prompt non ne hanno nessuna', async () => {
+  const nota = fornitoreFinto([{ testo: 'Done: the note is in Apple Notes.\n\nCall summary.' }])
+  await claude.svolgi('Write a note in Apple Notes with the call summary')
+  assert.ok(nomiAttrezzi(nota[0]).includes('crea_nota'))
+  assert.ok(!nomiAttrezzi(nota[0]).includes('scrivi_file'))
+  const file = fornitoreFinto([{ testo: 'Done: the file is written.\n\nPlan.' }])
+  await claude.svolgi('Save the pilot plan as a markdown file')
+  assert.ok(nomiAttrezzi(file[0]).includes('scrivi_file'))
+  cfg.scrivi({ ...cfg.leggi(), posta: { host: 'imap.example.test', porta: 993, utente: 'me@example.test', password: 'test' } })
+  const automazione = fornitoreFinto([{ testo: 'Nothing new in the mailbox.' }])
+  await claude.svolgi('Summarise new direct requests', null, 'bozza', ['posta.leggi'])
+  assert.ok(!nomiAttrezzi(automazione[0]).some(n => mani.eUnaMano(n)), 'un\'automazione ha solo gli attrezzi dichiarati')
+  const prompt = fornitoreFinto([{ testo: 'Write the pilot.' }])
+  await claude.svolgi('Define a Myynd pilot inside H-Farm', null, 'prompt')
+  assert.ok(!nomiAttrezzi(prompt[0]).some(n => mani.eUnaMano(n)), 'un prompt consegna la richiesta, non fa la cosa')
+})

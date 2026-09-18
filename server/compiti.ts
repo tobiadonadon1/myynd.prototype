@@ -39,6 +39,7 @@ import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import { senzaTrattini, soloDomanda } from './testo.ts'
 import { feedbackPer, giudica, prossimoPasso, simili, type Giudizio } from './revisione-lavoro.ts'
+import * as mani from './mani.ts'
 import * as ordine from './ordine.ts'
 
 export type Evento =
@@ -335,19 +336,16 @@ async function svolgiUno(id: string, nativa: boolean) {
      * Il materiale e le mani di un progetto.
      *
      * La cartella di lavoro, la memoria e il riferimento entrano come
-     * materiale (`materialeDelProgetto`). E se la cartella c'è, Claude Code è
-     * installato e la riga è lavoro di codice, la riga si porta dietro
-     * `claude.lavora` con quella cartella: il passo che legge il progetto e
-     * scrive cosa farebbe. Un'automazione ha già i suoi attrezzi e la sua
-     * cartella, e non si toccano.
+     * materiale (`materialeDelProgetto`), e la cartella arriva a `svolgi` come
+     * percorso: se la riga è lavoro di codice e Claude Code c'è, è `svolgi`
+     * che si dà la mano `lavora_nel_codice` (vedi `mani.ts`), che lavora in
+     * una copia. Un'automazione ha già i suoi attrezzi e la sua cartella, e
+     * non si toccano.
      */
     const materiale = progetto && progetto.stato !== 'chiuso' ? materialeDelProgetto(progetto) : null
     const cartella = dato?.cartella ?? materiale?.cartella?.percorso ?? null
-    const concessi = [
-      ...((dato?.nomi ?? []) as attrezzi.Nome[]),
-      ...(!dato && cartella && leManiSulCodice(c.testo, c.nota) ? ['claude.lavora' as attrezzi.Nome] : [])
-    ]
-    if (materiale?.cartella) console.info(`myynd · worker · project-folder · ${id} · ${materiale.cartella.id}${concessi.includes('claude.lavora') ? ' · claude.lavora' : ''}`)
+    const concessi = [...((dato?.nomi ?? []) as attrezzi.Nome[])]
+    if (materiale?.cartella) console.info(`myynd · worker · project-folder · ${id} · ${materiale.cartella.id}${!dato && cartella && leManiSulCodice(c.testo, c.nota) ? ' · codice' : ''}`)
     const lavora = (notaGiro: string | null) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
       concessi,
@@ -402,13 +400,27 @@ async function svolgiUno(id: string, nativa: boolean) {
         ? { chiede: !!uscita.consegna?.revisione && uscita.consegna.revisione.esito !== 'pass', domanda: '' }
         : uscita.daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo, notaGiro)
       if (richiamati.has(chiave(id))) return
+      /*
+       * La frase di chiusura, in prima riga, sempre.
+       *
+       * «Signal more clearly when it's done with a clear message that
+       * everything has been done»: la prima riga di ogni risultato dice cosa
+       * è stato prodotto e dove, e comincia con «Fatto:» o «Done:». Se il
+       * modello l'ha scritta si tiene la sua; se no la si compone dai fatti,
+       * cioè dagli attrezzi usati davvero. Non su una domanda: una riga che
+       * chiede non ha finito niente. E non su un prompt: quello si incolla
+       * com'è in un altro assistente, e una frase di chiusura in testa
+       * finirebbe dentro l'incollato.
+       */
+      if (!esito.chiede && c.modo !== 'prompt') testo = mani.conFraseDiChiusura(testo, uscita.fatti ?? [], cfg.lingua())
       if (esito.chiede || uscita.eseguito || !RILETTI.has(c.modo)) break
 
       verdetto = await ferri.giudica({
         compito: c, nota: notaGiro, risultato: testo,
         doc: c.doc ? store.documento(c.doc) : null,
         progetto: progetto && progetto.stato !== 'chiuso' ? progetto : null,
-        fonti: uscita.fonti
+        fonti: uscita.fonti,
+        fatti: uscita.fatti ?? []
       })
       if (richiamati.has(chiave(id))) return
       if (verdetto.esito !== 'revise' || giri >= GIRI_MAX) break
@@ -552,16 +564,12 @@ export function materialeDelProgetto(p: progetti.Progetto): claude.MaterialeProg
 /**
  * È lavoro di codice, e c'è chi può metterci le mani?
  *
- * `claude.lavora` legge una cartella con Claude Code e scrive cosa farebbe:
- * costa minuti, e non ha senso per «rispondere a Rossi». Si concede solo
- * quando la riga parla di codice — un bug, un test, un file, un comando —
- * e su questa macchina Claude Code c'è e le cartelle sono collegate. Su un
- * server mai: lì non c'è né l'eseguibile né il disco.
+ * La forma la riconosce `mani.sembraLavoroDiCodice`, che la legge anche chi
+ * svolge; qui resta la seconda metà — Claude Code c'è e le cartelle sono
+ * collegate — che serve solo al registro. Su un server mai: lì non c'è né
+ * l'eseguibile né il disco.
  */
-const DI_CODICE = /\b(?:code|coding|bug|bugs|test|tests|testing|commit|repo|repository|branch|merge|deploy|build|compile|refactor|script|cli|api|endpoint|migration|schema|database|query|typescript|javascript|python|swift|rust|go\b|node|react|css|html|sql|json|yaml|lint|typecheck|ci\b|pipeline|function|module|package|dependency|dependencies|library|import|export|class|component|server|backend|frontend|route|handler|crash|exception|stack ?trace|regression|codice|baco|errore di compilazione|compilazione|funzione|modulo|pacchetto|dipendenz[ae]|libreria|componente|rotta|migrazione|\w+\.(?:ts|tsx|js|mjs|cjs|py|swift|rs|go|java|kt|rb|sql|sh|yml|yaml|json|md))\b/i
-export function sembraLavoroDiCodice(testo: string, nota?: string | null): boolean {
-  return DI_CODICE.test(`${testo}\n${nota ?? ''}`)
-}
+export const sembraLavoroDiCodice = mani.sembraLavoroDiCodice
 function leManiSulCodice(testo: string, nota: string | null): boolean {
   if (OSPITATO || !sembraLavoroDiCodice(testo, nota)) return false
   try { return !!lavoro.installato() && attrezzi.collegato('claude.lavora') } catch { return false }

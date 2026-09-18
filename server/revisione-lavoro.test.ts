@@ -259,11 +259,14 @@ test('il revisore legge il controllo zero nel prompt', async () => {
 })
 
 /*
- * Gli obiettivi non sono compiti.
+ * Gli obiettivi non sono compiti, ma si fanno lo stesso.
  *
  * «Ingest one controlled real source in H-Brain production» non ha una cosa
- * finita che esista quando è fatto. La forma si riconosce senza modello, e
- * chi classifica non trasforma il piano in lavoro: la domanda è una sola.
+ * finita che esista quando è fatto. La forma si riconosce senza modello; il
+ * diciotto settembre lui ha deciso che a una riga così non si chiede «cosa
+ * deve esserci alla fine»: si sceglie il risultato più utile e lo si
+ * produce. Qui si prova che la domanda del risultato non c'è più da nessuna
+ * parte, e che un piano concreto su un obiettivo è lavoro.
  */
 test('sembraUnObiettivo riconosce la forma dell\'obiettivo e lascia stare i compiti con una cosa da consegnare', () => {
   for (const t of [
@@ -273,7 +276,9 @@ test('sembraUnObiettivo riconosce la forma dell\'obiettivo e lascia stare i comp
     'Sistemare il sito',
     'Capire cosa fare del progetto',
     'Set up the ingestion pipeline end-to-end',
-    'Improve retention'
+    'Improve retention',
+    'Define a Myynd pilot inside H-Farm',
+    'Definire un pilota di Myynd in H-Farm'
   ]) assert.equal(claude.sembraUnObiettivo(t), true, `doveva essere un obiettivo: «${t}»`)
   for (const t of [
     'Reply to App Review with the device recording and setup steps',
@@ -288,25 +293,32 @@ test('sembraUnObiettivo riconosce la forma dell\'obiettivo e lascia stare i comp
   assert.equal(claude.dettaglioDellaRiga('Progetto: H-Brain\nObiettivo: Cervello\nA CSV with 100 rows in the prod table'), 'A CSV with 100 rows in the prod table')
 })
 
-test('a un obiettivo nudo con un piano al posto del lavoro, chi classifica risponde con la domanda del risultato senza chiamare il modello', async () => {
+test('a un obiettivo si dice di produrre, non di chiedere: la domanda del risultato non c\'è più', () => {
+  const o = claude.obiettivoDaProdurre()
+  assert.match(o, /Non fermarti a chiedere cosa deve esserci alla fine/)
+  assert.match(o, /risultato concreto più utile/)
+  assert.match(o, /ipotesi/)
+  assert.doesNotMatch(o, /What should exist|Cosa deve esserci quando/)
+  assert.doesNotMatch(claude.SVOLGERE, /What should exist|chiedi cosa deve esserci/)
+  assert.match(claude.SVOLGERE, /si fanno lo\s+stesso/)
+  assert.match(claude.SVOLGERE, /dato duro/)
+  assert.match(claude.SVOLGERE, /«Fatto: »|«Done: »/, 'la frase di chiusura non è nel prompt di chi svolge')
+})
+
+test('un piano concreto su un obiettivo nudo è lavoro: chi classifica lo manda al modello, e il modello dice che è fatto', async () => {
   const ricevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
-  const piano = 'Here is how I would approach it.\n\n1. Identify a controlled source\n2. Configure the ingestion job\n3. Run it in production\n4. Verify the rows\n\nSources: none.'
-  const e = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', piano, 'Progetto: H-Brain\nObiettivo: Cervello d\'azienda')
-  assert.equal(ricevute.length, 0, 'il modello non doveva essere chiamato')
-  assert.equal(e.chiede, true)
-  assert.equal(e.domanda, 'What should exist when this is done?')
+  const piano = 'Done: the pilot definition is below.\n\nMyynd pilot inside H-Farm\n\nScope: one team, four weeks.\n1. Week 1: connect the shared folder (owner: Tobia)\n2. Week 2: daily briefs to the team lead (owner: Marta)\n3. Week 4: review with the CEO\n\nAssumptions: the pilot team is the innovation unit, from the H-Farm notes [1].'
+  const e = await claude.chiedeAiuto('Define a Myynd pilot inside H-Farm', piano, 'Progetto: H-Farm\nObiettivo: Improve internal AI systems')
+  assert.equal(ricevute.length, 1, 'il piano doveva andare al modello, non tornare come domanda')
+  assert.equal(e.chiede, false)
+  assert.match(ricevute[0].system, /un obiettivo non è una richiesta di aiuto/i)
+  assert.doesNotMatch(ricevute[0].system, /What should exist|cosa deve esserci quando è fatto/)
+  assert.match(JSON.stringify(ricevute[0].schema ?? {}), /dato duro/)
 
-  // con un dettaglio sotto la riga il piano non è più nudo: decide il modello
-  const conDettaglioRicevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
-  const conDettaglio = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', piano, 'Progetto: H-Brain\nGive me a plan in four steps')
-  assert.equal(conDettaglio.chiede, false)
-  assert.equal(conDettaglioRicevute.length, 1)
-  assert.match(conDettaglioRicevute[0].user, /Con questo dettaglio: Give me a plan in four steps/)
-
-  // due righe, l'ultima con la domanda: è la forma giusta, e si tiene com'è
-  const due = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', 'I read the H-Brain folder: the README describes an ingestion job with no source configured.\nWhat should exist when this is done?')
-  assert.deepEqual(due, { chiede: true, manca: [], domanda: 'What should exist when this is done?', visto: 'I read the H-Brain folder: the README describes an ingestion job with no source configured.' })
-  assert.equal(conDettaglioRicevute.length, 1, 'due righe con la domanda in fondo non si mandano al modello')
+  // due righe, l'ultima con la domanda: la forma di chi chiede un dato duro, e si tiene com'è
+  const due = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', 'I read the H-Brain folder: the README names two candidate sources with different schemas.\nWhich source goes first, the CRM export or the ticket feed?')
+  assert.deepEqual(due, { chiede: true, manca: [], domanda: 'Which source goes first, the CRM export or the ticket feed?', visto: 'I read the H-Brain folder: the README names two candidate sources with different schemas.' })
+  assert.equal(ricevute.length, 1, 'due righe con la domanda in fondo non si mandano al modello')
 
   // un'email di due righe che finisce con una domanda è lavoro: va al modello
   const emailRicevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
@@ -315,10 +327,51 @@ test('a un obiettivo nudo con un piano al posto del lavoro, chi classifica rispo
   assert.equal(emailRicevute.length, 1)
 })
 
-test('soloLaDomandaDelRisultato tiene le due righe giuste e rimpiazza un piano con la domanda', () => {
-  cfg.scrivi({ lingua: 'en' })
-  assert.equal(claude.soloLaDomandaDelRisultato('I read the folder: no source is configured.\n\nWhat should exist when this is done?'), 'I read the folder: no source is configured.\nWhat should exist when this is done?')
-  assert.equal(claude.soloLaDomandaDelRisultato('I read the H-Brain README and the last commits.\n\n1. Pick a source\n2. Configure the job\n3. Run it\n4. Verify'), 'I read the H-Brain README and the last commits.\nWhat should exist when this is done?')
-  assert.equal(claude.soloLaDomandaDelRisultato('1. Pick a source\n2. Configure the job\n3. Run it'), 'What should exist when this is done?')
-  assert.equal(claude.soloLaDomandaDelRisultato('Plan\n1. Pick a source\n2. Configure\n3. Run\nWhich source?'), 'What should exist when this is done?')
+/*
+ * La frase di chiusura contro gli attrezzi usati.
+ *
+ * «Done: saved in Pages» senza una chiamata a crea_documento_app non passa,
+ * e non passa prima del modello: è codice, non giudizio. Il revisore riceve
+ * l'elenco degli attrezzi e la regola scritta nel prompt.
+ */
+test('una frase di chiusura che dichiara un salvataggio mai fatto è «rivedi» senza chiamare il modello', async () => {
+  const ricevute = modelloJSON({ esito: 'pass', per: 'the reader', comeTe: 'Fine.', comeLoro: 'Fine.', problemi: [], verificato: ['all'] })
+  const g = await revisione.giudica({
+    compito: { testo: 'Define a Myynd pilot inside H-Farm' },
+    risultato: 'Done: the pilot definition is written and saved in Pages as «H-Farm pilot».\n\nMyynd pilot inside H-Farm: one team, four weeks, daily briefs, a review with the CEO at the end.',
+    fatti: [{ attrezzo: 'cerca', esito: 'ok', dettaglio: 'H-Farm (2)' }]
+  })
+  assert.equal(g.esito, 'revise')
+  assert.equal(ricevute.length, 0, 'il modello non doveva essere chiamato')
+  assert.match(g.problemi[0], /crea_documento_app was never called/)
+
+  // con il fatto giusto la stessa frase regge, e il revisore riceve l'elenco e la regola
+  await revisione.giudica({
+    compito: { testo: 'Define a Myynd pilot inside H-Farm' },
+    risultato: 'Done: the pilot definition is written and saved in Pages as «H-Farm pilot».\n\nMyynd pilot inside H-Farm: one team, four weeks, daily briefs, a review with the CEO at the end.',
+    fatti: [{ attrezzo: 'crea_documento_app', esito: 'ok', dettaglio: 'Pages: H-Farm pilot' }, { attrezzo: 'leggi_pagina', esito: 'ok', dettaglio: 'https://www.h-farm.com/en' }]
+  })
+  assert.equal(ricevute.length, 1)
+  assert.match(ricevute[0].user, /Gli attrezzi usati davvero, e cosa hanno restituito:\n- crea_documento_app \(ok\): Pages: H-Farm pilot\n- leggi_pagina \(ok\): https:\/\/www\.h-farm\.com\/en/)
+  assert.match(ricevute[0].system, /6\. La frase di chiusura/)
+  assert.match(ricevute[0].system, /vera contro l'elenco degli attrezzi usati/)
+  assert.doesNotMatch(ricevute[0].system, /una domanda sola su cosa deve esserci alla fine/)
+  assert.match(ricevute[0].system, /lei ha chiesto che si faccia/)
+
+  // quello che una mano ha letto è una fonte per il revisore, numerata a parte
+  await revisione.giudica({
+    compito: { testo: 'Summarise what https://example.com says in three lines' },
+    risultato: 'Done: the three-line summary is below.\n\nExample Domain is a placeholder site.\nIt is reserved for use in documentation.\nIt has no other content.\n\nFrom https://example.com/.',
+    fatti: [{ attrezzo: 'leggi_pagina', esito: 'ok', dettaglio: 'https://example.com/', testo: 'Example Domain\n\nThis domain is for use in illustrative examples in documents.' }]
+  })
+  assert.match(ricevute[1].user, /Nessuna fonte dall'indice: le fonti sono le letture fatte con le mani/)
+  assert.match(ricevute[1].user, /Le letture fatte con le mani, in estratto[^\n]*\n\[L1\] leggi_pagina · https:\/\/example\.com\/\nExample Domain\n\nThis domain is for use in illustrative examples/)
+  assert.match(ricevute[1].system, /nelle letture fatte con le mani/)
+
+  // l'elenco vuoto è «nessuno», e si dice; senza elenco non si dice niente
+  await revisione.giudica({ compito: { testo: 'Summarise the week' }, risultato: 'Done: the summary is below.\n\nMonday: team meeting. Tuesday: fair in Rimini. Thursday: quote to Rossi.', fatti: [] })
+  assert.match(ricevute[2].user, /No tool was used beyond the index/)
+  assert.match(ricevute[2].user, /Nessuna fonte: aveva davanti solo il testo del compito/)
+  await revisione.giudica({ compito: { testo: 'Summarise the week' }, risultato: 'Done: the summary is below.\n\nMonday: team meeting. Tuesday: fair in Rimini. Thursday: quote to Rossi.' })
+  assert.doesNotMatch(ricevute[3].user, /Gli attrezzi usati davvero|letture fatte con le mani/)
 })
