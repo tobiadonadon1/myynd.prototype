@@ -147,7 +147,7 @@ test('una riga affidata fa preso → lavoro → pronto, e solo a chi l’ha affi
   const pronto = await mio.aspetta('pronto')
 
   assert.deepEqual(mio.sentiti.map(e => e.fase), ['preso', 'lavoro', 'lavoro', 'lavoro', 'pronto'])
-  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Gentile Rossi, ecco il preventivo.')
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Done: the deliverable is below.\n\nGentile Rossi, ecco il preventivo.')
   assert.equal(pronto.fase === 'pronto' && pronto.compito.stato, 'pronto')
 
   // il filo di un'altra persona non ha sentito niente: dentro il «pronto» c'è
@@ -180,7 +180,7 @@ test('un risultato con le lineette arriva pulito, in fonte come nell\'email', as
   const pronto = await o.aspetta('pronto')
 
   const risultato = pronto.fase === 'pronto' ? pronto.compito.risultato : null
-  assert.equal(risultato, 'Il succo in una riga. La parte che conta.\n\nGentile Rossi. Ecco il preventivo. A presto.')
+  assert.equal(risultato, 'Done: the deliverable is below.\n\nIl succo in una riga. La parte che conta.\n\nGentile Rossi. Ecco il preventivo. A presto.')
   assert.ok(!risultato?.includes('—'), `lineetta lunga rimasta: ${risultato}`)
   assert.equal(store.compito(id)!.risultato, risultato)
 
@@ -438,7 +438,7 @@ test('se smontarla fallisce la bozza è pronta lo stesso, senza email', async ()
   compiti.affida(id, 'bozza')
   const pronto = await o.aspetta('pronto')
   assert.equal(pronto.fase === 'pronto' && pronto.compito.stato, 'pronto')
-  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Gentile Rossi, ecco.')
+  assert.equal(pronto.fase === 'pronto' && pronto.compito.risultato, 'Done: the deliverable is below.\n\nGentile Rossi, ecco.')
   assert.equal(pronto.fase === 'pronto' && pronto.compito.email, null)
   assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
   o.smetti()
@@ -666,7 +666,7 @@ test('ordinary parent-linked follow-up completes without requiring a revision ba
   prova({svolgi:async()=>({testo:'Agenda prepared.',fonti:[],eseguito:true})})
   const o=orecchio(id);compiti.affida(id,'bozza');await o.aspetta('pronto')
   assert.equal(store.compito(id)?.stato,'pronto')
-  assert.equal(store.compito(id)?.risultato,'Agenda prepared.')
+  assert.equal(store.compito(id)?.risultato,'Done: the deliverable is below.\n\nAgenda prepared.')
   assert.ok(!o.sentiti.some(e=>e.fase==='guaio'))
   o.smetti();await pausa(10)
 })
@@ -701,11 +701,11 @@ test('una stesura bocciata si riscrive una volta, con i problemi nella nota, e i
   assert.equal(note[0], null)
   assert.match(note[1] ?? '', /^Rivedi:/, 'il feedback non comincia con «Rivedi:»')
   assert.match(note[1] ?? '', /- il prezzo dice 890, il listino dice 980/, 'il problema non è arrivato a chi riscrive')
-  assert.deepEqual(giudicati, ['Gentile Rossi, l\'impianto costa 890 euro.', 'Gentile Rossi, l\'impianto costa 980 euro.'])
+  assert.deepEqual(giudicati, ['Done: the deliverable is below.\n\nGentile Rossi, l\'impianto costa 890 euro.', 'Done: the deliverable is below.\n\nGentile Rossi, l\'impianto costa 980 euro.'])
 
   const c = store.compito(id)!
   assert.equal(c.stato, 'pronto')
-  assert.equal(c.risultato, 'Gentile Rossi, l\'impianto costa 980 euro.')
+  assert.equal(c.risultato, 'Done: the deliverable is below.\n\nGentile Rossi, l\'impianto costa 980 euro.')
   assert.deepEqual(c.revisione, { esito: 'pass', per: 'Rossi', comeTe: 'Va bene così.', comeLoro: 'Chiaro, rispondo.', problemi: [], verificato: ['prezzo contro il listino'], giri: 2 })
   // e il «pronto» lo porta già con sé: chi guarda non deve rileggere la lista
   assert.equal(pronto.fase === 'pronto' && pronto.compito.revisione?.giri, 2)
@@ -755,7 +755,7 @@ test('senza un revisore la riga è pronta come prima, e lo dice: unavailable', a
   assert.equal(stesure, 1)
   const c = store.compito(id)!
   assert.equal(c.stato, 'pronto')
-  assert.equal(c.risultato, 'Gentile Rossi, ecco.')
+  assert.equal(c.risultato, 'Done: the deliverable is below.\n\nGentile Rossi, ecco.')
   assert.deepEqual(c.revisione, { esito: 'unavailable', per: '', comeTe: '', comeLoro: '', problemi: [], verificato: [], giri: 1 })
   assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
   o.smetti()
@@ -811,6 +811,58 @@ test('quando chiede, sulla riga c\'è prima cosa ha visto e poi la domanda sola'
   await o.aspetta('chiede')
   assert.equal(store.compito(id)!.risultato, 'Ho letto il filo con H-Farm: l\'audit nomina due unità.\nDi quale unità parliamo?')
   o.smetti()
+})
+
+/*
+ * La frase di chiusura.
+ *
+ * «Signal more clearly when it's done with a clear message that everything
+ * has been done.» La prima riga di un risultato pronto dice cosa è stato
+ * prodotto e dove, composta dai fatti se il modello non l'ha scritta, tenuta
+ * se l'ha scritta; e il revisore riceve i fatti per controllarla. Non su una
+ * domanda, non su un prompt.
+ */
+test('un risultato pronto comincia con «Done:» composto dai fatti, o con quello che il modello ha scritto; il revisore riceve i fatti', async () => {
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const fatti = [
+    { attrezzo: 'leggi_pagina' as const, esito: 'ok' as const, dettaglio: 'https://www.h-farm.com/en' },
+    { attrezzo: 'crea_nota' as const, esito: 'ok' as const, dettaglio: 'H-Farm pilot' }
+  ]
+  let ricevuti: unknown = null
+  let riletto = ''
+  prova({
+    svolgi: async () => ({ testo: 'Myynd pilot inside H-Farm: one team, four weeks, a review with the CEO at the end.', fonti: [], fatti }),
+    chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
+    giudica: async o => { ricevuti = o.fatti; riletto = o.risultato; return passa() }
+  })
+  const id = riga('Define a Myynd pilot inside H-Farm')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  const atteso = 'Done: the note «H-Farm pilot» is in Apple Notes; the rest is below after reading 1 web page.\n\nMyynd pilot inside H-Farm: one team, four weeks, a review with the CEO at the end.'
+  assert.equal(store.compito(id)!.risultato, atteso)
+  assert.equal(riletto, atteso, 'il revisore deve rileggere il testo con la frase di chiusura davanti')
+  assert.deepEqual(ricevuti, fatti, 'il revisore non ha ricevuto i fatti')
+  o.smetti()
+
+  // scritta dal modello: si tiene, nella lingua dell'app
+  prova({ svolgi: async () => ({ testo: 'Fatto: the reply to Rossi is ready below.\nHello Rossi, here is the quote.', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const sua = riga('Reply to Rossi')
+  const o2 = orecchio(sua)
+  compiti.affida(sua, 'bozza')
+  await o2.aspetta('pronto')
+  assert.equal(store.compito(sua)!.risultato, 'Done: the reply to Rossi is ready below.\n\nHello Rossi, here is the quote.')
+  o2.smetti()
+
+  // una domanda non ha finito niente: nessuna frase davanti
+  prova({ svolgi: async () => ({ testo: 'Which unit is the audit about?', fonti: [], fatti: [] }), chiedeAiuto: async () => ({ chiede: true, manca: ['unit'], domanda: 'Which unit is the audit about?' }), domandeDaFare: nessunaDomanda })
+  const chiede = riga('Reply to H-Farm about the audit')
+  const o3 = orecchio(chiede)
+  compiti.affida(chiede, 'bozza')
+  await o3.aspetta('chiede')
+  assert.equal(store.compito(chiede)!.risultato, 'Which unit is the audit about?')
+  o3.smetti()
 })
 
 /*
