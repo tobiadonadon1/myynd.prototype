@@ -29,6 +29,9 @@ export function nuovoId(): string {
 
 export type Avviso = { testo: string; quando: number } | null
 
+/** Il titolo dentro un avviso: intero se ci sta, altrimenti la testa. */
+const titoloCorto = (s: string) => (s.length > 64 ? `${s.slice(0, 63).trimEnd()}…` : s)
+
 export function useCompiti(
   mostraToast: (t: string) => void,
   /** Dove si collega una fonte che manca: il pannello delle connessioni, aperto su di lei. */
@@ -177,6 +180,30 @@ export function useCompiti(
     })
     return () => { clearTimeout(attesa); chiudi() }
   }, [rileggi])
+
+  /**
+   * «Ha finito»: detto una volta, quando succede.
+   *
+   * Lui lo ha chiesto così: che si veda chiaramente quando ha finito. In
+   * pagina la riga cambia da sola, ma se stai guardando altrove non te ne
+   * accorgi, e l'unico momento in cui si può dire è quello in cui passa da
+   * affidata a fatta. Non si guarda l'annuncio, si guarda la lista: qualunque
+   * strada abbia preso la notizia — il filo, una rilettura, il ritorno sulla
+   * finestra — il passaggio è uno solo, e si vede confrontando la lista di
+   * prima con quella di adesso. La prima lista che arriva non è un
+   * passaggio: è come stanno le cose, e non si annuncia niente.
+   */
+  const statiVisti = useRef<Record<string, string> | null>(null)
+  useEffect(() => {
+    const prima = statiVisti.current
+    const adesso: Record<string, string> = {}
+    for (const c of compiti) adesso[c.id] = c.stato
+    statiVisti.current = adesso
+    if (!prima) return
+    for (const c of compiti) {
+      if (prima[c.id] === 'delegato' && c.stato === 'pronto') mostraToast(frasi.compitoFinito(titoloCorto(c.testo)))
+    }
+  }, [compiti, mostraToast])
 
   /**
    * Rimette a posto UNA riga, non tutta la lista.

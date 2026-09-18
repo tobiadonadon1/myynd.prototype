@@ -1227,6 +1227,8 @@ const EN: Record<string, string> = {
   'tutto': 'Myynd',
   'Myynd': 'Myynd',
   'pronta': 'ready',
+  // la pastiglia di una riga finita: una parola sola, piena di rame
+  'fatto': 'done',
   'Va bene': 'Good',
   'Tutto pronto.': 'All ready.',
   'Oggi è finito.': 'Today is done.',
@@ -2951,6 +2953,19 @@ export const frasi = {
   // — frasi con un numero o un nome dentro: non si possono mettere nel dizionario
   //   come chiavi, perché la chiave cambierebbe a ogni valore —
   scollegato: (nome: string) => corrente === 'en' ? `${nome} disconnected.` : `${nome} scollegato.`,
+  /**
+   * Quando Myynd finisce una cosa che gli hai dato: si dice, e si dice dov'è.
+   *
+   * «E poi che me lo dica chiaramente quando ha finito, con un messaggio
+   * chiaro.» La riga in prima pagina cambia da sola — la pastiglia di rame, la
+   * frase che dice cosa ha fatto — ma se in quel momento stai guardando
+   * un'altra parte della pagina non te ne accorgi. Questo lo dice una volta
+   * sola, quando passa da «ce l'ha lui» a «è fatta», e dice anche dove
+   * guardare: il lavoro non sta dentro l'avviso, sta nella riga.
+   */
+  compitoFinito: (titolo: string) => corrente === 'en'
+    ? `Done: "${titolo}". The result is on your first page.`
+    : `Fatto: «${titolo}». Il risultato è in prima pagina.`,
   /** Dopo «Fatto» su una cosa di un progetto: si è segnato il traguardo, e va a guardare il passo dopo. */
   segnataPer: (progetto: string) => corrente === 'en'
     ? `Marked done for ${progetto}. Looking at the next step.`

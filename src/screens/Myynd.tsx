@@ -55,6 +55,18 @@ const PASTIGLIA: CSSProperties = {
   flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.02em', color: '#8E3F1F',
   background: 'rgba(196,98,59,.14)', border: '1px solid rgba(196,98,59,.3)', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap'
 }
+/**
+ * La pastiglia di una cosa finita: rame pieno, non il rame velato dell'attesa.
+ *
+ * «Segnala più chiaramente quando ha finito, con un messaggio chiaro.» Una
+ * riga pronta portava la stessa pastiglia leggera di tutto il resto, e da
+ * lontano non si distingueva da una riga qualsiasi. Piena si vede da un
+ * metro, ed è l'unica di questo peso in pagina: se ce ne fossero due non
+ * direbbe più niente.
+ */
+const PASTIGLIA_FATTA: CSSProperties = {
+  ...PASTIGLIA, color: '#FFF7F0', background: '#C4623B', borderColor: '#C4623B'
+}
 /** Il nome del progetto in cima al blocco: maiuscoletto spaziato, nel suo colore. */
 const NOME: CSSProperties = { fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' }
 /** Un gesto scritto piccolo, senza bordo: quello che si fa di rado. */
@@ -441,8 +453,23 @@ function didascalia(c: Compito, attivo = false): string {
 function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   if (c.consegna) return ''
-  if (c.stato === 'pronto' || c.stato === 'chiede') return primoParagrafo(c.risultato ?? '')
+  if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
+  if (c.stato === 'chiede') return primoParagrafo(c.risultato ?? '')
   return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
+}
+
+/**
+ * La riga che dice che ha finito, se il lavoro ne porta una.
+ *
+ * Il server apre quello che scrive con una riga sola che dice cosa ha fatto
+ * («Fatto: la definizione del pilota è scritta e salvata in Pages»), e quella
+ * riga è la risposta alla cosa che lui chiedeva: sapere, senza aprire niente,
+ * che è finita e com'è finita. Se non c'è resta l'inizio del lavoro, che è
+ * quello che si leggeva prima: meglio una frase vera che un annuncio finto.
+ */
+function fraseFinita(c: Compito): string {
+  const prima = (c.risultato ?? '').split('\n').map(r => r.trim()).find(Boolean) ?? ''
+  return /^(fatto|done)\s*:/i.test(prima) ? prima : ''
 }
 
 /**
@@ -453,11 +480,11 @@ function corpo(c: Compito): string {
  * com'è andata, e se restano punti aperti si elencano, corti. Senza modello
  * non si dice niente: una riga che dice «non riletta» è una scusa.
  */
-function Riletta({ c }: { c: Compito }) {
+function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
   const r = c.revisione
   if (c.stato !== 'pronto' || !r || r.esito === 'unavailable') return null
   return (
-    <div style={{ marginTop: 12, maxWidth: 600, fontSize: '13px', lineHeight: 1.5, color: 'rgba(255,247,240,.72)', textWrap: 'pretty' }}>
+    <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? 'rgba(34,39,31,.58)' : 'rgba(255,247,240,.72)', textWrap: 'pretty' }}>
       {frasi.riletta(r.per || t('chi la riceve'), r.esito, r.giri)}
       {r.esito === 'revise' && r.problemi.length > 0 && (
         <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
@@ -470,7 +497,7 @@ function Riletta({ c }: { c: Compito }) {
 
 /** Quello che aspetta te, detto in una parola. */
 function attesaDi(c: Compito): string {
-  return c.stato === 'pronto' ? t('pronta') : c.stato === 'chiede' ? t('ti chiede') : ''
+  return c.stato === 'pronto' ? t('fatto') : c.stato === 'chiede' ? t('ti chiede') : ''
 }
 
 /**
@@ -480,34 +507,43 @@ function attesaDi(c: Compito): string {
  * blocco sono tutte cose da fare per quel progetto, e non serve dire quale
  * l'ha scritta lui e quale l'hai scritta tu. Quello che cambia sono i gesti
  * sotto il dito: «Fatto», «Se ne occupa Myynd», e il posto vero da cui viene.
- * La riga intera la apre nella carta scura, dove c'è spazio per lavorarci.
+ * La riga intera la apre nella carta scura, dove c'è spazio per lavorarci —
+ * tranne quando ce l'ha in mano Myynd: allora resta una riga, con la sua luce
+ * addosso, e non c'è niente da aprire finché non torna con qualcosa.
  */
-function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: () => void }) {
+function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri?: () => void }) {
   const { attiva, props } = useAttiva()
   const attesa = attesaDi(c)
+  const pronto = c.stato === 'pronto'
   const testo = corpo(c)
+  // affidata: è nelle sue mani, in coda o già sotto le dita. Il passo che sta
+  // facendo si vede solo quando arriva davvero (`compitoInEsecuzione`): la
+  // luce dice «ce l'ha lui», la riga accanto dice a che punto è.
+  const affidato = c.stato === 'delegato'
   const attivo = compitoInEsecuzione(c, l.passi[c.id])
   const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
 
   if (consegnaPronta(c)) return <div style={{ padding: 8 }}><ConsegnaPronta c={c} l={l} v={v} /></div>
 
   return (
-    <div className="task-aurora-host task-aurora-row" data-working={attivo || undefined} role="button" tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)}
-      style={{ ...RIGA, cursor: 'pointer', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
+    <div className="task-aurora-host task-aurora-row" data-working={affidato || undefined}
+      {...(apri ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri) } : {})}
+      style={{ ...RIGA, cursor: apri ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
       {...props}>
-      {attivo && <AuroraCompito />}
+      {affidato && <AuroraCompito />}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {attivo && <Glifo tipo="penso" dim={12} colore="#C4623B" />}
+            {affidato && <Glifo tipo="penso" dim={12} colore="#C4623B" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
           {testo && <div style={PERCHE}>{taglia(testo, 150)}</div>}
+          <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
           <Consegna c={c} l={l} v={v} /><BozzaInPosta c={c} />
         </div>
         {attesa
-          ? <span style={PASTIGLIA}>{attesa}</span>
+          ? <span style={pronto ? PASTIGLIA_FATTA : PASTIGLIA}>{attesa}</span>
           : <span style={QUANDO}>{didascalia(c, attivo)}</span>}
       </div>
       <Fascia attiva={attiva}
@@ -519,6 +555,11 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri: (
               style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Fatto')}</Hov>
             {c.stato === 'aperto' && (
               <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Se ne occupa Myynd')}</Hov>
+            )}
+            {/* una riga affidata non si apre più nella carta: il modo di
+                riprendersela deve restare qui, o non c'è da nessuna parte */}
+            {affidato && (
+              <Hov as="button" type="button" onClick={fermo(() => l.richiama(c.id))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Richiamala')}</Hov>
             )}
             {!c.consegna && <Portami c={c} l={l} v={v} piatto />}
           </>
@@ -809,20 +850,30 @@ function Blocco({ b, v, lista, primaDomanda }: {
    * Quindi: in ogni blocco che ha delle cose da fare, una è aperta nella
    * carta scura e le altre restano righe. Quale, se non ha ancora scelto: la
    * prima pronta, perché una bozza che aspetta lui viene prima di tutto; se
-   * non ce n'è, la prima del blocco. Quando ne apre un'altra, quella di prima
-   * si richiude — dentro questo blocco e basta, gli altri non si muovono. La
-   * scelta vive quanto la pagina, perché vive qui: il blocco resta montato
-   * finché il progetto sta sul tavolo.
+   * non ce n'è, la prima che non sta già lavorando Myynd. Quando ne apre
+   * un'altra, quella di prima si richiude — dentro questo blocco e basta, gli
+   * altri non si muovono. La scelta vive quanto la pagina, perché vive qui: il
+   * blocco resta montato finché il progetto sta sul tavolo.
+   *
+   * Una riga affidata non si apre.
+   *
+   * «Quando gli do da fare va nella carta scura: la volevo della stessa forma
+   * di prima, solo con quel bagliore.» Il lavoro in corso non è una cosa su
+   * cui lavorare: è una cosa che sta succedendo, e sta bene sotto le altre,
+   * riga fra le righe, con la sua luce addosso. Se era aperta quando gliel'ha
+   * data, si richiude da sola; se sono affidate tutte, il blocco non ha
+   * nessuna carta aperta, ed è giusto così: non c'è niente che aspetta lui.
    */
   const compiti = b.righe.flatMap(r => (r.genere === 'compito' ? [r.compito] : []))
-  const preferita = compiti.find(c => c.stato === 'pronto')?.id ?? compiti[0]?.id ?? null
+  const apribile = (c: Compito) => c.stato !== 'delegato'
+  const preferita = compiti.find(c => c.stato === 'pronto')?.id ?? compiti.find(apribile)?.id ?? null
   // `undefined` è «non ha ancora scelto», e vale la preferita; `null` è
   // «le ho richiuse tutte», e resta così finché non ne apre una lui
   const [scelta, setScelta] = useState<string | null | undefined>(undefined)
   // una scelta che non c'è più — la riga è stata chiusa, o è scivolata sotto
   // il tetto — non lascia il blocco senza carta: torna la preferita
   const aperta = scelta === null ? null
-    : scelta && compiti.some(c => c.id === scelta) ? scelta
+    : scelta && compiti.some(c => c.id === scelta && apribile(c)) ? scelta
       : preferita
 
   const suo = b.progetto !== null
@@ -858,7 +909,7 @@ function Blocco({ b, v, lista, primaDomanda }: {
             {r.genere === 'voce' && <RigaVoce voce={r.voce} v={v} lista={lista} />}
             {r.genere === 'compito' && (carta
               ? <HeroCompito c={r.compito} l={lista!} v={v} richiudi={() => setScelta(null)} />
-              : <RigaCompito c={r.compito} l={lista!} v={v} apri={() => setScelta(r.compito.id)} />)}
+              : <RigaCompito c={r.compito} l={lista!} v={v} apri={apribile(r.compito) ? () => setScelta(r.compito.id) : undefined} />)}
             {r.genere === 'compito' && r.seguito && <Seguito c={r.seguito} />}
             {r.genere === 'domanda' && <RigaDomanda item={r.domanda} v={v} lista={lista} colore={colore} prima={primaDomanda === r.domanda.id} />}
           </div>
