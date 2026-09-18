@@ -96,6 +96,10 @@
 .task-planning-main > button:first-child {margin-top:2px;}
 .task-planning-title {min-width:0;flex:1;text-align:left;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere;color:var(--inchiostro);border:0;padding:0;background:none;}
 .task-planning-title:hover {color:var(--rame-testo);}
+/* l'ora di una riga che ne ha una: prima del titolo, sottovoce, con le cifre
+   della stessa larghezza così le dieci e le nove stanno incolonnate */
+.task-planning-time {margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(var(--inchiostro-rgb),.45);}
+.task-planning-title:hover .task-planning-time {color:rgba(var(--rame-rgb),.85);}
 .task-planning-footer {display:flex;align-items:center;justify-content:space-between;gap:3px;margin:12px -3px 0 21px;}
 .task-planning-footer select {max-width:85px;font-family:inherit;font-size:11px;color:rgba(var(--inchiostro-rgb),.5);border:0;background:transparent;padding:3px 1px;cursor:pointer;}
 .task-planning-footer select:focus-visible {outline:2px solid var(--rame);outline-offset:2px;border-radius:5px;}
@@ -120,7 +124,10 @@
 .task-detail-presets {display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .task-detail-presets button {padding:8px 11px;}
 .task-detail-presets button[aria-pressed=true] {background:rgba(var(--rame-rgb),.11);border-color:rgba(var(--rame-rgb),.34);color:var(--rame-testo);}
-.task-detail input[type=date] {font-family:inherit;font-size:13px;color:rgba(var(--inchiostro-rgb),.75);border:1px solid rgba(var(--inchiostro-rgb),.14);background:var(--carta-piena);padding:9px 12px;border-radius:10px;}
+.task-detail input[type=date],.task-detail input[type=time] {font-family:inherit;font-size:13px;color:rgba(var(--inchiostro-rgb),.75);border:1px solid rgba(var(--inchiostro-rgb),.14);background:var(--carta-piena);padding:9px 12px;border-radius:10px;}
+/* la data e l'ora sono la stessa domanda, fatta più da vicino: stanno accanto */
+.task-detail-quando {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.task-detail input[type=time]:disabled {opacity:.45;}
 .task-detail-notes {font-size:13px;line-height:1.6;border:1px solid rgba(var(--inchiostro-rgb),.12);border-radius:10px;background:var(--carta-piena);padding:10px 12px;}
 .task-detail-project {width:100%;padding:10px 12px;border:1px solid rgba(var(--inchiostro-rgb),.14);border-radius:10px;background:var(--carta-piena);color:var(--inchiostro);font:inherit;font-size:13px;}
 .task-detail footer {display:flex;justify-content:flex-end;gap:9px;padding:17px 24px;background:rgba(var(--inchiostro-rgb),.035);border-top:1px solid rgba(var(--inchiostro-rgb),.07);}

@@ -449,9 +449,18 @@ const EN: Record<string, string> = {
   'Settimana successiva': 'Next week',
   'Mese precedente': 'Previous month',
   'Mese successivo': 'Next month',
-  // La settimana aperta su tutta l'applicazione: si espande, e si riduce.
+  // La settimana aperta su tutta l'applicazione: si espande, e si torna indietro.
   'Riduci': 'Collapse',
+  'Torna indietro': 'Go back',
   'Nuovo evento': 'New event',
+  'Nuova attività': 'New task',
+  // la carta che scrive: un evento nel calendario, oppure una riga in lista
+  'Evento in': 'Event in',
+  'Attività in lista': 'Task on my list',
+  'Cosa stai scrivendo': 'What you are writing',
+  'Ora': 'Time',
+  'Ora non valida.': 'Not a valid time.',
+  'Un’ora senza un giorno non vuol dire niente.': 'A time needs a day to sit in.',
   'Modifica evento': 'Edit event',
   'I miei calendari': 'My calendars',
   'Le tue attività': 'Tasks',
@@ -460,7 +469,6 @@ const EN: Record<string, string> = {
   'Agenda del Mac': 'Mac calendar',
   'Titolo': 'Title',
   'Tutto il giorno': 'All day',
-  'Invece un’attività': 'A task instead',
   'Inizio': 'Start',
   'Fine': 'End',
   'Adesso': 'Now',

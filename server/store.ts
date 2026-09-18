@@ -1268,7 +1268,15 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // Evermute) e può stare dentro un altro (H-Brain è uno spin-off di Myynd):
   // finora vivevano nel riferimento e nelle note, e non si potevano scrivere
   // dalla Memoria. Due colonne, in fondo, come tutte.
-  d => { colonna(d, 'progetti', 'alias', 'TEXT'); colonna(d, 'progetti', 'genitore', 'TEXT') }
+  d => { colonna(d, 'progetti', 'alias', 'TEXT'); colonna(d, 'progetti', 'genitore', 'TEXT') },
+  // Un'attività può avere un'ora dentro il suo giorno: «HH:MM», o niente.
+  //
+  // Finora aveva solo il giorno, e nella settimana aperta questo si vedeva: si
+  // premeva sulle dieci di giovedì e la riga nasceva in cima, nella fascia del
+  // tutto il giorno, come se l'ora premuta non fosse mai stata detta. Senza ora
+  // resta lì, che è giusto — la maggior parte delle cose da fare non ha
+  // un'ora — ma adesso si può dire. In fondo, come tutte.
+  d => colonna(d, 'compiti', 'ora', 'TEXT')
 
 ]
 
@@ -1349,7 +1357,7 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
+  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
   feed: [['perche', 'TEXT'], ['contesto', 'TEXT']]
 }
 
@@ -3070,6 +3078,8 @@ export type Compito = {
   nota: string | null
   quando: string
   giorno?: string | null
+  /** L'ora dentro quel giorno, «HH:MM». Null vuol dire: vale per tutto il giorno. */
+  ora?: string | null
   progetto?: string | null
   stato: string
   modo: string
@@ -3341,6 +3351,8 @@ export function ultimoOrdine(quando: string): string {
 export function scriviCompito(c: {
   id: string; testo: string; nota?: string | null; quando?: string
   giorno?: string | null
+  /** L'ora dentro il giorno, «HH:MM», quando quella cosa si fa a un'ora precisa. */
+  ora?: string | null
   progetto?: string | null
   ordine: string; origine?: string; voce?: string | null; doc?: string | null
   /** La riga da cui questa è nata: si scrive alla nascita e non si riscrive. */
@@ -3349,12 +3361,16 @@ export function scriviCompito(c: {
 }) {
   const ora = new Date().toISOString()
   db.prepare(`
-    INSERT INTO compiti (id, testo, nota, quando, giorno, progetto, stato, ordine, origine, voce, doc, madre, attrezzi, creato, aggiornato)
-    VALUES (?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?,?)
+    INSERT INTO compiti (id, testo, nota, quando, giorno, ora, progetto, stato, ordine, origine, voce, doc, madre, attrezzi, creato, aggiornato)
+    VALUES (?,?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       testo      = excluded.testo,
       quando     = excluded.quando,
       giorno     = COALESCE(excluded.giorno, compiti.giorno),
+      -- come il giorno: chi riscrive una riga senza mandare l'ora non sta
+      -- dicendo «toglile l'ora», sta dicendo «non la tocco». Per toglierla
+      -- davvero c'è cambiaCompito, dove null vuol dire null
+      ora        = COALESCE(excluded.ora, compiti.ora),
       progetto   = COALESCE(excluded.progetto, compiti.progetto),
       -- da chi sei nata non cambia: una riscrittura senza madre non taglia il filo
       madre      = COALESCE(excluded.madre, compiti.madre),
@@ -3375,7 +3391,7 @@ export function scriviCompito(c: {
       aggiornato = excluded.aggiornato,
       versione   = compiti.versione + 1
   `).run(
-    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.progetto ?? null, c.ordine,
+    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
     c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
@@ -3397,6 +3413,7 @@ export function riordina(id: string, quando: string, nuova: string) {
 export function cambiaCompito(id: string, c: {
   testo?: string; nota?: string | null; quando?: string; ordine?: string
   giorno?: string | null
+  ora?: string | null
   progetto?: string | null
 }) {
   const campi: string[] = []
@@ -3406,6 +3423,7 @@ export function cambiaCompito(id: string, c: {
   if (c.testo !== undefined) { campi.push('testo = ?'); valori.push(c.testo) }
   if (c.nota !== undefined) { campi.push('nota = ?'); valori.push(c.nota) }
   if (c.giorno !== undefined) { campi.push('giorno = ?'); valori.push(c.giorno) }
+  if (c.ora !== undefined) { campi.push('ora = ?'); valori.push(c.ora) }
   if (c.progetto !== undefined) { campi.push('progetto = ?'); valori.push(c.progetto) }
   if (c.quando !== undefined) { campi.push('quando = ?'); valori.push(c.quando) }
   if (c.ordine !== undefined) { campi.push('ordine = ?'); valori.push(c.ordine) }

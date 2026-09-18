@@ -31,6 +31,7 @@ import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
+import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 
@@ -197,7 +198,11 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
   }
   return <li className={classi} draggable onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}>
     <div className="task-planning-main"><Cerchio c={c} onClick={() => l.chiudi(c.id)} />
-      <button type="button" className="task-planning-title" onClick={() => modifica(c)}>{c.testo}</button>
+      {/* l'ora, quando c'è, sta prima del titolo e sottovoce: è un dato, non
+          il titolo della riga */}
+      <button type="button" className="task-planning-title" onClick={() => modifica(c)}>
+        {oraDi(c) && <span className="task-planning-time">{oraDi(c)}</span>}{c.testo}
+      </button>
     </div>
     <div className="task-planning-footer">
       <select aria-label={`${t('Assegnazione')}: ${c.testo}`} value={c.modo}
@@ -1734,8 +1739,11 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
 
       {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}
         scegli={g => { setGiorno(g); setSenzaData(false) }} lingua={lingua}
-        pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
-        nuovoCompito={(testo, g) => { void l.aggiungi(testo, secchioDelGiorno(g), g) }}
+        // `ora` non passata vuol dire «non la tocco»: trascinare fra due giorni
+        // non deve portarsi via l'ora, lasciare sulle ore la scrive, lasciare
+        // nel tutto il giorno la toglie
+        pianifica={(id, data, ora) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data), ...(ora !== undefined ? { ora } : {}) }) }}
+        nuovoCompito={(testo, g, ora) => { void l.aggiungi(testo, secchioDelGiorno(g), g, ora) }}
         chiudi={() => setEspansa(false)} />}
 
       {vista === 'calendario' && l.compiti.filter(c => l.aperti.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede')).map(c =>

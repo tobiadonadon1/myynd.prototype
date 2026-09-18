@@ -224,22 +224,22 @@ export function useCompiti(
     mostraToast(messaggio)
   }, [mostraToast])
 
-  const aggiungi = useCallback(async (testo: string, quando: Secchio, giorno?: string | null): Promise<string | null> => {
+  const aggiungi = useCallback(async (testo: string, quando: Secchio, giorno?: string | null, ora?: string | null): Promise<string | null> => {
     const pulito = testo.trim()
     if (!pulito) return null
-    const ora = new Date().toISOString()
+    const adesso = new Date().toISOString()
     const finto: Compito = {
-      id: nuovoId(), testo: pulito, nota: null, quando, giorno, stato: 'aperto',
+      id: nuovoId(), testo: pulito, nota: null, quando, giorno, ora: ora ?? null, stato: 'aperto',
       // in coda al suo secchio: la chiave vera arriva dal server, questa serve
       // solo a non far saltare la riga di posto nel mezzo secondo di attesa
       ordine: 'zzzz', origine: 'mano', voce: null, doc: null, chiesto: null,
-      risultato: null, fonti: null, proposta: null, chieste: null, email: null, guaio: null, creato: ora, aggiornato: ora,
+      risultato: null, fonti: null, proposta: null, chieste: null, email: null, guaio: null, creato: adesso, aggiornato: adesso,
       chiuso: null, esito: null, sparito: null, versione: 1, modo: 'io'
     }
     const prima = compitiRef.current
     setCompiti(cs => [...cs, finto])
     try {
-      const r = await api.aggiungiCompito({ id: finto.id, testo: pulito, quando, giorno })
+      const r = await api.aggiungiCompito({ id: finto.id, testo: pulito, quando, giorno, ora: ora ?? null })
       setCompiti(r.compiti)
       return finto.id
     } catch {
@@ -395,7 +395,7 @@ export function useCompiti(
     } catch { indietro(prima, id, t('Non sono riuscito a rispondergli.')) }
   }, [indietro, mostraToast])
 
-  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; progetto?: string | null }): Promise<boolean> => {
+  const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null }): Promise<boolean> => {
     const prima = compitiRef.current
     setCompiti(cs => cs.map(x => (x.id === id ? { ...x, ...c } as Compito : x)))
     try {

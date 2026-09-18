@@ -27,6 +27,9 @@ import {
   ORE_IN_VISTA, affianca, colonneSettimana, dataLocale, giornoCompito, inizioSettimana,
   mezzanotte, miniMese, posaAdesso, posaEvento, righeOre, spostaGiorno, spostaMese
 } from '../oggi/giorni'
+import {
+  DURATA_COMPITO, compitiDelGiorno, istante, minutiDaOra, nellaGriglia, oraDaMinuti, oraDi, oraValida, posaCompito
+} from '../agenda-ore'
 import './agenda.css'
 
 /* ————— quello che la finestra si ricorda ————— */
@@ -94,9 +97,6 @@ const SEMI = [
 const fintiSeminati = new Set<string>()
 let finti: EventoAgenda[] = []
 
-const istante = (giorno: string, minuti: number) =>
-  new Date(mezzanotte(giorno).getTime() + minuti * 60000).toISOString()
-
 function seminaFinta(lunedi: string) {
   if (fintiSeminati.has(lunedi)) return
   fintiSeminati.add(lunedi)
@@ -150,11 +150,6 @@ type Bozza = {
 }
 
 const dueCifre = (n: number) => String(n).padStart(2, '0')
-const oreDaMinuti = (m: number) => `${dueCifre(Math.floor(m / 60) % 24)}:${dueCifre(Math.round(m) % 60)}`
-function minutiDaOre(hhmm: string): number {
-  const [o, m] = hhmm.split(':').map(Number)
-  return (Number.isFinite(o) ? o : 0) * 60 + (Number.isFinite(m) ? m : 0)
-}
 
 /** Dove sta la carta: accanto al dito, ma dentro la finestra. */
 function inFinestra(x: number, y: number): { x: number; y: number } {
@@ -170,6 +165,13 @@ const Spunta = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </svg>
+)
+
+const Indietro = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M15 5l-7 7 7 7" />
   </svg>
 )
 
@@ -220,8 +222,9 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
   giorno: string
   scegli: (g: string) => void
   lingua: string
-  pianifica: (id: string, giorno: string | null) => void
-  nuovoCompito: (testo: string, giorno: string) => void
+  /** Sposta una riga: il giorno, e l'ora dentro quel giorno. `null` la toglie. */
+  pianifica: (id: string, giorno: string | null, ora?: string | null) => void
+  nuovoCompito: (testo: string, giorno: string, ora?: string | null) => void
   chiudi: () => void
 }) {
   const locale = lingua === 'it' ? 'it-IT' : 'en-GB'
@@ -317,10 +320,13 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     setConCompiti(v => { scritta(CHIAVE_COMPITI, v ? '0' : '1'); return !v })
   }
 
-  const delGiorno = (g: string) => conCompiti ? compiti.filter(c => giornoCompito(c, oggi) === g) : []
+  /** Le attività accese, o nessuna: la spunta della colonna vale per tutte e due le fasce. */
+  const miei = conCompiti ? compiti : []
+  const delGiorno = (g: string) => compitiDelGiorno(miei, g, oggi).tuttoIlGiorno
   const tuttoIlGiorno = (g: string) => eventi.filter(e =>
     e.tuttoIlGiorno && e.inizio < istante(g, 24 * 60) && e.fine > istante(g, 0))
-  const aOre = (g: string) => affianca(eventi.filter(e => !e.tuttoIlGiorno && posaEvento(g, e.inizio, e.fine)))
+  /* eventi e attività con l'ora si contendono la stessa mezz'ora: si affiancano insieme */
+  const aOre = (g: string) => affianca(nellaGriglia(g, eventi, miei, oggi))
   /** Quante targhette la fascia sta tenendo fuori: zero, e non c'è niente da aprire. */
   const nascoste = settimana.reduce((n, g) =>
     n + Math.max(0, tuttoIlGiorno(g).length + delGiorno(g).length - IN_FASCIA), 0)
@@ -332,7 +338,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     const dove = inFinestra(x, y)
     setBozza({
       id: null, titolo: '', giorno: g,
-      inizio: oreDaMinuti(inizio), fine: oreDaMinuti(inizio + 60),
+      inizio: oraDaMinuti(inizio), fine: oraDaMinuti(inizio + 60),
       tuttoIlGiorno: false, calendario: scrivibili[0]?.id ?? '',
       // senza un calendario in cui scrivere la carta nasce sull'altra strada —
       // una riga in lista — invece di promettere un evento e poi non farlo
@@ -346,8 +352,8 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     const dove = inFinestra(x, y)
     setBozza({
       id: e.id, titolo: e.titolo, giorno: gg,
-      inizio: oreDaMinuti(g.getHours() * 60 + g.getMinutes()),
-      fine: oreDaMinuti(new Date(e.fine).getHours() * 60 + new Date(e.fine).getMinutes()),
+      inizio: oraDaMinuti(g.getHours() * 60 + g.getMinutes()),
+      fine: oraDaMinuti(new Date(e.fine).getHours() * 60 + new Date(e.fine).getMinutes()),
       tuttoIlGiorno: e.tuttoIlGiorno, calendario: e.calendario,
       compito: false, x: dove.x, y: dove.y, errore: null, salvando: false
     })
@@ -358,7 +364,11 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     const titolo = bozza.titolo.trim()
     if (!titolo) return
     if (bozza.compito) {
-      nuovoCompito(titolo, bozza.giorno)
+      // l'ora premuta arriva fino in fondo: era proprio questa che si perdeva
+      // per strada, e la riga finiva nel tutto il giorno qualunque casella si
+      // fosse premuta. Tutto il giorno acceso vuol dire senza ora, e allora
+      // resta nella fascia — che è dove quella riga vuole stare
+      nuovoCompito(titolo, bozza.giorno, !bozza.tuttoIlGiorno && oraValida(bozza.inizio) ? bozza.inizio : null)
       scegli(bozza.giorno)
       setBozza(null)
       return
@@ -367,8 +377,8 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
       ? { titolo, inizio: istante(bozza.giorno, 0), fine: istante(bozza.giorno, 24 * 60), tuttoIlGiorno: true, calendario: bozza.calendario }
       : {
         titolo, tuttoIlGiorno: false, calendario: bozza.calendario,
-        inizio: istante(bozza.giorno, minutiDaOre(bozza.inizio)),
-        fine: istante(bozza.giorno, Math.max(minutiDaOre(bozza.fine), minutiDaOre(bozza.inizio) + 15))
+        inizio: istante(bozza.giorno, minutiDaOra(bozza.inizio)),
+        fine: istante(bozza.giorno, Math.max(minutiDaOra(bozza.fine), minutiDaOra(bozza.inizio) + 15))
       }
     setBozza(b => b && { ...b, salvando: true, errore: null })
     try {
@@ -410,21 +420,34 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     e.dataTransfer.setData('text/plain', cosa)
     e.dataTransfer.effectAllowed = 'move'
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    if (cosa.startsWith('evento:')) presa.current = { id: cosa.slice(7), scarto: e.clientY - r.top, durata }
+    // il punto in cui si è preso il blocco vale per gli eventi e per le
+    // attività: si posa dove lo si è preso, non dove sta il dito
+    presa.current = { id: cosa.slice(cosa.indexOf(':') + 1), scarto: e.clientY - r.top, durata }
+  }
+
+  /** Il minuto su cui si è lasciato qualcosa, a quarti d'ora, tenendo conto della presa. */
+  const minutoLasciato = (e: React.DragEvent, id: string, durata: number) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const p = presa.current?.id === id ? presa.current : null
+    const grezzi = ((e.clientY - r.top - (p?.scarto ?? 0)) / r.height) * 1440
+    return Math.max(0, Math.min(Math.round(grezzi / 15) * 15, 1440 - durata))
   }
 
   const lasciaSuOre = (e: React.DragEvent, g: string) => {
     e.preventDefault()
     setBersaglio(null)
     const cosa = e.dataTransfer.getData('text/plain')
-    if (cosa.startsWith('compito:')) { pianifica(cosa.slice(8), g); return }
+    // una riga lasciata sulle ore prende quell'ora: è lo stesso gesto di un
+    // evento, e prima finiva comunque nel tutto il giorno
+    if (cosa.startsWith('compito:')) {
+      const id = cosa.slice(8)
+      pianifica(id, g, oraDaMinuti(minutoLasciato(e, id, DURATA_COMPITO)))
+      return
+    }
     if (!cosa.startsWith('evento:')) return
     const id = cosa.slice(7)
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const p = presa.current?.id === id ? presa.current : null
-    const grezzi = ((e.clientY - r.top - (p?.scarto ?? 0)) / r.height) * 1440
-    const durata = p?.durata || 60
-    const minuti = Math.max(0, Math.min(Math.round(grezzi / 15) * 15, 1440 - durata))
+    const durata = (presa.current?.id === id ? presa.current.durata : 0) || 60
+    const minuti = minutoLasciato(e, id, durata)
     void sposta(id, istante(g, minuti), istante(g, minuti + durata))
   }
 
@@ -432,7 +455,8 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
     e.preventDefault()
     setBersaglio(null)
     const cosa = e.dataTransfer.getData('text/plain')
-    if (cosa.startsWith('compito:')) { pianifica(cosa.slice(8), g); return }
+    // nella fascia l'ora non c'è: lasciarcela sarebbe un'ora che non si vede
+    if (cosa.startsWith('compito:')) { pianifica(cosa.slice(8), g, null); return }
     if (cosa.startsWith('evento:')) void sposta(cosa.slice(7), istante(g, 0), istante(g, 24 * 60))
   }
 
@@ -442,20 +466,29 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
 
   const nomeCorto = (g: string) => dataLocale(g).toLocaleDateString(locale, { weekday: 'short' })
   const perEsteso = (g: string) => dataLocale(g).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' })
-  const oraDi = (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  const oraEvento = (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 
   const rail = (
     <aside className="agenda-rail">
+      {/* la via d'uscita sta dove si comincia a leggere, in alto a sinistra, e
+          dice dove porta invece di dire cosa fa alla finestra */}
+      <button type="button" className="agenda-indietro" onClick={chiudi}>
+        <Indietro />{t('Torna indietro')}
+      </button>
+
       <button type="button" className="agenda-nuovo"
         onClick={e => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
           const ora = giorno === oggi ? adesso.getHours() + 1 : 9
           apriNuovo(giorno, ora * 60, r.left, r.bottom + 8)
         }}>
-        <span aria-hidden="true">+</span><span>{t('Nuovo evento')}</span>
+        {/* senza un calendario in cui scrivere questo bottone fa una riga in
+            lista, e allora lo dice: promettere un evento e darne un altro è la
+            cosa che qui non deve succedere */}
+        <i aria-hidden="true">+</i><span>{scrivibili.length ? t('Nuovo evento') : t('Nuova attività')}</span>
       </button>
 
-      <div>
+      <div className="agenda-mese">
         <div className="agenda-mese-testa">
           <span>{dataLocale(mese).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</span>
           <button type="button" aria-label={t('Mese precedente')} onClick={() => setMese(m => spostaMese(m, -1))}>‹</button>
@@ -482,7 +515,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
         </div>
       </div>
 
-      <div>
+      <div className="agenda-calendari">
         <h3>{t('I miei calendari')}</h3>
         <div className="agenda-lista">
           {calendari.map(c => (
@@ -514,20 +547,45 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
 
   const carta = bozza && (
     <div className="agenda-carta" style={{ left: bozza.x, top: bozza.y }} role="dialog"
-      aria-label={bozza.id ? t('Modifica evento') : t('Nuovo evento')}>
+      aria-label={bozza.id ? t('Modifica evento') : bozza.compito ? t('Nuova attività') : t('Nuovo evento')}>
       <input type="text" value={bozza.titolo} autoFocus placeholder={t('Titolo')}
         onChange={e => setBozza(b => b && { ...b, titolo: e.target.value })}
         onKeyDown={e => { if (e.key === 'Enter') void salva() }} />
+
+      {/*
+        * Un evento nel calendario, o una riga nella tua lista.
+        *
+        * Prima era un interruttore in fondo alla carta — «Invece un'attività» —
+        * e stava lì come un ripensamento: quello che stai scrivendo si sceglie
+        * prima di scriverlo, non dopo. Senza un calendario in cui scrivere
+        * questa scelta non c'è: c'è una strada sola, e la carta la prende.
+        */}
+      {!bozza.id && scrivibili.length > 0 && (
+        <div className="agenda-scelta" role="group" aria-label={t('Cosa stai scrivendo')}>
+          <button type="button" aria-pressed={!bozza.compito}
+            onClick={() => setBozza(b => b && { ...b, compito: false })}>
+            {t('Evento in')} {scrivibili.find(c => c.id === bozza.calendario)?.nome ?? scrivibili[0].nome}
+          </button>
+          <button type="button" aria-pressed={bozza.compito}
+            onClick={() => setBozza(b => b && { ...b, compito: true })}>
+            {t('Attività in lista')}
+          </button>
+        </div>
+      )}
 
       <input type="date" className="agenda-data" value={bozza.giorno} aria-label={t('Data')}
         onChange={e => setBozza(b => b && { ...b, giorno: e.target.value || b.giorno })} />
       {!bozza.tuttoIlGiorno && (
         <div className="agenda-quando">
-          <input type="time" value={bozza.inizio} aria-label={t('Inizio')}
+          <input type="time" value={bozza.inizio} aria-label={bozza.compito ? t('Ora') : t('Inizio')}
             onChange={e => setBozza(b => b && { ...b, inizio: e.target.value })} />
-          <span className="agenda-a" aria-hidden="true">→</span>
-          <input type="time" value={bozza.fine} aria-label={t('Fine')}
-            onChange={e => setBozza(b => b && { ...b, fine: e.target.value })} />
+          {/* un'attività non ha una fine da nessuna parte: si disegna alta
+              un'ora, e chiedere una durata sarebbe una domanda in più su ogni riga */}
+          {!bozza.compito && <>
+            <span className="agenda-a" aria-hidden="true">→</span>
+            <input type="time" value={bozza.fine} aria-label={t('Fine')}
+              onChange={e => setBozza(b => b && { ...b, fine: e.target.value })} />
+          </>}
         </div>
       )}
 
@@ -542,14 +600,6 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
           onChange={e => setBozza(b => b && { ...b, calendario: e.target.value })}>
           {scrivibili.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
         </select>
-      )}
-
-      {!bozza.id && (
-        <label className="agenda-interruttore">
-          <input type="checkbox" checked={bozza.compito}
-            onChange={e => setBozza(b => b && { ...b, compito: e.target.checked })} />
-          <span className="agenda-binario"><i /></span>{t('Invece un’attività')}
-        </label>
       )}
 
       {bozza.errore && <p className="agenda-nota" style={{ color: 'var(--rame-testo)' }}>{t(bozza.errore)}</p>}
@@ -576,7 +626,6 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
           <button type="button" aria-label={t('Settimana successiva')} onClick={() => scegli(spostaGiorno(giorno, 7))}>›</button>
           <button type="button" className="agenda-oggi" onClick={() => { scegli(oggi); setMese(oggi) }}>{t('Oggi')}</button>
           <span className="agenda-spinta" />
-          <button type="button" className="agenda-riduci" onClick={chiudi}>{t('Riduci')}</button>
         </header>
 
         <div className="agenda-settimana">
@@ -653,7 +702,25 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                     const minuti = Math.round((((e.clientY - r.top) / r.height) * 1440) / 30) * 30
                     apriNuovo(g, minuti, e.clientX + 14, e.clientY - 40)
                   }}>
-                  {aOre(g).map(({ evento: e, colonna, colonne }) => {
+                  {aOre(g).map(({ evento: cosa, colonna, colonne }) => {
+                    const dove = { left: `${(colonna / colonne) * 96 + 2}%`, width: `${96 / colonne - 1.5}%` }
+                    // un'attività con l'ora sta nella griglia come un evento, e
+                    // si veste come le sue sorelle della fascia: è tua, non del
+                    // calendario di qualcun altro
+                    if (cosa.tipo === 'compito') {
+                      const c = cosa.compito
+                      const posa = posaCompito(g, oraDi(c))
+                      if (!posa) return null
+                      return (
+                        <span key={c.id} className="agenda-blocco compito" title={c.testo} draggable
+                          style={{ top: `${posa.top * 100}%`, height: `${posa.altezza * 100}%`, ...dove }}
+                          onDragStart={ev => prendi(ev, `compito:${c.id}`, DURATA_COMPITO)}>
+                          <b>{c.testo}</b>
+                          <em>{c.ora}</em>
+                        </span>
+                      )
+                    }
+                    const e = cosa.evento
                     const posa = posaEvento(g, e.inizio, e.fine)
                     if (!posa) return null
                     const durata = (new Date(e.fine).getTime() - new Date(e.inizio).getTime()) / 60000
@@ -662,15 +729,14 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                       <button type="button" key={e.id} className={`agenda-blocco ${scrivibile ? '' : 'sola'}`}
                         title={e.titolo}
                         style={{
-                          top: `${posa.top * 100}%`, height: `${posa.altezza * 100}%`,
-                          left: `${(colonna / colonne) * 96 + 2}%`, width: `${96 / colonne - 1.5}%`,
+                          top: `${posa.top * 100}%`, height: `${posa.altezza * 100}%`, ...dove,
                           background: colori.get(e.calendario) ?? 'var(--rame)'
                         }}
                         draggable={!!scrivibile}
                         onDragStart={ev => prendi(ev, `evento:${e.id}`, durata)}
                         onClick={ev => { ev.stopPropagation(); apriEvento(e, ev.clientX, ev.clientY) }}>
                         <b>{e.titolo}</b>
-                        {durata >= 45 && <em>{oraDi(e.inizio)}</em>}
+                        {durata >= 45 && <em>{oraEvento(e.inizio)}</em>}
                       </button>
                     )
                   })}

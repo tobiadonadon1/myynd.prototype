@@ -5,6 +5,7 @@ import { t } from '../lingua'
 import { Cestino } from '../ui'
 import type { Lista } from './useCompiti'
 import { giornoCompito, giornoLocale, secchioDelGiorno, spostaGiorno } from './giorni'
+import { oraDi, oraValida } from '../agenda-ore'
 import './calendario.css'
 
 /** Native modal semantics provide focus containment, Escape and focus restoration. */
@@ -17,6 +18,8 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   useEffect(() => { let vivo = true; api.progetti(c.progetto ?? undefined).then(r => { if (vivo) setProgetti(r.progetti) }).catch(() => {}); return () => { vivo = false } }, [c.progetto])
   const oggi = giornoLocale()
   const [giorno, setGiorno] = useState(giornoCompito(c, oggi) ?? '')
+  /** L'ora dentro quel giorno: vuota vuol dire senza ora, cioè vale tutto il giorno. */
+  const [ora, setOra] = useState(oraDi(c) ?? '')
   const [salvando, setSalvando] = useState(false)
   const [errore, setErrore] = useState(false)
   useEffect(() => {
@@ -37,6 +40,8 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
     if (!testo.trim() || salvando) return
     setSalvando(true); setErrore(false)
     const fatto = await l.cambia(c.id, { testo: testo.trim(), nota: nota.trim() || null, giorno: giorno || null, progetto: progetto || null,
+      // senza un giorno l'ora non sta da nessuna parte, e il server la rifiuta
+      ora: giorno && oraValida(ora) ? ora : null,
       quando: giorno ? secchioDelGiorno(giorno) : (c.quando === 'settimana' ? 'settimana' : 'poi') })
     setSalvando(false)
     if (fatto) chiudi(); else setErrore(true)
@@ -50,8 +55,13 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
         <input id="task-detail-title" className="task-detail-title" autoFocus required value={testo} onChange={e => setTesto(e.target.value)} />
         <fieldset><legend>{t('Pianificazione')}</legend><div className="task-detail-presets">
           {[['Oggi', oggi], ['Domani', spostaGiorno(oggi, 1)], ['Dopodomani', spostaGiorno(oggi, 2)], ['Senza data', '']].map(([nome, data]) =>
-            <button type="button" key={nome} aria-pressed={giorno === data} onClick={() => setGiorno(data)}>{t(nome)}</button>)}
-        </div><input type="date" aria-label={t('Data')} min="1900-01-01" max="9999-12-31" value={giorno} onChange={e => setGiorno(e.target.value)} /></fieldset>
+            <button type="button" key={nome} aria-pressed={giorno === data} onClick={() => { setGiorno(data); if (!data) setOra('') }}>{t(nome)}</button>)}
+        </div><div className="task-detail-quando">
+          <input type="date" aria-label={t('Data')} min="1900-01-01" max="9999-12-31" value={giorno} onChange={e => { setGiorno(e.target.value); if (!e.target.value) setOra('') }} />
+          {/* l'ora sta accanto alla data perché è la stessa domanda, fatta più
+              da vicino: vuota vuol dire che quella cosa vale per tutto il giorno */}
+          <input type="time" aria-label={t('Ora')} value={ora} disabled={!giorno} onChange={e => setOra(e.target.value)} />
+        </div></fieldset>
         <label className="task-detail-label" htmlFor="task-detail-notes">{t('Note')}</label>
         <textarea id="task-detail-notes" className="task-detail-notes" rows={3} value={nota} placeholder={t('Aggiungi un dettaglio…')} onChange={e => setNota(e.target.value)} />
         {(progetti.length > 0 || progetto) && <><label className="task-detail-label" htmlFor="task-detail-project">{t('Progetto')}</label>

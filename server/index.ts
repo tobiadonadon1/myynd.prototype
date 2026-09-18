@@ -10,7 +10,7 @@ import { COLORE_NOTE } from './colori-fonti.ts'
 // scrivi nell'onboarding restano su questa macchina.
 
 import express from 'express'
-import { giornoValido } from './giorno-compito.ts'
+import { giornoValido, oraValida } from './giorno-compito.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
@@ -2688,6 +2688,11 @@ app.post('/api/compiti', (req, res) => {
   const quando = SECCHI.includes(String(req.body?.quando)) ? String(req.body.quando) : 'oggi'
   const giorno = req.body?.giorno ?? null
   if (giorno !== null && !giornoValido(giorno)) return res.status(400).json({ errore: 'Data non valida.' })
+  // l'ora vale dentro il giorno: senza giorno non c'è niente a cui appartenga,
+  // e una riga con l'ora e senza data sarebbe una riga che non si disegna mai
+  const ora = req.body?.ora ?? null
+  if (ora !== null && !oraValida(ora)) return res.status(400).json({ errore: 'Ora non valida.' })
+  if (ora !== null && giorno === null) return res.status(400).json({ errore: 'Un’ora senza un giorno non vuol dire niente.' })
   let progetto = req.body?.progetto ?? null
   if (progetto !== null && (typeof progetto !== 'string' || !progetti.trova(progetto))) {
     return res.status(400).json({ errore: 'Questo progetto non c’è.' })
@@ -2707,7 +2712,7 @@ app.post('/api/compiti', (req, res) => {
     store.scriviCompito({
     id, testo,
     nota: req.body?.nota ? String(req.body.nota) : null,
-    quando, giorno, progetto,
+    quando, giorno, ora, progetto,
     ordine: ordine.dopo(store.ultimoOrdine(quando)),
     origine: String(req.body?.origine ?? 'mano'),
     voce: req.body?.voce ? String(req.body.voce) : null,
@@ -2734,7 +2739,7 @@ app.patch('/api/compiti/:id', (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   const b = req.body ?? {}
-  const patch: { testo?: string; nota?: string | null; giorno?: string | null; progetto?: string | null } = {}
+  const patch: { testo?: string; nota?: string | null; giorno?: string | null; ora?: string | null; progetto?: string | null } = {}
   if (b.testo !== undefined) {
     const testo = String(b.testo).trim()
     if (!testo) return res.status(400).json({ errore: 'Un compito senza testo non è un compito.' })
@@ -2751,6 +2756,21 @@ app.patch('/api/compiti/:id', (req, res) => {
     if (b.giorno !== null && !giornoValido(b.giorno)) return res.status(400).json({ errore: 'Data non valida.' })
     patch.giorno = b.giorno
   }
+  if (b.ora !== undefined) {
+    if (b.ora !== null && !oraValida(b.ora)) return res.status(400).json({ errore: 'Ora non valida.' })
+    patch.ora = b.ora
+  }
+  /*
+   * L'ora vive dentro il giorno, e se il giorno se ne va se ne va con lui.
+   *
+   * Una riga tolta dal calendario — trascinata su «Da pianificare» — che si
+   * tenesse le dieci e mezza sarebbe una riga con un'ora che non sta da nessuna
+   * parte: il giorno che le si ridà una data tornerebbe alle dieci e mezza di
+   * un'altra settimana, senza che nessuno l'abbia chiesto.
+   */
+  const giornoVia = patch.giorno === null || (patch.giorno === undefined && !c.giorno)
+  if (giornoVia && patch.ora) return res.status(400).json({ errore: 'Un’ora senza un giorno non vuol dire niente.' })
+  if (patch.giorno === null) patch.ora = null
 
   let quando: string | undefined
   if (b.quando !== undefined) {

@@ -632,6 +632,8 @@ export type Compito = {
   nota: string | null
   quando: string          // oggi | settimana | poi
   giorno?: string | null  // planned local calendar day, YYYY-MM-DD
+  /** L'ora dentro quel giorno, «HH:MM». Null: vale per tutto il giorno. */
+  ora?: string | null
   progetto?: string | null
   stato: string           // aperto | delegato | pronto | chiede | fatto | lasciato
   modo: string            // io | bozza | tutto | prompt
@@ -1097,10 +1099,10 @@ export const api = {
 
   compiti: () => json<Lista>('/api/compiti'),
 
-  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; progetto?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
+  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
     json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti', { method: 'POST', body: JSON.stringify(c) }),
 
-  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; progetto?: string | null }) =>
+  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
 
