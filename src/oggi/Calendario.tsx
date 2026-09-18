@@ -24,12 +24,22 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   espandi: () => void
 }) {
   const [sopra, setSopra] = useState<string | null>(null)
+  /**
+   * Qualcosa si sta trascinando, adesso.
+   *
+   * Serve a una cosa sola: «Da pianificare» a zero non si disegna — un conto a
+   * zero non è una notizia — ma è anche il posto dove si lascia una riga per
+   * toglierle il giorno. Mentre una riga è in mano ricompare, e appena si posa
+   * se ne va. Gli eventi del trascinamento salgono dalle carte fin qui.
+   */
+  const [inMano, setInMano] = useState(false)
   const contenitore = useRef<HTMLElement>(null)
   const [colonne, setColonne] = useState(3)
   useEffect(() => {
     const el = contenitore.current
     if (!el) return
-    const misura = () => setColonne(quantiGiorni(el.clientWidth - 44))
+    // 36 sono i due lati dell'imbottitura della scheda: chi la cambia cambi qui
+    const misura = () => setColonne(quantiGiorni(el.clientWidth - 36))
     misura()
     const observer = new ResizeObserver(misura)
     observer.observe(el)
@@ -45,7 +55,7 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
     : g === spostaGiorno(oggi, 2) ? t('Dopodomani') : dataLocale(g).toLocaleDateString(locale, { weekday: 'long' })
   const perEsteso = (g: string) => dataLocale(g).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' })
   const lascia = (e: React.DragEvent, data: string | null) => {
-    e.preventDefault(); setSopra(null)
+    e.preventDefault(); setSopra(null); setInMano(false)
     const id = e.dataTransfer.getData('text/plain')
     if (compiti.some(c => c.id === id)) pianifica(id, data)
   }
@@ -55,7 +65,8 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   }
   const trascina = (e: React.DragEvent, g: string) => { e.preventDefault(); setSopra(g) }
 
-  return <section ref={contenitore} className="task-calendar" aria-label={t('Calendario')}>
+  return <section ref={contenitore} className="task-calendar" aria-label={t('Calendario')}
+    onDragStart={() => setInMano(true)} onDragEnd={() => setInMano(false)}>
     <div className="task-calendar-toolbar">
       <div className="task-calendar-month">{dataLocale(giorno).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</div>
       <div className="task-calendar-nav">
@@ -89,10 +100,12 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
     </div>
     <div className="task-calendar-agenda-header">
       <div><h2>{senzaData ? t('Da pianificare') : t('In programma')}</h2></div>
-      <button type="button" className={`task-unscheduled ${senzaData ? 'selected' : ''}`} aria-pressed={senzaData}
-        onClick={() => setSenzaData(v => !v)} onDragOver={e => e.preventDefault()} onDrop={e => lascia(e, null)}>
-        {t('Da pianificare')}<span>{nonPianificati.length}</span>
-      </button>
+      {(nonPianificati.length > 0 || senzaData || inMano) && (
+        <button type="button" className={`task-unscheduled ${senzaData ? 'selected' : ''}`} aria-pressed={senzaData}
+          onClick={() => setSenzaData(v => !v)} onDragOver={e => e.preventDefault()} onDrop={e => lascia(e, null)}>
+          {t('Da pianificare')}<span>{nonPianificati.length}</span>
+        </button>
+      )}
     </div>
     {!senzaData && visibili.includes(oggi) && arretrati.length > 0 && <div className="task-calendar-overdue">
       <h3>{t('Da recuperare')} <span>{arretrati.length}</span></h3>

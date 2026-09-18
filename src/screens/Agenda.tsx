@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api, type Agenda as DatiAgenda, type BozzaEvento, type CalendarioAgenda, type Compito, type EventoAgenda } from '../api'
+import { desktop } from '../desktop'
 import { t } from '../lingua'
 import {
   ORE_IN_VISTA, affianca, colonneSettimana, dataLocale, giornoCompito, inizioSettimana,
@@ -190,6 +191,25 @@ const Freccia = ({ su }: { su: boolean }) => (
  */
 const IN_FASCIA = 3
 
+/**
+ * La striscia in cima, dentro l'app sul Mac.
+ *
+ * Ventiquattro pixel, gli stessi che `App.tsx` lascia alle due colonne: la
+ * finestra non ha barra del titolo ma i tre semafori ci sono, in alto a
+ * sinistra, e sotto di loro non va messo niente. Da qui esce come `--striscia`
+ * e la cornice della schermata se la somma al proprio margine.
+ */
+const striscia = () => (desktop()?.piattaforma === 'darwin' ? 24 : 0)
+
+/**
+ * Dove si dà il permesso al Calendario.
+ *
+ * È la stessa riga di `server/agenda-apple.ts`, e il dizionario la conosce:
+ * sta anche qui perché la colonna la sappia dire da sé quando il guaio arriva
+ * senza — «non ha risposto» da solo non dice a nessuno cosa fare.
+ */
+const PERMESSO = 'Per l’agenda serve il permesso al Calendario: Impostazioni di Sistema › Privacy e sicurezza › Calendari › Myynd.'
+
 /* ————— la schermata ————— */
 
 export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovoCompito, chiudi }: {
@@ -222,8 +242,6 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
   const [mese, setMese] = useState(giorno)
   const [adesso, setAdesso] = useState(() => new Date())
   const griglia = useRef<HTMLDivElement>(null)
-  /** Il guaio dell'agenda si dice una volta: ridirlo a ogni giro è un martello. */
-  const gia = useRef<string | null>(null)
   /** Dove si teneva il blocco quando è partito il trascinamento. */
   const presa = useRef<{ id: string; scarto: number; durata: number } | null>(null)
 
@@ -233,14 +251,20 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
       setDati(await api.agenda(da, a))
       setGuasto(null)
     } catch (e) {
-      const frase = e instanceof Error ? e.message : String(e)
       setDati(null)
-      setGuasto(gia.current === frase ? null : frase)
-      gia.current = frase
+      setGuasto(e instanceof Error ? e.message : String(e))
     }
   }, [lunedi, da, a])
 
   useEffect(() => { void carica() }, [carica])
+
+  // finché la settimana è aperta prende lei tutta la finestra: quello che sta
+  // sotto — la mascotte, la porta della chat — si toglie di mezzo e torna alla
+  // chiusura. La regola che le nasconde sta in `agenda.css`
+  useEffect(() => {
+    document.body.classList.add('agenda-aperta')
+    return () => document.body.classList.remove('agenda-aperta')
+  }, [])
   useEffect(() => { setMese(m => m.slice(0, 7) === giorno.slice(0, 7) ? m : giorno) }, [giorno])
   useEffect(() => {
     const filo = window.setInterval(() => setAdesso(new Date()), 60_000)
@@ -269,6 +293,14 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
   const calendari = dati?.calendari ?? []
   const colori = useMemo(() => new Map(calendari.map(c => [c.id, c.colore])), [calendari])
   const scrivibili = calendari.filter(c => c.scrivibile)
+  /**
+   * L'agenda del Mac non c'è: la frase del server, o quella della richiesta
+   * andata storta. Le attività restano accese sopra, quindi la colonna non
+   * resta mai vuota e la settimana si guarda lo stesso.
+   */
+  const fonteGiu = dati?.avviso ?? guasto
+  /** Il permesso si spiega dove si può dare, e solo se non lo dice già la frase. */
+  const conPermesso = !!fonteGiu && fonteGiu !== PERMESSO && desktop()?.piattaforma === 'darwin'
   const eventi = useMemo(
     () => (dati?.eventi ?? []).filter(e => !spenti.has(e.calendario)),
     [dati, spenti])
@@ -302,7 +334,9 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
       id: null, titolo: '', giorno: g,
       inizio: oreDaMinuti(inizio), fine: oreDaMinuti(inizio + 60),
       tuttoIlGiorno: false, calendario: scrivibili[0]?.id ?? '',
-      compito: false, x: dove.x, y: dove.y, errore: null, salvando: false
+      // senza un calendario in cui scrivere la carta nasce sull'altra strada —
+      // una riga in lista — invece di promettere un evento e poi non farlo
+      compito: !scrivibili.length, x: dove.x, y: dove.y, errore: null, salvando: false
     })
   }
 
@@ -465,14 +499,16 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
             <span style={{ color: 'rgba(34,39,31,.8)' }}>{t('Le tue attività')}</span>
           </label>
         </div>
-      </div>
 
-      {guasto && (
-        <p className="agenda-guaio">
-          <span>{t(guasto)}</span>
-          <button type="button" aria-label={t('Chiudi')} onClick={() => setGuasto(null)}>×</button>
-        </p>
-      )}
+        {/* la fonte che manca si dice qui, sotto i calendari che ci sono */}
+        {fonteGiu && (
+          <p className="agenda-fonte">
+            <b>{t('Agenda del Mac')}</b>
+            {t(fonteGiu)}
+            {conPermesso && ` ${t(PERMESSO)}`}
+          </p>
+        )}
+      </div>
     </aside>
   )
 
@@ -529,7 +565,8 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
   )
 
   return createPortal(
-    <div className="agenda" role="dialog" aria-modal="true" aria-label={t('Agenda')}>
+    <div className="agenda" role="dialog" aria-modal="true" aria-label={t('Agenda')}
+      style={{ '--striscia': `${striscia()}px` } as React.CSSProperties}>
       {rail}
 
       <div className="agenda-corpo">

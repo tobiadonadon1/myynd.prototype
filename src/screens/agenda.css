@@ -6,6 +6,19 @@
  * spegnere — a destra i sette giorni con la fascia del tutto il giorno sopra e
  * la griglia delle ore sotto.
  *
+ * Sta *dentro* la finestra, e questa è la cosa che prima non faceva. Era un
+ * foglio appiccicato ai quattro bordi: sul Mac la barra del titolo non c'è ma
+ * i tre semafori sì, e «Nuovo evento» ci finiva sotto; la colonna e la griglia
+ * toccavano il vetro. Adesso c'è la stessa cornice del resto dell'app — la
+ * striscia in cima per i semafori, un margine tutt'intorno — e dentro ci stanno
+ * due schede: gli attrezzi e la settimana, con lo stesso bordo tenue e lo
+ * stesso raggio degli altri riquadri di casa.
+ *
+ * La striscia arriva da `Agenda.tsx` come `--striscia`: ventiquattro pixel
+ * dentro l'app sul Mac, zero dappertutto altrove. È lo stesso numero che
+ * `App.tsx` mette come margine alle due colonne; chi cambia l'uno cambi
+ * l'altro, o i semafori tornano addosso a qualcosa.
+ *
  * I colori sono quelli di casa: rame per l'unico accento — oggi, l'ora adesso,
  * il bottone che scrive — avorio e grigi caldi per tutto il resto. Il colore
  * dei blocchi è l'unica eccezione, e non è decorazione: è l'unica cosa che
@@ -16,8 +29,11 @@
  * blocchi e la riga di adesso la leggono tutti da lì.
  */
 .agenda {
-  position: fixed; inset: 0; z-index: 60; display: flex;
-  background: #FBF6EF; color: #22271F;
+  position: fixed; inset: 0; z-index: 60; display: flex; gap: 16px;
+  box-sizing: border-box;
+  padding: calc(var(--striscia, 0px) + 22px) 22px 22px;
+  background: radial-gradient(150% 110% at 6% 0%, #F8F1E7 0%, #F2E9DC 58%, #EFE2D2 100%);
+  color: #22271F;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px;
   animation: fadein .18s ease;
   --ora: 52px;
@@ -25,15 +41,27 @@
   --scuro: #8E3F1F;
   --filo: rgba(34,39,31,.09);
 }
+/* Mentre la settimana è aperta, quello che sta sotto non deve spuntare: la
+   mascotte e la porta della chat si tolgono di mezzo e tornano alla chiusura.
+   La classe la mette e la toglie `Agenda.tsx`. */
+body.agenda-aperta .app-mascotte,
+body.agenda-aperta .app-porta-chat { display: none; }
 .agenda button, .agenda input, .agenda select, .agenda label {font-family: inherit;}
 .agenda button {cursor: pointer;}
 .agenda :focus-visible {outline: 2px solid var(--rame); outline-offset: 2px; border-radius: 6px;}
 
 /* ————— la colonna degli attrezzi ————— */
+/* una scheda come quella della navigazione: stesso raggio, stesso bordo
+   chiaro, stessa ombra bassa. È lei a staccare gli attrezzi dalla griglia,
+   senza bisogno di una riga verticale in mezzo */
 .agenda-rail {
-  flex: none; width: 262px; display: flex; flex-direction: column; gap: 26px;
-  padding: 22px 20px 20px; overflow-y: auto;
-  background: rgba(255,253,249,.7); border-right: 1px solid rgba(34,39,31,.07);
+  flex: none; width: 250px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 24px;
+  padding: 18px 16px 16px; overflow-y: auto;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,253,249,.82), rgba(255,253,249,.58));
+  border: 1px solid rgba(255,255,255,.7);
+  box-shadow: 0 26px 60px rgba(84,64,44,.13);
 }
 .agenda-nuovo {
   display: flex; align-items: center; gap: 9px; width: 100%;
@@ -104,19 +132,27 @@
 .agenda-voce.spenta > span:last-child {color: rgba(34,39,31,.45);}
 .agenda-sola {font-size: 10.5px; color: rgba(34,39,31,.38); margin-left: auto; flex: none;}
 
-/* un guaio dell'agenda è una riga calma, non una carta con un punto esclamativo */
-.agenda-guaio {
-  display: flex; gap: 8px; align-items: flex-start;
-  font-size: 11.5px; line-height: 1.5; color: var(--scuro);
-  border-left: 2px solid rgba(196,98,59,.45); padding: 2px 0 2px 10px;
+/*
+ * L'agenda del Mac che non c'è.
+ *
+ * Non è un errore da sventolare: è una fonte in meno, e si dice dove si
+ * leggono le fonti — sotto «I miei calendari», una volta, con la riga che
+ * spiega dove si dà il permesso. Le attività restano accese sopra, quindi la
+ * colonna non è mai vuota e la settimana si guarda lo stesso.
+ */
+.agenda-fonte {
+  margin: 12px 0 0; padding: 11px 0 0; border-top: 1px solid rgba(34,39,31,.07);
+  font-size: 11.5px; line-height: 1.55; color: rgba(34,39,31,.52);
 }
-.agenda-guaio button {border: 0; background: none; padding: 0; color: inherit; font-size: 15px; line-height: 1;}
+.agenda-fonte b {display: block; font-weight: 500; color: rgba(34,39,31,.7); margin-bottom: 4px;}
 
 /* ————— la settimana ————— */
 .agenda-corpo {flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;}
+/* il mese comincia dove comincia la griglia: il titolo e il bordo della scheda
+   stanno sulla stessa verticale, e sopra e sotto c'è il respiro della cornice */
 .agenda-testa {
-  flex: none; display: flex; align-items: center; gap: 14px;
-  padding: 20px 26px 16px;
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 2px 2px 16px;
 }
 .agenda-testa h1 {
   margin: 0; font-size: 23px; font-weight: 400; letter-spacing: -.025em; text-transform: capitalize;
@@ -132,10 +168,14 @@
 }
 .agenda-testa .agenda-riduci {margin-left: 8px;}
 
+/* la griglia è una scheda come le altre di casa: stesso bordo chiaro, stesso
+   raggio, la stessa ombra bassa del calendario di «Da fare» */
 .agenda-settimana {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
-  margin: 0 20px 20px; border: 1px solid rgba(34,39,31,.08); border-radius: 18px;
-  background: #FFFDF9; overflow: hidden;
+  border: 1px solid rgba(255,255,255,.96); border-radius: 20px;
+  background: linear-gradient(140deg, rgba(255,253,248,.97), rgba(255,247,240,.92));
+  box-shadow: 0 10px 36px -24px rgba(71,57,40,.34);
+  overflow: hidden;
 }
 .agenda-teste, .agenda-tuttogiorno {
   display: grid; grid-template-columns: 58px repeat(7, minmax(0, 1fr));
@@ -278,12 +318,11 @@
 .agenda-carta .agenda-nota {font-size: 11.5px; line-height: 1.5; color: rgba(34,39,31,.5); margin: 0;}
 
 @media (max-width: 1180px) {
-  .agenda {--ora: 46px;}
-  .agenda-rail {width: 212px; padding: 18px 14px; gap: 20px;}
+  .agenda {--ora: 46px; gap: 12px; padding: calc(var(--striscia, 0px) + 18px) 16px 16px;}
+  .agenda-rail {width: 214px; padding: 14px 12px 12px; gap: 20px;}
   .agenda-teste, .agenda-tuttogiorno, .agenda-griglia {grid-template-columns: 44px repeat(7, minmax(0, 1fr));}
-  .agenda-testa {padding: 16px 18px 12px;}
+  .agenda-testa {padding: 0 2px 12px;}
   .agenda-testa h1 {font-size: 20px;}
-  .agenda-settimana {margin: 0 14px 14px;}
   .agenda-giorno-testa .agenda-numero {min-width: 28px; height: 28px; font-size: 17px;}
   .agenda-ore span {right: 6px; font-size: 10px;}
 }

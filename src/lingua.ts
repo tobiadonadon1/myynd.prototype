@@ -456,6 +456,8 @@ const EN: Record<string, string> = {
   'I miei calendari': 'My calendars',
   'Le tue attività': 'Tasks',
   'Sola lettura': 'Read only',
+  // la fonte che manca, detta sotto i calendari che ci sono
+  'Agenda del Mac': 'Mac calendar',
   'Titolo': 'Title',
   'Tutto il giorno': 'All day',
   'Invece un’attività': 'A task instead',
