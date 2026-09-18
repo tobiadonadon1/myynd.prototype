@@ -1291,6 +1291,13 @@ const EN: Record<string, string> = {
   'Se ne occupa Myynd': 'Myynd takes it',
   'Richiamala': 'Take it back',
   'Fanne una bozza': 'Draft it for me',
+  // le sue domande, in riga: si risponde lì, e si può anche lasciar perdere
+  'Rispondi qui': 'Answer here',
+  'Non mi serve, lasciala perdere': 'Not relevant, drop it',
+  // l'ordine dei blocchi: trascinando, o da tastiera («Sposta su» e «Sposta
+  // giù» il dizionario le sa già, dalla lista)
+  'Trascinalo per cambiare ordine': 'Drag it to reorder',
+  'Non sono riuscito a salvare l’ordine.': 'I could not save the order.',
   // i tre scaffali si spostano dalla lista, non dalla prima pagina: sul feed
   // erano tre voci di menù che non volevano dire niente
   'Apri nella lista': 'Open it in the list',

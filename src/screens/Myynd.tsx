@@ -1,40 +1,31 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconFrecciaDx, IconGiu, IconOcchio, IconSpunta } from '../icons'
+import { IconAvanti, IconOcchio, IconSpunta } from '../icons'
 import { Glifo, Stato } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
-import { MenuGiu, VOCE_MENU } from '../components/MenuGiu'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
-import type { Compito } from '../api'
+import type { Chiesta, Compito } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
-import { blocchiFeed, type Blocco as BloccoFeed, sulTavolo } from '../blocchi-feed'
+import { azioneEmail } from '../oggi/azione-email'
+import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, sulTavolo } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
-import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from '../consegna-ui'
+import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
 
-/**
- * I due pesi dei bottoni sulla card scura: uno pieno, gli altri di contorno.
- * Il bordo c'è in tutti e due — bianco su bianco nel pieno — così passare
- * dall'uno all'altro non sposta di un pixel quello che sta accanto.
- */
+/** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
 const PIENO_SCURO: CSSProperties = {
   padding: '12px 26px', borderRadius: 99, border: '1px solid #FFF7F0', background: '#FFF7F0', color: '#22271F',
   fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit'
 }
-const CONTORNO_SCURO: CSSProperties = {
-  ...PIENO_SCURO, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', boxShadow: 'none'
-}
-/** Un solo bottone pieno per card: quando si apre un rigo per scrivere, il pieno passa a «Manda». */
-const primario = (pieno: boolean) => (pieno ? PIENO_SCURO : CONTORNO_SCURO)
 
 /*
  * Il vestito di una riga dentro un blocco.
@@ -82,11 +73,21 @@ const LINK: CSSProperties = {
   padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F', cursor: 'pointer',
   textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', textAlign: 'left'
 }
-/** Lo stesso link, sulla carta scura: un gesto solo non merita un menù da aprire. */
-const LINK_SCURO: CSSProperties = {
-  ...LINK, fontSize: '13.5px', color: 'rgba(255,247,240,.72)', padding: '12px 4px'
+/**
+ * Il bottone pieno di una riga: uno solo, e c'è solo dove qualcosa si manda.
+ *
+ * Sulla riga i gesti sono di contorno o scritti e basta; il rame pieno resta
+ * per la cosa che parte — «Manda» sotto le domande — perché lì c'è una scelta
+ * fatta che aspetta di essere spedita, e non deve cercarla nessuno.
+ */
+const MANDA: CSSProperties = {
+  flex: 'none', padding: '8px 16px', borderRadius: 99, border: 'none',
+  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+  fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
 }
-const LINK_SCURO_SOPRA: CSSProperties = { color: '#FFF7F0', textDecorationColor: 'currentColor' }
+const MANDA_SPENTO: CSSProperties = {
+  ...MANDA, background: 'rgba(34,39,31,.1)', color: 'rgba(34,39,31,.3)', cursor: 'default'
+}
 
 /** Un gesto dentro una riga che è essa stessa un bersaglio: il clic non deve risalire. */
 const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai() }
@@ -394,43 +395,31 @@ function BozzaInPosta({ c }: { c: Compito }) {
   </div>
 }
 
-function Consegna({ c, l, v, scuro = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean }) {
+/**
+ * Il documento che ha scritto: una riga, non una carta.
+ *
+ * Era una scheda con il titolo grande, il messaggio di consegna, la revisione
+ * e due bottoni — cioè, dentro una riga alta quaranta pixel, un secondo
+ * oggetto alto centoventi. «Che senso ha che si aprano così e occupino tutto
+ * quello spazio.» Quello che serve sapere sono tre cose: che c'è, come si
+ * chiama, e come si apre. La revisione si scrive solo se ha trovato qualcosa:
+ * «revisione superata» sotto una cosa già dichiarata pronta è la stessa
+ * notizia detta due volte.
+ */
+function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const d = c.consegna
   if (!d) return null
   const en = lingua() === 'en'
-  const revisione = statoRevisione(d.revisione, en)
-  return <section className={`task-delivery${scuro ? ' task-delivery-dark' : ''}`} aria-label={en ? 'Document' : 'Documento'}>
-    <div className="task-delivery-title">{d.titolo}</div>
-    <div className="task-delivery-meta">{[d.app, d.pagine ? `${d.pagine} ${en ? (d.pagine === 1 ? 'page' : 'pages') : (d.pagine === 1 ? 'pagina' : 'pagine')}` : null, d.stile].filter(Boolean).join(' · ')}</div>
-    <div className="task-delivery-review" data-review={d.revisione?.esito ?? 'unavailable'}>{revisione}</div>
-    {d.revisione?.esito !== 'pass' && !!d.revisione?.problemi.length && <ul className="task-delivery-issues">{d.revisione.problemi.map((p, i) => <li key={i}>{p}</li>)}</ul>}
-    <div className="task-delivery-actions"><Portami c={c} l={l} v={v} scuro={scuro} /><Portami c={c} l={l} v={v} scuro={scuro} anteprima /></div>
-  </section>
-}
-
-/** Completed artifacts are a short hand-off, with technical details available on demand. */
-function ConsegnaPronta({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; richiudi?: () => void }) {
-  const d = c.consegna!
-  const en = lingua() === 'en'
-  return <section className={`task-completed${richiudi ? ' task-completed-hero' : ''}`} aria-label={t('È pronto.')}>
-    <div className="task-completed-heading">
-      <span className="task-completed-check"><IconSpunta size={14} /></span>
-      <strong>{t('È pronto.')}</strong>
+  const male = d.revisione?.esito !== 'pass'
+  return (
+    <div className="task-completed" aria-label={en ? 'Document' : 'Documento'}>
+      <span className="task-completed-check"><IconSpunta size={12} /></span>
       <span className="task-completed-name" title={d.titolo}>{d.titolo}</span>
-      {richiudi && <button type="button" className="task-completed-collapse" onClick={richiudi} aria-label={t('Richiudi')}><IconGiu size={14} /></button>}
+      <span className="task-completed-meta">{[d.app, d.pagine ? `${d.pagine} ${en ? (d.pagine === 1 ? 'page' : 'pages') : (d.pagine === 1 ? 'pagina' : 'pagine')}` : null].filter(Boolean).join(' · ')}</span>
+      <Portami c={c} l={l} v={v} piatto />
+      {male && <span className="task-completed-review">{statoRevisione(d.revisione, en)}</span>}
     </div>
-    <p className="task-completed-message">{messaggioConsegna(d, en)}</p>
-    <div className="task-completed-actions">
-      <Portami c={c} l={l} v={v} />
-      <button type="button" className="task-completed-discuss" onClick={() => v.discutiCompito(c)}>{t('Parlane in chat')}</button>
-      <button type="button" className="task-completed-dismiss" onClick={() => l.chiudi(c.id, t('Va bene così.'), c.risultato ?? '')}>{t('Va bene')}</button>
-      <details className="task-completed-details">
-        <summary>{t('Dettagli')}</summary>
-        <div className="task-completed-review">{statoRevisione(d.revisione, en)}{d.pagine ? ` · ${d.pagine} ${en ? 'pages' : 'pagine'}` : ''}</div>
-        <Portami c={c} l={l} v={v} anteprima />
-      </details>
-    </div>
-  </section>
+  )
 }
 
 /** Cosa c'è scritto accanto al titolo di una riga tua: cosa sta succedendo, o quando è. */
@@ -443,19 +432,40 @@ function didascalia(c: Compito, attivo = false): string {
 }
 
 /**
- * Il corpo: il guaio se c'è, l'essenza di quello che ha scritto lui se è
- * arrivato, la nota se l'hai messa.
+ * Il corpo: una riga sola sotto il titolo, come sotto una voce del feed.
  *
- * Quello che ha scritto lui adesso porta due cose in una — l'essenza in cima,
- * poi una riga vuota, poi il lavoro intero — e qui, sotto il titolo del
- * compito, ci sta solo la prima: il resto lo vede chi apre la carta.
+ * Il guaio se c'è; su una cosa finita la riga che dice che è finita; su una
+ * cosa che chiede, quello che ha visto prima di fermarsi — le domande stanno
+ * sotto, in chiaro, e ripeterle qui sarebbe la stessa frase due volte; sul
+ * resto, la nota.
  */
 function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   if (c.consegna) return ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
-  if (c.stato === 'chiede') return primoParagrafo(c.risultato ?? '')
+  if (c.stato === 'chiede') return domande(c).visto
   return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
+}
+
+/**
+ * Quello che chiede, smontato: cosa ha visto, e cosa vuole sapere.
+ *
+ * Quando si ferma scrive due righe: la prima dice dove è arrivato («ho letto
+ * la proposta ma manca il proprietario»), la seconda è la domanda vera («chi
+ * segue il pilota H-Farm?»). A quelle si aggiungono le domande a scelta che
+ * manda a parte, in `chieste`. Da qui escono già nella forma in cui si
+ * disegnano: una riga sotto il titolo, e un elenco di domande.
+ *
+ * Se ha scritto una riga sola: è la domanda, a meno che le domande a scelta ci
+ * siano già — allora quella riga è quello che ha visto, e le domande sono le
+ * loro.
+ */
+function domande(c: Compito): { visto: string; tutte: Chiesta[] } {
+  const righe = (c.risultato ?? '').split('\n').map(r => r.trim()).filter(Boolean)
+  const scelte = c.chieste ?? []
+  const libera = righe.length > 1 ? righe.slice(1).join('\n') : righe.length === 1 && !scelte.length ? righe[0] : ''
+  const visto = righe.length > 1 || (righe.length === 1 && scelte.length) ? righe[0] : ''
+  return { visto, tutte: [...(libera ? [{ domanda: libera, opzioni: [], multipla: false }] : []), ...scelte] }
 }
 
 /**
@@ -501,34 +511,154 @@ function attesaDi(c: Compito): string {
 }
 
 /**
+ * Le sue domande, tutte insieme, sotto il titolo della riga.
+ *
+ * «Avere dieci domande non è bello: meglio un compito solo con più domande
+ * dentro… e fammi rispondere sul feed.» Erano una riga a testa, o una carta
+ * scura grande mezzo schermo con dentro una casella sola. Qui sono un elenco
+ * corto: ogni domanda una riga, le sue opzioni come pastiglie da toccare, e in
+ * fondo un rigo per scrivere e un «Manda» solo. Quello che parte è un
+ * messaggio unico — una riga per domanda, «domanda → risposta» — perché il
+ * lavoro riparte una volta, non una per domanda.
+ *
+ * Le pastiglie di una domanda a scelta singola si comportano come un radio:
+ * toccarne un'altra sostituisce. Con `multipla` si accendono e si spengono.
+ */
+function Domande({ c, l }: { c: Compito; l: Lista }) {
+  const [testo, setTesto] = useState('')
+  const [scelte, setScelte] = useState<Record<number, Set<string>>>({})
+  const { tutte } = domande(c)
+
+  const tocca = (i: number, o: string, multipla: boolean) => setScelte(s => {
+    const ora = new Set(s[i] ?? [])
+    if (ora.has(o)) ora.delete(o)
+    else if (multipla) ora.add(o)
+    else { ora.clear(); ora.add(o) }
+    return { ...s, [i]: ora }
+  })
+
+  /** Un messaggio solo: una riga per domanda a cui ha risposto, poi quello che ha scritto. */
+  const composta = () => {
+    const scritto = testo.trim()
+    const libera = tutte.findIndex(q => !q.opzioni.length)
+    const righe = tutte
+      .map((q, i) => {
+        const prese = [...(scelte[i] ?? [])]
+        if (prese.length) return `${q.domanda} → ${prese.join(', ')}`
+        // la domanda aperta prende quello che ha scritto: è la sua risposta,
+        // e mandarla staccata dalla domanda vorrebbe dire farlo indovinare
+        if (i === libera && scritto) return `${q.domanda} → ${scritto}`
+        return ''
+      })
+      .filter(Boolean)
+    if (scritto && libera < 0) righe.push(scritto)
+    return righe.join('\n')
+  }
+
+  const qualcosa = !!testo.trim() || Object.values(scelte).some(s => s.size)
+  const manda = () => { if (qualcosa) l.rispondi(c.id, composta()) }
+
+  return (
+    <div style={{ marginTop: 9 }} onClick={e => e.stopPropagation()}>
+      {tutte.map((q, i) => (
+        <div key={i} style={{ marginTop: i ? 9 : 0 }}>
+          <div style={{ fontSize: '13px', lineHeight: 1.45, color: '#22271F', overflowWrap: 'anywhere' }}>{q.domanda}</div>
+          {q.opzioni.length > 0 && (
+            <div role={q.multipla ? 'group' : 'radiogroup'} aria-label={q.domanda} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
+              {q.opzioni.map(o => {
+                const presa = !!scelte[i]?.has(o)
+                return (
+                  <Hov as="button" key={o} type="button" role={q.multipla ? 'switch' : 'radio'} aria-checked={presa}
+                    onClick={fermo(() => tocca(i, o, q.multipla))}
+                    style={{
+                      padding: '5px 11px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
+                      cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
+                      border: `1px solid ${presa ? '#C4623B' : 'rgba(34,39,31,.18)'}`,
+                      background: presa ? 'rgba(196,98,59,.14)' : 'rgba(255,255,255,.7)',
+                      color: presa ? '#8E3F1F' : '#22271F'
+                    }}
+                    hover={presa ? { borderColor: '#8E3F1F' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>{o}</Hov>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, maxWidth: 560 }}>
+        <input
+          value={testo}
+          onChange={e => setTesto(e.target.value)}
+          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') manda() }}
+          aria-label={t('Rispondi qui')}
+          placeholder={t('Rispondi qui')}
+          style={{
+            flex: 1, minWidth: 0, padding: '7px 12px', borderRadius: 11,
+            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.85)',
+            color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+          }} />
+        <button type="button" onClick={fermo(manda)} disabled={!qualcosa} style={qualcosa ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 14px', marginTop: 7 }}>
+        {/* la risposta che chiude: il server la riconosce e la lascia perdere,
+            senza rimandarla a lavorare su una cosa che non serve più */}
+        <Hov as="button" type="button" onClick={fermo(() => l.rispondi(c.id, 'not relevant'))}
+          style={LINK} hover={{ textDecorationColor: 'currentColor' }}>{t('Non mi serve, lasciala perdere')}</Hov>
+        {/* l'altra strada: certe righe non si sbloccano con un dato, perché non
+            sono compiti — vedi il bottone gemello in `Oggi` */}
+        {siPuoParlarne() && (
+          <Hov as="button" type="button" onClick={fermo(() => portaInChat(frasi.scomponi(c.testo)))}
+            title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
+            style={{ ...LINK, color: 'rgba(34,39,31,.55)' }} hover={{ color: '#8E3F1F', textDecorationColor: 'currentColor' }}>{t('Scomponila in chat')}</Hov>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Una riga della tua lista, dentro il blocco del suo progetto.
  *
- * Vestita come una voce del feed — il titolo, una riga sotto — perché nel
- * blocco sono tutte cose da fare per quel progetto, e non serve dire quale
- * l'ha scritta lui e quale l'hai scritta tu. Quello che cambia sono i gesti
- * sotto il dito: «Fatto», «Se ne occupa Myynd», e il posto vero da cui viene.
- * La riga intera la apre nella carta scura, dove c'è spazio per lavorarci —
- * tranne quando ce l'ha in mano Myynd: allora resta una riga, con la sua luce
- * addosso, e non c'è niente da aprire finché non torna con qualcosa.
+ * Vestita come una voce del feed, e basta: il titolo, una riga sotto, lo stato
+ * a destra, e sotto il dito la stessa fascia di gesti. «Perché dovrebbero
+ * aprirsi in modo diverso? Devono aprirsi uguali, e preferisco il secondo:
+ * più pulito, occupa meno spazio.» Prima una riga tua si apriva in una carta
+ * scura alta mezzo schermo mentre una voce del feed restava una riga: due
+ * modi di dire la stessa cosa nella stessa pagina, e il più ingombrante
+ * toccava proprio alle cose sue.
+ *
+ * Quindi niente carta: quello che serviva lì dentro sta qui. Il testo lungo si
+ * apre sul posto, cliccando la riga; le domande si rispondono sul posto; il
+ * documento è una riga; i gesti sono la fascia. Una riga affidata non si apre
+ * e non si chiede: ha la sua luce addosso e un solo modo di fermarla.
  */
-function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri?: () => void }) {
+function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const { attiva, props } = useAttiva()
+  const [aperta, setAperta] = useState(false)
   const attesa = attesaDi(c)
   const pronto = c.stato === 'pronto'
-  const testo = corpo(c)
+  const chiede = c.stato === 'chiede'
   // affidata: è nelle sue mani, in coda o già sotto le dita. Il passo che sta
   // facendo si vede solo quando arriva davvero (`compitoInEsecuzione`): la
   // luce dice «ce l'ha lui», la riga accanto dice a che punto è.
   const affidato = c.stato === 'delegato'
   const attivo = compitoInEsecuzione(c, l.passi[c.id])
   const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
-
-  if (consegnaPronta(c)) return <div style={{ padding: 8 }}><ConsegnaPronta c={c} l={l} v={v} /></div>
+  const testo = corpo(c)
+  // quello che ha scritto per intero: si legge aprendo la riga, dove stava, e
+  // si tiene quando accetti la bozza — è da lì che impara come scrivi
+  const intero = pronto ? (c.risultato ?? '').trim() || testo : testo
+  const corta = taglia(testo, 150)
+  const espandibile = !chiede && intero.length > corta.length
+  const apri = () => { if (espandibile) setAperta(x => !x) }
+  const parlane = siPuoParlarne() ? () => v.discutiCompito(c) : null
+  const email = pronto && c.email && azioneEmail(c).tipo === 'invia'
 
   return (
     <div className="task-aurora-host task-aurora-row" data-working={affidato || undefined}
-      {...(apri ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri) } : {})}
-      style={{ ...RIGA, cursor: apri ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
+      {...(espandibile ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri), 'aria-expanded': aperta } : {})}
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
       {...props}>
       {affidato && <AuroraCompito />}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -537,10 +667,11 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri?: 
             {affidato && <Glifo tipo="penso" dim={12} colore="#C4623B" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
-          {testo && <div style={PERCHE}>{taglia(testo, 150)}</div>}
+          {testo && <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>}
           <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
-          <Consegna c={c} l={l} v={v} /><BozzaInPosta c={c} />
+          <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} />
+          {chiede && <Domande c={c} l={l} />}
         </div>
         {attesa
           ? <span style={pronto ? PASTIGLIA_FATTA : PASTIGLIA}>{attesa}</span>
@@ -548,22 +679,40 @@ function RigaCompito({ c, l, v, apri }: { c: Compito; l: Lista; v: Vals; apri?: 
       </div>
       <Fascia attiva={attiva}
         sinistra={<Prove c={c} v={v} l={l} inRiga />}
-        destra={
-          <>
-            {/* chiuderla senza nemmeno aprirla: è il gesto che si fa più spesso */}
-            <Hov as="button" type="button" onClick={fermo(() => l.chiudi(c.id))} aria-label={`${t('Fatto')}: ${titolo}`}
-              style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Fatto')}</Hov>
-            {c.stato === 'aperto' && (
-              <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Se ne occupa Myynd')}</Hov>
-            )}
-            {/* una riga affidata non si apre più nella carta: il modo di
-                riprendersela deve restare qui, o non c'è da nessuna parte */}
-            {affidato && (
-              <Hov as="button" type="button" onClick={fermo(() => l.richiama(c.id))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Richiamala')}</Hov>
-            )}
-            {!c.consegna && <Portami c={c} l={l} v={v} piatto />}
-          </>
-        } />
+        destra={affidato
+          ? (
+            // una riga che sta lavorando non si chiude e non si affida due
+            // volte: l'unica cosa da fare è fermarla
+            <Hov as="button" type="button" onClick={fermo(() => l.richiama(c.id))} style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Richiamala')}</Hov>
+          )
+          : (
+            <>
+              {/* su una bozza pronta «Fatto» sarebbe una bugia: quello che
+                  chiudi lì è il testo che hai davanti, e va tenuto */}
+              <Hov as="button" type="button" aria-label={`${pronto ? t('Va bene') : t('Fatto')}: ${titolo}`}
+                onClick={fermo(() => (pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
+                style={PILLOLA} hover={PILLOLA_SOPRA}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
+              {email && (
+                <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Manda')}</Hov>
+              )}
+              {pronto && (
+                <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Rifallo')}</Hov>
+              )}
+              {c.stato === 'aperto' && (
+                <>
+                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Se ne occupa Myynd')}</Hov>
+                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'bozza'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Fanne una bozza')}</Hov>
+                </>
+              )}
+              {parlane && (
+                <Hov as="button" type="button" onClick={fermo(parlane)} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Parlane in chat')}</Hov>
+              )}
+              {!c.consegna && <Portami c={c} l={l} v={v} piatto />}
+              {/* niente «Sicuro?»: toglierla è la decisione, non l'inizio di una domanda */}
+              <Hov as="button" type="button" title={t('Toglila')} onClick={fermo(() => { void l.elimina(c.id) })}
+                style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Toglila')}</Hov>
+            </>
+          )} />
     </div>
   )
 }
@@ -578,196 +727,6 @@ function Seguito({ c }: { c: Compito }) {
   return (
     <div style={{ padding: '0 21px 12px', marginTop: -2, fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', overflowWrap: 'anywhere' }}>
       <span style={{ fontWeight: 600 }}>{t('Poi:')}</span> {c.testo}
-    </div>
-  )
-}
-
-/**
- * Una cosa della tua lista, aperta.
- *
- * Stessa carta scura di prima, ma al posto della riga, dentro il blocco del
- * suo progetto: si apre dove sta, così non si perde di vista di cosa è.
- * Una voce si risolve; un compito si chiude, si affida, si rimanda o si
- * toglie. Tutto da qui: la ragione per cui questa card esiste è che il feed
- * non deve mai mandarti da un'altra parte per finire una cosa che sta
- * guardando.
- */
-function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; richiudi: () => void }) {
-  const [menu, setMenu] = useState(false)
-  const bottone = useRef<HTMLButtonElement | null>(null)
-  const chiudiMenu = useCallback(() => setMenu(false), [])
-  const [lungo, setLungo] = useState(false)
-  const [risposta, setRisposta] = useState('')
-  const pronto = c.stato === 'pronto'
-  const chiede = c.stato === 'chiede'
-  const delegato = c.stato === 'delegato'
-  const attivo = compitoInEsecuzione(c, l.passi[c.id])
-  // `testo` è l'essenza — quello che sta sotto al titolo, un paragrafo solo.
-  // `completo` è quello che ha scritto per intero: quello che «di più» apre, e
-  // quello che si tiene quando accetti la bozza, perché è da lì che impara
-  // come scrivi — non dalle due righe di riassunto.
-  const testo = corpo(c)
-  const completo = pronto || chiede ? (c.risultato ?? '') : testo
-  const tagliato = completo.length > 180
-
-  /*
-   * Il «⋯»: quello che si può fare con questa riga senza andarsene da qui.
-   *
-   * Dentro c'erano i tre scaffali — «riportala a oggi», «rimandala a questa
-   * settimana», «rimandala a prima o poi» — e lui li ha letti per quello che
-   * erano: «non hanno senso, è già una cosa sul mio feed; sembrano
-   * segnaposto». Aveva ragione. La prima pagina è quello che c'è adesso:
-   * spostare una riga fra gli scaffali è un gesto della lista, e la lista ha
-   * una schermata sua dove quel gesto si vede per intero.
-   *
-   * Restano le tre cose che qui vogliono dire qualcosa: parlarne, andare a
-   * vederla dove sta, e chiedergli la bozza — quest'ultima solo se la riga è
-   * ancora tua e ferma, perché su una già affidata o già pronta sarebbe un
-   * bottone che non fa niente. Se ne resta una sola non è un menù: è un link,
-   * e si legge senza doverlo aprire.
-   */
-  const altro = [
-    ...(siPuoParlarne() ? [{ id: 'chat', label: t('Parlane in chat'), fai: () => portaInChat(frasi.parlaneDelCompito(c.testo)) }] : []),
-    { id: 'lista', label: t('Apri nella lista'), fai: () => { l.chiediDiAprire(c.id); v.goOggi() } },
-    ...(c.stato === 'aperto' ? [{ id: 'bozza', label: t('Fanne una bozza'), fai: () => l.delega(c.id, 'bozza') }] : [])
-  ]
-
-  const rispondi = () => { if (risposta.trim()) l.rispondi(c.id, risposta.trim()) }
-
-  if (consegnaPronta(c)) return <ConsegnaPronta c={c} l={l} v={v} richiudi={richiudi} />
-
-  return (
-    <div className="task-aurora-host task-aurora-hero" data-working={attivo || undefined}
-      // dritta e senza l'entrata dal basso: dentro un blocco la carta prende
-      // il posto di una riga, e una riga non arriva storta
-      style={{ ...v.cartaScura, transform: 'none', animation: 'fadein .25s ease', position: 'relative', zIndex: menu ? 30 : undefined }}>
-      {attivo && <AuroraCompito />}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {attivo ? <Glifo tipo="penso" dim={15} colore="#FFF7F0" /> : <IconFrecciaDx size={15} />}
-        <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: '.02em' }}>{t('Da fare')}</span>
-        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.85)' }}>{didascalia(c, attivo)}</span>
-        <Hov as="button" type="button" onClick={richiudi} aria-label={t('Richiudi')} title={t('Richiudi')} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: '#FFF7F0', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 6px', fontSize: 12 }}>{t('Richiudi')} <IconGiu size={12} /></Hov>
-        {attesaDi(c) && (
-          <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.02em', color: '#FFF7F0', background: 'rgba(255,247,240,.2)', border: '1px solid rgba(255,247,240,.4)', borderRadius: 99, padding: '3px 10px' }}>
-            {attesaDi(c)}
-          </span>
-        )}
-      </div>
-
-      <div style={{ fontSize: 22, lineHeight: 1.35, marginTop: 20, maxWidth: 600, textWrap: 'pretty', fontWeight: 500, overflowWrap: 'anywhere' }}>{presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo}</div>
-
-      {testo && (
-        <div style={{ fontSize: '15.5px', lineHeight: 1.6, marginTop: 10, maxWidth: 600, color: 'rgba(255,247,240,.82)', textWrap: 'pretty', whiteSpace: 'pre-line' }}>
-          {lungo ? completo : taglia(testo, 180)}
-          {tagliato && (
-            <Hov as="button" onClick={() => setLungo(x => !x)}
-              style={{ border: 'none', background: 'none', padding: '0 0 0 6px', fontFamily: 'inherit', fontSize: '13.5px', color: 'rgba(255,247,240,.6)', cursor: 'pointer' }}
-              hover={{ color: '#FFF7F0' }}>{lungo ? t('meno') : t('di più')}</Hov>
-          )}
-        </div>
-      )}
-
-      {attivo && <PassoAttivo passo={l.passi[c.id]} />}
-      <Consegna c={c} l={l} v={v} scuro /><BozzaInPosta c={c} />
-      <Prove c={c} v={v} l={l} scuro />
-      <Riletta c={c} />
-
-      {/* a capo invece che fuori: con un bottone in più questa fascia, in una
-          finestra stretta, usciva dalla carta — e il testo che sfora non è un
-          dettaglio, è l'app che sembra rotta */}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
-        {/* quello che si fa quasi sempre. Su una bozza pronta «Fatto» sarebbe
-            una bugia: quello che chiudi lì è il testo che hai davanti, e va
-            tenuto — è da lì che impara come scrivi */}
-        {/* uno solo pieno per card: quando lui ti chiede una cosa, il pieno è «Manda» qui sotto */}
-        <Hov as="button"
-          onClick={() => (pronto ? l.chiudi(c.id, t('Va bene così.'), completo) : l.chiudi(c.id))}
-          style={primario(!chiede)}
-          hover={chiede ? { background: 'rgba(255,247,240,.16)' } : { background: '#FFFFFF' }}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
-
-        <Hov as="button"
-          onClick={() => (pronto ? l.delega(c.id, c.modo) : delegato ? l.richiama(c.id) : l.delega(c.id, 'tutto'))}
-          style={{ padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.5)', background: 'none', color: '#FFF7F0', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-          hover={{ background: 'rgba(255,247,240,.16)' }}>
-          {pronto ? t('Rifallo') : delegato ? t('Richiamala') : t('Se ne occupa Myynd')}
-        </Hov>
-
-        {!c.consegna && <Portami c={c} l={l} v={v} scuro />}
-
-        {/* un gesto solo: aprirlo da un menù sarebbe nascondere una cosa sola dietro una porta */}
-        {altro.length === 1 && (
-          <Hov as="button" type="button" onClick={altro[0].fai}
-            style={LINK_SCURO} hover={LINK_SCURO_SOPRA}>{altro[0].label}</Hov>
-        )}
-
-        {altro.length > 1 && (
-          <>
-            <Hov as="button" ref={bottone} onClick={() => setMenu(m => !m)} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
-              style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: menu ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-              hover={{ background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' }}>⋯</Hov>
-
-            {/* fuori dalla carta: qui dentro l'avrebbe tagliato il suo `overflow: hidden` — vedi `MenuGiu` */}
-            {menu && (
-              <MenuGiu ancora={bottone.current} chiudi={chiudiMenu} minLarghezza={210}>
-                {altro.map(a => (
-                  <Hov key={a.id} as="button" type="button" role="menuitem" onClick={() => { setMenu(false); a.fai() }}
-                    style={{ ...VOCE_MENU, whiteSpace: 'nowrap' }}
-                    hover={{ background: 'rgba(196,98,59,.09)' }}>{a.label}</Hov>
-                ))}
-              </MenuGiu>
-            )}
-          </>
-        )}
-
-        <div style={{ flex: 1 }} />
-        {/* niente «Sicuro?»: toglierla è la decisione, non l'inizio di una domanda */}
-        <Hov as="button" type="button" title={t('Toglila')}
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); void l.elimina(c.id) }}
-          style={{ border: 'none', background: 'none', padding: '12px 4px', fontSize: 13, color: 'rgba(255,247,240,.6)', cursor: 'pointer', fontFamily: 'inherit', transition: 'color .15s' }}
-          hover={{ color: '#FFFFFF' }}>{t('Toglila')}</Hov>
-      </div>
-
-      {/* una domanda senza il rigo per rispondere è un vicolo cieco: qui sotto
-          si risponde, e il lavoro riparte da solo */}
-      {chiede && (
-        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-          <input
-            className="scuro"
-            value={risposta}
-            onChange={e => setRisposta(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') rispondi() }}
-            aria-label={t('Rispondigli')}
-            placeholder={t('Rispondigli e ci riprova')}
-            style={{
-              flex: 1, minWidth: 0, padding: '11px 15px', borderRadius: 13,
-              border: '1px solid rgba(255,247,240,.34)', background: 'rgba(20,14,10,.24)',
-              color: '#FFF7F0', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
-            }} />
-          <button onClick={rispondi} disabled={!risposta.trim()} style={{
-            flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
-            background: risposta.trim() ? '#FFF7F0' : 'rgba(255,247,240,.22)',
-            color: risposta.trim() ? '#22271F' : 'rgba(255,247,240,.7)',
-            fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
-            cursor: risposta.trim() ? 'pointer' : 'default'
-          }}>{t('Manda')}</button>
-        </div>
-      )}
-
-      {/* l'altra strada: certe righe non si sbloccano con un dato, perché non
-          sono compiti — vedi il bottone gemello in `Oggi` */}
-      {chiede && siPuoParlarne() && (
-        <Hov as="button" type="button"
-          onClick={() => portaInChat(frasi.scomponi(c.testo))}
-          title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
-          style={{
-            marginTop: 12, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(255,247,240,.68)',
-            textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
-          }}
-          hover={{ color: '#FFF7F0', textDecorationColor: 'currentColor' }}>
-          {t('Scomponila in chat')}
-        </Hov>
-      )}
     </div>
   )
 }
@@ -833,62 +792,65 @@ export type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][numb
  * notato Myynd, le righe della tua lista, e in fondo la sua domanda.
  *
  * «Il resto» è il blocco di quello che non sta in nessun progetto: senza
- * colore, e sempre in fondo.
+ * colore, e in fondo a parità di attesa.
+ *
+ * La testa si trascina: l'ordine dei blocchi lo decide lui, e chi decide
+ * l'ordine lo fa prendendo la cosa e spostandola. Vedi `ordinaBlocchi`.
  */
-function Blocco({ b, v, lista, primaDomanda }: {
+function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
   b: BloccoPagina; v: Vals; lista?: Lista; primaDomanda: string | null
+  /** Dove sta adesso, e dove può andare: il trascinamento parla per posti, non per nomi. */
+  indice: number; ultimo: boolean; muovi: (da: number, a: number) => void
 }) {
-  /*
-   * Una carta aperta per blocco, e la prima è già aperta.
-   *
-   * Prima era una sola in tutta la pagina, e nessuna finché non ne cliccavi
-   * una: i blocchi erano dieci righe uguali, e per vedere cosa c'era dentro
-   * una bisognava aprirla. «Preferisco che siano già aperte, col disegno di
-   * prima, e indicizzate: una sola aperta per categoria, le altre chiuse
-   * dentro la parentesi della sezione.»
-   *
-   * Quindi: in ogni blocco che ha delle cose da fare, una è aperta nella
-   * carta scura e le altre restano righe. Quale, se non ha ancora scelto: la
-   * prima pronta, perché una bozza che aspetta lui viene prima di tutto; se
-   * non ce n'è, la prima che non sta già lavorando Myynd. Quando ne apre
-   * un'altra, quella di prima si richiude — dentro questo blocco e basta, gli
-   * altri non si muovono. La scelta vive quanto la pagina, perché vive qui: il
-   * blocco resta montato finché il progetto sta sul tavolo.
-   *
-   * Una riga affidata non si apre.
-   *
-   * «Quando gli do da fare va nella carta scura: la volevo della stessa forma
-   * di prima, solo con quel bagliore.» Il lavoro in corso non è una cosa su
-   * cui lavorare: è una cosa che sta succedendo, e sta bene sotto le altre,
-   * riga fra le righe, con la sua luce addosso. Se era aperta quando gliel'ha
-   * data, si richiude da sola; se sono affidate tutte, il blocco non ha
-   * nessuna carta aperta, ed è giusto così: non c'è niente che aspetta lui.
-   */
-  const compiti = b.righe.flatMap(r => (r.genere === 'compito' ? [r.compito] : []))
-  const apribile = (c: Compito) => c.stato !== 'delegato'
-  const preferita = compiti.find(c => c.stato === 'pronto')?.id ?? compiti.find(apribile)?.id ?? null
-  // `undefined` è «non ha ancora scelto», e vale la preferita; `null` è
-  // «le ho richiuse tutte», e resta così finché non ne apre una lui
-  const [scelta, setScelta] = useState<string | null | undefined>(undefined)
-  // una scelta che non c'è più — la riga è stata chiusa, o è scivolata sotto
-  // il tetto — non lascia il blocco senza carta: torna la preferita
-  const aperta = scelta === null ? null
-    : scelta && compiti.some(c => c.id === scelta && apribile(c)) ? scelta
-      : preferita
-
+  const { attiva, props } = useAttiva()
+  const [sopra, setSopra] = useState(false)
   const suo = b.progetto !== null
   const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(34,39,31,.5)'
   const filo = suo ? velato(colore, .18) : 'rgba(34,39,31,.09)'
   const apriProgetto = () => { if (b.progetto) v.apriProgetto(b.progetto) }
+
+  /*
+   * Trascinare un blocco sopra un altro.
+   *
+   * «Vorrei poter trascinare e dare priorità a una sezione sull'altra.» Si
+   * prende dalla testa — il nome, non una riga: le righe dentro si cliccano, e
+   * un blocco che parte mentre si prova a premere «Fatto» è una cosa che si
+   * rompe sotto le dita. Quello che si sposta è il posto, non il contenuto: il
+   * numero di partenza viaggia dentro l'evento, e chi riceve dice il suo.
+   *
+   * Accanto c'è la stessa cosa da tastiera: «Sposta su» e «Sposta giù» nella
+   * fascia della testa. Non è un ripiego per chi non può trascinare, è l'unico
+   * modo in cui questo gesto esiste per chi non usa il mouse — e chi lo usa
+   * spesso preferisce due clic a una mira.
+   */
+  const prendi = (e: DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(indice))
+  }
+  const sorvola = (e: DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setSopra(true) }
+  const posa = (e: DragEvent) => {
+    e.preventDefault()
+    setSopra(false)
+    const da = Number(e.dataTransfer.getData('text/plain'))
+    if (Number.isInteger(da)) muovi(da, indice)
+  }
+
   return (
-    <section aria-label={b.nome} style={{
-      flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'hidden',
-      background: suo ? `linear-gradient(0deg, ${velato(colore, .10)}, ${velato(colore, .10)}), rgba(255,253,249,.84)` : 'rgba(255,253,249,.66)',
-      backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
-      border: `1px solid ${suo ? velato(colore, .34) : 'rgba(255,255,255,.7)'}`,
-      boxShadow: '0 22px 52px rgba(84,64,44,.09)'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 21px 3px' }}>
+    <section aria-label={b.nome} data-blocco={chiaveBlocco(b)}
+      onDragOver={sorvola} onDragLeave={() => setSopra(false)} onDrop={posa}
+      style={{
+        flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'hidden',
+        background: suo ? `linear-gradient(0deg, ${velato(colore, .10)}, ${velato(colore, .10)}), rgba(255,253,249,.84)` : 'rgba(255,253,249,.66)',
+        backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+        border: `1px solid ${suo ? velato(colore, .34) : 'rgba(255,255,255,.7)'}`,
+        // dove si posa: un filo di rame in cima, e niente altro. Un blocco che
+        // si illumina tutto mentre ne trascini un altro sembra il bersaglio
+        // sbagliato — quello che cambia è il posto, e il posto è la riga sopra
+        boxShadow: sopra ? `inset 0 3px 0 #C4623B, 0 22px 52px rgba(84,64,44,.09)` : '0 22px 52px rgba(84,64,44,.09)'
+      }}>
+      <div draggable onDragStart={prendi} onDragEnd={() => setSopra(false)} {...props}
+        title={t('Trascinalo per cambiare ordine')}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 21px 3px', cursor: 'grab' }}>
         {suo && <span style={{ width: 8, height: 8, borderRadius: '50%', background: colore, flex: 'none' }} />}
         {suo
           ? (
@@ -898,18 +860,22 @@ function Blocco({ b, v, lista, primaDomanda }: {
               hover={{ textDecorationColor: 'currentColor' }}>{b.nome}</Hov>
           )
           : <span style={{ ...NOME, color: colore }}>{b.nome}</span>}
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}>
+          <Hov as="button" type="button" disabled={indice === 0} onClick={() => muovi(indice, indice - 1)}
+            aria-label={`${t('Sposta su')}: ${b.nome}`}
+            style={{ ...GESTO, opacity: indice === 0 ? .35 : 1, cursor: indice === 0 ? 'default' : 'pointer' }} hover={{ color: '#8E3F1F' }}>{t('Sposta su')}</Hov>
+          <Hov as="button" type="button" disabled={ultimo} onClick={() => muovi(indice, indice + 1)}
+            aria-label={`${t('Sposta giù')}: ${b.nome}`}
+            style={{ ...GESTO, opacity: ultimo ? .35 : 1, cursor: ultimo ? 'default' : 'pointer' }} hover={{ color: '#8E3F1F' }}>{t('Sposta giù')}</Hov>
+        </div>
       </div>
       {b.righe.map((r, i) => {
         const chiave = r.genere === 'voce' ? r.voce.id : r.genere === 'compito' ? r.compito.id : r.domanda.id
-        // la carta porta il suo bordo: il filo del blocco sopra di lei sarebbe
-        // una seconda riga di confine, e passerebbe dritto sotto i suoi angoli
-        const carta = r.genere === 'compito' && r.compito.id === aperta
         return (
-          <div key={chiave} style={{ borderTop: i === 0 || carta ? 'none' : `1px solid ${filo}` }}>
+          <div key={chiave} style={{ borderTop: i === 0 ? 'none' : `1px solid ${filo}` }}>
             {r.genere === 'voce' && <RigaVoce voce={r.voce} v={v} lista={lista} />}
-            {r.genere === 'compito' && (carta
-              ? <HeroCompito c={r.compito} l={lista!} v={v} richiudi={() => setScelta(null)} />
-              : <RigaCompito c={r.compito} l={lista!} v={v} apri={apribile(r.compito) ? () => setScelta(r.compito.id) : undefined} />)}
+            {r.genere === 'compito' && <RigaCompito c={r.compito} l={lista!} v={v} />}
             {r.genere === 'compito' && r.seguito && <Seguito c={r.seguito} />}
             {r.genere === 'domanda' && <RigaDomanda item={r.domanda} v={v} lista={lista} colore={colore} prima={primaDomanda === r.domanda.id} />}
           </div>
@@ -920,12 +886,18 @@ function Blocco({ b, v, lista, primaDomanda }: {
 }
 
 export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista; blocchi?: BloccoPagina[] }) {
-  // quale riga è aperta nella carta scura lo sa ogni blocco per conto suo:
-  // una per blocco, la prima già aperta — vedi `Blocco`
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const blocchi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
+  // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
+  // guscio mette insieme le righe, questa riga le mette in fila
+  const blocchi = ordinaBlocchi(grezzi, v.ordineBlocchi)
+  const chiavi = blocchi.map(chiaveBlocco)
+  const muovi = (da: number, a: number) => {
+    if (da === a || a < 0 || a >= chiavi.length) return
+    v.salvaOrdineBlocchi(ordineDopoIlTrascinamento(chiavi, da, a, v.ordineBlocchi))
+  }
   // quello che c'è in pagina: ogni riga che si vede, domande comprese, e la
   // domanda in cima. Lo stesso conto del menù, per costruzione.
   const inPagina = sulTavolo(blocchi, !!v.domanda)
@@ -1022,8 +994,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
         Inclinato, quel bordo non è più verticale, e mentre si scorre sembra
         che si muova la finestra.
       */}
-      {blocchi.map(b => (
-        <Blocco key={b.progetto ?? 'resto'} b={b} v={v} lista={lista} primaDomanda={primaDomanda} />
+      {blocchi.map((b, i) => (
+        <Blocco key={chiaveBlocco(b)} b={b} v={v} lista={lista} primaDomanda={primaDomanda}
+          indice={i} ultimo={i === blocchi.length - 1} muovi={muovi} />
       ))}
 
       {blocchi.length === 0 && <Vuoto v={v} />}
