@@ -686,6 +686,8 @@ export type Config = {
   github?: ConfigGithub
   granola?: ConfigGranola
   note?: ConfigNote
+  /** L'ordine dei blocchi della prima pagina scelto da lui trascinandoli: id di progetto, «resto» per il blocco senza progetto. */
+  ordineBlocchi?: string[]
   conversazioni?: ConfigConversazioni
   x?: ConfigX
   /**

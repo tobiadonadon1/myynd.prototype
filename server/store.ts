@@ -1263,7 +1263,12 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // prima pagina la mette nel suo blocco; un compito affidato porta con sé il
   // giudizio sul lavoro consegnato; una domanda di Myynd sa su quale
   // progetto la fa. Tre colonne, in fondo, come tutte.
-  d => { colonna(d, 'feed', 'progetto', 'TEXT'); colonna(d, 'compiti', 'revisione', 'TEXT'); colonna(d, 'domande', 'progetto', 'TEXT') }
+  d => { colonna(d, 'feed', 'progetto', 'TEXT'); colonna(d, 'compiti', 'revisione', 'TEXT'); colonna(d, 'domande', 'progetto', 'TEXT') },
+  // Un progetto ha altri nomi (le cartelle, i soprannomi: «everwave» per
+  // Evermute) e può stare dentro un altro (H-Brain è uno spin-off di Myynd):
+  // finora vivevano nel riferimento e nelle note, e non si potevano scrivere
+  // dalla Memoria. Due colonne, in fondo, come tutte.
+  d => { colonna(d, 'progetti', 'alias', 'TEXT'); colonna(d, 'progetti', 'genitore', 'TEXT') }
 
 ]
 
