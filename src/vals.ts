@@ -961,7 +961,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     connCount: connOn.length,
     // le voci, e basta: «mi dice che ci sono due cose sul tavolo, ma non ce
     // n'è nessuna». Una domanda sui progetti non è una cosa arrivata.
-    apertiCount: aperti.length,
     vociAperte: aperti.length,
     totaleDocumenti: stato.conteggi.totale,
     badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length ? 1 : 0.35 } as CSSProperties,
@@ -991,10 +990,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * pagina — quindi è lui a passare quante cose ha messo in pagina, e qui
      * si aggiunge solo la domanda in sospeso.
      */
-    sulTavolo: (inPagina: number) => {
-      const n = inPagina + (domanda ? 1 : 0)
-      return frasi.daGuardare(n, parole(n))
-    },
+    // il numero lo fanno i blocchi (`blocchi-feed.sulTavolo`), domanda compresa
+    sulTavolo: (n: number) => frasi.daGuardare(n, parole(n)),
     guastoFeed: guastoFeed ? t(guastoFeed) : null,
     guastoLettura,
     /*

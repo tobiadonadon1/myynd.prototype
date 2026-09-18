@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { desktop } from './desktop'
 import { Sfondo } from './Sfondo'
@@ -15,6 +15,7 @@ import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
 import { Oggi } from './oggi/Oggi'
 import { useCompiti } from './oggi/useCompiti'
+import { blocchiFeed, sulTavolo } from './blocchi-feed'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { Onboarding } from './onboarding/Onboarding'
@@ -262,6 +263,12 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // la lista si vede anche da qui: due facce, un cervello. Il filo che tiene
   // vive le deleghe la aggiorna da solo quando l'app cambia qualcosa.
   const lista = useCompiti(v.mostraToast, apriConnessioni)
+  // I blocchi della prima pagina, fatti qui una volta: la pagina li disegna
+  // e il menù ne conta le righe. Un conto solo, da un posto solo: «dice
+  // quattro cose sul tavolo, io ne conto cinque» non può più succedere.
+  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') }),
+    [v.voci, lista.compiti, v.iniziative, v.progetti])
+  const sulTavoloAdesso = sulTavolo(blocchi, !!v.domanda)
 
   /**
    * Il giro è stato chiuso *adesso*, prima che il server lo racconti.
@@ -399,7 +406,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           <a href="#" onClick={v.goMyynd} style={nav(v.navMyynd)} title={rail ? 'Myynd' : undefined}>
             <Marchio dim={15} animato={false} colore="currentColor" />
             {!rail && <span style={{ flex: 1 }}>Myynd</span>}
-            {!rail && <span style={v.badge}>{v.apertiCount}</span>}
+            {!rail && <span style={{ ...v.badge, opacity: sulTavoloAdesso ? 1 : 0.35 }}>{sulTavoloAdesso}</span>}
           </a>
           <a href="#" onClick={v.goOggi} style={nav(v.navOggi)} title={rail ? t('Da fare') : undefined}>
             <IconSpunta size={15} style={{ flex: 'none' }} />
@@ -519,7 +526,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         scrollbarGutter: 'stable both-edges',
         padding: rail ? `${16 + striscia}px 14px 24px 14px` : `${22 + striscia}px 34px 30px 30px`
       }}>
-        {v.isMyynd && <Myynd v={v} lista={lista} />}
+        {v.isMyynd && <Myynd v={v} lista={lista} blocchi={blocchi} />}
         {v.isOggi && (
           <Oggi
             l={lista}

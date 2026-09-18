@@ -130,3 +130,18 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
     return b.ultimo.localeCompare(a.ultimo) || a.nome.localeCompare(b.nome)
   })
 }
+
+/**
+ * Quante cose ci sono sul tavolo: tutte le righe dei blocchi, e la domanda
+ * in cima se c'è.
+ *
+ * «Dice quattro cose sul tavolo, io ne conto cinque.» Erano tre conti
+ * diversi: il titolo lasciava fuori le domande sui progetti, il numero nel
+ * menù contava solo le voci del feed, e lui contava quello che vedeva. Da
+ * qui esce un numero solo, da questi blocchi, e lo usano tutti e due: se
+ * una riga si vede, si conta; se non si vede (oltre il tetto dei compiti),
+ * no. La domanda in cima è una riga come le altre.
+ */
+export function sulTavolo(blocchi: { righe: unknown[] }[], conDomanda: boolean): number {
+  return blocchi.reduce((n, b) => n + b.righe.length, 0) + (conDomanda ? 1 : 0)
+}

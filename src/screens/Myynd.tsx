@@ -15,7 +15,7 @@ import type { Compito } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
-import { blocchiFeed, type Blocco as BloccoFeed } from '../blocchi-feed'
+import { blocchiFeed, type Blocco as BloccoFeed, sulTavolo } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from '../consegna-ui'
@@ -755,7 +755,7 @@ function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative
   )
 }
 
-type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][number]>
+export type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][number]>
 
 /**
  * Un progetto, un blocco.
@@ -812,7 +812,7 @@ function Blocco({ b, v, lista, inCima, setInCima, primaDomanda }: {
   )
 }
 
-export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
+export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista; blocchi?: BloccoPagina[] }) {
   /**
    * Quale riga della tua lista è aperta nella carta scura.
    *
@@ -823,11 +823,12 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
    */
   const [inCima, setInCima] = useState<string | null>(null)
   const compiti = lista?.compiti ?? []
-  const blocchi: BloccoPagina[] = blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
-  // quello che c'è in pagina, contato con le stesse regole dei blocchi: le
-  // domande sui progetti non si contano — «due cose sul tavolo» sopra due
-  // domande e nessuna cosa arrivata era una bugia che preoccupa
-  const inPagina = blocchi.reduce((n, b) => n + b.righe.filter(r => r.genere !== 'domanda').length, 0)
+  // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
+  // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
+  const blocchi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
+  // quello che c'è in pagina: ogni riga che si vede, domande comprese, e la
+  // domanda in cima. Lo stesso conto del menù, per costruzione.
+  const inPagina = sulTavolo(blocchi, !!v.domanda)
   const primaDomanda = blocchi.flatMap(b => b.righe).map(r => (r.genere === 'domanda' ? r.domanda.id : null)).find(Boolean) ?? null
 
   return (
@@ -839,9 +840,7 @@ export function Myynd({ v, lista }: { v: Vals; lista?: Lista }) {
           <h1 style={{
             fontSize: 40, lineHeight: 1.15, letterSpacing: '-.032em', maxWidth: 600,
             margin: 0, padding: '0 0 0 3px', fontWeight: 400, textWrap: 'pretty'
-          }}>{v.vociAperte === 0 && compiti.length > 0 && !v.domanda
-            ? frasi.daFare(compiti.length)
-            : v.feedCaricato && !v.guastoFeed && (v.vociAperte > 0 || v.domanda)
+          }}>{v.feedCaricato && !v.guastoFeed && inPagina > 0
             ? v.sulTavolo(inPagina)
             : v.headline}</h1>
           <div style={{

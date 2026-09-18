@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, COMPITI_IN_PAGINA } from './blocchi-feed.ts'
+import { blocchiFeed, COMPITI_IN_PAGINA, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string) => ({ id, progetto, quando })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string }> = {}) =>
@@ -132,4 +132,11 @@ test('dentro un blocco: prima le pronte, poi le voci, poi le altre righe, in fon
 
 test('senza niente non c’è nessun blocco', () => {
   assert.deepEqual(blocchiFeed({ voci: [], compiti: [], domande: [], progetti: PROGETTI, nomeResto: 'Il resto' }), [])
+})
+
+test('le cose sul tavolo sono tutte le righe che si vedono, domande comprese, più quella in cima', () => {
+  const blocchi = [{ righe: [{}, {}, {}] }, { righe: [{}] }]
+  assert.equal(sulTavolo(blocchi, false), 4)
+  assert.equal(sulTavolo(blocchi, true), 5)
+  assert.equal(sulTavolo([], false), 0)
 })
