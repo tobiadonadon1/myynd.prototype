@@ -178,3 +178,74 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
 export function sulTavolo(blocchi: { righe: unknown[] }[], conDomanda: boolean): number {
   return blocchi.reduce((n, b) => n + b.righe.length, 0) + (conDomanda ? 1 : 0)
 }
+
+/**
+ * Il nome con cui un blocco si riconosce nell'ordine salvato.
+ *
+ * L'id del progetto, e «resto» per il blocco di quello che non sta in nessun
+ * progetto: `null` non si scrive in un elenco di stringhe, e un blocco senza
+ * nome sarebbe un blocco che non si può trascinare.
+ */
+export const chiaveBlocco = (b: { progetto: string | null }): string => b.progetto ?? 'resto'
+
+/** Un blocco che aspetta lui: dentro c'è una bozza pronta o una domanda senza risposta. */
+function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco, DomandaDaBlocco>[] }>(b: B): boolean {
+  return b.righe.some(r => r.genere === 'compito' && (r.compito.stato === 'pronto' || r.compito.stato === 'chiede'))
+}
+
+/**
+ * L'ordine dei blocchi in pagina: il suo se l'ha scelto, altrimenti il nostro.
+ *
+ * «Vorrei poter trascinare e dare priorità a una sezione sull'altra; dovrebbe
+ * capire da sé quali sono le più urgenti, ma poterle trascinare sarebbe
+ * meglio.» Sono due cose, e questa funzione le tiene separate apposta.
+ *
+ * Il nostro ordine è quello che capisce da sé: prima i progetti dove qualcosa
+ * aspetta lui — una bozza pronta, una domanda senza risposta — poi i più
+ * recenti, e «Il resto» in fondo a parità di attesa, perché quello che non sta
+ * in nessun progetto non passa mai davanti a un progetto.
+ *
+ * Il suo vince sempre, e non si discute: un blocco che ha trascinato in cima
+ * ci resta anche il giorno in cui un altro ha una bozza pronta. Un blocco che
+ * nell'ordine salvato non c'è — un progetto nato ieri — va in fondo, fra gli
+ * altri sconosciuti, nell'ordine che avrebbe avuto da solo: il riordino è
+ * stabile, e chi non ha un posto resta come stava.
+ */
+export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco, D extends DomandaDaBlocco>(
+  blocchi: Blocco<V, C, D>[], ordine?: readonly string[] | null
+): Blocco<V, C, D>[] {
+  const predefinito = [...blocchi].sort((a, b) =>
+    Number(aspettaLui(b)) - Number(aspettaLui(a))
+    || Number(a.progetto === null) - Number(b.progetto === null)
+    || b.ultimo.localeCompare(a.ultimo)
+    || a.nome.localeCompare(b.nome))
+  if (!ordine?.length) return predefinito
+  const posto = new Map(ordine.map((id, i) => [id, i]))
+  const dove = (b: Blocco<V, C, D>) => posto.get(chiaveBlocco(b)) ?? Number.MAX_SAFE_INTEGER
+  return predefinito.sort((a, b) => dove(a) - dove(b))
+}
+
+/** Sposta un blocco da un posto all'altro. Fuori dall'elenco non si sposta niente. */
+export function spostaBlocco(chiavi: readonly string[], da: number, a: number): string[] {
+  const fuori = da < 0 || da >= chiavi.length || a < 0 || a >= chiavi.length
+  if (fuori || da === a) return [...chiavi]
+  const nuove = [...chiavi]
+  nuove.splice(a, 0, ...nuove.splice(da, 1))
+  return nuove
+}
+
+/**
+ * L'ordine da salvare dopo un trascinamento.
+ *
+ * Quello che si vede adesso, spostato, e in coda gli id che aveva già scelto e
+ * che oggi non sono in pagina: un progetto senza niente da fare non ha un
+ * blocco, e se il suo nome sparisse dall'ordine salvato il giorno che torna si
+ * ritroverebbe in fondo come se non l'avesse mai toccato.
+ */
+export function ordineDopoIlTrascinamento(
+  visibili: readonly string[], da: number, a: number, salvato?: readonly string[] | null
+): string[] {
+  const mosse = spostaBlocco(visibili, da, a)
+  const dentro = new Set(mosse)
+  return [...mosse, ...(salvato ?? []).filter(id => !dentro.has(id))]
+}

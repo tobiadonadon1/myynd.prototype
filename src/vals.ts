@@ -1121,6 +1121,31 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     },
     /** I progetti come li conosce il client: servono a dare un nome a un id. */
     progetti: progetti ?? [],
+
+    /**
+     * L'ordine dei blocchi della prima pagina, scelto da lui trascinandoli.
+     *
+     * Vuoto finché non ne sposta uno: allora decide la prima pagina da sé —
+     * prima quello che aspetta lui, poi il più recente. Il nome è lo stesso di
+     * qua e di là del filo (`ordineBlocchi`), e si guarda prima dentro `config`
+     * e poi in cima allo stato: due posti possibili, una parola sola.
+     */
+    ordineBlocchi: stato.config.ordineBlocchi ?? stato.ordineBlocchi ?? [],
+    /**
+     * Salvarlo: subito sullo schermo, poi sul disco.
+     *
+     * Trascinare un blocco deve essere istantaneo — aspettare il server per
+     * vedere una sezione salire la farebbe sembrare incollata — e se la
+     * scrittura non riesce si rilegge lo stato, così la pagina non resta a
+     * mostrare un ordine che nessuno ha scritto da nessuna parte.
+     */
+    salvaOrdineBlocchi: (ids: string[]) => {
+      setStato(s => ({ ...s, config: { ...s.config, ordineBlocchi: ids } }))
+      api.ordinaBlocchi(ids).catch(() => {
+        mostraToast(t('Non sono riuscito a salvare l’ordine.'))
+        ricaricaStato()
+      })
+    },
     /**
      * Aprire il progetto dietro una riga.
      *

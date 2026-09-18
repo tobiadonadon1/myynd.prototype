@@ -51,6 +51,11 @@ export type Stato = {
     /** Token al giorno oltre i quali Myynd smette di chiamare il modello. Zero = nessun tetto. */
     tetto: number
     giro: boolean
+    /**
+     * L'ordine dei blocchi della prima pagina, come li ha trascinati lui: id
+     * di progetto, «resto» per quello senza. Assente finché non ne sposta uno.
+     */
+    ordineBlocchi?: string[]
     /** Su cosa vuole essere tenuto aggiornato dai giornali. Vuoto = di tutto. */
     argomenti: string
     /** Quella riga l'ha scritta Myynd da quello che apre, non lei. */
@@ -122,6 +127,14 @@ export type Stato = {
   accessoNote?: {stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac';verificato:string;fase?:string;codice?:string}
   /** Le fonti che l'ultima lettura non ha letto per intero: la prima pagina le dice in una riga fissa. */
   letturaIncompleta?: FonteIncompleta[]
+  /**
+   * L'ordine dei blocchi, se il server lo manda qui invece che dentro `config`.
+   *
+   * È la stessa cosa scritta in due posti possibili, e la prima pagina guarda
+   * prima `config` e poi qui: un nome solo, `ordineBlocchi`, così le due metà
+   * dell'app non possono divergere in silenzio.
+   */
+  ordineBlocchi?: string[]
   presetPosta: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }>
   home: string
   /** Dove stanno i dati di questa installazione, in casa: vuoto su un server. */
@@ -1213,6 +1226,17 @@ export const api = {
 
   profilo: (p: Record<string, unknown>) =>
     json('/api/profilo', { method: 'POST', body: JSON.stringify(p) }),
+
+  /**
+   * L'ordine dei blocchi della prima pagina, come li ha trascinati lui.
+   *
+   * Gli id dei progetti, e «resto» per il blocco di quello che non sta in
+   * nessun progetto. Passa dalla stessa rotta del profilo — che è un patch
+   * parziale: quello che non si manda non si tocca — perché è una preferenza
+   * come le altre, e la prima pagina deve ritrovarla domani mattina.
+   */
+  ordinaBlocchi: (ids: string[]) =>
+    json('/api/profilo', { method: 'POST', body: JSON.stringify({ ordineBlocchi: ids }) }),
 
   collegaPosta: (p: { host: string; porta: number; utente: string; password: string; giorni: number }) =>
     json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null }>(

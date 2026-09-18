@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, COMPITI_IN_PAGINA, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string) => ({ id, progetto, quando })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -193,4 +193,70 @@ test('le cose sul tavolo sono tutte le righe che si vedono, domande comprese, pi
   assert.equal(sulTavolo(blocchi, false), 4)
   assert.equal(sulTavolo(blocchi, true), 5)
   assert.equal(sulTavolo([], false), 0)
+})
+
+// — l'ordine dei blocchi: quello che capisce da sé, e quello che sceglie lui —
+
+const blocchi = (dati: { voci?: ReturnType<typeof voce>[]; compiti?: ReturnType<typeof compito>[]; domande?: ReturnType<typeof domanda>[] }) =>
+  blocchiFeed({ voci: dati.voci ?? [], compiti: dati.compiti ?? [], domande: dati.domande ?? [], progetti: PROGETTI, nomeResto: 'Il resto' })
+const nomi = (b: { nome: string }[]) => b.map(x => x.nome)
+
+test('senza un ordine suo, i blocchi che aspettano lui passano davanti ai più recenti', () => {
+  const b = blocchi({
+    voci: [voce('v1', 'nx', '2026-09-17T10:00:00Z'), voce('v2', null, '2026-09-18T10:00:00Z')],
+    compiti: [compito('c1', 'hf', { stato: 'pronto', aggiornato: '2026-09-10T08:00:00Z' })]
+  })
+  // per data sarebbe Nextas, H-Farm, Il resto: H-Farm ha una bozza pronta e passa avanti
+  assert.deepEqual(nomi(ordinaBlocchi(b)), ['H-Farm', 'Nextas', 'Il resto'])
+})
+
+test('una domanda senza risposta vale come una bozza pronta, e tira su anche «Il resto»', () => {
+  const b = blocchi({
+    voci: [voce('v1', 'hf', '2026-09-18T10:00:00Z')],
+    compiti: [compito('c1', null, { stato: 'chiede', aggiornato: '2026-09-09T08:00:00Z' })]
+  })
+  // una cosa che aspetta lui viene prima di tutto, anche se sta fra quelle
+  // che non hanno un progetto: in fondo «Il resto» ci va a parità di attesa
+  assert.deepEqual(nomi(ordinaBlocchi(b)), ['Il resto', 'H-Farm'])
+  // niente che aspetti lui: torna in fondo, dove sta sempre
+  const senza = blocchi({ voci: [voce('v1', 'hf', '2026-09-09T10:00:00Z'), voce('v2', null, '2026-09-18T10:00:00Z')] })
+  assert.deepEqual(nomi(ordinaBlocchi(senza)), ['H-Farm', 'Il resto'])
+})
+
+test('l’ordine che ha scelto lui vince, anche su una bozza pronta', () => {
+  const b = blocchi({
+    voci: [voce('v1', 'nx', '2026-09-17T10:00:00Z')],
+    compiti: [compito('c1', 'hf', { stato: 'pronto' })]
+  })
+  assert.deepEqual(nomi(ordinaBlocchi(b, ['nx', 'hf'])), ['Nextas', 'H-Farm'])
+  assert.deepEqual(nomi(ordinaBlocchi(b, ['hf', 'nx'])), ['H-Farm', 'Nextas'])
+})
+
+test('un blocco che l’ordine salvato non conosce va in fondo, non in cima', () => {
+  const b = blocchi({
+    voci: [voce('v1', 'hf', '2026-09-10T10:00:00Z'), voce('v2', 'nx', '2026-09-18T10:00:00Z'), voce('v3', null, '2026-09-11T10:00:00Z')]
+  })
+  // solo H-Farm ha un posto scelto: gli altri due restano fra loro come stavano
+  assert.deepEqual(nomi(ordinaBlocchi(b, ['hf'])), ['H-Farm', 'Nextas', 'Il resto'])
+  // «resto» si nomina così, e un id che non c'è più non sposta niente
+  assert.deepEqual(nomi(ordinaBlocchi(b, ['resto', 'sparito', 'nx'])), ['Il resto', 'Nextas', 'H-Farm'])
+})
+
+test('la chiave di un blocco è il progetto, e «resto» per quello senza', () => {
+  assert.equal(chiaveBlocco({ progetto: 'hf' }), 'hf')
+  assert.equal(chiaveBlocco({ progetto: null }), 'resto')
+})
+
+test('trascinare sposta un blocco solo, e fuori dall’elenco non sposta niente', () => {
+  assert.deepEqual(spostaBlocco(['a', 'b', 'c'], 2, 0), ['c', 'a', 'b'])
+  assert.deepEqual(spostaBlocco(['a', 'b', 'c'], 0, 2), ['b', 'c', 'a'])
+  assert.deepEqual(spostaBlocco(['a', 'b', 'c'], 1, 1), ['a', 'b', 'c'])
+  assert.deepEqual(spostaBlocco(['a', 'b', 'c'], 1, 9), ['a', 'b', 'c'])
+  assert.deepEqual(spostaBlocco(['a', 'b', 'c'], -1, 0), ['a', 'b', 'c'])
+})
+
+test('l’ordine da salvare tiene in coda i blocchi che oggi non sono in pagina', () => {
+  assert.deepEqual(ordineDopoIlTrascinamento(['a', 'b'], 1, 0, ['b', 'a', 'z']), ['b', 'a', 'z'])
+  assert.deepEqual(ordineDopoIlTrascinamento(['a', 'b'], 0, 1, ['z', 'a', 'b']), ['b', 'a', 'z'])
+  assert.deepEqual(ordineDopoIlTrascinamento(['a', 'b'], 0, 1), ['b', 'a'])
 })
