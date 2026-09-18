@@ -1,21 +1,29 @@
-// Le impostazioni di un progetto: la sua riga, aperta.
+// Un progetto: la sua riga, e quello che sta sotto la riga.
 //
-// «Il progetto» era una riga con dentro un nome, un obiettivo e tre pastiglie,
-// e tutto il resto di quello che il server sa di un progetto (gli altri nomi,
-// il progetto dentro cui sta, le note, quello che Myynd ricorda) non aveva
-// nessun posto dove essere scritto o corretto. Qui c'è quel posto.
+// «Se voglio cancellare un progetto deve essere più immediato, e modificarli
+// deve essere più facile, quasi come se fosse una specie di dashboard.»
 //
-// Tre scelte, e perché:
+// Quello che si fa tutti i giorni sta sulla riga e non chiede di aprire
+// niente: il nome e l'obiettivo si scrivono cliccandoci sopra, il pallino
+// apre la tavolozza, lo stato è un interruttore a tre scatti, il cestino
+// compare passandoci sopra e la riga stessa diventa la domanda. Sotto la
+// riga resta quello che si tocca di rado: gli altri nomi, il progetto dentro
+// cui sta, le note, quello che Myynd ricorda, le attività, e unire.
 //
-//   · si apre *dentro* la lista, non sopra. Un riquadro in mezzo allo schermo
-//     nasconde gli altri progetti, e metà delle cose che si fanno qui, unire
-//     due progetti o metterne uno dentro un altro, si decidono guardando gli
-//     altri. La lista resta, la riga cresce.
+// Quattro scelte, e perché:
+//
+//   · niente doppioni. Quello che si cambia sulla riga non si ripete
+//     nell'editor: due caselle per lo stesso nome sono due posti dove
+//     correggerlo e uno solo che hai guardato.
 //   · si salva lasciando il campo, con una spunta piccola che lo dice. Niente
-//     bottone «Salva»: un bottone grosso in fondo a undici campi è la promessa
+//     bottone «Salva»: un bottone grosso in fondo a otto campi è la promessa
 //     che se sbagli la pagina prima di premerlo hai perso tutto.
-//   · ogni guaio sta sotto al suo campo. Una riga rossa in fondo alla schermata
-//     dice che qualcosa non è andato, non dice cosa.
+//   · eliminare è un gesto solo, e la domanda sta dove stava la riga. Prima
+//     era un testo smorto in fondo all'editor: per arrivarci bisognava aprire
+//     il progetto e scorrere due schermate, cioè non era un gesto, era una
+//     caccia.
+//   · ogni guaio sta sotto alla cosa che l'ha causato. Una riga rossa in fondo
+//     alla schermata dice che qualcosa non è andato, non dice cosa.
 
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -24,17 +32,21 @@ import {
 import './project-evidence.css'
 import { AttivitaProgetto } from '../components/AttivitaProgetto'
 import { frasi, loc, t } from '../lingua'
-import { Hov, LABEL } from '../ui'
-import { IconGiu, IconSpunta } from '../icons'
+import { Hov, LABEL, useAttiva } from '../ui'
+import { IconCestino, IconGiu, IconSpunta } from '../icons'
 import { COLORE_VALIDO, TAVOLOZZA, coloreProgetto } from '../colori-progetto'
 import { SPIEGA_STATO, STATI, aggiungiAlias, aliasPuliti, togliAlias } from '../progetto-modifica'
 import { portaAlleAttivita, siPuoAprireLeCose } from '../vals'
-import { GRADIENTE, RAME, RAME_CUPO, SALVIA } from '../tema'
+import { GRADIENTE, RAME } from '../tema'
 
 const INCHIOSTRO = 'var(--inchiostro)'
 const SPENTO = 'rgba(var(--inchiostro-rgb),.55)'
 const APPENA = 'rgba(var(--inchiostro-rgb),.42)'
 const RIGA = '1px solid rgba(var(--inchiostro-rgb),.08)'
+/** Il rame che fa da testo: di notte schiarisce da solo, un valore fisso no. */
+const RAME_TESTO = 'var(--rame-testo)'
+/** Il verde degli stati, che di notte schiarisce: la spunta e basta. */
+const VERDE = 'var(--verde-cupo)'
 
 /** Chi cambia un progetto: se il server dice di no, l'eccezione arriva a chi chiama. */
 export type Cambia = (id: string, c: CambioProgetto) => Promise<void>
@@ -51,12 +63,21 @@ const CASELLA = {
   color: INCHIOSTRO, fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none'
 }
 
+/**
+ * L'altezza di una riga.
+ *
+ * La domanda «lo elimino?» prende il posto della riga e deve stare nello
+ * stesso spazio: se la riga si accorcia di dieci pixel, tutte quelle sotto
+ * saltano su nel momento esatto in cui una persona sta per premere.
+ */
+const ALTA = 62
+
 /** La spunta che dice «l'ho salvato», e se ne va da sola. */
 function Tic({ mostra }: { mostra: boolean }) {
   return (
     <span aria-live="polite" style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px',
-      color: SALVIA, opacity: mostra ? 1 : 0, transition: 'opacity .35s'
+      flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px',
+      color: VERDE, opacity: mostra ? 1 : 0, transition: 'opacity .35s'
     }}>
       {mostra && <><IconSpunta size={11} />{t('Salvato')}</>}
     </span>
@@ -82,7 +103,7 @@ function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
         <div style={{ fontSize: '12px', color: APPENA, marginTop: 6, lineHeight: 1.55, textWrap: 'pretty' }}>{aiuto}</div>
       )}
       {guaio && (
-        <div role="alert" style={{ fontSize: '12px', color: RAME_CUPO, marginTop: 6, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+        <div role="alert" style={{ fontSize: '12px', color: RAME_TESTO, marginTop: 6, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
           {t(guaio)}
         </div>
       )}
@@ -110,6 +131,307 @@ function Tendina({ children, ...resto }: React.SelectHTMLAttributes<HTMLSelectEl
       }}>
         <IconGiu size={12} />
       </span>
+    </span>
+  )
+}
+
+/**
+ * Mandare un cambiamento, e sapere com'è andata per *quel* campo.
+ *
+ * La riga e l'editor salvano allo stesso modo, ognuno per conto suo: una
+ * spunta dove hai scritto, e il guaio sotto alla cosa che l'ha causato.
+ */
+function useSalvataggi(id: string, cambia: Cambia) {
+  const [guai, setGuai] = useState<Record<string, string>>({})
+  const [fatti, setFatti] = useState<Record<string, boolean>>({})
+  const orologi = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  useEffect(() => {
+    const suoi = orologi.current
+    return () => { for (const k of Object.keys(suoi)) clearTimeout(suoi[k]) }
+  }, [])
+
+  const manda = async (campo: string, c: CambioProgetto) => {
+    try {
+      await cambia(id, c)
+      setGuai(g => ({ ...g, [campo]: '' }))
+      setFatti(f => ({ ...f, [campo]: true }))
+      clearTimeout(orologi.current[campo])
+      orologi.current[campo] = setTimeout(() => setFatti(f => ({ ...f, [campo]: false })), 2400)
+    } catch (e) {
+      setGuai(g => ({ ...g, [campo]: e instanceof Error ? e.message : String(e) }))
+    }
+  }
+  const segnala = (campo: string, guaio: string) => setGuai(g => ({ ...g, [campo]: guaio }))
+  return { guai, fatti, manda, segnala }
+}
+
+/**
+ * Un testo che si scrive dov'è scritto.
+ *
+ * Sembra testo, e cliccandoci sopra è una casella con lo stesso carattere e
+ * nello stesso posto: il nome non si sposta di un pixel fra il leggerlo e il
+ * correggerlo. Si salva lasciando il campo o con Invio, Esc rimette com'era.
+ *
+ * Il negativo dei margini pareggia il bordo e l'imbottitura della casella: è
+ * quello che tiene ferme le due parole mentre una diventa l'altra.
+ */
+function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, tornaAlFuoco, salvato }: {
+  valore: string
+  /** Il carattere del testo: lo stesso da fermo e mentre si scrive. */
+  testoStile: React.CSSProperties
+  etichetta: string
+  /** Cosa si legge quando non c'è ancora niente. */
+  vuoto?: string
+  salva: (v: string) => void
+  /** Appena nato: si apre da sé, con dentro tutto selezionato. */
+  apriSubito?: boolean
+  /** Dove torna il fuoco uscendo con Invio o con Esc: la riga. */
+  tornaAlFuoco?: () => void
+  salvato?: boolean
+}) {
+  const [scrivo, setScrivo] = useState(false)
+  const [testo, setTesto] = useState(valore)
+  const annulla = useRef(false)
+  const daTastiera = useRef(false)
+  const nato = useRef(false)
+  useEffect(() => { setTesto(valore) }, [valore])
+  useEffect(() => {
+    if (!apriSubito || nato.current) return
+    nato.current = true
+    setScrivo(true)
+  }, [apriSubito])
+
+  /** Si riapre sempre da quello che è scritto davvero, non da un tentativo andato male. */
+  const apriti = () => { setTesto(valore); setScrivo(true) }
+
+  const comune: React.CSSProperties = {
+    ...testoStile, minWidth: 0, boxSizing: 'border-box',
+    padding: '3px 7px', margin: '-4px -8px', borderRadius: 7,
+    borderWidth: 1, borderStyle: 'solid', fontFamily: 'inherit'
+  }
+
+  if (scrivo) {
+    return (
+      <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          autoFocus
+          ref={el => {
+            if (!el) return
+            if (apriSubito) el.select()
+            else el.setSelectionRange(el.value.length, el.value.length)
+          }}
+          value={testo}
+          onChange={e => setTesto(e.target.value.replace(/\n/g, ' '))}
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); daTastiera.current = true; e.currentTarget.blur() }
+            else if (e.key === 'Escape') {
+              e.stopPropagation(); annulla.current = true; daTastiera.current = true; e.currentTarget.blur()
+            }
+          }}
+          onBlur={() => {
+            const annullato = annulla.current
+            const tastiera = daTastiera.current
+            annulla.current = false
+            daTastiera.current = false
+            setScrivo(false)
+            if (tastiera) tornaAlFuoco?.()
+            if (annullato) return setTesto(valore)
+            const v = testo.trim()
+            if (v !== valore.trim()) salva(v)
+          }}
+          aria-label={etichetta} spellCheck={false}
+          style={{
+            ...comune, flex: '1 1 auto', width: '100%', outline: 'none',
+            background: 'var(--carta-alta)', borderColor: 'rgba(var(--rame-rgb),.45)', color: INCHIOSTRO
+          }} />
+      </span>
+    )
+  }
+
+  return (
+    <span style={{ flex: '0 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Hov as="span" role="button" tabIndex={0}
+        onClick={(e: React.MouseEvent) => { e.stopPropagation(); apriti() }}
+        onFocus={apriti}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apriti() }
+        }}
+        style={{
+          ...comune, display: 'block', cursor: 'text', borderColor: 'transparent',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          color: valore ? testoStile.color : APPENA
+        }}
+        hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+        {valore || vuoto || etichetta}
+      </Hov>
+      <Tic mostra={!!salvato} />
+    </span>
+  )
+}
+
+/**
+ * Il pallino, e la tavolozza che ci sta sotto.
+ *
+ * Il colore era una fila di otto pastiglie dentro l'editor, cioè due clic e
+ * una schermata di distanza da dove il colore si vede. Qui è il pallino
+ * stesso: si preme, si sceglie, si richiude.
+ */
+function Pallino({ p, colore, manda, guaio, segnala }: {
+  p: Progetto
+  colore: string
+  manda: (campo: string, c: CambioProgetto) => Promise<void>
+  guaio?: string
+  segnala: (campo: string, guaio: string) => void
+}) {
+  const [aperto, setAperto] = useState(false)
+  const [scritto, setScritto] = useState(p.colore)
+  const scatola = useRef<HTMLSpanElement>(null)
+  const bottone = useRef<HTMLButtonElement>(null)
+  useEffect(() => { setScritto(p.colore) }, [p.colore])
+  useEffect(() => {
+    if (!aperto) return
+    const fuori = (e: MouseEvent) => {
+      if (!scatola.current?.contains(e.target as Node)) setAperto(false)
+    }
+    document.addEventListener('mousedown', fuori)
+    return () => document.removeEventListener('mousedown', fuori)
+  }, [aperto])
+
+  const salvaScritto = () => {
+    const v = scritto.trim()
+    if (v === p.colore) return
+    if (v && !COLORE_VALIDO.test(v)) return segnala('colore', 'Il colore di un progetto si scrive #RRGGBB.')
+    segnala('colore', '')
+    void manda('colore', { colore: v })
+  }
+
+  return (
+    <span ref={scatola} style={{ flex: 'none', position: 'relative', display: 'flex' }}
+      onKeyDown={e => { if (e.key === 'Escape' && aperto) { e.stopPropagation(); setAperto(false); bottone.current?.focus() } }}>
+      <Hov as="button" type="button" ref={bottone}
+        onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAperto(v => !v) }}
+        aria-label={t('Colore')} title={t('Colore')} aria-expanded={aperto}
+        style={{
+          flex: 'none', width: 22, height: 22, borderRadius: '50%', border: 'none', padding: 0,
+          background: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center'
+        }}>
+        <span style={{
+          width: 13, height: 13, borderRadius: '50%', background: colore,
+          border: '2px solid rgba(var(--luce-rgb),.9)',
+          boxShadow: aperto ? `0 0 0 2px ${colore}` : '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
+        }} />
+      </Hov>
+      {aperto && (
+        <span style={{
+          position: 'absolute', top: 'calc(100% + 8px)', left: -6, zIndex: 20, width: 267,
+          display: 'block', padding: '12px 13px 13px', borderRadius: 14,
+          background: 'var(--carta-piena)', border: '1px solid var(--filo)',
+          boxShadow: '0 12px 30px rgba(var(--ombra-rgb),.22)', animation: 'fadein .12s ease'
+        }}>
+          {/* le otto tinte in una riga sola: due righe da sei e due fanno
+              sembrare che le ultime due siano un'altra cosa */}
+          <span role="radiogroup" aria-label={t('Colore')} style={{ display: 'flex', gap: 9 }}>
+            {TAVOLOZZA.map(c => (
+              <Hov key={c} as="button" type="button" role="radio" aria-checked={c === colore} title={c} aria-label={c}
+                onClick={() => { setScritto(c); segnala('colore', ''); if (c !== p.colore) void manda('colore', { colore: c }) }}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%', background: c, padding: 0, cursor: 'pointer',
+                  border: '2px solid rgba(var(--luce-rgb),.9)',
+                  boxShadow: c === colore ? `0 0 0 2px ${c}` : '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
+                }}
+                hover={{ boxShadow: `0 0 0 2px ${c}` }} />
+            ))}
+          </span>
+          <input value={scritto} onChange={e => setScritto(e.target.value)} onBlur={salvaScritto}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            aria-label={t('Un altro colore, scritto #RRGGBB')} spellCheck={false} placeholder={colore}
+            style={{ ...CASELLA, marginTop: 11, fontSize: '12.5px', padding: '7px 10px', letterSpacing: '.02em' }} />
+          <span style={{ display: 'block', fontSize: '11.5px', color: APPENA, marginTop: 8, lineHeight: 1.5, textWrap: 'pretty' }}>
+            {t('Senza sceglierne uno, Myynd gliene dà uno suo, diverso da quello degli altri.')}
+          </span>
+          {guaio && (
+            <span role="alert" style={{ display: 'block', fontSize: '11.5px', color: RAME_TESTO, marginTop: 7, lineHeight: 1.45 }}>
+              {t(guaio)}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Lo stato, a tre scatti, sulla riga.
+ *
+ * Erano tre riquadri alti dentro l'editor, con sotto ognuno la riga che dice
+ * cosa cambia sulla prima pagina. Le tre righe servono ancora, perché la
+ * scelta di mezzo esiste proprio per «non è chiuso, è in pausa», ma non servono
+ * *sempre*: compaiono passando sopra al controllo e per qualche secondo dopo
+ * aver scelto, cioè nei due momenti in cui qualcuno se lo sta chiedendo. E
+ * compaiono sopra la riga, non dentro: una riga che cresce al passaggio del
+ * mouse sposta tutte quelle sotto.
+ */
+function Stati({ p, manda }: { p: Progetto; manda: (campo: string, c: CambioProgetto) => Promise<void> }) {
+  const [sopra, setSopra] = useState(false)
+  const [appena, setAppena] = useState(false)
+  const bottoni = useRef<(HTMLButtonElement | null)[]>([])
+  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(orologio.current), [])
+
+  const scegli = (s: StatoProgetto) => {
+    clearTimeout(orologio.current)
+    setAppena(true)
+    orologio.current = setTimeout(() => setAppena(false), 3200)
+    if (s !== p.stato) void manda('stato', { stato: s })
+  }
+
+  return (
+    <span style={{ flex: 'none', position: 'relative', display: 'flex' }}
+      onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}>
+      <span role="radiogroup" aria-label={t('Stato')} style={{
+        display: 'flex', gap: 2, padding: 2, borderRadius: 9,
+        border: '1px solid var(--filo)', background: 'rgba(var(--luce-rgb),.35)'
+      }}>
+        {STATI.map((s, i) => {
+          const suo = p.stato === s
+          return (
+            <Hov key={s} as="button" type="button" role="radio" aria-checked={suo}
+              ref={(el: HTMLButtonElement | null) => { bottoni.current[i] = el }}
+              tabIndex={suo ? 0 : -1}
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); scegli(s) }}
+              onKeyDown={(e: React.KeyboardEvent) => {
+                const avanti = e.key === 'ArrowRight' || e.key === 'ArrowDown'
+                const indietro = e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+                if (!avanti && !indietro) return
+                e.preventDefault(); e.stopPropagation()
+                const ora = STATI.indexOf(p.stato)
+                const j = (ora + (avanti ? 1 : STATI.length - 1)) % STATI.length
+                scegli(STATI[j])
+                bottoni.current[j]?.focus()
+              }}
+              style={{
+                padding: '3px 9px', borderRadius: 7, border: 'none', cursor: suo ? 'default' : 'pointer',
+                fontFamily: 'inherit', fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap',
+                textTransform: 'capitalize',
+                color: suo ? COLORE_STATO[s].testo : APPENA,
+                background: suo ? COLORE_STATO[s].fondo : 'transparent'
+              }}
+              hover={suo ? {} : { color: INCHIOSTRO, background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+              {t(s)}
+            </Hov>
+          )
+        })}
+      </span>
+      {(sopra || appena) && (
+        <span role="note" style={{
+          position: 'absolute', top: 'calc(100% + 7px)', right: 0, zIndex: 18, width: 250,
+          display: 'block', padding: '8px 11px', borderRadius: 10, textAlign: 'left',
+          background: 'var(--carta-piena)', border: '1px solid var(--filo)',
+          boxShadow: '0 12px 30px rgba(var(--ombra-rgb),.22)',
+          fontSize: '11.5px', lineHeight: 1.5, color: SPENTO, textWrap: 'pretty', animation: 'fadein .12s ease'
+        }}>{t(SPIEGA_STATO[p.stato])}</span>
+      )}
     </span>
   )
 }
@@ -210,68 +532,22 @@ function MemoriaProgetto({ p }: { p: Progetto }) {
 }
 
 /**
- * L'editor vero: undici cose, ognuna che si salva per conto suo.
+ * Il resto di un progetto: quello che si tocca di rado.
+ *
+ * Il nome, l'obiettivo, lo stato e il colore non stanno qui: si scrivono sulla
+ * riga, e ripeterli qui dentro vorrebbe dire due caselle per la stessa cosa.
  *
  * `cambia` butta l'eccezione del server invece di mangiarsela: è l'unico modo
  * per cui il messaggio «Esiste già un progetto con questo nome» possa comparire
- * sotto al campo del nome, dove serve, invece che in fondo alla schermata.
+ * sotto al campo giusto invece che in fondo alla schermata.
  */
-export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
+export function ProgettoEditor({ p, tutti, cambia, unisci }: {
   p: Progetto
   tutti: Progetto[]
   cambia: Cambia
   unisci: (id: string, dentro: string) => Promise<void>
-  elimina: (id: string) => Promise<void>
 }) {
-  const [guai, setGuai] = useState<Record<string, string>>({})
-  const [fatti, setFatti] = useState<Record<string, boolean>>({})
-  const orologi = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  useEffect(() => {
-    const suoi = orologi.current
-    return () => { for (const k of Object.keys(suoi)) clearTimeout(suoi[k]) }
-  }, [])
-
-  /** Manda un cambiamento, e tiene il conto di com'è andata per *quel* campo. */
-  const manda = async (campo: string, c: CambioProgetto) => {
-    try {
-      await cambia(p.id, c)
-      setGuai(g => ({ ...g, [campo]: '' }))
-      setFatti(f => ({ ...f, [campo]: true }))
-      clearTimeout(orologi.current[campo])
-      orologi.current[campo] = setTimeout(() => setFatti(f => ({ ...f, [campo]: false })), 2400)
-    } catch (e) {
-      setGuai(g => ({ ...g, [campo]: e instanceof Error ? e.message : String(e) }))
-    }
-  }
-  const segnala = (campo: string, guaio: string) => setGuai(g => ({ ...g, [campo]: guaio }))
-
-  // — il nome e l'obiettivo: si scrivono, si lascia il campo, sono salvati —
-  const [nome, setNome] = useState(p.nome)
-  const [obiettivo, setObiettivo] = useState(p.obiettivo)
-  useEffect(() => { setNome(p.nome) }, [p.nome])
-  useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
-
-  const salvaNome = () => {
-    const v = nome.trim()
-    if (v === p.nome.trim()) return
-    if (!v) return segnala('nome', 'Un progetto ha bisogno di un nome.')
-    void manda('nome', { nome: v })
-  }
-  const salvaObiettivo = () => {
-    const v = obiettivo.trim()
-    if (v !== p.obiettivo.trim()) void manda('obiettivo', { obiettivo: v })
-  }
-
-  // — il colore: otto tinte, e una scritta a mano —
-  const colore = coloreProgetto(p, tutti)
-  const [scritto, setScritto] = useState(p.colore)
-  useEffect(() => { setScritto(p.colore) }, [p.colore])
-  const salvaColore = () => {
-    const v = scritto.trim()
-    if (v === p.colore) return
-    if (v && !COLORE_VALIDO.test(v)) return segnala('colore', 'Il colore di un progetto si scrive #RRGGBB.')
-    void manda('colore', { colore: v })
-  }
+  const { guai, fatti, manda, segnala } = useSalvataggi(p.id, cambia)
 
   // — gli altri nomi —
   const alias = aliasPuliti(p.alias ?? [], p.nome)
@@ -298,13 +574,11 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
     void manda('note', { note: (p.note ? `${p.note}\n\n` : '') + `${data}\n${testo}` })
   }
 
-  // — unire, e togliere —
+  // — unire due progetti che erano lo stesso progetto —
   const [dentroChi, setDentroChi] = useState('')
   const [unisco, setUnisco] = useState(false)
   const bersaglio = tutti.find(x => x.id === dentroChi) ?? null
   const altri = tutti.filter(x => x.id !== p.id && x.stato !== 'chiuso')
-  const [chiedoDiTogliere, setChiedoDiTogliere] = useState(false)
-  const [tolgo, setTolgo] = useState(false)
 
   const facciamoUno = async () => {
     if (!bersaglio || unisco) return
@@ -313,86 +587,11 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
     catch (e) { segnala('unisci', e instanceof Error ? e.message : String(e)) }
     finally { setUnisco(false) }
   }
-  const togli = async () => {
-    if (tolgo) return
-    setTolgo(true)
-    try { await elimina(p.id); segnala('elimina', ''); setChiedoDiTogliere(false) }
-    catch (e) { segnala('elimina', e instanceof Error ? e.message : String(e)) }
-    finally { setTolgo(false) }
-  }
 
   const chiuso = p.stato === 'chiuso'
 
   return (
     <div id={`editor-${p.id}`} style={{ padding: '4px 4px 22px 25px' }}>
-      <Riquadro etichetta={t('Nome')} guaio={guai.nome} salvato={fatti.nome}>
-        <input value={nome} onChange={e => setNome(e.target.value)} onBlur={salvaNome}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          aria-label={t('Nome')} style={CASELLA} />
-      </Riquadro>
-
-      <Riquadro etichetta={t('Obiettivo')} salvato={fatti.obiettivo} guaio={guai.obiettivo}
-        aiuto={t('Com’è fatto quando è finito, in una riga. È la frase che decide cosa conta.')}>
-        <input value={obiettivo} onChange={e => setObiettivo(e.target.value.replace(/\n/g, ' ').slice(0, 200))}
-          onBlur={salvaObiettivo} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          placeholder={t('Chiudere il round entro ottobre')} aria-label={t('Obiettivo')} style={CASELLA} />
-      </Riquadro>
-
-      {/* i tre stati, ognuno con la riga che dice cosa cambia sulla prima pagina */}
-      <Riquadro etichetta={t('Stato')} salvato={fatti.stato} guaio={guai.stato}>
-        <div role="radiogroup" aria-label={t('Stato')}>
-          {STATI.map(s => {
-            const suo = p.stato === s
-            return (
-              <Hov key={s} as="button" type="button" role="radio" aria-checked={suo}
-                onClick={() => { if (!suo) void manda('stato', { stato: s }) }}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 11, width: '100%', textAlign: 'left',
-                  padding: '11px 13px', borderRadius: 10, marginTop: 7, cursor: suo ? 'default' : 'pointer',
-                  fontFamily: 'inherit', boxSizing: 'border-box',
-                  border: `1px solid ${suo ? 'rgba(var(--rame-rgb),.38)' : 'rgba(var(--inchiostro-rgb),.1)'}`,
-                  background: suo ? 'rgba(var(--rame-rgb),.08)' : 'transparent'
-                }}
-                hover={suo ? {} : { borderColor: 'rgba(var(--inchiostro-rgb),.3)' }}>
-                <span style={{
-                  flex: 'none', width: 13, height: 13, borderRadius: '50%', marginTop: 2,
-                  border: `1px solid ${suo ? RAME : 'rgba(var(--inchiostro-rgb),.3)'}`,
-                  background: suo ? RAME : 'transparent',
-                  boxShadow: suo ? 'inset 0 0 0 2.5px rgba(var(--carta-rgb),.92)' : 'none'
-                }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: '13.5px', fontWeight: 500, color: INCHIOSTRO, textTransform: 'capitalize' }}>{t(s)}</span>
-                  <span style={{ display: 'block', fontSize: '12.5px', color: SPENTO, marginTop: 3, lineHeight: 1.5, textWrap: 'pretty' }}>
-                    {t(SPIEGA_STATO[s])}
-                  </span>
-                </span>
-              </Hov>
-            )
-          })}
-        </div>
-      </Riquadro>
-
-      {/* il colore: quello con cui la prima pagina veste la carta di questo progetto */}
-      <Riquadro etichetta={t('Colore')} salvato={fatti.colore} guaio={guai.colore}
-        aiuto={t('Senza sceglierne uno, Myynd gliene dà uno suo, diverso da quello degli altri.')}>
-        <div role="radiogroup" aria-label={t('Colore')} style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-          {TAVOLOZZA.map(c => (
-            <Hov key={c} as="button" type="button" role="radio" aria-checked={c === colore} title={c} aria-label={c}
-              onClick={() => { setScritto(c); if (c !== p.colore) void manda('colore', { colore: c }) }}
-              style={{
-                width: 22, height: 22, borderRadius: '50%', background: c, padding: 0, cursor: 'pointer',
-                border: '2px solid rgba(var(--luce-rgb),.9)',
-                boxShadow: c === colore ? `0 0 0 2px ${c}` : '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
-              }}
-              hover={{ boxShadow: `0 0 0 2px ${c}` }} />
-          ))}
-          <input value={scritto} onChange={e => setScritto(e.target.value)} onBlur={salvaColore}
-            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            aria-label={t('Un altro colore, scritto #RRGGBB')} spellCheck={false} placeholder={colore}
-            style={{ ...CASELLA, width: 108, flex: 'none', fontSize: '12.5px', letterSpacing: '.02em' }} />
-        </div>
-      </Riquadro>
-
       {/* gli altri nomi: le cartelle e i soprannomi con cui lo chiama davvero */}
       <Riquadro etichetta={t('Altri nomi')} salvato={fatti.alias} guaio={guai.alias}
         aiuto={t('Le cartelle e i soprannomi con cui lo chiami: così Myynd lo riconosce anche scritto in un altro modo.')}>
@@ -411,7 +610,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
                   background: 'none', cursor: 'pointer', color: APPENA, fontFamily: 'inherit',
                   fontSize: '14px', lineHeight: 1, display: 'grid', placeItems: 'center'
                 }}
-                hover={{ background: 'rgba(var(--rame-rgb),.14)', color: RAME_CUPO }}>×</Hov>
+                hover={{ background: 'rgba(var(--rame-rgb),.14)', color: RAME_TESTO }}>×</Hov>
             </span>
           ))}
           <input value={altroNome} onChange={e => setAltroNome(e.target.value)}
@@ -458,7 +657,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
           <Hov as="button" type="button" onClick={() => portaAlleAttivita()}
             style={{
               border: 'none', background: 'none', padding: '8px 0 0', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: '12.5px', color: RAME_CUPO
+              fontFamily: 'inherit', fontSize: '12.5px', color: RAME_TESTO
             }}
             hover={{ color: RAME }}>{t('Aprile in Da fare')}</Hov>
         )}
@@ -495,55 +694,20 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
           )}
         </Riquadro>
       </div>
-
-      {/* — toglierlo del tutto: in fondo, e scritto, mai un bottone pieno — */}
-      <div style={{ marginTop: 20, paddingTop: 16, borderTop: RIGA }}>
-        {!chiedoDiTogliere ? (
-          <Hov as="button" type="button" onClick={() => { setChiedoDiTogliere(true); segnala('elimina', '') }}
-            style={{
-              border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '12.5px', color: APPENA
-            }}
-            hover={{ color: RAME_CUPO }}>{t('Elimina il progetto')}</Hov>
-        ) : (
-          <>
-            <div style={{ fontSize: '12.5px', color: SPENTO, lineHeight: 1.6, textWrap: 'pretty' }}>
-              {frasi.eliminoProgetto(p.nome)}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10 }}>
-              <Hov as="button" type="button" onClick={togli} disabled={tolgo}
-                style={{
-                  border: 'none', background: 'none', padding: 0, cursor: tolgo ? 'default' : 'pointer',
-                  fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, color: RAME_CUPO
-                }}
-                hover={tolgo ? {} : { color: RAME }}>{tolgo ? t('Tolgo…') : t('Eliminalo davvero')}</Hov>
-              <Hov as="button" type="button" onClick={() => setChiedoDiTogliere(false)}
-                style={{
-                  border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: '12.5px', color: APPENA
-                }}
-                hover={{ color: INCHIOSTRO }}>{t('Lascia stare')}</Hov>
-            </div>
-          </>
-        )}
-        {guai.elimina && (
-          <div role="alert" style={{ fontSize: '12px', color: RAME_CUPO, marginTop: 8, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-            {t(guai.elimina)}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
 
 /**
- * La riga di un progetto nella lista, e il suo editor quando è aperta.
+ * La riga di un progetto: quello che si cambia tutti i giorni, sul posto.
  *
- * Chiusa dice quattro cose e basta: il colore, il nome, dove punta, come sta.
- * Undici campi sempre aperti per otto progetti non sono una lista, sono un
- * modulo lungo due schermi.
+ * Chiusa non è più una vetrina che si limita a dire quattro cose: il nome e
+ * l'obiettivo si scrivono cliccandoci sopra, il pallino apre la tavolozza, lo
+ * stato ha i suoi tre scatti, il conto delle attività sta a destra e il
+ * cestino compare passando sopra. Il chevron apre il resto, che è quello che
+ * si tocca una volta al mese.
  */
-export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, acceso }: {
+export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, acceso, conto, nato }: {
   p: Progetto
   /** Gli altri: il colore assegnato a chi non l'ha scelto non deve ripetere il loro. */
   tutti: Progetto[]
@@ -554,10 +718,57 @@ export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, 
   apri: () => void
   /** Arrivato adesso da una riga della lista: un anello di rame per un attimo, e basta. */
   acceso?: boolean
+  /** Quante attività ha aperte, e quante ne ha chiuse. */
+  conto?: { aperte: number; fatte: number }
+  /** Appena creato: la riga prende il fuoco con il nome già selezionato. */
+  nato?: boolean
 }) {
+  const { attiva, sopra, props } = useAttiva()
+  const { guai, fatti, manda, segnala } = useSalvataggi(p.id, cambia)
+  const [chiedo, setChiedo] = useState(false)
+  const [tolgo, setTolgo] = useState(false)
+  const [uscendo, setUscendo] = useState(false)
+  const riga = useRef<HTMLDivElement>(null)
+
   const colore = coloreProgetto(p, tutti)
   const chiuso = p.stato === 'chiuso'
   const padre = tutti.find(x => x.id === p.genitore) ?? null
+
+  useEffect(() => { if (nato) riga.current?.scrollIntoView({ block: 'center' }) }, [nato])
+
+  const salvaNome = (v: string) => {
+    if (!v) return segnala('nome', 'Un progetto ha bisogno di un nome.')
+    segnala('nome', '')
+    void manda('nome', { nome: v })
+  }
+  const salvaObiettivo = (v: string) => void manda('obiettivo', { obiettivo: v.slice(0, 200) })
+
+  const togli = async () => {
+    if (tolgo) return
+    setTolgo(true)
+    segnala('elimina', '')
+    // va via prima di tornare il server: la riga si spegne, e se il server
+    // dice di no torna con il suo guaio scritto sotto
+    setUscendo(true)
+    try { await elimina(p.id) }
+    catch (e) { setUscendo(false); segnala('elimina', e instanceof Error ? e.message : String(e)) }
+    finally { setTolgo(false) }
+  }
+
+  const tasti = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && chiedo) {
+      e.stopPropagation()
+      setChiedo(false)
+      riga.current?.focus()
+      return
+    }
+    // dentro un campo i tasti sono del campo: Backspace lì vuol dire cancella una lettera
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apri() }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); setChiedo(true) }
+  }
+
+  const conteggio = conto && (conto.aperte || conto.fatte) ? frasi.attivitaDelProgetto(conto.aperte, conto.fatte) : ''
 
   return (
     // l'id è la maniglia con cui la prima pagina porta questa riga sotto gli occhi
@@ -565,55 +776,106 @@ export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, 
       borderTop: RIGA,
       // l'anello sta fuori dal flusso: acceso non sposta di un pixel quello che c'è sotto
       borderRadius: 12, outline: acceso ? `2px solid ${RAME}` : '2px solid transparent',
-      outlineOffset: 4, transition: 'outline-color .3s'
+      outlineOffset: 4, transition: 'outline-color .3s, opacity .22s ease',
+      opacity: uscendo ? 0 : 1, pointerEvents: uscendo ? 'none' : undefined
     }}>
-      <Hov as="button" type="button" onClick={apri} aria-expanded={aperta} aria-controls={`editor-${p.id}`}
+      <div ref={riga} {...props} role="group" tabIndex={0} aria-label={p.nome} onKeyDown={tasti}
         style={{
-          display: 'flex', alignItems: 'center', gap: 11, width: '100%', boxSizing: 'border-box',
-          padding: '13px 10px 13px 4px', borderRadius: 12, border: 'none', cursor: 'pointer',
-          background: aperta ? 'rgba(var(--inchiostro-rgb),.04)' : 'transparent', fontFamily: 'inherit', textAlign: 'left',
-          opacity: chiuso && !aperta ? 0.6 : 1
-        }}
-        hover={aperta ? {} : { background: 'rgba(var(--inchiostro-rgb),.035)' }}>
-        <span style={{
-          flex: 'none', width: 13, height: 13, borderRadius: '50%', background: colore,
-          border: '2px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
-        }} />
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+          display: 'flex', alignItems: 'center', gap: 10, minHeight: ALTA, boxSizing: 'border-box',
+          padding: '8px 8px 8px 4px', borderRadius: 12,
+          background: aperta ? 'rgba(var(--inchiostro-rgb),.04)' : sopra ? 'rgba(var(--inchiostro-rgb),.025)' : 'transparent',
+          transition: 'background .15s', opacity: chiuso && !aperta && !chiedo ? 0.72 : 1
+        }}>
+        {chiedo ? (
+          // la domanda prende il posto della riga, nello stesso spazio
+          <>
             <span style={{
-              minWidth: 0, fontSize: '14.5px', fontWeight: 500, color: INCHIOSTRO, overflowWrap: 'anywhere',
-              textDecoration: chiuso ? 'line-through' : 'none'
-            }}>{p.nome}</span>
-            {padre && (
-              <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>
-                {frasi.dentroProgetto(padre.nome)}
+              flex: 'none', width: 13, height: 13, marginLeft: 4, borderRadius: '50%', background: colore,
+              border: '2px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
+            }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: SPENTO, lineHeight: 1.55, textWrap: 'pretty' }}>
+              {frasi.eliminoProgetto(p.nome)}
+            </span>
+            <Hov as="button" type="button" autoFocus onClick={togli} disabled={tolgo}
+              style={{
+                flex: 'none', border: 'none', background: 'none', padding: '6px 4px',
+                cursor: tolgo ? 'default' : 'pointer', fontFamily: 'inherit',
+                fontSize: '12.5px', fontWeight: 500, color: RAME_TESTO
+              }}
+              hover={tolgo ? {} : { color: RAME }}>{tolgo ? t('Tolgo…') : t('Elimina')}</Hov>
+            <Hov as="button" type="button" onClick={() => { setChiedo(false); riga.current?.focus() }}
+              style={{
+                flex: 'none', border: 'none', background: 'none', padding: '6px 4px', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '12.5px', color: APPENA
+              }}
+              hover={{ color: INCHIOSTRO }}>{t('Tieni')}</Hov>
+          </>
+        ) : (
+          <>
+            <Pallino p={p} colore={colore} manda={manda} guaio={guai.colore} segnala={segnala} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <Scritta valore={p.nome} etichetta={t('Nome')} salva={salvaNome} salvato={fatti.nome}
+                  apriSubito={nato} tornaAlFuoco={() => riga.current?.focus()}
+                  testoStile={{
+                    fontSize: '14.5px', fontWeight: 500, color: INCHIOSTRO, lineHeight: 1.35,
+                    textDecoration: chiuso ? 'line-through' : 'none'
+                  }} />
+                {padre && (
+                  <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>
+                    {frasi.dentroProgetto(padre.nome)}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-          <span style={{
-            display: 'block', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 3,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-          }}>{p.obiettivo || t('Obiettivo non ancora scritto.')}</span>
-        </span>
-        {p.origine === 'punto' && !chiuso && (
-          <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>{t('riconosciuto dal punto')}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginTop: 5 }}>
+                <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} salva={salvaObiettivo} salvato={fatti.obiettivo}
+                  vuoto={t('Obiettivo non ancora scritto.')} tornaAlFuoco={() => riga.current?.focus()}
+                  testoStile={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', lineHeight: 1.35 }} />
+                {p.origine === 'punto' && !chiuso && (
+                  <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>{t('riconosciuto dal punto')}</span>
+                )}
+              </span>
+            </span>
+            <Stati p={p} manda={manda} />
+            {/* il conto tiene la sua colonna anche quando è vuoto: senza, gli
+                stati di ogni riga si fermano a un punto diverso, e una lista
+                dove niente è incolonnato non si legge a colpo d'occhio */}
+            <span style={{
+              flex: 'none', width: 104, textAlign: 'right', fontSize: '11.5px', color: APPENA,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+            }}>{conteggio}</span>
+            <Hov as="button" type="button" title={t('Elimina')} aria-label={t('Elimina')}
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); setChiedo(true) }}
+              style={{
+                flex: 'none', width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: 7,
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+                color: 'rgba(var(--inchiostro-rgb),.35)',
+                opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s, color .15s'
+              }}
+              hover={{ color: RAME_TESTO, background: 'rgba(var(--rame-rgb),.12)' }}>
+              <IconCestino size={13} />
+            </Hov>
+            <Hov as="button" type="button" onClick={apri} aria-expanded={aperta} aria-controls={`editor-${p.id}`}
+              title={t('Altro')} aria-label={t('Altro')}
+              style={{
+                flex: 'none', width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: 7,
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: APPENA
+              }}
+              hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+              <span style={{ display: 'flex', transform: aperta ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }}>
+                <IconGiu size={11} />
+              </span>
+            </Hov>
+          </>
         )}
-        {/* attivo è il modo normale di stare di un progetto: una pastiglia verde
-            su ognuno non distingue niente, e il colore qui dentro è uno solo.
-            La pastiglia compare nel momento in cui vuol dire qualcosa. */}
-        {p.stato !== 'attivo' && (
-          <span style={{
-            flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase',
-            padding: '3px 8px', borderRadius: 5, whiteSpace: 'nowrap',
-            color: COLORE_STATO[p.stato].testo, background: COLORE_STATO[p.stato].fondo
-          }}>{t(p.stato)}</span>
-        )}
-        <span style={{ flex: 'none', display: 'flex', transform: aperta ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }}>
-          <IconGiu size={11} />
-        </span>
-      </Hov>
-      {aperta && <ProgettoEditor p={p} tutti={tutti} cambia={cambia} unisci={unisci} elimina={elimina} />}
+      </div>
+      {/* i guai della riga stanno sotto la riga, dove è successo */}
+      {(guai.elimina || guai.nome) && (
+        <div role="alert" style={{
+          padding: '0 10px 9px 29px', fontSize: '12px', color: RAME_TESTO, lineHeight: 1.5, overflowWrap: 'anywhere'
+        }}>{t(guai.elimina || guai.nome)}</div>
+      )}
+      {aperta && <ProgettoEditor p={p} tutti={tutti} cambia={cambia} unisci={unisci} />}
     </div>
   )
 }

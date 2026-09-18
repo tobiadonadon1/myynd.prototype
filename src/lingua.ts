@@ -2665,8 +2665,8 @@ const EN: Record<string, string> = {
   'Scegli un progetto': 'Choose a project',
   'Unisci': 'Merge',
   'Unisco…': 'Merging…',
-  'Elimina il progetto': 'Delete the project',
-  'Eliminalo davvero': 'Delete it for good',
+  // — toglierlo: il cestino sulla riga, e la riga che diventa la domanda —
+  'Tieni': 'Keep',
   'Tolgo…': 'Deleting…',
 
   // — le due teste: Anthropic e OpenAI, con l'account o con la chiave —
@@ -2880,11 +2880,28 @@ export const frasi = {
    *
    * La seconda metà della frase è quella che conta: chi esita davanti a
    * «elimina» esita perché ha dieci righe di lavoro appese lì dentro, e la
-   * risposta va data prima del clic, non dopo.
+   * risposta va data prima del clic, non dopo. Sta scritta nello spazio di
+   * una riga, dove stava il progetto: corta, o la riga cresce e quelle sotto
+   * saltano mentre qualcuno sta per premere.
    */
   eliminoProgetto: (nome: string) => corrente === 'en'
-    ? `“${nome}” goes away from here, and there is no way back. Its tasks are not deleted: they stay on To do.`
-    : `«${nome}» sparisce da qui, e non si torna indietro. Le sue attività non si cancellano: restano in Da fare.`,
+    ? `Delete “${nome}”? Its tasks stay on To do, and there is no way back.`
+    : `Elimino «${nome}»? Le sue attività restano in Da fare, e non si torna indietro.`,
+
+  /*
+   * Quante attività ha, in fondo alla riga.
+   *
+   * Due numeri e basta: quello che resta da fare, e quello che è stato fatto.
+   * Un progetto senza niente non dice «0 aperte», non dice niente: uno zero
+   * scritto è una cosa in più da leggere su ogni riga, tutti i giorni.
+   */
+  attivitaDelProgetto: (aperte: number, fatte: number) => {
+    const en = corrente === 'en'
+    const pezzi: string[] = []
+    if (aperte) pezzi.push(en ? `${aperte} open` : `${aperte} apert${aperte === 1 ? 'a' : 'e'}`)
+    if (fatte) pezzi.push(en ? `${fatte} done` : `${fatte} fatt${fatte === 1 ? 'a' : 'e'}`)
+    return pezzi.join(' · ')
+  },
 
   // — le convinzioni che aspettano un sì —
   inAttesa: (n: number) => corrente === 'en'
