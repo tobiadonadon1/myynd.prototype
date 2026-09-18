@@ -133,3 +133,16 @@ test('Myynd desktop deliveries cannot resurface as fresh project requests', () =
  const d=mail({fonte:'desktop',tipo:'file',percorso:'/Users/person/Desktop/Myynd/review.pages',corpo:'Please review this project proposal tomorrow.'})
  assert.equal(classifica(d,true),'ignora')
 })
+
+test('le sue chat, i suoi post e le sue cartelle non sono richieste: al massimo novità, mai feed', async () => {
+  const { classificaAttenzione } = await import('./rilevanza.ts')
+  const adesso = Date.now()
+  for (const d of [
+    { id: 'conversazioni:codice:abc', fonte: 'conversazioni', tipo: 'chat', titolo: 'Sessione', corpo: 'Please can you fix the feed? I need your help by Friday.', quando: new Date(adesso).toISOString() },
+    { id: 'x:posted:1', fonte: 'x', tipo: 'post', titolo: 'Post', corpo: 'Can you review this? Reply please.', quando: new Date(adesso).toISOString(), inviato: true },
+    { id: 'lavoro:/Users/t/x-engine', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: x-engine', corpo: 'Ultimi commit: please fix the reply path', quando: new Date(adesso).toISOString() }
+  ]) {
+    const r = classificaAttenzione(d as never, { adesso, progettoAttivo: true })
+    assert.notEqual(r.destinazione, 'feed', d.fonte)
+  }
+})

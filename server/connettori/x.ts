@@ -197,11 +197,16 @@ function documentoNota(n: Nota, it: boolean): Documento | null {
  * post da solo può dare. La data è l'ultima cosa successa nella settimana,
  * non la sua fine: un riepilogo datato domenica prossima sarebbe nel futuro.
  */
-function documentoSettimana(chiave: string, post: Post[], conti: Conto[], it: boolean): Documento | null {
+function documentoSettimana(chiave: string, post: Post[], conti: Conto[], it: boolean, adesso = Date.now()): Documento | null {
   const validi = post.filter(p => istante(p.posted_at))
   if (!validi.length) return null
   const inizio = lunedi(istante(validi[0]!.posted_at)!)
   const fine = inizio + 7 * 86_400_000
+  // la settimana in corso non ha ancora i suoi numeri: le visualizzazioni
+  // salgono di ora in ora e i follower pure, e un riepilogo che li porta
+  // risulta «cambiato» a ogni giro. Fino a domenica, solo il conto dei post;
+  // chiusa la settimana, tutto.
+  const chiusa = fine <= adesso
   const nPost = validi.filter(p => p.kind !== 'reply').length
   const nRisposte = validi.length - nPost
   const ultimo = validi.map(p => istante(p.posted_at)!).sort().at(-1)!
@@ -228,8 +233,8 @@ function documentoSettimana(chiave: string, post: Post[], conti: Conto[], it: bo
   const [anno, n] = chiave.split('-')
   const righeCorpo = [
     it ? `${nPost} post e ${nRisposte} risposte pubblicate su X.` : `${nPost} posts and ${nRisposte} replies published on X.`,
-    follower,
-    top.length ? `${it ? 'I più visti' : 'Most viewed'}:\n${top.join('\n')}` : ''
+    chiusa ? follower : (it ? 'Settimana in corso: i numeri arrivano a settimana chiusa.' : 'Week in progress: the numbers come once the week is over.'),
+    chiusa && top.length ? `${it ? 'I più visti' : 'Most viewed'}:\n${top.join('\n')}` : ''
   ].filter(Boolean)
   return {
     id: `x:settimana:${chiave}`,
@@ -275,7 +280,7 @@ export function leggi(cfg: ConfigX, adesso = Date.now(), giorni = GIORNI): Esito
       perSettimana.set(k, [...(perSettimana.get(k) ?? []), p])
     }
     for (const [k, suoi] of perSettimana) {
-      const d = documentoSettimana(k, suoi, conti, it)
+      const d = documentoSettimana(k, suoi, conti, it, adesso)
       if (d) { docs.push(d); esito.settimane++ }
     }
     return esito

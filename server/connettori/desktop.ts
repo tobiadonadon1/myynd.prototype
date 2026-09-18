@@ -844,11 +844,14 @@ export async function documentiDiLavoro(radiciScelte: string[]): Promise<Documen
   const cartelle = await cartelleDiLavoro(radiciScelte)
   return cartelle.map(c => ({
     id: `lavoro:${c.percorso}`, fonte: 'lavoro', tipo: 'cartella', gruppo: 'documenti',
-    titolo: `Lavoro: ${c.nome}`, percorso: c.percorso, quando: c.modificata,
+    titolo: `Lavoro: ${c.nome}`, percorso: c.percorso, quando: `${c.modificata.slice(0, 10)}T12:00:00.000Z`,
+    // niente «file toccati per ultimi» e data al giorno: una cartella in cui
+    // gira un programma (x-engine scrive i suoi registri) cambiava data a
+    // ogni giro, e il documento risultava «cambiato» ogni dieci minuti. Il
+    // corpo cambia quando cambia la storia, cioè i commit, il README, il TODO.
     corpo: [
       `Cartella di lavoro: ${c.nome} (${c.percorso}). Ultima modifica: ${c.modificata.slice(0, 10)}.`,
       c.commit.length ? `Ultimi commit:\n${c.commit.map(x => `${x.quando}  ${x.messaggio}`).join('\n')}` : 'Nessuna storia git.',
-      c.recenti.length ? `File toccati per ultimi: ${c.recenti.join(', ')}` : '',
       c.readme ? `README: ${c.readme}` : '',
       c.appunti ? `Appunti: ${c.appunti}` : ''
     ].filter(Boolean).join('\n\n')

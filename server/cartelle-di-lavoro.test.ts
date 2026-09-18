@@ -49,5 +49,7 @@ test('le cartelle di lavoro sono i progetti di codice, con la storia: commit, RE
   assert.match(d.corpo, /Ultimi commit:\n2026-09-10  browser reply path working/)
   assert.match(d.corpo, /README: # x-engine Posts to X with Hermes\./)
   assert.match(d.corpo, /Appunti: - reply path/)
-  assert.equal(d.quando, x.modificata)
+  // al giorno, non al secondo: una cartella dove gira un programma cambia data di continuo
+  assert.equal(d.quando, `${x.modificata.slice(0, 10)}T12:00:00.000Z`)
+  assert.doesNotMatch(d.corpo, /File toccati/)
 })

@@ -93,6 +93,15 @@ export function classificaAttenzione(
     return { destinazione: 'feed', motivo: 'posta_diretta_recente' }
   }
   if (!documentoVero(d)) return no('file_tecnico')
+  /*
+   * Le sue chat con i modelli, quello che ha pubblicato su X, le cartelle in
+   * cui lavora: sono parole sue, non richieste che gli arrivano. Una sessione
+   * di Claude Code è piena di «please» e «can you», e la lettura del feed la
+   * prendeva per una richiesta da soddisfare, ogni dieci minuti, col
+   * modello. Al massimo sono novità per il punto; le priorità le leggono per
+   * conto loro.
+   */
+  if (d.fonte === 'conversazioni' || d.fonte === 'x' || d.fonte === 'lavoro') return { destinazione: 'brief', motivo: 'parole_sue' }
   if (d.fonte === 'calendario' || d.tipo === 'evento') return { destinazione: 'brief', motivo: 'evento' }
   if (d.fonte === 'github' && !opzioni.progettoAttivo) return { destinazione: 'brief', motivo: 'attivita_repository' }
   if (!opzioni.progettoAttivo) return no('nessun_progetto_attivo')

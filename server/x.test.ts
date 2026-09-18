@@ -114,8 +114,13 @@ test('post e note diventano documenti con il link; le bozze si contano e non ent
   assert.equal(n.quando, '2026-09-16T16:36:29.384Z')
 })
 
-test('il riepilogo della settimana conta, misura i follower e mette in fila i tre più visti', () => {
-  const e = x.leggi({ db: DB }, ADESSO)
+test('il riepilogo della settimana conta, misura i follower e mette in fila i tre più visti; la settimana in corso conta e basta', () => {
+  // giovedì 17: la settimana 38 è ancora aperta, i numeri cambiano di ora in ora e non entrano
+  const aperta = x.leggi({ db: DB }, ADESSO).docs.find(d => d.id === 'x:settimana:2026-38')!
+  assert.match(aperta.corpo, /^3 post e 1 risposte pubblicate su X\.\n\nSettimana in corso/)
+  assert.doesNotMatch(aperta.corpo, /Follower|I più visti/)
+  // il martedì dopo, chiusa: tutto
+  const e = x.leggi({ db: DB }, Date.parse('2026-09-22T12:00:00Z'))
   const s = e.docs.find(d => d.id === 'x:settimana:2026-38')!
   assert.equal(s.tipo, 'riepilogo')
   assert.equal(s.titolo, 'X, settimana 38 del 2026')
