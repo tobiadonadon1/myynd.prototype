@@ -65,6 +65,21 @@ export function riassegnaMemoriaProgetto(da:string,a:string):number {
  if(n)save(rows)
  return n
 }
+/**
+ * La memoria di un progetto che non c'è più.
+ *
+ * Quando lui cancella un progetto dalla Memoria, un record che dice «obiettivo
+ * di p123» non ha più nessuno a cui appartenere: resterebbe scritto, invisibile
+ * e falso. Si toglie tutto quello che porta quell'id, catena compresa. Torna
+ * quanti record.
+ */
+export function dimenticaProgetto(id:string):number {
+ const rows=read()
+ const resto=rows.filter(r=>r.projectId!==id)
+ const n=rows.length-resto.length
+ if(n)save(resto)
+ return n
+}
 /** Only called by the actual project-field write path, never source extraction. */
 export function recordProjectField(projectId:string,kind:'goal'|'note',value:string,evidenceAt=new Date().toISOString(),provenance:'user-field'|'user-chat'='user-field') {
  return record({projectId,key:kind,kind,value:value.slice(0,2000),provenance,evidenceAt})

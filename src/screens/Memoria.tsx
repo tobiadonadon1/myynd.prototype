@@ -356,7 +356,7 @@ function Progetti() {
   }
 
   const elimina = async (id: string) => {
-    try { await api.chiudiProgetto(id) } finally { await carica() }
+    try { await api.eliminaProgetto(id) } finally { await carica() }
     setAperto(a => (a === id ? null : a))
   }
 

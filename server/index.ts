@@ -2602,6 +2602,24 @@ app.delete('/api/progetti/:id', (req, res) => {
 })
 
 /**
+ * Cancellare, non chiudere: la scelta in fondo all'editor della Memoria.
+ *
+ * `DELETE` qui sopra è «non è un progetto» dalla prima pagina, e chiude. Questa
+ * è la sua mano che toglie una riga che non doveva esserci: la riga sparisce,
+ * le attività restano senza progetto (`progetti.elimina` dice cosa resta e
+ * cosa no), e la prima pagina si accorge del cambio come per ogni altro.
+ */
+app.post('/api/progetti/:id/elimina', (req, res) => {
+  try {
+    const r = progetti.elimina(req.params.id)
+    punto.togliDalPunto(req.params.id)
+    compiti.annunciaCambio()
+    compiti.annunciaFeed()
+    res.json({ ok: true, staccati: r.staccati })
+  } catch (e) { errore(res, e, 404) }
+})
+
+/**
  * Due progetti che sono la stessa cosa: `:id` finisce dentro `in`.
  *
  * Righe, voci, domande, chat e memoria passano al secondo; il nome del primo

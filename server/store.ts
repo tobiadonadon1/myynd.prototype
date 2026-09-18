@@ -2320,9 +2320,11 @@ export function rinominaChat(id: string, titolo: string) {
  * Le righe della lista, le voci del feed, le domande e le chat portano l'id
  * del progetto in una colonna, e unire due progetti (`progetti.unisci`) vuol
  * dire riscrivere quelle quattro colonne in una transazione sola: o si
- * spostano tutte o nessuna. Torna quante righe ha toccato, per dirlo.
+ * spostano tutte o nessuna. Con `a` nullo si staccano e basta: è quello che
+ * succede quando un progetto si cancella e le sue righe restano senza
+ * progetto. Torna quante righe ha toccato, per dirlo.
  */
-export function riassegnaProgetto(da: string, a: string): { compiti: number; feed: number; domande: number; chat: number } {
+export function riassegnaProgetto(da: string, a: string | null): { compiti: number; feed: number; domande: number; chat: number } {
   const sposta = (tabella: string) =>
     (db.prepare(`UPDATE ${tabella} SET progetto = ? WHERE progetto = ?`).run(a, da) as { changes: number }).changes
   db.exec('BEGIN')

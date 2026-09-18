@@ -1455,7 +1455,15 @@ export const api = {
   unisciProgetto: (id: string, dentro: string) =>
     json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}/unisci`,
       { method: 'POST', body: JSON.stringify({ in: dentro }) }),
-  /** Chiudere, non cancellare: la riga resta, e un chiuso non torna nel punto. */
+  /**
+   * Cancellare davvero, dall'editor della Memoria: la riga sparisce, le sue
+   * attività restano in Da fare senza progetto. Per «è finito» c'è lo stato
+   * chiuso, che resta scritto.
+   */
+  eliminaProgetto: (id: string) =>
+    json<{ ok: true; staccati: { compiti: number; feed: number; domande: number; chat: number; memoria: number; figli: number } }>(
+      `/api/progetti/${encodeURIComponent(id)}/elimina`, { method: 'POST' }),
+  /** «Non è un progetto» dalla prima pagina: la riga resta chiusa, e un chiuso non torna nel punto. */
   chiudiProgetto: (id: string) =>
     json<{ ok: true; progetto: Progetto | null }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 

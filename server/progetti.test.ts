@@ -331,6 +331,43 @@ test('unire: righe, voci, domande, chat, memoria, figli e decisioni passano; il 
   assert.equal(progetti.progresso(ev.id).attivita.length, 2)
 })
 
+test('cancellare: la riga sparisce, le attività restano senza progetto, la memoria si dimentica, i figli restano senza padre', async () => {
+  pulisci()
+  const cfg = await import('./config.ts')
+  const memoria = await import('./project-memory.ts')
+  const prova = progetti.scrivi({ nome: 'Prova', obiettivo: 'Un doppione', note: 'Nota di prova' })
+  const altro = progetti.scrivi({ nome: 'Altro' })
+  const figlio = progetti.scrivi({ nome: 'Prova docs' })
+  progetti.cambia(figlio.id, { genitore: prova.id })
+  store.scriviCompito({ id: 'c-1', testo: 'Cosa da fare', ordine: 'a', progetto: prova.id })
+  store.scriviCompito({ id: 'c-2', testo: 'Cosa dell’altro', ordine: 'b', progetto: altro.id })
+  store.salvaFeed([{ tipo: 'Da leggere', titolo: 'Una voce', testo: 'prova', progetto: prova.id }])
+  store.apriDomanda({ tema: 'cancella-prova', testo: 'A che punto è?', spunto: [], progetto: prova.id })
+  store.creaChat('chat-prova', 'prova', { progetto: prova.id, iniziativa: 'i2' })
+  memoria.recordCurrentWork(prova.id, 'Ci sto lavorando')
+  store.default.prepare(`INSERT INTO convinzioni (id, enunciato, genere, fiducia, origine, ambito, dal, creata) VALUES ('dec-prova', 'Resta scritta', 'esplicita', 1, 'mano', 'progetto:Prova', '2026-09-08', '2026-09-08')`).run()
+  cfg.aggiorna({ ordineBlocchi: [altro.id, prova.id, 'resto'] })
+
+  assert.throws(() => progetti.elimina('pinventato'), /non c’è/)
+
+  const r = progetti.elimina(prova.id)
+  // tre record: obiettivo e nota alla nascita, e il lavoro detto in chat
+  assert.deepEqual(r.staccati, { compiti: 1, feed: 1, domande: 1, chat: 1, memoria: 3, figli: 1 })
+  assert.equal(progetti.trova(prova.id), null, 'la riga non c’è più')
+  assert.deepEqual(progetti.chiusi(), [], 'non è un chiuso: cancellare non è «non è un progetto»')
+  assert.equal(store.compito('c-1')!.progetto, null, 'l’attività resta, senza progetto')
+  assert.equal(store.compito('c-2')!.progetto, altro.id, 'quelle degli altri non si toccano')
+  assert.equal(store.elencoFeed().find(v => v.titolo === 'Una voce')?.progetto, null)
+  assert.equal(store.domandaPerTema('cancella-prova')!.progetto, null)
+  assert.equal(store.chatSulProgetto('chat-prova'), null, 'la chat non è più «sul progetto»')
+  assert.equal(memoria.dimenticaProgetto(prova.id), 0, 'la memoria del progetto si è già dimenticata: non resta niente da togliere')
+  assert.equal(progetti.trova(figlio.id)!.genitore, null, 'il figlio resta, senza padre')
+  assert.equal((store.default.prepare('SELECT ambito FROM convinzioni WHERE id = ?').get('dec-prova') as { ambito: string }).ambito, 'progetto:Prova', 'le sue decisioni restano sue')
+  assert.deepEqual(cfg.leggi().ordineBlocchi, [altro.id, 'resto'], 'il blocco esce dall’ordine della prima pagina')
+  // e il nome può rinascere: cancellare non è chiudere
+  assert.equal(progetti.scrivi({ nome: 'Prova', origine: 'punto' }).nome, 'Prova')
+})
+
 test('unire quando il secondo è già nell’ordine dei blocchi toglie il primo e basta', async () => {
   pulisci()
   const cfg = await import('./config.ts')

@@ -19,7 +19,7 @@
 // quelli stanno già nella memoria, sotto `progetto:<nome>`, ed è lì che
 // restano.
 
-import { recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaMemoriaProgetto } from './project-memory.ts'
+import { recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaMemoriaProgetto, dimenticaProgetto } from './project-memory.ts'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -419,6 +419,35 @@ export function unisci(daId: string, inId: string): Unione {
     aggiornaConfig({ ordineBlocchi: ordine.includes(dentro.id) ? ordine.filter(x => x !== da.id) : ordine.map(x => x === da.id ? dentro.id : x) })
   }
   return { progetto: trova(dentro.id)!, spostati: { ...spostati, memoria, figli } }
+}
+
+/** Cosa si è staccato cancellando un progetto: per dirlo, e per provarlo. */
+export type Cancellazione = { staccati: { compiti: number; feed: number; domande: number; chat: number; memoria: number; figli: number } }
+
+/**
+ * Via del tutto, per sua scelta.
+ *
+ * Chiudere è per un progetto finito, o che non era un progetto: la riga resta
+ * e il modello sa che non deve riproporlo. Cancellare è per una riga che non
+ * doveva esserci, un doppione con un nome storto, una prova: qui non deve
+ * restare traccia. Le attività, le voci del feed, le domande e le chat che
+ * stavano sotto non si perdono: restano, senza progetto, dove stavano. La
+ * memoria del progetto si dimentica, perché parlerebbe di un id che non c'è;
+ * i sottoprogetti restano, senza padre; le convinzioni con il suo ambito
+ * restano sue. Un nome cancellato può rinascere: se il punto ritrova la
+ * cartella la propone di nuovo, ed è giusto così, perché cancellare non è
+ * «non è un progetto». Per quello c'è chiuso.
+ */
+export function elimina(id: string): Cancellazione {
+  const p = trova(id)
+  if (!p) throw new Error('Questo progetto non c’è.')
+  const staccati = riassegnaProgetto(p.id, null)
+  const memoria = dimenticaProgetto(p.id)
+  const figli = (db.prepare('UPDATE progetti SET genitore = NULL WHERE genitore = ?').run(p.id) as { changes: number }).changes
+  db.prepare('DELETE FROM progetti WHERE id = ?').run(p.id)
+  const ordine = leggiConfig().ordineBlocchi
+  if (ordine?.includes(p.id)) aggiornaConfig({ ordineBlocchi: ordine.filter(x => x !== p.id) })
+  return { staccati: { ...staccati, memoria, figli } }
 }
 
 /**
