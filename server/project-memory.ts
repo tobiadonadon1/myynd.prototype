@@ -49,6 +49,22 @@ export function recordNextResult(projectId:string,value:string) {
 export function nextResultSince(projectId:string,since:string):ProjectMemory|null {
  return read().findLast(r=>r.projectId===projectId && r.key==='prossimo-risultato' && !r.supersededBy && r.recordedAt>=since) ?? null
 }
+/**
+ * La memoria di un progetto passa sotto un altro (`progetti.unisci`).
+ *
+ * Si riscrive solo `projectId`: chi l'ha detto, quando, con quale citazione
+ * resta com'è, e resta anche la catena delle sostituzioni. Un obiettivo del
+ * primo progetto, sotto il secondo, è ancora «un obiettivo detto da lei quel
+ * giorno»: la provenienza è la cosa che non si tocca. Torna quanti record.
+ */
+export function riassegnaMemoriaProgetto(da:string,a:string):number {
+ project(a)
+ const rows=read()
+ let n=0
+ for(const r of rows)if(r.projectId===da){r.projectId=a;n++}
+ if(n)save(rows)
+ return n
+}
 /** Only called by the actual project-field write path, never source extraction. */
 export function recordProjectField(projectId:string,kind:'goal'|'note',value:string,evidenceAt=new Date().toISOString(),provenance:'user-field'|'user-chat'='user-field') {
  return record({projectId,key:kind,kind,value:value.slice(0,2000),provenance,evidenceAt})

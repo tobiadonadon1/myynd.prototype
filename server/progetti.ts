@@ -19,14 +19,15 @@
 // quelli stanno già nella memoria, sotto `progetto:<nome>`, ed è lì che
 // restano.
 
-import { recordProjectField, recordTaskOutcome, projectMemoryContext } from './project-memory.ts'
+import { recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaMemoriaProgetto } from './project-memory.ts'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella } from './config.ts'
+import { cartella, leggi as leggiConfig, aggiorna as aggiornaConfig } from './config.ts'
 import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
-import db, { compito, type Compito } from './store.ts'
+import db, { compito, riassegnaProgetto, type Compito } from './store.ts'
 import { compitiAttuali } from './attenzione.ts'
+import { senzaTrattini } from './testo.ts'
 
 export type Stato = 'attivo' | 'fermo' | 'chiuso'
 export const STATI: Stato[] = ['attivo', 'fermo', 'chiuso']
@@ -44,6 +45,14 @@ export type Progetto = {
   origine: 'mano' | 'punto' | 'conversazione'
   /** Il colore scelto da lui, `#RRGGBB`, o vuoto: allora la pagina ne prende uno stabile dall'id. */
   colore: string
+  /**
+   * Gli altri nomi con cui lo chiama: la cartella («everwave» per Evermute),
+   * il soprannome, il nome vecchio. Valgono come i nomi fra parentesi del
+   * riferimento: un testo che ne nomina uno parla di questo progetto.
+   */
+  alias: string[]
+  /** L'id del progetto di cui fa parte (H-Brain è uno spin-off di Myynd), o null. */
+  genitore: string | null
 }
 
 const COLORE_VALIDO = /^#[0-9a-f]{6}$/i
@@ -51,9 +60,24 @@ const COLORE_VALIDO = /^#[0-9a-f]{6}$/i
 /** Quanti se ne nominano al modello: oltre, non è più «su cosa sta lavorando». */
 const PER_IL_MODELLO = 8
 
+/** Quanti altri nomi può avere un progetto: oltre, non sono più nomi. */
+export const ALIAS_MAX = 12
+/** Quanti blocchi può ordinare a mano sulla prima pagina. */
+export const ORDINE_BLOCCHI_MAX = 50
+
 type Riga = {
   id: string; nome: string; obiettivo: string | null; stato: string; dal: string
   aggiornato: string; note: string | null; origine: string | null; colore?: string | null
+  alias?: string | null; genitore?: string | null
+}
+
+/** La colonna `alias` è JSON: un elenco di parole, o niente. Una colonna storta è un elenco vuoto. */
+function aliasDaColonna(s: string | null | undefined): string[] {
+  if (!s) return []
+  try {
+    const v = JSON.parse(s)
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()) : []
+  } catch { return [] }
 }
 
 const daRiga = (r: Riga): Progetto => ({
@@ -65,10 +89,44 @@ const daRiga = (r: Riga): Progetto => ({
   aggiornato: r.aggiornato,
   note: r.note ?? '',
   origine: r.origine === 'punto' || r.origine === 'conversazione' ? r.origine : 'mano',
-  colore: r.colore && COLORE_VALIDO.test(r.colore) ? r.colore : ''
+  colore: r.colore && COLORE_VALIDO.test(r.colore) ? r.colore : '',
+  alias: aliasDaColonna(r.alias),
+  genitore: r.genitore?.trim() || null
 })
 
 const chiave = (s: string) => s.trim().toLowerCase()
+
+/**
+ * Gli altri nomi, puliti: senza spazi attorno, senza doppioni (a meno di
+ * maiuscole), mai il nome del progetto stesso, al massimo dodici. Si tiene
+ * la grafia con cui li ha scritti: si confrontano in minuscolo, si mostrano
+ * come sono. Pura.
+ */
+export function normalizzaAlias(alias: readonly string[], nome: string): string[] {
+  const visti = new Set<string>([chiave(nome)])
+  const puliti: string[] = []
+  for (const a of alias) {
+    const pulito = String(a ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)
+    const k = chiave(pulito)
+    if (!k || visti.has(k)) continue
+    visti.add(k)
+    puliti.push(pulito)
+    if (puliti.length >= ALIAS_MAX) break
+  }
+  return puliti
+}
+
+/** Il progetto ha questo nome, o questo altro nome: a meno di maiuscole, accenti e punteggiatura. */
+export function haQuestoNome(p: Pick<Progetto, 'nome' | 'alias'>, nome: string): boolean {
+  const n = nomeNormalizzato(nome)
+  if (!n) return false
+  return nomeNormalizzato(p.nome) === n || p.alias.some(a => nomeNormalizzato(a) === n)
+}
+
+/** Il testo nomina il progetto, con il suo nome o con uno degli altri. */
+export function nominaProgetto(testo: string, p: Pick<Progetto, 'nome' | 'alias'>): boolean {
+  return nominaAmbito(testo, p.nome) || p.alias.some(a => nominaAmbito(testo, a))
+}
 
 /**
  * I progetti che il punto aveva già capito entrano una volta sola.
@@ -123,6 +181,8 @@ export function vivi(): Progetto[] {
 /** Imported goals were sometimes used as project names. Keep the original
  * records editable, but do not give a second vote to an inferred alias. */
 export function eUnAlias(nome: string, base: Progetto): boolean {
+  // un altro nome scritto da lui («everwave» per Evermute) vale come il nome
+  if (base.alias.some(a => nomeNormalizzato(a) === nomeNormalizzato(nome))) return true
   // «Myynd for Dad», «Myynd per la casa»: è il progetto, con dentro una cosa
   // da fare. Il punto lo faceva nascere come progetto a sé, e lui lo vedeva
   // doppio: «è lo stesso progetto, è solo una delle attività»
@@ -173,7 +233,30 @@ export function risolvi(nomeOId: string): Progetto | null {
   const k = compatto(s)
   if (k.length < 3) return null
   const tutti = elenco()
-  return tutti.find(p => compatto(p.nome) === k) ?? tutti.find(p => eUnAlias(s, p)) ?? null
+  // gli altri nomi scritti da lui valgono come il nome, anche compatti
+  return tutti.find(p => compatto(p.nome) === k)
+    ?? tutti.find(p => p.alias.some(a => compatto(a) === k))
+    ?? tutti.find(p => eUnAlias(s, p)) ?? null
+}
+
+/**
+ * Mettere `id` dentro `genitore` chiuderebbe un anello?
+ *
+ * Si risale la catena dei padri a partire dal genitore proposto: se si
+ * ritrova `id`, il progetto finirebbe dentro un suo sottoprogetto. Un anello
+ * già scritto nel database (non dovrebbe esserci) ferma la salita invece di
+ * farla girare per sempre.
+ */
+function chiuderebbeUnAnello(id: string, genitore: string): boolean {
+  const visti = new Set<string>()
+  let corrente: string | null = genitore
+  while (corrente) {
+    if (corrente === id) return true
+    if (visti.has(corrente)) return true
+    visti.add(corrente)
+    corrente = trova(corrente)?.genitore ?? null
+  }
+  return false
 }
 
 /**
@@ -221,7 +304,15 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
  * «dichiarato nella conversazione», a meno che non l'avesse già scritto lei a
  * mano: quello resta suo.
  */
-export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string }, provenienza: 'user-field' | 'user-chat' = 'user-field'): Progetto | null {
+export type Cambio = {
+  nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string
+  /** Gli altri nomi, per intero: quello che manda sostituisce quello che c'era. */
+  alias?: unknown
+  /** L'id del progetto di cui fa parte; null o vuoto lo toglie. */
+  genitore?: string | null
+}
+
+export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-chat' = 'user-field'): Progetto | null {
   const p = trova(id)
   if (!p) return null
   const nome = c.nome !== undefined ? c.nome.trim() : p.nome
@@ -235,16 +326,30 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
   if (c.colore !== undefined && c.colore !== '' && !COLORE_VALIDO.test(c.colore)) {
     throw new Error('Il colore di un progetto si scrive #RRGGBB.')
   }
+  if (c.alias !== undefined && (!Array.isArray(c.alias) || c.alias.some(a => typeof a !== 'string'))) {
+    throw new Error('Gli altri nomi di un progetto sono un elenco di parole.')
+  }
+  // un padre che non c'è, sé stesso, o un anello: nessuno dei tre si scrive
+  const genitore = c.genitore === undefined ? p.genitore : (String(c.genitore ?? '').trim() || null)
+  if (genitore && genitore !== p.genitore) {
+    if (genitore === id) throw new Error('Un progetto non può far parte di sé stesso.')
+    if (!trova(genitore)) throw new Error('Il progetto di cui farebbe parte non esiste.')
+    if (chiuderebbeUnAnello(id, genitore)) throw new Error('Un progetto non può far parte di un suo sottoprogetto.')
+  }
+  // ripuliti anche quando non cambiano: un nome nuovo uguale a un altro nome lo toglie dagli altri
+  const alias = normalizzaAlias(c.alias !== undefined ? (c.alias as string[]) : p.alias, nome)
   if (c.colore !== undefined) db.prepare('UPDATE progetti SET colore = ? WHERE id = ?').run(c.colore || null, id)
   const origine = c.nome !== undefined || c.obiettivo !== undefined
     ? (p.origine === 'mano' || provenienza !== 'user-chat' ? 'mano' : 'conversazione')
     : p.origine
-  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, aggiornato = ? WHERE id = ?').run(
+  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, alias = ?, genitore = ?, aggiornato = ? WHERE id = ?').run(
     nome,
     (c.obiettivo !== undefined ? c.obiettivo.trim() : p.obiettivo) || null,
     c.stato ?? p.stato,
     (c.note !== undefined ? c.note.trim() : p.note) || null,
     origine,
+    alias.length ? JSON.stringify(alias) : null,
+    genitore,
     new Date().toISOString(),
     id
   )
@@ -261,6 +366,78 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
 /** «Non è un progetto», o «è finito»: resta scritto, e non torna. */
 export function chiudi(id: string): boolean {
   return cambia(id, { stato: 'chiuso' }) !== null
+}
+
+/** Cosa si è spostato unendo due progetti: per dirlo, e per provarlo. */
+export type Unione = { progetto: Progetto; spostati: { compiti: number; feed: number; domande: number; chat: number; memoria: number; figli: number } }
+
+/**
+ * Due progetti che sono la stessa cosa diventano uno.
+ *
+ * Il punto ne faceva nascere uno da una cartella e lui ne aveva già scritto
+ * uno a mano con un altro nome: «everwave» ed «Evermute» con le attività
+ * divise a metà. Tutto quello che stava sotto il primo passa sotto il
+ * secondo: le righe della lista, le voci del feed, le domande, le chat, la
+ * memoria del progetto (con la sua provenienza), i sottoprogetti e le
+ * convinzioni con il suo ambito. Il nome e gli altri nomi del primo
+ * diventano altri nomi del secondo, così un testo che lo nomina continua a
+ * trovarlo; l'obiettivo e le note del primo si accodano alle note del
+ * secondo, con la data, perché non si perda una parola sua.
+ *
+ * Il primo poi si *cancella*, non si chiude. È l'unica riga di questo file
+ * che cancella, ed è una scelta: un progetto chiuso resta scritto perché
+ * «non torni», e i chiusi si dicono al modello come «non sono progetti».
+ * Qui è il contrario: quel nome È un progetto, l'altro. Una riga chiusa con
+ * lo stesso nome si prenderebbe «riapri everwave» in chat e direbbe al
+ * modello una cosa falsa. Niente di suo va perso: sta tutto nel secondo.
+ */
+export function unisci(daId: string, inId: string): Unione {
+  const da = trova(daId)
+  const dentro = trova(inId)
+  if (!da || !dentro) throw new Error('Questo progetto non c’è.')
+  if (da.id === dentro.id) throw new Error('Un progetto non si unisce a sé stesso.')
+
+  const spostati = riassegnaProgetto(da.id, dentro.id)
+  const memoria = riassegnaMemoriaProgetto(da.id, dentro.id)
+  // le decisioni tenute sotto il suo nome seguono il nome nuovo, come in un cambio di nome
+  db.prepare('UPDATE convinzioni SET ambito = ? WHERE ambito = ?').run(`progetto:${dentro.nome}`, `progetto:${da.nome}`)
+  // i sottoprogetti del primo diventano sottoprogetti del secondo; e se il
+  // secondo stava dentro il primo, adesso non sta dentro niente
+  const figli = (db.prepare('UPDATE progetti SET genitore = ? WHERE genitore = ? AND id != ?').run(dentro.id, da.id, dentro.id) as { changes: number }).changes
+  if (dentro.genitore === da.id) db.prepare('UPDATE progetti SET genitore = NULL WHERE id = ?').run(dentro.id)
+
+  const giorno = new Date().toISOString().slice(0, 10)
+  const righe = [`${giorno}: unito il progetto «${da.nome}»${da.obiettivo ? `. Obiettivo: ${da.obiettivo}` : ''}`]
+  if (da.note) righe.push(da.note)
+  const note = senzaTrattini([dentro.note, ...righe].filter(Boolean).join('\n'))
+  cambia(dentro.id, { alias: [...dentro.alias, da.nome, ...da.alias], note })
+
+  db.prepare('DELETE FROM progetti WHERE id = ?').run(da.id)
+  // e sulla prima pagina il blocco del primo era dove lui l'aveva messo: lì resta, con il nome del secondo
+  const ordine = leggiConfig().ordineBlocchi
+  if (ordine?.includes(da.id)) {
+    aggiornaConfig({ ordineBlocchi: ordine.includes(dentro.id) ? ordine.filter(x => x !== da.id) : ordine.map(x => x === da.id ? dentro.id : x) })
+  }
+  return { progetto: trova(dentro.id)!, spostati: { ...spostati, memoria, figli } }
+}
+
+/**
+ * L'ordine dei blocchi della prima pagina, pulito: id di progetti che
+ * esistono e «resto», ognuno una volta, al massimo cinquanta. Null se non è
+ * un elenco di parole: quello è un client che non sappiamo leggere.
+ */
+export function ordineBlocchiValido(v: unknown): string[] | null {
+  if (!Array.isArray(v) || v.some(x => typeof x !== 'string')) return null
+  const visti = new Set<string>()
+  const puliti: string[] = []
+  for (const x of v as string[]) {
+    const id = x.trim()
+    if (!id || visti.has(id) || (id !== 'resto' && !trova(id))) continue
+    visti.add(id)
+    puliti.push(id)
+    if (puliti.length >= ORDINE_BLOCCHI_MAX) break
+  }
+  return puliti
 }
 
 export type Progresso = {
@@ -302,8 +479,8 @@ export function progresso(id: string): Progresso {
  */
 export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati = false): string {
   const tutti = perContesto()
-  const nominati = tutti.filter(p => nominaAmbito(discorso, p.nome))
-  const rilevanza = (p: Progetto) => nominaAmbito(discorso, p.nome) ? 2 : Number(tocca(p, discorso))
+  const nominati = tutti.filter(p => nominaProgetto(discorso, p))
+  const rilevanza = (p: Progetto) => nominaProgetto(discorso, p) ? 2 : Number(tocca(p, discorso))
   return (soloNominati && nominati.length ? nominati : tutti)
     .sort((a, b) => rilevanza(b) - rilevanza(a)).slice(0, tetto)
     .map(p => {
@@ -311,9 +488,13 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
       const stato = a.attivita.length ? ` · ${a.completate} attività concluse${a.prossima ? `; prossima: ${a.prossima.testo.slice(0, 160)} [${a.prossima.stato}]` : ''}` : ''
       const origine = p.origine === 'mano' ? 'registrato dalla persona' : p.origine === 'conversazione' ? 'dichiarato nella conversazione'
         : 'inferito dalle fonti, non confermato dalla persona'
+      // gli altri nomi e il padre: il modello deve riconoscere «everwave» e sapere che H-Brain sta dentro Myynd
+      const altri = p.alias.length ? ` · Altri nomi: ${p.alias.join(', ')}` : ''
+      const padre = p.genitore ? trova(p.genitore) : null
+      const dentro = padre ? ` · Fa parte di ${padre.nome}` : ''
       for (const task of a.attivita) recordTaskOutcome(task.id)
       const evidence = projectMemoryContext(p.id)
-      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato} · Aggiornato ${p.aggiornato}` +
+      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}${altri}${dentro} · Aggiornato ${p.aggiornato}` +
         (p.note ? `\n${p.origine === 'punto' ? 'Note inferite, non confermate' : 'Note salvate dalla persona'}: ${JSON.stringify(p.note.slice(0,900))}` : '') +
         (evidence ? `\n${evidence}` : '')
     })
@@ -388,9 +569,9 @@ export function eUnObiettivo(testo: string, progetti = vivi()): boolean {
  * troppe per un oggetto di email. Niente modello qui: è il criterio con cui
  * si decide *cosa fargli leggere*, e deve costare zero.
  */
-export function tocca(p: { nome: string; obiettivo: string }, testo: string): boolean {
+export function tocca(p: { nome: string; obiettivo: string; alias?: string[] }, testo: string): boolean {
   const paroleTesto = new Set(nomeNormalizzato(testo).split(' '))
-  if (nominaAmbito(testo, p.nome)) return true
+  if (nominaProgetto(testo, { nome: p.nome, alias: p.alias ?? [] })) return true
   const parole = paroleDi(p)
   if (parole.length < 2) return false
   let trovate = 0

@@ -1,6 +1,6 @@
 import { recordUserDecision, recordNextResult, recordStateDecision } from './project-memory.ts'
 import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
-import { rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
+import { richiestaSulleFonti, rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
 import * as riferimento from './riferimento.ts'
 import { nomeNormalizzato } from './ambiti-memoria.ts'
 import { ATTREZZO_REVISIONE, verificaBaseRevisione, contestoRevisioni, rivediDallaChat, richiestaRevisione } from './revisioni.ts'
@@ -1010,6 +1010,43 @@ export type Attrezzi = {
   aggiungiCompito: (c: { testo: string; quando?: string; modo?: string; progetto?: string }) => { id: string }
   /** «Leggi le mie fonti»: la rilettura di sfondo, messa in mano da chi ha la rotta. Dice se è partita o se ce n'era già una. */
   rileggiFonti?: () => Lettura
+  /**
+   * Cosa sta facendo, prima di farlo: una frase di `PASSI`, in italiano, che
+   * il client traduce con `t()`. Si chiama prima di ogni strumento; mentre
+   * il modello pensa e basta non si chiama, e il client mostra la sua
+   * riga di sempre.
+   */
+  onPasso?: (testo: string) => void
+}
+
+/**
+ * Le frasi dei passi, una per cosa che la chat fa davvero.
+ *
+ * Diceva «sto pensando» mentre chiudeva una riga della lista, e «cerco»
+ * mentre salvava una decisione: la riga sotto la domanda deve dire quello
+ * che succede. Sono chiavi italiane: il client le passa da `t()`, e
+ * `lingua.test.ts` controlla che ognuna abbia la sua traduzione.
+ */
+export const PASSI = {
+  cerca: 'Cerco nelle tue fonti',
+  memoria: 'Aggiorno la memoria',
+  lista: 'Aggiorno la tua lista',
+  risultato: 'Salvo il risultato',
+  revisione: 'Rivedo il lavoro',
+  fontiStato: 'Controllo le fonti',
+  fontiLettura: 'Leggo le tue fonti'
+} as const
+
+/** La frase per uno strumento, o null se lo strumento non è uno di quelli che si annunciano. */
+export function passoPer(strumento: string): string | null {
+  switch (strumento) {
+    case 'cerca': return PASSI.cerca
+    case 'aggiorna_progetto': case 'ricorda_decisione_progetto': return PASSI.memoria
+    case 'aggiungi_compito': case 'chiudi_compito': case 'sposta_compito': return PASSI.lista
+    case 'concludi_progetto': return PASSI.risultato
+    case 'rivedi_compito': return PASSI.revisione
+    default: return null
+  }
 }
 
 /**
@@ -1431,9 +1468,13 @@ export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio
   }
   if (nota) cambiato.push(aggiungiNota(progetti.trova(p.id)!, nota) ? 'nota aggiunta' : 'nota già presente')
   if (madre) {
+    // il legame si scrive nella colonna, così la Memoria lo mostra e lo può
+    // cambiare; un anello (Myynd dentro H-Brain dentro Myynd) non si scrive
+    try { progetti.cambia(p.id, { genitore: madre.id }, 'user-chat') }
+    catch (e) { return nonCiRiesco(tool_use_id, e instanceof Error ? e.message : String(e)) }
     const legame = cfgLingua() === 'en' ? `${p.nome} is a spin-off of ${madre.nome}.` : `${p.nome} è uno spin-off di ${madre.nome}.`
     aggiungiNota(progetti.trova(p.id)!, legame)
-    aggiungiNota(madre, legame)
+    aggiungiNota(progetti.trova(madre.id)!, legame)
     cambiato.push(legame.replace(/\.$/, ''))
   }
   const adesso = progetti.trova(p.id)!
@@ -1493,7 +1534,10 @@ export async function rispondiInStreaming(
   onRicomincia?: () => void
 ): Promise<{ testo: string; fonti: Fonte[] }> {
   segnale?.throwIfAborted()
+  // il passo si dice prima di farlo; chi guarda può anche non esserci più
+  const passo = (testo: string) => { try { attrezzi?.onPasso?.(testo) } catch { /* chi guarda si arrangia */ } }
   if (attrezzi?.compitoId && richiestaRevisione(domanda)) {
+    passo(PASSI.revisione)
     await rivediDallaChat({ id: attrezzi.compitoId, feedback: domanda }, domanda, undefined, attrezzi.compitoId)
     const testo = leggi().lingua === 'en'
       ? 'I’m revising it with your feedback. The previous version is saved; you’ll see the new one in your feed when it’s ready.'
@@ -1505,6 +1549,8 @@ export async function rispondiInStreaming(
   if (saluto) { onTesto(saluto.testo); return saluto }
   // «leggi le mie fonti», «quante fonti hai»: uno stato, non una domanda al
   // materiale. Prima del modello, e anche senza un modello.
+  const sulleFonti = richiestaSulleFonti(domanda)
+  if (sulleFonti) passo(sulleFonti.rileggi ? PASSI.fontiLettura : PASSI.fontiStato)
   const fonti = rispostaSulleFonti(domanda, attrezzi?.rileggiFonti)
   if (fonti) { onTesto(fonti); return { testo: fonti, fonti: [] } }
   const salvati = salvaProgettiDallaChat(domanda)
@@ -1631,6 +1677,7 @@ export async function rispondiInStreaming(
   let chiusura: Chiusura | null = null
   if (attrezzi?.progetto && !attrezzi.risultatoSalvato && toccaConcludere(domanda, storico)) {
     segnale?.throwIfAborted()
+    passo(PASSI.risultato)
     chiusura = await concludiDaTrascrizione(attrezzi.progetto, domanda, storico, attrezzi.aggiungiCompito)
       .catch(e => { console.error('myynd · non sono riuscito a chiudere la chat sul progetto:', e instanceof Error ? e.message : e); return null })
   }
@@ -1691,6 +1738,8 @@ export async function rispondiInStreaming(
     if (!chiamate.length) break
 
     soloRicercaORevisione &&= chiamate.every(c => c.name === 'cerca' || c.name === 'rivedi_compito')
+    // il passo, prima di ogni strumento: una frase per strumento, non una per chiamata
+    for (const frase of new Set(chiamate.map(c => passoPer(c.name)))) if (frase) passo(frase)
     const risultati: Anthropic.ToolResultBlockParam[] = await Promise.all(chiamate.map(async c => {
       try {
         if (c.name === 'cerca') {

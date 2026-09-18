@@ -114,6 +114,22 @@ test('quello che arriva dal server ha una traduzione', () => {
     const k = vero(m[1])
     if (!definite.has(k)) manca.push(k)
   }
+  /*
+   * I passi della chat.
+   *
+   * «Cerco nelle tue fonti», «Aggiorno la tua lista»: il server li manda
+   * come evento `passo` mentre lavora, e la chat li disegna con `t(testo)`,
+   * chiave calcolata. Stanno tutti in `PASSI` dentro claude.ts: se uno manca
+   * qui, la riga sotto la domanda resta italiana con l'app in inglese.
+   */
+  const chat = readFileSync(join(RADICE, '..', 'server', 'claude.ts'), 'utf8')
+  const i = chat.indexOf('export const PASSI = {')
+  const passi = chat.slice(i, chat.indexOf('}', i))
+  assert.ok(i > 0 && passi.includes("'"), 'PASSI non si trova più in claude.ts')
+  for (const m of passi.matchAll(/'((?:[^'\\]|\\.)*)'/g)) {
+    const k = vero(m[1])
+    if (!definite.has(k)) manca.push(k)
+  }
   assert.deepEqual(manca, [], `senza traduzione:\n  ${manca.join('\n  ')}`)
 })
 

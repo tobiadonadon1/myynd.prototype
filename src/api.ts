@@ -1931,6 +1931,10 @@ export type Progetto = {
   origine: 'mano' | 'punto' | 'conversazione'
   /** Il colore scelto in Memoria, `#RRGGBB`, o vuoto: allora ne ha uno stabile dall'id (`colori-progetto.ts`). */
   colore: string
+  /** Gli altri nomi con cui lo chiama («everwave» per Evermute): un testo che ne nomina uno parla di questo progetto. */
+  alias: string[]
+  /** L'id del progetto di cui fa parte, o null. */
+  genitore: string | null
 }
 
 export type ProjectInitiative = { id: string; projectId: string; projectName: string; goal: string; kind: 'next-step' | 'question'; title: string; description: string; question?: string; taskId?: string; provenance: 'explicit-project'; urgent: false }
