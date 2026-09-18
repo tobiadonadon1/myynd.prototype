@@ -3207,6 +3207,38 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
   } finally { lavoriInCorso.delete(runKey) }
 })
 
+// — l'agenda: il Calendario del Mac e l'agenda iCal, in una settimana sola —
+//
+// Le rotte non sanno niente di Apple Events: chiedono ad `agenda` e passano
+// il numero che il guasto si porta dietro. 503 vuol dire che il Mac non
+// risponde (ospitati, non un Mac, permesso negato, finestra di sistema
+// aperta): la vista mostra la frase e resta leggibile con quello che ha.
+
+app.get('/api/agenda', async (req, res) => {
+  try {
+    res.json(await agenda.leggiAgenda(String(req.query.da ?? ''), String(req.query.a ?? '')))
+  } catch (e) { errore(res, e, agenda.statoDi(e)) }
+})
+
+app.post('/api/agenda/eventi', async (req, res) => {
+  try {
+    res.json({ evento: await agenda.creaEvento(req.body) })
+  } catch (e) { errore(res, e, agenda.statoDi(e)) }
+})
+
+app.patch('/api/agenda/eventi/:id', async (req, res) => {
+  try {
+    res.json({ evento: await agenda.modificaEvento(String(req.params.id), req.body) })
+  } catch (e) { errore(res, e, agenda.statoDi(e)) }
+})
+
+app.delete('/api/agenda/eventi/:id', async (req, res) => {
+  try {
+    await agenda.eliminaEvento(String(req.params.id))
+    res.json({ ok: true })
+  } catch (e) { errore(res, e, agenda.statoDi(e)) }
+})
+
 /** C'è Claude Code su questa macchina? Serve alla schermata, per non offrirlo a vuoto. */
 app.get('/api/capacita', async (_req, res) => {
   try {

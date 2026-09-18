@@ -1810,6 +1810,16 @@ const EN: Record<string, string> = {
   'macOS non mi lascia usare Calendario. Concedilo in Impostazioni › Privacy › Automazione.': 'macOS will not let me use Calendar. Allow it in Settings › Privacy › Automation.',
   'Calendario non è disponibile su questo Mac.': 'Calendar is not available on this Mac.',
   'Calendario non ha risposto.': 'Calendar did not answer.',
+  // — l'agenda della settimana: il Calendario del Mac letto e scritto da qui —
+  'L’agenda del Mac non è disponibile qui.': 'The Mac calendar is not available here.',
+  'Per l’agenda serve il permesso al Calendario: Impostazioni di Sistema › Privacy e sicurezza › Calendari › Myynd.':
+    'The calendar needs permission: System Settings › Privacy & Security › Calendars › Myynd.',
+  'Evento non trovato.': 'Event not found.',
+  'Non ho trovato quel calendario.': 'I could not find that calendar.',
+  'Questo evento si ripete: spostalo o cancellalo da Calendario.': 'This event repeats: move or delete it in Calendar.',
+  'Serve un titolo.': 'It needs a title.',
+  'La fine deve venire dopo l’inizio.': 'The end must come after the start.',
+  'Questa agenda si legge e basta.': 'This calendar is read-only.',
   'Non ho capito la data.': 'I did not understand the date.',
   'Dimmi cosa vuoi cambiare.': 'Tell me what you want to change.',
   'Gli attrezzi devono essere un elenco.': 'The tools must be a list.',

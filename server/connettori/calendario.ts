@@ -22,7 +22,7 @@
 import type { Documento } from '../store.ts'
 import { OSPITATO, hostRaggiungibile, hostRaggiungibileDavvero } from '../ospitato.ts'
 import { lingua } from '../config.ts'
-import { fusoDi } from '../fuso.ts'
+import { fusoDi, parti, istante } from '../fuso.ts'
 import { zonaDi, zonaIana, ZONA_UTC, leggiVtimezone, type Zona } from './fusiIcal.ts'
 
 export type ConfigCalendario = {
@@ -774,6 +774,48 @@ function corpo(e: Evento, p: Parole, quando: Intl.DateTimeFormat, giorno: Intl.D
   if (e.stato === 'TENTATIVE') pezzi.push(p.daConfermare)
   if (e.note) pezzi.push('', e.note)
   return pezzi.join('\n')
+}
+
+/**
+ * Il contrario di `corpo`: da un documento dell'indice, i due istanti.
+ *
+ * La vista della settimana mette insieme il Calendario del Mac e questa
+ * agenda, e questa agenda sta nell'indice: un documento ha `quando` per
+ * l'inizio, e la fine e «tutto il giorno» stanno solo nella prima riga del
+ * corpo, scritta da `corpo()` qui sopra. Rileggerla è più onesto che
+ * riscaricare il file a ogni settimana che scorre — ed è anche il motivo per
+ * cui le due funzioni stanno vicine: chi cambia una riga di `corpo` cambia
+ * anche questa.
+ *
+ * Senza una fine leggibile si dà un'ora, che è la durata di una riunione che
+ * nessuno ha misurato. Le note sono quello che viene dopo la riga vuota.
+ */
+export function daDocumento(
+  d: Pick<Documento, 'corpo' | 'quando' | 'percorso'>,
+  fuso = fusoDi()
+): { inizio: Date; fine: Date; tuttoIlGiorno: boolean; luogo: string | null; note: string | null } | null {
+  const inizio = new Date(d.quando ?? '')
+  if (Number.isNaN(inizio.getTime())) return null
+  const corpo = String(d.corpo ?? '')
+  const prima = corpo.split('\n')[0] ?? ''
+  const tuttoIlGiorno = /, (?:tutto il giorno|all day)\.$/.test(prima)
+  let fine: Date
+  if (tuttoIlGiorno) {
+    fine = new Date(inizio.getTime() + 864e5)
+  } else {
+    const m = / — (\d{1,2}):(\d{2})\.$/.exec(prima)
+    if (m) {
+      const p = parti(inizio, fuso)
+      fine = new Date(istante(p.anno, p.mese, p.giorno, Number(m[1]), fuso).getTime() + Number(m[2]) * 60_000)
+      // un'ora di fine più piccola dell'inizio è il giorno dopo: una cena che finisce all'una
+      if (fine <= inizio) fine = new Date(fine.getTime() + 864e5)
+    } else {
+      fine = new Date(inizio.getTime() + 3600e3)
+    }
+  }
+  const i = corpo.indexOf('\n\n')
+  const note = i >= 0 ? corpo.slice(i + 2).trim() : ''
+  return { inizio, fine, tuttoIlGiorno, luogo: d.percorso?.trim() || null, note: note || null }
 }
 
 export type EsitoCalendario = { docs: Documento[]; nome: string; troncato: boolean }

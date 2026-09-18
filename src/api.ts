@@ -656,6 +656,59 @@ export type Compito = {
 
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
 
+// — l'agenda della settimana —
+
+/** Un calendario della vista: quelli del Mac si scrivono, l'agenda iCal si legge e basta. */
+export type CalendarioAgenda = {
+  id: string
+  nome: string
+  /** Com'è scritto da Calendario (di solito `#rrggbb`); vuoto se non lo dice. */
+  colore: string
+  scrivibile: boolean
+  fonte: 'apple' | 'ical'
+}
+
+export type EventoAgenda = {
+  /**
+   * L'uid dell'evento sul Mac, o l'id del documento per l'agenda iCal.
+   * Un'occorrenza di una serie che non è la prima porta `uid#istante`: si
+   * disegna, ma spostarla o cancellarla risponde 400 con la frase da mostrare.
+   */
+  id: string
+  /** L'id del calendario in `calendari`, stabile da una chiamata all'altra. */
+  calendario: string
+  titolo: string
+  /** ISO in UTC. Un giorno intero sta a mezzanotte UTC e `fine` è il giorno dopo, escluso. */
+  inizio: string
+  fine: string
+  tuttoIlGiorno: boolean
+  luogo?: string | null
+  note?: string | null
+  fonte: 'apple' | 'ical'
+}
+
+export type Agenda = {
+  calendari: CalendarioAgenda[]
+  eventi: EventoAgenda[]
+  /** Vero quando il Calendario del Mac risponde: allora creare, spostare e cancellare funzionano. */
+  scrivibile: boolean
+  /** Perché il Mac non risponde, quando non risponde: una frase del dizionario, da passare a `t()`. */
+  avviso?: string
+}
+
+export type NuovoEventoAgenda = {
+  titolo: string
+  inizio: string
+  fine: string
+  tuttoIlGiorno?: boolean
+  /** L'id (o il nome) di un calendario del Mac. Senza, «Myynd», che nasce alla prima scrittura. */
+  calendario?: string
+  luogo?: string
+  note?: string
+}
+
+export type RitoccoEventoAgenda = Partial<Pick<NuovoEventoAgenda, 'titolo' | 'inizio' | 'fine' | 'tuttoIlGiorno' | 'luogo' | 'note'>>
+
 /**
  * Dov'è andato «Portami lì».
  *
@@ -1055,6 +1108,23 @@ export const api = {
    */
   preparaEmail: (id: string) =>
     json<EmailPronta>(`/api/compiti/${encodeURIComponent(id)}/prepara-email`, { method: 'POST' }),
+
+  // — l'agenda della settimana: il Calendario del Mac e l'agenda iCal insieme —
+
+  /** Calendari ed eventi fra due istanti ISO. Senza il Mac risponde lo stesso, con `scrivibile: false` e la frase in `avviso`. */
+  agenda: (da: string, a: string) =>
+    json<Agenda>(`/api/agenda?da=${encodeURIComponent(da)}&a=${encodeURIComponent(a)}`),
+
+  /** Un evento nuovo sul Mac. 503 con la frase da mostrare quando il Calendario non risponde. */
+  creaEvento: (e: NuovoEventoAgenda) =>
+    json<{ evento: EventoAgenda }>('/api/agenda/eventi', { method: 'POST', body: JSON.stringify(e) }),
+
+  /** Solo i campi che cambiano. Un'occorrenza di una serie (`uid#istante`) risponde 400. */
+  cambiaEvento: (id: string, r: RitoccoEventoAgenda) =>
+    json<{ evento: EventoAgenda }>(`/api/agenda/eventi/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(r) }),
+
+  eliminaEvento: (id: string) =>
+    json<{ ok: true }>(`/api/agenda/eventi/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   /** C'è Claude Code su questa macchina, e in quali cartelle può lavorare. */
   lavoroPronto: () => json<{ pronto: boolean; cartelle: string[]; runtimes?: ProjectRuntime[] }>('/api/lavoro/pronto'),
