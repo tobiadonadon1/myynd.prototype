@@ -351,6 +351,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const [messaggi, setMessaggi] = useState<Messaggio[]>([])
   const [draftMsg, setDraftMsg] = useState('')
   const [pensando, setPensando] = useState(false)
+  // «Aggiorno la memoria», «Cerco nelle tue fonti»: il passo che il server
+  // dice mentre lavora, coerente con quello che sta facendo davvero
+  const [passoChat, setPassoChat] = useState<string | null>(null)
 
   const [doc, setDoc] = useState<Record<string, string> | null>(null)
   const [aprendoFonte, setAprendoFonte] = useState<string | null>(null)
@@ -666,10 +669,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // quello vero — con le fonti — solo alla fine.
       const idVivo = idScritta + 'a'
       let cresciuta = ''
+      setPassoChat(null)
       const r = await api.chiedi(id, testo, delta => {
         if (gen.current !== mio) return
         cresciuta += delta
         setPensando(false)
+        setPassoChat(null)
         setMessaggi(m => {
           const senza = m.filter(x => x.id !== idVivo)
           return [...senza, { id: idVivo, role: 'a', text: cresciuta }]
@@ -681,7 +686,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         cresciuta = ''
         setPensando(true)
         setMessaggi(m => m.filter(x => x.id !== idVivo))
-      }, filo.signal, compitoDiscussione(id))
+      }, filo.signal, compitoDiscussione(id), passo => { if (gen.current === mio) setPassoChat(passo) })
       if (gen.current === mio) setMessaggi(r.messaggi)
     } catch (e) {
       /*
@@ -1239,6 +1244,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // la conversazione con Myynd ha il suo nome
     chatTitolo: passo !== null || intervistaFinita ? 'Myynd' : th?.titolo ?? 'Nuova chat',
     pensando,
+    passoChat,
     /** Taglia la risposta che sta arrivando. Vale solo mentre `pensando` è acceso. */
     annulla: () => { filoChat.current?.abort() },
     messages: messaggi.map(m => ({

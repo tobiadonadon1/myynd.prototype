@@ -896,6 +896,7 @@ const EN: Record<string, string> = {
   'Proposta': 'Proposal',
   'Posso farlo io:': 'I can do this:',
   'chi la riceve': 'the reader',
+  'Ci penso': 'Thinking',
   'Lasciata, con il tuo perché: me lo ricordo.': 'Dropped, with your reason: I will remember it.',
   'La cartella del conto sta fuori da --dati: mi fermo, per non toccare i dati veri.': 'The account folder is outside --dati: stopping, so the real data is not touched.',
   'Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.': 'Nothing new came in from your sources. I am going over your projects, work folders and mail now: what I find will show up here by itself.',

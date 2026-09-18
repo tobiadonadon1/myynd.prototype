@@ -1754,7 +1754,9 @@ export const api = {
      * il modello: la richiesta che nessuno legge non si finisce di pagare.
      */
     segnale?: AbortSignal,
-    compitoId?: string
+    compitoId?: string,
+    /** Cosa sta facendo, passo per passo: «Aggiorno la memoria», «Cerco nelle tue fonti». Una chiave del dizionario. */
+    onPasso?: (testo: string) => void
   ): Promise<{ messaggi: Messaggio[] }> => {
     const t = sessione.token()
     let r: Response
@@ -1796,9 +1798,12 @@ export const api = {
         // malformato in mezzo a una risposta lunga faceva esplodere il parse e
         // si portava via tutto il testo scritto fino a lì. Meglio saltare la
         // riga rotta e tenere la risposta.
-        let m: { fase: string; delta?: string; errore?: string; messaggi?: Messaggio[] }
+        let m: { fase: string; delta?: string; testo?: string; errore?: string; messaggi?: Messaggio[] }
         try { m = JSON.parse(p.slice(6)) } catch { continue }
         if (m.fase === 'testo' && m.delta) onDelta(m.delta)
+        // il passo che sta facendo, coerente con l'azione: lo dice il server
+        // prima di ogni strumento, e la chat lo mostra al posto di «penso»
+        if (m.fase === 'passo' && typeof m.testo === 'string') onPasso?.(m.testo)
         // il motore è cambiato a metà — Claude Code è caduto e riprende la
         // chiave — e la risposta riparte da capo: quello mostrato finora si butta
         if (m.fase === 'ricomincio') onRicomincia?.()

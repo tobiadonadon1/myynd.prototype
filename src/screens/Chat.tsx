@@ -139,7 +139,7 @@ export function Chat({ v }: { v: Vals }) {
         {v.pensando && (
           <div style={v.bolla.rigaSua}>
             <Mascotte size={LATO_MASCOTTE} style={AVATAR} />
-            <Stato tipo="cerco" testo={t('Cerco tra le fonti')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
+            <Stato tipo="cerco" testo={t(v.passoChat || 'Ci penso')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
             <Annulla su={v.annulla} />
           </div>
         )}
