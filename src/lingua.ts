@@ -447,6 +447,12 @@ const EN: Record<string, string> = {
   'Scegli un giorno': 'Choose a day',
   'Settimana precedente': 'Previous week',
   'Settimana successiva': 'Next week',
+  'Mese precedente': 'Previous month',
+  'Mese successivo': 'Next month',
+  // Le due viste del calendario: i tre giorni alti, o il mese intero.
+  'Vista calendario': 'Calendar view',
+  'Tre giorni': 'Three days',
+  'Vista intera': 'Full view',
   'Spazio per quello che conta.': 'Room for what matters.',
   'Tutto pianificato.': 'Everything is scheduled.',
   'attività': 'tasks',

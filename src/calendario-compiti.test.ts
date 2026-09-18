@@ -1,7 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { giornoLocale, giornoCompito, giorniVisibili, inizioSettimana, quantiGiorni, secchioDelGiorno, spostaGiorno } from './oggi/giorni.ts'
+import { celleDelMese, giornoLocale, giornoCompito, giorniVisibili, inizioMese, inizioSettimana, quantiGiorni, quantiInPiu, secchioDelGiorno, spostaGiorno, spostaMese } from './oggi/giorni.ts'
 import { secchioVivo } from './oggi/secchi.ts'
+
+/** Lunedì 0 … domenica 6, come legge la griglia della vista intera. */
+const colonna = (g: string) => (new Date(`${g}T12:00:00`).getDay() + 6) % 7
 
 test('calendar days cross month/year and leap days without UTC conversion', () => {
   assert.equal(spostaGiorno('2026-12-31', 1), '2027-01-01')
@@ -17,6 +20,48 @@ test('planner shows readable adjacent days: three at most, so each day is tall a
   assert.equal(quantiGiorni(1280), 3)
   assert.deepEqual(giorniVisibili('2026-09-30', 3), ['2026-09-30', '2026-10-01', '2026-10-02'])
   assert.deepEqual(giorniVisibili('2026-09-09', 7), ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'])
+})
+
+test('the full view is whole weeks, Monday to Sunday, around the month it shows', () => {
+  // settembre 2026 comincia di martedì: la griglia parte dal lunedì prima
+  const settembre = celleDelMese('2026-09-18')
+  assert.equal(settembre[0], '2026-08-31')
+  assert.equal(settembre.at(-1), '2026-10-04')
+  assert.equal(settembre.length % 7, 0)
+  assert.equal(colonna(settembre[0]), 0)
+  assert.equal(colonna(settembre.at(-1)!), 6)
+  // il primo e l'ultimo del mese ci sono, e nell'ordine giusto
+  assert.ok(settembre.includes('2026-09-01') && settembre.includes('2026-09-30'))
+  assert.deepEqual([...settembre].sort(), settembre)
+
+  // febbraio 2027 comincia di lunedì e finisce di domenica: quattro righe, niente caselle in più
+  const febbraio = celleDelMese('2027-02-10')
+  assert.equal(febbraio.length, 28)
+  assert.equal(febbraio[0], '2027-02-01')
+  assert.equal(febbraio.at(-1), '2027-02-28')
+
+  // un mese che sfora su sei righe resta una griglia intera
+  const agosto = celleDelMese('2026-08-20')
+  assert.equal(agosto.length % 7, 0)
+  assert.equal(colonna(agosto[0]), 0)
+  assert.ok(agosto.includes('2026-08-01') && agosto.includes('2026-08-31'))
+})
+
+test('month arrows keep the chosen day where the month has one', () => {
+  assert.equal(inizioMese('2026-09-18'), '2026-09-01')
+  assert.equal(spostaMese('2026-09-18', 1), '2026-10-18')
+  assert.equal(spostaMese('2026-01-01', -1), '2025-12-01')
+  // il 31 più un mese è l'ultimo giorno del mese d'arrivo, non il primo di quello dopo
+  assert.equal(spostaMese('2026-01-31', 1), '2026-02-28')
+  assert.equal(spostaMese('2024-01-31', 1), '2024-02-29')
+  assert.equal(spostaMese('2026-12-15', 1), '2027-01-15')
+})
+
+test('a month cell shows three chips and counts the rest', () => {
+  assert.equal(quantiInPiu(0, 3), 0)
+  assert.equal(quantiInPiu(3, 3), 0)
+  assert.equal(quantiInPiu(4, 3), 1)
+  assert.equal(quantiInPiu(11, 3), 8)
 })
 
 test('planned dates remain fixed; legacy today tasks keep their original semantics', () => {
