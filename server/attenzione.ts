@@ -29,6 +29,7 @@ export function progettoDelTesto(testo: string): string | null {
   const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
   const trovato = attivi.find(p => nominaAmbito(testo, p.nome))?.id
   if (trovato) return trovato
+  // gli altri nomi: quelli scritti nella Memoria e quelli fra parentesi nel riferimento
   for (const [nome, id] of riferimento.alias()) if (nominaAmbito(testo, nome)) return id
   return null
 }

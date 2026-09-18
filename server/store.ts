@@ -2314,6 +2314,28 @@ export function rinominaChat(id: string, titolo: string) {
   db.prepare('UPDATE chat SET titolo = ? WHERE id = ?').run(titolo, id)
 }
 
+/**
+ * Tutto quello che stava sotto un progetto passa sotto un altro.
+ *
+ * Le righe della lista, le voci del feed, le domande e le chat portano l'id
+ * del progetto in una colonna, e unire due progetti (`progetti.unisci`) vuol
+ * dire riscrivere quelle quattro colonne in una transazione sola: o si
+ * spostano tutte o nessuna. Torna quante righe ha toccato, per dirlo.
+ */
+export function riassegnaProgetto(da: string, a: string): { compiti: number; feed: number; domande: number; chat: number } {
+  const sposta = (tabella: string) =>
+    (db.prepare(`UPDATE ${tabella} SET progetto = ? WHERE progetto = ?`).run(a, da) as { changes: number }).changes
+  db.exec('BEGIN')
+  try {
+    const n = { compiti: sposta('compiti'), feed: sposta('feed'), domande: sposta('domande'), chat: sposta('chat') }
+    db.exec('COMMIT')
+    return n
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
 export function elencoChat() {
   return db.prepare('SELECT * FROM chat ORDER BY quando DESC').all() as { id: string; titolo: string; quando: string }[]
 }

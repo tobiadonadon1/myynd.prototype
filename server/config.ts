@@ -1111,6 +1111,8 @@ export function pubblica(c: Config = leggi()) {
     nome: c.nome ?? null,
     ruolo: c.ruolo ?? null,
     onboarding: !!c.onboarding,
+    // l'ordine dei blocchi della prima pagina scelto da lui; vuoto = quello di serie
+    ordineBlocchi: Array.isArray(c.ordineBlocchi) ? c.ordineBlocchi : [],
     // normalizzati: l'interfaccia deve vedere accesa la casella giusta anche
     // per un file scritto quando i nomi erano altri
     tono: tono(c),

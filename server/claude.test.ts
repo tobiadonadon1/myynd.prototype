@@ -791,3 +791,68 @@ test('le mani seguono il compito: una nota chiede crea_nota, un file scrivi_file
   await claude.svolgi('Define a Myynd pilot inside H-Farm', null, 'prompt')
   assert.ok(!nomiAttrezzi(prompt[0]).some(n => mani.eUnaMano(n)), 'un prompt consegna la richiesta, non fa la cosa')
 })
+
+// — i passi: cosa sta facendo, detto prima di farlo —
+
+test('il giro degli strumenti annuncia il passo giusto per ogni strumento, una volta per frase', async () => {
+  cfg.scrivi({})
+  store.scriviCompito({ id: 'c-passo-1', testo: 'Mandare il preventivo', ordine: 'a', quando: 'oggi' })
+  store.scriviCompito({ id: 'c-passo-2', testo: 'Richiamare Bianchi', ordine: 'b', quando: 'oggi' })
+  fornitoreFinto([
+    { chiamate: [
+      { name: 'cerca', input: { query: 'preventivo' } },
+      { name: 'chiudi_compito', input: { id: 'c-passo-1' } },
+      { name: 'sposta_compito', input: { id: 'c-passo-2', quando: 'poi' } }
+    ] },
+    { chiamate: [{ name: 'aggiorna_progetto', input: { progetto: 'Nessuno', citazione: 'x', stato: 'fermo' } }] },
+    { testo: 'Fatto.' }
+  ])
+  const passi: string[] = []
+  const r = await claude.rispondiInStreaming('il preventivo l’ho mandato, Bianchi a poi', [], () => {}, { ...attrezziFinti(), onPasso: t => passi.push(t) })
+  assert.match(r.testo, /Fatto/)
+  // cerca e due strumenti della lista nel primo giro: due frasi, non tre; poi la memoria
+  assert.deepEqual(passi, [claude.PASSI.cerca, claude.PASSI.lista, claude.PASSI.memoria])
+  assert.equal(claude.passoPer('ricorda_decisione_progetto'), claude.PASSI.memoria)
+  assert.equal(claude.passoPer('aggiungi_compito'), claude.PASSI.lista)
+  assert.equal(claude.passoPer('concludi_progetto'), claude.PASSI.risultato)
+  assert.equal(claude.passoPer('rivedi_compito'), claude.PASSI.revisione)
+  assert.equal(claude.passoPer('inventato'), null)
+  store.scordaCompito('c-passo-1'); store.scordaCompito('c-passo-2')
+})
+
+test('senza strumenti nessun passo: il client mostra la sua riga di sempre', async () => {
+  cfg.scrivi({})
+  fornitoreFinto([{ testo: 'Solo testo.' }])
+  const passi: string[] = []
+  await claude.rispondiInStreaming('come va?', [], () => {}, { ...attrezziFinti(), onPasso: t => passi.push(t) })
+  assert.deepEqual(passi, [])
+})
+
+test('«le mie fonti» annuncia il controllo, «rileggi le fonti» la lettura, prima di rispondere', async () => {
+  cfg.scrivi({ lingua: 'en' })
+  const passi: string[] = []
+  const stato = await claude.rispondiInStreaming('my sources', [], () => {}, { ...attrezziFinti(), onPasso: t => passi.push(t) })
+  assert.match(stato.testo, /sources/i)
+  assert.deepEqual(passi, [claude.PASSI.fontiStato])
+  const lettura: string[] = []
+  await claude.rispondiInStreaming('read my sources', [], () => {}, { ...attrezziFinti(), rileggiFonti: () => 'avviata', onPasso: t => lettura.push(t) })
+  assert.deepEqual(lettura, [claude.PASSI.fontiLettura])
+})
+
+test('«parteDi» detto in chat scrive il padre nella colonna, e rifiuta un anello senza scrivere niente', async () => {
+  const progetti = await import('./progetti.ts')
+  store.azzeraTutto()
+  const myynd = progetti.scrivi({ nome: 'Myynd', obiettivo: 'Un gemello' })
+  const hb = progetti.scrivi({ nome: 'H-Brain', obiettivo: 'Il cervello' })
+  const messaggio = 'H-Brain is just a spin off of myynd'
+  const r = claude.aggiornaDallaChat('t-padre', { progetto: 'H-Brain', citazione: messaggio, parteDi: 'myynd' }, messaggio)
+  assert.ok(!r.is_error, String(r.content))
+  assert.equal(progetti.trova(hb.id)!.genitore, myynd.id, 'il legame sta nella colonna, non solo nella nota')
+  assert.match(progetti.trova(hb.id)!.note, /spin-off/, 'e la nota resta')
+
+  const rovescio = 'myynd is part of H-Brain'
+  const no = claude.aggiornaDallaChat('t-anello', { progetto: 'Myynd', citazione: rovescio, parteDi: 'H-Brain' }, rovescio)
+  assert.equal(no.is_error, true)
+  assert.match(String(no.content), /sottoprogetto/)
+  assert.equal(progetti.trova(myynd.id)!.genitore, null)
+})

@@ -98,7 +98,19 @@ export function aliasDalTesto(testo: string, suoi = progetti.vivi()): Map<string
   }
   return alias
 }
-export function alias(): Map<string, string> { return aliasDalTesto(leggi().testo) }
+/**
+ * Tutti gli altri nomi delle sue cose: quelli scritti nella Memoria sul
+ * progetto (`progetti.alias`) e quelli fra parentesi nel riferimento. In
+ * minuscolo → id, i più lunghi prima, così «H-Farm audit» batte «H-Farm»;
+ * a parità di nome vale quello scritto nella Memoria.
+ */
+export function alias(): Map<string, string> {
+  const suoi = progetti.vivi()
+  const tutti = new Map<string, string>()
+  for (const p of suoi) for (const a of p.alias) tutti.set(a.toLowerCase(), p.id)
+  for (const [nome, id] of aliasDalTesto(leggi().testo, suoi)) if (!tutti.has(nome)) tutti.set(nome, id)
+  return new Map([...tutti].sort((a, b) => b[0].length - a[0].length))
+}
 
 /**
  * Un nome del riferimento che è anche una cartella di lavoro sul disco, e

@@ -917,6 +917,22 @@ const EN: Record<string, string> = {
   'Il modello non ha risposto: la valutazione non si può fare.': 'The model did not answer: the evaluation cannot be done.',
   'Su cosa sta lavorando adesso, progetto per progetto; cosa è morto; cosa è bloccato.':
     'What they are working on right now, project by project; what is dead; what is blocked.',
+  // gli altri nomi e il padre di un progetto, e l'unione di due (progetti.ts, index.ts)
+  'Gli altri nomi di un progetto sono un elenco di parole.': 'A project’s other names are a list of words.',
+  'Un progetto non può far parte di sé stesso.': 'A project cannot be part of itself.',
+  'Il progetto di cui farebbe parte non esiste.': 'The project it would be part of does not exist.',
+  'Un progetto non può far parte di un suo sottoprogetto.': 'A project cannot be part of one of its own sub-projects.',
+  'Un progetto non si unisce a sé stesso.': 'A project cannot be merged into itself.',
+  'Dimmi in quale progetto unirlo.': 'Tell me which project to merge it into.',
+  'L’ordine dei blocchi è un elenco di progetti.': 'The block order is a list of projects.',
+  // i passi della chat (claude.ts, PASSI): la riga sotto la domanda mentre fa qualcosa
+  'Cerco nelle tue fonti': 'Searching your sources',
+  'Aggiorno la memoria': 'Updating memory',
+  'Aggiorno la tua lista': 'Updating your list',
+  'Salvo il risultato': 'Saving the result',
+  'Rivedo il lavoro': 'Revising the work',
+  'Controllo le fonti': 'Checking sources',
+  'Leggo le tue fonti': 'Reading your sources',
 
   // — confermare l'indirizzo, e rimettere la password —
   'Ho dimenticato la password': 'I forgot my password',

@@ -716,12 +716,21 @@ app.post('/api/avvio/completa', (req, res) => {
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 
-app.post('/api/profilo', async (req, res) => {
+// La stessa rotta in POST e in PATCH: è un cambio parziale, e chi la chiama
+// con il verbo giusto non deve prendere un 404 per una parola.
+const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
   for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
+  }
+  // l'ordine dei blocchi della prima pagina: id di progetti che esistono e
+  // «resto», puliti da `progetti.ordineBlocchiValido`; un id che non c'è più cade
+  if (b.ordineBlocchi !== undefined) {
+    const ordine = progetti.ordineBlocchiValido(b.ordineBlocchi)
+    if (!ordine) return res.status(400).json({ errore: 'L’ordine dei blocchi è un elenco di progetti.' })
+    patch.ordineBlocchi = ordine
   }
   // il fuso è un nome IANA o niente: uno storto farebbe esplodere ogni conto sulle ore
   if (patch.fuso !== undefined && (typeof patch.fuso !== 'string' || !fuso.fusoValido(patch.fuso))) {
@@ -813,7 +822,9 @@ app.post('/api/profilo', async (req, res) => {
   }
 
   res.json(dopo)
-})
+}
+app.post('/api/profilo', profilo)
+app.patch('/api/profilo', profilo)
 
 // — connettori —
 
@@ -2565,10 +2576,13 @@ app.post('/api/progetti', (req, res) => {
 })
 
 app.patch('/api/progetti/:id', (req, res) => {
-  const c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string } = {}
+  const c: progetti.Cambio = {}
   for (const k of ['nome', 'obiettivo', 'stato', 'note', 'colore'] as const) {
     if (req.body?.[k] !== undefined) c[k] = String(req.body[k])
   }
+  // gli altri nomi per intero, e il padre: null o vuoto lo toglie. Il resto lo giudica `cambia`
+  if (req.body?.alias !== undefined) c.alias = req.body.alias
+  if (req.body?.genitore !== undefined) c.genitore = req.body.genitore === null ? null : String(req.body.genitore)
   try {
     // chiudere dalla Memoria fa uscire la riga anche dal punto che la pagina
     // sta mostrando; il controllo sull'origine è solo di «non è un progetto»
@@ -2585,6 +2599,26 @@ app.delete('/api/progetti/:id', (req, res) => {
     punto.nonEUnProgetto(req.params.id)
     res.json({ ok: true, progetto: progetti.trova(req.params.id) })
   } catch (e) { errore(res, e, 404) }
+})
+
+/**
+ * Due progetti che sono la stessa cosa: `:id` finisce dentro `in`.
+ *
+ * Righe, voci, domande, chat e memoria passano al secondo; il nome del primo
+ * diventa un altro nome del secondo; il primo si cancella (`progetti.unisci`
+ * dice perché non si chiude). La prima pagina e la lista si accorgono del
+ * cambio dallo stesso annuncio di ogni altra modifica.
+ */
+app.post('/api/progetti/:id/unisci', (req, res) => {
+  const dentro = String(req.body?.in ?? '').trim()
+  if (!dentro) return res.status(400).json({ errore: 'Dimmi in quale progetto unirlo.' })
+  try {
+    const r = progetti.unisci(req.params.id, dentro)
+    punto.togliDalPunto(req.params.id)
+    compiti.annunciaCambio()
+    compiti.annunciaFeed()
+    res.json({ ok: true, progetto: r.progetto, spostati: r.spostati })
+  } catch (e) { errore(res, e, 400) }
 })
 
 // — compiti —
@@ -3858,7 +3892,11 @@ app.post('/api/chat/:id', async (req, res) => {
         if (sincronizzazioneInCorso()) return 'in-corso'
         rileggiDaSola().catch(e => console.error('myynd · la rilettura chiesta in chat non è riuscita:', e instanceof Error ? e.message : e))
         return 'avviata'
-      }
+      },
+      // cosa sta facendo, prima di farlo: la riga sotto la domanda dice
+      // «aggiorno la tua lista» mentre chiude una riga, non «sto pensando».
+      // Fra «inizio» e il primo «testo»; il client traduce la frase con `t()`
+      onPasso: testo => invia({ fase: 'passo', testo })
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
