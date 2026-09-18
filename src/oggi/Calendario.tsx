@@ -2,41 +2,30 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Compito } from '../api'
 import { t } from '../lingua'
 import {
-  celleDelMese, dataLocale, giornoCompito, giorniVisibili, inizioSettimana,
-  quantiGiorni, quantiInPiu, spostaGiorno, spostaMese
+  dataLocale, giornoCompito, giorniVisibili, inizioSettimana, quantiGiorni, spostaGiorno
 } from './giorni'
 import './calendario.css'
 
-/** Quante targhette stanno in una casella del mese prima del «+N». */
-const IN_CASELLA = 3
-
 /**
- * La vista scelta resta scelta.
+ * Il calendario delle cose da fare: la striscia della settimana e tre giorni alti.
  *
- * Sta in `localStorage` come le altre preferenze della finestra: chi lavora a
- * mese vuole ritrovare il mese, e ricominciare ogni volta dai tre giorni è il
- * genere di attrito che non si racconta, si subisce.
+ * Qui c'era anche una vista a mese, scelta da un interruttore a due posizioni.
+ * Non è piaciuta, e per una ragione giusta: una griglia di caselle piccole
+ * dentro una colonna non è un calendario, è un riassunto. Al suo posto c'è un
+ * comando solo — «Espandi» — e la settimana vera si apre su tutta
+ * l'applicazione, con gli attrezzi a sinistra e le ore sotto. Un comando, non
+ * una scelta da fare ogni volta.
  */
-const CHIAVE_VISTA = 'myynd.calendario.vista'
-type Vista = 'tre' | 'mese'
-
-function vistaSalvata(): Vista {
-  try { return localStorage.getItem(CHIAVE_VISTA) === 'mese' ? 'mese' : 'tre' } catch { return 'tre' }
-}
-
-function salvaVista(v: Vista) {
-  try { localStorage.setItem(CHIAVE_VISTA, v) } catch { /* niente memoria: si riparte dai tre giorni, e basta */ }
-}
-
-export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, renderRiga, senzaData, setSenzaData }: {
+export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, renderRiga, senzaData, setSenzaData, espandi }: {
   compiti: Compito[]; oggi: string; giorno: string; scegli: (g: string) => void; lingua: string
   pianifica: (id: string, giorno: string | null) => void; renderRiga: (c: Compito) => ReactNode
   senzaData: boolean; setSenzaData: (v: boolean | ((v: boolean) => boolean)) => void
+  /** Apre la settimana su tutta l'applicazione. */
+  espandi: () => void
 }) {
   const [sopra, setSopra] = useState<string | null>(null)
   const contenitore = useRef<HTMLElement>(null)
   const [colonne, setColonne] = useState(3)
-  const [vista, setVista] = useState<Vista>(vistaSalvata)
   useEffect(() => {
     const el = contenitore.current
     if (!el) return
@@ -48,7 +37,6 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   }, [])
   const locale = lingua === 'it' ? 'it-IT' : 'en-US'
   const giorni = Array.from({ length: 7 }, (_, i) => spostaGiorno(inizioSettimana(giorno), i))
-  const celle = celleDelMese(giorno)
   const nonPianificati = compiti.filter(c => !giornoCompito(c, oggi))
   const arretrati = compiti.filter(c => { const g = giornoCompito(c, oggi); return g && g < oggi })
   const visibili = giorniVisibili(giorno, colonne)
@@ -61,11 +49,8 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
     const id = e.dataTransfer.getData('text/plain')
     if (compiti.some(c => c.id === id)) pianifica(id, data)
   }
-  const cambiaVista = (v: Vista) => { setVista(v); salvaVista(v) }
-  /** Il giorno scelto dal mese torna nei tre giorni, e la barra scrive lì. */
-  const apri = (g: string) => { scegli(g); setSenzaData(false); cambiaVista('tre') }
   const componi = (g: string) => {
-    apri(g)
+    scegli(g); setSenzaData(false)
     document.querySelector<HTMLInputElement>('#task-composer')?.focus()
   }
   const trascina = (e: React.DragEvent, g: string) => { e.preventDefault(); setSopra(g) }
@@ -74,18 +59,19 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
     <div className="task-calendar-toolbar">
       <div className="task-calendar-month">{dataLocale(giorno).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</div>
       <div className="task-calendar-nav">
-        <div className="task-view-toggle" role="group" aria-label={t('Vista calendario')}>
-          <button type="button" aria-pressed={vista === 'tre'} onClick={() => cambiaVista('tre')}>{t('Tre giorni')}</button>
-          <button type="button" aria-pressed={vista === 'mese'} onClick={() => cambiaVista('mese')}>{t('Vista intera')}</button>
-        </div>
+        <button type="button" className="task-calendar-espandi" onClick={espandi}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 3H3v6M15 21h6v-6M21 9V3h-6M3 15v6h6" />
+          </svg>
+          {t('Espandi')}
+        </button>
         <button type="button" className="task-calendar-today" onClick={() => { scegli(oggi); setSenzaData(false) }}>{t('Oggi')}</button>
-        <button type="button" aria-label={vista === 'mese' ? t('Mese precedente') : t('Settimana precedente')}
-          onClick={() => scegli(vista === 'mese' ? spostaMese(giorno, -1) : spostaGiorno(giorno, -7))}>‹</button>
-        <button type="button" aria-label={vista === 'mese' ? t('Mese successivo') : t('Settimana successiva')}
-          onClick={() => scegli(vista === 'mese' ? spostaMese(giorno, 1) : spostaGiorno(giorno, 7))}>›</button>
+        <button type="button" aria-label={t('Settimana precedente')} onClick={() => scegli(spostaGiorno(giorno, -7))}>‹</button>
+        <button type="button" aria-label={t('Settimana successiva')} onClick={() => scegli(spostaGiorno(giorno, 7))}>›</button>
       </div>
     </div>
-    {vista === 'tre' && <div className="task-calendar-week" role="group" aria-label={t('Scegli un giorno')}>
+    <div className="task-calendar-week" role="group" aria-label={t('Scegli un giorno')}>
       {giorni.map(g => {
         const quanti = delGiorno(g).length
         const classi = ['task-calendar-day', g === giorno && !senzaData && 'selected',
@@ -100,7 +86,7 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
           <span className="task-calendar-dots" aria-hidden="true">{Array.from({ length: Math.min(quanti, 3) }, (_, i) => <i key={i} />)}</span>
         </button>
       })}
-    </div>}
+    </div>
     <div className="task-calendar-agenda-header">
       <div><h2>{senzaData ? t('Da pianificare') : t('In programma')}</h2></div>
       <button type="button" className={`task-unscheduled ${senzaData ? 'selected' : ''}`} aria-pressed={senzaData}
@@ -108,41 +94,14 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
         {t('Da pianificare')}<span>{nonPianificati.length}</span>
       </button>
     </div>
-    {!senzaData && vista === 'tre' && visibili.includes(oggi) && arretrati.length > 0 && <div className="task-calendar-overdue">
+    {!senzaData && visibili.includes(oggi) && arretrati.length > 0 && <div className="task-calendar-overdue">
       <h3>{t('Da recuperare')} <span>{arretrati.length}</span></h3>
       <ul className="task-unscheduled-grid">{arretrati.map(renderRiga)}</ul>
     </div>}
     {senzaData ? <>
       <ul className="task-unscheduled-grid">{nonPianificati.map(renderRiga)}</ul>
       {!nonPianificati.length && <div className="task-calendar-empty"><span aria-hidden="true">✓</span><p>{t('Tutto pianificato.')}</p></div>}
-    </> : vista === 'mese' ? <div className="task-month">
-      <div className="task-month-heads" aria-hidden="true">
-        {celle.slice(0, 7).map(g => <span key={g}>{dataLocale(g).toLocaleDateString(locale, { weekday: 'short' })}</span>)}
-      </div>
-      <div className="task-month-grid">
-        {celle.map(g => {
-          const righe = delGiorno(g)
-          const inPiu = quantiInPiu(righe.length, IN_CASELLA)
-          const classi = ['task-month-cell', g.slice(0, 7) !== giorno.slice(0, 7) && 'fuori',
-            g === giorno && 'selected', g === oggi && 'today', sopra === g && 'drop-target'].filter(Boolean).join(' ')
-          return <div key={g} className={classi} onClick={() => apri(g)}
-            onDragOver={e => trascina(e, g)} onDragLeave={() => setSopra(null)} onDrop={e => lascia(e, g)}>
-            <div className="task-month-top">
-              <button type="button" className="task-month-number"
-                aria-current={g === oggi ? 'date' : undefined} aria-pressed={g === giorno}
-                aria-label={`${perEsteso(g)}, ${righe.length} ${t('attività')}`}>{dataLocale(g).getDate()}</button>
-              <button type="button" className="task-month-add" aria-label={`${t('Aggiungi per')} ${perEsteso(g)}`}
-                onClick={e => { e.stopPropagation(); componi(g) }}>+</button>
-            </div>
-            <ul className="task-month-chips">
-              {righe.slice(0, IN_CASELLA).map(c => <li key={c.id} className="task-month-chip" title={c.testo} draggable
-                onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}>{c.testo}</li>)}
-              {inPiu > 0 && <li className="task-month-more">+{inPiu}</li>}
-            </ul>
-          </div>
-        })}
-      </div>
-    </div> : <div className="task-calendar-columns" style={{ gridTemplateColumns: `repeat(${colonne}, minmax(0, 1fr))` }}>
+    </> : <div className="task-calendar-columns" style={{ gridTemplateColumns: `repeat(${colonne}, minmax(0, 1fr))` }}>
       {visibili.map(g => {
         const righe = delGiorno(g)
         const classi = ['task-day-column', g === oggi && 'today', g === giorno && 'selected', sopra === g && 'drop-target'].filter(Boolean).join(' ')
