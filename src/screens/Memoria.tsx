@@ -21,7 +21,9 @@
 //     può falsificare.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Blocco, type CambioProgetto, type Convinzione, type Memoria as Dati, type Progetto } from '../api'
+import {
+  api, type Blocco, type CambioProgetto, type Compito, type Convinzione, type Memoria as Dati, type Progetto
+} from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
 import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
@@ -287,12 +289,12 @@ function Riga({ c, scorda, tieni, storica }:
  * feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
  * scritto in una riga vale più di trenta documenti.
  *
- * Una riga per progetto, e la riga si apre. Prima mezzo editor stava spalmato
- * su ogni riga, sempre aperto, per ogni progetto: la lista non si leggeva più,
- * e intanto quello che il server sa davvero di un progetto (gli altri nomi, il
- * progetto dentro cui sta, le note) non aveva nessun posto dove essere
- * scritto. Adesso la lista dice quattro cose per riga, e tutto il resto sta
- * dentro la riga che hai aperto: `ProgettoEditor`.
+ * Una riga per progetto, e la riga è il posto dove si lavora. Il nome e
+ * l'obiettivo si scrivono cliccandoci sopra, il pallino apre la tavolozza, lo
+ * stato ha i suoi tre scatti, il cestino sta lì e chiede nello spazio della
+ * riga. Sotto la riga si apre quello che si tocca di rado: gli altri nomi, il
+ * progetto dentro cui sta, le note, quello che Myynd ricorda, unire.
+ * `ProgettoEditor`.
  */
 function Progetti() {
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
@@ -313,9 +315,31 @@ function Progetti() {
   const [obiettivo, setObiettivo] = useState('')
   const [guaio, setGuaio] = useState('')
   const [nasce, setNasce] = useState(false)
+  /** L'ultimo nato: la sua riga prende il fuoco con il nome selezionato. */
+  const [nato, setNato] = useState<string | null>(null)
+  /**
+   * Quante attività ha ciascuno.
+   *
+   * Una chiamata sola per tutta la lista, non una per riga: il conto è una
+   * cosa che si legge di sfuggita, e non vale otto richieste. Se non arriva,
+   * la riga semplicemente non lo dice.
+   */
+  const [conti, setConti] = useState<Record<string, { aperte: number; fatte: number }>>({})
 
   const carica = useCallback(async () => {
     try { setProgetti((await api.progetti()).progetti) } catch { /* la pagina resta com'è */ }
+    try {
+      const l = await api.compiti()
+      const m: Record<string, { aperte: number; fatte: number }> = {}
+      const conta = (c: Compito, quale: 'aperte' | 'fatte') => {
+        if (!c.progetto) return
+        const r = (m[c.progetto] ??= { aperte: 0, fatte: 0 })
+        r[quale]++
+      }
+      for (const c of l.compiti) if (c.stato !== 'fatto' && c.stato !== 'lasciato') conta(c, 'aperte')
+      for (const c of l.chiusi) if (c.stato === 'fatto') conta(c, 'fatte')
+      setConti(m)
+    } catch { /* la riga non dice il conto, e basta */ }
   }, [])
   useEffect(() => { carica() }, [carica])
   useEffect(() => ascoltaProgetto(() => setDaMostrare(progettoAtteso())), [])
@@ -368,9 +392,10 @@ function Progetti() {
       const r = await api.nuovoProgetto(n, obiettivo.trim())
       setNome(''); setObiettivo(''); setGuaio('')
       await carica()
-      // appena nato si apre: il nome e l'obiettivo bastavano a farlo esistere,
-      // tutto il resto si scrive qui dentro, adesso che c'è
-      setAperto(r.progetto.id)
+      // appena nato, il fuoco va sulla sua riga con il nome già selezionato:
+      // è lì che si correggono il nome, l'obiettivo, lo stato e il colore, e
+      // aprirgli sotto l'editor vorrebbe dire mandarlo a cercarli altrove
+      setNato(r.progetto.id)
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
     finally { setNasce(false) }
   }
@@ -382,7 +407,12 @@ function Progetti() {
   }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
+    // sopra le carte che vengono dopo: la tavolozza e la riga dello stato
+    // escono dalla riga, e una carta disegnata dopo le coprirebbe a metà
+    <div style={{
+      ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px',
+      position: 'relative', zIndex: 2
+    }}>
       <span style={{ ...LABEL }}>{t('Progetti')}</span>
       <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
         {t('Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.')}
@@ -439,7 +469,8 @@ function Progetti() {
       <div style={{ marginTop: progetti?.length ? 14 : 0 }}>
         {(progetti ?? []).map(p => (
           <RigaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} unisci={unisci} elimina={elimina}
-            aperta={aperto === p.id} apri={() => setAperto(a => (a === p.id ? null : p.id))} acceso={acceso === p.id} />
+            aperta={aperto === p.id} apri={() => setAperto(a => (a === p.id ? null : p.id))} acceso={acceso === p.id}
+            conto={conti[p.id]} nato={nato === p.id} />
         ))}
       </div>
     </div>
