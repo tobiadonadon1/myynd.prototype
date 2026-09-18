@@ -31,23 +31,23 @@ import { SPIEGA_STATO, STATI, aggiungiAlias, aliasPuliti, togliAlias } from '../
 import { portaAlleAttivita, siPuoAprireLeCose } from '../vals'
 import { GRADIENTE, RAME, RAME_CUPO, SALVIA } from '../tema'
 
-const INCHIOSTRO = '#22271F'
-const SPENTO = 'rgba(34,39,31,.55)'
-const APPENA = 'rgba(34,39,31,.42)'
-const RIGA = '1px solid rgba(34,39,31,.08)'
+const INCHIOSTRO = 'var(--inchiostro)'
+const SPENTO = 'rgba(var(--inchiostro-rgb),.55)'
+const APPENA = 'rgba(var(--inchiostro-rgb),.42)'
+const RIGA = '1px solid rgba(var(--inchiostro-rgb),.08)'
 
 /** Chi cambia un progetto: se il server dice di no, l'eccezione arriva a chi chiama. */
 export type Cambia = (id: string, c: CambioProgetto) => Promise<void>
 
 export const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string }> = {
-  attivo: { testo: '#2F4A33', fondo: 'rgba(126,156,130,.18)' },
-  fermo: { testo: '#8A6317', fondo: 'rgba(216,164,110,.2)' },
-  chiuso: { testo: 'rgba(34,39,31,.55)', fondo: 'rgba(34,39,31,.08)' }
+  attivo: { testo: 'var(--verde-cupo)', fondo: 'rgba(var(--salvia-rgb),.18)' },
+  fermo: { testo: 'var(--rame-testo)', fondo: 'rgba(var(--rame-rgb),.2)' },
+  chiuso: { testo: 'rgba(var(--inchiostro-rgb),.55)', fondo: 'rgba(var(--inchiostro-rgb),.08)' }
 }
 
 const CASELLA = {
   width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
-  border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.75)',
+  border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.75)',
   color: INCHIOSTRO, fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none'
 }
 
@@ -350,15 +350,15 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
                   display: 'flex', alignItems: 'flex-start', gap: 11, width: '100%', textAlign: 'left',
                   padding: '11px 13px', borderRadius: 10, marginTop: 7, cursor: suo ? 'default' : 'pointer',
                   fontFamily: 'inherit', boxSizing: 'border-box',
-                  border: `1px solid ${suo ? 'rgba(196,98,59,.38)' : 'rgba(34,39,31,.1)'}`,
-                  background: suo ? 'rgba(196,98,59,.08)' : 'transparent'
+                  border: `1px solid ${suo ? 'rgba(var(--rame-rgb),.38)' : 'rgba(var(--inchiostro-rgb),.1)'}`,
+                  background: suo ? 'rgba(var(--rame-rgb),.08)' : 'transparent'
                 }}
-                hover={suo ? {} : { borderColor: 'rgba(34,39,31,.3)' }}>
+                hover={suo ? {} : { borderColor: 'rgba(var(--inchiostro-rgb),.3)' }}>
                 <span style={{
                   flex: 'none', width: 13, height: 13, borderRadius: '50%', marginTop: 2,
-                  border: `1px solid ${suo ? RAME : 'rgba(34,39,31,.3)'}`,
+                  border: `1px solid ${suo ? RAME : 'rgba(var(--inchiostro-rgb),.3)'}`,
                   background: suo ? RAME : 'transparent',
-                  boxShadow: suo ? 'inset 0 0 0 2.5px rgba(255,253,249,.92)' : 'none'
+                  boxShadow: suo ? 'inset 0 0 0 2.5px rgba(var(--carta-rgb),.92)' : 'none'
                 }} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: '13.5px', fontWeight: 500, color: INCHIOSTRO, textTransform: 'capitalize' }}>{t(s)}</span>
@@ -381,8 +381,8 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
               onClick={() => { setScritto(c); if (c !== p.colore) void manda('colore', { colore: c }) }}
               style={{
                 width: 22, height: 22, borderRadius: '50%', background: c, padding: 0, cursor: 'pointer',
-                border: '2px solid rgba(255,255,255,.9)',
-                boxShadow: c === colore ? `0 0 0 2px ${c}` : '0 0 0 1px rgba(34,39,31,.15)'
+                border: '2px solid rgba(var(--luce-rgb),.9)',
+                boxShadow: c === colore ? `0 0 0 2px ${c}` : '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
               }}
               hover={{ boxShadow: `0 0 0 2px ${c}` }} />
           ))}
@@ -400,8 +400,8 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
           {alias.map(a => (
             <span key={a} style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%',
-              padding: '4px 5px 4px 11px', borderRadius: 99, background: 'rgba(34,39,31,.05)',
-              border: '1px solid rgba(34,39,31,.1)', fontSize: '12.5px', color: INCHIOSTRO
+              padding: '4px 5px 4px 11px', borderRadius: 99, background: 'rgba(var(--inchiostro-rgb),.05)',
+              border: '1px solid rgba(var(--inchiostro-rgb),.1)', fontSize: '12.5px', color: INCHIOSTRO
             }}>
               <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{a}</span>
               <Hov as="button" type="button" title={t('Togli questo nome')} aria-label={t('Togli questo nome')}
@@ -411,7 +411,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
                   background: 'none', cursor: 'pointer', color: APPENA, fontFamily: 'inherit',
                   fontSize: '14px', lineHeight: 1, display: 'grid', placeItems: 'center'
                 }}
-                hover={{ background: 'rgba(196,98,59,.14)', color: RAME_CUPO }}>×</Hov>
+                hover={{ background: 'rgba(var(--rame-rgb),.14)', color: RAME_CUPO }}>×</Hov>
             </span>
           ))}
           <input value={altroNome} onChange={e => setAltroNome(e.target.value)}
@@ -439,7 +439,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
         {p.note && (
           <div style={{
             whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '13px', lineHeight: 1.65,
-            color: 'rgba(34,39,31,.72)', background: 'rgba(34,39,31,.035)', borderRadius: 10,
+            color: 'rgba(var(--inchiostro-rgb),.72)', background: 'rgba(var(--inchiostro-rgb),.035)', borderRadius: 10,
             padding: '12px 14px', marginBottom: 8
           }}>{p.note}</div>
         )}
@@ -484,7 +484,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci, elimina }: {
                 <Hov as="button" type="button" onClick={facciamoUno} disabled={unisco}
                   style={{
                     flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none', background: GRADIENTE,
-                    color: '#FFF7F0', fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
+                    color: 'var(--avorio)', fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
                     cursor: unisco ? 'default' : 'pointer'
                   }}
                   hover={unisco ? {} : { opacity: 0.92 }}>
@@ -571,13 +571,13 @@ export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, 
         style={{
           display: 'flex', alignItems: 'center', gap: 11, width: '100%', boxSizing: 'border-box',
           padding: '13px 10px 13px 4px', borderRadius: 12, border: 'none', cursor: 'pointer',
-          background: aperta ? 'rgba(34,39,31,.04)' : 'transparent', fontFamily: 'inherit', textAlign: 'left',
+          background: aperta ? 'rgba(var(--inchiostro-rgb),.04)' : 'transparent', fontFamily: 'inherit', textAlign: 'left',
           opacity: chiuso && !aperta ? 0.6 : 1
         }}
-        hover={aperta ? {} : { background: 'rgba(34,39,31,.035)' }}>
+        hover={aperta ? {} : { background: 'rgba(var(--inchiostro-rgb),.035)' }}>
         <span style={{
           flex: 'none', width: 13, height: 13, borderRadius: '50%', background: colore,
-          border: '2px solid rgba(255,255,255,.9)', boxShadow: '0 0 0 1px rgba(34,39,31,.15)'
+          border: '2px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
         }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
@@ -592,7 +592,7 @@ export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, 
             )}
           </span>
           <span style={{
-            display: 'block', fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 3,
+            display: 'block', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 3,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
           }}>{p.obiettivo || t('Obiettivo non ancora scritto.')}</span>
         </span>

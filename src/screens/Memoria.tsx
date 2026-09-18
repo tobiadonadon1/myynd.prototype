@@ -37,9 +37,9 @@ function quanto(f: number): string {
 
 /** Da dove viene: esplicita è tua, indotta è sua. Non è la stessa cosa. */
 const COLORE_GENERE: Record<string, { testo: string; fondo: string }> = {
-  esplicita: { testo: '#2F4A33', fondo: 'rgba(126,156,130,.18)' },
-  dedotta: { testo: '#8A6317', fondo: 'rgba(216,164,110,.2)' },
-  indotta: { testo: '#8E3F1F', fondo: 'rgba(196,98,59,.14)' }
+  esplicita: { testo: 'var(--verde-cupo)', fondo: 'rgba(var(--salvia-rgb),.18)' },
+  dedotta: { testo: 'var(--rame-testo)', fondo: 'rgba(var(--rame-rgb),.2)' },
+  indotta: { testo: 'var(--rame-testo)', fondo: 'rgba(var(--rame-rgb),.14)' }
 }
 
 function Etichetta({ genere }: { genere: string }) {
@@ -91,9 +91,9 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
   }
 
   return (
-    <div style={{ padding: '15px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
+    <div style={{ padding: '15px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-        <div style={{ flex: 1, fontSize: '13.5px', color: 'rgba(34,39,31,.72)', textWrap: 'pretty' }}>
+        <div style={{ flex: 1, fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.72)', textWrap: 'pretty' }}>
           {/* la domanda in seconda persona, la stessa dell'onboarding: qui la
               legge la stessa persona che l'ha già letta là */}
           {t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}
@@ -109,7 +109,7 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
             sono parole tue.
           */}
           {b.daMe && !cambiato && (
-            <span style={{ display: 'block', marginTop: 3, fontSize: '11.5px', color: 'rgba(34,39,31,.42)' }}>
+            <span style={{ display: 'block', marginTop: 3, fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.42)' }}>
               {frasi.scrittoDaMe(new Date(b.daMe).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }))}
             </span>
           )}
@@ -121,15 +121,15 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
           <Hov as="button" onClick={riordina} disabled={riordino}
             style={{
               flex: 'none', padding: '5px 13px', borderRadius: 99, border: 'none',
-              background: riordino ? 'rgba(196,98,59,.12)' : 'rgba(196,98,59,.16)',
+              background: riordino ? 'rgba(var(--rame-rgb),.12)' : 'rgba(var(--rame-rgb),.16)',
               cursor: riordino ? 'default' : 'pointer', fontFamily: 'inherit',
-              fontSize: '12px', fontWeight: 500, color: '#8E3F1F',
+              fontSize: '12px', fontWeight: 500, color: 'var(--rame-testo)',
               whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6
             }}
-            hover={riordino ? {} : { background: 'rgba(196,98,59,.26)' }}>
+            hover={riordino ? {} : { background: 'rgba(var(--rame-rgb),.26)' }}>
             {/* il glifo del pensare, lo stesso che gira sulle righe delegate:
                 dice senza parole che qui dietro c'è il modello */}
-            <Glifo tipo="penso" dim={11} colore="#8E3F1F" />
+            <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
             {riordino ? t('Riordino…') : t('Riordina')}
           </Hov>
         )}
@@ -137,9 +137,9 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
           <Hov as="button" onClick={() => { setTesto(prima); setPrima(null) }}
             style={{
               flex: 'none', border: 'none', background: 'none', padding: '3px 0',
-              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px', color: 'rgba(34,39,31,.45)'
+              cursor: 'pointer', fontFamily: 'inherit', fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)'
             }}
-            hover={{ color: '#8E3F1F' }}>{t('Rimetti com’era')}</Hov>
+            hover={{ color: 'var(--rame-testo)' }}>{t('Rimetti com’era')}</Hov>
         )}
       </div>
       <textarea
@@ -153,12 +153,12 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
         rows={testo.length > 90 ? 3 : 2}
         style={{
           width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 12,
-          border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.75)',
-          color: '#22271F', fontSize: '14px', lineHeight: 1.55, fontFamily: 'inherit',
+          border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.75)',
+          color: 'var(--inchiostro)', fontSize: '14px', lineHeight: 1.55, fontFamily: 'inherit',
           outline: 'none', resize: 'vertical'
         }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-        <span style={{ flex: 'none', fontSize: '11.5px', color: resta < 60 ? '#8E3F1F' : 'rgba(34,39,31,.4)' }}>
+        <span style={{ flex: 'none', fontSize: '11.5px', color: resta < 60 ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)' }}>
           {resta < 120 ? `${resta} ${t('caratteri rimasti')}` : ''}
         </span>
 
@@ -167,7 +167,7 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
           <Hov as="button" onClick={salva} disabled={salvando}
             style={{
               flex: 'none', padding: '6px 14px', borderRadius: 99, border: 'none',
-              background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+              background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
               fontSize: '12.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
             }}
             hover={{ opacity: 0.92 }}>{salvando ? t('Salvo…') : t('Salva')}</Hov>
@@ -200,32 +200,32 @@ function Riga({ c, scorda, tieni, storica }:
     <div
       {...props}
       style={{
-        padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)',
+        padding: '13px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)',
         opacity: storica ? 0.6 : 1
       }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: '14.5px', lineHeight: 1.5, color: '#22271F', textWrap: 'pretty',
+            fontSize: '14.5px', lineHeight: 1.5, color: 'var(--inchiostro)', textWrap: 'pretty',
             textDecoration: storica ? 'line-through' : 'none'
           }}>{c.enunciato}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
             <Etichetta genere={c.genere} />
             {aspetta && (
-              <span style={{ fontSize: '11.5px', color: '#8E3F1F' }}>{t('non la sto usando')}</span>
+              <span style={{ fontSize: '11.5px', color: 'var(--rame-testo)' }}>{t('non la sto usando')}</span>
             )}
-            <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)' }}>{quanto(c.fiducia)}</span>
+            <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.5)' }}>{quanto(c.fiducia)}</span>
             {c.ambito !== 'persona' && (
               // «cliente:Nick» è come sta scritto nel database, non come si legge
-              <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.5)' }}>
+              <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.5)' }}>
                 · {c.ambito === 'azienda' ? t('azienda') : c.ambito.replace(/^(?:cliente|progetto):/, '')}
               </span>
             )}
-            <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.4)' }}>
+            <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.4)' }}>
               · {t('da')} {t(c.origine)}
             </span>
             {storica && c.al && (
-              <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.4)' }}>
+              <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.4)' }}>
                 · {t('fino al')} {new Date(c.al).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
             )}
@@ -233,9 +233,9 @@ function Riga({ c, scorda, tieni, storica }:
               <Hov as="button" onClick={() => setAperta(a => !a)}
                 style={{
                   border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: '11.5px', color: 'rgba(34,39,31,.45)', display: 'inline-flex', alignItems: 'center', gap: 4
+                  fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.45)', display: 'inline-flex', alignItems: 'center', gap: 4
                 }}
-                hover={{ color: '#8E3F1F' }}>
+                hover={{ color: 'var(--rame-testo)' }}>
                 {t('perché')}
                 <span style={{ display: 'flex', transform: aperta ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
                   <IconGiu size={9} stroke="currentColor" />
@@ -249,10 +249,10 @@ function Riga({ c, scorda, tieni, storica }:
         {aspetta && tieni && (
           <Hov as="button" onClick={() => tieni(c.id)}
             style={{
-              flex: 'none', border: '1px solid rgba(34,39,31,.16)', background: 'none', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: '12px', color: '#22271F', padding: '4px 11px', borderRadius: 7
+              flex: 'none', border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '12px', color: 'var(--inchiostro)', padding: '4px 11px', borderRadius: 7
             }}
-            hover={{ borderColor: 'rgba(34,39,31,.4)' }}>{t('Tienila')}</Hov>
+            hover={{ borderColor: 'rgba(var(--inchiostro-rgb),.4)' }}>{t('Tienila')}</Hov>
         )}
         {/* scordare chiede una volta: è la sua testa, ma è una cosa che non torna */}
         {scorda && <Cestino fai={() => scorda(c.id)} titolo={t('Scordala')} visibile={attiva} />}
@@ -261,14 +261,14 @@ function Riga({ c, scorda, tieni, storica }:
       {aperta && (
         <div style={{
           marginTop: 9, padding: '10px 13px', borderRadius: 11,
-          background: 'rgba(34,39,31,.04)', fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.7)',
+          background: 'rgba(var(--inchiostro-rgb),.04)', fontSize: '12.5px', lineHeight: 1.6, color: 'rgba(var(--inchiostro-rgb),.7)',
           // la citazione è copiata da un documento: può essere un indirizzo lungo
           overflowWrap: 'anywhere'
         }}>
           {c.prova?.citazione && <div style={{ fontStyle: 'italic' }}>«{c.prova.citazione}»</div>}
           {c.premesse?.length ? (
             <div style={{ marginTop: c.prova?.citazione ? 7 : 0 }}>
-              <div style={{ fontSize: '11px', letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(34,39,31,.45)', marginBottom: 3 }}>
+              <div style={{ fontSize: '11px', letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(var(--inchiostro-rgb),.45)', marginBottom: 3 }}>
                 {t('dedotta da')}
               </div>
               {c.premesse.map((p, i) => <div key={i}>— {p}</div>)}
@@ -377,18 +377,18 @@ function Progetti() {
 
   const campo = {
     boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
-    border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.75)',
-    color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
+    border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.75)',
+    color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
   }
 
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
       <span style={{ ...LABEL }}>{t('Progetti')}</span>
-      <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
         {t('Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.')}
       </div>
       {/* la confusione era proprio questa: un progetto senza un compito in corso non è finito */}
-      <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.45)', marginTop: 4, lineHeight: 1.5, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 4, lineHeight: 1.5, textWrap: 'pretty' }}>
         {t('Un progetto senza attività resta attivo: chiudilo solo quando è finito.')}
       </div>
 
@@ -400,7 +400,7 @@ function Progetti() {
       */}
       <div style={{
         marginTop: 15, padding: '13px 14px', borderRadius: 14,
-        border: '1px dashed rgba(34,39,31,.2)', background: 'rgba(255,255,255,.4)'
+        border: '1px dashed rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.4)'
       }}>
         <span style={{ ...LABEL }}>{t('Nuovo progetto')}</span>
         <div style={{ display: 'flex', gap: 9, marginTop: 9, flexWrap: 'wrap' }}>
@@ -416,23 +416,23 @@ function Progetti() {
         </div>
         {!!nome.trim() && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-end', marginTop: 11 }}>
-            <span style={{ fontSize: '12px', color: 'rgba(34,39,31,.45)' }}>{t('Il resto si scrive aprendo la riga.')}</span>
+            <span style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>{t('Il resto si scrive aprendo la riga.')}</span>
             <Hov as="button" type="button" onClick={aggiungi} disabled={nasce}
               style={{
                 flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none',
-                background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+                background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: nasce ? 'default' : 'pointer'
               }}
               hover={nasce ? {} : { opacity: 0.92 }}>{nasce ? t('Aggiungo…') : t('Aggiungi')}</Hov>
           </div>
         )}
         {guaio && (
-          <div role="alert" style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>
+          <div role="alert" style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>
         )}
       </div>
 
       {progetti && progetti.length === 0 && (
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.55)', marginTop: 14, lineHeight: 1.6, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 14, lineHeight: 1.6, textWrap: 'pretty' }}>
           {t('Nessun progetto ancora. Scrivine uno, o lascia che il punto lo riconosca dal materiale.')}
         </div>
       )}
@@ -527,7 +527,7 @@ export function Memoria() {
     return (
       <div style={{ width: 720, maxWidth: '100%', padding: '12px 4px' }}>
         <div style={{ fontSize: 34, letterSpacing: '-.03em' }}>{t('Memoria')}</div>
-        <div style={{ marginTop: 16, fontSize: '13.5px', color: '#8E3F1F' }}>{t(guasto)}</div>
+        <div style={{ marginTop: 16, fontSize: '13.5px', color: 'var(--rame-testo)' }}>{t(guasto)}</div>
       </div>
     )
   }
@@ -536,7 +536,7 @@ export function Memoria() {
     <div style={{ width: 720, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '12px 4px 8px' }}>
         <div style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em' }}>{t('Memoria')}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', marginTop: 8, maxWidth: 540, lineHeight: 1.6, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 8, maxWidth: 540, lineHeight: 1.6, textWrap: 'pretty' }}>
           {t('Quello che Myynd sa di te, separato da quello che ha letto. I documenti sono fatti; qui sta il giudizio, e puoi cambiarlo.')}
         </div>
       </div>
@@ -556,18 +556,18 @@ export function Memoria() {
           <Hov as="button" onClick={consolida} disabled={ordino}
             style={{
               flex: 'none', border: 'none', background: 'none', padding: 0,
-              fontFamily: 'inherit', fontSize: '12px', color: '#8E3F1F',
+              fontFamily: 'inherit', fontSize: '12px', color: 'var(--rame-testo)',
               cursor: ordino ? 'default' : 'pointer'
             }}
-            hover={ordino ? {} : { color: '#C4623B' }}>
+            hover={ordino ? {} : { color: 'var(--rame)' }}>
             {ordino ? t('Ci penso…') : t('Aggiorna da quello che hai imparato')}
           </Hov>
         </div>
         {dettoRitratto && (
-          <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 6 }}>{dettoRitratto}</div>
+          <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 6 }}>{dettoRitratto}</div>
         )}
         {(d?.blocchi ?? []).map(b => <Campo key={b.etichetta} b={b} salvato={carica} />)}
-        {!d && <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.45)', padding: '14px 0' }}>{t('carico…')}</div>}
+        {!d && <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.45)', padding: '14px 0' }}>{t('carico…')}</div>}
       </div>
 
       {/* — quello che ha capito da solo — */}
@@ -576,13 +576,13 @@ export function Memoria() {
           <span style={{ ...LABEL, flex: 1 }}>{t('Quello che ha capito')}</span>
           {/* mentre le rimette nella tua lingua: una riga, e poi sparisce */}
           {traduco && (
-            <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.45)' }}>{t('Le rimetto nella tua lingua…')}</span>
+            <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>{t('Le rimetto nella tua lingua…')}</span>
           )}
-          <span style={{ fontSize: '12px', color: 'rgba(34,39,31,.45)' }}>{d?.convinzioni.length ?? 0}</span>
+          <span style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>{d?.convinzioni.length ?? 0}</span>
         </div>
 
         {d && d.convinzioni.length === 0 && (
-          <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.55)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
+          <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
             {t('Ancora niente. Impara parlandoti, e da quello che correggi delle sue bozze.')}
           </div>
         )}
@@ -593,7 +593,7 @@ export function Memoria() {
           * mezzo a un elenco — e la cosa da capire è che Myynd non le sta usando.
           */}
         {!!quanteInAttesa && (
-          <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
+          <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
             {frasi.inAttesa(quanteInAttesa)} {t('Le ha notate da solo: non le usa per scrivere finché non gliele confermi.')}
           </div>
         )}
@@ -609,13 +609,13 @@ export function Memoria() {
             placeholder={t('Aggiungine una tu: «non faccio sconti sotto i mille euro»')}
             style={{
               flex: 1, minWidth: 0, padding: '10px 13px', borderRadius: 11,
-              border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.7)',
-              color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
+              border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.7)',
+              color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
             }} />
           <button onClick={aggiungi} disabled={!nuova.trim()} style={{
             flex: 'none', padding: '10px 18px', borderRadius: 99, border: 'none',
-            background: nuova.trim() ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
-            color: nuova.trim() ? '#FFF7F0' : 'rgba(34,39,31,.3)',
+            background: nuova.trim() ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+            color: nuova.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.3)',
             fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
             cursor: nuova.trim() ? 'pointer' : 'default'
           }}>{t('Aggiungi')}</button>
@@ -630,16 +630,16 @@ export function Memoria() {
               display: 'flex', alignItems: 'center', gap: 8, width: '100%', border: 'none',
               background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left'
             }}
-            hover={{ color: '#8E3F1F' }}>
+            hover={{ color: 'var(--rame-testo)' }}>
             <span style={{ display: 'flex', transform: storicheAperte ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }}>
               <IconGiu size={10} stroke="currentColor" />
             </span>
             <span style={{ ...LABEL, flex: 1 }}>{t('Quello che pensava prima')}</span>
-            <span style={{ fontSize: '12px', color: 'rgba(34,39,31,.45)' }}>{d.storiche.length}</span>
+            <span style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>{d.storiche.length}</span>
           </Hov>
           {storicheAperte && (
             <>
-              <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.55)', marginTop: 10, lineHeight: 1.55, textWrap: 'pretty' }}>
+              <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 10, lineHeight: 1.55, textWrap: 'pretty' }}>
                 {t('Non si cancella niente: quando cambia idea, alla vecchia mette una data di fine. Così «fino a marzo pensavo X» resta una domanda con una risposta.')}
               </div>
               {d.storiche.map(c => <Riga key={c.id} c={c} storica />)}

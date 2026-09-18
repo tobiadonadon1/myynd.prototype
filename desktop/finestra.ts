@@ -10,7 +10,7 @@
 // origine e non è http(s) resta fuori e basta: la finestra non è un browser.
 
 import { mailMessageLink } from './mail-link.ts'
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import * as impostazioni from './impostazioni.ts'
 import { t } from './lingua.ts'
@@ -18,6 +18,18 @@ import { t } from './lingua.ts'
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 
 export const SFONDO = '#F2E9DC'
+/** Lo sfondo di notte: lo stesso terreno caldo di `--pagina` scura in src/index.css. */
+export const SFONDO_NOTTE = '#1F1A17'
+export const INCHIOSTRO_NOTTE = 'rgba(255,247,240,.92)'
+/**
+ * Il colore che la finestra mostra prima che la pagina dipinga.
+ *
+ * Segue il sistema: la pagina applica il tema scelto da lui prima del primo
+ * disegno, ma la finestra nasce un attimo prima, e un lampo crema sopra un
+ * tema scuro si vede. Se ha scelto «scuro» con il sistema chiaro il lampo
+ * resta, per un fotogramma: la scelta sta nel suo conto, non qui.
+ */
+export const sfondoFinestra = () => nativeTheme.shouldUseDarkColors ? SFONDO_NOTTE : SFONDO
 const INCHIOSTRO = '#22271F'
 
 /**
@@ -63,9 +75,10 @@ function paginaDiAvvio(): string {
   // su Windows la barra c'è, e un corpo trascinabile si mangerebbe i clic
   const trascina = process.platform === 'darwin' ? ';-webkit-app-region:drag' : ''
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Myynd</title><style>
-html,body{margin:0;height:100%;background:${SFONDO};color:${INCHIOSTRO};
+html,body{margin:0;height:100%;background:${SFONDO};color:${INCHIOSTRO};color-scheme:light dark;
 font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-user-select:none}
 body{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px${trascina}}
+@media (prefers-color-scheme:dark){html,body{background:${SFONDO_NOTTE};color:${INCHIOSTRO_NOTTE}}}
 h1{margin:0;font-weight:600;font-size:34px;letter-spacing:-.02em}
 p{margin:0;font-size:15px;opacity:.7}
 </style></head><body><h1>Myynd</h1><p>${riga}</p></body></html>`
@@ -105,7 +118,7 @@ export function crea(argomenti: string[] = argomentiDati, nascosta = false): Bro
     ...riquadro,
     minWidth: 900, minHeight: 640,
     show: false,
-    backgroundColor: SFONDO,
+    backgroundColor: sfondoFinestra(),
     title: 'Myynd',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: SEMAFORI,
