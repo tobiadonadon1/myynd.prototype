@@ -1273,9 +1273,9 @@ const EN: Record<string, string> = {
   'Se ne occupa Myynd': 'Myynd takes it',
   'Richiamala': 'Take it back',
   'Fanne una bozza': 'Draft it for me',
-  'Riportala a oggi': 'Move it to today',
-  'Rimandala a questa settimana': 'Push it to this week',
-  'Rimandala a prima o poi': 'Push it to sooner or later',
+  // i tre scaffali si spostano dalla lista, non dalla prima pagina: sul feed
+  // erano tre voci di menù che non volevano dire niente
+  'Apri nella lista': 'Open it in the list',
   'ci sta lavorando': 'working on it',
   'bozza pronta': 'draft ready',
   'Va bene così': 'Good as it is',
@@ -2681,6 +2681,19 @@ export const frasi = {
     : `«${riga}» non è ancora un compito, è un obiettivo. Fammi le domande che ti servono per ` +
       `scomporlo, una alla volta: come penso di arrivarci, e dentro quale progetto sta. Poi ` +
       `trasformiamolo in cose da fare vere, e dimmi quali puoi prenderti tu.`,
+
+  /*
+   * «Parlane in chat», da una riga della prima pagina.
+   *
+   * Non è `scomponi`, che serve a smontare un obiettivo, e non è
+   * `dimmiDiPiu`, che è la domanda giusta su una cosa che ha notato Myynd:
+   * questa riga l'ha scritta lui, e sa già cos'è. Quello che gli serve qui è
+   * cominciare a parlarne con davanti il compito, e la frase lo dice in una
+   * riga, come la direbbe lui — finisce nella sua bolla e resta scritta.
+   */
+  parlaneDelCompito: (riga: string) => corrente === 'en'
+    ? `About "${riga}": let's talk it through. Ask me what you need to know, then tell me how you would do it.`
+    : `Su «${riga}»: parliamone. Fammi le domande che ti servono, poi dimmi come la faresti tu.`,
 
   /**
    * «Annulla» dell'avviso, che in inglese non è «Cancel».

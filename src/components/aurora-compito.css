@@ -1,48 +1,79 @@
 .task-aurora-host { position: relative; isolation: isolate; }
 .task-aurora-row { border-radius: 18px; }
 .task-aurora-host > :not(.task-aurora) { position: relative; z-index: 1; }
-/* Wide, slow luminous ribbons, never a progress claim or an obstructing layer. */
+/*
+ * Perché questi colori, e non altri.
+ *
+ * Quando Myynd sta lavorando a una cosa, la carta diventava un'altra app:
+ * fondo chiaro, ciano, lavanda e rosa, nastri freddi. Dentro una pagina di
+ * rame e panna si legge come una schermata presa altrove, e lui l'ha detto
+ * così: i colori, quando gli metto da fare, non stanno insieme al resto.
+ *
+ * La regola qui è che lo stato non ridipinge la carta: cambia la luce che ci
+ * passa sopra. Il fondo resta quello di quando è ferma (il bruno di
+ * `v.cartaScura`), e il movimento lo fa una lucentezza di rame `#C4623B`,
+ * ambra `#D98A5A` e panna `#FFF7F0` che scorre lenta: i tre colori
+ * dell'identità e nient'altro. Il solo altro colore è un velo di salvia
+ * `#5C7660`, e sta lì per la ragione per cui la salvia esiste ancora in
+ * questa app: dice uno stato, non decora. Niente tinte fredde e niente
+ * carta chiara: su una pagina calda si leggono come un errore di stampa.
+ *
+ * Lento apposta. Dice «sta succedendo», non «quanto manca» — quello lo dice
+ * la riga sotto il titolo, a parole. Con il moto ridotto (`--mo`) si ferma e
+ * resta una lucentezza calda ma immobile, che si distingue lo stesso dalla
+ * carta a riposo.
+ */
 .task-aurora {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
-  background: linear-gradient(115deg, #c8f7ee5c, #c9ddfa42 45%, #edc6fa57 78%, #ffe7d142);
-  box-shadow: inset 0 0 0 1px #d3d9f2c4;
+  background: linear-gradient(115deg, #c4623b2e, #d98a5a24 42%, #5c766017 72%, #fff7f01f);
+  background-size: 240% 240%;
+  animation: task-aurora-lucido 26s ease-in-out infinite alternate;
+  animation-play-state: var(--mo, running);
+  box-shadow: inset 0 0 0 1px #c4623b2b;
 }
 .task-aurora i {
   position: absolute; width: 105%; height: 180%; top: -65%; left: -35%;
-  background: radial-gradient(ellipse, #65e7d99c 0%, #76cbe961 32%, transparent 67%);
-  filter: blur(20px); transform-origin: center;
-  animation: task-aurora-drift 14s ease-in-out infinite alternate;
+  background: radial-gradient(ellipse, #d98a5a70 0%, #c4623b45 32%, transparent 67%);
+  filter: blur(22px); transform-origin: center;
+  animation: task-aurora-drift 16s ease-in-out infinite alternate;
   animation-play-state: var(--mo, running);
 }
 .task-aurora i:nth-child(2) {
-  left: 5%; top: -10%; background: radial-gradient(ellipse, #b7a0faaa, #e3a8e861 38%, transparent 70%);
-  animation-delay: -6s; animation-duration: 18s;
+  left: 5%; top: -10%; background: radial-gradient(ellipse, #fff7f047, #ffdcc22e 38%, transparent 70%);
+  animation-delay: -7s; animation-duration: 21s;
 }
+/* l'unico tocco di salvia: in quest'app il verde vuol dire «sta andando», e basta un velo */
 .task-aurora i:nth-child(3) {
-  left: 52%; top: -70%; background: radial-gradient(ellipse, #ffe2a885, #eeaac35c 38%, transparent 70%);
-  animation-delay: -11s; animation-duration: 21s;
+  left: 52%; top: -70%; background: radial-gradient(ellipse, #5c766042, #8e3f1f30 38%, transparent 70%);
+  animation-delay: -13s; animation-duration: 25s;
 }
+/*
+ * La carta al lavoro è la stessa carta di prima.
+ *
+ * Non si ridipinge niente: si aggiunge un filo di panna sul bordo, così da
+ * lontano si vede che è viva. A dire che sta lavorando restano il pallino
+ * che pulsa e la riga che racconta cosa sta facendo, cioè due cose che si
+ * leggono; il colore non deve dirlo una terza volta.
+ */
 .task-aurora-hero[data-working] {
-  background: linear-gradient(115deg, #e7fbf5, #eff0ff 55%, #fff1e8) !important;
-  color: #293746 !important;
-  box-shadow: 0 18px 54px #899ec52e, inset 0 1px 0 #ffffffd9 !important;
-  transform: none !important;
+  box-shadow: 0 30px 70px rgba(120,74,48,.34), inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 1px rgba(255,247,240,.3) !important;
 }
 .task-aurora-hero .task-aurora {
-  background: linear-gradient(115deg, #74ead51a, #a1c7ff12 45%, #e7b0ef19);
-  box-shadow: inset 0 0 0 1px #dedcffa6;
+  background: linear-gradient(115deg, #c4623b26, #d98a5a1c 42%, #5c766014 72%, #fff7f01c);
+  background-size: 240% 240%;
+  box-shadow: none;
 }
-.task-aurora-hero .task-aurora i { opacity: .64; }
-/* The active hero is light. Override the warm dark-card inline palette only in this state. */
-.task-aurora-hero[data-working] :is(div, span, a, button, p) { color: #293746 !important; text-shadow: none; }
-.task-aurora-hero[data-working] button { border-color: #53668050 !important; box-shadow: none !important; }
-.task-aurora-hero[data-working] button:hover { background: #ffffff85 !important; }
-.task-aurora-hero[data-working] button:focus-visible { outline: 2px solid #4d628a; outline-offset: 3px; }
-.task-aurora-hero[data-working] svg g rect { fill: #536b86; }
-.task-aurora-hero[data-working] svg > rect { fill: #536b861a; }
-.task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: #435268; overflow-wrap: anywhere; }
-.task-aurora-hero .task-working-step { color: #3d5068; }
+.task-aurora-hero .task-aurora i { opacity: .5; }
+/* Nel blocco la riga resta una riga: la stessa luce, ma un velo — se no una sola riga diventa una carta. */
+.task-aurora-row .task-aurora {
+  background: linear-gradient(115deg, #c4623b1c, #d98a5a14 42%, #5c76600f 72%, #fff7f014);
+  background-size: 240% 240%;
+  box-shadow: inset 0 0 0 1px #c4623b24;
+}
+.task-aurora-row .task-aurora i { opacity: .34; filter: blur(26px); }
+.task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(34,39,31,.62); overflow-wrap: anywhere; }
+.task-aurora-hero .task-working-step { color: rgba(255,247,240,.8); }
 .task-delivery { margin-top: 16px; padding: 16px; border: 1px solid #22271f24; border-radius: 14px; background: #fffdf9b3; color: #22271f; }
 .task-delivery-dark { background: #fff7f012; border-color: #fff7f040; color: #fff7f0; }
 .task-delivery-title { font-size: 16px; font-weight: 550; line-height: 1.4; overflow-wrap: anywhere; }
@@ -55,7 +86,13 @@
   from { transform: translate(-5%, -7%) rotate(-12deg) scale(.9); }
   to { transform: translate(24%, 16%) rotate(17deg) scale(1.15); }
 }
+/* la lucentezza: è la tavolozza stessa che scorre, non una forma che attraversa */
+@keyframes task-aurora-lucido {
+  from { background-position: 12% 42%; }
+  to { background-position: 88% 58%; }
+}
 @media (prefers-reduced-motion: reduce) {
+  .task-aurora { animation: none; }
   .task-aurora i { animation: none; transform: none; }
   .task-aurora-host[data-working] svg rect { animation: none !important; }
 }

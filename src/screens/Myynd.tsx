@@ -70,6 +70,11 @@ const LINK: CSSProperties = {
   padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F', cursor: 'pointer',
   textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', textAlign: 'left'
 }
+/** Lo stesso link, sulla carta scura: un gesto solo non merita un menù da aprire. */
+const LINK_SCURO: CSSProperties = {
+  ...LINK, fontSize: '13.5px', color: 'rgba(255,247,240,.72)', padding: '12px 4px'
+}
+const LINK_SCURO_SOPRA: CSSProperties = { color: '#FFF7F0', textDecorationColor: 'currentColor' }
 
 /** Un gesto dentro una riga che è essa stessa un bersaglio: il clic non deve risalire. */
 const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai() }
@@ -564,12 +569,26 @@ function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; ric
   const completo = pronto || chiede ? (c.risultato ?? '') : testo
   const tagliato = completo.length > 180
 
-  /** Il «⋯»: quello che non si fa quasi mai, e che quindi non deve stare in vista. */
+  /*
+   * Il «⋯»: quello che si può fare con questa riga senza andarsene da qui.
+   *
+   * Dentro c'erano i tre scaffali — «riportala a oggi», «rimandala a questa
+   * settimana», «rimandala a prima o poi» — e lui li ha letti per quello che
+   * erano: «non hanno senso, è già una cosa sul mio feed; sembrano
+   * segnaposto». Aveva ragione. La prima pagina è quello che c'è adesso:
+   * spostare una riga fra gli scaffali è un gesto della lista, e la lista ha
+   * una schermata sua dove quel gesto si vede per intero.
+   *
+   * Restano le tre cose che qui vogliono dire qualcosa: parlarne, andare a
+   * vederla dove sta, e chiedergli la bozza — quest'ultima solo se la riga è
+   * ancora tua e ferma, perché su una già affidata o già pronta sarebbe un
+   * bottone che non fa niente. Se ne resta una sola non è un menù: è un link,
+   * e si legge senza doverlo aprire.
+   */
   const altro = [
-    ...(delegato || pronto ? [] : [{ id: 'bozza', label: t('Fanne una bozza'), fai: () => l.delega(c.id, 'bozza') }]),
-    ...(c.quando !== 'oggi' ? [{ id: 'oggi', label: t('Riportala a oggi'), fai: () => l.cambia(c.id, { quando: 'oggi' }) }] : []),
-    ...(c.quando !== 'settimana' ? [{ id: 'sett', label: t('Rimandala a questa settimana'), fai: () => l.cambia(c.id, { quando: 'settimana' }) }] : []),
-    ...(c.quando !== 'poi' ? [{ id: 'poi', label: t('Rimandala a prima o poi'), fai: () => l.cambia(c.id, { quando: 'poi' }) }] : [])
+    ...(siPuoParlarne() ? [{ id: 'chat', label: t('Parlane in chat'), fai: () => portaInChat(frasi.parlaneDelCompito(c.testo)) }] : []),
+    { id: 'lista', label: t('Apri nella lista'), fai: () => { l.chiediDiAprire(c.id); v.goOggi() } },
+    ...(c.stato === 'aperto' ? [{ id: 'bozza', label: t('Fanne una bozza'), fai: () => l.delega(c.id, 'bozza') }] : [])
   ]
 
   const rispondi = () => { if (risposta.trim()) l.rispondi(c.id, risposta.trim()) }
@@ -634,7 +653,13 @@ function HeroCompito({ c, l, v, richiudi }: { c: Compito; l: Lista; v: Vals; ric
 
         {!c.consegna && <Portami c={c} l={l} v={v} scuro />}
 
-        {altro.length > 0 && (
+        {/* un gesto solo: aprirlo da un menù sarebbe nascondere una cosa sola dietro una porta */}
+        {altro.length === 1 && (
+          <Hov as="button" type="button" onClick={altro[0].fai}
+            style={LINK_SCURO} hover={LINK_SCURO_SOPRA}>{altro[0].label}</Hov>
+        )}
+
+        {altro.length > 1 && (
           <>
             <Hov as="button" ref={bottone} onClick={() => setMenu(m => !m)} title={t('Altro')} aria-label={t('Altro')} aria-haspopup="menu" aria-expanded={menu}
               style={{ padding: '12px 15px', borderRadius: 99, border: '1px solid rgba(255,247,240,.28)', background: menu ? 'rgba(255,247,240,.16)' : 'none', color: 'rgba(255,247,240,.85)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
@@ -769,9 +794,37 @@ export type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][numb
  * «Il resto» è il blocco di quello che non sta in nessun progetto: senza
  * colore, e sempre in fondo.
  */
-function Blocco({ b, v, lista, inCima, setInCima, primaDomanda }: {
-  b: BloccoPagina; v: Vals; lista?: Lista; inCima: string | null; setInCima: (id: string | null) => void; primaDomanda: string | null
+function Blocco({ b, v, lista, primaDomanda }: {
+  b: BloccoPagina; v: Vals; lista?: Lista; primaDomanda: string | null
 }) {
+  /*
+   * Una carta aperta per blocco, e la prima è già aperta.
+   *
+   * Prima era una sola in tutta la pagina, e nessuna finché non ne cliccavi
+   * una: i blocchi erano dieci righe uguali, e per vedere cosa c'era dentro
+   * una bisognava aprirla. «Preferisco che siano già aperte, col disegno di
+   * prima, e indicizzate: una sola aperta per categoria, le altre chiuse
+   * dentro la parentesi della sezione.»
+   *
+   * Quindi: in ogni blocco che ha delle cose da fare, una è aperta nella
+   * carta scura e le altre restano righe. Quale, se non ha ancora scelto: la
+   * prima pronta, perché una bozza che aspetta lui viene prima di tutto; se
+   * non ce n'è, la prima del blocco. Quando ne apre un'altra, quella di prima
+   * si richiude — dentro questo blocco e basta, gli altri non si muovono. La
+   * scelta vive quanto la pagina, perché vive qui: il blocco resta montato
+   * finché il progetto sta sul tavolo.
+   */
+  const compiti = b.righe.flatMap(r => (r.genere === 'compito' ? [r.compito] : []))
+  const preferita = compiti.find(c => c.stato === 'pronto')?.id ?? compiti[0]?.id ?? null
+  // `undefined` è «non ha ancora scelto», e vale la preferita; `null` è
+  // «le ho richiuse tutte», e resta così finché non ne apre una lui
+  const [scelta, setScelta] = useState<string | null | undefined>(undefined)
+  // una scelta che non c'è più — la riga è stata chiusa, o è scivolata sotto
+  // il tetto — non lascia il blocco senza carta: torna la preferita
+  const aperta = scelta === null ? null
+    : scelta && compiti.some(c => c.id === scelta) ? scelta
+      : preferita
+
   const suo = b.progetto !== null
   const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(34,39,31,.5)'
   const filo = suo ? velato(colore, .18) : 'rgba(34,39,31,.09)'
@@ -797,12 +850,15 @@ function Blocco({ b, v, lista, inCima, setInCima, primaDomanda }: {
       </div>
       {b.righe.map((r, i) => {
         const chiave = r.genere === 'voce' ? r.voce.id : r.genere === 'compito' ? r.compito.id : r.domanda.id
+        // la carta porta il suo bordo: il filo del blocco sopra di lei sarebbe
+        // una seconda riga di confine, e passerebbe dritto sotto i suoi angoli
+        const carta = r.genere === 'compito' && r.compito.id === aperta
         return (
-          <div key={chiave} style={{ borderTop: i === 0 ? 'none' : `1px solid ${filo}` }}>
+          <div key={chiave} style={{ borderTop: i === 0 || carta ? 'none' : `1px solid ${filo}` }}>
             {r.genere === 'voce' && <RigaVoce voce={r.voce} v={v} lista={lista} />}
-            {r.genere === 'compito' && (r.compito.id === inCima
-              ? <div style={{ padding: 8 }}><HeroCompito c={r.compito} l={lista!} v={v} richiudi={() => setInCima(null)} /></div>
-              : <RigaCompito c={r.compito} l={lista!} v={v} apri={() => setInCima(r.compito.id)} />)}
+            {r.genere === 'compito' && (carta
+              ? <HeroCompito c={r.compito} l={lista!} v={v} richiudi={() => setScelta(null)} />
+              : <RigaCompito c={r.compito} l={lista!} v={v} apri={() => setScelta(r.compito.id)} />)}
             {r.genere === 'compito' && r.seguito && <Seguito c={r.seguito} />}
             {r.genere === 'domanda' && <RigaDomanda item={r.domanda} v={v} lista={lista} colore={colore} prima={primaDomanda === r.domanda.id} />}
           </div>
@@ -813,15 +869,8 @@ function Blocco({ b, v, lista, inCima, setInCima, primaDomanda }: {
 }
 
 export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista; blocchi?: BloccoPagina[] }) {
-  /**
-   * Quale riga della tua lista è aperta nella carta scura.
-   *
-   * Nessuna, finché non ne clicchi una: la pagina si apre sui blocchi, che
-   * si leggono a colpo d'occhio, e la carta scura arriva quando serve
-   * spazio per lavorarci. Se la riga sparisce dalla pagina — chiusa, o
-   * scivolata sotto il tetto — la carta sparisce con lei.
-   */
-  const [inCima, setInCima] = useState<string | null>(null)
+  // quale riga è aperta nella carta scura lo sa ogni blocco per conto suo:
+  // una per blocco, la prima già aperta — vedi `Blocco`
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
@@ -923,7 +972,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
         che si muova la finestra.
       */}
       {blocchi.map(b => (
-        <Blocco key={b.progetto ?? 'resto'} b={b} v={v} lista={lista} inCima={inCima} setInCima={setInCima} primaDomanda={primaDomanda} />
+        <Blocco key={b.progetto ?? 'resto'} b={b} v={v} lista={lista} primaDomanda={primaDomanda} />
       ))}
 
       {blocchi.length === 0 && <Vuoto v={v} />}
