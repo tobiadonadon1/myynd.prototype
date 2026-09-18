@@ -897,3 +897,92 @@ test('la cosa dopo non nasce da una riga nata così, né se una simile è già i
   assert.equal(store.elencoCompiti().filter(c => c.madre === niente).length, 0)
   o3.smetti()
 })
+
+/*
+ * Una risposta che congeda la riga.
+ *
+ * «This is not relevant.» in risposta a una domanda non è il pezzo che
+ * mancava: è la chiusura, con il motivo. La rotta chiude; qui si prova la
+ * lettura pura, nelle due lingue, e i casi in cui NON si chiude: una
+ * risposta lunga, o un congedo seguito da un ordine.
+ */
+test('rispostaCheChiude: «lascia stare» e «già fatto» nelle due lingue; un ordine dopo, o una risposta lunga, non chiudono', () => {
+  const lasciate = ['this is not relevant.', 'Not relevant', 'irrelevant', 'skip', 'Skip it.', 'drop it', 'not now', 'Not relevant now, the client dropped out.',
+    'No, skip it', 'It is not relevant anymore', 'later', 'never mind', 'non serve', 'Non è rilevante.', 'lascia stare', 'Lasciamo perdere, non serve più.', 'non serve più', 'salta', 'dopo']
+  for (const r of lasciate) assert.equal(compiti.rispostaCheChiude(r), 'lasciato', `doveva chiudere come lasciata: «${r}»`)
+  const fatte = ['already done', 'Done.', 'I have completed it, i have approved it.', 'I did it', 'It\'s already done', 'già fatto', 'Fatta.', 'L\'ho già mandata.', 'Sì, già fatto', 'ho fatto tutto']
+  for (const r of fatte) assert.equal(compiti.rispostaCheChiude(r), 'fatto', `doveva chiudere come fatta: «${r}»`)
+  const no = ['Not now, use the June figures instead', 'Skip the intro and write the full email', 'Done, send it to Rossi',
+    'Use this shared link: https://drive.example.com/x.mov, recorded on an iPhone 15. Setup steps for the reviewer: install build 6, tap Allow, open Reels.',
+    'The source is the Notion export, one page, and the result is a table in the prod database with the same columns.', 'no', 'Rossi', 'not sure']
+  for (const r of no) assert.equal(compiti.rispostaCheChiude(r), null, `non doveva chiudere: «${r}»`)
+})
+
+test('la lezione della chiusura porta con sé la domanda a cui rispondeva', async () => {
+  const scambi: { ruolo: string; testo: string }[][] = []
+  compiti.perProva({ distilla: async s => { scambi.push(s); return 0 } })
+  compiti.imparaDallaChiusura({ testo: 'Ingest one controlled real source in H-Brain production', nota: null }, 'lasciato', 'this is not relevant.', 'What should exist when this is done?')
+  assert.equal(scambi.length, 1)
+  assert.match(scambi[0][0].testo, /Myynd le aveva chiesto: What should exist when this is done\?/)
+  assert.match(scambi[0][1].testo, /lasciata perdere.*this is not relevant\./)
+  // sotto le quattro parole non si impara niente, come sempre
+  compiti.imparaDallaChiusura({ testo: 'Una cosa', nota: null }, 'lasciato', 'skip', 'Quale?')
+  assert.equal(scambi.length, 1)
+  compiti.perProva(null)
+})
+
+/*
+ * Il materiale del progetto.
+ *
+ * La cartella di lavoro si trova per nome o per alias del riferimento, la
+ * memoria del progetto e le sue righe del riferimento arrivano a `svolgi`
+ * insieme al percorso della cartella. Una riga di un progetto senza cartella
+ * lavora com'era.
+ */
+test('una riga di un progetto porta a svolgi la cartella di lavoro, la memoria e le righe del riferimento; il percorso è la cartella', async () => {
+  const progetti = await import('./progetti.ts')
+  const riferimento = await import('./riferimento.ts')
+  const pm = await import('./project-memory.ts')
+  const p = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Ship Evermute 1.0' })
+  const q = progetti.scrivi({ nome: 'Nextas', obiettivo: 'Un altro' })
+  store.salvaDocumenti([
+    { id: 'lavoro:/Users/prova/Desktop/everwave', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: everwave', corpo: 'Ultimi commit:\n2026-09-10  screen time permission flow\nREADME: # everwave', percorso: '/Users/prova/Desktop/everwave', autore: null, quando: '2026-09-10T10:00:00.000Z' },
+    { id: 'lavoro:/Users/prova/Desktop/nextas', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: nextas', corpo: 'README: # nextas', percorso: '/Users/prova/Desktop/nextas', autore: null, quando: '2026-09-10T10:00:00.000Z' }
+  ])
+  riferimento.scrivi('Evermute (everwave): waiting on Apple, I send the recording Friday.\nNextas: dead, dropped it in August.')
+  pm.recordCurrentWork(p.id, 'Preparing the App Review reply.')
+
+  const m = compiti.materialeDelProgetto(p)
+  assert.equal(m.cartella?.id, 'lavoro:/Users/prova/Desktop/everwave', 'la cartella si trova dall\'alias del riferimento')
+  assert.match(m.riferimento, /waiting on Apple/)
+  assert.ok(!/Nextas: dead/.test(m.riferimento), 'le righe degli altri progetti non c\'entrano')
+  assert.match(m.memoria, /Preparing the App Review reply/)
+  assert.equal(compiti.materialeDelProgetto(q).cartella?.id, 'lavoro:/Users/prova/Desktop/nextas', 'per nome, quando non c\'è un alias')
+
+  let ricevuto: { cartella: string | null | undefined; concessi: string[]; materiale: unknown; nota: string | null | undefined } | null = null
+  prova({
+    svolgi: async (_t, nota, _m, concessi, cartella, _p, _d, _s, _e, materiale) => {
+      ricevuto = { cartella, concessi: concessi ?? [], materiale, nota }
+      return { testo: 'Reply to App Review with the link and the steps, whole and ready to send.', fonti: [] }
+    },
+    chiedeAiuto: async (_c, _r, nota) => { assert.match(nota ?? '', /^Progetto: Evermute/, 'chi classifica non ha ricevuto la nota'); return { chiede: false, manca: [], domanda: '' } },
+    domandeDaFare: nessunaDomanda
+  })
+  const id = riga('Reply to App Review with the recording')
+  store.cambiaCompito(id, { progetto: p.id })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.ok(ricevuto, 'svolgi non è stato chiamato')
+  const r = ricevuto as unknown as { cartella: string | null | undefined; concessi: string[]; materiale: { cartella: { id: string } | null; memoria: string; riferimento: string }; nota: string }
+  assert.equal(r.cartella, '/Users/prova/Desktop/everwave')
+  assert.equal(r.materiale.cartella?.id, 'lavoro:/Users/prova/Desktop/everwave')
+  assert.match(r.materiale.riferimento, /waiting on Apple/)
+  // senza Claude Code installato e cartelle collegate non si concede nessuna mano
+  assert.deepEqual(r.concessi, [])
+  o.smetti()
+
+  // una riga di codice si riconosce; le mani si concedono solo se ci sono
+  assert.equal(compiti.sembraLavoroDiCodice('Fix the crash in ScreenTimeManager.swift', null), true)
+  assert.equal(compiti.sembraLavoroDiCodice('Reply to App Review with the recording', null), false)
+})
