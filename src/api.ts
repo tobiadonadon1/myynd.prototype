@@ -1419,8 +1419,18 @@ export const api = {
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
   nuovoProgetto: (nome: string, obiettivo = '') =>
     json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
-  cambiaProgetto: (id: string, c: { nome?: string; obiettivo?: string; stato?: StatoProgetto; note?: string; colore?: string }) =>
+  cambiaProgetto: (id: string, c: CambioProgetto) =>
     json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(c) }),
+  /**
+   * Due progetti che erano lo stesso progetto diventano uno.
+   *
+   * Non è «cancella e riscrivi»: le attività, le righe del feed, le domande e
+   * quello che Myynd ricorda passano di là, e questo si chiude. È l'unico modo
+   * onesto di sistemare un progetto nato due volte con due nomi diversi.
+   */
+  unisciProgetto: (id: string, dentro: string) =>
+    json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}/unisci`,
+      { method: 'POST', body: JSON.stringify({ in: dentro }) }),
   /** Chiudere, non cancellare: la riga resta, e un chiuso non torna nel punto. */
   chiudiProgetto: (id: string) =>
     json<{ ok: true; progetto: Progetto | null }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -1902,6 +1912,25 @@ export type Progetto = {
   origine: 'mano' | 'punto' | 'conversazione'
   /** Il colore scelto in Memoria, `#RRGGBB`, o vuoto: allora ne ha uno stabile dall'id (`colori-progetto.ts`). */
   colore: string
+  /**
+   * Gli altri nomi con cui lo chiama: la cartella «everwave», il soprannome
+   * «x-engine». Servono a riconoscere che un documento parla di questo
+   * progetto anche quando non lo nomina come l'ha registrato lui.
+   */
+  alias: string[]
+  /** L'id del progetto dentro cui sta, se è uno spin-off di un altro. */
+  genitore: string | null
+}
+
+/** Quello che si può cambiare di un progetto dalla Memoria. */
+export type CambioProgetto = {
+  nome?: string
+  obiettivo?: string
+  stato?: StatoProgetto
+  note?: string
+  colore?: string
+  alias?: string[]
+  genitore?: string | null
 }
 
 export type ProjectInitiative = { id: string; projectId: string; projectName: string; goal: string; kind: 'next-step' | 'question'; title: string; description: string; question?: string; taskId?: string; provenance: 'explicit-project'; urgent: false }
