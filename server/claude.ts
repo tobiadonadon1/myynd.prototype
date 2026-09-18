@@ -2053,12 +2053,16 @@ ${UNA_DOMANDA}
 
 E non è sempre colpa del materiale. Certe righe non sono compiti: sono
 obiettivi, intenzioni, titoli di cose grosse — «solidificare i sistemi»,
-«sistemare il sito», «capire cosa fare del progetto». Non hanno una cosa
-finita che si possa consegnare oggi, e non c'è materiale che le renda
-eseguibili. Se la persona non ha indicato il risultato atteso, chiedi cosa
-deve esserci alla fine. Se invece ha chiesto esplicitamente un piano o dei
-prossimi passi proposti, il risultato è chiaro: consegna quel piano, nel
-numero e formato richiesti, senza presentarlo come lavoro già eseguito.
+«sistemare il sito», «capire cosa fare del progetto», «ingerire una fonte
+vera in produzione». Non hanno una cosa finita che si possa consegnare oggi,
+e non c'è materiale che le renda eseguibili. Un piano scritto al posto di
+quella cosa non è lavoro: è un piano vestito da lavoro, e chi legge se ne
+accorge. Se la persona non ha indicato il risultato atteso, non scrivere
+il piano: chiedi cosa deve esserci quando la cosa è fatta, una domanda
+sola, e le altre verranno dopo. Se invece ha chiesto esplicitamente un
+piano o dei prossimi passi proposti, il risultato è chiaro: consegna quel
+piano, nel numero e formato richiesti, senza presentarlo come lavoro già
+eseguito.
 
 Un preventivo con il prezzo sbagliato costa più di un preventivo non scritto.
 
@@ -2150,6 +2154,105 @@ export const MODI: Record<string, string> = {
     'cifra, e chi rilegge qui può controllarti.\n\n' +
     'La riga per lei — un dubbio, una scelta che hai fatto, cosa manca — resta dov\'è ' +
     'sempre: una riga sola in fondo, dopo una riga vuota, fuori dal prompt.'
+}
+
+/**
+ * Una riga che è un obiettivo, non un compito.
+ *
+ * Il diciotto settembre una riga nata in chat da un obiettivo — «Ingest one
+ * controlled real source in H-Brain production» — è stata affidata, e quello
+ * che è tornato era un piano in cinque punti scritto come se fosse lavoro.
+ * Le sue parole: «Ask me what you need to know to break it down, one
+ * question at a time». Un obiettivo non ha una cosa finita che esista quando
+ * è fatto: un'email esiste, un riassunto esiste, «ingerire una fonte» no.
+ *
+ * Qui si riconosce la forma, senza modello, e la regola è conservativa nel
+ * verso giusto: sbagliare qui costa una domanda, sbagliare dall'altra parte
+ * costa un piano spacciato per lavoro. Vale se la riga comincia con un verbo
+ * da obiettivo — costruire, sistemare, integrare, eseguire, verificare — o
+ * parla di produzione e di verifica, e nello stesso tempo non nomina
+ * nessuna cosa consegnabile: una risposta, una bozza, un riassunto, un piano
+ * chiesto per nome. Pura ed esportata: la si prova con dodici righe in un
+ * secondo, senza affidare niente a nessuno.
+ */
+const CONSEGNABILE = /\b(?:scriv\w*|rispond\w*|rispost[ae]|mand\w*|invi\w*|e-?mail|posta|messagg\w*|bozz[ae]|riassum\w*|riassunt[oi]|sintesi|prepar\w*|confront\w*|elenc\w*|list[ae]|scalett[ae]|traduc\w*|traduzion[ei]|prompt|preventiv[oi]|offert[ae]|propost[ae]|pian[oi]|roadmap|report|relazion[ei]|not[ae]|appunti|slide|presentazion[ei]|deck|document[oi]|contratt[oi]|fattur[ae]|tabell[ae]|verbal[ei]|comunicat[oi]|articol[oi]|testo|lettera|decid\w*|scegl\w*|spieg\w*|descriv\w*|fissa\w*|prenot\w*|chiam\w*|write|writing|reply|replies|respond|response|answer|draft|send|sending|summar\w*|summary|prepare|compare|comparison|list|outline|translate|translation|quote|proposal|plan|steps?|memo|notes?|slides?|presentation|document|contract|invoice|brief|agenda|checklist|table|spreadsheet|schedule|book|call|explain|describe|decide|choose|pick|recap|digest|review\s+of|message|letter|copy|caption|tweet|thread)\b/i
+const OBIETTIVO = /^\s*(?:(?:please|per favore|pls)\s+)?(?:ingest\w*|execute|run|verify|validate|solidify|improve|fix|set\s?up|build|implement|deploy|integrate|migrate|ship|launch|stabili[sz]e|refactor|optimi[sz]e|understand|figure\s+out|explore|investigate|make\s+(?:sure|it|the)|get\s+(?:the|it|this)|ensure|finish|complete|close\s+(?:the|this)|clean\s?up|sort\s+out|establish|enable|connect|automate|improve|grow|scale|ingerire|ingerisci|eseguire|esegui|verificare|verifica|validare|valida|solidificare|solidifica|migliorare|migliora|sistemare|sistema|costruire|costruisci|implementare|implementa|integrare|integra|migrare|migra|lanciare|lancia|stabilizzare|stabilizza|capire|capisci|esplorare|esplora|indagare|indaga|finire|finisci|completare|completa|chiudere|chiudi|pulire|pulisci|abilitare|abilita|collegare|collega|automatizzare|automatizza|far\s+funzionare|rendere|rendi|far\s+(?:partire|girare)|mettere\s+(?:in\s+piedi|a\s+posto)|metti\s+(?:in\s+piedi|a\s+posto))\b/i
+const DI_PRODUZIONE = /\b(?:in\s+production|in\s+produzione|end[- ]to[- ]end|and\s+verify|e\s+verifica(?:re|rne)?|permitted\s+action|azione\s+(?:permessa|consentita))\b/i
+
+export function sembraUnObiettivo(testo: string): boolean {
+  const t = testo.trim()
+  if (!t || CONSEGNABILE.test(t)) return false
+  return OBIETTIVO.test(t) || DI_PRODUZIONE.test(t)
+}
+
+/** La domanda che si fa a un obiettivo, nella lingua dell'app. */
+export function domandaDelRisultato(): string {
+  return cfgLingua() === 'en' ? 'What should exist when this is done?' : 'Cosa deve esserci quando questa cosa è fatta?'
+}
+
+/**
+ * Il dettaglio scritto sulla riga, senza le due righe del progetto.
+ *
+ * `compiti.ts` mette in testa alla nota «Progetto: …» e «Obiettivo: …»;
+ * quello che resta è la sua risposta a una domanda, o quello che ha scritto
+ * lui sotto il titolo. Vuoto vuol dire che la riga è nuda, ed è il caso in
+ * cui a un obiettivo si chiede cosa deve esserci alla fine.
+ */
+export function dettaglioDellaRiga(nota?: string | null): string {
+  return (nota ?? '').split('\n').filter(r => !/^\s*(?:Progetto|Obiettivo|Project|Goal)\s*:/i.test(r)).join('\n').trim()
+}
+
+/** Uno scritto che è un piano: passi numerati, o un titolo da piano in testa. */
+export function sembraUnPiano(testo: string): boolean {
+  const righe = testo.split('\n').map(r => r.trim()).filter(Boolean)
+  const passi = righe.filter(r => /^(?:\d{1,2}[.)]|[-•·*]|step\s+\d|passo\s+\d|fase\s+\d|phase\s+\d)\s*/i.test(r)).length
+  const titolo = /^(?:\*\*)?(?:plan|proposed\s+plan|proposal|approach|next\s+steps|steps|roadmap|piano|proposta(?:\s+di\s+piano)?|approccio|prossimi\s+passi|passi|scaletta)\b/i.test(righe[0] ?? '')
+  return titolo || passi >= 3
+}
+
+/**
+ * Quello che resta sulla riga quando la riga era un obiettivo: cosa ha visto,
+ * e la domanda. Se il modello ha già scritto così — due righe, l'ultima con
+ * il punto interrogativo — si tiene quello che ha scritto. Se ha scritto un
+ * piano, si tiene la prima riga come «cosa ho visto» (quando è una riga e
+ * non un punto dell'elenco) e si mette la domanda al posto del resto. Puro.
+ */
+export function soloLaDomandaDelRisultato(testo: string): string {
+  const righe = testo.split('\n').map(r => r.trim()).filter(Boolean)
+  if (righe.length > 0 && righe.length <= 2 && righe[righe.length - 1].endsWith('?') && !sembraUnPiano(testo)) return righe.join('\n')
+  const prima = righe[0] ?? ''
+  const visto = prima.length <= 200 && !/^(?:\d{1,2}[.)]|[-•·*#]|\*\*)/.test(prima) && !prima.endsWith('?') && !/^(?:plan|proposal|piano|proposta)\b/i.test(prima) ? prima : ''
+  return [visto, domandaDelRisultato()].filter(Boolean).join('\n')
+}
+
+/** Cosa si dice a chi lavora su una riga che ha la forma di un obiettivo. */
+function obiettivoSenzaRisultato(): string {
+  return '\n\nQuesta riga ha la forma di un obiettivo, non di un compito: non nomina una cosa ' +
+    'finita che esista quando è fatta, e non c\'è un dettaglio che la renda eseguibile. Non ' +
+    'scrivere un piano, non elencare passi, non presentare un ragionamento come lavoro: ' +
+    'sarebbe un piano vestito da lavoro, e lei se ne accorge. Scrivi due righe e basta. La ' +
+    'prima dice cosa hai visto nel materiale, in una riga. La seconda è la domanda, che è ' +
+    `una sola: «${domandaDelRisultato()}». Le altre domande, se servono, verranno dopo.`
+}
+
+/**
+ * Il materiale di un progetto, per chi lavora su una sua riga.
+ *
+ * Finora una riga di un progetto arrivava a `svolgi` con due righe in nota
+ * — il nome e l'obiettivo — e il resto lo trovava la ricerca, se lo trovava.
+ * La cartella di lavoro del progetto (il README, gli ultimi commit, gli
+ * appunti) stava nell'indice come un documento qualunque, pescato solo se le
+ * parole del titolo coincidevano; la memoria del progetto — cosa ha detto
+ * lui, cosa è stato fatto — non arrivava affatto; il riferimento nemmeno.
+ * Lo compone `compiti.materialeDelProgetto`, e qui entra tutto e per primo.
+ */
+export type MaterialeProgetto = {
+  /** Il documento `lavoro:<cartella>` del progetto, se sul disco ce n'è una. */
+  cartella: Documento | null
+  /** La memoria del progetto, come la dà `projectMemoryContext`. */
+  memoria: string
+  /** Le righe del riferimento che parlano di questo progetto. */
+  riferimento: string
 }
 
 /**
@@ -2250,10 +2353,13 @@ function conQuali(concessi: attrezzi.Nome[]): string {
     .filter((a): a is attrezzi.Attrezzo => !!a)
     .map(a => `— \`${a.tool.name}\`: ${a.spiega.it}${attrezzi.collegato(a.nome) ? '' : ' — NON È COLLEGATO: non puoi usarlo, e devi dirlo.'}`)
 
+  // «viene da un'automazione» non è più sempre vero: una riga di un progetto
+  // con una cartella di lavoro sul disco si porta dietro `claude.lavora` da
+  // sola, e dirle che è un'automazione le farebbe rifiutare il proprio lavoro
   const testa =
-    '\n\nQuesta riga viene da un\'automazione, e un\'automazione dichiara cosa può aprire. ' +
-    'Questi sono i tuoi attrezzi:\n' + righe.join('\n') +
-    '\n\nUsali: sono il motivo per cui questa automazione esiste. Se il compito parla di ' +
+    '\n\nQuesta riga si porta dietro degli attrezzi in più, e chi li ha dichiarati ha detto ' +
+    'cosa aprono. Questi sono i tuoi attrezzi:\n' + righe.join('\n') +
+    '\n\nUsali: sono il motivo per cui li hai. Se il compito parla di ' +
     'qualcosa che uno di questi apre, aprilo — non rispondere con quello che hai già sotto ' +
     'gli occhi sperando che basti. E non dare mai per buona una cosa che avresti potuto ' +
     'controllare con un attrezzo che hai.'
@@ -2364,7 +2470,13 @@ export async function svolgi(
    */
   doc?: string | null,
   selezione?: SelezioneLavoro | null,
-  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string }
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string },
+  /**
+   * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
+   * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
+   * prompt di sistema. Vedi `MaterialeProgetto`.
+   */
+  progetto?: MaterialeProgetto | null
 ): Promise<{ testo: string; fonti: Fonte[]; verificaDocumenti?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>} }> {
   const produzioneIniziata = Date.now()
   const tracciaProduzione = (fase: string) => console.info(`myynd · production · run=${produzioneIniziata} · ${fase} · elapsed_ms=${Date.now() - produzioneIniziata}`)
@@ -2423,7 +2535,27 @@ export async function svolgi(
     throw new Error('La fonte selezionata non è più una richiesta attuale pertinente. Rileggi le fonti prima di riprovare.')
   }
   const dalla = documentiPerSelezione(dalDoc && (!recinto || recinto.includes(dalDoc.fonte)) ? conIlFilo([dalDoc]) : [], selezione, domanda)
+  /*
+   * La cartella di lavoro del progetto entra come fonte fissa, dopo il
+   * documento della riga: il README, gli ultimi commit, gli appunti — cioè a
+   * che punto è la cosa. Non con una selezione attiva, che è una regola
+   * dell'automazione sulla posta, e non fuori dal recinto.
+   */
+  const dallaCartella = progetto?.cartella
+  if (dallaCartella && !selezioneAttiva && (!recinto || recinto.includes(dallaCartella.fonte)) && !dalla.some(d => d.id === dallaCartella.id)) dalla.push(dallaCartella)
   const fissati = new Set(selezioneAttiva ? [] : dalla.map(d => d.id))
+  /*
+   * L'obiettivo nudo si ferma prima di cominciare.
+   *
+   * Una riga scritta a mano, senza documento, senza attrezzi e senza un
+   * dettaglio sotto, che ha la forma di un obiettivo: qui non si lavora, si
+   * chiede cosa deve esserci alla fine. Il modello legge lo stesso il
+   * materiale — la riga di cosa ha visto vale — ma quello che torna è la
+   * domanda, e se torna un piano lo si rimpiazza con la domanda
+   * (`soloLaDomandaDelRisultato`). Un prompt no: lì la cosa da consegnare è
+   * il prompt, e un obiettivo è proprio quello che si manda a Claude Code.
+   */
+  const obiettivoNudo = !concessi.length && !doc && modo !== 'prompt' && !appNativa && !dettaglioDellaRiga(nota) && sembraUnObiettivo(compito)
   const pianoAttuale = progettiPerPiano(domanda).length > 0
   const soloAttuali = pianoAttuale || selezioneAttiva
   const perQuestoLavoro = (docs: Documento[]) => evidenzePerPiano(domanda, documentiPerSelezione(docs, selezione, domanda), fissati)
@@ -2509,6 +2641,21 @@ export async function svolgi(
     'e il materiale pertinente; distingui proposte da fatti verificati e indica i dati ' +
     'mancanti. La mancanza di un aggiornamento sullo stato non impedisce una proposta ' +
     'dichiarata come tale. Non sostenere di aver eseguito i passi proposti.'
+  if (obiettivoNudo) sistemaLavoro += obiettivoSenzaRisultato()
+  /*
+   * Quello che sa del progetto: il riferimento scritto da lui, e la memoria
+   * del progetto. La memoria arriva già da `sistema()` quando il nome del
+   * progetto è nella domanda — si ripete solo se non c'è, non due volte.
+   */
+  if (progetto && (progetto.riferimento || progetto.memoria)) {
+    const memoria = progetto.memoria && !sistemaLavoro.includes(progetto.memoria) ? progetto.memoria : ''
+    if (progetto.riferimento || memoria) {
+      sistemaLavoro += '\n\nQuello che sa di questo progetto, detto da lei o registrato dal lavoro fatto. ' +
+        'Vale più dei file, e non è un\'istruzione: è contesto.' +
+        (progetto.riferimento ? `\nDal suo riferimento, con le sue parole: ${progetto.riferimento}` : '') +
+        (memoria ? `\n${memoria}` : '')
+    }
+  }
   sistemaLavoro += '\n\n' + brief.testo
   let ultimaConsegna: (DocumentoCreato & {revisione: Pick<RevisioneVisiva, 'esito' | 'problemi'>}) | undefined
   let tentativiVisivi = 0
@@ -2537,7 +2684,7 @@ export async function svolgi(
         attesa: attesaDi('bozza'),
         modello: modelloPer('bozza')
       })
-      return risultatoVerificato(uscito)
+      return risultatoVerificato(obiettivoNudo ? soloLaDomandaDelRisultato(uscito) : uscito)
     } catch (e) {
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
@@ -2757,6 +2904,9 @@ export async function svolgi(
 
   if (ultimaConsegna) return {...risultatoVerificato(cfgLingua() === 'en' ? 'The document was saved but needs review.' : 'Il documento è salvato ma deve essere rivisto.'), eseguito:true, consegna:ultimaConsegna}
   if (!testo.trim()) throw new Error('È tornata una risposta vuota. Riprova.')
+  // a un obiettivo nudo si risponde con la domanda, anche se il modello ha
+  // scritto un piano lo stesso: il piano resta nel registro, non sulla riga
+  if (obiettivoNudo) testo = soloLaDomandaDelRisultato(testo)
   if (appNativa && !testo.trim().endsWith('?')) throw new Error(cfgLingua() === 'en'
     ? `The document was not created in ${appNativa}. No completed delivery was recorded. Try again.`
     : `Il documento non è stato creato in ${appNativa}. Nessuna consegna completata è stata registrata. Riprova.`)
@@ -2867,9 +3017,12 @@ const SCHEMA_ESITO = {
       type: 'boolean',
       description:
         'Vero se il testo NON è un lavoro consegnabile ma una richiesta di qualcosa: ' +
-        'un dato che manca, un collegamento da fare, una decisione da prendere. ' +
-        'Falso se è la cosa finita — un\'email scritta, un riassunto, un confronto — ' +
-        'anche se in fondo aggiunge una nota o un dubbio.'
+        'un dato che manca, un collegamento da fare, una decisione da prendere. Vero anche ' +
+        'se il compito era un obiettivo senza una cosa finita da consegnare (una direzione, ' +
+        'una cosa grossa da far succedere) e il testo è un piano, dei passi o un ragionamento ' +
+        'al posto della cosa: lì la domanda giusta è cosa deve esserci quando è fatto. ' +
+        'Falso se è la cosa finita — un\'email scritta, un riassunto, un confronto, un piano ' +
+        'che era stato chiesto per nome — anche se in fondo aggiunge una nota o un dubbio.'
     },
     manca: {
       type: 'array',
@@ -2918,7 +3071,7 @@ const SCHEMA_ESITO = {
  * qualcosa: chi confronta il risultato con `{ chiede, manca, domanda }` non
  * deve vedersi comparire una chiave vuota.
  */
-export async function chiedeAiuto(compito: string, risposta: string): Promise<{ chiede: boolean; manca: string[]; domanda: string; visto?: string }> {
+export async function chiedeAiuto(compito: string, risposta: string, nota?: string | null): Promise<{ chiede: boolean; manca: string[]; domanda: string; visto?: string }> {
   // Lavoro da modello piccolo: è una domanda con due risposte possibili su un
   // testo che è già stato scritto. Se c'è un modello su questa macchina lo fa
   // lui, gratis; se non c'è, o se sbaglia, si passa a Claude senza che nessuno
@@ -2934,17 +3087,45 @@ export async function chiedeAiuto(compito: string, risposta: string): Promise<{ 
       'la cui risposta cambia il risultato. Quello che ha scritto lui è lungo, e chi legge ' +
       'deve poter rispondere in cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
       'di chiedere, è la cosa fatta: non trasformare una scelta dichiarata in una domanda.\n\n' +
+      'E un obiettivo non è un compito. Se il compito era una direzione senza una cosa ' +
+      'finita da consegnare («solidificare i sistemi», «ingerire una fonte in produzione») e ' +
+      'lui ha scritto un piano, dei passi o un ragionamento al posto della cosa, quello non è ' +
+      'lavoro: è una richiesta di aiuto travestita, e la domanda è «' + domandaDelRisultato() + '». ' +
+      'Se invece il piano era stato chiesto per nome, è la cosa fatta.\n\n' +
       'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + UNA_DOMANDA
     ),
     formato: SCHEMA_ESITO,
-    messages: [{ role: 'user', content: `Il compito era: ${compito}\n\nHa risposto:\n${risposta.slice(0, 4000)}${aggiunta}` }]
+    messages: [{ role: 'user', content: `Il compito era: ${compito}${dettaglioDellaRiga(nota) ? `\nCon questo dettaglio: ${dettaglioDellaRiga(nota).slice(0, 1200)}` : ''}\n\nHa risposto:\n${risposta.slice(0, 4000)}${aggiunta}` }]
   })
 
   const pulita = risposta.trim()
   const prima = pulita.split(/\n\s*\n/)[0]
-  const domandaSola = pulita.length <= 300 && /^[^\n]*\?$/.test(pulita) && /^(?:what|which|who|where|when|how|can you|could you|do you|quale|quali|chi|dove|quando|come|puoi|mi dici|di qual)/i.test(pulita)
+  const INTERROGATIVA = /^(?:what|which|who|where|when|how|can you|could you|do you|should|is|are|cosa|che cosa|che|quale|quali|chi|dove|quando|come|quanto|quanti|puoi|mi dici|di qual)\b/i
+  const domandaSola = pulita.length <= 300 && /^[^\n]*\?$/.test(pulita) && INTERROGATIVA.test(pulita)
+  /*
+   * Due righe, l'ultima con il punto interrogativo: è la forma che la regola
+   * della domanda chiede a chi svolge — cosa ha visto, e la domanda — e non
+   * c'è niente da riscrivere. Si tiene com'è, senza chiamare nessuno.
+   */
+  const righe = pulita.split('\n').map(r => r.trim()).filter(Boolean)
+  const ultima = righe[righe.length - 1] ?? ''
+  const vistoEDomanda = righe.length === 2 && pulita.length <= 500 && ultima.endsWith('?') && INTERROGATIVA.test(ultima) && !righe[0].endsWith('?') &&
+    // un'email di due righe che finisce con una domanda è lavoro, non una richiesta
+    !/^(?:subject|oggetto|re:|dear|hi|hello|hey|ciao|gentile|buongiorno|buonasera|salve|caro|cara)\b/i.test(righe[0])
   const bloccato = pulita.length <= 700 && /^(?:I (?:need|cannot|can't|don['’]t have)|I['’]m (?:missing|unable)|Mi (?:manca|mancano|serve|servono)|Non (?:posso|ho accesso|riesco)|Collega(?:mi)?\b)/i.test(prima)
-  const ripiego = { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? pulita : '' }
+  /*
+   * E il piano al posto della cosa. Un compito con la forma di un obiettivo,
+   * senza un dettaglio che dica cosa deve esserci alla fine, a cui è tornato
+   * un piano: non si chiede al modello se è lavoro, perché non lo è — è il
+   * caso del diciotto settembre, e la domanda è quella del risultato.
+   */
+  const pianoPerUnObiettivo = !dettaglioDellaRiga(nota) && sembraUnObiettivo(compito) && sembraUnPiano(pulita)
+  const ripiego = vistoEDomanda
+    ? { chiede: true, manca: [] as string[], domanda: ultima, visto: senzaTrattini(righe[0]).slice(0, 240) }
+    : pianoPerUnObiettivo
+      ? { chiede: true, manca: [cfgLingua() === 'en' ? 'expected result' : 'risultato atteso'], domanda: domandaDelRisultato() }
+      : { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? pulita : '' }
+  if (ripiego.chiede && (vistoEDomanda || pianoPerUnObiettivo)) return ripiego
   let e = await chiama()
   if (!e || typeof e.chiede !== 'boolean') return ripiego
   if (ripiego.chiede) return ripiego

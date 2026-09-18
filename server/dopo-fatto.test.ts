@@ -78,7 +78,7 @@ test('una riga fatta di un progetto: il traguardo in memoria, e il passo dopo in
 
 test('se il modello non sa il passo dopo lo chiede a lui: una domanda per progetto, non due; la risposta va in lista', async () => {
   const p = progetti.scrivi({ nome: 'Borgo', obiettivo: 'Trasloco a marzo' })
-  dopoFatto.perProva({ collegato: () => true, prossimoPasso: async () => null })
+  dopoFatto.perProva({ collegato: () => true, prossimoPasso: async () => null, classificaPasso: async () => ({ tipo: 'passo', passo: 'Mandare le chiavi vecchie all’agenzia' }) })
   const a = riga('Chiamare il notaio', p.id)
   store.cambiaStatoCompito(a, 'fatto')
   assert.deepEqual(await dopoFatto.registraFatto({ genere: 'compito', id: a }), { progetto: 'Borgo', prossimo: 'domanda' })
@@ -182,4 +182,67 @@ test('il seguito di un seguito va avanti; ma se la madre ha già un’altra figl
   assert.equal(seguiti(p.id).length, 2)
   // il traguardo si segna comunque
   assert.equal(fatti(p.id).length, 2)
+})
+
+/*
+ * La risposta a «qual è il passo dopo?» si guarda prima di scrivere.
+ *
+ * «I have completed it, i have approved it.» è finito in lista come una cosa
+ * da fare: «That is a faulty feature.» Uno stato va in memoria e la domanda
+ * si chiude con «segnato»; un passo va in lista; altro si chiude e basta. Gli
+ * stati ovvi non arrivano nemmeno al modello.
+ */
+test('uno stato («l’ho completata, l’ho approvata») va in memoria e non in lista, senza chiamare il modello', async () => {
+  const p = progetti.scrivi({ nome: 'Ombra', obiettivo: 'Approvare le bozze' })
+  dopoFatto.perProva({ collegato: () => true, prossimoPasso: async () => null, classificaPasso: async () => { throw new Error('non doveva chiamare il modello') } })
+  const a = riga('Approve the X draft for Ombra', p.id)
+  store.cambiaStatoCompito(a, 'fatto')
+  assert.equal((await dopoFatto.registraFatto({ genere: 'compito', id: a })).prossimo, 'domanda')
+  const d = store.domandaAperta()!
+  const { esito } = await domande.rispondiADomanda(d.id, 'I have completed it, i have approved it.')
+  assert.equal(esito, 'Me lo sono segnato.')
+  assert.equal(seguiti(p.id).length, 0, 'uno stato non è una riga da fare')
+  const detto = memoria.projectEvidence(p.id).find(r => r.key === 'lavoro-attuale')
+  assert.equal(detto?.kind, 'work')
+  assert.equal(detto?.value, 'Told me: I have completed it, i have approved it.')
+  assert.equal(store.domanda(d.id)?.stato, 'risposta')
+})
+
+test('il modello decide quello che il filtro non vede: uno stato va in memoria, un passo in lista con le sue parole, altro si segna e basta', async () => {
+  const p = progetti.scrivi({ nome: 'Pino', obiettivo: 'Un progetto' })
+  const chieste: string[] = []
+  dopoFatto.perProva({ collegato: () => true, prossimoPasso: async () => null, classificaPasso: async o => {
+    chieste.push(o.risposta)
+    if (/Apple/.test(o.risposta)) return { tipo: 'stato' }
+    if (/contract/.test(o.risposta)) return { tipo: 'passo', passo: 'Send the signed contract to Rossi' }
+    return { tipo: 'altro' }
+  } })
+  const a = riga('Prepare the build for Pino', p.id)
+  store.cambiaStatoCompito(a, 'fatto')
+  assert.equal((await dopoFatto.registraFatto({ genere: 'compito', id: a })).prossimo, 'domanda')
+  let d = store.domandaAperta()!
+  // uno stato che il filtro non riconosce: lo dice il modello
+  assert.equal((await domande.rispondiADomanda(d.id, 'Apple is reviewing the build since Monday.')).esito, 'Me lo sono segnato.')
+  assert.equal(seguiti(p.id).length, 0)
+  assert.equal(memoria.projectEvidence(p.id).find(r => r.key === 'lavoro-attuale')?.value, 'Told me: Apple is reviewing the build since Monday.')
+  // la settimana di silenzio dopo una risposta si salta riaprendo il tema a mano
+  const riapri = () => { const gia = store.domandaPerTema(`fatto:${p.id}`)!; store.riapriDomanda(gia.id, 'Qual è il passo dopo?', []); return store.domandaAperta()! }
+  // un passo: la riga con le parole del modello, che comincia con un verbo
+  d = riapri()
+  assert.equal((await domande.rispondiADomanda(d.id, 'we should probably get the contract signed by Rossi and send it over')).esito, 'In lista per Pino: «Send the signed contract to Rossi».')
+  assert.deepEqual(seguiti(p.id).map(c => c.testo), ['Send the signed contract to Rossi'])
+  // altro: si chiude e basta
+  d = riapri()
+  assert.equal((await domande.rispondiADomanda(d.id, 'Good question, let me think about it')).esito, 'Me lo sono segnato.')
+  assert.equal(seguiti(p.id).length, 1)
+  assert.equal(chieste.length, 3)
+})
+
+test('senza modello, quello che il filtro non riconosce come stato resta un passo, com’era', async () => {
+  const p = progetti.scrivi({ nome: 'Quercia', obiettivo: 'Un progetto' })
+  dopoFatto.perProva({ collegato: () => false, prossimoPasso: async () => null, classificaPasso: async () => { throw new Error('senza modello non si chiama') } })
+  const d = store.apriDomanda({ tema: `fatto:${p.id}`, testo: 'Qual è il passo dopo?', spunto: [], progetto: p.id })!
+  assert.equal(await dopoFatto.rispostaSulPasso(d, 'Chiamare il commercialista per la fattura'), 'In lista per Quercia: «Chiamare il commercialista per la fattura».')
+  assert.equal(await dopoFatto.rispostaSulPasso(d, 'L\'ho già mandata ieri'), 'Me lo sono segnato.')
+  assert.deepEqual(seguiti(p.id).map(c => c.testo), ['Chiamare il commercialista per la fattura'])
 })

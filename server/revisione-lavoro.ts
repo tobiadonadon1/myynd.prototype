@@ -157,6 +157,62 @@ function nonDisponibile(per: string): Giudizio {
   return { esito: 'unavailable', per, comeTe: '', comeLoro: '', problemi: [], verificato: [] }
 }
 
+/**
+ * Il controllo zero: è il lavoro chiesto, o qualcos'altro al suo posto?
+ *
+ * Il diciotto settembre il revisore ha fatto passare «Not relevant. Closely
+ * related repeats should not be surfaced again.» come risposta a «Reply to
+ * App Review…», e con ragione dal suo punto di vista: nessun fatto inventato,
+ * nessuna cifra sbagliata. Non c'era un controllo che chiedesse se quella
+ * cosa fosse il lavoro. Adesso c'è, e sta nel codice prima del modello: una
+ * riga di stato, un rifiuto, un commento, una domanda, o un piano quando era
+ * chiesta una cosa scritta, non passano — a prescindere da cosa dice il
+ * modello. Pura, esportata, e volutamente stretta: quello che non riconosce
+ * lo giudica il revisore con la regola scritta nel prompt.
+ */
+const NON_LAVORO = /^(?:not\s+relevant|irrelevant|no\s+action(?:\s+(?:needed|required|taken))?|nothing\s+to\s+(?:do|reply|send|prepare|add|report)|not\s+(?:needed|necessary|applicable)|no\s+need|n\/a|already\s+done|done\.?$|skip(?:ped)?\b|out\s+of\s+scope|no\s+longer\s+relevant|non\s+(?:è\s+)?rilevante|niente\s+da\s+(?:fare|rispondere|mandare|preparare|aggiungere)|nulla\s+da\s+(?:fare|rispondere)|non\s+serve|già\s+fatto|fatto\.?$|non\s+c'?è\s+niente\s+da|non\s+ho\s+niente\s+da|i\s+(?:can'?t|cannot|won'?t|am\s+unable\s+to|do\s+not\s+have|don'?t\s+have|need\s+(?:you|more|the))|i'?m\s+(?:unable|missing)|non\s+posso|non\s+riesco|mi\s+manca|mi\s+mancano|non\s+ho\s+accesso|sorry\b|mi\s+dispiace)/i
+const CHIEDE_UN_TESTO = /\b(?:reply|respond|answer|write(?:\s+(?:to|back))?|draft|send|email|e-mail|message|follow\s*up|rispond\w*|scriv\w*|manda\w*|invia\w*|risposta|messaggio|bozza|follow-?up)\b/i
+const TITOLO_DA_PIANO = /^(?:\*\*|#+\s*)?(?:plan|proposed\s+plan|proposal|approach|next\s+steps|steps|roadmap|action\s+plan|piano|proposta(?:\s+di\s+piano)?|approccio|prossimi\s+passi|passi|scaletta)\b/i
+const E_UN_MESSAGGIO = /^(?:subject|oggetto|re:|dear|hi|hello|hey|ciao|gentile|buongiorno|buonasera|salve|caro|cara|good\s+(?:morning|afternoon|evening))\b/im
+const E_UNA_DECISIONE = /\b(?:decid\w*|scegl\w*|choose|pick|which|quale|quali|yes\s+or\s+no|sì\s+o\s+no|should\s+(?:i|we)|conviene|meglio)\b/i
+
+export function eUnLavoro(risultato: string, compito: string): boolean {
+  const pulito = risultato.replace(/\*\*|__|^#+\s*/gm, '').trim()
+  if (!pulito) return false
+  const righe = pulito.split('\n').map(r => r.trim()).filter(Boolean)
+  const prima = righe[0] ?? ''
+  // una riga di stato, un rifiuto, una scusa in testa: non è la cosa
+  if (NON_LAVORO.test(prima)) return false
+  // una domanda e basta: è una richiesta, non un lavoro
+  if (pulito.length <= 300 && pulito.endsWith('?')) return false
+  // troppo corto per essere un lavoro, a meno che non fosse una decisione
+  if (pulito.split(/\s+/).length < 8 && !E_UNA_DECISIONE.test(compito)) return false
+  // un piano quando era chiesta una cosa scritta: il titolo lo dice, o i
+  // passi numerati senza un messaggio attorno
+  if (CHIEDE_UN_TESTO.test(compito) && !E_UN_MESSAGGIO.test(pulito)) {
+    if (TITOLO_DA_PIANO.test(prima)) return false
+    const passi = righe.filter(r => /^(?:\d{1,2}[.)]|step\s+\d|passo\s+\d)\s*/i.test(r)).length
+    if (passi >= 3 && passi >= righe.length - 3) return false
+  }
+  return true
+}
+
+/** Il verdetto quando la cosa consegnata non è il lavoro: si boccia senza chiedere a nessuno. */
+function nonEIlLavoro(per: string): Giudizio {
+  const en = cfg.lingua() === 'en'
+  return {
+    esito: 'revise', per,
+    comeTe: en
+      ? 'This is not the work I asked for. It is a status line, a refusal, a comment or a plan standing in its place.'
+      : 'Non è il lavoro che avevo chiesto. È una riga di stato, un rifiuto, un commento o un piano al suo posto.',
+    comeLoro: en ? 'There is nothing here to read or to act on.' : 'Qui non c\'è niente da leggere né da usare.',
+    problemi: [en
+      ? 'Deliver the thing that was asked, whole. If it cannot be done, say what is missing in one question instead.'
+      : 'Consegna la cosa chiesta, per intero. Se non si può fare, di\' cosa manca con una domanda sola.'],
+    verificato: [en ? 'Whether it is the work that was asked: it is not.' : 'Se è il lavoro chiesto: non lo è.']
+  }
+}
+
 /** Una riga di testo generato, pulita: senza lineette, senza spazi, non oltre il tetto. */
 function riga(s: unknown, tetto: number): string {
   return typeof s === 'string' ? senzaTrattini(s).trim().slice(0, tetto) : ''
@@ -188,6 +244,8 @@ export async function giudica(o: {
   fonti?: { id: string }[]
 }): Promise<Giudizio> {
   const stimato = destinatario(o.doc, o.compito.testo)
+  // il controllo zero non ha bisogno di un modello, e vale anche senza
+  if (!eUnLavoro(o.risultato, o.compito.testo)) return nonEIlLavoro(stimato)
   if (!ferri.collegato()) return nonDisponibile(stimato)
 
   const visti = new Set<string>()
@@ -212,6 +270,11 @@ export async function giudica(o: {
     (carta ? `Chi è lei, e come scrive:\n${carta}\n\n` : '') +
     `Il tono che ha scelto per quello che esce a suo nome: ${cfg.tono()}.\n\n` +
     'Cosa controlli, in quest\'ordine:\n' +
+    '0. Che sia il lavoro chiesto. Una riga di stato («non rilevante», «già fatto»), un ' +
+    'rifiuto, un commento sul compito, una domanda, o un piano e dei passi quando era chiesta ' +
+    'una cosa finita, non passano mai: non sono il lavoro, sono qualcos\'altro al suo posto. ' +
+    'Se il compito era una direzione senza una cosa finita da consegnare, il lavoro giusto ' +
+    'era una domanda sola su cosa deve esserci alla fine, non un piano.\n' +
     '1. I fatti contro le fonti. Ogni nome, cifra, data, prezzo, condizione e stato di ' +
     'avanzamento che compare nel lavoro deve stare negli estratti delle fonti o nel testo del ' +
     'compito. Confrontali uno per uno. Se non c\'è, è inventato, e un lavoro con dentro una ' +

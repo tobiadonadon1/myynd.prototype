@@ -2814,6 +2814,31 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
   const testo = String(req.body?.testo ?? '').trim()
   if (!testo) return res.status(400).json({ errore: 'Scrivi la risposta.' })
 
+  /*
+   * Una risposta che congeda la riga la chiude, non la riaffida.
+   *
+   * «This is not relevant.» attaccato alla nota e riaffidato diventava il
+   * lavoro «Not relevant.», e la rilettura lo faceva passare. Le sue parole:
+   * «He should close it.» Qui si chiude — lasciata con il motivo, o fatta se
+   * dice che l'ha già fatta — e il motivo va in memoria come per ogni altra
+   * chiusura: dirgli perché è il modo in cui impara. `chiuso` nella risposta
+   * dice al client cosa è successo, così può dirlo a sua volta.
+   */
+  const chiusura = compiti.rispostaCheChiude(testo)
+  if (chiusura) {
+    try {
+      store.cambiaStatoCompito(c.id, chiusura, testo)
+      store.scordaChieste(c.id)
+    } catch (e) { return errore(res, e) }
+    res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi(), chiuso: chiusura })
+    compiti.annunciaCambio()
+    // dopo la risposta, mai davanti: la domanda che le aveva fatto sta accanto
+    // al suo perché, così la lezione ha un contesto
+    compiti.imparaDallaChiusura(c, chiusura, testo, c.stato === 'chiede' ? c.risultato : null)
+    if (chiusura === 'fatto') void dopoFatto.registraFatto({ genere: 'compito', id: c.id })
+    return
+  }
+
   try {
     store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${testo}` : testo })
     store.cambiaStatoCompito(c.id, 'aperto')

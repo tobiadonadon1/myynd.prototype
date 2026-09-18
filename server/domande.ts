@@ -278,12 +278,13 @@ export async function rispondiADomanda(id: string, risposta: string): Promise<{ 
   }
 
   /*
-   * «Qual è il passo dopo?» nemmeno: la risposta è il passo, con le sue
-   * parole, e va in lista sotto il progetto. Non c'è una regola da tirarne
-   * fuori, e l'esito dice dove è finita.
+   * «Qual è il passo dopo?» nemmeno: se la risposta è un passo, va in lista
+   * sotto il progetto con le sue parole; se è uno stato («l'ho approvata»),
+   * va nella memoria del progetto e basta. A distinguere è `dopo-fatto.ts`,
+   * e l'esito dice dove è finita.
    */
   if (questa?.tema.startsWith(dopoFatto.TEMA)) {
-    const esito = dopoFatto.rispostaSulPasso(questa, pulita)
+    const esito = await dopoFatto.rispostaSulPasso(questa, pulita)
     store.chiudiDomanda(id, 'risposta', pulita, esito)
     return { esito }
   }

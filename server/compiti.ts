@@ -30,6 +30,11 @@ import * as chi from './chi.ts'
 import * as cfg from './config.ts'
 import * as invio from './invio.ts'
 import * as progetti from './progetti.ts'
+import * as riferimento from './riferimento.ts'
+import * as lavoro from './lavoro.ts'
+import { OSPITATO } from './ospitato.ts'
+import { nominaAmbito } from './ambiti-memoria.ts'
+import { projectMemoryContext } from './project-memory.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
 import { senzaTrattini, soloDomanda } from './testo.ts'
@@ -257,6 +262,8 @@ type Ferri = {
   giudica: typeof giudica
   /** La cosa dopo, in una riga: sesta, e l'ultima. */
   prossimoPasso: typeof prossimoPasso
+  /** Quello che si impara chiudendo una riga: settima, per poter guardare cosa impara. */
+  distilla: typeof memoria.distilla
 }
 const VERI: Ferri = {
   salvaBozzaCasella,
@@ -266,6 +273,7 @@ const VERI: Ferri = {
   preparaEmail: (...a) => claude.preparaEmail(...a),
   giudica: (...a) => giudica(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
+  distilla: (...a) => memoria.distilla(...a),
   postaCollegata: () => {
     const c = cfg.leggi()
     return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
@@ -323,16 +331,34 @@ async function svolgiUno(id: string, nativa: boolean) {
       }
       annuncia({ fase: 'lavoro', id, passo: p })
     } }
+    /*
+     * Il materiale e le mani di un progetto.
+     *
+     * La cartella di lavoro, la memoria e il riferimento entrano come
+     * materiale (`materialeDelProgetto`). E se la cartella c'è, Claude Code è
+     * installato e la riga è lavoro di codice, la riga si porta dietro
+     * `claude.lavora` con quella cartella: il passo che legge il progetto e
+     * scrive cosa farebbe. Un'automazione ha già i suoi attrezzi e la sua
+     * cartella, e non si toccano.
+     */
+    const materiale = progetto && progetto.stato !== 'chiuso' ? materialeDelProgetto(progetto) : null
+    const cartella = dato?.cartella ?? materiale?.cartella?.percorso ?? null
+    const concessi = [
+      ...((dato?.nomi ?? []) as attrezzi.Nome[]),
+      ...(!dato && cartella && leManiSulCodice(c.testo, c.nota) ? ['claude.lavora' as attrezzi.Nome] : [])
+    ]
+    if (materiale?.cartella) console.info(`myynd · worker · project-folder · ${id} · ${materiale.cartella.id}${concessi.includes('claude.lavora') ? ' · claude.lavora' : ''}`)
     const lavora = (notaGiro: string | null) => ferri.svolgi(
       c.testo, notaGiro, c.modo,
-      (dato?.nomi ?? []) as attrezzi.Nome[],
-      dato?.cartella ?? null,
+      concessi,
+      cartella,
       passo,
       // la riga può essere nata da un documento preciso — «rispondere a
       // Rossi» — e allora la bozza parte da lì, non da una ricerca
       c.doc,
       dato,
-      { nativa, signal: controller.signal, taskId: c.id }
+      { nativa, signal: controller.signal, taskId: c.id },
+      materiale
     )
 
     /*
@@ -374,7 +400,7 @@ async function svolgiUno(id: string, nativa: boolean) {
       // qualcosa da mandare. Adesso si distingue, e la riga lo dice.
       esito = uscita.eseguito
         ? { chiede: !!uscita.consegna?.revisione && uscita.consegna.revisione.esito !== 'pass', domanda: '' }
-        : uscita.daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo)
+        : uscita.daChiedere ? { chiede: true, domanda: testo } : await ferri.chiedeAiuto(c.testo, testo, notaGiro)
       if (richiamati.has(chiave(id))) return
       if (esito.chiede || uscita.eseguito || !RILETTI.has(c.modo)) break
 
@@ -483,6 +509,104 @@ async function svolgiUno(id: string, nativa: boolean) {
     }
     annuncia({ fase: 'guaio', id, guaio })
   }
+}
+
+/**
+ * Il materiale di un progetto, per chi lavora su una sua riga.
+ *
+ * Tre cose, e finora non arrivava nessuna delle tre. La cartella di lavoro
+ * sul disco — il documento `lavoro:<cartella>` con il README, gli ultimi
+ * commit e gli appunti — si trova per nome: il nome del progetto, o uno degli
+ * altri nomi che lui ha dato nel riferimento («Evermute (everwave)»), contro
+ * l'ultimo pezzo del percorso, con la stessa lettura di
+ * `riferimento.registraProgettiNominati`. La memoria del progetto è quella
+ * di `projectMemoryContext`. Il riferimento sono le sue righe che nominano
+ * il progetto, e basta quelle: il resto parla d'altro.
+ *
+ * Non lancia mai: una riga di un progetto senza cartella lavora com'era.
+ */
+export function materialeDelProgetto(p: progetti.Progetto): claude.MaterialeProgetto {
+  const normale = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  let altriNomi: string[] = []
+  let cartella: store.Documento | null = null
+  let testoRiferimento = ''
+  try {
+    altriNomi = [...riferimento.alias()].filter(([, id]) => id === p.id).map(([nome]) => nome)
+    testoRiferimento = riferimento.leggi().testo
+  } catch { /* senza riferimento si va avanti con il nome */ }
+  const nomi = [normale(p.nome), ...altriNomi.map(normale)].filter(n => n.length >= 3)
+  try {
+    const ids = store.idsConPrefisso('lavoro:')
+    const base = (id: string) => normale(id.slice(id.lastIndexOf('/') + 1))
+    const id = ids.find(i => nomi.includes(base(i)))
+      ?? ids.find(i => { const b = base(i); return b.length >= 3 && nomi.some(n => b.startsWith(n) || n.startsWith(b)) })
+    cartella = id ? store.documento(id) : null
+  } catch { /* l'indice può non esserci: la riga lavora senza cartella */ }
+  const righe = testoRiferimento.split(/\n+/).map(r => r.trim())
+    .filter(r => r && (nominaAmbito(r, p.nome) || altriNomi.some(a => nominaAmbito(r, a))))
+  let memoria = ''
+  try { memoria = projectMemoryContext(p.id) } catch { /* la memoria è un di più */ }
+  return { cartella, memoria, riferimento: righe.join('\n').slice(0, 800) }
+}
+
+/**
+ * È lavoro di codice, e c'è chi può metterci le mani?
+ *
+ * `claude.lavora` legge una cartella con Claude Code e scrive cosa farebbe:
+ * costa minuti, e non ha senso per «rispondere a Rossi». Si concede solo
+ * quando la riga parla di codice — un bug, un test, un file, un comando —
+ * e su questa macchina Claude Code c'è e le cartelle sono collegate. Su un
+ * server mai: lì non c'è né l'eseguibile né il disco.
+ */
+const DI_CODICE = /\b(?:code|coding|bug|bugs|test|tests|testing|commit|repo|repository|branch|merge|deploy|build|compile|refactor|script|cli|api|endpoint|migration|schema|database|query|typescript|javascript|python|swift|rust|go\b|node|react|css|html|sql|json|yaml|lint|typecheck|ci\b|pipeline|function|module|package|dependency|dependencies|library|import|export|class|component|server|backend|frontend|route|handler|crash|exception|stack ?trace|regression|codice|baco|errore di compilazione|compilazione|funzione|modulo|pacchetto|dipendenz[ae]|libreria|componente|rotta|migrazione|\w+\.(?:ts|tsx|js|mjs|cjs|py|swift|rs|go|java|kt|rb|sql|sh|yml|yaml|json|md))\b/i
+export function sembraLavoroDiCodice(testo: string, nota?: string | null): boolean {
+  return DI_CODICE.test(`${testo}\n${nota ?? ''}`)
+}
+function leManiSulCodice(testo: string, nota: string | null): boolean {
+  if (OSPITATO || !sembraLavoroDiCodice(testo, nota)) return false
+  try { return !!lavoro.installato() && attrezzi.collegato('claude.lavora') } catch { return false }
+}
+
+/**
+ * Una risposta che non risponde: congeda la riga.
+ *
+ * Il diciotto settembre una riga nata da un obiettivo gli ha fatto una
+ * domanda, lui ha risposto «this is not relevant.», e la rotta ha fatto
+ * quello che faceva con ogni risposta: l'ha attaccata alla nota e ha
+ * riaffidato la riga. Il modello, obbediente, ha consegnato «Not relevant.»
+ * come lavoro, e la rilettura l'ha fatto passare. Le sue parole: «He should
+ * close it. It's not relevant right now.» E: «Me telling him why I removed
+ * something is great so that he can learn.»
+ *
+ * Qui si riconosce la risposta che dice «lascia stare» o «l'ho già fatto» e
+ * la si tratta per quello che è: una chiusura, con il motivo. Pura apposta.
+ * Corta: oltre i duecentoquaranta caratteri è materiale, non un congedo. Si
+ * guarda la prima frase; quello che viene dopo è il perché, e va in memoria.
+ * Ma se dopo c'è un ordine — «not now, use the June figures» — non è un
+ * congedo: è una risposta, e la riga riparte con quella.
+ */
+const RIEMPITIVO = /^(?:(?:no|nah|nope|ok|okay|va bene|beh|mah|yes|sì|si)[,.!]?\s+)?(?:(?:this|that|it|this one|this task|questo|questa|quello|quella|questa cosa|questa riga)(?:'s|’s|\s+is|\s+è|\s+e')?\s+)?(?:(?:really|actually|just|honestly|davvero|proprio|semplicemente)\s+)?/i
+const CODA = /\s+(?:for now|right now|now|at the moment|at this time|anymore|any more|today|per ora|adesso|ora|al momento|oggi|più|piu)$/i
+const LASCIA = /^(?:not (?:relevant|needed|necessary|important|now|required|useful)|no need|no longer (?:relevant|needed|necessary)|irrelevant|unnecessary|pointless|(?:maybe )?later|skip(?: (?:it|this|that|this one))?|drop(?: (?:it|this|that|this one))?|leave it|let it go|forget (?:it|about it)|never ?mind|doesn'?t matter|does not matter|cancel(?: (?:it|this))?|remove (?:it|this)|delete (?:it|this)|not any ?more|non (?:serve|è rilevante|e' rilevante|rilevante|è necessario|e' necessario|necessario|ora|adesso|per ora|importa|conta|è importante|e' importante|serve più|serve piu)|irrilevante|più tardi|piu tardi|lascia(?:mo|lo|la)? (?:stare|perdere)|salta(?:la|lo)?|dopo|togli(?:la|lo)?|cancella(?:la|lo)?|annulla(?:la|lo)?)$/i
+const GIA_FATTO = /^(?:(?:already )?(?:done|completed|finished|handled|sent|approved|closed|resolved|solved|taken care of)(?: already)?|i(?:'ve| have|'d| had| already| have already|'ve already)? (?:did|done|completed|finished|handled|sent|approved|closed|resolved|solved|took care of|taken care of) (?:it|that|this|this one|everything|all|them)(?: already| myself| all)?|(?:è |e' )?(?:già )?(?:fatt[oa]|completat[oa]|mandat[oa]|inviat[oa]|chius[oa]|approvat[oa]|risolt[oa]|finit[oa]|sistemat[oa])(?: tutto)?|(?:l'ho |l’ho |ho |l'abbiamo |l’abbiamo |abbiamo )(?:già )?(?:fatt[oa]|completat[oa]|mandat[oa]|inviat[oa]|chius[oa]|approvat[oa]|risolt[oa]|finit[oa]|sistemat[oa])(?: tutto| io)?)$/i
+/** Un ordine a Myynd dopo il congedo: allora non era un congedo. */
+const ORDINE = /^(?:please |per favore )?(?:send|write|reply|respond|draft|prepare|use|make|add|put|take|go|check|look|find|search|call|book|schedule|update|change|keep|include|remove|ask|tell|try|focus|start|do|manda|scrivi|rispondi|prepara|usa|fai|aggiungi|metti|prendi|vai|controlla|guarda|cerca|chiama|fissa|aggiorna|cambia|tieni|includi|togli|chiedi|di'|prova|comincia|parti)\b/i
+
+export function rispostaCheChiude(testo: string): 'lasciato' | 'fatto' | null {
+  const pulito = testo.replace(/\s+/g, ' ').trim()
+  if (!pulito || pulito.length > 240) return null
+  const frasi = pulito.split(/\s*[.;:!?\n]+\s*|\s*,\s*/).map(f => f.trim()).filter(Boolean)
+  // «No, skip it»: l'interiezione davanti non è la frase
+  while (frasi.length > 1 && /^(?:no|nah|nope|ok|okay|yes|sì|si|va bene|beh|mah)$/i.test(frasi[0])) frasi.shift()
+  if (!frasi.length) return null
+  const testa = frasi[0].replace(RIEMPITIVO, '').replace(/['’]/g, "'").trim().toLowerCase()
+  // «not relevant now» e «not now»: la coda si toglie, ma non se era la frase
+  const forme = [testa, testa.replace(CODA, '').trim()]
+  const resto = frasi.slice(1)
+  if (resto.some(f => ORDINE.test(f))) return null
+  if (forme.some(f => GIA_FATTO.test(f))) return 'fatto'
+  if (forme.some(f => LASCIA.test(f))) return 'lasciato'
+  return null
 }
 
 /** I modi che passano dalla rilettura: quelli che portano la sua firma. */
@@ -684,14 +808,21 @@ export function imparaSeCorretto(bozza: string | null, tenuto: string) {
 export function imparaDallaChiusura(
   c: { testo: string; nota: string | null },
   stato: string,
-  esito?: string
+  esito?: string,
+  /**
+   * La domanda che Myynd le aveva fatto, se la chiusura è la risposta a una
+   * domanda: «this is not relevant.» detto a «cosa deve esserci alla fine?»
+   * insegna dove passa il confine, e senza la domanda accanto è solo un no.
+   */
+  chiesto?: string | null
 ) {
   const parole = (esito ?? '').trim()
   if (parole.split(/\s+/).filter(Boolean).length < 4) return
 
   const lasciata = stato === 'lasciato'
-  memoria.distilla([
-    { ruolo: 'a', testo: `Aveva in lista: «${c.testo}»${c.nota ? `\nCon questa nota: ${c.nota}` : ''}` },
+  const domanda = (chiesto ?? '').trim()
+  ferri.distilla([
+    { ruolo: 'a', testo: `Aveva in lista: «${c.testo}»${c.nota ? `\nCon questa nota: ${c.nota}` : ''}${domanda ? `\nMyynd le aveva chiesto: ${domanda.slice(0, 400)}` : ''}` },
     {
       ruolo: 'u',
       testo: lasciata

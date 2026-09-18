@@ -69,7 +69,7 @@ test('la rilettura ha davanti il ritratto, il tono, le fonti in estratto e chi r
   })
   const g = await revisione.giudica({
     compito: { testo: 'Rispondere a Rossi con il preventivo' }, nota: 'Progetto: Impianti',
-    risultato: 'Gentile Rossi, l\'impianto base costa 890 euro.',
+    risultato: 'Gentile Rossi, l\'impianto base costa 890 euro, consegna in dieci giorni lavorativi. Un caro saluto.',
     doc: store.documento(rossi.id), progetto: null, fonti: [{ id: listino.id }]
   })
 
@@ -97,18 +97,18 @@ test('la rilettura ha davanti il ritratto, il tono, le fonti in estratto e chi r
 
 test('un «passa» con problemi elencati è un «rivedi»; un «rivedi» senza problemi non è un verdetto', async () => {
   modelloJSON({ esito: 'pass', per: 'chi legge', comeTe: 'Bene.', comeLoro: 'Bene.', problemi: ['Manca la data della consegna'], verificato: [] })
-  const contraddetto = await revisione.giudica({ compito: { testo: 'Riassumere la settimana' }, risultato: 'Lunedì riunione, martedì fiera.' })
+  const contraddetto = await revisione.giudica({ compito: { testo: 'Riassumere la settimana' }, risultato: 'Lunedì riunione con il team, martedì fiera a Rimini, giovedì consegna del preventivo a Rossi.' })
   assert.equal(contraddetto.esito, 'revise')
   assert.deepEqual(contraddetto.problemi, ['Manca la data della consegna'])
 
   modelloJSON({ esito: 'revise', per: 'chi legge', comeTe: 'Non mi convince.', comeLoro: 'Boh.', problemi: [], verificato: [] })
-  const muto = await revisione.giudica({ compito: { testo: 'Riassumere la settimana' }, risultato: 'Lunedì riunione, martedì fiera.' })
+  const muto = await revisione.giudica({ compito: { testo: 'Riassumere la settimana' }, risultato: 'Lunedì riunione con il team, martedì fiera a Rimini, giovedì consegna del preventivo a Rossi.' })
   assert.equal(muto.esito, 'unavailable', 'una bocciatura senza il perché non si può correggere: non è un verdetto')
 })
 
 test('senza fonti lo si dice al revisore, e il destinatario viene dal compito', async () => {
   const ricevute = modelloJSON({ esito: 'pass', per: '', comeTe: 'Va bene.', comeLoro: 'Chiaro.', problemi: [], verificato: ['nomi contro il compito'] })
-  const g = await revisione.giudica({ compito: { testo: 'Mandare il preventivo a Rossi' }, risultato: 'Gentile Rossi, ecco.' })
+  const g = await revisione.giudica({ compito: { testo: 'Mandare il preventivo a Rossi' }, risultato: 'Gentile Rossi, ecco il preventivo per l\'impianto base come richiesto. Un caro saluto.' })
   assert.match(ricevute[0].user, /Nessuna fonte/)
   assert.equal(g.esito, 'pass')
   assert.equal(g.per, 'Rossi', 'con il `per` vuoto vale quello ricavato dal compito')
@@ -117,11 +117,11 @@ test('senza fonti lo si dice al revisore, e il destinatario viene dal compito', 
 test('senza modello non si bussa in rete e il verdetto è «unavailable»; con il modello giù, uguale', async () => {
   cfg.scrivi({ lingua: 'it' })
   revisione.perProva({ collegato: () => false, chiediJSON: async () => { throw new Error('non doveva chiamare nessuno') } })
-  const spento = await revisione.giudica({ compito: { testo: 'Una cosa' }, risultato: 'Fatta.' })
+  const spento = await revisione.giudica({ compito: { testo: 'Una cosa' }, risultato: 'Ecco la cosa preparata per intero, con tutti i punti che servivano a chiuderla.' })
   assert.deepEqual(spento, { esito: 'unavailable', per: 'chi legge', comeTe: '', comeLoro: '', problemi: [], verificato: [] })
 
   revisione.perProva({ collegato: () => true, chiediJSON: async () => null })
-  const giu = await revisione.giudica({ compito: { testo: 'Una cosa' }, risultato: 'Fatta.' })
+  const giu = await revisione.giudica({ compito: { testo: 'Una cosa' }, risultato: 'Ecco la cosa preparata per intero, con tutti i punti che servivano a chiuderla.' })
   assert.equal(giu.esito, 'unavailable')
 })
 
@@ -203,4 +203,122 @@ test('le domande con le opzioni sono una, anche se il modello ne scrive tre', as
   const righe = await claude.domandeDaFare('Reply to H-Farm', 'Which unit? By when?')
   assert.match(ricevute[0].system, /UNA domanda/)
   assert.deepEqual(righe, [{ domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false }])
+})
+
+/*
+ * Il controllo zero: è il lavoro chiesto?
+ *
+ * Il diciotto settembre «Not relevant. Closely related repeats should not be
+ * surfaced again.» è passato come risposta a «Reply to App Review…». Qui si
+ * prova che non passi più, e che non passi *prima* del modello: un revisore
+ * che dice «pass» non conta, e non viene nemmeno chiamato.
+ */
+test('una riga di stato al posto del lavoro è «rivedi», anche se il modello dice «passa», e il modello non si chiama', async () => {
+  const ricevute = modelloJSON({ esito: 'pass', per: 'App Review', comeTe: 'Va bene.', comeLoro: 'Chiaro.', problemi: [], verificato: ['tutto'] })
+  const g = await revisione.giudica({
+    compito: { testo: 'Reply to App Review with the device recording and setup steps' },
+    risultato: 'Not relevant. Closely related repeats should not be surfaced again.'
+  })
+  assert.equal(g.esito, 'revise')
+  assert.equal(ricevute.length, 0, 'il modello non doveva essere chiamato')
+  assert.equal(g.problemi.length, 1)
+  assert.match(g.comeTe, /not the work/i)
+  assert.equal(g.per, 'App Review', 'il destinatario resta quello ricavato dal compito')
+
+  // e vale anche senza modello: il controllo è codice
+  revisione.perProva({ collegato: () => false, chiediJSON: async () => { throw new Error('non doveva chiamare nessuno') } })
+  assert.equal((await revisione.giudica({ compito: { testo: 'Reply to App Review with the recording' }, risultato: 'Not relevant.' })).esito, 'revise')
+})
+
+test('eUnLavoro: rifiuti, stati, domande, piani al posto di un messaggio non sono lavoro; un\'email, un riassunto e una decisione sì', () => {
+  const no = [
+    ['Not relevant. Closely related repeats should not be surfaced again.', 'Reply to App Review with the device recording'],
+    ['Already done.', 'Send the invoice to Rossi'],
+    ['Non rilevante: questa cosa non serve più.', 'Rispondere a Rossi'],
+    ['I cannot do this without access to the mailbox.', 'Reply to Rossi'],
+    ['Which unit is the audit about?', 'Reply to H-Farm about the audit'],
+    ['Plan\n1. Read the thread\n2. Draft the reply\n3. Send it', 'Reply to App Review with the setup steps'],
+    ['1. Collect the recording\n2. Write the steps\n3. Send the reply\n4. Wait', 'Write back to App Review'],
+    ['Sorry, there is nothing to reply to here.', 'Reply to Rossi']
+  ]
+  for (const [r, c] of no) assert.equal(revisione.eUnLavoro(r, c), false, `doveva essere bocciato: «${r}»`)
+  const si = [
+    ['Reply to App Review with the link and the three setup steps.\n\nSubject: Re: Evermute needs more information\n\nHello, here is the recording: https://example.com/x. Steps: 1. Install build 6. 2. Tap Allow. 3. Open Reels.\n\nLink from [1].', 'Reply to App Review with the device recording'],
+    ['Gentile Rossi, l\'impianto base costa 980 euro, consegna in dieci giorni. Un caro saluto.', 'Rispondere a Rossi con il preventivo'],
+    ['1. Monday: team meeting.\n2. Tuesday: fair in Rimini.\n3. Thursday: quote sent to Rossi.', 'Summarize the week'],
+    ['June, because the audit uses June [1].', 'Decide: June or July figures?']
+  ]
+  for (const [r, c] of si) assert.equal(revisione.eUnLavoro(r, c), true, `doveva passare: «${r}»`)
+})
+
+test('il revisore legge il controllo zero nel prompt', async () => {
+  const ricevute = modelloJSON({ esito: 'pass', per: 'Rossi', comeTe: 'Va bene.', comeLoro: 'Chiaro.', problemi: [], verificato: ['tutto'] })
+  await revisione.giudica({ compito: { testo: 'Mandare il preventivo a Rossi' }, risultato: 'Gentile Rossi, ecco il preventivo per l\'impianto base come richiesto. Un caro saluto.' })
+  assert.equal(ricevute.length, 1)
+  assert.match(ricevute[0].system, /0\. Che sia il lavoro chiesto/)
+})
+
+/*
+ * Gli obiettivi non sono compiti.
+ *
+ * «Ingest one controlled real source in H-Brain production» non ha una cosa
+ * finita che esista quando è fatto. La forma si riconosce senza modello, e
+ * chi classifica non trasforma il piano in lavoro: la domanda è una sola.
+ */
+test('sembraUnObiettivo riconosce la forma dell\'obiettivo e lascia stare i compiti con una cosa da consegnare', () => {
+  for (const t of [
+    'Ingest one controlled real source in H-Brain production',
+    'Execute one permitted action and verify its result',
+    'Solidificare i sistemi',
+    'Sistemare il sito',
+    'Capire cosa fare del progetto',
+    'Set up the ingestion pipeline end-to-end',
+    'Improve retention'
+  ]) assert.equal(claude.sembraUnObiettivo(t), true, `doveva essere un obiettivo: «${t}»`)
+  for (const t of [
+    'Reply to App Review with the device recording and setup steps',
+    'Mandare il preventivo a Rossi',
+    'Summarize the H-Brain thread for Marta',
+    'Write a plan for the H-Brain ingestion',
+    'Prepara la scaletta della riunione',
+    'Approve the X draft',
+    'Decide between June and July figures'
+  ]) assert.equal(claude.sembraUnObiettivo(t), false, `non doveva essere un obiettivo: «${t}»`)
+  assert.equal(claude.dettaglioDellaRiga('Progetto: H-Brain\nObiettivo: Cervello d\'azienda'), '')
+  assert.equal(claude.dettaglioDellaRiga('Progetto: H-Brain\nObiettivo: Cervello\nA CSV with 100 rows in the prod table'), 'A CSV with 100 rows in the prod table')
+})
+
+test('a un obiettivo nudo con un piano al posto del lavoro, chi classifica risponde con la domanda del risultato senza chiamare il modello', async () => {
+  const ricevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
+  const piano = 'Here is how I would approach it.\n\n1. Identify a controlled source\n2. Configure the ingestion job\n3. Run it in production\n4. Verify the rows\n\nSources: none.'
+  const e = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', piano, 'Progetto: H-Brain\nObiettivo: Cervello d\'azienda')
+  assert.equal(ricevute.length, 0, 'il modello non doveva essere chiamato')
+  assert.equal(e.chiede, true)
+  assert.equal(e.domanda, 'What should exist when this is done?')
+
+  // con un dettaglio sotto la riga il piano non è più nudo: decide il modello
+  const conDettaglioRicevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
+  const conDettaglio = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', piano, 'Progetto: H-Brain\nGive me a plan in four steps')
+  assert.equal(conDettaglio.chiede, false)
+  assert.equal(conDettaglioRicevute.length, 1)
+  assert.match(conDettaglioRicevute[0].user, /Con questo dettaglio: Give me a plan in four steps/)
+
+  // due righe, l'ultima con la domanda: è la forma giusta, e si tiene com'è
+  const due = await claude.chiedeAiuto('Ingest one controlled real source in H-Brain production', 'I read the H-Brain folder: the README describes an ingestion job with no source configured.\nWhat should exist when this is done?')
+  assert.deepEqual(due, { chiede: true, manca: [], domanda: 'What should exist when this is done?', visto: 'I read the H-Brain folder: the README describes an ingestion job with no source configured.' })
+  assert.equal(conDettaglioRicevute.length, 1, 'due righe con la domanda in fondo non si mandano al modello')
+
+  // un'email di due righe che finisce con una domanda è lavoro: va al modello
+  const emailRicevute = modelloJSON({ chiede: false, manca: [], domanda: '', visto: '' })
+  const email = await claude.chiedeAiuto('Reply to Rossi', 'Hi Rossi, thanks for the quote.\nWhich slot works for you on Tuesday?')
+  assert.equal(email.chiede, false)
+  assert.equal(emailRicevute.length, 1)
+})
+
+test('soloLaDomandaDelRisultato tiene le due righe giuste e rimpiazza un piano con la domanda', () => {
+  cfg.scrivi({ lingua: 'en' })
+  assert.equal(claude.soloLaDomandaDelRisultato('I read the folder: no source is configured.\n\nWhat should exist when this is done?'), 'I read the folder: no source is configured.\nWhat should exist when this is done?')
+  assert.equal(claude.soloLaDomandaDelRisultato('I read the H-Brain README and the last commits.\n\n1. Pick a source\n2. Configure the job\n3. Run it\n4. Verify'), 'I read the H-Brain README and the last commits.\nWhat should exist when this is done?')
+  assert.equal(claude.soloLaDomandaDelRisultato('1. Pick a source\n2. Configure the job\n3. Run it'), 'What should exist when this is done?')
+  assert.equal(claude.soloLaDomandaDelRisultato('Plan\n1. Pick a source\n2. Configure\n3. Run\nWhich source?'), 'What should exist when this is done?')
 })
