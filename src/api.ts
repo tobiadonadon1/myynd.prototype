@@ -1044,7 +1044,7 @@ export const api = {
 
   /** Il pezzo che gli mancava: si attacca al compito e il lavoro riparte. */
   rispondiCompito: (id: string, testo: string) =>
-    json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/rispondi`,
+    json<{ ok: true; compiti: Compito[]; chiuso?: 'lasciato' | 'fatto' | null }>(`/api/compiti/${encodeURIComponent(id)}/rispondi`,
       { method: 'POST', body: JSON.stringify({ testo }) }),
 
   /**

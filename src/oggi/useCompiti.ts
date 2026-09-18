@@ -362,8 +362,11 @@ export function useCompiti(
     try {
       const r = await api.rispondiCompito(id, testo)
       setCompiti(r.compiti)
+      // «non è rilevante» a una sua domanda non riparte: chiude, e lo si dice
+      if (r.chiuso === 'lasciato') mostraToast(t('Lasciata, con il tuo perché: me lo ricordo.'))
+      else if (r.chiuso === 'fatto') mostraToast(t('Segnata come fatta.'))
     } catch { indietro(prima, id, t('Non sono riuscito a rispondergli.')) }
-  }, [indietro])
+  }, [indietro, mostraToast])
 
   const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; progetto?: string | null }): Promise<boolean> => {
     const prima = compitiRef.current
