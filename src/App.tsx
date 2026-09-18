@@ -435,9 +435,14 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               <div style={{ maxHeight: 116, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
                 {/* la conversazione con Myynd: ha un nome e una faccia, e sta in cima finché c'è */}
                 {v.intervista && (
+                  // `app-porta-chat`: mentre la settimana è aperta prende lei
+                  // tutta la finestra, e questa porta si toglie di mezzo. La
+                  // regola sta in `agenda.css`, la classe sul corpo la mette
+                  // `Agenda.tsx`
                   <div role="button" tabIndex={0} aria-current={v.isChat || undefined} onClick={v.goChat} onKeyDown={daTastiera(v.goChat)}
+                    className="app-porta-chat"
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 10, cursor: 'pointer', background: 'rgba(255,255,255,.92)' }}>
-                    <Mascotte size={32} style={{ flex: 'none' }} />
+                    <span className="app-mascotte" style={{ flex: 'none', lineHeight: 0 }}><Mascotte size={32} /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '12.5px', fontWeight: 500 }}>Myynd</div>
                       <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{v.chatDaLeggere ? t('Ha qualche domanda per te.') : t('Fatto.')}</div>
