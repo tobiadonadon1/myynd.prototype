@@ -29,10 +29,36 @@ changes, like the cover and the pages of one book.
 - **Motion.** One easing for reveals (`cubic-bezier(.16,1,.3,1)`), one glass
   card recipe. Reduced-motion is honoured everywhere.
 
-Tokens live in `src/tema.ts` (TypeScript; the shared styles in `src/ui.tsx`
-read the gradient and the deep copper from it) and as CSS variables in
-`src/index.css` (the page-title rule reads `--serif`). Older inline styles
-still carry literal values; move them to the tokens as they are touched.
+Tokens live as CSS custom properties in `src/index.css` — every colour in the
+app now descends from them, including the ones written inline in TSX, which
+carry `var(--…)` strings. `src/tema.ts` keeps the few TypeScript constants and
+the theme switch. Nothing should introduce a new literal colour.
+
+## Night (18 September 2026)
+
+The desk has two hours of the day now. **System, Light, Dark**, in Preferences
+next to the language; System is the default and follows the computer. The
+choice is saved on the profile as `tema` and mirrored into `localStorage` under
+`myynd.tema`, so the first paint is already right before the profile answers.
+
+The night is **warm and deep, never cold grey and never black**. The ground is
+the near-black brown the app already had on its dark card (`#1F1A17`); cards are
+`#3A2F28`, raised surfaces `#4A3A31`, text is the same ivory at 92%. Copper is
+still the only accent in both worlds, and green still only means a state.
+
+How it works: a handful of `*-rgb` triplets (`--inchiostro-rgb`, `--carta-rgb`,
+`--luce-rgb`, `--rame-rgb`, `--salvia-rgb`, `--ombra-rgb`) plus named tokens
+(`--pagina`, `--carta`, `--carta-piena`, `--carta-alta`, `--filo`, `--pieno`,
+`--inchiostro`, `--rame-testo`, `--ombra-carta`, `--carta-scura`…). Half the app
+writes `rgba(var(--inchiostro-rgb),.5)` for a hairline or a second-level text,
+and at night that one line becomes ivory on brown without anyone rewriting it.
+`color-scheme` follows, so inputs, selects and scrollbars are native-dark too.
+
+Three things stay the same in both: the copper (`--rame`, `--gradiente-rame`),
+the ivory that sits **on** copper and on the dark card (`--avorio`, and
+`--su-avorio` for what is written on the ivory itself), and the warm brown
+gradient of the dark card (`--carta-scura`). They are the pieces of night the
+app already wore by day.
 
 ## The first run
 

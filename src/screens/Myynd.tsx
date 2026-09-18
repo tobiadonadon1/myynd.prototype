@@ -23,8 +23,8 @@ import { velato } from '../colori-progetto'
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
 const PIENO_SCURO: CSSProperties = {
-  padding: '12px 26px', borderRadius: 99, border: '1px solid #FFF7F0', background: '#FFF7F0', color: '#22271F',
-  fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(30,20,14,.3)', cursor: 'pointer', fontFamily: 'inherit'
+  padding: '12px 26px', borderRadius: 99, border: '1px solid var(--avorio)', background: 'var(--avorio)', color: 'var(--su-avorio)',
+  fontSize: 14, fontWeight: 500, boxShadow: '0 10px 24px rgba(var(--ombra-rgb),.3)', cursor: 'pointer', fontFamily: 'inherit'
 }
 
 /*
@@ -38,13 +38,13 @@ const PIENO_SCURO: CSSProperties = {
  */
 const RIGA: CSSProperties = { position: 'relative', padding: '12px 21px 7px', transition: 'background .15s' }
 const TITOLO: CSSProperties = { fontSize: '14.5px', fontWeight: 500, lineHeight: 1.4, overflowWrap: 'anywhere', textWrap: 'pretty' }
-const PERCHE: CSSProperties = { fontSize: '13px', lineHeight: 1.5, color: 'rgba(34,39,31,.64)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }
-const OFFERTA: CSSProperties = { ...PERCHE, color: 'rgba(34,39,31,.78)', marginTop: 5 }
-const QUANDO: CSSProperties = { flex: 'none', fontSize: 12, color: 'rgba(34,39,31,.5)', marginTop: 2, whiteSpace: 'nowrap' }
+const PERCHE: CSSProperties = { fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.64)', marginTop: 3, textWrap: 'pretty', overflowWrap: 'anywhere' }
+const OFFERTA: CSSProperties = { ...PERCHE, color: 'rgba(var(--inchiostro-rgb),.78)', marginTop: 5 }
+const QUANDO: CSSProperties = { flex: 'none', fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2, whiteSpace: 'nowrap' }
 /** La pastiglia a destra: l'urgenza di una voce, o quello che una riga aspetta da te. */
 const PASTIGLIA: CSSProperties = {
-  flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.02em', color: '#8E3F1F',
-  background: 'rgba(196,98,59,.14)', border: '1px solid rgba(196,98,59,.3)', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap'
+  flex: 'none', fontSize: '11.5px', fontWeight: 600, letterSpacing: '.02em', color: 'var(--rame-testo)',
+  background: 'rgba(var(--rame-rgb),.14)', border: '1px solid rgba(var(--rame-rgb),.3)', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap'
 }
 /**
  * La pastiglia di una cosa finita: rame pieno, non il rame velato dell'attesa.
@@ -56,21 +56,21 @@ const PASTIGLIA: CSSProperties = {
  * direbbe più niente.
  */
 const PASTIGLIA_FATTA: CSSProperties = {
-  ...PASTIGLIA, color: '#FFF7F0', background: '#C4623B', borderColor: '#C4623B'
+  ...PASTIGLIA, color: 'var(--avorio)', background: 'var(--rame)', borderColor: 'var(--rame)'
 }
 /** Il nome del progetto in cima al blocco: maiuscoletto spaziato, nel suo colore. */
 const NOME: CSSProperties = { fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' }
 /** Un gesto scritto piccolo, senza bordo: quello che si fa di rado. */
-const GESTO: CSSProperties = { padding: '2px 0', border: 'none', background: 'none', color: 'rgba(34,39,31,.55)', fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }
+const GESTO: CSSProperties = { padding: '2px 0', border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.55)', fontSize: '12.5px', fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }
 /** Il bottone della riga: uno solo per riga, ed è quello che si fa quasi sempre. */
 const PILLOLA: CSSProperties = {
-  padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)',
-  color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap'
+  padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.7)',
+  color: 'rgba(var(--inchiostro-rgb),.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap'
 }
-const PILLOLA_SOPRA: CSSProperties = { borderColor: '#C4623B', color: '#8E3F1F' }
+const PILLOLA_SOPRA: CSSProperties = { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }
 /** Un link scritto nel rame: la sottolineatura c'è solo sotto il dito. */
 const LINK: CSSProperties = {
-  padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F', cursor: 'pointer',
+  padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)', cursor: 'pointer',
   textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', textAlign: 'left'
 }
 /**
@@ -82,11 +82,11 @@ const LINK: CSSProperties = {
  */
 const MANDA: CSSProperties = {
   flex: 'none', padding: '8px 16px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
   fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
 }
 const MANDA_SPENTO: CSSProperties = {
-  ...MANDA, background: 'rgba(34,39,31,.1)', color: 'rgba(34,39,31,.3)', cursor: 'default'
+  ...MANDA, background: 'rgba(var(--inchiostro-rgb),.1)', color: 'rgba(var(--inchiostro-rgb),.3)', cursor: 'default'
 }
 
 /** Un gesto dentro una riga che è essa stessa un bersaglio: il clic non deve risalire. */
@@ -106,7 +106,7 @@ function Fascia({ attiva, sinistra, destra }: { attiva: boolean; sinistra?: Reac
       display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4, minHeight: 22,
       opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s'
     }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.55)' }}>{sinistra}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 7px', minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.55)' }}>{sinistra}</div>
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px' }}>{destra}</div>
     </div>
@@ -167,16 +167,16 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
     v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
   }
 
-  const fatto = <Hov as="button" type="button" onClick={fermo(() => v.risolviVoce(voce))} style={proposta && lista ? GESTO : PILLOLA} hover={proposta && lista ? { color: '#8E3F1F' } : PILLOLA_SOPRA}>{t('Fatto')}</Hov>
+  const fatto = <Hov as="button" type="button" onClick={fermo(() => v.risolviVoce(voce))} style={proposta && lista ? GESTO : PILLOLA} hover={proposta && lista ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{t('Fatto')}</Hov>
   const affidalo = lista && (
     <Hov as="button" type="button" onClick={fermo(() => { void affida() })} disabled={affidando}
-      style={{ ...(proposta ? PILLOLA : GESTO), opacity: affidando ? .6 : 1 }} hover={proposta ? PILLOLA_SOPRA : { color: '#8E3F1F' }}>{t('Affidalo a Myynd')}</Hov>
+      style={{ ...(proposta ? PILLOLA : GESTO), opacity: affidando ? .6 : 1 }} hover={proposta ? PILLOLA_SOPRA : { color: 'var(--rame-testo)' }}>{t('Affidalo a Myynd')}</Hov>
   )
 
   return (
     <div role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
       aria-expanded={espandibile ? aperta : undefined}
-      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}>
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={TITOLO}>{carta.titolo}</div>
@@ -203,8 +203,8 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
         destra={
           <>
             {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
-            <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Parlane in chat')}</Hov>
-            <Hov as="button" type="button" onClick={fermo(() => v.scartaVoce(voce))} title={t('Toglila dal feed')} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
+            <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
+            <Hov as="button" type="button" onClick={fermo(() => v.scartaVoce(voce))} title={t('Toglila dal feed')} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
           </>
         } />
     </div>
@@ -290,8 +290,8 @@ function provenienza(c: Compito, v: Vals, l?: Lista): { testo: string; apri?: ()
 function Prove({ c, v, l, scuro, inRiga }: { c: Compito; v: Vals; l?: Lista; scuro?: boolean; inRiga?: boolean }) {
   const da = provenienza(c, v, l)
   if (!da) return null
-  const quieto = scuro ? 'rgba(255,247,240,.68)' : 'rgba(34,39,31,.55)'
-  const acceso = scuro ? '#FFF7F0' : '#8E3F1F'
+  const quieto = scuro ? 'rgba(var(--avorio-rgb),.68)' : 'rgba(var(--inchiostro-rgb),.55)'
+  const acceso = scuro ? 'var(--avorio)' : 'var(--rame-testo)'
   const link: CSSProperties = {
     maxWidth: 260, minWidth: 0, padding: 0, border: 'none', background: 'none',
     fontFamily: 'inherit', fontSize: '12.5px', color: quieto, cursor: 'pointer', textAlign: 'left',
@@ -367,12 +367,12 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Com
   const etichetta = anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF') : c.consegna ? `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}` : nomePorta(c.porta!)
   const vestito: CSSProperties = scuro
     ? {
-        padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(255,247,240,.32)',
-        background: 'none', color: 'rgba(255,247,240,.9)', fontSize: 14
+        padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(var(--avorio-rgb),.32)',
+        background: 'none', color: 'rgba(var(--avorio-rgb),.9)', fontSize: 14
       }
     : piatto ? LINK : {
-        padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
-        background: 'rgba(255,255,255,.7)', color: 'rgba(34,39,31,.72)', fontSize: 12
+        padding: '4px 11px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)',
+        background: 'rgba(var(--luce-rgb),.7)', color: 'rgba(var(--inchiostro-rgb),.72)', fontSize: 12
       }
 
   return (
@@ -380,7 +380,7 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Com
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
       title={c.consegna?.titolo ?? etichetta}
       style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
-      hover={scuro ? { background: 'rgba(255,247,240,.16)', borderColor: 'rgba(255,247,240,.5)' } : piatto ? { textDecorationColor: 'currentColor' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
+      hover={scuro ? { background: 'rgba(var(--avorio-rgb),.16)', borderColor: 'rgba(var(--avorio-rgb),.5)' } : piatto ? { textDecorationColor: 'currentColor' } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
       {etichetta}
     </Hov>
   )
@@ -494,7 +494,7 @@ function Riletta({ c, chiaro = false }: { c: Compito; chiaro?: boolean }) {
   const r = c.revisione
   if (c.stato !== 'pronto' || !r || r.esito === 'unavailable') return null
   return (
-    <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? 'rgba(34,39,31,.58)' : 'rgba(255,247,240,.72)', textWrap: 'pretty' }}>
+    <div style={{ marginTop: chiaro ? 5 : 12, maxWidth: 600, fontSize: chiaro ? '12.5px' : '13px', lineHeight: 1.5, color: chiaro ? 'rgba(var(--inchiostro-rgb),.58)' : 'rgba(var(--avorio-rgb),.72)', textWrap: 'pretty' }}>
       {frasi.riletta(r.per || t('chi la riceve'), r.esito, r.giri)}
       {r.esito === 'revise' && r.problemi.length > 0 && (
         <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
@@ -562,7 +562,7 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
     <div style={{ marginTop: 9 }} onClick={e => e.stopPropagation()}>
       {tutte.map((q, i) => (
         <div key={i} style={{ marginTop: i ? 9 : 0 }}>
-          <div style={{ fontSize: '13px', lineHeight: 1.45, color: '#22271F', overflowWrap: 'anywhere' }}>{q.domanda}</div>
+          <div style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--inchiostro)', overflowWrap: 'anywhere' }}>{q.domanda}</div>
           {q.opzioni.length > 0 && (
             <div role={q.multipla ? 'group' : 'radiogroup'} aria-label={q.domanda} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
               {q.opzioni.map(o => {
@@ -573,11 +573,11 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
                     style={{
                       padding: '5px 11px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
                       cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
-                      border: `1px solid ${presa ? '#C4623B' : 'rgba(34,39,31,.18)'}`,
-                      background: presa ? 'rgba(196,98,59,.14)' : 'rgba(255,255,255,.7)',
-                      color: presa ? '#8E3F1F' : '#22271F'
+                      border: `1px solid ${presa ? 'var(--rame)' : 'rgba(var(--inchiostro-rgb),.18)'}`,
+                      background: presa ? 'rgba(var(--rame-rgb),.14)' : 'rgba(var(--luce-rgb),.7)',
+                      color: presa ? 'var(--rame-testo)' : 'var(--inchiostro)'
                     }}
-                    hover={presa ? { borderColor: '#8E3F1F' } : { borderColor: '#C4623B', color: '#8E3F1F' }}>{o}</Hov>
+                    hover={presa ? { borderColor: 'var(--rame-testo)' } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{o}</Hov>
                 )
               })}
             </div>
@@ -594,8 +594,8 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
           placeholder={t('Rispondi qui')}
           style={{
             flex: 1, minWidth: 0, padding: '7px 12px', borderRadius: 11,
-            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.85)',
-            color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.85)',
+            color: 'var(--inchiostro)', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
           }} />
         <button type="button" onClick={fermo(manda)} disabled={!qualcosa} style={qualcosa ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
       </div>
@@ -610,7 +610,7 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
         {siPuoParlarne() && (
           <Hov as="button" type="button" onClick={fermo(() => portaInChat(frasi.scomponi(c.testo)))}
             title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
-            style={{ ...LINK, color: 'rgba(34,39,31,.55)' }} hover={{ color: '#8E3F1F', textDecorationColor: 'currentColor' }}>{t('Scomponila in chat')}</Hov>
+            style={{ ...LINK, color: 'rgba(var(--inchiostro-rgb),.55)' }} hover={{ color: 'var(--rame-testo)', textDecorationColor: 'currentColor' }}>{t('Scomponila in chat')}</Hov>
         )}
       </div>
     </div>
@@ -658,13 +658,13 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   return (
     <div className="task-aurora-host task-aurora-row" data-working={affidato || undefined}
       {...(espandibile ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri), 'aria-expanded': aperta } : {})}
-      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(255,255,255,.34)' : 'transparent' }}
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent' }}
       {...props}>
       {affidato && <AuroraCompito />}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {affidato && <Glifo tipo="penso" dim={12} colore="#C4623B" />}
+            {affidato && <Glifo tipo="penso" dim={12} colore="var(--rame)" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
           {testo && <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>}
@@ -696,21 +696,21 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
                 <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Manda')}</Hov>
               )}
               {pronto && (
-                <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Rifallo')}</Hov>
+                <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Rifallo')}</Hov>
               )}
               {c.stato === 'aperto' && (
                 <>
-                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Se ne occupa Myynd')}</Hov>
-                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'bozza'))} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Fanne una bozza')}</Hov>
+                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Se ne occupa Myynd')}</Hov>
+                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'bozza'))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Fanne una bozza')}</Hov>
                 </>
               )}
               {parlane && (
-                <Hov as="button" type="button" onClick={fermo(parlane)} style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Parlane in chat')}</Hov>
+                <Hov as="button" type="button" onClick={fermo(parlane)} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
               )}
               {!c.consegna && <Portami c={c} l={l} v={v} piatto />}
               {/* niente «Sicuro?»: toglierla è la decisione, non l'inizio di una domanda */}
               <Hov as="button" type="button" title={t('Toglila')} onClick={fermo(() => { void l.elimina(c.id) })}
-                style={GESTO} hover={{ color: '#8E3F1F' }}>{t('Toglila')}</Hov>
+                style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Toglila')}</Hov>
             </>
           )} />
     </div>
@@ -725,7 +725,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
  */
 function Seguito({ c }: { c: Compito }) {
   return (
-    <div style={{ padding: '0 21px 12px', marginTop: -2, fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', overflowWrap: 'anywhere' }}>
+    <div style={{ padding: '0 21px 12px', marginTop: -2, fontSize: '12.5px', lineHeight: 1.45, color: 'rgba(var(--inchiostro-rgb),.6)', overflowWrap: 'anywhere' }}>
       <span style={{ fontWeight: 600 }}>{t('Poi:')}</span> {c.testo}
     </div>
   )
@@ -761,7 +761,7 @@ function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative
     <div ref={riga} role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
       style={{
         ...RIGA, padding: '13px 21px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-        background: attiva ? 'rgba(255,255,255,.34)' : 'transparent',
+        background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent',
         boxShadow: accesa ? `inset 0 0 0 2px ${colore}` : 'inset 0 0 0 2px transparent', transition: 'background .15s, box-shadow .3s'
       }}>
       <Marchio dim={14} animato={false} />
@@ -770,12 +770,12 @@ function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative
         {item.description && <div style={PERCHE}>{taglia(item.description, 150)}</div>}
       </div>
       {item.taskId && lista
-        ? <Hov as="button" type="button" onClick={fermo(() => { lista.chiediDiAprire(item.taskId!); v.goOggi() })} title={t('Apri il compito')} style={bottone} hover={{ background: '#FFFFFF' }}>{t('Apri il compito')}</Hov>
-        : <Hov as="button" type="button" onClick={fermo(parla)} title={t('Parliamone in chat')} style={bottone} hover={{ background: '#FFFFFF' }}>{t('Parliamone')}</Hov>}
+        ? <Hov as="button" type="button" onClick={fermo(() => { lista.chiediDiAprire(item.taskId!); v.goOggi() })} title={t('Apri il compito')} style={bottone} hover={{ background: 'var(--carta-alta)' }}>{t('Apri il compito')}</Hov>
+        : <Hov as="button" type="button" onClick={fermo(parla)} title={t('Parliamone in chat')} style={bottone} hover={{ background: 'var(--carta-alta)' }}>{t('Parliamone')}</Hov>}
       <Hov as="button" type="button" onClick={fermo(() => { void v.scartaIniziativa(item.id) })}
         title={t('Toglila dal feed')}
         style={{ ...GESTO, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}
-        hover={{ color: '#8E3F1F' }}>{t('Non mi interessa')}</Hov>
+        hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
     </div>
   )
 }
@@ -805,8 +805,8 @@ function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
   const { attiva, props } = useAttiva()
   const [sopra, setSopra] = useState(false)
   const suo = b.progetto !== null
-  const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(34,39,31,.5)'
-  const filo = suo ? velato(colore, .18) : 'rgba(34,39,31,.09)'
+  const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(var(--inchiostro-rgb),.5)'
+  const filo = suo ? velato(colore, .18) : 'rgba(var(--inchiostro-rgb),.09)'
   const apriProgetto = () => { if (b.progetto) v.apriProgetto(b.progetto) }
 
   /*
@@ -840,13 +840,13 @@ function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
       onDragOver={sorvola} onDragLeave={() => setSopra(false)} onDrop={posa}
       style={{
         flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'hidden',
-        background: suo ? `linear-gradient(0deg, ${velato(colore, .10)}, ${velato(colore, .10)}), rgba(255,253,249,.84)` : 'rgba(255,253,249,.66)',
+        background: suo ? `linear-gradient(0deg, ${velato(colore, .10)}, ${velato(colore, .10)}), rgba(var(--carta-rgb),.84)` : 'rgba(var(--carta-rgb),.66)',
         backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
-        border: `1px solid ${suo ? velato(colore, .34) : 'rgba(255,255,255,.7)'}`,
+        border: `1px solid ${suo ? velato(colore, .34) : 'rgba(var(--luce-rgb),.7)'}`,
         // dove si posa: un filo di rame in cima, e niente altro. Un blocco che
         // si illumina tutto mentre ne trascini un altro sembra il bersaglio
         // sbagliato — quello che cambia è il posto, e il posto è la riga sopra
-        boxShadow: sopra ? `inset 0 3px 0 #C4623B, 0 22px 52px rgba(84,64,44,.09)` : '0 22px 52px rgba(84,64,44,.09)'
+        boxShadow: sopra ? `inset 0 3px 0 var(--rame), 0 22px 52px rgba(var(--ombra-rgb),.09)` : '0 22px 52px rgba(var(--ombra-rgb),.09)'
       }}>
       <div draggable onDragStart={prendi} onDragEnd={() => setSopra(false)} {...props}
         title={t('Trascinalo per cambiare ordine')}
@@ -864,10 +864,10 @@ function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}>
           <Hov as="button" type="button" disabled={indice === 0} onClick={() => muovi(indice, indice - 1)}
             aria-label={`${t('Sposta su')}: ${b.nome}`}
-            style={{ ...GESTO, opacity: indice === 0 ? .35 : 1, cursor: indice === 0 ? 'default' : 'pointer' }} hover={{ color: '#8E3F1F' }}>{t('Sposta su')}</Hov>
+            style={{ ...GESTO, opacity: indice === 0 ? .35 : 1, cursor: indice === 0 ? 'default' : 'pointer' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta su')}</Hov>
           <Hov as="button" type="button" disabled={ultimo} onClick={() => muovi(indice, indice + 1)}
             aria-label={`${t('Sposta giù')}: ${b.nome}`}
-            style={{ ...GESTO, opacity: ultimo ? .35 : 1, cursor: ultimo ? 'default' : 'pointer' }} hover={{ color: '#8E3F1F' }}>{t('Sposta giù')}</Hov>
+            style={{ ...GESTO, opacity: ultimo ? .35 : 1, cursor: ultimo ? 'default' : 'pointer' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta giù')}</Hov>
         </div>
       </div>
       {b.righe.map((r, i) => {
@@ -917,15 +917,15 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
             : v.headline}</h1>
           <div style={{
             marginTop: 9, paddingLeft: 3, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
-            color: 'rgba(34,39,31,.5)', textTransform: 'capitalize'
+            color: 'rgba(var(--inchiostro-rgb),.5)', textTransform: 'capitalize'
           }}>{v.oggi}</div>
         </div>
         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, flexWrap: 'wrap' }}>
           <Rassegna />
           <Hov as="a" href="#" onClick={v.goConn}
-            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(34,39,31,.78)', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.9)', borderRadius: 99, padding: '5px 11px' }}
-            hover={{ background: '#FFFFFF' }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? '#5C7660' : '#B0705A' }} />
+            style={{ flex: 'none', marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.78)', background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--luce-rgb),.9)', borderRadius: 99, padding: '5px 11px' }}
+            hover={{ background: 'var(--carta-alta)' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: v.connCount ? 'var(--salvia)' : 'var(--ambra)' }} />
             {frasi.fontiEDocumenti(v.connCount, v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'), v.totaleDocumenti === 1)}
           </Hov>
           {/* «Leggi adesso» era un bottone pieno di rame che chiedeva attenzione:
@@ -936,11 +936,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
             title={v.generando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
             style={{
               flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '50%', border: '1px solid rgba(196,98,59,.35)', background: 'rgba(255,255,255,.7)',
-              color: '#C4623B', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
+              borderRadius: '50%', border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
+              color: 'var(--rame)', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
               opacity: v.generando ? 0.55 : 1, animation: v.generando ? 'pulse 1.2s ease-in-out infinite' : undefined
             }}
-            hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>
+            hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
             <IconOcchio size={15} />
           </Hov>
         </div>
@@ -951,11 +951,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
           cima a tutto, perché rispondergli viene prima del resto. */}
       {v.chatDaLeggere && (
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'linear-gradient(130deg,#8e3f1f,#a66b4c 60%,#4a3a31)', color: '#FFF7F0', padding: '18px 22px', marginBottom: 14, boxShadow: '0 22px 52px rgba(84,64,44,.18)' }}>
-          <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: '#FFF7F0' }} />
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'var(--carta-scura)', color: 'var(--avorio)', padding: '18px 22px', marginBottom: 14, boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.18)' }}>
+          <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: 'var(--avorio)' }} />
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Myynd ti ha scritto.')}</div>
-            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(255,247,240,.78)', marginTop: 3, textWrap: 'pretty' }}>{t('Ha qualche domanda per conoscerti: due minuti.')}</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--avorio-rgb),.78)', marginTop: 3, textWrap: 'pretty' }}>{t('Ha qualche domanda per conoscerti: due minuti.')}</div>
           </div>
           <button onClick={v.goChat} style={{ ...PIENO_SCURO, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Rispondi')} <IconAvanti /></button>
         </div>
@@ -964,10 +964,10 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       {/* Il primo progetto, dalla prima pagina e non da una carta in fondo alle
           preferenze: finché non c'è, è la cosa che manca, e si dice qui. */}
       {v.senzaProgetto && (
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '18px 22px', marginBottom: 14 }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', borderRadius: 20, background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.75)', padding: '18px 22px', marginBottom: 14 }}>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontSize: 15, fontWeight: 500 }}>{t('Nessun progetto ancora.')}</div>
-            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3, textWrap: 'pretty' }}>{t('Un progetto e un obiettivo: da lì scelgo cosa conta.')}</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 3, textWrap: 'pretty' }}>{t('Un progetto e un obiettivo: da lì scelgo cosa conta.')}</div>
           </div>
           <button onClick={v.avviaOnboarding} style={{ ...BOTTONE, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{t('Configura il progetto')} <IconAvanti /></button>
         </div>
@@ -1029,14 +1029,14 @@ function Avviso({ v }: { v: Vals }) {
   return (
     <div role="status" style={{
       flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
-      padding: '10px 16px', borderRadius: 14, background: 'rgba(196,98,59,.10)', border: '1px solid rgba(196,98,59,.28)',
-      color: '#8E3F1F', fontSize: 13, lineHeight: 1.5
+      padding: '10px 16px', borderRadius: 14, background: 'rgba(var(--rame-rgb),.10)', border: '1px solid rgba(var(--rame-rgb),.28)',
+      color: 'var(--rame-testo)', fontSize: 13, lineHeight: 1.5
     }}>
-      <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: '#C4623B' }} />
+      <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: 'var(--rame)' }} />
       <span style={{ flex: '1 1 220px', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{frase}</span>
       <Hov as="a" href="#" onClick={v.goConn}
-        style={{ flex: 'none', color: '#8E3F1F', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
-        hover={{ color: '#22271F' }}>{t('Vai alle Fonti')}</Hov>
+        style={{ flex: 'none', color: 'var(--rame-testo)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+        hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Fonti')}</Hov>
     </div>
   )
 }
@@ -1060,16 +1060,16 @@ function Domanda({ v }: { v: Vals }) {
     return (
       <div style={{
         display: 'flex', alignItems: 'flex-start', gap: 13, marginTop: 16, padding: '18px 20px',
-        borderRadius: 20, border: '1px solid rgba(126,156,130,.4)',
-        background: 'rgba(126,156,130,.12)', animation: 'fadein .3s ease'
+        borderRadius: 20, border: '1px solid rgba(var(--salvia-rgb),.4)',
+        background: 'rgba(var(--salvia-rgb),.12)', animation: 'fadein .3s ease'
       }}>
         <IconSpunta style={{ flex: 'none', marginTop: 1 }} />
-        <div style={{ flex: 1, minWidth: 0, fontSize: '15px', lineHeight: 1.55, color: '#22271F', textWrap: 'pretty' }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: '15px', lineHeight: 1.55, color: 'var(--inchiostro)', textWrap: 'pretty' }}>
           {t(v.esitoDom)}
         </div>
         <Hov as="button" onClick={v.chiudiEsito} title={t('Chiudi')} aria-label={t('Chiudi')}
-          style={{ flex: 'none', border: 'none', background: 'none', color: 'rgba(34,39,31,.4)', fontSize: 17, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
-          hover={{ color: '#22271F' }}>×</Hov>
+          style={{ flex: 'none', border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.4)', fontSize: 17, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
+          hover={{ color: 'var(--inchiostro)' }}>×</Hov>
       </div>
     )
   }
@@ -1104,16 +1104,16 @@ function Domanda({ v }: { v: Vals }) {
       position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13, flexWrap: lunga ? 'wrap' : 'nowrap',
       margin: '14px 0 4px', padding: lunga ? '14px 16px' : '10px 14px 10px 15px',
       borderRadius: 16,
-      background: 'linear-gradient(258deg, rgba(255,253,249,.82) 0%, rgba(255,253,249,.46) 55%, rgba(255,253,249,.16) 100%)',
+      background: 'linear-gradient(258deg, rgba(var(--carta-rgb),.82) 0%, rgba(var(--carta-rgb),.46) 55%, rgba(var(--carta-rgb),.16) 100%)',
       backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
-      border: '1px solid rgba(255,255,255,.55)',
-      borderLeft: '2px solid rgba(196,98,59,.55)',
-      boxShadow: '0 10px 30px -14px rgba(84,64,44,.3), inset 0 1px 0 rgba(255,255,255,.5)',
+      border: '1px solid rgba(var(--luce-rgb),.55)',
+      borderLeft: '2px solid rgba(var(--rame-rgb),.55)',
+      boxShadow: '0 10px 30px -14px rgba(var(--ombra-rgb),.3), inset 0 1px 0 rgba(var(--luce-rgb),.5)',
       animation: 'fadein .3s ease'
     }}>
       <Marchio dim={14} animato={false} />
 
-      <span style={{ fontSize: '15px', color: '#22271F', flex: lunga ? '1 1 100%' : 'none', maxWidth: lunga ? 640 : 300, textWrap: 'pretty', lineHeight: 1.35 }}>
+      <span style={{ fontSize: '15px', color: 'var(--inchiostro)', flex: lunga ? '1 1 100%' : 'none', maxWidth: lunga ? 640 : 300, textWrap: 'pretty', lineHeight: 1.35 }}>
         {v.domanda.testo}
       </span>
 
@@ -1129,8 +1129,8 @@ function Domanda({ v }: { v: Vals }) {
           rows={5}
           placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
           style={{
-            flex: '1 1 100%', minWidth: 0, padding: '8px 10px', border: '1px solid rgba(34,39,31,.16)', borderRadius: 10,
-            background: 'rgba(255,255,255,.55)', color: '#22271F', fontSize: '14px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
+            flex: '1 1 100%', minWidth: 0, padding: '8px 10px', border: '1px solid rgba(var(--inchiostro-rgb),.16)', borderRadius: 10,
+            background: 'rgba(var(--luce-rgb),.55)', color: 'var(--inchiostro)', fontSize: '14px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
           }} />
       ) : (
         <input
@@ -1143,8 +1143,8 @@ function Domanda({ v }: { v: Vals }) {
           placeholder={t('Bastano cinque parole')}
           style={{
             flex: 1, minWidth: 90, padding: '5px 2px', border: 'none',
-            borderBottom: '1px solid rgba(34,39,31,.2)', background: 'none',
-            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+            borderBottom: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'none',
+            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
           }} />
       )}
 
@@ -1152,31 +1152,31 @@ function Domanda({ v }: { v: Vals }) {
         style={{
           flex: 'none', border: 'none', background: 'none', padding: '4px 2px',
           fontFamily: 'inherit', fontSize: 16, lineHeight: 1,
-          color: v.rispostaDom.trim() ? '#8E3F1F' : 'rgba(34,39,31,.25)',
+          color: v.rispostaDom.trim() ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.25)',
           cursor: v.rispostaDom.trim() ? 'pointer' : 'default'
         }}
-        hover={v.rispostaDom.trim() ? { color: '#C4623B' } : {}}><IconAvanti size={14} /></Hov>
+        hover={v.rispostaDom.trim() ? { color: 'var(--rame)' } : {}}><IconAvanti size={14} /></Hov>
 
       <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
-        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(34,39,31,.34)', cursor: 'pointer' }}
-        hover={{ color: '#8E3F1F' }}>?</Hov>
+        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.34)', cursor: 'pointer' }}
+        hover={{ color: 'var(--rame-testo)' }}>?</Hov>
 
       <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')} aria-label={t('Lascia perdere: non te lo richiedo')}
-        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', color: 'rgba(34,39,31,.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-        hover={{ color: '#22271F' }}>×</Hov>
+        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', color: 'rgba(var(--inchiostro-rgb),.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
+        hover={{ color: 'var(--inchiostro)' }}>×</Hov>
 
       {v.spuntoAperto && (
         <div style={{
           position: 'absolute', zIndex: 25, marginTop: 4, top: '100%', left: 15, maxWidth: 420,
-          padding: '11px 14px', borderRadius: 13, background: '#FFFDF9',
-          border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 18px 44px rgba(30,20,14,.24)',
+          padding: '11px 14px', borderRadius: 13, background: 'var(--carta-piena)',
+          border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 18px 44px rgba(var(--ombra-rgb),.24)',
           animation: 'fadein .16s ease'
         }}>
-          <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', lineHeight: 1.5, marginBottom: 5 }}>
+          <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', lineHeight: 1.5, marginBottom: 5 }}>
             {t('Hai tolto di mezzo queste senza dirmi perché:')}
           </div>
           {v.domanda.spunto.slice(0, 4).map((x, i) => (
-            <div key={i} style={{ fontSize: '12px', color: 'rgba(34,39,31,.68)', lineHeight: 1.65 }}>— {x}</div>
+            <div key={i} style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.68)', lineHeight: 1.65 }}>— {x}</div>
           ))}
         </div>
       )}
@@ -1193,8 +1193,8 @@ function Vuoto({ v }: { v: Vals }) {
   if (!v.feedCaricato || v.guastoLettura) return null
   if (v.guastoFeed) {
     return (
-      <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '32px 28px' }}>
-        <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(34,39,31,.82)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.guastoFeed}</div>
+      <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.75)', padding: '32px 28px' }}>
+        <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.82)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.guastoFeed}</div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={v.ricaricaFeed} style={BOTTONE}>{t('Riprova')}</button>
         </div>
@@ -1202,11 +1202,11 @@ function Vuoto({ v }: { v: Vals }) {
     )
   }
   return (
-    <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(255,253,249,.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.75)', padding: '32px 28px' }}>
+    <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.75)', padding: '32px 28px' }}>
       {/* Una riga, non tre. Quello che c'era prima spiegava anche come funziona
           la memoria delle risposte — vero, e non è il momento di dirlo: chi
           guarda uno schermo vuoto vuole sapere cosa fare adesso. */}
-      <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(34,39,31,.82)', textWrap: 'pretty' }}>
+      <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.82)', textWrap: 'pretty' }}>
         {senzaFonti
           ? t('Non hai collegato niente.')
           : senzaDocumenti
@@ -1236,6 +1236,6 @@ function Vuoto({ v }: { v: Vals }) {
 
 const BOTTONE: React.CSSProperties = {
   padding: '11px 20px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
   fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }

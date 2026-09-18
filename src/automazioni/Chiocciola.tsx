@@ -25,8 +25,8 @@ import { IconCroce } from '../icons'
 
 export const RIGO: CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 13,
-  border: '1px solid rgba(34,39,31,.15)', background: 'rgba(255,255,255,.72)',
-  color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
+  border: '1px solid rgba(var(--inchiostro-rgb),.15)', background: 'rgba(var(--luce-rgb),.72)',
+  color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
 }
 
 /**
@@ -55,14 +55,14 @@ export function Pastiglia({ a, stacca, dim = 'normale' }: {
         padding: p ? '2px 7px' : '3px 9px 3px 8px', borderRadius: 99,
         fontSize: p ? '10.5px' : '11.5px', fontWeight: 500, whiteSpace: 'nowrap',
         maxWidth: '100%', overflow: 'hidden',
-        background: a.collegato ? `${a.tinta}1A` : 'rgba(34,39,31,.05)',
-        border: `1px solid ${a.collegato ? `${a.tinta}44` : 'rgba(34,39,31,.14)'}`,
-        color: a.collegato ? a.tinta : 'rgba(34,39,31,.42)'
+        background: a.collegato ? `${a.tinta}1A` : 'rgba(var(--inchiostro-rgb),.05)',
+        border: `1px solid ${a.collegato ? `${a.tinta}44` : 'rgba(var(--inchiostro-rgb),.14)'}`,
+        color: a.collegato ? a.tinta : 'rgba(var(--inchiostro-rgb),.42)'
       }}>
       <span style={{
         width: p ? 5 : 6, height: p ? 5 : 6, borderRadius: '50%', flex: 'none',
         background: a.collegato ? a.tinta : 'transparent',
-        border: a.collegato ? 'none' : '1px solid rgba(34,39,31,.3)'
+        border: a.collegato ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.3)'
       }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.etichetta}</span>
       {stacca && (
@@ -172,15 +172,15 @@ export function Casella({
         <div style={{
           position: 'absolute', zIndex: 20, left: 6, right: 6, top: '100%', marginTop: 5,
           borderRadius: 16, overflow: 'hidden', padding: 5,
-          background: 'rgba(255,253,249,.97)',
+          background: 'rgba(var(--carta-rgb),.97)',
           backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)',
-          border: '1px solid rgba(255,255,255,.9)',
-          boxShadow: '0 22px 50px -14px rgba(84,64,44,.34)',
+          border: '1px solid rgba(var(--luce-rgb),.9)',
+          boxShadow: '0 22px 50px -14px rgba(var(--ombra-rgb),.34)',
           animation: 'fadein .14s ease'
         }}>
           <div style={{
             fontSize: '10px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase',
-            color: 'rgba(34,39,31,.4)', padding: '6px 10px 5px'
+            color: 'rgba(var(--inchiostro-rgb),.4)', padding: '6px 10px 5px'
           }}>{t('cosa può aprire')}</div>
           {liberi.map((a, i) => (
             <div key={a.nome}
@@ -189,21 +189,21 @@ export function Casella({
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
                 borderRadius: 11, cursor: 'pointer',
-                background: i === scelto ? 'rgba(34,39,31,.06)' : 'transparent'
+                background: i === scelto ? 'rgba(var(--inchiostro-rgb),.06)' : 'transparent'
               }}>
               <span style={{
                 width: 9, height: 9, flex: 'none', borderRadius: '50%',
                 background: a.collegato ? a.tinta : 'transparent',
-                border: a.collegato ? 'none' : '1px solid rgba(34,39,31,.28)',
+                border: a.collegato ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.28)',
                 boxShadow: a.collegato ? `0 0 0 3px ${a.tinta}22` : 'none'
               }} />
-              <span style={{ fontSize: '13.5px', color: '#22271F', flex: 'none' }}>{a.etichetta}</span>
+              <span style={{ fontSize: '13.5px', color: 'var(--inchiostro)', flex: 'none' }}>{a.etichetta}</span>
               <span style={{
-                fontSize: '11.5px', color: 'rgba(34,39,31,.48)', flex: 1, minWidth: 0,
+                fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.48)', flex: 1, minWidth: 0,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
               }}>{a.spiega}</span>
               {!a.collegato && (
-                <span style={{ fontSize: '10px', color: 'rgba(34,39,31,.4)', flex: 'none' }}>{t('da collegare')}</span>
+                <span style={{ fontSize: '10px', color: 'rgba(var(--inchiostro-rgb),.4)', flex: 'none' }}>{t('da collegare')}</span>
               )}
             </div>
           ))}

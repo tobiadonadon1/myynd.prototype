@@ -12,7 +12,7 @@ import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
 /** Il bottone di seconda fila, com'è in «Il tuo accesso» e nel fascicolo. */
 const SECONDARIO: React.CSSProperties = {
   flex: 'none', padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-  border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.78)', fontSize: '13px'
+  border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
 }
 
 /**
@@ -113,7 +113,7 @@ function LApp() {
 
   const RIGA: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }
   const TESTO: React.CSSProperties = { flex: 1, minWidth: 0 }
-  const NOTA: React.CSSProperties = { fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }
+  const NOTA: React.CSSProperties = { fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }
 
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
@@ -127,7 +127,7 @@ function LApp() {
         {agg?.stato === 'pronta' ? (
           <button type="button" onClick={() => d.aggiornamenti.installa()} style={{
             flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
-            background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+            background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
             fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
           }}>{t('Riavvia e aggiorna')}</button>
         ) : agg?.stato !== 'spento' && (
@@ -142,7 +142,7 @@ function LApp() {
           {registro
             ? <div style={{ fontSize: 15 }}>{t('Premi la combinazione nuova…')}</div>
             : <div style={{ fontSize: 15 }}>
-                <span style={{ background: 'rgba(34,39,31,.07)', padding: '2px 9px', borderRadius: 7, letterSpacing: '.06em' }}>{acc ? simboli(acc, d.piattaforma) : '…'}</span>
+                <span style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '2px 9px', borderRadius: 7, letterSpacing: '.06em' }}>{acc ? simboli(acc, d.piattaforma) : '…'}</span>
               </div>}
           <div style={NOTA}>
             {registro
@@ -179,7 +179,7 @@ function LApp() {
         <div style={TESTO}>
           <div style={{ fontSize: 15 }}>{t('I tuoi dati')}</div>
           <div style={NOTA}>
-            <code style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>{dati || '~/.myynd'}</code>
+            <code style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>{dati || '~/.myynd'}</code>
           </div>
         </div>
         <button type="button" disabled={!dati} onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }} style={{ ...SECONDARIO, opacity: dati ? 1 : 0.6 }}>
@@ -187,7 +187,7 @@ function LApp() {
         </button>
       </div>
 
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
 }
@@ -216,12 +216,12 @@ function CampoFuoco({ v }: { v: Vals }) {
           placeholder={t('Questa settimana solo i preventivi e i pagamenti')}
           style={{
             flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
-            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.75)',
-            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.75)',
+            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
           }} />
         <button onClick={() => v.salvaFuoco(testo)} style={{
           flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
-          background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+          background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
         }}>{t('Salva')}</button>
       </div>
@@ -237,7 +237,7 @@ function CampoFuoco({ v }: { v: Vals }) {
       */}
       {v.fuocoDaMe && !!v.fuoco && (
         <div style={{
-          marginTop: 9, fontSize: '12px', color: 'rgba(34,39,31,.5)', textWrap: 'pretty'
+          marginTop: 9, fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', textWrap: 'pretty'
         }}>
           {t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.')}
         </div>
@@ -309,7 +309,7 @@ function Uso() {
     return (
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Quanto ha ragionato')}</div>
-        <div style={{ fontSize: '13.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>
+        <div style={{ fontSize: '13.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>
       </div>
     )
   }
@@ -320,18 +320,18 @@ function Uso() {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Quanto ha ragionato')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {u.oggi.chiamate
           ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
           : t('Oggi ancora niente.')}
-        {u.oggi.raggiunto && <span style={{ color: '#8E3F1F' }}> {t('Tetto raggiunto: si riparte domani.')}</span>}
+        {u.oggi.raggiunto && <span style={{ color: 'var(--rame-testo)' }}> {t('Tetto raggiunto: si riparte domani.')}</span>}
       </div>
       {giorni.length > 1 && (
         <div aria-hidden="true" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 44, marginTop: 14, maxWidth: 320 }}>
           {giorni.map(g => {
             const tot = g.entrata + g.uscita
             return <div key={g.giorno} title={`${g.giorno} · ${mila(tot)}`} style={{
-              flex: 1, height: `${Math.max(8, Math.round(100 * tot / max))}%`, borderRadius: 3, background: 'rgba(196,98,59,.55)'
+              flex: 1, height: `${Math.max(8, Math.round(100 * tot / max))}%`, borderRadius: 3, background: 'rgba(var(--rame-rgb),.55)'
             }} />
           })}
         </div>
@@ -345,12 +345,12 @@ function Uso() {
             className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 160 }} />
         </div>
         <button onClick={salva} disabled={salvo} style={{
-          padding: '10px 18px', borderRadius: 99, border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-          color: 'rgba(34,39,31,.78)', fontSize: '13px', fontFamily: 'inherit', cursor: salvo ? 'default' : 'pointer'
+          padding: '10px 18px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
+          color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px', fontFamily: 'inherit', cursor: salvo ? 'default' : 'pointer'
         }}>{salvo ? t('Un momento…') : t('Salva')}</button>
       </div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 8 }}>{t('Vuoto vuol dire: nessun tetto. Mille token sono circa una pagina.')}</div>
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>}
+      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 8 }}>{t('Vuoto vuol dire: nessun tetto. Mille token sono circa una pagina.')}</div>
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
 }
@@ -383,8 +383,8 @@ function Conto() {
   const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
   const BOTTONE = (acceso: boolean): React.CSSProperties => ({
     padding: '11px 20px', borderRadius: 99, border: 'none',
-    background: acceso ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.18)',
-    color: acceso ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+    background: acceso ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
+    color: acceso ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
     fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: acceso ? 'pointer' : 'default'
   })
 
@@ -415,11 +415,11 @@ function Conto() {
         </button>
         <button onClick={esciOvunque} disabled={!!faccio} style={{
           padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.78)', fontSize: '13px'
+          border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
         }}>{faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}</button>
       </div>
-      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+      {detto && <div style={{ fontSize: '12.5px', color: 'var(--verde-cupo)', marginTop: 10 }}>{detto}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
 }
@@ -480,13 +480,13 @@ function Identita() {
       <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={salva} disabled={!caricato || salvo} style={{
           padding: '11px 20px', borderRadius: 99, border: 'none',
-          background: caricato && !salvo ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.18)',
-          color: caricato && !salvo ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+          background: caricato && !salvo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
+          color: caricato && !salvo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: caricato && !salvo ? 'pointer' : 'default'
         }}>{salvo ? t('Un momento…') : t('Salva')}</button>
-        {detto && <span style={{ fontSize: '12.5px', color: '#3E5140' }}>{detto}</span>}
+        {detto && <span style={{ fontSize: '12.5px', color: 'var(--verde-cupo)' }}>{detto}</span>}
       </div>
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
 }
@@ -526,14 +526,14 @@ function Fascicolo() {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Tutto quello che tengo su di te')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {t('Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.')}
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={scarica} disabled={faccio} style={{
           padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-          color: 'rgba(34,39,31,.78)', fontSize: '13px'
+          border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
+          color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
         }}>{faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica i miei dati')}</button>
         {chiedo && (
           <input type="password" value={password} onChange={e => setPassword(e.target.value)}
@@ -542,8 +542,8 @@ function Fascicolo() {
             className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 220, marginTop: 0 }} />
         )}
       </div>
-      {detto && <div style={{ fontSize: '12.5px', color: '#3E5140', marginTop: 10 }}>{detto}</div>}
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+      {detto && <div style={{ fontSize: '12.5px', color: 'var(--verde-cupo)', marginTop: 10 }}>{detto}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
     </div>
   )
 }
@@ -581,19 +581,19 @@ function Cancella() {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Cancella il conto')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
         {t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}
       </div>
 
       {!aperto ? (
         <button onClick={() => setAperto(true)} style={{
           marginTop: 14, padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(142,63,31,.35)', background: 'rgba(255,255,255,.6)', color: '#8E3F1F', fontSize: '13px'
+          border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.6)', color: 'var(--rame-testo)', fontSize: '13px'
         }}>{t('Voglio cancellare il conto')}</button>
       ) : (
         <div style={{
           marginTop: 12, padding: '14px 15px', borderRadius: 14,
-          border: '1px solid rgba(196,98,59,.35)', background: 'rgba(196,98,59,.08)', maxWidth: 540
+          border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--rame-rgb),.08)', maxWidth: 540
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
             <div>
@@ -610,16 +610,16 @@ function Cancella() {
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button onClick={cancella} disabled={!puo} style={{
               padding: '9px 17px', borderRadius: 99, border: 'none', fontFamily: 'inherit', fontSize: '12.5px',
-              background: puo ? '#8E3F1F' : 'rgba(34,39,31,.18)', color: puo ? '#FFF7F0' : 'rgba(34,39,31,.5)',
+              background: puo ? 'var(--rame-forte)' : 'rgba(var(--inchiostro-rgb),.18)', color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
               cursor: puo ? 'pointer' : 'default'
             }}>{faccio ? t('Un momento…') : t('Cancella tutto, per sempre')}</button>
             <button onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }} style={{
               padding: '9px 17px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-              color: 'rgba(34,39,31,.7)', fontSize: '12.5px'
+              border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
+              color: 'rgba(var(--inchiostro-rgb),.7)', fontSize: '12.5px'
             }}>{t('Lascia stare')}</button>
           </div>
-          {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
+          {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
         </div>
       )}
     </div>
@@ -670,12 +670,12 @@ function CampoArgomenti({ v }: { v: Vals }) {
           placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')}
           style={{
             flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
-            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.75)',
-            color: '#22271F', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
+            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.75)',
+            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
           }} />
         <button onClick={salva} style={{
           flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
-          background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+          background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
           fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
         }}>{salvato ? t('Salvato') : t('Salva')}</button>
       </div>
@@ -699,7 +699,7 @@ function CampoArgomenti({ v }: { v: Vals }) {
       */}
       <div style={{
         display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
-        marginTop: 9, fontSize: '12px', color: 'rgba(34,39,31,.5)'
+        marginTop: 9, fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)'
       }}>
         {v.argomentiDaMe && !!v.argomenti && (
           <span style={{ textWrap: 'pretty' }}>
@@ -709,9 +709,9 @@ function CampoArgomenti({ v }: { v: Vals }) {
         <Hov as="button" type="button" onClick={proponi} disabled={chiedo}
           style={{
             border: 'none', background: 'none', padding: 0, fontFamily: 'inherit',
-            fontSize: '12px', color: '#8E3F1F', cursor: chiedo ? 'default' : 'pointer'
+            fontSize: '12px', color: 'var(--rame-testo)', cursor: chiedo ? 'default' : 'pointer'
           }}
-          hover={chiedo ? {} : { color: '#C4623B' }}>
+          hover={chiedo ? {} : { color: 'var(--rame)' }}>
           {chiedo ? t('Guardo…') : t('Scrivilo da quello che faccio e leggo')}
         </Hov>
         {detto && <span>{detto}</span>}
@@ -720,12 +720,12 @@ function CampoArgomenti({ v }: { v: Vals }) {
       {gusto && (
         <div style={{
           marginTop: 12, padding: '10px 13px', borderRadius: 12,
-          background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.07)'
+          background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.07)'
         }}>
-          <div style={{ ...LABEL, fontSize: '10.5px', color: 'rgba(34,39,31,.45)' }}>
+          <div style={{ ...LABEL, fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>
             {t('Da come leggi')}
           </div>
-          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.7)', marginTop: 5, textWrap: 'pretty' }}>
+          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.7)', marginTop: 5, textWrap: 'pretty' }}>
             {gusto}
           </div>
         </div>
@@ -892,13 +892,13 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
             <div key={x.id} role="radio" aria-checked={scelto} tabIndex={0}
               onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))} style={{
                 display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-                background: scelto ? 'rgba(255,255,255,.85)' : 'transparent',
-                boxShadow: scelto ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+                background: scelto ? 'rgba(var(--luce-rgb),.85)' : 'transparent',
+                boxShadow: scelto ? '0 12px 30px rgba(var(--ombra-rgb),.1)' : 'none'
               }}>
               <span style={{
                 width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-                border: scelto ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
-                background: scelto ? '#FFF7F0' : 'transparent'
+                border: scelto ? '4px solid var(--rame)' : '1.5px solid rgba(var(--inchiostro-rgb),.35)',
+                background: scelto ? 'var(--avorio)' : 'transparent'
               }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -908,19 +908,19 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                   </span>
                   <Hov as="button" type="button"
                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.apri() }}
-                    style={{ flex: 'none', border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.7)', borderRadius: 99, padding: '5px 12px', color: '#22271F', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
-                    hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>
+                    style={{ flex: 'none', border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.7)', borderRadius: 99, padding: '5px 12px', color: 'var(--inchiostro)', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
                     {x.collegato ? t('Gestisci') : t('Collega')}
                   </Hov>
                 </div>
                 {/* da quale strada passa, o cosa manca: sotto il nome, in una riga */}
                 {(riga || guaio) && (
-                  <div style={{ fontSize: '12.5px', marginTop: 5, color: guaio ? '#8E3F1F' : 'rgba(34,39,31,.65)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
+                  <div style={{ fontSize: '12.5px', marginTop: 5, color: guaio ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.65)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
                     {riga ?? guaio}
                   </div>
                 )}
                 {scelto && x.id === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo && (
-                  <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
                     <span>{t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}</span>
                     <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
                   </div>
@@ -931,14 +931,14 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                   lui ha raccontato per prima. Dirlo qui, con la via d'uscita.
                 */}
                 {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
-                  <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8, textWrap: 'pretty' }}>
+                  <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8, textWrap: 'pretty' }}>
                     {t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}
                   </div>
                 )}
                 {scelto && x.id !== 'claude' && (
                   <div style={{
                     fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
-                    border: '1px solid rgba(196,98,59,.28)', background: 'rgba(196,98,59,.07)', color: '#8E3F1F',
+                    border: '1px solid rgba(var(--rame-rgb),.28)', background: 'rgba(var(--rame-rgb),.07)', color: 'var(--rame-testo)',
                     textWrap: 'pretty'
                   }}>
                     {t('Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise — soprattutto le bozze e le fonti citate: rileggile prima di fidarti.')}
@@ -956,8 +956,8 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 /** La pastiglia di un modello: scelta, di rame; altrimenti solo il bordo. */
 function pastigliaModello(scelta: boolean): React.CSSProperties {
   return scelta
-    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
-    : { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }
+    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
+    : { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }
 }
 
 /**
@@ -978,15 +978,15 @@ function Modelli({ v }: { v: Vals }) {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
         {t('Haiku costa un decimo di Sonnet, Opus cinque volte tanto. Scegli dove spendere.')}
       </div>
       <div style={{ marginTop: 8 }}>
         {v.livelli.map(l => (
-          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 14 }}>{l.titolo}</div>
-              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
             </div>
             <div role="radiogroup" aria-label={l.titolo} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {v.modelli.map(m => (
@@ -1036,16 +1036,16 @@ function ModelliOpenAI({ v }: { v: Vals }) {
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
       <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
+      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
         {via === 'account' ? t('I modelli del tuo piano ChatGPT. Vuoto: quello predefinito del piano.') : t('I modelli della tua chiave OpenAI. Il più piccolo per il lavoro di servizio, il migliore per quello che firmi.')}
       </div>
-      {guaio && <div style={{ fontSize: '12.5px', color: '#8E3F1F', marginTop: 8 }}>{guaio}</div>}
+      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8 }}>{guaio}</div>}
       <div style={{ marginTop: 8 }}>
         {v.livelli.map(l => (
-          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(34,39,31,.08)' }}>
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 14 }}>{l.titolo}</div>
-              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(34,39,31,.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
             </div>
             <select aria-label={l.titolo} value={scelti[l.id]} onChange={e => scegli(l.id, e.target.value)}
               className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 'auto', minWidth: 200, maxWidth: '100%', padding: '8px 12px', fontSize: '13px' }}>
@@ -1105,7 +1105,7 @@ export function Preferenze({ v }: { v: Vals }) {
       */}
       <div style={{ ...CARD_GLASS, flex: 'none', borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Su cosa mi concentro')}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
           {t('Viene prima di tutto quando scelgo cosa metterti in prima pagina.')}
         </div>
         <CampoFuoco v={v} />
@@ -1116,7 +1116,7 @@ export function Preferenze({ v }: { v: Vals }) {
           modo per non confonderle. */}
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Di cosa ti tengo aggiornato')}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
           {t('Cosa ti interessa nei giornali. Vuoto: un po’ di tutto.')}
         </div>
         <CampoArgomenti v={v} />
@@ -1128,32 +1128,47 @@ export function Preferenze({ v }: { v: Vals }) {
         <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', gap: 9, marginTop: 14, flexWrap: 'wrap' }}>
           {v.autonomie.map(a => (
             <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick} title={a.nota} style={a.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{a.titolo}</button>
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{a.titolo}</button>
           ))}
         </div>
-        <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(34,39,31,.65)', marginTop: 12, textWrap: 'pretty' }}>{v.autonomie.find(a => a.scelto)?.nota}</div>
+        <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 12, textWrap: 'pretty' }}>{v.autonomie.find(a => a.scelto)?.nota}</div>
         {/* il tono nella stessa carta: sono le due manopole di come lavora e come parla */}
-        <div style={{ height: 1, background: 'rgba(34,39,31,.08)', margin: '18px 0 14px' }} />
+        <div style={{ height: 1, background: 'rgba(var(--inchiostro-rgb),.08)', margin: '18px 0 14px' }} />
         <div style={LABEL}>{t('Tono')}</div>
         <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
           {v.toni.map(tono => (
             <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
           ))}
         </div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(34,39,31,.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
+        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(var(--inchiostro-rgb),.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(var(--inchiostro-rgb),.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
       </div>
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Lingua')}</div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Risposte e prima pagina. I documenti restano nella loro lingua.')}</div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Risposte e prima pagina. I documenti restano nella loro lingua.')}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
           {v.lingue.map(l => (
             <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: l.occupato ? 'rgba(34,39,31,.4)' : '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: l.occupato ? 'rgba(var(--inchiostro-rgb),.4)' : 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
               {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
             </button>
+          ))}
+        </div>
+      </div>
+
+      {/* L'ora del giorno, accanto alla lingua: sono le due cose che
+          cambiano come l'app ti parla e come ti guarda, e si cercano insieme.
+          «Sistema» per primo perche e la risposta giusta per quasi tutti. */}
+      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
+        <div style={LABEL}>{t('Aspetto')}</div>
+        <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Chiaro di giorno, scuro di sera. «Sistema» segue il tuo computer.')}</div>
+        <div role="radiogroup" aria-label={t('Aspetto')} style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
+          {v.temi.map(x => (
+            <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick} style={x.scelto
+              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{x.label}</button>
           ))}
         </div>
       </div>
@@ -1186,11 +1201,11 @@ export function Preferenze({ v }: { v: Vals }) {
 
       <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
         <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(34,39,31,.75)', marginTop: 12, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(var(--inchiostro-rgb),.75)', marginTop: 12, textWrap: 'pretty' }}>
           {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(
-            <code key="directory" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
-            <code key="database" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
-            <code key="config" style={{ background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
+            <code key="directory" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
+            <code key="database" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
+            <code key="config" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
           )}
         </div>
       </div>

@@ -1,18 +1,157 @@
-:root{--fi:1.4;--mo:running}
+/* — La tavolozza —
+   Un'identità sola, due mondi, e adesso anche due ore del giorno.
+
+   Il palco (l'accesso e il primo avvio) resta inchiostro con la luce di rame;
+   la scrivania (l'app) è avorio di giorno e bruno profondo di notte, con lo
+   stesso rame come unico accento in tutti e due. Il verde continua a voler
+   dire una cosa sola: collegato, pronto, fatto.
+
+   I valori veri stanno qui, non più sparsi nei fogli e negli stili in linea:
+   ogni colore dell'app scende da questi nomi. Le triplette `*-rgb` esistono
+   perché mezza applicazione scrive `rgba(<tripletta>,.5)` per un filo o per un
+   testo secondario, e un'alfa dentro una variabile non si può comporre: con la
+   tripletta, `rgba(var(--inchiostro-rgb),.5)` resta una riga sola e di notte
+   diventa crema invece che inchiostro senza che nessuno la riscriva. */
+:root{
+  color-scheme:light;
+  /* le triplette da cui nascono tutti i velati */
+  --inchiostro-rgb:34,39,31;
+  --carta-rgb:255,253,249;
+  --luce-rgb:255,255,255;
+  --rame-rgb:196,98,59;
+  --salvia-rgb:92,118,96;
+  --ombra-rgb:84,64,44;
+  /* la crema non cambia mai: è il testo sopra il rame e sopra la carta scura */
+  --avorio-rgb:255,247,240;
+  /* la grana del fondo: di giorno scurisce, di notte scurisce ancora */
+  --grana-rgb:34,39,31;
+
+  /* le superfici */
+  --pagina:#E7DFD3;
+  --carta:rgba(var(--carta-rgb),.72);
+  --carta-piena:#FFFDF9;
+  --carta-alta:#FFFFFF;
+  --riga:rgba(var(--luce-rgb),.7);
+  --filo:rgba(var(--inchiostro-rgb),.1);
+  --sabbia:#EFE6DA;
+  /* il riempimento pieno e ciò che ci sta sopra: il bottone che decide da solo */
+  --pieno:#22271F;
+  --su-pieno:#FFF7F0;
+
+  /* l'inchiostro */
+  --inchiostro:#22271F;
+  --inchiostro-2:rgba(var(--inchiostro-rgb),.65);
+  --inchiostro-3:rgba(var(--inchiostro-rgb),.45);
+
+  /* il rame: unico accento, uguale nei due mondi tranne dove fa da testo —
+     lì di notte deve schiarire, se no sparisce dentro il bruno */
+  --rame:#C4623B;
+  --rame-cupo:#8E3F1F;
+  --rame-testo:#8E3F1F;
+  --rame-forte:#8E3F1F;
+  --rame-forte-su:#75371D;
+  --rame-profondo:#B24E2E;
+  --ambra:#D98A5A;
+  --gradiente-rame:linear-gradient(120deg,#B24E2E,#D98A5A);
+
+  /* il verde: solo stati, mai decorazione */
+  --salvia:#5C7660;
+  --verde-cupo:#3E5140;
+
+  /* le ombre */
+  --ombra-carta:0 22px 52px rgba(var(--ombra-rgb),.12);
+  --ombra-alta:0 30px 70px rgba(var(--ombra-rgb),.22);
+  --ombra-bassa:0 12px 30px rgba(var(--ombra-rgb),.1);
+
+  /* la carta scura della prima pagina: bruna e calda in tutti e due i mondi,
+     perché è lei il pezzo di notte che l'app aveva già di giorno */
+  --carta-scura-a:#8E3F1F;
+  --carta-scura-b:#A66B4C;
+  --carta-scura-c:#4A3A31;
+  --carta-scura:linear-gradient(130deg,var(--carta-scura-a),var(--carta-scura-b) 60%,var(--carta-scura-c));
+
+  /* le macchie del fondo: `--fi` ne regola l'intensità in blocco */
+  --fi:1.4;
+  --sabbia-viva-rgb:228,205,176;
+  --crema-rgb:244,233,220;
+
+  --mo:running;
+  --avorio:#FFF7F0;
+  /* cio che si scrive sopra la panna: anche di notte la panna resta panna */
+  --su-avorio:#22271F;
+  --serif:'Iowan Old Style','Baskerville','Times New Roman',serif;
+}
+
+/* — La notte —
+   Bruna e calda, mai grigia e mai nera. Il fondo è il bruno quasi nero che la
+   carta scura aveva già; la crema del testo è la stessa di sempre, all'92%
+   perché sul bruno il bianco pieno taglia.
+
+   Il blocco è scritto due volte apposta: una per la scelta esplicita, una per
+   chi lascia decidere al sistema. In CSS i due selettori non si possono
+   mettere sulla stessa riga, perché il secondo vive dentro una media query. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --inchiostro-rgb:255,247,240;
+  --carta-rgb:58,47,40;
+  --luce-rgb:110,88,73;
+  --salvia-rgb:126,156,130;
+  --ombra-rgb:8,5,4;
+  --grana-rgb:0,0,0;
+  --pagina:#1F1A17;
+  --carta-piena:#3A2F28;
+  --carta-alta:#4A3A31;
+  --sabbia:#2A2320;
+  --pieno:#6E5748;
+  --su-pieno:#FFF7F0;
+  --inchiostro:rgba(var(--inchiostro-rgb),.92);
+  --rame-testo:#E8A87C;
+  --rame-forte:#D98A5A;
+  --rame-forte-su:#E8A87C;
+  --ombra-carta:0 22px 52px rgba(0,0,0,.5);
+  --ombra-alta:0 30px 70px rgba(0,0,0,.6);
+  --ombra-bassa:0 12px 30px rgba(0,0,0,.42);
+  --fi:.34;
+  --sabbia-viva-rgb:122,78,50;
+  --crema-rgb:86,58,42;
+  --verde-cupo:#9BB79F;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --inchiostro-rgb:255,247,240;
+    --carta-rgb:58,47,40;
+    --luce-rgb:110,88,73;
+    --salvia-rgb:126,156,130;
+    --ombra-rgb:8,5,4;
+    --grana-rgb:0,0,0;
+    --pagina:#1F1A17;
+    --carta-piena:#3A2F28;
+    --carta-alta:#4A3A31;
+    --sabbia:#2A2320;
+    --pieno:#6E5748;
+    --su-pieno:#FFF7F0;
+    --inchiostro:rgba(var(--inchiostro-rgb),.92);
+    --rame-testo:#E8A87C;
+    --rame-forte:#D98A5A;
+    --rame-forte-su:#E8A87C;
+    --ombra-carta:0 22px 52px rgba(0,0,0,.5);
+    --ombra-alta:0 30px 70px rgba(0,0,0,.6);
+    --ombra-bassa:0 12px 30px rgba(0,0,0,.42);
+    --fi:.34;
+    --sabbia-viva-rgb:122,78,50;
+    --crema-rgb:86,58,42;
+    --verde-cupo:#9BB79F;
+  }
+}
 /* la pagina non scorre mai: scorre l'app dentro di sé. Una barra che compare
    sul documento cambierebbe l'altezza utile, e da lì parte lo sfarfallio. */
 html,body{height:100%;overflow:hidden}
-body{margin:0;background:#E7DFD3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+body{margin:0;background:var(--pagina);color:var(--inchiostro);font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
 /* chi ha chiesto meno movimento al sistema lo ottiene anche qui: il fondo si
    ferma, e con lui la ragione per cui i pannelli sfocati si ridipingono */
 @media (prefers-reduced-motion:reduce){:root{--mo:paused}}
-a{color:#3E5140;text-decoration:none}a:hover{color:#C4623B}
-/* — Il tema —
-   Un'identità sola, due mondi: il palco (accesso e primo avvio) è inchiostro
-   con la luce di rame; la scrivania (l'app) è avorio con lo stesso rame come
-   unico accento. I valori veri stanno in src/tema.ts; qui quelli che il CSS
-   deve poter leggere. */
-:root{--rame:#C4623B;--rame-cupo:#8E3F1F;--ambra:#D98A5A;--inchiostro:#22271F;--avorio:#FFF7F0;--sabbia:#EFE6DA;--salvia:#5C7660;--serif:'Iowan Old Style','Baskerville','Times New Roman',serif}
+a{color:var(--verde-cupo);text-decoration:none}a:hover{color:var(--rame)}
 /* I titoli di pagina parlano con la voce del primo avvio: è il filo più
    visibile fra il palco e la scrivania. Un h1 è sempre un titolo di pagina. */
 h1{font-family:var(--serif);font-weight:400;letter-spacing:-.035em}
@@ -58,38 +197,38 @@ button,input,textarea,select{font-family:inherit}
    illeggibile sulle card scure. È il motivo per cui la casella in fondo alla
    card sembrava vuota e rotta. */
 input,textarea{color:inherit}
-input::placeholder,textarea::placeholder{color:rgba(34,39,31,.45);opacity:1}
-.scuro::placeholder{color:rgba(255,247,240,.58)}
+input::placeholder,textarea::placeholder{color:rgba(var(--inchiostro-rgb),.45);opacity:1}
+.scuro::placeholder{color:rgba(var(--avorio-rgb),.58)}
 /* Un campo spento dice comunque qualcosa di importante — «Collega Claude per
    fare domande» è un'istruzione, non decorazione: il browser lo sbiadirebbe
    fino a renderlo illeggibile. */
 input:disabled,textarea:disabled{-webkit-text-fill-color:currentColor;opacity:1}
-input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(34,39,31,.5);-webkit-text-fill-color:rgba(34,39,31,.5)}
-.scuro:disabled::placeholder{color:rgba(255,247,240,.55);-webkit-text-fill-color:rgba(255,247,240,.55)}
+input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(var(--inchiostro-rgb),.5);-webkit-text-fill-color:rgba(var(--inchiostro-rgb),.5)}
+.scuro:disabled::placeholder{color:rgba(var(--avorio-rgb),.55);-webkit-text-fill-color:rgba(var(--avorio-rgb),.55)}
 
 /* — Il fuoco della tastiera —
    Ogni campo aveva outline:none e niente al suo posto: chi si muove da tastiera
    non sapeva più dov'era. Un anello morbido nel colore dell'accento costa poco
    e rende l'app usabile senza mouse. */
 :where(input,textarea,button,a,[tabindex]):focus-visible{
-  outline:2px solid rgba(196,98,59,.55);outline-offset:2px;border-radius:inherit
+  outline:2px solid rgba(var(--rame-rgb),.55);outline-offset:2px;border-radius:inherit
 }
-.scuro:focus-visible{outline-color:rgba(255,247,240,.75)}
+.scuro:focus-visible{outline-color:rgba(var(--avorio-rgb),.75)}
 
 /* La selezione, nei colori di casa invece che nel blu di sistema */
-::selection{background:#3E5140;color:#FFF7F0}
+::selection{background:var(--verde-cupo);color:var(--avorio)}
 
 /* Le barre di scorrimento interne: presenti quando servono, mai ingombranti */
-*{scrollbar-width:thin;scrollbar-color:rgba(34,39,31,.22) transparent}
+*{scrollbar-width:thin;scrollbar-color:rgba(var(--inchiostro-rgb),.22) transparent}
 *::-webkit-scrollbar{width:10px;height:10px}
-*::-webkit-scrollbar-thumb{background:rgba(34,39,31,.2);border-radius:99px;border:3px solid transparent;background-clip:content-box}
-*::-webkit-scrollbar-thumb:hover{background:rgba(34,39,31,.34);background-clip:content-box}
+*::-webkit-scrollbar-thumb{background:rgba(var(--inchiostro-rgb),.2);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:rgba(var(--inchiostro-rgb),.34);background-clip:content-box}
 *::-webkit-scrollbar-track{background:transparent}
 
 /* la giostra della rassegna: il cursore e il fuoco, che da uno stile in linea non si scrivono */
 .giostra{cursor:grab;outline:none}
 .giostra:active{cursor:grabbing}
-.giostra:focus-visible{outline:2px solid rgba(196,98,59,.65);outline-offset:4px;border-radius:22px}
+.giostra:focus-visible{outline:2px solid rgba(var(--rame-rgb),.65);outline-offset:4px;border-radius:22px}
 
 /* — Dentro l'app, sul Mac —
    La finestra non ha la barra del titolo: i tre semafori stanno in alto a

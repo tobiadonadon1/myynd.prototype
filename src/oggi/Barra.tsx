@@ -131,17 +131,17 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
   const etichetta: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none',
     padding: '4px 9px', borderRadius: 7, fontSize: '11.5px', fontWeight: 500,
-    background: 'rgba(34,39,31,.06)', color: 'rgba(34,39,31,.7)'
+    background: 'rgba(var(--inchiostro-rgb),.06)', color: 'rgba(var(--inchiostro-rgb),.7)'
   }
 
   return (
     <div style={{ position: 'relative', WebkitAppRegion: 'no-drag' } as CSSProperties}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9, padding: '7px 7px 7px 17px',
-        borderRadius: 14, background: 'rgba(255,253,249,.86)',
+        borderRadius: 14, background: 'rgba(var(--carta-rgb),.86)',
         backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-        border: `1px solid ${fuoco ? 'rgba(34,39,31,.26)' : 'rgba(255,255,255,.9)'}`,
-        boxShadow: fuoco ? '0 8px 26px rgba(84,64,44,.10)' : '0 4px 16px rgba(84,64,44,.05)',
+        border: `1px solid ${fuoco ? 'rgba(var(--inchiostro-rgb),.26)' : 'rgba(var(--luce-rgb),.9)'}`,
+        boxShadow: fuoco ? '0 8px 26px rgba(var(--ombra-rgb),.10)' : '0 4px 16px rgba(var(--ombra-rgb),.05)',
         transition: 'border-color .15s, box-shadow .15s'
       }}>
         <input
@@ -158,7 +158,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
           placeholder={giorno ? `${t('Aggiungi per')} ${dataLocale(giorno).toLocaleDateString(linguaPagina === 'it' ? 'it-IT' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' })}` : t('Cosa c\'è da fare')}
           style={{
             flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
-            fontFamily: 'inherit', fontSize: '14.5px', color: '#22271F', padding: '8px 0'
+            fontFamily: 'inherit', fontSize: '14.5px', color: 'var(--inchiostro)', padding: '8px 0'
           }} />
 
         {/* Anche «oggi» ha la sua targhetta: se scegliendo dal menù non cambia
@@ -167,20 +167,20 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
         {(dove !== 'oggi' || vistaScelta) && (
           <span style={{
             ...etichetta,
-            background: dove === 'oggi' ? 'rgba(62,81,64,.12)' : 'rgba(34,39,31,.06)',
-            color: dove === 'oggi' ? '#3E5140' : 'rgba(34,39,31,.7)'
+            background: dove === 'oggi' ? 'rgba(var(--salvia-rgb),.12)' : 'rgba(var(--inchiostro-rgb),.06)',
+            color: dove === 'oggi' ? 'var(--verde-cupo)' : 'rgba(var(--inchiostro-rgb),.7)'
           }}>{t(NOME[dove])}</span>
         )}
         {modo && (
-          <span style={{ ...etichetta, background: 'rgba(196,98,59,.12)', color: '#8E3F1F' }}>
+          <span style={{ ...etichetta, background: 'rgba(var(--rame-rgb),.12)', color: 'var(--rame-testo)' }}>
             {modo === 'bozza' ? t('bozza') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
 
         {!testo && (
           <span style={{
-            flex: 'none', fontSize: '11px', color: 'rgba(34,39,31,.3)',
-            border: '1px solid rgba(34,39,31,.12)', borderRadius: 5, padding: '2px 6px'
+            flex: 'none', fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.3)',
+            border: '1px solid rgba(var(--inchiostro-rgb),.12)', borderRadius: 5, padding: '2px 6px'
           }}>/</span>
         )}
 
@@ -188,8 +188,8 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
           title={t('Aggiungila')} aria-label={t('Aggiungila')}
           style={{
             width: 30, height: 30, flex: 'none', borderRadius: 9, border: 'none',
-            background: testo.trim() ? '#22271F' : 'rgba(34,39,31,.07)',
-            color: testo.trim() ? '#FFF7F0' : 'rgba(34,39,31,.28)',
+            background: testo.trim() ? 'var(--pieno)' : 'rgba(var(--inchiostro-rgb),.07)',
+            color: testo.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.28)',
             display: 'grid', placeItems: 'center',
             cursor: testo.trim() ? 'pointer' : 'default', fontFamily: 'inherit'
           }}><IconPiu size={13} /></button>
@@ -198,9 +198,9 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
       {aperto && (
         <div role="listbox" style={{
           position: 'absolute', top: 'calc(100% + 7px)', left: 0, right: 0, zIndex: 30,
-          borderRadius: 13, background: 'rgba(255,253,249,.97)',
+          borderRadius: 13, background: 'rgba(var(--carta-rgb),.97)',
           backdropFilter: 'blur(26px)', WebkitBackdropFilter: 'blur(26px)',
-          border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 20px 46px rgba(60,44,30,.20)',
+          border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 20px 46px rgba(var(--ombra-rgb),.2)',
           padding: 5, animation: 'fadein .12s ease', overflow: 'hidden'
         }}>
           {visti.map((c, i) => (
@@ -210,13 +210,13 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
               style={{
                 display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 11px',
                 borderRadius: 9, cursor: 'pointer',
-                background: i === scelto ? 'rgba(34,39,31,.06)' : 'transparent'
+                background: i === scelto ? 'rgba(var(--inchiostro-rgb),.06)' : 'transparent'
               }}
-              hover={{ background: 'rgba(34,39,31,.06)' }}>
-              <span style={{ fontSize: '13.5px', color: '#22271F', flex: 'none' }}>{t(c.nome)}</span>
-              <span style={{ fontSize: '12px', color: 'rgba(34,39,31,.45)', flex: 1, minWidth: 0 }}>{t(c.nota)}</span>
+              hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+              <span style={{ fontSize: '13.5px', color: 'var(--inchiostro)', flex: 'none' }}>{t(c.nome)}</span>
+              <span style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.45)', flex: 1, minWidth: 0 }}>{t(c.nota)}</span>
               <span style={{
-                fontFamily: 'inherit', fontSize: '11px', color: 'rgba(34,39,31,.35)', flex: 'none'
+                fontFamily: 'inherit', fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.35)', flex: 'none'
               }}>/{chiaveDi(c)}</span>
             </Hov>
           ))}

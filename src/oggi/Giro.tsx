@@ -13,15 +13,15 @@ import { t, frasi } from '../lingua'
 import { IconPiu, IconSpunta } from '../icons'
 
 const CARTA: CSSProperties = {
-  borderRadius: 14, background: 'rgba(255,253,249,.9)',
-  border: '1px solid rgba(255,255,255,.9)', padding: '14px 16px'
+  borderRadius: 14, background: 'rgba(var(--carta-rgb),.9)',
+  border: '1px solid rgba(var(--luce-rgb),.9)', padding: '14px 16px'
 }
 const GRIGLIA: CSSProperties = {
   display: 'grid', gridTemplateColumns: '1fr 46px 46px 46px', alignItems: 'center'
 }
 const ETICHETTA: CSSProperties = {
   fontSize: '9.5px', fontWeight: 500, letterSpacing: '.13em',
-  textTransform: 'uppercase', color: 'rgba(34,39,31,.4)', textAlign: 'center'
+  textTransform: 'uppercase', color: 'rgba(var(--inchiostro-rgb),.4)', textAlign: 'center'
 }
 
 /** Un pallino della griglia, premibile davvero. */
@@ -32,11 +32,11 @@ function Punto({ acceso, mio, onClick }: { acceso: boolean; mio: boolean; onClic
         height: 28, border: 'none', background: 'none', cursor: onClick ? 'pointer' : 'default',
         padding: 0, display: 'grid', placeItems: 'center'
       }}
-      hover={onClick ? { background: 'rgba(34,39,31,.04)' } : {}}>
+      hover={onClick ? { background: 'rgba(var(--inchiostro-rgb),.04)' } : {}}>
       <span style={{
         width: acceso ? 9 : 7, height: acceso ? 9 : 7, borderRadius: '50%',
-        background: acceso ? (mio ? '#22271F' : '#C4623B') : 'transparent',
-        border: acceso ? 'none' : '1px solid rgba(34,39,31,.2)'
+        background: acceso ? (mio ? 'var(--pieno)' : 'var(--rame)') : 'transparent',
+        border: acceso ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.2)'
       }} />
     </Hov>
   )
@@ -56,18 +56,18 @@ function Scrivere() {
           placeholder={t('mandare il preventivo a Rossi')}
           style={{
             flex: 1, border: 'none', background: 'none', outline: 'none',
-            fontFamily: 'inherit', fontSize: '14px', color: '#22271F', padding: '8px 0'
+            fontFamily: 'inherit', fontSize: '14px', color: 'var(--inchiostro)', padding: '8px 0'
           }} />
         <span style={{
           width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center',
-          background: testo.trim() ? '#22271F' : 'rgba(34,39,31,.07)',
-          color: testo.trim() ? '#FFF7F0' : 'rgba(34,39,31,.28)'
+          background: testo.trim() ? 'var(--pieno)' : 'rgba(var(--inchiostro-rgb),.07)',
+          color: testo.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.28)'
         }}><IconPiu size={12} /></span>
       </div>
       {messa && (
         <div style={{ ...CARTA, ...GRIGLIA, animation: 'fadein .2s ease' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '14px' }}>
-            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '1.5px solid rgba(34,39,31,.22)' }} />
+            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '1.5px solid rgba(var(--inchiostro-rgb),.22)' }} />
             {testo}
           </span>
           <Punto acceso mio /><Punto acceso={false} mio={false} /><Punto acceso={false} mio={false} />
@@ -89,11 +89,11 @@ function Comandi({ lingua }: { lingua: string }) {
         <Hov key={k} onClick={() => setScelto(k)}
           style={{
             display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 11px', borderRadius: 9,
-            cursor: 'pointer', background: scelto === k ? 'rgba(34,39,31,.06)' : 'transparent'
+            cursor: 'pointer', background: scelto === k ? 'rgba(var(--inchiostro-rgb),.06)' : 'transparent'
           }}
-          hover={{ background: 'rgba(34,39,31,.06)' }}>
-          <span style={{ fontSize: '13px', color: '#22271F', flex: 1 }}>{n}</span>
-          <span style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.4)' }}>{k}</span>
+          hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
+          <span style={{ fontSize: '13px', color: 'var(--inchiostro)', flex: 1 }}>{n}</span>
+          <span style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.4)' }}>{k}</span>
         </Hov>
       ))}
     </div>
@@ -116,16 +116,16 @@ function Colonne() {
         <span style={ETICHETTA}>{t('bozza')}</span>
         <span style={ETICHETTA}>Myynd</span>
       </div>
-      <div style={{ ...CARTA, ...GRIGLIA, borderLeft: modo === 'io' ? '2px solid transparent' : '2px solid rgba(196,98,59,.55)' }}>
+      <div style={{ ...CARTA, ...GRIGLIA, borderLeft: modo === 'io' ? '2px solid transparent' : '2px solid rgba(var(--rame-rgb),.55)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '14px' }}>
-          <span style={{ width: 15, height: 15, flex: 'none', borderRadius: '50%', border: '1.5px solid rgba(34,39,31,.22)' }} />
+          <span style={{ width: 15, height: 15, flex: 'none', borderRadius: '50%', border: '1.5px solid rgba(var(--inchiostro-rgb),.22)' }} />
           {t('mandare il preventivo a Rossi')}
         </span>
         <Punto acceso={modo === 'io'} mio onClick={() => setModo('io')} />
         <Punto acceso={modo === 'bozza'} mio={false} onClick={() => setModo('bozza')} />
         <Punto acceso={modo === 'tutto'} mio={false} onClick={() => setModo('tutto')} />
       </div>
-      <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', minHeight: 20, paddingLeft: 2 }}>
+      <div style={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.6)', minHeight: 20, paddingLeft: 2 }}>
         {t(spiega[modo])}
       </div>
     </div>
@@ -136,18 +136,18 @@ function Colonne() {
 function Chiede() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ ...CARTA, ...GRIGLIA, borderLeft: '2px solid rgba(196,98,59,.55)' }}>
+      <div style={{ ...CARTA, ...GRIGLIA, borderLeft: '2px solid rgba(var(--rame-rgb),.55)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '14px' }}>
-          <span style={{ width: 15, height: 15, flex: 'none', borderRadius: '50%', border: '2px solid #C4623B' }} />
+          <span style={{ width: 15, height: 15, flex: 'none', borderRadius: '50%', border: '2px solid var(--rame)' }} />
           {t('mandare una mail a mio padre')}
           <span style={{
             padding: '3px 9px', borderRadius: 99, fontSize: '11px', fontWeight: 500,
-            color: '#8E3F1F', background: 'rgba(196,98,59,.14)', border: '1px solid rgba(196,98,59,.32)'
+            color: 'var(--rame-testo)', background: 'rgba(var(--rame-rgb),.14)', border: '1px solid rgba(var(--rame-rgb),.32)'
           }}>{t('ti chiede')}</span>
         </span>
         <span /><span /><Punto acceso mio={false} />
       </div>
-      <div style={{ ...CARTA, fontSize: '13px', lineHeight: 1.6, color: 'rgba(34,39,31,.75)' }}>
+      <div style={{ ...CARTA, fontSize: '13px', lineHeight: 1.6, color: 'rgba(var(--inchiostro-rgb),.75)' }}>
         {t('Non ho la sua email e non so cosa vuoi dirgli. E la posta non è ancora collegata: collegamela e te la scrivo.')}
       </div>
     </div>
@@ -164,11 +164,11 @@ function Spuntare({ finito }: { finito: () => void }) {
         <Hov as="button" type="button" onClick={() => setVia(true)}
           style={{
             width: 15, height: 15, flex: 'none', padding: 0, borderRadius: '50%',
-            border: '1.5px solid rgba(34,39,31,.22)', background: 'none', cursor: 'pointer',
-            display: 'grid', placeItems: 'center', color: 'rgba(34,39,31,.4)'
+            border: '1.5px solid rgba(var(--inchiostro-rgb),.22)', background: 'none', cursor: 'pointer',
+            display: 'grid', placeItems: 'center', color: 'rgba(var(--inchiostro-rgb),.4)'
           }}
-          hover={{ borderColor: '#22271F' }}>{via && <IconSpunta size={9} />}</Hov>
-        <span style={{ textDecoration: via ? 'line-through' : 'none', color: via ? 'rgba(34,39,31,.4)' : '#22271F' }}>
+          hover={{ borderColor: 'var(--inchiostro)' }}>{via && <IconSpunta size={9} />}</Hov>
+        <span style={{ textDecoration: via ? 'line-through' : 'none', color: via ? 'rgba(var(--inchiostro-rgb),.4)' : 'var(--inchiostro)' }}>
           {t('richiamare lo studio')}
         </span>
       </span>
@@ -225,13 +225,13 @@ export function Giro({ lingua, chiudi, festa }: { lingua: string; chiudi: () => 
       onClick={e => { if (e.target === e.currentTarget) esci() }}
       style={{
         position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center',
-        background: 'rgba(40,30,22,.34)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        background: 'rgba(var(--ombra-rgb),.34)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         WebkitAppRegion: 'no-drag', padding: 24
       } as CSSProperties}>
       <div role="dialog" aria-label={t('Come funziona: il giro di prova')} style={{
         width: 480, maxWidth: '100%', borderRadius: 20, padding: '26px 26px 20px',
-        background: 'rgba(250,246,239,.98)', border: '1px solid rgba(255,255,255,.9)',
-        boxShadow: '0 40px 90px rgba(60,44,30,.34)', animation: 'toastin .3s ease',
+        background: 'rgba(var(--carta-rgb),.98)', border: '1px solid rgba(var(--luce-rgb),.9)',
+        boxShadow: '0 40px 90px rgba(var(--ombra-rgb),.34)', animation: 'toastin .3s ease',
         // il riquadro è centrato e non ha un'altezza: su una finestra bassa —
         // un portatile con la barra degli strumenti aperta — quello che sfora
         // esce di sopra e di sotto, e «Avanti» diventa irraggiungibile
@@ -248,13 +248,13 @@ export function Giro({ lingua, chiudi, festa }: { lingua: string; chiudi: () => 
         */}
         <div style={{
           fontSize: '9.5px', fontWeight: 600, letterSpacing: '.14em',
-          textTransform: 'uppercase', color: 'rgba(142,63,31,.75)', marginBottom: 9
+          textTransform: 'uppercase', color: 'rgba(var(--rame-rgb),.75)', marginBottom: 9
         }}>{frasi.passoDelGiro(i + 1, PASSI.length)}</div>
         <div style={{ fontSize: 21, letterSpacing: '-.02em', fontWeight: 500 }}>{t(p.titolo)}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.6)', marginTop: 6, lineHeight: 1.5 }}>{t(p.riga)}</div>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 6, lineHeight: 1.5 }}>{t(p.riga)}</div>
 
         <div style={{ marginTop: 18 }}>{p.corpo({ lingua, festa })}</div>
-        <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.45)', marginTop: 10, lineHeight: 1.5, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 10, lineHeight: 1.5, textWrap: 'pretty' }}>
           {t('Un esempio, per provarlo: niente di quello che scrivi qui finisce nella tua lista.')}
         </div>
 
@@ -263,7 +263,7 @@ export function Giro({ lingua, chiudi, festa }: { lingua: string; chiudi: () => 
             {PASSI.map((_, k) => (
               <span key={k} aria-hidden="true" style={{
                 width: k === i ? 18 : 6, height: 6, borderRadius: 99,
-                background: k <= i ? 'rgba(34,39,31,.55)' : 'rgba(34,39,31,.16)',
+                background: k <= i ? 'rgba(var(--inchiostro-rgb),.55)' : 'rgba(var(--inchiostro-rgb),.16)',
                 transition: 'width .3s, background .3s'
               }} />
             ))}
@@ -273,17 +273,17 @@ export function Giro({ lingua, chiudi, festa }: { lingua: string; chiudi: () => 
             <Hov as="button" type="button" onClick={() => setI(i - 1)}
               style={{
                 border: 'none', background: 'none', padding: '8px 6px', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '13px', color: 'rgba(34,39,31,.5)'
+                fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.5)'
               }}
-              hover={{ color: '#22271F' }}>{t('Indietro')}</Hov>
+              hover={{ color: 'var(--inchiostro)' }}>{t('Indietro')}</Hov>
           )}
           <Hov as="button" type="button" onClick={() => (ultimo ? esci() : setI(i + 1))}
             style={{
               padding: '9px 20px', borderRadius: 99, border: 'none',
-              background: '#22271F', color: '#FFF7F0',
+              background: 'var(--pieno)', color: 'var(--avorio)',
               fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
             }}
-            hover={{ background: '#3E5140' }}>{ultimo ? t('Ho capito') : t('Avanti')}</Hov>
+            hover={{ background: 'var(--verde-cupo)' }}>{ultimo ? t('Ho capito') : t('Avanti')}</Hov>
         </div>
       </div>
     </div>

@@ -13,11 +13,11 @@ import { Mascotte } from '../components/Mascotte'
 const LATO_MASCOTTE = 40
 const AVATAR: React.CSSProperties = { flex: 'none', marginTop: 4, marginRight: 8 }
 /** Chi scrive, sopra la prima bolla: un nome, non un'intestazione. */
-const MITTENTE: React.CSSProperties = { fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(34,39,31,.5)', margin: `4px 0 -6px ${LATO_MASCOTTE + 8}px` }
+const MITTENTE: React.CSSProperties = { fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(var(--inchiostro-rgb),.5)', margin: `4px 0 -6px ${LATO_MASCOTTE + 8}px` }
 
 const PASTIGLIA: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 99, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,253,249,.7)',
-  color: '#22271F', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit'
+  padding: '8px 14px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--carta-rgb),.7)',
+  color: 'var(--inchiostro)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit'
 }
 
 /** Una bolla di Myynd, con la faccia accanto. Fuori dal componente: dentro, rinascerebbe a ogni tasto. */
@@ -52,7 +52,7 @@ function Intervista({ v }: { v: Vals }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 2px' }}>
           {i.domanda.scelte?.map(s => (
             <Hov key={s.id} as="button" onClick={() => i.rispondi(s.id)} style={PASTIGLIA}
-              hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>{t(s.testo)}</Hov>
+              hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>{t(s.testo)}</Hov>
           ))}
         </div>
       </>}
@@ -61,10 +61,10 @@ function Intervista({ v }: { v: Vals }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 2px' }}>
           {v.senzaProgetto && (
             <Hov as="button" onClick={i.configuraProgetto} style={PASTIGLIA}
-              hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>{t('Configura il progetto')}</Hov>
+              hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>{t('Configura il progetto')}</Hov>
           )}
-          <Hov as="button" onClick={i.chiudi} style={{ ...PASTIGLIA, color: 'rgba(34,39,31,.6)' }}
-            hover={{ background: '#FFFFFF' }}>{t('Chiudi')}</Hov>
+          <Hov as="button" onClick={i.chiudi} style={{ ...PASTIGLIA, color: 'rgba(var(--inchiostro-rgb),.6)' }}
+            hover={{ background: 'var(--carta-alta)' }}>{t('Chiudi')}</Hov>
         </div>
       </>}
     </>
@@ -94,8 +94,8 @@ function Annulla({ su }: { su: () => void }) {
   return (
     <Hov as="button" type="button" onClick={su} style={{
       alignSelf: 'center', marginLeft: 10, border: 'none', background: 'none', padding: '4px 2px',
-      fontFamily: 'inherit', fontSize: 12.5, color: 'rgba(34,39,31,.5)', cursor: 'pointer'
-    }} hover={{ color: '#8E3F1F' }}>{t('Annulla')}</Hov>
+      fontFamily: 'inherit', fontSize: 12.5, color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer'
+    }} hover={{ color: 'var(--rame-testo)' }}>{t('Annulla')}</Hov>
   )
 }
 
@@ -116,9 +116,9 @@ export function Chat({ v }: { v: Vals }) {
                 una notizia: dirlo ogni volta che apri la chat è come farsi
                 presentare da qualcuno che vedi tutti i giorni. Se non ha letto
                 niente invece va detto, perché allora non può rispondere. */}
-            <div style={{ fontSize: 30, lineHeight: 1.25, letterSpacing: '-.025em', color: 'rgba(34,39,31,.75)' }}>{t('Cosa vuoi sapere?')}</div>
+            <div style={{ fontSize: 30, lineHeight: 1.25, letterSpacing: '-.025em', color: 'rgba(var(--inchiostro-rgb),.75)' }}>{t('Cosa vuoi sapere?')}</div>
             {!v.totaleDocumenti && (
-              <div style={{ fontSize: 14, color: 'rgba(34,39,31,.6)', marginTop: 10 }}>{frasi.nienteLetto()}</div>
+              <div style={{ fontSize: 14, color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 10 }}>{frasi.nienteLetto()}</div>
             )}
           </div>
         )}
@@ -139,7 +139,7 @@ export function Chat({ v }: { v: Vals }) {
         {v.pensando && (
           <div style={v.bolla.rigaSua}>
             <Mascotte size={LATO_MASCOTTE} style={AVATAR} />
-            <Stato tipo="cerco" testo={t(v.passoChat || 'Ci penso')} stile={{ background: 'rgba(255,253,249,.7)', border: '1px solid rgba(255,255,255,.8)' }} />
+            <Stato tipo="cerco" testo={t(v.passoChat || 'Ci penso')} stile={{ background: 'rgba(var(--carta-rgb),.7)', border: '1px solid rgba(var(--luce-rgb),.8)' }} />
             <Annulla su={v.annulla} />
           </div>
         )}
@@ -149,27 +149,27 @@ export function Chat({ v }: { v: Vals }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '6px 2px 12px' }}>
           {v.prompts.map(p => (
             <Hov key={p.id} as="button" onClick={p.onClick} style={PASTIGLIA}
-              hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>{p.text}</Hov>
+              hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>{p.text}</Hov>
           ))}
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 14px 12px 18px', borderRadius: 20, background: 'rgba(255,253,249,.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.13)', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 14px 12px 18px', borderRadius: 20, background: 'rgba(var(--carta-rgb),.78)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.8)', boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.13)', marginBottom: 4 }}>
         {scrivibile ? (
           <Campo v={v} rispondendo={rispondendo} />
         ) : (
           // un campo spento che dice «collega Claude» senza un posto dove farlo
           // è una porta chiusa: la riga stessa apre le connessioni su Claude
           <Hov as="button" type="button" onClick={() => v.apriConnessioni('claude')}
-            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: 15, color: 'rgba(34,39,31,.55)', cursor: 'pointer', overflowWrap: 'anywhere' }}
-            hover={{ color: '#8E3F1F' }}>
+            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: 15, color: 'rgba(var(--inchiostro-rgb),.55)', cursor: 'pointer', overflowWrap: 'anywhere' }}
+            hover={{ color: 'var(--rame-testo)' }}>
             {t('Collega Claude per fare domande')}
           </Hov>
         )}
         <button onClick={v.send} disabled={rispondendo ? false : (!v.claudeOn || v.pensando)} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
-          background: scrivibile ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.18)',
-          color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: scrivibile ? 'pointer' : 'default'
+          background: scrivibile ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
+          color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: scrivibile ? 'pointer' : 'default'
         }}>
           <IconSu />
         </button>
@@ -207,7 +207,7 @@ function Campo({ v, rispondendo }: { v: Vals; rispondendo: boolean }) {
           suo riquadro e il campo lo ritaglia.
         */
         flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', resize: 'none', padding: '7px 0 7px 3px', margin: 0,
-        fontFamily: 'inherit', fontSize: 15, lineHeight: '22px', color: '#22271F', overflowY: 'auto', display: 'block', boxSizing: 'border-box'
+        fontFamily: 'inherit', fontSize: 15, lineHeight: '22px', color: 'var(--inchiostro)', overflowY: 'auto', display: 'block', boxSizing: 'border-box'
       }} />
   )
 }

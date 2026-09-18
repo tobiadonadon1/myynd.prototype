@@ -35,8 +35,8 @@ function Segno({ n, fonte, onApri }: { n: number; fonte?: Fonte; onApri?: (id: s
           fontSize: '.66em', lineHeight: 0, verticalAlign: 'super',
           padding: '0 1px', borderRadius: 3, cursor: fonte ? 'pointer' : 'default',
           fontWeight: 500,
-          color: sopra ? '#8E3F1F' : 'rgba(34,39,31,.4)',
-          background: sopra ? 'rgba(196,98,59,.14)' : 'transparent',
+          color: sopra ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)',
+          background: sopra ? 'rgba(var(--rame-rgb),.14)' : 'transparent',
           transition: 'color .12s, background .12s'
         }}
         title={fonte ? titolo : undefined}>{n}</sup>
@@ -44,9 +44,9 @@ function Segno({ n, fonte, onApri }: { n: number; fonte?: Fonte; onApri?: (id: s
         <span style={{
           position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
           zIndex: 30, whiteSpace: 'normal', width: 'max-content', maxWidth: 280,
-          padding: '7px 11px', borderRadius: 10, background: '#22271F', color: '#FFF7F0',
+          padding: '7px 11px', borderRadius: 10, background: 'var(--pieno)', color: 'var(--avorio)',
           fontSize: '11.5px', lineHeight: 1.4, fontWeight: 400,
-          boxShadow: '0 12px 28px rgba(30,20,14,.34)', pointerEvents: 'none'
+          boxShadow: '0 12px 28px rgba(var(--ombra-rgb),.34)', pointerEvents: 'none'
         }}>{titolo}</span>
       )}
     </span>
@@ -75,7 +75,7 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string) => void): R
       pezzi.push(<em key={m.index}>{inline(m[2], fonti, onApri)}</em>)
     } else if (m[3] !== undefined) {
       pezzi.push(
-        <code key={m.index} style={{ background: 'rgba(34,39,31,.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
+        <code key={m.index} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
       )
     } else {
       const n = Number(m[4])
@@ -167,7 +167,7 @@ export function Testo({ testo, fonti = [], onApri }: {
       pezzi.push(
         <pre key={pezzi.length} style={{
           margin: primo() ? 0 : '10px 0 0', padding: '10px 12px', borderRadius: 8,
-          background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.09)',
+          background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.09)',
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px',
           lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre'
         }}>{b.testo}</pre>

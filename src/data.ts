@@ -78,6 +78,18 @@ export const LINGUE = [
   { id: 'en', nome: 'English' }
 ]
 
+/**
+ * Chiaro, scuro, o come il sistema.
+ *
+ * «Sistema» sta per primo perche e la risposta giusta per quasi tutti: chi
+ * mette il Mac in scuro la sera non deve dirlo due volte.
+ */
+export const TEMI = [
+  { id: 'sistema', label: 'Sistema' },
+  { id: 'chiaro', label: 'Chiaro' },
+  { id: 'scuro', label: 'Scuro' }
+] as const
+
 /** Per quanto restano in pagina le cose già chiuse. */
 export const TENUTE = [
   { ore: 24, label: 'Un giorno' },

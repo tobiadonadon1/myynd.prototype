@@ -22,16 +22,16 @@ export function Documento({ v }: { v: Vals }) {
       <div onClick={v.chiudiDoc} style={VELO(48, 0.4, 4)} />
       <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="documento-titolo"
         style={{ position: 'absolute', top: 60, bottom: 60, left: '50%', transform: 'translateX(-50%)', width: 640, maxWidth: '86%', zIndex: 49, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 12px', color: '#FFF7F0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 12px', color: 'var(--avorio)' }}>
           <span style={{ fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.titolo}</span>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{d.fonte}</span>
-          <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('Chiudi')}</button>
+          <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'rgba(var(--luce-rgb),.14)', color: 'var(--avorio)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('Chiudi')}</button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', background: '#FFFFFF', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
-          {d._avviso && <div role="status" style={{ fontSize: 13, lineHeight: 1.5, padding: '12px 14px', marginBottom: 20, background: '#FFF4E8', borderRadius: 8, color: '#69432A' }}>{d._avviso}</div>}
-          <div style={{ paddingBottom: 20, borderBottom: '2px solid #22271F' }}>
+        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--carta-alta)', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
+          {d._avviso && <div role="status" style={{ fontSize: 13, lineHeight: 1.5, padding: '12px 14px', marginBottom: 20, background: 'rgba(var(--rame-rgb),.1)', borderRadius: 8, color: 'var(--rame-testo)' }}>{d._avviso}</div>}
+          <div style={{ paddingBottom: 20, borderBottom: '2px solid var(--inchiostro)' }}>
             <div id="documento-titolo" style={{ fontSize: 21, fontWeight: 500, letterSpacing: '-.015em', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.titolo}</div>
-            <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.7 }}>
+            <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 8, lineHeight: 1.7 }}>
               {d.autore && <>{d.autore}<br /></>}
               {data}
               {d.percorso && <><br /><span style={{ wordBreak: 'break-all' }}>{d.percorso}</span></>}
@@ -43,15 +43,15 @@ export function Documento({ v }: { v: Vals }) {
               leggeva come il sorgente di un documento invece che come il
               documento. Il testo semplice non lo tocca: una mail esce riga
               per riga come è entrata. */}
-          <div style={{ fontSize: 14, color: 'rgba(34,39,31,.86)', marginTop: 26 }}>
+          <div style={{ fontSize: 14, color: 'rgba(var(--inchiostro-rgb),.86)', marginTop: 26 }}>
             {leggibile(d.corpo).map((b, i) => (
               b.tipo === 'vuota' ? <div key={i} style={{ height: 13 }} />
                 : b.tipo === 'titolo' ? (
-                  <div key={i} style={{ fontSize: '15px', fontWeight: 600, lineHeight: 1.5, marginTop: i ? 18 : 0, marginBottom: 2, color: '#22271F', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
+                  <div key={i} style={{ fontSize: '15px', fontWeight: 600, lineHeight: 1.5, marginTop: i ? 18 : 0, marginBottom: 2, color: 'var(--inchiostro)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
                 ) : b.tipo === 'codice' ? (
                   // il codice non si spezza a metà parola: scorre dentro il suo
                   // riquadro, e il foglio resta fermo
-                  <pre key={i} style={{ margin: '10px 0', padding: '12px 14px', borderRadius: 8, background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.09)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre' }}>{b.testo}</pre>
+                  <pre key={i} style={{ margin: '10px 0', padding: '12px 14px', borderRadius: 8, background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.09)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre' }}>{b.testo}</pre>
                 ) : (
                   <div key={i} style={{ lineHeight: 1.75, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
                 )
@@ -72,37 +72,37 @@ export function Ricerca({ v }: { v: Vals }) {
     <>
       <div onClick={v.closeSearch} style={VELO(46, 0.24, 3)} />
       <div ref={finestra} role="dialog" aria-modal="true" aria-label={t('Cerca')}
-        style={{ position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)', width: 600, maxWidth: '82%', borderRadius: 20, background: 'rgba(255,253,249,.96)', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 40px 90px rgba(60,44,30,.34)', zIndex: 47, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(34,39,31,.09)' }}>
-          <IconCerca size={17} style={{ flex: 'none', color: 'rgba(34,39,31,.6)' }} />
+        style={{ position: 'absolute', top: 88, left: '50%', transform: 'translateX(-50%)', width: 600, maxWidth: '82%', borderRadius: 20, background: 'rgba(var(--carta-rgb),.96)', border: '1px solid rgba(var(--luce-rgb),.95)', boxShadow: '0 40px 90px rgba(var(--ombra-rgb),.34)', zIndex: 47, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(var(--inchiostro-rgb),.09)' }}>
+          <IconCerca size={17} style={{ flex: 'none', color: 'rgba(var(--inchiostro-rgb),.6)' }} />
           <input value={v.query} onChange={v.onQuery}
             placeholder={v.totaleDocumenti
               ? frasi.cercaFra(v.totaleDocumenti.toLocaleString(lingua() === 'en' ? 'en-GB' : 'it-IT'))
               : t('Niente da cercare ancora')} autoFocus
             aria-label={t('Cerca')}
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); v.closeSearch() } }}
-            style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 16, color: '#22271F' }} />
-          <button onClick={v.closeSearch} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: '1px solid rgba(34,39,31,.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(34,39,31,.6)', cursor: 'pointer', flex: 'none' }}>esc</button>
+            style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 16, color: 'var(--inchiostro)' }} />
+          <button onClick={v.closeSearch} title={t('Chiudi')} aria-label={t('Chiudi')} style={{ border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'none', borderRadius: 7, padding: '3px 8px', fontFamily: 'inherit', fontSize: 11, color: 'rgba(var(--inchiostro-rgb),.6)', cursor: 'pointer', flex: 'none' }}>esc</button>
         </div>
         <div style={{ maxHeight: 340, overflowY: 'auto', padding: 6 }}>
           {/* bottoni, non div: un risultato si raggiunge con il tab e si apre con Invio */}
           {v.risultati.map(r => (
             <Hov key={r.id} as="button" type="button" onClick={r.onClick}
               style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', borderRadius: 14, cursor: 'pointer', border: 'none', background: 'none', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}
-              hover={{ background: 'rgba(34,39,31,.06)' }}>
+              hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
               <span style={r.dot} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '14.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.titolo}</div>
-                <div style={{ fontSize: '12.5px', color: 'rgba(34,39,31,.62)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.fonte}</div>
+                <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.62)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.fonte}</div>
               </div>
-              <span style={{ fontSize: 12, color: 'rgba(34,39,31,.5)', flex: 'none' }}>{r.quando}</span>
+              <span style={{ fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.5)', flex: 'none' }}>{r.quando}</span>
             </Hov>
           ))}
           {v.query.trim() && !v.risultati.length && (
-            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.6)' }}>{t('Niente che corrisponda.')}</div>
+            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(var(--inchiostro-rgb),.6)' }}>{t('Niente che corrisponda.')}</div>
           )}
           {!v.query.trim() && !v.risultati.length && (
-            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(34,39,31,.55)' }}>{t('Non c’è ancora niente da cercare.')}</div>
+            <div style={{ padding: '22px 14px', fontSize: 14, color: 'rgba(var(--inchiostro-rgb),.55)' }}>{t('Non c’è ancora niente da cercare.')}</div>
           )}
         </div>
       </div>
@@ -114,11 +114,11 @@ export function Ricerca({ v }: { v: Vals }) {
 export function Toast({ v }: { v: Vals }) {
   return (
     // una notizia che compare da sola va anche letta da sola, senza rubare il fuoco
-    <div role="status" aria-live="polite" style={{ position: 'absolute', top: 22, right: 26, zIndex: 50, display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 16, background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', flex: 'none' }} />
+    <div role="status" aria-live="polite" style={{ position: 'absolute', top: 22, right: 26, zIndex: 50, display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 16, background: 'rgba(var(--carta-rgb),.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 26px 60px rgba(var(--ombra-rgb),.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', flex: 'none' }} />
       <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{v.toastText}</span>
       {v.toastUndo && (
-        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: '#3E5140', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{frasi.annullaGesto()}</button>
+        <button onClick={v.undo} style={{ border: 'none', background: 'none', color: 'var(--verde-cupo)', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{frasi.annullaGesto()}</button>
       )}
     </div>
   )

@@ -3,7 +3,6 @@ import {
   type CSSProperties, type ElementType, type ComponentPropsWithRef,
   type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject
 } from 'react'
-import { GRADIENTE, RAME_CUPO } from './tema'
 import { t } from './lingua'
 import { IconCestino } from './icons'
 
@@ -209,7 +208,7 @@ function Sicuro({ armato, children }: { armato: boolean; children: ReactNode }) 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
       <span style={{ fontWeight: 500 }}>{t('Sicuro?')}</span>
-      <span style={{ padding: '4px 10px', borderRadius: 99, background: '#C4623B', color: '#FFF7F0', fontWeight: 500 }}>{children}</span>
+      <span style={{ padding: '4px 10px', borderRadius: 99, background: 'var(--rame)', color: 'var(--avorio)', fontWeight: 500 }}>{children}</span>
     </span>
   )
 }
@@ -232,8 +231,8 @@ export function BottoneSicuro({ fai, guaio, titolo, chiaro, subito, style, child
   children: ReactNode
 }) {
   const { armato, chiedi, disarma } = useConferma()
-  const spento = chiaro ? 'rgba(255,247,240,.6)' : 'rgba(34,39,31,.45)'
-  const acceso = chiaro ? '#FFFFFF' : '#8E3F1F'
+  const spento = chiaro ? 'rgba(var(--avorio-rgb),.6)' : 'rgba(var(--inchiostro-rgb),.45)'
+  const acceso = chiaro ? 'var(--avorio)' : 'var(--rame-testo)'
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => {
@@ -301,8 +300,8 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
   style?: CSSProperties
 }) {
   const { armato, chiedi, disarma } = useConferma()
-  const spento = chiaro ? 'rgba(255,247,240,.6)' : 'rgba(34,39,31,.35)'
-  const acceso = chiaro ? '#FFFFFF' : '#8E3F1F'
+  const spento = chiaro ? 'rgba(var(--avorio-rgb),.6)' : 'rgba(var(--inchiostro-rgb),.35)'
+  const acceso = chiaro ? 'var(--avorio)' : 'var(--rame-testo)'
   const mostra = visibile || armato
   return (
     <Hov as="button" type="button"
@@ -329,8 +328,8 @@ export function Cestino({ fai, guaio, titolo, visibile = true, dim = 22, icona =
           position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
           padding: '3px 9px', borderRadius: 99, whiteSpace: 'nowrap',
           fontSize: '11px', fontWeight: 500, lineHeight: 1.4,
-          color: '#8E3F1F', background: '#FFFDF9', border: '1px solid rgba(142,63,31,.4)',
-          boxShadow: '0 4px 12px -4px rgba(84,64,44,.3)', animation: 'fadein .12s ease'
+          color: 'var(--rame-testo)', background: 'var(--carta-piena)', border: '1px solid rgba(var(--rame-rgb),.4)',
+          boxShadow: '0 4px 12px -4px rgba(var(--ombra-rgb),.3)', animation: 'fadein .12s ease'
         }}>{t('Sicuro?')}</span>
       )}
     </Hov>
@@ -414,30 +413,30 @@ const NAV_BASE: CSSProperties = {
   borderRadius: 14, fontSize: '14.5px', cursor: 'pointer', transition: 'background .18s'
 }
 export const NAV_ON: CSSProperties = {
-  ...NAV_BASE, background: GRADIENTE,
-  border: '1px solid rgba(255,255,255,.5)', boxShadow: '0 10px 22px -12px rgba(120,60,40,.65)', color: '#FFF7F0'
+  ...NAV_BASE, background: 'var(--gradiente-rame)',
+  border: '1px solid rgba(var(--luce-rgb),.5)', boxShadow: '0 10px 22px -12px rgba(var(--ombra-rgb),.65)', color: 'var(--avorio)'
 }
-export const NAV_OFF: CSSProperties = { ...NAV_BASE, border: '1px solid transparent', color: 'rgba(34,39,31,.72)' }
+export const NAV_OFF: CSSProperties = { ...NAV_BASE, border: '1px solid transparent', color: 'rgba(var(--inchiostro-rgb),.72)' }
 
 const MENU_BASE: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px',
   borderRadius: 12, fontSize: '13.5px', cursor: 'pointer'
 }
-export const MENU_ON: CSSProperties = { ...MENU_BASE, background: GRADIENTE, color: '#FFF7F0' }
-export const MENU_OFF: CSSProperties = { ...MENU_BASE, color: '#22271F' }
+export const MENU_ON: CSSProperties = { ...MENU_BASE, background: 'var(--gradiente-rame)', color: 'var(--avorio)' }
+export const MENU_OFF: CSSProperties = { ...MENU_BASE, color: 'var(--inchiostro)' }
 
 /** L'interruttore. È lo stile di un `<button>`: da tastiera un div non si raggiunge. */
 export function track(on: boolean): CSSProperties {
   return {
     width: 40, height: 23, flex: 'none', borderRadius: 99, padding: 2, boxSizing: 'border-box', cursor: 'pointer',
     border: 'none',
-    background: on ? GRADIENTE : 'rgba(34,39,31,.2)',
+    background: on ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.2)',
     display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background .2s'
   }
 }
 
 export function knob(): CSSProperties {
-  return { width: 19, height: 19, borderRadius: '50%', background: '#FFFDF9', boxShadow: '0 2px 5px rgba(30,20,14,.3)' }
+  return { width: 19, height: 19, borderRadius: '50%', background: 'var(--avorio)', boxShadow: '0 2px 5px rgba(var(--ombra-rgb),.3)' }
 }
 
 export function dot(c: string): CSSProperties {
@@ -446,7 +445,7 @@ export function dot(c: string): CSSProperties {
 
 export const LABEL: CSSProperties = {
   fontSize: '11.5px', fontWeight: 500, letterSpacing: '.1em',
-  textTransform: 'uppercase', color: 'rgba(34,39,31,.55)'
+  textTransform: 'uppercase', color: 'rgba(var(--inchiostro-rgb),.55)'
 }
 
 /**
@@ -459,11 +458,11 @@ export const LABEL: CSSProperties = {
  */
 export const PILL: CSSProperties = {
   padding: '4px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-  color: RAME_CUPO, background: 'rgba(196,98,59,.14)',
-  border: '1px solid rgba(196,98,59,.32)'
+  color: 'var(--rame-testo)', background: 'rgba(var(--rame-rgb),.14)',
+  border: '1px solid rgba(var(--rame-rgb),.32)'
 }
 
 export const CARD_GLASS: CSSProperties = {
-  background: 'rgba(255,253,249,.72)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-  border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.12)'
+  background: 'rgba(var(--carta-rgb),.72)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+  border: '1px solid rgba(var(--luce-rgb),.8)', boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.12)'
 }

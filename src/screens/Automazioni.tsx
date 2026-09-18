@@ -311,7 +311,7 @@ export function Automazioni({ v }: { v: Vals }) {
         ce n'è ancora nessuna e nessun filtro le terrebbe fuori comunque.
       */}
       {!carico && cercoSuggerimenti && !suggerimenti.length && !cercaVera && !raccoltaVera && filtroVero === 'tutte' &&
-        <p role="status" style={{ fontSize: 13, color: '#64675e', margin: '14px 2px 0' }}>{t('Guardo cosa si ripete nel tuo lavoro…')}</p>}
+        <p role="status" style={{ fontSize: 13, color: 'var(--inchiostro-2)', margin: '14px 2px 0' }}>{t('Guardo cosa si ripete nel tuo lavoro…')}</p>}
     </section>
     <footer className="auto-page-footer">
       <span>{v.ospitato ? t('Le automazioni girano nel tuo spazio.') : t('Le automazioni girano mentre Myynd è aperto su questo computer.')}</span>

@@ -15,7 +15,7 @@ import { useState } from 'react'
 
 export function Mascotte({ size = 28, style }: { size?: number; style?: React.CSSProperties }) {
   const [rotta, setRotta] = useState(false)
-  if (rotta) return <span style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg,#C4623B,#E4A074)', display: 'inline-block', ...style }} aria-hidden="true" />
+  if (rotta) return <span style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg,var(--rame),#E4A074)', display: 'inline-block', ...style }} aria-hidden="true" />
   return <img src="/mascotte.png" width={size} height={size} alt="" aria-hidden="true" draggable={false} decoding="async"
     ref={el => { if (el && el.complete && el.naturalWidth === 0) setRotta(true) }}
     onError={() => setRotta(true)} style={{ display: 'block', objectFit: 'contain', ...style }} />

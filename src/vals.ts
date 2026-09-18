@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
+import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TEMI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { DOMANDE, type Campo } from './intervista'
 import type { Progetto, Compito, ProjectInitiative } from './api'
 import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
+import { ricordaTema, temaValido } from './tema'
 import { api, rigaSincronizzazione, type Connettore, type Stato } from './api'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
@@ -216,15 +217,15 @@ const RIGA_SUA: CSSProperties = { display: 'flex', justifyContent: 'flex-start' 
 const BOLLA_MIA: CSSProperties = {
   maxWidth: '74%', padding: '13px 17px', borderRadius: '20px 18px 6px 20px',
   background: 'linear-gradient(130deg,rgba(176,82,46,.92),rgba(140,100,64,.9))',
-  color: '#FFF7F0', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
+  color: 'var(--avorio)', fontSize: '15px', lineHeight: 1.55, whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere', minWidth: 0
 }
 // piatta: la sfocatura e l'ombra larga facevano un alone fra una bolla e l'altra
 const BOLLA_SUA: CSSProperties = {
   maxWidth: '80%', padding: '15px 18px', borderRadius: '20px 20px 20px 6px',
-  background: 'rgba(255,253,249,.92)',
-  border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 1px 2px rgba(84,64,44,.06)',
-  color: '#22271F', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+  background: 'rgba(var(--carta-rgb),.92)',
+  border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 1px 2px rgba(var(--ombra-rgb),.06)',
+  color: 'var(--inchiostro)', fontSize: '15px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere', minWidth: 0
 }
 
@@ -235,6 +236,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // questa viene dal profilo sul server: è una scelta, e si ricorda per le
   // schermate che si disegnano prima che il server risponda
   ricordaLingua(stato.config.lingua)
+  // e lo stesso per l'ora del giorno: la scelta vive sul server, la pagina la
+  // porta addosso come `data-theme`, e il browser ne tiene una copia per non
+  // lampeggiare di panna al primo disegno
+  ricordaTema(temaValido(stato.config.tema))
   // lo stato arriva da fuori quando cambiano i connettori: mi allineo senza
   // rimontare, così schermata, chat aperta e bozza restano dove sono
   useEffect(() => { setStato(iniziale) }, [iniziale])
@@ -1051,12 +1056,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       borderRadius: 20,
       background: 'linear-gradient(138deg,rgba(176,82,46,.9),rgba(154,100,55,.88) 46%,rgba(74,58,49,.92))',
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-      border: '1px solid rgba(255,255,255,.6)',
-      boxShadow: '0 30px 70px rgba(120,74,48,.34),inset 0 1px 0 rgba(255,255,255,.35)',
+      border: '1px solid rgba(var(--luce-rgb),.6)',
+      boxShadow: '0 30px 70px rgba(var(--ombra-rgb),.34),inset 0 1px 0 rgba(var(--luce-rgb),.35)',
       // Niente altezza minima: con il testo ripiegato la card restava alta 300
       // pixel con dentro centoventi di vuoto. Adesso è alta quanto quello che
       // contiene, e si allunga solo se apri il testo lungo.
-      padding: '22px 24px 20px', transform: 'rotate(-.35deg)', color: '#FFF7F0', flex: 'none',
+      padding: '22px 24px 20px', transform: 'rotate(-.35deg)', color: 'var(--avorio)', flex: 'none',
       display: 'flex', flexDirection: 'column', animation: 'heroin .35s ease',
       // il confine del testo è la carta: un titolo scritto dal modello a partire
       // da un nome di file senza spazi non deve poterne uscire
@@ -1163,8 +1168,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       id: d.id, esito: d.titolo, tipo: d.tipo, fonte: d.fonte ?? '', at: quando(d.quando),
       testo: d.testo, open: openDone === d.id, label: openDone === d.id ? t('Chiudi') : t('Vedi'),
       wrap: {
-        borderTop: ix === 0 ? 'none' : '1px solid rgba(34,39,31,.08)',
-        background: openDone === d.id ? 'rgba(255,255,255,.5)' : 'transparent'
+        borderTop: ix === 0 ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.08)',
+        background: openDone === d.id ? 'rgba(var(--luce-rgb),.5)' : 'transparent'
       } as CSSProperties,
       onOpen: () => setOpenDone(v => (v === d.id ? null : d.id)),
       onRestore: async (e: React.MouseEvent) => {
@@ -1239,7 +1244,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       sopra: ch.id === hoverThread,
       row: {
         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10, cursor: 'pointer',
-        background: ch.id === thread ? 'rgba(255,255,255,.92)' : ch.id === hoverThread ? 'rgba(255,255,255,.6)' : 'transparent'
+        background: ch.id === thread ? 'rgba(var(--luce-rgb),.92)' : ch.id === hoverThread ? 'rgba(var(--luce-rgb),.6)' : 'transparent'
       } as CSSProperties,
       onEnter: () => setHoverThread(ch.id),
       onLeave: () => setHoverThread(h => (h === ch.id ? null : h)),
@@ -1342,9 +1347,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         chip: {
           display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99,
           cursor: 'pointer', fontFamily: 'inherit', fontSize: '11.5px',
-          background: on ? 'rgba(255,247,240,.12)' : 'rgba(255,247,240,.04)',
-          border: '1px solid ' + (on ? 'rgba(255,247,240,.28)' : 'rgba(255,247,240,.1)'),
-          color: 'rgba(255,247,240,' + (on ? '.94' : '.45') + ')'
+          background: on ? 'rgba(var(--avorio-rgb),.12)' : 'rgba(var(--avorio-rgb),.04)',
+          border: '1px solid ' + (on ? 'rgba(var(--avorio-rgb),.28)' : 'rgba(var(--avorio-rgb),.1)'),
+          color: 'rgba(var(--avorio-rgb),' + (on ? '.94' : '.45') + ')'
         } as CSSProperties,
         dot: { width: 8, height: 8, borderRadius: '50%', background: g.colore, flex: 'none' } as CSSProperties,
         onClick: () => { setFiltro(f => (f === g.id ? null : g.id)); setSel(g.id) }
@@ -1353,7 +1358,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     selTipo: nodoSelezionato ? [parolaFonte(nodoSelezionato.fonte, nodoSelezionato.id), dataDocumentoMappa(nodoSelezionato.quando)].filter(Boolean).join(' · ')
       : cl ? frasi.nDocumenti(cl.nodi.toLocaleString(loc())) : '',
     selNome: nodoSelezionato?.titolo || (cl ? t(cl.nome) : t('Niente ancora')),
-    selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? '#8A7A6A', flex: 'none', marginTop: 4 } as CSSProperties,
+    selDot: { width: 10, height: 10, borderRadius: '50%', background: cl?.colore ?? 'var(--inchiostro-3)', flex: 'none', marginTop: 4 } as CSSProperties,
     selTesto: nodoSelezionato ? taglia(testoNodo, 580) || (caricoNodo ? t('Leggo il documento…') : t('Apri la fonte per leggere il documento.'))
       : cl ? t('Scegli un documento per leggerne il contenuto e i collegamenti.')
       : t('Collega una fonte e qui comparirà quello che Myynd ha letto.'),
@@ -1397,8 +1402,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       ...x, label: t(x.label),
       onClick: () => { setStato(s => ({ ...s, config: { ...s.config, tono: x.id } })); api.profilo({ tono: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
       style: (x.id === stato.config.tono
-        ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,.5)', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-        : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.5)', color: '#22271F', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
+        ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
+        : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }) as CSSProperties
     })),
     tonoEsempio: t(ESEMPIO_TONO[stato.config.tono] ?? ESEMPIO_TONO.diretto),
 
@@ -1472,6 +1477,25 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         setCambioLingua(false)
       }
     })),
+    temi: TEMI.map(x => ({
+      ...x, label: t(x.label),
+      scelto: temaValido(stato.config.tema) === x.id,
+      /*
+       * Cambia subito, e poi lo si dice al server.
+       *
+       * Al contrario della lingua non c'e niente da tradurre e niente da
+       * aspettare: `ricordaTema` sposta un attributo sulla radice e le
+       * variabili della tavolozza cambiano tutte insieme nello stesso
+       * fotogramma. Se il server non se lo segna, si ricarica lo stato e la
+       * scelta torna quella vera.
+       */
+      onClick: () => {
+        if (temaValido(stato.config.tema) === x.id) return
+        ricordaTema(x.id)
+        setStato(s => ({ ...s, config: { ...s.config, tema: x.id } }))
+        api.profilo({ tema: x.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() })
+      }
+    })),
     tenute: TENUTE.map(x => ({
       ...x, label: t(x.label),
       scelto: (stato.config.oreFatte ?? 48) === x.ore,
@@ -1486,13 +1510,13 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       onClick: () => { setStato(s => ({ ...s, config: { ...s.config, autonomia: a.id } })); api.profilo({ autonomia: a.id }).catch(() => { mostraToast(t('Non sono riuscito a salvare la preferenza.')); ricaricaStato() }) },
       row: {
         display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-        background: stato.config.autonomia === a.id ? 'rgba(255,255,255,.85)' : 'transparent',
-        boxShadow: stato.config.autonomia === a.id ? '0 12px 30px rgba(84,64,44,.1)' : 'none'
+        background: stato.config.autonomia === a.id ? 'rgba(var(--luce-rgb),.85)' : 'transparent',
+        boxShadow: stato.config.autonomia === a.id ? '0 12px 30px rgba(var(--ombra-rgb),.1)' : 'none'
       } as CSSProperties,
       radio: {
         width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-        border: stato.config.autonomia === a.id ? '4px solid #C4623B' : '1.5px solid rgba(34,39,31,.35)',
-        background: stato.config.autonomia === a.id ? '#FFF7F0' : 'transparent'
+        border: stato.config.autonomia === a.id ? '4px solid var(--rame)' : '1.5px solid rgba(var(--inchiostro-rgb),.35)',
+        background: stato.config.autonomia === a.id ? 'var(--avorio)' : 'transparent'
       } as CSSProperties
     })),
     apriConnessioni,
@@ -1526,7 +1550,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     onQuery: (e: { target: { value: string } }) => setQuery(e.target.value),
     risultati: risultati.map(r => ({
       id: r.id, titolo: r.titolo, fonte: `${r.fonte} · ${r.estratto.slice(0, 60)}…`, quando: quando(r.quando),
-      dot: dot(COLORE_FONTE[r.fonte] ?? '#C4623B'),
+      dot: dot(COLORE_FONTE[r.fonte] ?? 'var(--rame)'),
       onClick: () => {
         api.documento(r.id).then(d => { setDoc(d); setSearch(false); setQuery('') }).catch(() => {})
       }

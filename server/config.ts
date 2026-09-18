@@ -92,6 +92,14 @@ const AUTONOMIE_VECCHIE: Record<string, string> = { osservare: 'chiedere', agire
 /** I nomi che `claude.ts` sa interpretare. Fuori da qui non esiste altro. */
 export const TONI_VALIDI = ['diretto', 'caldo', 'formale']
 export const AUTONOMIE_VALIDE = ['chiedere', 'preparare', 'fare']
+/**
+ * Chiaro, scuro, o come il sistema.
+ *
+ * Sta qui e non solo nel browser perche e una preferenza come la lingua: chi
+ * apre Myynd da un altro computer se la ritrova com'era. Il browser ne tiene
+ * comunque una copia, ma solo per non lampeggiare di panna al primo disegno.
+ */
+export const TEMI_VALIDI = ['sistema', 'chiaro', 'scuro']
 
 export function tono(c: Config = leggi()): string {
   const t = c.tono ?? 'diretto'
@@ -706,6 +714,8 @@ export type Config = {
   modelli?: Partial<Record<Livello, string>>
   /** In che lingua risponde: 'it' | 'en'. */
   lingua?: string
+  /** L'ora del giorno dell'interfaccia: 'sistema' | 'chiaro' | 'scuro'. */
+  tema?: 'sistema' | 'chiaro' | 'scuro'
   /** Il fuso di chi usa (IANA, es. Europe/Rome): lo manda il browser. Senza, quello della macchina. */
   fuso?: string
   /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */
@@ -1120,6 +1130,7 @@ export function pubblica(c: Config = leggi()) {
     modello: modello(c),
     modelli: modelliPerLivello(c),
     lingua: c.lingua ?? 'en',
+    tema: c.tema ?? 'sistema',
     fuso: c.fuso ?? null,
     oreFatte: c.oreFatte ?? 48,
     tetto: c.tetto ?? 0,

@@ -77,11 +77,11 @@ const FERMO: CSSProperties = {}
  */
 const PIENO: CSSProperties = {
   padding: '8px 17px', borderRadius: 99, border: '1px solid transparent',
-  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
   fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
 }
 const CONTORNO: CSSProperties = {
-  ...PIENO, border: '1px solid rgba(34,39,31,.18)', background: 'none', color: '#22271F'
+  ...PIENO, border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'none', color: 'var(--inchiostro)'
 }
 
 /** Un pannello sotto la bozza: sa se è aperto, e lo dice alla bozza che lo apre e lo chiude. */
@@ -107,9 +107,9 @@ type Pannello = { aperto: boolean; apri: () => void; chiudi: () => void }
 type Tinta = { barra: string; fondo: string; bordo: string }
 
 const TINTE: Record<'aspetta' | 'lavora' | 'mia', Tinta> = {
-  aspetta: { barra: '#C4623B', fondo: 'rgba(196,98,59,.10)', bordo: 'rgba(196,98,59,.34)' },
-  lavora: { barra: '#7E9C82', fondo: 'rgba(126,156,130,.12)', bordo: 'rgba(126,156,130,.38)' },
-  mia: { barra: 'rgba(34,39,31,.18)', fondo: 'rgba(255,255,255,.34)', bordo: 'rgba(255,255,255,.95)' }
+  aspetta: { barra: 'var(--rame)', fondo: 'rgba(var(--rame-rgb),.10)', bordo: 'rgba(var(--rame-rgb),.34)' },
+  lavora: { barra: 'var(--salvia)', fondo: 'rgba(var(--salvia-rgb),.12)', bordo: 'rgba(var(--salvia-rgb),.38)' },
+  mia: { barra: 'rgba(var(--inchiostro-rgb),.18)', fondo: 'rgba(var(--luce-rgb),.34)', bordo: 'rgba(var(--luce-rgb),.95)' }
 }
 
 function tinta(c: Compito): Tinta {
@@ -126,10 +126,10 @@ function Cerchio({ c, onClick }: { c: Compito; onClick: () => void }) {
       aria-label={`${t('Fatto')}: ${c.testo}`} title={t('Fatto')}
       style={{
         width: 16, height: 16, flex: 'none', padding: 0, borderRadius: '50%',
-        border: `${pronto ? 2 : 1.5}px solid ${pronto ? '#C4623B' : 'rgba(34,39,31,.22)'}`,
+        border: `${pronto ? 2 : 1.5}px solid ${pronto ? 'var(--rame)' : 'rgba(var(--inchiostro-rgb),.22)'}`,
         background: 'none', cursor: 'pointer'
       }}
-      hover={{ borderColor: '#22271F' }} />
+      hover={{ borderColor: 'var(--inchiostro)' }} />
   )
 }
 
@@ -159,15 +159,15 @@ function Casella({ scelto, lavora, onClick, id, nome, cosa, riga }: {
         height: 30, border: 'none', background: 'none', cursor: 'pointer', padding: 0,
         display: 'grid', placeItems: 'center', fontFamily: 'inherit'
       }}
-      hover={{ background: 'rgba(34,39,31,.04)' }}>
+      hover={{ background: 'rgba(var(--inchiostro-rgb),.04)' }}>
       {/* col colore dichiarato il glifo perde il suo riquadro di fondo, che su
           una riga chiara si vedeva come un quadratino pieno invece che come
           una griglia che si accende */}
-      {lavora ? <Glifo tipo="penso" dim={19} colore="#C4623B" /> : (
+      {lavora ? <Glifo tipo="penso" dim={19} colore="var(--rame)" /> : (
         <span style={{
           width: scelto ? 9 : 7, height: scelto ? 9 : 7, borderRadius: '50%',
-          background: scelto ? (id === 'io' ? '#22271F' : '#C4623B') : 'transparent',
-          border: scelto ? 'none' : '1px solid rgba(34,39,31,.2)'
+          background: scelto ? (id === 'io' ? 'var(--inchiostro)' : 'var(--rame)') : 'transparent',
+          border: scelto ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.2)'
         }} />
       )}
     </Hov>
@@ -245,10 +245,10 @@ function Portami({ c, l }: { c: Compito; l: Lista }) {
       title={nomePorta(c.porta)}
       style={{
         flex: 'none', whiteSpace: 'nowrap', padding: '4px 11px', borderRadius: 99,
-        border: '1px solid rgba(34,39,31,.2)', background: 'rgba(255,255,255,.7)',
-        color: 'rgba(34,39,31,.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
+        border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.7)',
+        color: 'rgba(var(--inchiostro-rgb),.72)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
       }}
-      hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{nomePorta(c.porta)}</Hov>
+      hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{nomePorta(c.porta)}</Hov>
   )
 }
 
@@ -286,13 +286,13 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
         position: 'relative', listStyle: 'none', borderRadius: 16, boxSizing: 'border-box',
         padding: stretta ? '11px 10px 11px 18px' : '11px 15px 11px 22px',
         background: mostra
-          ? `linear-gradient(102deg, ${col.fondo} 0%, rgba(255,255,255,.6) 62%)`
-          : 'rgba(255,253,249,.48)',
+          ? `linear-gradient(102deg, ${col.fondo} 0%, rgba(var(--luce-rgb),.6) 62%)`
+          : 'rgba(var(--carta-rgb),.48)',
         backdropFilter: 'blur(20px) saturate(1.45)', WebkitBackdropFilter: 'blur(20px) saturate(1.45)',
-        border: `1px solid ${mostra ? col.bordo : 'rgba(255,255,255,.7)'}`,
+        border: `1px solid ${mostra ? col.bordo : 'rgba(var(--luce-rgb),.7)'}`,
         boxShadow: mostra
-          ? '0 16px 30px -18px rgba(84,64,44,.45), inset 0 1px 0 rgba(255,255,255,.6)'
-          : '0 3px 10px -8px rgba(84,64,44,.24), inset 0 1px 0 rgba(255,255,255,.45)',
+          ? '0 16px 30px -18px rgba(var(--ombra-rgb),.45), inset 0 1px 0 rgba(var(--luce-rgb),.6)'
+          : '0 3px 10px -8px rgba(var(--ombra-rgb),.24), inset 0 1px 0 rgba(var(--luce-rgb),.45)',
         transform: mostra ? 'translateY(-1px)' : 'none',
         transition: 'background .18s ease, border-color .18s ease, box-shadow .24s ease, transform .24s ease'
       }}
@@ -340,19 +340,19 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                 display: 'block', width: '100%', textAlign: 'left', border: 'none',
                 background: 'none', padding: 0, fontFamily: 'inherit', cursor: 'pointer',
                 fontSize: '14.5px', lineHeight: 1.4, overflowWrap: 'anywhere',
-                color: delegato ? 'rgba(34,39,31,.6)' : '#22271F'
+                color: delegato ? 'rgba(var(--inchiostro-rgb),.6)' : 'var(--inchiostro)'
               }}
-              hover={{ color: '#8E3F1F' }}>{c.testo}</Hov>
+              hover={{ color: 'var(--rame-testo)' }}>{c.testo}</Hov>
 
           {c.guaio && (
-            <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
+            <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
           )}
 
           {/* cosa sta facendo, finché ci lavora: una riga sola, smorzata, che
               non può sforare — un titolo di documento può essere lungo quanto vuole */}
           {delegato && l.passi[c.id] && (
             <div style={{
-              fontSize: '12.5px', color: 'rgba(34,39,31,.5)', marginTop: 3,
+              fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 3,
               overflowWrap: 'anywhere', overflow: 'hidden'
             }}>{frasePasso(l.passi[c.id])}</div>
           )}
@@ -361,7 +361,7 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
         {/* portata avanti da un giorno passato: lo si dice, senza toccare
             `quando` sul disco — vedi `secchioVivo` in `secchi.ts` */}
         {inRitardo && (
-          <span style={{ flex: 'none', whiteSpace: 'nowrap', fontSize: 11, color: 'rgba(34,39,31,.42)' }}>
+          <span style={{ flex: 'none', whiteSpace: 'nowrap', fontSize: 11, color: 'rgba(var(--inchiostro-rgb),.42)' }}>
             {t('in ritardo dal')} {dataLocale(c.giorno as string).toLocaleDateString(loc(), { day: 'numeric', month: 'short' })}
           </span>
         )}
@@ -369,7 +369,7 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
         {aspetta && (
           <Hov as="button" type="button" onClick={() => l.apriChiudi(c.id)} aria-expanded={aperto}
             style={{ ...PILL, flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit' }}
-            hover={{ background: 'rgba(196,98,59,.22)' }}>
+            hover={{ background: 'rgba(var(--rame-rgb),.22)' }}>
             {/* «pronta» su una riga che in realtà ti sta chiedendo una cosa era
                 la bugia più grossa dell'app: leggevi «fatto» dove c'era scritto
                 «non posso». Adesso le due cose hanno due nomi. */}
@@ -385,9 +385,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
         {delegato && prompt && (
           <span style={{
             flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 12, color: 'rgba(34,39,31,.5)'
+            fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.5)'
           }}>
-            <Glifo tipo="penso" dim={14} colore="#C4623B" />
+            <Glifo tipo="penso" dim={14} colore="var(--rame)" />
             {t('prompt')}
           </span>
         )}
@@ -414,11 +414,11 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
               style={{
                 width: 20, height: 20, display: 'grid', placeItems: 'center', border: 'none',
                 background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: 15, lineHeight: 1, color: menu ? '#8E3F1F' : 'rgba(34,39,31,.35)',
+                fontSize: 15, lineHeight: 1, color: menu ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.35)',
                 opacity: mostra || menu ? 1 : 0, pointerEvents: mostra || menu ? 'auto' : 'none',
                 transition: 'opacity .15s, color .15s'
               }}
-              hover={{ color: '#8E3F1F' }}>⋯</Hov>
+              hover={{ color: 'var(--rame-testo)' }}>⋯</Hov>
             {/*
               Non più dentro la riga: ogni riga è una lastra di vetro sfocato,
               cioè un piano per conto suo, e la riga che viene dopo si disegnava
@@ -435,11 +435,11 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                   style={{
                     display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
                     padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
-                    color: '#22271F', fontSize: '13px'
+                    color: 'var(--inchiostro)', fontSize: '13px'
                   }}
-                  hover={{ background: 'rgba(34,39,31,.06)' }}>
+                  hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
                   <div>{t('Preparami il prompt')}</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Da incollare in Claude o ChatGPT')}</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Da incollare in Claude o ChatGPT')}</div>
                 </Hov>
                 {/* prima di affidarla, non dopo: una riga che è un obiettivo si
                     smonta parlandone, e affidarla torna indietro con un piano */}
@@ -450,11 +450,11 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
                     style={{
                       display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none',
                       padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
-                      color: '#22271F', fontSize: '13px'
+                      color: 'var(--inchiostro)', fontSize: '13px'
                     }}
-                    hover={{ background: 'rgba(34,39,31,.06)' }}>
+                    hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
                     <div>{t('Scomponila in chat')}</div>
-                    <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.45)', marginTop: 1 }}>{t('Se è un obiettivo e non un compito')}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.45)', marginTop: 1 }}>{t('Se è un obiettivo e non un compito')}</div>
                   </Hov>
                 )}
               </MenuGiu>
@@ -543,12 +543,12 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
       // più chi contiene chi. Un fondo appena più scuro con l'ombra all'interno
       // dice l'unica cosa che deve dire — questo sta *dentro* quella riga lì.
       gridColumn: '1 / -1', marginTop: 11, marginBottom: 2, padding: '15px 17px',
-      borderRadius: 13, background: 'rgba(34,39,31,.045)',
-      border: '1px solid rgba(255,255,255,.5)',
-      boxShadow: 'inset 0 1px 3px rgba(84,64,44,.09)'
+      borderRadius: 13, background: 'rgba(var(--inchiostro-rgb),.045)',
+      border: '1px solid rgba(var(--luce-rgb),.5)',
+      boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)'
     }}>
       <div style={{
-        fontSize: '14px', lineHeight: 1.6, color: '#22271F', whiteSpace: 'pre-wrap',
+        fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
         overflowWrap: 'anywhere', maxHeight: 300, overflowY: 'auto'
       }}>
         <Testo testo={c.risultato ?? ''} fonti={c.fonti ?? []} />
@@ -556,7 +556,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
 
       {chieste.map((q, i) => (
         <div key={i} style={{ marginTop: 14 }}>
-          <div style={{ fontSize: '13.5px', color: '#22271F', marginBottom: 7, overflowWrap: 'anywhere' }}>{q.domanda}</div>
+          <div style={{ fontSize: '13.5px', color: 'var(--inchiostro)', marginBottom: 7, overflowWrap: 'anywhere' }}>{q.domanda}</div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             {q.opzioni.map(o => {
               const presa = scelte[i]?.has(o)
@@ -565,11 +565,11 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
                   style={{
                     padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
                     cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
-                    border: `1px solid ${presa ? 'transparent' : 'rgba(34,39,31,.18)'}`,
-                    background: presa ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(255,255,255,.7)',
-                    color: presa ? '#FFF7F0' : '#22271F'
+                    border: `1px solid ${presa ? 'transparent' : 'rgba(var(--inchiostro-rgb),.18)'}`,
+                    background: presa ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--luce-rgb),.7)',
+                    color: presa ? 'var(--avorio)' : 'var(--inchiostro)'
                   }}
-                  hover={presa ? { opacity: 0.92 } : { borderColor: '#C4623B', color: '#8E3F1F' }}>
+                  hover={presa ? { opacity: 0.92 } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
                   {o}
                 </Hov>
               )
@@ -591,13 +591,13 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
           placeholder={chieste.length ? t('Aggiungi qualcosa, se serve') : t('Rispondigli e ci riprova')}
           style={{
             flex: 1, minWidth: 0, padding: '9px 13px', borderRadius: 11,
-            border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.85)',
-            color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
+            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.85)',
+            color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
           }} />
         <button type="button" onClick={manda} disabled={!qualcosa} style={{
           flex: 'none', padding: '9px 17px', borderRadius: 99, border: 'none',
-          background: qualcosa ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
-          color: qualcosa ? '#FFF7F0' : 'rgba(34,39,31,.3)',
+          background: qualcosa ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          color: qualcosa ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.3)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: qualcosa ? 'pointer' : 'default'
         }}>{chieste.length ? t('Vai') : t('Manda')}</button>
@@ -619,10 +619,10 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
           title={t('Non è un compito? Parlane in chat e scomponilo insieme a Myynd.')}
           style={{
             marginTop: 10, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.55)',
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.55)',
             textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3
           }}
-          hover={{ color: '#8E3F1F', textDecorationColor: 'currentColor' }}>
+          hover={{ color: 'var(--rame-testo)', textDecorationColor: 'currentColor' }}>
           {t('Scomponila in chat')}
         </Hov>
       )}
@@ -670,38 +670,38 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       // più chi contiene chi. Un fondo appena più scuro con l'ombra all'interno
       // dice l'unica cosa che deve dire — questo sta *dentro* quella riga lì.
       gridColumn: '1 / -1', marginTop: 11, marginBottom: 2, padding: '15px 17px',
-      borderRadius: 13, background: 'rgba(34,39,31,.045)',
-      border: '1px solid rgba(255,255,255,.5)',
-      boxShadow: 'inset 0 1px 3px rgba(84,64,44,.09)'
+      borderRadius: 13, background: 'rgba(var(--inchiostro-rgb),.045)',
+      border: '1px solid rgba(var(--luce-rgb),.5)',
+      boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)'
     }}>
       <div style={{
         fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
-        color: 'rgba(34,39,31,.45)', marginBottom: 9
+        color: 'rgba(var(--inchiostro-rgb),.45)', marginBottom: 9
       }}>{t(cestino ? 'Da mettere nel cestino' : 'Da archiviare')}</div>
 
       <div style={{ maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 9 }}>
         {p.voci.map(v => (
           <div key={v.doc} style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
-            <span style={{ color: 'rgba(34,39,31,.3)', fontSize: 11, flex: 'none' }}>—</span>
+            <span style={{ color: 'rgba(var(--inchiostro-rgb),.3)', fontSize: 11, flex: 'none' }}>—</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '13.5px', color: '#22271F', overflowWrap: 'anywhere' }}>{v.titolo}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>
+              <div style={{ fontSize: '13.5px', color: 'var(--inchiostro)', overflowWrap: 'anywhere' }}>{v.titolo}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 10 }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 10 }}>{t(guaio)}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13 }}>
         <button type="button" onClick={vai} disabled={faccio} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: faccio ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#B24E2E,#D98A5A)',
-          color: faccio ? 'rgba(34,39,31,.35)' : '#FFF7F0',
+          background: faccio ? 'rgba(var(--inchiostro-rgb),.1)' : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))',
+          color: faccio ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
         }}>{faccio ? t('Li sposto…') : frasi.mettiViaTutti(p.voci.length, cestino)}</button>
-        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)' }}>
+        <span style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.35)' }}>
           {t('si spostano, non si cancellano')}
         </span>
       </div>
@@ -748,9 +748,9 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
       // più chi contiene chi. Un fondo appena più scuro con l'ombra all'interno
       // dice l'unica cosa che deve dire — questo sta *dentro* quella riga lì.
       gridColumn: '1 / -1', marginTop: 11, marginBottom: 2, padding: '15px 17px',
-      borderRadius: 13, background: 'rgba(34,39,31,.045)',
-      border: '1px solid rgba(255,255,255,.5)',
-      boxShadow: 'inset 0 1px 3px rgba(84,64,44,.09)'
+      borderRadius: 13, background: 'rgba(var(--inchiostro-rgb),.045)',
+      border: '1px solid rgba(var(--luce-rgb),.5)',
+      boxShadow: 'inset 0 1px 3px rgba(var(--ombra-rgb),.09)'
     }}>
       {modifico ? (
         <textarea
@@ -768,22 +768,22 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           aria-label={prompt ? t('Il prompt') : t('La bozza')}
           style={{
             width: '100%', boxSizing: 'border-box', border: 'none', background: 'none', outline: 'none',
-            resize: 'none', color: '#22271F', fontSize: '14px', lineHeight: 1.6,
+            resize: 'none', color: 'var(--inchiostro)', fontSize: '14px', lineHeight: 1.6,
             fontFamily: 'inherit', maxHeight: 400, overflowY: 'auto'
           }} />
       ) : spezzato ? (
         <div style={{
-          fontSize: '14px', lineHeight: 1.6, color: '#22271F', whiteSpace: 'pre-wrap',
+          fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere', maxHeight: 340, overflowY: 'auto'
         }}>
           {spezzato.prompt}
           {spezzato.nota && (
-            <div style={{ marginTop: 12, fontSize: '12.5px', color: 'rgba(34,39,31,.55)' }}>{spezzato.nota}</div>
+            <div style={{ marginTop: 12, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.55)' }}>{spezzato.nota}</div>
           )}
         </div>
       ) : (
         <div style={{
-          fontSize: '14px', lineHeight: 1.6, color: '#22271F', whiteSpace: 'pre-wrap',
+          fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere', maxHeight: 340, overflowY: 'auto'
         }}>
           <Testo testo={testo} fonti={c.fonti ?? []} />
@@ -795,28 +795,28 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
         {spezzato && (
           <Hov as="button" type="button" onClick={() => l.copia(spezzato.prompt)}
             style={pannello ? CONTORNO : PIENO}
-            hover={pannello ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Copia il prompt')}</Hov>
+            hover={pannello ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Copia il prompt')}</Hov>
         )}
         <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
           style={pannello || spezzato ? CONTORNO : PIENO}
-          hover={pannello || spezzato ? { borderColor: '#C4623B', color: '#8E3F1F' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
+          hover={pannello || spezzato ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
 
         <Hov as="button" type="button" onClick={() => setModifico(m => !m)}
           style={{
-            padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(34,39,31,.18)',
-            background: 'none', color: '#22271F', fontSize: '13px',
+            padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.18)',
+            background: 'none', color: 'var(--inchiostro)', fontSize: '13px',
             fontFamily: 'inherit', cursor: 'pointer'
           }}
-          hover={{ borderColor: '#C4623B', color: '#8E3F1F' }}>{modifico ? t('Rileggi') : t('Correggi')}</Hov>
+          hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>{modifico ? t('Rileggi') : t('Correggi')}</Hov>
 
         <div style={{ flex: 1 }} />
 
         <Hov as="button" type="button" onClick={() => l.delega(c.id, c.modo)}
           style={{
-            padding: '8px 4px', border: 'none', background: 'none', color: 'rgba(34,39,31,.45)',
+            padding: '8px 4px', border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.45)',
             fontSize: 12, fontFamily: 'inherit', cursor: 'pointer'
           }}
-          hover={{ color: '#22271F' }}>{t('Rifallo')}</Hov>
+          hover={{ color: 'var(--inchiostro)' }}>{t('Rifallo')}</Hov>
       </div>
 
       {/* un prompt non ha un destinatario né un file da diventare: va negli
@@ -898,8 +898,8 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
 
   const campo: CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 9,
-    border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.85)',
-    color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+    border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.85)',
+    color: 'var(--inchiostro)', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
   }
 
   if (!aperto) {
@@ -910,9 +910,9 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
         <Hov as="button" type="button" onClick={apri}
           style={{
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)'
           }}
-          hover={{ color: '#C4623B' }}>{t('Affida a un agente locale…')}</Hov>
+          hover={{ color: 'var(--rame)' }}>{t('Affida a un agente locale…')}</Hov>
       </div>
     )
   }
@@ -922,10 +922,10 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
   return (
     <div style={{
       marginTop: 12, padding: '13px 15px', borderRadius: 13,
-      background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)'
+      background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)'
     }}>
       {pronto && !pronto.pronto && !pronto.runtimes?.some(r => r.status === 'supported') ? (
-        <div style={{ fontSize: '12.5px', color: '#8E3F1F' }}>
+        <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)' }}>
           {t('Non c’è un agente locale compatibile su questo computer.')}
         </div>
       ) : (
@@ -936,11 +936,11 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             <option value="claude" disabled={!pronto?.pronto}>Claude Code</option>
             <option value="hermes" disabled={!pronto?.runtimes?.some(r => r.id === 'hermes' && r.status === 'supported')}>Hermes</option>
           </select>
-          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticated===false && <div style={{fontSize:12,color:'#8E3F1F',marginBottom:10}}>{t('Claude Code è installato, ma manca l’accesso al suo account. Collegalo nelle Fonti per affidargli il progetto.')}</div>}
-          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticationPending && <div style={{fontSize:12,color:'#8E3F1F',marginBottom:10}}>{t('L’accesso a Claude Code non è ancora verificato. Riprova tra poco.')}</div>}
+          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticated===false && <div style={{fontSize:12,color:'var(--rame-testo)',marginBottom:10}}>{t('Claude Code è installato, ma manca l’accesso al suo account. Collegalo nelle Fonti per affidargli il progetto.')}</div>}
+          {runtime==='claude' && pronto?.runtimes?.find(r=>r.id==='claude')?.authenticationPending && <div style={{fontSize:12,color:'var(--rame-testo)',marginBottom:10}}>{t('L’accesso a Claude Code non è ancora verificato. Riprova tra poco.')}</div>}
           <div style={{
             fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
-            color: 'rgba(34,39,31,.45)', marginBottom: 5
+            color: 'rgba(var(--inchiostro-rgb),.45)', marginBottom: 5
           }}>{t('In quale progetto')}</div>
           <select value={cartella || cartelle[0] || ''} onChange={e => setCartella(e.target.value)}
             aria-label={t('In quale progetto')} style={campo}>
@@ -961,36 +961,36 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             <label style={{ fontSize: 12 }}>{t('Fornitore Hermes')}
               <input value={hermesProvider} onChange={e => setHermesProvider(e.target.value)} style={campo} disabled={!!gira} />
             </label>
-            <div style={{ fontSize: 12, color: 'rgba(34,39,31,.65)' }}>{t('Hermes propone modifiche solo ai file indicati. Myynd le applica nella copia e le verifica. Le impostazioni dell’agente restano come sono.')}</div>
-            <div style={{fontSize:12,color:'rgba(34,39,31,.65)'}}>{t('Questa modalità usa le credenziali di inferenza già presenti nel file .env di Hermes. Un accesso solo OAuth non è supportato. L’installazione non conferma che l’account sia collegato.')}</div>
-            {pronto?.runtimes?.find(r=>r.id==='hermes')?.inferenceCredentialConfigured===false && <div style={{fontSize:12,color:'#8E3F1F'}}>{t('Mancano le credenziali di inferenza richieste per questa modalità di Hermes.')}</div>}
+            <div style={{ fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{t('Hermes propone modifiche solo ai file indicati. Myynd le applica nella copia e le verifica. Le impostazioni dell’agente restano come sono.')}</div>
+            <div style={{fontSize:12,color:'rgba(var(--inchiostro-rgb),.65)'}}>{t('Questa modalità usa le credenziali di inferenza già presenti nel file .env di Hermes. Un accesso solo OAuth non è supportato. L’installazione non conferma che l’account sia collegato.')}</div>
+            {pronto?.runtimes?.find(r=>r.id==='hermes')?.inferenceCredentialConfigured===false && <div style={{fontSize:12,color:'var(--rame-testo)'}}>{t('Mancano le credenziali di inferenza richieste per questa modalità di Hermes.')}</div>}
           </div>}
 
           <label style={{display:'flex',gap:7,alignItems:'center',fontSize:12,marginTop:10}}>
             <input type="checkbox" checked={team} onChange={e=>setTeam(e.target.checked)} disabled={!!gira || !pronto?.pronto}/>
             {t('Agente esecutore + revisore Claude')}
           </label>
-          {!pronto?.pronto && <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginTop:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>}
+          {!pronto?.pronto && <div style={{fontSize:12,color:'rgba(var(--inchiostro-rgb),.65)',marginTop:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>}
           {team && <div style={{marginTop:7}}>
-            <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginBottom:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>
+            <div style={{fontSize:12,color:'rgba(var(--inchiostro-rgb),.65)',marginBottom:5}}>{t('Il revisore richiede l’accesso a Claude Code. La chiave API collegata a Myynd non collega automaticamente il programma locale.')}</div>
             <label style={{fontSize:12}}>{t('Criteri per accettare il risultato')}
               <textarea value={acceptanceCriteria} onChange={e=>setAcceptanceCriteria(e.target.value)} maxLength={4000}
                 style={{...campo,minHeight:65}} disabled={!!gira}/>
             </label>
-            <div style={{fontSize:12,color:'rgba(34,39,31,.65)',marginTop:5}}>{t('L’esecutore lavora nella copia, poi il revisore controlla file e test. Un controllo incompleto ferma il risultato.')}</div>
+            <div style={{fontSize:12,color:'rgba(var(--inchiostro-rgb),.65)',marginTop:5}}>{t('L’esecutore lavora nella copia, poi il revisore controlla file e test. Un controllo incompleto ferma il risultato.')}</div>
           </div>}
 
-          <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.5)', marginTop: 9, lineHeight: 1.5 }}>
+          <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 9, lineHeight: 1.5 }}>
             {runtime === 'hermes' || pianoFatto
               ? t('Adesso lavora in una copia del progetto. Il progetto collegato resta com’è.')
               : t('Legge il progetto e scrive cosa farebbe. Non tocca niente.')}
           </div>
 
-          {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9 }}>{t(guaio)}</div>}
+          {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 9 }}>{t(guaio)}</div>}
 
           {esecuzione && <div style={{ marginTop: 12, padding: '11px 12px', borderRadius: 10,
-            border: '1px solid rgba(34,39,31,.12)', background: 'rgba(255,255,255,.72)',
-            fontSize: 12, lineHeight: 1.55, color: '#22271F' }}>
+            border: '1px solid rgba(var(--inchiostro-rgb),.12)', background: 'rgba(var(--luce-rgb),.72)',
+            fontSize: 12, lineHeight: 1.55, color: 'var(--inchiostro)' }}>
             <strong>{esecuzione.state === 'verified' ? t('Modifiche verificate nella copia')
               : esecuzione.state === 'unverified' ? t('Modifiche da verificare nella copia')
               : esecuzione.state === 'no_changes' ? t('Nessun file cambiato')
@@ -999,44 +999,44 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             {esecuzione.changedFiles.length > 0 && <div style={{ marginTop: 6 }}>
               {t('File cambiati')}: {esecuzione.changedFiles.map(f => f.path).join(', ')}
             </div>}
-            <div style={{ marginTop: 4, color: 'rgba(34,39,31,.65)' }}>
+            <div style={{ marginTop: 4, color: 'rgba(var(--inchiostro-rgb),.65)' }}>
               {t('Verifica')}: {esecuzione.verification.status === 'passed' ? t('superata')
                 : esecuzione.verification.status === 'failed' ? t('non superata')
                 : esecuzione.verification.status === 'cancelled' ? t('interrotta') : t('non disponibile')}
             </div>
             {esecuzione.verification.status === 'failed' && esecuzione.verification.output &&
               <pre style={{ maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', margin: '6px 0 0',
-                fontSize: 11, color: '#8E3F1F' }}>{esecuzione.verification.output.slice(0, 2000)}</pre>}
+                fontSize: 11, color: 'var(--rame-testo)' }}>{esecuzione.verification.output.slice(0, 2000)}</pre>}
             {esecuzione.team && <div style={{marginTop:7}}>
               <strong>{esecuzione.team.accepted ? t('Revisione accettata') : t('Revisione da completare')}</strong>
               {esecuzione.team.roles.map(role=><div key={role.role} style={{marginTop:4}}>
                 {role.role==='worker' ? t('Esecutore') : t('Revisore')}: {role.runtime} · {role.outcome==='verified' || role.outcome==='approved' ? t('superata') : role.outcome==='cancelled' ? t('interrotta') : role.outcome==='not_run' ? t('non eseguita') : role.outcome==='rejected' ? t('non accettata') : role.outcome==='incomplete' || role.outcome==='unverified' ? t('incompleta') : t('non superata')}
-                {role.findings?.map((finding,i)=><div key={i} style={{color:'rgba(34,39,31,.65)'}}>{finding}</div>)}
+                {role.findings?.map((finding,i)=><div key={i} style={{color:'rgba(var(--inchiostro-rgb),.65)'}}>{finding}</div>)}
               </div>)}
             </div>}
-            <div style={{ marginTop: 5, color: 'rgba(34,39,31,.5)', overflowWrap: 'anywhere' }}>
+            <div style={{ marginTop: 5, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
               {t('Copia')}: {esecuzione.workspace}
             </div>
             <button type="button" onClick={() => api.apriCopiaProgetto(esecuzione.reportFile).catch(e =>
               setGuaio(e instanceof Error ? e.message : String(e)))} style={{ marginTop: 8, padding: '6px 10px',
-                borderRadius: 8, border: '1px solid rgba(34,39,31,.2)', background: '#FFF',
-                color: '#22271F', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                borderRadius: 8, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'var(--carta-alta)',
+                color: 'var(--inchiostro)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
               {t('Apri la copia')}
             </button>
           </div>}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, flexWrap: 'wrap' }}>
             {runtime === 'claude' && <button type="button" onClick={() => vai('piano')} disabled={!!gira || !cartelle.length || !runtimeReady || (team && !acceptanceCriteria.trim())} style={{
-              padding: '9px 18px', borderRadius: 99, border: '1px solid rgba(34,39,31,.2)',
-              background: 'rgba(255,255,255,.8)', color: '#22271F',
+              padding: '9px 18px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)',
+              background: 'rgba(var(--luce-rgb),.8)', color: 'var(--inchiostro)',
               fontSize: '13px', fontFamily: 'inherit', cursor: gira ? 'default' : 'pointer'
             }}>{gira === 'piano' ? t('Guardo il progetto…') : t('Guarda e dimmi cosa faresti')}</button>}
 
             {(pianoFatto || runtime === 'hermes') && (
               <button type="button" onClick={() => vai('fai')} disabled={!!gira || !cartelle.length || !runtimeReady || (team && !acceptanceCriteria.trim()) || (runtime === 'hermes' && (!goal.trim() || !hermesFiles.trim() || !hermesModel.trim() || !hermesProvider.trim()))} style={{
                 padding: '9px 18px', borderRadius: 99, border: 'none',
-                background: gira ? 'rgba(34,39,31,.1)' : 'linear-gradient(120deg,#B24E2E,#D98A5A)',
-                color: gira ? 'rgba(34,39,31,.35)' : '#FFF7F0',
+                background: gira ? 'rgba(var(--inchiostro-rgb),.1)' : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))',
+                color: gira ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
                 cursor: gira ? 'default' : 'pointer'
               }}>{gira === 'fai' ? t('Lo sto facendo…') : runtime === 'hermes' ? t('Affida a Hermes nella copia') : t('Fallo davvero')}</button>
@@ -1045,9 +1045,9 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
               style={{
                 border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'
+                fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.45)'
               }}
-              hover={{ color: '#22271F' }}>{t('Annulla')}</Hov>
+              hover={{ color: 'var(--inchiostro)' }}>{t('Annulla')}</Hov>
           </div>
         </>
       )}
@@ -1090,8 +1090,8 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
 
   const campo: CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 9,
-    border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.85)',
-    color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+    border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.85)',
+    color: 'var(--inchiostro)', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
   }
 
   if (!aperto) {
@@ -1100,9 +1100,9 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
         <Hov as="button" type="button" onClick={apri}
           style={{
             border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)'
           }}
-          hover={{ color: '#C4623B' }}>{t('Salvala come documento…')}</Hov>
+          hover={{ color: 'var(--rame)' }}>{t('Salvala come documento…')}</Hov>
       </div>
     )
   }
@@ -1110,7 +1110,7 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
   return (
     <div style={{
       marginTop: 12, padding: '13px 15px', borderRadius: 13,
-      background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)'
+      background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)'
     }}>
       <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
         <input value={nome} onChange={e => setNome(e.target.value)}
@@ -1131,25 +1131,25 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
         </select>
       )}
 
-      {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9 }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 9 }}>{t(guaio)}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
         <button type="button" onClick={salva} disabled={salvo || !nome.trim() || !cartelle.length} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: !salvo && nome.trim() && cartelle.length ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
-          color: !salvo && nome.trim() && cartelle.length ? '#FFF7F0' : 'rgba(34,39,31,.35)',
+          background: !salvo && nome.trim() && cartelle.length ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          color: !salvo && nome.trim() && cartelle.length ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: salvo ? 'default' : 'pointer'
         }}>{salvo ? t('Salvo…') : t('Salva e apri')}</button>
         <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio('') }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)'
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.45)'
           }}
-          hover={{ color: '#22271F' }}>{t('Annulla')}</Hov>
+          hover={{ color: 'var(--inchiostro)' }}>{t('Annulla')}</Hov>
         <div style={{ flex: 1 }} />
         {!cartelle.length && (
-          <span style={{ fontSize: '11px', color: '#8E3F1F' }}>
+          <span style={{ fontSize: '11px', color: 'var(--rame-testo)' }}>
             {t('Collega una cartella del desktop e potrò scriverci.')}
           </span>
         )}
@@ -1212,10 +1212,10 @@ function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopia
     } catch { setEsito(t('Non sono riuscito ad aprirlo.')) }
     finally { inCorso.current = false; setOccupato(false) }
   }
-  return <div style={{ marginTop: 12, padding: '13px 15px', borderRadius: 13, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)' }}>
-    <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.65)' }}>{t('Invia questa bozza dal tuo programma di posta dopo averla riletta.')}</p>
-    {c.email && <div style={{ fontSize: 12, marginBottom: 10, overflowWrap: 'anywhere', color: 'rgba(34,39,31,.65)' }}>{[c.email.a, c.email.oggetto].filter(Boolean).join(' · ')}</div>}
-    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
+  return <div style={{ marginTop: 12, padding: '13px 15px', borderRadius: 13, background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)' }}>
+    <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{t('Invia questa bozza dal tuo programma di posta dopo averla riletta.')}</p>
+    {c.email && <div style={{ fontSize: 12, marginBottom: 10, overflowWrap: 'anywhere', color: 'rgba(var(--inchiostro-rgb),.65)' }}>{[c.email.a, c.email.oggetto].filter(Boolean).join(' · ')}</div>}
+    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
       {occupato ? t('Un momento…') : bozza.apri ? t('Copia la bozza e apri l’email') : t('Copia la bozza')}
     </button>
     {esito && <div role="status" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 9, overflowWrap: 'anywhere' }}>{esito}</div>}
@@ -1275,16 +1275,16 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
 
   const campo: CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 9,
-    border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.85)',
-    color: '#22271F', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+    border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.85)',
+    color: 'var(--inchiostro)', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
   }
   const etichetta: CSSProperties = {
     fontSize: '10.5px', letterSpacing: '.1em', textTransform: 'uppercase',
-    color: 'rgba(34,39,31,.45)', marginBottom: 4
+    color: 'rgba(var(--inchiostro-rgb),.45)', marginBottom: 4
   }
   const lieve: CSSProperties = {
     border: 'none', background: 'none', padding: '4px 0', cursor: 'pointer',
-    fontFamily: 'inherit', fontSize: '12.5px', color: '#8E3F1F'
+    fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)'
   }
 
   if (!aperto) {
@@ -1292,10 +1292,10 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
       <div style={{ marginTop: 10 }}>
         <Hov as="button" type="button" onClick={pronta ? () => { setM(pronta); apri() } : prepara} disabled={preparo}
           style={lieve}
-          hover={{ color: '#C4623B' }}>
+          hover={{ color: 'var(--rame)' }}>
           {preparo ? t('Preparo l’email…') : t('Mandala per email…')}
         </Hov>
-        {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 6 }}>{t(guaio)}</div>}
+        {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 6 }}>{t(guaio)}</div>}
       </div>
     )
   }
@@ -1311,7 +1311,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
   return (
     <div style={{
       marginTop: 12, padding: '13px 15px', borderRadius: 13,
-      background: 'rgba(255,255,255,.7)', border: '1px solid rgba(34,39,31,.12)',
+      background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)',
       overflow: 'hidden'
     }}>
       {campi ? (
@@ -1320,12 +1320,12 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           <input value={m?.a ?? ''} onChange={e => setM(v => (v ? { ...v, a: e.target.value } : v))}
             placeholder={t('nome@dominio.it')} style={campo} />
           {m && !a && (
-            <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 5 }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 5 }}>
               {t('Nel materiale non ho trovato un indirizzo: scrivilo tu.')}
             </div>
           )}
           {m && !!a && !m.conosciuto && (
-            <div style={{ fontSize: '11.5px', color: '#8A6317', marginTop: 5 }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 5 }}>
               {t('Non ho mai visto questo indirizzo nella tua posta. Controllalo.')}
             </div>
           )}
@@ -1343,15 +1343,15 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           {/* a chi e cosa, in una riga che non può sforare: un indirizzo lungo si tronca, non spinge */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
             <div style={{
-              flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.6)',
+              flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.6)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>
-              {t('A')} <span style={{ color: '#22271F', fontWeight: 500 }}>{a}</span>
-              {m?.oggetto ? <> · <span style={{ color: '#22271F' }}>{m.oggetto}</span></> : null}
+              {t('A')} <span style={{ color: 'var(--inchiostro)', fontWeight: 500 }}>{a}</span>
+              {m?.oggetto ? <> · <span style={{ color: 'var(--inchiostro)' }}>{m.oggetto}</span></> : null}
             </div>
             <Hov as="button" type="button" onClick={() => setTutto(true)}
-              style={{ ...lieve, flex: 'none', padding: 0, color: 'rgba(34,39,31,.45)' }}
-              hover={{ color: '#22271F' }}>{t('Modifica')}</Hov>
+              style={{ ...lieve, flex: 'none', padding: 0, color: 'rgba(var(--inchiostro-rgb),.45)' }}
+              hover={{ color: 'var(--inchiostro)' }}>{t('Modifica')}</Hov>
           </div>
 
           {scrivo ? (
@@ -1373,7 +1373,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
               onKeyDown={e => { if (e.key === 'Enter') setScrivo(true) }}
               title={t('Modifica')}
               style={{
-                marginTop: 9, fontSize: '13.5px', lineHeight: 1.55, color: '#22271F',
+                marginTop: 9, fontSize: '13.5px', lineHeight: 1.55, color: 'var(--inchiostro)',
                 whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', overflow: 'hidden',
                 maxHeight: 300, overflowY: 'auto', cursor: 'text'
               }}>{m?.corpo}</div>
@@ -1381,7 +1381,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
         </>
       )}
 
-      {guaio && <div style={{ fontSize: 12, color: '#8E3F1F', marginTop: 9, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: 12, color: 'var(--rame-testo)', marginTop: 9, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
       {/* la riga va a capo prima di stringere il bottone: «Manda a nome@…» è
           l'unica cosa che qui deve leggersi per intero, e la nota in fondo
@@ -1389,8 +1389,8 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
         <button type="button" onClick={manda} disabled={!puo} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
-          background: puo ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
-          color: puo ? '#FFF7F0' : 'rgba(34,39,31,.35)',
+          background: puo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: puo ? 'pointer' : 'default',
           // l'indirizzo sta dentro il bottone: lungo, si tronca — non esce dal riquadro
@@ -1399,11 +1399,11 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
         <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio(''); setScrivo(false) }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(34,39,31,.45)', flex: 'none'
+            fontFamily: 'inherit', fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.45)', flex: 'none'
           }}
-          hover={{ color: '#22271F' }}>{t('Annulla')}</Hov>
+          hover={{ color: 'var(--inchiostro)' }}>{t('Annulla')}</Hov>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: '11px', color: 'rgba(34,39,31,.35)', flex: 'none', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+        <span style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.35)', flex: 'none', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
           {pronta?.rispondeA ? t('Risponde nel filo del suo messaggio.') : t('parte dalla tua casella')}
         </span>
       </div>
@@ -1461,8 +1461,8 @@ function Gruppo({ s, l, stretta, modifica }: { s: Secchio; l: Lista; stretta: bo
 
   const filo = (acceso: boolean): CSSProperties => ({
     height: 2, margin: '0 10px 4px', borderRadius: 2,
-    background: acceso ? '#C4623B' : 'transparent',
-    boxShadow: acceso ? '0 0 10px rgba(196,98,59,.55)' : 'none',
+    background: acceso ? 'var(--rame)' : 'transparent',
+    boxShadow: acceso ? '0 0 10px rgba(var(--rame-rgb),.55)' : 'none',
     transition: 'background .12s, box-shadow .12s'
   })
 
@@ -1472,7 +1472,7 @@ function Gruppo({ s, l, stretta, modifica }: { s: Secchio; l: Lista; stretta: bo
         {t(NOME[s])}
         {/* il conto accanto al titolo: con le righe staccate la lunghezza di un
             gruppo non si legge più a colpo d'occhio come in un blocco chiuso */}
-        <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: 'none', color: 'rgba(34,39,31,.38)' }}>
+        <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: 'none', color: 'rgba(var(--inchiostro-rgb),.38)' }}>
           {righe.length}
         </span>
       </h2>
@@ -1526,9 +1526,9 @@ function Fatte({ l, aperto, apri }: { l: Lista; aperto: boolean; apri: () => voi
         style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px 8px', border: 'none',
           background: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          fontSize: '12px', color: 'rgba(34,39,31,.34)'
+          fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.34)'
         }}
-        hover={{ color: 'rgba(34,39,31,.62)' }}>
+        hover={{ color: 'rgba(var(--inchiostro-rgb),.62)' }}>
         <span aria-hidden="true" style={{ display: 'flex', transform: aperto ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }}>
           <IconGiu size={9} stroke="currentColor" />
         </span>
@@ -1540,17 +1540,17 @@ function Fatte({ l, aperto, apri }: { l: Lista; aperto: boolean; apri: () => voi
           {l.chiusi.map(c => (
             <Hov key={c.id} as="li" style={{
               display: 'flex', gap: 10, alignItems: 'center', padding: '6px 16px', borderRadius: 9
-            }} hover={{ background: 'rgba(255,255,255,.42)' }}>
-              <span aria-hidden="true" style={{ flex: 'none', display: 'flex', color: 'rgba(34,39,31,.26)' }}>
+            }} hover={{ background: 'rgba(var(--luce-rgb),.42)' }}>
+              <span aria-hidden="true" style={{ flex: 'none', display: 'flex', color: 'rgba(var(--inchiostro-rgb),.26)' }}>
                 <IconSpunta size={11} />
               </span>
-              <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(34,39,31,.42)', overflowWrap: 'anywhere' }}>{c.testo}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.42)', overflowWrap: 'anywhere' }}>{c.testo}</span>
               <Hov as="button" type="button" onClick={() => l.riapri(c.id)}
                 style={{
                   flex: 'none', border: 'none', background: 'none', padding: '0 2px', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: '11.5px', color: 'rgba(34,39,31,.3)'
+                  fontFamily: 'inherit', fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.3)'
                 }}
-                hover={{ color: '#8E3F1F' }}>{t('rimettila')}</Hov>
+                hover={{ color: 'var(--rame-testo)' }}>{t('rimettila')}</Hov>
             </Hov>
           ))}
         </ul>
@@ -1581,14 +1581,14 @@ function Finito({ l }: { l: Lista }) {
   if (prossima) {
     return (
       <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '14px', color: 'rgba(34,39,31,.62)' }}>{t('Oggi è finito.')}</span>
+        <span style={{ fontSize: '14px', color: 'rgba(var(--inchiostro-rgb),.62)' }}>{t('Oggi è finito.')}</span>
         <Hov as="button" type="button"
           onClick={() => l.cambia(prossima.id, { quando: 'oggi', giorno: giornoLocale() })}
           style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '14px', color: '#8E3F1F', textAlign: 'left'
+            fontSize: '14px', color: 'var(--rame-testo)', textAlign: 'left'
           }}
-          hover={{ color: '#C4623B' }}>
+          hover={{ color: 'var(--rame)' }}>
           {t('Ti porti avanti con')} «{prossima.testo}»?
         </Hov>
       </div>
@@ -1599,7 +1599,7 @@ function Finito({ l }: { l: Lista }) {
   // un tic, non un consiglio
   const quale = RIPOSI[new Date().getDate() % RIPOSI.length]
   return (
-    <div style={{ ...FERMO, marginTop: 26, padding: '0 4px', fontSize: '14px', color: 'rgba(34,39,31,.5)' }}>
+    <div style={{ ...FERMO, marginTop: 26, padding: '0 4px', fontSize: '14px', color: 'rgba(var(--inchiostro-rgb),.5)' }}>
       {t(quale)}
     </div>
   )
@@ -1709,7 +1709,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         </h1>
         <div style={{
           marginTop: 9, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
-          color: 'rgba(34,39,31,.5)', textTransform: 'capitalize'
+          color: 'rgba(var(--inchiostro-rgb),.5)', textTransform: 'capitalize'
         }}>{oggi}</div>
       </div>
 
@@ -1723,7 +1723,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         giorno={vista === 'calendario' && !senzaData ? giorno : undefined} lingua={lingua} />
 
       {l.guasto && (
-        <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: '#8E3F1F' }}>{t(l.guasto)}</div>
+        <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: 'var(--rame-testo)' }}>{t(l.guasto)}</div>
       )}
 
       {l.caricato && !l.guasto && vista === 'calendario' && <Calendario compiti={l.compiti} oggi={dataOggi}
@@ -1758,7 +1758,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
             <span />
             {MODI.map(m => (
               <span key={m.id} title={t(m.cosa)} style={{
-                ...LABEL, textAlign: 'center', color: 'rgba(34,39,31,.4)',
+                ...LABEL, textAlign: 'center', color: 'rgba(var(--inchiostro-rgb),.4)',
                 // con la spaziatura piena «MYYND» è più largo della sua colonna
                 // e le tre etichette si toccano
                 fontSize: stretta ? '8.5px' : '9.5px',
@@ -1779,12 +1779,12 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         <Hov as="button" type="button" onClick={() => setGiro(true)}
           style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '11.5px', color: 'rgba(34,39,31,.3)'
+            fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.3)'
           }}
-          hover={{ color: '#8E3F1F' }}>{t('Come funziona')}</Hov>
+          hover={{ color: 'var(--rame-testo)' }}>{t('Come funziona')}</Hov>
         {!desktop() && <Hov as="a" href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); apriGuida() }}
-          style={{ marginLeft: 14, fontSize: '11.5px', color: 'rgba(34,39,31,.3)', textDecoration: 'none' }}
-          hover={{ color: '#8E3F1F' }}>{t('La guida')}</Hov>}
+          style={{ marginLeft: 14, fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.3)', textDecoration: 'none' }}
+          hover={{ color: 'var(--rame-testo)' }}>{t('La guida')}</Hov>}
       </div>
 
       <Coriandoli quando={festa} finito={() => setFesta(0)} />
