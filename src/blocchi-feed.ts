@@ -13,7 +13,7 @@
 /** Una voce del feed, per quel che serve a metterla in un blocco. */
 export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
-export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string }
+export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null }
 /** La domanda di Myynd su un progetto. */
 export type DomandaDaBlocco = { id: string; projectId: string; projectName: string }
 /** Un progetto: solo quelli attivi hanno un blocco. */
@@ -47,6 +47,11 @@ export const COMPITI_IN_PAGINA = 6
 const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
 const peso = (stato: string) => ATTESA[stato] ?? 2
 
+/** I nomi sono entità: Acme non è AcmeCloud. Stessa regola del server (`nominaAmbito`). */
+function nomeNormalizzato(testo: string): string {
+  return (testo.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/[\p{L}\p{N}]+/gu) ?? []).join(' ')
+}
+
 export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D extends DomandaDaBlocco>(dati: {
   voci: V[]
   compiti: C[]
@@ -60,6 +65,34 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
   // un progetto fermo o chiuso, o un id che non si conosce, non ha un blocco:
   // quello che lo nomina va fra il resto, non sparisce
   const chiave = (id: string | null | undefined) => (id && attivi.has(id) ? id : null)
+
+  /*
+   * Una riga che nomina un progetto sta in quel progetto, anche senza averlo scritto.
+   *
+   * «Definire un pilota Myynd dentro H-Farm» finiva sotto «Il resto», e lui
+   * l'ha letta per quello che era: una cosa di H-Farm messa fra le cose di
+   * nessuno. Nasceva da una voce del feed, e chi la creava non le metteva il
+   * progetto. Qui, se il progetto non c'è, si guarda se il testo (o la nota)
+   * nomina un progetto attivo: stesso confine di parola del server, e il nome
+   * più lungo per primo, così «H-Farm» vince su «Farm» dove ci sono tutti e
+   * due. Il server intanto lo scrive alla nascita: i due devono dire la stessa
+   * cosa, non una ciascuno.
+   */
+  const nomi = [...attivi]
+    .map(([id, nome]) => [id, nomeNormalizzato(nome)] as const)
+    .filter(([, nome]) => nome.replace(/ /g, '').length >= 3)
+    .sort((a, b) => b[1].length - a[1].length)
+  const perNome = (testo: string): string | null => {
+    if (!testo.trim() || !nomi.length) return null
+    const dentro = ` ${nomeNormalizzato(testo)} `
+    return nomi.find(([, nome]) => dentro.includes(` ${nome} `))?.[0] ?? null
+  }
+  /** Il blocco di una riga della lista: il suo progetto, quello che nomina, o «Il resto». */
+  const casa = (c: C): string | null => {
+    const suo = chiave(c.progetto)
+    if (suo || c.progetto) return suo
+    return perNome(`${c.testo ?? ''}\n${c.nota ?? ''}`)
+  }
 
   /*
    * «La cosa dopo»: una riga nata da un'altra, che Myynd propone quando quella
@@ -99,7 +132,7 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
     piuRecente(b, voce.quando)
   }
   for (const compito of compiti) {
-    const b = blocco(chiave(compito.progetto))
+    const b = blocco(casa(compito))
     const riga: RigaBlocco<V, C, D> = { genere: 'compito', compito, seguito: seguiti.get(compito.id) ?? null }
     ;(peso(compito.stato) === 0 ? b.attese : b.altre).push(riga)
     piuRecente(b, compito.aggiornato)

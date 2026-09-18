@@ -7,8 +7,8 @@ import assert from 'node:assert/strict'
 import { blocchiFeed, COMPITI_IN_PAGINA, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string) => ({ id, progetto, quando })
-const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string }> = {}) =>
-  ({ id, progetto, stato: 'aperto', origine: 'mano', madre: null, aggiornato: '2026-09-10T08:00:00Z', ...altro })
+const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
+  ({ id, progetto, stato: 'aperto', origine: 'mano', madre: null, aggiornato: '2026-09-10T08:00:00Z', testo: '', nota: null, ...altro })
 const domanda = (id: string, projectId: string, projectName: string) => ({ id, projectId, projectName })
 const PROGETTI = [{ id: 'hf', nome: 'H-Farm', stato: 'attivo' }, { id: 'nx', nome: 'Nextas', stato: 'attivo' }, { id: 'old', nome: 'Vecchio', stato: 'chiuso' }]
 
@@ -130,7 +130,61 @@ test('dentro un blocco: prima le pronte, poi le voci, poi le altre righe, in fon
   assert.deepEqual(ids(b[0]), ['c2', 'v1', 'c1', 'd1'])
 })
 
-test('senza niente non c’è nessun blocco', () => {
+test('una riga senza progetto che ne nomina uno attivo sta nel suo blocco, non nel resto', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [compito('c1', null, { testo: 'Definire un pilota Myynd dentro H-Farm' })],
+    domande: [],
+    progetti: PROGETTI,
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(b.map(x => x.nome), ['H-Farm'])
+  assert.deepEqual(ids(b[0]), ['c1'])
+})
+
+test('vale anche quello che il nome sta nella nota, e il nome è un\u2019entità intera', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [
+      compito('nota', null, { testo: 'Preparare le slide', nota: 'per Nextas, entro venerdì' }),
+      // Nextastic non è Nextas: il confine di parola è lo stesso del server
+      compito('quasi', null, { testo: 'Scrivere a Nextastic' })
+    ],
+    domande: [],
+    progetti: PROGETTI,
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(ids(b.find(x => x.nome === 'Nextas')!), ['nota'])
+  assert.deepEqual(ids(b.find(x => x.nome === 'Il resto')!), ['quasi'])
+})
+
+test('fra due nomi che combaciano vince il più lungo', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [compito('c1', null, { testo: 'Pilota dentro H-Farm' })],
+    domande: [],
+    progetti: [{ id: 'f', nome: 'Farm', stato: 'attivo' }, { id: 'hf', nome: 'H-Farm', stato: 'attivo' }],
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(b.map(x => x.progetto), ['hf'])
+})
+
+test('il progetto scritto vince sul nome nominato, e un progetto chiuso non tira niente fuori dal resto', () => {
+  const b = blocchiFeed({
+    voci: [],
+    compiti: [
+      compito('scritto', 'nx', { testo: 'Pilota dentro H-Farm' }),
+      compito('chiuso', null, { testo: 'Riordinare il Vecchio' })
+    ],
+    domande: [],
+    progetti: PROGETTI,
+    nomeResto: 'Il resto'
+  })
+  assert.deepEqual(ids(b.find(x => x.nome === 'Nextas')!), ['scritto'])
+  assert.deepEqual(ids(b.find(x => x.nome === 'Il resto')!), ['chiuso'])
+})
+
+test('senza niente non c\u2019è nessun blocco', () => {
   assert.deepEqual(blocchiFeed({ voci: [], compiti: [], domande: [], progetti: PROGETTI, nomeResto: 'Il resto' }), [])
 })
 
