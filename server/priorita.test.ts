@@ -189,3 +189,11 @@ test('con il riferimento scritto: sta nel prompt, il progetto morto cade dal gir
   assert.equal(store.domandeConTema('priorita:').length, 1)
   progetti.chiudi(sito.id)
 })
+
+test('progettoDelTesto: il nome vince, il più lungo prima, l’alias del riferimento conta, due parole dell’obiettivo no', async () => {
+  const { progettoDelTesto } = await import('./attenzione.ts')
+  const progetti = await import('./progetti.ts')
+  const ev = progetti.trovaPerNome('Evermute')!
+  assert.equal(progettoDelTesto('Reply to App Review about Evermute'), ev.id)
+  assert.equal(progettoDelTesto('Ship the thing on the App Store this week'), null, 'parole dell’obiettivo senza il nome non bastano')
+})

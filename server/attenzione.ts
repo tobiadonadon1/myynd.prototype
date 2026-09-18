@@ -14,6 +14,25 @@ function pertinente(d: store.Documento, adesso: number) {
   }).destinazione === 'feed'
 }
 
+/**
+ * Di quale progetto parla un testo: solo se lo nomina.
+ *
+ * `tocca` accetta anche due parole dell'obiettivo, e con quello «Review
+ * x-engine's posting cycle» finiva sotto Myynd. Qui vale il nome, il nome
+ * più lungo per primo («H-Farm audit» batte «H-Farm»), e gli altri nomi
+ * delle sue cose scritti nel riferimento («Evermute (everwave)»). Lo usano
+ * la prima pagina per le voci e la lista per le righe nate da una voce:
+ * «Define a Myynd pilot inside H-Farm» stava in «Il resto» perché la riga
+ * nasceva senza progetto.
+ */
+export function progettoDelTesto(testo: string): string | null {
+  const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
+  const trovato = attivi.find(p => nominaAmbito(testo, p.nome))?.id
+  if (trovato) return trovato
+  for (const [nome, id] of riferimento.alias()) if (nominaAmbito(testo, nome)) return id
+  return null
+}
+
 /** Apply the same admission rules to old cached cards as to a new reading.
  * Keep the stored evidence and feedback intact; this is only a view. */
 export function feedAttuale(adesso = Date.now()) {
@@ -29,14 +48,7 @@ export function feedAttuale(adesso = Date.now()) {
   // con quello «Review x-engine's posting cycle» finiva sotto Myynd e
   // «H-Brain» sotto H-Farm. Il nome più lungo vince, così «H-Farm audit»
   // batte «H-Farm».
-  const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
-  // e gli altri nomi delle sue cose, dal riferimento: «Evermute (everwave)»
-  const alias = [...riferimento.alias()]
-  const progettoDi = (v: Record<string, string | null>) => {
-    if (v.progetto) return v.progetto
-    const testo = `${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`
-    return attivi.find(p => nominaAmbito(testo, p.nome))?.id || alias.find(([nome]) => nominaAmbito(testo, nome))?.[1] || null
-  }
+  const progettoDi = (v: Record<string, string | null>) => v.progetto || progettoDelTesto(`${v.titolo}\n${v.testo ?? ''}\n${v.perche ?? ''}`)
   const docs = new Map(voci.flatMap(v => {
     const d = v.doc ? store.documento(v.doc) : null
     return d ? [[d.id, d] as const] : []

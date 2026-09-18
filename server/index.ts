@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
-import { feedAttuale, compitiAttuali, percheVuoto, iniziativeProgetti } from './attenzione.ts'
+import { feedAttuale, compitiAttuali, percheVuoto, iniziativeProgetti, progettoDelTesto } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
 import * as compatibile from './compatibile.ts'
@@ -2635,9 +2635,16 @@ app.post('/api/compiti', (req, res) => {
   const quando = SECCHI.includes(String(req.body?.quando)) ? String(req.body.quando) : 'oggi'
   const giorno = req.body?.giorno ?? null
   if (giorno !== null && !giornoValido(giorno)) return res.status(400).json({ errore: 'Data non valida.' })
-  const progetto = req.body?.progetto ?? null
+  let progetto = req.body?.progetto ?? null
   if (progetto !== null && (typeof progetto !== 'string' || !progetti.trova(progetto))) {
     return res.status(400).json({ errore: 'Questo progetto non c’è.' })
+  }
+  // una riga nata da una voce del feed eredita il progetto della voce, e una
+  // riga che nomina un progetto suo è di quel progetto: «Define a Myynd
+  // pilot inside H-Farm» non deve finire in «Il resto»
+  if (progetto === null) {
+    const voce = req.body?.voce ? store.voceFeed(String(req.body.voce)) : undefined
+    progetto = voce?.progetto || progettoDelTesto(`${voce?.titolo ?? ''}\n${voce?.testo ?? ''}\n${String(req.body?.testo ?? '')}\n${String(req.body?.nota ?? '')}`)
   }
   // l'id lo può portare il client: un compito dettato altrove e uno scritto qui
   // devono poter nascere con lo stesso nome senza chiedere il permesso a nessuno
