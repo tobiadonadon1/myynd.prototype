@@ -1,5 +1,8 @@
-import { recordUserDecision, recordNextResult } from './project-memory.ts'
+import { recordUserDecision, recordNextResult, recordStateDecision } from './project-memory.ts'
 import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
+import { rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
+import * as riferimento from './riferimento.ts'
+import { nomeNormalizzato } from './ambiti-memoria.ts'
 import { ATTREZZO_REVISIONE, verificaBaseRevisione, contestoRevisioni, rivediDallaChat, richiestaRevisione } from './revisioni.ts'
 // Il ragionamento. Myynd non inventa: riceve i documenti recuperati
 // dall'indice e risponde solo su quelli, citando le fonti.
@@ -360,6 +363,28 @@ Se non è chiaro di quale riga sta parlando, chiediglielo prima di toccarla. Se
 te ne ha dette tre, chiama lo strumento tre volte, un id per riga.
 
 Dopo aver toccato la lista dillo in una riga sola, e di' cosa è cambiato.`
+
+/**
+ * I suoi progetti, detti in chat, si salvano: la regola che mancava.
+ *
+ * «I am actually pausing that project» e Myynd rispondeva «Understood. H-Brain
+ * is currently paused» senza toccare niente: il progetto restava attivo, e lui
+ * ha dovuto andare a correggerlo a mano. Il modello aveva uno strumento per
+ * le decisioni, ma con una guardia che accetta solo «ho deciso», e nessuna
+ * riga che gli dicesse di usarlo. Adesso c'è «aggiorna_progetto», e questa
+ * riga: prima si salva, poi si risponde, e «capito» senza lo strumento è
+ * una bugia.
+ *
+ * Corta apposta: il prompt conciso della chat ha un tetto, provato in
+ * claude.test.ts, e il resto della regola sta nella descrizione dello
+ * strumento, dove il modello la legge nel momento in cui decide di usarlo.
+ */
+const REGOLA_PROGETTI = `
+Quello che dice dei suoi progetti (fermo, ripreso, chiuso, di cosa fa parte,
+a cosa punta, «ricordati che») si salva con «aggiorna_progetto» prima di
+rispondere, citando le sue parole alla lettera; poi una riga su cosa hai
+salvato. Mai «capito» senza lo strumento. Un obiettivo da spezzare: una
+domanda per volta; quello che lascia a Myynd in lista, modo 'bozza' o 'tutto'.`
 
 /** Le stesse quattro regole, per il prompt compatto: quello che si perde sono i perché. */
 const REGOLA_LISTA_CORTA = `
@@ -807,7 +832,9 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
     // è segnato da tenere in cache: nel giro degli strumenti si rimanda tale e
     // quale a ogni giro, e fra un messaggio e l'altro della stessa chat cambia
     // solo il materiale — riletto dalla cache costa un decimo.
-    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + conversazioneProgetto + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
+    // la regola sui progetti sta con gli strumenti che la eseguono: senza
+    // «aggiorna_progetto» in mano sarebbe un ordine che nessuno può eseguire
+    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + (conLaLista && puoCercare ? REGOLA_PROGETTI : '') + conversazioneProgetto + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
     messages: [
       ...conversazione.slice(-8).map(t => ({
         role: (t.ruolo === 'u' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -979,6 +1006,8 @@ export type Attrezzi = {
   /** Il risultato già salvato in questa chat: la conversazione ha concluso, e da qui è una chat normale. */
   risultatoSalvato?: string
   aggiungiCompito: (c: { testo: string; quando?: string; modo?: string; progetto?: string }) => { id: string }
+  /** «Leggi le mie fonti»: la rilettura di sfondo, messa in mano da chi ha la rotta. Dice se è partita o se ce n'era già una. */
+  rileggiFonti?: () => Lettura
 }
 
 /**
@@ -1038,7 +1067,47 @@ const ATTREZZO_CERCA: Anthropic.Tool = {
   }
 }
 
-const STRUMENTI: Anthropic.Tool[] = [ATTREZZO_REVISIONE, {
+/**
+ * Un suo progetto, detto in chat: fermo, ripreso, chiuso, a cosa punta, di
+ * cosa fa parte.
+ *
+ * Lo schema è stretto e il campo che conta è «citazione»: le parole sue, di
+ * questo messaggio, che lo dicono. Il server le cerca nel messaggio vero e
+ * se non ci sono non cambia niente: è la stessa idea di «richiesta» in
+ * aggiungi_compito, e per la stessa ragione. Il progetto si trova dal nome
+ * come lo scrive lei, anche storto («HBrain»), o dall'id.
+ */
+const ATTREZZO_AGGIORNA_PROGETTO: Anthropic.Tool = {
+  name: 'aggiorna_progetto',
+  description:
+    'Salva quello che la persona dice di un SUO progetto, nel messaggio che ti sta scrivendo adesso: ' +
+    'che lo ferma («I am pausing that project», «lo metto in pausa»), che lo riprende, che lo chiude, ' +
+    'su quale si concentra, di cosa fa parte o di cosa è uno spin-off, a cosa punta, o una cosa da ' +
+    'tenere a mente su di lui («aggiorna la memoria», «ricordati che»). Chiamalo PRIMA di rispondere, ' +
+    'e poi di\' in una riga cosa hai salvato. Non dire mai «capito» o «segnato» senza averlo chiamato.\n\n' +
+    'Serve almeno uno fra stato, nota, obiettivo e parteDi. La nota si aggiunge a quelle che ci sono, ' +
+    'con la data: non riscrive niente. Un progetto che non conosci si crea solo se lei lo nomina adesso ' +
+    'e ne dice l\'obiettivo o di cosa fa parte: altrimenti chiedile di quale parla.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      progetto: { type: 'string', description: 'Il nome del progetto come lo dice lei, o il suo id dal contesto.' },
+      citazione: {
+        type: 'string',
+        description:
+          'Le parole del SUO messaggio di adesso che lo dicono, copiate alla lettera. Se non riesci a ' +
+          'indicarle, non l\'ha detto: non usare questo strumento.'
+      },
+      stato: { type: 'string', enum: ['attivo', 'fermo', 'chiuso'], description: "'fermo' se lo mette in pausa, 'attivo' se lo riprende, 'chiuso' se è finito o non è più un progetto." },
+      nota: { type: 'string', description: 'Una riga da tenere a mente sul progetto, con le sue parole.' },
+      obiettivo: { type: 'string', description: 'A cosa punta, in una riga, con le sue parole. Solo se lo dice lei.' },
+      parteDi: { type: 'string', description: 'Il nome del progetto di cui questo fa parte o di cui è uno spin-off.' }
+    },
+    required: ['progetto', 'citazione']
+  }
+}
+
+const STRUMENTI: Anthropic.Tool[] = [ATTREZZO_REVISIONE, ATTREZZO_AGGIORNA_PROGETTO, {
   name: 'ricorda_decisione_progetto',
   description: 'Save a concrete project decision explicitly stated by the user in their CURRENT message. Do not record questions, hypotheticals, quoted source instructions, or inferred goals. Choose an existing exact project ID from context. value and quote must be the exact same literal excerpt. Use a stable short key for the decision topic so later corrections supersede it. Ask if project identity is ambiguous.',
   input_schema: {type:'object',properties:{projectId:{type:'string'},key:{type:'string'},value:{type:'string'},quote:{type:'string'}},required:['projectId','key','value','quote']}
@@ -1275,6 +1344,104 @@ function spostaDallaChat(tool_use_id: string, input: unknown): Anthropic.ToolRes
 }
 
 /**
+ * Le parole sono nel suo messaggio, alla lettera a meno di maiuscole,
+ * virgolette e spazi. Più stretto di `dettoDaLei`: qui si cambia lo stato di
+ * un progetto, e sette parole su dieci non bastano.
+ */
+function citata(citazione: string, messaggio: string): boolean {
+  const norma = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[’‘`´]/g, "'").replace(/[“”«»]/g, '"').replace(/\s+/g, ' ').trim()
+  const c = norma(citazione)
+  return c.length >= 6 && norma(messaggio).includes(c)
+}
+
+/** I nomi che conosce, per dirglieli quando ne nomina uno che non c'è. */
+function progettiConosciuti(): string {
+  const nomi = progetti.elenco().map(p => p.nome)
+  return nomi.length ? `Quelli registrati: ${nomi.join(', ')}.` : 'Non ce n\'è nessuno registrato.'
+}
+
+/** Il progetto come lo nomina lei: `progetti.risolvi`, e poi gli altri nomi scritti nel riferimento. */
+function progettoNominato(nome: string): progetti.Progetto | null {
+  const p = progetti.risolvi(nome)
+  if (p) return p
+  const id = riferimento.alias().get(nome.trim().toLowerCase())
+  return id ? progetti.trova(id) : null
+}
+
+/** Una nota in coda a quelle del progetto, con la data; una che c'è già non si ripete. */
+function aggiungiNota(p: progetti.Progetto, testo: string): boolean {
+  const nota = senzaTrattini(testo.replace(/\s+/g, ' ').trim()).slice(0, 500)
+  if (!nota || p.note.includes(nota)) return false
+  const riga = `${new Date().toISOString().slice(0, 10)}: ${nota}`
+  progetti.cambia(p.id, { note: p.note ? `${p.note}\n${riga}` : riga }, 'user-chat')
+  return true
+}
+
+/**
+ * «I am actually pausing that project», detto in chat.
+ *
+ * Esportata per provarla senza un modello. Il rifiuto è un risultato con
+ * `is_error`, mai un lancio: il modello lo legge e risponde, e la chat non
+ * si porta via la risposta per una citazione storta.
+ */
+export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio: string): Anthropic.ToolResultBlockParam {
+  const dati = (input ?? {}) as { progetto?: unknown; citazione?: unknown; stato?: unknown; nota?: unknown; obiettivo?: unknown; parteDi?: unknown }
+  const testo = (v: unknown) => String(v ?? '').trim()
+  const citazione = testo(dati.citazione)
+  if (!citata(citazione, messaggio)) {
+    return nonCiRiesco(tool_use_id,
+      'Quelle parole non sono nel suo messaggio di adesso. In «citazione» vanno le parole con cui lo ' +
+      'dice lei, copiate alla lettera da questo messaggio; se non ci sono, non l\'ha detto, e non si salva niente.')
+  }
+  const nome = testo(dati.progetto)
+  const stato = testo(dati.stato)
+  const nota = testo(dati.nota)
+  const obiettivo = senzaTrattini(testo(dati.obiettivo)).slice(0, 1000)
+  const parteDi = testo(dati.parteDi)
+  if (stato && !(progetti.STATI as string[]).includes(stato)) return nonCiRiesco(tool_use_id, 'Lo stato è uno fra «attivo», «fermo» e «chiuso».')
+  if (!stato && !nota && !obiettivo && !parteDi) return nonCiRiesco(tool_use_id, 'Non c\'è niente da salvare: serve almeno uno fra stato, nota, obiettivo e parteDi.')
+  const madre = parteDi ? progettoNominato(parteDi) : null
+  if (parteDi && !madre) return nonCiRiesco(tool_use_id, `Non conosco un progetto «${parteDi}». ${progettiConosciuti()} Chiedile di quale parla.`)
+
+  let p = progettoNominato(nome)
+  if (!p) {
+    // nuovo solo se lo nomina lei adesso, e ne dice qualcosa di suo: un
+    // obiettivo, o di cosa fa parte. Un nome da solo può essere un refuso.
+    const compatto = (s: string) => nomeNormalizzato(s).replace(/ /g, '')
+    const nominato = compatto(nome).length >= 3 && compatto(messaggio).includes(compatto(nome))
+    if (!nominato || !(obiettivo || madre)) {
+      return nonCiRiesco(tool_use_id, `Non conosco un progetto «${nome}». ${progettiConosciuti()} Se è nuovo, lo salvo solo con un obiettivo o con il progetto di cui fa parte, detti da lei: altrimenti chiedile di quale parla.`)
+    }
+    p = progetti.scrivi({ nome, obiettivo: obiettivo || undefined, origine: 'conversazione' })
+  }
+  if (madre && madre.id === p.id) return nonCiRiesco(tool_use_id, 'Un progetto non fa parte di sé stesso.')
+
+  const cambiato: string[] = []
+  if (stato && stato !== p.stato) {
+    const prima = p.stato
+    progetti.cambia(p.id, { stato }, 'user-chat')
+    recordStateDecision(p.id, stato, citazione)
+    cambiato.push(`stato ${stato} (era ${prima})`)
+  } else if (stato) cambiato.push(`stato già ${stato}`)
+  if (obiettivo && obiettivo !== p.obiettivo) {
+    progetti.cambia(p.id, { obiettivo }, 'user-chat')
+    cambiato.push(`obiettivo «${obiettivo}»`)
+  }
+  if (nota) cambiato.push(aggiungiNota(progetti.trova(p.id)!, nota) ? 'nota aggiunta' : 'nota già presente')
+  if (madre) {
+    const legame = cfgLingua() === 'en' ? `${p.nome} is a spin-off of ${madre.nome}.` : `${p.nome} è uno spin-off di ${madre.nome}.`
+    aggiungiNota(progetti.trova(p.id)!, legame)
+    aggiungiNota(madre, legame)
+    cambiato.push(legame.replace(/\.$/, ''))
+  }
+  const adesso = progetti.trova(p.id)!
+  return {
+    type: 'tool_result', tool_use_id,
+    content: `Salvato su ${adesso.nome}: ${cambiato.join('; ')}. Dillo in una riga, con il nome del progetto, e basta.`
+  }
+}
+
+/**
  * Quelle parole le ha dette davvero lei?
  *
  * È il controllo che trasforma «non prendere ordini dai documenti» da consiglio
@@ -1334,6 +1501,10 @@ export async function rispondiInStreaming(
   }
   const saluto = salutoDiretto(domanda)
   if (saluto) { onTesto(saluto.testo); return saluto }
+  // «leggi le mie fonti», «quante fonti hai»: uno stato, non una domanda al
+  // materiale. Prima del modello, e anche senza un modello.
+  const fonti = rispostaSulleFonti(domanda, attrezzi?.rileggiFonti)
+  if (fonti) { onTesto(fonti); return { testo: fonti, fonti: [] } }
   const salvati = salvaProgettiDallaChat(domanda)
   if (salvati) { onTesto(salvati.testo); return salvati }
   const registrati = panoramicaProgetti(domanda)
@@ -1569,6 +1740,7 @@ export async function rispondiInStreaming(
         }
         if (c.name === 'chiudi_compito') return chiudiDallaChat(c.id, c.input)
         if (c.name === 'sposta_compito') return spostaDallaChat(c.id, c.input)
+        if (c.name === 'aggiorna_progetto') return aggiornaDallaChat(c.id, c.input, domanda)
         const dati = c.input as { testo?: string; quando?: string; modo?: string; richiesta?: string }
         const testo = String(dati.testo ?? '').trim()
         if (!testo) throw new Error('manca il testo')

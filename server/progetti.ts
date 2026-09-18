@@ -122,7 +122,7 @@ export function vivi(): Progetto[] {
 
 /** Imported goals were sometimes used as project names. Keep the original
  * records editable, but do not give a second vote to an inferred alias. */
-function eUnAlias(nome: string, base: Progetto): boolean {
+export function eUnAlias(nome: string, base: Progetto): boolean {
   // «Myynd for Dad», «Myynd per la casa»: è il progetto, con dentro una cosa
   // da fare. Il punto lo faceva nascere come progetto a sé, e lui lo vedeva
   // doppio: «è lo stesso progetto, è solo una delle attività»
@@ -152,6 +152,28 @@ export function trova(id: string): Progetto | null {
   importaDalPunto()
   const r = db.prepare('SELECT * FROM progetti WHERE id = ?').get(id) as Riga | undefined
   return r ? daRiga(r) : null
+}
+
+/**
+ * Un progetto da come lo nomina lei in chat.
+ *
+ * L'id, se il modello l'ha copiato dal contesto; il nome preciso; il nome
+ * scritto senza trattini e spazi («HBrain» per «H-Brain»); o un alias come li
+ * intende `eUnAlias` («H-Brain for the lab» è H-Brain). Anche un progetto
+ * chiuso si trova: «riapri H-Brain» deve poterlo riaprire.
+ */
+export function risolvi(nomeOId: string): Progetto | null {
+  const s = nomeOId.trim()
+  if (!s) return null
+  const perId = trova(s)
+  if (perId) return perId
+  const preciso = trovaPerNome(s)
+  if (preciso) return preciso
+  const compatto = (x: string) => nomeNormalizzato(x).replace(/ /g, '')
+  const k = compatto(s)
+  if (k.length < 3) return null
+  const tutti = elenco()
+  return tutti.find(p => compatto(p.nome) === k) ?? tutti.find(p => eUnAlias(s, p)) ?? null
 }
 
 /**
@@ -190,8 +212,16 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
   return trova(id)!
 }
 
-/** Cambia quello che c'è da cambiare. Torna `null` se il progetto non esiste. */
-export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string }): Progetto | null {
+/**
+ * Cambia quello che c'è da cambiare. Torna `null` se il progetto non esiste.
+ *
+ * `provenienza` dice da dove arriva il cambio, per la memoria del progetto:
+ * dal campo della Memoria (`user-field`, il predefinito) o dalle sue parole in
+ * chat (`user-chat`). Un obiettivo detto in chat segna il progetto come
+ * «dichiarato nella conversazione», a meno che non l'avesse già scritto lei a
+ * mano: quello resta suo.
+ */
+export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string }, provenienza: 'user-field' | 'user-chat' = 'user-field'): Progetto | null {
   const p = trova(id)
   if (!p) return null
   const nome = c.nome !== undefined ? c.nome.trim() : p.nome
@@ -206,7 +236,9 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
     throw new Error('Il colore di un progetto si scrive #RRGGBB.')
   }
   if (c.colore !== undefined) db.prepare('UPDATE progetti SET colore = ? WHERE id = ?').run(c.colore || null, id)
-  const origine = c.nome !== undefined || c.obiettivo !== undefined ? 'mano' : p.origine
+  const origine = c.nome !== undefined || c.obiettivo !== undefined
+    ? (p.origine === 'mano' || provenienza !== 'user-chat' ? 'mano' : 'conversazione')
+    : p.origine
   db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, aggiornato = ? WHERE id = ?').run(
     nome,
     (c.obiettivo !== undefined ? c.obiettivo.trim() : p.obiettivo) || null,
@@ -216,8 +248,9 @@ export function cambia(id: string, c: { nome?: string; obiettivo?: string; stato
     new Date().toISOString(),
     id
   )
-  if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim())
-  if (c.note !== undefined && c.note.trim() !== p.note) recordProjectField(id, 'note', c.note.trim())
+  const ora = new Date().toISOString()
+  if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim(), ora, provenienza)
+  if (c.note !== undefined && c.note.trim() !== p.note) recordProjectField(id, 'note', c.note.trim(), ora, provenienza)
   if (nome !== p.nome) {
     db.prepare('UPDATE convinzioni SET ambito = ? WHERE ambito = ?')
       .run(`progetto:${nome}`, `progetto:${p.nome}`)

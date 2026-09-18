@@ -3785,6 +3785,15 @@ app.post('/api/chat/:id', async (req, res) => {
         if (modo === 'bozza' || modo === 'tutto') compiti.affida(id, modo)
         compiti.annunciaCambio()
         return { id }
+      },
+      // «leggi le mie fonti», detto in chat: è la rilettura delle sei ore,
+      // avviata adesso e in sottofondo, per questo conto. Non si aspetta: la
+      // chat risponde con lo stato, e quello che arriva va sulla prima pagina
+      // dalla stessa strada di sempre. Se una lettura è già in corso lo si dice.
+      rileggiFonti: () => {
+        if (sincronizzazioneInCorso()) return 'in-corso'
+        rileggiDaSola().catch(e => console.error('myynd · la rilettura chiesta in chat non è riuscita:', e instanceof Error ? e.message : e))
+        return 'avviata'
       }
       // Claude Code è caduto dopo aver già scritto mezza risposta, e il motore
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,

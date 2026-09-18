@@ -68,6 +68,20 @@ export function explicitProjectDecision(quote:string,message:string):boolean {
  })
 }
 
+/**
+ * Lo stato cambiato dalla chat: fermato, ripreso, chiuso, con le sue parole accanto.
+ *
+ * Non passa da `explicitProjectDecision`: quella guardia accetta solo «ho
+ * deciso», «ricordati», e «I am actually pausing that project» non è nessuna
+ * delle due. Qui la garanzia è un'altra, e sta in chi chiama: la citazione
+ * è stata trovata alla lettera nel suo messaggio di adesso, e lo stato è uno
+ * dei tre. Una chiave sola, `decision:stato`: l'ultimo cambio vale, i
+ * precedenti restano come storia.
+ */
+export function recordStateDecision(projectId:string,stato:string,quote:string):ProjectMemory {
+ return record({projectId,key:'decision:stato',kind:'decision',value:`Stato: ${stato}`,quote:quote.trim().slice(0,400),provenance:'user-chat',evidenceAt:new Date().toISOString()})
+}
+
 export function recordUserDecision(input:{projectId:string;key:string;value:string;quote:string},currentUserMessage:string) {
  if(input.quote.trim().length<8 || !currentUserMessage.includes(input.quote) || input.value!==input.quote.trim())throw new Error('A decision must quote the current user message, not a model paraphrase')
  if(!explicitProjectDecision(input.quote,currentUserMessage))throw new Error('Only an explicit user decision can enter project memory')
