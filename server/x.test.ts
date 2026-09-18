@@ -75,18 +75,18 @@ function motore(percorso: string) {
 const DB = join(CASA, 'engine.db')
 motore(DB)
 
-test('post, bozze in attesa e note diventano documenti, con i numeri e il link', () => {
+test('post e note diventano documenti con il link; le bozze si contano e non entrano; i numeri stanno nel riepilogo', () => {
   const e = x.leggi({ db: DB }, ADESSO)
   assert.equal(e.post, 4)
   assert.equal(e.bozze, 2)
   assert.equal(e.note, 2)
   assert.equal(e.settimane, 2)
   const ids = e.docs.map(d => d.id)
-  for (const id of ['x:posted:1', 'x:posted:4', 'x:draft:1', 'x:draft:2', 'x:nota:1', 'x:nota:2', 'x:settimana:2026-38', 'x:settimana:2026-37']) {
+  for (const id of ['x:posted:1', 'x:posted:4', 'x:nota:1', 'x:nota:2', 'x:settimana:2026-38', 'x:settimana:2026-37']) {
     assert.ok(ids.includes(id), `manca ${id}`)
   }
-  // il post vecchio, quello senza testo, e le bozze rifiutate, annullate o già uscite
-  for (const id of ['x:posted:5', 'x:posted:6', 'x:draft:3', 'x:draft:4', 'x:draft:5']) {
+  // il post vecchio, quello senza testo, e nessuna bozza: la coda del motore non è un documento
+  for (const id of ['x:posted:5', 'x:posted:6', 'x:draft:1', 'x:draft:2', 'x:draft:3', 'x:draft:4', 'x:draft:5']) {
     assert.ok(!ids.includes(id), `${id} non doveva entrare`)
   }
   assert.ok(e.docs.every(d => d.fonte === 'x' && d.gruppo === 'note'))
@@ -94,7 +94,9 @@ test('post, bozze in attesa e note diventano documenti, con i numeri e il link',
   const p = e.docs.find(d => d.id === 'x:posted:2')!
   assert.equal(p.tipo, 'post')
   assert.equal(p.titolo, 'Attention belongs where a suggestion becomes your decision.')
-  assert.match(p.corpo, /^Attention belongs where a suggestion becomes your decision\.\n\nPost pubblicato su X\. Visualizzazioni 410 · Mi piace 3 · Repost 1 · Risposte 2\nhttps:\/\/x\.com\/tizio\/status\/1002$/)
+  // niente numeri nel corpo: cambiano a ogni giro e farebbero risultare il post «cambiato» dieci volte al giorno
+  assert.match(p.corpo, /^Attention belongs where a suggestion becomes your decision\.\n\nPost pubblicato su X\.\nhttps:\/\/x\.com\/tizio\/status\/1002$/)
+  assert.doesNotMatch(p.corpo, /Visualizzazioni|Mi piace/)
   assert.equal(p.percorso, 'https://x.com/tizio/status/1002')
   assert.equal(p.quando, '2026-09-16T09:00:00.000Z')
   // l'ha scritto lei (il suo motore): non è una novità arrivata
@@ -102,16 +104,8 @@ test('post, bozze in attesa e note diventano documenti, con i numeri e il link',
   // una risposta si dice, e la data con sei decimali si legge lo stesso
   const r = e.docs.find(d => d.id === 'x:posted:1')!
   assert.equal(r.titolo, 'The MD file is the part that matters.')
-  assert.match(r.corpo, /Risposta pubblicata su X\. Visualizzazioni 52/)
+  assert.match(r.corpo, /Risposta pubblicata su X\./)
   assert.equal(r.quando, '2026-09-15T14:31:56.222Z')
-
-  const b = e.docs.find(d => d.id === 'x:draft:2')!
-  assert.equal(b.tipo, 'bozza')
-  assert.equal(b.titolo, 'Bozza per X: Approved reply, going out tonight.')
-  assert.match(b.corpo, /\n\nBozza approvata, in coda per uscire · risposta a @someone · prevista per il 2026-09-17 20:00\nhttps:\/\/x\.com\/someone\/status\/77$/)
-  assert.equal(b.percorso, 'https://x.com/someone/status/77')
-  assert.equal(b.inviato, undefined)
-  assert.match(e.docs.find(d => d.id === 'x:draft:1')!.corpo, /\n\nBozza in attesa del tuo sì$/)
 
   const n = e.docs.find(d => d.id === 'x:nota:2')!
   assert.equal(n.tipo, 'nota')

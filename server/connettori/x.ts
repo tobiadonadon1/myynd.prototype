@@ -11,16 +11,25 @@
 // cambia, niente si crea — se il file non c'è, si dice, non si fa nascere un
 // database vuoto al suo posto.
 //
-// **Quattro tipi di documento.** Un post pubblicato, con i numeri e il link;
-// una bozza in attesa o approvata — quelle rifiutate, scadute o già uscite
-// non sono più una cosa da fare; una nota di strategia, così com'è; e un
-// riepilogo per settimana: quanti post e quante risposte, i follower
-// guadagnati o persi, i tre post più visti. Novanta giorni per post e bozze,
-// tutte le note: sono poche e sono la testa del motore.
+// **Tre tipi di documento.** Un post pubblicato, con il link; una nota di
+// strategia, così com'è; e un riepilogo per settimana: quanti post e quante
+// risposte, i follower guadagnati o persi, i tre post più visti con i loro
+// numeri. Novanta giorni per i post, tutte le note: sono poche e sono la
+// testa del motore.
+//
+// **Le bozze non entrano, e i numeri stanno solo nel riepilogo.** Il primo
+// giorno le bozze in attesa erano documenti, e il conto dei documenti in
+// prima pagina è passato da settecento a quattrocentottanta in una mattina:
+// il motore ne scrive a lotti e le annulla a lotti, e ogni giro le toglieva
+// dall'indice. Una coda di un altro programma non è un documento. E i numeri
+// di un post — visualizzazioni, mi piace — cambiano a ogni giro: messi nel
+// corpo facevano risultare «cambiati» venti post ogni dieci minuti, e ogni
+// volta partiva la lettura del feed con il modello. Si contano le bozze,
+// per il registro, ma non si indicizzano; i numeri vivono nel riepilogo.
 //
 // **I post sono suoi, non arrivati.** Un post pubblicato è `inviato`, come
 // la posta che ha scritto lei: entra nell'indice ma non è una novità da
-// raccontare in prima pagina. Una bozza sì — è una decisione che aspetta.
+// raccontare in prima pagina.
 
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -127,16 +136,13 @@ function documentoPost(p: Post, it: boolean): Documento | null {
   const corpo = (p.body ?? '').trim()
   const quando = istante(p.posted_at)
   if (!corpo || !quando) return null
-  const numeri = it
-    ? `Visualizzazioni ${numero(p.views)} · Mi piace ${numero(p.likes)} · Repost ${numero(p.reposts)} · Risposte ${numero(p.replies)}`
-    : `Views ${numero(p.views)} · Likes ${numero(p.likes)} · Reposts ${numero(p.reposts)} · Replies ${numero(p.replies)}`
   const cosa = p.kind === 'reply' ? (it ? 'Risposta pubblicata su X' : 'Reply published on X') : (it ? 'Post pubblicato su X' : 'Post published on X')
   return {
     id: `x:posted:${p.id}`,
     fonte: 'x',
     tipo: 'post',
     titolo: titoloDi(corpo),
-    corpo: `${corpo}\n\n${cosa}. ${numeri}${p.url ? `\n${p.url}` : ''}`,
+    corpo: `${corpo}\n\n${cosa}.${p.url ? `\n${p.url}` : ''}`,
     autore: null,
     percorso: p.url || null,
     quando,
@@ -257,7 +263,8 @@ export function leggi(cfg: ConfigX, adesso = Date.now(), giorni = GIORNI): Esito
     const docs: Documento[] = []
     const esito: EsitoX = { docs, post: 0, bozze: 0, note: 0, settimane: 0 }
     for (const p of post) { const d = documentoPost(p, it); if (d) { docs.push(d); esito.post++ } }
-    for (const b of bozze) { const d = documentoBozza(b, it); if (d) { docs.push(d); esito.bozze++ } }
+    // le bozze si contano e basta: vedi in testa
+    for (const b of bozze) { if (documentoBozza(b, it)) esito.bozze++ }
     for (const n of note) { const d = documentoNota(n, it); if (d) { docs.push(d); esito.note++ } }
 
     const perSettimana = new Map<string, Post[]>()
