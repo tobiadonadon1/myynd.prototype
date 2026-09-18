@@ -18,6 +18,9 @@
 .task-calendar-nav > button {border:0;background:transparent;border-radius:10px;min-width:34px;min-height:34px;color:rgba(34,39,31,.55);font-size:22px;}
 .task-calendar-nav .task-calendar-today {font-size:12.5px;margin:0 4px 0 10px;padding:0 14px;border:1px solid rgba(34,39,31,.14);color:rgba(34,39,31,.72);}
 .task-calendar-nav > button:hover {background:rgba(196,98,59,.1);color:#8e3f1f;}
+/* Un comando, non una scelta: la settimana si apre, e si richiude com'era. */
+.task-calendar-nav .task-calendar-espandi {display:inline-flex;align-items:center;gap:7px;font-size:12.5px;padding:0 14px;border:1px solid rgba(196,98,59,.34);color:#8e3f1f;}
+.task-calendar-nav .task-calendar-espandi:hover {background:rgba(196,98,59,.11);border-color:rgba(196,98,59,.5);}
 
 /* La striscia della settimana: una riga sola, calma. Nessun bordo, nessuna
    casella: solo il giorno scelto prende il rame, e oggi porta il suo bollo. */
@@ -71,28 +74,6 @@
 .task-day-column .task-agenda-list:empty + .task-day-add {margin-top:0;}
 .task-day-add:hover {background:rgba(196,98,59,.07);border-color:rgba(196,98,59,.35);color:#8e3f1f;}
 
-/* La vista intera: il mese per settimane, da lunedì a domenica. */
-.task-month-heads,.task-month-grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
-.task-month-heads {padding-bottom:10px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:rgba(34,39,31,.42);}
-.task-month-heads span {padding-left:11px;}
-.task-month-cell {display:flex;flex-direction:column;gap:6px;min-height:88px;padding:8px 8px 10px;background:rgba(255,255,255,.5);border:1px solid rgba(34,39,31,.07);border-radius:14px;cursor:pointer;transition:background .14s,border-color .14s;}
-.task-month-cell:hover {background:#fffdf9;border-color:rgba(196,98,59,.3);}
-.task-month-cell.fuori {background:transparent;border-color:transparent;}
-.task-month-cell.fuori .task-month-number {color:rgba(34,39,31,.3);}
-.task-month-cell.selected {background:rgba(196,98,59,.1);border-color:rgba(196,98,59,.34);}
-.task-month-cell.drop-target {outline:2px solid #c4623b;outline-offset:-2px;background:rgba(196,98,59,.12);}
-.task-month-top {display:flex;align-items:center;justify-content:space-between;gap:4px;}
-.task-month-number {display:grid;place-items:center;min-width:28px;height:28px;padding:0 5px;border:0;border-radius:99px;background:transparent;font-size:14.5px;color:rgba(34,39,31,.7);}
-.task-month-cell.today .task-month-number {background:#c4623b;color:#fff7f0;}
-.task-month-add {border:0;background:transparent;width:26px;height:26px;border-radius:8px;font-size:17px;line-height:1;color:rgba(34,39,31,.4);opacity:0;transition:opacity .14s;}
-.task-month-cell:hover .task-month-add,.task-month-cell.selected .task-month-add,.task-month-add:focus-visible {opacity:1;}
-.task-month-add:hover {background:rgba(196,98,59,.12);color:#8e3f1f;}
-.task-month-chips {list-style:none;display:flex;flex-direction:column;gap:4px;margin:0;padding:0;min-width:0;}
-.task-month-chip {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;line-height:1.5;padding:3px 7px;border-radius:8px;background:rgba(34,39,31,.05);color:rgba(34,39,31,.75);cursor:grab;}
-.task-month-chip:hover {background:rgba(196,98,59,.13);color:#8e3f1f;}
-.task-month-cell.today .task-month-chip {background:rgba(196,98,59,.1);}
-.task-month-more {font-size:11px;color:rgba(34,39,31,.45);padding:2px 8px;}
-
 .task-unscheduled-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;list-style:none;padding:0;margin:0;}
 .task-planning-card {min-width:0;list-style:none;position:relative;padding:13px 12px 10px;background:#fffdf9;border:1px solid rgba(34,39,31,.08);border-radius:12px;box-shadow:0 3px 9px -6px rgba(71,57,40,.2);}
 .task-planning-card.waiting {border-left:3px solid #c4623b;}
@@ -136,7 +117,6 @@
 .task-detail .task-detail-title,.task-detail .task-detail-notes {border-radius:12px;}
 .task-detail .task-detail-title:focus-visible,.task-detail .task-detail-notes:focus-visible {border-radius:12px;border-color:#c4623b;outline:2px solid #c4623b;outline-offset:-1px;}
 
-@media (max-width:900px) {.task-month-cell {min-height:94px;}.task-month-chip {font-size:11px;}}
 @media (max-width:560px) {
   .task-calendar {padding:16px 12px;border-radius:18px;}
   .task-calendar-week {gap:3px;}
@@ -152,10 +132,6 @@
   .task-planning-card {padding:11px 9px 8px;}
   .task-planning-footer {margin-left:0;}
   .task-calendar-owners {grid-template-columns:minmax(0,1fr) 40px 40px 40px;padding:0 11px 9px 19px;}
-  .task-month-heads,.task-month-grid {gap:3px;}
-  .task-month-heads {padding-left:6px;}
-  .task-month-cell {min-height:72px;padding:6px 5px 7px;border-radius:10px;}
-  .task-month-number {min-width:24px;height:24px;font-size:13px;}
   .task-detail-body {padding:22px 20px;}
 }
-@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-month-cell,.task-month-add,.task-day-add {transition:none;}}
+@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add {transition:none;}}

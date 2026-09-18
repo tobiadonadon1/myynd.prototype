@@ -657,6 +657,39 @@ export type Compito = {
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
 
 /**
+ * Un'agenda del Mac, o una letta da un indirizzo iCal.
+ *
+ * `scrivibile` è per calendario e non per tutta l'agenda: quella di un cliente
+ * arrivata per iCal si legge e basta, e offrire «salva» su una cosa che non si
+ * può salvare è una promessa che non si mantiene.
+ */
+export type CalendarioAgenda = {
+  id: string; nome: string; colore: string; scrivibile: boolean; fonte: 'apple' | 'ical'
+}
+
+export type EventoAgenda = {
+  id: string
+  calendario: string
+  titolo: string
+  /** Istanti, non giorni civili: la griglia a ore ragiona in minuti. */
+  inizio: string
+  fine: string
+  tuttoIlGiorno: boolean
+  luogo?: string
+  note?: string
+  fonte: string
+}
+
+/** Quello che l'agenda dice di una settimana. `scrivibile` falso = sola lettura. */
+export type Agenda = { calendari: CalendarioAgenda[]; eventi: EventoAgenda[]; scrivibile: boolean }
+
+/** Un evento come lo scrive chi lo crea o lo sposta: il server torna quello vero. */
+export type BozzaEvento = {
+  titolo: string; inizio: string; fine: string
+  tuttoIlGiorno?: boolean; calendario?: string; luogo?: string; note?: string
+}
+
+/**
  * Dov'è andato «Portami lì».
  *
  * `posta` e `file` sono già successi. Una `pagina` con URL va aperta sul
@@ -1103,6 +1136,29 @@ export const api = {
   inviaEmail: (id: string, m?: { a: string; oggetto: string; corpo: string }) =>
     json<{ ok: true; compiti: Compito[]; chiusi: Compito[] }>(
       `/api/compiti/${encodeURIComponent(id)}/invia`, { method: 'POST', body: JSON.stringify(m ?? {}) }),
+
+  // — l'agenda: la settimana aperta —
+
+  /**
+   * Gli eventi di un intervallo, con i calendari a cui appartengono.
+   *
+   * `da` e `a` sono istanti ISO e non giorni civili: l'estremo lo decide chi
+   * guarda — la settimana aperta chiede dalla mezzanotte di lunedì a quella di
+   * lunedì dopo — e il server non deve indovinare nessun fuso.
+   */
+  agenda: (da: string, a: string) =>
+    json<Agenda>(`/api/agenda?da=${encodeURIComponent(da)}&a=${encodeURIComponent(a)}`),
+
+  creaEvento: (e: BozzaEvento) =>
+    json<{ evento: EventoAgenda }>('/api/agenda/eventi', { method: 'POST', body: JSON.stringify(e) }),
+
+  /** Spostare è cambiare: trascinare un blocco in un'altra fascia passa da qui. */
+  cambiaEvento: (id: string, e: Partial<BozzaEvento>) =>
+    json<{ evento: EventoAgenda }>(`/api/agenda/eventi/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: JSON.stringify(e) }),
+
+  eliminaEvento: (id: string) =>
+    json<{ ok: true }>(`/api/agenda/eventi/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   /** Quello che è uscito da qui davvero. */
   azioni: () => json<{ azioni: Azione[] }>('/api/azioni'),

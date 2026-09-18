@@ -28,6 +28,7 @@ import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
 import { nomePorta, portaAlProgetto, portaInChat, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
+import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
 import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { desktop } from '../desktop'
@@ -1613,6 +1614,16 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
   const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
   const [giorno, setGiorno] = useState(giornoLocale)
   const [senzaData, setSenzaData] = useState(false)
+  /*
+   * La settimana aperta su tutta l'applicazione.
+   *
+   * Sta qui e non in `App.tsx` perché qui c'è quello che le serve: la lista,
+   * il giorno scelto e la barra che ci scrive dentro. Aprirla da più in alto
+   * avrebbe voluto dire portare su quello stato e rimandarlo giù — più fili
+   * per la stessa cosa. Si disegna fuori dall'impaginato con un portale, e
+   * quindi prende lo schermo per intero anche partendo da qui dentro.
+   */
+  const [espansa, setEspansa] = useState(false)
   const [modifica, setModifica] = useState<Compito | null>(null)
   // chiesta da fuori (una riga del punto): si apre il dettaglio e la richiesta si consuma
   useEffect(() => {
@@ -1717,8 +1728,15 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
 
       {l.caricato && !l.guasto && vista === 'calendario' && <Calendario compiti={l.compiti} oggi={dataOggi}
         giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
+        espandi={() => setEspansa(true)}
         pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
         renderRiga={c => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} />} />}
+
+      {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}
+        scegli={g => { setGiorno(g); setSenzaData(false) }} lingua={lingua}
+        pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
+        nuovoCompito={(testo, g) => { void l.aggiungi(testo, secchioDelGiorno(g), g) }}
+        chiudi={() => setEspansa(false)} />}
 
       {vista === 'calendario' && l.compiti.filter(c => l.aperti.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede')).map(c =>
         <section key={c.id} id={`task-result-${c.id}`} className="task-calendar-result"><ul className="task-agenda-list"><Riga c={c} l={l} stretta={stretta} modifica={setModifica} /></ul></section>)}
