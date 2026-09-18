@@ -21,16 +21,14 @@
 //     può falsificare.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Blocco, type Convinzione, type Memoria as Dati, type Progetto, type StatoProgetto, type ProjectEvidence } from '../api'
-import './project-evidence.css'
-import { AttivitaProgetto } from '../components/AttivitaProgetto'
+import { api, type Blocco, type CambioProgetto, type Convinzione, type Memoria as Dati, type Progetto } from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
-import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva, useConferma } from '../ui'
+import { CARD_GLASS, Cestino, Hov, LABEL, useAttiva } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
 import { ascoltaProgetto, dimenticaProgetto, progettoAtteso } from '../vals'
-import { TAVOLOZZA, coloreProgetto } from '../colori-progetto'
+import { RigaProgetto } from './ProgettoEditor'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
 function quanto(f: number): string {
@@ -285,205 +283,36 @@ function Riga({ c, scorda, tieni, storica }:
 /**
  * I progetti: su cosa lavora, e a cosa punta ciascuno.
  *
- * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che
- * il feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
- * scritto in una riga vale più di trenta documenti. Un nome, l'obiettivo che
- * si scrive qui dentro, e uno stato — attivo, fermo, chiuso — che si sceglie
- * uno per uno. Chiuso non cancella: resta scritto, e il punto non lo reinventa.
+ * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che il
+ * feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
+ * scritto in una riga vale più di trenta documenti.
  *
- * Prima girava con un dito — un clic sulla pastiglia passava allo stato dopo,
- * in silenzio — e a lui gliene ha chiusi due per sbaglio: «non sono chiusi,
- * sono solo in pausa, e "segna come chiuso" suona strano». Adesso i tre stati
- * si scelgono uno alla volta, chiudere chiede conferma una volta sola, e
- * riaprire resta un solo clic — perché riaprire non butta via niente.
+ * Una riga per progetto, e la riga si apre. Prima mezzo editor stava spalmato
+ * su ogni riga, sempre aperto, per ogni progetto: la lista non si leggeva più,
+ * e intanto quello che il server sa davvero di un progetto (gli altri nomi, il
+ * progetto dentro cui sta, le note) non aveva nessun posto dove essere
+ * scritto. Adesso la lista dice quattro cose per riga, e tutto il resto sta
+ * dentro la riga che hai aperto: `ProgettoEditor`.
  */
-const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string }> = {
-  attivo: { testo: '#2F4A33', fondo: 'rgba(126,156,130,.18)' },
-  fermo: { testo: '#8A6317', fondo: 'rgba(216,164,110,.2)' },
-  chiuso: { testo: 'rgba(34,39,31,.55)', fondo: 'rgba(34,39,31,.08)' }
-}
-
-/** Fetch only when expanded; old claims remain visible without looking current. */
-function MemoriaProgetto({p}: {p: Progetto}) {
-  const [open,setOpen]=useState(false)
-  const [records,setRecords]=useState<ProjectEvidence[] | null>(null)
-  const [error,setError]=useState(false)
-  const en=loc().startsWith('en')
-  useEffect(()=>{
-    if(!open)return
-    let alive=true
-    setError(false)
-    api.memoriaProgetto(p.id).then(r=>{if(alive)setRecords(r.records)}).catch(()=>{if(alive)setError(true)})
-    return ()=>{alive=false}
-  },[open,p.id,p.aggiornato])
-  const labels:Record<ProjectEvidence['provenance'],string>={
-    'user-field':en?'You saved this':'Salvato da te', 'user-chat':en?'You said this in chat':t('Dalla tua chat'),
-    'source-inference':en?'Inferred from a source':t('Dedotto da una fonte'), 'task-record':en?'Recorded work outcome':'Risultato del lavoro'
-  }
-  const kinds:Record<ProjectEvidence['kind'],string>={goal:en?'Goal':'Obiettivo',note:en?'Note':'Nota',decision:en?'Decision':'Decisione',observation:en?'Observation':'Osservazione',work:en?'Work':'Lavoro'}
-  const date=(value:string)=>Number.isFinite(Date.parse(value))?new Date(value).toLocaleDateString(loc(),{day:'numeric',month:'short',year:'numeric'}):(en?'Date unknown':'Data sconosciuta')
-  const row=(r:ProjectEvidence)=><li key={r.id} className="project-evidence-item" data-history={!!r.supersededBy}>
-    <div className="project-evidence-meta"><strong>{kinds[r.kind]}</strong><span>{r.supersededBy?(en?'Replaced':'Sostituito'):r.stale?(en?'Needs rechecking':'Da ricontrollare'):(en?'Current record':'Attuale')}</span></div>
-    <p>{r.value || (en?'Removed from the current project':'Rimosso dal progetto')}</p>
-    <div className="project-evidence-origin">{labels[r.provenance]} · <time dateTime={r.evidenceAt || undefined}>{date(r.evidenceAt)}</time></div>
-    {r.stale && <small className="project-evidence-warning">{en?'Not used as current knowledge. The source or task changed, is missing, or is too old.':t('Non usato come informazione attuale: fonte o attività cambiata, mancante o datata.')}</small>}
-    {r.quote && r.quote!==r.value && <blockquote>{r.quote}</blockquote>}
-  </li>
-  const current=records?.filter(r=>!r.supersededBy)??[]
-  const history=records?.filter(r=>r.supersededBy)??[]
-  return <details className="project-evidence" onToggle={e=>setOpen(e.currentTarget.open)}>
-    <summary>{en?'What Myynd remembers':'Cosa ricorda Myynd'}</summary>
-    {error?<p role="alert">{en?'Could not load this project’s memory. Close and reopen to retry.':t('Memoria non disponibile. Chiudi e riapri per riprovare.')}</p>:!records?<p role="status">{en?'Loading…':'Caricamento…'}</p>:<>
-      {!records.length && <p>{en?'No evidence history yet. Your saved goal and notes remain above.':'Nessuna cronologia. Obiettivo e note restano salvati.'}</p>}
-      <ul className="project-evidence-list">{current.map(row)}</ul>
-      {!!history.length && <details className="project-evidence-history"><summary>{en?'Previous versions':'Versioni precedenti'} <small>{history.length}</small></summary><ul className="project-evidence-list">{history.map(row)}</ul></details>}
-    </>}
-  </details>
-}
-
-function RigaProgetto({ p, tutti, cambia, acceso }: {
-  p: Progetto
-  /** Gli altri: il colore assegnato a chi non l'ha scelto non deve ripetere il loro. */
-  tutti: Progetto[]
-  cambia: (id: string, c: { obiettivo?: string; stato?: StatoProgetto; colore?: string }) => Promise<void>
-  /** Arrivato adesso da una riga della lista: un anello di rame per un attimo, e basta. */
-  acceso?: boolean
-}) {
-  const [obiettivo, setObiettivo] = useState(p.obiettivo)
-  useEffect(() => { setObiettivo(p.obiettivo) }, [p.obiettivo])
-  const chiuso = p.stato === 'chiuso'
-  const salva = () => { if (obiettivo.trim() !== p.obiettivo.trim()) cambia(p.id, { obiettivo: obiettivo.trim() }) }
-  /*
-   * Il colore del progetto: un pallino accanto al nome, che aperto mostra la
-   * tavolozza. È il colore con cui la prima pagina veste la carta di questo
-   * progetto — «lo cambierei nelle impostazioni»: le impostazioni di un
-   * progetto sono la sua riga, qui.
-   */
-  const colore = coloreProgetto(p, tutti)
-  const [tavolozza, setTavolozza] = useState(false)
-
-  // chiudere chiede una volta — è lì che si è rotto; riaprire no, perché non distrugge niente
-  const { armato, chiedi, disarma } = useConferma()
-  // titoli calcolati a ogni resa: `t()` legge la lingua corrente, e un dizionario
-  // fissato una volta sola all'avvio del modulo resterebbe fermo alla prima lingua vista
-  const TITOLO_STATO: Record<StatoProgetto, string> = {
-    attivo: t('Segna come attivo'), fermo: t('Segna come fermo'), chiuso: t('Segna come chiuso')
-  }
-  const chip = (s: StatoProgetto, onClick: () => void) => (
-    <Hov key={s} as="button" type="button" aria-pressed={p.stato === s} title={TITOLO_STATO[s]} onClick={onClick}
-      style={{
-        flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
-        padding: '3px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-        color: p.stato === s ? COLORE_STATO[s].testo : 'rgba(34,39,31,.4)',
-        background: p.stato === s ? COLORE_STATO[s].fondo : 'transparent'
-      }}
-      hover={p.stato === s ? {} : { color: '#C4623B' }}>{t(s)}</Hov>
-  )
-
-  return (
-    // l'id è la maniglia con cui la prima pagina porta questa riga sotto gli occhi
-    <div id={`progetto-${p.id}`} style={{
-      padding: '13px 0', borderTop: '1px solid rgba(34,39,31,.08)', opacity: chiuso ? 0.55 : 1,
-      // l'anello sta fuori dal flusso: acceso non sposta di un pixel quello che c'è sotto
-      borderRadius: 10, outline: acceso ? '2px solid #C4623B' : '2px solid transparent',
-      outlineOffset: 6, transition: 'outline-color .3s'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <Hov as="button" type="button" onClick={() => setTavolozza(x => !x)} title={t('Colore del progetto')} aria-label={t('Colore del progetto')}
-          aria-expanded={tavolozza}
-          style={{ flex: 'none', width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,.9)', background: colore, padding: 0, cursor: 'pointer', boxShadow: '0 0 0 1px rgba(34,39,31,.15)' }}
-          hover={{ boxShadow: '0 0 0 2px ' + colore }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: '14.5px', fontWeight: 500, color: '#22271F', overflowWrap: 'anywhere',
-          textDecoration: chiuso ? 'line-through' : 'none' }}>{p.nome}</span>
-        {p.origine === 'punto' && (
-          <span style={{ flex: 'none', fontSize: '11.5px', color: 'rgba(34,39,31,.45)' }}>{t('riconosciuto dal punto')}</span>
-        )}
-        {chiuso ? (
-          // chiuso non ha più chip da scegliere: solo l'etichetta, e un
-          // ritorno a un solo clic — riaprire non è una cosa da confermare
-          <>
-            <span style={{
-              flex: 'none', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase',
-              padding: '3px 8px', borderRadius: 5, color: COLORE_STATO.chiuso.testo, background: COLORE_STATO.chiuso.fondo
-            }}>{t('chiuso')}</span>
-            <Hov as="button" type="button" onClick={() => cambia(p.id, { stato: 'attivo' })}
-              style={{
-                flex: 'none', border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '12px', color: 'rgba(34,39,31,.5)'
-              }}
-              hover={{ color: '#C4623B' }}>{t('Riapri')}</Hov>
-          </>
-        ) : (
-          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 7, background: 'rgba(34,39,31,.05)' }}>
-              {chip('attivo', () => cambia(p.id, { stato: 'attivo' }))}
-              {chip('fermo', () => cambia(p.id, { stato: 'fermo' }))}
-              {/* il chip arma e basta: chiude solo «Chiudo davvero?», così un doppio clic non chiude niente */}
-              {chip('chiuso', () => { if (!armato) chiedi(() => cambia(p.id, { stato: 'chiuso' })) })}
-            </div>
-            {/* compare solo dopo il primo clic su «chiuso», e si spegne da sola: è `useConferma`, la stessa regola del cestino */}
-            {armato && (
-              <Hov as="button" type="button" onClick={() => chiedi(() => cambia(p.id, { stato: 'chiuso' }))}
-                onMouseLeave={disarma} onBlur={disarma}
-                style={{
-                  flex: 'none', border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: '11.5px', fontWeight: 500, color: '#8E3F1F', whiteSpace: 'nowrap'
-                }}
-                hover={{ color: '#C4623B' }}>{t('Chiudo davvero?')}</Hov>
-            )}
-          </div>
-        )}
-      </div>
-      {tavolozza && (
-        <div role="radiogroup" aria-label={t('Colore del progetto')} style={{ display: 'flex', gap: 8, marginTop: 9, marginLeft: 24 }}>
-          {TAVOLOZZA.map(c => (
-            <Hov key={c} as="button" type="button" role="radio" aria-checked={c === colore} title={c}
-              onClick={() => { setTavolozza(false); if (c !== colore) void cambia(p.id, { colore: c }) }}
-              style={{
-                width: 18, height: 18, borderRadius: '50%', background: c, padding: 0, cursor: 'pointer',
-                border: '2px solid rgba(255,255,255,.9)', boxShadow: c === colore ? '0 0 0 2px ' + c : '0 0 0 1px rgba(34,39,31,.15)'
-              }}
-              hover={{ boxShadow: '0 0 0 2px ' + c }} />
-          ))}
-        </div>
-      )}
-      {/* una riga sola: l'obiettivo non è un documento, è la frase che decide cosa conta */}
-      <textarea
-        value={obiettivo}
-        onChange={e => setObiettivo(e.target.value.replace(/\n/g, ' ').slice(0, 200))}
-        onBlur={salva}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
-        placeholder={t('Obiettivo non ancora scritto: scrivilo qui, in una riga.')}
-        rows={1}
-        disabled={chiuso}
-        style={{
-          width: '100%', boxSizing: 'border-box', marginTop: 7, padding: '8px 11px', borderRadius: 10,
-          border: '1px solid rgba(34,39,31,.14)', background: chiuso ? 'transparent' : 'rgba(255,255,255,.7)',
-          color: '#22271F', fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'none'
-        }} />
-      <AttivitaProgetto id={p.id} chiuso={chiuso} />
-      <MemoriaProgetto p={p} />
-    </div>
-  )
-}
-
 function Progetti() {
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
-  const [nuovo, setNuovo] = useState(false)
+  /** Quale riga è aperta: una sola, altrimenti è di nuovo un modulo lungo due schermi. */
+  const [aperto, setAperto] = useState<string | null>(null)
   /**
    * La riga da portare sotto gli occhi, e quella accesa.
    *
-   * Il biglietto lo lascia la prima pagina — «Da il progetto H-Farm» — e qui
-   * si legge quando la schermata si monta, o mentre è già aperta. Si strappa
-   * solo quando la riga esiste davvero: prima dei progetti caricati non c'è
-   * niente su cui scorrere, e strapparlo lì vorrebbe dire arrivare in Memoria
-   * senza sapere quale riga si era chiesta.
+   * Il biglietto lo lascia la prima pagina («Da il progetto H-Farm») e qui si
+   * legge quando la schermata si monta, o mentre è già aperta. Si strappa solo
+   * quando la riga esiste davvero: prima dei progetti caricati non c'è niente
+   * su cui scorrere, e strapparlo lì vorrebbe dire arrivare in Memoria senza
+   * sapere quale riga si era chiesta.
    */
   const [daMostrare, setDaMostrare] = useState<string | null>(progettoAtteso)
   const [acceso, setAcceso] = useState<string | null>(null)
   const [nome, setNome] = useState('')
   const [obiettivo, setObiettivo] = useState('')
   const [guaio, setGuaio] = useState('')
+  const [nasce, setNasce] = useState(false)
 
   const carica = useCallback(async () => {
     try { setProgetti((await api.progetti()).progetti) } catch { /* la pagina resta com'è */ }
@@ -496,6 +325,9 @@ function Progetti() {
     if (!riga) return
     riga.scrollIntoView({ block: 'center' })
     dimenticaProgetto()
+    // chi arriva qui da una carta della prima pagina è venuto per *questo*
+    // progetto: trovarlo chiuso come tutti gli altri sarebbe arrivare a metà
+    setAperto(daMostrare)
     setDaMostrare(null)
     setAcceso(daMostrare)
     // un secondo e mezzo: il tempo di vedere quale riga, non di doverla spegnere
@@ -503,37 +335,55 @@ function Progetti() {
     return () => clearTimeout(via)
   }, [daMostrare, progetti])
 
-  const cambia = async (id: string, c: { obiettivo?: string; stato?: StatoProgetto; colore?: string }) => {
+  /**
+   * Cambia, e lascia passare il guaio.
+   *
+   * L'eccezione non si mangia qui: l'editor la prende e la scrive sotto al
+   * campo che l'ha causata. «Esiste già un progetto con questo nome» sotto la
+   * casella del nome è una risposta; la stessa riga in fondo alla schermata è
+   * un enigma.
+   */
+  const cambia = async (id: string, c: CambioProgetto) => {
     // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
     setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
-    try { await api.cambiaProgetto(id, c); setGuaio('') }
-    catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    finally { carica() }
+    try { await api.cambiaProgetto(id, c) } finally { await carica() }
+  }
+
+  /** Due progetti che erano lo stesso: resta aperto quello in cui sono confluiti. */
+  const unisci = async (id: string, dentro: string) => {
+    try { await api.unisciProgetto(id, dentro) } finally { await carica() }
+    setAperto(dentro)
+  }
+
+  const elimina = async (id: string) => {
+    try { await api.chiudiProgetto(id) } finally { await carica() }
+    setAperto(a => (a === id ? null : a))
   }
 
   const aggiungi = async () => {
-    if (!nome.trim()) return
+    const n = nome.trim()
+    if (!n || nasce) return
+    setNasce(true)
     try {
-      await api.nuovoProgetto(nome.trim(), obiettivo.trim())
-      setNome(''); setObiettivo(''); setNuovo(false); setGuaio('')
+      const r = await api.nuovoProgetto(n, obiettivo.trim())
+      setNome(''); setObiettivo(''); setGuaio('')
+      await carica()
+      // appena nato si apre: il nome e l'obiettivo bastavano a farlo esistere,
+      // tutto il resto si scrive qui dentro, adesso che c'è
+      setAperto(r.progetto.id)
     } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    finally { carica() }
+    finally { setNasce(false) }
   }
 
   const campo = {
-    width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
+    boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
     border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.75)',
     color: '#22271F', fontSize: '13.5px', fontFamily: 'inherit', outline: 'none'
   }
 
   return (
     <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '20px 24px 18px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <span style={{ ...LABEL, flex: 1 }}>{t('Progetti')}</span>
-        <Hov as="button" type="button" onClick={() => setNuovo(v => !v)}
-          style={{ flex: 'none', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: '12px', color: '#8E3F1F', cursor: 'pointer' }}
-          hover={{ color: '#C4623B' }}>{t('+ Nuovo progetto')}</Hov>
-      </div>
+      <span style={{ ...LABEL }}>{t('Progetti')}</span>
       <div style={{ fontSize: '13px', color: 'rgba(34,39,31,.6)', marginTop: 8, lineHeight: 1.6, textWrap: 'pretty' }}>
         {t('Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.')}
       </div>
@@ -542,34 +392,56 @@ function Progetti() {
         {t('Un progetto senza attività resta attivo: chiudilo solo quando è finito.')}
       </div>
 
-      {nuovo && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          <input value={nome} onChange={e => setNome(e.target.value)} autoFocus
-            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
-            placeholder={t('Il nome del progetto')} style={campo} />
-          <input value={obiettivo} onChange={e => setObiettivo(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
-            placeholder={t('A cosa punta, in una riga: «chiudere il round entro ottobre»')} style={campo} />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={aggiungi} disabled={!nome.trim()} style={{
-              flex: 'none', padding: '8px 16px', borderRadius: 99, border: 'none',
-              background: nome.trim() ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(34,39,31,.1)',
-              color: nome.trim() ? '#FFF7F0' : 'rgba(34,39,31,.3)',
-              fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: nome.trim() ? 'pointer' : 'default'
-            }}>{t('Aggiungi')}</button>
-          </div>
-        </div>
-      )}
+      {/*
+        La riga che non c'è ancora.
 
-      {progetti && progetti.length === 0 && !nuovo && (
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.55)', marginTop: 12, lineHeight: 1.6, textWrap: 'pretty' }}>
+        Due caselle, non undici: un progetto nasce da un nome e da dove punta, e
+        il colore, gli altri nomi e il progetto padre si scrivono dopo, aprendolo.
+      */}
+      <div style={{
+        marginTop: 15, padding: '13px 14px', borderRadius: 14,
+        border: '1px dashed rgba(34,39,31,.2)', background: 'rgba(255,255,255,.4)'
+      }}>
+        <span style={{ ...LABEL }}>{t('Nuovo progetto')}</span>
+        <div style={{ display: 'flex', gap: 9, marginTop: 9, flexWrap: 'wrap' }}>
+          <input value={nome} onChange={e => setNome(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
+            placeholder={t('Il nome del progetto')} aria-label={t('Il nome del progetto')}
+            style={{ ...campo, flex: '1 1 180px', minWidth: 0 }} />
+          <input value={obiettivo} onChange={e => setObiettivo(e.target.value.slice(0, 200))}
+            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
+            placeholder={t('A cosa punta, in una riga: «chiudere il round entro ottobre»')}
+            aria-label={t('Obiettivo')}
+            style={{ ...campo, flex: '2 1 260px', minWidth: 0 }} />
+        </div>
+        {!!nome.trim() && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'flex-end', marginTop: 11 }}>
+            <span style={{ fontSize: '12px', color: 'rgba(34,39,31,.45)' }}>{t('Il resto si scrive aprendo la riga.')}</span>
+            <Hov as="button" type="button" onClick={aggiungi} disabled={nasce}
+              style={{
+                flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none',
+                background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+                fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: nasce ? 'default' : 'pointer'
+              }}
+              hover={nasce ? {} : { opacity: 0.92 }}>{nasce ? t('Aggiungo…') : t('Aggiungi')}</Hov>
+          </div>
+        )}
+        {guaio && (
+          <div role="alert" style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>
+        )}
+      </div>
+
+      {progetti && progetti.length === 0 && (
+        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.55)', marginTop: 14, lineHeight: 1.6, textWrap: 'pretty' }}>
           {t('Nessun progetto ancora. Scrivine uno, o lascia che il punto lo riconosca dal materiale.')}
         </div>
       )}
-      <div style={{ marginTop: progetti?.length ? 10 : 0 }}>
-        {(progetti ?? []).map(p => <RigaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} acceso={acceso === p.id} />)}
+      <div style={{ marginTop: progetti?.length ? 14 : 0 }}>
+        {(progetti ?? []).map(p => (
+          <RigaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} unisci={unisci} elimina={elimina}
+            aperta={aperto === p.id} apri={() => setAperto(a => (a === p.id ? null : p.id))} acceso={acceso === p.id} />
+        ))}
       </div>
-      {guaio && <div style={{ fontSize: '12px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
     </div>
   )
 }

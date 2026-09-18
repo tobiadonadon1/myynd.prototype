@@ -2619,6 +2619,51 @@ const EN: Record<string, string> = {
   'Il colore di un progetto si scrive #RRGGBB.': 'A project colour is written #RRGGBB.',
   'Questo progetto non c’è.': 'This project does not exist.',
 
+  // — le impostazioni di un progetto: la sua riga, aperta —
+  'Nuovo progetto': 'New project',
+  'A cosa punta, in una riga': 'What it aims at, in one line',
+  'Il resto si scrive aprendo la riga.': 'The rest is written by opening the row.',
+  'Aggiungo…': 'Adding…',
+  'Obiettivo non ancora scritto.': 'Goal not written yet.',
+  'Com’è fatto quando è finito, in una riga. È la frase che decide cosa conta.':
+    'What it looks like when it is done, in one line. It is the sentence that decides what counts.',
+  'Chiudere il round entro ottobre': 'Close the round by October',
+  'Stato': 'State',
+  'Sta sulla prima pagina: Myynd gli porta le novità e ti propone cosa fare.':
+    'It stays on the front page: Myynd brings it what is new and suggests what to do.',
+  'Non si perde niente, ma sparisce dalla prima pagina finché non lo riprendi.':
+    'Nothing is lost, but it leaves the front page until you pick it up again.',
+  'Finito. Esce dal punto e dal feed, e resta scritto. Riaprirlo è un clic.':
+    'Done. It leaves the briefing and the feed, and stays on record. Reopening it is one click.',
+  'Colore': 'Colour',
+  'Senza sceglierne uno, Myynd gliene dà uno suo, diverso da quello degli altri.':
+    'If you choose none, Myynd gives it one of its own, different from the others.',
+  'Un altro colore, scritto #RRGGBB': 'Another colour, written #RRGGBB',
+  'Altri nomi': 'Other names',
+  'Le cartelle e i soprannomi con cui lo chiami: così Myynd lo riconosce anche scritto in un altro modo.':
+    'The folders and nicknames you call it by, so Myynd recognises it written another way too.',
+  'Un altro nome': 'Another name',
+  'Un altro nome: «everwave»': 'Another name: “everwave”',
+  'Togli questo nome': 'Remove this name',
+  'Questo è già il nome del progetto.': 'That is already the project’s name.',
+  'Questo nome c’è già.': 'That name is already there.',
+  'Dentro': 'Inside',
+  'Se è un pezzo di un progetto più grande, dillo qui: Myynd li legge insieme.':
+    'If it is a piece of a bigger project, say so here: Myynd reads them together.',
+  'Nessuno': 'None',
+  'Quello che scrivi si aggiunge in fondo, con la data di oggi. Quello di prima resta dov’è.':
+    'What you write is added at the end, with today’s date. What was there stays where it is.',
+  'Aggiungi una nota': 'Add a note',
+  'Aprile in Da fare': 'Open them on To do',
+  'Unisci in un altro': 'Merge into another',
+  'Non c’è nessun altro progetto in cui unirlo.': 'There is no other project to merge it into.',
+  'Scegli un progetto': 'Choose a project',
+  'Unisci': 'Merge',
+  'Unisco…': 'Merging…',
+  'Elimina il progetto': 'Delete the project',
+  'Eliminalo davvero': 'Delete it for good',
+  'Tolgo…': 'Deleting…',
+
   // — le due teste: Anthropic e OpenAI, con l'account o con la chiave —
   'Claude, con il tuo account o con una chiave API.': 'Claude, with your account or with an API key.',
   'ChatGPT, con il tuo account o con una chiave API.': 'ChatGPT, with your account or with an API key.',
@@ -2807,6 +2852,34 @@ export const frasi = {
   passoDelGiro: (i: number, quanti: number) => corrente === 'en'
     ? `Tutorial · ${i} of ${quanti}`
     : `Tutorial · ${i} di ${quanti}`,
+
+  // — un progetto dentro un altro: si legge sulla riga, accanto al nome —
+  dentroProgetto: (nome: string) => corrente === 'en' ? `inside ${nome}` : `dentro ${nome}`,
+
+  /*
+   * Unire due progetti: cosa succede, prima di premere.
+   *
+   * La frase dice le tre cose che si muovono e la sola che non torna. Un
+   * «Sicuro?» non basta qui: chi unisce due progetti li ha aperti tutti e due
+   * per settimane, e ha il diritto di sapere dove finisce quello che c'era
+   * dentro al primo prima di premere.
+   */
+  unisciDentro: (uno: string, altro: string) => corrente === 'en'
+    ? `The tasks, the feed rows and everything Myynd remembers about “${uno}” move to “${altro}”. ` +
+      `“${uno}” closes, and there is no way back.`
+    : `Le attività, le righe del feed e quello che Myynd ricorda di «${uno}» passano a «${altro}». ` +
+      `«${uno}» si chiude, e non si torna indietro.`,
+
+  /**
+   * Toglierlo del tutto, e dove finiscono le sue attività.
+   *
+   * La seconda metà della frase è quella che conta: chi esita davanti a
+   * «elimina» esita perché ha dieci righe di lavoro appese lì dentro, e la
+   * risposta va data prima del clic, non dopo.
+   */
+  eliminoProgetto: (nome: string) => corrente === 'en'
+    ? `“${nome}” goes away from here, and there is no way back. Its tasks are not deleted: they stay on To do.`
+    : `«${nome}» sparisce da qui, e non si torna indietro. Le sue attività non si cancellano: restano in Da fare.`,
 
   // — le convinzioni che aspettano un sì —
   inAttesa: (n: number) => corrente === 'en'

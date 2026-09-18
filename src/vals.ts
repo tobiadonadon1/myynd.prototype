@@ -198,6 +198,21 @@ export function siPuoParlarne(): boolean { return !!portaAllaChat }
 export function portaInChat(testo: string) { portaAllaChat?.(testo) }
 
 /**
+ * «Portami su Da fare», detto da chi non ha `v`.
+ *
+ * L'editor di un progetto, in Memoria, elenca le sue attività aperte e non
+ * deve diventare una seconda lista: le righe si toccano dove si toccano
+ * sempre, e da lì ci si arriva con un clic. Stessa mano delle altre due porte,
+ * per la stessa ragione: la Memoria è montata da sola e non conosce la colonna
+ * delle schermate.
+ */
+let portaAlleCose: (() => void) | null = null
+export function registraPortaCose(f: (() => void) | null) { portaAlleCose = f }
+/** Vera quando c'è chi sa aprirla: senza, il collegamento non si disegna. */
+export function siPuoAprireLeCose(): boolean { return !!portaAlleCose }
+export function portaAlleAttivita() { portaAlleCose?.() }
+
+/**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
  *
  * «Portami lì» era una parola sola per tre posti diversi, e su una riga che non
@@ -932,6 +947,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     registraPortaChat((testo: string) => { void chiedi(testo) })
     return () => registraPortaChat(null)
   })
+
+  // e quella di Da fare, per l'editor di un progetto: vedi `portaAlleAttivita`
+  useEffect(() => {
+    registraPortaCose(() => { setScreen('oggi'); setSearch(false); setMenu(false) })
+    return () => registraPortaCose(null)
+  }, [])
 
   return {
     threadRef, cvA, cvB,
