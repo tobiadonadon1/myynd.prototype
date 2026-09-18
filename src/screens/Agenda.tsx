@@ -65,7 +65,7 @@ function spentiSalvati(): Set<string> {
 /* ————— l'agenda finta ————— */
 
 const CALENDARI_FINTI: CalendarioAgenda[] = [
-  { id: 'personale', nome: 'Personale', colore: '#C4623B', scrivibile: true, fonte: 'apple' },
+  { id: 'personale', nome: 'Personale', colore: 'var(--rame)', scrivibile: true, fonte: 'apple' },
   { id: 'lavoro', nome: 'Lavoro', colore: '#5F7A8A', scrivibile: true, fonte: 'apple' },
   { id: 'studio', nome: 'Studio Rossi', colore: '#8E6E53', scrivibile: false, fonte: 'ical' }
 ]
@@ -489,14 +489,14 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
             <label key={c.id} className={`agenda-voce ${spenti.has(c.id) ? 'spenta' : ''}`} style={{ color: c.colore }}>
               <input type="checkbox" checked={!spenti.has(c.id)} onChange={() => accendi(c.id)} />
               <span className="agenda-casella"><Spunta /></span>
-              <span style={{ color: spenti.has(c.id) ? undefined : 'rgba(34,39,31,.8)' }}>{c.nome}</span>
+              <span style={{ color: spenti.has(c.id) ? undefined : 'rgba(var(--inchiostro-rgb),.8)' }}>{c.nome}</span>
               {!c.scrivibile && <span className="agenda-sola">{t('Sola lettura')}</span>}
             </label>
           ))}
-          <label className="agenda-voce" style={{ color: '#C4623B' }}>
+          <label className="agenda-voce" style={{ color: 'var(--rame)' }}>
             <input type="checkbox" checked={conCompiti} onChange={accendiCompiti} />
             <span className="agenda-casella"><Spunta /></span>
-            <span style={{ color: 'rgba(34,39,31,.8)' }}>{t('Le tue attività')}</span>
+            <span style={{ color: 'rgba(var(--inchiostro-rgb),.8)' }}>{t('Le tue attività')}</span>
           </label>
         </div>
 
@@ -552,7 +552,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
         </label>
       )}
 
-      {bozza.errore && <p className="agenda-nota" style={{ color: '#8E3F1F' }}>{t(bozza.errore)}</p>}
+      {bozza.errore && <p className="agenda-nota" style={{ color: 'var(--rame-testo)' }}>{t(bozza.errore)}</p>}
 
       <footer>
         {bozza.id && <button type="button" className="agenda-butta" onClick={() => void butta()}>{t('Elimina')}</button>}
@@ -615,7 +615,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                   onDrop={e => lasciaSuTutto(e, g)}>
                   {ev.map(e => (
                     <button type="button" key={e.id} className="agenda-chip evento" title={e.titolo}
-                      style={{ background: colori.get(e.calendario) ?? '#C4623B' }}
+                      style={{ background: colori.get(e.calendario) ?? 'var(--rame)' }}
                       draggable onDragStart={ev2 => prendi(ev2, `evento:${e.id}`)}
                       onClick={ev2 => apriEvento(e, ev2.clientX, ev2.clientY)}>{e.titolo}</button>
                   ))}
@@ -664,7 +664,7 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
                         style={{
                           top: `${posa.top * 100}%`, height: `${posa.altezza * 100}%`,
                           left: `${(colonna / colonne) * 96 + 2}%`, width: `${96 / colonne - 1.5}%`,
-                          background: colori.get(e.calendario) ?? '#C4623B'
+                          background: colori.get(e.calendario) ?? 'var(--rame)'
                         }}
                         draggable={!!scrivibile}
                         onDragStart={ev => prendi(ev, `evento:${e.id}`, durata)}

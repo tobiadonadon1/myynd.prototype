@@ -66,19 +66,19 @@ export const IconApri = ({ size = 12, style }: P) => (
 )
 
 export const IconSpunta = ({ size = 15, style }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#3E7350" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--salvia)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </svg>
 )
 
-export const IconGiu = ({ size = 12, stroke = 'rgba(34,39,31,.5)' }: P & { stroke?: string }) => (
+export const IconGiu = ({ size = 12, stroke = 'rgba(var(--inchiostro-rgb),.5)' }: P & { stroke?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7 10l5 5 5-5" />
   </svg>
 )
 
 export const IconSuPiccola = ({ size = 13 }: P) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(34,39,31,.55)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(var(--inchiostro-rgb),.55)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7 14l5-5 5 5" />
   </svg>
 )

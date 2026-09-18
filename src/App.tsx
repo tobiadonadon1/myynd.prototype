@@ -246,8 +246,8 @@ function Avviso({ testo, chiudi }: { testo: string; chiudi: () => void }) {
     // e senza si trascinerebbe invece di chiudersi
     <div role="status" aria-live="polite" onClick={chiudi} className="app-presa" style={{
       position: 'fixed', top: alto(), right: 26, zIndex: 80, maxWidth: 'min(380px, calc(100% - 52px))',
-      padding: '13px 16px', borderRadius: 16, background: 'rgba(255,253,249,.94)',
-      color: '#22271F', border: '1px solid rgba(255,255,255,.9)', boxShadow: '0 26px 60px rgba(60,44,30,.26)',
+      padding: '13px 16px', borderRadius: 16, background: 'rgba(var(--carta-rgb),.94)',
+      color: 'var(--inchiostro)', border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 26px 60px rgba(var(--ombra-rgb),.26)',
       fontSize: '13.5px', lineHeight: 1.45, overflowWrap: 'anywhere', cursor: 'pointer',
       animation: 'toastin .3s ease', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif"
     }}>
@@ -350,7 +350,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
     // vedeva solo a finestra piccola perché a schermo intero il ciclo non parte.
     <div style={{
       position: 'fixed', inset: 0, overflow: 'hidden',
-      background: '#F2E9DC', color: '#22271F',
+      background: 'var(--pagina)', color: 'var(--inchiostro)',
       fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 14
     }}>
       {/*
@@ -380,9 +380,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         margin: rail ? `${12 + striscia}px 0 12px 12px` : `${18 + striscia}px 0 18px 18px`,
         padding: rail ? '16px 7px 12px' : '22px 15px 15px',
         borderRadius: 20,
-        background: 'linear-gradient(180deg,rgba(255,253,249,.72),rgba(255,253,249,.5))',
+        background: 'linear-gradient(180deg,rgba(var(--carta-rgb),.72),rgba(var(--carta-rgb),.5))',
         backdropFilter: 'blur(26px) saturate(1.5)', WebkitBackdropFilter: 'blur(26px) saturate(1.5)',
-        border: '1px solid rgba(255,255,255,.7)', boxShadow: '0 26px 60px rgba(84,64,44,.13)',
+        border: '1px solid rgba(var(--luce-rgb),.7)', boxShadow: '0 26px 60px rgba(var(--ombra-rgb),.13)',
         // un livello di composizione suo: senza, ogni fotogramma delle macchie
         // dietro obbliga a rifare la sfocatura di tutta la colonna
         transform: 'translateZ(0)', backfaceVisibility: 'hidden', contain: 'paint'
@@ -396,8 +396,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             {rail ? <Marchio dim={28} animato={false} /> : <span style={{ fontSize: 22, fontWeight: 300, letterSpacing: '.02em', lineHeight: 1 }}>myynd</span>}
           </div>
           <Hov as="button" title={t('Cerca  ⌘K')} onClick={v.openSearch}
-            style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(34,39,31,.7)', cursor: 'pointer' }}
-            hover={{ color: '#C4623B' }}>
+            style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: 'none', background: 'none', padding: 0, color: 'rgba(var(--inchiostro-rgb),.7)', cursor: 'pointer' }}
+            hover={{ color: 'var(--rame)' }}>
             <IconCerca />
           </Hov>
         </div>
@@ -413,23 +413,23 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
             {!rail && <span style={{ flex: 1 }}>{t('Da fare')}</span>}
             {/* l'accento qui vuol dire quello che vuol dire dappertutto:
                 qualcosa aspetta una persona */}
-            {(lista.pronte > 0 || lista.chiedono > 0) && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? '#FFF7F0' : '#C4623B' }} />}
+            {(lista.pronte > 0 || lista.chiedono > 0) && <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.isOggi ? 'var(--avorio)' : 'var(--rame)' }} />}
             {!rail && lista.pronte === 0 && lista.chiedono === 0 && lista.daFare > 0 && <span style={v.badge}>{lista.daFare}</span>}
           </a>
           <a href="#" onClick={v.goChat} style={nav(v.navChat)} title={rail ? t('Chat') : undefined}>
             {/* Myynd ha scritto: il fumetto si accende di rame e il pallino salta, finché non gli rispondi */}
-            {v.chatDaLeggere && !v.isChat ? <IconChatPiena style={{ flex: 'none', color: '#C4623B' }} /> : <IconChat style={{ flex: 'none' }} />}
+            {v.chatDaLeggere && !v.isChat ? <IconChatPiena style={{ flex: 'none', color: 'var(--rame)' }} /> : <IconChat style={{ flex: 'none' }} />}
             {!rail && <span style={{ flex: 1 }}>{t('Chat')}</span>}
-            {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 9, height: 9, flex: 'none', borderRadius: '50%', background: v.isChat ? '#FFF7F0' : '#C4623B', boxShadow: v.isChat ? 'none' : '0 0 0 3px rgba(196,98,59,.22)' }} />}
+            {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 9, height: 9, flex: 'none', borderRadius: '50%', background: v.isChat ? 'var(--avorio)' : 'var(--rame)', boxShadow: v.isChat ? 'none' : '0 0 0 3px rgba(var(--rame-rgb),.22)' }} />}
           </a>
 
           {/* l'elenco delle conversazioni non ci sta in una fila di icone:
               nel rail si raggiunge entrando in Chat */}
           {v.isChat && !rail && (
-            <div style={{ margin: '2px 0 6px', padding: 5, borderRadius: 14, background: 'rgba(34,39,31,.05)', animation: 'fadein .2s ease' }}>
+            <div style={{ margin: '2px 0 6px', padding: 5, borderRadius: 14, background: 'rgba(var(--inchiostro-rgb),.05)', animation: 'fadein .2s ease' }}>
               <Hov as="button" onClick={v.newChat}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 11, border: '1px solid rgba(34,39,31,.16)', background: 'rgba(255,255,255,.66)', color: '#8E3F1F', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-                hover={{ background: '#FFFFFF', borderColor: '#C4623B' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 11, border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.66)', color: 'var(--rame-testo)', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
                 <IconPiu />{t('Nuova chat')}
               </Hov>
               <div style={{ maxHeight: 116, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
@@ -441,13 +441,13 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
                   // `Agenda.tsx`
                   <div role="button" tabIndex={0} aria-current={v.isChat || undefined} onClick={v.goChat} onKeyDown={daTastiera(v.goChat)}
                     className="app-porta-chat"
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 10, cursor: 'pointer', background: 'rgba(255,255,255,.92)' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 10, cursor: 'pointer', background: 'rgba(var(--luce-rgb),.92)' }}>
                     <span className="app-mascotte" style={{ flex: 'none', lineHeight: 0 }}><Mascotte size={32} /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '12.5px', fontWeight: 500 }}>Myynd</div>
-                      <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{v.chatDaLeggere ? t('Ha qualche domanda per te.') : t('Fatto.')}</div>
+                      <div style={{ fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2 }}>{v.chatDaLeggere ? t('Ha qualche domanda per te.') : t('Fatto.')}</div>
                     </div>
-                    {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: '#C4623B', boxShadow: '0 0 0 3px rgba(196,98,59,.22)' }} />}
+                    {v.chatDaLeggere && <span className="pallino-salta" style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', background: 'var(--rame)', boxShadow: '0 0 0 3px rgba(var(--rame-rgb),.22)' }} />}
                   </div>
                 )}
                 {v.threads.map(ch => <RigaChat key={ch.id} ch={ch} />)}
@@ -458,9 +458,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           <a href="#" onClick={v.goAuto} style={nav(v.navAuto)} title={rail ? (v.suggerimentiNuovi > 0 ? t('Nuove automazioni proposte') : t('Automazioni')) : undefined}>
             {/* Myynd ha una proposta nuova: il fulmine si accende di rame e il pallino dice
                 quello che dice dappertutto, qualcosa aspetta una persona; si spegne quando la guarda */}
-            <IconFulmine style={{ flex: 'none', ...(v.suggerimentiNuovi > 0 && !v.isAuto ? { color: '#C4623B' } : {}) }} />
+            <IconFulmine style={{ flex: 'none', ...(v.suggerimentiNuovi > 0 && !v.isAuto ? { color: 'var(--rame)' } : {}) }} />
             {!rail && <span style={{ flex: 1 }}>{t('Automazioni')}</span>}
-            {v.suggerimentiNuovi > 0 && <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: v.isAuto ? '#FFF7F0' : '#C4623B' }} />}
+            {v.suggerimentiNuovi > 0 && <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: v.isAuto ? 'var(--avorio)' : 'var(--rame)' }} />}
           </a>
         </div>
 
@@ -478,7 +478,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               dalla colonna e si allarga verso destra — le voci del menù le parole
               ce le hanno anche quando la navigazione non le ha. */}
           {v.menuOpen && (
-            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(255,253,249,.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(255,255,255,.85)', boxShadow: '0 22px 50px rgba(84,64,44,.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
+            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(var(--carta-rgb),.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(var(--luce-rgb),.85)', boxShadow: '0 22px 50px rgba(var(--ombra-rgb),.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
               <a href="#" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
               <a href="#" onClick={v.goMemoria} style={v.menuMemoria}><IconSpunta size={15} style={{ flex: 'none' }} />{t('Memoria')}</a>
               <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>
@@ -488,25 +488,25 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
               {!desktop() && <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}
-              <div style={{ height: 1, background: 'rgba(34,39,31,.1)', margin: '5px 8px' }} />
+              <div style={{ height: 1, background: 'rgba(var(--inchiostro-rgb),.1)', margin: '5px 8px' }} />
               <Hov as="a" href="#"
                 onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}
-                style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 12, fontSize: '13.5px', cursor: 'pointer', color: 'rgba(34,39,31,.7)' }}
-                hover={{ color: '#8E3F1F', background: 'rgba(196,98,59,.1)' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 12, fontSize: '13.5px', cursor: 'pointer', color: 'rgba(var(--inchiostro-rgb),.7)' }}
+                hover={{ color: 'var(--rame-testo)', background: 'rgba(var(--rame-rgb),.1)' }}>
                 <IconEsci style={{ flex: 'none' }} />{t('Esci')}</Hov>
             </div>
           )}
           {/* un bottone, non un div: dietro ci stanno Preferenze, Memoria, le fonti e
               «Esci», e da tastiera un div non si raggiunge */}
           <Hov as="button" type="button" onClick={v.toggleMenu} aria-haspopup="menu" aria-label={t('Il tuo conto')}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(255,255,255,.42)', border: '1px solid rgba(255,255,255,.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
-            hover={{ background: 'rgba(255,255,255,.72)' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,#C4623B,#8FA593)', color: '#FFF7F0', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(var(--luce-rgb),.42)', border: '1px solid rgba(var(--luce-rgb),.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
+            hover={{ background: 'rgba(var(--luce-rgb),.72)' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,var(--rame),#8FA593)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
             {/* il punto sta con il ruolo, non da solo in fondo alla riga: un nome
                 lungo mandava a capo dopo il separatore, e restava lì appeso */}
             {!rail && (
               <span style={{ flex: 1, minWidth: 0, fontSize: '13.5px', overflowWrap: 'anywhere' }}>
-                {v.nome}{v.ruolo && <span style={{ color: 'rgba(34,39,31,.6)' }}>{' · '}{v.ruolo}</span>}
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(var(--inchiostro-rgb),.6)' }}>{' · '}{v.ruolo}</span>}
               </span>
             )}
             {!rail && <span style={v.chevron}><IconSuPiccola /></span>}
@@ -582,7 +582,7 @@ function RigaChat({ ch }: { ch: Vals['threads'][number] }) {
       style={ch.row}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.titolo}</div>
-        <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.5)', marginTop: 2 }}>{ch.quando}</div>
+        <div style={{ fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2 }}>{ch.quando}</div>
       </div>
       {/* il cestino basta: «voglio che sia il cestino a dire che si cancella», e non una domanda dopo */}
       <Cestino fai={ch.onDelete} titolo={t('Elimina')} visibile={attiva || ch.sopra} icona={13} subito />

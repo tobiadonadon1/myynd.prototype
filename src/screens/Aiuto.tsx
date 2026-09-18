@@ -608,11 +608,11 @@ const SEZIONI: Sezione[] = [
 
 const TITOLO: CSSProperties = { fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em', fontWeight: 400, margin: 0 }
 const SOTTO: CSSProperties = {
-  fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(34,39,31,.65)', margin: '10px 0 0',
+  fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(var(--inchiostro-rgb),.65)', margin: '10px 0 0',
   maxWidth: '68ch', textWrap: 'pretty'
 }
 const TITOLO_SCHEDA: CSSProperties = {
-  fontSize: 17, lineHeight: 1.3, fontWeight: 500, letterSpacing: '-.015em', color: '#22271F', margin: 0
+  fontSize: 17, lineHeight: 1.3, fontWeight: 500, letterSpacing: '-.015em', color: 'var(--inchiostro)', margin: 0
 }
 /**
  * La misura del testo: circa sessantotto caratteri. Sotto, una riga si legge
@@ -621,30 +621,30 @@ const TITOLO_SCHEDA: CSSProperties = {
  * indirizzo che esce dal riquadro è l'app che sembra rotta.
  */
 const PARAGRAFO: CSSProperties = {
-  fontSize: 14, lineHeight: 1.65, color: 'rgba(34,39,31,.78)', margin: '10px 0 0',
+  fontSize: 14, lineHeight: 1.65, color: 'rgba(var(--inchiostro-rgb),.78)', margin: '10px 0 0',
   maxWidth: '68ch', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere'
 }
 const ELENCO: CSSProperties = { margin: '8px 0 0', paddingLeft: 22, maxWidth: '68ch' }
 const PASSO: CSSProperties = {
-  fontSize: 14, lineHeight: 1.65, color: 'rgba(34,39,31,.78)', marginTop: 8,
+  fontSize: 14, lineHeight: 1.65, color: 'rgba(var(--inchiostro-rgb),.78)', marginTop: 8,
   textWrap: 'pretty', overflowWrap: 'anywhere'
 }
-const NOME_VOCE: CSSProperties = { fontSize: 14, lineHeight: 1.4, fontWeight: 500, color: '#22271F', margin: 0 }
-const CODICE: CSSProperties = { background: 'rgba(34,39,31,.07)', padding: '1px 6px', borderRadius: 5, fontSize: '12.5px' }
+const NOME_VOCE: CSSProperties = { fontSize: 14, lineHeight: 1.4, fontWeight: 500, color: 'var(--inchiostro)', margin: 0 }
+const CODICE: CSSProperties = { background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5, fontSize: '12.5px' }
 const LINK: CSSProperties = {
-  color: '#8E3F1F', textDecoration: 'underline', textDecorationColor: 'rgba(142,63,31,.35)', textUnderlineOffset: 2
+  color: 'var(--rame-testo)', textDecoration: 'underline', textDecorationColor: 'rgba(var(--rame-rgb),.35)', textUnderlineOffset: 2
 }
-const ETICHETTA: CSSProperties = { color: '#22271F', fontWeight: 500 }
+const ETICHETTA: CSSProperties = { color: 'var(--inchiostro)', fontWeight: 500 }
 const VOCE_INDICE: CSSProperties = {
   display: 'block', padding: '6px 12px', borderRadius: 10, fontSize: '13px', lineHeight: 1.35,
-  color: 'rgba(34,39,31,.62)', textDecoration: 'none'
+  color: 'rgba(var(--inchiostro-rgb),.62)', textDecoration: 'none'
 }
 const PASTIGLIA_INDICE: CSSProperties = {
   display: 'inline-block', padding: '6px 12px', borderRadius: 99, fontSize: '12.5px',
-  border: '1px solid rgba(34,39,31,.14)', background: 'rgba(255,255,255,.5)',
-  color: 'rgba(34,39,31,.65)', textDecoration: 'none'
+  border: '1px solid rgba(var(--inchiostro-rgb),.14)', background: 'rgba(var(--luce-rgb),.5)',
+  color: 'rgba(var(--inchiostro-rgb),.65)', textDecoration: 'none'
 }
-const AZIONE: CSSProperties = { display: 'inline-block', fontSize: '13px', color: '#8E3F1F', textDecoration: 'none' }
+const AZIONE: CSSProperties = { display: 'inline-block', fontSize: '13px', color: 'var(--rame-testo)', textDecoration: 'none' }
 
 /** I tre segni ammessi dentro un testo: un'etichetta, un link, un pezzo di codice. */
 const SEGNI = /(\{\{[a-zA-Z]+\}\}|\[[^\]\n]+\]\([^)\s]+\)|`[^`\n]+`)/g
@@ -693,7 +693,7 @@ function Pezzo({ p }: { p: Pezzo }) {
   return (
     <div>
       {p.voci.map((x, i) => (
-        <div key={i} style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(34,39,31,.08)' }}>
+        <div key={i} style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
           <h3 style={NOME_VOCE}>{inRiga(L(x.nome))}</h3>
           <p style={{ ...PARAGRAFO, marginTop: 5, fontSize: '13.5px', lineHeight: 1.6 }}>{inRiga(L(x.testo))}</p>
         </div>
@@ -717,9 +717,9 @@ function Scheda({ s, i, v }: { s: Sezione; i: number; v: Vals }) {
       {a && (
         <div style={{ marginTop: 16 }}>
           {a.href
-            ? <Hov as="a" href={a.href} style={AZIONE} hover={{ color: '#C4623B' }}>{a.etichetta()}</Hov>
+            ? <Hov as="a" href={a.href} style={AZIONE} hover={{ color: 'var(--rame)' }}>{a.etichetta()}</Hov>
             : (
-              <Hov as="a" href="#" style={AZIONE} hover={{ color: '#C4623B' }}
+              <Hov as="a" href="#" style={AZIONE} hover={{ color: 'var(--rame)' }}
                 onClick={(e: MouseEvent) => { e.preventDefault(); a.vai?.(v) }}>{a.etichetta()}</Hov>
             )}
         </div>
@@ -755,7 +755,7 @@ export function Aiuto({ v }: { v: Vals }) {
             <div style={{ ...LABEL, fontSize: '10px', padding: '0 12px 8px' }}>{t('In questa pagina')}</div>
             {SEZIONI.map(s => (
               <Hov key={s.id} as="a" href={`#${s.id}`} onClick={vai(s.id)} style={VOCE_INDICE}
-                hover={{ color: '#8E3F1F', background: 'rgba(34,39,31,.05)' }}>{L(s.titolo)}</Hov>
+                hover={{ color: 'var(--rame-testo)', background: 'rgba(var(--inchiostro-rgb),.05)' }}>{L(s.titolo)}</Hov>
             ))}
           </nav>
         )}
@@ -765,7 +765,7 @@ export function Aiuto({ v }: { v: Vals }) {
             <nav aria-label={t('In questa pagina')} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 0 14px' }}>
               {SEZIONI.map(s => (
                 <Hov key={s.id} as="a" href={`#${s.id}`} onClick={vai(s.id)} style={PASTIGLIA_INDICE}
-                  hover={{ color: '#8E3F1F', borderColor: 'rgba(196,98,59,.5)' }}>{L(s.titolo)}</Hov>
+                  hover={{ color: 'var(--rame-testo)', borderColor: 'rgba(var(--rame-rgb),.5)' }}>{L(s.titolo)}</Hov>
               ))}
             </nav>
           )}

@@ -4,6 +4,7 @@ import App from './App'
 import { Richiamo } from './richiamo/Richiamo'
 import './index.css'
 import { impostaLingua, linguaSalvata } from './lingua'
+import { applicaTema, temaSalvato } from './tema'
 import { desktop } from './desktop'
 
 // `?richiamo=1` è la barra della scorciatoia, non l'app: la stessa pagina,
@@ -31,6 +32,12 @@ if (richiamo && guscio?.dentroIlRichiamo) {
 // La lingua dell'ultima volta, prima del primo disegno: l'accesso e il primo
 // avvio compaiono prima che il server dica qualcosa.
 impostaLingua(linguaSalvata())
+
+// E per la stessa ragione il tema dell'ultima volta. Il profilo arriva dopo il
+// primo disegno: senza questa riga chi ha scelto la notte vedrebbe mezzo
+// secondo di panna a ogni avvio, che è proprio la cosa da cui si scappa
+// mettendo l'app in scuro.
+applicaTema(temaSalvato())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

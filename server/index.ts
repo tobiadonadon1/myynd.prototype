@@ -722,7 +722,7 @@ const profilo = async (req: express.Request, res: express.Response) => {
   // solo i campi davvero presenti: un patch parziale non deve cancellare il resto
   const b = req.body ?? {}
   const patch: Record<string, unknown> = {}
-  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
+  for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
   // l'ordine dei blocchi della prima pagina: id di progetti che esistono e
@@ -755,7 +755,8 @@ const profilo = async (req: express.Request, res: express.Response) => {
     tono: [...cfg.TONI_VALIDI, 'cordiale'],
     autonomia: [...cfg.AUTONOMIE_VALIDE, 'osservare', 'agire'],
     modello: cfg.MODELLI.map(m => m.id),
-    lingua: ['it', 'en']
+    lingua: ['it', 'en'],
+    tema: cfg.TEMI_VALIDI
   }
   for (const [campo, valori] of Object.entries(ammessi)) {
     if (patch[campo] !== undefined && !valori.includes(String(patch[campo]))) {

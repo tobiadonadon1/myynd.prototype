@@ -30,11 +30,11 @@ function Passo({ n, children }: { n: number; children: React.ReactNode }) {
     <div style={{ display: 'flex', gap: 11, alignItems: 'baseline' }}>
       <span aria-hidden="true" style={{
         flex: '0 0 auto', width: 19, height: 19, borderRadius: 99,
-        background: 'rgba(34,39,31,.07)', color: 'rgba(34,39,31,.55)',
+        background: 'rgba(var(--inchiostro-rgb),.07)', color: 'rgba(var(--inchiostro-rgb),.55)',
         fontSize: 11, fontVariantNumeric: 'tabular-nums',
         display: 'grid', placeItems: 'center', transform: 'translateY(2px)'
       }}>{n}</span>
-      <span style={{ flex: 1, fontSize: '13.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.78)' }}>{children}</span>
+      <span style={{ flex: 1, fontSize: '13.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.78)' }}>{children}</span>
     </div>
   )
 }
@@ -63,19 +63,19 @@ export function Credito({ motivo, claude, chiudi }: {
       onClick={e => { if (e.target === e.currentTarget) capito() }}
       style={{
         position: 'fixed', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
-        background: 'rgba(40,30,22,.34)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        background: 'rgba(var(--ombra-rgb),.34)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         WebkitAppRegion: 'no-drag', padding: 24
       } as React.CSSProperties}>
       <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="credito-titolo" style={{
         width: 460, maxWidth: '100%', borderRadius: 20, padding: '26px 26px 20px',
-        background: 'rgba(250,246,239,.98)', border: '1px solid rgba(255,255,255,.9)',
-        boxShadow: '0 40px 90px rgba(60,44,30,.34)', animation: 'toastin .3s ease',
-        color: '#22271F'
+        background: 'rgba(var(--carta-rgb),.98)', border: '1px solid rgba(var(--luce-rgb),.9)',
+        boxShadow: '0 40px 90px rgba(var(--ombra-rgb),.34)', animation: 'toastin .3s ease',
+        color: 'var(--inchiostro)'
       }}>
         <div id="credito-titolo" style={{ fontSize: 21, letterSpacing: '-.02em', fontWeight: 500 }}>
           {claude ? t('Il conto Anthropic è senza credito') : t('Il conto del fornitore è senza credito')}
         </div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(34,39,31,.6)', marginTop: 7, lineHeight: 1.5 }}>
+        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 7, lineHeight: 1.5 }}>
           {t('La chiave funziona. È il credito che manca: senza, ogni richiesta viene respinta e Myynd resta un archivio.')}
         </div>
 
@@ -88,8 +88,8 @@ export function Credito({ motivo, claude, chiudi }: {
         */}
         <div style={{
           marginTop: 16, padding: '11px 13px', borderRadius: 11,
-          background: 'rgba(34,39,31,.05)', border: '1px solid rgba(34,39,31,.07)',
-          fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(34,39,31,.7)',
+          background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.07)',
+          fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.7)',
           maxHeight: 108, overflowY: 'auto', overflowWrap: 'anywhere'
         }}>{motivo}</div>
 
@@ -106,16 +106,16 @@ export function Credito({ motivo, claude, chiudi }: {
           <Hov as="button" type="button" onClick={capito}
             style={{
               border: 'none', background: 'none', padding: '8px 6px', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: '13px', color: 'rgba(34,39,31,.5)'
+              fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.5)'
             }}
-            hover={{ color: '#22271F' }}>{chiudendo ? t('Chiudo…') : t('Ho capito')}</Hov>
+            hover={{ color: 'var(--inchiostro)' }}>{chiudendo ? t('Chiudo…') : t('Ho capito')}</Hov>
           {claude && (
             <Hov as="a" href={BILLING} target="_blank" rel="noreferrer" onClick={capito}
               style={{
-                padding: '9px 20px', borderRadius: 99, background: '#22271F', color: '#FFF7F0',
+                padding: '9px 20px', borderRadius: 99, background: 'var(--pieno)', color: 'var(--avorio)',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', textDecoration: 'none'
               }}
-              hover={{ background: '#3E5140' }}>{t('Apri Billing')}</Hov>
+              hover={{ background: 'var(--verde-cupo)' }}>{t('Apri Billing')}</Hov>
           )}
         </div>
       </div>

@@ -45,6 +45,8 @@ export type Stato = {
     /** Un modello di Claude per ogni livello di lavoro: manovre interne, letture di ogni giorno, frontiera. */
     modelli: Record<'casa' | 'media' | 'frontiera', string>
     lingua: string
+    /** Chiaro, scuro, o come il sistema. */
+    tema?: 'sistema' | 'chiaro' | 'scuro'
     /** Il fuso in cui ragiona il server per questa persona; `null` finché il browser non glielo dice. */
     fuso?: string | null
     oreFatte: number

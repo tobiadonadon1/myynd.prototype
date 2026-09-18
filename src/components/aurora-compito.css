@@ -11,10 +11,10 @@
  *
  * La regola qui è che lo stato non ridipinge la carta: cambia la luce che ci
  * passa sopra. Il fondo resta quello di quando è ferma (il bruno di
- * `v.cartaScura`), e il movimento lo fa una lucentezza di rame `#C4623B`,
- * ambra `#D98A5A` e panna `#FFF7F0` che scorre lenta: i tre colori
+ * `v.cartaScura`), e il movimento lo fa una lucentezza di rame `var(--rame)`,
+ * ambra `var(--ambra)` e panna `var(--avorio)` che scorre lenta: i tre colori
  * dell'identità e nient'altro. Il solo altro colore è un velo di salvia
- * `#5C7660`, e sta lì per la ragione per cui la salvia esiste ancora in
+ * `var(--salvia)`, e sta lì per la ragione per cui la salvia esiste ancora in
  * questa app: dice uno stato, non decora. Niente tinte fredde e niente
  * carta chiara: su una pagina calda si leggono come un errore di stampa.
  *
@@ -71,13 +71,13 @@
  * manca, e qui nessuno lo sa. Quanto manca lo dicono le parole sulla riga.
  */
 .task-aurora-row .task-aurora {
-  background: linear-gradient(115deg, #c4623b12, #d98a5a0b 42%, #5c766008 72%, #fff7f00b);
+  background: linear-gradient(115deg, rgba(var(--rame-rgb),.07), #d98a5a0b 42%, #5c766008 72%, #fff7f00b);
   background-size: 240% 240%;
   box-shadow: inset 0 0 0 1px #c4623b14;
   animation-duration: 44s;
 }
 .task-aurora-row .task-aurora i { opacity: .18; filter: blur(30px); animation-duration: 30s; }
-.task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(34,39,31,.62); overflow-wrap: anywhere; }
+.task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.62); overflow-wrap: anywhere; }
 @keyframes task-aurora-drift {
   from { transform: translate(-5%, -7%) rotate(-12deg) scale(.9); }
   to { transform: translate(24%, 16%) rotate(17deg) scale(1.15); }
@@ -104,9 +104,9 @@
  */
 .task-completed {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 9px;
-  margin-top: 6px; min-width: 0; font-size: 12.5px; color: #56635b;
+  margin-top: 6px; min-width: 0; font-size: 12.5px; color: var(--inchiostro-2);
 }
-.task-completed-check { display: inline-flex; color: #50795b; flex: none; align-self: center; }
-.task-completed-name { font-weight: 500; color: #26352e; min-width: 0; overflow-wrap: anywhere; }
-.task-completed-meta { color: #667269; }
-.task-completed-review { flex-basis: 100%; color: #8E3F1F; }
+.task-completed-check { display: inline-flex; color: var(--salvia); flex: none; align-self: center; }
+.task-completed-name { font-weight: 500; color: var(--inchiostro); min-width: 0; overflow-wrap: anywhere; }
+.task-completed-meta { color: var(--inchiostro-3); }
+.task-completed-review { flex-basis: 100%; color: var(--rame-testo); }

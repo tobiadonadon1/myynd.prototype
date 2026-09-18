@@ -35,14 +35,14 @@ import { quandoData, quandoGira } from './Scheda'
 
 const PIENO: React.CSSProperties = {
   padding: '10px 19px', borderRadius: 99, border: 'none',
-  background: '#8E3F1F', color: '#FFF7F0',
+  background: 'var(--rame-forte)', color: 'var(--avorio)',
   fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }
 
 const VUOTO: React.CSSProperties = {
   padding: '9px 15px', borderRadius: 99, cursor: 'pointer',
-  border: '1px solid rgba(34,39,31,.18)', background: 'rgba(255,255,255,.6)',
-  color: 'rgba(34,39,31,.78)', fontSize: '12.5px', fontFamily: 'inherit'
+  border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
+  color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '12.5px', fontFamily: 'inherit'
 }
 
 function Campo({ etichetta, children, nota }: {
@@ -53,7 +53,7 @@ function Campo({ etichetta, children, nota }: {
       <div style={{ ...LABEL, fontSize: '10px', marginBottom: 6 }}>{etichetta}</div>
       {children}
       {nota && (
-        <div style={{ fontSize: '11px', color: 'rgba(34,39,31,.42)', marginTop: 5, lineHeight: 1.5, textWrap: 'pretty' }}>
+        <div style={{ fontSize: '11px', color: 'rgba(var(--inchiostro-rgb),.42)', marginTop: 5, lineHeight: 1.5, textWrap: 'pretty' }}>
           {nota}
         </div>
       )}
@@ -66,7 +66,7 @@ function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' 
   return (
     <div role="tablist" style={{
       display: 'inline-flex', gap: 2, padding: 3, borderRadius: 99, flex: 'none',
-      background: 'rgba(34,39,31,.055)'
+      background: 'rgba(var(--inchiostro-rgb),.055)'
     }}>
       {([['parole', 'A parole'], ['campi', 'Binari']] as const).map(([id, testo]) => (
         <button key={id} type="button" role="tab" aria-selected={dove === id} onClick={() => vai(id)}
@@ -74,9 +74,9 @@ function Linguette({ dove, vai }: { dove: 'parole' | 'campi'; vai: (d: 'parole' 
             padding: '5px 13px', borderRadius: 99, cursor: 'pointer', fontSize: '12px',
             border: 'none', fontFamily: 'inherit',
             fontWeight: dove === id ? 500 : 400,
-            background: dove === id ? 'rgba(255,255,255,.95)' : 'transparent',
-            color: dove === id ? '#22271F' : 'rgba(34,39,31,.55)',
-            boxShadow: dove === id ? '0 2px 6px -2px rgba(84,64,44,.28)' : 'none',
+            background: dove === id ? 'rgba(var(--luce-rgb),.95)' : 'transparent',
+            color: dove === id ? 'var(--inchiostro)' : 'rgba(var(--inchiostro-rgb),.55)',
+            boxShadow: dove === id ? '0 2px 6px -2px rgba(var(--ombra-rgb),.28)' : 'none',
             transition: 'background .18s, color .18s'
           }}>{t(testo)}</button>
       ))}
@@ -132,24 +132,24 @@ function Anteprima({ id, catalogo, chiave }: {
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px',
           borderRadius: 99, cursor: guardo ? 'default' : 'pointer', fontFamily: 'inherit',
-          fontSize: '12px', border: '1px solid rgba(34,39,31,.18)',
-          background: 'rgba(255,255,255,.6)', color: 'rgba(34,39,31,.75)'
+          fontSize: '12px', border: '1px solid rgba(var(--inchiostro-rgb),.18)',
+          background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.75)'
         }}
-        hover={guardo ? {} : { borderColor: '#C4623B', color: '#8E3F1F' }}>
-        {guardo && <Glifo tipo="penso" dim={11} colore="#8E3F1F" />}
+        hover={guardo ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
+        {guardo && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
         {guardo ? t('Guardo…') : t('Cosa troverebbe adesso')}
       </Hov>
 
-      {guaio && <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
+      {guaio && <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{t(guaio)}</div>}
 
       {dati && (
         <div style={{
           marginTop: 10, padding: '11px 13px', borderRadius: 14,
-          border: '1px solid rgba(34,39,31,.1)', background: 'rgba(255,255,255,.5)'
+          border: '1px solid rgba(var(--inchiostro-rgb),.1)', background: 'rgba(var(--luce-rgb),.5)'
         }}>
           <div style={{
             fontSize: '12px', fontWeight: 500,
-            color: dati.docs.length ? '#3E5140' : '#8E3F1F'
+            color: dati.docs.length ? 'var(--verde-cupo)' : 'var(--rame-testo)'
           }}>
             {dati.docs.length ? frasi.neGuarderebbe(dati.docs.length) : t('Adesso non troverebbe niente.')}
           </div>
@@ -160,12 +160,12 @@ function Anteprima({ id, catalogo, chiave }: {
             niente, e Slack non è collegato» è una cosa da andare a fare.
           */}
           {!!dati.staccati.length && (
-            <div style={{ fontSize: '11.5px', color: '#8E3F1F', marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--rame-testo)', marginTop: 6, lineHeight: 1.5 }}>
               {t('Non è collegato:')} {dati.staccati.map(nomeAttrezzo).join(', ')}
             </div>
           )}
           {!dati.docs.length && !dati.staccati.length && (
-            <div style={{ fontSize: '11.5px', color: 'rgba(34,39,31,.55)', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>
+            <div style={{ fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>
               {dati.soloNuovi
                 ? t('Guarda solo quello che è arrivato dall’ultima volta: se non è arrivato niente, è normale.')
                 : t('Prova a cambiare le parole: vanno scritte come le userebbe chi ha scritto quei documenti, nella loro lingua.')}
@@ -177,18 +177,18 @@ function Anteprima({ id, catalogo, chiave }: {
               {dati.docs.slice(0, 6).map(d => (
                 <div key={d.id} style={{
                   display: 'flex', gap: 8, alignItems: 'baseline',
-                  fontSize: '11.5px', color: 'rgba(34,39,31,.7)'
+                  fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.7)'
                 }}>
                   <span style={{
                     flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                   }}>{d.titolo}</span>
-                  <span style={{ flex: 'none', fontSize: '10.5px', color: 'rgba(34,39,31,.38)' }}>
+                  <span style={{ flex: 'none', fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.38)' }}>
                     {d.quando ? new Date(d.quando).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }) : ''}
                   </span>
                 </div>
               ))}
               {dati.docs.length > 6 && (
-                <div style={{ fontSize: '10.5px', color: 'rgba(34,39,31,.38)' }}>
+                <div style={{ fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.38)' }}>
                   {`+${dati.docs.length - 6}`}
                 </div>
               )}
@@ -329,7 +329,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   return (
     <>
       <div onClick={chiediChiusura} style={{
-        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
+        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(var(--ombra-rgb),.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
 
@@ -346,10 +346,10 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
         transform: 'translate(-50%,-50%)',
         width: 720, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 64px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
-        background: 'linear-gradient(180deg,rgba(255,253,249,.97),rgba(255,251,245,.95))',
+        background: 'linear-gradient(180deg,rgba(var(--carta-rgb),.97),rgba(var(--carta-rgb),.95))',
         backdropFilter: 'blur(40px) saturate(1.6)', WebkitBackdropFilter: 'blur(40px) saturate(1.6)',
-        border: '1px solid rgba(255,255,255,.95)',
-        boxShadow: '0 44px 100px -24px rgba(60,44,30,.46)',
+        border: '1px solid rgba(var(--luce-rgb),.95)',
+        boxShadow: '0 44px 100px -24px rgba(var(--ombra-rgb),.46)',
         animation: 'editoresu .3s cubic-bezier(.2,.8,.25,1) both'
       }}>
 
@@ -357,15 +357,15 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
         {/* la testa: chi è, e i due bottoni che valgono per tutta la scheda */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '21px 24px 19px',
-          borderBottom: '1px solid rgba(34,39,31,.08)', background: 'rgba(126,156,130,.08)'
+          borderBottom: '1px solid rgba(var(--inchiostro-rgb),.08)', background: 'rgba(var(--salvia-rgb),.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div id="editor-titolo" style={{
-              fontSize: '19px', fontWeight: 450, color: '#22271F', letterSpacing: '-.02em',
+              fontSize: '19px', fontWeight: 450, color: 'var(--inchiostro)', letterSpacing: '-.02em',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>{nome || a.nome}</div>
             <div style={{
-              fontSize: '11.5px', color: 'rgba(34,39,31,.5)', marginTop: 2,
+              fontSize: '11.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 2,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
             }}>
               {a.accesa
@@ -385,22 +385,22 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
               display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none',
               padding: '9px', borderRadius: 11, fontFamily: 'inherit', fontSize: '12px',
               fontWeight: 500, cursor: occupato ? 'default' : 'pointer',
-              border: '1px solid rgba(196,98,59,.32)', background: 'rgba(196,98,59,.1)',
-              color: '#8E3F1F', opacity: occupato ? 0.6 : 1
+              border: '1px solid rgba(var(--rame-rgb),.32)', background: 'rgba(var(--rame-rgb),.1)',
+              color: 'var(--rame-testo)', opacity: occupato ? 0.6 : 1
             }}
-            hover={occupato ? {} : { background: 'rgba(196,98,59,.18)', borderColor: 'rgba(196,98,59,.5)' }}>
+            hover={occupato ? {} : { background: 'rgba(var(--rame-rgb),.18)', borderColor: 'rgba(var(--rame-rgb),.5)' }}>
             {penso === 'ottimizzo'
-              ? <Glifo tipo="penso" dim={11} colore="#8E3F1F" />
+              ? <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
               : <IconGiro size={12} />}
           </Hov>
 
           <Hov as="button" onClick={chiediChiusura} title={t('Chiudi')} aria-label={t('Chiudi')}
             style={{
               display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0,
-              borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)',
-              color: 'rgba(34,39,31,.5)', cursor: 'pointer'
+              borderRadius: 10, border: 'none', background: 'rgba(var(--inchiostro-rgb),.06)',
+              color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer'
             }}
-            hover={{ background: 'rgba(34,39,31,.13)', color: '#22271F' }}><IconCroce size={12} /></Hov>
+            hover={{ background: 'rgba(var(--inchiostro-rgb),.13)', color: 'var(--inchiostro)' }}><IconCroce size={12} /></Hov>
         </div>
 
         <div className="auto-editor-body" inert={occupato} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -435,7 +435,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                   opacity: occupato || richiesta.trim().length < 3 ? 0.5 : 1,
                   cursor: occupato || richiesta.trim().length < 3 ? 'default' : 'pointer'
                 }}>
-                {penso === 'riscrivo' && <Glifo tipo="penso" dim={11} colore="#FFF7F0" />}
+                {penso === 'riscrivo' && <Glifo tipo="penso" dim={11} colore="var(--avorio)" />}
                 {penso === 'riscrivo' ? t('La riscrivo…') : t('Riscrivila')}
               </button>
             </div>
@@ -473,8 +473,8 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
         <div style={{
           flex: 'none', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          padding: '15px 24px', borderTop: '1px solid rgba(34,39,31,.08)',
-          background: 'rgba(255,255,255,.4)'
+          padding: '15px 24px', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)',
+          background: 'rgba(var(--luce-rgb),.4)'
         }}>
           {dove === 'campi' && (
             <button onClick={salva} disabled={salvo || occupato || !modificata} style={{ ...PIENO, opacity: modificata ? 1 : .45 }}>
@@ -485,8 +485,8 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
           {/* «Provala adesso» c'è anche quando è in pausa: è lì che serve. */}
           <Hov as="button" onClick={adesso} disabled={gira || occupato}
             style={{ ...VUOTO, display: 'inline-flex', alignItems: 'center', gap: 7, cursor: gira ? 'default' : 'pointer' }}
-            hover={gira ? {} : { borderColor: '#C4623B', color: '#8E3F1F' }}>
-            {gira && <Glifo tipo="penso" dim={11} colore="#8E3F1F" />}
+            hover={gira ? {} : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
+            {gira && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}
             {gira ? t('Provo…') : modificata ? t('Salva e prova') : t('Provala adesso')}
           </Hov>
 
@@ -517,9 +517,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
           <div style={{
             flex: 'none', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
             padding: '10px 18px', fontSize: '11.5px', lineHeight: 1.55,
-            borderTop: '1px solid rgba(34,39,31,.06)',
-            background: a.salute.stato === 'ferma' ? 'rgba(34,39,31,.035)' : 'rgba(196,98,59,.07)',
-            color: a.salute.stato === 'ferma' ? 'rgba(34,39,31,.6)' : '#8E3F1F'
+            borderTop: '1px solid rgba(var(--inchiostro-rgb),.06)',
+            background: a.salute.stato === 'ferma' ? 'rgba(var(--inchiostro-rgb),.035)' : 'rgba(var(--rame-rgb),.07)',
+            color: a.salute.stato === 'ferma' ? 'rgba(var(--inchiostro-rgb),.6)' : 'var(--rame-testo)'
           }}>
             <details style={{ width: '100%' }}><summary style={{ cursor: 'pointer', fontSize: 11.5 }}>
               {a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('L’ultima volta è andata storta.') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}
@@ -538,10 +538,10 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                 style={{
                   flex: 'none', padding: '6px 12px', borderRadius: 99, fontFamily: 'inherit',
                   fontSize: '11.5px', fontWeight: 500, cursor: occupato ? 'default' : 'pointer',
-                  border: '1px solid rgba(196,98,59,.4)', background: 'rgba(255,255,255,.7)',
-                  color: '#8E3F1F'
+                  border: '1px solid rgba(var(--rame-rgb),.4)', background: 'rgba(var(--luce-rgb),.7)',
+                  color: 'var(--rame-testo)'
                 }}
-                hover={occupato ? {} : { background: 'rgba(196,98,59,.14)' }}>
+                hover={occupato ? {} : { background: 'rgba(var(--rame-rgb),.14)' }}>
                 {t('Riscrivile le parole')}
               </Hov>
             )}
@@ -552,12 +552,12 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
         {(detto || guaio || a.guaio) && (
           <div style={{
             flex: 'none', padding: '9px 18px 11px', fontSize: '11.5px', lineHeight: 1.55,
-            borderTop: '1px solid rgba(34,39,31,.06)', background: 'rgba(255,255,255,.4)'
+            borderTop: '1px solid rgba(var(--inchiostro-rgb),.06)', background: 'rgba(var(--luce-rgb),.4)'
           }}>
-            {detto && <div style={{ color: '#3E5140' }}>{detto}</div>}
-            {(guaio || a.guaio) && <div style={{ color: '#8E3F1F' }}>{t(guaio || a.guaio || '')}</div>}
+            {detto && <div style={{ color: 'var(--verde-cupo)' }}>{detto}</div>}
+            {(guaio || a.guaio) && <div style={{ color: 'var(--rame-testo)' }}>{t(guaio || a.guaio || '')}</div>}
             {!detto && !guaio && !a.guaio && a.quante > 0 && (
-              <div style={{ color: 'rgba(34,39,31,.42)' }}>
+              <div style={{ color: 'rgba(var(--inchiostro-rgb),.42)' }}>
                 {frasi.girataVolte(a.quante)}
                 {a.ultima ? ` · ${t('l’ultima')} ${new Date(a.ultima).toLocaleString(loc(), {
                   day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
@@ -644,29 +644,29 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
   return (
     <>
       <div onClick={() => { if (!occupato) chiudi() }} style={{
-        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,30,22,.3)',
+        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(var(--ombra-rgb),.3)',
         backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)', animation: 'fadein .2s ease'
       }} />
       <div ref={finestra} className="auto-editor" role="dialog" aria-modal="true" aria-labelledby="nuova-titolo" style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         width: 860, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 48px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
-        background: 'linear-gradient(180deg,rgba(255,253,249,.98),rgba(255,251,245,.96))',
-        border: '1px solid rgba(255,255,255,.95)',
-        boxShadow: '0 44px 100px -24px rgba(60,44,30,.46)',
+        background: 'linear-gradient(180deg,rgba(var(--carta-rgb),.98),rgba(var(--carta-rgb),.96))',
+        border: '1px solid rgba(var(--luce-rgb),.95)',
+        boxShadow: '0 44px 100px -24px rgba(var(--ombra-rgb),.46)',
         animation: 'editoresu .3s cubic-bezier(.2,.8,.25,1) both'
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, flex: 'none', padding: '18px 18px 16px 24px',
-          borderBottom: '1px solid rgba(34,39,31,.08)'
+          borderBottom: '1px solid rgba(var(--inchiostro-rgb),.08)'
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div id="nuova-titolo" style={{ fontSize: '17px', fontWeight: 500, color: '#22271F', letterSpacing: '-.01em' }}>{t('Nuova automazione')}</div>
-            <div style={{ fontSize: '12px', color: 'rgba(34,39,31,.55)', marginTop: 2 }}>{t('Dilla in una frase, o componila sui binari. Nasce in pausa.')}</div>
+            <div id="nuova-titolo" style={{ fontSize: '17px', fontWeight: 500, color: 'var(--inchiostro)', letterSpacing: '-.01em' }}>{t('Nuova automazione')}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.55)', marginTop: 2 }}>{t('Dilla in una frase, o componila sui binari. Nasce in pausa.')}</div>
           </div>
           <Hov as="button" onClick={() => { if (!occupato) chiudi() }} title={t('Chiudi')} aria-label={t('Chiudi')}
-            style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0, borderRadius: 10, border: 'none', background: 'rgba(34,39,31,.06)', color: 'rgba(34,39,31,.5)', cursor: 'pointer' }}
-            hover={{ background: 'rgba(34,39,31,.13)', color: '#22271F' }}><IconCroce size={12} /></Hov>
+            style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, flex: 'none', padding: 0, borderRadius: 10, border: 'none', background: 'rgba(var(--inchiostro-rgb),.06)', color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer' }}
+            hover={{ background: 'rgba(var(--inchiostro-rgb),.13)', color: 'var(--inchiostro)' }}><IconCroce size={12} /></Hov>
         </div>
 
         <div className="auto-editor-body" inert={occupato} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -676,7 +676,7 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
               onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void componi() } }} />
             <div className="auto-dettatura-riga">
               <button type="button" className="auto-button" disabled={occupato || frase.trim().length < 8} onClick={componi}>
-                {compongo && <Glifo tipo="penso" dim={11} colore="#8E3F1F" />}{compongo ? t('La compongo…') : t('Componi con Myynd')}
+                {compongo && <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />}{compongo ? t('La compongo…') : t('Componi con Myynd')}
               </button>
               <div className="auto-spunti">
                 {SPUNTI.map(([label, s]) => (
@@ -697,15 +697,15 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
 
         <div style={{
           flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          padding: '13px 24px', borderTop: '1px solid rgba(34,39,31,.08)', background: 'rgba(255,255,255,.4)'
+          padding: '13px 24px', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)', background: 'rgba(var(--luce-rgb),.4)'
         }}>
           <button onClick={crea} disabled={occupato || !pronta}
             style={{ ...PIENO, display: 'inline-flex', alignItems: 'center', gap: 7, opacity: occupato || !pronta ? 0.5 : 1, cursor: occupato || !pronta ? 'default' : 'pointer' }}>
-            {creo && <Glifo tipo="penso" dim={11} colore="#FFF7F0" />}
+            {creo && <Glifo tipo="penso" dim={11} colore="var(--avorio)" />}
             {creo ? t('La creo…') : t('Creala')}
           </button>
           <span className="auto-muted">{pronta ? t('Nasce in pausa: la accendi dalla sua scheda.') : t('Le manca cosa deve fare: scrivilo nel tratto «Fa», o componila con Myynd.')}</span>
-          {guaio && <span style={{ fontSize: '12px', color: '#8E3F1F', textWrap: 'pretty' }}>{t(guaio)}</span>}
+          {guaio && <span style={{ fontSize: '12px', color: 'var(--rame-testo)', textWrap: 'pretty' }}>{t(guaio)}</span>}
         </div>
       </div>
     </>

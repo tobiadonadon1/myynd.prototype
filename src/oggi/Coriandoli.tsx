@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from 'react'
 
-const COLORI = ['#C4623B', '#7E9C82', '#D8A46E', '#8E3F1F', '#FFF7F0']
+const COLORI = ['var(--rame)', '#7E9C82', '#D8A46E', 'var(--rame-testo)', 'var(--avorio)']
 const DURATA = 2600
 
 type Pezzo = {

@@ -11,9 +11,9 @@ export type Tipo = 'penso' | 'leggo' | 'cerco' | 'collego' | 'scrivo'
 type Def = { colore: string; spento: string; moto: 'sfarfallio' | 'scansione' | 'grafo' | 'orbita' }
 
 const DEF: Record<Tipo, Def> = {
-  penso:   { colore: '#C4623B', spento: 'rgba(196,98,59,.16)',  moto: 'sfarfallio' },
+  penso:   { colore: 'var(--rame)', spento: 'rgba(var(--rame-rgb),.16)',  moto: 'sfarfallio' },
   leggo:   { colore: '#D8A46E', spento: 'rgba(216,164,110,.18)', moto: 'scansione' },
-  cerco:   { colore: '#7E9C82', spento: 'rgba(126,156,130,.18)', moto: 'grafo' },
+  cerco:   { colore: 'var(--salvia)', spento: 'rgba(var(--salvia-rgb),.18)', moto: 'grafo' },
   collego: { colore: '#5B9BC9', spento: 'rgba(91,155,201,.18)',  moto: 'orbita' },
   scrivo:  { colore: '#A34E2D', spento: 'rgba(163,78,45,.16)',   moto: 'scansione' }
 }
@@ -28,7 +28,7 @@ function Griglia({ tipo, dim, colore }: { tipo: Tipo; dim: number; colore?: stri
   // su fondo scuro l'arancione del glifo si perde: chi lo disegna può dire
   // di che colore lo vuole, e il resto della card resta com'è
   const tinta = colore ?? d.colore
-  const spento = colore ? 'rgba(255,247,240,.16)' : d.spento
+  const spento = colore ? 'rgba(var(--avorio-rgb),.16)' : d.spento
   const celle = []
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -77,14 +77,14 @@ export function Stato({ tipo, testo, chiaro, stile }: {
     <div role="status" style={{
       display: 'inline-flex', alignItems: 'center', gap: 11,
       padding: '9px 15px 9px 11px', borderRadius: 14,
-      background: chiaro ? 'rgba(244,239,232,.06)' : 'rgba(34,39,31,.05)',
-      border: `1px solid ${chiaro ? 'rgba(244,239,232,.12)' : 'rgba(34,39,31,.08)'}`,
+      background: chiaro ? 'rgba(244,239,232,.06)' : 'rgba(var(--inchiostro-rgb),.05)',
+      border: `1px solid ${chiaro ? 'rgba(244,239,232,.12)' : 'rgba(var(--inchiostro-rgb),.08)'}`,
       ...stile
     }}>
       <Griglia tipo={tipo} dim={22} />
       <span style={{
         fontSize: '13.5px', letterSpacing: '.01em',
-        color: chiaro ? 'rgba(244,239,232,.9)' : 'rgba(34,39,31,.8)'
+        color: chiaro ? 'rgba(244,239,232,.9)' : 'rgba(var(--inchiostro-rgb),.8)'
       }}>
         {testo}
         <span style={{ color: d.colore, animation: 'puls 1.4s ease-in-out infinite' }}>…</span>

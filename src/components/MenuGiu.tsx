@@ -104,8 +104,8 @@ export function MenuGiu({ ancora, chiudi, minLarghezza = 200, allinea = 'sinistr
         // finché non è misurato non si vede: invisibile, ma largo quanto sarà
         visibility: posto ? 'visible' : 'hidden',
         zIndex: 901, maxHeight: `calc(100vh - ${MARGINE * 2}px)`, overflowY: 'auto',
-        borderRadius: 16, background: '#FFFDF9', border: '1px solid rgba(255,255,255,.9)',
-        boxShadow: '0 24px 56px rgba(30,20,14,.34)', padding: 5,
+        borderRadius: 16, background: 'var(--carta-piena)', border: '1px solid rgba(var(--luce-rgb),.9)',
+        boxShadow: '0 24px 56px rgba(var(--ombra-rgb),.34)', padding: 5,
         animation: 'fadein .14s ease'
       }}>
         {children}
@@ -118,5 +118,5 @@ export function MenuGiu({ ancora, chiudi, minLarghezza = 200, allinea = 'sinistr
 /** Una voce: un bottone largo quanto il menù, senza vestito suo. */
 export const VOCE_MENU: CSSProperties = {
   display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10,
-  border: 'none', background: 'none', cursor: 'pointer', fontSize: '13.5px', fontFamily: 'inherit', color: '#22271F'
+  border: 'none', background: 'none', cursor: 'pointer', fontSize: '13.5px', fontFamily: 'inherit', color: 'var(--inchiostro)'
 }

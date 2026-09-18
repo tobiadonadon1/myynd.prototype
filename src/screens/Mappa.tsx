@@ -19,7 +19,7 @@ export function Legenda({ v }: { v: Vals }) {
 
 function Pannello({ v, scuro }: { v: Vals; scuro?: boolean }) {
   const [cerca, setCerca] = useState('')
-  const testo = scuro ? 'rgba(244,239,232,.72)' : 'rgba(34,39,31,.75)'
+  const testo = scuro ? 'rgba(244,239,232,.72)' : 'rgba(var(--inchiostro-rgb),.75)'
   const etichetta = scuro ? { ...LABEL, color: 'rgba(244,239,232,.5)' } : LABEL
   const documenti = v.mappaDocumenti.filter(n => `${n.titolo} ${n.autore ?? ''}`.toLocaleLowerCase().includes(cerca.trim().toLocaleLowerCase())).slice(0, 12)
   return (
@@ -71,14 +71,14 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 9, marginTop: scuro ? 12 : 14,
       padding: scuro ? '7px 7px 7px 13px' : '8px 8px 8px 13px', borderRadius: 99,
-      background: scuro ? 'rgba(255,247,240,.1)' : 'rgba(255,255,255,.8)',
-      border: '1px solid ' + (scuro ? 'rgba(255,247,240,.18)' : 'rgba(34,39,31,.14)')
+      background: scuro ? 'rgba(var(--avorio-rgb),.1)' : 'rgba(var(--luce-rgb),.8)',
+      border: '1px solid ' + (scuro ? 'rgba(var(--avorio-rgb),.18)' : 'rgba(var(--inchiostro-rgb),.14)')
     }}>
       <input value={v.nodeMsg} onChange={v.onNodeType} onKeyDown={v.onNodeKey} placeholder={v.nodePlaceholder}
         className={scuro ? 'scuro' : undefined}
         disabled={!v.claudeOn}
-        style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : '#22271F' }} />
-      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,#B24E2E,#D98A5A)' : 'rgba(120,110,100,.35)', color: '#FFF7F0', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
+        style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : 'var(--inchiostro)' }} />
+      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(120,110,100,.35)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
         <IconSu size={14} />
       </button>
     </div>
@@ -96,20 +96,20 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
 function Sopra({ v }: { v: Vals }) {
   const stile = {
     position: 'absolute' as const, inset: 0, display: 'grid', placeItems: 'center',
-    color: 'rgba(255,247,240,.5)', fontSize: 14, textAlign: 'center' as const, padding: 30
+    color: 'rgba(var(--avorio-rgb),.5)', fontSize: 14, textAlign: 'center' as const, padding: 30
   }
   // prima il guasto: se anche i conteggi non sono arrivati, `mappaVuota` è
   // vera per un motivo che non è «non hai collegato niente», e chi ha
   // documenti si vedeva dire di collegare una fonte, senza il bottone per riprovare
   if (v.guastoMappa) {
     return (
-      <div style={{ ...stile, color: 'rgba(255,247,240,.7)' }}>
+      <div style={{ ...stile, color: 'rgba(var(--avorio-rgb),.7)' }}>
         <div style={{ maxWidth: 380, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
           {v.guastoMappa}
           <div style={{ marginTop: 14 }}>
             <Hov as="button" type="button" onClick={v.ricaricaMappa}
-              style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.4)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}
-              hover={{ background: 'rgba(255,255,255,.12)' }}>{t('Riprova')}</Hov>
+              style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.4)', background: 'none', color: 'rgba(var(--luce-rgb),.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}
+              hover={{ background: 'rgba(var(--luce-rgb),.12)' }}>{t('Riprova')}</Hov>
           </div>
         </div>
       </div>
@@ -130,31 +130,31 @@ export function Mappa({ v }: { v: Vals }) {
     <div style={{ width: 1010, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 10px' }}>
         <span style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em' }}>{t('Mappa')}</span>
-        <span style={{ fontSize: 13, color: 'rgba(34,39,31,.65)' }}>{v.mappaMeta}</span>
+        <span style={{ fontSize: 13, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{v.mappaMeta}</span>
       </div>
-      <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(34,39,31,.65)', maxWidth: 760 }}>
+      <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', maxWidth: 760 }}>
         {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
       </p>
       <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexDirection: stretta ? 'column' : 'row' }}>
-        <div style={{ flex: 1, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(255,247,240,.14)', boxShadow: '0 30px 70px rgba(50,36,24,.32)', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(var(--avorio-rgb),.14)', boxShadow: '0 30px 70px rgba(var(--ombra-rgb),.32)', overflow: 'hidden', position: 'relative' }}>
           <canvas ref={v.cvA} tabIndex={0} role="img" aria-label={t('Mappa dei documenti. Usa le frecce per selezionare un documento.')}
             style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
           <Sopra v={v} />
           {disegnata && (
             <>
               <Hov as="button" onClick={v.expandMap}
-                style={{ position: 'absolute', top: 14, right: 14, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.55)', background: 'rgba(255,255,255,.14)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}
-                hover={{ background: '#FFFFFF', color: '#1B1917' }}>
+                style={{ position: 'absolute', top: 14, right: 14, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.55)', background: 'rgba(var(--luce-rgb),.14)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}
+                hover={{ background: 'var(--carta-alta)', color: '#1B1917' }}>
                 <IconEspandi />{t('Espandi')}</Hov>
               <div style={{ position: 'absolute', left: 14, bottom: 12, display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: '78%' }}>
                 <Legenda v={v} />
               </div>
-              <div style={{ position: 'absolute', left: 16, top: 20, maxWidth: '55%', fontSize: 11, color: 'rgba(255,247,240,.5)' }}>{t('trascina per girare · rotella per lo zoom')}</div>
+              <div style={{ position: 'absolute', left: 16, top: 20, maxWidth: '55%', fontSize: 11, color: 'rgba(var(--avorio-rgb),.5)' }}>{t('trascina per girare · rotella per lo zoom')}</div>
             </>
           )}
         </div>
 
-        <div style={{ width: stretta ? '100%' : 308, boxSizing: 'border-box', maxHeight: stretta ? 620 : 480, flex: 'none', borderRadius: 20, background: 'rgba(255,253,249,.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 22px 52px rgba(84,64,44,.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: stretta ? '100%' : 308, boxSizing: 'border-box', maxHeight: stretta ? 620 : 480, flex: 'none', borderRadius: 20, background: 'rgba(var(--carta-rgb),.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.8)', boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
           <Pannello v={v} />
           <div style={{ flex: 1, minHeight: 12 }} />
           <BarraNodo v={v} />
@@ -171,12 +171,12 @@ export function MappaPiena({ v }: { v: Vals }) {
     <div ref={finestra} role="dialog" aria-modal="true" aria-labelledby="mappa-piena-titolo"
       style={{ position: 'absolute', inset: 0, zIndex: 40, background: '#191715', display: 'flex', flexDirection: 'column', animation: 'fadein .22s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14, padding: '18px 22px', flex: 'none' }}>
-        <span id="mappa-piena-titolo" style={{ fontSize: 15, color: 'rgba(255,247,240,.9)' }}>{t('Mappa')}</span>
-        <span style={{ fontSize: '12.5px', color: 'rgba(255,247,240,.5)' }}>{v.mappaMeta} · {t('trascina per girare, rotella per lo zoom')}</span>
+        <span id="mappa-piena-titolo" style={{ fontSize: 15, color: 'rgba(var(--avorio-rgb),.9)' }}>{t('Mappa')}</span>
+        <span style={{ fontSize: '12.5px', color: 'rgba(var(--avorio-rgb),.5)' }}>{v.mappaMeta} · {t('trascina per girare, rotella per lo zoom')}</span>
         <div style={{ flex: 1 }} />
-        <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.34)', background: 'none', color: 'rgba(255,255,255,.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
-        <button onClick={v.closeMap} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(255,255,255,.55)', background: 'rgba(255,255,255,.14)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>{t('Chiudi')}</button>
-        <p style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'rgba(255,247,240,.6)' }}>
+        <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.34)', background: 'none', color: 'rgba(var(--luce-rgb),.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
+        <button onClick={v.closeMap} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.55)', background: 'rgba(var(--luce-rgb),.14)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>{t('Chiudi')}</button>
+        <p style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--avorio-rgb),.6)' }}>
           {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
         </p>
       </div>
@@ -189,7 +189,7 @@ export function MappaPiena({ v }: { v: Vals }) {
           <Legenda v={v} />
         </div>
         </div>
-        <div className="map-full-details" style={{ borderRadius: 20, background: 'rgba(28,25,23,.9)', border: '1px solid rgba(255,247,240,.16)', padding: 20, color: '#F4EFE8', display: 'flex', flexDirection: 'column' }}>
+        <div className="map-full-details" style={{ borderRadius: 20, background: 'rgba(28,25,23,.9)', border: '1px solid rgba(var(--avorio-rgb),.16)', padding: 20, color: '#F4EFE8', display: 'flex', flexDirection: 'column' }}>
           <Pannello v={v} scuro />
           <div style={{ flex: 1, minHeight: 10 }} />
           <BarraNodo v={v} scuro />

@@ -32,14 +32,13 @@
   position: fixed; inset: 0; z-index: 60; display: flex; gap: 16px;
   box-sizing: border-box;
   padding: calc(var(--striscia, 0px) + 22px) 22px 22px;
-  background: radial-gradient(150% 110% at 6% 0%, #F8F1E7 0%, #F2E9DC 58%, #EFE2D2 100%);
-  color: #22271F;
+  background: radial-gradient(150% 110% at 6% 0%, var(--carta-piena) 0%, var(--sabbia) 58%, var(--pagina) 100%);
+  color: var(--inchiostro);
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px;
   animation: fadein .18s ease;
   --ora: 52px;
-  --rame: #C4623B;
-  --scuro: #8E3F1F;
-  --filo: rgba(34,39,31,.09);
+  --scuro: var(--rame-testo);
+  --filo: rgba(var(--inchiostro-rgb),.09);
 }
 /* Mentre la settimana è aperta, quello che sta sotto non deve spuntare: la
    mascotte e la porta della chat si tolgono di mezzo e tornano alla chiusura.
@@ -59,21 +58,21 @@ body.agenda-aperta .app-porta-chat { display: none; }
   display: flex; flex-direction: column; gap: 24px;
   padding: 18px 16px 16px; overflow-y: auto;
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255,253,249,.82), rgba(255,253,249,.58));
-  border: 1px solid rgba(255,255,255,.7);
-  box-shadow: 0 26px 60px rgba(84,64,44,.13);
+  background: linear-gradient(180deg, rgba(var(--carta-rgb),.82), rgba(var(--carta-rgb),.58));
+  border: 1px solid rgba(var(--luce-rgb),.7);
+  box-shadow: 0 26px 60px rgba(var(--ombra-rgb),.13);
 }
 .agenda-nuovo {
   display: flex; align-items: center; gap: 9px; width: 100%;
   padding: 13px 18px; border: 0; border-radius: 14px;
-  background: var(--rame); color: #FFF7F0; font-size: 14px; letter-spacing: -.01em;
-  box-shadow: 0 8px 20px -12px rgba(142,63,31,.7); transition: background .14s;
+  background: var(--rame); color: var(--avorio); font-size: 14px; letter-spacing: -.01em;
+  box-shadow: 0 8px 20px -12px rgba(var(--rame-rgb),.7); transition: background .14s;
 }
-.agenda-nuovo:hover {background: var(--scuro);}
+.agenda-nuovo:hover {background: var(--rame-forte);}
 .agenda-nuovo span:first-child {font-size: 19px; line-height: 1;}
 .agenda-rail h3 {
   margin: 0 0 12px; font-size: 11px; font-weight: 500; letter-spacing: .09em;
-  text-transform: uppercase; color: rgba(34,39,31,.42);
+  text-transform: uppercase; color: rgba(var(--inchiostro-rgb),.42);
 }
 
 /* il mesetto: sei righe sempre, così la colonna non salta quando si gira mese */
@@ -81,9 +80,9 @@ body.agenda-aperta .app-porta-chat { display: none; }
 .agenda-mese-testa > span {flex: 1; font-size: 13.5px; text-transform: capitalize; letter-spacing: -.01em;}
 .agenda-mese-testa button {
   width: 26px; height: 26px; border: 0; background: transparent; border-radius: 8px;
-  color: rgba(34,39,31,.5); font-size: 17px; line-height: 1;
+  color: rgba(var(--inchiostro-rgb),.5); font-size: 17px; line-height: 1;
 }
-.agenda-mese-testa button:hover {background: rgba(196,98,59,.1); color: var(--scuro);}
+.agenda-mese-testa button:hover {background: rgba(var(--rame-rgb),.1); color: var(--scuro);}
 .agenda-mese-griglia, .agenda-mese-iniziali {display: grid; grid-template-columns: repeat(7, 1fr);}
 /* la riga è un elemento vero — serve al `:first-child` della fascia della
    settimana — e non disegna niente: le caselle restano figlie della griglia */
@@ -91,32 +90,32 @@ body.agenda-aperta .app-porta-chat { display: none; }
 .agenda-mese-iniziali {padding-bottom: 5px;}
 .agenda-mese-iniziali span {
   text-align: center; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
-  color: rgba(34,39,31,.35);
+  color: rgba(var(--inchiostro-rgb),.35);
 }
 .agenda-mese-cella {
   position: relative; border: 0; background: transparent; padding: 0;
   height: 28px; display: grid; place-items: center;
-  font-size: 12px; color: rgba(34,39,31,.72); border-radius: 50%;
+  font-size: 12px; color: rgba(var(--inchiostro-rgb),.72); border-radius: 50%;
 }
-.agenda-mese-cella.fuori {color: rgba(34,39,31,.28);}
-.agenda-mese-cella:hover {background: rgba(196,98,59,.1); color: var(--scuro);}
-.agenda-mese-cella.settimana {background: rgba(196,98,59,.09); border-radius: 0;}
+.agenda-mese-cella.fuori {color: rgba(var(--inchiostro-rgb),.28);}
+.agenda-mese-cella:hover {background: rgba(var(--rame-rgb),.1); color: var(--scuro);}
+.agenda-mese-cella.settimana {background: rgba(var(--rame-rgb),.09); border-radius: 0;}
 .agenda-mese-cella.settimana:first-child {border-radius: 14px 0 0 14px;}
 .agenda-mese-cella.settimana:last-child {border-radius: 0 14px 14px 0;}
-.agenda-mese-cella.oggi {background: var(--rame); color: #FFF7F0; border-radius: 50%;}
+.agenda-mese-cella.oggi {background: var(--rame); color: var(--avorio); border-radius: 50%;}
 .agenda-mese-cella i {
   position: absolute; bottom: 3px; width: 3px; height: 3px; border-radius: 50%;
   background: var(--rame); opacity: .65;
 }
-.agenda-mese-cella.oggi i {background: #FFF7F0; opacity: .9;}
+.agenda-mese-cella.oggi i {background: var(--avorio); opacity: .9;}
 
 /* i calendari: il colore è la casella, il nome è il resto */
 .agenda-lista {display: flex; flex-direction: column; gap: 2px;}
 .agenda-voce {
   display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px;
-  font-size: 13px; color: rgba(34,39,31,.8); cursor: pointer; min-width: 0;
+  font-size: 13px; color: rgba(var(--inchiostro-rgb),.8); cursor: pointer; min-width: 0;
 }
-.agenda-voce:hover {background: rgba(34,39,31,.04);}
+.agenda-voce:hover {background: rgba(var(--inchiostro-rgb),.04);}
 .agenda-voce input {position: absolute; opacity: 0; width: 0; height: 0;}
 .agenda-voce .agenda-casella {
   flex: none; width: 16px; height: 16px; border-radius: 5px;
@@ -124,13 +123,13 @@ body.agenda-aperta .app-porta-chat { display: none; }
 }
 .agenda-voce .agenda-casella svg {opacity: 0;}
 .agenda-voce input:checked + .agenda-casella {background: currentColor;}
-.agenda-voce input:checked + .agenda-casella svg {opacity: 1; color: #FFFDF8;}
+.agenda-voce input:checked + .agenda-casella svg {opacity: 1; color: var(--avorio);}
 .agenda-voce input:focus-visible + .agenda-casella {outline: 2px solid var(--rame); outline-offset: 2px;}
 .agenda-voce > span:last-child {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.agenda-voce.spenta > span:last-child {color: rgba(34,39,31,.45);}
-.agenda-sola {font-size: 10.5px; color: rgba(34,39,31,.38); margin-left: auto; flex: none;}
+.agenda-voce.spenta > span:last-child {color: rgba(var(--inchiostro-rgb),.45);}
+.agenda-sola {font-size: 10.5px; color: rgba(var(--inchiostro-rgb),.38); margin-left: auto; flex: none;}
 
 /*
  * L'agenda del Mac che non c'è.
@@ -141,10 +140,10 @@ body.agenda-aperta .app-porta-chat { display: none; }
  * colonna non è mai vuota e la settimana si guarda lo stesso.
  */
 .agenda-fonte {
-  margin: 12px 0 0; padding: 11px 0 0; border-top: 1px solid rgba(34,39,31,.07);
-  font-size: 11.5px; line-height: 1.55; color: rgba(34,39,31,.52);
+  margin: 12px 0 0; padding: 11px 0 0; border-top: 1px solid rgba(var(--inchiostro-rgb),.07);
+  font-size: 11.5px; line-height: 1.55; color: rgba(var(--inchiostro-rgb),.52);
 }
-.agenda-fonte b {display: block; font-weight: 500; color: rgba(34,39,31,.7); margin-bottom: 4px;}
+.agenda-fonte b {display: block; font-weight: 500; color: rgba(var(--inchiostro-rgb),.7); margin-bottom: 4px;}
 
 /* ————— la settimana ————— */
 .agenda-corpo {flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;}
@@ -159,12 +158,12 @@ body.agenda-aperta .app-porta-chat { display: none; }
 }
 .agenda-testa .agenda-spinta {flex: 1;}
 .agenda-testa button {
-  border: 0; background: transparent; border-radius: 10px; color: rgba(34,39,31,.55);
+  border: 0; background: transparent; border-radius: 10px; color: rgba(var(--inchiostro-rgb),.55);
   min-width: 34px; min-height: 34px; font-size: 21px; line-height: 1;
 }
-.agenda-testa button:hover {background: rgba(196,98,59,.1); color: var(--scuro);}
+.agenda-testa button:hover {background: rgba(var(--rame-rgb),.1); color: var(--scuro);}
 .agenda-testa .agenda-oggi, .agenda-testa .agenda-riduci {
-  font-size: 12.5px; padding: 0 15px; border: 1px solid rgba(34,39,31,.14); color: rgba(34,39,31,.72);
+  font-size: 12.5px; padding: 0 15px; border: 1px solid rgba(var(--inchiostro-rgb),.14); color: rgba(var(--inchiostro-rgb),.72);
 }
 .agenda-testa .agenda-riduci {margin-left: 8px;}
 
@@ -172,9 +171,9 @@ body.agenda-aperta .app-porta-chat { display: none; }
    raggio, la stessa ombra bassa del calendario di «Da fare» */
 .agenda-settimana {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
-  border: 1px solid rgba(255,255,255,.96); border-radius: 20px;
-  background: linear-gradient(140deg, rgba(255,253,248,.97), rgba(255,247,240,.92));
-  box-shadow: 0 10px 36px -24px rgba(71,57,40,.34);
+  border: 1px solid rgba(var(--luce-rgb),.96); border-radius: 20px;
+  background: linear-gradient(140deg, rgba(var(--carta-rgb),.97), rgba(var(--carta-rgb),.92));
+  box-shadow: 0 10px 36px -24px rgba(var(--ombra-rgb),.34);
   overflow: hidden;
 }
 .agenda-teste, .agenda-tuttogiorno {
@@ -187,48 +186,48 @@ body.agenda-aperta .app-porta-chat { display: none; }
   padding: 11px 4px 10px; border: 0; background: transparent; border-left: 1px solid var(--filo);
   min-width: 0;
 }
-.agenda-giorno-testa:hover {background: rgba(196,98,59,.06);}
+.agenda-giorno-testa:hover {background: rgba(var(--rame-rgb),.06);}
 .agenda-giorno-testa .agenda-nome {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: rgba(34,39,31,.42);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: rgba(var(--inchiostro-rgb),.42);
 }
 .agenda-giorno-testa .agenda-numero {
   display: grid; place-items: center; min-width: 32px; height: 32px; border-radius: 99px;
-  font-size: 19px; font-weight: 400; letter-spacing: -.03em; color: rgba(34,39,31,.8);
+  font-size: 19px; font-weight: 400; letter-spacing: -.03em; color: rgba(var(--inchiostro-rgb),.8);
 }
-.agenda-giorno-testa.oggi .agenda-numero {background: var(--rame); color: #FFF7F0;}
+.agenda-giorno-testa.oggi .agenda-numero {background: var(--rame); color: var(--avorio);}
 .agenda-giorno-testa.oggi .agenda-nome {color: var(--scuro);}
-.agenda-giorno-testa.scelto {background: rgba(196,98,59,.07);}
+.agenda-giorno-testa.scelto {background: rgba(var(--rame-rgb),.07);}
 
 /* la fascia del tutto il giorno: tre targhette e un conto, o tutto se si apre */
-.agenda-tuttogiorno {flex: none; border-bottom: 1px solid rgba(34,39,31,.12);}
+.agenda-tuttogiorno {flex: none; border-bottom: 1px solid rgba(var(--inchiostro-rgb),.12);}
 .agenda-tuttogiorno.aperta {max-height: 38vh; overflow-y: auto;}
 .agenda-tuttogiorno > .agenda-fascia-nome {
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   padding: 8px 8px 0 0; text-align: right; font-size: 9.5px; letter-spacing: .06em;
-  text-transform: uppercase; color: rgba(34,39,31,.32); border-right: 1px solid var(--filo);
+  text-transform: uppercase; color: rgba(var(--inchiostro-rgb),.32); border-right: 1px solid var(--filo);
 }
 .agenda-fascia-nome button {
   border: 0; background: transparent; border-radius: 6px; padding: 2px 3px;
-  color: rgba(34,39,31,.45); line-height: 0;
+  color: rgba(var(--inchiostro-rgb),.45); line-height: 0;
 }
-.agenda-fascia-nome button:hover {background: rgba(196,98,59,.12); color: var(--scuro);}
+.agenda-fascia-nome button:hover {background: rgba(var(--rame-rgb),.12); color: var(--scuro);}
 .agenda-piu {
   align-self: flex-start; border: 0; background: transparent; padding: 2px 6px; border-radius: 6px;
-  font-size: 11px; color: rgba(34,39,31,.45);
+  font-size: 11px; color: rgba(var(--inchiostro-rgb),.45);
 }
-.agenda-piu:hover {background: rgba(196,98,59,.1); color: var(--scuro);}
+.agenda-piu:hover {background: rgba(var(--rame-rgb),.1); color: var(--scuro);}
 .agenda-fascia-cella {
   display: flex; flex-direction: column; gap: 3px; min-width: 0;
   padding: 7px 5px 8px; border-left: 1px solid var(--filo); min-height: 34px;
 }
-.agenda-fascia-cella.sopra {background: rgba(196,98,59,.12); box-shadow: inset 0 0 0 2px var(--rame);}
+.agenda-fascia-cella.sopra {background: rgba(var(--rame-rgb),.12); box-shadow: inset 0 0 0 2px var(--rame);}
 .agenda-chip {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11.5px; line-height: 1.5; padding: 3px 8px; border-radius: 7px; text-align: left;
-  border: 0; background: rgba(34,39,31,.06); color: rgba(34,39,31,.78); cursor: grab;
+  border: 0; background: rgba(var(--inchiostro-rgb),.06); color: rgba(var(--inchiostro-rgb),.78); cursor: grab;
 }
-.agenda-chip:hover {background: rgba(196,98,59,.13); color: var(--scuro);}
-.agenda-chip.evento {color: #FFFDF8;}
+.agenda-chip:hover {background: rgba(var(--rame-rgb),.13); color: var(--scuro);}
+.agenda-chip.evento {color: var(--avorio);}
 .agenda-chip.evento:hover {filter: brightness(.92);}
 
 /* la griglia delle ore: si scorre, e all'apertura sta sulla mattina */
@@ -242,21 +241,21 @@ body.agenda-aperta .app-porta-chat { display: none; }
 .agenda-ore {position: relative; border-right: 1px solid var(--filo);}
 .agenda-ore span {
   position: absolute; right: 8px; margin-top: 3px;
-  font-size: 10.5px; letter-spacing: .02em; color: rgba(34,39,31,.38);
+  font-size: 10.5px; letter-spacing: .02em; color: rgba(var(--inchiostro-rgb),.38);
 }
 .agenda-colonna {
   position: relative; min-width: 0; border-left: 1px solid var(--filo);
   background-image:
-    repeating-linear-gradient(to bottom, rgba(34,39,31,.05) 0 1px, transparent 1px var(--ora)),
-    repeating-linear-gradient(to bottom, transparent 0 calc(var(--ora) / 2), rgba(34,39,31,.028) calc(var(--ora) / 2) calc(var(--ora) / 2 + 1px), transparent calc(var(--ora) / 2 + 1px) var(--ora));
+    repeating-linear-gradient(to bottom, rgba(var(--inchiostro-rgb),.05) 0 1px, transparent 1px var(--ora)),
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--ora) / 2), rgba(var(--inchiostro-rgb),.028) calc(var(--ora) / 2) calc(var(--ora) / 2 + 1px), transparent calc(var(--ora) / 2 + 1px) var(--ora));
 }
-.agenda-colonna.oggi {background-color: rgba(196,98,59,.028);}
+.agenda-colonna.oggi {background-color: rgba(var(--rame-rgb),.028);}
 .agenda-colonna.sopra {box-shadow: inset 0 0 0 2px var(--rame);}
 .agenda-blocco {
   position: absolute; box-sizing: border-box; min-height: 17px; overflow: hidden;
   padding: 3px 6px 4px; border: 0; border-radius: 7px; text-align: left;
-  color: #FFFDF8; font-size: 11.5px; line-height: 1.32; cursor: pointer;
-  box-shadow: 0 1px 2px rgba(71,57,40,.14);
+  color: var(--avorio); font-size: 11.5px; line-height: 1.32; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(var(--ombra-rgb),.14);
 }
 .agenda-blocco:hover {filter: brightness(.92);}
 .agenda-blocco b {display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
@@ -271,35 +270,35 @@ body.agenda-aperta .app-porta-chat { display: none; }
 /* ————— la carta che scrive un evento ————— */
 .agenda-carta {
   position: fixed; z-index: 70; width: 306px; box-sizing: border-box;
-  background: #FFFDF8; border: 1px solid rgba(255,255,255,.9); border-radius: 16px;
-  box-shadow: 0 26px 70px -18px rgba(39,48,31,.34); padding: 16px 16px 14px;
+  background: var(--carta-piena); border: 1px solid rgba(var(--luce-rgb),.9); border-radius: 16px;
+  box-shadow: 0 26px 70px -18px rgba(var(--ombra-rgb),.34); padding: 16px 16px 14px;
   display: flex; flex-direction: column; gap: 11px;
 }
 .agenda-carta input[type=text] {
   box-sizing: border-box; width: 100%; font-size: 14.5px; line-height: 1.4;
-  border: 0; border-bottom: 1px solid rgba(34,39,31,.16); background: transparent;
-  color: #22271F; padding: 4px 1px 8px;
+  border: 0; border-bottom: 1px solid rgba(var(--inchiostro-rgb),.16); background: transparent;
+  color: var(--pieno); padding: 4px 1px 8px;
 }
 .agenda-carta input[type=text]:focus {outline: 0; border-bottom-color: var(--rame);}
 .agenda-carta .agenda-quando {display: flex; align-items: center; gap: 7px;}
 .agenda-carta .agenda-quando input {flex: 1; min-width: 0;}
 .agenda-carta input[type=date], .agenda-carta input[type=time], .agenda-carta select {
-  box-sizing: border-box; font-family: inherit; font-size: 12.5px; color: rgba(34,39,31,.8);
-  border: 1px solid rgba(34,39,31,.13); background: #FFFFFF; border-radius: 9px; padding: 7px 9px;
+  box-sizing: border-box; font-family: inherit; font-size: 12.5px; color: rgba(var(--inchiostro-rgb),.8);
+  border: 1px solid rgba(var(--inchiostro-rgb),.13); background: var(--carta-alta); border-radius: 9px; padding: 7px 9px;
 }
 .agenda-carta select, .agenda-carta .agenda-data {width: 100%;}
-.agenda-carta .agenda-a {font-size: 12px; color: rgba(34,39,31,.45);}
+.agenda-carta .agenda-a {font-size: 12px; color: rgba(var(--inchiostro-rgb),.45);}
 .agenda-interruttore {
-  display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: rgba(34,39,31,.72); cursor: pointer;
+  display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: rgba(var(--inchiostro-rgb),.72); cursor: pointer;
 }
 .agenda-interruttore input {position: absolute; opacity: 0; width: 0; height: 0;}
 .agenda-interruttore .agenda-binario {
-  flex: none; width: 30px; height: 18px; border-radius: 99px; background: rgba(34,39,31,.16);
+  flex: none; width: 30px; height: 18px; border-radius: 99px; background: rgba(var(--inchiostro-rgb),.16);
   padding: 2px; transition: background .14s;
 }
 .agenda-interruttore .agenda-binario i {
-  display: block; width: 14px; height: 14px; border-radius: 50%; background: #FFFDF8;
-  box-shadow: 0 1px 2px rgba(39,48,31,.28); transition: transform .14s;
+  display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--avorio);
+  box-shadow: 0 1px 2px rgba(var(--ombra-rgb),.28); transition: transform .14s;
 }
 .agenda-interruttore input:checked + .agenda-binario {background: var(--rame);}
 .agenda-interruttore input:checked + .agenda-binario i {transform: translateX(12px);}
@@ -307,15 +306,15 @@ body.agenda-aperta .app-porta-chat { display: none; }
 .agenda-carta footer {display: flex; align-items: center; gap: 8px; padding-top: 3px;}
 .agenda-carta footer .agenda-spinta {flex: 1;}
 .agenda-carta footer button {
-  border: 1px solid rgba(34,39,31,.14); background: transparent; color: rgba(34,39,31,.75);
+  border: 1px solid rgba(var(--inchiostro-rgb),.14); background: transparent; color: rgba(var(--inchiostro-rgb),.75);
   border-radius: 10px; padding: 8px 14px; font-size: 12.5px;
 }
-.agenda-carta footer button:hover {border-color: rgba(34,39,31,.3);}
-.agenda-carta footer .agenda-salva {background: var(--rame); border-color: var(--rame); color: #FFF7F0; min-width: 78px;}
-.agenda-carta footer .agenda-salva:hover {background: var(--scuro); border-color: var(--scuro);}
+.agenda-carta footer button:hover {border-color: rgba(var(--inchiostro-rgb),.3);}
+.agenda-carta footer .agenda-salva {background: var(--rame); border-color: var(--rame); color: var(--avorio); min-width: 78px;}
+.agenda-carta footer .agenda-salva:hover {background: var(--rame-forte); border-color: var(--rame-forte);}
 .agenda-carta footer .agenda-butta {border-color: transparent; color: var(--scuro); padding: 8px 6px;}
-.agenda-carta footer .agenda-butta:hover {background: rgba(196,98,59,.1); border-color: transparent;}
-.agenda-carta .agenda-nota {font-size: 11.5px; line-height: 1.5; color: rgba(34,39,31,.5); margin: 0;}
+.agenda-carta footer .agenda-butta:hover {background: rgba(var(--rame-rgb),.1); border-color: transparent;}
+.agenda-carta .agenda-nota {font-size: 11.5px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.5); margin: 0;}
 
 @media (max-width: 1180px) {
   .agenda {--ora: 46px; gap: 12px; padding: calc(var(--striscia, 0px) + 18px) 16px 16px;}

@@ -37,7 +37,7 @@ function spiegaGuaio(g: string): string {
 
 const VELO: CSSProperties = {
   position: 'fixed', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
-  background: 'rgba(34,39,31,.28)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+  background: 'rgba(var(--inchiostro-rgb),.28)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
   padding: 20, animation: 'fadein .16s ease'
 }
 
@@ -46,8 +46,8 @@ const FOGLIO: CSSProperties = {
   position: 'relative', width: 'min(640px, 100%)', maxHeight: 'min(86vh, 820px)',
   overflowY: 'auto', overflowX: 'hidden', minWidth: 0,
   padding: 'clamp(28px, 5vw, 40px) clamp(28px, 6vw, 44px)', borderRadius: 20,
-  background: 'var(--avorio)', border: '1px solid rgba(255,255,255,.9)',
-  boxShadow: '0 30px 80px rgba(60,44,30,.28)', color: 'var(--inchiostro)',
+  background: 'var(--carta-piena)', border: '1px solid rgba(var(--luce-rgb),.9)',
+  boxShadow: '0 30px 80px rgba(var(--ombra-rgb),.28)', color: 'var(--inchiostro)',
   fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif"
 }
 
@@ -63,7 +63,7 @@ const LINEA: CSSProperties = {
 const TESTO: CSSProperties = { flex: 1, minWidth: 0, overflowWrap: 'anywhere', textWrap: 'pretty' }
 
 /** Quello che sta accanto alla frase e non è la frase: il perché, il dove sei. */
-const SPENTO: CSSProperties = { color: 'rgba(34,39,31,.55)' }
+const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.55)' }
 
 /**
  * La riga intera è il bersaglio.
@@ -79,37 +79,37 @@ const APRIBILE: CSSProperties = {
 }
 
 /** Il rame al passaggio: l'unico accento, e solo dove si può cliccare. */
-const RAME: CSSProperties = { color: '#C4623B', textDecoration: 'underline', textUnderlineOffset: 3 }
+const RAME: CSSProperties = { color: 'var(--rame)', textDecoration: 'underline', textUnderlineOffset: 3 }
 
 /** Un gesto che non deve chiamare l'occhio: piccolo, spento, rame se ci passi sopra. */
 const QUIETO: CSSProperties = {
   flex: 'none', padding: 0, border: 'none', background: 'none', fontFamily: 'inherit',
-  fontSize: 12, lineHeight: 1.55, color: 'rgba(34,39,31,.5)', cursor: 'pointer', whiteSpace: 'nowrap'
+  fontSize: 12, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer', whiteSpace: 'nowrap'
 }
 
 /** La carta in prima pagina: come le altre, non un rigo di servizio. */
 const CARTA: CSSProperties = {
   flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0,
-  borderRadius: 20, background: 'rgba(255,253,249,.66)',
+  borderRadius: 20, background: 'rgba(var(--carta-rgb),.66)',
   backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-  border: '1px solid rgba(255,255,255,.75)', padding: '18px 22px', marginBottom: 14
+  border: '1px solid rgba(var(--luce-rgb),.75)', padding: '18px 22px', marginBottom: 14
 }
 
 /** Un bottone solo per carta, ed è questo. */
 const BOTTONE: CSSProperties = {
   flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 8,
   padding: '11px 20px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,#B24E2E,#D98A5A)', color: '#FFF7F0',
+  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
   fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }
 
 /** La riga sotto il titolo della carta: quello che il titolo non dice. */
 const SOTTO: CSSProperties = {
-  fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.65)', marginTop: 3,
+  fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 3,
   textWrap: 'pretty', overflowWrap: 'anywhere'
 }
 /** Perché non è arrivato: si legge se lo si cerca, e non toglie il posto al resto. */
-const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(34,39,31,.5)' }
+const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(var(--inchiostro-rgb),.5)' }
 
 /** «5 cose» comincia una frase: la maiuscola la mette la pagina, non il dizionario. */
 const maiuscola = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1)
@@ -182,10 +182,10 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         <Hov as="button" type="button" onClick={p.nascondi} title={t('Chiudi')} aria-label={t('Chiudi')}
           style={{
             position: 'absolute', top: 14, right: 14, width: 28, height: 28, borderRadius: 99,
-            border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(34,39,31,.4)',
+            border: 'none', background: 'none', cursor: 'pointer', color: 'rgba(var(--inchiostro-rgb),.4)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
-          hover={{ color: '#22271F', background: 'rgba(34,39,31,.06)' }}>
+          hover={{ color: 'var(--inchiostro)', background: 'rgba(var(--inchiostro-rgb),.06)' }}>
           <IconCroce size={11} />
         </Hov>
 
@@ -193,7 +193,7 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         <h1 id="punto-titolo" style={{ margin: 0, fontSize: 28, lineHeight: 1.2, paddingRight: 34, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
           {t('Il punto di oggi.')}
         </h1>
-        <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'rgba(34,39,31,.5)', overflowWrap: 'anywhere' }}>
+        <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
           {sotto}
         </div>
 
@@ -237,18 +237,18 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         )}
 
         <div style={{
-          marginTop: 30, paddingTop: 16, borderTop: '1px solid rgba(34,39,31,.08)',
+          marginTop: 30, paddingTop: 16, borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)',
           display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', minWidth: 0
         }}>
-          <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
+          <Hov as="button" type="button" style={QUIETO} hover={{ color: 'var(--rame)' }}
             onClick={p.rifai} disabled={p.carico}>{p.carico ? t('Un momento…') : t('Rifai il punto')}</Hov>
           {p.tetto && (
-            <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12, color: 'rgba(34,39,31,.5)', overflowWrap: 'anywhere' }}>
+            <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
               {t('Per oggi basta: tre punti al giorno. Si riparte domani.')}
             </span>
           )}
           {!p.tetto && <div style={{ flex: 1 }} />}
-          <Hov as="button" type="button" style={QUIETO} hover={{ color: '#C4623B' }}
+          <Hov as="button" type="button" style={QUIETO} hover={{ color: 'var(--rame)' }}
             onClick={p.nascondi}>{t('Chiudi')}</Hov>
         </div>
       </div>

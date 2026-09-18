@@ -27,9 +27,9 @@ export function campo(tema: Tema): CSSProperties {
   return {
     width: '100%', boxSizing: 'border-box', marginTop: 8, padding: '12px 15px',
     borderRadius: 13,
-    border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.18)'}`,
-    background: scuro ? 'rgba(244,239,232,.06)' : 'rgba(255,255,255,.7)',
-    color: scuro ? CHIARO : '#22271F',
+    border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.18)'}`,
+    background: scuro ? 'rgba(244,239,232,.06)' : 'rgba(var(--luce-rgb),.7)',
+    color: scuro ? CHIARO : 'var(--inchiostro)',
     fontSize: 15, fontFamily: 'inherit', outline: 'none'
   }
 }
@@ -42,7 +42,7 @@ export function campo(tema: Tema): CSSProperties {
 export function etichetta(tema: Tema): CSSProperties {
   return {
     fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
-    color: tema === 'scuro' ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.68)',
+    color: tema === 'scuro' ? 'rgba(244,239,232,.6)' : 'rgba(var(--inchiostro-rgb),.68)',
     marginTop: 12
   }
 }
@@ -58,7 +58,7 @@ export function etichetta(tema: Tema): CSSProperties {
 function guida(tema: Tema): CSSProperties {
   return {
     fontSize: '13.5px', lineHeight: 1.5, overflowWrap: 'anywhere',
-    color: tema === 'scuro' ? CHIARO : 'rgba(34,39,31,.88)'
+    color: tema === 'scuro' ? CHIARO : 'rgba(var(--inchiostro-rgb),.88)'
   }
 }
 
@@ -66,7 +66,7 @@ function guida(tema: Tema): CSSProperties {
 function nota(tema: Tema): CSSProperties {
   return {
     fontSize: '12.5px', lineHeight: 1.55, overflowWrap: 'anywhere',
-    color: tema === 'scuro' ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)'
+    color: tema === 'scuro' ? 'rgba(244,239,232,.82)' : 'rgba(var(--inchiostro-rgb),.78)'
   }
 }
 
@@ -74,7 +74,7 @@ function nota(tema: Tema): CSSProperties {
 function sommario(tema: Tema): CSSProperties {
   return {
     fontSize: 13, fontWeight: 500, lineHeight: 1.5, cursor: 'pointer', padding: '2px 0',
-    color: tema === 'scuro' ? 'rgba(244,239,232,.72)' : 'rgba(34,39,31,.7)'
+    color: tema === 'scuro' ? 'rgba(244,239,232,.72)' : 'rgba(var(--inchiostro-rgb),.7)'
   }
 }
 
@@ -82,8 +82,8 @@ function sommario(tema: Tema): CSSProperties {
 function azione(tema: Tema): CSSProperties {
   return {
     flex: 'none', padding: '8px 14px', borderRadius: 99, fontSize: '12.5px',
-    fontFamily: 'inherit', cursor: 'pointer', border: '1px solid #C4623B',
-    background: 'rgba(196,98,59,.16)', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F'
+    fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--rame)',
+    background: 'rgba(var(--rame-rgb),.16)', color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)'
   }
 }
 
@@ -135,10 +135,10 @@ function Avviso({ tema, children }: { tema: Tema; children: React.ReactNode }) {
   return (
     <div style={{
       marginTop: 12, padding: '10px 13px', borderRadius: 12,
-      border: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.2)' : 'rgba(196,98,59,.28)'}`,
-      background: tema === 'scuro' ? 'rgba(244,239,232,.07)' : '#EFE6DA',
+      border: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.2)' : 'rgba(var(--rame-rgb),.28)'}`,
+      background: tema === 'scuro' ? 'rgba(244,239,232,.07)' : 'var(--sabbia)',
       fontSize: '12.5px', lineHeight: 1.55, overflowWrap: 'anywhere',
-      color: tema === 'scuro' ? CHIARO : '#22271F'
+      color: tema === 'scuro' ? CHIARO : 'var(--inchiostro)'
     }}>{children}</div>
   )
 }
@@ -177,9 +177,9 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
     <button onClick={onClick} disabled={spento} style={{
       marginTop: 18, padding: '11px 22px', borderRadius: 99, border: 'none',
       background: spento
-        ? (scuro ? 'rgba(244,239,232,.2)' : 'rgba(34,39,31,.18)')
-        : (scuro ? CHIARO : 'linear-gradient(120deg,#B24E2E,#D98A5A)'),
-      color: spento ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(34,39,31,.5)') : (scuro ? '#191715' : '#FFF7F0'),
+        ? (scuro ? 'rgba(244,239,232,.2)' : 'rgba(var(--inchiostro-rgb),.18)')
+        : (scuro ? CHIARO : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))'),
+      color: spento ? (scuro ? 'rgba(244,239,232,.6)' : 'rgba(var(--inchiostro-rgb),.5)') : (scuro ? '#191715' : 'var(--avorio)'),
       fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit',
       cursor: spento ? 'default' : 'pointer'
     }}>{occupato ? t('Provo…') : children}</button>
@@ -194,14 +194,14 @@ function pastigliaStato(tema: Tema, pronto: boolean): CSSProperties {
   return {
     display: 'inline-flex', alignItems: 'center', minHeight: 18, padding: '1px 7px', borderRadius: 99,
     fontSize: '9.5px', fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase',
-    background: pronto ? (scuro ? 'rgba(118,144,101,.25)' : '#607f6818') : (scuro ? 'rgba(196,98,59,.22)' : '#c4623b17'),
-    color: pronto ? (scuro ? '#B9CDAA' : '#45604b') : (scuro ? '#E8A87C' : '#8e3f1f')
+    background: pronto ? (scuro ? 'rgba(var(--salvia-rgb),.25)' : 'rgba(var(--salvia-rgb),.14)') : (scuro ? 'rgba(var(--rame-rgb),.22)' : 'rgba(var(--rame-rgb),.09)'),
+    color: pronto ? (scuro ? '#B9CDAA' : 'var(--salvia)') : (scuro ? '#E8A87C' : 'var(--rame-testo)')
   }
 }
 
 /** Il colore di un collegamento dentro una nota. */
 function link(tema: Tema): CSSProperties {
-  return { color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F' }
+  return { color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)' }
 }
 
 /**
@@ -215,7 +215,7 @@ function Strada({ tema, titolo, stato, children }: {
   tema: Tema; titolo: string; stato?: { testo: string; pronto: boolean } | null; children: React.ReactNode
 }) {
   return (
-    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.14)' : 'rgba(34,39,31,.1)'}` }}>
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${tema === 'scuro' ? 'rgba(244,239,232,.14)' : 'rgba(var(--inchiostro-rgb),.1)'}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
         <div style={{ ...guida(tema), fontWeight: 500 }}>{titolo}</div>
         {stato && <span style={pastigliaStato(tema, stato.pronto)}>{stato.testo}</span>}
@@ -773,9 +773,9 @@ export function FormCompatibile({ tema, ok }: Props) {
   const scuro = tema === 'scuro'
   const pastiglia = (attiva: boolean): CSSProperties => ({
     padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer',
-    border: `1px solid ${attiva ? '#C4623B' : (scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.18)')}`,
-    background: attiva ? 'rgba(196,98,59,.1)' : (scuro ? 'rgba(244,239,232,.06)' : 'rgba(255,255,255,.6)'),
-    color: attiva ? '#8E3F1F' : (scuro ? CHIARO : '#22271F')
+    border: `1px solid ${attiva ? 'var(--rame)' : (scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.18)')}`,
+    background: attiva ? 'rgba(var(--rame-rgb),.1)' : (scuro ? 'rgba(244,239,232,.06)' : 'rgba(var(--luce-rgb),.6)'),
+    color: attiva ? 'var(--rame-testo)' : (scuro ? CHIARO : 'var(--inchiostro)')
   })
   const pronto = !!url.trim() && !!modello.trim()
 
@@ -804,7 +804,7 @@ export function FormCompatibile({ tema, ok }: Props) {
       */}
       {vivo !== null && (
         <div style={{ ...nota(tema), marginTop: 8, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-          <span style={{ color: vivo ? '#2F6B4F' : '#8E3F1F' }}>{vivo ? t('Risponde') : t('Non risponde')}</span>
+          <span style={{ color: vivo ? 'var(--salvia)' : 'var(--rame-testo)' }}>{vivo ? t('Risponde') : t('Non risponde')}</span>
           {vivo && modelli.length > 0 && <span>· {frasi.modelliTrovati(modelli.length)}</span>}
           {primaParola !== null && <span>· {t('Prima parola in')} <span>{(primaParola / 1000).toFixed(1)} s</span></span>}
         </div>
@@ -924,7 +924,7 @@ export function FormPosta({ tema, ok }: Props) {
               <span>{t('Server trovato:')}{' '}<strong style={{ fontWeight: 500 }}>{host}</strong></span>
               <button onClick={() => setAMano(true)} style={{
                 border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F', textDecoration: 'underline'
+                fontSize: '12.5px', color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)', textDecoration: 'underline'
               }}>{t('non è questo')}</button>
             </span>
           ) : undefined
@@ -960,7 +960,7 @@ export function FormPosta({ tema, ok }: Props) {
             <>
               {' '}
               <a href={dove} target="_blank" rel="noreferrer" style={{
-                color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F'
+                color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)'
               }}>{t('Creane una')}</a>.
             </>
           )}
@@ -1224,9 +1224,9 @@ export function FormDesktop({ tema, ok }: Props) {
   const suMac = nome ? nome !== 'Il mio PC' : desktop()?.piattaforma !== 'win32'
   const pastiglia = (on: boolean): CSSProperties => ({
     padding: '9px 14px', borderRadius: 99, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit',
-    border: `1px solid ${on ? '#C4623B' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)'}`,
-    background: on ? 'rgba(196,98,59,.16)' : 'none',
-    color: on ? (scuro ? '#E8A87C' : '#8E3F1F') : (scuro ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)')
+    border: `1px solid ${on ? 'var(--rame)' : scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.2)'}`,
+    background: on ? 'rgba(var(--rame-rgb),.16)' : 'none',
+    color: on ? (scuro ? '#E8A87C' : 'var(--rame-testo)') : (scuro ? 'rgba(244,239,232,.82)' : 'rgba(var(--inchiostro-rgb),.78)')
   })
   return (
     <div>
@@ -1263,7 +1263,7 @@ export function FormDesktop({ tema, ok }: Props) {
         <button type="button" onClick={() => collega(false)} disabled={occupato !== null}
           style={{
             ...pastiglia(false), display: 'block', marginTop: 14, padding: '10px 18px',
-            borderColor: '#C4623B', color: scuro ? '#E8A87C' : '#8E3F1F',
+            borderColor: 'var(--rame)', color: scuro ? '#E8A87C' : 'var(--rame-testo)',
             cursor: occupato ? 'default' : 'pointer'
           }}>
           {occupato === 'cartelle' ? t('Provo…') : t('Collega le cartelle scelte')}
@@ -1411,7 +1411,7 @@ export function AccessoDisco({ tema, testo, coda }: {
           {/* «Apri Impostazioni» si dice solo dove quel bottone esiste: nel
               browser la strada sta nei passi qui sotto, che è dove si va a cercarla */}
           {d && coda && <>{' '}{coda}</>}
-          {err && <span style={{ color: '#8E3F1F' }}> {t(err)}</span>}
+          {err && <span style={{ color: 'var(--rame-testo)' }}> {t(err)}</span>}
         </div>
         {d && <button type="button" onClick={apri} style={azione(tema)}>{t('Apri Impostazioni')}</button>}
       </div>
@@ -1488,8 +1488,8 @@ export function FormConversazioni({ tema, ok }: Props) {
   const pronto = file.length > 0 || manuale.trim().length > 0 || codice
   const pastiglia: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 99,
-    fontSize: '12.5px', fontFamily: 'inherit', border: '1px solid #C4623B',
-    background: 'rgba(196,98,59,.16)', color: scuro ? '#E8A87C' : '#8E3F1F'
+    fontSize: '12.5px', fontFamily: 'inherit', border: '1px solid var(--rame)',
+    background: 'rgba(var(--rame-rgb),.16)', color: scuro ? '#E8A87C' : 'var(--rame-testo)'
   }
   return (
     <div>
@@ -1509,8 +1509,8 @@ export function FormConversazioni({ tema, ok }: Props) {
           {desktop() && (
             <button type="button" onClick={scegli} style={{
               ...pastiglia, cursor: 'pointer', borderStyle: 'dashed', background: 'none',
-              borderColor: scuro ? 'rgba(244,239,232,.22)' : 'rgba(34,39,31,.2)',
-              color: scuro ? 'rgba(244,239,232,.82)' : 'rgba(34,39,31,.78)'
+              borderColor: scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.2)',
+              color: scuro ? 'rgba(244,239,232,.82)' : 'rgba(var(--inchiostro-rgb),.78)'
             }}>{t('Scegli i file…')}</button>
           )}
         </div>
@@ -1525,7 +1525,7 @@ export function FormConversazioni({ tema, ok }: Props) {
       {codicePossibile && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, color: scuro ? CHIARO : '#22271F' }}>{t('Anche le sessioni di Claude Code su questo computer')}</div>
+            <div style={{ fontSize: 14, color: scuro ? CHIARO : 'var(--inchiostro)' }}>{t('Anche le sessioni di Claude Code su questo computer')}</div>
             {sessioni > 0 && <div style={{ ...nota(tema), marginTop: 3 }}>{frasi.sessioniTrovate(sessioni)}</div>}
           </div>
           <button type="button" role="switch" aria-checked={codice} aria-label={t('Anche le sessioni di Claude Code su questo computer')}
@@ -2058,7 +2058,7 @@ export function FormDropbox({ tema, ok }: Props) {
             <>
               {t('Non si è aperto niente?')}{' '}
               <a href={dove} target="_blank" rel="noreferrer"
-                style={{ color: tema === 'scuro' ? '#E8A87C' : '#8E3F1F' }}>{t('apri la pagina a mano')}</a>
+                style={{ color: tema === 'scuro' ? '#E8A87C' : 'var(--rame-testo)' }}>{t('apri la pagina a mano')}</a>
             </>
           }>
             <input value={codice} onChange={e => setCodice(e.target.value)}
