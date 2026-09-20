@@ -176,7 +176,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   return (
     <div role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
       aria-expanded={espandibile ? aperta : undefined}
-      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent' }}>
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={TITOLO}>{carta.titolo}</div>
@@ -658,7 +658,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   return (
     <div className="task-aurora-host task-aurora-row" data-working={affidato || undefined}
       {...(espandibile ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri), 'aria-expanded': aperta } : {})}
-      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent' }}
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}
       {...props}>
       {affidato && <AuroraCompito />}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -761,7 +761,7 @@ function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative
     <div ref={riga} role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
       style={{
         ...RIGA, padding: '13px 21px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-        background: attiva ? 'rgba(var(--luce-rgb),.34)' : 'transparent',
+        background: attiva ? 'var(--riga-sopra)' : 'transparent',
         boxShadow: accesa ? `inset 0 0 0 2px ${colore}` : 'inset 0 0 0 2px transparent', transition: 'background .15s, box-shadow .3s'
       }}>
       <Marchio dim={14} animato={false} />

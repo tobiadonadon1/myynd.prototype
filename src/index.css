@@ -34,6 +34,10 @@
   --riga:rgba(var(--luce-rgb),.7);
   --filo:rgba(var(--inchiostro-rgb),.1);
   --sabbia:#EFE6DA;
+  /* il velo che si accende sotto una riga del feed quando ci passi sopra:
+     di giorno è la stessa luce che fa i fili, un rialzo appena. Di notte
+     non c'è, e il perché sta scritto là sotto. */
+  --riga-sopra:rgba(var(--luce-rgb),.34);
   /* il riempimento pieno e ciò che ci sta sopra: il bottone che decide da solo */
   --pieno:#22271F;
   --su-pieno:#FFF7F0;
@@ -57,6 +61,15 @@
   /* il verde: solo stati, mai decorazione */
   --salvia:#5C7660;
   --verde-cupo:#3E5140;
+
+  /* la selezione del testo: un velo di rame, e nient'altro.
+     Era verde pieno con la crema riscritta sopra — e il verde qui non
+     vuol dire niente, è il colore degli stati. Ma il guaio vero era la
+     riscrittura: di notte il verde schiarisce, e la crema sopra il verde
+     chiaro non si leggeva più. Un velo soltanto lascia a ogni riga il suo
+     colore: quello che si leggeva prima si legge anche selezionato, sulla
+     carta come sul bruno. */
+  --selezione:rgba(var(--rame-rgb),.3);
 
   /* le ombre */
   --ombra-carta:0 22px 52px rgba(var(--ombra-rgb),.12);
@@ -115,6 +128,12 @@
   --sabbia-viva-rgb:122,78,50;
   --crema-rgb:86,58,42;
   --verde-cupo:#9BB79F;
+  /* di notte il velo sotto il mouse non c'è: qualunque rialzo su questo
+     bruno si accende d'arancio, e la riga sembrava presa invece che
+     sfiorata. Che il puntatore ci stia sopra lo dice già la fascia dei
+     gesti, che compare sotto il titolo. */
+  --riga-sopra:transparent;
+  --selezione:rgba(var(--rame-rgb),.4);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -142,6 +161,12 @@
     --sabbia-viva-rgb:122,78,50;
     --crema-rgb:86,58,42;
     --verde-cupo:#9BB79F;
+    /* di notte il velo sotto il mouse non c'è: qualunque rialzo su questo
+       bruno si accende d'arancio, e la riga sembrava presa invece che
+       sfiorata. Che il puntatore ci stia sopra lo dice già la fascia dei
+       gesti, che compare sotto il titolo. */
+    --riga-sopra:transparent;
+    --selezione:rgba(var(--rame-rgb),.4);
   }
 }
 /* la pagina non scorre mai: scorre l'app dentro di sé. Una barra che compare
@@ -216,7 +241,7 @@ input:disabled::placeholder,textarea:disabled::placeholder{color:rgba(var(--inch
 .scuro:focus-visible{outline-color:rgba(var(--avorio-rgb),.75)}
 
 /* La selezione, nei colori di casa invece che nel blu di sistema */
-::selection{background:var(--verde-cupo);color:var(--avorio)}
+::selection{background:var(--selezione)}
 
 /* Le barre di scorrimento interne: presenti quando servono, mai ingombranti */
 *{scrollbar-width:thin;scrollbar-color:rgba(var(--inchiostro-rgb),.22) transparent}
