@@ -135,6 +135,18 @@ export const CATALOGO: VoceConnettore[] = [
    * chi deve sapere se il suo servizio ci parla.
    */
   { id: 'compatibile', nome: 'Modello locale o altro fornitore', gruppo: 'Ragionamento', pronto: true, nota: 'Ollama, LM Studio, llama.cpp, o un altro servizio con API in stile OpenAI.' },
+  /*
+   * Jev non è una terza testa: è il giudizio.
+   *
+   * Sta nello stesso gruppo perché è lì che uno lo va a cercare, ma non
+   * compete con le altre due e non si sceglie «con quale motore lavora»:
+   * mentre Claude o chi per lui scrive, Jev risponde alle domande piccole che
+   * l'app si faceva da sola con una fila di espressioni regolari — chi aspetta
+   * una risposta, cosa conta oggi. Scollegarlo non spegne niente: torna la
+   * fila di prima. La nota lo dice, perché una scheda che sembra obbligatoria
+   * è una scheda che qualcuno collega per paura.
+   */
+  { id: 'jev', nome: 'Jev', gruppo: 'Ragionamento', pronto: true, nota: 'Giudizi rapidi di TypeSafe: sceglie cosa merita la tua attenzione. Facoltativo.' },
   // La lista è una fonte come le altre: quello che decidi di fare dice di te
   // quanto un documento — e sta qui perché chi guarda le fonti si aspetta di
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.

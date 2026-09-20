@@ -62,7 +62,9 @@ export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; s
     granola: <><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 0v18m3-13h4m-4 4h4" /></>,
     conversazioni: <><path d="M14 14H7l-4 3V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5a3 3 0 0 1-3 3Z" /><path d="M8 17v1a2 2 0 0 0 2 2h6l4 2V11a2 2 0 0 0-1-1.7" /></>,
     mind2do: <><rect x="4" y="3" width="16" height="18" rx="4" /><path d="m8 12 3 3 5-6" strokeWidth="2" /></>,
-    compatibile: <><rect x="6" y="6" width="12" height="12" rx="3" /><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4" /><path d="M10 10h4v4h-4z" /></>
+    compatibile: <><rect x="6" y="6" width="12" height="12" rx="3" /><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4" /><path d="M10 10h4v4h-4z" /></>,
+    /* Un quadrante con l'ago: Jev non scrive, misura. */
+    jev: <><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="M12 17 16 9" /><circle cx="12" cy="17" r="1.4" /></>
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {marks[id] ?? <><rect x="4" y="4" width="16" height="16" rx="5" /><path d="M8 12h8m-4-4v8" /></>}

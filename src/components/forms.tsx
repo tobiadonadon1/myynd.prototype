@@ -2161,9 +2161,51 @@ export function FormWhatsapp({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Jev: una chiave, e una riga che dice cosa cambia.
+ *
+ * La riga conta quanto il campo. Questa è l'unica scheda delle Fonti che si
+ * può non collegare senza perdere niente, e chi la apre deve poterlo capire
+ * prima di andare a cercare una chiave: senza, Myynd fa quello che ha sempre
+ * fatto. Con, sceglie meglio cosa farsi leggere — e non scrive niente di suo.
+ */
+export function FormJev({ tema, ok }: Props) {
+  const [chiave, setChiave] = useState('')
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try { await api.collegaJev(chiave); setChiave(''); ok() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+
+  return (
+    <div>
+      <div style={guida(tema)}>{t('Jev risponde alle domande piccole: chi aspetta una risposta, cosa conta oggi. Myynd le faceva da sé con delle regole, e le regole non sanno leggere. Senza questa chiave non cambia niente: Jev affina, non serve.')}</div>
+      <Campo tema={tema} nome={t('Chiave di TypeSafe')}>
+        <input type="password" value={chiave} onChange={e => setChiave(e.target.value)}
+          placeholder="apikey_…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          onKeyDown={e => { if (e.key === 'Enter' && chiave) collega() }} />
+      </Campo>
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Jev')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+        <Passi tema={tema} passi={[
+          t('Su typesafe.ai fai un conto e apri le chiavi API.'),
+          t('Copia la chiave: comincia per apikey_.'),
+          t('Si paga a consumo, e un giudizio costa una frazione di una lettura.')
+        ]} />
+      </Aiuto>
+    </div>
+  )
+}
+
 export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} />
   if (id === 'claude') return <FormClaude tema={tema} ok={ok} />
+  if (id === 'jev') return <FormJev tema={tema} ok={ok} />
   if (id === 'openai') return <FormOpenAI tema={tema} ok={ok} />
   if (id === 'compatibile') return <FormCompatibile tema={tema} ok={ok} />
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />

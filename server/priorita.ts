@@ -41,6 +41,7 @@ import { fuoco } from './timone.ts'
 import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { classificaAttenzione, corpoAttuale } from './rilevanza.ts'
+import * as giudizi from './giudizi.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { carta } from './memoria.ts'
 import { feedAttuale } from './attenzione.ts'
@@ -92,6 +93,15 @@ export const MINUTI_MINIMI = 10
 /** Con almeno tante voci aperte il feed non ha bisogno di proposte. */
 export const ABBASTANZA = 3
 const DOCUMENTI = 48
+/**
+ * Quanti ne guarda Jev prima che si tagli a quarantotto.
+ *
+ * Novanta: quasi il doppio dei posti, e il costo di un giro di giudizi resta
+ * una frazione della chiamata che segue. Più in là non si va, perché anche la
+ * finestra di novanta giorni è un taglio, e a un certo punto il materiale che
+ * resta fuori è davvero vecchio.
+ */
+const DOCUMENTI_GIUDICATI = 90
 /** Fin dove si guarda indietro: il quadro non è la settimana, e una mail di due mesi fa su un problema aperto conta ancora. */
 export const GIORNI_QUADRO = 90
 /**
@@ -362,7 +372,22 @@ export async function proponi(): Promise<Giro | null> {
   // posta e i file di due settimane fa restavano fuori. I tetti per fonte
   // stanno in `documentiPerLePriorita`: qui si pesca largo, lì si sceglie.
   const tutti = store.recenti(800)
-  const docs = documentiPerLePriorita(tutti)
+  /*
+   * Quarantotto documenti entrano nel prompt, e fin qui li sceglieva la data.
+   *
+   * Novanta giorni di materiale non stanno in una chiamata, quindi si taglia;
+   * e tagliare per data vuol dire che il file di ieri che non dice niente
+   * scavalca la mail di tre settimane fa su cui è fermo un progetto. Jev legge
+   * i primi novanta della fila e dà a ognuno un peso — quanto questo dice sul
+   * lavoro che ha in mano — e i quarantotto posti vanno ai più pesanti.
+   *
+   * È una domanda diversa da quella del feed, e deve esserlo: qui dentro ci
+   * sono anche le sue parole (le chat con i modelli, le cartelle di lavoro), e
+   * una sua chat piena di «puoi farmi» non è qualcuno che aspetta lui.
+   */
+  const larghi = documentiPerLePriorita(tutti, Date.now(), DOCUMENTI_GIUDICATI)
+  const pesi = await giudizi.peso(larghi, DOCUMENTI_GIUDICATI)
+  const docs = giudizi.primaQuelloCheConta(larghi, pesi).slice(0, DOCUMENTI)
   const suoi = progetti.elenco('attivo')
   const nomi = new Map([...suoi.map(p => [p.nome.trim().toLowerCase(), p.id] as const), ...riferimento.alias()])
   const lista = store.compitiPerIlModello(20)

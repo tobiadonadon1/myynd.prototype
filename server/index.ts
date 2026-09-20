@@ -19,6 +19,8 @@ import * as store from './store.ts'
 import { feedAttuale, compitiAttuali, percheVuoto, iniziativeProgetti, progettoDelTesto } from './attenzione.ts'
 import * as claude from './claude.ts'
 import * as mod from './modello.ts'
+import * as jev from './jev.ts'
+import * as giudizi from './giudizi.ts'
 import * as compatibile from './compatibile.ts'
 import * as abbonamento from './abbonamento.ts'
 import * as chatgpt from './chatgpt.ts'
@@ -587,7 +589,11 @@ app.get('/api/stato', async (_req, res) => {
     // `pubblica()` guarda solo la chiave, perché da lì non si può chiedere a
     // `modello.ts` senza girare in tondo: la risposta vera — chiave *o*
     // abbonamento — si mette qui sopra, dove le due si conoscono entrambe
-    config: { ...cfg.pubblica(c), claude: mod.conClaude() ? { collegato: true } : null },
+    config: {
+      ...cfg.pubblica(c),
+      claude: mod.conClaude() ? { collegato: true } : null,
+      jev: jev.collegato() ? { collegato: true, consumo: jev.consumo() } : null
+    },
     conteggi: n,
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
@@ -612,6 +618,10 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'claude' ? mod.conClaude() :
         // collegato vuol dire «c'è», non «è lui che lavora»: quello lo dice il motore
         v.id === 'compatibile' ? !!c.compatibile :
+        // la chiave nel file o quella nell'ambiente: `jev.collegato()` le sa
+        // tutt'e due, e questa scheda dice «c'è di che giudicare», non «c'è
+        // una riga in config.json»
+        v.id === 'jev' ? jev.collegato() :
         // la scheda parla di OpenAI: la chiave salvata, o l'account ChatGPT
         // scelto e acceso — la stessa regola di Claude con l'abbonamento
         v.id === 'openai' ? !!c.openai?.chiave || chatgpt.pronto() :
@@ -1321,6 +1331,27 @@ app.post('/api/connettori/claude', async (req, res) => {
 })
 
 /**
+ * La chiave di Jev, provata prima di scriverla.
+ *
+ * Una domanda sola, la più stupida che ci sia, e costa un centesimo di
+ * centesimo: serve solo a scoprire una chiave incollata a metà mentre la
+ * persona ha ancora le mani sulla tastiera. Senza la prova, una chiave storta
+ * si scoprirebbe con Jev che tace per sempre — cioè con Myynd che si comporta
+ * esattamente come prima, che è il modo peggiore di fallire: nessuno se ne
+ * accorge, e chi ha incollato pensa di avercela.
+ */
+app.post('/api/connettori/jev', async (req, res) => {
+  const nuova = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
+  const apiKey = nuova || cfg.leggi().jev?.apiKey || ''
+  if (!apiKey) return res.status(400).json({ errore: 'Serve la chiave di TypeSafe.' })
+  try {
+    await jev.prova(apiKey)
+    if (nuova) cfg.aggiorna({ jev: { apiKey: nuova } })
+    res.json({ ok: true })
+  } catch (e) { errore(res, e) }
+})
+
+/**
  * Un fornitore compatibile con OpenAI al posto di Claude, per il lavoro grosso.
  *
  * Si prova prima di scrivere, come per tutti gli altri: un token basta a
@@ -1665,6 +1696,14 @@ app.delete('/api/connettori/:id', (req, res) => {
     c.chatgpt = { attivo: false }
     if (c.motore === 'openai' || c.motore === 'chatgpt') delete c.motore
   }
+  /*
+    Scollegare Jev non spegne niente: le regole di sempre restano al loro
+    posto e la fila torna quella di prima. Si butta anche quello che aveva già
+    giudicato, perché un giudizio tenuto in memoria dopo che la chiave è andata
+    via sarebbe un'intelligenza fantasma: qualcosa che continua a spostare le
+    cose senza che ci sia più niente di collegato.
+  */
+  else if (id === 'jev') { delete c.jev; giudizi.scorda() }
   else if (id === 'google') { delete c.google; google.scordaIlToken() }
   else if (id === 'slack') delete c.slack
   else if (id === 'github') delete c.github
@@ -1686,7 +1725,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   // si dice nel registro: una credenziale che sparisce senza una riga è quello che è successo il 13 settembre
   console.log(`myynd · scollegata la fonte «${id}» su richiesta`)
   cfg.scrivi(c, { togli: [id, ...(id === 'claude' ? ['claudeCon'] : []), ...(id === 'compatibile' || id === 'openai' ? ['motore'] : [])] })
-  if (id !== 'claude' && id !== 'compatibile' && id !== 'openai') store.svuotaFonte(id)
+  if (id !== 'claude' && id !== 'compatibile' && id !== 'openai' && id !== 'jev') store.svuotaFonte(id)
   res.json({ ok: true })
 })
 

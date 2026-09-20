@@ -170,6 +170,8 @@ const SEGNAPOSTO_TECNICI = new Set([
   // tradurli vorrebbe dire mostrare un esempio che non assomiglia a quello vero
   'sk-ant-…',
   'ntn_…',
+  // la forma della chiave di TypeSafe, per la stessa ragione delle altre
+  'apikey_…',
   'xoxp-…',
   '…apps.googleusercontent.com',
   '00000000-0000-0000-0000-000000000000',

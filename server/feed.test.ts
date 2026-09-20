@@ -31,6 +31,8 @@ const compatibile = await import('./compatibile.ts')
 const compiti = await import('./compiti.ts')
 const automazioni = await import('./automazioni.ts')
 const progetti = await import('./progetti.ts')
+const jev = await import('./jev.ts')
+const giudizi = await import('./giudizi.ts')
 
 before(() => store.azzeraTutto())
 after(() => {
@@ -605,4 +607,67 @@ test('a task created while the model is answering prevents a duplicate feed card
   store.scriviCompito({ id: 'race-task', testo: 'Review the Nextas contract', ordine: 'a', origine: 'punto', doc: d.id })
   assert.equal(store.salvaFeed(voci), 0)
   assert.equal(store.elencoFeed().length, 0)
+})
+
+// — Jev davanti alla lettura —
+//
+// La lettura costa, e i trenta posti erano dati per data. Qui si guarda
+// l'unica cosa che conta di questo cambiamento: *cosa arriva al modello*.
+
+/** Jev finto: risponde guardando il titolo del documento. */
+function jevFinto(quanto: (titolo: string) => { chiede: number; urgenza: number; genere: string }) {
+  cfg.aggiorna({ jev: { apiKey: 'apikey_prova' } })
+  giudizi.scorda()
+  jev.dimentica()
+  jev.perProva(async (_u, opz) => {
+    const stato = JSON.parse(String((opz as RequestInit).body)).state as { documento: { titolo: string } }
+    const v = quanto(stato.documento.titolo)
+    return Response.json({ answers: {
+      chiede: { type: 'noul', noul: v.chiede },
+      urgenza: { type: 'score', score: v.urgenza, confidence: 0.9, probabilities: {}, legend: {} },
+      genere: { type: 'choice', choice: v.genere, confidence: 0.8, probabilities: { [v.genere]: 0.8 } }
+    } })
+  })
+}
+
+test('Jev toglie dalla lettura quello che non aspetta nessuno, e mette davanti chi aspetta', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:700', 'Grazie', { corpo: 'Grazie mille, ho ricevuto tutto. Non serve altro.' }),
+    doc('posta:INBOX:701', 'Contratto', { corpo: 'Puoi firmare il contratto? Siamo fermi senza.' })
+  ])
+  const ricevute = fornitoreFinto([])
+  jevFinto(t => t === 'Grazie'
+    ? { chiede: 0.03, urgenza: 0.1, genere: 'aggiornamento' }
+    : { chiede: 0.97, urgenza: 2.8, genere: 'richiesta' })
+  try {
+    await claude.generaFeed()
+    const mandato = testoDi(ricevute[0])
+    assert.match(mandato, /id: posta:INBOX:701/)
+    assert.doesNotMatch(mandato, /id: posta:INBOX:700/, 'un «grazie, ricevuto» è arrivato al modello')
+  } finally { jev.perProva(null); giudizi.scorda() }
+})
+
+test('e senza Jev la lettura riceve quello che riceveva prima', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:710', 'Grazie', { corpo: 'Grazie mille, ho ricevuto tutto. Non serve altro.' }),
+    doc('posta:INBOX:711', 'Contratto', { corpo: 'Puoi firmare il contratto? Siamo fermi senza.' })
+  ])
+  const ricevute = fornitoreFinto([])
+  // la chiave sta fra i campi con un segreto: una scrittura qualunque non la
+  // porta via, e per toglierla ci vuole quello che fa «Scollega»
+  const senzaChiave = cfg.leggi()
+  delete senzaChiave.jev
+  cfg.scrivi(senzaChiave, { togli: ['jev'] })
+  giudizi.scorda()
+  let chiamate = 0
+  jev.perProva(async () => { chiamate++; return Response.json({}) })
+  try {
+    await claude.generaFeed()
+    assert.equal(chiamate, 0, 'senza chiave non si chiama TypeSafe')
+    const mandato = testoDi(ricevute[0])
+    assert.match(mandato, /id: posta:INBOX:710/)
+    assert.match(mandato, /id: posta:INBOX:711/)
+  } finally { jev.perProva(null) }
 })

@@ -2501,6 +2501,21 @@ const EN: Record<string, string> = {
     'From Claude Code it keeps the turns, not the files opened or the commands run.',
   'Le sessioni stanno in ~/.claude/projects.': 'The sessions live in ~/.claude/projects.',
 
+  // Jev: la scheda che si può non collegare. La riga lunga dice proprio
+  // questo, e in inglese deve dirlo con la stessa calma.
+  'Jev risponde alle domande piccole: chi aspetta una risposta, cosa conta oggi. Myynd le faceva da sé con delle regole, e le regole non sanno leggere. Senza questa chiave non cambia niente: Jev affina, non serve.':
+    'Jev answers the small questions: who is waiting on you, what matters today. Myynd used to settle them with rules, and rules cannot read. Without this key nothing changes: Jev sharpens, it is not required.',
+  'Chiave di TypeSafe': 'TypeSafe key',
+  'Collega Jev': 'Connect Jev',
+  'Su typesafe.ai fai un conto e apri le chiavi API.': 'On typesafe.ai create an account and open the API keys.',
+  'Copia la chiave: comincia per apikey_.': 'Copy the key: it starts with apikey_.',
+  'Si paga a consumo, e un giudizio costa una frazione di una lettura.': 'It is pay as you go, and one judgment costs a fraction of a reading.',
+  'Giudizi rapidi di TypeSafe: sceglie cosa merita la tua attenzione. Facoltativo.':
+    'Fast judgments from TypeSafe: it picks what deserves your attention. Optional.',
+  'Serve la chiave di TypeSafe.': 'The TypeSafe key is needed.',
+  'Incolla la chiave di TypeSafe.': 'Paste the TypeSafe key.',
+  'Questa chiave non ha risposto. Controlla di averla copiata tutta.': 'This key did not answer. Check that you copied all of it.',
+
   'Le pagine di Notion che condividi con l’integrazione.': 'The Notion pages you share with the integration.',
   'Dove trovo il token?': 'Where do I find the token?',
   'Su notion.so/my-integrations crea un’integrazione interna.': 'On notion.so/my-integrations create an internal integration.',

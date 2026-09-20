@@ -42,6 +42,7 @@ import {
 } from './store.ts'
 import * as ordine from './ordine.ts'
 import { classificaAttenzione, validaVoceFeed, corpoAttuale, tempoFondato } from './rilevanza.ts'
+import * as giudizi from './giudizi.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
 
 /**
@@ -1890,6 +1891,14 @@ export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: s
 export const VOCI_PER_LETTURA = 5
 /** Quanti documenti si mandano a leggere: è questo che fa il costo della lettura. */
 const DOCS_PER_LETTURA = 30
+/**
+ * Quanti candidati passano sotto gli occhi di Jev prima dei trenta.
+ *
+ * Il doppio dei posti, e non di più: sessanta giudizi costano una frazione di
+ * una lettura, ma di un candidato al sessantunesimo posto — più vecchio di
+ * tutti gli altri, di nessun progetto — si sa già abbastanza.
+ */
+const GIUDIZI_PER_LETTURA = 60
 /** Quanti mittenti scartati si nominano al modello. */
 const MITTENTI_NOMINATI = 15
 
@@ -1992,8 +2001,25 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * finestra; l'ordine fra loro resta quello di arrivo. Non è una scelta al
    * posto del modello: è la scelta di cosa fargli leggere, e costa zero.
    */
-  const docs = [...leggibili.filter(toccaUnSuo), ...leggibili.filter(d => !toccaUnSuo(d))]
-    .slice(0, DOCS_PER_LETTURA)
+  const inFila = [...leggibili.filter(toccaUnSuo), ...leggibili.filter(d => !toccaUnSuo(d))]
+  /*
+   * E poi Jev guarda chi c'è in fila.
+   *
+   * Fin qui hanno scelto delle regole: la data, il mittente, il progetto
+   * nominato. Regole che non sanno leggere — «We found an issue with your
+   * submission» non contiene nessuna delle parole che `rilevanza.ts` cerca, e
+   * «please find attached» le contiene tutte. Jev legge i primi sessanta della
+   * fila e risponde a due domande per ognuno: qualcuno aspetta lui? e quanto
+   * può aspettare? Chi non aspetta nessuno esce dai trenta posti della
+   * lettura, chi aspetta da venerdì passa davanti.
+   *
+   * I trenta posti sono gli stessi di prima: qui non si spende di più, si
+   * spende meglio. E se Jev non c'è — nessuna chiave, rete giù, tetto del
+   * giorno finito — `attenzione` torna una Map vuota, `primaChiAspetta` non
+   * tocca niente, e la fila resta quella che era.
+   */
+  const visti = await giudizi.attenzione(inFila.slice(0, GIUDIZI_PER_LETTURA))
+  const docs = giudizi.primaChiAspetta(inFila, visti).slice(0, DOCS_PER_LETTURA)
   if (!docs.length) return []
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file

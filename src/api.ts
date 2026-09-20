@@ -77,6 +77,8 @@ export type Stato = {
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
     calendario: { collegato: boolean; nome: string | null; giorni: number } | null
     claude: { collegato: boolean } | null
+    /** Jev, il giudizio rapido: se c'è, e quanto ha giudicato oggi. */
+    jev?: { collegato: boolean; consumo: { giorno: string; giudizi: number; gettoni: number } } | null
     /** Con cosa lavora Claude, quando è lui: l'account (tramite Claude Code) o la chiave. */
     claudeCon?: 'abbonamento' | 'chiave'
     /** Chi fa il lavoro grosso: Claude, o il fornitore compatibile con OpenAI. */
@@ -440,7 +442,7 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
 const NOME_FONTE: Record<string, string> = {
   posta: 'Posta', calendario: 'Calendario', notion: 'Notion', granola: 'Granola',
   conversazioni: 'Conversazioni',
-  claude: 'Claude', mind2do: 'Mind2Do',
+  claude: 'Claude', jev: 'Jev', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
   whatsapp: 'WhatsApp Business'
@@ -1286,6 +1288,9 @@ export const api = {
 
   collegaCalendario: (p: { url: string; giorni: number }) =>
     json<{ ok: true; nome: string; eventi: number }>('/api/connettori/calendario', { method: 'POST', body: JSON.stringify(p) }),
+
+  collegaJev: (apiKey: string) =>
+    json<{ ok: true }>('/api/connettori/jev', { method: 'POST', body: JSON.stringify({ apiKey }) }),
 
   collegaClaude: (apiKey: string) =>
     json<{ ok: true; avviso?: string; dettaglio?: string }>('/api/connettori/claude', { method: 'POST', body: JSON.stringify({ apiKey }) }),

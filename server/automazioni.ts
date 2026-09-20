@@ -35,6 +35,7 @@ import { fusoDi, parti, istante, giornoIn } from './fuso.ts'
 
 import { validaPassi, eseguiPassi, type Passo } from './flusso.ts'
 import { classificaAttenzione } from './rilevanza.ts'
+import * as giudizi from './giudizi.ts'
 import { contestoOperativo } from './memoria.ts'
 import * as progetti from './progetti.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
@@ -891,8 +892,34 @@ async function faiPerDocumento(
   risultatoFlusso?: string
 ): Promise<'fatta' | 'niente'> {
   const gia = store.docsConRiga(docs.map(d => d.id), `auto:${a.id}`)
-  const candidati = docs.filter(d => !gia.has(d.id))
-  // tutto già in lista: non si chiama nessun modello per non dire niente
+  let candidati = docs.filter(d => !gia.has(d.id))
+  /*
+   * Prima di scomodare il modello: chi aspetta davvero una risposta?
+   *
+   * Questa è la coda delle risposte, e dietro ogni scelta nasce una riga nella
+   * sua lista — a volte con la bozza già scritta. Le regole che hanno portato
+   * qui queste mail sanno riconoscere una newsletter, non sanno distinguere
+   * «ti confermo che ho ricevuto» da «mi confermi entro venerdì?»: tutte e due
+   * sono posta diretta, recente, di una persona vera. Jev lo distingue, e la
+   * soglia qui è alta apposta (`SOGLIA_RISPOSTE`), perché una riga che manca
+   * lui la aggiunge in tre secondi e otto righe inutili gli fanno spegnere
+   * l'automazione.
+   *
+   * Solo per le ricette che scelgono richieste dirette: una ricetta sua che
+   * dice «archivia gli ordini» ha già dichiarato cosa guarda, e Jev non ha
+   * nessun titolo per toglierle il materiale.
+   */
+  if (richiesteDirette(a) || a.suggerita) {
+    const aspettano = await giudizi.attenzione(candidati, 20)
+    if (aspettano.size) {
+      candidati = candidati.filter(d => {
+        const g = aspettano.get(d.id)
+        return !g || g.chiede >= giudizi.SOGLIA_RISPOSTE || g.genere === 'scadenza'
+      })
+    }
+  }
+  // tutto già in lista, o niente che aspetti davvero: non si chiama nessun
+  // modello per non dire niente
   if (!candidati.length) {
     store.automazioneGirata(a.id, 'niente', undefined, docs.length)
     return 'niente'

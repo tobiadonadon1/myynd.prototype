@@ -680,6 +680,13 @@ export type ConfigX = { db: string }
  */
 export type ConfigCalendario = { url: string; nome?: string; giorni?: number }
 export type ConfigClaude = { apiKey: string }
+/**
+ * La chiave di TypeSafe, con cui Jev risponde alle domande piccole.
+ *
+ * **È una credenziale**, come quella di Claude, e come quella non esce mai da
+ * `pubblica()`. Senza, Myynd fa quello che faceva prima: Jev affina, non regge.
+ */
+export type ConfigJev = { apiKey: string }
 
 export type Account = { email: string; sale: string; hash: string }
 
@@ -706,6 +713,7 @@ export type Config = {
   accesiDaSoli?: string[]
   calendario?: ConfigCalendario
   claude?: ConfigClaude
+  jev?: ConfigJev
   tono?: string
   autonomia?: string
   /** Il modello con cui ragiona il lavoro di frontiera. Vuoto = quello predefinito. */
@@ -995,7 +1003,7 @@ export function leggi(): Config {
  * quello nuovo, mai una via di mezzo.
  */
 /** I campi che portano una credenziale: non spariscono da una scrittura qualunque. */
-export const CON_SEGRETI = ['claude', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
+export const CON_SEGRETI = ['claude', 'jev', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
 const CAMPI_SEGRETI = new Set(['apiKey', 'chiave', 'password', 'token', 'refresh', 'clientSecret', 'segreto', 'parola'])
 const segretoPresente = (v: unknown): v is string => typeof v === 'string' && !!v.trim()
   && !/^[*•●…\.\s]+$/.test(v) && v !== '[credenziale rimossa / credential removed]'
@@ -1181,6 +1189,10 @@ export function pubblica(c: Config = leggi()) {
      * cosa vuol dire davvero.
      */
     claude: segretoPresente(c.claude?.apiKey) ? { collegato: true } : null,
+    // come sopra: esce che c'è, non qual è. Chi vuol sapere se Jev può
+    // davvero rispondere — chiave nel file *o* nell'ambiente — lo chiede a
+    // `jev.collegato()`, e `index.ts` lo sovrascrive nella rotta `/api/stato`.
+    jev: segretoPresente(c.jev?.apiKey) ? { collegato: true } : null,
     // di questi esce solo come si chiamano: token, refresh e segreti non
     // attraversano mai questa funzione, ed è l'unica ragione per cui esiste
     slack: c.slack ? { collegato: true, squadra: c.slack.squadra ?? null } : null,
