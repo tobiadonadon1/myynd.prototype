@@ -28,7 +28,7 @@ import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
-import { convinzioni, feedGiaVisto, feedAperto, elencoFeed, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 /**
  * La lista, per la chat che la tocca.
  *
@@ -43,6 +43,7 @@ import {
 import * as ordine from './ordine.ts'
 import { classificaAttenzione, validaVoceFeed, corpoAttuale, tempoFondato } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
+import { rifinisci } from './rifinitura.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
 
 /**
@@ -1866,9 +1867,9 @@ const schemaFeed = (ids: string[]) => ({
         type: 'object',
         properties: {
           tipo: { type: 'string', enum: ['Da decidere', 'Da leggere', 'Scadenza'] },
-          titolo: { type: 'string' },
-          testo: { type: 'string', description: 'Una o due frasi, massimo 240 caratteri.' },
-          urgenza: { type: 'string' },
+          titolo: { type: 'string', description: 'Un verbo all\'inizio e la cosa concreta, al massimo nove parole: «Rispondi a Sara sulla proposta».' },
+          testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: chi aspetta, o perché adesso. Parole piane, senza gergo.' },
+          urgenza: { type: 'string', description: 'Due o tre parole al massimo: «entro venerdì», «questa settimana», «nessuna fretta». Mai una frase.' },
           fonte: { type: 'string' },
           doc: { type: 'string', enum: ids, description: 'Uno degli identificativi forniti, copiato alla lettera dalla riga «id:».' },
           // la riga che rende la scelta controllabile: senza, una voce è
@@ -1885,7 +1886,7 @@ const schemaFeed = (ids: string[]) => ({
   additionalProperties: false
 })
 
-export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string; progetto?: string | null }
+export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string; progetto?: string | null; peso?: number | null }
 
 /** Quante voci al massimo può tirare fuori una lettura. */
 export const VOCI_PER_LETTURA = 5
@@ -2111,16 +2112,27 @@ Quello che ti ha detto lei batte quello che dicono i documenti: i file sono
 quasi sempre indietro sulla realtà. Se ti ha detto che una cosa è fatta, è
 fatta, anche se il documento non lo sa ancora.
 
-Per ognuna: che tipo è, un titolo breve, due righe che spiegano cosa c'è da
-sapere e perché conta, quanto è urgente in DUE O TRE PAROLE — «entro venerdì», «questa settimana»,
-«nessuna fretta» — mai una frase, da che fonte arriva, l'identificativo del
-documento fra quelli forniti, e un «perché» di dodici parole al massimo: per
+Per ognuna: che tipo è, un titolo, UNA riga sotto, quanto è urgente in DUE O
+TRE PAROLE — «entro venerdì», «questa settimana», «nessuna fretta» — mai una
+frase, da che fonte arriva, l'identificativo del documento fra quelli
+forniti, e un «perché» di dodici parole al massimo: per
 quale progetto o obiettivo conta, o quale decisione chiede. Se non sai
 scrivere il perché, la voce non ci va.
 
-Il titolo inizia con un'azione precisa: «Rispondi a Sara sulla proposta»,
-«Conferma a Marco la riunione di giovedì». Il testo dice CHI ha chiesto COSA,
-qual è il prossimo gesto e il dettaglio concreto necessario per farlo.
+Il titolo è un verbo e la cosa concreta, al massimo nove parole, come lo
+direbbe un collega a voce: «Rispondi a Sara sulla proposta», «Paga la fattura
+di Rossi». La riga sotto è UNA frase di al massimo diciotto parole che dice
+CHI aspetta o PERCHÉ adesso: «Sara aspetta un sì o un no da lunedì per chiudere
+il preventivo». Non cucire due fonti con «mentre»; non raccontare cosa dice un
+documento, un commit o una revisione: di' la situazione. Niente gergo di
+prodotto o di consulenza. Male: «Verify Jev keeps Myynd data local before
+expanding it» / «The September 20 commit uses Jev for reading decisions, while
+the TypeSafe review says real use calls its service». Bene: «Check that Jev
+keeps Myynd data local» / «Jev's judgments go through TypeSafe's service:
+decide that before using it more widely». Male: «Approve the X draft on
+Myynd's founder workflow» / «Approve or revise the X draft positioning Myynd as
+removing founders from small-question bottlenecks». Bene: «Approve the X post
+about founders» / «The draft is ready; it goes out once you say yes».
 Non riassumere «la nota istruisce l'agente»: parla direttamente alla persona.
 «prova» è una citazione testuale ESATTA della richiesta nel messaggio corrente,
 da 12 a 500 caratteri, nella lingua originale. Se non puoi citarla, lascia
@@ -2220,47 +2232,14 @@ Scrivi in ${nellaLingua()}.`),
   if (voci.some(v => linguaSbagliata(daLeggere(v), l))) voci = await chiama(`\n\n${soloInLingua(l)}`)
   const buone = voci.filter(v => !linguaSbagliata(daLeggere(v), l))
   if (buone.length < voci.length) console.warn('myynd · lettura: risposta nella lingua sbagliata, scartata')
-  return await rifinite(buone, suoi)
-}
-
-/**
- * L'ultimo passaggio: via quello che ha già, e a ognuna il suo progetto.
- *
- * Due domande che le regole non sanno fare, e si fanno qui — dopo che la voce
- * è nata e prima che si salvi — perché sono giudizi sulla *voce*, non sul
- * documento da cui viene.
- *
- *   · Il doppione. `salvaFeed` conta le parole in comune, e non può
- *     distinguere «la risposta di papà» dal «riscontro di papà» — la stessa
- *     mail, due carte — senza confondere «fattura 123» con «fattura 124».
- *     Dal database del ventuno settembre: tre voci nate dalla stessa
- *     conversazione con suo padre, una fatta e due scartate a mano da lui.
- *   · Il progetto. La prima pagina mette ogni voce nel blocco del suo
- *     progetto cercando il *nome* scritto dentro il titolo: una carta che
- *     parla del deck senza mai scrivere «Evermute» resta fuori da tutti i
- *     blocchi. Si chiede una volta, quando la voce nasce, e si scrive sulla
- *     carta: la pagina non deve aspettare nessuno per disegnarsi.
- *
- * Senza Jev tutt'e due tacciono e la lettura finisce come finiva prima.
- */
-async function rifinite(voci: VoceFeed[], suoi: progetti.Progetto[]): Promise<VoceFeed[]> {
-  if (!voci.length) return voci
-  // le carte aperte intere, con il loro testo: al confronto serve di più di un titolo
-  const aperte = elencoFeed('aperto').map(v => ({ titolo: v.titolo, testo: v.testo }))
-  const doppie = await giudizi.doppioni(voci, aperte)
-  const restano = voci.filter(v => {
-    const quale = doppie.get(v)
-    if (quale) console.warn(`myynd · lettura · doppione: «${v.titolo.slice(0, 60)}» è la stessa cosa di «${quale.slice(0, 60)}»`)
-    return !quale
-  })
-  if (!restano.length || suoi.length < 2) return restano
-  const perNome = new Map(suoi.map(p => [p.nome.trim().toLowerCase(), p.id]))
-  const scelti = await giudizi.progettoDelle(restano, suoi.map(p => ({ nome: p.nome, obiettivo: p.obiettivo })))
-  return restano.map(v => {
-    const nome = scelti.get(v)
-    const id = nome ? perNome.get(nome.trim().toLowerCase()) : undefined
-    return id ? { ...v, progetto: id } : v
-  })
+  /*
+   * L'ultimo passaggio, in `rifinitura.ts`: via quello che ha già, a ognuna
+   * il suo progetto, riscritta quella che non si capisce al primo sguardo,
+   * il peso di ognuna, la pillola corta, niente lineette. Sono giudizi sulla
+   * *voce*, non sul documento da cui viene, e si fanno dopo che è nata e
+   * prima che si salvi. Senza Jev restano solo le lineette via e la pillola.
+   */
+  return await rifinisci(buone, { progetti: suoi, registro: 'lettura' })
 }
 
 /**

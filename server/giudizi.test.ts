@@ -13,7 +13,7 @@
 
 import { test, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Documento } from './store.ts'
@@ -134,6 +134,101 @@ test('il peso rimette in ordine il materiale delle priorità', async () => {
   jevDice(id => ({ chiede: 0, urgenza: id === 'aperto' ? 3 : id === 'ieri' ? 1.5 : 0.1, genere: 'aggiornamento' }))
   const pesi = await giudizi.peso(docs)
   assert.deepEqual(giudizi.primaQuelloCheConta(docs, pesi).map(d => d.id), ['aperto', 'ieri', 'chiuso'])
+})
+
+// — quattro domande in una chiamata, e una memoria che resta —
+
+test('la quarta domanda viaggia con le altre tre: il peso si legge dalla memoria senza richiedere', async () => {
+  let chiamate = 0
+  jevDice(() => { chiamate++; return { chiede: 0.9, urgenza: 2, genere: 'richiesta' } })
+  const docs = [mail('a', { titolo: 'a' }), mail('b', { titolo: 'b' })]
+  const visti = await giudizi.attenzione(docs)
+  assert.equal(visti.get('a')?.peso, 2)
+  const pesi = await giudizi.peso(docs)
+  assert.equal(chiamate, 2, 'il peso era già stato chiesto insieme al resto')
+  assert.deepEqual([...pesi.entries()], [['a', 2], ['b', 2]])
+  assert.equal(giudizi.priorDelDocumento('a'), 2, 'e l’urgenza del documento è il punto di partenza del peso di una carta')
+  assert.equal(giudizi.priorDelDocumento('mai-visto'), null)
+})
+
+test('un Jev che risponde a tre domande su quattro vale lo stesso, e il peso si chiede dopo', async () => {
+  let chiamate = 0
+  jev.perProva(async () => {
+    chiamate++
+    return Response.json({ answers: {
+      chiede: { type: 'noul', noul: 0.8 },
+      urgenza: { type: 'score', score: 1.5, confidence: 0.9, probabilities: {}, legend: {} },
+      genere: { type: 'choice', choice: 'richiesta', confidence: 0.8, probabilities: { richiesta: 0.8 } }
+    } })
+  })
+  const docs = [mail('tre', { titolo: 'tre' })]
+  const visti = await giudizi.attenzione(docs)
+  assert.equal(visti.get('tre')?.chiede, 0.8)
+  assert.equal(visti.get('tre')?.peso, undefined)
+  assert.equal(jev.consumo().giudizi, 3, 'si contano le risposte date, non le domande fatte')
+  jev.perProva(async () => { chiamate++; return Response.json({ answers: { peso: { type: 'score', score: 2.5, confidence: 0.9, probabilities: {}, legend: {} } } }) })
+  assert.equal((await giudizi.peso(docs)).get('tre'), 2.5)
+  assert.equal(chiamate, 2)
+})
+
+test('i giudizi sopravvivono a un riavvio: la memoria si svuota, il file nella cartella resta', async () => {
+  let chiamate = 0
+  jevDice(() => { chiamate++; return { chiede: 0.9, urgenza: 2, genere: 'richiesta' } })
+  const docs = [mail('a', { titolo: 'a' }), mail('b', { titolo: 'b' })]
+  await giudizi.attenzione(docs)
+  assert.equal(chiamate, 2)
+  const file = join(CASA, '.myynd', 'giudizi.json')
+  assert.ok(existsSync(file), 'il file dei giudizi non è stato scritto')
+  // un riavvio: la Map è vuota, il file no
+  giudizi.scorda({ soloMemoria: true })
+  const dopo = await giudizi.attenzione(docs)
+  assert.equal(chiamate, 2, 'dopo il riavvio si è richiesto quello che si sapeva già')
+  assert.equal(dopo.get('a')?.urgenza, 2)
+  assert.equal(dopo.get('a')?.genere, 'richiesta')
+  assert.equal((await giudizi.peso(docs)).get('b'), 2)
+  assert.equal(chiamate, 2)
+  // dimenticare davvero toglie anche il file, e Jev rigiudica
+  giudizi.scorda()
+  assert.ok(!existsSync(file))
+  await giudizi.attenzione(docs)
+  assert.equal(chiamate, 4)
+})
+
+test('il tetto del giorno vale al giudizio: quattro domande per documento, centocinquanta documenti e non uno di più', async () => {
+  let chiamate = 0
+  jevDice(() => { chiamate++; return { chiede: 0.5, urgenza: 1, genere: 'aggiornamento' } })
+  const docs = Array.from({ length: 200 }, (_, i) => mail(`d${i}`, { titolo: `d${i}` }))
+  const visti = await giudizi.attenzione(docs, 200)
+  assert.equal(jev.consumo().giudizi, jev.TETTO_AL_GIORNO)
+  assert.equal(visti.size, jev.TETTO_AL_GIORNO / 4)
+  assert.equal(chiamate, jev.TETTO_AL_GIORNO / 4)
+  assert.equal(jev.restanti(), 0)
+  // e il conto del giorno sta su disco: un riavvio non lo azzera
+  const conto = JSON.parse(readFileSync(join(CASA, '.myynd', 'jev.json'), 'utf8')) as { giudizi: number }
+  assert.equal(conto.giudizi, jev.TETTO_AL_GIORNO)
+})
+
+// — le due domande sulla carta —
+
+test('le due domande sulla carta viaggiano insieme, con la data di oggi; senza chiave niente', async () => {
+  let stato: { oggi: string; carta: { titolo: string; urgenza: string } } | null = null
+  jev.perProva(async (_u, opz) => {
+    const corpo = JSON.parse(String((opz as RequestInit).body))
+    stato = corpo.state
+    assert.deepEqual(Object.keys(corpo.questions), ['chiara', 'peso'])
+    return Response.json({ answers: {
+      chiara: { type: 'noul', noul: 0.3 },
+      peso: { type: 'score', score: 2.2, confidence: 0.9, probabilities: {}, legend: {} }
+    } })
+  })
+  const carta = { tipo: 'Priority', titolo: 'Verify Jev keeps Myynd data local', testo: 'The commit says one thing while the review says another.', perche: 'Privacy', urgenza: 'Tomorrow 9:30' }
+  const g = await giudizi.giudicaCarte([carta], { oggi: new Date(2026, 8, 21, 0, 30) })
+  assert.deepEqual(g.get(carta), { chiara: 0.3, peso: 2.2 })
+  assert.equal(stato!.oggi, 'Monday 2026-09-21', 'il giorno è quello di chi guarda, anche a mezzanotte e mezza')
+  assert.equal(stato!.carta.titolo, carta.titolo)
+  assert.equal(stato!.carta.urgenza, 'Tomorrow 9:30')
+  cfg.scrivi({ lingua: 'en' }, { togli: ['jev'] })
+  assert.equal((await giudizi.giudicaCarte([carta])).size, 0)
 })
 
 // — dove cambia qualcosa per lui —

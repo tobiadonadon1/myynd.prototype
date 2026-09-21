@@ -11,8 +11,12 @@ const store = await import('./store.ts')
 const progetti = await import('./progetti.ts')
 const priorita = await import('./priorita.ts')
 const riferimento = await import('./riferimento.ts')
+const cfg = await import('./config.ts')
+const jev = await import('./jev.ts')
+const giudizi = await import('./giudizi.ts')
+const rifinitura = await import('./rifinitura.ts')
 const { feedAttuale } = await import('./attenzione.ts')
-after(() => { priorita.perProva(null); store.chiudiIndici(); delete process.env.MYYND_DATI; rmSync(dati, { recursive: true, force: true }) })
+after(() => { priorita.perProva(null); jev.perProva(null); rifinitura.perProva(null); store.chiudiIndici(); delete process.env.MYYND_DATI; rmSync(dati, { recursive: true, force: true }) })
 
 const giorniFa = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 const p = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Ship Evermute 1.0 on the App Store' })
@@ -188,6 +192,56 @@ test('con il riferimento scritto: sta nel prompt, il progetto morto cade dal gir
   assert.equal(await priorita.forse(true), 0)
   assert.equal(store.domandeConTema('priorita:').length, 1)
   progetti.chiudi(sito.id)
+})
+
+test('una priorità che non si capisce arriva sul feed riscritta, con il peso; senza Jev arriva com’è', async () => {
+  priorita.dimentica()
+  const confusa = { genere: 'priorita', titolo: 'Verify Jev keeps Myynd data local before expanding it', testo: 'The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service.', perche: 'Privacy is the promise of Myynd', progetto: 'Evermute', doc: '', offerta: 'I read the TypeSafe terms and write down what leaves the Mac.', quando: '' }
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [confusa], domande: [] })) as never })
+  let riscritture = 0
+  rifinitura.perProva({ collegato: () => true, chiediJSON: (async () => {
+    riscritture++
+    return { titolo: 'Record the Myynd walkthrough video', testo: 'Your founder post needs the app video you asked for on September 18.', urgenza: '' }
+  }) as never })
+  // senza Jev: la carta arriva sul feed com’è, senza peso, e il modello non riscrive
+  assert.equal(await priorita.forse(true), 1)
+  let voce = (feedAttuale() as Record<string, unknown>[]).find(v => v.tipo === 'Priorità' && /Jev/.test(String(v.titolo)))
+  assert.ok(voce, 'la priorità è sul feed')
+  assert.equal(voce.titolo, confusa.titolo)
+  assert.equal(voce.peso, null)
+  assert.equal(riscritture, 0)
+  store.cambiaStatoFeed(String(voce.id), 'scartato', 'prova')
+
+  // con Jev che la dice confusa: riscritta dal modello grande, e con il peso
+  priorita.dimentica()
+  cfg.aggiorna({ jev: { apiKey: 'apikey_prova' } })
+  giudizi.scorda(); jev.dimentica()
+  jev.perProva(async (_u, opz) => {
+    const corpo = JSON.parse(String((opz as RequestInit).body)) as { questions: Record<string, unknown> }
+    if (corpo.questions.chiara) return Response.json({ answers: {
+      chiara: { type: 'noul', noul: 0.2 },
+      peso: { type: 'score', score: 2.4, confidence: 0.9, probabilities: {}, legend: {} }
+    } })
+    if (corpo.questions.doppione) return Response.json({ answers: { doppione: { type: 'choice', choice: 'nessuno', confidence: 0.9, probabilities: { nessuno: 0.9 } } } })
+    // il peso dei documenti, con cui si scelgono i quarantotto
+    return Response.json({ answers: { peso: { type: 'score', score: 1.5, confidence: 0.9, probabilities: {}, legend: {} } } })
+  })
+  // un'altra carta confusa: la prima è stata scartata, e una scartata non si ripropone
+  const cucita = { ...confusa, titolo: 'Record the Myynd walkthrough and attach it to the founder post', testo: 'Your September 18 request specified an app video, while recent feedback says the posts lack pictures and links.', perche: 'The founder post is the launch of Myynd', offerta: 'I write the shot list for the walkthrough video.' }
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [cucita], domande: [] })) as never })
+  try {
+    assert.equal(await priorita.forse(true), 1)
+    voce = (feedAttuale() as Record<string, unknown>[]).find(v => v.tipo === 'Priorità' && /walkthrough/.test(String(v.titolo)))
+    assert.ok(voce, 'la priorità è sul feed')
+    assert.equal(voce.titolo, 'Record the Myynd walkthrough video', 'riscritta dal modello grande, perché Jev l’ha detta confusa')
+    assert.equal(voce.testo, 'Your founder post needs the app video you asked for on September 18.')
+    assert.equal(voce.peso, 2.4, 'con il peso giudicato sulla carta')
+    assert.equal(voce.progetto, p.id, 'e il progetto scelto dal modello resta')
+    assert.equal(riscritture, 1)
+  } finally {
+    jev.perProva(null); rifinitura.perProva(null); giudizi.scorda()
+    const c = cfg.leggi(); delete c.jev; cfg.scrivi(c, { togli: ['jev'] })
+  }
 })
 
 test('progettoDelTesto: il nome vince, il più lungo prima, l’alias del riferimento conta, due parole dell’obiettivo no', async () => {

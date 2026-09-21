@@ -42,6 +42,7 @@ import { chiediJSON, collegato, conLaLingua } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { classificaAttenzione, corpoAttuale } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
+import { conGergo, rifinisci } from './rifinitura.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { carta } from './memoria.ts'
 import { feedAttuale } from './attenzione.ts'
@@ -61,6 +62,8 @@ export type Priorita = {
   offerta: string
   /** Solo per «scadenza»: la data come l'ha letta nella fonte. */
   quando: string
+  /** Quanto conta oggi, da 0 a 3, se Jev l'ha giudicata (`rifinitura.ts`). */
+  peso?: number | null
 }
 
 /** Una domanda che il giro fa a lui, quando non sa a che punto è un progetto. */
@@ -205,13 +208,13 @@ const FORMA = {
         type: 'object',
         properties: {
           genere: { type: 'string', enum: ['priorita', 'proposta', 'da-leggere', 'scadenza'] },
-          titolo: { type: 'string', description: 'Comincia con un verbo. Preciso: nomi, cifre e date lette davvero.' },
-          testo: { type: 'string', description: 'Una frase, venti parole al massimo: perché adesso, e da dove lo sai.' },
+          titolo: { type: 'string', description: 'Un verbo all\'inizio e la cosa concreta, al massimo nove parole: nomi, cifre e date lette davvero.' },
+          testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: chi aspetta, o perché adesso. Parole piane, senza gergo.' },
           perche: { type: 'string', description: 'Dodici parole al massimo: quale progetto o obiettivo muove.' },
           progetto: { type: 'string', description: 'Il nome esatto di uno dei progetti, o una stringa vuota.' },
           doc: { type: 'string', description: 'L\'id esatto del documento da cui nasce, o una stringa vuota. Per «da-leggere» è obbligatorio.' },
           offerta: { type: 'string', description: 'Cosa faresti tu da solo per portarla avanti, in prima persona, una frase corta di dodici parole al massimo.' },
-          quando: { type: 'string', description: 'Solo per «scadenza»: la data come l\'hai letta nella fonte, ad esempio «rinnova il 3 ottobre». Vuota per gli altri generi.' }
+          quando: { type: 'string', description: 'Solo per «scadenza»: la data come l\'hai letta nella fonte, in tre parole al massimo, ad esempio «entro il 3 ottobre». Vuota per gli altri generi.' }
         },
         required: ['genere', 'titolo', 'testo', 'perche', 'progetto', 'doc', 'offerta', 'quando'],
         additionalProperties: false
@@ -251,15 +254,11 @@ let ferri: Ferri = VERI
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
 /**
- * Il gergo che non deve arrivare sulla prima pagina.
- *
- * La prima priorità vera che ha visto proponeva «una specifica UI concisa con
- * layout, gerarchia e criteri di accettazione»: «non capisco, parole semplici e
- * dirette, come tutto il resto della pagina». Il prompt lo chiede; qui si
- * controlla, perché un consiglio nel prompt non è una regola.
+ * Il gergo che non deve arrivare sulla prima pagina sta in `rifinitura.ts`,
+ * perché vale per ogni carta e non solo per le priorità; qui si continua a
+ * chiudere la porta con lo stesso metro, e le prove lo leggono da qui.
  */
-const GERGO = /\b(?:acceptance criteria|specifications?|spec|hierarch(?:y|ies)|stakeholders?|rubrics?|frameworks?|leverage|synerg\w*|deliverables?|roadmap|workflows?|onboarding flow|UX|UI spec|criteri di accettazione|specifica|gerarchia|flusso di|rubrica)\b/i
-export const conGergo = (s: string) => GERGO.test(s)
+export { conGergo }
 
 /**
  * Una data come la si legge in una fonte: «3 ottobre», «Oct 3», «03/10»,
@@ -431,9 +430,9 @@ Scrivi fino a ${AL_GIRO} priorità, le più importanti prima. Lavora su più pro
 
 Collega quello che vedi fra progetti e cartelle: la stessa cosa vista da due fonti (una mail e un commit, una chat e un file) è una voce sola, e un fatto su un progetto che cambia un altro va detto, nel testo, con i nomi di tutti e due.
 
-Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa; un testo di UNA frase, venti parole al massimo, che dice perché adesso e da dove lo sai (la carta è piccola: non ripetere il titolo); un perché di dodici parole, cioè quale progetto o obiettivo muove; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase corta, dodici parole al massimo, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
+Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa, al massimo nove parole; un testo di UNA frase, diciotto parole al massimo, che dice chi aspetta o perché adesso (la carta è piccola: non ripetere il titolo); un perché di dodici parole, cioè quale progetto o obiettivo muove; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase corta, dodici parole al massimo, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
 
-Il titolo è una frase che diresti a voce, davanti a lui, in un fiato: un verbo e la cosa, come la chiamerebbe lui. Niente parole incollate con i trattini («choose-project, connect-source»), niente etichette inventate fra virgolette, niente elenchi compressi in un titolo. Bene: «Rispondi ad Apple sul video di Evermute», «Scrivi la prima schermata di Myynd: scegli il progetto e collega una fonte», «Rimetti mano al sito: le tre offerte sono ferme da venti giorni». Male: «Build the choose-project, connect-source, get-work start». Il testo dice da dove lo sai con parole piane: «Nella mail dell'8 settembre a tuo padre scrivi che…», non «la mail nomina questo come passo».
+Il titolo è una frase che diresti a voce, davanti a lui, in un fiato: un verbo e la cosa, come la chiamerebbe lui. Niente parole incollate con i trattini («choose-project, connect-source»), niente etichette inventate fra virgolette, niente elenchi compressi in un titolo. Bene: «Rispondi ad Apple sul video di Evermute», «Rimetti mano al sito: le tre offerte sono ferme da venti giorni». Male: «Build the choose-project, connect-source, get-work start», «Verify Jev keeps Myynd data local before expanding it». Il testo dice chi aspetta o perché adesso, con parole piane, e non cuce due fonti con «mentre» né racconta cosa dice un commit o una revisione. Bene: «Tuo padre aspetta una risposta sul deck dall'8 settembre». Male: «The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service». Bene: «Real replies to DMs still don't go out since the September 18 upgrade». Male: «The September 18 upgrade says this authorized lane remains blocked despite the restored X schedules».
 Le parole: semplici, dirette, come si parla a un collega. Frasi corte. Dì la cosa da fare e perché, con i nomi delle cose sue. Niente gergo di prodotto o di consulenza: niente «specifica», «criteri di accettazione», «gerarchia», «flusso», «stakeholder», «rubrica di valutazione», «UX». Se una frase la capirebbe solo chi lavora in un'agenzia, riscrivila. L'offerta dice cosa consegni, in una frase che lui capisce al volo: «Ti preparo la risposta ad Apple con il video e le istruzioni», non «una specifica con criteri di accettazione».
 
 Se su un progetto non capisci se è ancora vivo, se una cosa è già stata fatta, o di chi tocca, non tirare a indovinare: scrivi una domanda in «domande», al massimo ${DOMANDE_AL_GIRO}, corta, che si possa liquidare in cinque parole, con il nome del progetto e gli id delle fonti da cui nasce il dubbio. Una domanda buona vale più di una voce sbagliata; nessuna domanda è la risposta normale.
@@ -463,24 +462,24 @@ Scrivi in ${nellaLingua()}.`)
     if (domande.length >= DOMANDE_AL_GIRO) break
   }
   /*
-   * E fuori quelle che dicono una cosa che ha già sul feed.
+   * E poi la rifinitura, la stessa della lettura (`rifinitura.ts`).
    *
-   * Il prompt gliele elenca — «queste sono già sul suo feed» — e il modello le
-   * riscrive lo stesso con parole diverse: è successo tre volte con la stessa
+   * Prima di tutto fuori quelle che dicono una cosa che ha già sul feed: il
+   * prompt gliele elenca — «queste sono già sul suo feed» — e il modello le
+   * riscrive lo stesso con parole diverse; è successo tre volte con la stessa
    * conversazione, e due di quelle tre voci lui le ha scartate a mano. Il
    * controllo sulle parole in `salvaFeed` non le prende, perché a cambiare è
-   * proprio la parola («la risposta di papà», «il riscontro di papà»).
+   * proprio la parola («la risposta di papà», «il riscontro di papà»). Poi il
+   * progetto a chi non ce l'ha, la riscrittura di quella che non si capisce
+   * al primo sguardo, il peso, la pillola corta.
    *
    * Qui e non in `salvaFeed` per la stessa ragione del blocco degli obiettivi
-   * in `claude.ts`: questa è una domanda sul senso, e le domande sul senso non
-   * si fanno dentro una transazione del database.
+   * in `claude.ts`: sono domande sul senso, e le domande sul senso non si
+   * fanno dentro una transazione del database. La carta va a Jev con il tipo
+   * e con «quando» al posto dell'urgenza, che è quello che diventa sul feed.
    */
-  const doppie = await giudizi.doppioni(voci, store.elencoFeed('aperto').map(v => ({ titolo: v.titolo, testo: v.testo })))
-  const tenute = voci.filter(v => {
-    const quale = doppie.get(v)
-    if (quale) console.warn(`myynd · priorità · doppione: «${v.titolo.slice(0, 60)}» è la stessa cosa di «${quale.slice(0, 60)}»`)
-    return !quale
-  })
+  const rifinite = await rifinisci(voci.map(p => ({ ...p, tipo: TIPO[p.genere], urgenza: p.quando })), { progetti: suoi, registro: 'priorità' })
+  const tenute: Priorita[] = rifinite.map(({ tipo: _tipo, urgenza, ...p }) => ({ ...p, quando: urgenza ?? '' }))
   console.log(`myynd · priorità · ${docs.length} documenti, di cui ${cartelle} cartelle di lavoro e ${conversazioni} conversazioni, ${Array.isArray(out.priorita) ? out.priorita.length : 0} proposte, ${tenute.length} buone, ${domande.length} domande`)
   return { voci: tenute, domande, guardati: docs.length, cartelle, conversazioni }
 }
@@ -488,7 +487,7 @@ Scrivi in ${nellaLingua()}.`)
 /** Da priorità a voce del feed: la fonte è il documento, se c'è; altrimenti nessuna. */
 export function voceDelFeed(p: Priorita) {
   const d = p.doc ? store.documento(p.doc) : null
-  return { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: p.quando ?? '', perche: p.perche, offerta: p.offerta, progetto: p.progetto, ...(d ? { doc: d.id, fonte: d.fonte } : {}) }
+  return { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: p.quando ?? '', perche: p.perche, offerta: p.offerta, progetto: p.progetto, peso: p.peso ?? null, ...(d ? { doc: d.id, fonte: d.fonte } : {}) }
 }
 
 /**

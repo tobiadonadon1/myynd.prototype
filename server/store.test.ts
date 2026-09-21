@@ -283,6 +283,29 @@ test('idFeed è stabile e rigenerare il feed non riapre quello che hai chiuso', 
   assert.equal(store.elencoFeed('fatto').length, 1)
 })
 
+test('il peso di una voce si salva, si aggiorna se arriva, e non si cancella se manca', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('pesata')])
+  const voce = { tipo: 'Da decidere', titolo: 'Rispondere a Rossi', testo: 'Aspetta da lunedì.', doc: 'pesata' }
+  // nasce con un peso
+  store.salvaFeed([{ ...voce, peso: 2.5 }])
+  const [prima] = store.elencoFeed('aperto')
+  assert.equal(prima.peso, 2.5)
+  // una lettura senza Jev non lo porta: quello di prima resta
+  store.salvaFeed([{ ...voce, peso: null }])
+  assert.equal(store.voceFeed(prima.id as string)!.peso, 2.5)
+  store.salvaFeed([voce])
+  assert.equal(store.voceFeed(prima.id as string)!.peso, 2.5)
+  // una lettura con Jev lo aggiorna, dentro i limiti
+  store.salvaFeed([{ ...voce, peso: 1 }])
+  assert.equal(store.voceFeed(prima.id as string)!.peso, 1)
+  store.salvaFeed([{ ...voce, peso: 7 }])
+  assert.equal(store.voceFeed(prima.id as string)!.peso, 3, 'il peso va da 0 a 3')
+  // senza giudizio resta NULL, e la pagina lo legge come tale
+  store.salvaFeed([{ tipo: 'Da leggere', titolo: 'Senza peso', testo: 'x' }])
+  assert.equal(store.elencoFeed('aperto').find(v => v.titolo === 'Senza peso')!.peso, null)
+})
+
 test('azzeraTutto svuota davvero tutte le tabelle', () => {
   store.salvaDocumenti([doc('a')])
   store.salvaFeed([{ tipo: 'x', titolo: 't', testo: 'y', doc: 'a' }])
@@ -1097,7 +1120,7 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
   }
 
   const feed = colonne('feed')
-  for (const c of ['id', 'tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'stato', 'quando', 'motivo', 'risposto', 'perche']) {
+  for (const c of ['id', 'tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'stato', 'quando', 'motivo', 'risposto', 'perche', 'contesto', 'offerta', 'progetto', 'peso']) {
     assert.ok(feed.includes(c), `feed non ha «${c}»: una migrazione è stata saltata`)
   }
 
