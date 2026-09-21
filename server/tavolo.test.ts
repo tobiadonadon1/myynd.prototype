@@ -77,3 +77,15 @@ test('una proposta tolta da lui fa tacere il progetto per un giorno; una simile 
   risposte.Nextas = 'Prepare the investor update'
   assert.deepEqual(tavolo.scoperti(adesso + 26 * ORA + 1000).map(x => x.nome), [], 'Nextas ha una riga; Website ha appena chiesto')
 })
+
+test('due giri insieme scrivono una riga sola per progetto: il secondo torna subito, e chi arriva dopo si riguarda', async () => {
+  store.azzeraTutto()
+  const p = progetti.scrivi({ nome: 'Solo', obiettivo: 'Una cosa' })
+  let chiamate = 0
+  tavolo.perProva({ collegato: () => true, prossimo: async () => { chiamate++; await new Promise(r => setTimeout(r, 40)); return 'Write the plan for Solo' } })
+  const [a, b] = await Promise.all([tavolo.riempi(), tavolo.riempi()])
+  assert.deepEqual([a, b].sort(), [0, 1])
+  assert.equal(chiamate, 1)
+  assert.equal(store.elencoCompiti().filter(c => c.progetto === p.id).length, 1)
+})
+

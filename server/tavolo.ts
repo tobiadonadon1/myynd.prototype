@@ -21,6 +21,14 @@
 // modello che non sa non viene richiamato in tondo. E non fallisce mai
 // verso chi chiama: al peggio scrive una riga nel registro.
 //
+// Un giro alla volta per conto, e si riguarda prima di scrivere. La prima
+// sera due giri sono partiti insieme — l'avvio e la pagina che si era
+// trovata vuota — e ogni progetto ha ricevuto due righe: tutti e due
+// avevano letto la stessa lista dei scoperti prima che uno dei due
+// scrivesse. Adesso il secondo torna subito, e comunque ogni progetto si
+// ricontrolla un attimo prima di chiamare il modello e un attimo prima di
+// scrivere.
+//
 //   node --test server/tavolo.test.ts
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -65,6 +73,9 @@ const VERI: Ferri = { collegato: () => collegato(), prossimo: (...a) => prossimo
 let ferri: Ferri = VERI
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
+/** I conti con un giro in corso: un secondo giro insieme torna subito. */
+const inCorso = new Set<string>()
+
 /** I progetti attivi che non hanno niente sul tavolo, e a cui si può proporre adesso. */
 export function scoperti(adesso = Date.now()): progetti.Progetto[] {
   const righe = store.elencoCompiti()
@@ -88,20 +99,31 @@ export function scoperti(adesso = Date.now()): progetti.Progetto[] {
 /** Riempie il tavolo: una riga per progetto scoperto. Torna quante ne ha scritte. */
 export async function riempi(adesso = Date.now()): Promise<number> {
   if (!ferri.collegato()) return 0
+  const conto = cartella()
+  if (inCorso.has(conto)) return 0
+  inCorso.add(conto)
   let scritte = 0
-  for (const p of scoperti(adesso)) {
-    segna(p.id, adesso)
-    let passo: string | null = null
-    try { passo = await ferri.prossimo(p) } catch (e) {
-      console.warn(`myynd · tavolo · ${p.nome}: il passo dopo non è arrivato:`, e instanceof Error ? e.message : e)
-      continue
+  try {
+    for (const p of scoperti(adesso)) {
+      // si riguarda: nel frattempo può essere arrivata una riga, o una proposta di un altro giro
+      if (!scoperti(adesso).some(x => x.id === p.id)) continue
+      segna(p.id, adesso)
+      let passo: string | null = null
+      try { passo = await ferri.prossimo(p) } catch (e) {
+        console.warn(`myynd · tavolo · ${p.nome}: il passo dopo non è arrivato:`, e instanceof Error ? e.message : e)
+        continue
+      }
+      if (!passo) { console.info(`myynd · tavolo · ${p.nome} · niente da proporre`); continue }
+      const righe = store.elencoCompiti()
+      if (righe.some(c => c.progetto === p.id)) { console.info(`myynd · tavolo · ${p.nome} · ha già una riga`); continue }
+      if (righe.some(v => simili(v.testo, passo!))) { console.info(`myynd · tavolo · ${p.nome} · già in lista: «${passo.slice(0, 80)}»`); continue }
+      const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+      store.scriviCompito({ id, testo: passo, quando: 'oggi', origine: ORIGINE, progetto: p.id, ordine: ordine.dopo(store.ultimoOrdine('oggi')) })
+      console.info(`myynd · tavolo · ${p.nome} → ${id} · «${passo.slice(0, 80)}»`)
+      scritte++
     }
-    if (!passo) { console.info(`myynd · tavolo · ${p.nome} · niente da proporre`); continue }
-    if (store.elencoCompiti().some(v => simili(v.testo, passo!))) { console.info(`myynd · tavolo · ${p.nome} · già in lista: «${passo.slice(0, 80)}»`); continue }
-    const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    store.scriviCompito({ id, testo: passo, quando: 'oggi', origine: ORIGINE, progetto: p.id, ordine: ordine.dopo(store.ultimoOrdine('oggi')) })
-    console.info(`myynd · tavolo · ${p.nome} → ${id} · «${passo.slice(0, 80)}»`)
-    scritte++
+  } finally {
+    inCorso.delete(conto)
   }
   if (scritte) compiti.annunciaCambio()
   return scritte
