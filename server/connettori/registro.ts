@@ -136,17 +136,16 @@ export const CATALOGO: VoceConnettore[] = [
    */
   { id: 'compatibile', nome: 'Modello locale o altro fornitore', gruppo: 'Ragionamento', pronto: true, nota: 'Ollama, LM Studio, llama.cpp, o un altro servizio con API in stile OpenAI.' },
   /*
-   * Jev non è una terza testa: è il giudizio.
+   * Jev non sta in questo catalogo, e non per dimenticanza.
    *
-   * Sta nello stesso gruppo perché è lì che uno lo va a cercare, ma non
-   * compete con le altre due e non si sceglie «con quale motore lavora»:
-   * mentre Claude o chi per lui scrive, Jev risponde alle domande piccole che
-   * l'app si faceva da sola con una fila di espressioni regolari — chi aspetta
-   * una risposta, cosa conta oggi. Scollegarlo non spegne niente: torna la
-   * fila di prima. La nota lo dice, perché una scheda che sembra obbligatoria
-   * è una scheda che qualcuno collega per paura.
+   * Ci è stato per un giorno, come scheda «facoltativa» nel gruppo del
+   * ragionamento. Lui, il 21 settembre: «it has been added as a source, but
+   * it's not. It's just something that we provide. We embed Jev within
+   * Myynd, it's not something that people have to connect.» Jev è il
+   * giudizio dentro l'app — chi aspetta una risposta, cosa conta oggi — e la
+   * sua chiave viaggia con Myynd (`jev.ts` la legge dall'ambiente o dalla
+   * configurazione). Non è una fonte da collegare, quindi non è una scheda.
    */
-  { id: 'jev', nome: 'Jev', gruppo: 'Ragionamento', pronto: true, nota: 'Giudizi rapidi di TypeSafe: sceglie cosa merita la tua attenzione. Facoltativo.' },
   // La lista è una fonte come le altre: quello che decidi di fare dice di te
   // quanto un documento — e sta qui perché chi guarda le fonti si aspetta di
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.

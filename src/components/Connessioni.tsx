@@ -7,7 +7,7 @@ import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import './connessioni.css'
 
 // Quelli che non portano documenti: niente «Rileggi», perché non c'è niente da rileggere.
-const MOTORI = ['claude', 'openai', 'compatibile', 'jev']
+const MOTORI = ['claude', 'openai', 'compatibile']
 
 /**
  * Le fonti che si possono cambiare senza scollegarle prima.
@@ -18,7 +18,7 @@ const MOTORI = ['claude', 'openai', 'compatibile', 'jev']
  * era proprio quella — cioè nessuna, per chi non se la sente.
  */
 // Anthropic e OpenAI hanno due strade: «Cambia» riapre la scheda per scegliere l'altra, o cambiare chiave
-const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop', 'jev']
+const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop']
 
 /** A quiet source picker; credentials and account controls appear only after choosing. */
 export function Connessioni({ fonte, chiudi, cambiato }: {

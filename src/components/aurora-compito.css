@@ -13,123 +13,36 @@
  * — vetro rigato, luce dietro. «With the same texture, with the same feel,
  * of course, alive.»
  *
- * Quindi la riga intera diventa quel fuoco, non un velo sopra la carta. I
- * colori sono quelli dell'identità spinti fino in fondo: l'ambra e il rame
- * in cima, il rame cupo a metà, il bruno quasi nero della notte in basso. Il
- * testo passa in crema, come sul palco: sulla riga che lavora la carta è
- * notte anche di giorno, e i gettoni si ridefiniscono qui sotto perché
- * tutto quello che sta dentro — titolo, riga sotto, passo, pillola — legga
- * sul buio senza sapere di starci.
+ * Quindi la riga intera diventa quel fuoco. I colori sono quelli
+ * dell'identità spinti fino in fondo: l'ambra e il rame in cima, il rame
+ * cupo a metà, il bruno quasi nero della notte in basso. Qui sta solo il
+ * fondo, fermo; le righe e la luce che ci passa dentro le disegna la tela in
+ * `AuroraCompito.tsx`, dove è scritto anche perché.
  *
- * Tre strati e tre moti, tutti lenti:
- *   · il fuoco (`.task-aurora`) respira: l'orlo ambra sale e scende, come
- *     una fiamma che non decide;
- *   · le righe (`::before`) scorrono di lato — due passi diversi, 14 e 47
- *     pixel, così il disegno non si ripete mai uguale sotto gli occhi;
- *   · la sbavatura (`::after`) sono le striature scure che salgono dal
- *     basso a mangiare il rosso, come nella prima immagine, e scorrono a
- *     un'altra velocità;
- *   · le braci (`i`) sono due chiazze sfocate che vagano da sinistra a destra.
+ * La sera stessa, in pagina, due correzioni sue. «I like the colors… I
+ * just wanted it more transparent so that it wasn't that disruptive»: lo
+ * strato sta al sessanta per cento, così la carta sotto traspare davvero, e
+ * il testo resta quello del tema — inchiostro di giorno, crema di notte —
+ * senza ridipingerlo in crema come prima: a questa trasparenza il crema
+ * sull'avorio non si leggeva più. E l'animazione: non più due strati che
+ * scorrono in versi opposti (vedi la tela).
  *
  * Nessuna barra che avanza: dice «sta succedendo», non «quanto manca» —
  * quello lo dice a parole la riga del passo. Con il moto ridotto resta il
  * fuoco fermo, che si distingue lo stesso da una riga a riposo.
- *
- * La sera stessa, visto in pagina: «I like the gradient… make that less
- * vivid. Maybe a little bit more transparent would work better.» Quindi lo
- * strato sta all'ottanta per cento, così la carta sotto traspare, e i
- * colori sono smorzati di un passo: l'ambra meno gialla, il rosso meno
- * acceso, le braci a metà. La stessa forma, meno voce.
  */
-.task-aurora-host[data-working] {
-  --inchiostro-rgb: 255,247,240;
-  --inchiostro: rgba(255,247,240,.95);
-  --inchiostro-2: rgba(255,247,240,.7);
-  --inchiostro-3: rgba(255,247,240,.52);
-  --luce-rgb: 70,30,16;
-  --rame: #FFC79A;
-  --rame-testo: #FFD5B0;
-  --riga-sopra: transparent;
-  --carta-alta: #4A2416;
-  --salvia: #BFD6C2;
-  color: var(--inchiostro);
-  text-shadow: 0 1px 2px rgba(0,0,0,.35);
-}
+.task-aurora-host[data-working] { --riga-sopra: transparent; }
 .task-aurora {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
-  opacity: .8;
-  background-color: #1A0D08;
-  background-image: linear-gradient(to bottom,
-    #E9A35C 0%, #DA7A45 5%, #C4553A 11%, #A03826 18%, #732A19 29%, #3E1A10 44%, #22110B 58%, #1A0D08 100%);
-  background-size: 100% 180%;
-  background-position: 0 0%;
-  animation: task-fuoco-respiro 11s ease-in-out infinite alternate;
-  animation-play-state: var(--mo, running);
-  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1), inset 0 1px 0 rgba(255,225,190,.2);
+  opacity: .6;
+  background: linear-gradient(to bottom,
+    #E9A35C 0%, #DA7A45 6%, #C4553A 13%, #A03826 21%, #732A19 34%, #3E1A10 52%, #22110B 70%, #1A0D08 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1);
 }
-.task-aurora::before, .task-aurora::after {
-  content: ''; position: absolute; inset: 0;
-  animation-play-state: var(--mo, running);
-}
-/* le righe: due passi che si battono, così il disegno non torna mai uguale */
-.task-aurora::before {
-  background-image:
-    repeating-linear-gradient(90deg, rgba(255,235,210,.08) 0 1px, transparent 1px 6px, rgba(0,0,0,.22) 6px 8px, transparent 8px 14px),
-    repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.18) 9px 13px, transparent 13px 30px, rgba(255,225,190,.06) 30px 32px, transparent 32px 47px);
-  background-size: 14px 100%, 47px 100%;
-  animation: task-fuoco-scorri 70s linear infinite;
-}
-/* la sbavatura: striature scure che salgono dal basso, alte quanto vogliono */
-.task-aurora::after {
-  background-image: repeating-linear-gradient(90deg,
-    rgba(21,10,6,.92) 0 3px, transparent 3px 11px, rgba(21,10,6,.55) 11px 19px, transparent 19px 26px,
-    rgba(21,10,6,.85) 26px 27px, transparent 27px 41px, rgba(21,10,6,.7) 41px 46px, transparent 46px 61px);
-  background-size: 61px 100%;
-  -webkit-mask-image: linear-gradient(to top, #000 22%, rgba(0,0,0,.55) 48%, transparent 78%);
-  mask-image: linear-gradient(to top, #000 22%, rgba(0,0,0,.55) 48%, transparent 78%);
-  animation: task-fuoco-sbava 95s linear infinite;
-}
-/* le braci: due chiazze calde che vagano */
-.task-aurora i {
-  position: absolute; width: 46%; height: 160%; top: -30%; left: 8%;
-  background: radial-gradient(ellipse at center, rgba(255,170,80,.34) 0%, rgba(232,101,42,.18) 38%, transparent 70%);
-  filter: blur(18px); mix-blend-mode: screen;
-  animation: task-fuoco-brace 19s ease-in-out infinite alternate;
-  animation-play-state: var(--mo, running);
-}
-.task-aurora i:nth-child(2) {
-  left: 50%; top: 10%; width: 40%;
-  background: radial-gradient(ellipse at center, rgba(255,90,40,.28) 0%, rgba(160,40,20,.16) 40%, transparent 70%);
-  animation-delay: -9s; animation-duration: 23s;
-}
-.task-aurora i:nth-child(3) {
-  left: 30%; top: -70%; width: 30%; height: 90%;
-  background: radial-gradient(ellipse at center, rgba(255,240,215,.15) 0%, transparent 65%);
-  filter: blur(10px);
-  animation-delay: -14s; animation-duration: 27s;
-}
+.task-aurora canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.62); overflow-wrap: anywhere; }
-@keyframes task-fuoco-respiro {
-  from { background-position: 0 0%; }
-  to { background-position: 0 34%; }
-}
-/* 658 = 14 × 47: le due righe tornano a posto insieme, e il giro non salta */
-@keyframes task-fuoco-scorri {
-  from { background-position: 0 0, 0 0; }
-  to { background-position: 658px 0, 658px 0; }
-}
-@keyframes task-fuoco-sbava {
-  from { background-position: 0 0; }
-  to { background-position: -610px 0; }
-}
-@keyframes task-fuoco-brace {
-  from { transform: translate(-12%, 0) scale(.95); }
-  to { transform: translate(60%, 6%) scale(1.15); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .task-aurora, .task-aurora::before, .task-aurora::after { animation: none; }
-  .task-aurora i { animation: none; transform: none; }
   .task-aurora-host[data-working] svg rect { animation: none !important; }
 }
 

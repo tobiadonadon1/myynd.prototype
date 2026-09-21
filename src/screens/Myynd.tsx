@@ -694,7 +694,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {affidato && <Glifo tipo="penso" dim={12} colore="rgba(var(--avorio-rgb),.95)" />}
+            {affidato && <Glifo tipo="penso" dim={12} colore="var(--inchiostro)" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
           {testo && <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>}

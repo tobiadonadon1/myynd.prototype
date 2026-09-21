@@ -619,10 +619,6 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'claude' ? mod.conClaude() :
         // collegato vuol dire «c'è», non «è lui che lavora»: quello lo dice il motore
         v.id === 'compatibile' ? !!c.compatibile :
-        // la chiave nel file o quella nell'ambiente: `jev.collegato()` le sa
-        // tutt'e due, e questa scheda dice «c'è di che giudicare», non «c'è
-        // una riga in config.json»
-        v.id === 'jev' ? jev.collegato() :
         // la scheda parla di OpenAI: la chiave salvata, o l'account ChatGPT
         // scelto e acceso — la stessa regola di Claude con l'abbonamento
         v.id === 'openai' ? !!c.openai?.chiave || chatgpt.pronto() :
