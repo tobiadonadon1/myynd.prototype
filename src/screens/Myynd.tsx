@@ -1131,8 +1131,8 @@ function Domanda({ v }: { v: Vals }) {
         viene dopo, essendo un fratello successivo, gli finiva sopra. Si alza
         la fascia intera, non il figlio.
       */
-      position: 'relative', zIndex: 12, display: 'flex', alignItems: 'center', gap: 13, flexWrap: lunga ? 'wrap' : 'nowrap',
-      margin: '14px 0 4px', padding: lunga ? '14px 16px' : '10px 14px 10px 15px',
+      position: 'relative', zIndex: 12, display: 'flex', alignItems: 'flex-start', gap: '11px 13px', flexWrap: 'wrap',
+      margin: '14px 0 4px', padding: '13px 15px',
       borderRadius: 16,
       background: 'linear-gradient(258deg, rgba(var(--carta-rgb),.82) 0%, rgba(var(--carta-rgb),.46) 55%, rgba(var(--carta-rgb),.16) 100%)',
       backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
@@ -1141,59 +1141,87 @@ function Domanda({ v }: { v: Vals }) {
       boxShadow: '0 10px 30px -14px rgba(var(--ombra-rgb),.3), inset 0 1px 0 rgba(var(--luce-rgb),.5)',
       animation: 'fadein .3s ease'
     }}>
-      <Marchio dim={14} animato={false} />
+      {/*
+        La domanda sta su una riga sua, e il campo sotto.
 
-      <span style={{ fontSize: '15px', color: 'var(--inchiostro)', flex: lunga ? '1 1 100%' : 'none', maxWidth: lunga ? 640 : 300, textWrap: 'pretty', lineHeight: 1.35 }}>
-        {v.domanda.testo}
-      </span>
+        Stavano sulla stessa linea, e la linea non bastava mai: la domanda
+        veniva tagliata a trecento pixel — «You closed «Compare the strongest
+        viable local models…» for H-Farm. What is the next step there?» finiva
+        dentro un fumetto di sistema, cioè da nessuna parte — e quello che
+        restava per rispondere era un filo sottolineato largo un pollice, con
+        il suo stesso segnaposto tagliato a metà. Due cose strette invece di
+        due cose intere. In verticale costa una riga in più e si legge tutto.
+      */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, flex: '1 1 100%', minWidth: 0 }}>
+        <span style={{ flex: 'none', marginTop: 1 }}><Marchio dim={14} animato={false} /></span>
+        <span style={{ fontSize: '15px', color: 'var(--inchiostro)', minWidth: 0, maxWidth: 640, textWrap: 'pretty', lineHeight: 1.4 }}>
+          {v.domanda.testo}
+        </span>
+      </div>
 
-      {/* il rigo su cui si risponde, non una casella; per il riferimento una casella che va a capo */}
-      {lunga ? (
-        <textarea
-          value={v.rispostaDom}
-          onChange={e => v.setRispostaDom(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); v.rispondiADomanda() }
-            if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
-          }}
-          rows={5}
-          placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
+      {/*
+        Il campo è quello di casa: la stessa scatola della barra che scrive
+        una cosa da fare — stesso raggio, stessa carta, stesso vetro, stesso
+        bordo che si accende quando ci sei dentro. «It is very small and it's
+        not designed like the others»: erano due disegni diversi per la stessa
+        cosa, scrivere una riga, e questo qui era il peggiore dei due.
+      */}
+      <div style={{
+        flex: '1 1 100%', minWidth: 0, display: 'flex', alignItems: lunga ? 'flex-end' : 'center', gap: 4,
+        padding: lunga ? '9px 7px 9px 15px' : '4px 7px 4px 15px',
+        borderRadius: 14, background: 'rgba(var(--carta-rgb),.86)',
+        border: '1px solid rgba(var(--luce-rgb),.9)',
+        boxShadow: '0 4px 16px rgba(var(--ombra-rgb),.05)'
+      }}>
+        {lunga ? (
+          <textarea
+            value={v.rispostaDom}
+            onChange={e => v.setRispostaDom(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); v.rispondiADomanda() }
+              if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
+            }}
+            rows={5}
+            aria-label={t('Rispondi')}
+            placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
+            style={{
+              flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
+              color: 'var(--inchiostro)', fontSize: '14.5px', lineHeight: 1.5, fontFamily: 'inherit', resize: 'vertical', padding: 0
+            }} />
+        ) : (
+          <input
+            value={v.rispostaDom}
+            onChange={e => v.setRispostaDom(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') v.rispondiADomanda()
+              if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
+            }}
+            aria-label={t('Rispondi')}
+            placeholder={t('Bastano cinque parole')}
+            style={{
+              flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
+              color: 'var(--inchiostro)', fontSize: '14.5px', fontFamily: 'inherit', padding: '8px 0'
+            }} />
+        )}
+
+        <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')} aria-label={t('Rispondi')}
           style={{
-            flex: '1 1 100%', minWidth: 0, padding: '8px 10px', border: '1px solid rgba(var(--inchiostro-rgb),.16)', borderRadius: 10,
-            background: 'rgba(var(--luce-rgb),.55)', color: 'var(--inchiostro)', fontSize: '14px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', resize: 'vertical'
-          }} />
-      ) : (
-        <input
-          value={v.rispostaDom}
-          onChange={e => v.setRispostaDom(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') v.rispondiADomanda()
-            if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
+            flex: 'none', display: 'grid', placeItems: 'center', width: 30, height: 30, borderRadius: 10,
+            border: 'none', background: v.rispostaDom.trim() ? 'var(--rame-forte)' : 'rgba(var(--inchiostro-rgb),.06)',
+            fontFamily: 'inherit', lineHeight: 1,
+            color: v.rispostaDom.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.3)',
+            cursor: v.rispostaDom.trim() ? 'pointer' : 'default'
           }}
-          placeholder={t('Bastano cinque parole')}
-          style={{
-            flex: 1, minWidth: 90, padding: '5px 2px', border: 'none',
-            borderBottom: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'none',
-            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
-          }} />
-      )}
+          hover={v.rispostaDom.trim() ? { background: 'var(--rame-forte-su)' } : {}}><IconAvanti size={14} /></Hov>
 
-      <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')} aria-label={t('Rispondi')}
-        style={{
-          flex: 'none', border: 'none', background: 'none', padding: '4px 2px',
-          fontFamily: 'inherit', fontSize: 16, lineHeight: 1,
-          color: v.rispostaDom.trim() ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.25)',
-          cursor: v.rispostaDom.trim() ? 'pointer' : 'default'
-        }}
-        hover={v.rispostaDom.trim() ? { color: 'var(--rame)' } : {}}><IconAvanti size={14} /></Hov>
+        <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
+          style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 26, height: 30, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.34)', cursor: 'pointer' }}
+          hover={{ color: 'var(--rame-testo)' }}>?</Hov>
 
-      <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
-        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.34)', cursor: 'pointer' }}
-        hover={{ color: 'var(--rame-testo)' }}>?</Hov>
-
-      <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')} aria-label={t('Lascia perdere: non te lo richiedo')}
-        style={{ flex: 'none', border: 'none', background: 'none', padding: '4px 3px', color: 'rgba(var(--inchiostro-rgb),.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-        hover={{ color: 'var(--inchiostro)' }}>×</Hov>
+        <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')} aria-label={t('Lascia perdere: non te lo richiedo')}
+          style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 26, height: 30, border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
+          hover={{ color: 'var(--inchiostro)' }}>×</Hov>
+      </div>
 
       {v.spuntoAperto && (
         <div style={{

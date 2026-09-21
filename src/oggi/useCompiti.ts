@@ -33,7 +33,8 @@ export type Avviso = { testo: string; quando: number } | null
 const titoloCorto = (s: string) => (s.length > 64 ? `${s.slice(0, 63).trimEnd()}…` : s)
 
 export function useCompiti(
-  mostraToast: (t: string) => void,
+  /** `disfa`, quando c'è, è il gesto che «Annulla» deve rifare al contrario. */
+  mostraToast: (t: string, disfa?: () => void) => void,
   /** Dove si collega una fonte che manca: il pannello delle connessioni, aperto su di lei. */
   apriConnessioni?: (fonte: string) => void
 ) {
@@ -285,6 +286,17 @@ export function useCompiti(
     })
   }
 
+  /**
+   * Chiudere una riga, e poterlo disdire.
+   *
+   * Una riga chiusa spariva e basta: nessun avviso senza progetto, e con un
+   * progetto un avviso senza «Annulla». Ma questa è la pagina dove le righe si
+   * riordinano da sole — una bozza che diventa pronta passa davanti, un passo
+   * nuovo arriva dal filo mentre guardi — e un bersaglio che si sposta sotto
+   * il dito è un bersaglio che prima o poi si prende quello sbagliato. Da qui
+   * in poi chiuderne una costa un clic per rimetterla, sempre, anche quando
+   * non c'era niente da dire.
+   */
   const chiudi = useCallback(async (id: string, esito?: string, tenuto?: string) => {
     const prima = compitiRef.current
     setCompiti(cs => cs.filter(x => x.id !== id))
@@ -292,9 +304,14 @@ export function useCompiti(
     try {
       const r = await api.chiudiCompito(id, { esito, tenuto })
       setCompiti(r.compiti); setChiusi(r.chiusi)
-      // con un progetto si dice che il traguardo è segnato e che guarda il
-      // passo dopo: la riga nuova, o la domanda, arrivano da sole dal filo
-      if (r.registrato?.progetto) mostraToast(frasi.segnataPer(r.registrato.progetto))
+      const disfa = () => {
+        api.riapriCompito(id)
+          .then(x => { setCompiti(x.compiti); setChiusi(x.chiusi) })
+          .catch(() => mostraToast(t('Non sono riuscito a rimetterlo.')))
+      }
+      // con un progetto si dice anche che il traguardo è segnato e che guarda
+      // il passo dopo: la riga nuova, o la domanda, arrivano da sole dal filo
+      mostraToast(r.registrato?.progetto ? frasi.segnataPer(r.registrato.progetto) : t('Fatta.'), disfa)
     } catch {
       indietro(prima, id, t('Non sono riuscito a chiuderlo.'))
     }

@@ -2421,6 +2421,19 @@ app.post('/api/domanda/:id/rispondi', async (req, res) => {
   try {
     const { esito } = await domande.rispondiADomanda(req.params.id, String(req.body?.testo ?? ''))
     res.json({ ok: true, esito })
+    /*
+     * Rispondere cambia la pagina, e finora non lo diceva a nessuno.
+     *
+     * Una risposta sul passo dopo scrive una riga vera in lista sotto il suo
+     * progetto; il riferimento riscrive quello che le priorità leggeranno; e
+     * in ogni caso la domanda dopo non è più quella. Tutte cose che stanno
+     * sulla prima pagina — e la prima pagina restava com'era fino al
+     * ricaricamento successivo, così sembrava che rispondere non servisse a
+     * niente. Le altre rotte che toccano il feed suonano questa campana da
+     * sempre: questa se l'era scordata.
+     */
+    compiti.annunciaCambio()
+    compiti.annunciaFeed()
   } catch (e) { errore(res, e) }
 })
 

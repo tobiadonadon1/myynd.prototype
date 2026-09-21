@@ -1451,6 +1451,8 @@ const EN: Record<string, string> = {
 
   // — gli avvisi —
   'Segnata come fatta.': 'Marked as done.',
+  'Fatta.': 'Done.',
+  'Presa.': 'Got it.',
   'Segnato.': 'Noted.',
   'Non trovo più il documento.': "I can't find that document any more.",
   'La fonte selezionata non è più una richiesta attuale pertinente. Rileggi le fonti prima di riprovare.': 'This source no longer contains a relevant current request. Refresh your sources before trying again.',

@@ -15,7 +15,17 @@ import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
 import {statoAccessoNote} from './note-access.ts'
 
-type Toast = { text: string; undo: boolean } | null
+/**
+ * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
+ *
+ * `undo` era un `boolean`, e chi premeva «Annulla» finiva sempre nello stesso
+ * posto: rimetti a posto *l'ultima voce fatta*. Due gesti diversi con lo stesso
+ * bottone, e nessuno dei due legato alla cosa che avevi appena toccato: bastava
+ * che il feed si rileggesse da solo in mezzo — e si rilegge da solo — perché
+ * «l'ultima» fosse un'altra, o non ci fosse più. Adesso il gesto se lo porta
+ * dietro l'avviso: chi lo mostra sa cosa ha fatto, e sa come disfarlo.
+ */
+type Toast = { text: string; undo?: () => void } | null
 
 const COLORE_FONTE: Record<string, string> = {
   posta: '#C4553C', desktop: '#E0A44A', notion: '#5B9BC9', claude: '#7FA98A'
@@ -278,7 +288,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * una cosa che non si ritrova più — e la sola difesa sarebbe non premere,
    * cioè un bottone che non si usa. Vive quanto l'avviso: dopo, è andata.
    */
-  const [scartata, setScartata] = useState<{ voce: VoceFeed; dove: number } | null>(null)
   // Le cose già chiuse sono archivio, non notizie: partono ripiegate. Aperte
   // di default si prendevano tutta la prima pagina proprio nel momento in cui
   // non c'era più niente da fare — l'opposto di quello che serve lì.
@@ -386,9 +395,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const cvB = useRef<HTMLCanvasElement>(null)
   const tt = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const mostraToast = useCallback((text: string, undo?: boolean) => {
+  const mostraToast = useCallback((text: string, undo?: () => void) => {
     clearTimeout(tt.current)
-    setToast({ text, undo: !!undo })
+    setToast({ text, undo })
     // cinque secondi: «sparisce dopo un secondo, a malapena» — il tempo di leggerla
     tt.current = setTimeout(() => setToast(null), 5000)
   }, [])
@@ -838,20 +847,36 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * Sparisce subito e si scusa dopo: aspettare il server su un gesto così
    * piccolo fa sembrare lenta l'app proprio dove è più veloce.
    */
+  /**
+   * Rimette una voce dove stava, non in cima.
+   *
+   * In cima è il posto sbagliato due volte: non è quello da cui l'hai tolta, e
+   * su una pagina a blocchi «in cima» non vuol nemmeno dire niente — la voce
+   * torna dentro il blocco del suo progetto, che può stare in fondo allo
+   * schermo. Rimetterla al suo indice la fa ricomparire esattamente dove
+   * l'avevi lasciata, che è l'unica cosa che assomiglia a non averla toccata.
+   */
+  const rimettiVoce = (v: VoceFeed, dove: number) => setAperti(a => {
+    const senza = a.filter(x => x.id !== v.id)
+    const posto = Math.max(0, Math.min(dove, senza.length))
+    return [...senza.slice(0, posto), v, ...senza.slice(posto)]
+  })
+
   const scarta = async (v: VoceFeed) => {
     const dove = aperti.findIndex(x => x.id === v.id)
     setAperti(a => a.filter(x => x.id !== v.id))
-    setScartata({ voce: v, dove: dove < 0 ? 0 : dove })
     try {
       await api.rispondiFeed(v.id, t('Non mi interessa.'), 'scartato')
-      mostraToast(t('Via. Non te la rimetto davanti.'), true)
+      mostraToast(t('Via. Non te la rimetto davanti.'), () => {
+        rimettiVoce(v, dove)
+        api.segnaFeed(v.id, 'aperto').catch(() => {
+          setAperti(a => a.filter(x => x.id !== v.id))
+          mostraToast(t('Non sono riuscito ad annullare.'))
+        })
+      })
     } catch (e) {
       // rimetterla dov'era è meglio che farla sparire in silenzio
-      setAperti(a => {
-        const senza = a.filter(x => x.id !== v.id)
-        return [...senza.slice(0, dove), v, ...senza.slice(dove)]
-      })
-      setScartata(null)
+      rimettiVoce(v, dove)
       mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a toglierla.'))
     }
   }
@@ -865,14 +890,28 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    */
   const rispondiADomanda = async () => {
     if (!domanda || !rispostaDom.trim()) return
-    const id = domanda.id
+    const questa = domanda
     const testo = rispostaDom
+    /*
+     * Presa, e poi detto cosa ne ho fatto.
+     *
+     * Il campo si svuotava subito e la fascia restava lì, uguale, per i tre o
+     * quattro secondi che il modello ci mette a capire se quella frase è un
+     * passo o uno stato: premevi Invio e non succedeva niente. Adesso la presa
+     * si vede nell'istante in cui premi — la domanda lascia il posto alla
+     * conferma — e la conferma si riscrive da sola quando arriva quella vera,
+     * che dice dove è finita la risposta. Se il server non ce la fa, la
+     * domanda torna con dentro le sue parole: non si perde niente.
+     */
     setRispostaDom('')
+    setDomanda(null)
+    setEsitoDom(t('Presa.'))
     try {
-      const r = await api.rispondiDomanda(id, testo)
+      const r = await api.rispondiDomanda(questa.id, testo)
       setEsitoDom(r.esito)
-      setDomanda(null)
     } catch (e) {
+      setEsitoDom('')
+      setDomanda(questa)
       setRispostaDom(testo)
       mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
     }
@@ -918,17 +957,29 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   /** «Fatto» su una voce: via dalle aperte, fra le fatte, e il server lo sa un attimo dopo. */
   const risolvi = async (v: VoceFeed) => {
+    const dove = aperti.findIndex(x => x.id === v.id)
     setAperti(a => a.filter(x => x.id !== v.id))
     setFatte(f => [v, ...f])
+    // disfare questa, non «l'ultima segnata»: fra il gesto e il ripensamento
+    // il feed può essersi riletto da solo, e l'ultima essere diventata un'altra
+    const annulla = () => {
+      setFatte(f => f.filter(x => x.id !== v.id))
+      rimettiVoce(v, dove)
+      api.segnaFeed(v.id, 'aperto').catch(() => {
+        setAperti(a => a.filter(x => x.id !== v.id))
+        setFatte(f => [v, ...f])
+        mostraToast(t('Non sono riuscito ad annullare.'))
+      })
+    }
     try {
       const r = await api.segnaFeed(v.id, 'fatto')
       // con un progetto l'avviso dice anche che si è segnato il traguardo e
       // che guarda il passo dopo: quello arriva da solo, dal filo
-      mostraToast(r.registrato?.progetto ? frasi.segnataPer(r.registrato.progetto) : t('Segnata come fatta.'), true)
+      mostraToast(r.registrato?.progetto ? frasi.segnataPer(r.registrato.progetto) : t('Segnata come fatta.'), annulla)
     } catch {
       // rimetto le cose come stavano invece di mentire
       setFatte(f => f.filter(x => x.id !== v.id))
-      setAperti(a => [v, ...a])
+      rimettiVoce(v, dove)
       mostraToast(t('Non sono riuscito a segnarla.'))
     }
   }
@@ -1217,35 +1268,21 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
     // — toast —
     toastOn: !!toast, toastText: toast?.text ?? '', toastUndo: !!toast?.undo,
+    /*
+     * «Annulla» disfa il gesto che ha acceso questo avviso, e nient'altro.
+     *
+     * Prima qui c'era la regola, non il gesto: se c'era uno scarto disfa lo
+     * scarto, se no rimetti a posto `fatte[0]`. Due supposizioni, e tutte e
+     * due cadono da sole — il feed si rilegge quando il server gli dice che è
+     * cambiato qualcosa, quindi fra il «Fatto» e il ripensamento `fatte[0]`
+     * può essere diventata un'altra cosa, e una riga della lista chiusa per
+     * sbaglio non aveva proprio nessun modo di tornare. Adesso il gesto viaggia
+     * con l'avviso: chi lo mostra sa che cosa ha fatto.
+     */
     undo: () => {
-      /*
-       * Prima lo scarto, poi la fatta.
-       *
-       * Sono due gesti diversi che finiscono nello stesso avviso, e quello da
-       * annullare è sempre l'ultimo fatto: `scartata` esiste solo finché
-       * l'avviso è in piedi, quindi se c'è è lei.
-       */
-      if (scartata) {
-        const { voce, dove } = scartata
-        setToast(null)
-        setScartata(null)
-        setAperti(a => [...a.slice(0, dove), voce, ...a.slice(dove)])
-        api.segnaFeed(voce.id, 'aperto').catch(() => {
-          setAperti(a => a.filter(x => x.id !== voce.id))
-          mostraToast(t('Non sono riuscito ad annullare.'))
-        })
-        return
-      }
-      const ultima = fatte[0]
+      const disfa = toast?.undo
       setToast(null)
-      if (!ultima) return
-      setFatte(f => f.slice(1))
-      setAperti(a => [ultima, ...a])
-      api.segnaFeed(ultima.id, 'aperto').catch(() => {
-        setAperti(a => a.filter(x => x.id !== ultima.id))
-        setFatte(f => [ultima, ...f])
-        mostraToast(t('Non sono riuscito ad annullare.'))
-      })
+      disfa?.()
     },
 
     discutiCompito: (c: Compito) => {
