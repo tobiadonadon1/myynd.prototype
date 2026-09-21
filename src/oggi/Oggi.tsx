@@ -189,9 +189,9 @@ function Casella({ scelto, lavora, onClick, id, nome, cosa, riga }: {
  * identica per tutte — stessa forma, stessa misura, stesso gesto — e cambia
  * solo la tinta, che è quello che le distingue davvero.
  */
-function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (c: Compito) => void }) {
+function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; modifica: (c: Compito) => void; ritardo?: string }) {
   const attende = c.stato === 'pronto' || c.stato === 'chiede'
-  const classi = ['task-planning-card', attende && 'waiting', c.stato === 'delegato' && 'working'].filter(Boolean).join(' ')
+  const classi = ['task-planning-card', attende && 'waiting', c.stato === 'delegato' && 'working', ritardo && 'late'].filter(Boolean).join(' ')
   const apri = () => {
     l.apriChiudi(c.id)
     if (!l.aperti.has(c.id)) requestAnimationFrame(() => document.getElementById(`task-result-${c.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'auto' }))
@@ -201,6 +201,11 @@ function CartaCalendario({ c, l, modifica }: { c: Compito; l: Lista; modifica: (
       {/* l'ora, quando c'è, sta prima del titolo e sottovoce: è un dato, non
           il titolo della riga */}
       <button type="button" className="task-planning-title" onClick={() => modifica(c)}>
+        {/* la data di quando scadeva prende il posto dell'ora, nel rosso del
+            ritardo: la riga è nella colonna di oggi, e questo dice da quando.
+            La parola sta nascosta accanto, perché il colore da solo non parla
+            a chi la sente leggere. */}
+        {ritardo && <span className="task-planning-late">{ritardo}<span className="task-sr">, {t('Da recuperare')}</span></span>}
         {oraDi(c) && <span className="task-planning-time">{oraDi(c)}</span>}{c.testo}
       </button>
     </div>
@@ -1735,7 +1740,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
         espandi={() => setEspansa(true)}
         pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
-        renderRiga={c => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} />} />}
+        renderRiga={(c, ritardo) => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} ritardo={ritardo} />} />}
 
       {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}
         scegli={g => { setGiorno(g); setSenzaData(false) }} lingua={lingua}

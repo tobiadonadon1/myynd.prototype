@@ -18,7 +18,9 @@ import './calendario.css'
  */
 export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, renderRiga, senzaData, setSenzaData, espandi }: {
   compiti: Compito[]; oggi: string; giorno: string; scegli: (g: string) => void; lingua: string
-  pianifica: (id: string, giorno: string | null) => void; renderRiga: (c: Compito) => ReactNode
+  pianifica: (id: string, giorno: string | null) => void
+  /** `ritardo` è la data in cui doveva essere fatta, già scritta per esteso: c'è solo sulle arretrate. */
+  renderRiga: (c: Compito, ritardo?: string) => ReactNode
   senzaData: boolean; setSenzaData: (v: boolean | ((v: boolean) => boolean)) => void
   /** Apre la settimana su tutta l'applicazione. */
   espandi: () => void
@@ -50,7 +52,26 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   const nonPianificati = compiti.filter(c => !giornoCompito(c, oggi))
   const arretrati = compiti.filter(c => { const g = giornoCompito(c, oggi); return g && g < oggi })
   const visibili = giorniVisibili(giorno, colonne)
-  const delGiorno = (g: string) => compiti.filter(c => giornoCompito(c, oggi) === g)
+  /**
+   * Le righe di un giorno — e oggi ha anche quelle che doveva già avere.
+   *
+   * Le arretrate stavano in un riquadro loro, «Da recuperare», sopra le
+   * colonne: una riga sola si prendeva una fascia intera, e soprattutto
+   * viveva fuori dalla giornata, come un promemoria di qualcosa che non è
+   * di oggi. Ma è di oggi: una cosa in ritardo la fai adesso o non la fai.
+   * «The scheduled overdue should put them in today's date.» Quindi entrano
+   * nella colonna di oggi, prime della fila, e si riconoscono dal colore e
+   * dalla data che portano scritta accanto.
+   */
+  const delGiorno = (g: string) => {
+    const suoi = compiti.filter(c => giornoCompito(c, oggi) === g)
+    return g === oggi ? [...arretrati, ...suoi] : suoi
+  }
+  /** La data in cui scadeva, da mettere sulla riga; niente se non è in ritardo. */
+  const scadeva = (c: Compito) => {
+    const g = giornoCompito(c, oggi)
+    return g && g < oggi ? dataLocale(g).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : undefined
+  }
   const nome = (g: string) => g === oggi ? t('Oggi') : g === spostaGiorno(oggi, 1) ? t('Domani')
     : g === spostaGiorno(oggi, 2) ? t('Dopodomani') : dataLocale(g).toLocaleDateString(locale, { weekday: 'long' })
   const perEsteso = (g: string) => dataLocale(g).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -107,12 +128,8 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
         </button>
       )}
     </div>
-    {!senzaData && visibili.includes(oggi) && arretrati.length > 0 && <div className="task-calendar-overdue">
-      <h3>{t('Da recuperare')} <span>{arretrati.length}</span></h3>
-      <ul className="task-unscheduled-grid">{arretrati.map(renderRiga)}</ul>
-    </div>}
     {senzaData ? <>
-      <ul className="task-unscheduled-grid">{nonPianificati.map(renderRiga)}</ul>
+      <ul className="task-unscheduled-grid">{nonPianificati.map(c => renderRiga(c))}</ul>
       {!nonPianificati.length && <div className="task-calendar-empty"><span aria-hidden="true">✓</span><p>{t('Tutto pianificato.')}</p></div>}
     </> : <div className="task-calendar-columns" style={{ gridTemplateColumns: `repeat(${colonne}, minmax(0, 1fr))` }}>
       {visibili.map(g => {
@@ -122,7 +139,7 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
           onDragOver={e => trascina(e, g)} onDragLeave={() => setSopra(null)} onDrop={e => lascia(e, g)}>
           <header><div><h3>{nome(g)}</h3><span>{dataLocale(g).toLocaleDateString(locale, { day: 'numeric', month: 'long' })}</span></div>
             {righe.length > 0 && <span className="task-day-count">{righe.length}</span>}</header>
-          <ul className="task-agenda-list">{righe.map(renderRiga)}</ul>
+          <ul className="task-agenda-list">{righe.map(c => renderRiga(c, scadeva(c)))}</ul>
           <button type="button" className="task-day-add" aria-label={`${t('Aggiungi per')} ${perEsteso(g)}`}
             onClick={() => componi(g)}>+</button>
         </section>

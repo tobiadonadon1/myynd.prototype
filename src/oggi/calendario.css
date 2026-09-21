@@ -60,10 +60,6 @@
 .task-calendar-empty {text-align:center;padding:30px 12px 36px;color:rgba(var(--inchiostro-rgb),.5);}
 .task-calendar-empty > span {display:inline-grid;place-items:center;border:1px solid rgba(var(--rame-rgb),.3);border-radius:12px;width:36px;height:36px;color:var(--rame);font-size:21px;}
 .task-calendar-empty p {font-size:13px;margin-bottom:0;}
-.task-calendar-overdue {border-left:2px solid rgba(var(--rame-rgb),.45);padding-left:14px;margin:2px 0 22px;}
-.task-calendar-overdue h3 {font-size:12px;font-weight:500;color:var(--rame-testo);margin:0 0 12px;letter-spacing:.02em;}
-.task-calendar-overdue h3 span {margin-left:6px;}
-
 .task-view-toggle {display:inline-flex;padding:3px;background:rgba(var(--inchiostro-rgb),.05);border:1px solid rgba(var(--luce-rgb),.7);border-radius:11px;}
 .task-view-toggle button {font-size:12px;border:0;padding:7px 13px;background:transparent;border-radius:9px;color:rgba(var(--inchiostro-rgb),.55);}
 .task-view-toggle button:hover {color:var(--rame-testo);}
@@ -92,6 +88,15 @@
 .task-planning-card {min-width:0;list-style:none;position:relative;padding:13px 12px 10px;background:var(--carta-piena);border:1px solid rgba(var(--inchiostro-rgb),.08);border-radius:12px;box-shadow:0 3px 9px -6px rgba(var(--ombra-rgb),.2);}
 .task-planning-card.waiting {border-left:3px solid var(--rame);}
 .task-planning-card.working {border-left:3px solid rgba(var(--inchiostro-rgb),.22);}
+/* In ritardo: sta nella colonna di oggi come le altre, e si vede che non è
+   di oggi. Il filo rosso vince su quello di rame di `waiting` — una riga può
+   essere tutte e due le cose, e di bordo sinistro ce n'è uno solo: viene prima
+   la scadenza mancata. Il velo è tenue apposta; a parlare sono il filo e la
+   data. */
+.task-planning-card.late {border-left:3px solid var(--ritardo);background:linear-gradient(rgba(var(--ritardo-rgb),.09),rgba(var(--ritardo-rgb),.09)),var(--carta-piena);}
+.task-planning-late {margin-right:8px;font-size:12px;font-weight:500;color:var(--ritardo);}
+/* una parola che si sente e non si vede: il colore da solo non è un'informazione */
+.task-sr {position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
 .task-planning-main {display:flex;align-items:flex-start;gap:9px;}
 .task-planning-main > button:first-child {margin-top:2px;}
 .task-planning-title {min-width:0;flex:1;text-align:left;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere;color:var(--inchiostro);border:0;padding:0;background:none;}

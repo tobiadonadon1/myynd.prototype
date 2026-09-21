@@ -225,14 +225,17 @@ export function Automazioni({ v }: { v: Vals }) {
     </header>
     {/*
       Si chiamava «Prepara in anticipo», e non diceva cosa preparasse né in
-      anticipo su cosa. Il titolo adesso è la cosa che fa, e la frase sotto
-      dice quando, quanto e cosa non fa mai: le tre domande di chi vede un
-      interruttore.
+      anticipo su cosa. Adesso il titolo è la cosa che fa, e sotto non c'è
+      più niente: c'erano due righe che spiegavano quando, quanto e cosa non
+      fa mai, più una terza sul Mac sveglio. «We are not trying to explain
+      the software as people go about it»: un titolo e un interruttore si
+      capiscono da soli, e chi vuole sapere quando gira lo legge in fondo
+      alla pagina, una volta. Resta solo la riga del perché è spento, che
+      non spiega il prodotto — dice perché quell'interruttore non fa niente.
     */}
     {iniziativa && <section className="auto-initiative" aria-label={t('Bozze pronte prima che le chieda')}>
-      <div><h2>{t('Bozze pronte prima che le chieda')}</h2><p>{t('Quando sul feed arriva una cosa che vuole una risposta o un passo, Myynd la prepara in sottofondo: al massimo due al giorno, e non manda mai niente.')}</p>
-      {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}
-      <small>{t('Funziona mentre Myynd è aperto e il Mac è sveglio.')}</small></div>
+      <div><h2>{t('Bozze pronte prima che le chieda')}</h2>
+      {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}</div>
       <div className="auto-initiative-controls"><button className="auto-switch" role="switch" aria-checked={iniziativa.attiva} aria-label={t('Bozze pronte prima che le chieda')} disabled={!!occupato}
         onClick={() => azione('iniziativa', async () => { setIniziativa(await api.impostaIniziativa(!iniziativa.attiva)); setIniziativaEsito('') })}><span /></button>
       <span>{iniziativa.attiva ? t('Attiva') : t('In pausa')}</span>
