@@ -45,6 +45,7 @@ import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
 import { apriDocumento } from './native-document.ts'
+import * as mani from './mani.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
 import { detectRuntime, hermesDefaults, hasHermesInferenceCredentials, type RuntimeDetection, type RuntimeId } from './agent-runtime.ts'
@@ -3215,8 +3216,13 @@ app.post('/api/compiti/:id/portami', async (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   if (c.consegna) {
-    try { await apriDocumento(c.consegna, req.body?.anteprima === true); return res.json({ ok: true, dove: 'file' }) }
-    catch (e) { return errore(res, e) }
+    try {
+      // un file scritto da sé si apre con l'app del Mac; un documento con la sua app
+      const d = c.consegna
+      if (d.app === 'File') await mani.apriFile(d.percorso)
+      else await apriDocumento({ app: d.app, percorso: d.percorso, desktop: d.desktop, anteprima: d.anteprima }, req.body?.anteprima === true)
+      return res.json({ ok: true, dove: 'file' })
+    } catch (e) { return errore(res, e) }
   }
   const meta = scrivania.dovePortare(c, c.doc ? store.documento(c.doc) : null)
   return portaAllaFonte(meta, res)

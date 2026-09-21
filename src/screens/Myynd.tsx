@@ -364,7 +364,9 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Com
     else if (r.dove === 'progetto') v.apriProgetto(r.id)
   }
 
-  const etichetta = anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF') : c.consegna ? `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}` : nomePorta(c.porta!)
+  const etichetta = anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF')
+    : c.consegna ? (c.consegna.app === 'File' ? t('Apri') : `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}`)
+    : nomePorta(c.porta!)
   const vestito: CSSProperties = scuro
     ? {
         padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(var(--avorio-rgb),.32)',
@@ -410,6 +412,22 @@ function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const d = c.consegna
   if (!d) return null
   const en = lingua() === 'en'
+  /*
+   * Il file che ha scritto da sé: dove sta, come si chiama, «Apri».
+   *
+   * «He should tell me, "Hey, I saved it to your desktop"». Il verdetto
+   * della rilettura non si ripete qui: lo dice già `Riletta`, sopra.
+   */
+  if (d.app === 'File') {
+    return (
+      <div className="task-completed" aria-label={en ? 'Saved file' : 'File salvato'}>
+        <span className="task-completed-check"><IconSpunta size={12} /></span>
+        <span className="task-completed-meta">{frasi.salvatoDove(d.dove)}</span>
+        <span className="task-completed-name" title={d.percorso}>{d.titolo}</span>
+        <Portami c={c} l={l} v={v} piatto />
+      </div>
+    )
+  }
   const male = d.revisione?.esito !== 'pass'
   return (
     <div className="task-completed" aria-label={en ? 'Document' : 'Documento'}>
@@ -441,7 +459,9 @@ function didascalia(c: Compito, attivo = false): string {
  */
 function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
-  if (c.consegna) return ''
+  // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
+  // fatte, la scelta presa. Il documento sta nel file, non qui.
+  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
   return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
@@ -463,9 +483,18 @@ function corpo(c: Compito): string {
 function domande(c: Compito): { visto: string; tutte: Chiesta[] } {
   const righe = (c.risultato ?? '').split('\n').map(r => r.trim()).filter(Boolean)
   const scelte = c.chieste ?? []
-  const libera = righe.length > 1 ? righe.slice(1).join('\n') : righe.length === 1 && !scelte.length ? righe[0] : ''
+  // le domande a scelta sono le stesse domande, con le risposte da toccare:
+  // con quelle, la prosa non si ripete sotto come una domanda in più
+  const libera = scelte.length ? '' : righe.length > 1 ? righe.slice(1).join('\n') : righe.length === 1 ? righe[0] : ''
   const visto = righe.length > 1 || (righe.length === 1 && scelte.length) ? righe[0] : ''
   return { visto, tutte: [...(libera ? [{ domanda: libera, opzioni: [], multipla: false }] : []), ...scelte] }
+}
+
+/** Quello che viene dopo la frase di chiusura, se è corto: la riga per lei. */
+function dopoLaChiusura(risultato: string): string {
+  const [, ...resto] = risultato.trim().split(/\n\s*\n/)
+  const nota = resto.join('\n').trim()
+  return nota.length <= 400 ? nota : ''
 }
 
 /**
@@ -650,7 +679,8 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   // si tiene quando accetti la bozza — è da lì che impara come scrivi
   const intero = pronto ? (c.risultato ?? '').trim() || testo : testo
   const corta = taglia(testo, 150)
-  const espandibile = !chiede && intero.length > corta.length
+  // un file scritto da sé non si apre sul posto: si apre il file
+  const espandibile = !chiede && !c.consegna && intero.length > corta.length
   const apri = () => { if (espandibile) setAperta(x => !x) }
   const parlane = siPuoParlarne() ? () => v.discutiCompito(c) : null
   const email = pronto && c.email && azioneEmail(c).tipo === 'invia'
@@ -664,7 +694,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {affidato && <Glifo tipo="penso" dim={12} colore="var(--rame)" />}
+            {affidato && <Glifo tipo="penso" dim={12} colore="rgba(var(--avorio-rgb),.95)" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
           {testo && <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>}

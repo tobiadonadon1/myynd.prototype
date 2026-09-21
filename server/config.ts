@@ -724,6 +724,12 @@ export type Config = {
   lingua?: string
   /** L'ora del giorno dell'interfaccia: 'sistema' | 'chiaro' | 'scuro'. */
   tema?: 'sistema' | 'chiaro' | 'scuro'
+  /**
+   * Dove lasciare i file che scrive da sé: un nome fra quelli di
+   * `mani.LUOGHI`. Manca = la cartella Myynd sulla Scrivania. Lo impara
+   * dalle sue parole («save it to my Desktop»), non da una schermata.
+   */
+  consegne?: { luogo: 'myynd' | 'scrivania' | 'scaricati' | 'documenti' }
   /** Il fuso di chi usa (IANA, es. Europe/Rome): lo manda il browser. Senza, quello della macchina. */
   fuso?: string
   /** Dopo quante ore una voce chiusa sparisce dall'elenco. 0 = mai. */

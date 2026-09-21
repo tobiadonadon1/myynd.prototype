@@ -91,6 +91,10 @@ type Ferri = {
   installato: () => string | null
   casa: () => string
   scrivania: () => string
+  scaricati: () => string
+  documenti: () => string
+  /** Apre un file con l'app predefinita del Mac, senza portare niente davanti a forza. */
+  apri: (percorso: string) => Promise<void>
   copie: () => string
   piattaforma: () => string
   ospitato: () => boolean
@@ -112,6 +116,9 @@ const VERI: Ferri = {
   installato: () => lavoro.installato(),
   casa: () => homedir(),
   scrivania: () => join(homedir(), 'Desktop'),
+  scaricati: () => join(homedir(), 'Downloads'),
+  documenti: () => join(homedir(), 'Documents'),
+  apri: percorso => new Promise((ok, no) => execFile('/usr/bin/open', [percorso], { timeout: 15_000 }, e => e ? no(new Error('Non sono riuscito ad aprire il file.')) : ok())),
   copie: () => join(cartellaProfilo(), 'project-work'),
   piattaforma: () => process.platform,
   ospitato: () => OSPITATO
@@ -452,6 +459,87 @@ export function cartellaConsegne(): string {
   return join(ferri.scrivania(), 'Myynd')
 }
 
+// — dove finiscono le cose che scrive —
+//
+// Le sue parole, del ventuno settembre: «once the work was produced, he just
+// pasted it under the task on my feed. That's not okay. He should tell me,
+// "Hey, I saved it to your desktop," or "I saved it in the downloads folder,"
+// or wherever. Of course, as I tell more and more, "Save it to my Desktop",
+// he will learn that that's my preferred option.»
+//
+// Un luogo è un nome, non un percorso: il percorso lo decide la macchina, e
+// il nome è quello che si può dire a parole sulla riga («sulla Scrivania,
+// nella cartella Myynd»). Quattro e basta, tutti sotto la sua casa: la
+// cartella Myynd sulla Scrivania (quello di sempre), la Scrivania, Download,
+// Documenti. Si impara dalle sue parole — `luogoNelTesto` legge «save it to
+// my Desktop» nel compito o nella risposta — e resta in `config.consegne`.
+
+/** Un posto in cui Myynd può lasciare un file scritto da sé. */
+export type Luogo = 'myynd' | 'scrivania' | 'scaricati' | 'documenti'
+export const LUOGHI: readonly Luogo[] = ['myynd', 'scrivania', 'scaricati', 'documenti']
+export const LUOGO_PREDEFINITO: Luogo = 'myynd'
+
+export function cartellaDelLuogo(l: Luogo): string {
+  return l === 'scrivania' ? ferri.scrivania() : l === 'scaricati' ? ferri.scaricati() : l === 'documenti' ? ferri.documenti() : cartellaConsegne()
+}
+
+/** Il luogo scelto nelle preferenze, o quello di sempre. */
+export function luogoPreferito(): Luogo {
+  const l = leggi().consegne?.luogo
+  return l && (LUOGHI as readonly string[]).includes(l) ? l as Luogo : LUOGO_PREDEFINITO
+}
+
+const VERBO_DI_SALVATAGGIO = /\b(?:save[sd]?|saving|put|place|write|writes|export|exports|drop|leave|deliver|store|keep|salva\w*|metti\w*|mettere|scriv\w*|esport\w*|lascia\w*|consegn\w*|tieni\w*|tenere)\b/i
+const DOVE: [RegExp, Luogo][] = [
+  [/\b(?:myynd folder|myynd directory|cartella myynd|desktop\/myynd)\b/i, 'myynd'],
+  [/\b(?:desktop|scrivania)\b/i, 'scrivania'],
+  [/\b(?:downloads?(?: folder)?|scaricati|cartella download)\b/i, 'scaricati'],
+  [/\b(?:documents(?: folder)?|documenti)\b/i, 'documenti']
+]
+
+/**
+ * Il luogo che lei nomina, se lo nomina: «save it to my Desktop», «mettilo
+ * nei Download». Serve un verbo del salvare nella stessa frase: «leggi il
+ * file sulla Scrivania» parla di dove sta una cosa, non di dove metterla.
+ * L'ultima frase che lo dice vince: la risposta a una domanda si attacca in
+ * coda alla nota, e la sua parola più recente è quella che conta.
+ */
+export function luogoNelTesto(testo: string): Luogo | null {
+  let trovato: Luogo | null = null
+  for (const frase of testo.split(/[.!?\n]+/)) {
+    if (!VERBO_DI_SALVATAGGIO.test(frase)) continue
+    const dove = DOVE.find(([re]) => re.test(frase))
+    if (dove) trovato = dove[1]
+  }
+  return trovato
+}
+
+/** Il luogo detto a parole, per la frase di chiusura e per la riga. */
+export function descriviLuogo(l: Luogo, lingua: 'it' | 'en'): string {
+  const e = lingua === 'en'
+  return l === 'scrivania' ? (e ? 'on your Desktop' : 'sulla Scrivania')
+    : l === 'scaricati' ? (e ? 'in your Downloads folder' : 'nella cartella Download')
+    : l === 'documenti' ? (e ? 'in your Documents folder' : 'in Documenti')
+    : (e ? 'on your Desktop, in the Myynd folder' : 'sulla Scrivania, nella cartella Myynd')
+}
+
+/** Di quale luogo è un percorso, se è di uno dei quattro. La cartella Myynd prima della Scrivania che la contiene. */
+export function luogoDelPercorso(percorso: string): Luogo | null {
+  const reale = realeAnche(percorso)
+  for (const l of ['myynd', 'scrivania', 'scaricati', 'documenti'] as Luogo[]) {
+    if (dentro(realeAnche(cartellaDelLuogo(l)), reale)) return l
+  }
+  return null
+}
+
+/** Il nome di un file dal titolo della riga: senza i segni che un nome non può avere, non più lungo di così. */
+export function nomeFile(titolo: string): string {
+  const pulito = titolo.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').replace(/^[.\s]+|[.\s]+$/g, '').trim()
+  const corto = pulito.length > 70 ? pulito.slice(0, 70).replace(/\s+\S*$/, '').trim() : pulito
+  const nome = corto || 'Myynd'
+  return nome.charAt(0).toUpperCase() + nome.slice(1)
+}
+
 export const TESTO_SCRIVIBILE = ['.md', '.markdown', '.txt', '.csv', '.tsv', '.json', '.yaml', '.yml', '.html', '.htm', '.xml', '.tex', '.org']
 
 /**
@@ -464,28 +552,32 @@ export const TESTO_SCRIVIBILE = ['.md', '.markdown', '.txt', '.csv', '.tsv', '.j
  * I collegamenti si risolvono sull'antenato che esiste: una cartella Myynd
  * che fosse un link a un'altra parte del disco non si usa.
  */
-export function percorsoScrivibile(percorso: string, copia?: string | null): { percorso: string; nellaCopia: boolean } {
+export function percorsoScrivibile(percorso: string, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): { percorso: string; nellaCopia: boolean } {
   if (typeof percorso !== 'string' || !percorso.trim() || percorso.includes('\0')) throw new Error('Manca il percorso del file da scrivere.')
   const consegne = cartellaConsegne()
+  // il luogo che ha scelto lei, oltre alla cartella Myynd: un nome nudo va lì
+  const scelta = cartellaDelLuogo(luogo)
   const copie = ferri.copie()
   const chiesto = espandi(percorso)
-  const assoluto = isAbsolute(chiesto) ? resolve(chiesto) : resolve(consegne, chiesto)
-  if (existsSync(consegne) && lstatSync(consegne).isSymbolicLink()) throw new Error('La cartella Myynd sulla Scrivania è un collegamento: non ci scrivo.')
+  const assoluto = isAbsolute(chiesto) ? resolve(chiesto) : resolve(scelta, chiesto)
+  for (const c of new Set([consegne, scelta])) {
+    if (existsSync(c) && lstatSync(c).isSymbolicLink()) throw new Error('La cartella delle consegne è un collegamento: non ci scrivo.')
+  }
   const reale = realeAnche(assoluto)
   const nellaCopia = [copie, ...(copia ? [copia] : [])].some(r => dentro(realeAnche(r), reale))
     && /\/project-work\/[^/]+\/project\//.test(reale.replace(/\\/g, '/'))
-  const sullaScrivania = !nellaCopia && dentro(realeAnche(consegne), reale)
-  if (!nellaCopia && !sullaScrivania) throw new Error('Posso scrivere solo nella cartella Myynd sulla Scrivania o in una copia di lavoro.')
+  const sullaScrivania = !nellaCopia && (dentro(realeAnche(consegne), reale) || dentro(realeAnche(scelta), reale))
+  if (!nellaCopia && !sullaScrivania) throw new Error('Posso scrivere solo nella cartella Myynd sulla Scrivania, nella cartella delle consegne o in una copia di lavoro.')
   if (existsSync(reale) && !statSync(reale).isFile()) throw new Error('Questo percorso è una cartella, non un file.')
   if (sullaScrivania && !TESTO_SCRIVIBILE.includes(extname(reale).toLowerCase())) throw new Error('Sulla Scrivania scrivo solo file di testo: .md, .txt, .csv, .json, .html e simili.')
   return { percorso: reale, nellaCopia }
 }
 
-export function scriviFile(o: { percorso: string; testo: string }, copia?: string | null): string {
+export function scriviFile(o: { percorso: string; testo: string }, copia?: string | null, luogo: Luogo = LUOGO_PREDEFINITO): string {
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
   const testo = String(o.testo ?? '')
   if (!testo.trim() || testo.length > 200_000 || testo.includes('\0')) throw new Error('Serve il testo del file, sotto i duecentomila caratteri.')
-  let { percorso, nellaCopia } = percorsoScrivibile(o.percorso, copia)
+  let { percorso, nellaCopia } = percorsoScrivibile(o.percorso, copia, luogo)
   if (!nellaCopia && existsSync(percorso)) {
     const ext = extname(percorso)
     const base = percorso.slice(0, -ext.length || undefined)
@@ -496,6 +588,95 @@ export function scriviFile(o: { percorso: string; testo: string }, copia?: strin
   mkdirSync(dirname(percorso), { recursive: true, mode: 0o700 })
   writeFileSync(percorso, testo, { mode: 0o600, flag: nellaCopia ? 'w' : 'wx' })
   return percorso
+}
+
+// — la consegna su file —
+
+/**
+ * Il lavoro finito, salvato come file nel luogo scelto.
+ *
+ * Markdown, col nome preso dal titolo della riga: «Introducing Myynd to
+ * H-Farm.md». Mai sopra a un file che c'era: se il nome è preso si numera,
+ * come per ogni altra scrittura sulla Scrivania.
+ */
+export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo }): { percorso: string; nome: string; luogo: Luogo } {
+  if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
+  const percorso = scriviFile({ percorso: join(cartellaDelLuogo(o.luogo), `${nomeFile(o.titolo)}.md`), testo: o.testo }, null, o.luogo)
+  return { percorso, nome: basename(percorso), luogo: o.luogo }
+}
+
+/**
+ * Va salvato come file, o resta sulla riga?
+ *
+ * Una pagina scritta — una definizione, un piano, una proposta — è un file:
+ * incollata sotto la riga del feed è quello che lui non vuole. Restano
+ * sulla riga le cose che sulla riga servono: un messaggio da mandare (il
+ * bottone «Manda» legge da lì), una risposta corta, una decisione. E quello
+ * che una mano ha già prodotto altrove — una nota, un documento in Pages, un
+ * file scritto dal modello — non si scrive due volte.
+ *
+ * Se ha chiesto lei un posto («save it to my Desktop»), si salva comunque,
+ * anche corto: l'ha detto.
+ */
+export function vaSalvato(o: { risultato: string; fatti: Fatto[]; messaggio: boolean; chiesto?: boolean }): boolean {
+  if (o.fatti.some(f => f.esito === 'ok' && CHE_PRODUCONO.includes(f.attrezzo))) return false
+  if (o.messaggio) return false
+  const corpo = senzaChiusura(o.risultato).trim()
+  if (!corpo) return false
+  if (/^(?:subject|oggetto)\s*:/im.test(corpo)) return false
+  if (o.chiesto) return true
+  const paragrafi = corpo.split(/\n\s*\n/).filter(p => p.trim())
+  return corpo.length >= 900 || paragrafi.length >= 4 || /^#{1,3}\s+\S/m.test(corpo)
+}
+
+/** Il risultato senza la frase di chiusura in testa: quello che va nel file. */
+export function senzaChiusura(testo: string): string {
+  const righe = testo.trimStart().split('\n')
+  if (!FRASE_DI_CHIUSURA.test(righe[0] ?? '')) return testo.trim()
+  return righe.slice(1).join('\n').replace(/^\n+/, '').trim()
+}
+
+const PER_LEI = /^(?:i\s|i['’](?:ve|m|d)\s|not verified|unverified|assum\w*|note for you|for you\b|if you\b|let me know|tell me\b|ho\s|non ho\s|ipotesi|da verificare|non verificato|nota per te|per te\b|se vuoi|dimmi\b|fammi sapere|scelt[ao]\b|choice\b)/i
+const DI_IPOTESI = /\b(?:assum\w*|ipotes\w*|ipotizz\w*|verif\w*|chose|chosen|choice|scelt[aoe]|based on|basat[oa] su|not in the (?:sources|material)|non (?:c'è|era) nel materiale|let me know|fammi sapere|dimmi)\b/i
+
+/**
+ * La riga per lei, staccata dal documento.
+ *
+ * Chi svolge chiude con una riga rivolta a lei — le ipotesi fatte, la scelta
+ * presa — dopo una riga vuota. Quella riga non è parte del documento: un
+ * file che finisce con «ho supposto che l'unità sia H-Farm Education» non
+ * si manda a nessuno. Si tiene sulla riga del feed, sotto la frase di
+ * chiusura; il file prende il resto. Si riconosce solo se è breve e ha
+ * l'aria giusta: nel dubbio resta nel documento, che è il posto più sicuro.
+ */
+export function rigaPerLei(testo: string): { corpo: string; nota: string } {
+  const paragrafi = testo.trim().split(/\n\s*\n/)
+  if (paragrafi.length < 3) return { corpo: testo.trim(), nota: '' }
+  const ultimo = paragrafi[paragrafi.length - 1].trim()
+  const righe = ultimo.split('\n').filter(r => r.trim())
+  const sembra = ultimo.length <= 400 && righe.length <= 2 && !/^#{1,6}\s/.test(ultimo) && (PER_LEI.test(ultimo) || DI_IPOTESI.test(ultimo))
+  if (!sembra) return { corpo: testo.trim(), nota: '' }
+  return { corpo: paragrafi.slice(0, -1).join('\n\n').trim(), nota: ultimo }
+}
+
+/** La frase di chiusura di un file salvato da sé: cosa, e dove, in parole sue. */
+export function fraseDelFile(salvato: { nome: string; luogo: Luogo }, lingua: 'it' | 'en', imparato = false): string {
+  const dove = descriviLuogo(salvato.luogo, lingua)
+  return lingua === 'en'
+    ? `Done: «${salvato.nome}» is ${dove}.${imparato ? ' I will keep saving there.' : ''}`
+    : `Fatto: «${salvato.nome}» è ${dove}.${imparato ? ' D\'ora in poi salvo lì.' : ''}`
+}
+
+/**
+ * Apre un file che Myynd ha scritto da sé, e solo quello: dentro uno dei
+ * quattro luoghi, di testo, con l'app predefinita del Mac.
+ */
+export async function apriFile(percorso: string): Promise<void> {
+  if (ferri.ospitato() || ferri.piattaforma() !== 'darwin') throw new Error('Apri questo file dall’app Myynd sul Mac.')
+  if (typeof percorso !== 'string' || !isAbsolute(percorso) || percorso.includes('\0') || !existsSync(percorso)) throw new Error('Il file non c’è più.')
+  const reale = realpathSync(percorso)
+  if (!luogoDelPercorso(reale) || !statSync(reale).isFile() || !TESTO_SCRIVIBILE.includes(extname(reale).toLowerCase())) throw new Error('Questo file non è una consegna di Myynd.')
+  await ferri.apri(reale)
 }
 
 // — lavorare nel codice —
@@ -594,11 +775,12 @@ export const CREA_NOTA: Anthropic.Tool = {
 export const SCRIVI_FILE: Anthropic.Tool = {
   name: 'scrivi_file',
   description:
-    'Scrivi un file di testo (.md, .txt, .csv, .json, .html) nella cartella Myynd sulla Scrivania, ' +
-    'o dentro la copia di lavoro di un progetto. Da nessun\'altra parte. Usala solo se il compito ' +
-    'chiede un file. Sulla Scrivania non sovrascrive mai: se il nome è preso, numera. Torna il percorso.',
+    'Scrivi un file di testo (.md, .txt, .csv, .json, .html) nella cartella delle consegne (di solito la ' +
+    'cartella Myynd sulla Scrivania, o dove lei ha chiesto di salvare), o dentro la copia di lavoro di un ' +
+    'progetto. Da nessun\'altra parte. Usala solo se il compito chiede un file. Non sovrascrive mai: se il ' +
+    'nome è preso, numera. Torna il percorso.',
   input_schema: schema({
-    percorso: { type: 'string', description: 'Il nome del file, o un percorso dentro la cartella Myynd sulla Scrivania o dentro la copia di lavoro.' },
+    percorso: { type: 'string', description: 'Il nome del file, o un percorso dentro la cartella delle consegne o dentro la copia di lavoro.' },
     testo: { type: 'string', description: 'Il contenuto completo del file.' }
   }, ['percorso', 'testo'])
 }
@@ -641,7 +823,7 @@ export function spiega(mani: Anthropic.Tool[]): string {
     'lei citalo con l\'indirizzo o il percorso, così chi rilegge lo ritrova.'
 }
 
-export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal }
+export type Contesto = { cartella?: string | null; copia?: string | null; signal?: AbortSignal; luogo?: Luogo }
 export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: string }
 
 /**
@@ -680,7 +862,7 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
       }
     }
     if (nome === SCRIVI_FILE.name) {
-      const percorso = scriviFile({ percorso: s('percorso'), testo: s('testo') }, contesto.copia)
+      const percorso = scriviFile({ percorso: s('percorso'), testo: s('testo') }, contesto.copia, contesto.luogo)
       return { testo: `File scritto: ${percorso}`, fatto: { attrezzo: 'scrivi_file', esito: 'ok', dettaglio: percorso } }
     }
     if (nome === LAVORA_NEL_CODICE.name) {
@@ -723,7 +905,12 @@ export function fraseDaiFatti(fatti: Fatto[], lingua: 'it' | 'en'): string {
       const [app, titolo] = f.dettaglio.includes(': ') ? f.dettaglio.split(/: (.*)/s) : ['', f.dettaglio]
       parti.push(e ? `the document ${virgolette(titolo)} is saved in ${app || 'the app'}` : `il documento ${virgolette(titolo)} è salvato in ${app || 'app'}`)
     } else if (f.attrezzo === 'crea_nota') parti.push(e ? `the note ${virgolette(f.dettaglio)} is in Apple Notes` : `la nota ${virgolette(f.dettaglio)} è in Note`)
-    else if (f.attrezzo === 'scrivi_file') parti.push(e ? `the file is written at ${f.dettaglio}` : `il file è scritto in ${f.dettaglio}`)
+    else if (f.attrezzo === 'scrivi_file') {
+      const luogo = luogoDelPercorso(f.dettaglio)
+      parti.push(luogo
+        ? (e ? `${virgolette(basename(f.dettaglio))} is ${descriviLuogo(luogo, 'en')}` : `${virgolette(basename(f.dettaglio))} è ${descriviLuogo(luogo, 'it')}`)
+        : (e ? `the file is written at ${f.dettaglio}` : `il file è scritto in ${f.dettaglio}`))
+    }
     else if (f.attrezzo === 'lavora' && !f.dettaglio.startsWith('piano su ')) parti.push(e ? `the changes are in the copy at ${f.dettaglio}, nothing in the real folder changed` : `le modifiche sono nella copia ${f.dettaglio}, la cartella vera non è cambiata`)
   }
   const pagine = ok.filter(f => f.attrezzo === 'leggi_pagina').length

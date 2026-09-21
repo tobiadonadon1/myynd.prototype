@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import * as store from './store.ts'
 import { dopo } from './ordine.ts'
 import { leggiDocumentoAttuale, verificaDocumentoInvariato, type DocumentoAttuale } from './native-document.ts'
@@ -40,6 +41,11 @@ export async function verificaBaseRevisione(c:store.Compito, deps:{documento?:ty
     await verificaDocumentoInvariato({app:base.app,percorso:base.percorso,desktop:base.desktop,testo:'',impronta:base.impronta},deps.documento)
   } else if (base.tipo === 'bozza' && base.source && base.id) {
     await verificaBozzaInvariata({stato:'presente',source:base.source,id:base.id,impronta:base.impronta},deps.bozza)
+  } else if (base.tipo === 'file' && base.percorso) {
+    // il file che ha scritto da sé: si rilegge dal disco, e deve essere quello di prima
+    let ora = ''
+    try { ora = readFileSync(base.percorso, 'utf8').trim() } catch { throw new Error('The saved file is no longer there. Read the current version and revise again.') }
+    if (createHash('sha256').update(ora).digest('hex') !== base.impronta) throw new Error('The saved file changed while this revision was prepared. Read its current version and revise again.')
   } else if (base.tipo === 'testo' && base.task) {
     const parent=store.compito(base.task)
     const now=parent?.risultato?.trim() || ''
@@ -47,8 +53,15 @@ export async function verificaBaseRevisione(c:store.Compito, deps:{documento?:ty
   } else throw new Error('This revision has an invalid artifact baseline.')
 }
 async function versioneAttuale(c:store.Compito, letture:Letture):Promise<{testo:string;baseline:object;impronta:string;stili?:object[]}> {
-  if (c.consegna) {
-    const doc:DocumentoAttuale = await (letture.documento ?? leggiDocumentoAttuale)(c.consegna)
+  const d = c.consegna
+  if (d && d.app === 'File') {
+    // il file scritto da sé si legge dal disco: la versione attuale è quella, non il testo della riga
+    const testo = readFileSync(d.percorso, 'utf8').trim()
+    const impronta = createHash('sha256').update(testo).digest('hex')
+    return {testo,baseline:{tipo:'file',percorso:d.percorso,impronta},impronta}
+  }
+  if (d && (d.app === 'Pages' || d.app === 'TextEdit')) {
+    const doc:DocumentoAttuale = await (letture.documento ?? leggiDocumentoAttuale)({app:d.app,percorso:d.percorso,desktop:d.desktop})
     return {testo:doc.testo.trim(),baseline:{tipo:'documento',app:doc.app,percorso:doc.percorso,desktop:doc.desktop,impronta:doc.impronta,improntaSalvata:doc.improntaSalvata,modificato:doc.modificato},impronta:doc.impronta,stili:doc.stili?.slice(0,40)}
   }
   if (c.email?.casella?.stato === 'salvata') {

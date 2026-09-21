@@ -159,8 +159,9 @@ function togliIlCappello(riga: string): string {
   return dietro
 }
 
-export function soloDomanda(testo: string): string {
-  const piana = testo
+/** Il testo senza i segni che nessuno ha chiesto: grassetti, numerini delle fonti, segni di elenco. */
+function senzaSegni(testo: string): string {
+  return testo
     .replace(/\r\n?/g, '\n')
     // i segni che nessuno ha chiesto: il grassetto, il corsivo, gli apici, i cancelletti
     .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -170,6 +171,18 @@ export function soloDomanda(testo: string): string {
     // il segno di elenco, o il numero, in testa a una riga
     .replace(/^[ \t]*(?:[-•·]|\d{1,3}[.)])[ \t]+/gm, '')
     .trim()
+}
+
+/** Una domanda troppo lunga per essere una domanda: si taglia all'ultimo spazio, non a metà parola. */
+function accorciata(pulita: string): string {
+  if (pulita.length <= DOMANDA_MAX) return pulita
+  const tagliata = pulita.slice(0, DOMANDA_MAX)
+  const spazio = tagliata.lastIndexOf(' ')
+  return `${(spazio > 40 ? tagliata.slice(0, spazio) : tagliata).replace(/[.,;:\s]+$/, '')}?`
+}
+
+export function soloDomanda(testo: string): string {
+  const piana = senzaSegni(testo)
 
   // la prima riga che è davvero una domanda, fra tutte quelle che ha scritto
   const righe = piana.split('\n').map(r => r.trim()).filter(Boolean)
@@ -190,13 +203,36 @@ export function soloDomanda(testo: string): string {
    * senza la domanda. Se quello che sta prima comincia con una parola
    * interrogativa, i due punti sono dentro la frase e non davanti.
    */
-  const pulita = togliIlCappello(una).trim()
+  return accorciata(togliIlCappello(una).trim())
+}
 
-  if (pulita.length <= DOMANDA_MAX) return pulita
-  // troppo lunga per essere una domanda: si taglia all'ultimo spazio, non a metà parola
-  const tagliata = pulita.slice(0, DOMANDA_MAX)
-  const spazio = tagliata.lastIndexOf(' ')
-  return `${(spazio > 40 ? tagliata.slice(0, spazio) : tagliata).replace(/[.,;:\s]+$/, '')}?`
+/**
+ * Tutte le domande che ha scritto, una per riga, fino a `max`. (21 set 2026)
+ *
+ * `soloDomanda` ne teneva una, per sua regola del diciassette: «l'unica
+ * domanda che gli serve». Il ventuno ha visto l'altra faccia: una domanda,
+ * il lavoro, un'altra domanda sotto il lavoro, un altro giro. «Why doesn't
+ * he ask me all in one go, right as one task, before he produces?» Quindi
+ * qui si tengono tutte quelle che ha scritto — pulite una per una come
+ * l'unica di prima, senza doppioni, spezzate se stavano sulla stessa riga —
+ * e chi le legge risponde a tutte in un colpo. Se non ne trova nessuna con
+ * il punto interrogativo, torna quello che tornava `soloDomanda`.
+ */
+export function tutteLeDomande(testo: string, max = 3): string {
+  const righe = senzaSegni(testo).split('\n').map(r => r.trim()).filter(r => r.includes('?'))
+  const domande: string[] = []
+  for (const riga of righe) {
+    // dentro una riga possono essercene due: si spezzano al punto interrogativo
+    for (const pezzo of riga.split(/(?<=\?)\s+/)) {
+      const fino = pezzo.indexOf('?')
+      if (fino < 0) continue
+      const una = accorciata(togliIlCappello(pezzo.slice(0, fino + 1)).trim())
+      if (una.length < 4 || domande.some(d => d.toLowerCase() === una.toLowerCase())) continue
+      domande.push(una)
+      if (domande.length >= max) return domande.join('\n')
+    }
+  }
+  return domande.length ? domande.join('\n') : soloDomanda(testo)
 }
 
 // — la lingua in cui è nato un testo —

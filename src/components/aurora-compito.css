@@ -2,93 +2,126 @@
 .task-aurora-row { border-radius: 18px; }
 .task-aurora-host > :not(.task-aurora) { position: relative; z-index: 1; }
 /*
- * Perché questi colori, e non altri.
+ * Il fuoco sulla riga a cui sta lavorando. (21 settembre 2026)
  *
- * Quando Myynd sta lavorando a una cosa, la carta diventava un'altra app:
- * fondo chiaro, ciano, lavanda e rosa, nastri freddi. Dentro una pagina di
- * rame e panna si legge come una schermata presa altrove, e lui l'ha detto
- * così: i colori, quando gli metto da fare, non stanno insieme al resto.
+ * Prima la riga affidata portava un velo di rame a un quarto di opacità e
+ * un glifo di dodici pixel accanto al titolo. Di notte il velo spariva del
+ * tutto, e le sue parole sono state queste: «the only thing that was telling
+ * me that he was working was a tiny little square on the top left that kind
+ * of moved, which is not enough». Poi due immagini: un arancio caldo in cima
+ * che scende in rosso e si spegne nel buio, tagliato da striature verticali
+ * — vetro rigato, luce dietro. «With the same texture, with the same feel,
+ * of course, alive.»
  *
- * La regola qui è che lo stato non ridipinge la carta: cambia la luce che ci
- * passa sopra. Il fondo resta quello di quando è ferma (il bruno di
- * `v.cartaScura`), e il movimento lo fa una lucentezza di rame `var(--rame)`,
- * ambra `var(--ambra)` e panna `var(--avorio)` che scorre lenta: i tre colori
- * dell'identità e nient'altro. Il solo altro colore è un velo di salvia
- * `var(--salvia)`, e sta lì per la ragione per cui la salvia esiste ancora in
- * questa app: dice uno stato, non decora. Niente tinte fredde e niente
- * carta chiara: su una pagina calda si leggono come un errore di stampa.
+ * Quindi la riga intera diventa quel fuoco, non un velo sopra la carta. I
+ * colori sono quelli dell'identità spinti fino in fondo: l'ambra e il rame
+ * in cima, il rame cupo a metà, il bruno quasi nero della notte in basso. Il
+ * testo passa in crema, come sul palco: sulla riga che lavora la carta è
+ * notte anche di giorno, e i gettoni si ridefiniscono qui sotto perché
+ * tutto quello che sta dentro — titolo, riga sotto, passo, pillola — legga
+ * sul buio senza sapere di starci.
  *
- * Lento apposta. Dice «sta succedendo», non «quanto manca» — quello lo dice
- * la riga sotto il titolo, a parole. Con il moto ridotto (`--mo`) si ferma e
- * resta una lucentezza calda ma immobile, che si distingue lo stesso dalla
- * carta a riposo.
+ * Tre strati e tre moti, tutti lenti:
+ *   · il fuoco (`.task-aurora`) respira: l'orlo ambra sale e scende, come
+ *     una fiamma che non decide;
+ *   · le righe (`::before`) scorrono di lato — due passi diversi, 14 e 47
+ *     pixel, così il disegno non si ripete mai uguale sotto gli occhi;
+ *   · la sbavatura (`::after`) sono le striature scure che salgono dal
+ *     basso a mangiare il rosso, come nella prima immagine, e scorrono a
+ *     un'altra velocità;
+ *   · le braci (`i`) sono due chiazze sfocate che vagano da sinistra a destra.
+ *
+ * Nessuna barra che avanza: dice «sta succedendo», non «quanto manca» —
+ * quello lo dice a parole la riga del passo. Con il moto ridotto resta il
+ * fuoco fermo, che si distingue lo stesso da una riga a riposo.
  */
+.task-aurora-host[data-working] {
+  --inchiostro-rgb: 255,247,240;
+  --inchiostro: rgba(255,247,240,.95);
+  --inchiostro-2: rgba(255,247,240,.7);
+  --inchiostro-3: rgba(255,247,240,.52);
+  --luce-rgb: 70,30,16;
+  --rame: #FFC79A;
+  --rame-testo: #FFD5B0;
+  --riga-sopra: transparent;
+  --carta-alta: #4A2416;
+  --salvia: #BFD6C2;
+  color: var(--inchiostro);
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
+}
 .task-aurora {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
-  background: linear-gradient(115deg, #c4623b2e, #d98a5a24 42%, #5c766017 72%, #fff7f01f);
-  background-size: 240% 240%;
-  animation: task-aurora-lucido 26s ease-in-out infinite alternate;
+  background-color: #150A06;
+  background-image: linear-gradient(to bottom,
+    #F2A24A 0%, #E76F2E 6%, #D4482A 13%, #B32E16 20%, #7E1E0E 30%, #3F1409 44%, #1D0D08 58%, #150A06 100%);
+  background-size: 100% 180%;
+  background-position: 0 0%;
+  animation: task-fuoco-respiro 11s ease-in-out infinite alternate;
   animation-play-state: var(--mo, running);
-  box-shadow: inset 0 0 0 1px #c4623b2b;
+  box-shadow: inset 0 0 0 1px rgba(255,200,150,.12), inset 0 1px 0 rgba(255,225,190,.28);
 }
+.task-aurora::before, .task-aurora::after {
+  content: ''; position: absolute; inset: 0;
+  animation-play-state: var(--mo, running);
+}
+/* le righe: due passi che si battono, così il disegno non torna mai uguale */
+.task-aurora::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,235,210,.10) 0 1px, transparent 1px 6px, rgba(0,0,0,.30) 6px 8px, transparent 8px 14px),
+    repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.24) 9px 13px, transparent 13px 30px, rgba(255,225,190,.08) 30px 32px, transparent 32px 47px);
+  background-size: 14px 100%, 47px 100%;
+  animation: task-fuoco-scorri 70s linear infinite;
+}
+/* la sbavatura: striature scure che salgono dal basso, alte quanto vogliono */
+.task-aurora::after {
+  background-image: repeating-linear-gradient(90deg,
+    rgba(21,10,6,.92) 0 3px, transparent 3px 11px, rgba(21,10,6,.55) 11px 19px, transparent 19px 26px,
+    rgba(21,10,6,.85) 26px 27px, transparent 27px 41px, rgba(21,10,6,.7) 41px 46px, transparent 46px 61px);
+  background-size: 61px 100%;
+  -webkit-mask-image: linear-gradient(to top, #000 22%, rgba(0,0,0,.55) 48%, transparent 78%);
+  mask-image: linear-gradient(to top, #000 22%, rgba(0,0,0,.55) 48%, transparent 78%);
+  animation: task-fuoco-sbava 95s linear infinite;
+}
+/* le braci: due chiazze calde che vagano */
 .task-aurora i {
-  position: absolute; width: 105%; height: 180%; top: -65%; left: -35%;
-  background: radial-gradient(ellipse, #d98a5a70 0%, #c4623b45 32%, transparent 67%);
-  filter: blur(22px); transform-origin: center;
-  animation: task-aurora-drift 16s ease-in-out infinite alternate;
+  position: absolute; width: 46%; height: 160%; top: -30%; left: 8%;
+  background: radial-gradient(ellipse at center, rgba(255,170,80,.5) 0%, rgba(232,101,42,.28) 38%, transparent 70%);
+  filter: blur(18px); mix-blend-mode: screen;
+  animation: task-fuoco-brace 19s ease-in-out infinite alternate;
   animation-play-state: var(--mo, running);
 }
 .task-aurora i:nth-child(2) {
-  left: 5%; top: -10%; background: radial-gradient(ellipse, #fff7f047, #ffdcc22e 38%, transparent 70%);
-  animation-delay: -7s; animation-duration: 21s;
+  left: 50%; top: 10%; width: 40%;
+  background: radial-gradient(ellipse at center, rgba(255,90,40,.42) 0%, rgba(160,40,20,.24) 40%, transparent 70%);
+  animation-delay: -9s; animation-duration: 23s;
 }
-/* l'unico tocco di salvia: in quest'app il verde vuol dire «sta andando», e basta un velo */
 .task-aurora i:nth-child(3) {
-  left: 52%; top: -70%; background: radial-gradient(ellipse, #5c766042, #8e3f1f30 38%, transparent 70%);
-  animation-delay: -13s; animation-duration: 25s;
+  left: 30%; top: -70%; width: 30%; height: 90%;
+  background: radial-gradient(ellipse at center, rgba(255,240,215,.22) 0%, transparent 65%);
+  filter: blur(10px);
+  animation-delay: -14s; animation-duration: 27s;
 }
-/*
- * Della carta scura non resta niente, e non è una dimenticanza.
- *
- * In prima pagina una riga tua si apriva in una carta scura alta mezzo
- * schermo, mentre una voce del feed restava una riga: «perché dovrebbero
- * aprirsi in modo diverso? Devono aprirsi uguali, e preferisco il secondo:
- * più pulito, occupa meno spazio.» Adesso c'è una forma sola — la riga — e
- * quello che serviva alla carta (il testo lungo, le domande, il documento)
- * sta dentro la riga. Le regole di `.task-aurora-hero` sono sparite con lei.
- */
-/*
- * Nel blocco la riga resta una riga, e la luce è la metà di quella.
- *
- * «Quel bagliore arancione mi piace, fallo solo più trasparente: che lavori
- * sotto le cose da fare.» Prima era mezzo velo; adesso è un quarto, e il giro
- * dura il doppio. Deve leggersi come una cosa che sta succedendo lì sotto,
- * non come una riga accesa che chiama: se una riga di sei fa più luce delle
- * altre cinque, la pagina ha un padrone, e non è lui.
- *
- * Non è e non diventerà una barra che avanza: una barra promette quanto
- * manca, e qui nessuno lo sa. Quanto manca lo dicono le parole sulla riga.
- */
-.task-aurora-row .task-aurora {
-  background: linear-gradient(115deg, rgba(var(--rame-rgb),.07), #d98a5a0b 42%, #5c766008 72%, #fff7f00b);
-  background-size: 240% 240%;
-  box-shadow: inset 0 0 0 1px #c4623b14;
-  animation-duration: 44s;
-}
-.task-aurora-row .task-aurora i { opacity: .18; filter: blur(30px); animation-duration: 30s; }
 .task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.62); overflow-wrap: anywhere; }
-@keyframes task-aurora-drift {
-  from { transform: translate(-5%, -7%) rotate(-12deg) scale(.9); }
-  to { transform: translate(24%, 16%) rotate(17deg) scale(1.15); }
+@keyframes task-fuoco-respiro {
+  from { background-position: 0 0%; }
+  to { background-position: 0 34%; }
 }
-/* la lucentezza: è la tavolozza stessa che scorre, non una forma che attraversa */
-@keyframes task-aurora-lucido {
-  from { background-position: 12% 42%; }
-  to { background-position: 88% 58%; }
+/* 658 = 14 × 47: le due righe tornano a posto insieme, e il giro non salta */
+@keyframes task-fuoco-scorri {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 658px 0, 658px 0; }
+}
+@keyframes task-fuoco-sbava {
+  from { background-position: 0 0; }
+  to { background-position: -610px 0; }
+}
+@keyframes task-fuoco-brace {
+  from { transform: translate(-12%, 0) scale(.95); }
+  to { transform: translate(60%, 6%) scale(1.15); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .task-aurora { animation: none; }
+  .task-aurora, .task-aurora::before, .task-aurora::after { animation: none; }
   .task-aurora i { animation: none; transform: none; }
   .task-aurora-host[data-working] svg rect { animation: none !important; }
 }
@@ -101,6 +134,9 @@
  * centoventi. Qui è il segno di spunta, il nome del file, cosa è, e il modo
  * di aprirlo — sulla stessa linea, e a capo solo quando la finestra è
  * stretta. Il verde resta sulla spunta e basta: dice uno stato, non decora.
+ *
+ * Dal 21 settembre ci passa anche il file che scrive da sé: «I saved it to
+ * your desktop». La spunta, dove sta, il nome, e «Apri».
  */
 .task-completed {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 9px;

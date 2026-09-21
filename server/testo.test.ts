@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda } from './testo.ts'
+import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -236,3 +236,15 @@ test('i due punti dentro la domanda non le portano via l’inizio', () => {
     'Quale unità: quella di Treviso o quella di Roma?'
   )
 })
+
+// — tutte le domande, dal ventuno settembre —
+
+test('tutteLeDomande tiene tutte le domande, fino a tre, pulite e senza doppioni; senza domande torna quella sola', () => {
+  assert.equal(
+    tutteLeDomande('Ho letto il filo.\n- Di quale unità parliamo? E chi tiene il numero?\n- Per andare avanti: entro quando?\n- Di quale unità parliamo?\n- Una quarta?'),
+    'Di quale unità parliamo?\nE chi tiene il numero?\nentro quando?'
+  )
+  assert.equal(tutteLeDomande('Which unit is the audit about?'), 'Which unit is the audit about?')
+  assert.equal(tutteLeDomande('Non ho trovato niente.'), soloDomanda('Non ho trovato niente.'))
+})
+

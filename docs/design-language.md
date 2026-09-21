@@ -85,3 +85,25 @@ Myynd's first run is therefore:
 3. **Then the app, already filled.** The first task is on the front page.
 
 The account email is no longer repeated on the intro: it is in the footer.
+
+## The working row (21 September 2026)
+
+A row Myynd is working on is a **fire**, not a veil. The whole row becomes
+the stage: a warm amber rim at the top that falls through copper and deep
+red into the near-black brown of the night theme, cut by thin vertical
+streaks, like light behind ribbed glass. The text on it turns cream, as on
+the stage. Three slow motions and nothing else: the fire breathes (the amber
+edge rises and sinks), the streaks glide sideways at two beat frequencies so
+the pattern never repeats, dark smears climb from the bottom edge, and two
+blurred embers drift across. Reduced motion leaves the fire still.
+
+The reason, in his words: the earlier copper glow at a quarter opacity
+vanished at night, and «the only thing that was telling me that he was
+working was a tiny little square on the top left that kind of moved, which
+is not enough». The two reference images were an orange-to-red-to-black
+gradient with vertical streaks; the row keeps their texture and feel with the
+palette's own colours (amber `#D98A5A` family, copper, `--carta-scura`
+browns), so it still belongs to the desk it sits on. It never becomes a
+progress bar: it says «happening», not «how long». Rules and tokens in
+`src/components/aurora-compito.css`.
+

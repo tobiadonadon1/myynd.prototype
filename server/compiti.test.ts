@@ -19,7 +19,7 @@
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -77,8 +77,17 @@ const nonDisponibile = async (): Promise<Giudizio> => ({ esito: 'unavailable', p
  * non le nomina. Senza questo, una chiave ANTHROPIC_API_KEY nell'ambiente
  * basterebbe a far partire un revisore vero in mezzo a una prova sulla coda.
  */
+/** Le consegne su file delle prove: in casa, mai sulla Scrivania vera. */
+const CONSEGNE = join(CASA, 'consegne')
+const salvaInCasa: Ferri['salvaConsegna'] = o => {
+  mkdirSync(join(CONSEGNE, o.luogo), { recursive: true })
+  const nome = `${o.titolo.replace(/[\\/:*?"<>|]+/g, ' ').trim()}.md`
+  const percorso = join(CONSEGNE, o.luogo, nome)
+  writeFileSync(percorso, o.testo)
+  return { percorso, nome, luogo: o.luogo }
+}
 function prova(f: Ferri) {
-  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, ...f })
+  compiti.perProva({ giudica: nonDisponibile, prossimoPasso: async () => null, salvaConsegna: salvaInCasa, ...f })
 }
 
 test('la delega riceve il progetto attuale per ID e conserva le note della riga', async () => {
@@ -1038,3 +1047,122 @@ test('una riga di un progetto porta a svolgi la cartella di lavoro, la memoria e
   assert.equal(compiti.sembraLavoroDiCodice('Fix the crash in ScreenTimeManager.swift', null), true)
   assert.equal(compiti.sembraLavoroDiCodice('Reply to App Review with the recording', null), false)
 })
+
+/*
+ * La consegna su file.
+ *
+ * «Once the work was produced, he just pasted it under the task on my feed.
+ * That's not okay. He should tell me, "Hey, I saved it to your desktop".»
+ * Una pagina scritta si salva come file nel luogo delle consegne; sulla riga
+ * resta la frase che dice dove, più la riga per lei; il revisore e la cosa
+ * dopo leggono il lavoro intero. E il luogo si impara dalle sue parole.
+ */
+test('una pagina scritta si salva come file nel luogo delle consegne, e sulla riga resta dove sta più la riga per lei', async () => {
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const corpo = '# Introducing Myynd to H-Farm\n\n' + 'Myynd is a personal digital twin that reads what you already have. '.repeat(20).trim() + '\n\n## Why now\n\nBecause.'
+  const pagina = corpo + '\n\nI assumed the audience is the leadership team; tell me if it is the students.'
+  let riletto = ''
+  let seguito = ''
+  prova({
+    svolgi: async () => ({ testo: pagina, fonti: [], fatti: [] }),
+    chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda,
+    giudica: async o => { riletto = o.risultato; return passa() },
+    prossimoPasso: async o => { seguito = o.risultato; return null }
+  })
+  const id = riga('Introduce Myynd to H-Farm')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  const e = await o.aspetta('pronto')
+  const c = store.compito(id)!
+  assert.equal(c.consegna?.app, 'File')
+  assert.equal(c.consegna?.dove, 'myynd')
+  assert.equal(c.consegna?.titolo, 'Introduce Myynd to H-Farm.md')
+  assert.equal(readFileSync(c.consegna!.percorso, 'utf8'), corpo, 'il file ha il documento, senza la frase di chiusura né la riga per lei')
+  assert.equal(c.risultato, 'Done: «Introduce Myynd to H-Farm.md» is on your Desktop, in the Myynd folder.\n\nI assumed the audience is the leadership team; tell me if it is the students.')
+  assert.equal(c.consegna?.revisione?.esito, 'pass')
+  assert.ok(riletto.includes('## Why now'), 'il revisore rilegge il documento intero')
+  assert.ok(seguito.includes('## Why now'), 'la cosa dopo si cerca dal lavoro intero')
+  assert.equal(e.fase === 'pronto' && e.compito.consegna?.app, 'File')
+  o.smetti()
+})
+
+test('«save it to my Desktop» nella risposta si impara e vale da subito; un messaggio e una risposta corta restano sulla riga', async () => {
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ lingua: 'en' })
+  prova({ svolgi: async () => ({ testo: 'Yes: go with the June figures.', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const corta = riga('Decide which figures to use')
+  store.cambiaCompito(corta, { nota: 'Save it to my Desktop.' })
+  const o = orecchio(corta)
+  compiti.affida(corta, 'bozza')
+  await o.aspetta('pronto')
+  const c = store.compito(corta)!
+  assert.equal(c.consegna?.app, 'File', 'l\'ha chiesto lei: si salva anche se corto')
+  assert.equal(c.consegna?.dove, 'scrivania')
+  assert.equal(c.risultato, 'Done: «Decide which figures to use.md» is on your Desktop. I will keep saving there.')
+  assert.equal(cfg.leggi().consegne?.luogo, 'scrivania')
+  o.smetti()
+
+  // da adesso una pagina va sulla Scrivania senza che lo dica, e «write» da solo non è una mail
+  const pagina = '# Plan\n\n' + 'Step. '.repeat(200).trim() + '\n\nA.\n\nB.'
+  prova({ svolgi: async () => ({ testo: pagina, fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const piano = riga('Write the pilot plan')
+  const o2 = orecchio(piano)
+  compiti.affida(piano, 'bozza')
+  await o2.aspetta('pronto')
+  assert.equal(store.compito(piano)!.consegna?.dove, 'scrivania')
+  assert.equal(store.compito(piano)!.risultato, 'Done: «Write the pilot plan.md» is on your Desktop.')
+  o2.smetti()
+
+  // un messaggio resta sulla riga: «Manda» legge da lì
+  prova({ svolgi: async () => ({ testo: 'Subject: Quote\n\nHello Rossi,\n\n' + 'Here is the quote. '.repeat(60) + '\n\nBest,\nTobia', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const mail = riga('Reply to Rossi with the quote')
+  const o3 = orecchio(mail)
+  compiti.affida(mail, 'bozza')
+  await o3.aspetta('pronto')
+  assert.equal(store.compito(mail)!.consegna ?? null, null)
+  assert.match(store.compito(mail)!.risultato ?? '', /Hello Rossi/)
+  o3.smetti()
+
+  // una risposta corta senza che lo chieda: sulla riga
+  cfg.aggiorna({ consegne: { luogo: 'myynd' } })
+  prova({ svolgi: async () => ({ testo: 'Yes: go with the June figures.', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
+  const breve = riga('Decide which figures to use, again')
+  const o4 = orecchio(breve)
+  compiti.affida(breve, 'bozza')
+  await o4.aspetta('pronto')
+  assert.equal(store.compito(breve)!.consegna ?? null, null)
+  assert.equal(store.compito(breve)!.risultato, 'Done: the deliverable is below.\n\nYes: go with the June figures.')
+  o4.smetti()
+
+  // se il file non si può scrivere, il testo resta sulla riga com'era
+  prova({ svolgi: async () => ({ testo: pagina, fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, salvaConsegna: () => { throw new Error('disco pieno') } })
+  const senza = riga('Write the second plan')
+  const o5 = orecchio(senza)
+  compiti.affida(senza, 'bozza')
+  await o5.aspetta('pronto')
+  assert.equal(store.compito(senza)!.consegna ?? null, null)
+  assert.match(store.compito(senza)!.risultato ?? '', /^Done: the deliverable is below\.\n\n# Plan/)
+  o5.smetti()
+})
+
+test('quando chiede, sulla riga ci sono tutte le domande, fino a tre, dopo cosa ha visto', async () => {
+  prova({
+    svolgi: async () => ({ testo: 'x', fonti: [] }),
+    chiedeAiuto: async () => ({ chiede: true, manca: ['unità', 'quando'], domanda: 'Di quale unità parliamo?\nEntro quando? E chi firma?\nUna quarta?', visto: 'Ho letto il filo con H-Farm.' }),
+    domandeDaFare: async () => [
+      { domanda: 'Di quale unità parliamo?', opzioni: ['Education', 'Ventures'], multipla: false },
+      { domanda: 'Entro quando?', opzioni: ['Questa settimana', 'Fine mese'], multipla: false },
+      { domanda: 'Chi firma?', opzioni: ['Tobia', 'Il CEO'], multipla: false }
+    ]
+  })
+  const id = riga('Rispondere a H-Farm sull\'audit')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('chiede')
+  const c = store.compito(id)!
+  assert.equal(c.risultato, 'Ho letto il filo con H-Farm.\nDi quale unità parliamo?\nEntro quando?\nE chi firma?')
+  assert.equal(c.chieste?.length, 3)
+  o.smetti()
+})
+

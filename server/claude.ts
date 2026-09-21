@@ -2284,21 +2284,30 @@ async function rifinite(voci: VoceFeed[], suoi: progetti.Progetto[]): Promise<Vo
  * settembre: «mi dice cosa ha visto, mi fa l'unica domanda che gli serve per
  * essere sicuro di aver capito, propone la strada o dice che se ne occupa».
  *
- * Tre cose, quindi, e nell'ordine: cosa ha visto, in una riga; una domanda
- * sola, e solo se la risposta cambia il risultato; altrimenti niente domanda,
- * si va avanti e lo si dice. Esportata per le prove: una regola che non si
- * può leggere da fuori non si può provare.
+ * Tre cose, quindi, e nell'ordine: cosa ha visto, in una riga; le domande,
+ * e solo quelle la cui risposta cambia il risultato; altrimenti niente
+ * domanda, si va avanti e lo si dice.
+ *
+ * Dal ventuno settembre le domande sono *tutte insieme*, prima di produrre.
+ * Erano una alla volta — «le altre due si chiedono dopo, se servono ancora»
+ * — e lui ha visto cosa vuol dire: una domanda, il lavoro, un'altra domanda
+ * sotto il lavoro, un altro giro. «Why doesn't he ask me all in one go,
+ * right as one task, before he produces this pages document? That would
+ * work way better.» Quindi un giro solo di domande, fino a tre, e poi la
+ * cosa finita. Esportata per le prove: una regola che non si può leggere da
+ * fuori non si può provare.
  */
-export const UNA_DOMANDA =
-  'Quando ti fermi, quello che scrivi sono due righe e basta. La prima dice cosa hai ' +
-  'visto: cosa hai letto, cosa hai trovato e cosa no, in una riga sola. La seconda è la ' +
-  'domanda: una sola, come la farebbe un collega alzando la testa dalla scrivania, «Di ' +
-  'quale unità parliamo?». Non un piano, non dei passi numerati, non «per aiutarti dovrei ' +
-  'prima analizzare», non tre domande insieme sperando che una sia quella giusta. Chi ' +
-  'legge deve poter rispondere in cinque parole senza rileggere niente. Se ti mancano tre ' +
-  'cose, chiedi quella senza cui non si comincia: le altre due si chiedono dopo, se servono ' +
-  'ancora.\n\n' +
-  'E chiedi solo se la risposta cambia quello che consegni. Se non lo cambia, o se una ' +
+export const DOMANDE_INSIEME =
+  'Quando ti fermi per chiedere, lo fai una volta sola, prima di produrre. Quello che scrivi ' +
+  'sono poche righe. La prima dice cosa hai visto: cosa hai letto, cosa hai trovato e cosa no, ' +
+  'in una riga sola. Poi le domande che ti servono per fare il lavoro intero: tutte, insieme, ' +
+  'da una a tre, una per riga, ognuna come la farebbe un collega alzando la testa dalla ' +
+  'scrivania, «Di quale unità parliamo?». Chi legge deve poter rispondere a ciascuna in cinque ' +
+  'parole senza rileggere niente. Non un piano, non dei passi numerati, non «per aiutarti ' +
+  'dovrei prima analizzare». Se ti mancano tre cose, chiedile tutte e tre adesso: un giro ' +
+  'solo. Quello che non chiedi adesso non lo chiedi dopo, e quando ha risposto produci la ' +
+  'cosa finita senza tornare a chiedere.\n\n' +
+  'E chiedi solo quello la cui risposta cambia quello che consegni. Se non lo cambia, o se una ' +
   'strada è chiaramente più ragionevole delle altre, non fermarti: prendila, fai il lavoro, ' +
   'e nella riga finale per lei di\' in una riga cosa hai scelto e perché, così sa che te ne ' +
   'stai occupando e può correggerti dopo. Una domanda che non cambia niente le costa ' +
@@ -2332,21 +2341,24 @@ solo se lo strumento che lo fa ti ha risposto che l'ha fatto. Poi una riga
 vuota, e solo dopo il resto: l'email, l'elenco, la bozza intera. Niente
 cappelli in mezzo, niente «Ecco…».
 
-Quello che devi dire *a lei* e non al destinatario — un dubbio, un dato che
-manca, una scelta che hai fatto, un'ipotesi su cui ti sei basato — sta in una
-riga sola in fondo, dopo un'altra riga vuota.
+Quello che devi dire *a lei* e non al destinatario — un dubbio, una scelta
+che hai fatto, un'ipotesi su cui ti sei basato — sta in una riga sola in
+fondo, dopo un'altra riga vuota. Non è una domanda: le domande si fanno
+prima di produrre, tutte insieme, e sotto una cosa consegnata non se ne
+fanno più.
 
 Non inventare fatti, nomi, cifre o stati di avanzamento mancanti. Se ti è
 stata richiesta una proposta, un piano o una scaletta, consegnala come
 PROPOSTA basata sull'obiettivo noto e indica cosa resta da verificare. La
 proposta richiesta è già un risultato utile, anche senza un rapporto sullo
-stato attuale. Fai UNA domanda solo quando manca un dato duro, uno che
+stato attuale. Fai domande solo quando manca un dato duro, uno che
 nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario,
-una data, un file che non esiste. Una preferenza, un formato, un livello di
-dettaglio non sono dati duri: si sceglie la strada più ragionevole e la si
-dice nella riga finale.
+una data, un file che non esiste. E falle tutte insieme, in un giro solo,
+prima di produrre: quello che ti servirà dopo chiedilo adesso. Una
+preferenza, un formato, un livello di dettaglio non sono dati duri: si
+sceglie la strada più ragionevole e la si dice nella riga finale.
 
-${UNA_DOMANDA}
+${DOMANDE_INSIEME}
 
 E le righe che sono obiettivi, non compiti — «definire un pilota di Myynd in
 H-Farm», «solidificare i sistemi», «ingerire una fonte vera in produzione»,
@@ -2508,7 +2520,8 @@ export function obiettivoDaProdurre(): string {
     'piano con chi fa cosa ed entro quando, una bozza, un documento. Producilo per intero, ' +
     'senza fingere di aver eseguito niente, e nella riga finale per lei di\' in una riga quali ' +
     'ipotesi hai fatto per sceglierlo. Chiedi solo se manca un dato duro che nessuna fonte ' +
-    'contiene e che cambia il risultato.'
+    'contiene e che cambia il risultato; e se ti mancano più cose, chiedile tutte insieme in un ' +
+    'giro solo, prima di produrre: mai una adesso e le altre dopo.'
 }
 
 /**
@@ -3107,7 +3120,7 @@ export async function svolgi(
         const dettaglio = (c.input as Record<string, unknown> | null)
         const detto = String(dettaglio?.url ?? dettaglio?.percorso ?? dettaglio?.query ?? dettaglio?.titolo ?? dettaglio?.richiesta ?? '').trim().slice(0, 120)
         passo(c.name === mani.CERCA_WEB.name ? { passo: 'cerco', dettaglio: detto } : c.name === mani.LEGGI_FILE.name || c.name === mani.LEGGI_PAGINA.name ? { passo: 'apro', dettaglio: detto } : { passo: 'scrivo', dettaglio: detto })
-        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal })
+        const e = await mani.esegui(c.name, c.input, { cartella, copia: copiaDiLavoro, signal: esecuzione?.signal, luogo: mani.luogoNelTesto(domanda) ?? mani.luogoPreferito() })
         esecuzione?.signal.throwIfAborted()
         fatti.push(e.fatto)
         if (e.copia) copiaDiLavoro = e.copia
@@ -3287,21 +3300,27 @@ export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
  */
 export async function domandeDaFare(compito: string, risposta: string): Promise<Chiesta[]> {
   /*
-   * Una, dal diciassette settembre. Erano tre o quattro, e tre domande con le
-   * opzioni si rispondono in fretta — ma sono comunque tre cose da decidere
-   * davanti a una riga che doveva farne una. La sua regola è «l'unica domanda
-   * che gli serve per essere sicuro di aver capito»: quella la cui risposta
-   * cambia il risultato. Le altre, se servono ancora, si chiedono dopo.
+   * Tutte insieme, fino a tre, dal ventuno settembre. Il diciassette erano
+   * diventate una — «l'unica domanda che gli serve» — e le altre «si
+   * chiedono dopo, se servono ancora». Il dopo l'ha visto lui: la risposta,
+   * il lavoro, un'altra domanda sotto il lavoro, un altro giro. «Why doesn't
+   * he ask me all in one go, right as one task, before he produces?» Quindi
+   * un giro solo: le domande che servono per fare il lavoro intero, sullo
+   * stesso tema, con le opzioni da toccare, e poi la cosa finita. Restano
+   * solo quelle la cui risposta cambia il risultato: se gliene manca una,
+   * una.
    */
   const out = await chiediJSON<{ righe: Chiesta[] }>({
     lavoro: 'domande',
-    max_tokens: 800,
+    max_tokens: 1200,
     system: conLaLingua(
       'Un assistente si è fermato su un compito perché gli manca qualcosa. Trasforma ' +
-      'quello che ha scritto in UNA domanda a scelta multipla: quella senza la cui risposta ' +
-      'non si può andare avanti, e la cui risposta cambia il risultato. Una sola, non di ' +
-      'più: se gliene mancano tre, la prima; le altre si chiedono dopo, se servono ancora.\n\n' +
-      'La domanda ha da due a quattro opzioni: concrete, diverse fra loro, e ognuna ' +
+      'quello che ha scritto nelle domande a scelta multipla che gli servono per fare il ' +
+      'lavoro intero: da una a tre, tutte insieme, sullo stesso tema, nell\'ordine in cui ' +
+      'contano. È l\'unico giro di domande che farà: quello che non si chiede qui non si ' +
+      'chiede dopo. Ma solo quelle la cui risposta cambia il risultato: se gliene manca una ' +
+      'sola, una sola.\n\n' +
+      'Ogni domanda ha da due a quattro opzioni: concrete, diverse fra loro, e ognuna ' +
       'una scelta che si può fare davvero. Niente «altro» fra le opzioni: chi risponde ' +
       'ha comunque una casella per scrivere.\n\n' +
       'Se la risposta è ovvia dal compito stesso, non fare nessuna domanda: sarebbe far ' +
@@ -3320,9 +3339,8 @@ export async function domandeDaFare(compito: string, risposta: string): Promise<
       multipla: !!r.multipla
     }))
     .filter(r => r.opzioni.length >= 2)
-    // una: se il modello ne ha scritte tre lo stesso, vale la prima, che è
-    // quella che gli si è chiesto di mettere per prima
-    .slice(0, 1)
+    // tre al massimo: oltre si legge come un modulo, e un modulo non si compila
+    .slice(0, 3)
 }
 
 const SCHEMA_ESITO = {
@@ -3349,10 +3367,12 @@ const SCHEMA_ESITO = {
     domanda: {
       type: 'string',
       description:
-        'Se chiede: LA domanda, una sola, come la farebbe un collega alzando la testa ' +
-        'dalla scrivania. Una frase, sotto le venti parole, che finisce col punto ' +
-        'interrogativo. Niente premesse, niente elenchi, niente piani, niente «per ' +
-        'assisterti dovrei». Nomina la cosa vera che gli manca. Vuota se non chiede.'
+        'Se chiede: le domande, da una a tre, una per riga, ognuna come la farebbe un ' +
+        'collega alzando la testa dalla scrivania. Ogni riga una frase sotto le venti parole ' +
+        'che finisce col punto interrogativo. Tutte quelle che gli servono per fare il lavoro ' +
+        'intero senza tornare a chiedere, e solo quelle la cui risposta cambia il risultato. ' +
+        'Niente premesse, niente elenchi numerati, niente piani, niente «per assisterti ' +
+        'dovrei». Nominano la cosa vera che gli manca. Vuota se non chiede.'
     },
     visto: {
       type: 'string',
@@ -3400,9 +3420,10 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
     system: conLaLingua(
       'Guardi il risultato di un compito affidato a un assistente e dici se è la cosa ' +
       'fatta o una richiesta di aiuto. Se è una richiesta di aiuto, la riscrivi come ' +
-      'deve essere: una riga che dice cosa ha visto, e una domanda sola e diretta, quella ' +
-      'la cui risposta cambia il risultato. Quello che ha scritto lui è lungo, e chi legge ' +
-      'deve poter rispondere in cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
+      'deve essere: una riga che dice cosa ha visto, e le domande dirette che gli servono, ' +
+      'da una a tre, una per riga, tutte insieme: quelle la cui risposta cambia il risultato. ' +
+      'Quello che ha scritto lui è lungo, e chi legge deve poter rispondere a ciascuna in ' +
+      'cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
       'di chiedere, è la cosa fatta: non trasformare una scelta dichiarata in una domanda.\n\n' +
       'E un obiettivo non è una richiesta di aiuto. Se il compito era una direzione ' +
       '(«definire un pilota», «solidificare i sistemi», «ingerire una fonte in produzione») e ' +
@@ -3411,7 +3432,7 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
       'la cosa fatta: non trasformarla in una domanda. Chiede solo se gli manca un dato duro ' +
       'che nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, una ' +
       'data, un file. Una domanda su una preferenza o un formato non è una richiesta di aiuto.\n\n' +
-      'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + UNA_DOMANDA
+      'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + DOMANDE_INSIEME
     ),
     formato: SCHEMA_ESITO,
     messages: [{ role: 'user', content: `Il compito era: ${compito}${dettaglioDellaRiga(nota) ? `\nCon questo dettaglio: ${dettaglioDellaRiga(nota).slice(0, 1200)}` : ''}\n\nHa risposto:\n${risposta.slice(0, 4000)}${aggiunta}` }]
@@ -3420,15 +3441,18 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
   const pulita = risposta.trim()
   const prima = pulita.split(/\n\s*\n/)[0]
   const INTERROGATIVA = /^(?:what|which|who|where|when|how|can you|could you|do you|should|is|are|cosa|che cosa|che|quale|quali|chi|dove|quando|come|quanto|quanti|puoi|mi dici|di qual)\b/i
-  const domandaSola = pulita.length <= 300 && /^[^\n]*\?$/.test(pulita) && INTERROGATIVA.test(pulita)
-  /*
-   * Due righe, l'ultima con il punto interrogativo: è la forma che la regola
-   * della domanda chiede a chi svolge — cosa ha visto, e la domanda — e non
-   * c'è niente da riscrivere. Si tiene com'è, senza chiamare nessuno.
-   */
+  // una riga che chiede: interrogativa anche dopo un «e» o un «and» in testa
+  const chiedeLaRiga = (r: string) => r.endsWith('?') && INTERROGATIVA.test(r.replace(/^(?:and|or|also|e|o|oppure|inoltre)\s+/i, ''))
   const righe = pulita.split('\n').map(r => r.trim()).filter(Boolean)
-  const ultima = righe[righe.length - 1] ?? ''
-  const vistoEDomanda = righe.length === 2 && pulita.length <= 500 && ultima.endsWith('?') && INTERROGATIVA.test(ultima) && !righe[0].endsWith('?') &&
+  // solo domande, da una a tre: è una richiesta, e si tiene com'è
+  const domandaSola = pulita.length <= 500 && righe.length >= 1 && righe.length <= 3 && righe.every(chiedeLaRiga)
+  /*
+   * Una riga e poi le domande, con il punto interrogativo: è la forma che la
+   * regola chiede a chi svolge — cosa ha visto, e le domande, fino a tre — e
+   * non c'è niente da riscrivere. Si tiene com'è, senza chiamare nessuno.
+   */
+  const dopo = righe.slice(1)
+  const vistoEDomanda = righe.length >= 2 && righe.length <= 4 && pulita.length <= 900 && dopo.every(chiedeLaRiga) && !righe[0].endsWith('?') &&
     // un'email di due righe che finisce con una domanda è lavoro, non una richiesta
     !/^(?:subject|oggetto|re:|dear|hi|hello|hey|ciao|gentile|buongiorno|buonasera|salve|caro|cara)\b/i.test(righe[0])
   const bloccato = pulita.length <= 700 && /^(?:I (?:need|cannot|can't|don['’]t have)|I['’]m (?:missing|unable)|Mi (?:manca|mancano|serve|servono)|Non (?:posso|ho accesso|riesco)|Collega(?:mi)?\b)/i.test(prima)
@@ -3440,8 +3464,8 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
    * che non hanno bisogno di nessuno: la domanda sola, e le due righe.
    */
   const ripiego = vistoEDomanda
-    ? { chiede: true, manca: [] as string[], domanda: ultima, visto: senzaTrattini(righe[0]).slice(0, 240) }
-    : { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? pulita : '' }
+    ? { chiede: true, manca: [] as string[], domanda: dopo.join('\n'), visto: senzaTrattini(righe[0]).slice(0, 240) }
+    : { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? righe.join('\n') : '' }
   if (ripiego.chiede && vistoEDomanda) return ripiego
   let e = await chiama()
   if (!e || typeof e.chiede !== 'boolean') return ripiego

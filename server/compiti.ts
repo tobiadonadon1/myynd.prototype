@@ -37,7 +37,7 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import { projectMemoryContext } from './project-memory.ts'
 import { fonteValida } from './iniziativa.ts'
 import { salvaBozzaCasella, salvaRevisioneCasella } from './mailbox-drafts.ts'
-import { senzaTrattini, soloDomanda } from './testo.ts'
+import { senzaTrattini, tutteLeDomande } from './testo.ts'
 import { feedbackPer, giudica, prossimoPasso, simili, type Giudizio } from './revisione-lavoro.ts'
 import * as mani from './mani.ts'
 import * as ordine from './ordine.ts'
@@ -265,6 +265,8 @@ type Ferri = {
   prossimoPasso: typeof prossimoPasso
   /** Quello che si impara chiudendo una riga: settima, per poter guardare cosa impara. */
   distilla: typeof memoria.distilla
+  /** Il lavoro finito scritto come file nel luogo scelto: le prove lo fanno in una cartella loro. */
+  salvaConsegna: typeof mani.salvaConsegna
 }
 const VERI: Ferri = {
   salvaBozzaCasella,
@@ -273,6 +275,7 @@ const VERI: Ferri = {
   domandeDaFare: (...a) => claude.domandeDaFare(...a),
   preparaEmail: (...a) => claude.preparaEmail(...a),
   giudica: (...a) => giudica(...a),
+  salvaConsegna: (...a) => mani.salvaConsegna(...a),
   prossimoPasso: (...a) => prossimoPasso(...a),
   distilla: (...a) => memoria.distilla(...a),
   postaCollegata: () => {
@@ -432,9 +435,58 @@ async function svolgiUno(id: string, nativa: boolean) {
     }
     const { fonti, verificaDocumenti, eseguito, consegna } = uscita
     const { chiede, domanda } = esito
+    /** Il lavoro per intero, prima che la riga ne tenga solo la chiusura: la cosa dopo si cerca da qui. */
+    const lavoroIntero = testo
 
     /*
-     * Quando chiede, sotto la riga ci va la domanda. Solo quella, e davanti
+     * Il lavoro finito è un file, non un testo incollato sotto la riga.
+     *
+     * Le sue parole, del ventuno settembre: «once the work was produced, he
+     * just pasted it under the task on my feed. That's not okay. He should
+     * tell me, "Hey, I saved it to your desktop"». Quindi una pagina scritta
+     * — una definizione, un piano, una proposta — si salva come file nel
+     * luogo delle consegne (`mani.vaSalvato` decide cosa è una pagina e cosa
+     * no: un messaggio da mandare resta sulla riga, e così una risposta
+     * corta), e sulla riga resta la frase che dice dove sta, più la riga
+     * per lei se c'era. Il luogo lo impara dalle sue parole: «save it to my
+     * Desktop» nel compito o nella risposta vale da quel momento in poi.
+     * Se il file non si può scrivere — un server, un disco che dice di no —
+     * il testo resta sulla riga com'era: meglio incollato che perso.
+     */
+    let consegnaFile: store.ConsegnaCompito | null = null
+    if (!chiede && !eseguito && RILETTI.has(c.modo)) {
+      const dettoDaLei = mani.luogoNelTesto(`${c.testo}\n${claude.dettaglioDellaRiga(nota)}`)
+      const diPrima = mani.luogoPreferito()
+      const luogo = dettoDaLei ?? diPrima
+      const imparato = !!dettoDaLei && dettoDaLei !== diPrima
+      if (imparato) {
+        try { cfg.aggiorna({ consegne: { luogo } }); console.info(`myynd · consegne · ${id} · da oggi ${luogo}`) }
+        catch (e) { console.warn('myynd · non riesco a ricordare dove salvare:', e instanceof Error ? e.message : e) }
+      }
+      // è un messaggio se nasce dalla posta, se il compito è scrivere a
+      // qualcuno, o se la bozza ha un saluto o una firma: «write the plan»
+      // da solo non basta, o ogni pagina scritta resterebbe sulla riga
+      const messaggio = [c.doc, ...fonti.map(f => f.id)].some(x => !!x && x.startsWith('posta:'))
+        || EPISTOLARE.test(c.testo) || invio.sembraUnMessaggio('', testo)
+      if (mani.vaSalvato({ risultato: testo, fatti: uscita.fatti ?? [], messaggio, chiesto: !!dettoDaLei })) {
+        try {
+          const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
+          const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo })
+          ;(uscita.fatti ??= []).push({ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: salvato.percorso })
+          testo = mani.fraseDelFile(salvato, cfg.lingua(), imparato) + (perLei ? `\n\n${perLei}` : '')
+          consegnaFile = {
+            app: 'File', titolo: salvato.nome, percorso: salvato.percorso, dove: salvato.luogo,
+            ...(verdetto && verdetto.esito !== 'unavailable' ? { revisione: { esito: verdetto.esito, problemi: verdetto.problemi } } : {})
+          }
+          console.info(`myynd · consegna · ${id} · file · ${salvato.percorso}`)
+        } catch (e) {
+          console.warn(`myynd · compito ${id}: il lavoro è pronto, il file no —`, e instanceof Error ? e.message : e)
+        }
+      }
+    }
+
+    /*
+     * Quando chiede, sotto la riga ci vanno le domande. Solo quelle, e davanti
      * la riga di cosa ha visto, se c'è.
      *
      * Ci andava tutto quello che aveva scritto, e quando un modello si ferma
@@ -446,12 +498,14 @@ async function svolgiUno(id: string, nativa: boolean) {
      *
      * Adesso quelle duecento parole restano dove sono nate — servono a
      * `domandeDaFare`, che da lì ricava le risposte da toccare — e sulla riga
-     * compare la domanda sola. Se il modello non riesce a formularla si tiene
-     * quello che c'era: una riga che chiede male è meglio di una riga che non
-     * chiede niente. La riga di cosa ha visto sta sopra, sulla stessa
-     * paragrafata: è quella che fa capire perché la domanda è quella.
+     * compaiono le domande sole. Dal ventuno settembre non una: tutte quelle
+     * che gli servono, insieme, fino a tre — «why doesn't he ask me all in
+     * one go, right as one task, before he produces?». Se il modello non
+     * riesce a formularle si tiene quello che c'era: una riga che chiede
+     * male è meglio di una riga che non chiede niente. La riga di cosa ha
+     * visto sta sopra: è quella che fa capire perché le domande sono quelle.
      */
-    const detto = chiede && domanda ? [esito.visto ?? '', soloDomanda(domanda)].filter(Boolean).join('\n') : testo
+    const detto = chiede && domanda ? [esito.visto ?? '', tutteLeDomande(domanda)].filter(Boolean).join('\n') : testo
 
     // Classification is asynchronous too: feedback arriving after drafting
     // must still win before an automated current-email summary becomes ready.
@@ -472,6 +526,7 @@ async function svolgiUno(id: string, nativa: boolean) {
     // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
     if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
     if (consegna) store.scriviConsegnaCompito(id, consegna)
+    else if (consegnaFile) store.scriviConsegnaCompito(id, consegnaFile)
     // il verdetto si riscrive a ogni giro, anche quando non c'è: una riga
     // riaffidata che stavolta chiede non deve portarsi dietro il «passa» di ieri
     const revisione = verdetto ? { ...verdetto, giri } : null
@@ -495,7 +550,7 @@ async function svolgiUno(id: string, nativa: boolean) {
     if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
     // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
     // non deve aspettare una riga in più che quasi sempre non c'è
-    if (fatto?.stato === 'pronto') await proponiIlSeguito(c, testo, progetto)
+    if (fatto?.stato === 'pronto') await proponiIlSeguito(c, lavoroIntero, progetto)
   } catch (e) {
     if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
@@ -619,6 +674,8 @@ export function rispostaCheChiude(testo: string): 'lasciato' | 'fatto' | null {
 
 /** I modi che passano dalla rilettura: quelli che portano la sua firma. */
 const RILETTI = new Set(['bozza', 'tutto'])
+/** Un compito che è scrivere *a qualcuno*: la cosa resta sulla riga, da dove si manda. */
+const EPISTOLARE = /\b(?:mail|e-?mail|reply|repl\w*|respond\w*|answer\w*|send|sending|forward|message|messages|write\s+(?:back\s+)?to\b|rispond\w*|risposta|mand\w*|invi\w*|inoltr\w*|messagg\w*|scriv\w*\s+(?:a|al|alla|allo|ai|agli|alle)\b)/i
 /** Quante stesure al massimo: la prima, e una riscritta con i problemi in coda. */
 const GIRI_MAX = 2
 

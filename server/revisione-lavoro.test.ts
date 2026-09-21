@@ -173,20 +173,26 @@ test('due righe che dicono la stessa cosa si riconoscono, in tutte e due le ling
  * cose — cosa ha visto, una domanda sola, altrimenti vai avanti e dillo — e
  * che arrivi davvero a tutti e due.
  */
-test('la regola della domanda dice le tre cose, e la legge chi svolge', () => {
-  const r = claude.UNA_DOMANDA
+test('la regola delle domande dice le tre cose, tutte insieme e prima, e la legge chi svolge', () => {
+  const r = claude.DOMANDE_INSIEME
   assert.match(r, /cosa hai visto/i)
-  assert.match(r, /una sola/)
-  assert.match(r, /solo se la risposta cambia quello che consegni/)
+  // dal ventuno settembre: tutte insieme, un giro solo, prima di produrre
+  assert.match(r, /tutte, insieme/)
+  assert.match(r, /un giro solo/)
+  assert.match(r, /prima di produrre/)
+  assert.match(r, /non lo chiedi dopo/)
+  assert.match(r, /solo quello la cui risposta cambia quello che consegni/)
   assert.match(r, /non fermarti/)
   assert.ok(claude.SVOLGERE.includes(r), 'la regola non è nel prompt di chi svolge')
+  // e sotto una cosa consegnata non si chiede più niente
+  assert.match(claude.SVOLGERE, /sotto una cosa consegnata non se ne\nfanno più/)
 })
 
 test('chi classifica legge la stessa regola, e restituisce cosa ha visto accanto alla domanda', async () => {
   const ricevute = modelloJSON({ chiede: true, manca: ['unit'], domanda: 'Which unit is the audit about?', visto: 'I read the H-Farm thread: the audit names two units.' })
   const e = await claude.chiedeAiuto('Reply to H-Farm about the audit', 'Here is my analysis of the audit.\n\n1. Scope\n2. Timeline\n\nWhich unit? And when?')
   assert.equal(ricevute.length, 1)
-  assert.ok(ricevute[0].system.includes(claude.UNA_DOMANDA), 'la regola non è arrivata a chi classifica')
+  assert.ok(ricevute[0].system.includes(claude.DOMANDE_INSIEME), 'la regola non è arrivata a chi classifica')
   assert.deepEqual(e, { chiede: true, manca: ['unit'], domanda: 'Which unit is the audit about?', visto: 'I read the H-Farm thread: the audit names two units.' })
 
   // senza domanda, niente riga di cosa ha visto: e la chiave non compare
@@ -194,15 +200,21 @@ test('chi classifica legge la stessa regola, e restituisce cosa ha visto accanto
   assert.deepEqual(await claude.chiedeAiuto('Draft a message', 'Subject: Proposal\n\nHello Alex, the proposal is ready.'), { chiede: false, manca: [], domanda: '' })
 })
 
-test('le domande con le opzioni sono una, anche se il modello ne scrive tre', async () => {
+test('le domande con le opzioni sono tutte insieme, fino a tre, in un giro solo', async () => {
   const ricevute = modelloJSON({ righe: [
     { domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false },
     { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false },
-    { domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false }
+    { domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false },
+    { domanda: 'Una quarta?', opzioni: ['a', 'b'], multipla: false }
   ] })
-  const righe = await claude.domandeDaFare('Reply to H-Farm', 'Which unit? By when?')
-  assert.match(ricevute[0].system, /UNA domanda/)
-  assert.deepEqual(righe, [{ domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false }])
+  const righe = await claude.domandeDaFare('Reply to H-Farm', 'Which unit? By when? Which format?')
+  assert.match(ricevute[0].system, /da una a tre, tutte insieme/)
+  assert.match(ricevute[0].system, /non si chiede dopo/)
+  assert.deepEqual(righe, [
+    { domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false },
+    { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false },
+    { domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false }
+  ])
 })
 
 /*

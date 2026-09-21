@@ -2249,6 +2249,14 @@ const EN: Record<string, string> = {
   'Manca il percorso del file da scrivere.': 'The path of the file to write is missing.',
   'La cartella Myynd sulla Scrivania è un collegamento: non ci scrivo.': 'The Myynd folder on the Desktop is a link: I do not write there.',
   'Posso scrivere solo nella cartella Myynd sulla Scrivania o in una copia di lavoro.': 'I can only write in the Myynd folder on the Desktop or in a working copy.',
+  // — la consegna su file: dove salva, e il file che si apre dalla riga —
+  'Posso scrivere solo nella cartella Myynd sulla Scrivania, nella cartella delle consegne o in una copia di lavoro.': 'I can only write in the Myynd folder on the Desktop, in your delivery folder or in a working copy.',
+  'La cartella delle consegne è un collegamento: non ci scrivo.': 'The delivery folder is a link: I do not write there.',
+  'Non sono riuscito ad aprire il file.': 'I could not open the file.',
+  'Apri questo file dall’app Myynd sul Mac.': 'Open this file from the Myynd app on your Mac.',
+  'Il file non c’è più.': 'The file is no longer there.',
+  'Questo file non è una consegna di Myynd.': 'This file is not something Myynd delivered.',
+  'Luogo della consegna non valido.': 'Invalid delivery place.',
   'Sulla Scrivania scrivo solo file di testo: .md, .txt, .csv, .json, .html e simili.': 'On the Desktop I only write text files: .md, .txt, .csv, .json, .html and the like.',
   'Su un server non ho una Scrivania su cui scrivere.': 'On a server there is no Desktop for me to write to.',
   'Serve il testo del file, sotto i duecentomila caratteri.': 'The file needs its text, under two hundred thousand characters.',
@@ -3160,6 +3168,20 @@ export const frasi = {
    * sola, quando passa da «ce l'ha lui» a «è fatta», e dice anche dove
    * guardare: il lavoro non sta dentro l'avviso, sta nella riga.
    */
+  /**
+   * Dove ha messo il file che ha scritto da sé: «Saved on your Desktop, in
+   * the Myynd folder:». Il luogo arriva a nome dal server (`mani.Luogo`); le
+   * parole le mette la lingua dell'app, e un nome che non conosce resta
+   * «Salvato:», che è vero comunque.
+   */
+  salvatoDove: (dove?: string | null) => {
+    const e = corrente === 'en'
+    return dove === 'scrivania' ? (e ? 'Saved on your Desktop:' : 'Salvato sulla Scrivania:')
+      : dove === 'scaricati' ? (e ? 'Saved in your Downloads:' : 'Salvato in Download:')
+      : dove === 'documenti' ? (e ? 'Saved in your Documents:' : 'Salvato in Documenti:')
+      : dove === 'myynd' ? (e ? 'Saved on your Desktop, in the Myynd folder:' : 'Salvato sulla Scrivania, nella cartella Myynd:')
+      : (e ? 'Saved:' : 'Salvato:')
+  },
   compitoFinito: (titolo: string) => corrente === 'en'
     ? `Done: "${titolo}". The result is on your first page.`
     : `Fatto: «${titolo}». Il risultato è in prima pagina.`,

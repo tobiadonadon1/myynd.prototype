@@ -41,6 +41,7 @@ writeFileSync(join(progetto, 'README.md'), '# Progetto\n')
 
 const finto = (f: Parameters<typeof mani.perProva>[0]) => mani.perProva({
   casa: () => casa, scrivania: () => scrivania, copie: () => copie, piattaforma: () => 'darwin', ospitato: () => false,
+  scaricati: () => join(casa, 'Downloads'), documenti: () => join(casa, 'Documents'), apri: async () => {},
   risolvi: async () => [{ address: '93.184.216.34' }],
   ...f
 })
@@ -374,3 +375,103 @@ test('chiusuraVera boccia una frase che dichiara un salvataggio senza il fatto, 
   assert.match(mani.fattiInRighe([], 'it'), /^Nessun attrezzo usato/)
   assert.equal(mani.fattiInRighe([ok('leggi_pagina'), no('crea_nota')], 'en'), '- leggi_pagina (ok): x\n- crea_nota (failed): x')
 })
+
+// — dove finiscono le cose che scrive —
+//
+// «He should tell me, "Hey, I saved it to your desktop"… as I tell more and
+// more, "Save it to my Desktop", he will learn that that's my preferred option.»
+
+test('luogoNelTesto legge il posto dalle sue parole, solo con un verbo del salvare, e vince l\'ultima frase', () => {
+  assert.equal(mani.luogoNelTesto('Save it to my Desktop'), 'scrivania')
+  assert.equal(mani.luogoNelTesto('Write the intro and put it in my Downloads folder.'), 'scaricati')
+  assert.equal(mani.luogoNelTesto('Salvalo in Documenti, grazie'), 'documenti')
+  assert.equal(mani.luogoNelTesto('keep it in the Myynd folder on the desktop'), 'myynd')
+  // dove sta una cosa non è dove metterla
+  assert.equal(mani.luogoNelTesto('Read the file on my Desktop and summarise it'), null)
+  assert.equal(mani.luogoNelTesto('Introduce Myynd to H-Farm'), null)
+  // la risposta si attacca in coda alla nota: l'ultima parola sua vince
+  assert.equal(mani.luogoNelTesto('Project: X\nSave to Downloads.\nActually, save it to my Desktop.'), 'scrivania')
+})
+
+test('descriviLuogo e luogoDelPercorso parlano dei quattro posti nelle due lingue', () => {
+  assert.equal(mani.descriviLuogo('myynd', 'en'), 'on your Desktop, in the Myynd folder')
+  assert.equal(mani.descriviLuogo('scrivania', 'it'), 'sulla Scrivania')
+  assert.equal(mani.descriviLuogo('scaricati', 'en'), 'in your Downloads folder')
+  assert.equal(mani.descriviLuogo('documenti', 'it'), 'in Documenti')
+  assert.equal(mani.luogoDelPercorso(join(scrivania, 'Myynd', 'x.md')), 'myynd')
+  assert.equal(mani.luogoDelPercorso(join(scrivania, 'x.md')), 'scrivania')
+  assert.equal(mani.luogoDelPercorso(join(casa, 'Downloads', 'x.md')), 'scaricati')
+  assert.equal(mani.luogoDelPercorso(join(casa, 'x.md')), null)
+  assert.equal(mani.luogoPreferito(), 'myynd')
+  cfg.aggiorna({ consegne: { luogo: 'scaricati' } })
+  assert.equal(mani.luogoPreferito(), 'scaricati')
+})
+
+test('salvaConsegna scrive il file col nome della riga nel luogo scelto, numera, e la frase dice dove', () => {
+  const s = mani.salvaConsegna({ titolo: 'Introduce Myynd to H-Farm: a one-page intro?', testo: '# Intro\n\nBody.', luogo: 'scrivania' })
+  assert.equal(s.percorso, join(realpathSync(scrivania), 'Introduce Myynd to H-Farm a one-page intro.md'))
+  assert.equal(s.nome, 'Introduce Myynd to H-Farm a one-page intro.md')
+  assert.equal(readFileSync(s.percorso, 'utf8'), '# Intro\n\nBody.')
+  const due = mani.salvaConsegna({ titolo: 'Introduce Myynd to H-Farm: a one-page intro?', testo: 'again', luogo: 'scrivania' })
+  assert.equal(due.nome, 'Introduce Myynd to H-Farm a one-page intro-2.md')
+  assert.equal(readFileSync(s.percorso, 'utf8'), '# Intro\n\nBody.', 'il primo file non è stato toccato')
+  const giu = mani.salvaConsegna({ titolo: 'piano', testo: 'x', luogo: 'scaricati' })
+  assert.equal(giu.percorso, join(realpathSync(join(casa, 'Downloads')), 'Piano.md'))
+  assert.equal(mani.nomeFile('  ...  '), 'Myynd')
+  assert.equal(mani.nomeFile('a'.repeat(100)).length, 70)
+  assert.equal(mani.fraseDelFile(s, 'en'), 'Done: «Introduce Myynd to H-Farm a one-page intro.md» is on your Desktop.')
+  assert.equal(mani.fraseDelFile(giu, 'it', true), 'Fatto: «Piano.md» è nella cartella Download. D\'ora in poi salvo lì.')
+  // e la frase dai fatti conosce il posto, quando è uno dei quattro
+  assert.equal(mani.fraseDaiFatti([{ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: s.percorso }], 'en'), 'Done: «Introduce Myynd to H-Farm a one-page intro.md» is on your Desktop; the rest is below.')
+  finto({ ospitato: () => true })
+  assert.throws(() => mani.salvaConsegna({ titolo: 'x', testo: 'x', luogo: 'myynd' }), /server/)
+})
+
+test('vaSalvato: una pagina sì, un messaggio no, una risposta corta no, una cosa già prodotta altrove no, e se lo chiede lei sì', () => {
+  const pagina = 'Done: below.\n\n# Introducing Myynd\n\n' + 'Myynd is a personal twin. '.repeat(40) + '\n\nSecond.\n\nThird.'
+  assert.equal(mani.vaSalvato({ risultato: pagina, fatti: [], messaggio: false }), true)
+  assert.equal(mani.vaSalvato({ risultato: pagina, fatti: [], messaggio: true }), false)
+  assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nYes: go with the June figures.', fatti: [], messaggio: false }), false)
+  assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nYes: go with the June figures.', fatti: [], messaggio: false, chiesto: true }), true)
+  assert.equal(mani.vaSalvato({ risultato: pagina, fatti: [{ attrezzo: 'crea_nota', esito: 'ok', dettaglio: 'x' }], messaggio: false }), false)
+  assert.equal(mani.vaSalvato({ risultato: pagina, fatti: [{ attrezzo: 'scrivi_file', esito: 'errore', dettaglio: 'x' }], messaggio: false }), true)
+  assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nSubject: Hi\n\n' + 'x '.repeat(600), fatti: [], messaggio: false }), false)
+  assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nA\n\nB\n\nC\n\nD', fatti: [], messaggio: false }), true)
+  assert.equal(mani.vaSalvato({ risultato: 'Done: below.', fatti: [], messaggio: false, chiesto: true }), false)
+})
+
+test('rigaPerLei stacca la riga per lei dal documento, e nel dubbio la lascia dentro', () => {
+  const doc = '# Intro\n\nParagraph one.\n\nParagraph two.\n\nI assumed the audience is the H-Farm leadership team; tell me if it is the students.'
+  assert.deepEqual(mani.rigaPerLei(doc), { corpo: '# Intro\n\nParagraph one.\n\nParagraph two.', nota: 'I assumed the audience is the H-Farm leadership team; tell me if it is the students.' })
+  assert.deepEqual(mani.rigaPerLei('# Intro\n\nOne.\n\nA closing paragraph about the future of the pilot.'), { corpo: '# Intro\n\nOne.\n\nA closing paragraph about the future of the pilot.', nota: '' })
+  // due paragrafi soli: il secondo è il documento, non una nota
+  assert.deepEqual(mani.rigaPerLei('One.\n\nHo ipotizzato che il pilota parta a ottobre.'), { corpo: 'One.\n\nHo ipotizzato che il pilota parta a ottobre.', nota: '' })
+  assert.deepEqual(mani.rigaPerLei('One.\n\nTwo.\n\nHo ipotizzato che il pilota parta a ottobre.'), { corpo: 'One.\n\nTwo.', nota: 'Ho ipotizzato che il pilota parta a ottobre.' })
+  assert.equal(mani.senzaChiusura('Done: x.\n\nBody.\n'), 'Body.')
+  assert.equal(mani.senzaChiusura('Body.'), 'Body.')
+})
+
+test('apriFile apre solo un file di testo dentro uno dei quattro luoghi, con la mano che apre', async () => {
+  const aperti: string[] = []
+  finto({ apri: async p => { aperti.push(p) } })
+  const s = mani.salvaConsegna({ titolo: 'aprimi', testo: 'x', luogo: 'myynd' })
+  await mani.apriFile(s.percorso)
+  assert.deepEqual(aperti, [s.percorso])
+  await assert.rejects(mani.apriFile(join(casa, 'appunti.md')), /non è una consegna/)
+  await assert.rejects(mani.apriFile(join(scrivania, 'Myynd', 'manca.md')), /non c’è più/)
+  writeFileSync(join(scrivania, 'Myynd', 'app.sh'), 'x')
+  await assert.rejects(mani.apriFile(join(scrivania, 'Myynd', 'app.sh')), /non è una consegna/)
+  assert.equal(aperti.length, 1)
+  finto({ ospitato: () => true })
+  await assert.rejects(mani.apriFile(s.percorso), /Mac/)
+})
+
+test('scrivi_file scrive nel luogo scelto quando lei ne ha scelto uno, e resta fuori dagli altri posti', () => {
+  assert.equal(mani.scriviFile({ percorso: 'note-scelte.md', testo: 'x' }, null, 'scaricati'), join(realpathSync(join(casa, 'Downloads')), 'note-scelte.md'))
+  // la cartella Myynd resta scrivibile anche con un altro luogo scelto
+  assert.equal(mani.scriviFile({ percorso: join(scrivania, 'Myynd', 'ancora.md'), testo: 'x' }, null, 'scaricati'), join(realpathSync(scrivania), 'Myynd', 'ancora.md'))
+  // ma la Scrivania nuda no, se il luogo è Download
+  assert.throws(() => mani.scriviFile({ percorso: join(scrivania, 'sopra2.md'), testo: 'x' }, null, 'scaricati'), /solo nella cartella/)
+  assert.ok(!existsSync(join(scrivania, 'sopra2.md')))
+})
+

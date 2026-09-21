@@ -624,8 +624,10 @@ export type EmailPronta = {
 export type Registrato = { progetto: string | null }
 
 export type Compito = {
-  /** Verified native artifact; never inferred from the response text. */
-  consegna?: { app: 'Pages' | 'TextEdit'; titolo: string; percorso: string
+  /** Verified native artifact, or the file Myynd wrote by itself (`app: 'File'`); never inferred from the response text. */
+  consegna?: { app: 'Pages' | 'TextEdit' | 'File'; titolo: string; percorso: string
+  /** For a file: where it is, by name (myynd | scrivania | scaricati | documenti), said in words on the row. */
+  dove?: string
   anteprima?: string; pagine?: number; stile?: string; desktop?: string
   revisione?: { esito: 'pass' | 'revise' | 'unavailable'; problemi: string[] }
   } | null

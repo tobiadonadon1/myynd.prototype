@@ -3055,7 +3055,10 @@ export const perProva = {
 // una voce del feed promossa a compito *chiude* la voce invece di duplicarla.
 
 export type ConsegnaCompito = {
-  app: 'Pages' | 'TextEdit'; titolo: string; percorso: string
+  /** `File`: un file scritto da Myynd da sé, nel luogo delle consegne. Vedi `mani.salvaConsegna`. */
+  app: 'Pages' | 'TextEdit' | 'File'; titolo: string; percorso: string
+  /** Per un file: il luogo a nome (`mani.Luogo`), per dirlo a parole sulla riga. */
+  dove?: string
   desktop?: string; anteprima?: string; pagine?: number; stile?: string
   revisione?: { esito: 'pass' | 'revise' | 'unavailable'; problemi: string[] }
 }
@@ -3535,10 +3538,11 @@ export function cambiaStatoCompito(id: string, stato: string, esito?: string) {
 
 /** Written only by the verified native executor, never from model prose or task edits. */
 export function scriviConsegnaCompito(id: string, consegna: ConsegnaCompito | null) {
-  if (consegna && (!['Pages', 'TextEdit'].includes(consegna.app) || !consegna.titolo.trim() || !consegna.percorso.startsWith('/') || consegna.percorso.includes('\0'))) {
+  if (consegna && (!['Pages', 'TextEdit', 'File'].includes(consegna.app) || !consegna.titolo.trim() || !consegna.percorso.startsWith('/') || consegna.percorso.includes('\0'))) {
     throw new Error('Consegna non valida.')
   }
   if (consegna?.desktop && (!consegna.desktop.startsWith('/') || consegna.desktop.includes('\0'))) throw new Error('Invalid desktop delivery path.')
+  if (consegna?.dove !== undefined && (typeof consegna.dove !== 'string' || !/^[a-z]{1,20}$/.test(consegna.dove))) throw new Error('Luogo della consegna non valido.')
   if (consegna?.anteprima && (!consegna.anteprima.startsWith('/') || consegna.anteprima.includes('\0'))) throw new Error('Anteprima non valida.')
   if (consegna?.pagine != null && (!Number.isInteger(consegna.pagine) || consegna.pagine < 1)) throw new Error('Numero di pagine non valido.')
   if (consegna?.revisione && (!['pass', 'revise', 'unavailable'].includes(consegna.revisione.esito) || !Array.isArray(consegna.revisione.problemi) || !consegna.revisione.problemi.every(p => typeof p === 'string'))) throw new Error('Revisione non valida.')
