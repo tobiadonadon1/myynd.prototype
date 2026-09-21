@@ -27,6 +27,14 @@
  * sull'avorio non si leggeva più. E l'animazione: non più due strati che
  * scorrono in versi opposti (vedi la tela).
  *
+ * Qui sta il fondo, e sta fermo: l'ambra in cima, il rame, il bruno quasi
+ * nero in basso. Tutto quello che si muove — le righe che scivolano, il
+ * fascio che le attraversa, il guizzo delle fiamme, il fumo che sale, le
+ * braci — lo disegna la tela in `AuroraCompito.tsx`, dove è scritto anche
+ * perché ognuna di quelle cose si muove in quel verso e non in un altro. Il
+ * fondo è in CSS e non nella tela perché così la riga si vede accesa anche
+ * nel fotogramma prima che JavaScript parta.
+ *
  * Nessuna barra che avanza: dice «sta succedendo», non «quanto manca» —
  * quello lo dice a parole la riga del passo. Con il moto ridotto resta il
  * fuoco fermo, che si distingue lo stesso da una riga a riposo.
@@ -36,14 +44,54 @@
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
   opacity: .6;
+  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1);
+}
+/* il fondo su un suo strato, perché quando il lavoro finisce si raffredda per
+   conto proprio mentre la tela sopra finisce la sua corsa */
+.task-aurora::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
   background: linear-gradient(to bottom,
     #E9A35C 0%, #DA7A45 6%, #C4553A 13%, #A03826 21%, #732A19 34%, #3E1A10 52%, #22110B 70%, #1A0D08 100%);
-  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1);
 }
 .task-aurora canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .task-working-step { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(var(--inchiostro-rgb),.62); overflow-wrap: anywhere; }
+
+/*
+ * Quando il lavoro finisce. (21 settembre 2026)
+ *
+ * Un secondo e quattro decimi, una volta sola. Il fascio si raccoglie e si
+ * ferma, il fuoco si raffredda dall'ambra a un rame quieto, le righe si
+ * posano e svaniscono: quello lo fa la tela. Qui si spegne lo strato intero,
+ * con un soffio più acceso a metà — il calore che si raccoglie prima di
+ * andarsene — e poi giù fino a niente. Non è un avviso che compare: è una
+ * cosa che smette. Alla fine il componente chiama `onFinita` e la riga passa
+ * allo stato dopo.
+ *
+ * Lo spegnimento sta sullo strato e non sul fondo, e non è un dettaglio: con
+ * il fondo che se ne andava per conto suo, sulla carta chiara restava per due
+ * decimi di secondo la tela da sola — righe accese e fumo scuro su un bianco
+ * quasi pieno, che sembrava un guasto. Tela e fondo se ne vanno insieme,
+ * sempre; il raffreddamento è solo un filtro, che non toglie niente da sotto.
+ */
+.task-aurora[data-fase="finita"] { animation: fuoco-si-posa 1.4s cubic-bezier(.33,0,.15,1) forwards; }
+.task-aurora[data-fase="finita"]::before { animation: fuoco-si-raffredda 1.4s cubic-bezier(.33,0,.15,1) forwards; }
+@keyframes fuoco-si-posa {
+  0% { opacity: .6; }
+  35% { opacity: .62; }
+  70% { opacity: .4; }
+  100% { opacity: 0; }
+}
+@keyframes fuoco-si-raffredda {
+  0% { filter: none; }
+  30% { filter: brightness(1.14); }
+  60% { filter: brightness(.95) saturate(.8); }
+  100% { filter: brightness(.74) saturate(.55); }
+}
 @media (prefers-reduced-motion: reduce) {
   .task-aurora-host[data-working] svg rect { animation: none !important; }
+  /* niente da guardare: la riga si spegne e basta */
+  .task-aurora[data-fase="finita"] { opacity: 0; animation: none; }
+  .task-aurora[data-fase="finita"]::before { animation: none; }
 }
 
 /*
