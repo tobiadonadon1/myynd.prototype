@@ -34,6 +34,12 @@
  * Nessuna barra che avanza: dice «sta succedendo», non «quanto manca» —
  * quello lo dice a parole la riga del passo. Con il moto ridotto resta il
  * fuoco fermo, che si distingue lo stesso da una riga a riposo.
+ *
+ * La sera stessa, visto in pagina: «I like the gradient… make that less
+ * vivid. Maybe a little bit more transparent would work better.» Quindi lo
+ * strato sta all'ottanta per cento, così la carta sotto traspare, e i
+ * colori sono smorzati di un passo: l'ambra meno gialla, il rosso meno
+ * acceso, le braci a metà. La stessa forma, meno voce.
  */
 .task-aurora-host[data-working] {
   --inchiostro-rgb: 255,247,240;
@@ -52,14 +58,15 @@
 .task-aurora {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit;
   overflow: hidden; pointer-events: none; contain: paint;
-  background-color: #150A06;
+  opacity: .8;
+  background-color: #1A0D08;
   background-image: linear-gradient(to bottom,
-    #F2A24A 0%, #E76F2E 6%, #D4482A 13%, #B32E16 20%, #7E1E0E 30%, #3F1409 44%, #1D0D08 58%, #150A06 100%);
+    #E9A35C 0%, #DA7A45 5%, #C4553A 11%, #A03826 18%, #732A19 29%, #3E1A10 44%, #22110B 58%, #1A0D08 100%);
   background-size: 100% 180%;
   background-position: 0 0%;
   animation: task-fuoco-respiro 11s ease-in-out infinite alternate;
   animation-play-state: var(--mo, running);
-  box-shadow: inset 0 0 0 1px rgba(255,200,150,.12), inset 0 1px 0 rgba(255,225,190,.28);
+  box-shadow: inset 0 0 0 1px rgba(255,200,150,.1), inset 0 1px 0 rgba(255,225,190,.2);
 }
 .task-aurora::before, .task-aurora::after {
   content: ''; position: absolute; inset: 0;
@@ -68,8 +75,8 @@
 /* le righe: due passi che si battono, così il disegno non torna mai uguale */
 .task-aurora::before {
   background-image:
-    repeating-linear-gradient(90deg, rgba(255,235,210,.10) 0 1px, transparent 1px 6px, rgba(0,0,0,.30) 6px 8px, transparent 8px 14px),
-    repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.24) 9px 13px, transparent 13px 30px, rgba(255,225,190,.08) 30px 32px, transparent 32px 47px);
+    repeating-linear-gradient(90deg, rgba(255,235,210,.08) 0 1px, transparent 1px 6px, rgba(0,0,0,.22) 6px 8px, transparent 8px 14px),
+    repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.18) 9px 13px, transparent 13px 30px, rgba(255,225,190,.06) 30px 32px, transparent 32px 47px);
   background-size: 14px 100%, 47px 100%;
   animation: task-fuoco-scorri 70s linear infinite;
 }
@@ -86,19 +93,19 @@
 /* le braci: due chiazze calde che vagano */
 .task-aurora i {
   position: absolute; width: 46%; height: 160%; top: -30%; left: 8%;
-  background: radial-gradient(ellipse at center, rgba(255,170,80,.5) 0%, rgba(232,101,42,.28) 38%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(255,170,80,.34) 0%, rgba(232,101,42,.18) 38%, transparent 70%);
   filter: blur(18px); mix-blend-mode: screen;
   animation: task-fuoco-brace 19s ease-in-out infinite alternate;
   animation-play-state: var(--mo, running);
 }
 .task-aurora i:nth-child(2) {
   left: 50%; top: 10%; width: 40%;
-  background: radial-gradient(ellipse at center, rgba(255,90,40,.42) 0%, rgba(160,40,20,.24) 40%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(255,90,40,.28) 0%, rgba(160,40,20,.16) 40%, transparent 70%);
   animation-delay: -9s; animation-duration: 23s;
 }
 .task-aurora i:nth-child(3) {
   left: 30%; top: -70%; width: 30%; height: 90%;
-  background: radial-gradient(ellipse at center, rgba(255,240,215,.22) 0%, transparent 65%);
+  background: radial-gradient(ellipse at center, rgba(255,240,215,.15) 0%, transparent 65%);
   filter: blur(10px);
   animation-delay: -14s; animation-duration: 27s;
 }
