@@ -671,3 +671,33 @@ test('e senza Jev la lettura riceve quello che riceveva prima', async () => {
     assert.match(mandato, /id: posta:INBOX:711/)
   } finally { jev.perProva(null) }
 })
+
+test('la lettura non ripropone una cosa che è già sul feed con altre parole', async () => {
+  store.azzeraTutto()
+  // la carta di ieri, nata da una mail; oggi ne arriva un'altra che dice la stessa cosa
+  store.salvaDocumenti([
+    doc('posta:INBOX:800', 'Riscontro di papà', { corpo: 'Puoi rispondere al riscontro di papà su Myynd?' }),
+    doc('posta:INBOX:801', 'Risposta di papà', { corpo: 'Puoi rispondere alla risposta di papà su Myynd?' })
+  ])
+  store.salvaFeed([voce('Rispondere a papà sul riscontro di Myynd', 'posta:INBOX:800')])
+  const ricevute = fornitoreFinto([
+    { tipo: 'Da decidere', titolo: 'Rispondere a papà sulla risposta di Myynd', testo: 'Papà aspetta una risposta sul suo riscontro a Myynd.', urgenza: 'nessuna fretta', fonte: 'posta', doc: 'posta:INBOX:801', perche: 'Papà aspetta una tua risposta.', prova: 'Puoi rispondere alla risposta di papà su Myynd?' }
+  ])
+  cfg.aggiorna({ jev: { apiKey: 'apikey_prova' } })
+  giudizi.scorda(); jev.dimentica()
+  jev.perProva(async (_u, opz) => {
+    const corpo = JSON.parse(String((opz as RequestInit).body))
+    // la porta d'ingresso dice sì; il controllo sui doppioni dice «è la stessa»
+    if (corpo.questions.chiede) return Response.json({ answers: {
+      chiede: { type: 'noul', noul: 0.9 },
+      urgenza: { type: 'score', score: 2, confidence: 0.9, probabilities: {}, legend: {} },
+      genere: { type: 'choice', choice: 'richiesta', confidence: 0.9, probabilities: { richiesta: 0.9 } }
+    } })
+    return Response.json({ answers: { doppione: { type: 'choice', choice: 'c0', confidence: 0.8, probabilities: { c0: 0.8, nessuno: 0.2 } } } })
+  })
+  try {
+    const voci = await claude.generaFeed()
+    assert.equal(ricevute.length, 1, 'il modello è stato chiamato: il doppione si scopre dopo')
+    assert.deepEqual(voci, [], 'la voce doppia è arrivata fino al feed')
+  } finally { jev.perProva(null); giudizi.scorda() }
+})

@@ -267,3 +267,147 @@ export function primaQuelloCheConta(docs: readonly Documento[], pesi: Map<string
   return [...docs].sort((a, b) =>
     (pesi.get(b.id) ?? 1.5) - (pesi.get(a.id) ?? 1.5) || posto.get(a.id)! - posto.get(b.id)!)
 }
+
+// — la stessa cosa due volte —
+
+/**
+ * Sopra questa probabilità, una carta nuova è una carta che ha già.
+ *
+ * Misurata il 21 settembre 2026 sulle sue carte vere. Le tre voci nate dalla
+ * stessa conversazione con suo padre — «Dad's reply on Myynd needs a
+ * response», «Dad's feedback on Myynd needs a response», «Dad's reply on
+ * Myynd — feature request»: una fatta, due scartate — si riconoscono a 0.77 e
+ * 0.90. Due fatture dello stesso fornitore, due cose diverse per la stessa
+ * persona e due carte a caso rispondono «nessuno» fra 0.87 e 0.95. In mezzo
+ * non c'è niente, e la soglia sta lì: 0.55.
+ */
+export const SOGLIA_DOPPIONE = 0.55
+
+/** Quante carte aperte si mettono davanti a Jev per volta: più opzioni, più la scelta si annacqua. */
+const APERTE_A_CONFRONTO = 8
+
+export type Carta = { titolo: string; testo?: string | null }
+
+const PAROLE_VUOTE = new Set(('the a an and or of to for on in with your you his her their this that is are be need needs ' +
+  'reply respond answer send confirm review about from myynd il lo la le un una di da per con su che non e a').split(' '))
+function paroleUtili(s: string): Set<string> {
+  return new Set(s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .split(/[^a-z0-9]+/).filter(p => p.length >= 3 && !PAROLE_VUOTE.has(p)))
+}
+
+/**
+ * Le candidate: solo quelle che hanno almeno una parola in comune.
+ *
+ * Non è la decisione — quella la prende Jev — è il modo di non pagarla. Due
+ * carte che non condividono nemmeno un nome, un prodotto o un verbo non sono
+ * mai la stessa cosa, e chiederlo costerebbe una domanda per ogni coppia.
+ */
+function vicine(nuova: Carta, aperte: readonly Carta[]): Carta[] {
+  const parole = paroleUtili(`${nuova.titolo} ${nuova.testo ?? ''}`)
+  return aperte
+    .map(c => ({ c, n: [...paroleUtili(`${c.titolo} ${c.testo ?? ''}`)].filter(p => parole.has(p)).length }))
+    .filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, APERTE_A_CONFRONTO)
+    .map(x => x.c)
+}
+
+/**
+ * Quali carte nuove dicono una cosa che ha già sul feed.
+ *
+ * Oggi lo decide un conto di parole in comune (`stessoTitolo` in `store.ts`),
+ * e quel conto non può distinguere «la risposta a papà» da «il riscontro di
+ * papà» — che sono la stessa mail — senza confondere anche «fattura 123» con
+ * «fattura 124», che sono due soldi diversi. Jev legge la differenza.
+ *
+ * Il confronto è anche **fra le carte nuove**: il modello ne scrive due
+ * uguali nello stesso giro più spesso di quanto si creda, ed è così che sono
+ * nate le tre voci su suo padre.
+ *
+ * Torna solo i doppioni trovati: una carta che non c'è dentro resta, come
+ * resterebbe se Jev non esistesse.
+ */
+export async function doppioni<T extends Carta>(nuove: readonly T[], aperte: readonly Carta[]): Promise<Map<T, string>> {
+  const fuori = new Map<T, string>()
+  if (!nuove.length || !jev.collegato()) return fuori
+  const confronto: Carta[] = [...aperte]
+  for (const nuova of nuove) {
+    const candidate = vicine(nuova, confronto)
+    if (!candidate.length) { confronto.push(nuova); continue }
+    const r = await jev.giudica({
+      persona: leggi().nome || 'Tobia',
+      carta_nuova: { titolo: nuova.titolo, testo: (nuova.testo ?? '').slice(0, 200) }
+    }, {
+      doppione: {
+        type: 'choice',
+        instructions:
+          'Which card already on his feed would be satisfied by the same single piece of work as the new card: ' +
+          'doing one would leave nothing to do for the other.',
+        criteria: Object.fromEntries([
+          ...candidate.map((c, i) => [`c${i}`, { what: c.titolo, detail: (c.testo ?? '').slice(0, 160) }]),
+          ['nessuno', 'None of them: the new card is separate work, even if it touches the same person, project or thread']
+        ])
+      } as jev.Scelta
+    })
+    const d = r?.doppione
+    // «nessuno» e le risposte incerte lasciano la carta dov'è: il dubbio non
+    // toglie niente a nessuno, e una voce in più costa molto meno di una persa
+    if (d && d.choice !== 'nessuno' && (d.probabilities[d.choice] ?? 0) >= SOGLIA_DOPPIONE) {
+      const quale = candidate[Number(d.choice.slice(1))]
+      if (quale) { fuori.set(nuova, quale.titolo); continue }
+    }
+    confronto.push(nuova)
+  }
+  return fuori
+}
+
+// — di chi è questa carta —
+
+/**
+ * Sopra questa probabilità si scrive il progetto sulla carta.
+ *
+ * Misurata sui suoi documenti: le chat sul prototipo danno Myynd a 0.99-1.00,
+ * l'invito all'audit 0.71, una promozione «nessuno» a 0.96. Sotto 0.6 si
+ * lascia decidere alla regola di sempre, che guarda se il nome è scritto.
+ */
+export const SOGLIA_PROGETTO = 0.6
+
+/**
+ * Di quale progetto parla ogni carta.
+ *
+ * Oggi la prima pagina raggruppa le voci per progetto cercando il *nome* del
+ * progetto dentro il titolo (`progettoDelTesto`): una carta che parla del
+ * deck senza mai scrivere «Evermute» finisce nel blocco di nessuno. Qui si
+ * chiede, e si scrive la risposta sulla carta quando nasce — non a ogni
+ * apertura della pagina, che deve restare istantanea.
+ *
+ * La chiave della Map è il nome del progetto come l'ha scritto lui: chi
+ * chiama lo traduce nell'id.
+ */
+export async function progettoDelle<T extends Carta>(
+  carte: readonly T[],
+  progetti: readonly { nome: string; obiettivo?: string }[]
+): Promise<Map<T, string>> {
+  const fuori = new Map<T, string>()
+  if (!carte.length || progetti.length < 2 || !jev.collegato()) return fuori
+  const criteri = Object.fromEntries([
+    ...progetti.map(p => [p.nome, { what: p.obiettivo?.slice(0, 200) || p.nome }]),
+    ['nessuno', 'None of them: personal, admin, or something outside his projects']
+  ])
+  const risposte = await jev.giudicaTanti(carte, c => ({
+    persona: leggi().nome || 'Tobia',
+    carta: { titolo: c.titolo, testo: (c.testo ?? '').slice(0, 300) }
+  }), {
+    progetto: {
+      type: 'choice',
+      instructions: 'Which of his projects this card belongs to.',
+      criteria: criteri
+    } as jev.Scelta
+  })
+  for (const [c, r] of risposte) {
+    const p = r?.progetto
+    if (!p || p.choice === 'nessuno') continue
+    if ((p.probabilities[p.choice] ?? 0) >= SOGLIA_PROGETTO) fuori.set(c, p.choice)
+  }
+  return fuori
+}

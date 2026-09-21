@@ -462,8 +462,27 @@ Scrivi in ${nellaLingua()}.`)
     if (d && !(d.progetto && morti.has(d.progetto)) && !store.domandaGiaFatta(d.tema)) domande.push(d)
     if (domande.length >= DOMANDE_AL_GIRO) break
   }
-  console.log(`myynd · priorità · ${docs.length} documenti, di cui ${cartelle} cartelle di lavoro e ${conversazioni} conversazioni, ${Array.isArray(out.priorita) ? out.priorita.length : 0} proposte, ${voci.length} buone, ${domande.length} domande`)
-  return { voci, domande, guardati: docs.length, cartelle, conversazioni }
+  /*
+   * E fuori quelle che dicono una cosa che ha già sul feed.
+   *
+   * Il prompt gliele elenca — «queste sono già sul suo feed» — e il modello le
+   * riscrive lo stesso con parole diverse: è successo tre volte con la stessa
+   * conversazione, e due di quelle tre voci lui le ha scartate a mano. Il
+   * controllo sulle parole in `salvaFeed` non le prende, perché a cambiare è
+   * proprio la parola («la risposta di papà», «il riscontro di papà»).
+   *
+   * Qui e non in `salvaFeed` per la stessa ragione del blocco degli obiettivi
+   * in `claude.ts`: questa è una domanda sul senso, e le domande sul senso non
+   * si fanno dentro una transazione del database.
+   */
+  const doppie = await giudizi.doppioni(voci, store.elencoFeed('aperto').map(v => ({ titolo: v.titolo, testo: v.testo })))
+  const tenute = voci.filter(v => {
+    const quale = doppie.get(v)
+    if (quale) console.warn(`myynd · priorità · doppione: «${v.titolo.slice(0, 60)}» è la stessa cosa di «${quale.slice(0, 60)}»`)
+    return !quale
+  })
+  console.log(`myynd · priorità · ${docs.length} documenti, di cui ${cartelle} cartelle di lavoro e ${conversazioni} conversazioni, ${Array.isArray(out.priorita) ? out.priorita.length : 0} proposte, ${tenute.length} buone, ${domande.length} domande`)
+  return { voci: tenute, domande, guardati: docs.length, cartelle, conversazioni }
 }
 
 /** Da priorità a voce del feed: la fonte è il documento, se c'è; altrimenti nessuna. */

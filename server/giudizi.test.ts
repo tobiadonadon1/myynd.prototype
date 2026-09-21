@@ -188,3 +188,87 @@ test('e quando Jev tace, la coda delle risposte resta quella di sempre', async (
   await auto.fai(r, { aMano: true })
   assert.deepEqual(visti.sort(), ['luca', 'marta'], 'tutt’e due, come prima che Jev esistesse')
 })
+
+// — la stessa cosa due volte —
+
+/** Jev finto che sceglie: `quale` riceve la carta nuova e le opzioni offerte. */
+function jevSceglie(quale: (titolo: string, opzioni: Record<string, unknown>) => { scelta: string; p: number }) {
+  jev.perProva(async (_u, opz) => {
+    const corpo = JSON.parse(String((opz as RequestInit).body))
+    const nome = Object.keys(corpo.questions)[0]
+    const criteri = corpo.questions[nome].criteria as Record<string, unknown>
+    const titolo = (corpo.state.carta_nuova ?? corpo.state.carta).titolo
+    const { scelta, p } = quale(titolo, criteri)
+    return Response.json({ answers: { [nome]: {
+      type: 'choice', choice: scelta, confidence: p,
+      probabilities: { [scelta]: p, ...(scelta === 'nessuno' ? {} : { nessuno: 1 - p }) }
+    } } })
+  })
+}
+
+test('una carta che dice quello che ha già sul feed non passa, una diversa sì', async () => {
+  const aperte = [
+    { titolo: 'Dad’s reply on Myynd needs a response', testo: 'He likes the concept but flags the to-do sync.' },
+    { titolo: 'Pay invoice n. 123 from Rossi', testo: 'The March invoice is due Friday.' }
+  ]
+  const nuove = [
+    { titolo: 'Dad’s feedback on Myynd needs a response', testo: 'Your father flagged the action side.' },
+    { titolo: 'Pay invoice n. 124 from Rossi', testo: 'The April invoice is due Friday.' }
+  ]
+  jevSceglie(t => /feedback/.test(t) ? { scelta: 'c0', p: 0.77 } : { scelta: 'nessuno', p: 0.95 })
+  const doppie = await giudizi.doppioni(nuove, aperte)
+  assert.equal(doppie.size, 1)
+  assert.equal(doppie.get(nuove[0]), 'Dad’s reply on Myynd needs a response')
+  assert.equal(doppie.get(nuove[1]), undefined, 'due fatture diverse non sono un doppione')
+})
+
+test('una risposta incerta non toglie niente: nel dubbio la carta resta', async () => {
+  const aperte = [{ titolo: 'Dad’s reply on Myynd needs a response', testo: '' }]
+  const nuove = [{ titolo: 'Dad’s feedback on Myynd needs a response', testo: '' }]
+  jevSceglie(() => ({ scelta: 'c0', p: giudizi.SOGLIA_DOPPIONE - 0.05 }))
+  assert.equal((await giudizi.doppioni(nuove, aperte)).size, 0)
+  jevSceglie(() => ({ scelta: 'c0', p: giudizi.SOGLIA_DOPPIONE + 0.01 }))
+  assert.equal((await giudizi.doppioni(nuove, aperte)).size, 1)
+})
+
+test('senza una parola in comune non si chiede niente a nessuno', async () => {
+  let chiamate = 0
+  jev.perProva(async () => { chiamate++; return Response.json({ answers: {} }) })
+  const doppie = await giudizi.doppioni(
+    [{ titolo: 'Pagare l’F24 entro il 30', testo: '' }],
+    [{ titolo: 'Confirm attendance for Amanda’s audit', testo: '' }])
+  assert.equal(chiamate, 0, 'due carte senza niente in comune non valgono una domanda')
+  assert.equal(doppie.size, 0)
+})
+
+test('il doppione si cerca anche fra le carte dello stesso giro', async () => {
+  const nuove = [
+    { titolo: 'Dad’s reply on Myynd needs a response', testo: '' },
+    { titolo: 'Dad’s reply on Myynd — feature request', testo: '' }
+  ]
+  // la prima non ha contro chi confrontarsi; la seconda trova la prima
+  jevSceglie((t, opzioni) => 'c0' in opzioni && /feature/.test(t) ? { scelta: 'c0', p: 0.8 } : { scelta: 'nessuno', p: 0.9 })
+  const doppie = await giudizi.doppioni(nuove, [])
+  assert.deepEqual([...doppie.values()], ['Dad’s reply on Myynd needs a response'])
+})
+
+// — di chi è questa carta —
+
+test('il progetto si scrive sulla carta solo quando Jev è sicuro', async () => {
+  const progetti = [{ nome: 'Myynd', obiettivo: 'Il gemello digitale' }, { nome: 'Evermute', obiettivo: 'Il deck e il prodotto audio' }]
+  const carte = [{ titolo: 'Rispondere sul deck', testo: 'Mancano le decisioni di design.' }, { titolo: 'Pagare l’F24', testo: 'Entro il 30.' }]
+  jevSceglie(t => /deck/.test(t) ? { scelta: 'Evermute', p: 0.97 } : { scelta: 'Myynd', p: 0.4 })
+  const scelti = await giudizi.progettoDelle(carte, progetti)
+  assert.equal(scelti.get(carte[0]), 'Evermute')
+  assert.equal(scelti.get(carte[1]), undefined, 'sotto la soglia decide la regola di sempre, non Jev')
+})
+
+test('senza chiave nessuna delle due domande chiama niente', async () => {
+  cfg.scrivi({ lingua: 'en' }, { togli: ['jev'] })
+  let chiamate = 0
+  jev.perProva(async () => { chiamate++; return Response.json({ answers: {} }) })
+  const carte = [{ titolo: 'Dad’s feedback on Myynd', testo: '' }]
+  assert.equal((await giudizi.doppioni(carte, [{ titolo: 'Dad’s reply on Myynd', testo: '' }])).size, 0)
+  assert.equal((await giudizi.progettoDelle(carte, [{ nome: 'Myynd' }, { nome: 'Evermute' }])).size, 0)
+  assert.equal(chiamate, 0)
+})

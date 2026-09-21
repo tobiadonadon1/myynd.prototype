@@ -28,7 +28,7 @@ import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, elencoFeed, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 /**
  * La lista, per la chat che la tocca.
  *
@@ -1885,7 +1885,7 @@ const schemaFeed = (ids: string[]) => ({
   additionalProperties: false
 })
 
-export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string }
+export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string; progetto?: string | null }
 
 /** Quante voci al massimo può tirare fuori una lettura. */
 export const VOCI_PER_LETTURA = 5
@@ -2220,7 +2220,47 @@ Scrivi in ${nellaLingua()}.`),
   if (voci.some(v => linguaSbagliata(daLeggere(v), l))) voci = await chiama(`\n\n${soloInLingua(l)}`)
   const buone = voci.filter(v => !linguaSbagliata(daLeggere(v), l))
   if (buone.length < voci.length) console.warn('myynd · lettura: risposta nella lingua sbagliata, scartata')
-  return buone
+  return await rifinite(buone, suoi)
+}
+
+/**
+ * L'ultimo passaggio: via quello che ha già, e a ognuna il suo progetto.
+ *
+ * Due domande che le regole non sanno fare, e si fanno qui — dopo che la voce
+ * è nata e prima che si salvi — perché sono giudizi sulla *voce*, non sul
+ * documento da cui viene.
+ *
+ *   · Il doppione. `salvaFeed` conta le parole in comune, e non può
+ *     distinguere «la risposta di papà» dal «riscontro di papà» — la stessa
+ *     mail, due carte — senza confondere «fattura 123» con «fattura 124».
+ *     Dal database del ventuno settembre: tre voci nate dalla stessa
+ *     conversazione con suo padre, una fatta e due scartate a mano da lui.
+ *   · Il progetto. La prima pagina mette ogni voce nel blocco del suo
+ *     progetto cercando il *nome* scritto dentro il titolo: una carta che
+ *     parla del deck senza mai scrivere «Evermute» resta fuori da tutti i
+ *     blocchi. Si chiede una volta, quando la voce nasce, e si scrive sulla
+ *     carta: la pagina non deve aspettare nessuno per disegnarsi.
+ *
+ * Senza Jev tutt'e due tacciono e la lettura finisce come finiva prima.
+ */
+async function rifinite(voci: VoceFeed[], suoi: progetti.Progetto[]): Promise<VoceFeed[]> {
+  if (!voci.length) return voci
+  // le carte aperte intere, con il loro testo: al confronto serve di più di un titolo
+  const aperte = elencoFeed('aperto').map(v => ({ titolo: v.titolo, testo: v.testo }))
+  const doppie = await giudizi.doppioni(voci, aperte)
+  const restano = voci.filter(v => {
+    const quale = doppie.get(v)
+    if (quale) console.warn(`myynd · lettura · doppione: «${v.titolo.slice(0, 60)}» è la stessa cosa di «${quale.slice(0, 60)}»`)
+    return !quale
+  })
+  if (!restano.length || suoi.length < 2) return restano
+  const perNome = new Map(suoi.map(p => [p.nome.trim().toLowerCase(), p.id]))
+  const scelti = await giudizi.progettoDelle(restano, suoi.map(p => ({ nome: p.nome, obiettivo: p.obiettivo })))
+  return restano.map(v => {
+    const nome = scelti.get(v)
+    const id = nome ? perNome.get(nome.trim().toLowerCase()) : undefined
+    return id ? { ...v, progetto: id } : v
+  })
 }
 
 /**
