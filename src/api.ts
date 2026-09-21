@@ -1781,6 +1781,8 @@ export const api = {
   feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[] }>('/api/feed'),
   generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto; cerco?: boolean }>('/api/feed/genera', { method: 'POST' }),
   feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
+  /** La risposta alla domanda di un progetto, dalla prima pagina: l'esito dice dove è finita. */
+  rispondiIniziativa: (id: string, testo: string) => json<{ ok: true; esito: string; iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/rispondi`, { method: 'POST', body: JSON.stringify({ testo }) }),
   segnaFeed: (id: string, stato: 'fatto' | 'aperto') => json<{ ok: true; registrato?: Registrato }>(`/api/feed/${id}/${stato}`, { method: 'POST' }),
 
   chat: () => json<{ id: string; titolo: string; quando: string }[]>('/api/chat'),

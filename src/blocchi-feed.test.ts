@@ -4,23 +4,21 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
 
-const voce = (id: string, progetto: string | null, quando: string) => ({ id, progetto, quando })
+const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
   ({ id, progetto, stato: 'aperto', origine: 'mano', madre: null, aggiornato: '2026-09-10T08:00:00Z', testo: '', nota: null, ...altro })
-const domanda = (id: string, projectId: string, projectName: string) => ({ id, projectId, projectName })
 const PROGETTI = [{ id: 'hf', nome: 'H-Farm', stato: 'attivo' }, { id: 'nx', nome: 'Nextas', stato: 'attivo' }, { id: 'old', nome: 'Vecchio', stato: 'chiuso' }]
 
 const generi = (b: { righe: { genere: string }[] }) => b.righe.map(r => r.genere)
-const ids = (b: { righe: ({ genere: 'voce'; voce: { id: string } } | { genere: 'compito'; compito: { id: string } } | { genere: 'domanda'; domanda: { id: string } })[] }) =>
-  b.righe.map(r => r.genere === 'voce' ? r.voce.id : r.genere === 'compito' ? r.compito.id : r.domanda.id)
+const ids = (b: { righe: ({ genere: 'voce'; voce: { id: string } } | { genere: 'compito'; compito: { id: string } })[] }) =>
+  b.righe.map(r => r.genere === 'voce' ? r.voce.id : r.compito.id)
 
 test('ogni progetto è un blocco suo, e quello che non ha progetto sta in fondo', () => {
   const b = blocchiFeed({
     voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z'), voce('v2', null, '2026-09-17T10:00:00Z'), voce('v3', 'nx', '2026-09-15T10:00:00Z')],
     compiti: [compito('c1', 'nx'), compito('c2', null)],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
@@ -36,44 +34,47 @@ test('i blocchi vanno dal più recente al più vecchio, e conta anche una riga d
   const b = blocchiFeed({
     voci: [voce('v1', 'hf', '2026-09-10T10:00:00Z')],
     compiti: [compito('c1', 'nx', { aggiornato: '2026-09-16T10:00:00Z' })],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
   assert.deepEqual(b.map(x => x.nome), ['Nextas', 'H-Farm'])
 })
 
-test('la domanda sul progetto è l’ultima riga del suo blocco, mai sopra le cose da fare', () => {
+test('un blocco tiene solo il lavoro: voci e righe, mai una domanda', () => {
   const b = blocchiFeed({
     voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')],
     compiti: [compito('c1', 'hf')],
-    domande: [domanda('d1', 'hf', 'H-Farm'), domanda('d2', 'hf', 'H-Farm')],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
   assert.equal(b.length, 1)
-  assert.deepEqual(generi(b[0]), ['voce', 'compito', 'domanda'])
-  // una sola domanda per progetto
-  assert.deepEqual(ids(b[0]), ['v1', 'c1', 'd1'])
+  assert.deepEqual(generi(b[0]), ['voce', 'compito'])
 })
 
-test('un progetto con solo la domanda ha comunque un blocco, dopo quelli con qualcosa dentro', () => {
+test('le voci di un blocco vanno dalla più pesante alla più leggera, e chi non ha un peso sta in mezzo', () => {
   const b = blocchiFeed({
-    voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')],
+    voci: [
+      voce('sfondo', 'hf', '2026-09-18T10:00:00Z', 0),
+      voce('boh', 'hf', '2026-09-17T10:00:00Z', null),
+      voce('oggi', 'hf', '2026-09-16T10:00:00Z', 3),
+      voce('settimana', 'hf', '2026-09-15T10:00:00Z', 1),
+      voce('boh2', 'hf', '2026-09-14T10:00:00Z')
+    ],
     compiti: [],
-    domande: [domanda('d1', 'nx', 'Nextas')],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
-  assert.deepEqual(b.map(x => x.nome), ['H-Farm', 'Nextas'])
-  assert.deepEqual(generi(b[1]), ['domanda'])
+  assert.deepEqual(ids(b[0]), ['oggi', 'boh', 'boh2', 'settimana', 'sfondo'])
+  assert.equal(b[0].peso, 3)
+  assert.equal(pesoDi({ peso: null }), SENZA_PESO)
+  assert.equal(pesoDi({ peso: Number.NaN }), SENZA_PESO)
+  assert.equal(pesoDi({ peso: 2 }), 2)
 })
 
 test('un progetto chiuso o sconosciuto non ha un blocco: le sue cose vanno nel resto', () => {
   const b = blocchiFeed({
     voci: [voce('v1', 'old', '2026-09-16T10:00:00Z'), voce('v2', 'boh', '2026-09-16T10:00:00Z')],
     compiti: [compito('c1', 'old')],
-    domande: [domanda('d1', 'old', 'Vecchio')],
     progetti: PROGETTI,
     nomeResto: 'Everything else'
   })
@@ -91,7 +92,6 @@ test('la cosa dopo si legge sotto la riga da cui nasce, non come riga sua', () =
       // la madre non è in lista (è chiusa): questa è una riga come le altre
       compito('c3', 'hf', { origine: 'seguito', madre: 'chiusa' })
     ],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
@@ -109,7 +109,7 @@ test('quello che aspetta lui passa davanti, e sopra il tetto non si va', () => {
     compito('chiede', 'nx', { stato: 'chiede' }),
     compito('lavora', 'nx', { stato: 'delegato' })
   ]
-  const b = blocchiFeed({ voci: [], compiti, domande: [], progetti: PROGETTI, nomeResto: 'Il resto' })
+  const b = blocchiFeed({ voci: [], compiti, progetti: PROGETTI, nomeResto: 'Il resto' })
   const tutte = b.flatMap(ids)
   assert.equal(tutte.length, COMPITI_IN_PAGINA)
   assert.ok(tutte.includes('pronta') && tutte.includes('chiede') && tutte.includes('lavora'))
@@ -119,22 +119,20 @@ test('quello che aspetta lui passa davanti, e sopra il tetto non si va', () => {
   assert.deepEqual(ids(b.find(x => x.nome === 'H-Farm')!).slice(1), ['a0', 'a1', 'a2'])
 })
 
-test('dentro un blocco: prima le pronte, poi le voci, poi le altre righe, in fondo la domanda', () => {
+test('dentro un blocco: prima le pronte, poi le voci, poi le altre righe', () => {
   const b = blocchiFeed({
     voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')],
     compiti: [compito('c1', 'hf'), compito('c2', 'hf', { stato: 'chiede' })],
-    domande: [domanda('d1', 'hf', 'H-Farm')],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
-  assert.deepEqual(ids(b[0]), ['c2', 'v1', 'c1', 'd1'])
+  assert.deepEqual(ids(b[0]), ['c2', 'v1', 'c1'])
 })
 
 test('una riga senza progetto che ne nomina uno attivo sta nel suo blocco, non nel resto', () => {
   const b = blocchiFeed({
     voci: [],
     compiti: [compito('c1', null, { testo: 'Definire un pilota Myynd dentro H-Farm' })],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
@@ -150,7 +148,6 @@ test('vale anche quello che il nome sta nella nota, e il nome è un\u2019entità
       // Nextastic non è Nextas: il confine di parola è lo stesso del server
       compito('quasi', null, { testo: 'Scrivere a Nextastic' })
     ],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
@@ -162,7 +159,6 @@ test('fra due nomi che combaciano vince il più lungo', () => {
   const b = blocchiFeed({
     voci: [],
     compiti: [compito('c1', null, { testo: 'Pilota dentro H-Farm' })],
-    domande: [],
     progetti: [{ id: 'f', nome: 'Farm', stato: 'attivo' }, { id: 'hf', nome: 'H-Farm', stato: 'attivo' }],
     nomeResto: 'Il resto'
   })
@@ -176,7 +172,6 @@ test('il progetto scritto vince sul nome nominato, e un progetto chiuso non tira
       compito('scritto', 'nx', { testo: 'Pilota dentro H-Farm' }),
       compito('chiuso', null, { testo: 'Riordinare il Vecchio' })
     ],
-    domande: [],
     progetti: PROGETTI,
     nomeResto: 'Il resto'
   })
@@ -185,20 +180,21 @@ test('il progetto scritto vince sul nome nominato, e un progetto chiuso non tira
 })
 
 test('senza niente non c\u2019è nessun blocco', () => {
-  assert.deepEqual(blocchiFeed({ voci: [], compiti: [], domande: [], progetti: PROGETTI, nomeResto: 'Il resto' }), [])
+  assert.deepEqual(blocchiFeed({ voci: [], compiti: [], progetti: PROGETTI, nomeResto: 'Il resto' }), [])
 })
 
-test('le cose sul tavolo sono tutte le righe che si vedono, domande comprese, più quella in cima', () => {
+test('le cose sul tavolo sono tutte le righe che si vedono, più le domande nella loro carta', () => {
   const blocchi = [{ righe: [{}, {}, {}] }, { righe: [{}] }]
-  assert.equal(sulTavolo(blocchi, false), 4)
-  assert.equal(sulTavolo(blocchi, true), 5)
-  assert.equal(sulTavolo([], false), 0)
+  assert.equal(sulTavolo(blocchi, 0), 4)
+  assert.equal(sulTavolo(blocchi, 3), 7)
+  assert.equal(sulTavolo([], 0), 0)
+  assert.equal(sulTavolo([], -1), 0)
 })
 
 // — l'ordine dei blocchi: quello che capisce da sé, e quello che sceglie lui —
 
-const blocchi = (dati: { voci?: ReturnType<typeof voce>[]; compiti?: ReturnType<typeof compito>[]; domande?: ReturnType<typeof domanda>[] }) =>
-  blocchiFeed({ voci: dati.voci ?? [], compiti: dati.compiti ?? [], domande: dati.domande ?? [], progetti: PROGETTI, nomeResto: 'Il resto' })
+const blocchi = (dati: { voci?: ReturnType<typeof voce>[]; compiti?: ReturnType<typeof compito>[] }) =>
+  blocchiFeed({ voci: dati.voci ?? [], compiti: dati.compiti ?? [], progetti: PROGETTI, nomeResto: 'Il resto' })
 const nomi = (b: { nome: string }[]) => b.map(x => x.nome)
 
 test('senza un ordine suo, i blocchi che aspettano lui passano davanti ai più recenti', () => {
@@ -221,6 +217,25 @@ test('una domanda senza risposta vale come una bozza pronta, e tira su anche «I
   // niente che aspetti lui: torna in fondo, dove sta sempre
   const senza = blocchi({ voci: [voce('v1', 'hf', '2026-09-09T10:00:00Z'), voce('v2', null, '2026-09-18T10:00:00Z')] })
   assert.deepEqual(nomi(ordinaBlocchi(senza)), ['H-Farm', 'Il resto'])
+})
+
+test('a parità di attesa, il blocco con la cosa più pesante passa davanti al più recente', () => {
+  const b = blocchi({
+    voci: [
+      voce('v1', 'nx', '2026-09-18T10:00:00Z', 1),
+      voce('v2', 'hf', '2026-09-10T10:00:00Z', 3),
+      voce('v3', null, '2026-09-19T10:00:00Z', 3)
+    ]
+  })
+  // per data sarebbe Nextas, H-Farm; H-Farm ha una cosa di peso 3 e passa
+  // avanti; «Il resto» ha lo stesso peso e resta in fondo, come sempre
+  assert.deepEqual(nomi(ordinaBlocchi(b)), ['H-Farm', 'Nextas', 'Il resto'])
+  // ma una bozza pronta viene prima di qualunque peso
+  const c = blocchi({
+    voci: [voce('v1', 'nx', '2026-09-18T10:00:00Z', 3)],
+    compiti: [compito('c1', 'hf', { stato: 'pronto', aggiornato: '2026-09-01T08:00:00Z' })]
+  })
+  assert.deepEqual(nomi(ordinaBlocchi(c)), ['H-Farm', 'Nextas'])
 })
 
 test('l’ordine che ha scelto lui vince, anche su una bozza pronta', () => {

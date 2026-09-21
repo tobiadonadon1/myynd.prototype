@@ -8,30 +8,40 @@
 // disegna lo sa `Myynd.tsx`. Sta in un file suo perché si prova da solo,
 // senza React e senza server.
 //
+// Dal 21 settembre le domande di Myynd sui progetti non stanno più qui
+// dentro: «if it's multiple questions, don't stack them one over the other,
+// just ask them in one unique card». Stanno in una carta sola, sotto i
+// blocchi, e la disegna `Myynd.tsx`. I blocchi sono il lavoro.
+//
 //   node --test src/blocchi-feed.test.ts
 
-/** Una voce del feed, per quel che serve a metterla in un blocco. */
-export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string }
+/**
+ * Una voce del feed, per quel che serve a metterla in un blocco.
+ *
+ * `peso` è quanto conta adesso, da 0 a 3, giudicato quando la voce è nata
+ * (`server/rifinitura.ts`): «organise it by importance on my feed». Chi non
+ * l'ha, perché è nata prima o perché Jev non c'era, sta in mezzo.
+ */
+export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string; peso?: number | null }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
 export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null }
-/** La domanda di Myynd su un progetto. */
-export type DomandaDaBlocco = { id: string; projectId: string; projectName: string }
 /** Un progetto: solo quelli attivi hanno un blocco. */
 export type ProgettoDaBlocco = { id: string; nome: string; stato?: string }
 
-export type RigaBlocco<V, C, D> =
+export type RigaBlocco<V, C> =
   | { genere: 'voce'; voce: V }
   /** `seguito` è la cosa che Myynd propone dopo questa, se l'ha proposta: si legge sotto, non è una riga sua. */
   | { genere: 'compito'; compito: C; seguito: C | null }
-  | { genere: 'domanda'; domanda: D }
 
-export type Blocco<V, C, D> = {
+export type Blocco<V, C> = {
   /** L'id del progetto; null è «Il resto», cioè quello che non sta in nessun progetto. */
   progetto: string | null
   nome: string
-  righe: RigaBlocco<V, C, D>[]
-  /** Quando è arrivata l'ultima cosa del blocco: decide l'ordine fra i blocchi. */
+  righe: RigaBlocco<V, C>[]
+  /** Quando è arrivata l'ultima cosa del blocco: decide l'ordine fra i blocchi a parità di peso. */
   ultimo: string
+  /** Il peso della cosa più pesante del blocco: decide l'ordine fra i blocchi, dopo chi aspetta lui. */
+  peso: number
 }
 
 /**
@@ -47,20 +57,32 @@ export const COMPITI_IN_PAGINA = 6
 const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
 const peso = (stato: string) => ATTESA[stato] ?? 2
 
+/**
+ * Il peso di una voce, come numero sempre.
+ *
+ * In mezzo (1.5) quando non c'è: una voce nata prima di oggi, o senza Jev,
+ * non deve né scavalcare quello che è stato giudicato urgente né finire
+ * dietro a quello che è stato giudicato di sfondo.
+ */
+export const SENZA_PESO = 1.5
+export function pesoDi(v: { peso?: number | null }): number {
+  const p = v.peso
+  return typeof p === 'number' && Number.isFinite(p) ? p : SENZA_PESO
+}
+
 /** I nomi sono entità: Acme non è AcmeCloud. Stessa regola del server (`nominaAmbito`). */
 function nomeNormalizzato(testo: string): string {
   return (testo.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/[\p{L}\p{N}]+/gu) ?? []).join(' ')
 }
 
-export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D extends DomandaDaBlocco>(dati: {
+export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(dati: {
   voci: V[]
   compiti: C[]
-  domande: D[]
   progetti: ProgettoDaBlocco[]
   /** Il nome del blocco senza progetto, già nella lingua giusta. */
   nomeResto: string
   massimoCompiti?: number
-}): Blocco<V, C, D>[] {
+}): Blocco<V, C>[] {
   const attivi = new Map(dati.progetti.filter(p => !p.stato || p.stato === 'attivo').map(p => [p.id, p.nome]))
   // un progetto fermo o chiuso, o un id che non si conosce, non ha un blocco:
   // quello che lo nomina va fra il resto, non sparisce
@@ -114,46 +136,44 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
     .map(x => x.c)
     .slice(0, dati.massimoCompiti ?? COMPITI_IN_PAGINA)
 
-  type B = Blocco<V, C, D> & { attese: RigaBlocco<V, C, D>[]; voci: RigaBlocco<V, C, D>[]; altre: RigaBlocco<V, C, D>[]; domanda: RigaBlocco<V, C, D> | null }
+  type B = Blocco<V, C> & { attese: RigaBlocco<V, C>[]; voci: { riga: RigaBlocco<V, C>; peso: number; i: number }[]; altre: RigaBlocco<V, C>[] }
   const blocchi = new Map<string | null, B>()
   const blocco = (id: string | null): B => {
     let b = blocchi.get(id)
     if (!b) {
-      b = { progetto: id, nome: id ? attivi.get(id)! : dati.nomeResto, righe: [], ultimo: '', attese: [], voci: [], altre: [], domanda: null }
+      b = { progetto: id, nome: id ? attivi.get(id)! : dati.nomeResto, righe: [], ultimo: '', peso: 0, attese: [], voci: [], altre: [] }
       blocchi.set(id, b)
     }
     return b
   }
   const piuRecente = (b: B, quando: string) => { if (quando > b.ultimo) b.ultimo = quando }
 
-  for (const voce of dati.voci) {
+  dati.voci.forEach((voce, i) => {
     const b = blocco(chiave(voce.progetto))
-    b.voci.push({ genere: 'voce', voce })
+    const p = pesoDi(voce)
+    b.voci.push({ riga: { genere: 'voce', voce }, peso: p, i })
+    if (p > b.peso) b.peso = p
     piuRecente(b, voce.quando)
-  }
+  })
   for (const compito of compiti) {
     const b = blocco(casa(compito))
-    const riga: RigaBlocco<V, C, D> = { genere: 'compito', compito, seguito: seguiti.get(compito.id) ?? null }
+    const riga: RigaBlocco<V, C> = { genere: 'compito', compito, seguito: seguiti.get(compito.id) ?? null }
     ;(peso(compito.stato) === 0 ? b.attese : b.altre).push(riga)
     piuRecente(b, compito.aggiornato)
-  }
-  // la domanda sul progetto è l'ultima riga del suo blocco, mai sopra le cose
-  // da fare: una domanda di Myynd viene dopo il lavoro. Una sola per progetto.
-  for (const domanda of dati.domande) {
-    const id = chiave(domanda.projectId)
-    if (!id) continue
-    const b = blocco(id)
-    if (!b.domanda) b.domanda = { genere: 'domanda', domanda }
   }
 
   /*
    * Dentro un blocco: prima quello che aspetta lui (una bozza pronta, una
-   * domanda su una riga), poi quello che ha notato Myynd, poi le sue righe,
-   * in fondo la domanda sul progetto.
+   * domanda su una riga), poi quello che ha notato Myynd dal più pesante al
+   * più leggero (a parità, nell'ordine in cui è arrivato), poi le sue righe.
    */
   const pronti = [...blocchi.values()].map(b => ({
-    progetto: b.progetto, nome: b.nome, ultimo: b.ultimo,
-    righe: [...b.attese, ...b.voci, ...b.altre, ...(b.domanda ? [b.domanda] : [])]
+    progetto: b.progetto, nome: b.nome, ultimo: b.ultimo, peso: b.peso,
+    righe: [
+      ...b.attese,
+      ...b.voci.sort((x, y) => y.peso - x.peso || x.i - y.i).map(x => x.riga),
+      ...b.altre
+    ]
   })).filter(b => b.righe.length)
 
   // il più recente in cima; «Il resto» sempre in fondo, qualunque data abbia
@@ -165,18 +185,18 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco, D
 }
 
 /**
- * Quante cose ci sono sul tavolo: tutte le righe dei blocchi, e la domanda
- * in cima se c'è.
+ * Quante cose ci sono sul tavolo: tutte le righe dei blocchi, e le domande
+ * nella loro carta.
  *
  * «Dice quattro cose sul tavolo, io ne conto cinque.» Erano tre conti
  * diversi: il titolo lasciava fuori le domande sui progetti, il numero nel
  * menù contava solo le voci del feed, e lui contava quello che vedeva. Da
  * qui esce un numero solo, da questi blocchi, e lo usano tutti e due: se
  * una riga si vede, si conta; se non si vede (oltre il tetto dei compiti),
- * no. La domanda in cima è una riga come le altre.
+ * no. Le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui.
  */
-export function sulTavolo(blocchi: { righe: unknown[] }[], conDomanda: boolean): number {
-  return blocchi.reduce((n, b) => n + b.righe.length, 0) + (conDomanda ? 1 : 0)
+export function sulTavolo(blocchi: { righe: unknown[] }[], domande: number): number {
+  return blocchi.reduce((n, b) => n + b.righe.length, 0) + Math.max(0, domande)
 }
 
 /**
@@ -189,7 +209,7 @@ export function sulTavolo(blocchi: { righe: unknown[] }[], conDomanda: boolean):
 export const chiaveBlocco = (b: { progetto: string | null }): string => b.progetto ?? 'resto'
 
 /** Un blocco che aspetta lui: dentro c'è una bozza pronta o una domanda senza risposta. */
-function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco, DomandaDaBlocco>[] }>(b: B): boolean {
+function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco>[] }>(b: B): boolean {
   return b.righe.some(r => r.genere === 'compito' && (r.compito.stato === 'pronto' || r.compito.stato === 'chiede'))
 }
 
@@ -201,27 +221,31 @@ function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco,
  * meglio.» Sono due cose, e questa funzione le tiene separate apposta.
  *
  * Il nostro ordine è quello che capisce da sé: prima i progetti dove qualcosa
- * aspetta lui — una bozza pronta, una domanda senza risposta — poi i più
- * recenti, e «Il resto» in fondo a parità di attesa, perché quello che non sta
- * in nessun progetto non passa mai davanti a un progetto.
+ * aspetta lui (una bozza pronta, una domanda senza risposta), poi quelli con
+ * la cosa più pesante dentro («organise it by importance on my feed»), poi i
+ * più recenti, e «Il resto» in fondo a parità, perché quello che non sta in
+ * nessun progetto non passa mai davanti a un progetto.
  *
  * Il suo vince sempre, e non si discute: un blocco che ha trascinato in cima
  * ci resta anche il giorno in cui un altro ha una bozza pronta. Un blocco che
- * nell'ordine salvato non c'è — un progetto nato ieri — va in fondo, fra gli
+ * nell'ordine salvato non c'è (un progetto nato ieri) va in fondo, fra gli
  * altri sconosciuti, nell'ordine che avrebbe avuto da solo: il riordino è
  * stabile, e chi non ha un posto resta come stava.
  */
-export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco, D extends DomandaDaBlocco>(
-  blocchi: Blocco<V, C, D>[], ordine?: readonly string[] | null
-): Blocco<V, C, D>[] {
+export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco>(
+  blocchi: Blocco<V, C>[], ordine?: readonly string[] | null
+): Blocco<V, C>[] {
+  // «Il resto» sta dietro ai progetti a parità di attesa: il peso ordina i
+  // progetti fra loro, non tira su quello che non sta in nessun progetto
   const predefinito = [...blocchi].sort((a, b) =>
     Number(aspettaLui(b)) - Number(aspettaLui(a))
     || Number(a.progetto === null) - Number(b.progetto === null)
+    || b.peso - a.peso
     || b.ultimo.localeCompare(a.ultimo)
     || a.nome.localeCompare(b.nome))
   if (!ordine?.length) return predefinito
   const posto = new Map(ordine.map((id, i) => [id, i]))
-  const dove = (b: Blocco<V, C, D>) => posto.get(chiaveBlocco(b)) ?? Number.MAX_SAFE_INTEGER
+  const dove = (b: Blocco<V, C>) => posto.get(chiaveBlocco(b)) ?? Number.MAX_SAFE_INTEGER
   return predefinito.sort((a, b) => dove(a) - dove(b))
 }
 

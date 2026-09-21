@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconOcchio, IconSpunta } from '../icons'
-import { Glifo, Stato } from '../components/Stato'
+import { IconAvanti, IconOcchio, IconPiu, IconSpunta } from '../icons'
+import { Glifo } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
@@ -10,7 +10,7 @@ import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat,
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
-import { api, type Chiesta, type Compito } from '../api'
+import type { Chiesta, Compito } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
@@ -93,6 +93,35 @@ const MANDA_SPENTO: CSSProperties = {
 const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai() }
 
 /**
+ * La scatola in cui si scrive: la stessa della barra che aggiunge una cosa
+ * da fare (`Barra.tsx`), copiata e non ridisegnata.
+ *
+ * «This input bar is very small and it's not designed like the others. I
+ * liked the other designs better.» Un campo sottolineato in fondo alla
+ * pagina e una casella con un altro raggio dentro una riga erano tre disegni
+ * per lo stesso mestiere. Da qui in poi è uno: raggio 14, la carta all'86%,
+ * il vetro, e il bordo che si accende quando ci sei dentro.
+ */
+function Scatola({ children, alto = false }: { children: ReactNode; alto?: boolean }) {
+  const [fuoco, setFuoco] = useState(false)
+  return (
+    <div onFocus={() => setFuoco(true)} onBlur={() => setFuoco(false)} style={{
+      flex: 1, minWidth: 0, display: 'flex', alignItems: alto ? 'flex-end' : 'center', gap: 6,
+      padding: alto ? '9px 9px 9px 15px' : '3px 9px 3px 15px', borderRadius: 14,
+      background: 'rgba(var(--carta-rgb),.86)', backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
+      border: `1px solid ${fuoco ? 'rgba(var(--inchiostro-rgb),.26)' : 'rgba(var(--luce-rgb),.9)'}`,
+      boxShadow: fuoco ? '0 8px 26px rgba(var(--ombra-rgb),.10)' : '0 4px 16px rgba(var(--ombra-rgb),.05)',
+      transition: 'border-color .15s, box-shadow .15s'
+    }}>{children}</div>
+  )
+}
+/** Il campo dentro la scatola: senza bordo suo, è la scatola che lo veste. */
+const CAMPO: CSSProperties = {
+  flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
+  color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', padding: '7px 0'
+}
+
+/**
  * La riga piccola sotto il testo: da dove viene a sinistra, cosa farne a destra.
  *
  * Occupa il suo posto anche quando non si vede — opacità, non `display` —
@@ -147,6 +176,17 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   const offerta = voce.offerta ?? ''
   const fonte = voce.doc || voce.fonte ? parolaFonte(voce.fonte, voce.doc) : ''
   const ora = quando(dataFonte(voce))
+  /*
+   * La pastiglia dice quando, in tre parole: «entro venerdì», «domani 9:30».
+   *
+   * Sulla carta dell'audit c'era scritto «Tuesday Sep 22, 2026, 9:30am.
+   * 10am Eastern Time», quarantacinque caratteri dentro una pastiglia
+   * fatta per tre parole: la riga si spezzava e non si leggeva niente. Le
+   * voci nuove nascono già corte (`rifinitura.ts`); quelle di prima, se
+   * sono lunghe, la pastiglia non la portano: la data resta nel testo.
+   */
+  const pastiglia = (voce.urgenza ?? '').trim()
+  const conPastiglia = pastiglia.length > 0 && pastiglia.length <= 26 && !/[.;]\s\S/.test(pastiglia)
   const dettaglio = [voce.fonteAutore, voce.fonteTitolo].filter(Boolean).join(' · ')
   const aprendo = !!voce.doc && v.aprendoFonte === voce.doc
 
@@ -187,7 +227,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <div style={OFFERTA}><span style={{ fontWeight: 600 }}>{t('Posso farlo io:')}</span> {offerta}</div>
           )}
         </div>
-        {voce.urgenza && <span style={PASTIGLIA}>{voce.urgenza}</span>}
+        {conPastiglia && <span style={PASTIGLIA}>{pastiglia}</span>}
       </div>
       <Fascia attiva={attiva}
         sinistra={(fonte || ora) && (
@@ -614,18 +654,17 @@ function Domande({ c, l }: { c: Compito; l: Lista }) {
         </div>
       ))}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, maxWidth: 560 }}>
-        <input
-          value={testo}
-          onChange={e => setTesto(e.target.value)}
-          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') manda() }}
-          aria-label={t('Rispondi qui')}
-          placeholder={t('Rispondi qui')}
-          style={{
-            flex: 1, minWidth: 0, padding: '7px 12px', borderRadius: 11,
-            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.85)',
-            color: 'var(--inchiostro)', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
-          }} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, maxWidth: 560, alignItems: 'center' }}>
+        {/* la scatola è quella di casa (`Barra.tsx`): una barra sola per scrivere, in tutta l'app */}
+        <Scatola>
+          <input
+            value={testo}
+            onChange={e => setTesto(e.target.value)}
+            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') manda() }}
+            aria-label={t('Rispondi qui')}
+            placeholder={t('Rispondi qui')}
+            style={CAMPO} />
+        </Scatola>
         <button type="button" onClick={fermo(manda)} disabled={!qualcosa} style={qualcosa ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
       </div>
 
@@ -762,56 +801,7 @@ function Seguito({ c }: { c: Compito }) {
   )
 }
 
-/**
- * La domanda di Myynd su un progetto: l'ultima riga del suo blocco.
- *
- * Era una carta a sé, sotto la lista, col nome del progetto scritto sopra.
- * Adesso il progetto ce l'ha già il blocco, e la domanda sta in fondo alle
- * sue cose — mai sopra: «la carta di H-Farm dove mi fa domande deve stare
- * sotto le priorità». Il marchio davanti dice che è lui a chiedere. Un
- * bottone solo: «Parliamone», o «Apri il compito» se c'è già una riga.
- *
- * Quando «Leggi adesso» non trova niente di nuovo ma i progetti aspettano,
- * la pagina la porta sotto gli occhi e la accende per un attimo: l'avviso
- * dice «qui sotto», e questo è il «qui».
- */
-function RigaDomanda({ item, v, lista, colore, prima }: { item: Vals['iniziative'][number]; v: Vals; lista?: Lista; colore: string; prima: boolean }) {
-  const { attiva, props } = useAttiva()
-  const riga = useRef<HTMLDivElement | null>(null)
-  const [accesa, setAccesa] = useState(false)
-  useEffect(() => {
-    if (!v.evidenziaProgetti) return
-    if (prima) riga.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setAccesa(true)
-    const via = setTimeout(() => setAccesa(false), 1600)
-    return () => clearTimeout(via)
-  }, [v.evidenziaProgetti, prima])
-  const parla = () => v.discutiIniziativa(item)
-  const bottone: CSSProperties = { ...PILLOLA, border: `1px solid ${velato(colore, .45)}`, color: colore }
-  return (
-    <div ref={riga} role="button" tabIndex={0} onClick={parla} onKeyDown={daTastiera(parla)} {...props}
-      style={{
-        ...RIGA, padding: '13px 21px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-        background: attiva ? 'var(--riga-sopra)' : 'transparent',
-        boxShadow: accesa ? `inset 0 0 0 2px ${colore}` : 'inset 0 0 0 2px transparent', transition: 'background .15s, box-shadow .3s'
-      }}>
-      <Marchio dim={14} animato={false} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={TITOLO}>{item.question ?? item.title}</div>
-        {item.description && <div style={PERCHE}>{taglia(item.description, 150)}</div>}
-      </div>
-      {item.taskId && lista
-        ? <Hov as="button" type="button" onClick={fermo(() => { lista.chiediDiAprire(item.taskId!); v.goOggi() })} title={t('Apri il compito')} style={bottone} hover={{ background: 'var(--carta-alta)' }}>{t('Apri il compito')}</Hov>
-        : <Hov as="button" type="button" onClick={fermo(parla)} title={t('Parliamone in chat')} style={bottone} hover={{ background: 'var(--carta-alta)' }}>{t('Parliamone')}</Hov>}
-      <Hov as="button" type="button" onClick={fermo(() => { void v.scartaIniziativa(item.id) })}
-        title={t('Toglila dal feed')}
-        style={{ ...GESTO, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}
-        hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
-    </div>
-  )
-}
-
-export type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][number]>
+export type BloccoPagina = BloccoFeed<VoceFeed, Compito>
 
 /**
  * Un progetto, un blocco.
@@ -828,8 +818,8 @@ export type BloccoPagina = BloccoFeed<VoceFeed, Compito, Vals['iniziative'][numb
  * La testa si trascina: l'ordine dei blocchi lo decide lui, e chi decide
  * l'ordine lo fa prendendo la cosa e spostandola. Vedi `ordinaBlocchi`.
  */
-function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
-  b: BloccoPagina; v: Vals; lista?: Lista; primaDomanda: string | null
+function Blocco({ b, v, lista, indice, ultimo, muovi }: {
+  b: BloccoPagina; v: Vals; lista?: Lista
   /** Dove sta adesso, e dove può andare: il trascinamento parla per posti, non per nomi. */
   indice: number; ultimo: boolean; muovi: (da: number, a: number) => void
 }) {
@@ -902,13 +892,12 @@ function Blocco({ b, v, lista, primaDomanda, indice, ultimo, muovi }: {
         </div>
       </div>
       {b.righe.map((r, i) => {
-        const chiave = r.genere === 'voce' ? r.voce.id : r.genere === 'compito' ? r.compito.id : r.domanda.id
+        const chiave = r.genere === 'voce' ? r.voce.id : r.compito.id
         return (
           <div key={chiave} style={{ borderTop: i === 0 ? 'none' : `1px solid ${filo}` }}>
             {r.genere === 'voce' && <RigaVoce voce={r.voce} v={v} lista={lista} />}
             {r.genere === 'compito' && <RigaCompito c={r.compito} l={lista!} v={v} />}
             {r.genere === 'compito' && r.seguito && <Seguito c={r.seguito} />}
-            {r.genere === 'domanda' && <RigaDomanda item={r.domanda} v={v} lista={lista} colore={colore} prima={primaDomanda === r.domanda.id} />}
           </div>
         )
       })}
@@ -920,7 +909,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, domande: v.iniziative, progetti: v.progetti, nomeResto: t('Il resto') })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto') })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const blocchi = ordinaBlocchi(grezzi, v.ordineBlocchi)
@@ -929,10 +918,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
     if (da === a || a < 0 || a >= chiavi.length) return
     v.salvaOrdineBlocchi(ordineDopoIlTrascinamento(chiavi, da, a, v.ordineBlocchi))
   }
-  // quello che c'è in pagina: ogni riga che si vede, domande comprese, e la
-  // domanda in cima. Lo stesso conto del menù, per costruzione.
-  const inPagina = sulTavolo(blocchi, !!v.domanda)
-  const primaDomanda = blocchi.flatMap(b => b.righe).map(r => (r.genere === 'domanda' ? r.domanda.id : null)).find(Boolean) ?? null
+  // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
+  // carta. Lo stesso conto del menù, per costruzione.
+  const inPagina = sulTavolo(blocchi, (v.domanda ? 1 : 0) + v.iniziative.length)
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1013,8 +1001,6 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
           cose da fare non stanno lì dentro, stanno qui sotto. */}
       <Punto v={v} />
 
-      <Domanda v={v} />
-
       {/*
         I blocchi non sono inclinati, e le altre carte sì. Non è una dimenticanza.
 
@@ -1026,9 +1012,14 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
         che si muova la finestra.
       */}
       {blocchi.map((b, i) => (
-        <Blocco key={chiaveBlocco(b)} b={b} v={v} lista={lista} primaDomanda={primaDomanda}
+        <Blocco key={chiaveBlocco(b)} b={b} v={v} lista={lista}
           indice={i} ultimo={i === blocchi.length - 1} muovi={muovi} />
       ))}
+
+      {/* le sue domande, tutte in una carta, sotto il lavoro: «la carta dove
+          mi fa domande deve stare sotto le priorità», e «if it's multiple
+          questions, don't stack them one over the other» */}
+      <CartaDomande v={v} />
 
       {blocchi.length === 0 && <Vuoto v={v} />}
 
@@ -1073,245 +1064,250 @@ function Avviso({ v }: { v: Vals }) {
 }
 
 /**
- * Quando è lui a chiedere.
+ * Le sue domande, tutte in una carta.
  *
- * Deliberatamente diversa da una voce del feed: chiara, ma non urgente. Una
- * voce è lavoro che ti aspetta; questa è un collega che alza la testa dalla
- * scrivania. Se avesse l'aria di un compito, in tre giorni la salteresti come
- * si saltano i compiti — e allora tanto varrebbe non chiedere.
+ * «If it is a question, it should look like the UI of the question that you
+ * can answer on the feed. We already designed this. If it's multiple
+ * questions, don't stack them one over the other. Just ask them in one
+ * unique card, not four different ones.» Prima erano tre cose diverse: una
+ * fascia in cima per la domanda sua (il riferimento, uno scarto ripetuto),
+ * una riga in fondo a ogni blocco con «Parliamone» per la domanda sul
+ * progetto, e con otto progetti la pagina finiva con otto carte che erano
+ * solo domande, una sotto l'altra.
  *
- * Sta sopra i blocchi, mai in mezzo: non deve mettersi in mezzo al lavoro
- * vero. Ma quando non c'è lavoro resta l'unica cosa sullo schermo, ed è il
- * momento migliore per chiedere qualcosa a qualcuno.
+ * Qui stanno tutte insieme, sotto il lavoro (17 settembre: «la carta dove mi
+ * fa domande deve stare sotto le priorità»), e si risponde sul posto, come
+ * sotto una riga che chiede: ogni domanda la sua riga e la sua scatola, un
+ * «Manda» solo per tutte, Invio che manda. Quello che fa una risposta lo
+ * dice l'esito che prende il posto della domanda: «In lista per H-Farm: …»,
+ * «Da adesso i rinnovi non te li porto più». Una domanda sul progetto ha
+ * ancora «Parliamone» per chi preferisce la chat, sotto il dito.
+ *
+ * Il gesto si vede subito: mandando, le domande risposte lasciano il posto a
+ * «Presa.», e la riga si riscrive quando arriva l'esito vero. Se il server
+ * non ce la fa, la domanda torna con dentro le sue parole.
  */
-function Domanda({ v }: { v: Vals }) {
-  // Dopo la risposta, l'esito prende il posto della domanda e resta lì. Non è
-  // un avviso che sfarfalla: è la prova che rispondere è servito a qualcosa.
-  if (v.esitoDom) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 13, marginTop: 16, padding: '18px 20px',
-        borderRadius: 20, border: '1px solid rgba(var(--salvia-rgb),.4)',
-        background: 'rgba(var(--salvia-rgb),.12)', animation: 'fadein .3s ease'
-      }}>
-        <IconSpunta style={{ flex: 'none', marginTop: 1 }} />
-        <div style={{ flex: 1, minWidth: 0, fontSize: '15px', lineHeight: 1.55, color: 'var(--inchiostro)', textWrap: 'pretty' }}>
-          {t(v.esitoDom)}
-        </div>
-        <Hov as="button" onClick={v.chiudiEsito} title={t('Chiudi')} aria-label={t('Chiudi')}
-          style={{ flex: 'none', border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.4)', fontSize: 17, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
-          hover={{ color: 'var(--inchiostro)' }}>×</Hov>
-      </div>
-    )
+type Domanda = {
+  id: string; testo: string; genere: 'sua' | 'progetto'
+  progetto?: string | null; nomeProgetto?: string
+  /** Il riferimento si scrive su più righe: la scatola è alta. */
+  lunga: boolean
+  spunto: string[]
+  originale?: Vals['iniziative'][number]
+}
+
+function CartaDomande({ v }: { v: Vals }) {
+  const domande: Domanda[] = [
+    ...(v.domanda ? [{ id: v.domanda.id, testo: v.domanda.testo, genere: 'sua' as const, lunga: v.domanda.tema === 'riferimento', spunto: v.domanda.spunto }] : []),
+    ...v.iniziative.map(i => ({
+      id: i.id, testo: i.question ?? i.title, genere: 'progetto' as const,
+      progetto: i.projectId, nomeProgetto: i.projectName, lunga: false, spunto: [] as string[], originale: i
+    }))
+  ]
+  const [risposte, setRisposte] = useState<Record<string, string>>({})
+  const [esiti, setEsiti] = useState<{ id: string; testo: string; presa: boolean }[]>([])
+  const [mandando, setMandando] = useState(false)
+  const carta = useRef<HTMLElement | null>(null)
+
+  // «Leggi adesso» non ha trovato niente di nuovo ma i progetti aspettano: la
+  // pagina porta la carta sotto gli occhi e la accende per un attimo
+  const [accesa, setAccesa] = useState(false)
+  useEffect(() => {
+    if (!v.evidenziaProgetti || !domande.length) return
+    carta.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setAccesa(true)
+    const via = setTimeout(() => setAccesa(false), 1600)
+    return () => clearTimeout(via)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.evidenziaProgetti])
+
+  if (!domande.length && !esiti.length) return null
+
+  const piene = domande.filter(q => (risposte[q.id] ?? '').trim())
+  const scrivi = (id: string, testo: string) => setRisposte(r => ({ ...r, [id]: testo }))
+
+  const manda = async () => {
+    if (!piene.length || mandando) return
+    setMandando(true)
+    // la presa subito, per ogni domanda risposta; l'esito vero si riscrive sopra
+    setEsiti(e => [...e.filter(x => !piene.some(q => q.id === x.id)), ...piene.map(q => ({ id: q.id, testo: t('Presa.'), presa: true }))])
+    await Promise.all(piene.map(async q => {
+      const testo = (risposte[q.id] ?? '').trim()
+      try {
+        const esito = q.genere === 'sua' ? await v.rispondiADomanda(q.id, testo) : await v.rispondiIniziativa(q.id, testo)
+        setEsiti(e => e.map(x => (x.id === q.id ? { id: q.id, testo: esito, presa: false } : x)))
+        setRisposte(r => { const { [q.id]: _via, ...resto } = r; return resto })
+      } catch {
+        // la domanda è tornata (ci pensa `vals`) e le sue parole sono ancora nel campo
+        setEsiti(e => e.filter(x => x.id !== q.id))
+      }
+    }))
+    setMandando(false)
   }
 
-  if (!v.domanda) return null
-  // il riferimento non sta in cinque parole: è una riga per progetto, e si
-  // scrive in una casella che va a capo, con la domanda sopra
-  const lunga = v.domanda.tema === 'riferimento'
+  const lascia = (q: Domanda) => {
+    setRisposte(r => { const { [q.id]: _via, ...resto } = r; return resto })
+    if (q.genere === 'sua') void v.lasciaCadere()
+    else void v.scartaIniziativa(q.id)
+  }
 
   return (
-    <div style={{
-      /*
-        Sottile, e di vetro.
-
-        La versione con la card occupava l'altezza di un blocco per contenere
-        una riga di testo. Questa è una fascia: la domanda, il rigo su cui
-        rispondere e la freccia stanno tutti sulla stessa linea, e in verticale
-        costa un terzo.
-
-        Il gradiente va al contrario di quello delle carte sopra — quelle
-        partono opache in alto a sinistra e si spengono in basso a destra,
-        questa fa l'inverso: quasi trasparente dove comincia, densa dove
-        finisce. Le due superfici si passano la luce invece di ripeterla.
-      */
-      /*
-        Lo z-index del pannello «perché» non bastava: questa fascia ha un
-        backdrop-filter, e un filtro crea un contesto di impilamento — quindi
-        il 25 del pannello valeva solo *dentro* la fascia, e il blocco che
-        viene dopo, essendo un fratello successivo, gli finiva sopra. Si alza
-        la fascia intera, non il figlio.
-      */
-      position: 'relative', zIndex: 12, display: 'flex', alignItems: 'flex-start', gap: '11px 13px', flexWrap: 'wrap',
-      margin: '14px 0 4px', padding: '13px 15px',
-      borderRadius: 16,
-      background: 'linear-gradient(258deg, rgba(var(--carta-rgb),.82) 0%, rgba(var(--carta-rgb),.46) 55%, rgba(var(--carta-rgb),.16) 100%)',
-      backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
-      border: '1px solid rgba(var(--luce-rgb),.55)',
-      borderLeft: '2px solid rgba(var(--rame-rgb),.55)',
-      boxShadow: '0 10px 30px -14px rgba(var(--ombra-rgb),.3), inset 0 1px 0 rgba(var(--luce-rgb),.5)',
-      animation: 'fadein .3s ease'
+    <section ref={carta} aria-label={t('Myynd ti chiede')} style={{
+      flex: 'none', marginTop: 14, borderRadius: 20, overflow: 'visible',
+      background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px) saturate(1.4)', WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+      border: '1px solid rgba(var(--luce-rgb),.7)',
+      boxShadow: accesa ? 'inset 0 0 0 2px var(--rame), 0 22px 52px rgba(var(--ombra-rgb),.09)' : '0 22px 52px rgba(var(--ombra-rgb),.09)',
+      transition: 'box-shadow .3s', animation: 'fadein .3s ease'
     }}>
-      {/*
-        La domanda sta su una riga sua, e il campo sotto.
-
-        Stavano sulla stessa linea, e la linea non bastava mai: la domanda
-        veniva tagliata a trecento pixel — «You closed «Compare the strongest
-        viable local models…» for H-Farm. What is the next step there?» finiva
-        dentro un fumetto di sistema, cioè da nessuna parte — e quello che
-        restava per rispondere era un filo sottolineato largo un pollice, con
-        il suo stesso segnaposto tagliato a metà. Due cose strette invece di
-        due cose intere. In verticale costa una riga in più e si legge tutto.
-      */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, flex: '1 1 100%', minWidth: 0 }}>
-        <span style={{ flex: 'none', marginTop: 1 }}><Marchio dim={14} animato={false} /></span>
-        <span style={{ fontSize: '15px', color: 'var(--inchiostro)', minWidth: 0, maxWidth: 640, textWrap: 'pretty', lineHeight: 1.4 }}>
-          {v.domanda.testo}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '13px 21px 3px' }}>
+        <Marchio dim={14} animato={false} />
+        <span style={{ ...NOME, color: 'rgba(var(--inchiostro-rgb),.55)' }}>{t('Myynd ti chiede')}</span>
       </div>
 
-      {/*
-        Il campo è quello di casa: la stessa scatola della barra che scrive
-        una cosa da fare — stesso raggio, stessa carta, stesso vetro, stesso
-        bordo che si accende quando ci sei dentro. «It is very small and it's
-        not designed like the others»: erano due disegni diversi per la stessa
-        cosa, scrivere una riga, e questo qui era il peggiore dei due.
-      */}
-      <div style={{
-        flex: '1 1 100%', minWidth: 0, display: 'flex', alignItems: lunga ? 'flex-end' : 'center', gap: 4,
-        padding: lunga ? '9px 7px 9px 15px' : '4px 7px 4px 15px',
-        borderRadius: 14, background: 'rgba(var(--carta-rgb),.86)',
-        border: '1px solid rgba(var(--luce-rgb),.9)',
-        boxShadow: '0 4px 16px rgba(var(--ombra-rgb),.05)'
-      }}>
-        {lunga ? (
-          <textarea
-            value={v.rispostaDom}
-            onChange={e => v.setRispostaDom(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); v.rispondiADomanda() }
-              if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
-            }}
-            rows={5}
-            aria-label={t('Rispondi')}
-            placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
-            style={{
-              flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
-              color: 'var(--inchiostro)', fontSize: '14.5px', lineHeight: 1.5, fontFamily: 'inherit', resize: 'vertical', padding: 0
-            }} />
-        ) : (
-          <input
-            value={v.rispostaDom}
-            onChange={e => v.setRispostaDom(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') v.rispondiADomanda()
-              if (e.key === 'Escape') { e.stopPropagation(); v.lasciaCadere() }
-            }}
-            aria-label={t('Rispondi')}
-            placeholder={t('Bastano cinque parole')}
-            style={{
-              flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
-              color: 'var(--inchiostro)', fontSize: '14.5px', fontFamily: 'inherit', padding: '8px 0'
-            }} />
-        )}
+      {/* quello che le risposte hanno fatto: resta scritto, e si chiude con una × */}
+      {esiti.map(e => (
+        <div key={e.id} role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 21px 4px' }}>
+          <IconSpunta size={13} style={{ flex: 'none', marginTop: 3, color: e.presa ? 'rgba(var(--inchiostro-rgb),.4)' : 'var(--salvia)' }} />
+          <div style={{ flex: 1, minWidth: 0, fontSize: '13.5px', lineHeight: 1.5, color: e.presa ? 'rgba(var(--inchiostro-rgb),.55)' : 'var(--inchiostro)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{t(e.testo)}</div>
+          {!e.presa && (
+            <Hov as="button" type="button" onClick={() => setEsiti(x => x.filter(y => y.id !== e.id))} title={t('Chiudi')} aria-label={t('Chiudi')}
+              style={{ flex: 'none', border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.4)', fontSize: 17, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit', padding: 2 }}
+              hover={{ color: 'var(--inchiostro)' }}>×</Hov>
+          )}
+        </div>
+      ))}
 
-        <Hov as="button" onClick={v.rispondiADomanda} disabled={!v.rispostaDom.trim()} title={t('Rispondi')} aria-label={t('Rispondi')}
-          style={{
-            flex: 'none', display: 'grid', placeItems: 'center', width: 30, height: 30, borderRadius: 10,
-            border: 'none', background: v.rispostaDom.trim() ? 'var(--rame-forte)' : 'rgba(var(--inchiostro-rgb),.06)',
-            fontFamily: 'inherit', lineHeight: 1,
-            color: v.rispostaDom.trim() ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.3)',
-            cursor: v.rispostaDom.trim() ? 'pointer' : 'default'
-          }}
-          hover={v.rispostaDom.trim() ? { background: 'var(--rame-forte-su)' } : {}}><IconAvanti size={14} /></Hov>
+      {domande.map((q, i) => (
+        <RigaDomanda key={q.id} q={q} v={v} prima={i === 0 && !esiti.length}
+          testo={risposte[q.id] ?? ''} scrivi={testo => scrivi(q.id, testo)} manda={() => { void manda() }} lascia={() => lascia(q)} />
+      ))}
 
-        <Hov as="button" onClick={v.apriSpunto} title={t('Perché me lo chiedi?')} aria-label={t('Perché me lo chiedi?')} aria-expanded={v.spuntoAperto}
-          style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 26, height: 30, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.34)', cursor: 'pointer' }}
-          hover={{ color: 'var(--rame-testo)' }}>?</Hov>
-
-        <Hov as="button" onClick={v.lasciaCadere} title={t('Lascia perdere: non te lo richiedo')} aria-label={t('Lascia perdere: non te lo richiedo')}
-          style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 26, height: 30, border: 'none', background: 'none', color: 'rgba(var(--inchiostro-rgb),.28)', fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit' }}
-          hover={{ color: 'var(--inchiostro)' }}>×</Hov>
-      </div>
-
-      {v.spuntoAperto && (
-        <div style={{
-          position: 'absolute', zIndex: 25, marginTop: 4, top: '100%', left: 15, maxWidth: 420,
-          padding: '11px 14px', borderRadius: 13, background: 'var(--carta-piena)',
-          border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 18px 44px rgba(var(--ombra-rgb),.24)',
-          animation: 'fadein .16s ease'
-        }}>
-          <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', lineHeight: 1.5, marginBottom: 5 }}>
-            {t('Hai tolto di mezzo queste senza dirmi perché:')}
-          </div>
-          {v.domanda.spunto.slice(0, 4).map((x, i) => (
-            <div key={i} style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.68)', lineHeight: 1.65 }}>— {x}</div>
-          ))}
+      {domande.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 21px 14px' }}>
+          <div style={{ flex: 1 }} />
+          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando}
+            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
         </div>
       )}
+    </section>
+  )
+}
+
+/**
+ * Una domanda nella carta: il progetto, la domanda, la scatola per rispondere.
+ *
+ * Sotto il dito compaiono i gesti di contorno: «Parliamone» sulla domanda di
+ * un progetto (la chat resta una strada), «Perché me lo chiedi?» dove c'è
+ * uno spunto, e «Non mi interessa» che la toglie di mezzo.
+ */
+function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
+  q: Domanda; v: Vals; prima: boolean
+  testo: string; scrivi: (testo: string) => void; manda: () => void; lascia: () => void
+}) {
+  const { attiva, props } = useAttiva()
+  const [spunto, setSpunto] = useState(false)
+  const colore = q.progetto ? v.coloreProgetto(q.progetto) : null
+  const tasti = (e: React.KeyboardEvent) => {
+    e.stopPropagation()
+    if (e.key === 'Enter' && (!q.lunga || e.metaKey || e.ctrlKey)) { e.preventDefault(); manda() }
+    if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur()
+  }
+  return (
+    <div {...props} style={{ ...RIGA, padding: '12px 21px 10px', borderTop: prima ? 'none' : '1px solid rgba(var(--inchiostro-rgb),.09)', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}>
+      {q.nomeProgetto && colore && (
+        <div style={{ ...NOME, color: colore, fontSize: '11px', marginBottom: 4 }}>{q.nomeProgetto}</div>
+      )}
+      <div style={{ ...TITOLO, fontWeight: 400, fontSize: '14.5px', maxWidth: 640 }}>{q.testo}</div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, maxWidth: 640, alignItems: 'center' }}>
+        <Scatola alto={q.lunga}>
+          {q.lunga ? (
+            <textarea value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti} rows={4}
+              aria-label={t('Rispondi qui')} placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
+              style={{ ...CAMPO, lineHeight: 1.5, resize: 'vertical' }} />
+          ) : (
+            <input value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti}
+              aria-label={t('Rispondi qui')} placeholder={t('Rispondi qui')} style={CAMPO} />
+          )}
+        </Scatola>
+      </div>
+      <Fascia attiva={attiva}
+        sinistra={spunto && q.spunto.length > 0 && (
+          <span style={{ flexBasis: '100%', color: 'rgba(var(--inchiostro-rgb),.6)', lineHeight: 1.6 }}>
+            {t('Hai tolto di mezzo queste senza dirmi perché:')} {q.spunto.slice(0, 4).map(x => `«${x}»`).join(', ')}
+          </span>
+        )}
+        destra={
+          <>
+            {q.originale && (
+              <Hov as="button" type="button" onClick={fermo(() => v.discutiIniziativa(q.originale!))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parliamone')}</Hov>
+            )}
+            {q.spunto.length > 0 && (
+              <Hov as="button" type="button" onClick={fermo(() => setSpunto(x => !x))} aria-expanded={spunto} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Perché me lo chiedi?')}</Hov>
+            )}
+            <Hov as="button" type="button" onClick={fermo(lascia)} title={t('Lascia perdere: non te lo richiedo')} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
+          </>
+        } />
     </div>
   )
 }
 
 /**
- * Quando non c'è niente: dice cosa manca, non finge.
+ * Quando non c'è niente: un bottone piccolo, e basta.
  *
- * E non dice più «niente da segnalare, fai una lettura». Le sue parole, del
- * 21 settembre: «it is not okay that there is the "nothing left, read now"
- * card… It sounds like it's mechanical, as if he needs to tell me what to
- * do. There is always stuff to do because the projects are not completed
- * unless the user says so.» Con dei progetti attivi la pagina vuota chiede
- * al server di riempire il tavolo (`/api/tavolo`: la cosa dopo di ogni
- * progetto), e intanto lo dice; le righe arrivano dal filo. Quello che
- * resta qui sono le mancanze vere: nessuna fonte, niente letto, niente
- * Claude, nessun progetto.
+ * Le sue parole: «rather than having some messed-up tasks that are complex
+ * to read or that do not mean anything, have it empty, without the "Read
+ * Now" button and that stupid card that appears when the feed is empty.
+ * Rather, a small, minimal, non-clustered "Add Task" button that brings me
+ * directly to the to-do where I can add a task.» Quindi niente carta, niente
+ * «Leggi adesso», niente righe inventate per riempire il tavolo: una
+ * pastiglia che porta alla lista, dove la barra aspetta già con il cursore.
+ *
+ * Restano, in una riga sola e senza carta, le mancanze vere: nessuna fonte,
+ * niente letto, niente modello, nessun progetto, un feed che non si legge.
+ * Sono le uniche cose che non si risolvono aggiungendo una riga.
  */
 function Vuoto({ v }: { v: Vals }) {
+  if (!v.feedCaricato || v.guastoLettura) return null
   const senzaFonti = v.connCount === 0
   const senzaDocumenti = v.totaleDocumenti === 0
   const conProgetti = v.progetti.some(p => !p.stato || p.stato === 'attivo')
-  const [tavolo, setTavolo] = useState<'chiedo' | 'niente' | null>(null)
-  const chiesto = useRef(false)
-  useEffect(() => {
-    if (!v.feedCaricato || !conProgetti || !v.claudeOn || chiesto.current) return
-    chiesto.current = true
-    setTavolo('chiedo')
-    api.riempiTavolo().then(r => setTavolo(r.proposte ? null : 'niente')).catch(() => setTavolo('niente'))
-  }, [v.feedCaricato, conProgetti, v.claudeOn])
-  // Prima della risposta non si dice niente; dopo un errore si dice l'errore.
-  // Prima questa carta diceva «La tua mente è ancora vuota» anche a un 500.
-  if (!v.feedCaricato || v.guastoLettura) return null
+  const riga: CSSProperties = { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '4px 14px', marginTop: 10, padding: '0 4px', fontSize: '13.5px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.6)' }
+  const link: CSSProperties = { ...LINK, fontSize: '13.5px' }
   if (v.guastoFeed) {
     return (
-      <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.75)', padding: '32px 28px' }}>
-        <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.82)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{v.guastoFeed}</div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-          <button onClick={v.ricaricaFeed} style={BOTTONE}>{t('Riprova')}</button>
-        </div>
+      <div role="status" style={riga}>
+        <span style={{ color: 'var(--rame-testo)', overflowWrap: 'anywhere' }}>{v.guastoFeed}</span>
+        <Hov as="button" type="button" onClick={v.ricaricaFeed} style={link} hover={{ textDecorationColor: 'currentColor' }}>{t('Riprova')}</Hov>
       </div>
     )
   }
+  const manca = senzaFonti ? { frase: t('Non hai collegato niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
+    : senzaDocumenti ? { frase: t('Non ho ancora letto niente.'), gesto: null, vai: null }
+    : !v.claudeOn ? { frase: t('Serve Claude per scegliere cosa conta.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
+    : !conProgetti ? { frase: t('Nessun progetto attivo.'), gesto: t('Apri la memoria'), vai: v.goMemoria }
+    : null
   return (
-    <div style={{ flex: 'none', borderRadius: 24, background: 'rgba(var(--carta-rgb),.66)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.75)', padding: '32px 28px' }}>
-      {/* Una riga, non tre. Quello che c'era prima spiegava anche come funziona
-          la memoria delle risposte — vero, e non è il momento di dirlo: chi
-          guarda uno schermo vuoto vuole sapere cosa fare adesso. */}
-      <div style={{ fontSize: 17, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.82)', textWrap: 'pretty' }}>
-        {senzaFonti
-          ? t('Non hai collegato niente.')
-          : senzaDocumenti
-            ? t('Non ho ancora letto niente.')
-            : !v.claudeOn
-              ? t('Serve Claude per scegliere cosa conta.')
-              : !conProgetti
-                ? t('Nessun progetto attivo.')
-                : tavolo === 'niente'
-                  ? t('Sul tavolo non c’è niente, per ora.')
-                  : null}
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: senzaFonti || senzaDocumenti || !v.claudeOn || !conProgetti || tavolo === 'niente' ? 20 : 0, flexWrap: 'wrap' }}>
-        {senzaFonti || !v.claudeOn ? (
-          <button onClick={v.goConn} style={BOTTONE}>{t('Vai ai connettori')}</button>
-        ) : senzaDocumenti ? (
-          v.sincronizzando
-            ? <Stato tipo="leggo" testo={v.sincronizzando} />
-            : <button onClick={v.sincronizza} style={BOTTONE}>{t('Leggi adesso')}</button>
-        ) : !conProgetti ? (
-          <button onClick={v.goMemoria} style={BOTTONE}>{t('Apri la memoria')}</button>
-        ) : tavolo === 'chiedo' ? (
-          <Stato tipo="cerco" testo={t('Guardo i tuoi progetti per la cosa dopo')} />
-        ) : null}
-      </div>
+    <div style={{ padding: '0 4px' }}>
+      {manca && (
+        <div role="status" style={riga}>
+          <span>{manca.frase}</span>
+          {manca.gesto && manca.vai && (
+            <Hov as="a" href="#" onClick={manca.vai} style={link} hover={{ textDecorationColor: 'currentColor' }}>{manca.gesto}</Hov>
+          )}
+        </div>
+      )}
+      <Hov as="button" type="button"
+        onClick={() => {
+          v.goOggi()
+          // «brings me directly to the to-do where I can add a task»: il cursore
+          // è già nella barra quando arriva. La barra si mette a fuoco da sé
+          // nascendo; questo è per il caso in cui è già nata
+          requestAnimationFrame(() => document.getElementById('task-composer')?.focus())
+        }}
+        style={{ ...PILLOLA, display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 14, padding: '7px 14px 7px 11px', fontSize: '12.5px' }}
+        hover={PILLOLA_SOPRA}>
+        <IconPiu size={12} />{t('Aggiungi una cosa da fare')}
+      </Hov>
     </div>
   )
 }

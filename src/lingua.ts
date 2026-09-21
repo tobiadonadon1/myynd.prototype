@@ -2820,6 +2820,9 @@ const EN: Record<string, string> = {
   'Nessun progetto attivo.': 'No active project.',
   'Sul tavolo non c’è niente, per ora.': 'Nothing on your desk, for now.',
   'Guardo i tuoi progetti per la cosa dopo': 'Looking at your projects for the next thing',
+  // la prima pagina vuota, e la carta delle domande (21 set 2026)
+  'Aggiungi una cosa da fare': 'Add a task',
+  'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
 }

@@ -27,6 +27,8 @@ export type VoceFeed = {
   offerta?: string | null
   /** Il progetto di cui è, se si sa: la prima pagina la mette nel suo blocco. */
   progetto?: string | null
+  /** Quanto conta adesso, da 0 a 3, giudicato quando è nata: la prima pagina ordina con questo. */
+  peso?: number | null
   /** Verified document metadata, rather than a model-generated source label. */
   fonteTitolo?: string | null
   fonteQuando?: string | null

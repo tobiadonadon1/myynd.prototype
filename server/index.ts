@@ -2225,9 +2225,8 @@ async function rileggiDaSola() {
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
     if (await priorita.forse()) compiti.annunciaFeed()
-    // e il tavolo: un progetto attivo senza niente davanti riceve la cosa
-    // dopo. I cancelli stanno dentro `riempi`; qui si dà l'occasione.
-    await tavolo.riempi().catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e))
+    // niente tavolo qui: le righe inventate per riempire un progetto vuoto
+    // erano «messed-up tasks that do not mean anything». Vedi `tavolo.ts`.
     // e le automazioni che non si è ancora scritto. Il cancello — un giro al
     // giorno per conto, mai senza modello — sta dentro `inSottofondo`: qui si
     // dà l'occasione, e quando ne ha scritte di nuove lo si dice in colonna,
@@ -2343,6 +2342,37 @@ app.get('/api/feed', (_req, res) => {
   res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(chi.adesso() ?? '') })
 })
 
+/**
+ * Rispondere alla domanda di un progetto dalla prima pagina, sul posto.
+ *
+ * «If it is a question, it should look like the UI of the question that you
+ * can answer on the feed.» Prima l'unica strada era «Parliamone», cioè una
+ * chat. Qui la risposta si legge come quella a «qual è il passo dopo?»
+ * (`dopo-fatto.rispostaSulPasso`): un passo va in lista sotto il progetto,
+ * uno stato va nella memoria del progetto, e l'esito dice dove è finita. La
+ * domanda si scrive anche nel registro delle domande, con il suo tema, così
+ * resta la traccia di cosa è stato chiesto e cosa ha risposto.
+ */
+app.post('/api/feed/iniziative/:id/rispondi', async (req, res) => {
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return errore(res, new Error('Scrivi qualcosa.'), 400)
+  try {
+    const item = iniziativeProgetti().find(i => i.id === req.params.id)
+    if (!item) return errore(res, new Error('Project suggestion is no longer current'), 409)
+    const domanda = item.question ?? item.title
+    const tema = `iniziativa:${item.id}`
+    const aperta = store.apriDomanda({ tema, testo: domanda, spunto: [], progetto: item.projectId })
+      ?? store.domandaPerTema(tema)
+      ?? { id: item.id, tema, testo: domanda, spunto: [], stato: 'aperta', risposta: null, esito: null, creata: new Date().toISOString(), progetto: item.projectId }
+    const esito = await dopoFatto.rispostaSulPasso(aperta, testo)
+    if (store.domanda(aperta.id)) store.chiudiDomanda(aperta.id, 'risposta', testo, esito)
+    feedbackProjectInitiative(item.id, 'answered')
+    res.json({ ok: true, esito, iniziative: iniziativeProgetti() })
+    compiti.annunciaCambio()
+    compiti.annunciaFeed()
+  } catch (e) { errore(res, e) }
+})
+
 app.post('/api/feed/iniziative/:id/feedback', (req, res) => {
   const outcome = req.body?.outcome
   if (!['dismissed', 'answered', 'done'].includes(outcome)) return errore(res, new Error('Invalid initiative feedback'), 400)
@@ -2404,7 +2434,6 @@ app.post('/api/feed/genera', async (_req, res) => {
     const rileggi = async () => {
       await rileggiDaSola(); compiti.annunciaFeed()
       if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
-      await tavolo.riempi().catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e))
     }
     void (utente ? chi.dentro(utente, rileggi) : rileggi())
       .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
@@ -2736,9 +2765,15 @@ app.get('/api/compiti/flusso', (req, res) => {
 })
 
 /**
- * La pagina si è trovata vuota: il tavolo si riempie adesso, non al prossimo
- * giro. Idempotente, con i cancelli di `tavolo.riempi`: chiamarla due volte
- * non scrive due righe.
+ * Il tavolo, solo a richiesta.
+ *
+ * Fino al 21 settembre si riempiva da sé: all'avvio, dopo ogni rilettura e
+ * quando la pagina si trovava vuota. Lui ha visto il risultato («Define the
+ * specific company efforts AI systems should streamline», cinque righe
+ * così in un pomeriggio) e ha detto: «rather than having some messed-up
+ * tasks that are complex to read or that do not mean anything, have it
+ * empty». Quindi nessuno lo chiama più da solo; la rotta resta per chi la
+ * vuole. Idempotente, con i cancelli di `tavolo.riempi`.
  */
 app.post('/api/tavolo', async (_req, res) => {
   try { res.json({ proposte: await tavolo.riempi() }) }
@@ -4473,12 +4508,6 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
   }
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
-  // e il tavolo di ognuno: un progetto attivo senza niente davanti riceve
-  // la cosa dopo, all'avvio come dopo ogni rilettura
-  for (const u of conti.tutti()) {
-    try { void chi.dentro(u, () => tavolo.riempi()).catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e)) }
-    catch { /* uno rotto non ferma gli altri */ }
-  }
   const quantiConti = conti.quanti()
   console.log(`myynd · ${quantiConti} cont${quantiConti === 1 ? 'o' : 'i'} su questa installazione`)
   if (ospitato.OSPITATO) {

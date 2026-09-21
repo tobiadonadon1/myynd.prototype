@@ -358,9 +358,6 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   }
   const [fuocoAperto, setFuocoAperto] = useState(false)
   const [domanda, setDomanda] = useState<{ id: string; testo: string; spunto: string[]; tema?: string } | null>(null)
-  const [rispostaDom, setRispostaDom] = useState('')
-  const [esitoDom, setEsitoDom] = useState('')
-  const [spuntoAperto, setSpuntoAperto] = useState(false)
   const [cambioLingua, setCambioLingua] = useState(false)
   const [generando, setGenerando] = useState(false)
 
@@ -888,32 +885,26 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * meccanismo è vedere *cosa è cambiato*. Un avviso che sfarfalla e sparisce
    * insegnerebbe che rispondere non serve.
    */
-  const rispondiADomanda = async () => {
-    if (!domanda || !rispostaDom.trim()) return
-    const questa = domanda
-    const testo = rispostaDom
-    /*
-     * Presa, e poi detto cosa ne ho fatto.
-     *
-     * Il campo si svuotava subito e la fascia restava lì, uguale, per i tre o
-     * quattro secondi che il modello ci mette a capire se quella frase è un
-     * passo o uno stato: premevi Invio e non succedeva niente. Adesso la presa
-     * si vede nell'istante in cui premi — la domanda lascia il posto alla
-     * conferma — e la conferma si riscrive da sola quando arriva quella vera,
-     * che dice dove è finita la risposta. Se il server non ce la fa, la
-     * domanda torna con dentro le sue parole: non si perde niente.
-     */
-    setRispostaDom('')
-    setDomanda(null)
-    setEsitoDom(t('Presa.'))
+  /*
+   * Presa, e poi detto cosa ne ho fatto.
+   *
+   * La domanda sparisce nell'istante in cui si manda, e la carta delle
+   * domande scrive «Presa.» al suo posto; quando arriva l'esito vero, che
+   * dice dove è finita la risposta, la carta lo riscrive. Se il server non
+   * ce la fa la domanda torna, e la carta tiene le sue parole nel campo: non
+   * si perde niente. L'esito torna a chi chiama, che è chi lo disegna.
+   */
+  const rispondiADomanda = async (id: string, testo: string): Promise<string> => {
+    const questa = domanda?.id === id ? domanda : null
+    if (!testo.trim()) throw new Error('Scrivi qualcosa.')
+    setDomanda(d => (d?.id === id ? null : d))
     try {
-      const r = await api.rispondiDomanda(questa.id, testo)
-      setEsitoDom(r.esito)
+      const r = await api.rispondiDomanda(id, testo)
+      return r.esito
     } catch (e) {
-      setEsitoDom('')
-      setDomanda(questa)
-      setRispostaDom(testo)
+      if (questa) setDomanda(questa)
       mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
+      throw e
     }
   }
 
@@ -921,9 +912,30 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     if (!domanda) return
     const id = domanda.id
     setDomanda(null)
-    setSpuntoAperto(false)
     // non si ripropone: lasciarla cadere è una risposta anche quella
     try { await api.ignoraDomanda(id) } catch { /* al prossimo avvio non c'è più */ }
+  }
+
+  /**
+   * La risposta alla domanda di un progetto, dalla prima pagina.
+   *
+   * Stessa presa: la domanda se ne va subito, l'esito arriva dopo e dice
+   * dove è finita la risposta (in lista sotto il progetto, o nella sua
+   * memoria). Se non passa, la domanda torna al suo posto.
+   */
+  const rispondiIniziativa = async (id: string, testo: string): Promise<string> => {
+    if (!testo.trim()) throw new Error('Scrivi qualcosa.')
+    const prima = iniziative
+    setIniziative(i => i.filter(x => x.id !== id))
+    try {
+      const r = await api.rispondiIniziativa(id, testo)
+      setIniziative(r.iniziative)
+      return r.esito
+    } catch (e) {
+      setIniziative(prima)
+      mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a segnarlo.'))
+      throw e
+    }
   }
 
   const salvaFuoco = async (testo: string) => {
@@ -1167,16 +1179,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      */
     viaDalFeed: (id: string) => setAperti(a => a.filter(x => x.id !== id)),
 
-    // — la domanda che fa lui —
+    // — le domande che fa lui: la sua, e quelle sui progetti, in una carta sola —
     domanda,
-    rispostaDom,
-    setRispostaDom,
     rispondiADomanda,
     lasciaCadere,
-    esitoDom,
-    chiudiEsito: () => setEsitoDom(''),
-    spuntoAperto,
-    apriSpunto: () => setSpuntoAperto(v => !v),
+    rispondiIniziativa,
 
     fuoco,
     // chi ha scritto quella riga: come per gli argomenti, il campo lo dice
