@@ -1291,6 +1291,8 @@ export const api = {
   collegaCalendario: (p: { url: string; giorni: number }) =>
     json<{ ok: true; nome: string; eventi: number }>('/api/connettori/calendario', { method: 'POST', body: JSON.stringify(p) }),
 
+  /** La pagina si è trovata vuota: il tavolo si riempie adesso, con la cosa dopo di ogni progetto attivo. */
+  riempiTavolo: () => json<{ proposte: number }>('/api/tavolo', { method: 'POST' }),
   collegaJev: (apiKey: string) =>
     json<{ ok: true }>('/api/connettori/jev', { method: 'POST', body: JSON.stringify({ apiKey }) }),
 

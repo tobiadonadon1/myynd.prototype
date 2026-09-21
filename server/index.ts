@@ -46,6 +46,7 @@ import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
 import { apriDocumento } from './native-document.ts'
 import * as mani from './mani.ts'
+import * as tavolo from './tavolo.ts'
 import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
 import { detectRuntime, hermesDefaults, hasHermesInferenceCredentials, type RuntimeDetection, type RuntimeId } from './agent-runtime.ts'
@@ -2224,6 +2225,9 @@ async function rileggiDaSola() {
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
     if (await priorita.forse()) compiti.annunciaFeed()
+    // e il tavolo: un progetto attivo senza niente davanti riceve la cosa
+    // dopo. I cancelli stanno dentro `riempi`; qui si dà l'occasione.
+    await tavolo.riempi().catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e))
     // e le automazioni che non si è ancora scritto. Il cancello — un giro al
     // giorno per conto, mai senza modello — sta dentro `inSottofondo`: qui si
     // dà l'occasione, e quando ne ha scritte di nuove lo si dice in colonna,
@@ -2400,6 +2404,7 @@ app.post('/api/feed/genera', async (_req, res) => {
     const rileggi = async () => {
       await rileggiDaSola(); compiti.annunciaFeed()
       if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
+      await tavolo.riempi().catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e))
     }
     void (utente ? chi.dentro(utente, rileggi) : rileggi())
       .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
@@ -2728,6 +2733,16 @@ app.get('/api/compiti/flusso', (req, res) => {
   const battito = setInterval(() => { if (!res.writableEnded) res.write(': vivo\n\n') }, 15_000)
 
   req.on('close', () => { clearInterval(battito); basta(); if (!res.writableEnded) res.end() })
+})
+
+/**
+ * La pagina si è trovata vuota: il tavolo si riempie adesso, non al prossimo
+ * giro. Idempotente, con i cancelli di `tavolo.riempi`: chiamarla due volte
+ * non scrive due righe.
+ */
+app.post('/api/tavolo', async (_req, res) => {
+  try { res.json({ proposte: await tavolo.riempi() }) }
+  catch (e) { errore(res, e) }
 })
 
 app.post('/api/compiti', (req, res) => {
@@ -4458,6 +4473,12 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
   }
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
+  // e il tavolo di ognuno: un progetto attivo senza niente davanti riceve
+  // la cosa dopo, all'avvio come dopo ogni rilettura
+  for (const u of conti.tutti()) {
+    try { void chi.dentro(u, () => tavolo.riempi()).catch(e => console.warn('myynd · tavolo:', e instanceof Error ? e.message : e)) }
+    catch { /* uno rotto non ferma gli altri */ }
+  }
   const quantiConti = conti.quanti()
   console.log(`myynd · ${quantiConti} cont${quantiConti === 1 ? 'o' : 'i'} su questa installazione`)
   if (ospitato.OSPITATO) {

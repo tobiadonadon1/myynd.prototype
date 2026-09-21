@@ -235,21 +235,23 @@ test('crea_nota rifiuta titoli e testi fuori misura, un server e un computer che
 // — scrivere un file —
 
 test('scrivi_file scrive solo nella cartella Myynd sulla Scrivania, non sovrascrive e numera', async () => {
-  const p = mani.scriviFile({ percorso: 'pilota.md', testo: '# Pilota\n' })
+  const p = mani.scriviFile({ percorso: 'pilota.md', testo: '# Pilota\n' }, null, 'myynd')
   assert.equal(p, join(realpathSync(scrivania), 'Myynd', 'pilota.md'))
   assert.equal(readFileSync(p, 'utf8'), '# Pilota\n')
-  assert.equal(mani.scriviFile({ percorso: 'pilota.md', testo: 'due' }), join(realpathSync(scrivania), 'Myynd', 'pilota-2.md'))
+  assert.equal(mani.scriviFile({ percorso: 'pilota.md', testo: 'due' }, null, 'myynd'), join(realpathSync(scrivania), 'Myynd', 'pilota-2.md'))
   assert.equal(mani.scriviFile({ percorso: '~/Desktop/Myynd/pilota.md', testo: 'tre' }), join(realpathSync(scrivania), 'Myynd', 'pilota-3.md'))
   assert.equal(readFileSync(join(scrivania, 'Myynd', 'pilota.md'), 'utf8'), '# Pilota\n', 'il primo file non è stato toccato')
-  assert.equal(mani.scriviFile({ percorso: 'h-farm/piano.csv', testo: 'a,b\n' }), join(realpathSync(scrivania), 'Myynd', 'h-farm', 'piano.csv'))
-  const e = await mani.esegui('scrivi_file', { percorso: 'note.txt', testo: 'x' })
+  assert.equal(mani.scriviFile({ percorso: 'h-farm/piano.csv', testo: 'a,b\n' }, null, 'myynd'), join(realpathSync(scrivania), 'Myynd', 'h-farm', 'piano.csv'))
+  // il predefinito, dal 21 settembre sera, è la Scrivania nuda: «save it to my Desktop» è la sua opzione
+  assert.equal(mani.scriviFile({ percorso: 'sul-tavolo.md', testo: 'x' }), join(realpathSync(scrivania), 'sul-tavolo.md'))
+  const e = await mani.esegui('scrivi_file', { percorso: 'note.txt', testo: 'x' }, { luogo: 'myynd' })
   assert.equal(e.testo, `File scritto: ${join(realpathSync(scrivania), 'Myynd', 'note.txt')}`)
   assert.deepEqual(e.fatto, { attrezzo: 'scrivi_file', esito: 'ok', dettaglio: join(realpathSync(scrivania), 'Myynd', 'note.txt') })
 })
 
 test('scrivi_file non esce dal recinto: fuori dalla cartella Myynd, sopra la Scrivania, formati che non sono testo, un server', async () => {
   assert.throws(() => mani.scriviFile({ percorso: '../fuori.md', testo: 'x' }), /solo nella cartella Myynd/)
-  assert.throws(() => mani.scriviFile({ percorso: join(scrivania, 'sopra.md'), testo: 'x' }), /solo nella cartella Myynd/)
+  assert.throws(() => mani.scriviFile({ percorso: join(scrivania, 'sopra.md'), testo: 'x' }, null, 'myynd'), /solo nella cartella Myynd/)
   assert.throws(() => mani.scriviFile({ percorso: '/etc/x.md', testo: 'x' }), /solo nella cartella Myynd/)
   assert.throws(() => mani.scriviFile({ percorso: join(casa, 'appunti.md'), testo: 'x' }), /solo nella cartella Myynd/)
   assert.throws(() => mani.scriviFile({ percorso: 'doc.pages', testo: 'x' }), /solo file di testo/)
@@ -402,7 +404,7 @@ test('descriviLuogo e luogoDelPercorso parlano dei quattro posti nelle due lingu
   assert.equal(mani.luogoDelPercorso(join(scrivania, 'x.md')), 'scrivania')
   assert.equal(mani.luogoDelPercorso(join(casa, 'Downloads', 'x.md')), 'scaricati')
   assert.equal(mani.luogoDelPercorso(join(casa, 'x.md')), null)
-  assert.equal(mani.luogoPreferito(), 'myynd')
+  assert.equal(mani.luogoPreferito(), 'scrivania')
   cfg.aggiorna({ consegne: { luogo: 'scaricati' } })
   assert.equal(mani.luogoPreferito(), 'scaricati')
 })

@@ -10,7 +10,7 @@ import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat,
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
 import { giornoLocale } from '../oggi/giorni'
-import type { Chiesta, Compito } from '../api'
+import { api, type Chiesta, type Compito } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
@@ -352,7 +352,7 @@ function Prove({ c, v, l, scuro, inRiga }: { c: Compito; v: Vals; l?: Lista; scu
  * nasconde dietro tre puntini. Dentro la fascia di una riga (`piatto`) è
  * scritto e basta: lì il bottone è uno solo, ed è «Fatto».
  */
-function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Compito; l: Lista; v: Vals; scuro?: boolean; piatto?: boolean; anteprima?: boolean }) {
+function Portami({ c, l, v, scuro, piatto = false, anteprima = false, etichetta: data }: { c: Compito; l: Lista; v: Vals; scuro?: boolean; piatto?: boolean; anteprima?: boolean; etichetta?: string }) {
   if ((!c.porta && !c.consegna) || (anteprima && !c.consegna?.anteprima)) return null
 
   const vai = async () => {
@@ -364,9 +364,9 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Com
     else if (r.dove === 'progetto') v.apriProgetto(r.id)
   }
 
-  const etichetta = anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF')
+  const etichetta = data ?? (anteprima ? (lingua() === 'en' ? 'Preview PDF' : 'Anteprima PDF')
     : c.consegna ? (c.consegna.app === 'File' ? t('Apri') : `${lingua() === 'en' ? 'Open in' : 'Apri in'} ${c.consegna.app}`)
-    : nomePorta(c.porta!)
+    : nomePorta(c.porta!))
   const vestito: CSSProperties = scuro
     ? {
         padding: '12px 20px', borderRadius: 99, border: '1px solid rgba(var(--avorio-rgb),.32)',
@@ -380,8 +380,8 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false }: { c: Com
   return (
     <Hov as="button" type="button"
       onClick={(e: MouseEvent) => { e.stopPropagation(); void vai() }}
-      title={c.consegna?.titolo ?? etichetta}
-      style={{ ...vestito, flex: 'none', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
+      title={c.consegna?.percorso ?? c.consegna?.titolo ?? etichetta}
+      style={{ ...vestito, flex: 'none', whiteSpace: data ? 'normal' : 'nowrap', overflowWrap: 'anywhere', cursor: 'pointer', fontFamily: 'inherit' }}
       hover={scuro ? { background: 'rgba(var(--avorio-rgb),.16)', borderColor: 'rgba(var(--avorio-rgb),.5)' } : piatto ? { textDecorationColor: 'currentColor' } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
       {etichetta}
     </Hov>
@@ -423,8 +423,8 @@ function ConsegnaPronta({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
       <div className="task-completed" aria-label={en ? 'Saved file' : 'File salvato'}>
         <span className="task-completed-check"><IconSpunta size={12} /></span>
         <span className="task-completed-meta">{frasi.salvatoDove(d.dove)}</span>
-        <span className="task-completed-name" title={d.percorso}>{d.titolo}</span>
-        <Portami c={c} l={l} v={v} piatto />
+        {/* il nome è il bottone: un «Apri» a parte andava a capo da solo, staccato dal nome */}
+        <Portami c={c} l={l} v={v} piatto etichetta={d.titolo} />
       </div>
     )
   }
@@ -677,10 +677,11 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const testo = corpo(c)
   // quello che ha scritto per intero: si legge aprendo la riga, dove stava, e
   // si tiene quando accetti la bozza — è da lì che impara come scrivi
-  const intero = pronto ? (c.risultato ?? '').trim() || testo : testo
+  // su un file scritto da sé quello che si apre sul posto è la riga per
+  // lei, non il documento: quello sta nel file
+  const intero = pronto && !c.consegna ? (c.risultato ?? '').trim() || testo : testo
   const corta = taglia(testo, 150)
-  // un file scritto da sé non si apre sul posto: si apre il file
-  const espandibile = !chiede && !c.consegna && intero.length > corta.length
+  const espandibile = !chiede && intero.length > corta.length
   const apri = () => { if (espandibile) setAperta(x => !x) }
   const parlane = siPuoParlarne() ? () => v.discutiCompito(c) : null
   const email = pronto && c.email && azioneEmail(c).tipo === 'invia'
@@ -1242,10 +1243,31 @@ function Domanda({ v }: { v: Vals }) {
   )
 }
 
-/** Quando non c'è niente: dice cosa manca, non finge. */
+/**
+ * Quando non c'è niente: dice cosa manca, non finge.
+ *
+ * E non dice più «niente da segnalare, fai una lettura». Le sue parole, del
+ * 21 settembre: «it is not okay that there is the "nothing left, read now"
+ * card… It sounds like it's mechanical, as if he needs to tell me what to
+ * do. There is always stuff to do because the projects are not completed
+ * unless the user says so.» Con dei progetti attivi la pagina vuota chiede
+ * al server di riempire il tavolo (`/api/tavolo`: la cosa dopo di ogni
+ * progetto), e intanto lo dice; le righe arrivano dal filo. Quello che
+ * resta qui sono le mancanze vere: nessuna fonte, niente letto, niente
+ * Claude, nessun progetto.
+ */
 function Vuoto({ v }: { v: Vals }) {
   const senzaFonti = v.connCount === 0
   const senzaDocumenti = v.totaleDocumenti === 0
+  const conProgetti = v.progetti.some(p => !p.stato || p.stato === 'attivo')
+  const [tavolo, setTavolo] = useState<'chiedo' | 'niente' | null>(null)
+  const chiesto = useRef(false)
+  useEffect(() => {
+    if (!v.feedCaricato || !conProgetti || !v.claudeOn || chiesto.current) return
+    chiesto.current = true
+    setTavolo('chiedo')
+    api.riempiTavolo().then(r => setTavolo(r.proposte ? null : 'niente')).catch(() => setTavolo('niente'))
+  }, [v.feedCaricato, conProgetti, v.claudeOn])
   // Prima della risposta non si dice niente; dopo un errore si dice l'errore.
   // Prima questa carta diceva «La tua mente è ancora vuota» anche a un 500.
   if (!v.feedCaricato || v.guastoLettura) return null
@@ -1271,22 +1293,24 @@ function Vuoto({ v }: { v: Vals }) {
             ? t('Non ho ancora letto niente.')
             : !v.claudeOn
               ? t('Serve Claude per scegliere cosa conta.')
-              : v.haFatte
-                ? t('Non è rimasto niente.')
-                : t('Niente da segnalare.')}
+              : !conProgetti
+                ? t('Nessun progetto attivo.')
+                : tavolo === 'niente'
+                  ? t('Sul tavolo non c’è niente, per ora.')
+                  : null}
       </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: senzaFonti || senzaDocumenti || !v.claudeOn || !conProgetti || tavolo === 'niente' ? 20 : 0, flexWrap: 'wrap' }}>
         {senzaFonti || !v.claudeOn ? (
           <button onClick={v.goConn} style={BOTTONE}>{t('Vai ai connettori')}</button>
         ) : senzaDocumenti ? (
           v.sincronizzando
             ? <Stato tipo="leggo" testo={v.sincronizzando} />
             : <button onClick={v.sincronizza} style={BOTTONE}>{t('Leggi adesso')}</button>
-        ) : (
-          v.generando
-            ? <Stato tipo="cerco" testo={t('Leggo tutto e scelgo cosa conta')} />
-            : <button onClick={v.genera} style={BOTTONE}>{t('Fai una lettura')}</button>
-        )}
+        ) : !conProgetti ? (
+          <button onClick={v.goMemoria} style={BOTTONE}>{t('Apri la memoria')}</button>
+        ) : tavolo === 'chiedo' ? (
+          <Stato tipo="cerco" testo={t('Guardo i tuoi progetti per la cosa dopo')} />
+        ) : null}
       </div>
     </div>
   )

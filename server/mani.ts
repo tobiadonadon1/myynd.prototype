@@ -468,16 +468,22 @@ export function cartellaConsegne(): string {
 // he will learn that that's my preferred option.»
 //
 // Un luogo è un nome, non un percorso: il percorso lo decide la macchina, e
-// il nome è quello che si può dire a parole sulla riga («sulla Scrivania,
-// nella cartella Myynd»). Quattro e basta, tutti sotto la sua casa: la
-// cartella Myynd sulla Scrivania (quello di sempre), la Scrivania, Download,
-// Documenti. Si impara dalle sue parole — `luogoNelTesto` legge «save it to
-// my Desktop» nel compito o nella risposta — e resta in `config.consegne`.
+// il nome è quello che si può dire a parole sulla riga («sulla Scrivania»).
+// Quattro e basta, tutti sotto la sua casa: la Scrivania, la cartella Myynd
+// sulla Scrivania (dove finiscono i documenti di Pages), Download, Documenti.
+// Si impara dalle sue parole — `luogoNelTesto` legge «save it to my Desktop»
+// nel compito o nella risposta — e resta in `config.consegne`.
+//
+// Il predefinito è la Scrivania nuda. Era la cartella Myynd, e il primo file
+// vero ci è finito dentro: lui non l'ha visto — «he didn't save it to my
+// desktop… I asked you to have it saved to my desktop, it's my preferred
+// option, to make that work, actually tangible». Un file che sta in una
+// cartella che non si apre non è tangibile.
 
 /** Un posto in cui Myynd può lasciare un file scritto da sé. */
 export type Luogo = 'myynd' | 'scrivania' | 'scaricati' | 'documenti'
 export const LUOGHI: readonly Luogo[] = ['myynd', 'scrivania', 'scaricati', 'documenti']
-export const LUOGO_PREDEFINITO: Luogo = 'myynd'
+export const LUOGO_PREDEFINITO: Luogo = 'scrivania'
 
 export function cartellaDelLuogo(l: Luogo): string {
   return l === 'scrivania' ? ferri.scrivania() : l === 'scaricati' ? ferri.scaricati() : l === 'documenti' ? ferri.documenti() : cartellaConsegne()

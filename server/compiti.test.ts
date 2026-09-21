@@ -1076,10 +1076,10 @@ test('una pagina scritta si salva come file nel luogo delle consegne, e sulla ri
   const e = await o.aspetta('pronto')
   const c = store.compito(id)!
   assert.equal(c.consegna?.app, 'File')
-  assert.equal(c.consegna?.dove, 'myynd')
+  assert.equal(c.consegna?.dove, 'scrivania', 'il predefinito è la Scrivania nuda: «save it to my Desktop» è la sua opzione')
   assert.equal(c.consegna?.titolo, 'Introduce Myynd to H-Farm.md')
   assert.equal(readFileSync(c.consegna!.percorso, 'utf8'), corpo, 'il file ha il documento, senza la frase di chiusura né la riga per lei')
-  assert.equal(c.risultato, 'Done: «Introduce Myynd to H-Farm.md» is on your Desktop, in the Myynd folder.\n\nI assumed the audience is the leadership team; tell me if it is the students.')
+  assert.equal(c.risultato, 'Done: «Introduce Myynd to H-Farm.md» is on your Desktop.\n\nI assumed the audience is the leadership team; tell me if it is the students.')
   assert.equal(c.consegna?.revisione?.esito, 'pass')
   assert.ok(riletto.includes('## Why now'), 'il revisore rilegge il documento intero')
   assert.ok(seguito.includes('## Why now'), 'la cosa dopo si cerca dal lavoro intero')
@@ -1092,26 +1092,26 @@ test('«save it to my Desktop» nella risposta si impara e vale da subito; un me
   cfg.scrivi({ lingua: 'en' })
   prova({ svolgi: async () => ({ testo: 'Yes: go with the June figures.', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
   const corta = riga('Decide which figures to use')
-  store.cambiaCompito(corta, { nota: 'Save it to my Desktop.' })
+  store.cambiaCompito(corta, { nota: 'Put it in my Downloads folder.' })
   const o = orecchio(corta)
   compiti.affida(corta, 'bozza')
   await o.aspetta('pronto')
   const c = store.compito(corta)!
   assert.equal(c.consegna?.app, 'File', 'l\'ha chiesto lei: si salva anche se corto')
-  assert.equal(c.consegna?.dove, 'scrivania')
-  assert.equal(c.risultato, 'Done: «Decide which figures to use.md» is on your Desktop. I will keep saving there.')
-  assert.equal(cfg.leggi().consegne?.luogo, 'scrivania')
+  assert.equal(c.consegna?.dove, 'scaricati')
+  assert.equal(c.risultato, 'Done: «Decide which figures to use.md» is in your Downloads folder. I will keep saving there.')
+  assert.equal(cfg.leggi().consegne?.luogo, 'scaricati')
   o.smetti()
 
-  // da adesso una pagina va sulla Scrivania senza che lo dica, e «write» da solo non è una mail
+  // da adesso una pagina va in Download senza che lo dica, e «write» da solo non è una mail
   const pagina = '# Plan\n\n' + 'Step. '.repeat(200).trim() + '\n\nA.\n\nB.'
   prova({ svolgi: async () => ({ testo: pagina, fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
   const piano = riga('Write the pilot plan')
   const o2 = orecchio(piano)
   compiti.affida(piano, 'bozza')
   await o2.aspetta('pronto')
-  assert.equal(store.compito(piano)!.consegna?.dove, 'scrivania')
-  assert.equal(store.compito(piano)!.risultato, 'Done: «Write the pilot plan.md» is on your Desktop.')
+  assert.equal(store.compito(piano)!.consegna?.dove, 'scaricati')
+  assert.equal(store.compito(piano)!.risultato, 'Done: «Write the pilot plan.md» is in your Downloads folder.')
   o2.smetti()
 
   // un messaggio resta sulla riga: «Manda» legge da lì
@@ -1125,7 +1125,7 @@ test('«save it to my Desktop» nella risposta si impara e vale da subito; un me
   o3.smetti()
 
   // una risposta corta senza che lo chieda: sulla riga
-  cfg.aggiorna({ consegne: { luogo: 'myynd' } })
+  cfg.aggiorna({ consegne: { luogo: 'scrivania' } })
   prova({ svolgi: async () => ({ testo: 'Yes: go with the June figures.', fonti: [], fatti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda })
   const breve = riga('Decide which figures to use, again')
   const o4 = orecchio(breve)

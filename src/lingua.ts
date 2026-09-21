@@ -2816,6 +2816,10 @@ const EN: Record<string, string> = {
   //   che non sta in nessuno; il nome in cima apre il progetto; «Poi:» è la
   //   cosa che Myynd propone dopo una riga finita —
   'Il resto': 'Everything else',
+  // — la pagina vuota: mai «niente da segnalare, fai una lettura»; il tavolo si riempie da sé —
+  'Nessun progetto attivo.': 'No active project.',
+  'Sul tavolo non c’è niente, per ora.': 'Nothing on your desk, for now.',
+  'Guardo i tuoi progetti per la cosa dopo': 'Looking at your projects for the next thing',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
 }
