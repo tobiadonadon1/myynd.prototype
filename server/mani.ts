@@ -44,6 +44,7 @@ import { OSPITATO } from './ospitato.ts'
 import { daBuffer, daHtml, RICCHI } from './connettori/estrai.ts'
 import { riflua } from './testo.ts'
 import * as lavoro from './lavoro.ts'
+import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
 
 // — cosa è stato fatto —
@@ -87,6 +88,8 @@ type Ferri = {
   risolvi: Risolutore
   osascript: Esecutore
   fai: typeof lavoro.fai
+  /** Posa il lavoro fatto nella copia dentro il progetto vero, tenendo da parte com'era. */
+  posa: typeof landReport
   runtime: () => Promise<{ status: string }>
   installato: () => string | null
   casa: () => string
@@ -101,6 +104,7 @@ type Ferri = {
 }
 const VERI: Ferri = {
   rete: (...a) => fetch(...a),
+  posa: landReport,
   risolvi: host => lookup(host, { all: true }),
   osascript: (argomenti, signal) => new Promise((ok, no) => {
     execFile('/usr/bin/osascript', argomenti, { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024, signal }, (errore, stdout, stderr) => {
@@ -612,17 +616,28 @@ export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo }
 }
 
 /**
- * Va salvato come file, o resta sulla riga?
+ * Quando qualcosa *è stato scritto*, quel qualcosa è un file sul suo computer.
  *
- * Una pagina scritta — una definizione, un piano, una proposta — è un file:
- * incollata sotto la riga del feed è quello che lui non vuole. Restano
- * sulla riga le cose che sulla riga servono: un messaggio da mandare (il
- * bottone «Manda» legge da lì), una risposta corta, una decisione. E quello
- * che una mano ha già prodotto altrove — una nota, un documento in Pages, un
- * file scritto dal modello — non si scrive due volte.
+ * Il 22 settembre: «when I tell Myynd to take it and he prepares a brief or he
+ * completely makes the document for me… I actually need him to do it. I do not
+ * want him to make the brief in-app and deliver it under the feed.» Questa
+ * funzione esisteva già e la regola c'era già — solo che si accendeva sopra
+ * novecento caratteri, o quattro paragrafi, o un titolo in markdown. Sotto
+ * quella riga una relazione di mezza pagina restava incollata sotto la voce
+ * del feed, che è esattamente la cosa che lui non vuole vedere.
  *
- * Se ha chiesto lei un posto («save it to my Desktop»), si salva comunque,
- * anche corto: l'ha detto.
+ * La soglia adesso separa due cose diverse, non due lunghezze: una *cosa
+ * scritta* e una *risposta*. Un paragrafo e mezzo di testo è una cosa
+ * scritta, e va sul disco. «L'unità è H-Farm Education» è una risposta, e
+ * mettere una riga in un file sarebbe peggio che lasciarla lì.
+ *
+ * Restano sulla riga anche le cose che sulla riga servono: un messaggio da
+ * mandare — il bottone «Manda» legge da lì, e il suo atterraggio vero è la
+ * bozza nella sua casella — e quello che una mano ha già prodotto altrove:
+ * una nota, un documento in Pages, un file scritto dal modello, il lavoro
+ * atterrato in un progetto. Quello non si scrive due volte.
+ *
+ * Se ha chiesto lei un posto («save it to my Desktop»), si salva comunque.
  */
 export function vaSalvato(o: { risultato: string; fatti: Fatto[]; messaggio: boolean; chiesto?: boolean }): boolean {
   if (o.fatti.some(f => f.esito === 'ok' && CHE_PRODUCONO.includes(f.attrezzo))) return false
@@ -632,8 +647,20 @@ export function vaSalvato(o: { risultato: string; fatti: Fatto[]; messaggio: boo
   if (/^(?:subject|oggetto)\s*:/im.test(corpo)) return false
   if (o.chiesto) return true
   const paragrafi = corpo.split(/\n\s*\n/).filter(p => p.trim())
-  return corpo.length >= 900 || paragrafi.length >= 4 || /^#{1,3}\s+\S/m.test(corpo)
+  // due paragrafi, un elenco, un titolo, o un paragrafo che va a capo da solo:
+  // sono tutte forme di «è stato scritto qualcosa», e nessuna è una risposta
+  return corpo.length >= UNA_RISPOSTA || paragrafi.length >= 2
+    || /^#{1,3}\s+\S/m.test(corpo) || /^\s*(?:[-*•]|\d+[.)])\s+\S/m.test(corpo)
 }
+
+/**
+ * Oltre questi caratteri, un testo di un paragrafo solo non è più una risposta.
+ *
+ * Duecentoquaranta sono due frasi piene. «The audit covers H-Farm Education,
+ * and Giulia needs it before Friday» ne sta dentro e resta sulla riga, dove
+ * la si legge in un colpo; una mezza pagina no.
+ */
+const UNA_RISPOSTA = 240
 
 /** Il risultato senza la frase di chiusura in testa: quello che va nel file. */
 export function senzaChiusura(testo: string): string {
@@ -699,15 +726,28 @@ export function sembraLavoroDiCodice(testo: string, nota?: string | null): boole
 }
 
 /**
- * Claude Code dentro una copia della cartella del progetto.
+ * Claude Code dentro una copia della cartella del progetto, e poi nel progetto.
  *
- * Il passo che cambia i file gira solo in una copia (`executeInCopy`), e il
- * risultato dice dove sta la copia e che la cartella vera non è stata
- * toccata: chi legge deve saperlo prima di fidarsi. Se il Claude Code
- * installato non ha le opzioni con cui lo si tiene nel recinto, si ripiega
- * sul piano: legge e scrive cosa farebbe. Se non c'è affatto, lo si dice.
+ * Il passo che cambia i file gira sempre in una copia (`executeInCopy`): è
+ * quello che tiene un giro andato male lontano da un progetto vero, ed è
+ * anche quello che rende il lavoro rileggibile prima che tocchi qualcosa. Ma
+ * la copia non è la fine della strada. «He needs to… actually perform the
+ * changes on my Xcode project»: un lavoro che finisce dentro una cartella
+ * temporanea, per chi guarda, non è successo.
+ *
+ * Quindi dopo la copia il lavoro *si posa* nel progetto vero
+ * (`landReport`), e quello che si posa si può sempre disfare: ogni file
+ * toccato viene messo da parte prima, e un file che ha cambiato lui mentre
+ * l'agente lavorava non si tocca. Il risultato dice tutte e tre le cose —
+ * cosa è cambiato, dove sta il prima, cosa è stato lasciato stare — perché
+ * chi legge deve saperlo senza andare a cercarlo.
+ *
+ * Un giro fallito o annullato non si posa: resta nella copia, e lo si dice.
+ * Se il Claude Code installato non ha le opzioni con cui lo si tiene nel
+ * recinto, si ripiega sul piano: legge e scrive cosa farebbe. Se non c'è
+ * affatto, lo si dice.
  */
-export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo }> {
+export async function lavoraNelCodice(o: { cartella: string; richiesta: string; signal?: AbortSignal }): Promise<{ testo: string; copia: string | null; passo: lavoro.Passo; posato?: boolean }> {
   if (ferri.ospitato()) throw new Error('Su un server non posso lavorare in una cartella.')
   const richiesta = String(o.richiesta ?? '').trim()
   if (!richiesta) throw new Error('Non c’è niente da chiedergli.')
@@ -716,19 +756,28 @@ export async function lavoraNelCodice(o: { cartella: string; richiesta: string; 
   const passo: lavoro.Passo = runtime.status === 'supported' ? 'fai' : 'piano'
   const e = await ferri.fai(leggi().desktop, { cartella: o.cartella, richiesta, passo, signal: o.signal })
   if (e.passo === 'fai') {
-    const cambiati = e.esecuzione?.changedFiles.map(f => `${f.path} (${f.kind})`) ?? []
-    const stato = e.esecuzione?.state ?? (e.finito ? 'verified' : 'cancelled')
-    const verifica = e.esecuzione?.verification
+    const esecuzione = e.esecuzione
+    const cambiati = esecuzione?.changedFiles.map(f => `${f.path} (${f.kind})`) ?? []
+    const stato = esecuzione?.state ?? (e.finito ? 'verified' : 'cancelled')
+    const verifica = esecuzione?.verification
+    const posa = esecuzione && (stato === 'verified' || stato === 'unverified') && cambiati.length
+      ? await ferri.posa(esecuzione).catch(g => {
+        console.warn('myynd · il lavoro è fatto, ma non si è posato nel progetto:', g instanceof Error ? g.message : g)
+        return null
+      })
+      : null
+    const lasciati = posa?.skipped.filter(s => s.reason === 'changed-meanwhile').map(s => s.path) ?? []
     return {
-      passo: 'fai', copia: e.cartella,
+      passo: 'fai', copia: e.cartella, posato: !!posa?.applied.length,
       testo: [
-        `Lavoro fatto nella copia: ${e.cartella}`,
-        `La cartella vera (${o.cartella}) non è stata toccata: niente è cambiato lì.`,
-        cambiati.length ? `File cambiati nella copia: ${cambiati.join(', ')}` : 'Nessun file è cambiato nella copia.',
-        `Stato: ${stato}${verifica?.command ? ` · verifica «${verifica.command.join(' ')}»: ${verifica.status}` : ''}`,
-        '',
-        e.testo
-      ].join('\n')
+        posa?.applied.length
+          ? `Fatto nel progetto (${o.cartella}): ${posa.applied.map(f => `${f.path} (${f.kind})`).join(', ')}`
+          : `Il lavoro è nella copia (${e.cartella}) e la cartella vera non è stata toccata.`,
+        posa?.applied.length ? `Com'erano prima: ${posa.backup}` : '',
+        lasciati.length ? `Lasciati stare perché li hai cambiati tu nel frattempo: ${lasciati.join(', ')}` : '',
+        cambiati.length ? `File cambiati dal lavoro: ${cambiati.join(', ')}` : 'Nessun file è cambiato.',
+        `Stato: ${stato}${verifica?.command ? ` · verifica «${verifica.command.join(' ')}»: ${verifica.status}` : ''}`
+      ].filter(Boolean).join('\n') + `\n\n${e.testo}`
     }
   }
   return {
@@ -874,7 +923,14 @@ export async function esegui(nome: string, input: unknown, contesto: Contesto = 
     if (nome === LAVORA_NEL_CODICE.name) {
       if (!contesto.cartella) return guaio('lavora', '', new Error('Questa riga non ha una cartella di progetto.'))
       const r = await lavoraNelCodice({ cartella: contesto.cartella, richiesta: s('richiesta'), signal: contesto.signal })
-      return { testo: r.testo, fatto: { attrezzo: 'lavora', esito: 'ok', dettaglio: r.copia ?? `piano su ${contesto.cartella}` }, ...(r.copia ? { copia: r.copia } : {}) }
+      /*
+       * Il dettaglio dice dove è finito il lavoro, e sono tre posti diversi:
+       * posato nel progetto, fermo in una copia, o solo un piano. La frase di
+       * chiusura (`fraseDaiFatti`) lo legge da qui, e non deve poter dire «la
+       * cartella vera non è cambiata» quando invece è cambiata.
+       */
+      const dove = r.posato ? `posato in ${contesto.cartella}` : r.copia ?? `piano su ${contesto.cartella}`
+      return { testo: r.testo, fatto: { attrezzo: 'lavora', esito: 'ok', dettaglio: dove }, ...(r.copia ? { copia: r.copia } : {}) }
     }
     return guaio('cerca', nome, new Error(`attrezzo sconosciuto: ${nome}`))
   } catch (e) {
@@ -916,6 +972,10 @@ export function fraseDaiFatti(fatti: Fatto[], lingua: 'it' | 'en'): string {
       parti.push(luogo
         ? (e ? `${virgolette(basename(f.dettaglio))} is ${descriviLuogo(luogo, 'en')}` : `${virgolette(basename(f.dettaglio))} è ${descriviLuogo(luogo, 'it')}`)
         : (e ? `the file is written at ${f.dettaglio}` : `il file è scritto in ${f.dettaglio}`))
+    }
+    else if (f.attrezzo === 'lavora' && f.dettaglio.startsWith('posato in ')) {
+      const cartella = f.dettaglio.slice('posato in '.length)
+      parti.push(e ? `the changes are in ${cartella}` : `le modifiche sono in ${cartella}`)
     }
     else if (f.attrezzo === 'lavora' && !f.dettaglio.startsWith('piano su ')) parti.push(e ? `the changes are in the copy at ${f.dettaglio}, nothing in the real folder changed` : `le modifiche sono nella copia ${f.dettaglio}, la cartella vera non è cambiata`)
   }

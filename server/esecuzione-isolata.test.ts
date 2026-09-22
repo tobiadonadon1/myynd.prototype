@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { executeInCopy, runCommand } from './esecuzione-isolata.ts'
+import { executeInCopy, landReport, runCommand } from './esecuzione-isolata.ts'
 
 async function project(fn: (root: string, base: string) => Promise<void>): Promise<void> {
   const base = await mkdtemp(join(tmpdir(), 'myynd-isolated-test-'))
@@ -116,4 +116,78 @@ test('bounded commands can be cancelled', async () => project(async (root) => {
   setTimeout(() => controller.abort(), 100)
   const result = await runCommand([process.execPath, '-e', 'setTimeout(()=>{}, 10000)'], root, controller.signal, 1000)
   assert.equal(result.finished, false)
+}))
+
+// — posare il lavoro nel progetto vero —
+
+test('landing writes the verified work into the real project and keeps what was there', async () => project(async (root, base) => {
+  await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'node --test' } }))
+  await writeFile(join(root, 'value.mjs'), 'export const value = 1\n')
+  await writeFile(join(root, 'vecchio.mjs'), 'export const old = true\n')
+  await writeFile(join(root, 'value.test.mjs'), "import {test} from 'node:test'; import {strict as assert} from 'node:assert'; import {value} from './value.mjs'; test('value',()=>assert.equal(value,2));\n")
+  const report = await executeInCopy(root, async workspace => {
+    await writeFile(join(workspace, 'value.mjs'), 'export const value = 2\n')
+    await writeFile(join(workspace, 'nuovo.mjs'), 'export const fresh = true\n')
+    await rm(join(workspace, 'vecchio.mjs'))
+    return { exitCode: 0, finished: true, text: 'Done' }
+  }, { baseDir: join(base, 'copies') })
+  assert.equal(report.state, 'verified')
+
+  const landing = await landReport(report)
+  assert.deepEqual(landing.applied.map(f => `${f.path}:${f.kind}`).sort(), ['nuovo.mjs:added', 'value.mjs:modified', 'vecchio.mjs:deleted'])
+  assert.deepEqual(landing.skipped, [])
+  assert.equal(await readFile(join(root, 'value.mjs'), 'utf8'), 'export const value = 2\n')
+  assert.equal(await readFile(join(root, 'nuovo.mjs'), 'utf8'), 'export const fresh = true\n')
+  assert.equal(await readFile(join(root, 'vecchio.mjs'), 'utf8').catch(() => null), null, 'il file tolto dal lavoro sparisce davvero')
+  // e niente è perso: quello che c'era prima sta nella cartella del giro
+  assert.equal(await readFile(join(landing.backup, 'value.mjs'), 'utf8'), 'export const value = 1\n')
+  assert.equal(await readFile(join(landing.backup, 'vecchio.mjs'), 'utf8'), 'export const old = true\n')
+}))
+
+test('landing never overwrites a file the person changed while the agent worked', async () => project(async (root, base) => {
+  await writeFile(join(root, 'a.txt'), 'uno\n')
+  await writeFile(join(root, 'b.txt'), 'due\n')
+  const report = await executeInCopy(root, async workspace => {
+    await writeFile(join(workspace, 'a.txt'), 'agente\n')
+    await writeFile(join(workspace, 'b.txt'), 'agente\n')
+    return { exitCode: 0, finished: true, text: 'Done' }
+  }, { baseDir: join(base, 'copies') })
+  assert.equal(report.state, 'unverified', 'senza un comando di verifica il giro resta non verificato, e si posa lo stesso')
+  // mentre l'agente lavorava, lui ha messo le mani su a.txt
+  await writeFile(join(root, 'a.txt'), 'scritto da lui\n')
+
+  const landing = await landReport(report)
+  assert.deepEqual(landing.skipped, [{ path: 'a.txt', reason: 'changed-meanwhile' }])
+  assert.deepEqual(landing.applied.map(f => f.path), ['b.txt'])
+  assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'scritto da lui\n', 'quello che ha scritto lui resta suo')
+  assert.equal(await readFile(join(root, 'b.txt'), 'utf8'), 'agente\n')
+}))
+
+test('a run that failed or produced nothing never reaches the real project', async () => project(async (root, base) => {
+  await writeFile(join(root, 'a.txt'), 'uno\n')
+  const rotto = await executeInCopy(root, async workspace => {
+    await writeFile(join(workspace, 'a.txt'), 'agente\n')
+    return { exitCode: 1, finished: true, text: 'no' }
+  }, { baseDir: join(base, 'copies') })
+  assert.equal(rotto.state, 'failed')
+  await assert.rejects(() => landReport(rotto), /can be applied/)
+  assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'uno\n')
+}))
+
+test('a path outside the project is never written, whatever the report says', async () => project(async (root, base) => {
+  await writeFile(join(root, 'a.txt'), 'uno\n')
+  const report = await executeInCopy(root, async workspace => {
+    await writeFile(join(workspace, 'a.txt'), 'agente\n')
+    return { exitCode: 0, finished: true, text: 'Done' }
+  }, { baseDir: join(base, 'copies') })
+  const fuori = join(base, 'fuori.txt')
+  await writeFile(fuori, 'non toccarmi\n')
+  const landing = await landReport({
+    ...report,
+    changedFiles: [{ path: '../fuori.txt', kind: 'modified' }, { path: '/etc/hosts', kind: 'modified' }],
+    artifactHashes: {}, baseHashes: {}
+  })
+  assert.deepEqual(landing.applied, [])
+  assert.equal(landing.skipped.length, 2)
+  assert.equal(await readFile(fuori, 'utf8'), 'non toccarmi\n')
 }))

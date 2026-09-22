@@ -777,7 +777,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // a chi lavora su otto progetti suona ridicola: quando il quadro sta per
       // essere guardato, si dice quello, e basta. I numeri restano solo per
       // chi non ha un modello che possa dire altro.
-      mostraToast(r.generate ? frasi.coseNuove(r.generate)
+      // stava già leggendo: non è un guasto e non è un «niente», è la stessa
+      // lettura che avrebbe chiesto lui, cominciata un momento prima
+      mostraToast(r.gia ? t('Sto già leggendo le tue fonti: quello che trovo compare qui da sé.')
+        : r.generate ? frasi.coseNuove(r.generate)
         : r.cerco ? t('Dalle fonti non è arrivato niente di nuovo. Sto guardando i tuoi progetti, le cartelle di lavoro e la posta: quello che trovo compare qui da sé.')
         : (r.vuoto ? frasi.feedVuoto(r.vuoto) : t('Non ho trovato niente da segnalare.'))
           + (r.iniziative?.length ? ' ' + t('I tuoi progetti aspettano un passo, qui sotto.') : ''))

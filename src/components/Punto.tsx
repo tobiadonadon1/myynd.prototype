@@ -18,9 +18,11 @@
 // mette in lista mentre scrive il punto, e nel feed la freccia apre la mail a
 // cui deve rispondere.
 //
-// Il saluto non lo scrive il modello: lo compone la pagina dal tempo che la
-// finestra sa, così non dice «sei stato via sette giorni» perché il materiale
-// copre sette giorni.
+// Sotto il titolo ci stanno la data e il conto delle righe, e basta. Per un
+// po' c'è stato anche da quanto mancava — «sei stato via tredici ore» — e la
+// sua risposta è stata secca: «I don't care to know, and I don't want him to
+// tell me». Quanto è stato via lo sa il server, perché è con quello che
+// decide da dove ripartire a guardare; non è una cosa da dire a lui.
 
 import { useRef, type CSSProperties } from 'react'
 import { frasi, loc, t, tradotta } from '../lingua'
@@ -80,12 +82,6 @@ const APRIBILE: CSSProperties = {
 
 /** Il rame al passaggio: l'unico accento, e solo dove si può cliccare. */
 const RAME: CSSProperties = { color: 'var(--rame)', textDecoration: 'underline', textUnderlineOffset: 3 }
-
-/** Un gesto che non deve chiamare l'occhio: piccolo, spento, rame se ci passi sopra. */
-const QUIETO: CSSProperties = {
-  flex: 'none', padding: 0, border: 'none', background: 'none', fontFamily: 'inherit',
-  fontSize: 12, lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.5)', cursor: 'pointer', whiteSpace: 'nowrap'
-}
 
 /** La carta in prima pagina: come le altre, non un rigo di servizio. */
 const CARTA: CSSProperties = {
@@ -168,12 +164,21 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
   const quante = punto.progetti.length + punto.github.length + punto.daLeggere.length + punto.risposte.length + (punto.aggiornamenti?.length ?? 0)
   const vuoto = quante === 0
   const data = new Date(punto.quando).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' })
+  /*
+   * La data e il conto. Quanto sei stato via, no.
+   *
+   * «Remove the time that I was away for. I don't care to know, and I don't
+   * want him to tell me.» Era la terza cosa scritta qui sotto — «sei stato
+   * via tredici ore» — e non risponde a nessuna domanda che si faccia
+   * aprendo un punto: quello che è successo lo dicono le righe. Il server
+   * continua a sapere da quanto manca, perché è con quello che decide da
+   * dove ripartire a guardare; semplicemente non glielo dice più.
+   */
   const sotto = [
     data,
     // quando non c'è niente lo dice il foglio, una riga sotto: dirlo due volte
     // nella stessa finestra è il modo di far sembrare vuoto anche il resto
-    vuoto ? '' : frasi.coseNelPunto(quante),
-    punto.via ? frasi.viaDa(punto.via) : ''
+    vuoto ? '' : frasi.coseNelPunto(quante)
   ].filter(Boolean).join(' · ')
 
   return (
@@ -236,21 +241,14 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
           <Sezione etichetta={t('Aggiornamenti')}>{righe(punto.aggiornamenti)}</Sezione>
         )}
 
-        <div style={{
-          marginTop: 30, paddingTop: 16, borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)',
-          display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', minWidth: 0
-        }}>
-          <Hov as="button" type="button" style={QUIETO} hover={{ color: 'var(--rame)' }}
-            onClick={p.rifai} disabled={p.carico}>{p.carico ? t('Un momento…') : t('Rifai il punto')}</Hov>
-          {p.tetto && (
-            <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
-              {t('Per oggi basta: tre punti al giorno. Si riparte domani.')}
-            </span>
-          )}
-          {!p.tetto && <div style={{ flex: 1 }} />}
-          <Hov as="button" type="button" style={QUIETO} hover={{ color: 'var(--rame)' }}
-            onClick={p.nascondi}>{t('Chiudi')}</Hov>
-        </div>
+        {/* In fondo non c'è niente.
+            «Remove the "redo briefing" and the "close" that appear at the
+            bottom.» Erano due gesti scritti piccoli sotto una riga: uno
+            rifaceva quello che si stava leggendo, l'altro ripeteva la croce
+            che sta già in alto a destra. Un foglio da leggere si chiude dove
+            si chiudono i fogli, e finisce con l'ultima riga. Rifarlo resta
+            possibile dalla carta in prima pagina, che è dove ha senso: lì il
+            punto non c'è ancora, o è di ieri. */}
       </div>
     </div>
   )

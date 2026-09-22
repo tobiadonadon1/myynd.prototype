@@ -45,6 +45,7 @@ import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
 import * as scrivania from './scrivania.ts'
 import { apriDocumento } from './native-document.ts'
+import { landReport } from './esecuzione-isolata.ts'
 import * as mani from './mani.ts'
 import * as tavolo from './tavolo.ts'
 import * as agenda from './agenda.ts'
@@ -59,7 +60,7 @@ import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
-import { LetturaInCorso, fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import { fontiIncomplete, osservaLettura } from './lettura-feed.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
 import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
@@ -2400,11 +2401,32 @@ app.post('/api/feed/genera', async (_req, res) => {
      * che c'è in indice — la risposta arriva in pochi secondi — e le fonti si
      * rileggono dopo, di fondo, con lo stesso giro delle sei ore: quello che
      * arriva passa da `dopoLArrivo` e compare da solo, e la riga delle fonti
-     * non lette si aggiorna con il feed. Una lettura già in corso resta un
-     * 409: due letture insieme non hanno mai senso.
+     * non lette si aggiorna con il feed.
      */
     const conto = chi.adesso() ?? ''
-    if (sincronizzazioniInCorso.has(conto)) throw new LetturaInCorso()
+    /*
+     * Premere l'occhio mentre sta già leggendo non è un errore.
+     *
+     * Era un 409 — «A source read is already running. Wait for it to finish
+     * and try again.» — e arrivava addosso a chi aveva appena premuto: una
+     * striscia rossa in alto a destra che se ne andava in cinque secondi, e
+     * subito dopo due carte nuove nel feed. «There is an error that comes up
+     * every time that I click that eye… it added two things to my feed while
+     * giving me an error.» Erano la stessa cosa: la rilettura di fondo che
+     * parte da *questo* bottone tiene il lucchetto per una mezza minuto, e
+     * in quel mezzo minuto ogni altra pressione era un errore. Poi la
+     * rilettura finiva e metteva le sue carte.
+     *
+     * Adesso si risponde con quello che c'è — il feed di adesso, le fonti —
+     * e si dice che sta già leggendo. Niente modello e nessuna seconda
+     * rilettura: quella in corso è la stessa che avrebbe chiesto lui.
+     */
+    if (sincronizzazioniInCorso.has(conto)) {
+      return res.json({
+        ok: true, generate: 0, gia: true,
+        feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
+      })
+    }
     const voci = await claude.generaFeed()
     // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
     // è quello che impedisce a una rilettura di duplicare il feed. Quello che
@@ -2437,10 +2459,7 @@ app.post('/api/feed/genera', async (_req, res) => {
     }
     void (utente ? chi.dentro(utente, rileggi) : rileggi())
       .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
-  } catch (e) {
-    if (e instanceof LetturaInCorso) res.status(e.status).json({ errore: e.perLingua(cfg.lingua()) })
-    else errore(res, e)
-  }
+  } catch (e) { errore(res, e) }
 })
 
 // — quello che chiede lui —
@@ -3366,15 +3385,44 @@ app.post('/api/compiti/:id/lavora', async (req, res) => {
     }
     const current=stillCurrent()
     if(!current) e.finito=false
+    /*
+     * E poi il lavoro si posa nel progetto vero.
+     *
+     * Questo è il passo che lui ha già approvato leggendo il piano, e fino a
+     * qui finiva dentro una copia: «he needs to… actually perform the changes
+     * on my Xcode project». `landReport` tiene da parte ogni file prima di
+     * toccarlo e lascia stare quelli che ha cambiato lui nel frattempo, quindi
+     * non c'è niente da chiedere una seconda volta. Se non riesce, il lavoro
+     * resta nella copia e la riga lo dice: non è un motivo per buttare via un
+     * giro riuscito.
+     */
+    let posa: Awaited<ReturnType<typeof landReport>> | null = null
+    if (current && e.finito && e.esecuzione && e.esecuzione.changedFiles.length
+      && (e.esecuzione.state === 'verified' || e.esecuzione.state === 'unverified')) {
+      posa = await landReport(e.esecuzione).catch(g => {
+        console.warn(`myynd · il lavoro su ${c.id} è fatto, ma non si è posato nel progetto:`, g instanceof Error ? g.message : g)
+        return null
+      })
+    }
     store.registraAzione({
       tipo: passo === 'piano' ? 'lavoro.piano' : 'lavoro.fatto',
-      verso: e.cartella, cosa: c.testo, compito: c.id,
+      verso: posa?.applied.length ? cartella : e.cartella, cosa: c.testo, compito: c.id,
       esito: e.finito ? 'fatta' : 'fallita',
       dettaglio: e.esecuzione ? JSON.stringify(e.esecuzione) : e.finito ? undefined : 'Execution did not finish.'
     })
     // il piano si legge come una bozza; quello che ha fatto davvero anche —
     // con la differenza che i file nella cartella adesso sono cambiati
-    const evidence = e.esecuzione ? `\n\nWorking copy: ${e.esecuzione.workspace}\nVerification: ${e.esecuzione.state}\nChanged files: ${e.esecuzione.changedFiles.map(f => f.path).join(', ') || 'none'}\nReport: ${e.esecuzione.reportFile}` : ''
+    const lasciati = posa?.skipped.filter(x => x.reason === 'changed-meanwhile').map(x => x.path) ?? []
+    const evidence = e.esecuzione ? [
+      '',
+      posa?.applied.length ? `Applied to ${cartella}: ${posa.applied.map(f => `${f.path} (${f.kind})`).join(', ')}` : '',
+      posa?.applied.length ? `Previous versions kept in: ${posa.backup}` : '',
+      lasciati.length ? `Left alone because you changed them meanwhile: ${lasciati.join(', ')}` : '',
+      `Working copy: ${e.esecuzione.workspace}`,
+      `Verification: ${e.esecuzione.state}`,
+      `Changed files: ${e.esecuzione.changedFiles.map(f => f.path).join(', ') || 'none'}`,
+      `Report: ${e.esecuzione.reportFile}`
+    ].filter((r, i) => i === 0 || r).join('\n') : ''
     if(current) store.risultatoCompito(c.id, senzaTrattini(e.testo) + evidence, [], e.finito ? 'pronto' : 'chiede')
     const dopo = store.compito(c.id)
     res.json({ ok: true, passo, finito: e.finito, esecuzione: e.esecuzione, compiti: compitiAttuali(), compito: dopo })

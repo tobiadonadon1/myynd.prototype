@@ -3,8 +3,8 @@
 // project they connected.
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, symlink, writeFile, copyFile } from 'node:fs/promises'
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile, copyFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { cartella as profileFolder } from './config.ts'
 
 const MAX_FILES = 100_000
@@ -23,6 +23,15 @@ export type ExecutionReport = {
   changedFiles: ChangedFile[]
   /** Hashes of the files that still exist, and 'deleted' for removals. */
   artifactHashes: Record<string, string>
+  /**
+   * How those same files looked *before* the agent touched them.
+   *
+   * It is what makes landing the work safe: a file the person edited in the
+   * real project while the agent worked no longer matches this, and is left
+   * alone instead of being overwritten. 'deleted' means the file did not
+   * exist before.
+   */
+  baseHashes?: Record<string, string>
   verification: Verification
   agentExitCode: number | null
   agentFinished: boolean
@@ -207,7 +216,8 @@ export async function executeInCopy(
       }
       state = verification.status === 'passed' ? 'verified' : verification.status === 'unavailable' ? 'unverified' : verification.status === 'cancelled' ? 'cancelled' : 'failed'
     }
-    const report: ExecutionReport = { id, source, workspace, reportFile, state, changedFiles, artifactHashes, verification, agentExitCode: agentResult.exitCode, agentFinished: agentResult.finished, agentText: agentResult.text, createdAt }
+    const baseHashes = Object.fromEntries(changedFiles.map(f => [f.path, before.get(f.path) ?? 'deleted']))
+    const report: ExecutionReport = { id, source, workspace, reportFile, state, changedFiles, artifactHashes, baseHashes, verification, agentExitCode: agentResult.exitCode, agentFinished: agentResult.finished, agentText: agentResult.text, createdAt }
     await writeFile(reportFile, JSON.stringify(report, null, 2), { mode: 0o600 })
     return report
   } catch (e) {
@@ -218,4 +228,102 @@ export async function executeInCopy(
     await writeFile(reportFile, JSON.stringify(report, null, 2), { mode: 0o600 })
     return report
   }
+}
+
+// — landing the work in the real project —
+//
+// «He needs to actually produce the document, actually reply to the email,
+// actually perform the changes on my Xcode project, whatever it may be.»
+// Until here the copy was the end of the road: the agent edited it, the report
+// listed what changed, and the real project stayed exactly as it was. That is
+// the right way to *do* the work and the wrong way to *finish* it — from where
+// he sits, nothing happened.
+//
+// So the copy stays (it is what makes the work reviewable and what keeps a bad
+// run away from a real project), and afterwards the changed files are laid
+// down in the real project. Three rules make that safe enough to do without
+// asking:
+//
+//   · **Every file is kept first.** Whatever was there goes into `before/`
+//     inside the run folder, path for path, before anything is written or
+//     removed. Nothing this function does is one-way.
+//   · **A file he touched is never overwritten.** `baseHashes` says how each
+//     file looked when the copy was taken; if the real one no longer matches,
+//     he edited it while the agent worked, and it is left alone and reported.
+//   · **A run that failed does not land.** Only a run that finished and whose
+//     verification did not fail gets this far.
+
+export type Landing = {
+  /** Where the previous version of every touched file was kept. */
+  backup: string
+  applied: ChangedFile[]
+  /** Files left alone, and why: almost always because he changed them meanwhile. */
+  skipped: { path: string; reason: 'changed-meanwhile' | 'missing-in-copy' }[]
+}
+
+/** A path from the report is data: it must stay inside both folders, as a plain relative path. */
+function safeRelative(path: string): boolean {
+  if (!path || isAbsolute(path) || path.includes('\0')) return false
+  return !path.split(/[\\/]/).some(part => part === '' || part === '.' || part === '..')
+}
+
+async function hashOf(path: string): Promise<string> {
+  const info = await lstat(path).catch(() => null)
+  if (!info) return 'deleted'
+  if (info.isSymbolicLink()) return `link:${await readlink(path)}`
+  if (!info.isFile()) return 'special'
+  return createHash('sha256').update(await readFile(path)).digest('hex')
+}
+
+/**
+ * Lays the verified work down in the project it came from.
+ *
+ * Returns what landed and what did not. It never throws for a single file: a
+ * project where nine files landed and one was skipped is a true outcome worth
+ * reporting, not a failure worth hiding.
+ */
+export async function landReport(report: ExecutionReport): Promise<Landing> {
+  if (report.state !== 'verified' && report.state !== 'unverified') {
+    throw new Error('Only a finished run whose verification did not fail can be applied to the project.')
+  }
+  const source = await realpath(report.source)
+  const workspace = await realpath(report.workspace)
+  const backup = join(dirname(report.reportFile), 'before')
+  const applied: ChangedFile[] = []
+  const skipped: Landing['skipped'] = []
+
+  for (const file of report.changedFiles) {
+    if (!safeRelative(file.path)) { skipped.push({ path: file.path, reason: 'missing-in-copy' }); continue }
+    const real = join(source, file.path)
+    const copy = join(workspace, file.path)
+    if (!within(source, real) || !within(workspace, copy)) { skipped.push({ path: file.path, reason: 'missing-in-copy' }); continue }
+
+    // he may have edited it while the agent worked: then it is his, not ours
+    const atteso = report.baseHashes?.[file.path]
+    if (atteso !== undefined && await hashOf(real) !== atteso) {
+      skipped.push({ path: file.path, reason: 'changed-meanwhile' })
+      continue
+    }
+    // and the copy must still hold what the report says it holds
+    if (file.kind !== 'deleted' && await hashOf(copy) !== report.artifactHashes[file.path]) {
+      skipped.push({ path: file.path, reason: 'missing-in-copy' })
+      continue
+    }
+
+    // whatever is there now is kept, always, before anything else happens
+    const previous = await readFile(real).catch(() => null)
+    if (previous) {
+      const keep = join(backup, file.path)
+      await mkdir(dirname(keep), { recursive: true })
+      await writeFile(keep, previous, { mode: 0o600 })
+    }
+
+    if (file.kind === 'deleted') await rm(real, { force: true })
+    else {
+      await mkdir(dirname(real), { recursive: true })
+      await copyFile(copy, real)
+    }
+    applied.push(file)
+  }
+  return { backup, applied, skipped }
 }

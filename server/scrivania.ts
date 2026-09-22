@@ -239,7 +239,34 @@ export type Destinazione =
 /** Quel poco che serve di una riga della lista per sapere dove porta. */
 export type Riga = { doc?: string | null; madre?: string | null; progetto?: string | null }
 /** Quel poco che serve del documento da cui viene. */
-export type Fonte = { fonte?: string | null; percorso?: string | null; messageId?: string | null } | null
+export type Fonte = { fonte?: string | null; percorso?: string | null; messageId?: string | null; tipo?: string | null } | null
+
+/**
+ * Quello che, aperto, mostra *una cosa sola da leggere*.
+ *
+ * «When you link me to a certain file, it is not specific. It links me to the
+ * folder, not the file.» Era vero alla lettera. Una chat di Claude Code porta
+ * nel `percorso` la cartella del progetto — il ventidue settembre, nel suo
+ * punto, era `/Users/tobiadonadon`, cioè la casa — e una cartella di lavoro
+ * è una cartella per definizione: `dovePortare` le manda tutte e due su
+ * `file`, e `open` apre il Finder. Una riga che promette un documento e apre
+ * una finestra del Finder sulla home è peggio di una riga senza freccia.
+ *
+ * Qui non si decide *dove* si va — quello lo fa `dovePortare` e resta com'era
+ * — si risponde a un'altra domanda: quello che c'è dall'altra parte è una
+ * cosa da leggere? Una mail, una pagina, un file sì; una cartella no; una
+ * riga che non porta da nessuna parte nemmeno.
+ *
+ * Pura, e guarda solo il tipo del documento: il tipo lo scrive chi indicizza
+ * — `cartella` per le cartelle di lavoro, `chat` per le sessioni degli
+ * agenti — e l'estensione non basta, perché `myynd.prototype` è una cartella
+ * che a `extname` sembra un file `.prototype`.
+ */
+export function unaCosaSola(d: Destinazione, fonte: Fonte): boolean {
+  const tipo = (fonte?.tipo ?? '').trim().toLowerCase()
+  if (tipo === 'cartella' || tipo === 'chat') return false
+  return d.dove === 'posta' || d.dove === 'pagina' || d.dove === 'file'
+}
 
 /**
  * Le tre strade, nell'ordine in cui si provano.

@@ -43,6 +43,9 @@ const finto = (f: Parameters<typeof mani.perProva>[0]) => mani.perProva({
   casa: () => casa, scrivania: () => scrivania, copie: () => copie, piattaforma: () => 'darwin', ospitato: () => false,
   scaricati: () => join(casa, 'Downloads'), documenti: () => join(casa, 'Documents'), apri: async () => {},
   risolvi: async () => [{ address: '93.184.216.34' }],
+  // la posa finta: la vera scrive sul disco, e una prova non posa niente
+  // dentro un progetto di nessuno
+  posa: async r => ({ backup: `${r.reportFile}/before`, applied: r.changedFiles, skipped: [] }),
   ...f
 })
 
@@ -291,13 +294,40 @@ test('lavora_nel_codice fa il passo che cambia i file in una copia e lo dice; se
   const fatto = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test for the crash' })
   assert.equal(fatto.passo, 'fai')
   assert.equal(fatto.copia, '/profilo/project-work/everwave-ab12/project')
-  assert.match(fatto.testo, /^Lavoro fatto nella copia: \/profilo\/project-work\/everwave-ab12\/project\nLa cartella vera \(.*progetto\) non è stata toccata: niente è cambiato lì\.\nFile cambiati nella copia: src\/a\.test\.ts \(added\)\nStato: verified · verifica «npm test»: passed\n\nHo aggiunto il test\./)
+  assert.equal(fatto.posato, true, 'un giro verificato si posa nel progetto vero')
+  assert.match(fatto.testo, /^Fatto nel progetto \(.*progetto\): src\/a\.test\.ts \(added\)\nCom'erano prima: \/r\/before\nFile cambiati dal lavoro: src\/a\.test\.ts \(added\)\nStato: verified · verifica «npm test»: passed\n\nHo aggiunto il test\./)
   assert.deepEqual(richieste, [{ passo: 'fai', cartella: progetto, richiesta: 'Add a test for the crash' }])
 
   const e = await mani.esegui('lavora_nel_codice', { richiesta: 'Add a test' }, { cartella: progetto })
-  assert.deepEqual(e.fatto, { attrezzo: 'lavora', esito: 'ok', dettaglio: '/profilo/project-work/everwave-ab12/project' })
+  assert.deepEqual(e.fatto, { attrezzo: 'lavora', esito: 'ok', dettaglio: `posato in ${progetto}` })
   assert.equal(e.copia, '/profilo/project-work/everwave-ab12/project')
+  assert.match(mani.fraseDaiFatti([e.fatto!], 'en'), new RegExp(`the changes are in ${progetto}`))
   assert.equal((await mani.esegui('lavora_nel_codice', { richiesta: 'x' }, {})).male, true)
+
+  // un file che ha cambiato lui nel frattempo non si tocca, e la riga lo dice
+  finto({
+    installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
+    posa: async () => ({ backup: '/r/before', applied: [], skipped: [{ path: 'src/a.test.ts', reason: 'changed-meanwhile' as const }] }),
+    fai: async (_d, o) => ({ passo: 'fai', testo: 'Ho aggiunto il test.', finito: true, cartella: '/profilo/project-work/everwave-ab12/project',
+      esecuzione: { id: '1', source: o.cartella, workspace: '/profilo/project-work/everwave-ab12/project', reportFile: '/r', state: 'verified', changedFiles: [{ path: 'src/a.test.ts', kind: 'added' }], artifactHashes: {}, verification: { status: 'passed' }, agentExitCode: 0, agentFinished: true, agentText: '', createdAt: 'x' } })
+  })
+  const tuo = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test' })
+  assert.equal(tuo.posato, false)
+  assert.match(tuo.testo, /Lasciati stare perché li hai cambiati tu nel frattempo: src\/a\.test\.ts/)
+  assert.match(tuo.testo, /Il lavoro è nella copia/)
+
+  // un giro fallito non si posa: resta nella copia
+  let posate = 0
+  finto({
+    installato: () => '/x/claude', runtime: async () => ({ status: 'supported' }),
+    posa: async () => { posate++; return { backup: '', applied: [], skipped: [] } },
+    fai: async (_d, o) => ({ passo: 'fai', testo: 'Non ce l’ho fatta.', finito: true, cartella: '/copia',
+      esecuzione: { id: '1', source: o.cartella, workspace: '/copia', reportFile: '/r', state: 'failed', changedFiles: [{ path: 'src/a.ts', kind: 'modified' }], artifactHashes: {}, verification: { status: 'failed' }, agentExitCode: 1, agentFinished: true, agentText: '', createdAt: 'x' } })
+  })
+  const rotto = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test' })
+  assert.equal(posate, 0, 'un giro fallito non deve toccare il progetto vero')
+  assert.equal(rotto.posato, false)
+  assert.match(rotto.testo, /Il lavoro è nella copia \(\/copia\) e la cartella vera non è stata toccata\./)
 
   finto({ installato: () => '/x/claude', runtime: async () => ({ status: 'incompatible' }), fai: async (_d, o) => ({ passo: 'piano', testo: 'Aggiungerei un test.', finito: true, cartella: o.cartella }) })
   const piano = await mani.lavoraNelCodice({ cartella: progetto, richiesta: 'Add a test' })
@@ -440,6 +470,23 @@ test('vaSalvato: una pagina sì, un messaggio no, una risposta corta no, una cos
   assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nSubject: Hi\n\n' + 'x '.repeat(600), fatti: [], messaggio: false }), false)
   assert.equal(mani.vaSalvato({ risultato: 'Done: below.\n\nA\n\nB\n\nC\n\nD', fatti: [], messaggio: false }), true)
   assert.equal(mani.vaSalvato({ risultato: 'Done: below.', fatti: [], messaggio: false, chiesto: true }), false)
+})
+
+/*
+ * La soglia separa una cosa scritta da una risposta, non due lunghezze.
+ *
+ * «I do not want him to make the brief in-app and deliver it under the feed»:
+ * prima ci voleva mezza pagina (novecento caratteri, o quattro paragrafi) per
+ * finire su un file, e un brief di due paragrafi restava incollato sotto la
+ * voce del feed — cioè esattamente la cosa che lui non vuole vedere.
+ */
+test('vaSalvato: due paragrafi sono una cosa scritta e vanno su file; due frasi sono una risposta e restano sulla riga', () => {
+  const senzaFile = (risultato: string) => mani.vaSalvato({ risultato, fatti: [], messaggio: false })
+  assert.equal(senzaFile('Done: below.\n\nThe pilot starts in October.\n\nThree people, four weeks.'), true)
+  assert.equal(senzaFile('Done: below.\n\nThe pilot starts in October.\n- Three people\n- Four weeks'), true)
+  assert.equal(senzaFile('Done: below.\n\n' + 'The pilot starts in October with three people. '.repeat(8)), true, 'mezza pagina di un paragrafo solo è comunque una cosa scritta')
+  assert.equal(senzaFile('Done: below.\n\nThe audit covers H-Farm Education, and Giulia needs the answer before Friday.'), false)
+  assert.equal(senzaFile('Done: below.\n\nYes.'), false)
 })
 
 test('rigaPerLei stacca la riga per lei dal documento, e nel dubbio la lascia dentro', () => {

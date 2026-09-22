@@ -367,3 +367,35 @@ test('senza chiave nessuna delle due domande chiama niente', async () => {
   assert.equal((await giudizi.progettoDelle(carte, [{ nome: 'Myynd' }, { nome: 'Evermute' }])).size, 0)
   assert.equal(chiamate, 0)
 })
+
+// — la freccia del punto —
+
+test('valeAprire: la freccia resta su quello che vale, cade su quello che non vale', async () => {
+  const brief: Documento = { id: 'desktop:brief.docx', fonte: 'desktop', tipo: 'documento', titolo: 'Q4 brief',
+    corpo: 'Le tre fasi del Q4, un responsabile per fase.', quando: new Date(ORA).toISOString() }
+  const log: Documento = { id: 'desktop:build.log', fonte: 'desktop', tipo: 'file', titolo: 'build.log',
+    corpo: 'compiled 431 modules in 2.1s', quando: new Date(ORA).toISOString() }
+  jev.perProva(async (_u, opz) => {
+    const stato = JSON.parse(String((opz as RequestInit).body)).state as { documento: { titolo: string } }
+    const vale = stato.documento.titolo === 'Q4 brief' ? 0.92 : 0.08
+    return Response.json({ answers: { vale: { type: 'noul', noul: vale } } })
+  })
+  const righe = [
+    { testo: 'Il brief del Q4 è cambiato.', doc: brief },
+    { testo: 'La compilazione è passata.', doc: log }
+  ]
+  const esito = await giudizi.valeAprire(righe)
+  assert.ok((esito.get(righe[0]) ?? 0) >= giudizi.SOGLIA_DA_APRIRE, 'il brief vale la freccia')
+  assert.ok((esito.get(righe[1]) ?? 1) < giudizi.SOGLIA_DA_APRIRE, 'un log non vale la freccia')
+})
+
+test('valeAprire: senza Jev non si toglie nessuna freccia', async () => {
+  cfg.scrivi({ lingua: 'en' }, { togli: ['jev'] })
+  let chiamate = 0
+  jev.perProva(async () => { chiamate++; return Response.json({ answers: {} }) })
+  const esito = await giudizi.valeAprire([
+    { testo: 'Una riga.', doc: { id: 'x', fonte: 'posta', tipo: 'email', titolo: 'T', corpo: 'c' } as Documento }
+  ])
+  assert.equal(chiamate, 0, 'senza chiave non si chiama nessuno')
+  assert.equal(esito.size, 0, 'una Map vuota vuol dire «tienile tutte»')
+})

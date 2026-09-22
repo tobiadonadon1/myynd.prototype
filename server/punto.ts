@@ -43,6 +43,8 @@ import { giornoIn, parti } from './fuso.ts'
 import * as progetti from './progetti.ts'
 import * as compiti from './compiti.ts'
 import * as ordine from './ordine.ts'
+import * as scrivania from './scrivania.ts'
+import * as giudizi from './giudizi.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -92,6 +94,17 @@ export type Punto = {
   risposte: Riga[]
   /** Routine receipts, deliveries and renewals belong here, never in the task feed. */
   aggiornamenti?: Riga[]
+  /**
+   * I documenti che non si meritano la freccia, secondo Jev.
+   *
+   * Il `doc` di una riga resta la sua *provenienza*: è quello che si
+   * ricontrolla a ogni lettura — il documento c'è ancora? è ancora roba sua?
+   * — e senza non si può fare. La freccia è un'altra cosa: è la promessa di
+   * portarcelo, e si mantiene solo quando dall'altra parte c'è qualcosa che
+   * vale la pena leggere. Qui stanno gli id che quella promessa non la
+   * meritano; `alPresente` li spegne uscendo.
+   */
+  senzaFreccia?: string[]
 }
 
 export type Esito = {
@@ -233,15 +246,36 @@ function alPresente(p: Punto): Punto {
       progettoAttivo: progetti.toccaUnProgetto(`${d.titolo}\n${d.corpo}`, suoi)
     }).destinazione !== 'ignora'
   }
+  /*
+   * L'ultima porta, e ci passa ogni punto che esce: la freccia.
+   *
+   * «It links me to the folder, not the file.» Due regole, una gratis e una
+   * di Jev. La gratis è `scrivania.unaCosaSola`: una cartella di lavoro e una
+   * chat di un agente portano nel percorso la *cartella* del progetto — il
+   * ventidue settembre era la sua casa — e aprirle apre il Finder. Quella di
+   * Jev sta in `senzaFreccia`, scritta quando il punto è nato.
+   *
+   * Si decide *uscendo* e non scrivendo, perché il `doc` deve restare: è la
+   * provenienza con cui questa stessa funzione ricontrolla la riga a ogni
+   * lettura. Così anche i punti scritti prima di questa regola smettono di
+   * promettere una cartella.
+   */
+  const spente = new Set(attuale.senzaFreccia ?? [])
+  const freccia = <T extends { doc: string | null }>(r: T): T => {
+    const d = r.doc ? docs.find(x => x.id === r.doc) : null
+    const vale = !!d && !spente.has(d.id) && scrivania.unaCosaSola(scrivania.dovePortare({ doc: r.doc }, d), d)
+    return vale ? r : { ...r, doc: null }
+  }
   return {
     ...attuale,
     progetti: attuale.progetti.filter(r => {
       const p = suoi.find(p => p.id === r.id)
       return !!p && !!r.doc && valido(r) && !progetti.eLObiettivo(p, r.novita)
-    }), github: attuale.github.filter(valido),
-    risposte: attuale.risposte.filter(valido),
+    }).map(freccia),
+    github: attuale.github.filter(valido).map(freccia),
+    risposte: attuale.risposte.filter(valido).map(freccia),
     aggiornamenti: servizi.filter(d => !ignorati.has(d.id)).slice(0, 3)
-      .map(d => ({ testo: d.titolo.replace(/\s+/g, ' ').trim().slice(0, 240), doc: d.id }))
+      .map(d => freccia({ testo: d.titolo.replace(/\s+/g, ' ').trim().slice(0, 240), doc: d.id }))
   }
 }
 
@@ -1186,6 +1220,46 @@ export function ricuci(g: Grezzo, m: Materiale, quando: string, via: number | nu
   }
 }
 
+/**
+ * La seconda porta della freccia, e la fa Jev.
+ *
+ * `freccia` dentro `ricuci` è una regola: taglia le cartelle, che sono il
+ * caso che gli è saltato agli occhi. Quello che una regola non sa fare è
+ * dire se *quel* documento, aperto, vale i dieci secondi — un file di
+ * configurazione dentro una cartella lecita apre qualcosa, e non serve a
+ * niente. Quella domanda è di Jev (`giudizi.valeAprire`), e la risposta
+ * toglie solo la freccia: la riga resta e si legge com'era.
+ *
+ * Senza Jev — nessuna chiave, tetto del giorno finito, rete giù — non
+ * succede niente: le frecce restano quelle che la regola ha lasciato.
+ * Cambia il punto sul posto, perché è l'ultimo ritocco prima di scriverlo.
+ */
+async function soloLeFrecceCheValgono(p: Punto, m: Materiale): Promise<void> {
+  const perId = new Map([...m.arrivati, ...m.github, ...m.risposte, ...(m.aggiornamenti ?? [])].map(d => [d.id, d]))
+  type Voce = { testo: string; doc: store.Documento }
+  const voci: Voce[] = []
+  const raccogli = (testo: string, id: string | null) => {
+    const d = id ? perId.get(id) : null
+    // le cartelle le ha già tolte la regola gratis: non si paga Jev per quelle
+    if (d && scrivania.unaCosaSola(scrivania.dovePortare({ doc: d.id }, d), d) && !voci.some(v => v.doc.id === d.id)) {
+      voci.push({ testo, doc: d })
+    }
+  }
+  for (const r of p.progetti) raccogli(`${r.nome}: ${r.novita}`, r.doc)
+  for (const r of [...p.github, ...p.risposte, ...(p.aggiornamenti ?? [])]) raccogli(r.testo, r.doc)
+  if (!voci.length) return
+  try {
+    const giudizio = await giudizi.valeAprire(voci)
+    const spente = voci.filter(v => {
+      const quanto = giudizio.get(v)
+      return quanto !== undefined && quanto < giudizi.SOGLIA_DA_APRIRE
+    })
+    if (spente.length) p.senzaFreccia = spente.map(v => v.doc.id)
+  } catch (e) {
+    console.warn('myynd · punto: Jev non ha detto quali frecce valgono:', e instanceof Error ? e.message : e)
+  }
+}
+
 // — quello che nota va in lista —
 
 /**
@@ -1518,6 +1592,8 @@ async function fai(r: Richiesta, adesso: number): Promise<Esito> {
   a.chiamate = [...(prodottoOggi ? diOggi(a.chiamate, adesso) : []), quando]
 
   const nuovo = ricuci(grezzo, mat, quando, r.via ?? null)
+  // e l'ultimo ritocco prima di scriverlo: le frecce che non valgono, via
+  await soloLeFrecceCheValgono(nuovo.punto, mat)
   /*
    * Le cose da fare vanno in lista, non in finestra.
    *

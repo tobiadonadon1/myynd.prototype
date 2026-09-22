@@ -96,12 +96,22 @@ after(async () => {
   rmSync(home, { recursive: true, force: true })
 })
 
+/**
+ * Il progetto torna com'era prima di ogni prova.
+ *
+ * Da quando il lavoro si posa davvero nella cartella vera (`landReport`), una
+ * prova lascia `value.mjs` a 2 e la prova dopo partirebbe da lì: l'agente
+ * finto scriverebbe quello che c'è già e il giro tornerebbe «no_changes».
+ */
+function ripristina() { writeFileSync(join(source, 'value.mjs'), 'export const value = 1\n') }
+
 async function post(path: string, token: string, body: object): Promise<{ status: number; data: Record<string, unknown> }> {
   const response = await fetch(base + path, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })
   return { status: response.status, data: await response.json() as Record<string, unknown> }
 }
 
-test('plan result is saved and concurrent edits dispatch once; original stays untouched', async () => {
+test('plan result is saved and concurrent edits dispatch once; the work lands in the project', async () => {
+  ripristina()
   const ready = await fetch(base + '/api/lavoro/pronto', { headers: { authorization: `Bearer ${firstToken}` } }).then(r => r.json()) as { pronto:boolean; cartelle: string[]; runtimes:{id:string;status:string;defaults?:object}[] }
   assert.deepEqual(ready.cartelle, [source])
   assert.equal(ready.pronto,true)
@@ -124,14 +134,20 @@ test('plan result is saved and concurrent edits dispatch once; original stays un
   const report = done.data.esecuzione as { state: string; reportFile: string; workspace: string; changedFiles: { path: string }[] }
   assert.equal(report.state, 'verified')
   assert.deepEqual(report.changedFiles.map(f => f.path), ['value.mjs'])
-  assert.equal(readFileSync(join(source, 'value.mjs'), 'utf8'), 'export const value = 1\n')
+  // «He needs to… actually perform the changes on my Xcode project»: il giro
+  // gira in una copia, e poi si posa nella cartella vera. Quello che c'era
+  // prima resta accanto al rapporto, così si può sempre tornare indietro.
+  assert.equal(readFileSync(join(source, 'value.mjs'), 'utf8'), 'export const value = 2\n')
   assert.equal(readFileSync(join(report.workspace, 'value.mjs'), 'utf8'), 'export const value = 2\n')
+  assert.match((done.data.compito as { risultato: string }).risultato, new RegExp(`Applied to ${source}: value\\.mjs \\(modified\\)`))
+  assert.equal(readFileSync(join(report.reportFile, '..', 'before', 'value.mjs'), 'utf8'), 'export const value = 1\n')
   assert.equal((JSON.parse(readFileSync(report.reportFile, 'utf8')) as { state: string }).state, 'verified')
   const foreign = await post('/api/lavoro/copia/apri', secondToken, { reportFile: report.reportFile })
   assert.notEqual(foreign.status, 200)
 })
 
 test('Hermes route validates explicit scope before delegation and saves checked provenance', async () => {
+  ripristina()
   const badRuntime = await post('/api/compiti/route-hermes/lavora',firstToken,{cartella:source,passo:'fai',runtime:'universal'})
   assert.equal(badRuntime.status,400)
   const missing = await post('/api/compiti/route-hermes/lavora',firstToken,{cartella:source,passo:'fai',runtime:'hermes'})
@@ -144,11 +160,12 @@ test('Hermes route validates explicit scope before delegation and saves checked 
   const report = done.data.esecuzione as {reportFile:string;workspace:string;runtimeProvenance:object}
   assert.deepEqual(report.runtimeProvenance,{runtime:'hermes',executable:fakeHermes,version:'Hermes route fixture',scope:'copy-files',model:'fixture-model',provider:'fixture-provider'})
   assert.deepEqual(JSON.parse(readFileSync(report.reportFile,'utf8')).runtimeProvenance,report.runtimeProvenance)
-  assert.equal(readFileSync(join(source,'value.mjs'),'utf8'),'export const value = 1\n')
+  assert.equal(readFileSync(join(source,'value.mjs'),'utf8'),'export const value = 2\n','anche Hermes posa nel progetto vero')
   assert.equal(readFileSync(join(report.workspace,'value.mjs'),'utf8'),'export const value = 2\n')
 })
 
 test('worker and reviewer share one copy; rejected review prevents a completed result',async()=>{
+  ripristina()
   const missing=await post('/api/compiti/route-team/lavora',firstToken,{cartella:source,passo:'fai',team:true})
   assert.equal(missing.status,400)
   // The exact per-account workspace is returned by the report, so do not
@@ -161,6 +178,7 @@ test('worker and reviewer share one copy; rejected review prevents a completed r
   assert.equal((done.data.compito as {stato:string}).stato,'chiede')
   const taskFolder=join(report.workspace,'..')
   assert.deepEqual(readdirSync(taskFolder).sort(),['project','report.json'])
+  // una revisione respinta non è un lavoro finito: non si posa niente
   assert.equal(readFileSync(join(source,'value.mjs'),'utf8'),'export const value = 1\n')
   assert.deepEqual(JSON.parse(readFileSync(report.reportFile,'utf8')).team,report.team)
 })

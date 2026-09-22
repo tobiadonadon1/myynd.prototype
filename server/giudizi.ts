@@ -670,3 +670,86 @@ export async function giudicaCarte<T extends CartaIntera>(
   registra('carte', { giudicati, noti: 0, muti: carte.length - giudicati, fuori: 0 })
   return fuori
 }
+
+// — la freccia del punto —
+//
+// «It is not file-specific. It links me to the folder, not the file. It'd
+// rather be: if it's a single file, if it's readable and it's worthy for the
+// user to read, or no link at all. We can have Jev determine that.»
+//
+// Due porte, non una. La prima è una regola e non costa niente
+// (`scrivania.unaCosaSola`): una cartella non si apre, una riga che non porta
+// da nessuna parte nemmeno. La seconda è questa, ed è la parte che una regola
+// non sa fare — se quel documento, aperto, valga i dieci secondi che ci
+// vogliono ad aprirlo.
+
+/**
+ * Sotto questa, la freccia non si disegna.
+ *
+ * Mezzo punto, perché qui sbagliare costa poco da tutt'e due le parti: una
+ * freccia in meno è una riga che si legge lo stesso, una freccia di troppo è
+ * un documento aperto per niente. Non c'è ragione di pendere da un lato.
+ */
+export const SOGLIA_DA_APRIRE = 0.5
+
+const VALE_APRIRLO = {
+  type: 'noul',
+  instructions:
+    'Opening this document would put in front of Tobia the very thing the briefing line talks about, ' +
+    'and reading it is worth his ten seconds.',
+  criteria: {
+    true: {
+      what:
+        'One document he would want open in front of him: the email he has to answer, the page with the ' +
+        'news in it, the file with the figures or the text the line is about',
+      examples: [
+        'The line says a client asks him to confirm the scope, and the document is that email',
+        'The line says the Q4 brief changed, and the document is the brief'
+      ]
+    },
+    false: {
+      what:
+        'Opening it would show him nothing he can use: a folder or a project directory, an index, a log, ' +
+        'a build output, a file written by a program, a chat session of his own with an assistant, or a ' +
+        'document that does not actually contain what the line says',
+      examples: [
+        'The line talks about what changed in a project, and the document is the project folder',
+        'The line reports a delivery, and the document is a machine-generated notification log'
+      ]
+    }
+  }
+} as const satisfies jev.Noul
+
+/**
+ * Quali fra queste righe meritano la freccia.
+ *
+ * Torna solo quelle su cui Jev ha risposto: una che manca vuol dire «non lo
+ * so», e chi legge tiene la freccia che aveva — la regola pura l'ha già
+ * guardata, e senza Jev il punto resta quello che era.
+ */
+export async function valeAprire<T extends { testo: string; doc: Documento }>(
+  righe: readonly T[]
+): Promise<Map<T, number>> {
+  const fuori = new Map<T, number>()
+  if (!righe.length || !jev.collegato()) return fuori
+  const persona = leggi().nome || 'Tobia'
+  const risposte = await jev.giudicaTanti(righe, r => ({
+    persona,
+    riga: r.testo.slice(0, 240),
+    documento: {
+      fonte: r.doc.fonte,
+      tipo: r.doc.tipo,
+      da: r.doc.autore ?? '',
+      titolo: r.doc.titolo.slice(0, 200),
+      testo: corpoAttuale(r.doc).replace(/\s+/g, ' ').slice(0, 700)
+    }
+  }), { vale: VALE_APRIRLO })
+  let giudicati = 0
+  for (const [r, risposta] of risposte) {
+    if (!risposta) continue
+    fuori.set(r, risposta.vale.noul)
+    giudicati++
+  }
+  registra('frecce del punto', { giudicati, noti: 0, muti: righe.length - giudicati, fuori: 0 })
+  return fuori
+}

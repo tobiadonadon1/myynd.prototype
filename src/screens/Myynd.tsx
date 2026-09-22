@@ -784,11 +784,19 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
               {pronto && (
                 <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Rifallo')}</Hov>
               )}
+              {/* Un modo solo di affidarla, ed è questo.
+                  «"Myynd takes it" and "Draft it for me" are too similar
+                  because that's basically what Myynd does: it drafts it, and
+                  then you can approve it and send it out.» Erano due bottoni
+                  uno accanto all'altro che chiedevano di scegliere fra due
+                  parole per la stessa cosa, prima ancora di sapere cosa
+                  sarebbe venuto fuori. La scelta non era sua da fare: quello
+                  che cambia — un file sulla Scrivania, una risposta pronta da
+                  mandare, una modifica nel progetto — lo decide la cosa da
+                  fare, non un bottone. La bozza resta scrivendo «/draft»
+                  nella barra, per chi la vuole nominare. */}
               {c.stato === 'aperto' && (
-                <>
-                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Se ne occupa Myynd')}</Hov>
-                  <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'bozza'))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Fanne una bozza')}</Hov>
-                </>
+                <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, 'tutto'))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Se ne occupa Myynd')}</Hov>
               )}
               {parlane && (
                 <Hov as="button" type="button" onClick={fermo(parlane)} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>

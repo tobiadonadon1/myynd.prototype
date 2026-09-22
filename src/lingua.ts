@@ -1167,6 +1167,8 @@ const EN: Record<string, string> = {
   'Letto tutto quello che è cambiato.': 'Read everything that changed.',
   'Sincronizzazione fallita.': 'The reading failed.',
   'Non ho trovato niente da segnalare.': 'I found nothing worth flagging.',
+  'Sto già leggendo le tue fonti: quello che trovo compare qui da sé.':
+    'I am already reading your sources: whatever I find shows up here by itself.',
   'La lettura non è riuscita.': 'The reading did not go through.',
   'Non sono riuscito a segnarla.': 'I could not mark it.',
   'Rimessa in cima al feed.': 'Back on top of the feed.',
@@ -1315,7 +1317,6 @@ const EN: Record<string, string> = {
   'fatta': 'done',
   'Se ne occupa Myynd': 'Myynd takes it',
   'Richiamala': 'Take it back',
-  'Fanne una bozza': 'Draft it for me',
   // le sue domande, in riga: si risponde lì, e si può anche lasciar perdere
   'Rispondi qui': 'Answer here',
   'Non mi serve, lasciala perdere': 'Not relevant, drop it',
@@ -3384,14 +3385,6 @@ export const frasi = {
       : `La ${versione} è pronta: si installa al prossimo riavvio.`,
 
   // — il richiamo: la conferma dopo una riga segnata, o un elenco —
-  // — il punto: il saluto lo compone la pagina, dal tempo che la finestra sa —
-  viaDa: (minuti: number | null) => {
-    if (!minuti || minuti < 60) return corrente === 'en' ? 'While you were away.' : 'Mentre non c’eri.'
-    const ore = Math.round(minuti / 60)
-    if (ore < 36) return corrente === 'en' ? `You were away ${ore} hour${ore === 1 ? '' : 's'}.` : `Sei stato via ${ore} or${ore === 1 ? 'a' : 'e'}.`
-    const giorni = Math.round(ore / 24)
-    return corrente === 'en' ? `You were away ${giorni} day${giorni === 1 ? '' : 's'}.` : `Sei stato via ${giorni} giorn${giorni === 1 ? 'o' : 'i'}.`
-  },
   coseNelPunto: (n: number) => corrente === 'en'
     ? (n === 1 ? 'one thing' : `${n} things`) : (n === 1 ? 'una cosa' : `${n} cose`),
 

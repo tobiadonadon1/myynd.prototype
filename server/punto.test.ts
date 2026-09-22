@@ -51,15 +51,31 @@ function pulisci() {
 }
 
 const DATA_DOC = new Date().toISOString()
+/*
+ * Il `messageId` c'è, come su una mail vera.
+ *
+ * Non è un dettaglio del finto: da quando la freccia del punto si disegna solo
+ * su quello che si apre davvero (`scrivania.unaCosaSola`), una mail senza
+ * `Message-ID` non porta da nessuna parte — e una prova che semina mail senza
+ * id proverebbe la regola sbagliata.
+ */
 const doc = (id: string, titolo: string, sopra: Partial<Documento> = {}): Documento => ({
   id, fonte: 'posta', tipo: 'email', titolo, corpo: `Il testo di ${titolo}. `.repeat(40),
-  autore: 'Rossi <rossi@esempio.it>', percorso: 'INBOX',
+  autore: 'Rossi <rossi@esempio.it>', percorso: 'INBOX', messageId: `${id.replace(/[^A-Za-z0-9._-]/g, '-')}@esempio.it`,
   quando: DATA_DOC, gruppo: 'posta', ...sopra
 })
 
-/** Una notizia da GitHub, come la porta il connettore: «repo #12: titolo». */
+/**
+ * Una notizia da GitHub, come la porta il connettore: «repo #12: titolo».
+ *
+ * Con la sua pagina nel `percorso`, come la scrive il connettore vero: è
+ * quella che apre la freccia, e senza la riga non ne avrebbe una.
+ */
 const suGithub = (id: string, titolo: string, sopra: Partial<Documento> = {}): Documento =>
-  doc(id, titolo, { fonte: 'github', tipo: 'attività', autore: 'tobiadonadon', gruppo: 'codice', percorso: null, ...sopra })
+  doc(id, titolo, {
+    fonte: 'github', tipo: 'attività', autore: 'tobiadonadon', gruppo: 'codice', messageId: null,
+    percorso: `https://github.com/tobiadonadon/${id.replace(/^github:/, '').replace('#', '/pull/')}`, ...sopra
+  })
 
 /** Il progetto di cui parla il modello finto: senza riga in tabella, non passa. */
 const seminaProgetto = () => progetti.scrivi({ nome: 'Myynd', obiettivo: 'Un gemello che sceglie per lui.' })
@@ -1232,4 +1248,120 @@ test('new service updates remain visible when the daily model allowance is exhau
   assert.equal(requests.length, 3, 'showing a factual service subject does not make another model call')
   assert.equal(r.tetto, true)
   assert.deepEqual(r.punto?.aggiornamenti, [{ testo: receipt.titolo, doc: receipt.id }])
+})
+
+// — la freccia: una cosa sola da leggere, o niente —
+//
+// «On the brief, when you link me to a certain file, it is not specific. It
+// links me to the folder, not the file. It'd rather be: if it's a single
+// file, if it's readable and it's worthy for the user to read, or no link at
+// all.» Il punto del ventidue settembre aveva una riga sul progetto Myynd con
+// dietro una chat di Claude Code: nel `percorso` di quel documento c'è la
+// cartella del progetto, e quel giorno era `/Users/tobiadonadon`. Premere la
+// riga apriva il Finder sulla casa.
+
+test('una riga che dietro ha una cartella di lavoro si legge, ma non ha la freccia', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('lavoro:/Users/prova/Desktop/myynd.prototype', 'Lavoro: myynd.prototype', {
+      fonte: 'lavoro', tipo: 'cartella', gruppo: 'documenti', autore: null,
+      percorso: '/Users/prova/Desktop/myynd.prototype'
+    })
+  ])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'La cartella si è mossa.', doc: 'lavoro:/Users/prova/Desktop/myynd.prototype' }]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.progetti.length, 1, 'la riga deve restare: quello che cade è la freccia')
+  assert.equal(e.punto?.progetti[0].doc, null, 'la freccia apriva il Finder su una cartella')
+})
+
+test('una chat con un agente porta la cartella del progetto: niente freccia', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('conversazioni:codice:abc', 'tobiadonadon · Feed intelligence', {
+      fonte: 'conversazioni', tipo: 'chat', gruppo: 'codice', autore: 'tobiadonadon',
+      percorso: '/Users/prova'
+    })
+  ])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'Sono state chieste cinque cose.', doc: 'conversazioni:codice:abc' }]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.progetti[0]?.doc, null, 'la chat apriva il Finder sulla casa')
+})
+
+test('una mail con il suo Message-ID tiene la freccia, una nota di Note no', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:1', 'Preventivo Rossi', { messageId: 'preventivo-1@esempio.it' }),
+    doc('note:nota:xyz', 'Il viaggio del protocollo', {
+      fonte: 'note', tipo: 'nota', gruppo: 'documenti', autore: null, percorso: 'Notes', messageId: null
+    })
+  ])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'Rossi ha mandato il preventivo.', doc: 'posta:INBOX:1' }]
+  })
+  const conMail = await punto.punto({}, adesso())
+  assert.equal(conMail.punto?.progetti[0]?.doc, 'posta:INBOX:1', 'una mail apribile deve tenere la freccia')
+
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('note:nota:xyz', 'Myynd: il viaggio del protocollo', {
+      fonte: 'note', tipo: 'nota', gruppo: 'documenti', autore: null, percorso: 'Notes', messageId: null,
+      corpo: 'Appunti su Myynd, un gemello che sceglie per lui. '.repeat(20)
+    })
+  ])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'C’è una pagina nuova negli appunti.', doc: 'note:nota:xyz' }]
+  })
+  const conNota = await punto.punto({}, adesso())
+  assert.equal(conNota.punto?.progetti[0]?.doc, null, 'una nota di Note non si apre da nessuna parte')
+})
+
+test('un file vero sotto una cartella collegata tiene la freccia', async () => {
+  pulisci()
+  seminaProgetto()
+  store.salvaDocumenti([
+    doc('desktop:/Users/prova/Desktop/brief-q4.docx', 'Myynd: brief del Q4', {
+      fonte: 'desktop', tipo: 'documento', gruppo: 'documenti', autore: null,
+      percorso: '/Users/prova/Desktop/brief-q4.docx', messageId: null,
+      corpo: 'Il brief del Q4 di Myynd, un gemello che sceglie per lui. '.repeat(20)
+    })
+  ])
+  fornitoreFinto({
+    ...RISPOSTA,
+    progetti: [{ nome: 'Myynd', novita: 'Il brief di Q4 è cambiato.', doc: 'desktop:/Users/prova/Desktop/brief-q4.docx' }]
+  })
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.progetti[0]?.doc, 'desktop:/Users/prova/Desktop/brief-q4.docx')
+})
+
+test('un punto scritto prima della regola perde la freccia alla prima lettura', async () => {
+  pulisci()
+  const p = seminaProgetto()
+  store.salvaDocumenti([
+    doc('lavoro:/Users/prova/x-engine', 'Lavoro: x-engine', {
+      fonte: 'lavoro', tipo: 'cartella', gruppo: 'documenti', autore: null, percorso: '/Users/prova/x-engine'
+    })
+  ])
+  // com'era scritto su disco prima: la freccia c'era, e apriva una cartella
+  writeFileSync(punto.perProva.file(), JSON.stringify({
+    ultimo: {
+      quando: new Date().toISOString(), via: null,
+      progetti: [{ id: p.id, nome: 'Myynd', novita: 'La cartella si è mossa.', doc: 'lavoro:/Users/prova/x-engine' }],
+      github: [], daLeggere: [], risposte: [], aggiornamenti: []
+    },
+    progetti: [], scartati: [], chiamate: [], avviate: []
+  }))
+  const e = await punto.punto({}, adesso())
+  assert.equal(e.punto?.progetti[0]?.doc ?? null, null, 'la freccia si decide a ogni lettura, non una volta per sempre')
 })
