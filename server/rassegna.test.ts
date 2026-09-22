@@ -352,6 +352,11 @@ test('fra due articoli sullo stesso fatto vale l’annuncio del laboratorio, poi
   assert.ok(rappresenta(ufficiale) > rappresenta(riassunto))
   assert.ok(rappresenta(col_modello) > rappresenta(vago))
   assert.equal(rappresenta(vago), rappresenta(riassunto))
+  // fra due post di OpenAI su GPT-6 vince l'annuncio, non il più recente
+  assert.ok(rappresenta({ fonte: 'OpenAI', titolo: 'Introducing GPT-6 Sol and Luna' }) > rappresenta({ fonte: 'OpenAI', titolo: 'Better prompt caching for GPT-6' }))
+  const lancio = finta({ id: 'lancio-gpt', fonte: 'OpenAI', titolo: 'Introducing GPT-6 Sol and Luna', quando: fa(3) })
+  const cache = finta({ id: 'cache-gpt', fonte: 'OpenAI', titolo: 'Better prompt caching for GPT-6', quando: fa(1) })
+  assert.deepEqual(cernita([cache, lancio], ora).map(n => n.id), ['lancio-gpt'])
   // il rilascio detto dal laboratorio vale più del posto in cui è arrivato
   assert.ok(rappresenta(col_modello) > rappresenta({ fonte: 'Amazon Web Services (AWS)', titolo: 'Claude Opus 5.5 is now available on AWS' }))
 })

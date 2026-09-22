@@ -342,7 +342,7 @@ export function impronta(titolo: string): Set<string> {
     titolo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(p => p.length >= 4 || /^\d+$/.test(p))
   )
-  for (const m of titolo.toLowerCase().matchAll(PRODOTTO)) parole.add(`#${m[1]}${m[2].replace(',', '.')}`)
+  for (const m of titolo.toLowerCase().matchAll(new RegExp(PRODOTTO.source, 'gi'))) parole.add(`#${m[1]}${m[2].replace(',', '.')}`)
   return parole
 }
 
@@ -357,6 +357,15 @@ export function impronta(titolo: string): Set<string> {
  * nei due giorni della rassegna, è lo stesso fatto.
  */
 const PRODOTTO = /\b(gpt|claude|opus|sonnet|haiku|fable|gemini|llama|grok|mistral|deepseek|qwen|codex|sora|veo|imagen)[\s-]?(\d+(?:[.,]\d+)?)\b/gi
+/**
+ * La stessa, senza la «g», per le domande sì o no.
+ *
+ * Una regex globale si ricorda dove è arrivata: `test()` sposta `lastIndex`,
+ * e `matchAll` riparte da lì. Con una sola regex per tutte e due le cose,
+ * dopo un `test()` riuscito l'impronta del titolo dopo saltava il modello — e
+ * due articoli su GPT-6 restavano due. Trovato dalla prova, il 22 settembre.
+ */
+const UN_PRODOTTO = new RegExp(PRODOTTO.source, 'i')
 
 /**
  * Lo stesso fatto, raccontato da due giornali.
@@ -572,16 +581,18 @@ const SOGGETTO_LABORATORIO = /^(anthropic|openai|google( deepmind)?|deepmind|met
  * più vaga, solo perché era arrivata prima.
  */
 export function rappresenta(n: Pick<Grezza, 'titolo' | 'fonte'>): number {
-  PRODOTTO.lastIndex = 0
   // «Anthropic launches Claude Opus 5.5» racconta il rilascio; «Claude Opus
-  // 5.5 is now available on AWS» racconta un posto in cui è arrivato
-  return (FONTI_LABORATORIO.has(n.fonte) ? 4 : 0) + (PRODOTTO.test(n.titolo) ? 2 : 0) + (SOGGETTO_LABORATORIO.test(n.titolo.trim()) ? 1 : 0)
+  // 5.5 is now available on AWS» racconta un posto in cui è arrivato. E fra
+  // due post dello stesso laboratorio sullo stesso modello vince l'annuncio:
+  // la sera del 22 settembre «Better prompt caching for GPT-6» aveva preso il
+  // posto di «Introducing GPT-6 Sol and Luna» solo perché era più recente
+  return (FONTI_LABORATORIO.has(n.fonte) ? 4 : 0) + (UN_PRODOTTO.test(n.titolo) ? 2 : 0)
+    + (SOGGETTO_LABORATORIO.test(n.titolo.trim()) ? 1 : 0) + (RILASCIO.test(n.titolo) ? 1 : 0)
 }
 
 export function rilascioDiUnLaboratorio(n: Pick<Grezza, 'titolo' | 'fonte'>): boolean {
   if (!pareUnRilascio(n)) return false
-  PRODOTTO.lastIndex = 0
-  return FONTI_LABORATORIO.has(n.fonte) || SOGGETTO_LABORATORIO.test(n.titolo.trim()) || PRODOTTO.test(n.titolo)
+  return FONTI_LABORATORIO.has(n.fonte) || SOGGETTO_LABORATORIO.test(n.titolo.trim()) || UN_PRODOTTO.test(n.titolo)
 }
 
 /** Fallback prudente: una parola generica in comune non basta a creare rilevanza. */
