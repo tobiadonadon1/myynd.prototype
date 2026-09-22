@@ -844,6 +844,8 @@ export type Notizia = {
   letta: string | null
   /** L'hai buttata via. Non torna: né domani, né raccontata da un altro giornale. */
   scartata: string | null
+  /** Un rilascio di un laboratorio di frontiera, o un fatto che cambia il suo lavoro: la pastiglia salta. */
+  importante: boolean
 }
 
 export type Rassegna = {
@@ -851,8 +853,6 @@ export type Rassegna = {
   recenti?: Notizia[]
   aggiornando?: boolean
   quando: string | null
-  /** Quante ne ha scelte oggi, sul tetto di otto: la testata lo dice. */
-  oggi: number
   argomenti: string
   /**
    * Quello che Myynd ha notato da come leggi, detto in una riga.

@@ -17,7 +17,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  cernita, contestoDi, daRifare, entita, impronta, leggiFeed, pulisciLink, ricuciScelte, rilevanza, ripulisci, sceltaAMano, selezioneVisibile, sensato, simili, QUANTE, type Grezza
+  cernita, contestoDi, daRifare, entita, impronta, inTema, leggiFeed, ordina, pareUnRilascio, pulisciLink, rappresenta, rilascioDiUnLaboratorio, ricuciScelte, rilevanza, ripulisci, sceltaAMano, selezioneVisibile, sensato, simili, MINUTI_GIRO, QUANTE, SEMPRE, type Grezza
 } from './rassegna.ts'
 import { giornoIn } from './fuso.ts'
 import type { Notizia } from './store.ts'
@@ -54,6 +54,21 @@ test('un entry Atom ha il link in un attributo, non nel testo', () => {
 
   assert.equal(n.link, 'https://www.theverge.com/policy/986733/x')
   assert.equal(n.riassunto, 'Cody Wilson announced a tool last week.')
+})
+
+test('Google News: il giornale vero sulla carta, il titolo senza la coda, niente riassunto di link', () => {
+  const xml = `<rss><channel><item>
+    <title>Anthropic releases Claude Opus 5 - Reuters</title>
+    <link>https://news.google.com/rss/articles/CBMiabc?oc=5</link>
+    <pubDate>Tue, 22 Sep 2026 18:07:05 GMT</pubDate>
+    <description>&lt;a href="https://news.google.com/rss/articles/CBMiabc"&gt;Anthropic releases Claude Opus 5&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;Reuters&lt;/font&gt;</description>
+    <source url="https://www.reuters.com">Reuters</source>
+  </item></channel></rss>`
+  const [n] = leggiFeed(xml, { nome: 'Google News', url: 'https://x', argomento: 'ia', lingua: '*', aggregatore: true })
+  assert.equal(n.titolo, 'Anthropic releases Claude Opus 5')
+  assert.equal(n.fonte, 'Reuters')
+  assert.equal(n.riassunto, '')
+  assert.equal(n.argomento, 'ia')
 })
 
 test('il link «self» del feed non diventa il link della notizia', () => {
@@ -141,9 +156,13 @@ const TITOLI = [
   'Riaperto il valico di frontiera dopo sei settimane'
 ]
 
-test('se nelle ultime ore non c’è niente si guarda più indietro, invece di uscire vuoti', () => {
+test('la finestra non si allarga quando c’è poco: tre giorni fa non è «adesso»', () => {
+  // ogni giro guarda solo i titoli nuovi, quindi «poco» è la regola; allargare
+  // ripescava le notizie di due giorni prima, quelle che «feel old»
   const vecchie = TITOLI.slice(0, 5).map((titolo, i) => finta({ id: `v${i}`, titolo, quando: fa(60) }))
-  assert.equal(cernita(vecchie, ora).length, 5)
+  assert.equal(cernita(vecchie, ora).length, 0)
+  // un laboratorio resta tre giorni: un rilascio di ieri l'altro vale ancora
+  assert.equal(cernita([finta({ id: 'lab', fonte: 'Anthropic', titolo: 'Introducing Claude for Chrome', quando: fa(60) })], ora).length, 1)
 })
 
 test('la stessa notizia da due giornali entra una volta sola', () => {
@@ -152,6 +171,18 @@ test('la stessa notizia da due giornali entra una volta sola', () => {
     finta({ id: 'b', titolo: 'Il prezzo del grano vola: ecco perché', fonte: 'ANSA' })
   ], ora)
   assert.equal(fuori.length, 1, 'lo stesso fatto compare due volte nella rassegna')
+})
+
+test('lo stesso modello alla stessa versione è lo stesso fatto, anche con titoli che non si somigliano', () => {
+  // il 22 settembre: la stessa uscita, due carte una sotto l'altra
+  assert.ok(simili(impronta('Introducing GPT-6 Sol and Luna'), impronta('OpenAI launches GPT-6 Sol and Luna, boasting lower cost and fewer mistakes')))
+  assert.ok(simili(impronta('Anthropic launches Claude Opus 5.5, promising Fable-level performance at a lower price'),
+    impronta('Anthropic launches Claude Opus 5.5 with stricter safeguards for cybersecurity')))
+  // versioni diverse sono uscite diverse
+  assert.ok(!simili(impronta('OpenAI ships GPT-6'), impronta('OpenAI ships GPT-6.1 to developers')))
+  assert.ok(!simili(impronta('Gemini 3 arrives in Chrome'), impronta('Gemini 4 arrives in Chrome for everyone')))
+  // e senza un modello nel titolo la regola di prima resta quella
+  assert.ok(!simili(impronta('Anthropic hires a new policy chief'), impronta('Anthropic opens an office in Tokyo')))
 })
 
 test('l’impronta non si fa ingannare da maiuscole, accenti e punteggiatura', () => {
@@ -280,13 +311,67 @@ test('due parole non sono un riassunto', () => {
 })
 
 const focus = contestoDi([{ nome: 'Myynd', doveSei: 'Release Electron macOS' }], [], '', 'politica estera')
-const notizia = (n: Grezza): Notizia => ({ ...n, perche: 'Un commento generato non verificato.', presa: fa(1), letta: null, scartata: null })
+const notizia = (n: Grezza): Notizia => ({ ...n, perche: 'Un commento generato non verificato.', presa: fa(1), letta: null, scartata: null, importante: false, interesse: null })
 
-test('i progetti attivi prevalgono sugli interessi generali', () => {
-  assert.equal(focus.length, 1)
-  assert.ok(!focus[0].testo.includes('politica'))
+test('prima il lavoro, poi quello che ha chiesto di seguire, e l’IA di frontiera c’è sempre', () => {
+  // «Di cosa ti tengo aggiornato» è la domanda a cui risponde la rassegna:
+  // quello che ha scritto lì conta anche quando ha dei progetti
+  assert.deepEqual(focus.map(f => f.nome), ['Myynd', 'Interessi', SEMPRE.nome])
   assert.ok(rilevanza(finta({ id: 'app', titolo: 'Electron fixes macOS sandbox security' }), focus) > 0)
-  assert.equal(rilevanza(finta({ id: 'world', titolo: 'La politica estera cambia dopo il vertice' }), focus), 0)
+  assert.ok(rilevanza(finta({ id: 'world', titolo: 'La politica estera cambia dopo il vertice' }), focus) > 0)
+  assert.ok(rilevanza(finta({ id: 'lab', titolo: 'OpenAI releases GPT-6 to developers' }), focus) > 0)
+  assert.equal(rilevanza(finta({ id: 'forno', titolo: 'Local bakery wins regional award' }), focus), 0)
+  // senza niente di scritto resta l'IA, non il vuoto
+  assert.deepEqual(contestoDi([], [], '', '').map(f => f.nome), [SEMPRE.nome])
+})
+
+test('un laboratorio che rilascia qualcosa è importante anche senza modello', () => {
+  assert.ok(pareUnRilascio({ fonte: 'Anthropic', titolo: 'Introducing Claude Opus 5' }))
+  assert.ok(pareUnRilascio({ fonte: 'The Verge', titolo: 'OpenAI launches GPT-6 with a cheaper API' }))
+  assert.ok(pareUnRilascio({ fonte: 'Reuters', titolo: 'Google rolls out Gemini 4 to all users' }))
+  assert.ok(!pareUnRilascio({ fonte: 'The Verge', titolo: 'OpenAI’s CEO talks about the future of work' }), 'un’intervista non è un rilascio')
+  assert.ok(!pareUnRilascio({ fonte: 'TechCrunch', titolo: 'A startup launches an HR tool' }), 'un rilascio non di un laboratorio non conta')
+})
+
+test('un rilascio di un laboratorio entra sempre: la regola stretta, che non scambia una startup per OpenAI', () => {
+  assert.ok(rilascioDiUnLaboratorio({ fonte: 'OpenAI', titolo: 'Introducing GPT-6 Sol and Luna' }))
+  assert.ok(rilascioDiUnLaboratorio({ fonte: 'Reuters', titolo: 'Anthropic unveils Claude Opus 5.5' }))
+  assert.ok(rilascioDiUnLaboratorio({ fonte: 'The New Stack', titolo: 'OpenAI releases GPT-6 Sol and Luna — and cuts token prices in half' }))
+  assert.ok(rilascioDiUnLaboratorio({ fonte: 'The Verge', titolo: 'Google rolls out Gemini 4 to all users' }))
+  assert.ok(!rilascioDiUnLaboratorio({ fonte: 'TechCrunch', titolo: 'A startup launches a ChatGPT plugin for lawyers' }))
+  assert.ok(!rilascioDiUnLaboratorio({ fonte: 'The Guardian', titolo: 'British Columbia sues OpenAI and Sam Altman' }))
+  // la regex con la «g» non deve ricordarsi dove era arrivata fra una chiamata e l'altra
+  for (let i = 0; i < 3; i++) assert.ok(rilascioDiUnLaboratorio({ fonte: 'Wired', titolo: 'Anyone can now try GPT-6, released today' }))
+})
+
+test('fra due articoli sullo stesso fatto vale l’annuncio del laboratorio, poi il titolo che nomina il modello', () => {
+  const ufficiale = { fonte: 'OpenAI', titolo: 'Introducing GPT-6 Sol and Luna' }
+  const col_modello = { fonte: 'Mashable', titolo: 'Anthropic launches Claude Opus 5.5, promising Fable-level performance' }
+  const vago = { fonte: 'ft.com', titolo: 'Anthropic releases cheaper AI model ahead of IPO' }
+  const riassunto = { fonte: 'CNBC', titolo: 'Anthropic and OpenAI roll out cheaper models' }
+  assert.ok(rappresenta(ufficiale) > rappresenta(riassunto))
+  assert.ok(rappresenta(col_modello) > rappresenta(vago))
+  assert.equal(rappresenta(vago), rappresenta(riassunto))
+  // il rilascio detto dal laboratorio vale più del posto in cui è arrivato
+  assert.ok(rappresenta(col_modello) > rappresenta({ fonte: 'Amazon Web Services (AWS)', titolo: 'Claude Opus 5.5 is now available on AWS' }))
+})
+
+test('la regola gratis sulle parole tiene l’articolo migliore, non il più fresco', () => {
+  const aws = finta({ id: 'aws', fonte: 'AWS', titolo: 'Claude Opus 5.5 is now available on AWS', quando: fa(1) })
+  const lancio = finta({ id: 'lancio', fonte: 'Mashable', titolo: 'Anthropic launches Claude Opus 5.5 at a lower price', quando: fa(2) })
+  assert.deepEqual(cernita([aws, lancio], ora).map(n => n.id), ['lancio'])
+})
+
+test('in tema: l’IA e la tecnologia passano, la cronaca solo se tocca il lavoro', () => {
+  assert.ok(inTema(finta({ id: 'ia', argomento: 'ia', titolo: 'Anything from an AI desk' }), focus))
+  assert.ok(inTema(finta({ id: 'mondo-ia', argomento: 'mondo', titolo: 'Anthropic signs a deal with the EU', riassunto: 'Claude will be offered to agencies.' }), focus))
+  assert.ok(!inTema(finta({ id: 'guerra', argomento: 'mondo', titolo: 'Ceasefire talks resume in Geneva' }), focus))
+  assert.ok(!inTema(finta({ id: 'borsa', argomento: 'economia', titolo: 'Oil prices slide as demand cools' }), focus))
+})
+
+test('le importanti stanno in cima, e dentro ognuna la più fresca prima', () => {
+  const n = (id: string, importante: boolean, ore: number) => ({ id, importante, quando: fa(ore) })
+  assert.deepEqual(ordina([n('a', false, 1), n('b', true, 20), n('c', false, 3), n('d', true, 2)]).map(x => x.id), ['d', 'b', 'a', 'c'])
 })
 
 test('il fallback non riempie una selezione corta con notizie generiche', () => {
@@ -338,7 +423,9 @@ test('l’edizione contiene solo gli ID scelti e preserva il riassunto della fon
   const tutte = [notizia(finta({ id: 'canada', titolo: 'Canada updates tariffs', riassunto: 'Tariffs change in Canada.' })),
     notizia(finta({ id: 'libano', titolo: 'Lebanon peace talks resume', riassunto: 'Peace talks resume in Lebanon.' }))]
   const scelte = ricuciScelte(tutte as Grezza[], [{ id: 'libano' }, { id: 1.5 }, { id: 'inesistente' }, { id: 'libano' }])
-  assert.deepEqual(scelte, [{ n: 2, riga: '' }])
+  assert.deepEqual(scelte, [{ n: 2, riga: '', importante: false }])
+  // «importante» passa solo se è davvero vero: una stringa non è un sì
+  assert.deepEqual(ricuciScelte(tutte as Grezza[], [{ id: 'canada', importante: true }, { id: 'libano', importante: 'true' }]).map(s => s.importante), [true, false])
   const visibili = selezioneVisibile(tutte, focus, scelte.map(s => tutte[s.n - 1].id), ora)
   assert.equal(visibili.length, 1)
   assert.equal(visibili[0].titolo, 'Lebanon peace talks resume')
@@ -357,12 +444,14 @@ test('gli articoli scaduti non rientrano quando tutte le fonti sono ferme', () =
   assert.deepEqual(selezioneVisibile([notizia(vecchia)], focus, ['vecchia'], ora), [])
 })
 
-test('una deprecazione ufficiale macOS resta utile per due settimane, la cronaca no', () => {
-  const rilascio = finta({ id: 'rosetta', fonte: 'Apple Developer', titolo: 'Upcoming changes to Rosetta support for Intel-based macOS apps', quando: fa(7 * 24) })
-  const cronaca = finta({ id: 'cronaca', fonte: 'BBC', titolo: 'Parliament reaches a trade agreement', quando: fa(7 * 24) })
+test('una nota ufficiale per sviluppatori resta tre giorni, la cronaca due', () => {
+  // era due settimane, ed è così che il 22 settembre la rassegna mostrava
+  // ancora «Get ready with the latest beta releases» del 16
+  const rilascio = finta({ id: 'rosetta', fonte: 'Apple Developer', titolo: 'Upcoming changes to Rosetta support for Intel-based macOS apps', quando: fa(60) })
+  const cronaca = finta({ id: 'cronaca', fonte: 'BBC', titolo: 'Parliament reaches a trade agreement', quando: fa(60) })
   assert.deepEqual(cernita([rilascio, cronaca], ora).map(n => n.id), ['rosetta'])
   assert.deepEqual(selezioneVisibile([notizia(rilascio)], focus, undefined, ora).map(n => n.id), ['rosetta'])
-  const scaduto = { ...rilascio, quando: fa(15 * 24) }
+  const scaduto = { ...rilascio, quando: fa(4 * 24) }
   assert.deepEqual(cernita([scaduto], ora), [])
   assert.deepEqual(selezioneVisibile([notizia(scaduto)], focus, [scaduto.id], ora), [])
 })
@@ -381,29 +470,26 @@ const ORA = 3600_000
 const stessoGiorno = (ora: number) => ({ giorno: giornoIn(new Date(T)), ora })
 const giornoNuovo = (ora: number) => ({ giorno: '1999-01-01', ora })
 
-test('dentro le sei ore non si rifà, dopo sì', () => {
+test('dentro i venti minuti non si rifà, dopo sì', () => {
+  assert.equal(MINUTI_GIRO, 20)
   const e = { controllata: QUANDO, ids: ['a', 'b'] }
-  assert.equal(daRifare(e, T + ORA, stessoGiorno(10)), false)
-  assert.equal(daRifare(e, T + 7 * ORA, stessoGiorno(10)), true)
+  assert.equal(daRifare(e, T + 19 * 60_000, stessoGiorno(10)), false)
+  assert.equal(daRifare(e, T + 20 * 60_000, stessoGiorno(10)), true)
+  assert.equal(daRifare(e, T + ORA, stessoGiorno(10)), true)
 })
 
 test('il giorno nuovo la rifà dalle sei in poi, e prima di dormire no', () => {
   const e = { controllata: QUANDO, ids: ['a', 'b'] }
   // le cinque e mezza: è un altro giorno, ma non è ancora mattina per nessuno
-  assert.equal(daRifare(e, T + ORA, giornoNuovo(5)), false)
-  // le sei e dieci: un'ora sola dall'ultimo controllo, e si rifà lo stesso —
-  // è l'unico modo perché alle otto le notizie ci siano già
-  assert.equal(daRifare(e, T + ORA, giornoNuovo(6)), true)
+  assert.equal(daRifare(e, T + 10 * 60_000, giornoNuovo(5)), false)
+  // le sei e dieci: dieci minuti dall'ultimo controllo, e si rifà lo stesso
+  assert.equal(daRifare(e, T + 10 * 60_000, giornoNuovo(6)), true)
 })
 
-test('una rassegna vuota si riprova dopo un’ora, non dopo sei', () => {
-  const e = { controllata: QUANDO, ids: [] }
-  assert.equal(daRifare(e, T + 30 * 60_000, stessoGiorno(10)), false)
-  assert.equal(daRifare(e, T + 61 * 60_000, stessoGiorno(10)), true)
-})
-
-test('i minuti chiesti dal giro precedente valgono più della finestra', () => {
-  const e = { controllata: QUANDO, ids: ['a'], riprovaMinuti: 20 }
+test('vuota o piena, il giro è lo stesso: venti minuti', () => {
+  // un'edizione vecchia con «riprovaMinuti: 60» scritto sopra non tiene ferma
+  // la rassegna un'ora dopo l'aggiornamento
+  const e = { controllata: QUANDO, ids: [], riprovaMinuti: 60 }
   assert.equal(daRifare(e, T + 10 * 60_000, stessoGiorno(10)), false)
   assert.equal(daRifare(e, T + 21 * 60_000, stessoGiorno(10)), true)
 })

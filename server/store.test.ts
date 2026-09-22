@@ -1140,7 +1140,10 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
   for (const c of ['id', 'nome', 'obiettivo', 'stato', 'dal', 'aggiornato', 'note', 'origine']) {
     assert.ok(progetti.includes(c), `progetti non ha «${c}»: una migrazione è stata saltata`)
   }
-  assert.ok(colonne('notizie').includes('perche'), 'notizie non ha «perche»')
+  const notizie = colonne('notizie')
+  for (const c of ['perche', 'importante', 'interesse']) {
+    assert.ok(notizie.includes(c), `notizie non ha «${c}»: una migrazione è stata saltata`)
+  }
 
   const tabelle = (store.default.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table'"

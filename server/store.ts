@@ -1281,7 +1281,12 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // (`rifinitura.ts`): la prima pagina può mettere davanti quello che è
   // davvero urgente invece dell'ultima arrivata. NULL quando nessuno l'ha
   // giudicata — senza Jev, o prima di questa colonna. In fondo, come tutte.
-  d => colonna(d, 'feed', 'peso', 'REAL')
+  d => colonna(d, 'feed', 'peso', 'REAL'),
+  // 44 → 45 · una notizia sa se è importante (un rilascio di un laboratorio di
+  // frontiera, o un fatto che cambia il suo lavoro: la pastiglia salta) e
+  // quanto è interessante per lui secondo Jev, che decide chi esce quando la
+  // rassegna supera le dieci. Due colonne, in fondo, come tutte.
+  d => { colonna(d, 'notizie', 'importante', 'INTEGER NOT NULL DEFAULT 0'); colonna(d, 'notizie', 'interesse', 'REAL') }
 
 ]
 
@@ -1363,7 +1368,8 @@ const COLONNE: Record<string, [string, string][]> = {
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
   compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
-  feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']]
+  feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']],
+  notizie: [['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -2891,6 +2897,15 @@ export type Notizia = {
   presa: string
   letta: string | null
   scartata: string | null
+  /** Un rilascio di un laboratorio di frontiera, o un fatto che cambia il suo lavoro. */
+  importante: boolean
+  /** Quanto gli interessa secondo Jev, da 0 a 1. Null finché nessuno l'ha chiesto. */
+  interesse: number | null
+}
+
+/** Una riga della tabella: SQLite tiene i booleani come interi. */
+function notiziaDaRiga(r: Record<string, unknown>): Notizia {
+  return { ...(r as unknown as Notizia), importante: !!r.importante, interesse: typeof r.interesse === 'number' ? r.interesse : null }
 }
 
 /**
@@ -2902,20 +2917,23 @@ export type Notizia = {
  * tocca. Quest'ultima è la parte importante: quello che hai già guardato non
  * deve tornare a sembrare nuovo perché il giornale l'ha ripubblicato.
  */
-export function salvaNotizie(n: Omit<Notizia, 'presa' | 'letta' | 'scartata'>[]) {
+export function salvaNotizie(n: (Omit<Notizia, 'presa' | 'letta' | 'scartata' | 'importante' | 'interesse'> & { importante?: boolean })[]) {
   if (!n.length) return
+  // «importante» non si spegne da un giro all'altro: un rilascio resta tale
+  // anche se il giornale che lo ripubblica non lo sa
   const ins = db.prepare(`
-    INSERT INTO notizie (id, titolo, riassunto, perche, fonte, link, argomento, quando, presa)
-    VALUES (?,?,?,?,?,?,?,?,?)
+    INSERT INTO notizie (id, titolo, riassunto, perche, fonte, link, argomento, quando, presa, importante)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       titolo=excluded.titolo, riassunto=excluded.riassunto, perche=excluded.perche,
-      argomento=excluded.argomento, presa=excluded.presa
+      argomento=excluded.argomento, presa=excluded.presa,
+      importante=MAX(notizie.importante, excluded.importante)
   `)
   const ora = new Date().toISOString()
   db.exec('BEGIN')
   try {
     for (const x of n) {
-      ins.run(x.id, x.titolo, x.riassunto, x.perche ?? null, x.fonte, x.link, x.argomento, x.quando, ora)
+      ins.run(x.id, x.titolo, x.riassunto, x.perche ?? null, x.fonte, x.link, x.argomento, x.quando, ora, x.importante ? 1 : 0)
     }
     db.exec('COMMIT')
   } catch (e) {
@@ -2934,32 +2952,20 @@ export function salvaNotizie(n: Omit<Notizia, 'presa' | 'letta' | 'scartata'>[])
  */
 export function notizie(giorni = 7): Notizia[] {
   const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  return db.prepare(
+  return (db.prepare(
     'SELECT * FROM notizie WHERE presa >= ? AND scartata IS NULL ORDER BY presa DESC, quando DESC'
-  ).all(soglia) as unknown as Notizia[]
+  ).all(soglia) as Record<string, unknown>[]).map(notiziaDaRiga)
 }
 
-/**
- * Quante sono entrate in rassegna da un momento in qua, e sono ancora lì.
- *
- * È il conto del tetto giornaliero: la rassegna gira quattro volte al giorno
- * e ognuna sceglieva otto — trentadue notizie, che non sono «poche e
- * mirate», sono un giornale. Si conta sulla `presa`, non sull'uscita: una
- * notizia ripresa oggi si sposta a oggi, e conta una volta. Le scartate
- * contano lo stesso: sono state scelte, e il tetto è sulle scelte.
- *
- * **Le lette no**, ed è la riga che tiene insieme il tetto e l'edizione. Una
- * notizia aperta lascia la pagina nello stesso momento — `selezioneVisibile`
- * nasconde le `letta` e le sposta fra le «recenti» — quindi contarla vorrebbe
- * dire che chi legge le sue otto a colazione si ritrova la rassegna vuota *e*
- * ferma fino a mezzanotte, con `giro()` che non va nemmeno a guardare i
- * giornali. Il tetto è su quanto ti si mette davanti in un giorno, non su
- * quanto hai già tolto di mezzo: `giro()` dice la stessa cosa un livello più
- * su, dove le lette non entrano fra le candidate.
- */
-export function notiziePreseDal(quando: string): number {
-  const r = db.prepare('SELECT COUNT(*) AS n FROM notizie WHERE presa >= ? AND letta IS NULL').get(quando) as { n: number }
-  return r.n
+/** Il fatto è importante anche se l'articolo rimasto non lo diceva: lo si segna su quello. */
+export function segnaImportante(id: string) {
+  db.prepare('UPDATE notizie SET importante = 1 WHERE id = ?').run(id)
+}
+
+/** Quanto gli interessa, secondo Jev: si chiede una volta per notizia e poi si ricorda. */
+export function segnaInteresse(id: string, interesse: number) {
+  if (!Number.isFinite(interesse)) return
+  db.prepare('UPDATE notizie SET interesse = ? WHERE id = ?').run(Math.max(0, Math.min(1, interesse)), id)
 }
 
 /**
@@ -2990,9 +2996,9 @@ export function notizieFeedback(): Pick<Notizia, 'id' | 'titolo' | 'letta' | 'sc
  */
 export function notiziePerGusto(giorni = 30): Notizia[] {
   const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  return db.prepare(
+  return (db.prepare(
     'SELECT * FROM notizie WHERE presa >= ? AND (letta IS NOT NULL OR scartata IS NOT NULL)'
-  ).all(soglia) as unknown as Notizia[]
+  ).all(soglia) as Record<string, unknown>[]).map(notiziaDaRiga)
 }
 
 /** Non ti interessa. Vale per sempre, non per oggi. */
@@ -3282,12 +3288,6 @@ export function compitiChiusi(limite = 30): Compito[] {
 }
 
 /**
- * Le righe che ha buttato via, e quando.
- *
- * `scordaCompito` scrive la data in `sparito` e lascia lo stato dov'era. Da
- * quel momento la riga non esiste per nessuno: `elencoCompiti` la salta,
- * `compitiChiusi` la salta due volte — una per lo stato, una per `sparito` —
-/**
  * I documenti prodotti da Myynd, vivi o chiusi.
  *
  * La lista normale separa il lavoro aperto da quello chiuso e limita il
@@ -3303,6 +3303,12 @@ export function consegneProdotte(limite = 200): Compito[] {
   return righe.map(compitoDaRiga)
 }
 
+/**
+ * Le righe che ha buttato via, e quando.
+ *
+ * `scordaCompito` scrive la data in `sparito` e lascia lo stato dov'era. Da
+ * quel momento la riga non esiste per nessuno: `elencoCompiti` la salta,
+ * `compitiChiusi` la salta due volte — una per lo stato, una per `sparito` —
  * e il punto, che legge solo quelle due, non sa che è mai esistita. Quindi la
  * riproponeva. Il quattordici settembre ne ha tolte tre alle 16:33 e alle
  * 17:42 se le è ritrovate, una identica parola per parola.

@@ -423,6 +423,9 @@ const EN: Record<string, string> = {
   'Lista': 'List',
   'Vista attività': 'Task view',
   'Intorno ai tuoi progetti': 'Around your projects',
+  'L’IA e il tuo lavoro': 'AI and your work',
+  'Importante': 'Important',
+  'Notizie importanti': 'Important news',
   'La selezione': 'The selection',
   'Leggi l’articolo': 'Read article',
   'Niente da aggiungere, per ora.': 'Nothing to add, for now.',
@@ -1687,15 +1690,15 @@ const EN: Record<string, string> = {
   'Quello che Myynd sa di te, separato da quello che ha letto. I documenti sono fatti; qui sta il giudizio, e puoi cambiarlo.':
     'What Myynd knows about you, kept apart from what it has read. Documents are facts; this is judgement, and you can change it.',
   'Come lavori': 'How you work',
-  'Cinque domande. Quello che scrivi qui sta in cima a ogni ragionamento, sempre.':
-    'Five questions. What you write here sits at the top of every answer, always.',
-  'Non gliel’hai ancora detto.': 'You have not told it yet.',
   'Ultimo ricordo': 'Latest memory',
   'Documenti creati': 'Created documents',
   'Doppio clic per aprire': 'Double-click to open',
   'Non più rintracciabile': 'No longer discoverable',
   'Nessun documento creato finora.': 'No documents created yet.',
   'Apro…': 'Opening…',
+  'Cinque domande. Quello che scrivi qui sta in cima a ogni ragionamento, sempre.':
+    'Five questions. What you write here sits at the top of every answer, always.',
+  'Non gliel’hai ancora detto.': 'You have not told it yet.',
   'caratteri rimasti': 'characters left',
   'Salvo…': 'Saving…',
   'carico…': 'loading…',

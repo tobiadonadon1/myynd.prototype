@@ -117,7 +117,8 @@ test('news context excludes paused projects, old Brief projects and unadopted ge
   assert.ok(news.contesto().some(f => f.testo.includes('Electron')))
   assert.ok(news.contesto().every(f => !f.testo.includes('FunctionHealth') && !f.testo.includes('medical')))
   progetti.cambia(p.id, { stato: 'fermo' })
-  assert.deepEqual(news.contesto(), [])
+  // resta solo l'IA di frontiera, che c'è per tutti
+  assert.deepEqual(news.contesto(), [news.SEMPRE])
   assert.equal(gusto.evidenzaDalLavoro().vale, false)
 })
 

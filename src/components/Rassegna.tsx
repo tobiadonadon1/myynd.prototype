@@ -25,6 +25,22 @@ const segnaVista = (q: string) => {
   try { localStorage.setItem(CHIAVE_VISTA, q) } catch { /* no storage: the dot bounces once too often, and that is all */ }
 }
 
+/*
+ * The important stories already seen, by id.
+ *
+ * An important story (a frontier lab shipping something) makes the whole pill
+ * jump until the room is opened while it is in there. Ids, not a timestamp:
+ * the pool renews every twenty minutes, and a new important story must jump
+ * even if the room was opened a minute ago for the previous one.
+ */
+const CHIAVE_IMPORTANTI = 'myynd.rassegna.importanti'
+const importantiViste = (): string[] => {
+  try { const v = JSON.parse(localStorage.getItem(CHIAVE_IMPORTANTI) ?? '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] } catch { return [] }
+}
+const segnaImportanti = (ids: string[]) => {
+  try { localStorage.setItem(CHIAVE_IMPORTANTI, JSON.stringify(ids.slice(-200))) } catch { /* no storage: it jumps again after a reload */ }
+}
+
 function eta(iso: string): string {
   const minuti = (Date.now() - Date.parse(iso)) / 60_000
   if (!Number.isFinite(minuti)) return ''
@@ -68,7 +84,7 @@ function SalaNotizie({ notizie, quando, carico, guaio, aggiorna, togli, occupata
         <header className="news-heading">
           <div className="news-heading-title"><div>
             <h2 id="news-title">{t('Notizie')}</h2>
-            <p>{t('Intorno ai tuoi progetti')}</p>
+            <p>{t('L’IA e il tuo lavoro')}</p>
           </div></div>
           <div className="news-heading-actions">
             <button className="news-icon" onClick={aggiorna} disabled={carico}
@@ -89,7 +105,7 @@ function SalaNotizie({ notizie, quando, carico, guaio, aggiorna, togli, occupata
                   onClick={() => setScelta(n.id)} aria-current={selezionata.id === n.id ? 'true' : undefined}
                   aria-controls="news-article">
                   <span className="news-number" aria-hidden="true">{String(corrente * PER_PAGINA + i + 1).padStart(2, '0')}</span>
-                  <span className="news-story-copy"><span className="news-source">{n.fonte}</span><span className="news-story-title">{n.titolo}</span></span>
+                  <span className="news-story-copy"><span className="news-source">{n.fonte}{n.importante && <span className="news-flag">{t('Importante')}</span>}</span><span className="news-story-title">{n.titolo}</span></span>
                 </button>
               </li>)}
             </ol>
@@ -100,7 +116,7 @@ function SalaNotizie({ notizie, quando, carico, guaio, aggiorna, togli, occupata
             </div>}
           </nav>
           <article id="news-article" className="news-article" key={selezionata.id} aria-labelledby="news-article-title">
-            <div className="news-article-meta"><span>{selezionata.fonte}</span><time dateTime={selezionata.quando}>{eta(selezionata.quando)}</time></div>
+            <div className="news-article-meta"><span>{selezionata.fonte}</span>{selezionata.importante && <span className="news-flag">{t('Importante')}</span>}<time dateTime={selezionata.quando}>{eta(selezionata.quando)}</time></div>
             <h3 id="news-article-title">{selezionata.titolo}</h3>
             {selezionata.riassunto && <p className="news-summary">{selezionata.riassunto}</p>}
             <div className="news-article-actions">
@@ -129,6 +145,7 @@ export function Rassegna() {
   const [guaio, setGuaio] = useState('')
   const [aperta, setAperta] = useState(false)
   const [vista, setVista] = useState(vistaSalvata)
+  const [viste, setViste] = useState(importantiViste)
   const [occupata, setOccupata] = useState<string | null>(null)
   const viva = useRef(true)
   const caricando = useRef(false)
@@ -163,6 +180,16 @@ export function Rassegna() {
     setVista(v => quando > v ? quando : v)
   }, [aperta, quando])
 
+  // The same for the important ones: seen while the room is open means seen.
+  useEffect(() => {
+    if (!aperta) return
+    const nuove = notizie.filter(n => n.importante && !viste.includes(n.id)).map(n => n.id)
+    if (!nuove.length) return
+    const tutte = [...viste, ...nuove]
+    segnaImportanti(tutte)
+    setViste(tutte)
+  }, [aperta, notizie, viste])
+
   useEffect(() => {
     if (!aperta || !aggiornando) return
     const timer = setInterval(() => void carica(), 3_000)
@@ -189,10 +216,12 @@ export function Rassegna() {
 
   // Something new, and not yet opened: the only case worth a moving dot.
   const fresca = !!quando && quando > vista && notizie.length > 0
+  // Something important, and not yet seen: the whole pill jumps.
+  const importante = notizie.some(n => n.importante && !viste.includes(n.id))
 
   return <>
-    <button type="button" className="news-pill" onClick={() => { setAperta(true); void carica() }} aria-haspopup="dialog" aria-expanded={aperta}
-      aria-label={fresca ? t('Notizie nuove') : t('Notizie')}>
+    <button type="button" className={`news-pill${importante && !aperta ? ' news-pill-salta' : ''}`} onClick={() => { setAperta(true); void carica() }} aria-haspopup="dialog" aria-expanded={aperta}
+      aria-label={importante ? t('Notizie importanti') : fresca ? t('Notizie nuove') : t('Notizie')}>
       <span className={`news-dot${notizie.length ? ' has-news' : ''}${fresca ? ' pallino-salta' : ''}`} aria-hidden="true" />{t('Notizie')}
     </button>
     {aperta && <SalaNotizie notizie={notizie.length ? notizie : recenti} archivio={!notizie.length && !!recenti.length} quando={quando} carico={carico || aggiornando} guaio={guaio}

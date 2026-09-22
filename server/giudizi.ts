@@ -753,3 +753,130 @@ export async function valeAprire<T extends { testo: string; doc: Documento }>(
   registra('frecce del punto', { giudicati, noti: 0, muti: righe.length - giudicati, fuori: 0 })
   return fuori
 }
+
+// — la rassegna: chi esce quando sono più di dieci —
+//
+// «We shall never exceed the 10 news; if we reach the cap, we remove the less
+// interesting ones with Jev.» La rassegna aggiunge un'infornata ogni venti
+// minuti e ne tiene dieci: quando ne arriva un'undicesima, qualcuna deve
+// uscire, e l'ordine d'arrivo non basta — un rilascio di due giorni fa vale
+// più di un pezzo d'opinione di stamattina.
+//
+// Si chiede una volta per notizia (il voto resta scritto nella riga), e solo
+// quando c'è da scegliere: una rassegna sotto le dieci non costa niente.
+
+const INTERESSE_NOTIZIA = {
+  type: 'noul',
+  instructions:
+    'Given his work and what he follows, this person would want to read this news story today.',
+  criteria: {
+    true: {
+      what:
+        'A release or announcement from a frontier AI lab (a new model, product, feature, price or API change from ' +
+        'Anthropic, OpenAI, Google DeepMind, Meta, xAI, Mistral and the like), or a fact that changes something he is working on',
+      examples: [
+        'OpenAI releases a new model to developers, with lower prices in the API',
+        'Anthropic launches a new Claude model and a Claude Code feature for teams'
+      ]
+    },
+    false: {
+      what:
+        'General news, a minor funding round, an opinion or explainer piece, a listicle, a product in a field he does ' +
+        'not work in, or one more article on a story he already has',
+      examples: [
+        'Ten ways to use AI to plan your holidays',
+        'A regional startup raises a seed round for an HR tool'
+      ]
+    }
+  }
+} as const satisfies jev.Noul
+
+/**
+ * Quanto interessa ognuna di queste notizie, da 0 a 1.
+ *
+ * Torna solo quelle su cui Jev ha risposto: chi chiama ordina le altre come
+ * faceva prima, con le parole in comune con il lavoro e la freschezza.
+ */
+export async function interesseNotizie<T extends { id: string; titolo: string; riassunto: string; fonte: string }>(
+  notizie: readonly T[],
+  lavoro: readonly string[]
+): Promise<Map<string, number>> {
+  const fuori = new Map<string, number>()
+  if (!notizie.length || !jev.collegato()) return fuori
+  const persona = leggi().nome || 'Tobia'
+  const segue = lavoro.slice(0, 10).map(l => l.slice(0, 220))
+  const risposte = await jev.giudicaTanti(notizie, n => ({
+    persona,
+    segue,
+    notizia: { fonte: n.fonte, titolo: n.titolo.slice(0, 200), riassunto: n.riassunto.slice(0, 320) }
+  }), { interessa: INTERESSE_NOTIZIA })
+  let giudicati = 0
+  for (const [n, r] of risposte) {
+    if (!r) continue
+    fuori.set(n.id, r.interessa.noul)
+    giudicati++
+  }
+  registra('notizie', { giudicati, noti: 0, muti: notizie.length - giudicati, fuori: 0 })
+  return fuori
+}
+
+/**
+ * Sopra questa probabilità una notizia nuova è lo stesso fatto di una che c'è.
+ *
+ * Misurata il 22 settembre 2026 sulle notizie vere del giorno. Lo stesso
+ * fatto: FT «cheaper AI model ahead of IPO» = Opus 5.5 di Mashable 0.60, i
+ * due GPT-6 0.72, i due Gemini hackerati 0.69. Fatti diversi sulla stessa
+ * azienda (Muse bloccato da Amazon, Muse corretto da Meta, un'assunzione di
+ * Anthropic, Opus 5.5 dentro Copilot) danno «nessuno» fra 0.87 e 1.00: la
+ * carta migliore non passa mai 0.13. Mezzo punto sta in mezzo con margine.
+ */
+export const SOGLIA_STESSO_FATTO = 0.5
+
+const STESSO_FATTO = 'Which story already in his news reports the same event as the new story, so that reading one ' +
+  'would leave nothing new in the other: the same launch, deal, incident or decision, even if the headline is worded differently.'
+
+/**
+ * Quali notizie nuove raccontano un fatto che la rassegna ha già.
+ *
+ * Il giorno di un rilascio ne scrivono tutti, e non sempre col nome del
+ * modello: «Anthropic releases cheaper AI model ahead of IPO» (FT) è Opus 5.5
+ * di Mashable detto con altre parole, e nessuna regola sulle parole lo vede.
+ * Torna, per ogni nuova che è un doppione, l'id di quella che c'era. Si
+ * confronta anche fra le nuove, come per le carte.
+ */
+export async function stessoFatto<T extends { id: string; titolo: string; riassunto: string }>(
+  nuove: readonly T[],
+  presenti: readonly { id: string; titolo: string; riassunto: string }[]
+): Promise<Map<string, string>> {
+  const fuori = new Map<string, string>()
+  if (!nuove.length || !jev.collegato()) return fuori
+  const carta = (n: { id: string; titolo: string; riassunto: string }) => ({ id: n.id, titolo: n.titolo, testo: n.riassunto.slice(0, 200) })
+  const confronto = presenti.map(carta)
+  let chieste = 0
+  for (const nuova of nuove) {
+    const candidate = vicine(carta(nuova), confronto) as ReturnType<typeof carta>[]
+    if (!candidate.length) { confronto.push(carta(nuova)); continue }
+    chieste++
+    const r = await jev.giudica({
+      persona: leggi().nome || 'Tobia',
+      notizia_nuova: { titolo: nuova.titolo, riassunto: nuova.riassunto.slice(0, 200) }
+    }, {
+      stesso: {
+        type: 'choice',
+        instructions: STESSO_FATTO,
+        criteria: Object.fromEntries([
+          ...candidate.map((c, i) => [`c${i}`, { what: c.titolo, detail: (c.testo ?? '').slice(0, 160) }]),
+          ['nessuno', 'None of them: the new story reports a different event, even if it names the same company or product']
+        ])
+      } as jev.Scelta
+    })
+    const d = r?.stesso
+    if (d && d.choice !== 'nessuno' && (d.probabilities[d.choice] ?? 0) >= SOGLIA_STESSO_FATTO) {
+      const quale = candidate[Number(d.choice.slice(1))]
+      if (quale) { fuori.set(nuova.id, quale.id); continue }
+    }
+    confronto.push(carta(nuova))
+  }
+  registra(`stesso fatto (${fuori.size} ${fuori.size === 1 ? 'doppione' : 'doppioni'})`, { giudicati: chieste, noti: 0, muti: 0, fuori: 0 })
+  return fuori
+}
