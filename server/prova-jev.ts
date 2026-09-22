@@ -7,7 +7,11 @@
 //
 // Non scrive niente e non salva niente: legge l'indice, chiede a Jev, stampa.
 //
-//   node --env-file-if-exists=.env.local server/prova-jev.ts --conto tobia@donadon.com [--quanti 20] [--dati ~/.myynd]
+//   node --env-file-if-exists=.env.local server/prova-jev.ts --conto tobia@donadon.com [--quanti 20] [--peso | --carte] [--dati ~/.myynd]
+//
+// Attenzione a `--dati` sulla cartella vera: aprire l'indice con una versione
+// di Myynd che ha una migrazione in più la applica. Su una copia, o con la
+// stessa versione dell'app installata.
 //
 // Gli import sono dinamici come in `valuta-feed.ts`, e per la stessa ragione:
 // `--dati` deve valere prima che `config.ts` legga l'ambiente.
@@ -19,9 +23,10 @@ const USO = `Uso: node server/prova-jev.ts --conto <email> [--quanti <n>] [--dat
   --conto    l'email del conto da guardare
   --quanti   quanti documenti giudicare (20 di serie)
   --peso     l'altra domanda: quanto ognuno dice sul lavoro che ha in mano
+  --carte    le carte del feed, aperte e chiuse da poco: si capiscono? e quanto contano?
   --dati     un'altra cartella dati, per provare su una copia`
 
-type Argomenti = { conto?: string; quanti: number; dati?: string; peso?: boolean; aiuto?: boolean; sbagliato?: string }
+type Argomenti = { conto?: string; quanti: number; dati?: string; peso?: boolean; carte?: boolean; aiuto?: boolean; sbagliato?: string }
 function leggiArgomenti(argv: string[]): Argomenti {
   const a: Argomenti = { quanti: 20 }
   for (let i = 0; i < argv.length; i++) {
@@ -31,6 +36,7 @@ function leggiArgomenti(argv: string[]): Argomenti {
     else if (x === '--quanti') a.quanti = Math.max(1, Math.min(60, Number(valore()) || 20))
     else if (x === '--dati') a.dati = valore()
     else if (x === '--peso') a.peso = true
+    else if (x === '--carte') a.carte = true
     else if (x === '--aiuto' || x === '-h' || x === '--help') a.aiuto = true
     else a.sbagliato = x
   }
@@ -39,6 +45,68 @@ function leggiArgomenti(argv: string[]): Argomenti {
 
 const riga = (s: string, n: number) => (s.replace(/\s+/g, ' ').trim().slice(0, n) + ' '.repeat(n)).slice(0, n)
 
+type CartaDelFeed = { id: string; tipo: string; titolo: string; testo: string; urgenza: string | null; perche: string | null; doc: string | null; stato: string }
+
+/**
+ * Le carte del feed davanti a Jev: si capiscono al primo sguardo? quanto
+ * contano oggi? e cosa ne dice il codice?
+ *
+ * È la tabella con cui si è scelta `SOGLIA_CHIARA` in `giudizi.ts`: le carte
+ * aperte del 21 settembre 2026, quelle che lui aveva appena chiamato «chaotic,
+ * confusing», dovevano finire per lo più sotto la soglia, e una carta come
+ * «Reply to Apple about the Evermute review video» sopra. Solo SELECT sul
+ * feed, e nessuna riscrittura: qui si guarda, non si spende un modello.
+ */
+async function carte(
+  store: typeof import('./store.ts'),
+  jev: typeof import('./jev.ts'),
+  giudizi: typeof import('./giudizi.ts'),
+  rifinitura: typeof import('./rifinitura.ts')
+) {
+  const colonne = 'id, tipo, titolo, testo, urgenza, perche, doc, stato'
+  const aperte = store.default.prepare(`SELECT ${colonne} FROM feed WHERE stato = 'aperto' ORDER BY quando DESC`).all() as unknown as CartaDelFeed[]
+  const soglia = new Date(Date.now() - 4 * 86_400_000).toISOString()
+  const chiuse = store.default.prepare(
+    `SELECT ${colonne} FROM feed WHERE stato IN ('fatto', 'scartato') AND COALESCE(risposto, quando) >= ? ORDER BY COALESCE(risposto, quando) DESC LIMIT 20`
+  ).all(soglia) as unknown as CartaDelFeed[]
+  const tutte = [...aperte, ...chiuse]
+  if (!tutte.length) { console.log('Nessuna carta sul feed, né aperta né chiusa da poco.'); return }
+
+  const partito = Date.now()
+  // il documento dietro ogni carta, giudicato prima: è il punto di partenza del peso
+  const docs = tutte.flatMap(c => c.doc ? store.documento(c.doc) ?? [] : [])
+  const visti = await giudizi.attenzione(docs, docs.length)
+  const giudicate = await giudizi.giudicaCarte(tutte)
+  const oggi = new Date()
+
+  console.log(`\n${tutte.length} carte (${aperte.length} aperte, ${chiuse.length} chiuse da poco), ${((Date.now() - partito) / 1000).toFixed(1)}s, ${jev.consumo().giudizi} giudizi, ${jev.consumo().gettoni.toLocaleString('it')} gettoni`)
+  console.log(`soglia di chiarezza in giudizi.ts: ${giudizi.SOGLIA_CHIARA}\n`)
+  console.log(`${riga('stato', 9)}${riga('chiara', 7)}${riga('peso', 6)}${riga('doc', 5)}${riga('codice', 30)}titolo`)
+  console.log('─'.repeat(120))
+  for (const c of tutte) {
+    const g = giudicate.get(c)
+    const prior = c.doc ? visti.get(c.doc)?.urgenza : undefined
+    const controlli = rifinitura.controlla({ titolo: c.titolo, testo: c.testo, urgenza: rifinitura.pillola(c.urgenza ?? '', oggi) })
+    console.log(
+      riga(c.stato, 9) +
+      riga(g ? g.chiara.toFixed(2) : '—', 7) +
+      riga(g ? g.peso.toFixed(2) : '—', 6) +
+      riga(prior !== undefined ? prior.toFixed(1) : '—', 5) +
+      riga(controlli.length ? controlli.join(', ') : 'passa', 30) +
+      riga(`${c.tipo} · ${c.titolo}`, 63)
+    )
+    console.log(`         ${riga(c.testo, 100)}${c.urgenza ? `  [${c.urgenza}]` : ''}`)
+    if (c.urgenza && rifinitura.pillola(c.urgenza, oggi) !== c.urgenza.trim()) console.log(`         pillola: ${rifinitura.pillola(c.urgenza, oggi)}`)
+  }
+  const chiare = [...giudicate.values()].map(g => g.chiara).sort((a, b) => a - b)
+  if (chiare.length) {
+    console.log(`\nchiarezza, dal basso: ${chiare.map(v => v.toFixed(2)).join('  ')}`)
+    const sotto = tutte.filter(c => (giudicate.get(c)?.chiara ?? 1) < giudizi.SOGLIA_CHIARA).length
+    console.log(`sotto la soglia (${giudizi.SOGLIA_CHIARA}): ${sotto} di ${giudicate.size}; il codice ne ferma ${tutte.filter(c => rifinitura.controlla({ titolo: c.titolo, testo: c.testo, urgenza: rifinitura.pillola(c.urgenza ?? '', oggi) }).length).length}`)
+  }
+  console.log()
+}
+
 async function main() {
   const a = leggiArgomenti(process.argv.slice(2))
   if (a.aiuto) { console.log(USO); return }
@@ -46,10 +114,13 @@ async function main() {
   if (!a.conto) { console.error(`Dimmi il conto: --conto <email>\n\n${USO}`); process.exitCode = 2; return }
   if (a.dati) process.env.MYYND_DATI = resolve(a.dati)
 
-  const [conti, chi, config, store, jev, giudizi, rilevanza] = await Promise.all([
+  const [conti, chi, config, store, jev, giudizi, rilevanza, rifinitura] = await Promise.all([
     import('./conti.ts'), import('./chi.ts'), import('./config.ts'), import('./store.ts'),
-    import('./jev.ts'), import('./giudizi.ts'), import('./rilevanza.ts')
+    import('./jev.ts'), import('./giudizi.ts'), import('./rilevanza.ts'), import('./rifinitura.ts')
   ])
+  // niente file nella cartella di una persona: né i giudizi, né il conto del giorno
+  jev.senzaDisco(true)
+  giudizi.senzaDisco(true)
   await conti.avvia()
   await config.avvia()
   const cerco = a.conto.trim().toLowerCase()
@@ -68,6 +139,7 @@ async function main() {
         process.exitCode = 2
         return
       }
+      if (a.carte) { await carte(store, jev, giudizi, rifinitura); return }
       /*
        * Tutto quello che le regole non buttano via, non solo quello che
        * mandano al feed.

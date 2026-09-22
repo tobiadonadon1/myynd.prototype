@@ -1276,7 +1276,12 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // tutto il giorno, come se l'ora premuta non fosse mai stata detta. Senza ora
   // resta lì, che è giusto — la maggior parte delle cose da fare non ha
   // un'ora — ma adesso si può dire. In fondo, come tutte.
-  d => colonna(d, 'compiti', 'ora', 'TEXT')
+  d => colonna(d, 'compiti', 'ora', 'TEXT'),
+  // Quanto conta una voce del feed, da 0 a 3, giudicato quando nasce
+  // (`rifinitura.ts`): la prima pagina può mettere davanti quello che è
+  // davvero urgente invece dell'ultima arrivata. NULL quando nessuno l'ha
+  // giudicata — senza Jev, o prima di questa colonna. In fondo, come tutte.
+  d => colonna(d, 'feed', 'peso', 'REAL')
 
 ]
 
@@ -1358,7 +1363,7 @@ const COLONNE: Record<string, [string, string][]> = {
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
   compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
-  feed: [['perche', 'TEXT'], ['contesto', 'TEXT']]
+  feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']]
 }
 
 function rimetti(db: DatabaseSync) {
@@ -2528,15 +2533,17 @@ const OMBRA_GIORNI = 60
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
  */
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string; offerta?: string; progetto?: string | null }[]): number {
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string; offerta?: string; progetto?: string | null; peso?: number | null }[]): number {
+  // il peso è un giudizio dato quando la voce nasce: chi lo porta lo scrive,
+  // chi non ce l'ha (una lettura senza Jev) non cancella quello di ieri
   const ins = db.prepare(`
-    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, contesto, offerta, progetto, stato, quando)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,'aperto',?)
+    INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, perche, contesto, offerta, progetto, peso, stato, quando)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'aperto',?)
     ON CONFLICT(id) DO UPDATE SET
       tipo=excluded.tipo, testo=excluded.testo, urgenza=excluded.urgenza,
       fonte=excluded.fonte, doc=excluded.doc, perche=COALESCE(excluded.perche, feed.perche),
       contesto=COALESCE(feed.contesto, excluded.contesto), offerta=COALESCE(excluded.offerta, feed.offerta),
-      progetto=COALESCE(excluded.progetto, feed.progetto)
+      progetto=COALESCE(excluded.progetto, feed.progetto), peso=COALESCE(excluded.peso, feed.peso)
   `)
   const ora = new Date().toISOString()
   // Un `doc` che non corrisponde a nessuna riga è un bottone «apri» che non
@@ -2591,7 +2598,8 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
         vicine.push({ id, titolo: i.titolo, doc: i.doc ?? null, stato: 'aperto', contesto: null })
       }
       const d = i.doc ? documento(i.doc) : undefined
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, i.offerta?.trim() || null, i.progetto ?? null, ora)
+      const peso = typeof i.peso === 'number' && Number.isFinite(i.peso) ? Math.min(3, Math.max(0, i.peso)) : null
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, i.offerta?.trim() || null, i.progetto ?? null, peso, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()

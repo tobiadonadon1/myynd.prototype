@@ -1,7 +1,7 @@
 // Le domande che Myynd fa a Jev, e cosa ne fa delle risposte.
 //
-// `jev.ts` è il filo; qui c'è quello che si chiede. Due domande sole, perché
-// due sono quelle che l'app si faceva già di nascosto con una fila di
+// `jev.ts` è il filo; qui c'è quello che si chiede. Due domande sui documenti,
+// perché due sono quelle che l'app si faceva già di nascosto con una fila di
 // espressioni regolari:
 //
 //   · «chi aspetta una risposta?» — la porta del feed e della coda delle
@@ -20,14 +20,23 @@
 //     0.09 sulla prima domanda e sta a 2.56 sulla seconda, che è esattamente
 //     la differenza fra le due.
 //
+// E due domande sulle *carte*, quelle che stanno per finire sulla prima
+// pagina (`rifinitura.ts`): «si capisce al primo sguardo?» e «quanto conta
+// oggi?». Sono giudizi sulla voce, non sul documento da cui viene, e si
+// fanno una volta, quando la voce nasce.
+//
 // Quello che Jev decide, e quello che non decide: sceglie *cosa* far leggere
-// al modello grande e in che ordine. Non scrive una voce, non scrive una riga,
-// non manda niente. Se tace, il materiale resta quello di prima nell'ordine di
-// prima, e nessuno se ne accorge.
+// al modello grande e in che ordine, e dice quale carta si legge male. Non
+// scrive una voce, non scrive una riga, non manda niente: la riscrittura la
+// fa il modello grande. Se tace, il materiale resta quello di prima
+// nell'ordine di prima, e nessuno se ne accorge.
 
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import * as chi from './chi.ts'
-import { leggi } from './config.ts'
+import { cartella, leggi } from './config.ts'
 import * as jev from './jev.ts'
+import { OSPITATO } from './ospitato.ts'
 import { corpoAttuale } from './rilevanza.ts'
 import type { Documento } from './store.ts'
 
@@ -57,7 +66,13 @@ export const SOGLIA_FEED = 0.35
 export const SOGLIA_RISPOSTE = 0.6
 
 export type Genere = 'richiesta' | 'scadenza' | 'aggiornamento' | 'rumore'
-export type Giudizio = { chiede: number; urgenza: number; genere: Genere; sicurezza: number }
+const GENERI = new Set<string>(['richiesta', 'scadenza', 'aggiornamento', 'rumore'])
+/**
+ * Cosa ne pensa Jev di un documento. `peso` è la quarta risposta, quella
+ * delle priorità: si chiede insieme alle altre tre, e chi la finge nelle
+ * prove può anche non darla.
+ */
+export type Giudizio = { chiede: number; urgenza: number; genere: Genere; sicurezza: number; peso?: number }
 
 const CHIEDE = {
   type: 'noul',
@@ -112,7 +127,18 @@ const PESO = {
   ]
 } as const satisfies jev.Livelli
 
-const ATTENZIONE = { chiede: CHIEDE, urgenza: URGENZA, genere: GENERE }
+/*
+ * Quattro domande in una chiamata, non tre più una.
+ *
+ * `peso` era una domanda a parte con una memoria a parte: la lettura del feed
+ * giudicava un documento, e il giro delle priorità lo rigiudicava — stesso
+ * materiale, stessa chiamata pagata due volte. Adesso viaggia con le altre
+ * tre, e `peso()` legge prima quella memoria. È facoltativa perché chi finge
+ * Jev nelle prove più vecchie risponde a tre domande, e tre risposte buone
+ * non devono diventare nessuna.
+ */
+const ATTENZIONE = { chiede: CHIEDE, urgenza: URGENZA, genere: GENERE, peso: PESO }
+const FACOLTATIVE = ['peso'] as const
 
 /**
  * Il documento come lo vede Jev.
@@ -152,9 +178,30 @@ function scheda(d: Documento) {
  * stessa mail sarebbe la stessa domanda con la stessa risposta, pagata ogni
  * volta. Gli id dei documenti non cambiano e il corpo di una mail arrivata non
  * cambia più, quindi la risposta di ieri vale oggi.
+ *
+ * E vale anche dopo un riavvio: la memoria sta in una Map, che è la strada
+ * veloce, e in `giudizi.json` nella cartella del conto, che è quella che
+ * sopravvive. L'app sul Mac si riapre più volte al giorno, e ogni apertura
+ * rigiudicava gli stessi sessanta documenti — quattro domande l'uno, per
+ * dire quello che aveva già detto. Il file tiene al massimo quattromila
+ * risposte, le più recenti, e si scrive intero a ogni giro che ne aggiunge:
+ * su un file accanto, poi al suo posto, così un'app chiusa a metà scrittura
+ * non lascia un file a metà.
  */
 const memoria = new Map<string, Giudizio>()
+const pesi = new Map<string, number>()
 const PER_CONTO = 4000
+/** I conti di cui si è già letto il file: una volta per processo, e poi la Map basta. */
+const caricati = new Set<string>()
+
+/*
+ * `senzaDisco` spegne il file: la prova sui documenti veri (`prova-jev.ts`)
+ * legge la cartella di una persona e non deve lasciarci niente.
+ */
+let disco = true
+export function senzaDisco(si = true) { disco = !si }
+
+const conto = () => chi.adesso() ?? 'casa'
 
 /**
  * La chiave porta dentro il conto, e non è una precauzione teorica: gli id dei
@@ -162,9 +209,83 @@ const PER_CONTO = 4000
  * che leggono la stessa casella condivisa avrebbero lo stesso id per la stessa
  * mail. Una risposta giudicata per uno non è mai la risposta dell'altro.
  */
-const dove = (id: string) => `${chi.adesso() ?? 'casa'}|${id}`
+const dove = (id: string) => `${conto()}|${id}`
 
-export function scorda() { memoria.clear(); pesi.clear() }
+function fileRicordi(): string | null {
+  if (!disco || (OSPITATO && !chi.adesso())) return null
+  return join(cartella(), 'giudizi.json')
+}
+
+type Ricordo = Partial<Giudizio>
+
+function carica() {
+  const c = conto()
+  if (caricati.has(c)) return
+  caricati.add(c)
+  const f = fileRicordi()
+  if (!f) return
+  try {
+    const j = JSON.parse(readFileSync(f, 'utf8')) as { ricordi?: unknown }
+    const voci = Array.isArray(j?.ricordi) ? j.ricordi as unknown[] : []
+    for (const voce of voci) {
+      if (!Array.isArray(voce) || typeof voce[0] !== 'string' || !voce[1] || typeof voce[1] !== 'object') continue
+      const [id, r] = voce as [string, Ricordo]
+      const k = `${c}|${id}`
+      if (typeof r.chiede === 'number' && typeof r.urgenza === 'number' && typeof r.genere === 'string' && GENERI.has(r.genere)) {
+        memoria.set(k, {
+          chiede: r.chiede, urgenza: r.urgenza, genere: r.genere,
+          sicurezza: typeof r.sicurezza === 'number' ? r.sicurezza : 0,
+          ...(typeof r.peso === 'number' ? { peso: r.peso } : {})
+        })
+      }
+      if (typeof r.peso === 'number') pesi.set(k, r.peso)
+    }
+  } catch { /* nessun file, o storto: si riparte da zero e Jev rigiudica */ }
+}
+
+function salva() {
+  const f = fileRicordi()
+  if (!f) return
+  const prefisso = `${conto()}|`
+  const ricordi = new Map<string, Ricordo>()
+  for (const [k, g] of memoria) if (k.startsWith(prefisso)) ricordi.set(k.slice(prefisso.length), g)
+  for (const [k, p] of pesi) {
+    if (!k.startsWith(prefisso)) continue
+    const id = k.slice(prefisso.length)
+    ricordi.set(id, { ...ricordi.get(id), peso: p })
+  }
+  try {
+    const dir = cartella()
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const tmp = `${f}.${process.pid}.tmp`
+    writeFileSync(tmp, JSON.stringify({ versione: 1, ricordi: [...ricordi.entries()].slice(-PER_CONTO) }), { mode: 0o600 })
+    renameSync(tmp, f)
+  } catch (e) {
+    console.warn('myynd · jev · non riesco a scrivere giudizi.json:', e instanceof Error ? e.message : e)
+  }
+}
+
+/**
+ * Dimentica i giudizi: la Map e, salvo `soloMemoria`, anche il file del conto.
+ *
+ * `soloMemoria` è quello che succede a un riavvio, e serve alle prove per
+ * dimostrare che il file basta.
+ */
+export function scorda(opz: { soloMemoria?: boolean } = {}) {
+  memoria.clear(); pesi.clear(); caricati.clear()
+  if (opz.soloMemoria) return
+  const f = fileRicordi()
+  if (f) { try { unlinkSync(f) } catch { /* non c'era */ } }
+}
+
+/** Una riga nel registro per ogni giro: è l'unico posto dove si vede cosa costa Jev. */
+function registra(cosa: string, conti: { giudicati: number; noti: number; muti: number; fuori: number }) {
+  const c = jev.consumo()
+  console.log(
+    `myynd · jev · ${cosa} · ${conti.giudicati} giudicati, ${conti.noti} già noti, ${conti.muti} senza risposta` +
+    `${conti.fuori ? `, ${conti.fuori} oltre il tetto del giro` : ''} · oggi ${c.giudizi}/${jev.TETTO_AL_GIORNO} giudizi, ${c.gettoni.toLocaleString('it')} gettoni`
+  )
+}
 
 /**
  * Cosa ne pensa Jev di questi documenti.
@@ -176,55 +297,83 @@ export function scorda() { memoria.clear(); pesi.clear() }
 export async function attenzione(docs: readonly Documento[], tetto = 60): Promise<Map<string, Giudizio>> {
   const fuori = new Map<string, Giudizio>()
   if (!docs.length) return fuori
+  carica()
   const daChiedere: Documento[] = []
+  let oltre = 0
   for (const d of docs) {
     const gia = memoria.get(dove(d.id))
     if (gia) fuori.set(d.id, gia)
     else if (daChiedere.length < tetto) daChiedere.push(d)
+    else oltre++
   }
   if (!daChiedere.length || !jev.collegato()) return fuori
-  const risposte = await jev.giudicaTanti(daChiedere, scheda, ATTENZIONE)
+  const risposte = await jev.giudicaTanti(daChiedere, scheda, ATTENZIONE, { facoltative: FACOLTATIVE })
+  let giudicati = 0
   for (const [d, r] of risposte) {
     if (!r) continue
     const g: Giudizio = {
       chiede: r.chiede.noul,
       urgenza: r.urgenza.score,
       genere: r.genere.choice as Genere,
-      sicurezza: r.genere.confidence
+      sicurezza: r.genere.confidence,
+      ...(r.peso ? { peso: r.peso.score } : {})
     }
     if (memoria.size >= PER_CONTO) memoria.clear()
     memoria.set(dove(d.id), g)
+    if (g.peso !== undefined) pesi.set(dove(d.id), g.peso)
     fuori.set(d.id, g)
+    giudicati++
   }
+  registra('documenti', { giudicati, noti: fuori.size - giudicati, muti: daChiedere.length - giudicati, fuori: oltre })
+  if (giudicati) salva()
   return fuori
 }
 
 /**
  * Quanto ciascun documento dice sul lavoro che ha in mano, da 0 a 3.
  *
- * Serve alle priorità, che guardano novanta giorni e anche le sue parole. Non
- * si divide la memoria con `attenzione`: è un'altra domanda, e una risposta
- * alla domanda sbagliata è peggio di nessuna risposta.
+ * Serve alle priorità, che guardano novanta giorni e anche le sue parole.
+ * Prima si guarda se la lettura del feed l'ha già chiesto — la quarta
+ * domanda di `attenzione` è questa — e solo per il resto si chiama Jev.
  */
-const pesi = new Map<string, number>()
 export async function peso(docs: readonly Documento[], tetto = 60): Promise<Map<string, number>> {
   const fuori = new Map<string, number>()
   if (!docs.length) return fuori
+  carica()
   const daChiedere: Documento[] = []
+  let oltre = 0
   for (const d of docs) {
-    const gia = pesi.get(dove(d.id))
+    const gia = pesi.get(dove(d.id)) ?? memoria.get(dove(d.id))?.peso
     if (gia !== undefined) fuori.set(d.id, gia)
     else if (daChiedere.length < tetto) daChiedere.push(d)
+    else oltre++
   }
   if (!daChiedere.length || !jev.collegato()) return fuori
   const risposte = await jev.giudicaTanti(daChiedere, scheda, { peso: PESO })
+  let giudicati = 0
   for (const [d, r] of risposte) {
     if (!r) continue
     if (pesi.size >= PER_CONTO) pesi.clear()
     pesi.set(dove(d.id), r.peso.score)
     fuori.set(d.id, r.peso.score)
+    giudicati++
   }
+  registra('peso', { giudicati, noti: fuori.size - giudicati, muti: daChiedere.length - giudicati, fuori: oltre })
+  if (giudicati) salva()
   return fuori
+}
+
+/**
+ * Quanto è urgente il documento dietro una carta, se Jev l'ha già letto.
+ *
+ * È il punto di partenza del peso di una carta nata da quel documento: la
+ * lettura del feed l'ha giudicato prima di far leggere il documento al
+ * modello grande, e quella risposta non si paga due volte. `null` se nessuno
+ * gliel'ha mai chiesto.
+ */
+export function priorDelDocumento(id: string): number | null {
+  carica()
+  return memoria.get(dove(id))?.urgenza ?? null
 }
 
 // — cosa farne —
@@ -409,5 +558,115 @@ export async function progettoDelle<T extends Carta>(
     if (!p || p.choice === 'nessuno') continue
     if ((p.probabilities[p.choice] ?? 0) >= SOGLIA_PROGETTO) fuori.set(c, p.choice)
   }
+  return fuori
+}
+
+// — si capisce, e quanto conta —
+
+/**
+ * Sotto questa probabilità una carta non si capisce al primo sguardo, e il
+ * modello grande la riscrive.
+ *
+ * Misurata il 21 settembre 2026 sulle sue carte vere (`npm run prova:jev --
+ * --conto … --carte`), il giorno in cui le ha chiamate «chaotic, confusing».
+ * Le sette aperte: «Verify Jev keeps Myynd data local…» (cuce due fonti con
+ * un «while») 0.18, «Unblock genuine incoming DM replies in Hermes» 0.18,
+ * «Choose the first audience angle…» 0.30, «Approve the X draft…» 0.30,
+ * «Record the Myynd walkthrough…» 0.42; e le due che si leggono, «Prepare
+ * for Amanda's Myynd audit on September 22» 0.70 e «Fix Evermute's family
+ * account issues…» 0.76. Le chiuse da poco stanno fra 0.26 e 0.60. Carte
+ * scritte a mano come dovrebbero essere — «Reply to Apple about the Evermute
+ * review video / Apple asked for a device recording; nothing went back yet»
+ * 0.90, «Pay the Rossi invoice / It is due Friday and Rossi wrote twice»
+ * 0.93, «Rispondi a Sara sulla proposta» 0.86, «Paga l'F24 entro il 30» 0.88
+ * — stanno sopra 0.68; quelle buone ma senza un perché adesso («Pick an
+ * audience for tobiadonadon.com») fra 0.45 e 0.50; una newsletter 0.10, un
+ * titolo di gergo 0.19. Fra 0.50 e 0.60 non c'è finito niente: la soglia sta
+ * lì. Sbagliare per eccesso costa una riscrittura piccola, che il codice
+ * rilegge; sbagliare per difetto lascia sulla pagina la carta che non capiva.
+ */
+export const SOGLIA_CHIARA = 0.55
+
+export type CartaIntera = Carta & { tipo?: string | null; perche?: string | null; urgenza?: string | null }
+export type GiudizioCarta = { chiara: number; peso: number }
+
+const CHIARA = {
+  type: 'noul',
+  instructions:
+    'A busy person reading only the title and the line under it would know at a glance what to do and why it matters now.',
+  criteria: {
+    true: {
+      what:
+        'The title names one concrete action on one concrete thing, and the line says who is waiting or why now, ' +
+        'in the plain words a colleague would use across a desk',
+      examples: [
+        'Reply to Apple about the review video. Apple asked for a device recording; nothing went back yet.',
+        'Pay the Rossi invoice. It is due Friday and Rossi wrote twice.'
+      ]
+    },
+    false: {
+      what:
+        'The reader would have to stop and think: two sources stitched together with «while», talk of commits, ' +
+        'reviews, lanes, angles or positioning instead of the situation, product or consulting jargon, a line that ' +
+        'describes a document instead of saying what to do, or no reason why it matters now',
+      examples: [
+        'The March commit uses the new parser for imports, while the vendor review says real use calls its service.',
+        'Unblock the authorized inbound lane: the upgrade notes say it remains gated despite the restored schedules.'
+      ]
+    }
+  }
+} as const satisfies jev.Noul
+
+const PESO_CARTA = {
+  type: 'score',
+  instructions: 'How much it matters that he sees and acts on this card today, given today’s date.',
+  criteria: [
+    'Background: nothing of his is waiting; he can read it whenever, or never',
+    'Worth doing this week; no date and nobody blocked',
+    'A person is waiting on him, or a date lands within a few days',
+    'Today or late: money at stake, a deadline today or tomorrow, someone stuck waiting on him'
+  ]
+} as const satisfies jev.Livelli
+
+const GIORNI = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+/** «Monday 2026-09-21», nel fuso di chi guarda: a mezzanotte l'ISO direbbe ieri. */
+function giornoDi(d: Date): string {
+  const due = (n: number) => String(n).padStart(2, '0')
+  return `${GIORNI[d.getDay()]} ${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}`
+}
+
+/**
+ * Le due domande sulla carta, in una chiamata: si capisce? e quanto conta oggi?
+ *
+ * La data di oggi sta nel materiale, perché «domani alle 9:30» vale tre solo
+ * se domani è domani. Nessuna memoria: una carta si giudica quando nasce, e
+ * nasce una volta.
+ */
+export async function giudicaCarte<T extends CartaIntera>(
+  carte: readonly T[],
+  opz: { oggi?: Date } = {}
+): Promise<Map<T, GiudizioCarta>> {
+  const fuori = new Map<T, GiudizioCarta>()
+  if (!carte.length || !jev.collegato()) return fuori
+  const oggi = opz.oggi ?? new Date()
+  const persona = leggi().nome || 'Tobia'
+  const risposte = await jev.giudicaTanti(carte, c => ({
+    persona,
+    oggi: giornoDi(oggi),
+    carta: {
+      tipo: c.tipo ?? '',
+      titolo: c.titolo.slice(0, 200),
+      testo: (c.testo ?? '').slice(0, 400),
+      perche: (c.perche ?? '').slice(0, 200),
+      urgenza: (c.urgenza ?? '').slice(0, 80)
+    }
+  }), { chiara: CHIARA, peso: PESO_CARTA })
+  let giudicati = 0
+  for (const [c, r] of risposte) {
+    if (!r) continue
+    fuori.set(c, { chiara: r.chiara.noul, peso: r.peso.score })
+    giudicati++
+  }
+  registra('carte', { giudicati, noti: 0, muti: carte.length - giudicati, fuori: 0 })
   return fuori
 }
