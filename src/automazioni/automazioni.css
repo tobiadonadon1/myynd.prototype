@@ -192,7 +192,10 @@
 }
 
 /* — i binari: un colore solo, il rame, e solo dove distingue — */
-.auto-binari{--inchiostro:var(--inchiostro);--rame:var(--rame);--rame-cupo:var(--rame-testo);--avorio:var(--avorio);--bordo:rgba(var(--inchiostro-rgb),.16);color:var(--inchiostro)}
+/* niente `--x: var(--x)`: una variabile che rimanda a se stessa non vale, e
+   dentro i binari spegneva l'inchiostro, il rame e l'avorio — la frase in cima
+   restava senza il suo fondo, il pallino acceso senza il suo rame */
+.auto-binari{--rame-cupo:var(--rame-testo);--bordo:rgba(var(--inchiostro-rgb),.16);color:var(--inchiostro)}
 .auto-frase{margin:0 0 18px;padding:14px 16px;border-radius:14px;background:var(--inchiostro);color:var(--avorio);font-size:14.5px;line-height:1.55;letter-spacing:-.1px;text-wrap:pretty}
 .auto-tratto{position:relative;padding:0 0 18px 26px}
 .auto-tratto:before{content:'';position:absolute;left:7px;top:6px;bottom:-6px;width:2px;background:rgba(var(--inchiostro-rgb),.22)}
@@ -202,6 +205,15 @@
 .auto-tratto.attivo .auto-tratto-eyebrow span{border-color:var(--rame);background:var(--rame)}
 .auto-tratto-eyebrow b{font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--inchiostro)}
 .auto-tratto-body{display:flex;flex-direction:column;gap:10px}
+/* il tratto che si apre col suo nome: la testa è un bottone, e chiusa porta
+   una riga con quello che c'è dentro — sottovoce, e mai oltre il riquadro */
+.auto-tratto-testa{width:100%;min-width:0;border:0;background:none;padding:0;font-family:inherit;text-align:left;cursor:pointer;color:inherit}
+.auto-tratto-testa em{flex:1;min-width:0;font-style:normal;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.auto-tratto-testa i{margin-left:auto;flex:none;width:18px;height:18px;display:grid;place-items:center;border-radius:6px;font-style:normal;font-size:13px;line-height:1;color:rgba(var(--inchiostro-rgb),.5)}
+.auto-tratto-testa:hover b,.auto-tratto-testa:hover i{color:var(--rame-testo)}
+.auto-tratto-testa:focus-visible{outline:2px solid var(--rame);outline-offset:3px;border-radius:6px}
+.auto-tratto.chiuso .auto-tratto-eyebrow{margin-bottom:0}
+.auto-tratto.chiuso{padding-bottom:14px}
 .auto-pillole{display:flex;flex-wrap:wrap;gap:6px}
 .auto-pillola{padding:7px 13px;border-radius:99px;border:1px solid rgba(var(--inchiostro-rgb),.22);background:var(--carta-piena);color:var(--inchiostro);font:inherit;font-size:12.5px;cursor:pointer}
 .auto-pillola:hover{border-color:var(--inchiostro)}

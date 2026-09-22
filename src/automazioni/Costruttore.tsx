@@ -42,18 +42,46 @@ export function fraseDi(r: RicettaComposta, catalogo: Attrezzo[]): string {
   const legge = fonti.length ? `${t('legge')} ${fonti.join(', ')}` : t('guarda quello che ha già letto')
   const cerca = r.guarda.cerca?.trim() ? ` ${t('cercando')} «${r.guarda.cerca.trim()}»` : ''
   const passi = r.passi?.length ? `, ${r.passi.length === 1 ? t('un passaggio in mezzo') : `${r.passi.length} ${t('passaggi in mezzo')}`}` : ''
-  const modo = r.metti.modo === 'bozza' ? t('scrive anche la bozza') : r.metti.modo === 'tutto' ? t('fa tutto il lavoro') : r.metti.modo === 'prompt' ? t('prepara il prompt') : t('mette una riga in lista')
+  const modo = r.metti.modo === 'bozza' ? t('prepara anche il lavoro') : r.metti.modo === 'tutto' ? t('fa tutto il lavoro') : r.metti.modo === 'prompt' ? t('prepara il prompt') : t('mette una riga in lista')
   const dove = r.metti.inLista === 'oggi' ? t('in Oggi') : r.metti.inLista === 'settimana' ? t('in Questa settimana') : t('in Prima o poi')
   const per = r.metti.perDocumento ? `, ${t('una per documento')}` : ''
   const q = quandoFrase(r.quando)
   return `${q.charAt(0).toUpperCase()}${q.slice(1)}, ${legge}${cerca}${passi}, ${t('e')} ${modo} ${dove}${per}.`
 }
 
-function Tratto({ eyebrow, children, attivo }: { eyebrow: string; children: React.ReactNode; attivo?: boolean }) {
+/**
+ * Un tratto dei binari: chiuso, è il suo nome e una riga con quello che dice.
+ *
+ * «Some things in the builder can be collapsed at start. Processes don't have
+ * to be, by definition, open.» Erano tutti aperti, sempre: sei riquadri di
+ * controlli per un'automazione che si apre quasi sempre per guardarla, non per
+ * rifarla. Adesso ognuno si apre col suo nome, e chiuso dice in una riga cosa
+ * c'è dentro. La frase nera in cima racconta già il tutto.
+ */
+function Tratto({ eyebrow, children, attivo, riassunto, aperto = true, alterna, quandoSopra }: {
+  eyebrow: string; children: React.ReactNode; attivo?: boolean
+  /** Quello che si legge a tratto chiuso. */
+  riassunto?: string
+  aperto?: boolean
+  /** Apre o chiude; senza, il tratto non si chiude. */
+  alterna?: () => void
+  /** Una tessera trascinata sopra un tratto chiuso lo apre: la zona di caduta è dentro. */
+  quandoSopra?: () => void
+}) {
+  const testa = alterna
+    ? (
+      <button type="button" className="auto-tratto-eyebrow auto-tratto-testa" aria-expanded={aperto} onClick={alterna}>
+        <span /><b>{eyebrow}</b>
+        {!aperto && riassunto && <em>{riassunto}</em>}
+        <i aria-hidden="true">{aperto ? '−' : '+'}</i>
+      </button>
+    )
+    : <div className="auto-tratto-eyebrow"><span /><b>{eyebrow}</b></div>
   return (
-    <section className={`auto-tratto${attivo ? ' attivo' : ''}`}>
-      <div className="auto-tratto-eyebrow"><span /><b>{eyebrow}</b></div>
-      <div className="auto-tratto-body">{children}</div>
+    <section className={`auto-tratto${attivo ? ' attivo' : ''}${aperto ? '' : ' chiuso'}`}
+      onDragOver={!aperto && quandoSopra ? e => { e.preventDefault(); quandoSopra() } : undefined}>
+      {testa}
+      {aperto && <div className="auto-tratto-body">{children}</div>}
     </section>
   )
 }
@@ -92,6 +120,18 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
   const [aperto, setAperto] = useState<string | null>(null)
   const suoi = r.attrezzi ?? []
   const passi = r.passi ?? []
+  /*
+   * Quali tratti sono aperti. All'inizio solo «Fa» — è la cosa per cui si apre
+   * un'automazione — e quelli ancora vuoti, che vanno scritti: un'automazione
+   * nuova si apre da scrivere, una che c'è si apre da leggere.
+   */
+  const [espansi, setEspansi] = useState<Set<string>>(() => new Set([
+    'fa',
+    ...(passi.filter(p => !p.testo.trim()).map(p => p.id))
+  ]))
+  const alterna = (k: string) => () => setEspansi(v => { const n = new Set(v); if (n.has(k)) n.delete(k); else n.add(k); return n })
+  const apri = (k: string) => () => setEspansi(v => v.has(k) ? v : new Set([...v, k]))
+  const riga = (s: string, quanto = 90) => { const u = s.replace(/\s+/g, ' ').trim(); return u.length > quanto ? `${u.slice(0, quanto - 1)}…` : u }
   const q = r.quando
   const cadenza = 'quandoArriva' in q ? 'arrivo' : q.ogni
   const ora = 'quandoArriva' in q ? 8 : q.ora
@@ -101,7 +141,7 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
   const togli = (nome: string) => cambia({ ...r, attrezzi: suoi.filter(x => x !== nome) })
   const cadenzaScelta = (c: 'arrivo' | 'giorno' | 'settimana') => cambia({ ...r, quando: c === 'arrivo' ? { quandoArriva: true } : c === 'giorno' ? { ogni: 'giorno', ora } : { ogni: 'settimana', giorno, ora } })
   const passiCambia = (p: Passo[]) => cambia({ ...r, passi: p })
-  const nuovoPasso = (tipo: Passo['tipo']) => { const id = crypto.randomUUID(); passiCambia([...passi, { id, tipo, testo: '' }]); setAperto(id) }
+  const nuovoPasso = (tipo: Passo['tipo']) => { const id = crypto.randomUUID(); passiCambia([...passi, { id, tipo, testo: '' }]); setAperto(id); apri(id)() }
   const sposta = (id: string, primaDi: string | null) => {
     const da = passi.findIndex(p => p.id === id)
     if (da < 0) return
@@ -116,7 +156,8 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
     <div className="auto-binari">
       <p className="auto-frase">{fraseDi(r, catalogo)}</p>
 
-      <Tratto eyebrow={t('Quando')}>
+      <Tratto eyebrow={t('Quando')} aperto={espansi.has('quando')} alterna={alterna('quando')}
+        riassunto={(q => q.charAt(0).toUpperCase() + q.slice(1))(quandoFrase(q))}>
         <Pillole etichetta={t('Quando gira')} valore={cadenza} scegli={cadenzaScelta} voci={[
           ['arrivo', t('Quando arriva qualcosa')], ['giorno', t('Ogni giorno')], ['settimana', t('Ogni settimana')]
         ]} />
@@ -146,7 +187,11 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
           in cui si scrive «@». Si può ancora lasciarci cadere una tessera —
           la zona di caduta è il campo stesso — ma non c'è più niente da
           leggere prima di sapere cosa si vuole. */}
-      <Tratto eyebrow={t('Legge')} attivo={sopra || cercaFonte}>
+      <Tratto eyebrow={t('Legge')} attivo={sopra || cercaFonte} aperto={espansi.has('legge')} alterna={alterna('legge')} quandoSopra={apri('legge')}
+        riassunto={riga([
+          suoi.length ? suoi.map(n => catalogo.find(a => a.nome === n)?.etichetta ?? n).join(', ') : t('Quello che ha già letto'),
+          r.guarda.cerca?.trim() ? `«${r.guarda.cerca.trim()}»` : ''
+        ].filter(Boolean).join(' · '))}>
         <MenzioneFonti catalogo={catalogo} scelte={suoi} aggiungi={aggiungi} togli={togli}
           sopra={sopra} setSopra={setSopra} setCerca={setCercaFonte}
           suDrop={e => { e.preventDefault(); setSopra(false); const n = dato(e, FONTE); if (n) aggiungi(n) }}
@@ -171,7 +216,8 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
       </Tratto>
 
       {passi.map((p, i) => (
-        <Tratto key={p.id} eyebrow={p.tipo === 'condizione' ? t('Solo se') : t('Poi')} attivo={trascino === p.id}>
+        <Tratto key={p.id} eyebrow={p.tipo === 'condizione' ? t('Solo se') : t('Poi')} attivo={trascino === p.id}
+          aperto={espansi.has(p.id)} alterna={alterna(p.id)} riassunto={riga(p.testo)}>
           <div className={`auto-passo${trascino === p.id ? ' trascinato' : ''}`}
             draggable
             onDragStart={e => { e.dataTransfer.setData('text/plain', PASSO + p.id); e.dataTransfer.effectAllowed = 'move'; setTrascino(p.id) }}
@@ -200,16 +246,18 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
         <span>{passi.length}/6</span>
       </div>
 
-      <Tratto eyebrow={t('Fa')}>
+      <Tratto eyebrow={t('Fa')} aperto={espansi.has('fa')} alterna={alterna('fa')} riassunto={riga(r.fai)}>
         <textarea className="auto-fai" rows={4} aria-label={t('Cosa deve farne')} value={r.fai} maxLength={4000}
           placeholder={t('Dimmi quali preventivi sono ancora senza risposta: chi, cosa, da quanto. Se non ce n’è, dillo e basta.')}
           onChange={e => cambia({ ...r, fai: e.target.value })} />
         <Pillole etichetta={t('Quanto fa')} valore={r.metti.modo ?? 'io'} scegli={m => cambia({ ...r, metti: { ...r.metti, modo: m } })} voci={[
-          ['io', t('Mette una riga')], ['bozza', t('Scrive anche la bozza')], ['tutto', t('Fa tutto il lavoro')], ['prompt', t('Prepara il prompt')]
+          ['io', t('Mette una riga')], ['bozza', t('Prepara anche il lavoro')], ['tutto', t('Fa tutto il lavoro')], ['prompt', t('Prepara il prompt')]
         ]} />
       </Tratto>
 
-      <Tratto eyebrow={t('Mette')}>
+      <Tratto eyebrow={t('Mette')} aperto={espansi.has('mette')} alterna={alterna('mette')}
+        riassunto={[r.metti.inLista === 'oggi' ? t('Oggi') : r.metti.inLista === 'settimana' ? t('Questa settimana') : t('Prima o poi'),
+          r.metti.perDocumento ? t('una per documento') : ''].filter(Boolean).join(' · ')}>
         <Pillole etichetta={t('In che lista')} valore={r.metti.inLista} scegli={l => cambia({ ...r, metti: { ...r.metti, inLista: l } })} voci={[
           ['oggi', t('Oggi')], ['settimana', t('Questa settimana')], ['poi', t('Prima o poi')]
         ]} />

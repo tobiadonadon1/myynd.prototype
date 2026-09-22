@@ -23,7 +23,7 @@
 // che hai scritto tu senza che tu l'abbia chiesto non è un aiuto.
 
 import { useEffect, useRef, useState } from 'react'
-import { Costruttore } from './Costruttore'
+import { Costruttore, fraseDi } from './Costruttore'
 import { api, type Anteprima as AnteprimaDati, type Attrezzo, type Automazione, type Raccolta, type RicettaComposta } from '../api'
 import { interpreta } from './interpreta'
 import { frasi, loc, t } from '../lingua'
@@ -210,7 +210,9 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   chiudi: () => void
   spostata: (id: string, raccolta: string | null) => void
 }) {
-  const [dove, setDove] = useState<'parole' | 'campi'>('campi')
+  // «The automation should open in the words panel»: si apre da leggere, a
+  // parole; i binari sono per chi vuole cambiarne un pezzo
+  const [dove, setDove] = useState<'parole' | 'campi'>('parole')
 
   const [confermaChiusura, setConfermaChiusura] = useState(false)
   const chiediChiusura = () => { if (modificata) setConfermaChiusura(true); else chiudi() }
@@ -226,6 +228,8 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
   const [perDocumento, setPerDocumento] = useState(!!a.metti.perDocumento)
   const [suoi, setSuoi] = useState<string[]>(a.attrezzi)
   const [cartella, setCartella] = useState(a.cartella ?? '')
+  /** La ricetta com'è adesso, con le modifiche non salvate: la leggono i binari e la frase a parole. */
+  const ricetta = { nome, spiega, quando, guarda: { ...a.guarda, cerca }, fai, passi, metti: { inLista, modo, ...(perDocumento ? { perDocumento: true as const } : {}) }, attrezzi: suoi, cartella }
 
   const [richiesta, setRichiesta] = useState('')
   /**
@@ -419,6 +423,10 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
 
           {dove === 'parole' ? (
             <div>
+              {/* a parole, prima di tutto quello che fa adesso: è la stessa frase
+                  che sta in cima ai binari, ed era la prima cosa che si leggeva
+                  aprendola quando si apriva sui binari */}
+              <p className="auto-frase">{fraseDi(ricetta, catalogo)}</p>
               <Campo etichetta={t('Cosa vuoi cambiare')}
                 nota={t('Dillo come lo diresti a voce. Tengo tutto il resto com’è. Con @ aggiungi cosa può aprire.')}>
                 <Casella
@@ -449,7 +457,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
                 non sono la ricetta: sono come la si chiama.
               */}
               <Costruttore catalogo={catalogo} cartelle={cartelle}
-                r={{ nome, spiega, quando, guarda: { ...a.guarda, cerca }, fai, passi, metti: { inLista, modo, ...(perDocumento ? { perDocumento: true } : {}) }, attrezzi: suoi, cartella }}
+                r={ricetta}
                 cambia={n => {
                   setQuando(n.quando); setCerca(n.guarda.cerca ?? ''); setFai(n.fai); setPassi(n.passi ?? [])
                   setInLista(n.metti.inLista); setModo(n.metti.modo ?? 'io'); setPerDocumento(!!n.metti.perDocumento)
