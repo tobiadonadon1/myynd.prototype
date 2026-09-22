@@ -124,8 +124,12 @@ test('le bozze passano dall’abbonamento quando è quello scelto', () => {
   // finché non lo facevano, «lavora con l'abbonamento» non valeva per la cosa
   // che l'app fa di più — e nessuna schermata lo diceva
   const c = readFileSync(join(QUI, 'claude.ts'), 'utf8')
-  assert.match(c, /const soloAbbonamento = !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/,
+  // la regola sta in `modello.ts` dal 22 settembre 2026: la guardano insieme
+  // `svolgi` e la rotta che affida, così non possono più dire cose diverse
+  assert.match(c, /const soloAbbonamento = conLAccountClaude\(\)/,
     'le bozze non guardano più l’abbonamento: tornano tutte sulla chiave')
+  const m = readFileSync(join(QUI, 'modello.ts'), 'utf8')
+  assert.match(m, /export function soloAbbonamento\(\): boolean \{\s*return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/)
   // senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice che
   // quello che ha davanti è tutto quello che avrà
   assert.match(c, /non puoi cercarne altro/,

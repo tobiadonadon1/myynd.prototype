@@ -193,8 +193,8 @@ function LApp() {
       {/* Spento finché non lo si accende: il brief vuole un'app quieta, e un
           avviso è un'interruzione che si sceglie. */}
       <div className="prefs-riga">
-        <div className="prefs-nome">{t('Avvisami quando una bozza è pronta')}</div>
-        <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando una bozza è pronta')}
+        <div className="prefs-nome">{t('Avvisami quando un lavoro è pronto')}</div>
+        <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando un lavoro è pronto')}
           onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
       </div>
 

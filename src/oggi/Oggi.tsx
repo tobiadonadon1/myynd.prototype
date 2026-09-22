@@ -48,10 +48,12 @@ const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settima
  */
 const MODI = [
   { id: 'io', nome: 'io', cosa: 'La fai tu. Myynd non la tocca.' },
-  { id: 'bozza', nome: 'bozza', cosa: 'Cerca nel tuo materiale e scrive la cosa. La rileggi tu prima che esca.' },
+  // «bozza» era il nome, e lui non la vuole chiamare così: quello che Myynd
+  // consegna è un lavoro — un file, una risposta, un cambio nel progetto
+  { id: 'bozza', nome: 'lavoro', cosa: 'Cerca nel tuo materiale e scrive la cosa. La rileggi tu prima che esca.' },
   // la terza colonna porta il suo nome: è lui che se ne occupa, e «tutto» non
   // diceva di chi
-  { id: 'tutto', nome: 'Myynd', cosa: 'Come la bozza, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.' }
+  { id: 'tutto', nome: 'Myynd', cosa: 'Come il lavoro, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.' }
 ] as const
 
 // `useLarghezza` sta in ui.tsx: la usa anche l'impaginato intero, e due copie
@@ -783,7 +785,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             if (e.key === 'Escape') { e.stopPropagation(); setTesto(c.risultato ?? ''); setModifico(false) }
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), testo)
           }}
-          aria-label={prompt ? t('Il prompt') : t('La bozza')}
+          aria-label={prompt ? t('Il prompt') : t('Il lavoro')}
           style={{
             width: '100%', boxSizing: 'border-box', border: 'none', background: 'none', outline: 'none',
             resize: 'none', color: 'var(--inchiostro)', fontSize: '14px', lineHeight: 1.6,

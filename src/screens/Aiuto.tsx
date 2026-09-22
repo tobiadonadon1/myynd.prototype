@@ -35,7 +35,7 @@ const ETICHETTE: Record<string, () => string> = {
   settimana: () => t('Questa settimana'),
   poi: () => t('Prima o poi'),
   io: () => t('io'),
-  bozza: () => t('bozza'),
+  bozza: () => t('lavoro'),
   pronta: () => t('pronta'),
   tiChiede: () => t('ti chiede'),
   vaBene: () => t('Va bene'),

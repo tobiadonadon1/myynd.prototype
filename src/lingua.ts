@@ -238,7 +238,7 @@ const EN: Record<string, string> = {
   'ogni mattina.': 'every morning.',
   'Cosa aspetta te, cosa può aspettare, cosa è già a posto.': 'What needs you, what can wait, what is already handled.',
   'Prepara, tu decidi': 'It prepares, you decide',
-  'Scrive la bozza.': 'It writes the draft.',
+  'Fa il lavoro.': 'It does the work.',
   'Tu premi Invia.': 'You press Send.',
   'Risposte, brief, riassunti: pronti prima che li chieda. Niente esce senza di te.': 'Replies, briefs, summaries: ready before you ask. Nothing goes out without you.',
   'Resta tuo': 'It stays yours',
@@ -307,8 +307,8 @@ const EN: Record<string, string> = {
   'Punto di partenza': 'Starting point',
   'Rivedi il progetto, l’obiettivo, la fonte e la prima attività che orientano Myynd.': 'Review the project, goal, source and first task that guide Myynd.',
   'Rivedi configurazione': 'Review setup',
-  'Usa Claude Code su questo computer. È incluso nel tuo piano; le bozze lavorano sul materiale che Myynd ha già trovato.': 'Uses Claude Code on this computer. It is included in your plan; drafts work from material Myynd has already found.',
-  'Usa il credito API di Anthropic. Le bozze possono fare più giri di ricerca prima di scrivere.': 'Uses Anthropic API credit. Drafts can make several search passes before writing.',
+  'Usa Claude Code su questo computer. È incluso nel tuo piano; il lavoro parte dal materiale che Myynd ha già trovato.': 'Uses Claude Code on this computer. It is included in your plan; the work starts from material Myynd has already found.',
+  'Usa il credito API di Anthropic. Il lavoro può fare più giri di ricerca prima di scrivere.': 'Uses Anthropic API credit. The work can make several search passes before writing.',
   'In uso': 'In use',
   'Da configurare': 'Setup needed',
   'Pronto': 'Ready',
@@ -1145,7 +1145,6 @@ const EN: Record<string, string> = {
   'Riprova': 'Try again',
   'Il tuo conto': 'Your account',
   'Errore.': 'Error.',
-  'Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.': 'Drafts need an API key or a provider: the subscription covers chat only.',
   'Troppi tentativi. Riprova fra un minuto.': 'Too many attempts. Try again in a minute.',
   'Quell’host non si può raggiungere da qui.': 'That host cannot be reached from here.',
   'Su un server la posta si legge solo sulle porte 993 o 143.': 'On a server, mail is only read on ports 993 or 143.',
@@ -1273,7 +1272,8 @@ const EN: Record<string, string> = {
   'Le fatte': 'The done ones',
   'Mostra o nascondi': 'Show or hide',
   'io': 'me',
-  'bozza': 'draft',
+  'lavoro': 'work',
+  'Lo fa lui, lo mandi tu': 'It does it, you send it',
   'tutto': 'Myynd',
   'Myynd': 'Myynd',
   'pronta': 'ready',
@@ -1297,7 +1297,7 @@ const EN: Record<string, string> = {
   'Notizie': 'News',
   'Chiudila': 'Close it',
   'Il testo della riga': 'The text of the line',
-  'La bozza': 'The draft',
+  'Il lavoro': 'The work',
   "Com'è andata": 'How it went',
   'Rileggi': 'Read it',
   'scarta la bozza': 'discard the draft',
@@ -1638,7 +1638,7 @@ const EN: Record<string, string> = {
   'Solo osservare': 'Watch only',
   'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.': 'Reads and indexes. Before suggesting anything to act on, it asks.',
   'Preparare e aspettare': 'Prepare and wait',
-  'Scrive bozze e brief, niente esce senza il tuo Invia.': 'Writes drafts and briefs; nothing goes out without your Send.',
+  'Prepara il lavoro, niente esce senza il tuo Invia.': 'Prepares the work; nothing goes out without your Send.',
   'Agire sulla routine': 'Act on the routine',
   'Archivia e risponde dove hai già confermato tre volte.': "Files and replies where you've already confirmed three times.",
   'Diretto': 'Direct',
@@ -2155,9 +2155,9 @@ const EN: Record<string, string> = {
   'Continua nell’app': 'Continue in the app',
   'Apri Myynd per entrare': 'Open Myynd to sign in',
   'Apri Myynd': 'Open Myynd',
-  'Una bozza è pronta.': 'A draft is ready.',
+  'Il lavoro è pronto.': 'Your work is ready.',
   'Myynd ti chiede una cosa.': 'Myynd is asking you something.',
-  'Avvisami quando una bozza è pronta': 'Tell me when a draft is ready',
+  'Avvisami quando un lavoro è pronto': 'Tell me when work is ready',
   'Un avviso di sistema, solo se Myynd non è davanti. Vale anche per le domande che ti fa.': 'A system notification, only when Myynd is not in front. Also for the questions it asks you.',
   'Apre il richiamo da qualunque programma: una riga da segnare, o una domanda con «?». Premuta di nuovo, lo chiude.': 'Opens the quick bar from any program: a line to note, or a question with “?”. Pressed again, it closes it.',
   // — il punto: la carta di quando torni —
@@ -2300,8 +2300,8 @@ const EN: Record<string, string> = {
   'La fai tu. Myynd non la tocca.': 'You do it. Myynd does not touch it.',
   'Cerca nel tuo materiale e scrive la cosa. La rileggi tu prima che esca.':
     'Searches your material and writes the thing. You read it before it goes out.',
-  'Come la bozza, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.':
-    'Like the draft, plus what you need to close it. The last step stays yours.',
+  'Come il lavoro, e in più ti dice cosa serve per chiuderla. L’ultimo passo resta tuo.':
+    'Like work, plus what you need to close it. The last step stays yours.',
   'Scomponila in chat': 'Break it down in chat',
   'Se è un obiettivo e non un compito': 'If it is a goal, not a task',
   'Non è un compito? Parlane in chat e scomponilo insieme a Myynd.': 'Not a task? Talk it through in chat and break it down with Myynd.',
@@ -3055,8 +3055,8 @@ export const frasi = {
     ? (n === 1 ? 'One thing to do.' : `${n} things to do.`)
     : (n === 1 ? 'Una cosa da fare.' : `${n} cose da fare.`),
   bozzeInAttesa: (n: number) => corrente === 'en'
-    ? (n === 1 ? 'one draft is waiting for you' : `${n} drafts are waiting for you`)
-    : (n === 1 ? 'una bozza aspetta te' : `${n} bozze aspettano te`),
+    ? (n === 1 ? 'one piece of work is waiting for you' : `${n} pieces of work are waiting for you`)
+    : (n === 1 ? 'un lavoro aspetta te' : `${n} lavori aspettano te`),
 
   // il singolare esiste, ed è il caso più comune al primo giorno: «1 sources»
   // è il genere di sciatteria che si nota subito e non si dimentica

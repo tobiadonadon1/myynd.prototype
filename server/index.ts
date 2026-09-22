@@ -2969,16 +2969,18 @@ app.post('/api/compiti/:id/delega', (req, res) => {
     return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   }
   /*
-   * Le bozze vogliono un motore vero, non l'abbonamento.
+   * Un lavoro affidato vuole qualcuno che lo faccia: la chiave, un fornitore,
+   * l'account ChatGPT — o l'account Claude, che qui prima non contava.
    *
-   * `svolgi` cerca e apre documenti a più giri, e quella strada Claude Code non
-   * la fa. Ma «un motore vero» è la chiave di Claude *oppure* il fornitore
-   * compatibile: chiedere `cliente()` — che è solo Anthropic — vietava le bozze
-   * proprio a chi aveva appena collegato OpenAI, mentre chat, feed e automazioni
-   * gli funzionavano. Meglio dirlo qui, prima di affidare, che con una rotella.
+   * Questa riga diceva «per le bozze serve una chiave API: l'abbonamento basta
+   * per la chat», ed era rimasta indietro rispetto a `svolgi`, che
+   * sull'abbonamento lavora da tempo: il materiale lo trova Myynd e all'account
+   * si chiede una passata sola. Il 22 settembre, con l'account Claude acceso e
+   * nessuna chiave, «Myynd takes it» rispondeva con quell'errore. La regola sta
+   * in `mod.puoLavorare`, la stessa che guarda `svolgi`.
    */
-  if (!mod.motore()) {
-    return errore(res, new Error('Per le bozze serve una chiave API o un fornitore: l’abbonamento basta per la chat.'), 400)
+  if (!mod.puoLavorare()) {
+    return errore(res, new Error('Collega Claude e potrò lavorarci.'), 400)
   }
   const modo = MODI.includes(String(req.body?.modo)) ? String(req.body.modo) : 'bozza'
   compiti.affida(c.id, modo)

@@ -81,8 +81,8 @@ function Scrivere() {
 function Comandi({ lingua }: { lingua: string }) {
   const [scelto, setScelto] = useState<string | null>(null)
   const voci = lingua === 'en'
-    ? [['/today', 'To do now'], ['/week', 'By Friday'], ['/draft', 'He writes it, you send it'], ['/myynd', 'Right up to the last step']]
-    : [['/oggi', 'Da fare adesso'], ['/settimana', 'Entro venerdì'], ['/bozza', 'La scrive lui, la mandi tu'], ['/myynd', "Fino all'ultimo passo"]]
+    ? [['/today', 'To do now'], ['/week', 'By Friday'], ['/work', 'It does it, you send it'], ['/myynd', 'Right up to the last step']]
+    : [['/oggi', 'Da fare adesso'], ['/settimana', 'Entro venerdì'], ['/lavoro', 'Lo fa lui, lo mandi tu'], ['/myynd', "Fino all'ultimo passo"]]
   return (
     <div style={{ ...CARTA, padding: 6 }}>
       {voci.map(([k, n]) => (
@@ -113,7 +113,7 @@ function Colonne() {
       <div style={{ ...GRIGLIA, padding: '0 16px' }}>
         <span />
         <span style={ETICHETTA}>{t('io')}</span>
-        <span style={ETICHETTA}>{t('bozza')}</span>
+        <span style={ETICHETTA}>{t('lavoro')}</span>
         <span style={ETICHETTA}>Myynd</span>
       </div>
       <div style={{ ...CARTA, ...GRIGLIA, borderLeft: modo === 'io' ? '2px solid transparent' : '2px solid rgba(var(--rame-rgb),.55)' }}>

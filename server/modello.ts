@@ -670,6 +670,25 @@ function senzaSilenzi(f: ReturnType<Anthropic['messages']['stream']>): Promise<A
   })
 }
 
+/**
+ * Può fare un lavoro affidato: un motore con gli attrezzi, o il suo account Claude.
+ *
+ * «It does not need an API key to produce the actual work on my desktop… if
+ * they want to use the account, they can use the account perfectly fine.»
+ * `svolgi` lavora anche sull'abbonamento — il materiale lo cerca Myynd, e
+ * all'account si chiede una passata sola — ma la rotta che affida chiedeva
+ * `motore()`, che l'abbonamento non lo conta: «Myynd takes it» rispondeva che
+ * serviva una chiave API. Una regola sola, qui, per la rotta e per `svolgi`.
+ */
+export function puoLavorare(): boolean {
+  return motore() !== null || soloAbbonamento()
+}
+
+/** L'account Claude, quando è lui a lavorare e non c'è un altro motore scelto. */
+export function soloAbbonamento(): boolean {
+  return !chatgpt.scelto() && abbonamento.disponibile() && fornitore() === null
+}
+
 export function motore(): Motore | null {
   if (chatgpt.scelto()) {
     const m = chatgpt.motore()

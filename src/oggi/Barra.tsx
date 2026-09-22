@@ -21,6 +21,8 @@ export type Comando = {
   /** Quello che si scrive. Due, perché un menù in inglese che vuole «/oggi» non è in inglese. */
   it: string
   en: string
+  /** Le parole di prima, che funzionano ancora: chi ha imparato «/draft» non deve reimpararlo. */
+  anche?: string[]
   nome: string
   nota: string
   quando?: Secchio
@@ -32,7 +34,9 @@ export const COMANDI: Comando[] = [
   { it: 'oggi',      en: 'today', nome: 'Oggi',            nota: 'Da fare adesso',             quando: 'oggi' },
   { it: 'settimana', en: 'week',  nome: 'Questa settimana', nota: 'Entro venerdì',             quando: 'settimana' },
   { it: 'poi',       en: 'later', nome: 'Prima o poi',      nota: 'Quando capita',             quando: 'poi' },
-  { it: 'bozza',     en: 'draft', nome: 'Chiedi la bozza',  nota: 'La scrive lui, la mandi tu', modo: 'bozza' },
+  // «lavoro», non «bozza»: quello che consegna è un lavoro (un file, una
+  // risposta pronta, un cambio nel progetto). «/bozza» e «/draft» valgono ancora
+  { it: 'lavoro',    en: 'work',  anche: ['bozza', 'draft'], nome: 'Fallo fare a Myynd', nota: 'Lo fa lui, lo mandi tu', modo: 'bozza' },
   { it: 'myynd',     en: 'myynd', nome: 'Falla fare a lui', nota: 'Fino all\'ultimo passo',    modo: 'tutto' },
   // la riga diventa una richiesta da incollare altrove: è quello che suo padre
   // avrebbe fatto a mano con tutte le note del to-do, se fosse servito
@@ -69,7 +73,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
   // si accettano tutte e due le parole: chi ha imparato «/settimana» non deve
   // reimpararlo perché ha cambiato la lingua dell'interfaccia
   const visti = filtro === null ? [] : COMANDI.filter(c =>
-    c.it.startsWith(filtro) || c.en.startsWith(filtro) || t(c.nome).toLowerCase().startsWith(filtro))
+    c.it.startsWith(filtro) || c.en.startsWith(filtro) || !!c.anche?.some(a => a.startsWith(filtro)) || t(c.nome).toLowerCase().startsWith(filtro))
   const aperto = filtro !== null && visti.length > 0
 
   useEffect(() => { setScelto(0) }, [filtro])
@@ -173,7 +177,7 @@ export function Barra({ aggiungi, aggiungiRighe, mostraFatte, giorno, lingua: li
         )}
         {modo && (
           <span style={{ ...etichetta, background: 'rgba(var(--rame-rgb),.12)', color: 'var(--rame-testo)' }}>
-            {modo === 'bozza' ? t('bozza') : modo === 'prompt' ? t('prompt') : t('Myynd')}
+            {modo === 'bozza' ? t('lavoro') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
 

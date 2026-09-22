@@ -18,7 +18,7 @@ import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from '
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
 import { OSPITATO } from './ospitato.ts'
-import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX } from './modello.ts'
+import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import * as chatgpt from './chatgpt.ts'
 import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, stessoFilo, type Concessione, type Documento } from './store.ts'
@@ -2767,7 +2767,7 @@ export async function svolgi(
    * ricerca, e la scheda lo dice a chi sceglie. Molto meglio di «questa cosa non
    * funziona con l'abbonamento».
    */
-  const soloAbbonamento = !chatgpt.scelto() && abbonamento.disponibile() && m?.tipo !== 'compatibile'
+  const soloAbbonamento = conLAccountClaude() && m?.tipo !== 'compatibile'
   // Non `{ testo: '' }`: quello faceva finire il compito fra i «pronti» con una
   // bozza vuota sotto — cioè l'app diceva di aver fatto un lavoro che non aveva
   // fatto. È l'unico modo di sbagliare che questo prodotto non si può permettere.

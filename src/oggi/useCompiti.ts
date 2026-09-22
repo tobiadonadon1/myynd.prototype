@@ -158,7 +158,7 @@ export function useCompiti(
        */
       if ((e.fase === 'pronto' || e.fase === 'chiede') && avvisiAccesi() && (document.hidden || !document.hasFocus())) {
         desktop()?.notifica?.({
-          titolo: e.fase === 'pronto' ? t('Una bozza è pronta.') : t('Myynd ti chiede una cosa.'),
+          titolo: e.fase === 'pronto' ? t('Il lavoro è pronto.') : t('Myynd ti chiede una cosa.'),
           corpo: e.compito.testo, dove: 'oggi'
         })
       }

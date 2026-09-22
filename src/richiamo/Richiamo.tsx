@@ -66,7 +66,7 @@ export function Richiamo() {
   const pezzo = /(?:^|\s)\/(\S*)$/.exec(testo)
   const filtro = pezzo?.[1]?.toLowerCase() ?? null
   const visti = filtro === null ? [] : COMANDI_QUI.filter(c =>
-    c.it.startsWith(filtro) || c.en.startsWith(filtro) || t(c.nome).toLowerCase().startsWith(filtro))
+    c.it.startsWith(filtro) || c.en.startsWith(filtro) || !!c.anche?.some(a => a.startsWith(filtro)) || t(c.nome).toLowerCase().startsWith(filtro))
   const aperto = filtro !== null && visti.length > 0
   useEffect(() => { setScelto(0) }, [filtro])
 
@@ -256,7 +256,7 @@ export function Richiamo() {
         )}
         {modo && (
           <span style={{ ...etichetta, background: 'rgba(196,98,59,.12)', color: '#8E3F1F' }}>
-            {modo === 'bozza' ? t('bozza') : modo === 'prompt' ? t('prompt') : t('Myynd')}
+            {modo === 'bozza' ? t('lavoro') : modo === 'prompt' ? t('prompt') : t('Myynd')}
           </span>
         )}
         {!testo && (

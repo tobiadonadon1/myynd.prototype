@@ -26,7 +26,7 @@ const MOMENTI: Momento[] = [
   { chiave: 'benvenuto', kicker: 'Il tuo digital brain', titolo: ['Meno rumore.', 'Più spazio per te.'], riga: 'I tuoi progetti, le tue idee. Una mente in più per portarli avanti.', visivo: 'marchio' },
   { chiave: 'legge', kicker: 'Quello che legge', titolo: ['Legge quello', 'che hai già.'], riga: 'Posta, file, note, agenda. Li colleghi una volta; li rilegge ogni giorno.', visivo: 'fonti' },
   { chiave: 'pagina', kicker: 'La prima pagina', titolo: ['Una pagina', 'ogni mattina.'], riga: 'Cosa aspetta te, cosa può aspettare, cosa è già a posto.', visivo: 'pagina' },
-  { chiave: 'bozza', kicker: 'Prepara, tu decidi', titolo: ['Scrive la bozza.', 'Tu premi Invia.'], riga: 'Risposte, brief, riassunti: pronti prima che li chieda. Niente esce senza di te.', visivo: 'bozza' },
+  { chiave: 'bozza', kicker: 'Prepara, tu decidi', titolo: ['Fa il lavoro.', 'Tu premi Invia.'], riga: 'Risposte, brief, riassunti: pronti prima che li chieda. Niente esce senza di te.', visivo: 'bozza' },
   { chiave: 'tuo', kicker: 'Resta tuo', titolo: ['Sul tuo computer.', 'Con la tua chiave.'], riga: 'Nessun modello incluso: colleghi Claude, o un modello che hai già. Cancelli tutto quando vuoi.', visivo: 'tuo' }
 ]
 
