@@ -1,27 +1,28 @@
-// Un progetto: la sua riga, e quello che sta sotto la riga.
+// Un progetto: la sua scheda, e quello che sta dentro la scheda.
 //
 // «Se voglio cancellare un progetto deve essere più immediato, e modificarli
 // deve essere più facile, quasi come se fosse una specie di dashboard.»
 //
-// Quello che si fa tutti i giorni sta sulla riga e non chiede di aprire
+// Quello che si fa tutti i giorni sta sulla scheda e non chiede di aprire
 // niente: il nome e l'obiettivo si scrivono cliccandoci sopra, il pallino
-// apre la tavolozza, lo stato è un interruttore a tre scatti, il cestino
-// compare passandoci sopra e la riga stessa diventa la domanda. Sotto la
-// riga resta quello che si tocca di rado: gli altri nomi, il progetto dentro
-// cui sta, le note, quello che Myynd ricorda, le attività, e unire.
+// apre la tavolozza, lo stato è un interruttore a tre scatti, il cestino sta
+// in alto a destra e compare passandoci sopra. Dentro la scheda — cioè nella
+// finestra che si apre cliccandola — resta quello che si tocca di rado: gli
+// altri nomi, il progetto dentro cui sta, le note, quello che Myynd ricorda,
+// le attività, e unire.
 //
 // Quattro scelte, e perché:
 //
-//   · niente doppioni. Quello che si cambia sulla riga non si ripete
+//   · niente doppioni. Quello che si cambia sulla scheda non si ripete
 //     nell'editor: due caselle per lo stesso nome sono due posti dove
 //     correggerlo e uno solo che hai guardato.
 //   · si salva lasciando il campo, con una spunta piccola che lo dice. Niente
 //     bottone «Salva»: un bottone grosso in fondo a otto campi è la promessa
 //     che se sbagli la pagina prima di premerlo hai perso tutto.
-//   · eliminare è un gesto solo, e la domanda sta dove stava la riga. Prima
-//     era un testo smorto in fondo all'editor: per arrivarci bisognava aprire
-//     il progetto e scorrere due schermate, cioè non era un gesto, era una
-//     caccia.
+//   · eliminare è un gesto solo, e sta dove sta in tutto il resto dell'app:
+//     il cestino in alto a destra, che chiede «Sicuro?» una volta. Prima era
+//     un testo smorto in fondo all'editor: per arrivarci bisognava aprire il
+//     progetto e scorrere due schermate, cioè non era un gesto, era una caccia.
 //   · ogni guaio sta sotto alla cosa che l'ha causato. Una riga rossa in fondo
 //     alla schermata dice che qualcosa non è andato, non dice cosa.
 
@@ -32,8 +33,8 @@ import {
 import './project-evidence.css'
 import { AttivitaProgetto } from '../components/AttivitaProgetto'
 import { frasi, loc, t } from '../lingua'
-import { Hov, LABEL, useAttiva } from '../ui'
-import { IconCestino, IconGiu, IconSpunta } from '../icons'
+import { Cestino, Hov, LABEL, daTastiera, useAttiva } from '../ui'
+import { IconAvanti, IconGiu, IconSpunta } from '../icons'
 import { COLORE_VALIDO, TAVOLOZZA, coloreProgetto } from '../colori-progetto'
 import { SPIEGA_STATO, STATI, aggiungiAlias, aliasPuliti, togliAlias } from '../progetto-modifica'
 import { portaAlleAttivita, siPuoAprireLeCose } from '../vals'
@@ -63,17 +64,8 @@ const CASELLA = {
   color: INCHIOSTRO, fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none'
 }
 
-/**
- * L'altezza di una riga.
- *
- * La domanda «lo elimino?» prende il posto della riga e deve stare nello
- * stesso spazio: se la riga si accorcia di dieci pixel, tutte quelle sotto
- * saltano su nel momento esatto in cui una persona sta per premere.
- */
-const ALTA = 62
-
 /** La spunta che dice «l'ho salvato», e se ne va da sola. */
-function Tic({ mostra }: { mostra: boolean }) {
+export function Tic({ mostra }: { mostra: boolean }) {
   return (
     <span aria-live="polite" style={{
       flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px',
@@ -307,7 +299,10 @@ function Pallino({ p, colore, manda, guaio, segnala }: {
   }
 
   return (
+    // il clic non esce da qui: la scheda che ci sta attorno si apre cliccandola,
+    // e scegliere una tinta dalla tavolozza non vuol dire «aprimi il progetto»
     <span ref={scatola} style={{ flex: 'none', position: 'relative', display: 'flex' }}
+      onClick={(e: React.MouseEvent) => e.stopPropagation()}
       onKeyDown={e => { if (e.key === 'Escape' && aperto) { e.stopPropagation(); setAperto(false); bottone.current?.focus() } }}>
       <Hov as="button" type="button" ref={bottone}
         onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAperto(v => !v) }}
@@ -387,7 +382,9 @@ function Stati({ p, manda }: { p: Progetto; manda: (campo: string, c: CambioProg
   }
 
   return (
+    // come la tavolozza: il clic resta qui dentro, anche quello sulla nota
     <span style={{ flex: 'none', position: 'relative', display: 'flex' }}
+      onClick={(e: React.MouseEvent) => e.stopPropagation()}
       onMouseEnter={() => setSopra(true)} onMouseLeave={() => setSopra(false)}>
       <span role="radiogroup" aria-label={t('Stato')} style={{
         display: 'flex', gap: 2, padding: 2, borderRadius: 9,
@@ -424,8 +421,12 @@ function Stati({ p, manda }: { p: Progetto; manda: (campo: string, c: CambioProg
         })}
       </span>
       {(sopra || appena) && (
+        // a sinistra e non a destra: sulla riga di una volta lo stato stava in
+        // fondo a destra e la nota rientrava; dentro una scheda lo stato è la
+        // prima cosa del piede, e una nota ancorata a destra usciva dal bordo
+        // sinistro della colonna e si leggeva a metà
         <span role="note" style={{
-          position: 'absolute', top: 'calc(100% + 7px)', right: 0, zIndex: 18, width: 250,
+          position: 'absolute', top: 'calc(100% + 7px)', left: 0, zIndex: 18, width: 250,
           display: 'block', padding: '8px 11px', borderRadius: 10, textAlign: 'left',
           background: 'var(--carta-piena)', border: '1px solid var(--filo)',
           boxShadow: '0 12px 30px rgba(var(--ombra-rgb),.22)',
@@ -591,7 +592,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
   const chiuso = p.stato === 'chiuso'
 
   return (
-    <div id={`editor-${p.id}`} style={{ padding: '4px 4px 22px 25px' }}>
+    <div id={`editor-${p.id}`} style={{ paddingBottom: 4 }}>
       {/* gli altri nomi: le cartelle e i soprannomi con cui lo chiama davvero */}
       <Riquadro etichetta={t('Altri nomi')} salvato={fatti.alias} guaio={guai.alias}
         aiuto={t('Le cartelle e i soprannomi con cui lo chiami: così Myynd lo riconosce anche scritto in un altro modo.')}>
@@ -699,42 +700,43 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
 }
 
 /**
- * La riga di un progetto: quello che si cambia tutti i giorni, sul posto.
+ * La scheda di un progetto: quello che si cambia tutti i giorni, sul posto.
  *
- * Chiusa non è più una vetrina che si limita a dire quattro cose: il nome e
- * l'obiettivo si scrivono cliccandoci sopra, il pallino apre la tavolozza, lo
- * stato ha i suoi tre scatti, il conto delle attività sta a destra e il
- * cestino compare passando sopra. Il chevron apre il resto, che è quello che
- * si tocca una volta al mese.
+ * Non è una vetrina che si limita a dire quattro cose: il nome e l'obiettivo
+ * si scrivono cliccandoci sopra, il pallino apre la tavolozza, lo stato ha i
+ * suoi tre scatti, il conto delle attività sta in fondo e il cestino compare
+ * in alto a destra passandoci sopra. Il corpo della scheda apre la finestra
+ * con il resto, che è quello che si tocca una volta al mese.
+ *
+ * `role="button"` e non un `<button>`: dentro ci stanno altri bottoni, e un
+ * bottone dentro un bottone non esiste. Invio e spazio li porta `daTastiera`,
+ * che lascia i tasti ai campi quando è un campo ad averli presi.
  */
-export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, acceso, conto, nato }: {
+export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto, nato }: {
   p: Progetto
   /** Gli altri: il colore assegnato a chi non l'ha scelto non deve ripetere il loro. */
   tutti: Progetto[]
   cambia: Cambia
-  unisci: (id: string, dentro: string) => Promise<void>
   elimina: (id: string) => Promise<void>
-  aperta: boolean
+  /** Apre la finestra con il resto del progetto. */
   apri: () => void
-  /** Arrivato adesso da una riga della lista: un anello di rame per un attimo, e basta. */
+  /** Arrivato adesso da una carta della prima pagina: un anello di rame per un attimo. */
   acceso?: boolean
   /** Quante attività ha aperte, e quante ne ha chiuse. */
   conto?: { aperte: number; fatte: number }
-  /** Appena creato: la riga prende il fuoco con il nome già selezionato. */
+  /** Appena creato: la scheda prende il fuoco con il nome già selezionato. */
   nato?: boolean
 }) {
-  const { attiva, sopra, props } = useAttiva()
+  const { attiva, props } = useAttiva()
   const { guai, fatti, manda, segnala } = useSalvataggi(p.id, cambia)
-  const [chiedo, setChiedo] = useState(false)
-  const [tolgo, setTolgo] = useState(false)
   const [uscendo, setUscendo] = useState(false)
-  const riga = useRef<HTMLDivElement>(null)
+  const scheda = useRef<HTMLDivElement>(null)
 
   const colore = coloreProgetto(p, tutti)
   const chiuso = p.stato === 'chiuso'
   const padre = tutti.find(x => x.id === p.genitore) ?? null
 
-  useEffect(() => { if (nato) riga.current?.scrollIntoView({ block: 'center' }) }, [nato])
+  useEffect(() => { if (nato) scheda.current?.scrollIntoView({ block: 'center' }) }, [nato])
 
   const salvaNome = (v: string) => {
     if (!v) return segnala('nome', 'Un progetto ha bisogno di un nome.')
@@ -744,138 +746,54 @@ export function RigaProgetto({ p, tutti, cambia, unisci, elimina, aperta, apri, 
   const salvaObiettivo = (v: string) => void manda('obiettivo', { obiettivo: v.slice(0, 200) })
 
   const togli = async () => {
-    if (tolgo) return
-    setTolgo(true)
     segnala('elimina', '')
-    // va via prima di tornare il server: la riga si spegne, e se il server
+    // va via prima di tornare il server: la scheda si spegne, e se il server
     // dice di no torna con il suo guaio scritto sotto
     setUscendo(true)
     try { await elimina(p.id) }
     catch (e) { setUscendo(false); segnala('elimina', e instanceof Error ? e.message : String(e)) }
-    finally { setTolgo(false) }
-  }
-
-  const tasti = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && chiedo) {
-      e.stopPropagation()
-      setChiedo(false)
-      riga.current?.focus()
-      return
-    }
-    // dentro un campo i tasti sono del campo: Backspace lì vuol dire cancella una lettera
-    if (e.target !== e.currentTarget) return
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apri() }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); setChiedo(true) }
   }
 
   const conteggio = conto && (conto.aperte || conto.fatte) ? frasi.attivitaDelProgetto(conto.aperte, conto.fatte) : ''
 
   return (
-    // l'id è la maniglia con cui la prima pagina porta questa riga sotto gli occhi
-    <div id={`progetto-${p.id}`} style={{
-      borderTop: RIGA,
-      // l'anello sta fuori dal flusso: acceso non sposta di un pixel quello che c'è sotto
-      borderRadius: 12, outline: acceso ? `2px solid ${RAME}` : '2px solid transparent',
-      outlineOffset: 4, transition: 'outline-color .3s, opacity .22s ease',
-      opacity: uscendo ? 0 : 1, pointerEvents: uscendo ? 'none' : undefined
-    }}>
-      <div ref={riga} {...props} role="group" tabIndex={0} aria-label={p.nome} onKeyDown={tasti}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10, minHeight: ALTA, boxSizing: 'border-box',
-          padding: '8px 8px 8px 4px', borderRadius: 12,
-          background: aperta ? 'rgba(var(--inchiostro-rgb),.04)' : sopra ? 'rgba(var(--inchiostro-rgb),.025)' : 'transparent',
-          transition: 'background .15s', opacity: chiuso && !aperta && !chiedo ? 0.72 : 1
-        }}>
-        {chiedo ? (
-          // la domanda prende il posto della riga, nello stesso spazio
-          <>
-            <span style={{
-              flex: 'none', width: 13, height: 13, marginLeft: 4, borderRadius: '50%', background: colore,
-              border: '2px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 0 0 1px rgba(var(--inchiostro-rgb),.15)'
-            }} />
-            <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: SPENTO, lineHeight: 1.55, textWrap: 'pretty' }}>
-              {frasi.eliminoProgetto(p.nome)}
-            </span>
-            <Hov as="button" type="button" autoFocus onClick={togli} disabled={tolgo}
-              style={{
-                flex: 'none', border: 'none', background: 'none', padding: '6px 4px',
-                cursor: tolgo ? 'default' : 'pointer', fontFamily: 'inherit',
-                fontSize: '12.5px', fontWeight: 500, color: RAME_TESTO
-              }}
-              hover={tolgo ? {} : { color: RAME }}>{tolgo ? t('Tolgo…') : t('Elimina')}</Hov>
-            <Hov as="button" type="button" onClick={() => { setChiedo(false); riga.current?.focus() }}
-              style={{
-                flex: 'none', border: 'none', background: 'none', padding: '6px 4px', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '12.5px', color: APPENA
-              }}
-              hover={{ color: INCHIOSTRO }}>{t('Tieni')}</Hov>
-          </>
-        ) : (
-          <>
-            <Pallino p={p} colore={colore} manda={manda} guaio={guai.colore} segnala={segnala} />
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <Scritta valore={p.nome} etichetta={t('Nome')} salva={salvaNome} salvato={fatti.nome}
-                  apriSubito={nato} tornaAlFuoco={() => riga.current?.focus()}
-                  testoStile={{
-                    fontSize: '14.5px', fontWeight: 500, color: INCHIOSTRO, lineHeight: 1.35,
-                    textDecoration: chiuso ? 'line-through' : 'none'
-                  }} />
-                {padre && (
-                  <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>
-                    {frasi.dentroProgetto(padre.nome)}
-                  </span>
-                )}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginTop: 5 }}>
-                <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} salva={salvaObiettivo} salvato={fatti.obiettivo}
-                  vuoto={t('Obiettivo non ancora scritto.')} tornaAlFuoco={() => riga.current?.focus()}
-                  testoStile={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', lineHeight: 1.35 }} />
-                {p.origine === 'punto' && !chiuso && (
-                  <span style={{ flex: 'none', fontSize: '11.5px', color: APPENA, whiteSpace: 'nowrap' }}>{t('riconosciuto dal punto')}</span>
-                )}
-              </span>
-            </span>
-            <Stati p={p} manda={manda} />
-            {/* il conto tiene la sua colonna anche quando è vuoto: senza, gli
-                stati di ogni riga si fermano a un punto diverso, e una lista
-                dove niente è incolonnato non si legge a colpo d'occhio */}
-            <span style={{
-              flex: 'none', width: 104, textAlign: 'right', fontSize: '11.5px', color: APPENA,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-            }}>{conteggio}</span>
-            <Hov as="button" type="button" title={t('Elimina')} aria-label={t('Elimina')}
-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); setChiedo(true) }}
-              style={{
-                flex: 'none', width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: 7,
-                border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-                color: 'rgba(var(--inchiostro-rgb),.35)',
-                opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s, color .15s'
-              }}
-              hover={{ color: RAME_TESTO, background: 'rgba(var(--rame-rgb),.12)' }}>
-              <IconCestino size={13} />
-            </Hov>
-            <Hov as="button" type="button" onClick={apri} aria-expanded={aperta} aria-controls={`editor-${p.id}`}
-              title={t('Altro')} aria-label={t('Altro')}
-              style={{
-                flex: 'none', width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: 7,
-                border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: APPENA
-              }}
-              hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
-              <span style={{ display: 'flex', transform: aperta ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }}>
-                <IconGiu size={11} />
-              </span>
-            </Hov>
-          </>
-        )}
+    // l'id è la maniglia con cui la prima pagina porta questa scheda sotto gli occhi
+    <div id={`progetto-${p.id}`} ref={scheda} {...props} className="mem-card mem-progetto"
+      role="button" tabIndex={0} aria-label={p.nome} onClick={apri} onKeyDown={daTastiera(apri)}
+      data-acceso={acceso ? '' : undefined} data-chiuso={chiuso ? '' : undefined}
+      style={{ opacity: uscendo ? 0 : undefined, pointerEvents: uscendo ? 'none' : undefined }}>
+      <div className="mem-card-cima">
+        <Pallino p={p} colore={colore} manda={manda} guaio={guai.colore} segnala={segnala} />
+        <Scritta valore={p.nome} etichetta={t('Nome')} salva={salvaNome} salvato={fatti.nome}
+          apriSubito={nato} tornaAlFuoco={() => scheda.current?.focus()}
+          testoStile={{
+            fontSize: '15px', fontWeight: 500, color: INCHIOSTRO, lineHeight: 1.35,
+            textDecoration: chiuso ? 'line-through' : 'none'
+          }} />
       </div>
-      {/* i guai della riga stanno sotto la riga, dove è successo */}
-      {(guai.elimina || guai.nome) && (
-        <div role="alert" style={{
-          padding: '0 10px 9px 29px', fontSize: '12px', color: RAME_TESTO, lineHeight: 1.5, overflowWrap: 'anywhere'
-        }}>{t(guai.elimina || guai.nome)}</div>
+      {/* il cestino dell'app, in alto a destra: compare sotto mano e chiede una volta */}
+      <span className="mem-card-gesti" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <Cestino fai={togli} guaio={g => segnala('elimina', g)} titolo={t('Elimina')} visibile={attiva} />
+      </span>
+      <div className="mem-card-obiettivo">
+        <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} salva={salvaObiettivo} salvato={fatti.obiettivo}
+          vuoto={t('Obiettivo non ancora scritto.')} tornaAlFuoco={() => scheda.current?.focus()}
+          testoStile={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.55)', lineHeight: 1.4 }} />
+      </div>
+      {(padre || (p.origine === 'punto' && !chiuso)) && (
+        <div className="mem-card-dentro">
+          {padre ? frasi.dentroProgetto(padre.nome) : t('riconosciuto dal punto')}
+        </div>
       )}
-      {aperta && <ProgettoEditor p={p} tutti={tutti} cambia={cambia} unisci={unisci} />}
+      <div className="mem-card-piede">
+        <Stati p={p} manda={manda} />
+        <span className="mem-conto">{conteggio}</span>
+        <span className="mem-apri">{t('Apri')}<IconAvanti size={10} /></span>
+      </div>
+      {/* i guai della scheda stanno dentro la scheda, dove è successo */}
+      {(guai.elimina || guai.nome) && (
+        <div role="alert" className="mem-guaio">{t(guai.elimina || guai.nome)}</div>
+      )}
     </div>
   )
 }

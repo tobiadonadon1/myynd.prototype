@@ -1,30 +1,79 @@
-import { useCallback, useEffect, useState } from 'react'
+// Le preferenze: quattro aree, e dentro ognuna una griglia di schede.
+//
+// «The settings page is clustered, not intuitive, not straightforward, not
+// easy to edit, and not easy to manage.»
+//
+// Quello che era: una pila di riquadri larghi quanto il pannello, ognuno con
+// un titolo, un paragrafo che spiegava cosa fa il controllo, e poi il
+// controllo. Per trovare l'aspetto bisognava leggere quattro paragrafi.
+//
+// Quello che è adesso, e le tre regole che lo tengono insieme:
+//
+//   · una scheda è un titolo, un controllo, e al massimo una riga che dice
+//     come sta la cosa adesso. I paragrafi che insegnano non ci sono più:
+//     «Chiaro di giorno, scuro di sera» non aggiunge niente a tre pastiglie
+//     che dicono Sistema, Chiaro, Scuro.
+//   · un solo bottone pieno per scheda, e sta in fondo a destra. Il resto è
+//     bordo o sole parole.
+//   · le caselle di testo sono quelle della barra di «Da fare»: stesso raggio,
+//     stesso fondo, stesso bordo che si accende quando ci scrivi.
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
-import { campo, classeCampo, etichetta } from '../components/forms'
 import { frasi, t } from '../lingua'
-import { CARD_GLASS, Hov, LABEL, daTastiera, knob, track } from '../ui'
-import { IconAvanti } from '../icons'
+import { Hov, daTastiera, knob, track } from '../ui'
+import { IconAvanti, IconSpunta } from '../icons'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
 import './preferenze.css'
 import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
 
-/** Il bottone di seconda fila, com'è in «Il tuo accesso» e nel fascicolo. */
-const SECONDARIO: React.CSSProperties = {
-  flex: 'none', padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-  border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
+/** Una scheda: il titolo è la gerarchia, e sotto ci sta quello che si tocca. */
+function Scheda({ titolo, larga, quieta, children }: {
+  titolo: string
+  /** Larga quanto il pannello: solo dove il controllo non ci sta in metà. */
+  larga?: boolean
+  /** Smorzata: quello che non si preme di fretta. */
+  quieta?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <article className={`prefs-card${larga ? ' larga' : ''}${quieta ? ' quieta' : ''}`}>
+      <h3>{titolo}</h3>
+      {children}
+    </article>
+  )
+}
+
+/** La spunta che dice «l'ho salvato», e se ne va da sola. */
+function Tic({ mostra }: { mostra: boolean }) {
+  return (
+    <span aria-live="polite" style={{
+      flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11.5px',
+      color: 'var(--verde-cupo)', opacity: mostra ? 1 : 0, transition: 'opacity .35s'
+    }}>
+      {mostra && <><IconSpunta size={11} />{t('Salvato')}</>}
+    </span>
+  )
+}
+
+/** Una pastiglia di scelta: è quella dell'app, scelta di rame e spenta di bordo. */
+function pastiglia(scelta: boolean): React.CSSProperties {
+  return scelta
+    ? { padding: '9px 17px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }
+    : { padding: '9px 17px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer' }
 }
 
 /**
  * L'app da scrivania: quello che sa fare il guscio e il sito no.
  *
  * Si vede solo dentro l'app. Sono le quattro cose che una persona tocca una
- * volta e poi dimentica: la scorciatoia che porta Myynd davanti da qualunque
- * programma, se parte da solo all'accesso, gli aggiornamenti, e dove stanno i
- * file. La scorciatoia si cambia premendola — non scrivendola — perché
+ * volta e poi dimentica: gli aggiornamenti, la scorciatoia che porta Myynd
+ * davanti da qualunque programma, se parte da sola all'accesso, e gli avvisi.
+ * La scorciatoia si cambia premendola — non scrivendola — perché
  * «CommandOrControl+Shift+M» non è una cosa che si chiede a nessuno di sapere.
  *
- * Quando l'app non può aggiornarsi lo dice con una frase e basta, senza un
+ * Quando l'app non può aggiornarsi lo dice con una riga e basta, senza un
  * bottone spento accanto: un «Controlla» che non controlla niente insegna a
  * non fidarsi degli altri.
  */
@@ -36,15 +85,12 @@ function LApp() {
   const [avvisi, setAvvisi] = useState(avvisiAccesi)
   const [agg, setAgg] = useState<Aggiornamento | null>(null)
   const [chiedo, setChiedo] = useState(false)
-  const [dati, setDati] = useState('')
   const [guaio, setGuaio] = useState('')
 
   useEffect(() => {
     if (!d) return
     d.scorciatoia().then(setAcc).catch(() => {})
     d.avvioAutomatico().then(setAvvio).catch(() => {})
-    // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
-    api.stato().then(s => setDati(s.dati || (s.home ? `${s.home}/.myynd` : ''))).catch(() => {})
     // gli eventi già mandati prima che questa scheda esistesse non tornano:
     // si chiede com'è adesso, e da lì in poi si ascolta
     d.aggiornamenti.attuale().then(setAgg).catch(() => {})
@@ -109,96 +155,86 @@ function LApp() {
     }
   }
   const inCorso = chiedo || agg?.stato === 'controllo' || agg?.stato === 'scarico'
-  const mac = d.piattaforma === 'darwin'
-
-  const RIGA: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }
-  const TESTO: React.CSSProperties = { flex: 1, minWidth: 0 }
-  const NOTA: React.CSSProperties = { fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 4, textWrap: 'pretty', overflowWrap: 'anywhere' }
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('L’app')}</div>
-
-      <div style={{ ...RIGA, marginTop: 12 }}>
-        <div style={TESTO}>
-          <div style={{ fontSize: 15 }}>{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
-          <div style={NOTA}>{rigaAggiornamenti()}</div>
+    <Scheda titolo={t('L’app')}>
+      <div className="prefs-riga">
+        <div>
+          <div className="prefs-nome">{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
+          <div className="prefs-stato">{rigaAggiornamenti()}</div>
         </div>
         {agg?.stato === 'pronta' ? (
-          <button type="button" onClick={() => d.aggiornamenti.installa()} style={{
-            flex: 'none', padding: '11px 20px', borderRadius: 99, border: 'none',
-            background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
-            fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
-          }}>{t('Riavvia e aggiorna')}</button>
+          <button type="button" className="prefs-pieno" onClick={() => d.aggiornamenti.installa()}>{t('Riavvia e aggiorna')}</button>
         ) : agg?.stato !== 'spento' && (
-          <button type="button" onClick={controlla} disabled={inCorso} style={{ ...SECONDARIO, cursor: inCorso ? 'default' : 'pointer', opacity: inCorso ? 0.6 : 1 }}>
+          <button type="button" className="prefs-secondario" onClick={controlla} disabled={inCorso}>
             {inCorso ? t('Controllo…') : t('Controlla')}
           </button>
         )}
       </div>
 
-      <div style={RIGA}>
-        <div style={TESTO}>
+      <div className="prefs-riga">
+        <div>
+          <div className="prefs-nome">{t('Il richiamo')}</div>
           {registro
-            ? <div style={{ fontSize: 15 }}>{t('Premi la combinazione nuova…')}</div>
-            : <div style={{ fontSize: 15 }}>
-                <span style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '2px 9px', borderRadius: 7, letterSpacing: '.06em' }}>{acc ? simboli(acc, d.piattaforma) : '…'}</span>
-              </div>}
-          <div style={NOTA}>
-            {registro
-              ? t('Esc lascia com’è.')
-              : t('Apre il richiamo da qualunque programma.')}
-          </div>
+            ? <div className="prefs-stato rame">{t('Premi la combinazione nuova…')} {t('Esc lascia com’è.')}</div>
+            : <div style={{ marginTop: 4 }}><span className="prefs-tasto">{acc ? simboli(acc, d.piattaforma) : '…'}</span></div>}
         </div>
-        <button type="button" onClick={() => { setGuaio(''); setRegistro(r => !r) }} style={SECONDARIO}>
+        <button type="button" className="prefs-secondario" onClick={() => { setGuaio(''); setRegistro(r => !r) }}>
           {registro ? t('Annulla') : t('Cambia')}
         </button>
       </div>
 
-      <div style={RIGA}>
-        <div style={TESTO}>
-          <div style={{ fontSize: 15 }}>{t('Si apre all’accesso')}</div>
-          <div style={NOTA}>{t('Myynd parte da solo quando entri nel computer.')}</div>
-        </div>
+      <div className="prefs-riga">
+        <div className="prefs-nome">{t('Si apre all’accesso')}</div>
         <button type="button" role="switch" aria-checked={!!avvio} aria-label={t('Si apre all’accesso')}
           disabled={avvio === null} onClick={cambiaAvvio} style={track(!!avvio)}><span style={knob()} /></button>
       </div>
 
       {/* Spento finché non lo si accende: il brief vuole un'app quieta, e un
           avviso è un'interruzione che si sceglie. */}
-      <div style={RIGA}>
-        <div style={TESTO}>
-          <div style={{ fontSize: 15 }}>{t('Avvisami quando una bozza è pronta')}</div>
-          <div style={NOTA}>{t('Un avviso di sistema, solo se Myynd non è davanti.')}</div>
-        </div>
+      <div className="prefs-riga">
+        <div className="prefs-nome">{t('Avvisami quando una bozza è pronta')}</div>
         <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando una bozza è pronta')}
           onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
       </div>
 
-      <div style={RIGA}>
-        <div style={TESTO}>
-          <div style={{ fontSize: 15 }}>{t('I tuoi dati')}</div>
-          <div style={NOTA}>
-            <code style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>{dati || '~/.myynd'}</code>
-          </div>
-        </div>
-        <button type="button" disabled={!dati} onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }} style={{ ...SECONDARIO, opacity: dati ? 1 : 0.6 }}>
-          {mac ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
-        </button>
-      </div>
-
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
   )
 }
 
-
 /**
- * Il fondo in movimento è bello e costa: le macchie sfocate stanno dietro a
- * pannelli con backdrop-filter, e ogni loro fotogramma obbliga a rifare la
- * sfocatura. Su qualche macchina si vede tremolare. Chi non lo vuole lo spegne,
- * e resta il colore — non l'ho tolto a tutti per un problema di alcuni.
+ * Dove stanno i tuoi dati: il percorso, e il bottone che lo apre.
+ *
+ * Era un paragrafo di tre righe con tre nomi di file dentro. Il percorso vero
+ * è l'unica cosa che serve sapere, e sull'app c'è anche il modo di arrivarci.
  */
+function DoveStanno({ v }: { v: Vals }) {
+  const d = desktop()
+  const [dati, setDati] = useState('')
+  useEffect(() => {
+    // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
+    api.stato().then(s => setDati(s.dati || (s.home ? `${s.home}/.myynd` : ''))).catch(() => {})
+  }, [])
+
+  return (
+    <Scheda titolo={t('I tuoi dati')}>
+      <div className="prefs-stato">
+        {v.ospitato ? frasi.doveStannoIDatiServer() : <code>{dati || '~/.myynd'}</code>}
+      </div>
+      {d && !v.ospitato && (
+        <div className="prefs-piede">
+          <div className="prefs-stato" />
+          <button type="button" className="prefs-secondario" disabled={!dati}
+            onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }}>
+            {d.piattaforma === 'darwin' ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
+          </button>
+        </div>
+      )}
+    </Scheda>
+  )
+}
+
 /** Il campo del fuoco: stato suo, di nessun altro. */
 function CampoFuoco({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.fuoco)
@@ -207,42 +243,26 @@ function CampoFuoco({ v }: { v: Vals }) {
   useEffect(() => { setTesto(v.fuoco) }, [v.fuoco])
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-        <input
-          value={testo}
-          onChange={e => setTesto(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') v.salvaFuoco(testo) }}
-          placeholder={t('Questa settimana solo i preventivi e i pagamenti')}
-          style={{
-            flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
-            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.75)',
-            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
-          }} />
-        <button onClick={() => v.salvaFuoco(testo)} style={{
-          flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
-          background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
-          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
-        }}>{t('Salva')}</button>
+    <Scheda titolo={t('Su cosa mi concentro')}>
+      <input className="prefs-campo" value={testo} onChange={e => setTesto(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') v.salvaFuoco(testo) }}
+        aria-label={t('Su cosa mi concentro')}
+        placeholder={t('Questa settimana solo i preventivi e i pagamenti')} />
+      <div className="prefs-piede">
+        {/*
+          Chi ha scritto quella riga.
+
+          Il campo restava vuoto perché «su cosa vuoi che mi concentri adesso?»
+          non è una domanda a cui si risponde in astratto. Adesso, se è vuoto,
+          lo scrive Myynd da quello che ha in lista — e lo dice, perché una riga
+          comparsa da sola che nessuno dichiara è peggio di una riga vuota.
+        */}
+        <span className="prefs-stato">
+          {v.fuocoDaMe && !!v.fuoco ? t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.') : ''}
+        </span>
+        <button type="button" className="prefs-pieno" onClick={() => v.salvaFuoco(testo)}>{t('Salva')}</button>
       </div>
-
-      {/*
-        Chi ha scritto quella riga.
-
-        Stessa nota che sta sotto gli argomenti, e per la stessa ragione: il
-        campo restava vuoto perché «su cosa vuoi che mi concentri adesso?» non
-        è una domanda a cui si risponde in astratto. Adesso, se è vuoto, lo
-        scrive Myynd da quello che ha in lista — e lo dice, perché una riga
-        comparsa da sola che nessuno dichiara è peggio di una riga vuota.
-      */}
-      {v.fuocoDaMe && !!v.fuoco && (
-        <div style={{
-          marginTop: 9, fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', textWrap: 'pretty'
-        }}>
-          {t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.')}
-        </div>
-      )}
-    </>
+    </Scheda>
   )
 }
 
@@ -252,380 +272,7 @@ function CampoFuoco({ v }: { v: Vals }) {
  * Gemello del fuoco, e vale la pena tenerli distinti anche qui sotto gli occhi:
  * il fuoco dice a Myynd dove guardare *dentro* — nella posta, nei file, in
  * quello che ti riguarda — questo dice cosa cercare *fuori*, nei giornali.
- * Mescolarli vorrebbe dire che chi si concentra sui preventivi smette di
- * ricevere notizie dal mondo, che non è quello che ha chiesto.
- *
- * Vuoto è una risposta buona e va detto: chi non sa ancora cosa gli interessa
- * non deve sentirsi davanti a un campo obbligatorio.
  */
-/**
- * Portarsi il proprio Myynd da un'altra parte.
- *
- * Esiste perché la cosa più ovvia — «ce l'ho qui, lo rivoglio là» — non aveva
- * nessuna strada che non passasse dalla riga di comando di chi ospita: una
- * cosa che si può chiedere a chi sviluppa, non a chi usa. Un file che si
- * scarica di qua e si carica di là non chiede di sapere niente.
- *
- * La riga sulle credenziali sta in alto e non in fondo. Quel file apre la
- * casella di posta di chi l'ha fatto, e chi lo scarica deve saperlo *prima* di
- * lasciarlo nei Download per sei mesi.
- */
-/**
- * Il conto: la password si cambia da qui, e le sessioni si chiudono da qui.
- * Prima l'unica strada era la riga di comando di chi ospita — cioè nessuna,
- * per chi usa.
- */
-/**
- * Quanto è costato ragionare, e dove sta il tetto.
- *
- * Prima «perché ho speso sei dollari in tre giorni» non aveva un posto in
- * cui trovare risposta. Qui si vede oggi e gli ultimi giorni, in token — che
- * è quello che si paga — e si mette un tetto oltre il quale Myynd smette di
- * chiamare il modello fino a domani.
- */
-function Uso() {
-  const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
-  const [tetto, setTetto] = useState('')
-  const [salvo, setSalvo] = useState(false)
-  const [guaio, setGuaio] = useState('')
-  useEffect(() => {
-    // un errore qui faceva sparire la carta intera, senza dire niente: è la
-    // stessa distinzione fra «vuoto» e «guasto» che vale per il feed e la mappa
-    api.uso()
-      .then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') })
-      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
-  }, [])
-
-  const salva = async () => {
-    const n = Math.max(0, Math.floor(Number(tetto) || 0))
-    setSalvo(true); setGuaio('')
-    try { await api.profilo({ tetto: n }); setU(await api.uso()) }
-    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setSalvo(false)
-  }
-
-  if (!u) {
-    if (!guaio) return null
-    return (
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Quanto ha ragionato')}</div>
-        <div style={{ fontSize: '13.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>
-      </div>
-    )
-  }
-  const mila = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n)
-  const giorni = u.giorni.slice(-7)
-  const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Quanto ha ragionato')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {u.oggi.chiamate
-          ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
-          : t('Oggi ancora niente.')}
-        {u.oggi.raggiunto && <span style={{ color: 'var(--rame-testo)' }}> {t('Tetto raggiunto: si riparte domani.')}</span>}
-      </div>
-      {giorni.length > 1 && (
-        <div aria-hidden="true" style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 44, marginTop: 14, maxWidth: 320 }}>
-          {giorni.map(g => {
-            const tot = g.entrata + g.uscita
-            return <div key={g.giorno} title={`${g.giorno} · ${mila(tot)}`} style={{
-              flex: 1, height: `${Math.max(8, Math.round(100 * tot / max))}%`, borderRadius: 3, background: 'rgba(var(--rame-rgb),.55)'
-            }} />
-          })}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Tetto al giorno, in token')}</div>
-          <input inputMode="numeric" value={tetto} placeholder={t('nessuno')}
-            onChange={e => setTetto(e.target.value.replace(/[^\d]/g, ''))}
-            onKeyDown={e => { if (e.key === 'Enter') salva() }}
-            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 160 }} />
-        </div>
-        <button onClick={salva} disabled={salvo} style={{
-          padding: '10px 18px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
-          color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px', fontFamily: 'inherit', cursor: salvo ? 'default' : 'pointer'
-        }}>{salvo ? t('Un momento…') : t('Salva')}</button>
-      </div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 8 }}>{t('Vuoto vuol dire: nessun tetto. Mille token sono circa una pagina.')}</div>
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
-  )
-}
-
-function Conto() {
-  const [attuale, setAttuale] = useState('')
-  const [nuova, setNuova] = useState('')
-  const [ripeti, setRipeti] = useState('')
-  const [faccio, setFaccio] = useState<'' | 'cambio' | 'esco'>('')
-  const [detto, setDetto] = useState('')
-  const [guaio, setGuaio] = useState('')
-
-  const cambia = async () => {
-    if (nuova !== ripeti) { setGuaio(t('Le due password nuove non coincidono.')); return }
-    setFaccio('cambio'); setDetto(''); setGuaio('')
-    try {
-      await api.cambiaPassword(attuale, nuova)
-      setAttuale(''); setNuova(''); setRipeti('')
-      setDetto(t('Password cambiata. Gli altri dispositivi dovranno rientrare.'))
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setFaccio('')
-  }
-
-  const esciOvunque = async () => {
-    setFaccio('esco'); setGuaio('')
-    try { await api.esciOvunque(); sessione.pulisci(); location.reload() }
-    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio('') }
-  }
-
-  const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
-  const BOTTONE = (acceso: boolean): React.CSSProperties => ({
-    padding: '11px 20px', borderRadius: 99, border: 'none',
-    background: acceso ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
-    color: acceso ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
-    fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: acceso ? 'pointer' : 'default'
-  })
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Il tuo accesso')}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 6, maxWidth: 640 }}>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Password attuale')}</div>
-          <input type="password" value={attuale} onChange={e => setAttuale(e.target.value)} autoComplete="current-password"
-            className={classeCampo('chiaro')} style={campo('chiaro')} />
-        </div>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Password nuova')}</div>
-          <input type="password" value={nuova} onChange={e => setNuova(e.target.value)} autoComplete="new-password"
-            placeholder={t('otto caratteri')} className={classeCampo('chiaro')} style={campo('chiaro')} />
-        </div>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Ripeti la nuova')}</div>
-          <input type="password" value={ripeti} onChange={e => setRipeti(e.target.value)} autoComplete="new-password"
-            onKeyDown={e => { if (e.key === 'Enter' && pronto) cambia() }}
-            className={classeCampo('chiaro')} style={campo('chiaro')} />
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={cambia} disabled={!pronto} style={BOTTONE(pronto)}>
-          {faccio === 'cambio' ? t('Un momento…') : t('Cambia la password')}
-        </button>
-        <button onClick={esciOvunque} disabled={!!faccio} style={{
-          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
-        }}>{faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}</button>
-      </div>
-      {detto && <div style={{ fontSize: '12.5px', color: 'var(--verde-cupo)', marginTop: 10 }}>{detto}</div>}
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
-  )
-}
-
-/**
- * Come ti chiami, e cosa fai.
- *
- * `/api/profilo` li accetta da sempre e li chiedeva **solo l'onboarding**: una
- * scrittura andata storta là dentro — la rete che salta, una scheda chiusa a
- * metà — e da lì in avanti Myynd ti chiamava «tu» per sempre, senza nessuna
- * schermata da cui rimediare. Due campi non sono una funzione nuova: sono la
- * via d'uscita che mancava a una cosa che si può scrivere una volta sola.
- *
- * Si va a prendere il valore vero invece di leggerlo da `v.nome`, che porta già
- * il ripiego: un campo precompilato con «tu» chiede di cancellare una parola
- * che nessuno ha scritto.
- */
-function Identita() {
-  const [nome, setNome] = useState('')
-  const [ruolo, setRuolo] = useState('')
-  const [caricato, setCaricato] = useState(false)
-  const [salvo, setSalvo] = useState(false)
-  const [detto, setDetto] = useState('')
-  const [guaio, setGuaio] = useState('')
-
-  useEffect(() => {
-    api.stato()
-      .then(s => { setNome(s.config.nome ?? ''); setRuolo(s.config.ruolo ?? ''); setCaricato(true) })
-      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
-  }, [])
-
-  const salva = async () => {
-    setSalvo(true); setDetto(''); setGuaio('')
-    try {
-      await api.profilo({ nome: nome.trim(), ruolo: ruolo.trim() })
-      setDetto(t('Salvato.'))
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setSalvo(false)
-  }
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Chi sei')}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12, maxWidth: 520 }}>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Nome')}</div>
-          <input value={nome} onChange={e => setNome(e.target.value)} disabled={!caricato}
-            onKeyDown={e => { if (e.key === 'Enter' && caricato) salva() }}
-            className={classeCampo('chiaro')} style={campo('chiaro')} />
-        </div>
-        <div>
-          <div style={etichetta('chiaro')}>{t('Ruolo')}</div>
-          <input value={ruolo} onChange={e => setRuolo(e.target.value)} disabled={!caricato}
-            onKeyDown={e => { if (e.key === 'Enter' && caricato) salva() }}
-            placeholder={t('titolare, responsabile vendite, …')} className={classeCampo('chiaro')} style={campo('chiaro')} />
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={salva} disabled={!caricato || salvo} style={{
-          padding: '11px 20px', borderRadius: 99, border: 'none',
-          background: caricato && !salvo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
-          color: caricato && !salvo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
-          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: caricato && !salvo ? 'pointer' : 'default'
-        }}>{salvo ? t('Un momento…') : t('Salva')}</button>
-        {detto && <span style={{ fontSize: '12.5px', color: 'var(--verde-cupo)' }}>{detto}</span>}
-      </div>
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
-  )
-}
-
-/**
- * «Dammi tutto quello che avete su di me».
- *
- * Accanto al pacco del trasloco e non dentro, perché sono due cose diverse e
- * confonderle costa: quello sposta un'installazione e **dentro ha le
- * credenziali vere** — apre la casella di posta di chi l'ha fatto — questo si
- * legge, si stampa, si manda a un consulente, e le credenziali non ce le ha.
- * La password si chiede lo stesso: dentro non ci sono chiavi, ma c'è tutta la
- * posta letta.
- */
-function Fascicolo() {
-  const [password, setPassword] = useState('')
-  const [chiedo, setChiedo] = useState(false)
-  const [faccio, setFaccio] = useState(false)
-  const [detto, setDetto] = useState('')
-  const [guaio, setGuaio] = useState('')
-
-  const scarica = async () => {
-    if (!password) { setChiedo(true); return }
-    setFaccio(true); setDetto(''); setGuaio('')
-    try {
-      const { nome, dati } = await api.scaricaDati(password)
-      setPassword(''); setChiedo(false)
-      const url = URL.createObjectURL(dati)
-      const a = document.createElement('a')
-      a.href = url; a.download = nome; a.click()
-      URL.revokeObjectURL(url)
-      setDetto(t('Scaricato: è nella cartella dei download.'))
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setFaccio(false)
-  }
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Tutto quello che tengo su di te')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {t('Un file che si legge, con dentro il tuo conto, i documenti, la lista, quello che ho imparato su di te, le chat, le automazioni e quanto è costato. Le password e i token non ci sono: per spostare un’installazione serve il file qui sopra.')}
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={scarica} disabled={faccio} style={{
-          padding: '11px 20px', borderRadius: 99, cursor: faccio ? 'default' : 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
-          color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13px'
-        }}>{faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica i miei dati')}</button>
-        {chiedo && (
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            autoComplete="current-password" placeholder={t('la tua password')}
-            onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }}
-            className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 220, marginTop: 0 }} />
-        )}
-      </div>
-      {detto && <div style={{ fontSize: '12.5px', color: 'var(--verde-cupo)', marginTop: 10 }}>{detto}</div>}
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-    </div>
-  )
-}
-
-/**
- * Andarsene.
- *
- * Due cose insieme, e non è una cerimonia: la password dice che è lei, e il
- * proprio indirizzo ricopiato a mano la obbliga a fermarsi un secondo davanti a
- * un gesto che non ha un annulla. Un bottone rosso con «sei sicuro?» si preme
- * per riflesso; ricopiare il proprio indirizzo no.
- *
- * E sopra ai due campi c'è scritto **cosa sparisce**, per esteso. Chi cancella
- * un conto quasi sempre non sa che se ne va anche l'indice — mesi di posta
- * letta — e scoprirlo dopo non serve a niente.
- */
-function Cancella() {
-  const [aperto, setAperto] = useState(false)
-  const [password, setPassword] = useState('')
-  const [email, setEmail] = useState('')
-  const [faccio, setFaccio] = useState(false)
-  const [guaio, setGuaio] = useState('')
-
-  const cancella = async () => {
-    setFaccio(true); setGuaio('')
-    try {
-      await api.cancellaConto(password, email)
-      sessione.pulisci()
-      location.reload()
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio(false) }
-  }
-
-  const puo = !!password && !!email.trim() && !faccio
-
-  return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Cancella il conto')}</div>
-      <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 540, textWrap: 'pretty' }}>
-        {t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}
-      </div>
-
-      {!aperto ? (
-        <button onClick={() => setAperto(true)} style={{
-          marginTop: 14, padding: '11px 20px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-          border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.6)', color: 'var(--rame-testo)', fontSize: '13px'
-        }}>{t('Voglio cancellare il conto')}</button>
-      ) : (
-        <div style={{
-          marginTop: 12, padding: '14px 15px', borderRadius: 14,
-          border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--rame-rgb),.08)', maxWidth: 540
-        }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-            <div>
-              <div style={etichetta('chiaro')}>{t('La tua password')}</div>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                autoComplete="current-password" className={classeCampo('chiaro')} style={campo('chiaro')} />
-            </div>
-            <div>
-              <div style={etichetta('chiaro')}>{t('Il tuo indirizzo, per conferma')}</div>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"
-                placeholder={t('tu@tuodominio.it')} className={classeCampo('chiaro')} style={campo('chiaro')} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <button onClick={cancella} disabled={!puo} style={{
-              padding: '9px 17px', borderRadius: 99, border: 'none', fontFamily: 'inherit', fontSize: '12.5px',
-              background: puo ? 'var(--rame-forte)' : 'rgba(var(--inchiostro-rgb),.18)', color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.5)',
-              cursor: puo ? 'pointer' : 'default'
-            }}>{faccio ? t('Un momento…') : t('Cancella tutto, per sempre')}</button>
-            <button onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }} style={{
-              padding: '9px 17px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)',
-              color: 'rgba(var(--inchiostro-rgb),.7)', fontSize: '12.5px'
-            }}>{t('Lascia stare')}</button>
-          </div>
-          {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 10, overflowWrap: 'anywhere' }}>{guaio}</div>}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function CampoArgomenti({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.argomenti)
   const [salvato, setSalvato] = useState(false)
@@ -661,77 +308,359 @@ function CampoArgomenti({ v }: { v: Vals }) {
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-        <input
-          value={testo}
-          onChange={e => setTesto(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') salva() }}
-          placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')}
-          style={{
-            flex: 1, minWidth: 0, padding: '12px 15px', borderRadius: 13,
-            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.75)',
-            color: 'var(--inchiostro)', fontSize: '14px', fontFamily: 'inherit', outline: 'none'
-          }} />
-        <button onClick={salva} style={{
-          flex: 'none', padding: '12px 22px', borderRadius: 99, border: 'none',
-          background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
-          fontSize: '13.5px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
-        }}>{salvato ? t('Salvato') : t('Salva')}</button>
-      </div>
-
-      {/*
-        Quello che ha imparato guardandoti leggere.
-
-        Sta qui sotto e non dentro il campo perché non è una cosa che hai
-        scritto tu: è una cosa che ha concluso lui. Tenerle separate è quello
-        che permette di crederci — e di correggerlo scrivendo sopra nel campo,
-        che è l'unica leva che deve avere chi non è d'accordo.
-      */}
-      {/*
-        Chi ha scritto quella riga.
-
-        Il campo restava vuoto per sempre, e non per distrazione: «su cosa vuoi
-        essere tenuto aggiornato?» è una domanda a cui non si risponde davanti a
-        una casella di testo. Adesso, se è vuoto, lo scrive Myynd da quello che
-        apri davvero — e lo dice, perché una riga comparsa da sola che nessuno
-        dichiara è peggio di una riga vuota.
-      */}
-      <div style={{
-        display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
-        marginTop: 9, fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)'
-      }}>
-        {v.argomentiDaMe && !!v.argomenti && (
-          <span style={{ textWrap: 'pretty' }}>
-            {t('L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.')}
-          </span>
-        )}
-        <Hov as="button" type="button" onClick={proponi} disabled={chiedo}
-          style={{
-            border: 'none', background: 'none', padding: 0, fontFamily: 'inherit',
-            fontSize: '12px', color: 'var(--rame-testo)', cursor: chiedo ? 'default' : 'pointer'
-          }}
-          hover={chiedo ? {} : { color: 'var(--rame)' }}>
+    <Scheda titolo={t('Di cosa ti tengo aggiornato')}>
+      <input className="prefs-campo" value={testo} onChange={e => setTesto(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') salva() }}
+        aria-label={t('Di cosa ti tengo aggiornato')}
+        placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')} />
+      <div className="prefs-piede">
+        <button type="button" className="prefs-quieto" onClick={proponi} disabled={chiedo}>
           {chiedo ? t('Guardo…') : t('Scrivilo da quello che faccio e leggo')}
-        </Hov>
-        {detto && <span>{detto}</span>}
+        </button>
+        <div style={{ flex: 1 }} />
+        <button type="button" className="prefs-pieno" onClick={salva}>{salvato ? t('Salvato') : t('Salva')}</button>
       </div>
-
+      {/*
+        Quello che ha imparato guardandoti leggere: non è una cosa che hai
+        scritto tu, è una cosa che ha concluso lui, e tenerle separate è quello
+        che permette di crederci — e di correggerlo scrivendo sopra nel campo.
+      */}
+      {(detto || (v.argomentiDaMe && !!v.argomenti)) && (
+        <div className="prefs-stato">{detto || t('L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.')}</div>
+      )}
       {gusto && (
-        <div style={{
-          marginTop: 12, padding: '10px 13px', borderRadius: 12,
-          background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.07)'
-        }}>
-          <div style={{ ...LABEL, fontSize: '10.5px', color: 'rgba(var(--inchiostro-rgb),.45)' }}>
-            {t('Da come leggi')}
-          </div>
-          <div style={{ fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.7)', marginTop: 5, textWrap: 'pretty' }}>
-            {gusto}
-          </div>
+        <div className="prefs-stato"><span className="prefs-etichetta">{t('Da come leggi')}</span>{gusto}</div>
+      )}
+    </Scheda>
+  )
+}
+
+/**
+ * Quanto è costato ragionare, e dove sta il tetto.
+ *
+ * Prima «perché ho speso sei dollari in tre giorni» non aveva un posto in
+ * cui trovare risposta. Qui si vede oggi e gli ultimi giorni, in token — che
+ * è quello che si paga — e si mette un tetto oltre il quale Myynd smette di
+ * chiamare il modello fino a domani.
+ */
+function Uso() {
+  const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
+  const [tetto, setTetto] = useState('')
+  const [salvo, setSalvo] = useState(false)
+  const [guaio, setGuaio] = useState('')
+  useEffect(() => {
+    // un errore qui faceva sparire la carta intera, senza dire niente: è la
+    // stessa distinzione fra «vuoto» e «guasto» che vale per il feed e la mappa
+    api.uso()
+      .then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') })
+      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+  }, [])
+
+  const salva = async () => {
+    const n = Math.max(0, Math.floor(Number(tetto) || 0))
+    setSalvo(true); setGuaio('')
+    try { await api.profilo({ tetto: n }); setU(await api.uso()) }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setSalvo(false)
+  }
+
+  if (!u) {
+    if (!guaio) return null
+    return <Scheda titolo={t('Quanto ha ragionato')}><div className="prefs-stato rame">{guaio}</div></Scheda>
+  }
+  const mila = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n)
+  const giorni = u.giorni.slice(-7)
+  const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
+
+  return (
+    <Scheda titolo={t('Quanto ha ragionato')}>
+      <div className="prefs-stato">
+        {u.oggi.chiamate
+          ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
+          : t('Oggi ancora niente.')}
+        {u.oggi.raggiunto && <span className="rame"> {t('Tetto raggiunto: si riparte domani.')}</span>}
+      </div>
+      {giorni.length > 1 && (
+        <div aria-hidden="true" className="prefs-barre">
+          {giorni.map(g => {
+            const tot = g.entrata + g.uscita
+            return <div key={g.giorno} className="prefs-barra" title={`${g.giorno} · ${mila(tot)}`}
+              style={{ height: `${Math.max(8, Math.round(100 * tot / max))}%` }} />
+          })}
         </div>
       )}
-    </>
+      <div>
+        <span className="prefs-etichetta">{t('Tetto al giorno, in token')}</span>
+        <input inputMode="numeric" className="prefs-campo" value={tetto} placeholder={t('nessuno')}
+          aria-label={t('Tetto al giorno, in token')}
+          onChange={e => setTetto(e.target.value.replace(/[^\d]/g, ''))}
+          onKeyDown={e => { if (e.key === 'Enter') salva() }} />
+      </div>
+      <div className="prefs-piede">
+        <div className="prefs-stato" />
+        <button type="button" className="prefs-pieno" onClick={salva} disabled={salvo}>
+          {salvo ? t('Un momento…') : t('Salva')}
+        </button>
+      </div>
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
   )
+}
+
+/**
+ * Il conto: la password si cambia da qui, e le sessioni si chiudono da qui.
+ * Prima l'unica strada era la riga di comando di chi ospita — cioè nessuna,
+ * per chi usa.
+ */
+function Conto() {
+  const [attuale, setAttuale] = useState('')
+  const [nuova, setNuova] = useState('')
+  const [ripeti, setRipeti] = useState('')
+  const [faccio, setFaccio] = useState<'' | 'cambio' | 'esco'>('')
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  const cambia = async () => {
+    if (nuova !== ripeti) { setGuaio(t('Le due password nuove non coincidono.')); return }
+    setFaccio('cambio'); setDetto(''); setGuaio('')
+    try {
+      await api.cambiaPassword(attuale, nuova)
+      setAttuale(''); setNuova(''); setRipeti('')
+      setDetto(t('Password cambiata. Gli altri dispositivi dovranno rientrare.'))
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setFaccio('')
+  }
+
+  const esciOvunque = async () => {
+    setFaccio('esco'); setGuaio('')
+    try { await api.esciOvunque(); sessione.pulisci(); location.reload() }
+    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio('') }
+  }
+
+  const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
+
+  return (
+    <Scheda titolo={t('Il tuo accesso')}>
+      <div className="prefs-coppia">
+        <div>
+          <span className="prefs-etichetta">{t('Password attuale')}</span>
+          <input type="password" className="prefs-campo" value={attuale} onChange={e => setAttuale(e.target.value)} autoComplete="current-password" />
+        </div>
+        <div>
+          <span className="prefs-etichetta">{t('Password nuova')}</span>
+          <input type="password" className="prefs-campo" value={nuova} onChange={e => setNuova(e.target.value)} autoComplete="new-password"
+            placeholder={t('otto caratteri')} />
+        </div>
+        <div>
+          <span className="prefs-etichetta">{t('Ripeti la nuova')}</span>
+          <input type="password" className="prefs-campo" value={ripeti} onChange={e => setRipeti(e.target.value)} autoComplete="new-password"
+            onKeyDown={e => { if (e.key === 'Enter' && pronto) cambia() }} />
+        </div>
+      </div>
+      <div className="prefs-piede">
+        <button type="button" className="prefs-quieto" onClick={esciOvunque} disabled={!!faccio}>
+          {faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}
+        </button>
+        <div style={{ flex: 1 }} />
+        <button type="button" className="prefs-pieno" onClick={cambia} disabled={!pronto}>
+          {faccio === 'cambio' ? t('Un momento…') : t('Cambia la password')}
+        </button>
+      </div>
+      {detto && <div className="prefs-stato verde">{detto}</div>}
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
+  )
+}
+
+/**
+ * Come ti chiami, e cosa fai.
+ *
+ * `/api/profilo` li accetta da sempre e li chiedeva **solo l'onboarding**: una
+ * scrittura andata storta là dentro — la rete che salta, una scheda chiusa a
+ * metà — e da lì in avanti Myynd ti chiamava «tu» per sempre, senza nessuna
+ * schermata da cui rimediare.
+ *
+ * Si salva lasciando il campo o con Invio, con una spunta piccola che lo dice:
+ * la stessa regola dei campi di un progetto, e nessun bottone da premere.
+ */
+function Identita() {
+  const [nome, setNome] = useState('')
+  const [ruolo, setRuolo] = useState('')
+  const [caricato, setCaricato] = useState(false)
+  const [fatto, setFatto] = useState(false)
+  const [guaio, setGuaio] = useState('')
+  /** Quello che il server ha davvero: senza, ogni uscita dal campo riscrive. */
+  const vero = useRef({ nome: '', ruolo: '' })
+  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    api.stato()
+      .then(s => {
+        const n = s.config.nome ?? '', r = s.config.ruolo ?? ''
+        vero.current = { nome: n, ruolo: r }
+        setNome(n); setRuolo(r); setCaricato(true)
+      })
+      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+  }, [])
+  useEffect(() => () => clearTimeout(orologio.current), [])
+
+  const salva = async () => {
+    if (!caricato) return
+    const n = nome.trim(), r = ruolo.trim()
+    if (n === vero.current.nome && r === vero.current.ruolo) return
+    setGuaio('')
+    try {
+      await api.profilo({ nome: n, ruolo: r })
+      vero.current = { nome: n, ruolo: r }
+      setFatto(true)
+      clearTimeout(orologio.current)
+      orologio.current = setTimeout(() => setFatto(false), 2400)
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+  }
+
+  return (
+    <Scheda titolo={t('Chi sei')}>
+      <div className="prefs-coppia">
+        <div>
+          <span className="prefs-etichetta">{t('Nome')}</span>
+          <input className="prefs-campo" value={nome} onChange={e => setNome(e.target.value)} disabled={!caricato}
+            onBlur={salva} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+        </div>
+        <div>
+          <span className="prefs-etichetta">{t('Ruolo')}</span>
+          <input className="prefs-campo" value={ruolo} onChange={e => setRuolo(e.target.value)} disabled={!caricato}
+            onBlur={salva} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            placeholder={t('titolare, responsabile vendite, …')} />
+        </div>
+      </div>
+      <div className="prefs-piede"><div className="prefs-stato" /><Tic mostra={fatto} /></div>
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
+  )
+}
+
+/**
+ * «Dammi tutto quello che avete su di me».
+ *
+ * Si legge, si stampa, si manda a un consulente. La password si chiede lo
+ * stesso: dentro non ci sono chiavi, ma c'è tutta la posta letta.
+ */
+function Fascicolo() {
+  const [password, setPassword] = useState('')
+  const [chiedo, setChiedo] = useState(false)
+  const [faccio, setFaccio] = useState(false)
+  const [detto, setDetto] = useState('')
+  const [guaio, setGuaio] = useState('')
+
+  const scarica = async () => {
+    if (!password) { setChiedo(true); return }
+    setFaccio(true); setDetto(''); setGuaio('')
+    try {
+      const { nome, dati } = await api.scaricaDati(password)
+      setPassword(''); setChiedo(false)
+      const url = URL.createObjectURL(dati)
+      const a = document.createElement('a')
+      a.href = url; a.download = nome; a.click()
+      URL.revokeObjectURL(url)
+      setDetto(t('Scaricato: è nella cartella dei download.'))
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    setFaccio(false)
+  }
+
+  return (
+    <Scheda titolo={t('Scarica i miei dati')}>
+      {/* una riga sola, e dice una cosa che non si può dedurre dal bottone */}
+      <div className="prefs-stato">{t('Senza password né token.')}</div>
+      {chiedo && (
+        <input type="password" className="prefs-campo" value={password} onChange={e => setPassword(e.target.value)}
+          autoComplete="current-password" placeholder={t('la tua password')} autoFocus
+          aria-label={t('la tua password')}
+          onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }} />
+      )}
+      <div className="prefs-piede">
+        <div className="prefs-stato" />
+        <button type="button" className="prefs-pieno" onClick={scarica} disabled={faccio}>
+          {faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica')}
+        </button>
+      </div>
+      {detto && <div className="prefs-stato verde">{detto}</div>}
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
+  )
+}
+
+/**
+ * Andarsene.
+ *
+ * Due cose insieme, e non è una cerimonia: la password dice che è lei, e il
+ * proprio indirizzo ricopiato a mano la obbliga a fermarsi un secondo davanti a
+ * un gesto che non ha un annulla. Un bottone rosso con «sei sicuro?» si preme
+ * per riflesso; ricopiare il proprio indirizzo no.
+ *
+ * E sopra ai due campi c'è scritto **cosa sparisce**, per esteso: quella riga
+ * non è una spiegazione del bottone, è la conseguenza di premerlo.
+ */
+function Cancella() {
+  const [aperto, setAperto] = useState(false)
+  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
+  const [faccio, setFaccio] = useState(false)
+  const [guaio, setGuaio] = useState('')
+
+  const cancella = async () => {
+    setFaccio(true); setGuaio('')
+    try {
+      await api.cancellaConto(password, email)
+      sessione.pulisci()
+      location.reload()
+    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio(false) }
+  }
+
+  const puo = !!password && !!email.trim() && !faccio
+
+  return (
+    <Scheda titolo={t('Cancella il conto')} quieta larga={aperto}>
+      <div className="prefs-stato">{t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}</div>
+      {!aperto ? (
+        <div className="prefs-piede">
+          <div className="prefs-stato" />
+          <button type="button" className="prefs-secondario prefs-rosso" onClick={() => setAperto(true)}>
+            {t('Voglio cancellare il conto')}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="prefs-coppia">
+            <div>
+              <span className="prefs-etichetta">{t('La tua password')}</span>
+              <input type="password" className="prefs-campo" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+            </div>
+            <div>
+              <span className="prefs-etichetta">{t('Il tuo indirizzo, per conferma')}</span>
+              <input type="email" className="prefs-campo" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"
+                placeholder={t('tu@tuodominio.it')} />
+            </div>
+          </div>
+          <div className="prefs-piede">
+            <button type="button" className="prefs-quieto" onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }}>
+              {t('Lascia stare')}
+            </button>
+            <div style={{ flex: 1 }} />
+            <button type="button" className="prefs-pieno" onClick={cancella} disabled={!puo}
+              style={puo ? { background: 'var(--rame-forte)' } : undefined}>
+              {faccio ? t('Un momento…') : t('Cancella tutto, per sempre')}
+            </button>
+          </div>
+        </>
+      )}
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+    </Scheda>
+  )
+}
+
+/** «Ollama · qwen3.5:9b»: il nome che gli ha dato lei, e il modello che lavora davvero. */
+function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
+  return [f.nome, f.modello].filter(Boolean).join(' · ')
 }
 
 /**
@@ -743,20 +672,10 @@ function CampoArgomenti({ v }: { v: Vals }) {
  * *come* è collegata lo dice la riga sotto il nome. Qui si sceglie solo chi
  * lavora; per collegare o cambiare strada c'è il bottone, che apre la scheda.
  *
- * Era una riga per ogni modo di pagare — ChatGPT, Claude con la chiave,
- * Claude Code, un altro fornitore — con tre righe di spiegazione ciascuna.
- * Quattro righe per tre fornitori: si leggevano tutte per capire quale fosse
- * accesa. Adesso è un fornitore per riga, e una riga per fornitore.
- *
  * Siccome Myynd è stato messo a punto su Claude, scegliere un altro si può,
- * ma con l'avviso scritto sotto e non in una nota a piè di pagina: la
- * qualità non deve calare in silenzio.
+ * ma con una riga che lo dice — non più un riquadro d'avviso di quattro righe
+ * sotto la scelta.
  */
-/** «Ollama · qwen3.5:9b»: il nome che gli ha dato lei, e il modello che lavora davvero. */
-function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
-  return [f.nome, f.modello].filter(Boolean).join(' · ')
-}
-
 function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   type Via = 'claude' | 'openai' | 'compatibile'
   const [s, setS] = useState<ClaudeCon | null>(null)
@@ -780,13 +699,12 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   /*
    * Il modello di casa, provato davvero, all'apertura della scheda.
    *
-   * Questa riga diceva solo *cosa* era collegato — nome, modello, indirizzo —
-   * e non se funzionava. Ma un modello sul proprio computer è una cosa che si
-   * spegne: si chiude Ollama, si riavvia il portatile, e la riga continua a
-   * dire «In uso» mentre la chat non risponde più. Si prova, e si dice in
-   * quanto ha risposto. Solo in casa: la rotta che prova riscrive la
-   * configurazione con quello che le si manda, e la chiave di un fornitore
-   * in rete qui non ce l'abbiamo.
+   * Un modello sul proprio computer è una cosa che si spegne: si chiude
+   * Ollama, si riavvia il portatile, e la riga continua a dire «In uso»
+   * mentre la chat non risponde più. Si prova, e si dice in quanto ha
+   * risposto. Solo in casa: la rotta che prova riscrive la configurazione con
+   * quello che le si manda, e la chiave di un fornitore in rete qui non ce
+   * l'abbiamo.
    */
   const inCasa = !!f && /^https?:\/\/(127\.|localhost|\[?::1\]?|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(f.url)
   const [velocita, setVelocita] = useState<{ ok: boolean; ms: number } | null>(null)
@@ -879,9 +797,8 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   ]
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Con quale motore lavora')}</div>
-      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 12 }}>
+    <Scheda titolo={t('Con quale motore lavora')} larga>
+      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {vie.map(x => {
           const scelto = attuale === x.id
           const guaio = manca(x.id)
@@ -889,39 +806,29 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
           const spento = x.id === 'openai' && scelto && v.motore === 'chatgpt' && chatgpt && !chatgpt.acceso
           return (
             // dentro c'è il bottone «Gestisci»: la riga tiene il ruolo, non il tag
-            <div key={x.id} role="radio" aria-checked={scelto} tabIndex={0}
-              onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))} style={{
-                display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderRadius: 16, cursor: 'pointer',
-                background: scelto ? 'rgba(var(--luce-rgb),.85)' : 'transparent',
-                boxShadow: scelto ? '0 12px 30px rgba(var(--ombra-rgb),.1)' : 'none'
-              }}>
-              <span style={{
-                width: 15, height: 15, flex: 'none', borderRadius: '50%', marginTop: 3,
-                border: scelto ? '4px solid var(--rame)' : '1.5px solid rgba(var(--inchiostro-rgb),.35)',
-                background: scelto ? 'var(--avorio)' : 'transparent'
-              }} />
+            <div key={x.id} className="prefs-via" role="radio" aria-checked={scelto} tabIndex={0}
+              onClick={() => scegli(x.id)} onKeyDown={daTastiera(() => scegli(x.id))}>
+              <span className="prefs-bollo" />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 15, overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{x.titolo}</span>
+                <div className="prefs-via-cima">
+                  <span>{x.titolo}</span>
                   <span className={`prefs-status ${guaio || spento ? 'needs-attention' : 'ready'}`}>
                     {spento ? t('Disattivato in Myynd') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
-                  <Hov as="button" type="button"
+                  <Hov as="button" type="button" className="prefs-secondario"
                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.apri() }}
-                    style={{ flex: 'none', border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.7)', borderRadius: 99, padding: '5px 12px', color: 'var(--inchiostro)', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    style={{ padding: '5px 12px', fontSize: '12px' }}
                     hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
                     {x.collegato ? t('Gestisci') : t('Collega')}
                   </Hov>
                 </div>
                 {/* da quale strada passa, o cosa manca: sotto il nome, in una riga */}
                 {(riga || guaio) && (
-                  <div style={{ fontSize: '12.5px', marginTop: 5, color: guaio ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.65)', overflowWrap: 'anywhere', textWrap: 'pretty' }}>
-                    {riga ?? guaio}
-                  </div>
+                  <div className={`prefs-stato${guaio ? ' rame' : ''}`} style={{ marginTop: 5 }}>{riga ?? guaio}</div>
                 )}
                 {scelto && x.id === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo && (
-                  <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 6, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                    <span>{t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}</span>
+                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
+                    {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}{' '}
                     <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
                   </div>
                 )}
@@ -931,17 +838,13 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                   lui ha raccontato per prima. Dirlo qui, con la via d'uscita.
                 */}
                 {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
-                  <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8, textWrap: 'pretty' }}>
+                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
                     {t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}
                   </div>
                 )}
                 {scelto && x.id !== 'claude' && (
-                  <div style={{
-                    fontSize: '12.5px', lineHeight: 1.55, marginTop: 10, padding: '10px 13px', borderRadius: 12,
-                    border: '1px solid rgba(var(--rame-rgb),.28)', background: 'rgba(var(--rame-rgb),.07)', color: 'var(--rame-testo)',
-                    textWrap: 'pretty'
-                  }}>
-                    {t('Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise — soprattutto le bozze e le fonti citate: rileggile prima di fidarti.')}
+                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
+                    {t('Messo a punto su Claude: con un altro modello rileggi le bozze e le fonti citate.')}
                   </div>
                 )}
               </div>
@@ -949,46 +852,36 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
           )
         })}
       </div>
-    </div>
+    </Scheda>
   )
 }
 
 /** La pastiglia di un modello: scelta, di rame; altrimenti solo il bordo. */
 function pastigliaModello(scelta: boolean): React.CSSProperties {
   return scelta
-    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
+    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
     : { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }
 }
 
 /**
  * Quale modello di Claude, per quale lavoro.
  *
- * Era una scelta sola — un modello per tutto — con tre righe di spiegazione
- * per modello. Ma il lavoro non è uno: dare un titolo a una chat e scrivere
- * una bozza che esce dall'azienda non valgono la stessa spesa, e chi paga
- * deve poterlo dire senza conoscere la tabella dei lavori. Tre righe, una
- * per livello, e su ognuna i tre modelli come pastiglie: si legge in un
- * colpo d'occhio dove si spende, e si cambia con un clic.
- *
- * Sta nelle preferenze e non nel codice perché è una scelta di costo. Si vede
- * solo quando è Claude a lavorare: con un altro motore il modello lo dice la
- * sua scheda.
+ * Il lavoro non è uno: dare un titolo a una chat e scrivere una bozza che esce
+ * dall'azienda non valgono la stessa spesa, e chi paga deve poterlo dire senza
+ * conoscere la tabella dei lavori. Tre righe, una per livello, e su ognuna i
+ * tre modelli come pastiglie.
  */
 function Modelli({ v }: { v: Vals }) {
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
-        {t('Haiku costa un decimo di Sonnet, Opus cinque volte tanto. Scegli dove spendere.')}
-      </div>
-      <div style={{ marginTop: 8 }}>
+    <Scheda titolo={t('Quale modello, per quale lavoro')} larga>
+      <div>
         {v.livelli.map(l => (
-          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: 14 }}>{l.titolo}</div>
-              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+          <div key={l.id} className="prefs-livello">
+            <div>
+              <div className="prefs-nome">{l.titolo}</div>
+              <div className="prefs-stato">{l.nota}</div>
             </div>
-            <div role="radiogroup" aria-label={l.titolo} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div role="radiogroup" aria-label={l.titolo} className="prefs-pastiglie">
               {v.modelli.map(m => (
                 <button key={m.id} type="button" role="radio" aria-checked={l.scelto === m.id} title={m.nota}
                   onClick={() => { if (l.scelto !== m.id) l.scegli(m.id) }} style={pastigliaModello(l.scelto === m.id)}>{m.nome}</button>
@@ -997,18 +890,17 @@ function Modelli({ v }: { v: Vals }) {
           </div>
         ))}
       </div>
-    </div>
+    </Scheda>
   )
 }
 
 /**
  * Quale modello di OpenAI, per quale lavoro.
  *
- * La stessa carta di Claude, con una differenza che decide la forma: i modelli
+ * La stessa scheda di Claude, con una differenza che decide la forma: i modelli
  * non sono tre nostri, sono quelli del catalogo — dell'API con la chiave, del
  * piano con l'account — e possono essere venti. Quindi un menù per riga, non
- * le pastiglie. Con l'account, la prima voce è «il modello del piano»: è
- * quello che lavora finché non si sceglie altro.
+ * le pastiglie.
  */
 function ModelliOpenAI({ v }: { v: Vals }) {
   const [via, setVia] = useState<'chiave' | 'account' | null>(null)
@@ -1034,28 +926,24 @@ function ModelliOpenAI({ v }: { v: Vals }) {
   const opzioni = (attuale: string) => [...new Set([...(attuale && !catalogo.includes(attuale) ? [attuale] : []), ...catalogo])]
 
   return (
-    <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-      <div style={LABEL}>{t('Quale modello, per quale lavoro')}</div>
-      <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 520, textWrap: 'pretty' }}>
-        {via === 'account' ? t('I modelli del tuo piano ChatGPT. Vuoto: quello predefinito del piano.') : t('I modelli della tua chiave OpenAI. Il più piccolo per il lavoro di servizio, il migliore per quello che firmi.')}
-      </div>
-      {guaio && <div style={{ fontSize: '12.5px', color: 'var(--rame-testo)', marginTop: 8 }}>{guaio}</div>}
-      <div style={{ marginTop: 8 }}>
+    <Scheda titolo={t('Quale modello, per quale lavoro')} larga>
+      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+      <div>
         {v.livelli.map(l => (
-          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)' }}>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: 14 }}>{l.titolo}</div>
-              <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'rgba(var(--inchiostro-rgb),.6)', marginTop: 2, textWrap: 'pretty' }}>{l.nota}</div>
+          <div key={l.id} className="prefs-livello">
+            <div>
+              <div className="prefs-nome">{l.titolo}</div>
+              <div className="prefs-stato">{l.nota}</div>
             </div>
             <select aria-label={l.titolo} value={scelti[l.id]} onChange={e => scegli(l.id, e.target.value)}
-              className={classeCampo('chiaro')} style={{ ...campo('chiaro'), width: 'auto', minWidth: 200, maxWidth: '100%', padding: '8px 12px', fontSize: '13px' }}>
+              className="prefs-campo" style={{ width: 'auto', minWidth: 200, maxWidth: '100%', padding: '8px 12px', fontSize: '13px' }}>
               {via === 'account' && <option value="">{t('Il modello del piano')}</option>}
               {opzioni(scelti[l.id]).map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
         ))}
       </div>
-    </div>
+    </Scheda>
   )
 }
 
@@ -1074,7 +962,6 @@ export function Preferenze({ v }: { v: Vals }) {
     <main className="prefs-page">
       <header className="prefs-header">
         <h1>{t('Preferenze')}</h1>
-        <p>{t('Scegli un’area. Le impostazioni meno usate restano fuori dalla strada finché non ti servono.')}</p>
       </header>
 
       <div className="prefs-layout">
@@ -1094,135 +981,102 @@ export function Preferenze({ v }: { v: Vals }) {
             <p>{attuale.nota}</p>
           </div>
 
-      {sezione === 'myynd' && <>
-      {/*
-        Il fuoco sta qui e non più come pastiglia sopra al feed.
-        È una preferenza a tutti gli effetti — vale per tutte le letture che
-        verranno, non per quella che stai guardando — e sopra al feed era una
-        riga di testo in mezzo al lavoro, per una cosa che si cambia una volta
-        alla settimana. Quello che scrivi qui è anche l'unica leva che hai per
-        non farti riempire la prima pagina di roba che non ti serve.
-      */}
-      <div style={{ ...CARD_GLASS, flex: 'none', borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Su cosa mi concentro')}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
-          {t('Viene prima di tutto quando scelgo cosa metterti in prima pagina.')}
-        </div>
-        <CampoFuoco v={v} />
-      </div>
+          {sezione === 'myynd' && (
+            <div className="prefs-grid">
+              {/*
+                Il fuoco sta qui e non più come pastiglia sopra al feed: è una
+                preferenza a tutti gli effetti, e vale per tutte le letture che
+                verranno, non per quella che stai guardando.
+              */}
+              <CampoFuoco v={v} />
+              {/* Subito dopo il fuoco perché sono la stessa domanda fatta due
+                  volte — dove guardo dentro, cosa cerco fuori. */}
+              <CampoArgomenti v={v} />
 
-      {/* Subito sotto al fuoco perché sono la stessa domanda fatta due volte —
-          dove guardo dentro, cosa cerco fuori — e leggerle vicine è l'unico
-          modo per non confonderle. */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Di cosa ti tengo aggiornato')}</div>
-        <div style={{ fontSize: '13.5px', color: 'rgba(var(--inchiostro-rgb),.65)', lineHeight: 1.55, marginTop: 6, maxWidth: 520, textWrap: 'pretty' }}>
-          {t('Cosa ti interessa nei giornali. Vuoto: un po’ di tutto.')}
-        </div>
-        <CampoArgomenti v={v} />
-      </div>
+              <Scheda titolo={t('Autonomia')} larga>
+                <div role="radiogroup" aria-label={t('Autonomia')} className="prefs-pastiglie">
+                  {v.autonomie.map(a => (
+                    <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick}
+                      style={pastiglia(a.scelto)}>{a.titolo}</button>
+                  ))}
+                </div>
+                {/* una riga sola: quella della scelta fatta, non tutte e tre */}
+                <div className="prefs-stato">{v.autonomie.find(a => a.scelto)?.nota}</div>
+              </Scheda>
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Autonomia')}</div>
-        {/* tre pastiglie come il tono, e sotto una riga sola: quella della scelta */}
-        <div role="radiogroup" aria-label={t('Autonomia')} style={{ display: 'flex', gap: 9, marginTop: 14, flexWrap: 'wrap' }}>
-          {v.autonomie.map(a => (
-            <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick} title={a.nota} style={a.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{a.titolo}</button>
-          ))}
-        </div>
-        <div style={{ fontSize: '13px', lineHeight: 1.55, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 12, textWrap: 'pretty' }}>{v.autonomie.find(a => a.scelto)?.nota}</div>
-        {/* il tono nella stessa carta: sono le due manopole di come lavora e come parla */}
-        <div style={{ height: 1, background: 'rgba(var(--inchiostro-rgb),.08)', margin: '18px 0 14px' }} />
-        <div style={LABEL}>{t('Tono')}</div>
-        <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-          {v.toni.map(tono => (
-            <button key={tono.id} onClick={tono.onClick} style={tono.style}>{tono.label}</button>
-          ))}
-        </div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.6, color: 'rgba(var(--inchiostro-rgb),.72)', marginTop: 14, padding: '13px 15px', borderRadius: 14, background: 'rgba(var(--inchiostro-rgb),.05)', textWrap: 'pretty' }}>{v.tonoEsempio}</div>
-      </div>
+              <Scheda titolo={t('Tono')}>
+                <div className="prefs-pastiglie">
+                  {v.toni.map(tono => (
+                    <button key={tono.id} type="button" onClick={tono.onClick} style={tono.style}>{tono.label}</button>
+                  ))}
+                </div>
+                <div className="prefs-stato" style={{ padding: '11px 13px', borderRadius: 14, background: 'rgba(var(--inchiostro-rgb),.05)', color: 'rgba(var(--inchiostro-rgb),.72)' }}>
+                  {v.tonoEsempio}
+                </div>
+              </Scheda>
 
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Lingua')}</div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Risposte e prima pagina. I documenti restano nella loro lingua.')}</div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
-          {v.lingue.map(l => (
-            <button key={l.id} onClick={l.onClick} disabled={l.occupato} style={l.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: l.occupato ? 'rgba(var(--inchiostro-rgb),.4)' : 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: l.occupato ? 'default' : 'pointer' }}>
-              {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
-            </button>
-          ))}
-        </div>
-      </div>
+              <Scheda titolo={t('Lingua')}>
+                <div className="prefs-pastiglie">
+                  {v.lingue.map(l => (
+                    <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} style={pastiglia(l.scelto)}>
+                      {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
+                    </button>
+                  ))}
+                </div>
+              </Scheda>
 
-      {/* L'ora del giorno, accanto alla lingua: sono le due cose che
-          cambiano come l'app ti parla e come ti guarda, e si cercano insieme.
-          «Sistema» per primo perche e la risposta giusta per quasi tutti. */}
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Aspetto')}</div>
-        <div style={{ fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 6, lineHeight: 1.5, maxWidth: 460, textWrap: 'pretty' }}>{t('Chiaro di giorno, scuro di sera. «Sistema» segue il tuo computer.')}</div>
-        <div role="radiogroup" aria-label={t('Aspetto')} style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
-          {v.temi.map(x => (
-            <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick} style={x.scelto
-              ? { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, cursor: 'pointer' }
-              : { padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13.5px', cursor: 'pointer' }}>{x.label}</button>
-          ))}
-        </div>
-      </div>
+              {/* L'ora del giorno, accanto alla lingua: sono le due cose che
+                  cambiano come l'app ti parla e come ti guarda. */}
+              <Scheda titolo={t('Aspetto')}>
+                <div role="radiogroup" aria-label={t('Aspetto')} className="prefs-pastiglie">
+                  {v.temi.map(x => (
+                    <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick}
+                      style={pastiglia(x.scelto)}>{x.label}</button>
+                  ))}
+                </div>
+              </Scheda>
 
-      <Identita />
-      </>}
-
-      {sezione === 'intelligenza' && <>
-
-      {/* Chi ragiona: Anthropic, OpenAI, o un modello in casa. */}
-      <Motore v={v} avvisa={v.mostraToast} />
-
-      {/* I modelli di Claude, uno per livello di lavoro: solo quando è Claude a lavorare. */}
-      {v.motore === 'claude' && <Modelli v={v} />}
-      {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
-
-      <Uso />
-      </>}
-
-      {sezione === 'dati' && <>
-      <div className="prefs-sources-card">
-        <div>
-          <div style={LABEL}>{t('Le tue fonti')}</div>
-          <p>{t('Collega o scollega quando vuoi, senza rifare tutto.')}</p>
-        </div>
-        <button onClick={() => v.apriConnessioni()}>{t('Gestisci')} <IconAvanti /></button>
-      </div>
-
-      <Fascicolo />
-
-      <div style={{ ...CARD_GLASS, flex: 'none', marginTop: 14, borderRadius: 20, padding: '18px 22px' }}>
-        <div style={LABEL}>{t('Dove stanno i tuoi dati')}</div>
-        <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'rgba(var(--inchiostro-rgb),.75)', marginTop: 12, textWrap: 'pretty' }}>
-          {v.ospitato ? frasi.doveStannoIDatiServer() : frasi.doveStannoIDati(
-            <code key="directory" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>~/.myynd</code>,
-            <code key="database" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>mente.db</code>,
-            <code key="config" style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 6px', borderRadius: 5 }}>config.json</code>
+              <Identita />
+            </div>
           )}
-        </div>
-      </div>
-      </>}
 
-      {sezione === 'account' && <>
+          {sezione === 'intelligenza' && (
+            <div className="prefs-grid">
+              {/* Chi ragiona: Anthropic, OpenAI, o un modello in casa. */}
+              <Motore v={v} avvisa={v.mostraToast} />
+              {/* I modelli, uno per livello di lavoro: quelli di chi lavora. */}
+              {v.motore === 'claude' && <Modelli v={v} />}
+              {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
+              <Uso />
+            </div>
+          )}
 
-      <Conto />
+          {sezione === 'dati' && (
+            <div className="prefs-grid">
+              <Scheda titolo={t('Le tue fonti')}>
+                <div className="prefs-piede">
+                  <div className="prefs-stato" />
+                  <button type="button" className="prefs-secondario" onClick={() => v.apriConnessioni()}>
+                    {t('Gestisci')} <IconAvanti />
+                  </button>
+                </div>
+              </Scheda>
+              <DoveStanno v={v} />
+              <Fascicolo />
+            </div>
+          )}
 
-      {/* solo dentro l'app da scrivania: nel browser la carta non si disegna */}
-      <LApp />
-
-      {/* ultimo di tutti, e non per pudore: è l'unica cosa in questa schermata
-          che non si può annullare, e non deve stare accanto a niente che si
-          preme di fretta */}
-      <Cancella />
-      </>}
+          {sezione === 'account' && (
+            <div className="prefs-grid">
+              <Conto />
+              {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
+              <LApp />
+              {/* ultima di tutte, e non per pudore: è l'unica cosa in questa
+                  schermata che non si può annullare, e non deve stare accanto a
+                  niente che si preme di fretta */}
+              <Cancella />
+            </div>
+          )}
         </section>
       </div>
     </main>

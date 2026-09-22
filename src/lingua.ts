@@ -1778,6 +1778,16 @@ const EN: Record<string, string> = {
   'Riordino…': 'Tidying…',
   'Rimetti com’era': 'Put it back',
   'Le rimetto nella tua lingua…': 'Putting them into your language…',
+  // — la Memoria e le Preferenze a schede (21 settembre 2026) —
+  'progetto attivo': 'active project',
+  'progetti attivi': 'active projects',
+  'cosa imparata': 'thing learned',
+  'cose imparate': 'things learned',
+  'attivi': 'active',
+  'Il richiamo': 'The quick bar',
+  'Messo a punto su Claude: con un altro modello rileggi le bozze e le fonti citate.': 'Tuned on Claude: with a different model, reread the drafts and the sources it quotes.',
+  'Scarica': 'Download',
+  'Senza password né token.': 'No passwords, no tokens.',
   'azienda': 'the company',
   // — le automazioni —
   'quando arriva qualcosa di nuovo': 'when something new arrives',

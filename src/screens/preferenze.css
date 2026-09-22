@@ -1,3 +1,11 @@
+/* — Le preferenze, a schede —
+   Le quattro aree restano dove sono, nella colonna di sinistra. Quello che
+   cambia è il pannello: era una pila di riquadri larghi, ognuno con un titolo,
+   un paragrafo che spiegava il controllo e poi il controllo. Adesso è una
+   griglia di schede — due colonne quando c'è posto, una quando non c'è — e
+   ogni scheda è un titolo, il controllo, e al massimo una riga che dice come
+   sta la cosa adesso. Nessun paragrafo insegna più cosa fa un bottone. */
+
 .prefs-page{width:960px;max-width:100%;padding:8px 4px 34px;box-sizing:border-box;color:var(--inchiostro)}
 .prefs-header{padding:0 4px 22px}.prefs-header h1{margin:0;font-size:34px;line-height:1.1;font-weight:400;letter-spacing:-.03em}.prefs-header p{max-width:620px;margin:9px 0 0;font-size:13px;line-height:1.55;color:var(--inchiostro-2)}
 .prefs-layout{display:grid;grid-template-columns:202px minmax(0,720px);gap:22px;align-items:start}
@@ -6,16 +14,77 @@
 .prefs-nav button:hover{background:rgba(var(--carta-rgb),.79);color:var(--inchiostro)}.prefs-nav button[aria-current=page]{background:var(--pieno);color:var(--su-pieno);box-shadow:0 9px 22px rgba(var(--ombra-rgb),.17)}
 .prefs-nav button span{font-size:13.5px;font-weight:500;line-height:1.25}.prefs-nav button small{font-size:10.5px;line-height:1.35;color:inherit;opacity:.68}
 .prefs-panel{min-width:0}.prefs-panel-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:3px 4px 12px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.075);margin-bottom:2px}.prefs-panel-heading h2{margin:0;font-size:20px;font-weight:450;letter-spacing:-.02em}.prefs-panel-heading p{margin:0;font-size:11.5px;color:var(--inchiostro-3);text-align:right}
-.prefs-setup-card,.prefs-sources-card{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:14px;padding:21px 23px;border:1px solid rgba(var(--luce-rgb),.83);border-radius:24px;background:linear-gradient(130deg,rgba(34,39,31,.95),rgba(74,58,49,.87) 62%,rgba(166,107,76,.87));color:var(--avorio);box-shadow:0 22px 52px rgba(var(--ombra-rgb),.15)}
-.prefs-setup-card>div,.prefs-sources-card>div{min-width:0}.prefs-eyebrow{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:rgba(var(--avorio-rgb),.66)}.prefs-setup-card h3{margin:6px 0 0;font-size:19px;font-weight:500;letter-spacing:-.02em}.prefs-setup-card p,.prefs-sources-card p{max-width:430px;margin:6px 0 0;font-size:12.5px;line-height:1.5;color:rgba(var(--avorio-rgb),.79)}
-.prefs-setup-card button,.prefs-sources-card button{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:none;padding:10px 14px;border:1px solid rgba(var(--avorio-rgb),.36);border-radius:12px;background:rgba(var(--avorio-rgb),.09);color:var(--avorio);font-family:inherit;font-size:12px;font-weight:500;cursor:pointer}.prefs-setup-card button:hover,.prefs-sources-card button:hover{background:rgba(var(--avorio-rgb),.16)}.prefs-setup-card button svg,.prefs-sources-card button svg{flex:none}
-.prefs-sources-card{background:linear-gradient(135deg,rgba(var(--carta-rgb),.85),rgba(var(--carta-rgb),.78));color:var(--inchiostro);box-shadow:0 22px 52px rgba(var(--ombra-rgb),.1)}.prefs-sources-card p{color:var(--inchiostro-2)}.prefs-sources-card button{border-color:rgba(var(--inchiostro-rgb),.19);background:var(--pieno);color:var(--su-pieno)}.prefs-sources-card button:hover{background:rgba(var(--inchiostro-rgb),.82)}
-.prefs-status{display:inline-flex;align-items:center;min-height:18px;padding:1px 7px;border-radius:99px;font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.prefs-status.ready{background:rgba(var(--salvia-rgb),.14);color:var(--salvia)}.prefs-status.needs-attention{background:rgba(var(--rame-rgb),.09);color:var(--rame-testo)}
 
-@media(max-width:1080px){
-  .prefs-page{width:720px}.prefs-layout{grid-template-columns:minmax(0,1fr);gap:14px}.prefs-nav{position:static;display:grid;grid-template-columns:repeat(4,minmax(138px,1fr));overflow-x:auto;border-radius:17px}.prefs-nav button{min-width:138px;padding:10px 11px}.prefs-panel-heading{padding-top:2px}
+/* — la griglia e la scheda —
+   Niente `backdrop-filter` sulla scheda: la tendina di un modello e il menù
+   di sistema escono dal suo riquadro, e un filtro sullo sfondo ne farebbe un
+   piano a sé sotto cui la scheda disegnata dopo passerebbe sopra. */
+/* le schede di una riga sono alte uguali: una griglia a scalini si legge
+   come un elenco sbagliato invece che come un cruscotto */
+.prefs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));gap:14px;margin-top:14px}
+.prefs-card{position:relative;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px 18px;border:1px solid rgba(var(--luce-rgb),.8);border-radius:20px;background:rgba(var(--carta-rgb),.72);box-shadow:0 6px 18px -12px rgba(var(--ombra-rgb),.5)}
+.prefs-card.larga{grid-column:1/-1}
+.prefs-card.quieta{background:rgba(var(--carta-rgb),.46);box-shadow:none;border-color:rgba(var(--inchiostro-rgb),.1)}
+.prefs-card h3{margin:0;font-size:15px;font-weight:500;line-height:1.35;letter-spacing:-.01em;color:var(--inchiostro);text-wrap:pretty;overflow-wrap:anywhere}
+.prefs-stato{font-size:12.5px;line-height:1.55;color:var(--inchiostro-3);text-wrap:pretty;overflow-wrap:anywhere}
+.prefs-stato.rame{color:var(--rame-testo)}
+.prefs-stato.verde{color:var(--verde-cupo)}
+.prefs-stato code{background:rgba(var(--inchiostro-rgb),.07);padding:1px 6px;border-radius:5px;word-break:break-all}
+.prefs-piede{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.prefs-piede .prefs-stato{flex:1;min-width:0}
+.prefs-riga{display:flex;align-items:center;gap:12px;padding-top:12px;border-top:1px solid rgba(var(--inchiostro-rgb),.08)}
+.prefs-riga:first-of-type{padding-top:0;border-top:0}
+.prefs-riga>div{flex:1;min-width:0}
+.prefs-riga .prefs-nome{font-size:13.5px;line-height:1.4;overflow-wrap:anywhere}
+.prefs-tasto{background:rgba(var(--inchiostro-rgb),.07);padding:2px 9px;border-radius:7px;letter-spacing:.06em;font-size:13.5px}
+
+/* — il campo di testo, uno solo per tutta l'app: quello della barra — */
+.prefs-campo{width:100%;box-sizing:border-box;padding:10px 14px;border-radius:14px;border:1px solid rgba(var(--luce-rgb),.9);background:rgba(var(--carta-rgb),.86);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);color:var(--inchiostro);font-family:inherit;font-size:13.5px;line-height:1.55;outline:none;box-shadow:0 4px 16px rgba(var(--ombra-rgb),.05);transition:border-color .15s,box-shadow .15s}
+.prefs-campo:focus{border-color:rgba(var(--inchiostro-rgb),.26);box-shadow:0 8px 26px rgba(var(--ombra-rgb),.1)}
+select.prefs-campo{cursor:pointer}
+.prefs-etichetta{display:block;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.6);margin-bottom:5px}
+.prefs-coppia{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+
+/* — i bottoni: uno pieno per scheda, il resto è bordo o sole parole — */
+.prefs-pieno{flex:none;padding:10px 19px;border-radius:99px;border:0;background:var(--gradiente-rame);color:var(--avorio);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.prefs-pieno:hover{opacity:.92}
+.prefs-pieno[disabled]{cursor:default;background:rgba(var(--inchiostro-rgb),.14);color:rgba(var(--inchiostro-rgb),.4)}
+.prefs-secondario{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 16px;border-radius:99px;border:1px solid rgba(var(--inchiostro-rgb),.18);background:rgba(var(--luce-rgb),.6);color:rgba(var(--inchiostro-rgb),.8);font-family:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.prefs-secondario:hover{border-color:rgba(var(--rame-rgb),.45);color:var(--rame-testo)}
+.prefs-secondario[disabled]{cursor:default;opacity:.55}
+.prefs-quieto{flex:none;border:0;background:none;padding:0;font-family:inherit;font-size:12px;color:var(--rame-testo);cursor:pointer;text-align:left}
+.prefs-quieto:hover{color:var(--rame)}
+.prefs-quieto[disabled]{cursor:default;color:var(--inchiostro-3)}
+.prefs-rosso{border-color:rgba(var(--rame-rgb),.4);color:var(--rame-testo)}
+.prefs-pastiglie{display:flex;gap:8px;flex-wrap:wrap}
+
+.prefs-status{display:inline-flex;align-items:center;min-height:18px;padding:1px 7px;border-radius:99px;font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}.prefs-status.ready{background:rgba(var(--salvia-rgb),.14);color:var(--salvia)}.prefs-status.needs-attention{background:rgba(var(--rame-rgb),.09);color:var(--rame-testo)}
+
+/* le tre vie del motore, e i tre livelli dei modelli: righe dentro una scheda */
+.prefs-via{display:flex;gap:12px;align-items:flex-start;padding:12px 13px;border-radius:16px;cursor:pointer;background:transparent}
+.prefs-via[aria-checked=true]{background:rgba(var(--luce-rgb),.85);box-shadow:0 12px 30px rgba(var(--ombra-rgb),.1)}
+.prefs-via:hover{background:rgba(var(--luce-rgb),.6)}
+.prefs-via[aria-checked=true]:hover{background:rgba(var(--luce-rgb),.9)}
+.prefs-bollo{width:15px;height:15px;flex:none;border-radius:50%;margin-top:3px;border:1.5px solid rgba(var(--inchiostro-rgb),.35);background:transparent}
+.prefs-via[aria-checked=true] .prefs-bollo{border:4px solid var(--rame);background:var(--avorio)}
+.prefs-via-cima{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.prefs-via-cima>span:first-child{flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere}
+.prefs-livello{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:11px 0;border-top:1px solid rgba(var(--inchiostro-rgb),.08)}
+.prefs-livello:first-of-type{border-top:0}
+.prefs-livello>div:first-child{flex:1;min-width:170px}
+.prefs-livello .prefs-nome{font-size:14px}
+.prefs-barre{display:flex;gap:6px;align-items:flex-end;height:44px;max-width:320px}
+.prefs-barra{flex:1;border-radius:3px;background:rgba(var(--rame-rgb),.55)}
+
+/* La soglia sale da 1080 a 1180. A finestra 1100 il pannello restava largo
+   cinquecentosettanta pixel — una colonna sola di schede, con la fascia di
+   sinistra a mangiarsi il resto. Con le quattro aree in orizzontale il
+   pannello prende tutta la larghezza e le schede tornano due. */
+@media(max-width:1180px){
+  .prefs-page{width:760px}.prefs-layout{grid-template-columns:minmax(0,1fr);gap:14px}.prefs-nav{position:static;display:grid;grid-template-columns:repeat(4,minmax(138px,1fr));overflow-x:auto;border-radius:17px}.prefs-nav button{min-width:138px;padding:10px 11px}.prefs-panel-heading{padding-top:2px}
 }
 @media(max-width:650px){
-  .prefs-header h1{font-size:30px}.prefs-header p{font-size:12.5px}.prefs-nav{grid-template-columns:repeat(4,150px)}.prefs-panel-heading{align-items:flex-start;flex-direction:column;gap:3px}.prefs-panel-heading p{text-align:left}.prefs-setup-card,.prefs-sources-card{align-items:flex-start;flex-direction:column}.prefs-setup-card button,.prefs-sources-card button{width:100%}
+  .prefs-header h1{font-size:30px}.prefs-header p{font-size:12.5px}.prefs-nav{grid-template-columns:repeat(4,150px)}.prefs-panel-heading{align-items:flex-start;flex-direction:column;gap:3px}.prefs-panel-heading p{text-align:left}
+  .prefs-grid{grid-template-columns:minmax(0,1fr)}
 }
-@media(prefers-reduced-motion:reduce){.prefs-nav button{transition:none}}
+@media(prefers-reduced-motion:reduce){.prefs-nav button,.prefs-campo{transition:none}}
