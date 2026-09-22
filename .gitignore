@@ -17,5 +17,3 @@ dist-app/
 desktop/feed.json
 
 /.myynd-local-signing.json
-# la configurazione di Vite usata solo per guardare l'app durante le prove
-vite.prova.config.ts
