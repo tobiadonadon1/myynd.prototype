@@ -32,12 +32,12 @@ async function archivio(file: Record<string, string>): Promise<Buffer> {
 // — i file che si sanno aprire —
 
 test('i formati nuovi sono nell’elenco, quelli che non sappiamo leggere no', () => {
-  for (const n of ['preventivo.xlsx', 'Piano.pptx', 'pagina.html', 'pagina.HTM', 'appunti.rtf']) {
+  for (const n of ['preventivo.xlsx', 'Piano.pptx', 'pagina.html', 'pagina.HTM', 'appunti.rtf', 'Lettera.pages']) {
     assert.equal(leggibile(n), true, n)
   }
-  // `.doc`, i formati di Apple e le immagini restano fuori: dentro non c'è
-  // nessun XML da leggere, e un'immagine senza riconoscimento ottico non ha testo
-  for (const n of ['vecchio.doc', 'Lettera.pages', 'Conti.numbers', 'Keynote.key', 'scansione.png']) {
+  // `.doc`, i fogli e le presentazioni di Apple e le immagini restano fuori;
+  // `.pages` si legge dal 22 settembre 2026 (`pages.ts`, e la sua prova)
+  for (const n of ['vecchio.doc', 'Conti.numbers', 'Keynote.key', 'scansione.png']) {
     assert.equal(leggibile(n), false, n)
   }
   assert.equal(LETTI.includes('.xlsx'), true)

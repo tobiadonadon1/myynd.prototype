@@ -51,7 +51,7 @@ test('il rapporto: un giro nuovo non salvato più il feed, i totali, la lunghezz
         { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording; nothing went back yet.', perche: 'Unblocks the Evermute release', progetto: evermute.id, doc: null, offerta: 'I draft the reply with the checklist.', quando: '' },
         { genere: 'proposta', titolo: 'Turn the notes into a guide that is far too long a title to fit the card at all, really', testo: 'x'.repeat(201), perche: 'Moves the site from copy to products', progetto: null, doc: null, offerta: 'I outline the guide.', quando: '' }
       ],
-      domande: [], guardati: 48, cartelle: 9, conversazioni: 3
+      domande: [], superate: [], guardati: 48, cartelle: 9, conversazioni: 3
     }),
     chiediJSON: (async (o: { lavoro: string; system: string; messages: { content: string }[] }) => {
       assert.equal(o.lavoro, 'valutazione')

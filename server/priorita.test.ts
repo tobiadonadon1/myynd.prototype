@@ -251,3 +251,85 @@ test('progettoDelTesto: il nome vince, il più lungo prima, l’alias del riferi
   assert.equal(progettoDelTesto('Reply to App Review about Evermute'), ev.id)
   assert.equal(progettoDelTesto('Ship the thing on the App Store this week'), null, 'parole dell’obiettivo senza il nome non bastano')
 })
+
+// — adesso: il lavoro degli ultimi tre giorni, e il feed che lo segue —
+//
+// «It has to be things that are relevant to the things that I'm working on.»
+// Il 22 settembre il feed teneva sette carte, quattro di giorni prima, e la
+// sessione del pomeriggio su InfoProducts non era diventata niente: i giri
+// partivano solo col feed quasi vuoto, e il materiale lo sceglieva il peso,
+// non il tempo.
+
+test('adesso: le sessioni e i commit degli ultimi tre giorni per cartella, i file toccati a parte, il vecchio fuori', () => {
+  const ora = Date.now()
+  const fa = (ore: number) => new Date(ora - ore * 3_600_000).toISOString()
+  const oggi = fa(0).slice(0, 10)
+  const docs = [
+    { id: 'conversazioni:codice:1', fonte: 'conversazioni', tipo: 'chat', titolo: 'myynd.prototype · App testing fixes', corpo: 'x', quando: fa(1) },
+    { id: 'conversazioni:codex:2', fonte: 'conversazioni', tipo: 'chat', titolo: 'InfoProducts · Infoproducts for Jev trading guides', corpo: 'x', quando: fa(2) },
+    { id: 'conversazioni:codice:3', fonte: 'conversazioni', tipo: 'chat', titolo: 'myynd.prototype · Feed task intelligence', corpo: 'x', quando: fa(30) },
+    { id: 'conversazioni:codice:4', fonte: 'conversazioni', tipo: 'chat', titolo: 'everwave · old session', corpo: 'x', quando: fa(5 * 24) },
+    { id: 'lavoro:/x/myynd.prototype', fonte: 'lavoro', tipo: 'cartella', titolo: 'Lavoro: myynd.prototype', quando: fa(1),
+      corpo: `Cartella di lavoro: myynd.prototype.\n\nUltimi commit:\n${oggi}  myynd: la rassegna si rinnova\n${oggi}  Merge branch 'worktree-x'\n2026-01-02  un commit di gennaio` },
+    { id: 'desktop:/x/Offer.pages', fonte: 'desktop', tipo: 'documento', titolo: 'Offer for H-Farm', corpo: 'x', quando: fa(5) },
+    { id: 'posta:9', fonte: 'posta', tipo: 'email', titolo: 'A newsletter', corpo: 'x', quando: fa(1) }
+  ]
+  const l = priorita.lavoroInCorso(docs as never, ora)
+  assert.deepEqual(l.filoni.map(f => f.nome), ['myynd.prototype', 'InfoProducts'], 'una sessione di cinque giorni fa non è adesso')
+  const myynd = l.filoni[0]
+  assert.deepEqual(myynd.sessioni, ['App testing fixes', 'Feed task intelligence'], 'la sessione e la cartella si incontrano per nome')
+  assert.deepEqual(myynd.commit, ['myynd: la rassegna si rinnova'], 'né i merge né un commit di gennaio')
+  assert.deepEqual(l.documenti, [`Offer for H-Farm (documento, ${fa(5).slice(0, 10)})`], 'un file toccato sì, una mail no')
+  const testo = priorita.scriviLavoroInCorso(l)
+  assert.match(testo, /InfoProducts .*Infoproducts for Jev trading guides/)
+  assert.equal(priorita.scriviLavoroInCorso({ filoni: [], documenti: [] }), '')
+  // una nota che si chiama come una chiave non ricopia la chiave nel prompt
+  assert.equal(priorita.senzaChiavi('Jev apikey_21090110fd0d8e6942c2b42bb9607'), 'Jev […]')
+  assert.equal(priorita.senzaChiavi('Infoproducts_for_Jev_trading_guides'), 'Infoproducts_for_Jev_trading_guides', 'le parole lunghe senza cifre restano')
+})
+
+test('col feed pieno il giro riparte quando il lavoro è cambiato, dopo quattro ore e non prima', () => {
+  priorita.perProva({ collegato: () => true })
+  store.salvaFeed(['Record the Evermute walkthrough', 'Send the H-Farm audit outline', 'Price the three website offers'].map(titolo => (
+    { tipo: 'Priorità', titolo, testo: 'Nobody has moved this for a while and it blocks the next step.', perche: 'Moves the project', offerta: 'I draft it for you.', progetto: null }
+  )))
+  assert.ok(feedAttuale().length >= priorita.ABBASTANZA)
+  const archivio = (ore: number) => writeFileSync(join(dati, 'priorita.json'), JSON.stringify({ ultimo: new Date(Date.now() - ore * 3_600_000).toISOString(), proposte: 1 }))
+  archivio(5)
+  assert.equal(priorita.pronta(), true, 'cinque ore e una cartella toccata dopo: si rifà')
+  archivio(2)
+  assert.equal(priorita.pronta(), false, 'due ore: aspetta, anche se il lavoro è cambiato')
+  // senza niente di nuovo dopo l'ultimo giro non riparte, nemmeno dopo quattro ore
+  assert.equal(priorita.lavoroNuovoDal(new Date(Date.now() + 60_000).toISOString(), store.recenti(200)), false)
+  assert.equal(priorita.lavoroNuovoDal(null, []), true, 'mai fatto un giro: c’è tutto da guardare')
+  priorita.dimentica()
+})
+
+test('il giro toglie le sue carte superate, e solo le sue: la carta di una mail resta', async () => {
+  priorita.dimentica()
+  store.salvaFeed([{ tipo: 'Da leggere', titolo: 'Sign the Ceru contract', testo: 'Marta still needs your signature before she hands over the keys.', perche: 'The house', progetto: null, doc: 'posta:INBOX:3' }])
+  const aperte = store.feedAperto(40)
+  const mia = aperte.find(v => v.titolo === 'Record the Evermute walkthrough')!
+  const posta = aperte.find(v => v.titolo === 'Sign the Ceru contract')!
+  assert.ok(mia && posta)
+  let sistema = ''
+  priorita.perProva({
+    collegato: () => true,
+    chiediJSON: (async (o: { system: string }) => {
+      sistema = o.system
+      return { priorita: [], domande: [], superate: [
+        { id: mia.id, motivo: 'recorded in yesterday’s session' },
+        { id: posta.id, motivo: 'looks old' },
+        { id: 'non-esiste', motivo: 'whatever' }
+      ] }
+    }) as never
+  })
+  await priorita.forse(true)
+  assert.match(sistema, /IN QUESTI TRE GIORNI LAVORA SU QUESTO/, 'il lavoro di adesso sta nel prompt')
+  assert.ok(sistema.includes(`[${mia.id}]`), 'le carte aperte ci stanno con il loro id, così si possono dire superate')
+  const dopo = store.feedAperto(40)
+  assert.ok(!dopo.some(v => v.id === mia.id), 'la sua carta superata esce')
+  assert.equal(store.voceFeed(mia.id)?.stato, 'scaduto', 'scaduta, non fatta: non l’ha fatta lui')
+  assert.ok(dopo.some(v => v.id === posta.id), 'la carta di una mail la toglie solo lui')
+  priorita.perProva(null)
+})

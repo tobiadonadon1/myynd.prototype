@@ -28,10 +28,13 @@ import { riflua } from '../testo.ts'
  *
  * **Quello che resta fuori, e perché.** `.doc` (il Word di prima del 2007) è
  * un formato binario chiuso: aprirlo vuol dire un pacchetto in più che
- * sbaglia spesso, per dei file che quasi nessuno ha più. `.pages`,
- * `.numbers` e `.key` sono cartelle zippate il cui contenuto vero è un
- * archivio binario di Apple (IWA, protobuf compresso): dentro non c'è nessun
- * XML da leggere, solo un'anteprima PDF che non è il documento. Le immagini —
+ * sbaglia spesso, per dei file che quasi nessuno ha più. `.numbers` e
+ * `.key` sono zip il cui contenuto vero è un archivio binario di Apple (IWA,
+ * protobuf compresso): in un foglio e in una presentazione il testo sta
+ * sparso fra cento oggetti, e non vale ancora il lavoro. `.pages` invece sì:
+ * il testo di un documento sta tutto in un tipo di messaggio, e dal 22
+ * settembre 2026 si legge (`pages.ts`) — «the pages document» era una delle
+ * cose che Myynd doveva leggere per sapere su cosa lavora. Le immagini —
  * `.png`, `.jpg`, gli screenshot, le scansioni — non hanno testo senza un
  * riconoscimento ottico, che è un altro mestiere e un'altra spesa. E il
  * codice resta fuori di proposito: `cammina` salta già i progetti interi, e
@@ -40,7 +43,7 @@ import { riflua } from '../testo.ts'
  */
 export const TESTO = ['.md', '.markdown', '.txt', '.rtf', '.csv', '.org', '.tex', '.html', '.htm']
 /** Quelli che costano ad aprirsi: vanno nel filo a parte. */
-export const RICCHI = ['.pdf', '.docx', '.xlsx', '.pptx']
+export const RICCHI = ['.pdf', '.docx', '.xlsx', '.pptx', '.pages']
 export const LETTI = [...RICCHI, ...TESTO]
 
 /**
@@ -153,6 +156,11 @@ export async function quiDentro(buf: Buffer, nome: string): Promise<string> {
     const { default: mammoth } = await import('mammoth')
     const r = await mammoth.extractRawText({ buffer: buf })
     return riflua((r.value || '').trim())
+  }
+
+  if (ext === '.pages') {
+    const { testoDaPages } = await import('./pages.ts')
+    return riflua(await testoDaPages(buf))
   }
 
   if (ext === '.xlsx') return (await daXlsx(buf)).trim()
@@ -694,7 +702,7 @@ export function chiudiIlFilo() {
 export function tipoDi(nome: string): string {
   const ext = extname(nome).toLowerCase()
   if (ext === '.pdf') return 'pdf'
-  if (ext === '.docx' || ext === '.rtf') return 'documento'
+  if (ext === '.docx' || ext === '.rtf' || ext === '.pages') return 'documento'
   if (ext === '.csv' || ext === '.xlsx') return 'tabella'
   if (ext === '.pptx') return 'presentazione'
   if (ext === '.html' || ext === '.htm') return 'pagina'

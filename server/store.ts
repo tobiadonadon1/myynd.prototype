@@ -2787,9 +2787,10 @@ const DOMINI_DI_TUTTI = new Set([
  * i titoli: ogni lettura costa quello che costa, e la lista intera con i
  * testi sarebbe un altro migliaio di token per dire la stessa cosa.
  */
-export function feedAperto(limite = 40): { titolo: string; doc: string | null }[] {
-  return db.prepare('SELECT titolo, doc FROM feed WHERE stato = ? ORDER BY quando DESC LIMIT ?')
-    .all('aperto', limite) as unknown as { titolo: string; doc: string | null }[]
+export type VoceAperta = { id: string; titolo: string; testo: string | null; tipo: string | null; offerta: string | null; quando: string; doc: string | null }
+export function feedAperto(limite = 40): VoceAperta[] {
+  return db.prepare('SELECT id, titolo, testo, tipo, offerta, quando, doc FROM feed WHERE stato = ? ORDER BY quando DESC LIMIT ?')
+    .all('aperto', limite) as unknown as VoceAperta[]
 }
 
 /**
