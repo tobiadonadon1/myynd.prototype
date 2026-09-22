@@ -295,6 +295,7 @@ const EN: Record<string, string> = {
   'Priorità, autonomia e voce': 'Priorities, autonomy and voice',
   'Generale': 'General',
   'Priorità, aspetto e fonti': 'Priorities, appearance and sources',
+  'Priorità, voce e aspetto': 'Priorities, voice and appearance',
   'Lingua e aspetto': 'Language and appearance',
   'Intelligenza e costi': 'AI and costs',
   'Dati e fonti': 'Data and sources',

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Hov, LABEL, useFocoDialogo, useLarghezza } from '../ui'
 import { t } from '../lingua'
-import { IconEspandi, IconSu } from '../icons'
+import { IconAvanti, IconEspandi, IconSu } from '../icons'
 import type { Vals } from '../vals'
 import './mappa.css'
 
@@ -134,6 +134,16 @@ export function Mappa({ v }: { v: Vals }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 10px' }}>
         <span style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em' }}>{t('Mappa')}</span>
         <span style={{ fontSize: 13, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{v.mappaMeta}</span>
+        <div style={{ flex: 1 }} />
+        {/* Le fonti stanno qui e non più nelle Preferenze: la mappa è quello che
+            hanno portato, e da qui si collegano, si leggono, si tolgono */}
+        <Hov as="button" type="button" onClick={() => v.apriConnessioni()}
+          style={{ alignSelf: 'center', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 99,
+            border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'var(--inchiostro)',
+            fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+          hover={{ background: 'var(--carta-piena)', borderColor: 'rgba(var(--rame-rgb),.4)' }}>
+          {t('Le tue fonti')} <IconAvanti size={12} />
+        </Hov>
       </div>
       <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', maxWidth: 760 }}>
         {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}

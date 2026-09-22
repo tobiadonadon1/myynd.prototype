@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
 import { frasi, t } from '../lingua'
 import { Hov, daTastiera, knob, track } from '../ui'
-import { IconAvanti, IconSpunta } from '../icons'
+import { IconSpunta } from '../icons'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
 import './preferenze.css'
@@ -203,49 +203,39 @@ function LApp() {
   )
 }
 
-/**
- * Dove stanno i tuoi dati: il percorso, e il bottone che lo apre.
- *
- * Era un paragrafo di tre righe con tre nomi di file dentro. Il percorso vero
- * è l'unica cosa che serve sapere, e sull'app c'è anche il modo di arrivarci.
- */
-function DoveStanno({ v }: { v: Vals }) {
-  const d = desktop()
-  const [dati, setDati] = useState('')
-  useEffect(() => {
-    // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
-    api.stato().then(s => setDati(s.dati || (s.home ? `${s.home}/.myynd` : ''))).catch(() => {})
-  }, [])
-
-  return (
-    <Scheda titolo={t('I tuoi dati')}>
-      <div className="prefs-stato">
-        {v.ospitato ? frasi.doveStannoIDatiServer() : <code>{dati || '~/.myynd'}</code>}
-      </div>
-      {d && !v.ospitato && (
-        <div className="prefs-piede">
-          <div className="prefs-stato" />
-          <button type="button" className="prefs-secondario" disabled={!dati}
-            onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }}>
-            {d.piattaforma === 'darwin' ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
-          </button>
-        </div>
-      )}
-    </Scheda>
-  )
-}
 
 /** Il campo del fuoco: stato suo, di nessun altro. */
-function CampoFuoco({ v }: { v: Vals }) {
-  const [testo, setTesto] = useState(v.fuoco)
+/**
+ * Salvare uscendo dal campo, come il nome e il ruolo: la spunta dice che è
+ * fatto, e se ne va da sola. Un «Salva» di rame per ogni campo erano due
+ * bottoni primari nella stessa riga di schede — «how the buttons are».
+ */
+function useSalvaUscendo(vero: string, salva: (testo: string) => void) {
+  const [testo, setTesto] = useState(vero)
+  const [fatto, setFatto] = useState(false)
+  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   // si riallinea solo quando il valore vero cambia — cioè al caricamento e al
   // salvataggio. Mentre scrivi, nessun caricamento in sottofondo può toccarlo.
-  useEffect(() => { setTesto(v.fuoco) }, [v.fuoco])
+  useEffect(() => { setTesto(vero) }, [vero])
+  useEffect(() => () => clearTimeout(orologio.current), [])
+  const esci = () => {
+    if (testo.trim() === vero.trim()) return
+    salva(testo)
+    setFatto(true)
+    clearTimeout(orologio.current)
+    orologio.current = setTimeout(() => setFatto(false), 2400)
+  }
+  return { testo, setTesto, fatto, esci }
+}
+
+function CampoFuoco({ v }: { v: Vals }) {
+  const { testo, setTesto, fatto, esci } = useSalvaUscendo(v.fuoco, v.salvaFuoco)
 
   return (
     <Scheda titolo={t('Su cosa mi concentro')}>
       <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) v.salvaFuoco(testo) }}
+        onBlur={esci}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) e.currentTarget.blur() }}
         aria-label={t('Su cosa mi concentro')}
         placeholder={t('Questa settimana solo i preventivi e i pagamenti')} rows={3} />
       <div className="prefs-piede">
@@ -260,7 +250,7 @@ function CampoFuoco({ v }: { v: Vals }) {
         <span className="prefs-stato">
           {v.fuocoDaMe && !!v.fuoco ? t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.') : ''}
         </span>
-        <button type="button" className="prefs-pieno" onClick={() => v.salvaFuoco(testo)}>{t('Salva')}</button>
+        <Tic mostra={fatto} />
       </div>
     </Scheda>
   )
@@ -274,25 +264,18 @@ function CampoFuoco({ v }: { v: Vals }) {
  * quello che ti riguarda — questo dice cosa cercare *fuori*, nei giornali.
  */
 function CampoArgomenti({ v }: { v: Vals }) {
-  const [testo, setTesto] = useState(v.argomenti)
-  const [salvato, setSalvato] = useState(false)
-  useEffect(() => { setTesto(v.argomenti) }, [v.argomenti])
-
-  const salva = () => {
-    v.salvaArgomenti(testo)
-    setSalvato(true)
-    setTimeout(() => setSalvato(false), 1800)
-  }
+  const { testo, setTesto, fatto, esci } = useSalvaUscendo(v.argomenti, v.salvaArgomenti)
 
   return (
     <Scheda titolo={t('Di cosa ti tengo aggiornato')}>
       <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
+        onBlur={esci}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) e.currentTarget.blur() }}
         aria-label={t('Di cosa ti tengo aggiornato')}
         placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')} rows={3} />
       <div className="prefs-piede">
         <div className="prefs-stato" />
-        <button type="button" className="prefs-pieno" onClick={salva}>{salvato ? t('Salvato') : t('Salva')}</button>
+        <Tic mostra={fatto} />
       </div>
     </Scheda>
   )
@@ -484,12 +467,18 @@ function Identita() {
  * Si legge, si stampa, si manda a un consulente. La password si chiede lo
  * stesso: dentro non ci sono chiavi, ma c'è tutta la posta letta.
  */
-function Fascicolo() {
+function Fascicolo({ v }: { v: Vals }) {
+  const d = desktop()
+  const [dati, setDati] = useState('')
   const [password, setPassword] = useState('')
   const [chiedo, setChiedo] = useState(false)
   const [faccio, setFaccio] = useState(false)
   const [detto, setDetto] = useState('')
   const [guaio, setGuaio] = useState('')
+  useEffect(() => {
+    // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
+    api.stato().then(s => setDati(s.dati || (s.home ? `${s.home}/.myynd` : ''))).catch(() => {})
+  }, [])
 
   const scarica = async () => {
     if (!password) { setChiedo(true); return }
@@ -506,10 +495,17 @@ function Fascicolo() {
     setFaccio(false)
   }
 
+  /*
+   * «I tuoi dati» e «Scarica i miei dati» erano due schede in due sezioni per
+   * la stessa cosa. «You can also keep the "Your Data" card on the same card
+   * as the "Download My Data" card.» Una scheda: dove stanno, aprirli nel
+   * Finder, scaricarli.
+   */
   return (
-    <Scheda titolo={t('Scarica i miei dati')}>
-      {/* una riga sola, e dice una cosa che non si può dedurre dal bottone */}
-      <div className="prefs-stato">{t('Senza password né token.')}</div>
+    <Scheda titolo={t('I tuoi dati')}>
+      <div className="prefs-stato">
+        {v.ospitato ? frasi.doveStannoIDatiServer() : <code>{dati || '~/.myynd'}</code>}
+      </div>
       {chiedo && (
         <input type="password" className="prefs-campo" value={password} onChange={e => setPassword(e.target.value)}
           autoComplete="current-password" placeholder={t('la tua password')} autoFocus
@@ -517,6 +513,12 @@ function Fascicolo() {
           onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }} />
       )}
       <div className="prefs-piede">
+        {d && !v.ospitato && (
+          <button type="button" className="prefs-secondario" disabled={!dati}
+            onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }}>
+            {d.piattaforma === 'darwin' ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
+          </button>
+        )}
         <div className="prefs-stato" />
         <button type="button" className="prefs-pieno" onClick={scarica} disabled={faccio}>
           {faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica')}
@@ -558,7 +560,9 @@ function Cancella() {
   const puo = !!password && !!email.trim() && !faccio
 
   return (
-    <Scheda titolo={t('Cancella il conto')} quieta larga={aperto}>
+    // nell'app da scrivania c'è anche «L'app», che fa coppia con «I tuoi
+    // dati»: questa allora resta sola in fondo, e larga non lascia il buco
+    <Scheda titolo={t('Cancella il conto')} quieta larga={aperto || !!desktop()}>
       <div className="prefs-stato">{t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}</div>
       {!aperto ? (
         <div className="prefs-piede">
@@ -890,7 +894,7 @@ export function Preferenze({ v }: { v: Vals }) {
   type Sezione = 'myynd' | 'intelligenza' | 'account'
   const [sezione, setSezione] = useState<Sezione>('myynd')
   const sezioni: { id: Sezione; titolo: string; nota: string }[] = [
-    { id: 'myynd', titolo: t('Generale'), nota: t('Priorità, aspetto e fonti') },
+    { id: 'myynd', titolo: t('Generale'), nota: t('Priorità, voce e aspetto') },
     { id: 'intelligenza', titolo: t('Intelligenza e costi'), nota: t('Modello, chiave e utilizzo') },
     { id: 'account', titolo: t('Account e app'), nota: t('Accesso, notifiche e sicurezza') }
   ]
@@ -953,6 +957,9 @@ export function Preferenze({ v }: { v: Vals }) {
                 </div>
               </Scheda>
 
+              {/* accanto al tono: due schede della stessa altezza, niente buchi */}
+              <Identita />
+
               <Scheda titolo={t('Lingua e aspetto')} larga>
                 <div className="prefs-inline-settings">
                   <div>
@@ -977,16 +984,9 @@ export function Preferenze({ v }: { v: Vals }) {
                 </div>
               </Scheda>
 
-              <Identita />
-              <Scheda titolo={t('Le tue fonti')}>
-                <div className="prefs-piede">
-                  <div className="prefs-stato" />
-                  <button type="button" className="prefs-secondario" onClick={() => v.apriConnessioni()}>
-                    {t('Gestisci')} <IconAvanti />
-                  </button>
-                </div>
-              </Scheda>
-              <DoveStanno v={v} />
+              {/* «Le tue fonti» e «I tuoi dati» non stanno più qui: le fonti si
+                  aprono dalla Mappa, dove si vede cosa hanno portato, e la
+                  cartella dei dati sta con «Scarica i miei dati», in Account */}
             </div>
           )}
 
@@ -1006,7 +1006,7 @@ export function Preferenze({ v }: { v: Vals }) {
               <Conto />
               {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
               <LApp />
-              <Fascicolo />
+              <Fascicolo v={v} />
               {/* ultima di tutte, e non per pudore: è l'unica cosa in questa
                   schermata che non si può annullare, e non deve stare accanto a
                   niente che si preme di fretta */}

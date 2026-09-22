@@ -19,7 +19,11 @@
    Niente `backdrop-filter` sulla scheda: la tendina di un modello e il menù
    di sistema escono dal suo riquadro, e un filtro sullo sfondo ne farebbe un
    piano a sé sotto cui la scheda disegnata dopo passerebbe sopra. */
-.prefs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));align-items:start;gap:11px;margin-top:11px}
+/* Le schede di una riga sono alte uguali: con `start` una scheda corta
+   lasciava sotto di sé un buco alto quanto la vicina, e la pagina sembrava
+   messa lì a caso — «they are in like different places». L'ordine delle
+   schede fa il resto: due mezze, una larga, due mezze, una larga. */
+.prefs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));align-items:stretch;gap:11px;margin-top:11px}
 .prefs-card{position:relative;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;min-width:0;padding:13px 15px;border:1px solid rgba(var(--luce-rgb),.8);border-radius:17px;background:rgba(var(--carta-rgb),.72);box-shadow:0 6px 18px -12px rgba(var(--ombra-rgb),.5)}
 .prefs-card.larga{grid-column:1/-1}
 .prefs-card.quieta{background:rgba(var(--carta-rgb),.46);box-shadow:none;border-color:rgba(var(--inchiostro-rgb),.1)}
