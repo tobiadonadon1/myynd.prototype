@@ -105,7 +105,21 @@ export function Chat({ v }: { v: Vals }) {
   const rispondendo = !!v.intervista?.domanda
   const scrivibile = v.claudeOn || rispondendo
   return (
-    <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    /*
+     * Più larga delle altre schermate, ed è una scelta.
+     *
+     * Settecentosessanta è la misura di una colonna da leggere, e la prima
+     * pagina e la lista la tengono per quello: righe corte, occhio che non si
+     * perde. Una conversazione non è una pagina da leggere — è uno scambio
+     * che scorre, con le bolle a destra e a sinistra e le fonti sotto — e a
+     * settecentosessanta stava stretta: «right now it's pretty condensed and
+     * pretty thin. Whereas if it was widened, it looks better and feels
+     * better.» Novecentoquaranta è quanto ci sta comodo nella finestra da
+     * milleduecentottanta, con il suo margine intorno, e non di più: una
+     * conversazione larga quanto lo schermo torna a essere difficile da
+     * leggere, dall'altra parte.
+     */
+    <div style={{ width: 940, maxWidth: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div ref={v.threadRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 2px 8px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* «Cosa vuoi sapere?» solo quando è vero: per un attimo, mentre i
             messaggi arrivavano, la chat piena si presentava vuota */}

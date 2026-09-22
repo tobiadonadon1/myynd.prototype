@@ -14,7 +14,7 @@
 // tessere portano il segno della loro fonte, come nelle Fonti — colorato se
 // è collegata, grigio se no — e nient'altro è colorato.
 
-import { useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Attrezzo, Passo, RicettaComposta } from '../api'
 import { t } from '../lingua'
 import { ConnectorIcon, connectorPerAttrezzo } from '../components/ConnectorIcon'
@@ -86,6 +86,8 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
   coda?: React.ReactNode
 }) {
   const [sopra, setSopra] = useState(false)
+  /** Si sta cercando una fonte con la «@»: il tratto si accende come quando si trascina. */
+  const [cercaFonte, setCercaFonte] = useState(false)
   const [trascino, setTrascino] = useState<string | null>(null)
   const [aperto, setAperto] = useState<string | null>(null)
   const suoi = r.attrezzi ?? []
@@ -108,19 +110,6 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
     senza.splice(a < 0 ? senza.length : a, 0, passi[da])
     passiCambia(senza)
   }
-  const tile = (a: Attrezzo, dentro: boolean) => (
-    <button key={a.nome} type="button" draggable={!dentro}
-      className={['auto-tessera', a.collegato ? '' : 'manca', dentro ? 'dentro' : ''].filter(Boolean).join(' ')}
-      title={a.collegato ? a.spiega : `${a.spiega} · ${t('non è collegato')}`}
-      aria-label={dentro ? `${t('Togli')}: ${a.etichetta}` : `${t('Aggiungi')}: ${a.etichetta}`}
-      onDragStart={e => { e.dataTransfer.setData('text/plain', FONTE + a.nome); e.dataTransfer.effectAllowed = 'copy' }}
-      onClick={() => dentro ? togli(a.nome) : aggiungi(a.nome)}>
-      <ConnectorIcon id={connectorPerAttrezzo(a.nome, a.serve)} size={16} spenta={!a.collegato} />
-      <span>{a.etichetta}</span>
-      {!a.collegato && <small>{t('da collegare')}</small>}
-      {dentro && <i aria-hidden="true">×</i>}
-    </button>
-  )
   const vuoleCartella = suoi.includes('claude.lavora')
 
   return (
@@ -146,18 +135,22 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
         )}
       </Tratto>
 
-      <Tratto eyebrow={t('Legge')} attivo={sopra}>
-        <div className={['auto-cala', sopra ? 'sopra' : '', suoi.length ? '' : 'vuota'].filter(Boolean).join(' ')}
-          onDragOver={e => { if (porta(e, FONTE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (!sopra) setSopra(true) } }}
-          onDragLeave={() => setSopra(false)}
-          onDrop={e => { e.preventDefault(); setSopra(false); const n = dato(e, FONTE); if (n) aggiungi(n) }}>
-          {suoi.length
-            ? suoi.map(n => { const a = catalogo.find(x => x.nome === n); return a ? tile(a, true) : null })
-            : <span className="auto-cala-vuota">{t('Trascina qui una fonte, o toccala sotto. Senza, guarda solo quello che ha già letto.')}</span>}
-        </div>
-        <div className="auto-tavolozza" aria-label={t('Le fonti')}>
-          {catalogo.filter(a => !suoi.includes(a.nome)).map(a => tile(a, false))}
-        </div>
+      {/* Una riga, non quindici tessere.
+          «Rather than putting all of the connectors, just tell me to put an @
+          symbol and to tag it. Simply, it's too clustered. There's too much.»
+          La tavolozza stendeva l'intero catalogo — email, il Mac, Notion,
+          Granola, Note, conversazioni, Slack, Drive, SharePoint, Dropbox,
+          WhatsApp, GitHub, agenda, chat, Claude Code — su tre righe di
+          pastiglie, sopra a una zona di caduta vuota: quattro righe per dire
+          «da dove leggo». Adesso è una riga sola: le fonti scelte, e un campo
+          in cui si scrive «@». Si può ancora lasciarci cadere una tessera —
+          la zona di caduta è il campo stesso — ma non c'è più niente da
+          leggere prima di sapere cosa si vuole. */}
+      <Tratto eyebrow={t('Legge')} attivo={sopra || cercaFonte}>
+        <MenzioneFonti catalogo={catalogo} scelte={suoi} aggiungi={aggiungi} togli={togli}
+          sopra={sopra} setSopra={setSopra} setCerca={setCercaFonte}
+          suDrop={e => { e.preventDefault(); setSopra(false); const n = dato(e, FONTE); if (n) aggiungi(n) }}
+          suSopra={e => { if (porta(e, FONTE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (!sopra) setSopra(true) } }} />
         <label className="auto-campo">
           <span>{t('Con queste parole')}</span>
           <input value={r.guarda.cerca ?? ''} onChange={e => cambia({ ...r, guarda: { ...r.guarda, cerca: e.target.value } })}
@@ -225,6 +218,108 @@ export function Costruttore({ r, cambia, catalogo, cartelle, coda }: {
           <span>{t('Una riga per ogni documento, non una riga con l’elenco')}</span>
         </label>
       </Tratto>
+    </div>
+  )
+}
+
+/**
+ * Le fonti, in una riga: quelle scelte, e la «@» per aggiungerne.
+ *
+ * «Just tell me to put an @ symbol and to tag it.» È lo stesso gesto della
+ * casella a parole (`Chiocciola.tsx`), portato sui binari: si scrive «@», si
+ * legge un elenco corto di quello che Myynd sa aprire, si sceglie, e resta
+ * una pastiglia. Il catalogo intero non sta più in pagina — si guarda solo
+ * quando lo si chiede — e quello che prima erano quattro righe adesso è una.
+ *
+ * Quello che non cambia: si può ancora *lasciarci cadere* una tessera
+ * trascinata da un'altra parte, perché il campo è anche la zona di caduta; e
+ * una fonte non collegata si vede lo stesso, con scritto che va collegata,
+ * perché è la spiegazione di un'automazione che non troverà mai niente.
+ */
+function MenzioneFonti({ catalogo, scelte, aggiungi, togli, sopra, setSopra, setCerca, suDrop, suSopra }: {
+  catalogo: Attrezzo[]
+  scelte: string[]
+  aggiungi: (nome: string) => void
+  togli: (nome: string) => void
+  sopra: boolean
+  setSopra: (v: boolean) => void
+  setCerca: (v: boolean) => void
+  suDrop: (e: DragEvent) => void
+  suSopra: (e: DragEvent) => void
+}) {
+  const campo = useRef<HTMLInputElement>(null)
+  const [testo, setTesto] = useState('')
+  const [scelto, setScelto] = useState(0)
+  /** La «@» apre l'elenco; quello che viene dopo lo filtra. */
+  const chiocciola = testo.startsWith('@')
+  const filtro = chiocciola ? testo.slice(1).trim().toLowerCase() : ''
+  const liberi = catalogo.filter(a => !scelte.includes(a.nome)
+    && (!filtro || a.etichetta.toLowerCase().includes(filtro) || a.nome.includes(filtro)))
+  const aperto = chiocciola && liberi.length > 0
+  useEffect(() => { setScelto(0) }, [filtro, chiocciola])
+  useEffect(() => { setCerca(aperto) }, [aperto, setCerca])
+
+  const prendi = (a: Attrezzo) => {
+    aggiungi(a.nome)
+    setTesto('')
+    requestAnimationFrame(() => campo.current?.focus())
+  }
+  const tasti = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!aperto) {
+      // niente scritto e Backspace: si toglie l'ultima, come in ogni campo a pastiglie
+      if (e.key === 'Backspace' && !testo && scelte.length) togli(scelte[scelte.length - 1])
+      return
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); return setScelto(i => (i + 1) % liberi.length) }
+    if (e.key === 'ArrowUp') { e.preventDefault(); return setScelto(i => (i - 1 + liberi.length) % liberi.length) }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return prendi(liberi[scelto]) }
+    // chiudere l'elenco non è chiudere la finestra che lo contiene
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setTesto('') }
+  }
+
+  return (
+    <div className="auto-fonti">
+      <div className={['auto-fonti-riga', sopra && 'sopra'].filter(Boolean).join(' ')}
+        onDragOver={suSopra} onDragLeave={() => setSopra(false)} onDrop={suDrop}
+        onClick={() => campo.current?.focus()}>
+        {scelte.map(n => {
+          const a = catalogo.find(x => x.nome === n)
+          return a ? (
+            <button key={n} type="button" className={['auto-tessera', 'dentro', a.collegato ? '' : 'manca'].filter(Boolean).join(' ')}
+              title={a.collegato ? a.spiega : `${a.spiega} · ${t('non è collegato')}`}
+              aria-label={`${t('Togli')}: ${a.etichetta}`} onClick={e => { e.stopPropagation(); togli(n) }}>
+              <ConnectorIcon id={connectorPerAttrezzo(a.nome, a.serve)} size={15} spenta={!a.collegato} />
+              <span>{a.etichetta}</span>
+              {!a.collegato && <small>{t('da collegare')}</small>}
+              <i aria-hidden="true">×</i>
+            </button>
+          ) : null
+        })}
+        <input ref={campo} className="auto-fonti-campo" value={testo}
+          onChange={e => setTesto(e.target.value)} onKeyDown={tasti}
+          onBlur={() => setTimeout(() => setTesto(t => t.startsWith('@') ? '' : t), 140)}
+          placeholder={scelte.length ? t('@ per un’altra') : t('Scrivi @ per dire da dove legge')}
+          aria-label={t('Scrivi @ per dire da dove legge')} />
+      </div>
+      {aperto && (
+        <div className="auto-fonti-menu" role="listbox" aria-label={t('cosa può aprire')}>
+          {liberi.map((a, i) => (
+            <div key={a.nome} role="option" aria-selected={i === scelto}
+              className={`auto-fonti-voce${i === scelto ? ' scelta' : ''}`}
+              onMouseDown={e => { e.preventDefault(); prendi(a) }}
+              onMouseEnter={() => setScelto(i)}>
+              <ConnectorIcon id={connectorPerAttrezzo(a.nome, a.serve)} size={15} spenta={!a.collegato} />
+              <b>{a.etichetta}</b>
+              <span>{a.spiega}</span>
+              {!a.collegato && <small>{t('da collegare')}</small>}
+            </div>
+          ))}
+        </div>
+      )}
+      <small className="auto-fonti-nota">
+        {scelte.length ? t('Senza parole di ricerca guarda tutto quello che arriva da lì.')
+          : t('Senza nessuna fonte, guarda solo quello che ha già letto.')}
+      </small>
     </div>
   )
 }

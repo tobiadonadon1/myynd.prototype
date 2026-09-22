@@ -649,7 +649,11 @@ export function Nuova({ catalogo, cartelle, chiudi, fatta }: {
       }} />
       <div ref={finestra} className="auto-editor" role="dialog" aria-modal="true" aria-labelledby="nuova-titolo" style={{
         position: 'fixed', zIndex: 61, top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        width: 860, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 48px)',
+        // «The card for it is extra wide»: ottocentosessanta su una finestra da
+        // milleduecentottanta erano il foglio intero, e un modulo largo quanto
+        // lo schermo si legge come una tabella. Seicentoquaranta è la misura
+        // del foglio del Brief, ed è la stessa ragione: una colonna sola.
+        width: 640, maxWidth: 'calc(100vw - 40px)', maxHeight: 'calc(100dvh - 48px)',
         display: 'flex', flexDirection: 'column', borderRadius: 28, overflow: 'hidden',
         background: 'linear-gradient(180deg,rgba(var(--carta-rgb),.98),rgba(var(--carta-rgb),.96))',
         border: '1px solid rgba(var(--luce-rgb),.95)',

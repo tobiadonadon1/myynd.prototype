@@ -10,13 +10,13 @@
  * (il numero del giorno, il nome della colonna), i filetti sono spariti dove
  * non separavano niente, e ogni riquadro respira. Prima sembrava schiacciato.
  */
-/* L'imbottitura è diciotto e non ventisei, e non è un capriccio: la barra che
-   scrive, qui sopra, tiene il suo testo a diciassette dal proprio bordo. Con
-   ventisei il mese, «In programma» e le colonne cominciavano nove pixel più a
-   destra di quello che si stava scrivendo — abbastanza poco da non vederlo,
-   abbastanza da sentirlo storto. L'aria la mettono le colonne, che ce l'hanno
-   dentro. Chi cambia questo numero cambi anche la misura in `Calendario.tsx`. */
-.task-calendar {margin-top:24px; padding:22px 18px 18px; background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8)); border:1px solid rgba(var(--luce-rgb),.96); border-radius:20px; box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34); color:var(--inchiostro);}
+/* L'imbottitura è diciotto e non ventisei: l'aria la mettono le colonne, che
+   ce l'hanno dentro. Chi cambia questo numero cambi anche la misura in
+   `Calendario.tsx`.
+   E sopra non c'è margine: la distanza dal titolo la dà l'intestazione della
+   pagina, ventisei come in prima pagina. Prima erano ventisei più una riga di
+   linguette più quattordici più questi ventiquattro, e si vedeva. */
+.task-calendar {margin-top:0; padding:22px 18px 18px; background:linear-gradient(140deg,rgba(var(--carta-rgb),.92),rgba(var(--carta-rgb),.8)); border:1px solid rgba(var(--luce-rgb),.96); border-radius:20px; box-shadow:0 10px 36px -24px rgba(var(--ombra-rgb),.34); color:var(--inchiostro);}
 .task-calendar button,.task-detail button,.task-view-toggle button {font-family:inherit;cursor:pointer;}
 .task-calendar-toolbar,.task-calendar-agenda-header {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
 .task-calendar-month {font-size:20px;font-weight:400;text-transform:capitalize;letter-spacing:-.02em;}
@@ -34,7 +34,16 @@
    mezzo — così la striscia e i giorni alti sembrano due righe di una cosa
    sola e non due tabelle diverse messe una sopra l'altra */
 .task-calendar-week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:16px;margin-top:24px;}
-.task-calendar-day {position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 2px 12px;border:1px solid transparent;background:transparent;border-radius:14px;color:rgba(var(--inchiostro-rgb),.55);transition:background .16s;}
+/* La casella di un giorno tiene due bersagli: il giorno, e il «+» che apre la
+   riga nella sua colonna. Il «+» non c'è finché non serve — al passaggio, col
+   fuoco della tastiera, o sul giorno scelto — perché sette «+» sempre accesi
+   sono sette cose che chiamano l'occhio invece di una. */
+.task-calendar-day-cell {position:relative;min-width:0;}
+.task-calendar-day {position:relative;width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 2px 12px;border:1px solid transparent;background:transparent;border-radius:14px;color:rgba(var(--inchiostro-rgb),.55);transition:background .16s;}
+.task-calendar-day-piu {position:absolute;top:4px;right:4px;width:22px;height:22px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:rgba(var(--inchiostro-rgb),.4);font-size:15px;line-height:1;opacity:0;transition:opacity .14s,background .14s,color .14s;}
+.task-calendar-day-cell:hover .task-calendar-day-piu,.task-calendar-day-cell:focus-within .task-calendar-day-piu,.task-calendar-day-cell:has(.selected) .task-calendar-day-piu {opacity:1;}
+.task-calendar-day-piu:hover {background:rgba(var(--rame-rgb),.14);color:var(--rame-testo);}
+.task-calendar-day-piu:focus-visible {opacity:1;}
 .task-calendar-day:hover {background:rgba(var(--rame-rgb),.08);}
 .task-calendar-day.selected {background:rgba(var(--rame-rgb),.11);color:var(--inchiostro);}
 .task-calendar-day.today .task-calendar-number {background:var(--rame);color:var(--avorio);}
@@ -80,9 +89,23 @@
 /* Aggiungere qui è un invito, non un bottone: era un riquadro tratteggiato
    alto quanto una riga vera e pesava come una cosa da fare. Adesso è un segno
    tenue che si accende quando ci passi sopra. */
-.task-day-add {width:100%;min-height:34px;margin-top:10px;border:0;background:transparent;border-radius:11px;color:rgba(var(--inchiostro-rgb),.26);font-size:17px;line-height:1;transition:color .14s,background .14s;}
+/* «It's very small and not very visible»: un «+» solo, grigio, alto come una
+   riga di testo. Adesso porta anche la parola, ha il bordo tratteggiato di
+   una cosa che non c'è ancora, e sta largo quanto la colonna: si vede da
+   lontano che lì si aggiunge, e si prende senza mirare. */
+.task-day-add {display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:40px;margin-top:10px;border:1px dashed rgba(var(--inchiostro-rgb),.16);background:transparent;border-radius:12px;color:rgba(var(--inchiostro-rgb),.45);font-size:13px;line-height:1;transition:color .14s,background .14s,border-color .14s;}
+.task-day-add > span {font-size:16px;line-height:1;}
 .task-day-column .task-agenda-list:empty + .task-day-add {margin-top:0;}
-.task-day-add:hover {background:rgba(var(--rame-rgb),.07);color:var(--rame-testo);}
+.task-day-add:hover {background:rgba(var(--rame-rgb),.08);border-color:rgba(var(--rame-rgb),.4);color:var(--rame-testo);}
+
+/* E quando si scrive, si scrive lì: la casella prende il posto del «+», nella
+   colonna del suo giorno. Il disegno è quello della barra di casa — una
+   scatola sola per tutti i campi di testo dell'app. */
+.task-day-scrittura {margin-top:10px;}
+.task-day-column .task-agenda-list:empty + .task-day-scrittura {margin-top:0;}
+.task-day-scrittura input {box-sizing:border-box;width:100%;min-height:40px;padding:10px 12px;font-family:inherit;font-size:13.5px;line-height:1.4;color:var(--inchiostro);background:var(--carta-piena);border:1px solid rgba(var(--rame-rgb),.45);border-radius:12px;}
+.task-day-scrittura input::placeholder {color:rgba(var(--inchiostro-rgb),.38);}
+.task-day-scrittura input:focus-visible {outline:2px solid var(--rame);outline-offset:-1px;}
 
 .task-unscheduled-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;list-style:none;padding:0;margin:0;}
 .task-planning-card {min-width:0;list-style:none;position:relative;padding:13px 12px 10px;background:var(--carta-piena);border:1px solid rgba(var(--inchiostro-rgb),.08);border-radius:12px;box-shadow:0 3px 9px -6px rgba(var(--ombra-rgb),.2);}
@@ -160,4 +183,4 @@
   .task-calendar-owners {grid-template-columns:minmax(0,1fr) 40px 40px 40px;padding:0 11px 9px 19px;}
   .task-detail-body {padding:22px 20px;}
 }
-@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add {transition:none;}}
+@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add,.task-calendar-day-piu {transition:none;}}

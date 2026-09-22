@@ -1705,32 +1705,46 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
     <div style={{ ...SPOSTA, width: vista === 'calendario' ? 1480 : 780, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: stretta ? 24 : 34 }} />
 
-      <div style={{ ...SPOSTA, padding: stretta ? '0 2px 20px' : '0 4px 26px' }}>
-        <h1 style={{
-          fontSize: stretta ? 26 : 36, lineHeight: 1.1, letterSpacing: '-.032em', margin: 0, fontWeight: 400
-        }}>
-          {!l.caricato ? '\u00A0'
-            : l.guasto ? t('Qualcosa non va.')
-            // aver finito e non aver mai cominciato non sono la stessa cosa,
-            // e sotto i coriandoli si vede la differenza
-            : vuota ? (l.chiusi.length ? t('Fatto tutto.') : t('Niente in lista.'))
-            : l.daFare === 0 ? t('Tutto pronto.')
-            : frasi.daFare(l.daFare)}
-        </h1>
-        <div style={{
-          marginTop: 9, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
-          color: 'rgba(var(--inchiostro-rgb),.5)', textTransform: 'capitalize'
-        }}>{oggi}</div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-        <div className="task-view-toggle" role="group" aria-label={t('Vista attività')}>
+      {/* Il titolo e la scelta della vista stanno sulla stessa riga.
+          «There is too much spacing between the title and the actual
+          calendar. There has to be a standard and regular amount of
+          spacing»: fra la data e il calendario c'erano una riga per le due
+          linguette, una barra per scrivere, e tre margini sommati — cento
+          pixel di niente. Il passo adesso è quello di casa: ventisei sotto
+          la data, e comincia la prima scheda. */}
+      <div style={{ ...SPOSTA, display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, padding: stretta ? '0 2px 20px' : '0 4px 26px' }}>
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+          <h1 style={{
+            fontSize: stretta ? 26 : 36, lineHeight: 1.1, letterSpacing: '-.032em', margin: 0, fontWeight: 400
+          }}>
+            {!l.caricato ? '\u00A0'
+              : l.guasto ? t('Qualcosa non va.')
+              // aver finito e non aver mai cominciato non sono la stessa cosa,
+              // e sotto i coriandoli si vede la differenza
+              : vuota ? (l.chiusi.length ? t('Fatto tutto.') : t('Niente in lista.'))
+              : l.daFare === 0 ? t('Tutto pronto.')
+              : frasi.daFare(l.daFare)}
+          </h1>
+          <div style={{
+            marginTop: 9, fontSize: '12.5px', fontWeight: 500, letterSpacing: '.02em',
+            color: 'rgba(var(--inchiostro-rgb),.5)', textTransform: 'capitalize'
+          }}>{oggi}</div>
+        </div>
+        <div className="task-view-toggle" style={{ flex: 'none', marginTop: 6 }} role="group" aria-label={t('Vista attività')}>
           <button type="button" aria-pressed={vista === 'calendario'} onClick={() => setVista('calendario')}>{t('Calendario')}</button>
           <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>{t('Lista')}</button>
         </div>
       </div>
-      <Barra aggiungi={aggiungi} aggiungiRighe={aggiungiRighe} mostraFatte={() => setFatteAperte(a => !a)}
-        giorno={vista === 'calendario' && !senzaData ? giorno : undefined} lingua={lingua} />
+
+      {/* La barra che scrive sta dove è l'unico modo di scrivere: nella lista.
+          Nel calendario una riga si scrive dentro il giorno a cui appartiene
+          (vedi `Calendario.tsx`), e una barra in cima che chiede «per quale
+          giorno?» quando il giorno ce l'hai sotto il dito è un passaggio in
+          più. I comandi con la barra — «/draft», «/myynd» — restano lì. */}
+      {vista === 'lista' && (
+        <Barra aggiungi={aggiungi} aggiungiRighe={aggiungiRighe} mostraFatte={() => setFatteAperte(a => !a)}
+          lingua={lingua} />
+      )}
 
       {l.guasto && (
         <div style={{ ...FERMO, marginTop: 22, padding: '0 4px', fontSize: '13.5px', color: 'var(--rame-testo)' }}>{t(l.guasto)}</div>
@@ -1740,6 +1754,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
         espandi={() => setEspansa(true)}
         pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
+        aggiungi={(testo, g) => { void l.aggiungi(testo, secchioDelGiorno(g), g) }}
         renderRiga={(c, ritardo) => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} ritardo={ritardo} />} />}
 
       {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}
