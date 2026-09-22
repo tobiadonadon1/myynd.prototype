@@ -283,3 +283,25 @@ export function ordineDopoIlTrascinamento(
   const dentro = new Set(mosse)
   return [...mosse, ...(salvato ?? []).filter(id => !dentro.has(id))]
 }
+
+/**
+ * L'ordine che si vede non si rimescola sotto la mano.
+ *
+ * «When I click "done" on a specific item, some other items kind of switch
+ * the position.» Era vero: l'ordine dei blocchi dipende dalla cosa più
+ * pesante che c'è dentro e da quando è stata toccata l'ultima riga, quindi
+ * spuntare la riga più recente di H-Farm faceva scendere H-Farm sotto
+ * Myynd, un attimo dopo il clic, sotto il dito. Provato il 22 settembre nella
+ * cornice vera: H-Farm, Myynd, Il resto → Myynd, H-Farm, Il resto.
+ *
+ * Qui: i blocchi che erano già in pagina restano nell'ordine in cui erano;
+ * uno nuovo entra dove lo metterebbe l'ordine di sempre, spingendo giù gli
+ * altri senza scambiarli. Uno sparito se ne va e basta. Chi chiama decide
+ * quando ricominciare da capo (la pagina riaperta, un «Sposta su»).
+ */
+export function ordineStabile(correnti: readonly string[], visti: readonly string[]): string[] {
+  const dove = new Map(visti.map((k, i) => [k, i]))
+  const fuori = correnti.filter(k => dove.has(k)).sort((a, b) => dove.get(a)! - dove.get(b)!)
+  correnti.forEach((k, i) => { if (!dove.has(k)) fuori.splice(Math.min(i, fuori.length), 0, k) })
+  return fuori
+}

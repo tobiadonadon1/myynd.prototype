@@ -15,7 +15,7 @@ import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, sulTavolo } from '../blocchi-feed'
+import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, sulTavolo } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
@@ -936,8 +936,22 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
-  const blocchi = ordinaBlocchi(grezzi, v.ordineBlocchi)
-  const chiavi = blocchi.map(chiaveBlocco)
+  const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi)
+  /*
+   * E mentre la pagina è aperta, l'ordine che vede resta quello (`ordineStabile`):
+   * spuntare una riga non fa scambiare i blocchi sotto il dito. Si comincia a
+   * tenerlo solo a pagina carica — la lista e il feed arrivano in due tempi, e
+   * tenere l'ordine della metà arrivata prima vorrebbe dire ignorare il peso
+   * del feed — e lo si lascia andare quando cambia il suo ordine salvato: un
+   * «Sposta su» vince sempre.
+   */
+  const pronta = v.feedCaricato && (!lista || lista.caricato)
+  const salvato = (v.ordineBlocchi ?? []).join('|')
+  const visto = useRef<{ chiavi: string[]; salvato: string } | null>(null)
+  const tieni = pronta && visto.current !== null && visto.current.salvato === salvato
+  const chiavi = tieni ? ordineStabile(ordinati.map(chiaveBlocco), visto.current!.chiavi) : ordinati.map(chiaveBlocco)
+  useEffect(() => { if (pronta) visto.current = { chiavi, salvato } })
+  const blocchi = chiavi.map(k => ordinati.find(b => chiaveBlocco(b) === k)!)
   const muovi = (da: number, a: number) => {
     if (da === a || a < 0 || a >= chiavi.length) return
     v.salvaOrdineBlocchi(ordineDopoIlTrascinamento(chiavi, da, a, v.ordineBlocchi))

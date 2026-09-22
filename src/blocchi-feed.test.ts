@@ -288,3 +288,16 @@ test('l’ordine da salvare tiene in coda i blocchi che oggi non sono in pagina'
   assert.deepEqual(ordineDopoIlTrascinamento(['a', 'b'], 0, 1, ['z', 'a', 'b']), ['b', 'a', 'z'])
   assert.deepEqual(ordineDopoIlTrascinamento(['a', 'b'], 0, 1), ['b', 'a'])
 })
+
+test('spuntare una riga non rimescola i blocchi: restano dov’erano, un nuovo entra al suo posto', async () => {
+  const { ordineStabile } = await import('./blocchi-feed.ts')
+  // il 22 settembre: dopo il clic l'ordine di sempre metteva Myynd sopra H-Farm
+  assert.deepEqual(ordineStabile(['myynd', 'hfarm', 'resto'], ['hfarm', 'myynd', 'resto']), ['hfarm', 'myynd', 'resto'])
+  // un blocco sparito se ne va, gli altri non si muovono
+  assert.deepEqual(ordineStabile(['myynd', 'resto'], ['hfarm', 'myynd', 'resto']), ['myynd', 'resto'])
+  // uno nuovo entra dove lo mette l'ordine di sempre, senza scambiare gli altri
+  assert.deepEqual(ordineStabile(['nuovo', 'myynd', 'hfarm', 'resto'], ['hfarm', 'myynd', 'resto']), ['nuovo', 'hfarm', 'myynd', 'resto'])
+  assert.deepEqual(ordineStabile(['myynd', 'hfarm', 'resto', 'nuovo'], ['hfarm', 'myynd', 'resto']), ['hfarm', 'myynd', 'resto', 'nuovo'])
+  // la prima volta non c'è niente da tenere: vale l'ordine di sempre
+  assert.deepEqual(ordineStabile(['a', 'b'], []), ['a', 'b'])
+})
