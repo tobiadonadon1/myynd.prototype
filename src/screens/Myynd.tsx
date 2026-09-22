@@ -712,6 +712,21 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   // luce dice «ce l'ha lui», la riga accanto dice a che punto è.
   const affidato = c.stato === 'delegato'
   const attivo = compitoInEsecuzione(c, l.passi[c.id])
+  /*
+   * Il momento in cui finisce.
+   *
+   * «The animation of when the work gets done is not good.» Quando la riga
+   * passa da affidata a pronta (o a una domanda), il fuoco non sparisce di
+   * colpo: si raccoglie, si spegne nel rame e si posa, un secondo e mezzo,
+   * e poi la riga è quella di sempre con la pastiglia piena. Si ricorda com'era
+   * al giro prima: il passaggio si vede una volta, non a ogni ridisegno.
+   */
+  const eraAffidato = useRef(affidato)
+  const [finita, setFinita] = useState(false)
+  useEffect(() => {
+    if (eraAffidato.current && !affidato && (c.stato === 'pronto' || c.stato === 'chiede')) setFinita(true)
+    eraAffidato.current = affidato
+  }, [affidato, c.stato])
   const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
   const testo = corpo(c)
   // quello che ha scritto per intero: si legge aprendo la riga, dove stava, e
@@ -726,11 +741,12 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const email = pronto && c.email && azioneEmail(c).tipo === 'invia'
 
   return (
-    <div className="task-aurora-host task-aurora-row" data-working={affidato || undefined}
+    <div className="task-aurora-host task-aurora-row" data-working={affidato || finita || undefined}
       {...(espandibile ? { role: 'button', tabIndex: 0, onClick: apri, onKeyDown: daTastiera(apri), 'aria-expanded': aperta } : {})}
       style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}
       {...props}>
-      {affidato && <AuroraCompito />}
+      {affidato && !finita && <AuroraCompito />}
+      {finita && <AuroraCompito fase="finita" onFinita={() => setFinita(false)} />}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ ...TITOLO, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -909,7 +925,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto') })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const blocchi = ordinaBlocchi(grezzi, v.ordineBlocchi)

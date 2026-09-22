@@ -55,7 +55,15 @@ export type Blocco<V, C> = {
 export const COMPITI_IN_PAGINA = 6
 
 const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
-const peso = (stato: string) => ATTESA[stato] ?? 2
+/**
+ * Quanto aspetta lui una riga della lista: zero è «adesso», due è la lista.
+ *
+ * `fermi` sono le righe che hanno appena finito: per il tempo in cui il
+ * fuoco si posa tengono il posto di una riga affidata, così quello che si
+ * guardava non salta in cima a metà animazione. Vedi `useCompiti.appenaFinite`.
+ */
+const pesoRiga = (c: { id: string; stato: string }, fermi?: ReadonlySet<string>) =>
+  fermi?.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede') ? ATTESA.delegato : ATTESA[c.stato] ?? 2
 
 /**
  * Il peso di una voce, come numero sempre.
@@ -82,6 +90,8 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   /** Il nome del blocco senza progetto, già nella lingua giusta. */
   nomeResto: string
   massimoCompiti?: number
+  /** Le righe che hanno appena finito: restano al loro posto finché il fuoco si posa. */
+  fermi?: ReadonlySet<string>
 }): Blocco<V, C>[] {
   const attivi = new Map(dati.progetti.filter(p => !p.stato || p.stato === 'attivo').map(p => [p.id, p.nome]))
   // un progetto fermo o chiuso, o un id che non si conosce, non ha un blocco:
@@ -132,7 +142,7 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   const compiti = dati.compiti
     .filter(c => !appesi.has(c.id))
     .map((c, i) => ({ c, i }))
-    .sort((a, b) => peso(a.c.stato) - peso(b.c.stato) || a.i - b.i)
+    .sort((a, b) => pesoRiga(a.c, dati.fermi) - pesoRiga(b.c, dati.fermi) || a.i - b.i)
     .map(x => x.c)
     .slice(0, dati.massimoCompiti ?? COMPITI_IN_PAGINA)
 
@@ -158,7 +168,7 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   for (const compito of compiti) {
     const b = blocco(casa(compito))
     const riga: RigaBlocco<V, C> = { genere: 'compito', compito, seguito: seguiti.get(compito.id) ?? null }
-    ;(peso(compito.stato) === 0 ? b.attese : b.altre).push(riga)
+    ;(pesoRiga(compito, dati.fermi) === 0 ? b.attese : b.altre).push(riga)
     piuRecente(b, compito.aggiornato)
   }
 

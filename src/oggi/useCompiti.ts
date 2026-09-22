@@ -195,15 +195,33 @@ export function useCompiti(
    * passaggio: è come stanno le cose, e non si annuncia niente.
    */
   const statiVisti = useRef<Record<string, string> | null>(null)
+  /**
+   * Le righe che hanno appena finito: per un attimo restano dove stavano.
+   *
+   * Una riga pronta passa in cima al suo blocco. Se lo fa nello stesso
+   * istante in cui finisce, il fuoco che si posa (`AuroraCompito`, fase
+   * «finita») si vede da un'altra parte, e dove si guardava resta un buco:
+   * «the animation of when the work gets done is not good». Quindi per il
+   * tempo del posarsi la riga tiene il posto di una riga affidata, e solo
+   * dopo sale. Chi disegna i blocchi la legge da qui (`fermi`).
+   */
+  const [appenaFinite, setAppenaFinite] = useState<ReadonlySet<string>>(() => new Set())
+  const FERMA_MS = 1800
   useEffect(() => {
     const prima = statiVisti.current
     const adesso: Record<string, string> = {}
     for (const c of compiti) adesso[c.id] = c.stato
     statiVisti.current = adesso
     if (!prima) return
+    const finite: string[] = []
     for (const c of compiti) {
       if (prima[c.id] === 'delegato' && c.stato === 'pronto') mostraToast(frasi.compitoFinito(titoloCorto(c.testo)))
+      if (prima[c.id] === 'delegato' && (c.stato === 'pronto' || c.stato === 'chiede')) finite.push(c.id)
     }
+    if (!finite.length) return
+    setAppenaFinite(f => new Set([...f, ...finite]))
+    const via = setTimeout(() => setAppenaFinite(f => new Set([...f].filter(id => !finite.includes(id)))), FERMA_MS)
+    return () => clearTimeout(via)
   }, [compiti, mostraToast])
 
   /**
@@ -620,6 +638,7 @@ export function useCompiti(
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
+    appenaFinite,
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
     aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,

@@ -119,6 +119,19 @@ test('quello che aspetta lui passa davanti, e sopra il tetto non si va', () => {
   assert.deepEqual(ids(b.find(x => x.nome === 'H-Farm')!).slice(1), ['a0', 'a1', 'a2'])
 })
 
+test('una riga appena finita resta al posto di una affidata finché il fuoco si posa', () => {
+  const dati = {
+    voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')],
+    compiti: [compito('c1', 'hf'), compito('c2', 'hf', { stato: 'pronto' })],
+    progetti: PROGETTI, nomeResto: 'Il resto'
+  }
+  assert.deepEqual(ids(blocchiFeed(dati)[0]), ['c2', 'v1', 'c1'])
+  // il posto di una affidata: dopo le voci, prima delle righe aperte
+  assert.deepEqual(ids(blocchiFeed({ ...dati, fermi: new Set(['c2']) })[0]), ['v1', 'c2', 'c1'])
+  // ferma vale solo per una riga pronta o che chiede: una aperta non cambia posto
+  assert.deepEqual(ids(blocchiFeed({ ...dati, fermi: new Set(['c1']) })[0]), ['c2', 'v1', 'c1'])
+})
+
 test('dentro un blocco: prima le pronte, poi le voci, poi le altre righe', () => {
   const b = blocchiFeed({
     voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')],

@@ -266,8 +266,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // I blocchi della prima pagina, fatti qui una volta: la pagina li disegna
   // e il menù ne conta le righe. Un conto solo, da un posto solo: «dice
   // quattro cose sul tavolo, io ne conto cinque» non può più succedere.
-  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto') }),
-    [v.voci, lista.compiti, v.progetti])
+  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite }),
+    [v.voci, lista.compiti, v.progetti, lista.appenaFinite])
   // le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui
   const sulTavoloAdesso = sulTavolo(blocchi, (v.domanda ? 1 : 0) + v.iniziative.length)
 
