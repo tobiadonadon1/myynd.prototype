@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { Compito } from '../api'
+import { api, type Compito, type Priorita, type Progetto } from '../api'
 import { t } from '../lingua'
 import {
   dataLocale, giornoCompito, giorniVisibili, inizioSettimana, quantiGiorni, spostaGiorno
@@ -24,8 +24,8 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   senzaData: boolean; setSenzaData: (v: boolean | ((v: boolean) => boolean)) => void
   /** Apre la settimana su tutta l'applicazione. */
   espandi: () => void
-  /** Una riga nuova, scritta dentro il giorno in cui va. */
-  aggiungi: (testo: string, giorno: string) => void
+  /** Una riga nuova, scritta dentro il giorno in cui va, con la sua ora, la priorità e il progetto. */
+  aggiungi: (riga: RigaNuova, giorno: string) => void
 }) {
   const [sopra, setSopra] = useState<string | null>(null)
   /**
@@ -132,14 +132,12 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
         const classi = ['task-calendar-day', g === giorno && !senzaData && 'selected',
           g === oggi && 'today', sopra === g && 'drop-target'].filter(Boolean).join(' ')
         /*
-         * Il giorno e il suo «+», due bersagli dentro una casella sola.
+         * Il giorno, e basta.
          *
-         * «I would like… for me to click something on the calendar, even if
-         * it's the small version, for the + to be visible.» Anche qui, nella
-         * striscia piccola: il «+» compare quando il dito ci passa sopra o
-         * quando il giorno è quello scelto, e apre la riga nella sua colonna.
-         * Due bottoni e non uno dentro l'altro — un bottone dentro un bottone
-         * non è HTML, e con la tastiera non si raggiungerebbe.
+         * C'era anche un «+» piccolo in ogni casella: «the + on the day of the
+         * week is useless, so remove that». Si aggiunge dal «+» largo in fondo
+         * alla colonna del giorno, che apre la scheda con ora, priorità e
+         * progetto; premere un giorno qui lo porta fra le colonne.
          */
         return <div key={g} className="task-calendar-day-cell">
           <button type="button" className={classi}
@@ -151,8 +149,6 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
             <span className="task-calendar-number">{dataLocale(g).getDate()}</span>
             <span className="task-calendar-dots" aria-hidden="true">{Array.from({ length: Math.min(quanti, 3) }, (_, i) => <i key={i} />)}</span>
           </button>
-          <button type="button" className="task-calendar-day-piu" onClick={() => componi(g)}
-            aria-label={`${t('Aggiungi per')} ${perEsteso(g)}`} title={`${t('Aggiungi per')} ${perEsteso(g)}`}>+</button>
         </div>
       })}
     </div>
@@ -178,7 +174,7 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
             {righe.length > 0 && <span className="task-day-count">{righe.length}</span>}</header>
           <ul className="task-agenda-list">{righe.map(c => renderRiga(c, scadeva(c)))}</ul>
           {scrivendo === g
-            ? <Scrittura giorno={g} nome={nome(g)} scrivi={testo => aggiungi(testo, g)} chiudi={() => setScrivendo(null)} />
+            ? <Scrittura giorno={g} nome={nome(g)} scrivi={riga => aggiungi(riga, g)} chiudi={() => setScrivendo(null)} />
             : <button type="button" className="task-day-add" aria-label={`${t('Aggiungi per')} ${perEsteso(g)}`}
               onClick={() => componi(g)}><span aria-hidden="true">+</span>{t('Aggiungi')}</button>}
         </section>
@@ -187,38 +183,97 @@ export function Calendario({ compiti, oggi, giorno, scegli, lingua, pianifica, r
   </section>
 }
 
+/** Quello che la scheda del «+» consegna: la riga, e quello che le si è detto attorno. */
+export type RigaNuova = { testo: string; ora: string | null; priorita: Priorita | null; progetto: string | null }
+
+const LIVELLI: { id: Priorita | null; nome: string }[] = [
+  { id: 'bassa', nome: 'Bassa' }, { id: null, nome: 'Normale' }, { id: 'alta', nome: 'Alta' }
+]
+
 /**
- * La riga che si scrive dentro il giorno.
+ * La scheda che si apre col «+» del giorno.
  *
- * Una casella sola, dentro la colonna, già col fuoco: si scrive e si preme
- * Invio. Dopo Invio la casella resta aperta e vuota — chi aggiunge una cosa a
- * un giorno quasi sempre ne aggiunge due — e si chiude con Esc o uscendo dal
- * campo senza aver scritto niente. Non c'è nessun bottone «Salva»: il gesto
- * è Invio, come nella barra di casa e come in ogni campo di questa
- * applicazione (vedi `Barra.tsx`).
+ * «When I click the + on the little day, I'm not supposed to just write the
+ * thing for tomorrow. I should also be able to set a time, a priority, and
+ * even a project.» Era una casella sola, di una riga: il testo lungo scorreva
+ * a destra e spariva. Adesso il testo va a capo e la casella cresce con lui,
+ * e sotto ci sono le tre cose che si possono dire di una riga — tutte già al
+ * valore che vale quasi sempre (senza ora, normale, nessun progetto), così
+ * chi vuole solo scrivere scrive e preme Invio.
+ *
+ * Dopo Invio la scheda resta aperta e vuota per la riga dopo, con lo stesso
+ * progetto: chi ne aggiunge due a un giorno di solito le aggiunge allo stesso
+ * lavoro. Esc chiude; uscire dalla scheda la chiude se non c'è niente scritto.
  */
 function Scrittura({ giorno, nome, scrivi, chiudi }: {
-  giorno: string; nome: string; scrivi: (testo: string) => void; chiudi: () => void
+  giorno: string; nome: string; scrivi: (riga: RigaNuova) => void; chiudi: () => void
 }) {
-  const campo = useRef<HTMLInputElement>(null)
+  const scheda = useRef<HTMLFormElement>(null)
+  const campo = useRef<HTMLTextAreaElement>(null)
   const [testo, setTesto] = useState('')
+  const [ora, setOra] = useState('')
+  const [priorita, setPriorita] = useState<Priorita | null>(null)
+  const [progetto, setProgetto] = useState('')
+  const [progetti, setProgetti] = useState<Progetto[]>([])
   useEffect(() => { campo.current?.focus() }, [giorno])
+  useEffect(() => {
+    let vivo = true
+    api.progetti().then(r => { if (vivo) setProgetti(r.progetti.filter(p => p.stato !== 'chiuso')) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  // la casella cresce con il testo: va a capo invece di scorrere a destra
+  useEffect(() => {
+    const el = campo.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [testo])
   const manda = () => {
-    const pulito = testo.trim()
+    const pulito = testo.replace(/\s+/g, ' ').trim()
     if (!pulito) return chiudi()
-    scrivi(pulito)
-    setTesto('')
+    scrivi({ testo: pulito, ora: ora || null, priorita, progetto: progetto || null })
+    setTesto(''); setOra(''); setPriorita(null)
+    campo.current?.focus()
   }
   return (
-    <div className="task-day-scrittura">
-      <input ref={campo} value={testo} onChange={e => setTesto(e.target.value)}
+    <form ref={scheda} className="task-new" aria-label={`${t('Aggiungi per')} ${nome}`}
+      onSubmit={e => { e.preventDefault(); manda() }}
+      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); chiudi() } }}
+      onBlur={e => {
+        // si chiude solo se il fuoco esce dalla scheda, e solo se è vuota
+        if (scheda.current?.contains(e.relatedTarget as Node | null)) return
+        if (!testo.trim()) chiudi()
+      }}>
+      <textarea ref={campo} rows={1} value={testo} onChange={e => setTesto(e.target.value)}
         placeholder={`${t('Aggiungi per')} ${nome.toLocaleLowerCase()}`}
-        aria-label={`${t('Aggiungi per')} ${nome}`}
-        onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); manda() }
-          if (e.key === 'Escape') { e.preventDefault(); chiudi() }
-        }}
-        onBlur={() => { if (!testo.trim()) chiudi() }} />
-    </div>
+        aria-label={t('Cosa c’è da fare')}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); manda() } }} />
+      <div className="task-new-campi">
+        <label className="task-new-campo">
+          <span>{t('Ora')}</span>
+          <input type="time" value={ora} onChange={e => setOra(e.target.value)} />
+        </label>
+        <div className="task-new-campo">
+          <span id={`priorita-${giorno}`}>{t('Priorità')}</span>
+          <div className="task-new-livelli" role="radiogroup" aria-labelledby={`priorita-${giorno}`}>
+            {LIVELLI.map(l => (
+              <button key={l.nome} type="button" role="radio" aria-checked={priorita === l.id}
+                className={l.id ? `livello-${l.id}` : undefined} onClick={() => setPriorita(l.id)}>{t(l.nome)}</button>
+            ))}
+          </div>
+        </div>
+        {progetti.length > 0 && <label className="task-new-campo">
+          <span>{t('Progetto')}</span>
+          <select value={progetto} onChange={e => setProgetto(e.target.value)}>
+            <option value="">{t('Nessun progetto')}</option>
+            {progetti.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </label>}
+      </div>
+      <div className="task-new-gesti">
+        <button type="button" className="task-new-annulla" onClick={chiudi}>{t('Annulla')}</button>
+        <button type="submit" className="task-new-aggiungi" disabled={!testo.trim()}>{t('Aggiungi')}</button>
+      </div>
+    </form>
   )
 }

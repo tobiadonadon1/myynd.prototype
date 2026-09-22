@@ -2816,6 +2816,8 @@ app.post('/api/compiti', (req, res) => {
   if (progetto !== null && (typeof progetto !== 'string' || !progetti.trova(progetto))) {
     return res.status(400).json({ errore: 'Questo progetto non c’è.' })
   }
+  const priorita = req.body?.priorita ?? null
+  if (priorita !== null && !store.PRIORITA.includes(priorita)) return res.status(400).json({ errore: 'Priorità non valida.' })
   // una riga nata da una voce del feed eredita il progetto della voce, e una
   // riga che nomina un progetto suo è di quel progetto: «Define a Myynd
   // pilot inside H-Farm» non deve finire in «Il resto»
@@ -2831,7 +2833,7 @@ app.post('/api/compiti', (req, res) => {
     store.scriviCompito({
     id, testo,
     nota: req.body?.nota ? String(req.body.nota) : null,
-    quando, giorno, ora, progetto,
+    quando, giorno, ora, progetto, priorita,
     ordine: ordine.dopo(store.ultimoOrdine(quando)),
     origine: String(req.body?.origine ?? 'mano'),
     voce: req.body?.voce ? String(req.body.voce) : null,
@@ -2858,7 +2860,7 @@ app.patch('/api/compiti/:id', (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
 
   const b = req.body ?? {}
-  const patch: { testo?: string; nota?: string | null; giorno?: string | null; ora?: string | null; progetto?: string | null } = {}
+  const patch: { testo?: string; nota?: string | null; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: store.Priorita | null } = {}
   if (b.testo !== undefined) {
     const testo = String(b.testo).trim()
     if (!testo) return res.status(400).json({ errore: 'Un compito senza testo non è un compito.' })
@@ -2874,6 +2876,10 @@ app.patch('/api/compiti/:id', (req, res) => {
   if (b.giorno !== undefined) {
     if (b.giorno !== null && !giornoValido(b.giorno)) return res.status(400).json({ errore: 'Data non valida.' })
     patch.giorno = b.giorno
+  }
+  if (b.priorita !== undefined) {
+    if (b.priorita !== null && !store.PRIORITA.includes(b.priorita)) return res.status(400).json({ errore: 'Priorità non valida.' })
+    patch.priorita = b.priorita
   }
   if (b.ora !== undefined) {
     if (b.ora !== null && !oraValida(b.ora)) return res.status(400).json({ errore: 'Ora non valida.' })
@@ -2898,7 +2904,10 @@ app.patch('/api/compiti/:id', (req, res) => {
   }
 
   try {
-    if(Object.keys(patch).length && stopProjectWork(req.params.id)) compiti.richiama(req.params.id)
+    // cambiare il lavoro ferma il lavoro in corso; cambiarne la priorità no:
+    // la cosa da fare è la stessa, e buttare via mezz'ora di codice per un
+    // «alta» sarebbe un prezzo che nessuno ha chiesto di pagare
+    if (Object.keys(patch).some(k => k !== 'priorita') && stopProjectWork(req.params.id)) compiti.richiama(req.params.id)
     if (Object.keys(patch).length) store.cambiaCompito(req.params.id, patch)
     // Cambiare secchio vuol dire cambiare fila, e una chiave nata nell'altra
     // fila lì non vuol dire niente: può essere identica a una che c'è già, e da

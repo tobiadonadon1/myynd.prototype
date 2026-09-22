@@ -197,6 +197,10 @@ function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; mo
     if (!l.aperti.has(c.id)) requestAnimationFrame(() => document.getElementById(`task-result-${c.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'auto' }))
   }
   return <li className={classi} draggable onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' }}>
+    {/* «From that view, I should also be able to easily delete one of the
+        items»: il cestino della lista, qui in alto a destra, quando la carta
+        è sotto il mouse o ha il fuoco. Togliere si disfa, quindi non chiede. */}
+    <span className="task-planning-cestino"><Cestino fai={() => l.elimina(c.id)} titolo={t('Toglila')} dim={22} icona={11} subito /></span>
     <div className="task-planning-main"><Cerchio c={c} onClick={() => l.chiudi(c.id)} />
       {/* l'ora, quando c'è, sta prima del titolo e sottovoce: è un dato, non
           il titolo della riga */}
@@ -214,6 +218,7 @@ function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; mo
         onChange={e => { if (e.target.value === 'io') l.richiama(c.id); else l.delega(c.id, e.target.value) }}>
         {MODI.map(m => <option key={m.id} value={m.id} title={t(m.cosa)}>{t(m.nome)}</option>)}
       </select>
+      {c.priorita && <span className={`task-priorita ${c.priorita}`}>{c.priorita === 'alta' ? t('Alta') : t('Bassa')}</span>}
       {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
         : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
     </div>
@@ -367,6 +372,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
             }}>{frasePasso(l.passi[c.id])}</div>
           )}
         </div>
+
+        {/* la priorità, quando non è la normale: la stessa parola del calendario */}
+        {c.priorita && <span className={`task-priorita ${c.priorita}`} style={{ flex: 'none' }}>{c.priorita === 'alta' ? t('Alta') : t('Bassa')}</span>}
 
         {/* portata avanti da un giorno passato: lo si dice, senza toccare
             `quando` sul disco — vedi `secchioVivo` in `secchi.ts` */}
@@ -1754,7 +1762,7 @@ export function Oggi({ l, oggi, lingua, giroFatto, segnaGiro, apriGuida }: {
         giorno={giorno} scegli={setGiorno} lingua={lingua} senzaData={senzaData} setSenzaData={setSenzaData}
         espandi={() => setEspansa(true)}
         pianifica={(id, data) => { void l.cambia(id, { giorno: data, quando: secchioDelGiorno(data) }) }}
-        aggiungi={(testo, g) => { void l.aggiungi(testo, secchioDelGiorno(g), g) }}
+        aggiungi={(r, g) => { void l.aggiungi(r.testo, secchioDelGiorno(g), g, r.ora, { progetto: r.progetto, priorita: r.priorita }) }}
         renderRiga={(c, ritardo) => <CartaCalendario key={c.id} c={c} l={l} modifica={setModifica} ritardo={ritardo} />} />}
 
       {espansa && <Agenda compiti={l.compiti} oggi={dataOggi} giorno={senzaData ? dataOggi : giorno}

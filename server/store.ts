@@ -1286,7 +1286,11 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // frontiera, o un fatto che cambia il suo lavoro: la pastiglia salta) e
   // quanto è interessante per lui secondo Jev, che decide chi esce quando la
   // rassegna supera le dieci. Due colonne, in fondo, come tutte.
-  d => { colonna(d, 'notizie', 'importante', 'INTEGER NOT NULL DEFAULT 0'); colonna(d, 'notizie', 'interesse', 'REAL') }
+  d => { colonna(d, 'notizie', 'importante', 'INTEGER NOT NULL DEFAULT 0'); colonna(d, 'notizie', 'interesse', 'REAL') },
+  // 45 → 46 · la priorità di una riga: «alta», «bassa», o niente (normale).
+  // La chiede la scheda che si apre col «+» del calendario, insieme all'ora e
+  // al progetto. In fondo, come tutte.
+  d => colonna(d, 'compiti', 'priorita', 'TEXT')
 
 ]
 
@@ -1367,7 +1371,7 @@ const COLONNE: Record<string, [string, string][]> = {
   ],
   automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT']],
+  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT'], ['priorita', 'TEXT']],
   feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']],
   notizie: [['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']]
 }
@@ -3088,6 +3092,13 @@ export type RevisioneLavoro = {
   giri: number
 }
 
+/**
+ * Quanto conta una riga, detto da lui: alta o bassa. Niente vuol dire normale,
+ * ed è la risposta giusta per quasi tutte — per questo non ha un valore suo.
+ */
+export type Priorita = 'alta' | 'bassa'
+export const PRIORITA: readonly Priorita[] = ['alta', 'bassa']
+
 export type Compito = {
   consegna?: ConsegnaCompito | null
   id: string
@@ -3098,6 +3109,8 @@ export type Compito = {
   /** L'ora dentro quel giorno, «HH:MM». Null vuol dire: vale per tutto il giorno. */
   ora?: string | null
   progetto?: string | null
+  /** «alta» o «bassa»; null è la normale. */
+  priorita?: Priorita | null
   stato: string
   modo: string
   ordine: string
@@ -3387,6 +3400,8 @@ export function scriviCompito(c: {
   /** L'ora dentro il giorno, «HH:MM», quando quella cosa si fa a un'ora precisa. */
   ora?: string | null
   progetto?: string | null
+  /** «alta» o «bassa»; null è la normale, cioè quasi tutte. */
+  priorita?: Priorita | null
   ordine: string; origine?: string; voce?: string | null; doc?: string | null
   /** La riga da cui questa è nata: si scrive alla nascita e non si riscrive. */
   madre?: string | null
@@ -3394,8 +3409,8 @@ export function scriviCompito(c: {
 }) {
   const ora = new Date().toISOString()
   db.prepare(`
-    INSERT INTO compiti (id, testo, nota, quando, giorno, ora, progetto, stato, ordine, origine, voce, doc, madre, attrezzi, creato, aggiornato)
-    VALUES (?,?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?,?)
+    INSERT INTO compiti (id, testo, nota, quando, giorno, ora, progetto, priorita, stato, ordine, origine, voce, doc, madre, attrezzi, creato, aggiornato)
+    VALUES (?,?,?,?,?,?,?,?,'aperto',?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET
       testo      = excluded.testo,
       quando     = excluded.quando,
@@ -3405,6 +3420,7 @@ export function scriviCompito(c: {
       -- davvero c'è cambiaCompito, dove null vuol dire null
       ora        = COALESCE(excluded.ora, compiti.ora),
       progetto   = COALESCE(excluded.progetto, compiti.progetto),
+      priorita   = COALESCE(excluded.priorita, compiti.priorita),
       -- da chi sei nata non cambia: una riscrittura senza madre non taglia il filo
       madre      = COALESCE(excluded.madre, compiti.madre),
       -- il permesso si riscrive con la riga: se l'automazione nel frattempo ha
@@ -3424,7 +3440,7 @@ export function scriviCompito(c: {
       aggiornato = excluded.aggiornato,
       versione   = compiti.versione + 1
   `).run(
-    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.ordine,
+    c.id, c.testo, c.nota ?? null, c.quando ?? 'oggi', c.giorno ?? null, c.ora ?? null, c.progetto ?? null, c.priorita ?? null, c.ordine,
     c.origine ?? 'mano', c.voce ?? null, c.doc ?? null, c.madre ?? null,
     c.attrezzi?.nomi?.length ? JSON.stringify(c.attrezzi) : null, ora, ora
   )
@@ -3448,6 +3464,7 @@ export function cambiaCompito(id: string, c: {
   giorno?: string | null
   ora?: string | null
   progetto?: string | null
+  priorita?: Priorita | null
 }) {
   const campi: string[] = []
   const valori: (string | null)[] = []
@@ -3458,6 +3475,7 @@ export function cambiaCompito(id: string, c: {
   if (c.giorno !== undefined) { campi.push('giorno = ?'); valori.push(c.giorno) }
   if (c.ora !== undefined) { campi.push('ora = ?'); valori.push(c.ora) }
   if (c.progetto !== undefined) { campi.push('progetto = ?'); valori.push(c.progetto) }
+  if (c.priorita !== undefined) { campi.push('priorita = ?'); valori.push(c.priorita) }
   if (c.quando !== undefined) { campi.push('quando = ?'); valori.push(c.quando) }
   if (c.ordine !== undefined) { campi.push('ordine = ?'); valori.push(c.ordine) }
   if (!campi.length) return

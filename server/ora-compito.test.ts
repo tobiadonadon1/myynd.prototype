@@ -137,3 +137,45 @@ test('the hour moves with the task, is cleared on its own, and goes away with th
   const no = await chiama('PATCH', '/api/compiti/con-ora', { ora: '09:00' })
   assert.equal(no.stato, 400)
 })
+
+// — la priorità —
+//
+// La scheda del «+» nel calendario chiede, oltre all'ora, la priorità e il
+// progetto. La priorità è «alta», «bassa» o niente: il niente è la normale, e
+// non si scrive.
+
+const prio = (r: Risposta, id: string) =>
+  (r.dati.compiti as { id: string; priorita: string | null; progetto: string | null }[]).find(c => c.id === id)
+
+test('a task is born with its priority and project from the day card, and a made-up priority is refused', async () => {
+  const p = await chiama('POST', '/api/progetti', { nome: 'H-Farm' })
+  const progetto = String((p.dati.progetto as { id: string } | undefined)?.id ?? '')
+  assert.ok(progetto, `il progetto non è nato: ${JSON.stringify(p.dati).slice(0, 200)}`)
+
+  const nata = await chiama('POST', '/api/compiti', { id: 'prio-alta', testo: 'Send the audit', quando: 'oggi', giorno: '2026-09-17', ora: '11:00', priorita: 'alta', progetto })
+  assert.equal(nata.stato, 200)
+  assert.deepEqual([prio(nata, 'prio-alta')?.priorita, prio(nata, 'prio-alta')?.progetto], ['alta', progetto])
+
+  const normale = await chiama('POST', '/api/compiti', { id: 'prio-normale', testo: 'Water the plants', quando: 'oggi', giorno: '2026-09-17' })
+  assert.equal(prio(normale, 'prio-normale')?.priorita, null, 'senza dirla è la normale, e non si scrive')
+
+  for (const priorita of ['urgente', 'ALTA', 1, true]) {
+    const no = await chiama('POST', '/api/compiti', { id: `prio-${priorita}`, testo: 'Nope', quando: 'oggi', priorita })
+    assert.equal(no.stato, 400, `«${priorita}» è passata`)
+    assert.equal(no.dati.errore, 'Priorità non valida.')
+  }
+})
+
+test('the priority changes and clears on its own, and a change that does not mention it leaves it alone', async () => {
+  const bassa = await chiama('PATCH', '/api/compiti/prio-alta', { priorita: 'bassa' })
+  assert.equal(prio(bassa, 'prio-alta')?.priorita, 'bassa')
+
+  const testo = await chiama('PATCH', '/api/compiti/prio-alta', { testo: 'Send the audit to Marta' })
+  assert.equal(prio(testo, 'prio-alta')?.priorita, 'bassa', 'una modifica del testo non tocca la priorità')
+
+  const normale = await chiama('PATCH', '/api/compiti/prio-alta', { priorita: null })
+  assert.equal(prio(normale, 'prio-alta')?.priorita, null)
+
+  const storta = await chiama('PATCH', '/api/compiti/prio-alta', { priorita: 'media' })
+  assert.equal(storta.stato, 400)
+})

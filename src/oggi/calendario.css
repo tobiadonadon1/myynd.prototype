@@ -34,16 +34,10 @@
    mezzo — così la striscia e i giorni alti sembrano due righe di una cosa
    sola e non due tabelle diverse messe una sopra l'altra */
 .task-calendar-week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:16px;margin-top:24px;}
-/* La casella di un giorno tiene due bersagli: il giorno, e il «+» che apre la
-   riga nella sua colonna. Il «+» non c'è finché non serve — al passaggio, col
-   fuoco della tastiera, o sul giorno scelto — perché sette «+» sempre accesi
-   sono sette cose che chiamano l'occhio invece di una. */
+/* La casella di un giorno: il giorno e basta. Il «+» che c'era qui è andato
+   via — «the + on the day of the week is useless» — si aggiunge dalla colonna. */
 .task-calendar-day-cell {position:relative;min-width:0;}
 .task-calendar-day {position:relative;width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 2px 12px;border:1px solid transparent;background:transparent;border-radius:14px;color:rgba(var(--inchiostro-rgb),.55);transition:background .16s;}
-.task-calendar-day-piu {position:absolute;top:4px;right:4px;width:22px;height:22px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:rgba(var(--inchiostro-rgb),.4);font-size:15px;line-height:1;opacity:0;transition:opacity .14s,background .14s,color .14s;}
-.task-calendar-day-cell:hover .task-calendar-day-piu,.task-calendar-day-cell:focus-within .task-calendar-day-piu,.task-calendar-day-cell:has(.selected) .task-calendar-day-piu {opacity:1;}
-.task-calendar-day-piu:hover {background:rgba(var(--rame-rgb),.14);color:var(--rame-testo);}
-.task-calendar-day-piu:focus-visible {opacity:1;}
 .task-calendar-day:hover {background:rgba(var(--rame-rgb),.08);}
 .task-calendar-day.selected {background:rgba(var(--rame-rgb),.11);color:var(--inchiostro);}
 .task-calendar-day.today .task-calendar-number {background:var(--rame);color:var(--avorio);}
@@ -98,14 +92,47 @@
 .task-day-column .task-agenda-list:empty + .task-day-add {margin-top:0;}
 .task-day-add:hover {background:rgba(var(--rame-rgb),.08);border-color:rgba(var(--rame-rgb),.4);color:var(--rame-testo);}
 
-/* E quando si scrive, si scrive lì: la casella prende il posto del «+», nella
-   colonna del suo giorno. Il disegno è quello della barra di casa — una
-   scatola sola per tutti i campi di testo dell'app. */
-.task-day-scrittura {margin-top:10px;}
-.task-day-column .task-agenda-list:empty + .task-day-scrittura {margin-top:0;}
-.task-day-scrittura input {box-sizing:border-box;width:100%;min-height:40px;padding:10px 12px;font-family:inherit;font-size:13.5px;line-height:1.4;color:var(--inchiostro);background:var(--carta-piena);border:1px solid rgba(var(--rame-rgb),.45);border-radius:12px;}
-.task-day-scrittura input::placeholder {color:rgba(var(--inchiostro-rgb),.38);}
-.task-day-scrittura input:focus-visible {outline:2px solid var(--rame);outline-offset:-1px;}
+/* E quando si scrive, si scrive lì: la scheda prende il posto del «+», nella
+   colonna del suo giorno. Una carta come le righe — stessa carta, stesso
+   raggio — con il testo che va a capo in cima e sotto, in piccolo, le tre cose
+   che si possono dire di una riga. Ognuna ha già il valore di quasi sempre:
+   chi vuole solo scrivere, scrive e preme Invio. */
+.task-new {container-type:inline-size;margin-top:10px;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--carta-piena);border:1px solid rgba(var(--rame-rgb),.4);border-radius:14px;box-shadow:0 8px 22px -14px rgba(var(--ombra-rgb),.35);}
+.task-day-column .task-agenda-list:empty + .task-new {margin-top:0;}
+.task-new textarea {box-sizing:border-box;width:100%;min-height:22px;max-height:160px;resize:none;overflow-y:auto;padding:0;border:0;background:transparent;font-family:inherit;font-size:14px;line-height:1.45;color:var(--inchiostro);overflow-wrap:anywhere;}
+.task-new textarea::placeholder {color:rgba(var(--inchiostro-rgb),.4);}
+.task-new textarea:focus {outline:none;}
+.task-new-campi {display:flex;flex-direction:column;gap:9px;padding-top:11px;border-top:1px solid rgba(var(--inchiostro-rgb),.08);}
+.task-new-campo {display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
+.task-new-campo > span {flex:none;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.5);}
+.task-new-campo input[type=time],.task-new-campo select {min-width:0;max-width:100%;box-sizing:border-box;font-family:inherit;font-size:12.5px;color:var(--inchiostro);background:rgba(var(--inchiostro-rgb),.035);border:1px solid rgba(var(--inchiostro-rgb),.12);border-radius:9px;padding:5px 8px;}
+.task-new-campo select {flex:1 1 auto;width:0;cursor:pointer;text-overflow:ellipsis;}
+.task-new-livelli {display:inline-flex;padding:2px;gap:2px;border-radius:9px;background:rgba(var(--inchiostro-rgb),.05);}
+.task-new-livelli button {border:0;background:transparent;border-radius:7px;padding:4px 8px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.6);white-space:nowrap;}
+.task-new-livelli button:hover {color:var(--inchiostro);}
+.task-new-livelli button[aria-checked=true] {background:var(--carta-piena);color:var(--inchiostro);box-shadow:0 1px 4px rgba(var(--ombra-rgb),.14);}
+.task-new-livelli button.livello-alta[aria-checked=true] {color:var(--rame-testo);}
+.task-new-gesti {display:flex;justify-content:flex-end;align-items:center;gap:6px;}
+.task-new-annulla {border:0;background:transparent;border-radius:9px;padding:7px 10px;font-size:12.5px;color:rgba(var(--inchiostro-rgb),.55);}
+.task-new-annulla:hover {color:var(--inchiostro);background:rgba(var(--inchiostro-rgb),.05);}
+.task-new-aggiungi {border:0;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:500;background:var(--rame);color:var(--avorio);}
+.task-new-aggiungi:hover:not(:disabled) {background:var(--rame-forte);}
+.task-new-aggiungi:disabled {opacity:.45;cursor:default;}
+.task-new button:focus-visible,.task-new input:focus-visible,.task-new select:focus-visible {outline:2px solid var(--rame);outline-offset:2px;}
+/* Stretta — a 1100 le colonne sono di 185: «Bassa Normale Alta» accanto
+   all'etichetta usciva dalla scheda. Lì l'etichetta sta sopra e i controlli
+   prendono tutta la larghezza, invece di sbordare. */
+@container (max-width:236px) {
+  .task-new-campo {flex-direction:column;align-items:stretch;gap:5px;}
+  .task-new-campo input[type=time],.task-new-campo select {width:100%;}
+  .task-new-livelli {display:flex;}
+  .task-new-livelli button {flex:1;padding:4px 2px;}
+}
+
+/* La priorità sulla carta: una parola sola, e solo se non è la normale. */
+.task-priorita {font-size:11px;font-weight:500;padding:1px 7px;border-radius:99px;white-space:nowrap;}
+.task-priorita.alta {color:var(--rame-testo);background:rgba(var(--rame-rgb),.12);}
+.task-priorita.bassa {color:rgba(var(--inchiostro-rgb),.5);background:rgba(var(--inchiostro-rgb),.06);}
 
 .task-unscheduled-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;list-style:none;padding:0;margin:0;}
 .task-planning-card {min-width:0;list-style:none;position:relative;padding:13px 12px 10px;background:var(--carta-piena);border:1px solid rgba(var(--inchiostro-rgb),.08);border-radius:12px;box-shadow:0 3px 9px -6px rgba(var(--ombra-rgb),.2);}
@@ -120,9 +147,15 @@
 .task-planning-late {margin-right:8px;font-size:12px;font-weight:500;color:var(--ritardo);}
 /* una parola che si sente e non si vede: il colore da solo non è un'informazione */
 .task-sr {position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+/* il cestino, in alto a destra, solo sulla carta sotto mano: invisibile non
+   prende clic, così un tocco sull'angolo di una carta non la toglie */
+.task-planning-cestino {position:absolute;top:6px;right:6px;opacity:0;pointer-events:none;transition:opacity .14s;}
+.task-planning-card:hover .task-planning-cestino,.task-planning-card:focus-within .task-planning-cestino {opacity:1;pointer-events:auto;}
 .task-planning-main {display:flex;align-items:flex-start;gap:9px;}
 .task-planning-main > button:first-child {margin-top:2px;}
-.task-planning-title {min-width:0;flex:1;text-align:left;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere;color:var(--inchiostro);border:0;padding:0;background:none;}
+/* lo spazio del cestino a destra c'è sempre: se si aprisse solo al passaggio
+   il titolo andrebbe a capo sotto il mouse */
+.task-planning-title {min-width:0;flex:1;text-align:left;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere;color:var(--inchiostro);border:0;padding:0 18px 0 0;background:none;}
 .task-planning-title:hover {color:var(--rame-testo);}
 /* l'ora di una riga che ne ha una: prima del titolo, sottovoce, con le cifre
    della stessa larghezza così le dieci e le nove stanno incolonnate */
@@ -183,4 +216,4 @@
   .task-calendar-owners {grid-template-columns:minmax(0,1fr) 40px 40px 40px;padding:0 11px 9px 19px;}
   .task-detail-body {padding:22px 20px;}
 }
-@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add,.task-calendar-day-piu {transition:none;}}
+@media (prefers-reduced-motion:reduce) {.task-calendar-day,.task-day-add,.task-planning-cestino {transition:none;}}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type Compito, type Progetto } from '../api'
+import { api, type Compito, type Priorita, type Progetto } from '../api'
 import { t } from '../lingua'
 import { Cestino } from '../ui'
 import type { Lista } from './useCompiti'
@@ -20,6 +20,7 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   const [giorno, setGiorno] = useState(giornoCompito(c, oggi) ?? '')
   /** L'ora dentro quel giorno: vuota vuol dire senza ora, cioè vale tutto il giorno. */
   const [ora, setOra] = useState(oraDi(c) ?? '')
+  const [priorita, setPriorita] = useState<Priorita | null>(c.priorita ?? null)
   const [salvando, setSalvando] = useState(false)
   const [errore, setErrore] = useState(false)
   useEffect(() => {
@@ -40,6 +41,8 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
     if (!testo.trim() || salvando) return
     setSalvando(true); setErrore(false)
     const fatto = await l.cambia(c.id, { testo: testo.trim(), nota: nota.trim() || null, giorno: giorno || null, progetto: progetto || null,
+      // solo se è cambiata: una modifica che non la tocca non deve riscriverla
+      ...(priorita !== (c.priorita ?? null) ? { priorita } : {}),
       // senza un giorno l'ora non sta da nessuna parte, e il server la rifiuta
       ora: giorno && oraValida(ora) ? ora : null,
       quando: giorno ? secchioDelGiorno(giorno) : (c.quando === 'settimana' ? 'settimana' : 'poi') })
@@ -61,6 +64,10 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
           {/* l'ora sta accanto alla data perché è la stessa domanda, fatta più
               da vicino: vuota vuol dire che quella cosa vale per tutto il giorno */}
           <input type="time" aria-label={t('Ora')} value={ora} disabled={!giorno} onChange={e => setOra(e.target.value)} />
+        </div></fieldset>
+        <fieldset><legend>{t('Priorità')}</legend><div className="task-detail-presets" role="radiogroup" aria-label={t('Priorità')}>
+          {([['bassa', 'Bassa'], [null, 'Normale'], ['alta', 'Alta']] as [Priorita | null, string][]).map(([id, nome]) =>
+            <button type="button" key={nome} role="radio" aria-checked={priorita === id} aria-pressed={priorita === id} onClick={() => setPriorita(id)}>{t(nome)}</button>)}
         </div></fieldset>
         <label className="task-detail-label" htmlFor="task-detail-notes">{t('Note')}</label>
         <textarea id="task-detail-notes" className="task-detail-notes" rows={3} value={nota} placeholder={t('Aggiungi un dettaglio…')} onChange={e => setNota(e.target.value)} />

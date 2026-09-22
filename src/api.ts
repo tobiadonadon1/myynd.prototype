@@ -623,6 +623,9 @@ export type EmailPronta = {
  */
 export type Registrato = { progetto: string | null }
 
+/** Quanto conta una riga, detto da lui. Niente è la normale. */
+export type Priorita = 'alta' | 'bassa'
+
 export type Compito = {
   /** Verified native artifact, or the file Myynd wrote by itself (`app: 'File'`); never inferred from the response text. */
   consegna?: { app: 'Pages' | 'TextEdit' | 'File'; titolo: string; percorso: string
@@ -639,6 +642,8 @@ export type Compito = {
   /** L'ora dentro quel giorno, «HH:MM». Null: vale per tutto il giorno. */
   ora?: string | null
   progetto?: string | null
+  /** «alta» o «bassa»; null è la normale. */
+  priorita?: Priorita | null
   stato: string           // aperto | delegato | pronto | chiede | fatto | lasciato
   modo: string            // io | bozza | tutto | prompt
   ordine: string
@@ -1114,10 +1119,10 @@ export const api = {
 
   compiti: () => json<Lista>('/api/compiti'),
 
-  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
+  aggiungiCompito: (c: { id: string; testo: string; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null; nota?: string; voce?: string; doc?: string; origine?: string }) =>
     json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti', { method: 'POST', body: JSON.stringify(c) }),
 
-  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null }) =>
+  cambiaCompito: (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null }) =>
     json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}`,
       { method: 'PATCH', body: JSON.stringify(c) }),
 
