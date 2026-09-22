@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  api, type Blocco, type CambioProgetto, type Compito, type Convinzione, type Memoria as Dati, type Progetto
+  api, type Blocco, type CambioProgetto, type Compito, type Convinzione, type DocumentoProdotto, type Memoria as Dati, type Progetto
 } from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
@@ -122,58 +122,84 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
   }
 
   return (
-    <div className="mem-card">
-      <div className="mem-card-cima" style={{ paddingRight: 0, alignItems: 'flex-start' }}>
-        {/* la domanda in seconda persona, la stessa dell'onboarding: qui la
-            legge la stessa persona che l'ha già letta là */}
-        <h3 style={{ flex: 1, minWidth: 0 }}>{t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}</h3>
-        <Tic mostra={fatto} />
-      </div>
-      {/*
-        Chi ha scritto questa riga.
-
-        Queste cinque caselle restavano vuote per sempre — nessuno si siede a
-        scrivere un ritratto di sé stesso — e adesso le riempie Myynd da quello
-        che ha imparato lavorando. Il che rende questa mezza riga obbligatoria:
-        un ritratto scritto da una macchina che non dice di averlo scritto è
-        esattamente la cosa contro cui è fatta questa schermata. Appena ci metti
-        mano tu, sparisce: da lì in poi quelle sono parole tue.
-      */}
-      {b.daMe && !cambiato && (
-        <div className="mem-stato">
-          {frasi.scrittoDaMe(new Date(b.daMe).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }))}
-        </div>
-      )}
-      <textarea
-        className="mem-campo"
-        value={testo}
-        onChange={e => setTesto(e.target.value.slice(0, b.tetto))}
-        onBlur={salva}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
-        // l'esempio, come nell'onboarding: davanti a un riquadro vuoto vale più
-        // di una spiegazione
-        placeholder={t(DOMANDE[b.etichetta]?.esempio ?? 'Non gliel’hai ancora detto.')}
-        aria-label={t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}
-        rows={testo.length > 140 ? 4 : 3} />
-      <div className="mem-card-piede nudo">
-        <span className="mem-conto">
-          {resta < 120 ? <span style={{ color: resta < 60 ? 'var(--rame-testo)' : undefined }}>{resta} {t('caratteri rimasti')}</span> : ''}
+    <details className="mem-profile-field">
+      <summary>
+        <span className="mem-disclosure"><IconGiu size={13} stroke="currentColor" /></span>
+        <span className="mem-profile-heading">
+          <strong>{t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}</strong>
+          {!!testo.trim() && <span>{testo}</span>}
         </span>
-        {prima !== null && (
-          <button type="button" className="mem-quieto" onClick={() => { setTesto(prima); setPrima(null) }}>
-            {t('Rimetti com’era')}
-          </button>
+        <Tic mostra={fatto} />
+      </summary>
+      <div className="mem-profile-body">
+        {b.daMe && !cambiato && (
+          <div className="mem-stato">
+            {frasi.scrittoDaMe(new Date(b.daMe).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }))}
+          </div>
         )}
-        {!!testo.trim() && (
-          <button type="button" className="mem-pill" onClick={riordina} disabled={riordino}>
-            {/* il glifo del pensare, lo stesso che gira sulle righe delegate:
-                dice senza parole che qui dietro c'è il modello */}
-            <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
-            {riordino ? t('Riordino…') : t('Riordina')}
-          </button>
-        )}
+        <textarea
+          className="mem-campo"
+          value={testo}
+          onChange={e => setTesto(e.target.value.slice(0, b.tetto))}
+          onBlur={salva}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
+          placeholder={t(DOMANDE[b.etichetta]?.esempio ?? 'Non gliel’hai ancora detto.')}
+          aria-label={t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}
+          rows={testo.length > 140 ? 4 : 3} />
+        <div className="mem-card-piede nudo">
+          <span className="mem-conto">
+            {resta < 120 ? <span style={{ color: resta < 60 ? 'var(--rame-testo)' : undefined }}>{resta} {t('caratteri rimasti')}</span> : ''}
+          </span>
+          {prima !== null && (
+            <button type="button" className="mem-quieto" onClick={() => { setTesto(prima); setPrima(null) }}>
+              {t('Rimetti com’era')}
+            </button>
+          )}
+          {!!testo.trim() && (
+            <button type="button" className="mem-pill" onClick={riordina} disabled={riordino}>
+              <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
+              {riordino ? t('Riordino…') : t('Riordina')}
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </details>
+  )
+}
+
+/** Lo scaffale delle consegne: resta leggibile anche se il file è stato spostato. */
+function DocumentiProdotti({ documenti }: { documenti: DocumentoProdotto[] }) {
+  const [apro, setApro] = useState('')
+  const [guaio, setGuaio] = useState('')
+  const apri = async (d: DocumentoProdotto) => {
+    if (!d.disponibile || apro) return
+    setApro(d.id); setGuaio('')
+    try { await api.portami(d.id) }
+    catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    finally { setApro('') }
+  }
+  return (
+    <section className="mem-section">
+      <Testata titolo={t('Documenti creati')} conto={String(documenti.length)} />
+      <div className="mem-card mem-documents-card">
+        {documenti.map(d => (
+          <div key={d.id} className="mem-document-row" data-missing={!d.disponibile ? '' : undefined}
+            role={d.disponibile ? 'button' : undefined} tabIndex={d.disponibile ? 0 : undefined}
+            onDoubleClick={() => apri(d)}
+            onKeyDown={e => { if (d.disponibile && e.key === 'Enter') void apri(d) }}>
+            <div className="mem-document-main">
+              <strong>{d.titolo}</strong>
+              <span>{[d.progetto, new Date(d.aggiornato).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })].filter(Boolean).join(' · ')}</span>
+            </div>
+            <span className="mem-document-status">
+              {!d.disponibile ? t('Non più rintracciabile') : apro === d.id ? t('Apro…') : t('Doppio clic per aprire')}
+            </span>
+          </div>
+        ))}
+        {!documenti.length && <div className="mem-vuoto">{t('Nessun documento creato finora.')}</div>}
+        {guaio && <div role="status" className="mem-guaio">{t(guaio)}</div>}
+      </div>
+    </section>
   )
 }
 
@@ -562,11 +588,13 @@ export function Memoria() {
             {ordino ? t('Ci penso…') : t('Aggiorna da quello che hai imparato')}
           </button>
         </Testata>
-        <div className="mem-grid">
+        <div className="mem-card mem-profile-card">
           {(d?.blocchi ?? []).map(b => <Campo key={b.etichetta} b={b} salvato={carica} />)}
           {!d && <div className="mem-vuoto">{t('carico…')}</div>}
         </div>
       </section>
+
+      {d && <DocumentiProdotti documenti={d.documenti} />}
 
       {/* — quello che ha capito da solo — */}
       <section className="mem-section">

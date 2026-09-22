@@ -244,10 +244,10 @@ function CampoFuoco({ v }: { v: Vals }) {
 
   return (
     <Scheda titolo={t('Su cosa mi concentro')}>
-      <input className="prefs-campo" value={testo} onChange={e => setTesto(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') v.salvaFuoco(testo) }}
+      <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) v.salvaFuoco(testo) }}
         aria-label={t('Su cosa mi concentro')}
-        placeholder={t('Questa settimana solo i preventivi e i pagamenti')} />
+        placeholder={t('Questa settimana solo i preventivi e i pagamenti')} rows={3} />
       <div className="prefs-piede">
         {/*
           Chi ha scritto quella riga.
@@ -276,13 +276,7 @@ function CampoFuoco({ v }: { v: Vals }) {
 function CampoArgomenti({ v }: { v: Vals }) {
   const [testo, setTesto] = useState(v.argomenti)
   const [salvato, setSalvato] = useState(false)
-  const [gusto, setGusto] = useState('')
-  const [chiedo, setChiedo] = useState(false)
-  const [detto, setDetto] = useState('')
   useEffect(() => { setTesto(v.argomenti) }, [v.argomenti])
-
-  // quello che ha notato da come leggi: si chiede una volta, all'apertura
-  useEffect(() => { api.rassegna().then(r => setGusto(r.gusto)).catch(() => {}) }, [])
 
   const salva = () => {
     v.salvaArgomenti(testo)
@@ -290,79 +284,38 @@ function CampoArgomenti({ v }: { v: Vals }) {
     setTimeout(() => setSalvato(false), 1800)
   }
 
-  /**
-   * La proposta, che si mette nel campo e non ci si scrive da sola.
-   *
-   * Chi ha scritto quella riga se la tiene: qui si riempie la casella e basta,
-   * e a salvare ci pensa lei. La differenza fra le due cose è tutto quello che
-   * separa un aiuto da una cosa che ti riscrive addosso.
-   */
-  const proponi = async () => {
-    setChiedo(true); setDetto('')
-    try {
-      const r = await api.proponiArgomenti()
-      if (r.argomenti) { setTesto(r.argomenti); setDetto(t('Guarda se ti torna, poi salva.')) }
-      else setDetto(t('Non ho ancora abbastanza per dire cosa ti interessa.'))
-    } catch { setDetto(t('Non ce l’ha fatta.')) }
-    setChiedo(false)
-  }
-
   return (
     <Scheda titolo={t('Di cosa ti tengo aggiornato')}>
-      <input className="prefs-campo" value={testo} onChange={e => setTesto(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') salva() }}
+      <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
         aria-label={t('Di cosa ti tengo aggiornato')}
-        placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')} />
+        placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')} rows={3} />
       <div className="prefs-piede">
-        <button type="button" className="prefs-quieto" onClick={proponi} disabled={chiedo}>
-          {chiedo ? t('Guardo…') : t('Scrivilo da quello che faccio e leggo')}
-        </button>
-        <div style={{ flex: 1 }} />
+        <div className="prefs-stato" />
         <button type="button" className="prefs-pieno" onClick={salva}>{salvato ? t('Salvato') : t('Salva')}</button>
       </div>
-      {/*
-        Quello che ha imparato guardandoti leggere: non è una cosa che hai
-        scritto tu, è una cosa che ha concluso lui, e tenerle separate è quello
-        che permette di crederci — e di correggerlo scrivendo sopra nel campo.
-      */}
-      {(detto || (v.argomentiDaMe && !!v.argomenti)) && (
-        <div className="prefs-stato">{detto || t('L’ho scritto io, da quello che apri. Se lo cambi, resta tuo.')}</div>
-      )}
-      {gusto && (
-        <div className="prefs-stato"><span className="prefs-etichetta">{t('Da come leggi')}</span>{gusto}</div>
-      )}
     </Scheda>
   )
 }
 
 /**
- * Quanto è costato ragionare, e dove sta il tetto.
+ * Quanto è costato ragionare.
  *
  * Prima «perché ho speso sei dollari in tre giorni» non aveva un posto in
  * cui trovare risposta. Qui si vede oggi e gli ultimi giorni, in token — che
- * è quello che si paga — e si mette un tetto oltre il quale Myynd smette di
- * chiamare il modello fino a domani.
+ * è quello che si paga — senza trasformare questa schermata in un pannello
+ * tecnico di quote.
  */
 function Uso() {
   const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
-  const [tetto, setTetto] = useState('')
-  const [salvo, setSalvo] = useState(false)
   const [guaio, setGuaio] = useState('')
   useEffect(() => {
     // un errore qui faceva sparire la carta intera, senza dire niente: è la
     // stessa distinzione fra «vuoto» e «guasto» che vale per il feed e la mappa
     api.uso()
-      .then(x => { setU(x); setTetto(x.oggi.tetto ? String(x.oggi.tetto) : '') })
+      .then(setU)
       .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
   }, [])
-
-  const salva = async () => {
-    const n = Math.max(0, Math.floor(Number(tetto) || 0))
-    setSalvo(true); setGuaio('')
-    try { await api.profilo({ tetto: n }); setU(await api.uso()) }
-    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-    setSalvo(false)
-  }
 
   if (!u) {
     if (!guaio) return null
@@ -378,7 +331,6 @@ function Uso() {
         {u.oggi.chiamate
           ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
           : t('Oggi ancora niente.')}
-        {u.oggi.raggiunto && <span className="rame"> {t('Tetto raggiunto: si riparte domani.')}</span>}
       </div>
       {giorni.length > 1 && (
         <div aria-hidden="true" className="prefs-barre">
@@ -389,19 +341,6 @@ function Uso() {
           })}
         </div>
       )}
-      <div>
-        <span className="prefs-etichetta">{t('Tetto al giorno, in token')}</span>
-        <input inputMode="numeric" className="prefs-campo" value={tetto} placeholder={t('nessuno')}
-          aria-label={t('Tetto al giorno, in token')}
-          onChange={e => setTetto(e.target.value.replace(/[^\d]/g, ''))}
-          onKeyDown={e => { if (e.key === 'Enter') salva() }} />
-      </div>
-      <div className="prefs-piede">
-        <div className="prefs-stato" />
-        <button type="button" className="prefs-pieno" onClick={salva} disabled={salvo}>
-          {salvo ? t('Un momento…') : t('Salva')}
-        </button>
-      </div>
       {guaio && <div className="prefs-stato rame">{guaio}</div>}
     </Scheda>
   )
@@ -440,8 +379,8 @@ function Conto() {
   const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
 
   return (
-    <Scheda titolo={t('Il tuo accesso')}>
-      <div className="prefs-coppia">
+    <Scheda titolo={t('Il tuo accesso')} larga>
+      <div className="prefs-password">
         <div>
           <span className="prefs-etichetta">{t('Password attuale')}</span>
           <input type="password" className="prefs-campo" value={attuale} onChange={e => setAttuale(e.target.value)} autoComplete="current-password" />
@@ -948,12 +887,11 @@ function ModelliOpenAI({ v }: { v: Vals }) {
 }
 
 export function Preferenze({ v }: { v: Vals }) {
-  type Sezione = 'myynd' | 'intelligenza' | 'dati' | 'account'
+  type Sezione = 'myynd' | 'intelligenza' | 'account'
   const [sezione, setSezione] = useState<Sezione>('myynd')
   const sezioni: { id: Sezione; titolo: string; nota: string }[] = [
-    { id: 'myynd', titolo: 'Myynd', nota: t('Priorità, autonomia e voce') },
+    { id: 'myynd', titolo: t('Generale'), nota: t('Priorità, aspetto e fonti') },
     { id: 'intelligenza', titolo: t('Intelligenza e costi'), nota: t('Modello, chiave e utilizzo') },
-    { id: 'dati', titolo: t('Dati e fonti'), nota: t('Fonti, memoria e trasferimento') },
     { id: 'account', titolo: t('Account e app'), nota: t('Accesso, notifiche e sicurezza') }
   ]
   const attuale = sezioni.find(s => s.id === sezione)!
@@ -1015,28 +953,40 @@ export function Preferenze({ v }: { v: Vals }) {
                 </div>
               </Scheda>
 
-              <Scheda titolo={t('Lingua')}>
-                <div className="prefs-pastiglie">
-                  {v.lingue.map(l => (
-                    <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} style={pastiglia(l.scelto)}>
-                      {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
-                    </button>
-                  ))}
-                </div>
-              </Scheda>
-
-              {/* L'ora del giorno, accanto alla lingua: sono le due cose che
-                  cambiano come l'app ti parla e come ti guarda. */}
-              <Scheda titolo={t('Aspetto')}>
-                <div role="radiogroup" aria-label={t('Aspetto')} className="prefs-pastiglie">
-                  {v.temi.map(x => (
-                    <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick}
-                      style={pastiglia(x.scelto)}>{x.label}</button>
-                  ))}
+              <Scheda titolo={t('Lingua e aspetto')} larga>
+                <div className="prefs-inline-settings">
+                  <div>
+                    <span className="prefs-etichetta">{t('Lingua')}</span>
+                    <div className="prefs-pastiglie">
+                      {v.lingue.map(l => (
+                        <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} style={pastiglia(l.scelto)}>
+                          {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="prefs-etichetta">{t('Aspetto')}</span>
+                    <div role="radiogroup" aria-label={t('Aspetto')} className="prefs-pastiglie">
+                      {v.temi.map(x => (
+                        <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick}
+                          style={pastiglia(x.scelto)}>{x.label}</button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </Scheda>
 
               <Identita />
+              <Scheda titolo={t('Le tue fonti')}>
+                <div className="prefs-piede">
+                  <div className="prefs-stato" />
+                  <button type="button" className="prefs-secondario" onClick={() => v.apriConnessioni()}>
+                    {t('Gestisci')} <IconAvanti />
+                  </button>
+                </div>
+              </Scheda>
+              <DoveStanno v={v} />
             </div>
           )}
 
@@ -1051,26 +1001,12 @@ export function Preferenze({ v }: { v: Vals }) {
             </div>
           )}
 
-          {sezione === 'dati' && (
-            <div className="prefs-grid">
-              <Scheda titolo={t('Le tue fonti')}>
-                <div className="prefs-piede">
-                  <div className="prefs-stato" />
-                  <button type="button" className="prefs-secondario" onClick={() => v.apriConnessioni()}>
-                    {t('Gestisci')} <IconAvanti />
-                  </button>
-                </div>
-              </Scheda>
-              <DoveStanno v={v} />
-              <Fascicolo />
-            </div>
-          )}
-
           {sezione === 'account' && (
             <div className="prefs-grid">
               <Conto />
               {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
               <LApp />
+              <Fascicolo />
               {/* ultima di tutte, e non per pudore: è l'unica cosa in questa
                   schermata che non si può annullare, e non deve stare accanto a
                   niente che si preme di fretta */}

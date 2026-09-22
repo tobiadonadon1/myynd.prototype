@@ -2,7 +2,7 @@ import { listSenderRules, enableSenderRule, disableSenderRule, runSenderRules } 
 import { copiaVerificata } from './apri-copia.ts'
 import { execFile } from 'node:child_process'
 import { capabilities, proofValid } from './capacita-verificate.ts'
-import { projectEvidence } from './project-memory.ts'
+import { projectEvidence, projectMemorySummaries } from './project-memory.ts'
 import { runScheduled, scheduledStatus } from './pianificazione-durevole.ts'
 import { withBackgroundWork } from './lavoro-background.ts'
 import { COLORE_NOTE } from './colori-fonti.ts'
@@ -621,9 +621,9 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'claude' ? mod.conClaude() :
         // collegato vuol dire «c'è», non «è lui che lavora»: quello lo dice il motore
         v.id === 'compatibile' ? !!c.compatibile :
-        // la scheda parla di OpenAI: la chiave salvata, o l'account ChatGPT
-        // scelto e acceso — la stessa regola di Claude con l'abbonamento
-        v.id === 'openai' ? !!c.openai?.chiave || chatgpt.pronto() :
+        // Collegato non vuol dire «scelto come motore». Cambiare motore non
+        // deve far sparire l'account ChatGPT dall'elenco delle fonti.
+        v.id === 'openai' ? !!c.openai?.chiave || chatgpt.collegato() :
         v.id === 'google' ? google.collegato() :
         v.id === 'slack' ? slack.collegato(c) :
         v.id === 'github' ? github.collegato(c) :
@@ -2659,7 +2659,8 @@ app.get('/api/progetti', (req, res) => {
   // Ordinary lists use the same canonical projects as chat and the map.
   const collegato = typeof req.query.collegato === 'string' ? progetti.trova(req.query.collegato) : null
   if (collegato && !elenco.some(p => p.id === collegato.id)) elenco.push(collegato)
-  res.json({ progetti: elenco })
+  const ricordi = projectMemorySummaries(elenco.map(p => p.id))
+  res.json({ progetti: elenco.map(p => ({ ...p, memoria: ricordi[p.id] ?? null })) })
 })
 
 app.get('/api/progetti/:id/memoria', (req, res) => {
@@ -3257,6 +3258,9 @@ app.post('/api/compiti/:id/documento', async (req, res) => {
     if (req.body?.apri !== false) {
       await scrivania.apri(conf.desktop, f.percorso).catch(() => { /* il file c'è comunque */ })
     }
+    // È una consegna vera, non solo una riga nel registro: così resta nello
+    // scaffale della Memoria e «Portami lì» può riaprirla anche fra mesi.
+    store.scriviConsegnaCompito(c.id, { app: 'File', titolo: f.nome, percorso: f.percorso })
     store.tieniLaTua(c.id, testo)
     store.cambiaStatoCompito(c.id, 'fatto', `Salvato in «${f.nome}».`)
     res.json({ ok: true, ...f, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
@@ -3875,7 +3879,16 @@ app.get('/api/memoria', (_req, res) => {
       }
     }),
     convinzioni: store.convinzioni(),
-    storiche: store.convinzioniStoriche()
+    storiche: store.convinzioniStoriche(),
+    documenti: store.consegneProdotte().map(c => ({
+      id: c.id,
+      titolo: c.consegna!.titolo,
+      percorso: c.consegna!.desktop || c.consegna!.percorso,
+      app: c.consegna!.app,
+      aggiornato: c.aggiornato,
+      progetto: c.progetto ? progetti.trova(c.progetto)?.nome ?? null : null,
+      disponibile: existsSync(c.consegna!.desktop || c.consegna!.percorso)
+    }))
   })
 })
 

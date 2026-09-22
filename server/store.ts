@@ -3287,6 +3287,22 @@ export function compitiChiusi(limite = 30): Compito[] {
  * `scordaCompito` scrive la data in `sparito` e lascia lo stato dov'era. Da
  * quel momento la riga non esiste per nessuno: `elencoCompiti` la salta,
  * `compitiChiusi` la salta due volte — una per lo stato, una per `sparito` —
+/**
+ * I documenti prodotti da Myynd, vivi o chiusi.
+ *
+ * La lista normale separa il lavoro aperto da quello chiuso e limita il
+ * secondo: è giusto per una to-do list, ma non per lo scaffale dei documenti
+ * creati. Qui si leggono direttamente le consegne, in ordine di modifica.
+ */
+export function consegneProdotte(limite = 200): Compito[] {
+  const righe = db.prepare(`
+    SELECT * FROM compiti
+    WHERE consegna IS NOT NULL AND sparito IS NULL
+    ORDER BY aggiornato DESC LIMIT ?
+  `).all(limite) as Record<string, unknown>[]
+  return righe.map(compitoDaRiga)
+}
+
  * e il punto, che legge solo quelle due, non sa che è mai esistita. Quindi la
  * riproponeva. Il quattordici settembre ne ha tolte tre alle 16:33 e alle
  * 17:42 se le è ritrovate, una identica parola per parola.

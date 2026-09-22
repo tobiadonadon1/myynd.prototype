@@ -151,7 +151,8 @@ export const CATALOGO: VoceConnettore[] = [
   // vedere tutto quello che Myynd ha in mano, non solo quello che ha letto.
   { id: 'mind2do', nome: 'Da fare', gruppo: 'Note', pronto: true, nota: 'La tua lista, sempre collegata.' },
 
-  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Microsoft Teams: arriva presto.' }
+  { id: 'teams', nome: 'Microsoft Teams', gruppo: 'Comunicazione', pronto: false, nota: 'Microsoft Teams: arriva presto.' },
+  { id: 'work-tracker', nome: 'Linear e Jira', gruppo: 'Gestionale', pronto: false, nota: 'Progetti, issue e decisioni dal posto in cui il team organizza il lavoro: arriva presto.' }
 ]
 
 export const PRONTI = CATALOGO.filter(c => c.pronto).map(c => c.id)

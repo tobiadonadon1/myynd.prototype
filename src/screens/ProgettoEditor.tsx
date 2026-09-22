@@ -780,6 +780,12 @@ export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto,
           vuoto={t('Obiettivo non ancora scritto.')} tornaAlFuoco={() => scheda.current?.focus()}
           testoStile={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.55)', lineHeight: 1.4 }} />
       </div>
+      {p.memoria && (
+        <div className="mem-project-memory">
+          <span>{t('Ultimo ricordo')}</span>
+          <p>{p.memoria.value}</p>
+        </div>
+      )}
       {(padre || (p.origine === 'punto' && !chiuso)) && (
         <div className="mem-card-dentro">
           {padre ? frasi.dentroProgetto(padre.nome) : t('riconosciuto dal punto')}

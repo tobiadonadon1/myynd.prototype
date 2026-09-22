@@ -124,10 +124,13 @@ export function Mappa({ v }: { v: Vals }) {
   // Sotto i mille pixel il canvas e il pannello laterale non ci stanno
   // affiancati: 308 fissi per il pannello lasciavano al disegno una fetta
   // sempre più stretta finché la palla non era più leggibile. Si impilano.
-  const stretta = useLarghezza() < 1000
+  const stretta = useLarghezza() < 1080
   const disegnata = !v.guastoMappa && !v.costruendoMappa && !v.mappaVuota
+  const altezzaMappa = disegnata
+    ? (stretta ? 460 : 'clamp(460px, calc(100vh - 220px), 600px)')
+    : (stretta ? 320 : 420)
   return (
-    <div style={{ width: 1010, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: 1160, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '12px 4px 10px' }}>
         <span style={{ fontSize: 34, lineHeight: 1.1, letterSpacing: '-.03em' }}>{t('Mappa')}</span>
         <span style={{ fontSize: 13, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{v.mappaMeta}</span>
@@ -135,10 +138,10 @@ export function Mappa({ v }: { v: Vals }) {
       <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', maxWidth: 760 }}>
         {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
       </p>
-      <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexDirection: stretta ? 'column' : 'row' }}>
-        <div style={{ flex: 1, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(var(--avorio-rgb),.14)', boxShadow: '0 30px 70px rgba(var(--ombra-rgb),.32)', overflow: 'hidden', position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexDirection: stretta ? 'column' : 'row' }}>
+        <div style={{ flex: 1, width: stretta ? '100%' : undefined, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(var(--avorio-rgb),.14)', boxShadow: '0 30px 70px rgba(var(--ombra-rgb),.32)', overflow: 'hidden', position: 'relative' }}>
           <canvas ref={v.cvA} tabIndex={0} role="img" aria-label={t('Mappa dei documenti. Usa le frecce per selezionare un documento.')}
-            style={{ display: 'block', width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }} />
+            style={{ display: 'block', width: '100%', height: altezzaMappa, cursor: 'grab', touchAction: 'none' }} />
           <Sopra v={v} />
           {disegnata && (
             <>
@@ -154,9 +157,8 @@ export function Mappa({ v }: { v: Vals }) {
           )}
         </div>
 
-        <div style={{ width: stretta ? '100%' : 308, boxSizing: 'border-box', maxHeight: stretta ? 620 : 480, flex: 'none', borderRadius: 20, background: 'rgba(var(--carta-rgb),.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.8)', boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.14)', padding: 20, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: stretta ? '100%' : 340, boxSizing: 'border-box', maxHeight: stretta ? 620 : altezzaMappa, flex: 'none', borderRadius: 20, background: 'rgba(var(--carta-rgb),.74)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(var(--luce-rgb),.8)', boxShadow: '0 22px 52px rgba(var(--ombra-rgb),.14)', padding: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <Pannello v={v} />
-          <div style={{ flex: 1, minHeight: 12 }} />
           <BarraNodo v={v} />
         </div>
       </div>

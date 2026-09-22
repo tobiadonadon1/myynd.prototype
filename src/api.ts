@@ -980,6 +980,17 @@ export type Memoria = {
   blocchi: Blocco[]
   convinzioni: Convinzione[]
   storiche: Convinzione[]
+  documenti: DocumentoProdotto[]
+}
+
+export type DocumentoProdotto = {
+  id: string
+  titolo: string
+  percorso: string
+  app: 'Pages' | 'TextEdit' | 'File'
+  aggiornato: string
+  progetto: string | null
+  disponibile: boolean
 }
 
 /**
@@ -1973,6 +1984,8 @@ export type Progetto = {
   alias: string[]
   /** L'id del progetto dentro cui sta, se è uno spin-off di un altro. */
   genitore: string | null
+  /** L'ultimo ricordo attuale, per non lasciare vuota la scheda del progetto. */
+  memoria: Pick<ProjectEvidence, 'kind' | 'value' | 'recordedAt'> | null
 }
 
 /** Quello che si può cambiare di un progetto dalla Memoria. */

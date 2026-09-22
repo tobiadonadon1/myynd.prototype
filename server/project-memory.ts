@@ -163,6 +163,21 @@ export function projectEvidence(projectId:string,options:{history?:boolean;now?:
   return {...r,stale,reason}
  })
 }
+export type ProjectMemorySummary = Pick<ProjectMemory,'kind'|'value'|'recordedAt'>
+/** Una riga attuale per ogni scheda, letta dal file una sola volta. */
+export function projectMemorySummaries(projectIds:string[],now=Date.now()):Record<string,ProjectMemorySummary> {
+ const wanted=new Set(projectIds), summaries:Record<string,ProjectMemorySummary>={}
+ const rows=read().filter(r=>wanted.has(r.projectId) && !r.supersededBy && r.value && !['goal','note'].includes(r.kind) && r.key!=='decision:stato')
+  .sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt))
+ for(const r of rows) {
+  if(summaries[r.projectId])continue
+  let stale=false
+  if(r.sourceId){const source=documento(r.sourceId);stale=!source || fingerprint(source.corpo)!==r.fingerprint || !Number.isFinite(Date.parse(r.evidenceAt)) || now-Date.parse(r.evidenceAt)>30*86400_000}
+  if(r.taskId){const task=compito(r.taskId);stale=!task || !!task.sparito || task.aggiornato!==r.evidenceAt}
+  if(!stale)summaries[r.projectId]={kind:r.kind,value:r.value,recordedAt:r.recordedAt}
+ }
+ return summaries
+}
 export function projectMemoryContext(projectId:string):string {
  const rows=projectEvidence(projectId)
  const current=rows.filter(r=>!r.stale && r.value && !['goal','note'].includes(r.kind)).sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt)).slice(0,6)

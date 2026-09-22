@@ -74,6 +74,14 @@ test('selected but disabled subscription cannot fall back to a retained API key'
   await assert.rejects(() => mod.motore()!.crea(base), /Turn on ChatGPT/)
 })
 
+test('a connected account remains a source after switching engines', async () => {
+  const cfg = await import('./config.ts')
+  cfg.aggiorna({ motore: 'claude', chatgpt: { attivo: true, email: 'connected@example.test' } })
+  assert.equal(g.scelto(), false)
+  assert.equal(g.pronto(), false)
+  assert.equal(g.collegato(), true)
+})
+
 test('a hosted profile keeps unavailable ChatGPT selection instead of billing the API', () => {
   const code = `const cfg=await import('./server/config.ts'); const mod=await import('./server/modello.ts'); cfg.aggiorna({motore:'chatgpt',chatgpt:{attivo:true},claude:{apiKey:'fake-key-never-used'}}); console.log(JSON.stringify({connected:mod.collegato(),kind:mod.motore()?.tipo}));`
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, MYYND_DATI: join(dir, 'hosted'), MYYND_PUBBLICO: 'https://myynd.test' } })

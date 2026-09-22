@@ -15,6 +15,17 @@ export function installato(): string | null {
 }
 export function scelto(): boolean { return leggi().motore === 'chatgpt' }
 export function pronto(): boolean { return scelto() && leggi().chatgpt?.attivo === true && !!installato() }
+/**
+ * L'account esiste anche quando sta lavorando un altro motore.
+ *
+ * `pronto` risponde alla domanda «può ragionare adesso con ChatGPT?»; le
+ * Fonti chiedono invece «questo account è collegato?». L'email viene salvata
+ * soltanto dopo un accesso riuscito, quindi è il segno persistente giusto.
+ */
+export function collegato(): boolean {
+  const c = leggi()
+  return !!c.chatgpt?.email || (!!installato() && c.motore === 'chatgpt' && c.chatgpt?.attivo === true)
+}
 
 /** No native agent tools, project instructions, background hooks or API billing. */
 export function recinto(config: Obj = {}): Obj {

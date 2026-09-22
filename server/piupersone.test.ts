@@ -30,6 +30,7 @@ process.env.MYYND_DATI = CASA
 process.env.RAILWAY_ENVIRONMENT = 'prova'
 
 const conti = await import('./conti.ts')
+const auth = await import('./auth.ts')
 const chi = await import('./chi.ts')
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')
@@ -205,6 +206,21 @@ test('una password nuova sostituisce la vecchia, e la vecchia non entra più', a
   assert.ok(e.ok)
   assert.equal((await conti.entra('anna@esempio.it', 'passwordlunga1')).ok, false, 'la vecchia apre ancora')
   assert.equal((await conti.entra('anna@esempio.it', 'unapasswordnuova')).ok, true)
+})
+
+test('la schermata cambia password solo con quella attuale e lascia una sessione valida', async () => {
+  const prima = await conti.perProva.apri(anna)
+  const sbagliata = await auth.cambiaPassword(anna, 'questa-non-e-corretta', 'passwordfinale')
+  assert.equal(sbagliata.ok, false)
+  assert.equal((await conti.entra('anna@esempio.it', 'unapasswordnuova')).ok, true)
+
+  const cambiata = await auth.cambiaPassword(anna, 'unapasswordnuova', 'passwordfinale')
+  assert.ok(cambiata.ok)
+  assert.equal(await conti.utenteDelToken(prima), null, 'la sessione vecchia è rimasta valida')
+  if (!cambiata.ok) return
+  assert.equal(await conti.utenteDelToken(cambiata.token), anna, 'la schermata resta invece senza una sessione nuova')
+  assert.equal((await conti.entra('anna@esempio.it', 'unapasswordnuova')).ok, false)
+  assert.equal((await conti.entra('anna@esempio.it', 'passwordfinale')).ok, true)
 })
 
 test('cambiarla butta fuori le sessioni aperte', async () => {

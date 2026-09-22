@@ -50,6 +50,8 @@ test('real delivered work enters shared project context without claiming user co
  store.cambiaStatoCompito('essay','fatto')
  assert.match(projects.perIlModello('Publication'),/User marked completed/)
  assert.equal(memory.projectEvidence(p.id,{history:true}).filter(r=>r.kind==='work').length,2)
+ const summaries=memory.projectMemorySummaries([p.id])
+ assert.match(summaries[p.id].value,/User marked completed/)
 })
 
 test('questions, hypotheticals and quoted decisions cannot enter explicit project memory',()=>{

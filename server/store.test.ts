@@ -613,6 +613,18 @@ test('un compito chiuso esce dalla lista ma non dal mondo', () => {
   assert.deepEqual(store.compitiChiusi().map(c => c.id), ['a'], 'la chiusa non si ritrova più')
 })
 
+test('una consegna resta nello scaffale anche dopo aver chiuso il compito', () => {
+  store.azzeraTutto()
+  compito('a')
+  store.scriviConsegnaCompito('a', { app: 'File', titolo: 'Proposta.md', percorso: '/prova/Proposta.md' })
+  store.cambiaStatoCompito('a', 'fatto', 'consegnata')
+
+  assert.deepEqual(
+    store.consegneProdotte().map(c => ({ id: c.id, titolo: c.consegna?.titolo })),
+    [{ id: 'a', titolo: 'Proposta.md' }]
+  )
+})
+
 test('affidare un compito lo toglie dalle tue mani ma non dalla lista', () => {
   store.azzeraTutto()
   compito('a')

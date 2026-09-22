@@ -658,9 +658,11 @@ export async function consolida(forza = false, adesso = Date.now()): Promise<Con
   const gia = new Map(store.blocchi().map(b => [b.etichetta, b]))
   const scritti: string[] = []
 
-  for (const base of BLOCCHI_BASE) {
+  // I cinque ritratti non dipendono l'uno dall'altro. Farli in serie rendeva
+  // il bottone cinque volte più lento senza migliorare il risultato.
+  const proposte = await Promise.all(BLOCCHI_BASE.map(async base => {
     const vecchio = gia.get(base.etichetta)?.valore?.trim() ?? ''
-    if (vecchio && !gia.get(base.etichetta)?.daMe) continue
+    if (vecchio && !gia.get(base.etichetta)?.daMe) return null
     try {
       const r = await chiediJSON<{ testo: string; cambiato: boolean }>({
         lavoro: 'ritratto',
@@ -677,7 +679,20 @@ export async function consolida(forza = false, adesso = Date.now()): Promise<Con
         }]
       })
       const testo = (r?.testo ?? '').trim()
-      if (!r?.cambiato || !testo || testo === vecchio) continue
+      if (!r?.cambiato || !testo || testo === vecchio) return null
+      return { base, testo }
+    } catch (e) {
+      // un blocco che non riesce non ferma gli altri quattro
+      console.error(`myynd · il blocco «${base.etichetta}» non si è lasciato scrivere:`,
+        e instanceof Error ? e.message : e)
+      return null
+    }
+  }))
+
+  for (const proposta of proposte) {
+    if (!proposta) continue
+    const { base, testo } = proposta
+    try {
       // A person may edit the block while the model is writing. Their latest
       // words remain authoritative even if this run began with a learned block.
       const attuale = store.blocchi().find(b => b.etichetta === base.etichetta)
@@ -693,8 +708,7 @@ export async function consolida(forza = false, adesso = Date.now()): Promise<Con
       })
       scritti.push(base.etichetta)
     } catch (e) {
-      // un blocco che non riesce non ferma gli altri quattro
-      console.error(`myynd · il blocco «${base.etichetta}» non si è lasciato scrivere:`,
+      console.error(`myynd · il blocco «${base.etichetta}» non si è lasciato salvare:`,
         e instanceof Error ? e.message : e)
     }
   }
