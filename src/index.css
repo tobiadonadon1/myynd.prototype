@@ -140,6 +140,13 @@
   --sabbia-viva-rgb:122,78,50;
   --crema-rgb:86,58,42;
   --verde-cupo:#9BB79F;
+  /* i marchi quasi neri — Anthropic, OpenAI, GitHub, Notion, Apple — sul
+     bruno sparivano: di notte si disegnano col colore del testo */
+  --marchio-scuro:rgba(var(--inchiostro-rgb),.92);
+  /* la spunta di una cosa fatta: di giorno salvia su salvia leggera, di notte
+     il cerchio si scalda e il segno si schiarisce, o sul bruno non si vede */
+  --fatto-fondo:rgba(var(--salvia-rgb),.38);
+  --fatto-segno:#E3EFE4;
   /* il ritardo di notte fa da testo sul bruno: schiarisce, e resta
      più rosso dell'ambra qui sopra, se no i due si confondono */
   --ritardo-rgb:240,107,82;
@@ -182,6 +189,9 @@
     --sabbia-viva-rgb:122,78,50;
     --crema-rgb:86,58,42;
     --verde-cupo:#9BB79F;
+    --marchio-scuro:rgba(var(--inchiostro-rgb),.92);
+    --fatto-fondo:rgba(var(--salvia-rgb),.38);
+    --fatto-segno:#E3EFE4;
     /* il ritardo di notte fa da testo sul bruno: schiarisce, e resta
        più rosso dell'ambra qui sopra, se no i due si confondono */
     --ritardo-rgb:240,107,82;

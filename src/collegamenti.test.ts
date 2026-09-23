@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import * as ts from 'typescript'
 import { readFileSync } from 'node:fs'
-import { cambiaIlCollegamento, guaioDelPunto, moduloDaFinire, rilettura, suCollegamento } from './collegamenti.ts'
+import { cambiaIlCollegamento, fontiCollegate, guaioDelPunto, moduloDaFinire, rigaDelleMancanze, rilettura, suCollegamento } from './collegamenti.ts'
 
 const apiUrl = new URL('./api.ts', import.meta.url).href
 const hooks = registerHooks({ load(url, context, nextLoad) {
@@ -182,4 +182,24 @@ test('i pezzi della cartella non dicono il fatto uno per uno: lo dice l’ultimo
     await api.caricaFileDesktop({ file: [], radice: 'Documenti', completo: true, visti: [] })
     assert.equal(fatti(), 1)
   })
+})
+
+test('la prima pagina conta le fonti, non le teste', () => {
+  const c = (id: string, collegato = true) => ({ id, collegato })
+  const tutte = [c('desktop'), c('calendario'), c('claude'), c('openai'), c('compatibile'), c('mind2do'), c('notion', false)]
+  assert.deepEqual(fontiCollegate(tutte).map(x => x.id), ['desktop', 'calendario'],
+    '«3 fonti · 12 documenti» per il Mac, il calendario e Anthropic')
+  assert.equal(fontiCollegate([c('calendario'), c('claude')]).length, 1, '«2 fonti» con il solo calendario')
+})
+
+test('la riga fissa dice che serve Claude finché non si ragiona, una volta, e se ne va subito', () => {
+  const base = { serveClaude: 'Serve Claude.', chiedeClaude: 'Collega Claude e potrò lavorarci.', guastoLettura: null, fontiNonLette: null }
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: false }), 'Serve Claude.', 'con un’attività in pagina non lo diceva nessuno')
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: true }), null)
+  // insieme alle fonti non lette, in una riga sola
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: false, fontiNonLette: 'Calendario non letto.' }), 'Serve Claude. Calendario non letto.')
+  // un «Leggi adesso» fallito per Claude non si ripete, e dopo il collegamento non resta
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: false, guastoLettura: 'Collega Claude e potrò lavorarci.' }), 'Serve Claude.')
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: true, guastoLettura: 'Collega Claude e potrò lavorarci.' }), null)
+  assert.equal(rigaDelleMancanze({ ...base, ragiona: true, guastoLettura: 'La lettura non è riuscita.' }), 'La lettura non è riuscita.')
 })

@@ -49,7 +49,10 @@
 .prog-stato-riga[data-stato=pronto],.prog-stato-riga[data-stato=chiede]{color:var(--rame-testo);background:rgba(var(--rame-rgb),.12)}
 
 .prog-spunta-fatta{flex:none;display:grid;place-items:center;width:16px;height:16px;margin-top:2px;border-radius:50%;
-  color:var(--verde-cupo);background:rgba(var(--salvia-rgb),.18)}
+  color:var(--verde-cupo);background:var(--fatto-fondo,rgba(var(--salvia-rgb),.18))}
+/* la spunta porta il suo colore scritto dentro (`IconSpunta`, salvia): di notte
+   salvia su salvia non si vedeva, e il segno prende il suo gettone */
+.prog-spunta-fatta svg{stroke:var(--fatto-segno,var(--salvia))}
 .prog-quando{flex:none;margin-top:2px;font-size:11.5px;color:var(--inchiostro-3);white-space:nowrap}
 
 .prog-elenco>.prog-ricordo{flex-direction:column;gap:4px}

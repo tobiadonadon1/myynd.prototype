@@ -37,6 +37,22 @@ const DI_MARCA: Record<string, string> = {
 }
 
 /**
+ * Un colore di marca che di notte, sul bruno, non si vede.
+ *
+ * Anthropic, OpenAI, GitHub e Notion hanno il marchio nero o quasi: di giorno
+ * sulla piastrella chiara è perfetto, di notte la tessera collegata mostrava
+ * un quadrato vuoto. Sotto questa soglia il segno usa `--marchio-scuro`, che
+ * esiste solo di notte ed è il colore del testo; di giorno resta il suo.
+ */
+export function quasiNero(colore: string): boolean {
+  const m = /^#([0-9a-f]{6})$/i.exec(colore)
+  if (!m) return false
+  const n = parseInt(m[1], 16)
+  const lum = (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255
+  return lum < 0.2
+}
+
+/**
  * Il segno di una fonte.
  *
  * Collegata, porta i suoi colori veri: è viva, ed è quello che la fa trovare
@@ -49,8 +65,9 @@ const DI_MARCA: Record<string, string> = {
 export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; size?: number; spenta?: boolean }) {
   const marchio = MARCHI[DI_MARCA[id] ?? '']
   if (marchio) {
+    const colore = id === 'note' ? COLORE_NOTE : marchio.colore
     return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d={marchio.d} fill={spenta ? 'currentColor' : id === 'note' ? COLORE_NOTE : marchio.colore} />
+      <path d={marchio.d} fill={spenta ? 'currentColor' : quasiNero(colore) ? `var(--marchio-scuro, ${colore})` : colore} />
     </svg>
   }
 

@@ -224,6 +224,18 @@ export function sulTavolo(blocchi: { righe: unknown[] }[], domande: number): num
 }
 
 /**
+ * Le cose che aspettano lui fuori dai blocchi: la sua domanda, le proposte sui
+ * progetti, e le domande con cui Myynd vuole conoscerlo.
+ *
+ * Quest'ultima è una carta in cima alla pagina, con «Rispondi»: senza contarla
+ * il titolo diceva «Niente che richieda te, adesso» proprio sopra di lei, e il
+ * menù segnava 0. Il titolo e il menù passano di qui tutti e due.
+ */
+export function cheAspettano(o: { domanda: unknown; iniziative: number; lettera: boolean }): number {
+  return (o.domanda ? 1 : 0) + Math.max(0, o.iniziative) + (o.lettera ? 1 : 0)
+}
+
+/**
  * Il nome con cui un blocco si riconosce nell'ordine salvato.
  *
  * L'id del progetto, e «resto» per il blocco di quello che non sta in nessun

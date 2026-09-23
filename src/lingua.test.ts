@@ -123,6 +123,10 @@ test('quello che arriva dal server ha una traduzione', () => {
    * qui, la riga sotto la domanda resta italiana con l'app in inglese.
    */
   const chat = readFileSync(join(RADICE, '..', 'server', 'claude.ts'), 'utf8')
+  // e la risposta della chat quando nessuno può ragionare: la chat la passa da `t()`
+  const senzaMotore = chat.match(/export const SENZA_MOTORE_CHAT = '((?:[^'\\]|\\.)*)'/)
+  assert.ok(senzaMotore, 'SENZA_MOTORE_CHAT non si trova più in claude.ts')
+  if (!definite.has(vero(senzaMotore[1]))) manca.push(vero(senzaMotore[1]))
   const i = chat.indexOf('export const PASSI = {')
   const passi = chat.slice(i, chat.indexOf('}', i))
   assert.ok(i > 0 && passi.includes("'"), 'PASSI non si trova più in claude.ts')

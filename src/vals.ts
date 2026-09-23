@@ -16,6 +16,7 @@ import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mapp
 import {statoAccessoNote} from './note-access.ts'
 import { nonLette } from './lettura-fonti.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
+import { fontiCollegate } from './collegamenti'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -861,6 +862,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // fonti diceva «1 fonte» a chi non aveva collegato niente, e la stessa
   // schermata sotto diceva «non hai collegato niente»
   const connOn = connettori.filter(c => c.collegato && c.id !== 'mind2do')
+  // le fonti, senza le teste: vedi `fontiCollegate`
+  const fontiOn = fontiCollegate(connettori)
   // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
   // motore la chat e le domande funzionano uguale, e devono aprirsi. Lo dice il
   // server (`ragiona` in api.ts): rifatto qui da `motore` e dalle schede, non
@@ -1114,7 +1117,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     /** Su un server, non sul suo computer: cambia cosa è vero dire sui dati. */
     ospitato: !!stato.ospitato,
     iniziali: (stato.config.nome ?? 'M').slice(0, 2).toUpperCase(),
-    connCount: connOn.length,
+    // quante fonti portano documenti: Anthropic ragiona, non si legge
+    connCount: fontiOn.length,
     // le voci, e basta: «mi dice che ci sono due cose sul tavolo, ma non ce
     // n'è nessuna». Una domanda sui progetti non è una cosa arrivata.
     vociAperte: aperti.length,
@@ -1742,7 +1746,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       problema: c.id === 'note' && statoAccessoNote(stato).problema,
       // il desktop dice anche se lo sta guardando dal vivo: è la differenza
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
-      stato: [frasi.statoConnettore(c.documenti), c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+      // a zero documenti «collegato» ripeteva il «Collegato» della tessera, una riga sotto
+      stato: [c.documenti ? frasi.statoConnettore(c.documenti) : null, c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
       // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
       // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto

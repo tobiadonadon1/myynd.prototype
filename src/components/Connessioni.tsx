@@ -207,7 +207,10 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
           <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''}`}>
             <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato} /></span>
             <div><span className="connection-detail-status">{scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
-              <p>{scelta.collegato
+              {/* una riga sola per dire cosa porta la fonte: se sotto c'è il suo
+                  modulo, la dice lui, più precisa. Prima la scheda la diceva due
+                  volte, qui e nella prima riga del modulo, con parole quasi uguali */}
+              {(scelta.collegato || !moduloVisibile) && <p>{scelta.collegato
                 ? scelta.id === 'compatibile' && s?.config.compatibile
                   ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
                   // le due teste dicono da quale strada passano: l'account, o la chiave
@@ -234,7 +237,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
                       ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
                       : null
                   ].filter(Boolean).join(' · ') || t(scelta.nota)
-                : t(scelta.nota)}</p>
+                : t(scelta.nota)}</p>}
               {/* «perché lascia fuori così tanti file» è la domanda che segue il
                   numero di sopra: questa riga la chiude, dicendo cos'è un
                   documento per Myynd invece di lasciarlo indovinare. */}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { frasi, t } from '../lingua'
+import { frasi, t, tradotta } from '../lingua'
 import { Hov } from '../ui'
 import { IconSu } from '../icons'
 import { Stato } from '../components/Stato'
@@ -104,6 +104,9 @@ export function Chat({ v }: { v: Vals }) {
   // mentre Myynd fa le sue domande si risponde a lui, anche senza un motore collegato
   const rispondendo = !!v.intervista?.domanda
   const scrivibile = v.claudeOn || rispondendo
+  // il bottone si accende quando c'è qualcosa da mandare: pieno di rame su un
+  // campo vuoto sembrava pronto a mandare il niente
+  const daMandare = scrivibile && !!v.draftMsg.trim() && (rispondendo || !v.pensando)
   return (
     /*
      * Più larga delle altre schermate, ed è una scelta.
@@ -145,7 +148,10 @@ export function Chat({ v }: { v: Vals }) {
             <div style={m.bubble}>
               {/* Le domande restano testo semplice: le hai scritte tu, non
                   c'è niente da impaginare. Le risposte passano dal compositore. */}
-              {m.mio ? m.text : <Testo testo={m.text} fonti={m.sources} onApri={v.apriFonte} />}
+              {/* una risposta che è una frase dell'app — «collega Claude nelle
+                  Fonti», detta dal server senza motore — passa dal dizionario:
+                  arrivava in italiano in una chat inglese */}
+              {m.mio ? m.text : <Testo testo={tradotta(m.text) ? t(m.text) : m.text} fonti={m.sources} onApri={v.apriFonte} />}
             </div>
           </div>
         ))}
@@ -159,7 +165,9 @@ export function Chat({ v }: { v: Vals }) {
         )}
       </div>
 
-      {v.prompts.length > 0 && v.chatEmpty && v.chatCaricata && !v.intervista && (
+      {/* senza un motore i suggerimenti mandavano una domanda e tornava una
+          risposta di circostanza: la strada è la riga qui sotto, e basta */}
+      {v.claudeOn && v.prompts.length > 0 && v.chatEmpty && v.chatCaricata && !v.intervista && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '6px 2px 12px' }}>
           {v.prompts.map(p => (
             <Hov key={p.id} as="button" onClick={p.onClick} style={PASTIGLIA}
@@ -180,10 +188,10 @@ export function Chat({ v }: { v: Vals }) {
             {t('Collega Claude per fare domande')}
           </Hov>
         )}
-        <button onClick={v.send} disabled={rispondendo ? false : (!v.claudeOn || v.pensando)} aria-label={t('Manda')} style={{
+        <button onClick={v.send} disabled={!daMandare} aria-label={t('Manda')} style={{
           width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none',
-          background: scrivibile ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
-          color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: scrivibile ? 'pointer' : 'default'
+          background: daMandare ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.18)',
+          color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: daMandare ? 'pointer' : 'default'
         }}>
           <IconSu />
         </button>

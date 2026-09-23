@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, cheAspettano, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -362,4 +362,13 @@ test('spuntare una riga non rimescola i blocchi: restano dov’erano, un nuovo e
   assert.deepEqual(ordineStabile(['myynd', 'hfarm', 'resto', 'nuovo'], ['hfarm', 'myynd', 'resto']), ['hfarm', 'myynd', 'resto', 'nuovo'])
   // la prima volta non c'è niente da tenere: vale l'ordine di sempre
   assert.deepEqual(ordineStabile(['a', 'b'], []), ['a', 'b'])
+})
+
+test('la carta di Myynd che ha scritto è una cosa sul tavolo: il titolo e il menù la contano', () => {
+  // «Niente che richieda te, adesso» sopra «Myynd ti ha scritto · Rispondi», e uno 0 nel menù
+  assert.equal(sulTavolo([], cheAspettano({ domanda: null, iniziative: 0, lettera: true })), 1)
+  // «Una cosa sul tavolo» sopra la lettera e un’attività: sono due
+  assert.equal(sulTavolo([{ righe: [1] }], cheAspettano({ domanda: null, iniziative: 0, lettera: true })), 2)
+  assert.equal(cheAspettano({ domanda: { id: 'q' }, iniziative: 2, lettera: false }), 3)
+  assert.equal(cheAspettano({ domanda: null, iniziative: 0, lettera: false }), 0)
 })

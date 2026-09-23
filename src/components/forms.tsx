@@ -75,6 +75,23 @@ function nota(tema: Tema): CSSProperties {
   }
 }
 
+/**
+ * Un testo lungo dentro una finestrella che scorre, senza mezze righe al bordo.
+ *
+ * Con l'altezza massima a 220 e righe da 19,4 pixel l'ultima riga visibile
+ * restava tagliata a metà: si leggeva l'alto delle lettere e basta. Le righe
+ * adesso sono alte venti pixel e la finestrella ne tiene un numero intero;
+ * in fondo il testo sfuma, per dire che continua, e un margine sotto lascia
+ * arrivare l'ultima riga fuori dalla sfumatura quando si scorre fino in fondo.
+ */
+function scorreARighe(righe: number): CSSProperties {
+  const sfuma = 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)'
+  return {
+    lineHeight: '20px', maxHeight: righe * 20, overflowY: 'auto', paddingBottom: 20,
+    maskImage: sfuma, WebkitMaskImage: sfuma
+  }
+}
+
 /** La riga che si apre: un titolo che dice cosa c'è dentro, e si vede che si clicca. */
 function sommario(tema: Tema): CSSProperties {
   return {
@@ -229,7 +246,7 @@ export function ChiediAllAmministratore({ tema, caso }: { tema: Tema; caso: Caso
       </div>
       {r && <details open={aperta} onToggle={e => setAperta((e.currentTarget as HTMLDetailsElement).open)} style={{ marginTop: 10 }}>
         <summary style={sommario(tema)}>{t('Cosa c’è scritto nella richiesta')}</summary>
-        <div style={{ ...nota(tema), marginTop: 8, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}>{intera}</div>
+        <div style={{ ...nota(tema), ...scorreARighe(10), marginTop: 8, whiteSpace: 'pre-wrap', userSelect: 'text' }}>{intera}</div>
       </details>}
     </Avviso>
   )
@@ -620,7 +637,7 @@ function ConChiaveClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nul
         <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
         {dettaglio && (
           <Aiuto tema={tema} titolo={t('Cosa ha risposto Anthropic')}>
-            <div style={{ ...nota(tema), maxHeight: 96, overflowY: 'auto' }}>{dettaglio}</div>
+            <div style={{ ...nota(tema), ...scorreARighe(4) }}>{dettaglio}</div>
           </Aiuto>
         )}
       </Strada>
@@ -1616,10 +1633,11 @@ export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () =>
   }
 
   if (attesa) {
+    // mentre aspetta il browser c'è una cosa sola da dire, ed è cosa fare: la
+    // riga «le note delle tue riunioni» sopra ripeteva la scheda per la terza volta
     return (
       <div>
-        <div style={guida(tema)}>{t('Le note delle tue riunioni: accedi con il tuo account Granola.')}</div>
-        <div role="status" style={{ ...nota(tema), marginTop: 10 }}>
+        <div role="status" style={guida(tema)}>
           {lettura ? t('Leggo le tue riunioni…') : t('Accedi a Granola nel browser e torna qui.')}
         </div>
         {!lettura && (
@@ -1902,7 +1920,8 @@ export function FormNotion({ tema, ok, collegato }: Props) {
           onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
       </Campo>
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Notion')}</Conferma>
+      {/* spento finché il campo è vuoto, come GitHub e Slack: acceso, mandava il niente e tornava un errore del server */}
+      <Conferma onClick={collega} occupato={occupato} disabilitato={!token.trim()} tema={tema}>{t('Collega Notion')}</Conferma>
       {/*
         Le voci sono quelle di oggi: Notion ha chiamato «connessioni interne»
         quelle che erano le integrazioni (developers.notion.com, «Internal
