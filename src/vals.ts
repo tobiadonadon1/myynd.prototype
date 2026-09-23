@@ -392,8 +392,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     if (passo === null) return
     const d = DOMANDE[passo]
     const valore = testo?.trim() ?? ''
-    // saltata: resta la domanda, con un trattino al posto della risposta
-    const detta = valore ? (d.scelte?.find(s => s.id === valore)?.testo ?? valore) : '—'
+    // saltata: resta la domanda, e al posto della risposta lo si dice (niente trattini lunghi)
+    const detta = valore ? (d.scelte?.find(s => s.id === valore)?.testo ?? valore) : t('Saltata')
     setBattute(b => [...b, { domanda: d.testo, risposta: detta }])
     const cfgDopo = (valore && d.campo !== 'fuoco' ? { ...stato.config, [d.campo]: valore } : stato.config) as Stato['config']
     const n = prossimoPasso(passo, tutteLeDomande, cfgDopo, d.campo === 'fuoco' && valore ? valore : fuoco)
