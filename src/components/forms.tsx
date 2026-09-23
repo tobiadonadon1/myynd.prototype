@@ -2080,7 +2080,9 @@ export function FormGithub({ tema, ok }: Props) {
             <Vai tema={tema} url="https://github.com/settings/tokens" />
           </Avviso>
         )}
-        <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre, fatto.letti)} ok={ok} />
+        <div style={{ marginTop: fatto.sso ? 12 : 0 }}>
+          <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre, fatto.letti)} ok={ok} />
+        </div>
       </>
     )
   }
