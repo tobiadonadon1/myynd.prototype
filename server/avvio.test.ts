@@ -13,6 +13,7 @@ const chi = await import('./chi.ts')
 const conti = await import('./conti.ts')
 const desktop = await import('./connettori/desktop.ts')
 const cfg = await import('./config.ts')
+const memoria = await import('./project-memory.ts')
 
 before(async () => { await conti.avvia() })
 beforeEach(() => { avvio.perProva.dopoCompito(null); store.azzeraTutto(); rmSync(join(casa, 'avvio.json'), { force: true }) })
@@ -125,16 +126,19 @@ test('an empty source has no invented facts and can be skipped for useful goal-o
   assert.equal(c.giorno, '2026-10-01')
   assert.equal(c.progetto, s.risultato!.progetto.id)
   assert.equal(c.modo, 'io', 'creating a first outline never delegates work without a separate choice')
-  assert.match(c.nota!, /not a completed task/)
+  // una riga da leggere, senza trattini e senza «Campo: valore»
+  assert.match(c.nota!, /^(First step for|Primo passo per) Aurora\.$/)
 })
 
 test('explicit source skip works without documents or a model key', () => {
   let s = progetto()
-  assert.throws(() => avvio.completa({ azione: s.azione, revisione: s.revisione }), /Conferma gli estratti/)
+  assert.equal(s.azione, '', 'the first task starts empty, not filled with the goal')
+  assert.throws(() => avvio.completa({ azione: s.progetto!.obiettivo, revisione: s.revisione }), /Conferma gli estratti/)
   s = avvio.fonte({ fonte: null, revisione: s.revisione })
   assert.equal(s.fonteSaltata, true)
   assert.equal(s.fase, 'azione')
-  const risultato = avvio.completa({ azione: s.azione, revisione: s.revisione })
+  // scritta da lei uguale all'obiettivo si può: solo non la si riempie al posto suo
+  const risultato = avvio.completa({ azione: s.progetto!.obiettivo, revisione: s.revisione })
   assert.equal(risultato.risultato?.compito.testo, s.progetto?.obiettivo)
   assert.equal(risultato.risultato?.compito.giorno, null)
 })
@@ -142,7 +146,7 @@ test('explicit source skip works without documents or a model key', () => {
 test('invalid dates and empty actions cannot partially create a first result', () => {
   let s = progetto()
   s = avvio.fonte({ fonte: null, revisione: s.revisione })
-  assert.throws(() => avvio.completa({ azione: s.azione, giorno: '2026-02-30', revisione: s.revisione }), /Data non valida/)
+  assert.throws(() => avvio.completa({ azione: 'Scrivere il piano', giorno: '2026-02-30', revisione: s.revisione }), /Data non valida/)
   assert.throws(() => avvio.completa({ azione: ' ', revisione: s.revisione }), /prossima azione/)
   assert.equal(progetti.elenco().length, 0)
   assert.equal(store.elencoCompiti().length, 0)
@@ -167,11 +171,19 @@ test('confirmed evidence is stored in the first task and a lost-response retry d
   const completato = avvio.completa({ azione: 'Rivedere la pagina prezzi con il team', revisione: s.revisione })
   assert.equal(completato.risultato?.traccia.estratti.length, 3)
   const compito = store.compito(completato.risultato!.compito.id)!
+  // la nota dice da dove viene, in una riga; le frasi stanno nella memoria del progetto
+  assert.ok(!compito.nota?.includes('\n'), compito.nota ?? '')
+  const ricordi = memoria.projectEvidence(completato.risultato!.progetto.id)
   for (const f of s.fatti) {
-    assert.ok(compito.nota?.includes(f.evidenza.doc))
-    assert.ok(compito.nota?.includes(f.testo))
+    assert.ok(compito.nota?.includes(f.evidenza.titolo), compito.nota ?? '')
+    assert.ok(!compito.nota?.includes(f.testo), 'the excerpts are not repeated in the note')
+    const r = ricordi.find(x => x.quote === f.testo)
+    assert.ok(r, `excerpt missing from project memory: ${f.testo}`)
+    assert.equal(r.sourceId, f.evidenza.doc)
+    assert.equal(r.kind, 'observation')
   }
   assert.deepEqual(avvio.completa({ azione: 'retry', revisione: s.revisione }), completato)
+  assert.equal(memoria.projectEvidence(completato.risultato!.progetto.id).filter(r => r.kind === 'observation').length, 3, 'a retry does not duplicate the memory')
   assert.equal(store.elencoCompiti().length, 1)
   assert.equal(progetti.elenco().length, 1)
 })
@@ -385,4 +397,32 @@ test('a source that is not connected cannot be chosen, and nothing changes', () 
     assert.throws(() => avvio.fonte({ ...corpo, revisione: p.revisione }), /Collega questa fonte/, JSON.stringify(corpo))
   }
   assert.deepEqual(avvio.stato(), p)
+})
+
+/*
+ * Il titolo di un file di testo non è un estratto.
+ *
+ * «Open questions for the Northwind website launch», prima riga di un
+ * `.txt`, è stato il primo estratto della revisione finale: nomina il
+ * progetto e non dice niente.
+ */
+test('the title line of a plain text file is never an excerpt', () => {
+  store.salvaDocumenti([
+    documento('domande', 'Domande aperte per il lancio di Aurora\n\nPer Aurora serve il via libera legale prima di mandare gli inviti ai clienti pilota.'),
+    documento('senza-titolo', 'Aurora: la prova con i clienti pilota comincia martedì, e il supporto è pronto.\nSeconda riga del documento di prova.')
+  ])
+  const p = progetto()
+  const s = avvio.fonte({ fonti: ['desktop'], revisione: p.revisione })
+  const testi = s.fatti.map(f => f.testo)
+  assert.ok(!testi.includes('Domande aperte per il lancio di Aurora'), testi.join(' | '))
+  assert.ok(testi.includes('Per Aurora serve il via libera legale prima di mandare gli inviti ai clienti pilota.'), testi.join(' | '))
+  // una prima riga con il punto in fondo, senza riga vuota sotto, è testo e resta
+  assert.ok(testi.some(t => t.startsWith('Aurora: la prova con i clienti pilota')), testi.join(' | '))
+})
+
+test('a session saved when the first task was filled with the goal shows it empty', () => {
+  const p = progetto()
+  const salvato = JSON.parse(readFileSync(join(casa, 'avvio.json'), 'utf8'))
+  writeFileSync(join(casa, 'avvio.json'), JSON.stringify({ ...salvato, azione: p.progetto!.obiettivo }))
+  assert.equal(avvio.stato().azione, '')
 })
