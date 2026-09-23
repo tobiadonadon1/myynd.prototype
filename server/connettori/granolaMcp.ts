@@ -40,7 +40,7 @@
 
 import { randomBytes } from 'node:crypto'
 import * as chi from '../chi.ts'
-import { leggi, lingua, scrivi as scriviConfig } from '../config.ts'
+import { leggi, lingua, scrivi as scriviConfig, type RegistrazioneMcp } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { oauthWeb } from '../ospitato.ts'
 import { avviaLocale, avviaWeb, chiediGettoni, Vivo, type Gettoni, type Sportello } from './oauth.ts'
@@ -52,6 +52,15 @@ export const INDIRIZZO = 'https://mcp.granola.ai/mcp'
 export function endpoint(): string {
   return (process.env.MYYND_GRANOLA_MCP ?? '').trim() || INDIRIZZO
 }
+
+/**
+ * L'http su questo computer, solo per i server finti.
+ *
+ * Chi mette `MYYND_GRANOLA_MCP` sta provando: lì i metadati possono rimandare a
+ * `http://127.0.0.1`. Senza, solo https: un metadato che rimandasse a una
+ * porta di questa macchina darebbe il codice a chiunque ci stia in ascolto.
+ */
+const httpLocale = () => !!(process.env.MYYND_GRANOLA_MCP ?? '').trim()
 
 const GIORNO = 86_400_000
 /** Quanto si aspetta chi sta facendo l'accesso: Granola può chiedere un secondo accesso, a Google. */
@@ -70,6 +79,20 @@ const FRESCHE_GIORNI = 7
 const SOSPETTO = 100
 const TETTO = 4000
 const TESTO_MAX = 24_000
+/**
+ * Il tempo di tutta una lettura, non della singola richiesta.
+ *
+ * Granola si legge dentro lo stesso giro della posta e dell'agenda: un
+ * Granola lento non deve tenere fermo tutto il resto. Allo scadere la lettura
+ * si ferma dov'è, vale come «non finita» (niente si cancella), e riparte al
+ * giro dopo. La prima, al collegamento, ha più tempo: è quella che si aspetta.
+ */
+const DURATA_GIRO = 90_000
+const DURATA_PRIMA = 180_000
+/** Una riunione chiesta e tornata senza testo non si richiede prima di così. */
+const RIPROVA_VUOTE_GIORNI = 7
+/** Una registrazione più vecchia di così si rifà: meglio una in più che una che Granola ha buttato. */
+const REGISTRAZIONE_VALE = 30 * GIORNO
 
 // — le frasi —
 
@@ -81,6 +104,10 @@ export const CAMBIATO = 'Granola ha cambiato il modo in cui si collega: questo c
 export const REGISTRAZIONE = 'Granola non ha accettato Myynd come app: riprova più tardi.'
 export const NON_LEGGE = 'Granola non mi ha dato le riunioni: riprova più tardi.'
 export const SENZA_DURATA = 'Granola non ha dato il permesso duraturo: riprova.'
+export const GIU = 'Granola non risponde in questo momento: riprova più tardi.'
+export const LENTO = 'Granola ci mette troppo a rispondere: riprovo al prossimo giro.'
+export const GUASTO = 'Qualcosa non è andato leggendo Granola: riprova.'
+export const NON_SALVATO = 'Non riesco a salvare il collegamento con Granola su questo computer: riprova.'
 
 /**
  * Da un guaio a una frase che dice cosa fare. Mai il messaggio tecnico.
@@ -97,12 +124,25 @@ export function frase(e: unknown): string {
     if (e.tipo === 'limite') return RALLENTA
     if (e.tipo === 'registrazione') return REGISTRAZIONE
     if (e.tipo === 'strumento') return NON_LEGGE
+    // Granola che sta male, o che è lenta, non è un collegamento da rifare
+    if (e.tipo === 'servizio') return GIU
+    if (e.tipo === 'tempo') return LENTO
     return CAMBIATO
   }
   // `fetch` che non arriva da nessuna parte, o che ci mette troppo
   if (e instanceof TypeError) return RETE
-  if (e instanceof Error) return e.name === 'TimeoutError' || e.name === 'AbortError' ? RETE : e.message
-  return String(e)
+  if (e instanceof Error) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') return RETE
+    /*
+     * Solo le frasi scritte per chi legge passano così come sono: quelle di
+     * questo modulo e di `oauth.ts`, che sono `Error` semplici. Un errore del
+     * disco (`EACCES`, con dentro un percorso) o uno di programma
+     * (`RangeError`) finiva sulla scheda tale e quale.
+     */
+    if (e.constructor !== Error || typeof (e as { code?: unknown }).code === 'string') return GUASTO
+    return e.message
+  }
+  return GUASTO
 }
 
 // — le chiavi —
@@ -123,8 +163,32 @@ export function conAccount(c: { granola?: ConfigGranola }): boolean {
   return !!chiaviDi(c.granola)
 }
 
+/**
+ * Il refresh ruotato che il disco non ha voluto, per persona.
+ *
+ * WorkOS usa ogni refresh una volta: quello nuovo va tenuto anche se la
+ * scrittura della configurazione fallisce (un disco pieno, un permesso), o il
+ * giro dopo userebbe quello vecchio e si sentirebbe dire «scaduto». Resta qui
+ * finché una scrittura va, e vale solo per la registrazione con cui è nato.
+ */
+const inMemoria = new Map<string, { clientId: string; refresh: string }>()
+
+/**
+ * La generazione del collegamento, per persona.
+ *
+ * Cresce quando si scollega e quando un collegamento nuovo si scrive. Una
+ * lettura si ricorda quella con cui è partita, e se alla fine è cambiata non
+ * scrive niente: «Scollega» premuto mentre Granola rispondeva deve vincere, e
+ * così una lettura della registrazione di prima finita dopo un «Accedi di
+ * nuovo».
+ */
+const generazioni = new Map<string, number>()
+const generazione = (di: string) => generazioni.get(di) ?? 0
+const avanti = (di: string) => { generazioni.set(di, generazione(di) + 1) }
+
 function chiaviDi(g: ConfigGranola | undefined): Chiavi | null {
   if (!g?.refresh || !g.clientId || !g.gettoni) return null
+  const tenuto = inMemoria.get(chi.adesso() ?? '')
   return {
     clientId: g.clientId,
     ...(g.clientSecret ? { clientSecret: g.clientSecret } : {}),
@@ -132,7 +196,7 @@ function chiaviDi(g: ConfigGranola | undefined): Chiavi | null {
     gettoni: g.gettoni,
     risorsa: g.risorsa || g.mcp || endpoint(),
     mcp: g.mcp || endpoint(),
-    refresh: g.refresh
+    refresh: tenuto && tenuto.clientId === g.clientId ? tenuto.refresh : g.refresh
   }
 }
 
@@ -205,36 +269,84 @@ async function rinnovaCon(c: Chiavi): Promise<Gettoni> {
 }
 
 /**
- * Un rinnovo alla volta, per persona.
+ * Il refresh nuovo, scritto solo sopra il collegamento da cui è nato.
  *
- * Due letture insieme — il giro delle sei ore e un «Rileggi» — chiederebbero
- * due rinnovi con lo stesso refresh: il secondo arriva con un refresh già
- * usato, e WorkOS a quel punto può buttare anche il primo. Chi arriva mentre
- * un rinnovo è in volo aspetta quello.
+ * Mentre questo rinnovo era in volo qualcuno può aver rifatto l'accesso
+ * («Accedi di nuovo»: un'altra registrazione, un altro refresh) o scollegato:
+ * scriverlo lo stesso metteva il refresh della registrazione vecchia accanto
+ * al `clientId` nuovo, e il giro dopo si rompeva. Si scrive se la
+ * registrazione è la stessa e il refresh sul disco (o in memoria) è ancora
+ * quello usato; se il disco dice di no, resta in memoria.
+ */
+function tieniRefresh(di: string, clientId: string, prima: string, nuovo: string) {
+  const ora = leggi()
+  const g = ora.granola
+  if (!g || g.clientId !== clientId) return
+  const tenuto = inMemoria.get(di)
+  const attuale = tenuto && tenuto.clientId === clientId ? tenuto.refresh : g.refresh
+  if (attuale !== prima) return
+  inMemoria.set(di, { clientId, refresh: nuovo })
+  try {
+    scriviConfig({ ...ora, granola: { ...g, refresh: nuovo } })
+    inMemoria.delete(di)
+  } catch (e) {
+    console.error(`myynd · granola · il refresh nuovo resta in memoria: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+/**
+ * Un rinnovo alla volta, per persona e per registrazione.
+ *
+ * Due letture insieme — il giro di sfondo e un «Rileggi» — chiederebbero due
+ * rinnovi con lo stesso refresh: il secondo arriva con un refresh già usato, e
+ * WorkOS a quel punto può buttare anche il primo. Chi arriva mentre un rinnovo
+ * è in volo aspetta quello. La registrazione sta nella chiave, qui e nel
+ * `Vivo`: il token di quella vecchia non viene dato a chi legge con la nuova.
  */
 const inVolo = new Map<string, Promise<Gettoni>>()
+const chiaveDi = () => `${chi.adesso() ?? ''}|${leggi().granola?.clientId ?? ''}`
 const vivo = new Vivo(() => {
   const di = chi.adesso() ?? ''
-  let p = inVolo.get(di)
+  const c = chiaviDi(leggi().granola)
+  if (!c) return Promise.reject(new Error(NIENTE_ACCESSO))
+  const chiave = `${di}|${c.clientId}`
+  let p = inVolo.get(chiave)
   if (!p) {
     p = (async () => {
-      const c = chiaviDi(leggi().granola)
-      if (!c) throw new Error(NIENTE_ACCESSO)
       const prima = c.refresh
       const g = await rinnovaCon(c)
-      if (c.refresh !== prima) {
-        const ora = leggi()
-        if (ora.granola) scriviConfig({ ...ora, granola: { ...ora.granola, refresh: c.refresh } })
-      }
+      if (c.refresh !== prima) tieniRefresh(di, c.clientId, prima, c.refresh)
       return g
-    })().finally(() => inVolo.delete(di))
-    inVolo.set(di, p)
+    })().finally(() => inVolo.delete(chiave))
+    inVolo.set(chiave, p)
   }
   return p
-})
+}, { chiave: chiaveDi })
 
-/** Da usare quando si scollega: il token d'accesso in memoria se ne va con lui. */
-export function scorda() { vivo.scorda() }
+/**
+ * Da usare quando si scollega: il token d'accesso e il refresh in memoria se
+ * ne vanno, e le letture in volo non scrivono più niente.
+ */
+export function scorda() {
+  const di = chi.adesso() ?? ''
+  vivo.scorda()
+  inMemoria.delete(di)
+  appena.delete(di)
+  avanti(di)
+}
+
+/**
+ * La prima lettura è appena finita: il giro che parte subito dopo — l'«Avanti»
+ * della scheda rilegge tutte le fonti — non rifà Granola. Una volta sola, e
+ * solo nei cinque minuti dopo.
+ */
+const appena = new Map<string, number>()
+export function appenaLetto(): boolean {
+  const di = chi.adesso() ?? ''
+  const quando = appena.get(di)
+  appena.delete(di)
+  return !!quando && Date.now() - quando < 5 * 60_000
+}
 
 /**
  * Le chiavi in mano, per la prima lettura: prima di scriverle da qualche parte.
@@ -274,21 +386,57 @@ export type Riunione = {
   testo: string
 }
 
-const ENTITA: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", nbsp: ' ' }
+const ENTITA: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+/**
+ * Le entità, in un passaggio solo.
+ *
+ * Erano due passaggi, e il secondo rileggeva quello che il primo aveva appena
+ * scritto: il titolo di un invito «&amp;#1114112;» diventava «&#1114112;», poi
+ * `String.fromCodePoint` di un numero che non è un carattere — un RangeError
+ * che faceva fallire ogni lettura, per sempre, per una riga scritta da chi
+ * aveva mandato l'invito. Un numero fuori da Unicode, o una metà di coppia,
+ * diventa il carattere di sostituzione.
+ */
 function decodifica(s: string): string {
-  return s.replace(/&(amp|lt|gt|quot|apos|#39|nbsp);/g, (_, k: string) => ENTITA[k] ?? '')
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+  return s.replace(/&(?:#(\d{1,8})|#x([0-9a-f]{1,7})|(amp|lt|gt|quot|apos|nbsp));/gi, (tutto, dec?: string, hex?: string, nome?: string) => {
+    if (nome) return ENTITA[nome.toLowerCase()] ?? tutto
+    const n = dec !== undefined ? Number(dec) : parseInt(hex ?? '', 16)
+    if (!Number.isFinite(n) || n <= 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) return '\ufffd'
+    return String.fromCodePoint(n)
+  })
 }
 
+/**
+ * Gli attributi di un tag, e il primo vince.
+ *
+ * Un titolo scritto male (`title="x" id="y"` senza le virgolette sfuggite)
+ * non deve poter cambiare l'id della riunione: con l'ultimo che vinceva,
+ * bastava un invito con quel titolo per far sovrascrivere una riunione con
+ * un'altra nell'indice.
+ */
 function attributi(s: string): Record<string, string> {
   const fuori: Record<string, string> = {}
-  for (const m of s.matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)) fuori[m[1]!.toLowerCase()] = decodifica(m[2]!)
+  for (const m of s.matchAll(/(?:^|\s)([\w:-]+)\s*=\s*"([^"]*)"/g)) {
+    const k = m[1]!.toLowerCase()
+    if (!(k in fuori)) fuori[k] = decodifica(m[2]!)
+  }
   return fuori
 }
 
+/**
+ * Una data, anche quando `Date` non la capisce al primo colpo.
+ *
+ * Granola scrive «Feb 4, 2026 7:30 PM»; basta un «at» in mezzo, un «4th» o il
+ * giorno della settimana davanti perché `Date` dica NaN, e una riunione
+ * senza data si richiedeva a ogni giro. Si tolgono quelle parole e si riprova.
+ */
 function isoDa(v: unknown): string | null {
   if (typeof v !== 'string' && typeof v !== 'number') return null
-  const d = new Date(v)
+  let d = new Date(v)
+  if (Number.isNaN(d.getTime()) && typeof v === 'string') {
+    const pulita = v.replace(/^[a-z]+day,?\s+/i, '').replace(/\s+at\s+/i, ' ').replace(/(\d)(st|nd|rd|th)\b/gi, '$1').replace(/\s+/g, ' ').trim()
+    d = new Date(pulita)
+  }
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
@@ -341,7 +489,9 @@ function partecipantiDa(x: unknown): string[] {
  */
 function testoDaPezzi(pezzi: { nome: string; testo: string }[]): string {
   const peso = (n: string) => /summary|enhanced|ai_|panel/.test(n) ? 0 : /transcript/.test(n) ? 2 : 1
-  const utili = pezzi.map(p => ({ ...p, testo: ripulisci(testoLibero(decodifica(p.testo))) })).filter(p => p.testo)
+  // una decodifica sola: l'HTML la fa `testoLibero` (che toglie i tag), il testo semplice questa
+  const leggibile = (t: string) => /<\/?[a-z][^>]*>/i.test(t) ? testoLibero(t) : decodifica(t)
+  const utili = pezzi.map(p => ({ ...p, testo: ripulisci(leggibile(p.testo)) })).filter(p => p.testo)
   const senzaTrascrizione = utili.filter(p => peso(p.nome) < 2)
   const scelti = (senzaTrascrizione.length ? senzaTrascrizione : utili).sort((a, b) => peso(a.nome) - peso(b.nome))
   const tutto: string[] = []
@@ -356,24 +506,29 @@ function daXml(testo: string): { riunioni: Riunione[]; dichiarate: number | null
   const busta = /<meetings_data\b([^>]*)>/.exec(testo)
   const riunioni: Riunione[] = []
   for (const m of testo.matchAll(/<meeting\b([^>]*?)(?:\/>|>([\s\S]*?)<\/meeting>)/g)) {
-    const a = attributi(m[1] ?? '')
-    const id = (a.id ?? '').trim()
-    if (!id) continue
-    const dentro = m[2] ?? ''
-    const persone: string[] = []
-    const pezzi: { nome: string; testo: string }[] = []
-    for (const s of dentro.matchAll(/<([a-z][a-z0-9_]*)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
-      const nome = s[1]!.toLowerCase()
-      if (PARTECIPANTI.test(nome)) persone.push(...partecipanti(s[2]!))
-      else pezzi.push({ nome, testo: s[2]! })
+    // una riunione che non si legge non ferma le altre: si salta, e si dice nel registro
+    try {
+      const a = attributi(m[1] ?? '')
+      const id = (a.id ?? '').trim()
+      if (!id) continue
+      const dentro = m[2] ?? ''
+      const persone: string[] = []
+      const pezzi: { nome: string; testo: string }[] = []
+      for (const s of dentro.matchAll(/<([a-z][a-z0-9_]*)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+        const nome = s[1]!.toLowerCase()
+        if (PARTECIPANTI.test(nome)) persone.push(...partecipanti(s[2]!))
+        else pezzi.push({ nome, testo: s[2]! })
+      }
+      riunioni.push({
+        id,
+        titolo: (a.title ?? '').trim(),
+        quando: isoDa(a.date ?? a.created_at ?? a.start),
+        persone: [...new Set(persone)],
+        testo: testoDaPezzi(pezzi)
+      })
+    } catch (e) {
+      console.error(`myynd · granola · una riunione non si legge: ${e instanceof Error ? e.message : String(e)}`)
     }
-    riunioni.push({
-      id,
-      titolo: (a.title ?? '').trim(),
-      quando: isoDa(a.date ?? a.created_at ?? a.start),
-      persone: [...new Set(persone)],
-      testo: testoDaPezzi(pezzi)
-    })
   }
   if (!busta && !riunioni.length) return null
   const n = busta ? Number(attributi(busta[1] ?? '').count) : NaN
@@ -397,18 +552,22 @@ function daJson(x: unknown): { riunioni: Riunione[]; dichiarate: number | null }
   const riunioni: Riunione[] = []
   for (const v of elenco) {
     if (!v || typeof v !== 'object') continue
-    const o = v as Record<string, unknown>
-    const id = typeof o.id === 'string' ? o.id.trim() : typeof o.meeting_id === 'string' ? o.meeting_id.trim() : ''
-    if (!id) continue
-    riunioni.push({
-      id,
-      titolo: typeof o.title === 'string' ? o.title.trim() : '',
-      quando: isoDa(o.date ?? o.created_at ?? o.start_time ?? o.start ?? o.meeting_date),
-      persone: partecipantiDa(o.known_participants ?? o.participants ?? o.attendees ?? o.people),
-      testo: testoDaPezzi(CAMPI_TESTO.filter(k => o[k] != null).map(k => ({
-        nome: k, testo: typeof o[k] === 'string' ? o[k] as string : testoLibero(o[k])
-      })))
-    })
+    try {
+      const o = v as Record<string, unknown>
+      const id = typeof o.id === 'string' ? o.id.trim() : typeof o.meeting_id === 'string' ? o.meeting_id.trim() : ''
+      if (!id) continue
+      riunioni.push({
+        id,
+        titolo: typeof o.title === 'string' ? o.title.trim() : '',
+        quando: isoDa(o.date ?? o.created_at ?? o.start_time ?? o.start ?? o.meeting_date),
+        persone: partecipantiDa(o.known_participants ?? o.participants ?? o.attendees ?? o.people),
+        testo: testoDaPezzi(CAMPI_TESTO.filter(k => o[k] != null).map(k => ({
+          nome: k, testo: typeof o[k] === 'string' ? o[k] as string : testoLibero(o[k])
+        })))
+      })
+    } catch (e) {
+      console.error(`myynd · granola · una riunione non si legge: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
   return { riunioni, dichiarate }
 }
@@ -536,11 +695,26 @@ async function elencaFinestra(cliente: ClienteMcp, f: Forma, da: number, a: numb
 
 // — leggere —
 
+/**
+ * Quello che un giro lascia al giro dopo.
+ *
+ * Sta nel cursore di `store` (vedi `ripresa.ts`), che è già per persona e su
+ * disco: lo legge e lo scrive `index.ts`, qui si usa e basta.
+ */
+export type Ricordi = {
+  /** Quando si è elencato l'ultima volta tutto il tratto, fino a due anni indietro. */
+  piena?: number
+  /** Il giro scorso ha lasciato riunioni da chiedere, o si è fermato: il prossimo elenca tutto. */
+  resto?: boolean
+  /** Le riunioni chieste e tornate senza testo, con quando: non si richiedono a ogni giro. */
+  vuote?: Record<string, number>
+}
+
 export type EsitoMcp = EsitoGranola & {
   /**
    * Gli id che non si possono cancellare: quelli che Granola ha elencato, e
-   * quelli dell'indice fuori dal tratto di date letto. Vanno a `riconcilia`
-   * insieme ai documenti.
+   * quelli dell'indice fuori dal tratto di date che Granola ha coperto. Vanno a
+   * `riconcilia` insieme ai documenti.
    */
   visti: string[]
   /** Il tratto letto non ha buchi: quello che manca lì dentro, Granola non ce l'ha più. */
@@ -556,20 +730,35 @@ export type EsitoMcp = EsitoGranola & {
    * perde roba.
    */
   giaLetti: number
+  /** Da ricordare per il giro dopo. */
+  ricordi: Ricordi
+  /** La generazione con cui è partita la lettura: vedi `valido`. */
+  generazione: number
+}
+
+/**
+ * Questa lettura può ancora scrivere? No se nel frattempo si è scollegato, o
+ * se un collegamento nuovo ha preso il posto di quello con cui è partita.
+ */
+export function valido(e: { generazione: number }): boolean {
+  return generazione(chi.adesso() ?? '') === e.generazione
 }
 
 /**
  * Le riunioni, lette da un cliente già pronto.
  *
- * Tre tempi. **L'elenco**: finestre di trenta giorni all'indietro, fino a due
- * anni o a tre mesi vuoti di fila (trenta giorni in tutto, se il piano è
- * quello gratuito). **Le note**: solo quelle che mancano all'indice e quelle
- * delle riunioni di questa settimana, a dieci per chiamata, trecento per giro,
- * dalle più nuove — le altre sono già dentro, uguali. **Cosa si può
- * cancellare**: solo dentro il tratto elencato, con due giorni di margine sul
- * bordo vecchio. Una riunione più vecchia del tratto non è sparita: è fuori
- * da quello che si è guardato — il piano gratuito, una lettura fermata a
- * metà — e `riconcilia` non la deve toccare.
+ * Tre tempi. **L'elenco**: una volta al giorno (o quando il giro prima non ha
+ * finito) finestre di trenta giorni all'indietro, fino a due anni o a tre mesi
+ * vuoti di fila; negli altri giri solo l'ultima finestra, che è dove nascono
+ * le riunioni nuove e cambiano le note. **Le note**: solo quelle che mancano
+ * all'indice e quelle delle riunioni di questa settimana, a dieci per
+ * chiamata, trecento per giro, dalle più nuove; una riunione tornata senza
+ * testo si richiede dopo una settimana, non a ogni giro. **Cosa si può
+ * cancellare**: solo quello che sta fra la riunione più vecchia che Granola ha
+ * elencato e oggi. Non dall'inizio della finestra più vecchia chiesta: il
+ * piano gratuito risponde vuoto, senza dirlo, oltre i trenta giorni, e tre
+ * finestre vuote in fondo allargavano il tratto fino a quattro mesi — cioè
+ * cancellavano riunioni che da lì non sarebbero tornate mai più.
  */
 export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | null>, opz: {
   adesso?: number
@@ -579,8 +768,14 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
    * un Granola vecchio, che il riassunto non l'aveva.
    */
   tutte?: boolean
+  /** Tutto il tratto, invece della sola finestra recente. Di serie: una volta al giorno. */
+  piena?: boolean
+  ricordi?: Ricordi
 } = {}): Promise<EsitoMcp> {
+  const gen = generazione(chi.adesso() ?? '')
   const adesso = opz.adesso ?? Date.now()
+  const ricordi = opz.ricordi ?? {}
+  const piena = opz.piena ?? (!ricordi.piena || adesso - ricordi.piena > GIORNO || !!ricordi.resto)
   const strumenti = await cliente.strumenti()
   const elenca = strumenti.find(s => s.name === 'list_meetings')
   const prendi = strumenti.find(s => s.name === 'get_meetings')
@@ -593,15 +788,15 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
       const info = await cliente.chiama('get_account_info', {})
       if (!info.isError && pianoGratuito(info)) trenta = true
     } catch (e) {
-      // l'account è un di più: un guasto qui non ferma la lettura, uno d'accesso sì
-      if (e instanceof ErroreMcp && e.tipo === 'accesso') throw e
+      // l'account è un di più: un guasto qui non ferma la lettura; l'accesso negato e il tempo finito sì
+      if (e instanceof ErroreMcp && (e.tipo === 'accesso' || e.tipo === 'tempo')) throw e
     }
   }
 
   const elencate = new Map<string, Riunione>()
-  let inizioLetto = adesso
   let buchi = false
   let troncato = false
+  let interrotto = false
 
   if (!forma.finestra) {
     // lo strumento non accetta date: quello che dà da solo, cioè gli ultimi trenta giorni
@@ -610,28 +805,36 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
     const e = riunioniDa(r)
     if (!e.capito) throw new ErroreMcp('protocollo', 'list_meetings: forma sconosciuta')
     for (const x of e.riunioni) if (!elencate.has(x.id)) elencate.set(x.id, x)
-    inizioLetto = adesso - FINESTRA_GIORNI * GIORNO
     buchi = e.dichiarate !== null && e.dichiarate > e.riunioni.length
   } else {
-    const limite = adesso - (trenta ? FINESTRA_GIORNI : ORIZZONTE_GIORNI) * GIORNO
     // due giorni avanti: «oggi» in un altro fuso è già domani
     let fine = adesso + 2 * GIORNO
+    const limite = trenta ? adesso - FINESTRA_GIORNI * GIORNO
+      : piena ? adesso - ORIZZONTE_GIORNI * GIORNO
+      : fine - FINESTRA_GIORNI * GIORNO
     let vuoteDiFila = 0
     let prima = true
     for (;;) {
       const inizio = Math.max(limite, fine - FINESTRA_GIORNI * GIORNO)
-      const w = await elencaFinestra(cliente, forma, inizio, fine)
+      let w: Finestra
+      try {
+        w = await elencaFinestra(cliente, forma, inizio, fine)
+      } catch (e) {
+        // senza la prima finestra non c'è niente da dire; dopo, ci si ferma dove si è arrivati
+        if (prima || (e instanceof ErroreMcp && (e.tipo === 'accesso' || e.tipo === 'protocollo'))) throw e
+        interrotto = true
+        break
+      }
       if (w.errore) {
         if (w.piano) trenta = true
-        // la prima finestra è l'unica senza la quale non c'è niente da dire
-        if (prima && !w.piano) throw new ErroreMcp('strumento', w.errore)
+        else if (prima) throw new ErroreMcp('strumento', w.errore)
+        else interrotto = true
         break
       }
       prima = false
       const prime = elencate.size
       for (const x of w.riunioni) if (!elencate.has(x.id)) elencate.set(x.id, x)
       if (w.buco) buchi = true
-      inizioLetto = inizio
       vuoteDiFila = elencate.size === prime ? vuoteDiFila + 1 : 0
       if (elencate.size >= TETTO) { troncato = true; break }
       if (inizio <= limite || vuoteDiFila >= VUOTE_DI_FILA) break
@@ -642,11 +845,25 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
 
   const ms = (r: Riunione) => r.quando ? Date.parse(r.quando) : NaN
   const ordinate = [...elencate.values()].sort((a, b) => (ms(b) || 0) - (ms(a) || 0))
+  const vuoteViste: Record<string, number> = {}
+  for (const [id, quando] of Object.entries(ricordi.vuote ?? {})) {
+    if (typeof quando === 'number' && adesso - quando < RIPROVA_VUOTE_GIORNI * GIORNO) vuoteViste[id] = quando
+  }
+  const fresca = (r: Riunione) => { const t = ms(r); return Number.isFinite(t) && t > adesso - FRESCHE_GIORNI * GIORNO }
+  /*
+   * Cosa chiedere. Una riunione senza data valida si chiedeva a ogni giro, e
+   * così una tornata senza testo: trecento così mangiavano tutto il tetto, e
+   * le riunioni più vecchie con le note vere non arrivavano mai.
+   */
   const daChiedere = ordinate.filter(r => {
-    const t = ms(r)
-    return opz.tutte || !gia.has(`granola:${r.id}`) || !Number.isFinite(t) || t > adesso - FRESCHE_GIORNI * GIORNO
+    if (opz.tutte || fresca(r)) return true
+    if (vuoteViste[r.id]) return false
+    return !gia.has(`granola:${r.id}`)
   })
-  if (daChiedere.length > PER_GIRO) troncato = true
+  const chieste = new Set(daChiedere.map(r => r.id))
+  const giaLetti = ordinate.filter(r => !chieste.has(r.id) && gia.has(`granola:${r.id}`)).length
+  let noteLasciate = daChiedere.length > PER_GIRO
+  if (noteLasciate) troncato = true
 
   const senzaTitolo = lingua() === 'it' ? 'Riunione senza titolo' : 'Untitled meeting'
   const con = lingua() === 'it' ? 'Con' : 'With'
@@ -659,14 +876,17 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
     try {
       r = await cliente.chiama('get_meetings', { [forma.campoId]: lotto.map(x => x.id) })
     } catch (e) {
-      // a metà: quello letto resta, il resto al giro dopo
-      if (!i || (e instanceof ErroreMcp && e.tipo === 'accesso')) throw e
+      // a metà, o finito il tempo: quello letto resta, il resto al giro dopo
+      if (e instanceof ErroreMcp && e.tipo === 'accesso') throw e
+      if (!i && !(e instanceof ErroreMcp && e.tipo === 'tempo')) throw e
       troncato = true
+      noteLasciate = true
       break
     }
     if (r.isError) {
       if (!i) throw new ErroreMcp('strumento', testoDi(r))
       troncato = true
+      noteLasciate = true
       break
     }
     const e = riunioniDa(r)
@@ -676,7 +896,8 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
       if (!chiesti.has(x.id)) continue
       chiesti.delete(x.id)
       const base = elencate.get(x.id)
-      if (!x.testo) { vuote++; continue }
+      if (!x.testo) { vuote++; vuoteViste[x.id] = adesso; continue }
+      delete vuoteViste[x.id]
       const persone = [...new Set([...x.persone, ...(base?.persone ?? [])])]
       docs.push({
         // lo stesso id della cache: chi passa da una strada all'altra non si
@@ -692,27 +913,49 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
         gruppo: 'note'
       })
     }
+    // chieste e non tornate: come quelle senza testo, per non richiederle a ogni giro
+    for (const id of chiesti) vuoteViste[id] = adesso
   }
 
+  /*
+   * Il tratto che Granola ha davvero coperto: dalla riunione più vecchia che ha
+   * elencato fino alla fine dell'ultima finestra chiesta. Fuori da lì — più
+   * vecchia, senza data, o con una data oltre la fine — una riunione
+   * dell'indice non si tocca: non è sparita, non la si è guardata.
+   */
+  let piuVecchia = Infinity
+  for (const r of elencate.values()) { const t = ms(r); if (Number.isFinite(t) && t < piuVecchia) piuVecchia = t }
+  const fineLetta = adesso + 2 * GIORNO
   const visti = new Set([...elencate.keys()].map(id => `granola:${id}`))
-  const bordo = inizioLetto + 2 * GIORNO
   for (const [id, quando] of gia) {
     const t = quando ? Date.parse(quando) : NaN
-    if (!Number.isFinite(t) || t < bordo) visti.add(id)
+    if (!Number.isFinite(t) || t < piuVecchia || t > fineLetta) visti.add(id)
   }
+  // zero riunioni elencate con l'indice pieno non vuol dire «Granola è vuoto»
+  const completo = !buchi && !(elencate.size === 0 && gia.size > 0)
+
+  const vuoteTenute = Object.fromEntries(Object.entries(vuoteViste).sort((a, b) => b[1] - a[1]).slice(0, 5000))
   return {
-    docs, vuote, troncato, visti: [...visti], completo: !buchi, trentaGiorni: trenta,
-    elencate: elencate.size, giaLetti: ordinate.length - daChiedere.length
+    docs, vuote, troncato, visti: [...visti], completo, trentaGiorni: trenta,
+    elencate: elencate.size, giaLetti,
+    ricordi: {
+      ...(piena && !interrotto ? { piena: adesso } : ricordi.piena ? { piena: ricordi.piena } : {}),
+      ...(noteLasciate || interrotto ? { resto: true } : {}),
+      ...(Object.keys(vuoteTenute).length ? { vuote: vuoteTenute } : {})
+    },
+    generazione: gen
   }
 }
 
-/** Il giro di sfondo: le chiavi dalla configurazione, il token rinnovato quando serve. */
-export async function sincronizza(gia: Map<string, string | null>): Promise<EsitoMcp> {
+/** Il giro di sfondo: le chiavi dalla configurazione, il token rinnovato quando serve, un tempo per tutto. */
+export async function sincronizza(gia: Map<string, string | null>, ricordi: Ricordi = {}): Promise<EsitoMcp> {
   const c = chiaviDi(leggi().granola)
   if (!c) throw new Error(NIENTE_ACCESSO)
-  const cliente = new ClienteMcp({ endpoint: c.mcp, token: () => vivo.dammi(), scaduto: () => vivo.scorda() })
+  const cliente = new ClienteMcp({
+    endpoint: c.mcp, token: () => vivo.dammi(), scaduto: () => vivo.scorda(), scadenza: Date.now() + DURATA_GIRO
+  })
   try {
-    return await leggiDa(cliente, gia)
+    return await leggiDa(cliente, gia, { ricordi })
   } catch (e) {
     throw new Error(frase(e))
   } finally {
@@ -727,43 +970,118 @@ export type Azioni = {
   gia: () => Map<string, string | null>
   /** Mette nell'indice quello che si è letto, e dice quante riunioni ci sono adesso. */
   salva: (e: EsitoMcp) => Promise<number>
+  /** Quello che il giro scorso ha lasciato, e dove mettere quello che lascia questo. */
+  ricordi?: () => Ricordi
+  ricorda?: (r: Ricordi) => void
+}
+
+// — l'app registrata, riusata —
+
+function registrazioniSalvate(): RegistrazioneMcp[] {
+  const r = leggi().registrazioniMcp
+  return Array.isArray(r) ? r : []
+}
+
+function scriviRegistrazioni(cambia: (r: RegistrazioneMcp[]) => RegistrazioneMcp[]) {
+  try {
+    const c = leggi()
+    scriviConfig({ ...c, registrazioniMcp: cambia(Array.isArray(c.registrazioniMcp) ? c.registrazioniMcp : []).slice(0, 4) })
+  } catch (e) {
+    // non ricordarla vuol dire registrarne un'altra la prossima volta, non un guasto
+    console.error(`myynd · granola · la registrazione non si ricorda: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+/**
+ * L'app già registrata per questo emittente e questo ritorno, invece di una
+ * nuova a ogni «Collega».
+ *
+ * Ogni clic registrava un'app in più presso Granola: dieci tentativi, dieci
+ * app a nome di Myynd nell'elenco di chi collega. Si riusa quella di prima se
+ * il ritorno è lo stesso (ospitati sempre; in casa se la porta di allora è
+ * ancora libera, e la si prova per prima) e se ha meno di un mese. Un
+ * tentativo andato storto con lei la fa dimenticare: il clic dopo ne fa una
+ * nuova, e una registrazione buttata da Granola costa un tentativo, non tutti.
+ */
+async function registrazione(s: Scoperta, redirect: string): Promise<Registrazione> {
+  const gia = registrazioniSalvate().find(x => x.emittente === s.emittente && x.redirect === redirect)
+  if (gia && Date.now() - gia.quando < REGISTRAZIONE_VALE) return { clientId: gia.clientId, metodo: 'none' }
+  const r = await registra(s, redirect)
+  // solo i client pubblici: un segreto non si tiene fuori dal collegamento
+  if (!r.clientSecret) {
+    scriviRegistrazioni(tutte => [
+      { emittente: s.emittente, redirect, clientId: r.clientId, quando: Date.now() },
+      ...tutte.filter(x => !(x.emittente === s.emittente && x.redirect === redirect))
+    ])
+  }
+  return r
+}
+
+function dimenticaRegistrazione(emittente: string, redirect: string) {
+  if (!registrazioniSalvate().some(x => x.emittente === emittente && x.redirect === redirect)) return
+  scriviRegistrazioni(tutte => tutte.filter(x => !(x.emittente === emittente && x.redirect === redirect)))
+}
+
+/** La porta dell'ultimo ritorno in casa ancora buono: provarla per prima vuol dire riusarne la registrazione. */
+function portaDi(emittente: string): number | undefined {
+  for (const r of registrazioniSalvate()) {
+    if (r.emittente !== emittente || Date.now() - r.quando >= REGISTRAZIONE_VALE) continue
+    const m = /^http:\/\/localhost:(\d+)\/callback$/.exec(r.redirect)
+    if (m) return Number(m[1])
+  }
+  return undefined
 }
 
 /**
  * La prima lettura, con le chiavi appena avute, e poi la scrittura.
  *
  * Nell'ordine: senza refresh non si parte (il collegamento morirebbe fra
- * qualche minuto); si legge; si mette nell'indice; e solo allora il
- * collegamento si scrive in configurazione. Una lettura che fallisce lascia
- * tutto com'era, e la scheda dice perché.
+ * qualche minuto); si legge, con un tempo per tutto; si mette nell'indice; e
+ * solo allora il collegamento si scrive in configurazione. Una lettura che
+ * fallisce lascia tutto com'era, e la scheda dice perché. Un «Scollega»
+ * premuto mentre Granola rispondeva vince: `null`, e niente si scrive.
  */
-async function primaLettura(c: Chiavi, g: Gettoni, azioni: Azioni): Promise<{ note: number; trentaGiorni: boolean }> {
+async function primaLettura(c: Chiavi, g: Gettoni, azioni: Azioni): Promise<{ note: number; trentaGiorni: boolean } | null> {
   if (typeof g.refresh_token !== 'string' || !g.refresh_token) throw new Error(SENZA_DURATA)
+  const di = chi.adesso() ?? ''
+  const gen = generazione(di)
   c.refresh = g.refresh_token
   const mano = inMano(c, g)
-  const cliente = new ClienteMcp({ endpoint: c.mcp, token: mano.dammi, scaduto: mano.scorda })
+  const cliente = new ClienteMcp({ endpoint: c.mcp, token: mano.dammi, scaduto: mano.scorda, scadenza: Date.now() + DURATA_PRIMA })
   let e: EsitoMcp
   try {
-    e = await leggiDa(cliente, azioni.gia(), { tutte: true })
+    e = await leggiDa(cliente, azioni.gia(), { tutte: true, piena: true, ricordi: azioni.ricordi?.() ?? {} })
   } finally {
     await cliente.chiudi()
   }
+  if (generazione(di) !== gen) return null
   const note = await azioni.salva(e)
-  const ora = leggi()
-  scriviConfig({
-    ...ora,
-    granola: {
-      note,
-      clientId: c.clientId,
-      ...(c.clientSecret ? { clientSecret: c.clientSecret, metodo: c.metodo } : {}),
-      refresh: c.refresh,
-      gettoni: c.gettoni,
-      risorsa: c.risorsa,
-      mcp: c.mcp,
-      ...(e.trentaGiorni ? { trentaGiorni: true } : {})
-    }
-  })
+  if (generazione(di) !== gen) return null
+  try {
+    const ora = leggi()
+    scriviConfig({
+      ...ora,
+      granola: {
+        note,
+        clientId: c.clientId,
+        ...(c.clientSecret ? { clientSecret: c.clientSecret, metodo: c.metodo } : {}),
+        refresh: c.refresh,
+        gettoni: c.gettoni,
+        risorsa: c.risorsa,
+        mcp: c.mcp,
+        ...(e.trentaGiorni ? { trentaGiorni: true } : {})
+      }
+    })
+  } catch (err) {
+    console.error(`myynd · granola · il collegamento non si scrive: ${err instanceof Error ? err.message : String(err)}`)
+    throw new Error(NON_SALVATO)
+  }
+  inMemoria.delete(di)
+  azioni.ricorda?.(e.ricordi)
+  // le letture partite prima di questo collegamento erano della registrazione di prima: non scrivono più
+  avanti(di)
   vivo.scorda()
+  appena.set(di, Date.now())
   return { note, trentaGiorni: e.trentaGiorni }
 }
 
@@ -789,58 +1107,82 @@ type Tentativo = {
  */
 const tentativi = new Map<string, Tentativo>()
 
+/** Uno alla volta per persona: un secondo browser sopra al primo confonde e basta. */
+function nuovoTentativo(utente: string, chiudi: () => void): { id: string; t: Tentativo } {
+  const ora = Date.now()
+  for (const [k, t] of tentativi) {
+    if (t.utente === utente && t.stato === 'attesa') { t.stato = 'annullato'; t.chiudi() }
+    if (ora - t.quando > 30 * 60_000) tentativi.delete(k)
+  }
+  const id = randomBytes(12).toString('base64url')
+  const t: Tentativo = { utente, stato: 'attesa', quando: ora, scade: ora + ATTESA, chiudi }
+  tentativi.set(id, t)
+  return { id, t }
+}
+
+/** Dopo il sì, uguale in casa e ospitati: la prima lettura, e lo stato che la scheda legge. */
+async function dopoIlSi(t: Tentativo, c: Chiavi, g: Gettoni, azioni: Azioni): Promise<void> {
+  if (t.stato !== 'attesa') return
+  t.stato = 'lettura'
+  try {
+    const fatto = await primaLettura(c, g, azioni)
+    if (!fatto) { t.stato = 'annullato'; return }
+    t.stato = 'fatto'
+    t.note = fatto.note
+    t.trentaGiorni = fatto.trentaGiorni
+  } catch (e) {
+    t.stato = 'errore'
+    t.errore = frase(e)
+  }
+}
+
+/** Un no detto dalla persona non dice niente della registrazione; il resto (nessun ritorno, un codice rifiutato) forse sì. */
+const colpaDellaRegistrazione = (frase: string) => frase !== 'Hai detto di no a Granola.' && frase !== 'Accesso annullato.'
+
 /**
  * Primo tempo, in casa: l'indirizzo del consenso, senza aprire niente.
  *
  * Il browser lo apre chi ha premuto: dentro l'app il guscio, fuori la pagina.
- * Da qui si scopre chi autorizza, si registra l'app con l'indirizzo di ritorno
- * di questo giro (`http://localhost:<porta>/callback`, la forma che usano i
- * client MCP che Granola dichiara supportati), e si resta in ascolto. Quello
- * che succede dopo il sì — i token, la prima lettura, la scrittura — gira da
- * solo, dentro il conto di chi ha avviato, e la scheda lo segue con `statoDi`.
+ * Da qui si scopre chi autorizza, si prende l'app già registrata con questo
+ * ritorno (o se ne registra una: `http://localhost:<porta>/callback`, la forma
+ * che usano i client MCP che Granola dichiara supportati), e si resta in
+ * ascolto. Quello che succede dopo il sì — i token, la prima lettura, la
+ * scrittura — gira da solo, dentro il conto di chi ha avviato, e la scheda lo
+ * segue con `statoDi`.
  */
 export async function avvia(azioni: Azioni): Promise<{ id: string; dove: string; scade: number }> {
   const utente = chi.adesso() ?? ''
-  const ora = Date.now()
-  for (const [k, t] of tentativi) {
-    // uno alla volta per persona: un secondo browser sopra al primo confonde e basta
-    if (t.utente === utente && t.stato === 'attesa') { t.stato = 'annullato'; t.chiudi() }
-    if (ora - t.quando > 30 * 60_000) tentativi.delete(k)
-  }
-
   let scoperta: Scoperta
-  const tenuta: { reg?: Registrazione } = {}
+  const tenuta: { reg?: Registrazione; redirect?: string } = {}
   let l: Awaited<ReturnType<typeof avviaLocale>>
   try {
-    scoperta = await scopri(endpoint())
+    scoperta = await scopri(endpoint(), { httpLocale: httpLocale() })
     l = await avviaLocale('Granola', async redirect => {
-      tenuta.reg = await registra(scoperta, redirect)
+      tenuta.redirect = redirect
+      tenuta.reg = await registrazione(scoperta, redirect)
       return sportello(chiaviDa(scoperta, tenuta.reg), scoperta)
-    }, { ospite: 'localhost', percorso: '/callback', durata: ATTESA })
+    }, { ospite: 'localhost', percorso: '/callback', durata: ATTESA, porta: portaDi(scoperta.emittente) })
   } catch (e) { throw new Error(frase(e)) }
 
-  const id = randomBytes(12).toString('base64url')
-  const t: Tentativo = { utente, stato: 'attesa', quando: ora, scade: ora + ATTESA, chiudi: l.chiudi }
-  tentativi.set(id, t)
+  const locale = l
+  const { id, t } = nuovoTentativo(utente, locale.chiudi)
   const dentro = (fn: () => Promise<void>) => utente ? chi.dentro(utente, fn) : fn()
   void dentro(async () => {
+    let g: Gettoni
     try {
-      const g = await l.gettoni
-      if (t.stato !== 'attesa') return
-      t.stato = 'lettura'
-      const fatto = await primaLettura(chiaviDa(scoperta, tenuta.reg!), g, azioni)
-      t.stato = 'fatto'
-      t.note = fatto.note
-      t.trentaGiorni = fatto.trentaGiorni
+      g = await locale.gettoni
     } catch (e) {
       if (t.stato === 'annullato') return
       t.stato = 'errore'
       t.errore = frase(e)
+      if (colpaDellaRegistrazione(t.errore)) dimenticaRegistrazione(scoperta.emittente, tenuta.redirect ?? '')
+      return
     } finally {
-      l.chiudi()
+      locale.chiudi()
     }
+    await dopoIlSi(t, chiaviDa(scoperta, tenuta.reg!), g, azioni)
   })
-  return { id, dove: l.dove, scade: t.scade }
+  return { id, dove: locale.dove, scade: t.scade }
 }
 
 /** Com'è andato un collegamento avviato da questa persona; `null` se non è suo o non c'è. */
@@ -869,23 +1211,45 @@ export function annulla(id: string): ReturnType<typeof statoDi> {
 /**
  * Ospitati: lo stesso consenso, con il ritorno dal nostro dominio.
  *
- * L'app si registra con `https://<dominio>/api/oauth/ritorno`, e da lì in
- * poi è il ballo di Google e Microsoft: `avviaWeb` tiene lo `state` e il
- * verificatore, `/api/oauth/ritorno` scambia il codice, e qui si fa la prima
- * lettura dentro il conto di chi ha avviato. Nessuna app da registrare per
- * chi ospita: la registrazione è dinamica, e basta che il server sappia il
- * proprio nome.
+ * L'app si registra (una volta) con `https://<dominio>/api/oauth/ritorno`, e
+ * da lì in poi è il ballo di Google e Microsoft: `avviaWeb` tiene lo `state`
+ * e il verificatore, `/api/oauth/ritorno` scambia il codice. La differenza è
+ * dopo. Il ritorno risponde **subito**: la prima lettura può durare un minuto,
+ * e davanti a un proxy che taglia a trenta secondi quella pagina era un 502
+ * con il collegamento scritto lo stesso. La lettura parte per conto suo, nel
+ * conto di chi ha avviato (`completaWeb` chiama dentro quello), e la scheda la
+ * segue con `statoDi` come in casa: il consenso si fa in un'altra scheda del
+ * browser, che alla fine dice di chiudersi.
  */
-export async function avviaSulWeb(azioni: Azioni): Promise<{ dove: string; biglietto: string }> {
+export async function avviaSulWeb(azioni: Azioni): Promise<{ id: string; dove: string; scade: number; biglietto: string }> {
   const ritorno = oauthWeb().ritorno
   if (!ritorno) throw new Error('Il server non conosce il proprio dominio: chi lo ospita deve impostare MYYND_PUBBLICO.')
+  const utente = chi.adesso() ?? ''
   let c: Chiavi
   let s: Scoperta
   try {
-    s = await scopri(endpoint())
-    c = chiaviDa(s, await registra(s, ritorno))
+    s = await scopri(endpoint(), { httpLocale: httpLocale() })
+    c = chiaviDa(s, await registrazione(s, ritorno))
   } catch (e) { throw new Error(frase(e)) }
-  return avviaWeb(sportello(c, s), async g => {
-    try { await primaLettura(c, g, azioni) } catch (e) { throw new Error(frase(e)) }
+  const { id, t } = nuovoTentativo(utente, () => {})
+  const emittente = s.emittente
+  const a = avviaWeb({
+    ...sportello(c, s),
+    scheda: true,
+    fallito: e => {
+      if (t.stato !== 'attesa') return
+      t.stato = 'errore'
+      t.errore = frase(e)
+      if (colpaDellaRegistrazione(t.errore)) dimenticaRegistrazione(emittente, ritorno)
+    }
+  }, async g => {
+    if (t.stato !== 'attesa') throw new Error('Accesso annullato.')
+    if (typeof g.refresh_token !== 'string' || !g.refresh_token) {
+      t.stato = 'errore'
+      t.errore = SENZA_DURATA
+      throw new Error(SENZA_DURATA)
+    }
+    void dopoIlSi(t, { ...c }, g, azioni)
   })
+  return { id, dove: a.dove, scade: t.scade, biglietto: a.biglietto }
 }

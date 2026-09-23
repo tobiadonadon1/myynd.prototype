@@ -330,8 +330,8 @@ app.get('/api/oauth/ritorno', async (req, res) => {
     return res.send(oauth.paginaConsenso(!guaio && String(req.query.admin_consent).toLowerCase() === 'true'))
   }
   try {
-    const { nome } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
-    res.send(oauth.paginaWeb(true, nome))
+    const { nome, scheda } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
+    res.send(oauth.paginaWeb(true, nome, '', scheda))
   } catch (e) {
     res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
   }
@@ -1344,11 +1344,18 @@ const azioniGranola: granolaMcp.Azioni = {
   salva: async e => {
     await salvaGranola(e)
     return store.quandoPerPrefisso('granola:').size
-  }
+  },
+  ricordi: ricordiGranola,
+  ricorda: r => store.segnaCursore(GIRO_GRANOLA, JSON.stringify(r))
 }
 app.post('/api/connettori/granola/avvia', async (_req, res) => {
   try {
-    if (ospitato.OSPITATO) return partiPerIlConsenso(res, await granolaMcp.avviaSulWeb(azioniGranola))
+    if (ospitato.OSPITATO) {
+      // ospitati si segue come in casa: il consenso in un'altra scheda, questa aspetta
+      const a = await granolaMcp.avviaSulWeb(azioniGranola)
+      consegnaIlBiglietto(res, a.biglietto)
+      return res.json({ id: a.id, dove: a.dove, scade: a.scade })
+    }
     res.json(await granolaMcp.avvia(azioniGranola))
   } catch (e) { errore(res, e, 400) }
 })
@@ -1897,6 +1904,15 @@ async function salvaGranola(e: granolaMcp.EsitoMcp): Promise<number> {
   return store.riconcilia('granola', { completo: e.completo }, [...e.docs.map(d => d.id), ...e.visti])
 }
 
+/** Dove sta quello che un giro di Granola lascia al giro dopo (`granolaMcp.Ricordi`): per persona, con l'indice. */
+const GIRO_GRANOLA = 'granola:giro'
+function ricordiGranola(): granolaMcp.Ricordi {
+  try {
+    const j = JSON.parse(store.cursore(GIRO_GRANOLA) ?? '{}') as unknown
+    return j && typeof j === 'object' && !Array.isArray(j) ? j as granolaMcp.Ricordi : {}
+  } catch { return {} }
+}
+
 /**
  * Rileggere le fonti. Una funzione sola, usata da due strade.
  *
@@ -2020,38 +2036,6 @@ async function leggiTuttoDentro(
     const tolti = store.riconcilia('notion', { completo: !e.interrotto },
       [...e.docs.map(d => d.id), ...e.visti])
     avvisa({ fase: 'notion', stato: 'fatto', documenti: e.docs.length, parziali: e.parziali, interrotto: e.interrotto, tolti, invariate: e.invariate, resto: e.resto })
-    return e.docs.length
-  })
-  /*
-   * Granola, da due strade, e una sola per volta.
-   *
-   * Con l'account (il refresh in configurazione) si legge dal server MCP di
-   * Granola, e la cache non si apre nemmeno: è la strada che la scheda fa
-   * prendere a tutti da quando Granola cifra le note sul Mac, e dà il
-   * riassunto che la cache non ha più. Senza account resta la cache, per chi
-   * l'aveva collegato così su un Granola che la scrive ancora in chiaro —
-   * solo in casa, perché è un file di *questo* computer. Le due strade
-   * scrivono gli stessi id (`granola:<id>`): passare dall'una all'altra
-   * aggiorna le riunioni invece di raddoppiarle.
-   */
-  const conAccount = granolaMcp.conAccount(c)
-  if (c.granola && (conAccount || !ospitato.OSPITATO)) await fonte('granola', async () => {
-    avvisa({ fase: 'granola', stato: 'leggo le riunioni' })
-    if (conAccount) {
-      const e = await granolaMcp.sincronizza(store.quandoPerPrefisso('granola:'))
-      const tolti = await salvaGranola(e)
-      const g = cfg.leggi().granola
-      if (g) cfg.aggiorna({ granola: { ...g, note: store.quandoPerPrefisso('granola:').size, trentaGiorni: e.trentaGiorni || undefined } })
-      avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, giaLetti: e.giaLetti, vuote: e.vuote, troncato: e.troncato, tolti })
-      return e.docs.length
-    }
-    const e = await granola.sincronizza()
-    await store.salvaDocumentiAPezzi(e.docs)
-    // una nota cancellata in Granola deve sparire anche di qui: il file è
-    // sempre intero, quindi quello che non c'è dentro non c'è più
-    const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
-    cfg.aggiorna({ granola: { ...cfg.leggi().granola, note: e.docs.length } })
-    avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
     return e.docs.length
   })
   /*
@@ -2185,6 +2169,49 @@ async function leggiTuttoDentro(
       avvisa({ fase: 'microsoft', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
     await store.salvaDocumentiAPezzi(e.docs)
     avvisa({ fase: 'microsoft', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
+    return e.docs.length
+  })
+  /*
+   * Granola, da due strade, e una sola per volta.
+   *
+   * Con l'account (il refresh in configurazione) si legge dal server MCP di
+   * Granola, e la cache non si apre nemmeno: è la strada che la scheda fa
+   * prendere a tutti da quando Granola cifra le note sul Mac, e dà il
+   * riassunto che la cache non ha più. Senza account resta la cache, per chi
+   * l'aveva collegato così su un Granola che la scrive ancora in chiaro —
+   * solo in casa, perché è un file di *questo* computer. Le due strade
+   * scrivono gli stessi id (`granola:<id>`): passare dall'una all'altra
+   * aggiorna le riunioni invece di raddoppiarle.
+   *
+   * Dopo la posta, e non prima: Granola passa da internet e può essere lenta,
+   * e la posta e l'agenda sono quello che una persona guarda per prima.
+   */
+  const conAccount = granolaMcp.conAccount(c)
+  if (c.granola && (conAccount || !ospitato.OSPITATO)) await fonte('granola', async () => {
+    avvisa({ fase: 'granola', stato: 'leggo le riunioni' })
+    if (conAccount) {
+      // appena letta dalla scheda: l'«Avanti» che rilegge tutte le fonti non la rifà
+      if (granolaMcp.appenaLetto()) {
+        avvisa({ fase: 'granola', stato: 'fatto', documenti: store.quandoPerPrefisso('granola:').size })
+        return 0
+      }
+      const e = await granolaMcp.sincronizza(store.quandoPerPrefisso('granola:'), ricordiGranola())
+      // scollegata, o ricollegata, mentre Granola rispondeva: quello che è arrivato non è più di nessuno
+      if (!granolaMcp.valido(e)) return 0
+      const tolti = await salvaGranola(e)
+      store.segnaCursore(GIRO_GRANOLA, JSON.stringify(e.ricordi))
+      const g = cfg.leggi().granola
+      if (g) cfg.aggiorna({ granola: { ...g, note: store.quandoPerPrefisso('granola:').size, trentaGiorni: e.trentaGiorni || undefined } })
+      avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, giaLetti: e.giaLetti, vuote: e.vuote, troncato: e.troncato, tolti })
+      return e.docs.length
+    }
+    const e = await granola.sincronizza()
+    await store.salvaDocumentiAPezzi(e.docs)
+    // una nota cancellata in Granola deve sparire anche di qui: il file è
+    // sempre intero, quindi quello che non c'è dentro non c'è più
+    const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
+    cfg.aggiorna({ granola: { ...cfg.leggi().granola, note: e.docs.length } })
+    avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
     return e.docs.length
   })
   const slk = c.slack
