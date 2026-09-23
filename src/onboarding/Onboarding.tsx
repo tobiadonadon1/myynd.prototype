@@ -225,10 +225,12 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
         <span className="onboard-kicker">{t('Cominciamo da te')}</span>
         <h2 ref={titolo} tabIndex={-1}>{t('Cosa vuoi ottenere?')}</h2>
-        <p className="onboard-why">{t('Serve a scegliere cosa conta, ogni mattina.')}</p>
+        {/* cosa ci fa Myynd, detto da fuori: «serve a scegliere cosa conta» non diceva chi sceglie, né cosa */}
+        <p className="onboard-why">{t('Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.')}</p>
         <fieldset disabled={occupato} className="onboard-fieldset">
-          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Cosa vuoi ottenere?')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Un risultato concreto, con le tue parole.')} /></label>
-          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Il nome del tuo progetto')} /></label>
+          {/* ogni campo la sua etichetta sopra, e nel segnaposto un esempio: l'obiettivo era l'unico senza */}
+          <label className="onboard-field onboard-answer"><span>{t('Obiettivo')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Mettere online il sito nuovo entro ottobre')} /></label>
+          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Sito nuovo')} /></label>
           <OnboardErrore testo={errore} />
           <div className="onboard-actions"><button className="onboard-primary" disabled={!progetto.trim() || !obiettivo.trim() || occupato}>{occupato ? t('Salvo…') : t('Continua')}<Avanti /></button></div>
         </fieldset>

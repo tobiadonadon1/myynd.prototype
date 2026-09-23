@@ -261,7 +261,6 @@ const EN: Record<string, string> = {
   'Tu, a ogni passo': 'You, at every step',
   'Salta l’introduzione': 'Skip the intro',
   'Introduzione': 'Introduction',
-  'Serve a scegliere cosa conta, ogni mattina.': 'It is how I pick what matters, every morning.',
   'Finisce nella lista: è la prima cosa che vedrai.': 'It goes on your list: the first thing you will see.',
   // — l'intervista in chat, il progetto dalla prima pagina, e due carte più leggere —
   'Prima due parole su di te, così so con chi parlo.': 'First, a couple of things about you, so I know who I am talking to.',
@@ -320,7 +319,6 @@ const EN: Record<string, string> = {
   "Cominciamo da te": "Start with you",
   "A cosa stai lavorando?": "What are you working on?",
   "Dove vuoi arrivare?": "Where do you want to go?",
-  "Il nome del tuo progetto": "Your project’s name",
 
   'Progetto': 'Project',
   'Prossima azione': 'Next action',
@@ -358,7 +356,6 @@ const EN: Record<string, string> = {
   "Nome del progetto": "Project name",
   "Il progetto a cui stai lavorando": "The project you’re working on",
   "Cosa vuoi ottenere?": "What do you want to achieve?",
-  "Un risultato concreto, con le tue parole.": "A concrete outcome, in your own words.",
   "Il tuo nome": "Your name",
   "Continua": "Continue",
   "Da cosa partiamo?": "What shall we start with?",
@@ -2862,6 +2859,9 @@ const EN: Record<string, string> = {
   'Legge il tuo lavoro e ti dice cosa conta oggi.': 'It reads your work and tells you what matters today.',
   'nome@esempio.it': 'name@example.com',
   'Va bene qualsiasi indirizzo, di lavoro o personale.': 'Any address is fine, work or personal.',
+  'Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.': 'Myynd uses this goal to decide what to show you first each morning.',
+  'Mettere online il sito nuovo entro ottobre': 'Put the new website online by October',
+  'Sito nuovo': 'New website',
 }
 
 
