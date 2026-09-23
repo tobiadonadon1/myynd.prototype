@@ -33,7 +33,7 @@ import { Hov, useFocoDialogo } from '../ui'
 import { IconGiu, IconSpunta } from '../icons'
 import { coloreProgetto } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
-import { portaAlleAttivita, primoParagrafo, siPuoAprireLeCose, type Vals } from '../vals'
+import { annunciaProgetti, portaAlleAttivita, primoParagrafo, siPuoAprireLeCose, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { NomiERaggruppamento, Pallino, Scritta, Stati, Tic, useSalvataggi } from './ProgettoEditor'
 import { CAMPO, Scatola } from './Myynd'
@@ -213,6 +213,8 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
               unisci={async (id, dentro) => {
                 await api.unisciProgetto(id, dentro)
                 await v.ricaricaProgetti()
+                // la Memoria sotto, se è aperta, deve perdere la scheda che non c'è più
+                annunciaProgetti()
                 // questo non c'è più: resta aperto quello in cui è confluito
                 v.apriProgetto(dentro)
               }} />
