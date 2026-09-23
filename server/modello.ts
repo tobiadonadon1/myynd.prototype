@@ -34,7 +34,7 @@
 // quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
+import { aggiorna, leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
@@ -141,6 +141,22 @@ export function collegato(): boolean {
  */
 export function conClaude(): boolean {
   return conLaChiave() || abbonamento.pronto()
+}
+
+/**
+ * Claude appena collegato, e un motore scelto che non può lavorare.
+ *
+ * ChatGPT scelto e poi spento in Myynd lascia `motore: 'chatgpt'` scritto, e
+ * da lì `collegato()` dice no qualunque cosa sia collegata. Collegare Claude
+ * con la chiave, o dire «usa il mio account», non toccava il motore: la prima
+ * pagina continuava a dire «serve Claude» a chi l'aveva appena collegato. Se
+ * nessuno può ragionare e Claude sì, lavora Claude. Un motore che lavora non si
+ * tocca: collegare una seconda testa non vuol dire sceglierla.
+ */
+export function scegliClaudeSeServe(): boolean {
+  if (collegato() || !conClaude()) return false
+  aggiorna({ motore: 'claude' })
+  return true
 }
 
 /**

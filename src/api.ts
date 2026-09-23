@@ -113,6 +113,16 @@ export type Stato = {
   }
   connettori: Connettore[]
   /**
+   * Myynd può ragionare adesso: la risposta del server, non una deduzione.
+   *
+   * Prima la pagina la rifaceva da sé guardando `motore`, la scheda di Claude
+   * e quella di OpenAI, e non sempre coincideva: un fornitore scelto senza
+   * indirizzo, o ChatGPT acceso senza il suo programma, aprivano una chat che
+   * poi non rispondeva. È `modello.collegato()`, la stessa domanda che fanno
+   * la chat, il punto e le deleghe prima di chiamare qualcuno.
+   */
+  ragiona: boolean
+  /**
    * La frase con cui il fornitore ha detto «niente credito», o `null`.
    *
    * È sua e resta nella sua lingua: è una citazione, non una riga dell'app. Le
@@ -156,6 +166,7 @@ export type Stato = {
 import { frasi, t } from './lingua.ts'
 import { desktop } from './desktop.ts'
 import { dettaglioSincronizzazione } from './lettura-fonti.ts'
+import { annunciaCollegamento, cambiaIlCollegamento } from './collegamenti.ts'
 
 const CHIAVE = 'myynd.token'
 
@@ -438,6 +449,9 @@ async function json<T>(url: string, opz?: RequestInit): Promise<T> {
    */
   const tipo = r.headers.get('content-type') ?? ''
   if (!tipo.includes('application/json')) throw new SenzaMotore(`HTTP ${r.status} · ${tipo || '(no content-type)'} · ${r.url}`)
+  // un collegamento è cambiato: lo si dice da qui, da dove passano tutti,
+  // invece di contare che ogni scheda si ricordi di rileggere (collegamenti.ts)
+  if (cambiaIlCollegamento(opz?.method, url, corpo)) annunciaCollegamento()
   return corpo as T
 }
 

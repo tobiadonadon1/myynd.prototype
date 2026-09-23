@@ -597,6 +597,11 @@ app.get('/api/stato', async (_req, res) => {
       claude: mod.conClaude() ? { collegato: true } : null,
       jev: jev.collegato() ? { collegato: true, consumo: jev.consumo() } : null
     },
+    // «Myynd può ragionare adesso?», detto una volta sola e da qui. La pagina
+    // lo rifaceva da sé con `motore` e le schede, e non sempre rispondeva come
+    // `collegato()`, che è quello che guardano la chat, il punto e le deleghe
+    // prima di chiamare qualcuno
+    ragiona: mod.collegato(),
     conteggi: n,
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
@@ -919,6 +924,8 @@ app.get('/api/modello/abbonamento/accesso/:id', (req, res) => {
   if (s.stato === 'completed') {
     const c = cfg.leggi()
     if (c.claudeCon !== 'abbonamento') { cfg.aggiorna({ claudeCon: 'abbonamento', abbonamento: { attivo: true }, motore: 'claude' }); abbonamento.riprova() }
+    // già scelto da prima, e rientrato: il motore può essere rimasto su uno spento
+    else mod.scegliClaudeSeServe()
   }
   res.json(s)
 })
@@ -937,6 +944,7 @@ app.post('/api/modello/abbonamento', async (req, res) => {
   // resta per chi legge una configurazione vecchia senza sapere della scelta
   cfg.aggiorna({ abbonamento: { attivo }, claudeCon: attivo ? 'abbonamento' : 'chiave' })
   if (attivo) abbonamento.riprova()
+  mod.scegliClaudeSeServe()
   try { res.json({ ok: true, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
 })
 
@@ -962,6 +970,7 @@ app.post('/api/modello/claude-con', async (req, res) => {
   }
   cfg.aggiorna({ claudeCon: con, abbonamento: { attivo: con === 'abbonamento' } })
   if (con === 'abbonamento') abbonamento.riprova()
+  mod.scegliClaudeSeServe()
   try { res.json({ ok: true, con, ...await abbonamento.stato() }) } catch (e) { errore(res, e) }
 })
 
@@ -1000,6 +1009,7 @@ app.post('/api/connettori/claude/ambiente', async (_req, res) => {
   const e = await claude.prova(k)
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   cfg.aggiorna({ claude: { apiKey: k } })
+  mod.scegliClaudeSeServe()
   res.json({ ok: true, ...(e.avviso ? { avviso: e.avviso } : {}), ...(e.dettaglio ? { dettaglio: e.dettaglio } : {}) })
 })
 
@@ -1323,6 +1333,8 @@ app.post('/api/connettori/claude', async (req, res) => {
     const esito = await claude.prova(apiKey)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     if (nuova) cfg.aggiorna({ claude: { apiKey: nuova } })
+    // collegarlo deve bastare a ragionare, anche se il motore scelto è spento
+    mod.scegliClaudeSeServe()
     // `avviso` è una frase nostra e passa dal dizionario; `dettaglio` è la frase
     // di Anthropic, e va riportata com'è — è quella che dice cosa fare
     res.json({ ok: true, ...(esito.avviso ? { avviso: esito.avviso } : {}), ...(esito.dettaglio ? { dettaglio: esito.dettaglio } : {}) })

@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
+import { suCollegamento } from '../collegamenti'
 import type { ChatGPT, ClaudeCon, Stato } from '../api'
 import { frasi, t } from '../lingua'
 import { desktop } from '../desktop'
@@ -249,6 +250,8 @@ export function FormClaude({ tema, ok }: Props) {
   const [s, setS] = useState<ClaudeCon | null>(null)
   const guarda = useCallback(() => { api.claude().then(setS).catch(() => {}) }, [])
   useEffect(() => { guarda() }, [guarda])
+  // le due strade si cambiano anche da fuori (le preferenze, l'altra strada): si rileggono
+  useEffect(() => suCollegamento(guarda), [guarda])
   // A cold native credential check can time out without losing the account.
   useEffect(() => {
     if (!s?.abbonamento.verificaInSospeso) { verifiche.current = 0; return }
@@ -490,6 +493,7 @@ export function FormOpenAI({ tema, ok }: Props) {
       .catch(e => setErroreChatgpt(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'))
   }, [])
   useEffect(() => { guarda() }, [guarda])
+  useEffect(() => suCollegamento(guarda), [guarda])
   const accountInUso = s?.config.motore === 'chatgpt' && !!s.config.chatgpt?.attivo && !!chatgpt?.acceso
   return (
     <div>

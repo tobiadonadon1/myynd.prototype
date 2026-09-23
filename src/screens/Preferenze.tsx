@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
+import { suCollegamento } from '../collegamenti'
 import { frasi, t } from '../lingua'
 import { Hov, daTastiera, knob, track } from '../ui'
 import { IconSpunta } from '../icons'
@@ -629,12 +630,16 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   // sopra questa schermata, e chiudendola la riga deve dire «pronto» senza
   // che uno esca e rientri
   useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile, v.motore])
+  // e quando cambia un collegamento qualunque: passare dalla chiave all'account
+  // non tocca nessuna delle tre qui sopra, e la riga restava quella di prima
+  const [giroCollegamento, setGiroCollegamento] = useState(0)
+  useEffect(() => suCollegamento(() => { guarda(); setGiroCollegamento(n => n + 1) }), [guarda])
   useEffect(() => {
     const controller = new AbortController()
     api.chatgpt(controller.signal).then(r => { if (!controller.signal.aborted) setChatgpt(r) })
       .catch(() => { if (!controller.signal.aborted) setChatgpt(null) })
     return () => controller.abort()
-  }, [v.motore, v.claudeOn, v.openai])
+  }, [v.motore, v.claudeOn, v.openai, giroCollegamento])
 
   const f = v.compatibile
   const o = v.openai
@@ -666,9 +671,10 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const LENTO = 10_000
 
   const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : 'claude'
-  // Claude è collegato con la chiave, o con l'account scelto e in cui si è entrati
-  const conAccountClaude = !!s?.abbonamentoPossibile && s.con === 'abbonamento' && s.abbonamento.entrato
-  const claudeCollegato = !!s && (s.chiave.collegata || conAccountClaude)
+  // Claude collegato, con la chiave o con l'account: lo dicono le Fonti, cioè
+  // il server. Rifatto qui dalla verifica di Claude Code, una verifica lenta o
+  // in sospeso diceva «da collegare» mentre la prima pagina diceva «collegato»
+  const claudeCollegato = !!s && v.claudeCollegato
   const accountChatGPT = !!chatgpt?.entrato
   const openaiCollegato = accountChatGPT || !!o?.collegato
   const accountChatGPTInUso = v.motore === 'chatgpt' && !!chatgpt?.acceso
@@ -677,7 +683,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const dettaglio = (via: Via): string | undefined => {
     if (via === 'claude') {
       if (!claudeCollegato) return undefined
-      return conAccountClaude && (s?.con === 'abbonamento') ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
+      return s?.abbonamentoPossibile && s.con === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
     }
     if (via === 'openai') {
       if (accountChatGPTInUso || (accountChatGPT && v.motore !== 'openai')) {
