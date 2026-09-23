@@ -5,8 +5,19 @@ import '../components/connessioni.css'
 
 /** Only available integrations are in the catalog; planned sources stay secondary. */
 export function Connettori({ v }: { v: Vals }) {
+  /*
+   * Durante «Rileggi tutto» ogni scheda collegata dice a che punto è la sua
+   * fonte: in coda, quanti documenti, o perché non si è letta. Prima lo diceva
+   * solo il bottone, una fonte alla volta, e alla fine non restava niente per
+   * sapere quale era andata. Letta, torna a dire quello che dice sempre.
+   */
+  const riga = (id: string) => v.letturaFonti?.find(r => r.id === id && r.stato !== 'fatto')
+  const inLettura = (id: string, solita: string) => {
+    const r = riga(id)
+    return !r ? solita : r.stato === 'attesa' ? t('In coda') : r.stato === 'leggo' ? r.testo || t('leggo…') : `${t('Non letta')} · ${r.testo}`
+  }
   const fonti = [
-    ...v.connAttivi.map(c => ({ id: c.id, nome: c.nome, nota: c.stato, collegata: true, problema: c.problema })),
+    ...v.connAttivi.map(c => ({ id: c.id, nome: c.nome, nota: inLettura(c.id, c.stato), collegata: true, problema: c.problema })),
     ...v.connSpenti.map(c => ({ id: c.id, nome: c.nome, nota: t(c.nota), collegata: false, problema: false }))
   ]
   // niente filtro e niente ricerca: sono una dozzina di tessere, e i due gruppi
@@ -43,7 +54,8 @@ export function Connettori({ v }: { v: Vals }) {
         <h1>{t('Connettori')}</h1>
         <p className="connections-lead">{t('Collega quello che usi già. Myynd legge le fonti ed esegue le azioni che abiliti.')}</p>
       </div>
-      {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando}>{v.sincronizzando ?? t('Rileggi tutto')}</button>}
+      {/* la riga di avanzamento sta sulle schede, fonte per fonte: il bottone dice solo che sta leggendo */}
+      {v.connCount > 0 && <button className="connections-button" onClick={v.sincronizza} disabled={!!v.sincronizzando}>{v.sincronizzando ? t('Leggo…') : t('Rileggi tutto')}</button>}
     </header>
     {gruppo('Collegate', collegate, 'collegate')}
     {gruppo('Da collegare', daCollegare, 'da-collegare')}

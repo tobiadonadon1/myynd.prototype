@@ -14,6 +14,7 @@ import { preparaApertura } from './navigazione.ts'
 import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
 import {statoAccessoNote} from './note-access.ts'
+import { avanzaLettura, chiudiLettura, iniziaLettura, type RigaLettura } from './lettura-fonti.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -386,6 +387,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   const aperturaFonte = useRef(false)
   const [toast, setToast] = useState<Toast>(null)
   const [sincronizzando, setSincronizzando] = useState<string | null>(null)
+  /** «Rileggi tutto», fonte per fonte: ogni scheda collegata dice a che punto è la sua. */
+  const [letturaFonti, setLetturaFonti] = useState<RigaLettura[] | null>(null)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const cvA = useRef<HTMLCanvasElement>(null)
@@ -750,13 +753,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
 
   const sincronizza = async (fonte?: string) => {
     setSincronizzando('preparo')
+    // le fonti che non portano documenti non hanno niente da dire in questa lettura
+    let righe = fonte ? null : iniziaLettura(connOn.filter(c => !['claude', 'openai', 'compatibile', 'jev'].includes(c.id)).map(c => c.id))
+    setLetturaFonti(righe)
     try {
       await api.sincronizza(m => {
         if (m.fase !== 'fine') setSincronizzando(rigaSincronizzazione(m))
+        if (righe) { righe = avanzaLettura(righe, m); setLetturaFonti(righe) }
       }, fonte)
-      await Promise.all([ricaricaStato(), caricaMente(mappaInVista), caricaFeed()])
+      const [nuovo] = await Promise.all([ricaricaStato(), caricaMente(mappaInVista), caricaFeed()])
+      if (righe) setLetturaFonti(chiudiLettura(righe, id => nuovo.connettori.find(c => c.id === id)?.documenti))
       mostraToast(t('Letto tutto quello che è cambiato.'))
     } catch (e) {
+      // la frase arriva nel riquadro: righe ferme a «in coda» direbbero che sta ancora leggendo
+      setLetturaFonti(null)
       mostraToast(e instanceof Error ? t(e.message) : t('Sincronizzazione fallita.'))
     }
     setSincronizzando(null)
@@ -1062,6 +1072,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     totaleDocumenti: stato.conteggi.totale,
     badge: { fontSize: '11.5px', fontWeight: 500, opacity: aperti.length ? 1 : 0.35 } as CSSProperties,
     sincronizzando,
+    letturaFonti,
     sincronizza: () => sincronizza(),
     claudeOn,
 
