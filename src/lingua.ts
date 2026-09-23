@@ -2860,6 +2860,27 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  // — feedback 23 set: progetti —
+  //   più di un progetto dalla prima pagina, la pagina di un progetto che dice
+  //   a cosa serve, e la priorità: «alta» o normale
+  'Priorità alta': 'High priority',
+  'La priorità di un progetto è alta o normale.': 'A project’s priority is high or normal.',
+  'Altri progetti': 'Other projects',
+  'Il rilancio del sito': 'Website relaunch',
+  'Non sono riuscito a crearlo.': 'I could not create it.',
+  'Qual è il primo passo?': 'What’s the first step?',
+  'Manda il preventivo a Rossi': 'Send the quote to Rossi',
+  'A cosa serve? Una riga.': 'What is it for? One line.',
+  'Prossimi passi': 'Next steps',
+  'Aggiungi un passo': 'Add a step',
+  'Quello che Myynd sa': 'What Myynd knows',
+  'Nomi e raggruppamento': 'Names and grouping',
+  'Decisione': 'Decision',
+  'Osservazione': 'Observation',
+  'Lavoro': 'Work',
+  'Salvato da te': 'You saved this',
+  'Risultato del lavoro': 'Work outcome',
+  'Da ricontrollare': 'Needs rechecking',
 }
 
 

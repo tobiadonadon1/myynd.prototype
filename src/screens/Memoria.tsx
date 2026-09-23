@@ -32,11 +32,11 @@ import {
 } from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
-import { Cestino, useAttiva, useFocoDialogo } from '../ui'
+import { Cestino, useAttiva } from '../ui'
 import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
-import { ascoltaProgetto, dimenticaProgetto, progettoAtteso } from '../vals'
-import { ProgettoEditor, SchedaProgetto, Tic } from './ProgettoEditor'
+import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso } from '../vals'
+import { SchedaProgetto, Tic } from './ProgettoEditor'
 import './memoria.css'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
@@ -273,41 +273,6 @@ function SchedaConvinzione({ c, scorda, tieni, storica }:
 }
 
 /**
- * La finestra di un progetto: gli altri nomi, dove sta dentro, le note, quello
- * che Myynd ricorda, le attività, unire.
- *
- * Una finestra e non un pannello che si apre sotto la scheda: in una griglia
- * un pannello che cresce sposta tutte le schede della riga, e quello che si
- * stava guardando finisce da un'altra parte. Esc chiude, il fuoco torna alla
- * scheda da cui si è partiti.
- */
-function FinestraProgetto({ p, tutti, cambia, unisci, chiudi }: {
-  p: Progetto
-  tutti: Progetto[]
-  cambia: (id: string, c: CambioProgetto) => Promise<void>
-  unisci: (id: string, dentro: string) => Promise<void>
-  chiudi: () => void
-}) {
-  const finestra = useRef<HTMLDivElement>(null)
-  useFocoDialogo(finestra, chiudi)
-  return (
-    <>
-      <div className="mem-velo" onClick={chiudi} />
-      <div ref={finestra} className="mem-finestra" role="dialog" aria-modal="true" aria-label={p.nome}>
-        <div className="mem-finestra-cima">
-          <strong>{p.nome}</strong>
-          {p.obiettivo && <span className="mem-obiettivo">{p.obiettivo}</span>}
-          <button type="button" className="mem-chiudi" onClick={chiudi}>{t('Chiudi')}</button>
-        </div>
-        <div className="mem-finestra-corpo">
-          <ProgettoEditor p={p} tutti={tutti} cambia={cambia} unisci={unisci} />
-        </div>
-      </div>
-    </>
-  )
-}
-
-/**
  * I progetti: su cosa lavora, e a cosa punta ciascuno.
  *
  * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che il
@@ -316,8 +281,6 @@ function FinestraProgetto({ p, tutti, cambia, unisci, chiudi }: {
  */
 function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
-  /** Quale scheda ha la finestra aperta: una sola. */
-  const [aperto, setAperto] = useState<string | null>(null)
   /**
    * La scheda da portare sotto gli occhi, e quella accesa.
    *
@@ -361,6 +324,10 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
   }, [])
   useEffect(() => { carica() }, [carica])
   useEffect(() => ascoltaProgetto(() => setDaMostrare(progettoAtteso())), [])
+  // la pagina di un progetto si apre sopra questa, e quello che vi si cambia
+  // (il nome, il colore, la priorità, un'unione) deve vedersi anche qui sotto
+  const questaCopia = useRef({})
+  useEffect(() => ascoltaProgetti(da => { if (da !== questaCopia.current) void carica() }), [carica])
   useEffect(() => { dimmi((progetti ?? []).filter(p => p.stato === 'attivo').length) }, [progetti, dimmi])
   useEffect(() => {
     if (!daMostrare || !progetti?.length) return
@@ -368,9 +335,9 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
     if (!scheda) return
     scheda.scrollIntoView({ block: 'center' })
     dimenticaProgetto()
-    // chi arriva qui da una carta della prima pagina è venuto per *questo*
-    // progetto: trovarlo chiuso come tutti gli altri sarebbe arrivare a metà
-    setAperto(daMostrare)
+    // chi arriva qui con un biglietto è venuto per *questo* progetto: si apre
+    // la sua pagina, sopra, e la scheda resta accesa sotto
+    portaAlProgetto(daMostrare)
     setDaMostrare(null)
     setAcceso(daMostrare)
     // un secondo e mezzo: il tempo di vedere quale scheda, non di doverla spegnere
@@ -389,37 +356,50 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
   const cambia = async (id: string, c: CambioProgetto) => {
     // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
     setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
-    try { await api.cambiaProgetto(id, c) } finally { await carica() }
-  }
-
-  /** Due progetti che erano lo stesso: resta aperto quello in cui sono confluiti. */
-  const unisci = async (id: string, dentro: string) => {
-    try { await api.unisciProgetto(id, dentro) } finally { await carica() }
-    setAperto(dentro)
+    try { await api.cambiaProgetto(id, c); annunciaProgetti(questaCopia.current) } finally { await carica() }
   }
 
   const elimina = async (id: string) => {
-    try { await api.eliminaProgetto(id) } finally { await carica() }
-    setAperto(a => (a === id ? null : a))
+    try { await api.eliminaProgetto(id); annunciaProgetti(questaCopia.current) } finally { await carica() }
   }
 
+  /*
+   * Un progetto nuovo: la scheda c'è nell'istante di Invio.
+   *
+   * Aspettava il server e poi un ricarico intero, e per quel mezzo secondo
+   * la griglia restava com'era: la prima persona da fuori che l'ha provato
+   * ha concluso che di progetti se ne potesse avere uno solo. Adesso la
+   * scheda nasce subito, con un id provvisorio; la risposta la sostituisce
+   * con quella vera, e il fuoco va sul nome. Se non passa, sparisce e le
+   * caselle tornano con dentro le sue parole.
+   */
   const aggiungi = async () => {
     const n = nome.trim()
     if (!n || nasce) return
+    const o = obiettivo.trim()
+    const adesso = new Date().toISOString()
+    const finto: Progetto = {
+      id: `nuovo-${Date.now()}`, nome: n, obiettivo: o, stato: 'attivo', dal: adesso, aggiornato: adesso,
+      note: '', origine: 'mano', colore: '', alias: [], genitore: null, priorita: null, memoria: null
+    }
     setNasce(true)
+    setNome(''); setObiettivo(''); setGuaio('')
+    setProgetti(ps => [...(ps ?? []).filter(p => p.stato !== 'chiuso'), finto, ...(ps ?? []).filter(p => p.stato === 'chiuso')])
     try {
-      const r = await api.nuovoProgetto(n, obiettivo.trim())
-      setNome(''); setObiettivo(''); setGuaio('')
+      const r = await api.nuovoProgetto(n, o)
+      annunciaProgetti(questaCopia.current)
       await carica()
       // appena nato, il fuoco va sulla sua scheda con il nome già selezionato:
       // è lì che si correggono il nome, l'obiettivo, lo stato e il colore, e
       // mandarlo altrove vorrebbe dire fargli cercare le stesse cose due volte
       setNato(r.progetto.id)
-    } catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
+    } catch (e) {
+      setProgetti(ps => (ps ?? []).filter(p => p.id !== finto.id))
+      setNome(n); setObiettivo(o)
+      setGuaio(e instanceof Error ? e.message : String(e))
+    }
     finally { setNasce(false) }
   }
-
-  const inFinestra = progetti?.find(x => x.id === aperto) ?? null
 
   return (
     <section className="mem-section">
@@ -428,7 +408,7 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
       <div className="mem-grid">
         {(progetti ?? []).map(p => (
           <SchedaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} elimina={elimina}
-            apri={() => setAperto(p.id)} acceso={acceso === p.id} conto={conti[p.id]} nato={nato === p.id} />
+            apri={() => { if (!p.id.startsWith('nuovo-')) portaAlProgetto(p.id) }} acceso={acceso === p.id} conto={conti[p.id]} nato={nato === p.id} />
         ))}
 
         {/*
@@ -464,10 +444,6 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
         {t('Un progetto senza attività resta attivo: chiudilo solo quando è finito.')}
       </div>
 
-      {inFinestra && (
-        <FinestraProgetto p={inFinestra} tutti={progetti ?? []} cambia={cambia} unisci={unisci}
-          chiudi={() => setAperto(null)} />
-      )}
     </section>
   )
 }

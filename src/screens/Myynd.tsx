@@ -102,7 +102,7 @@ const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai
  * per lo stesso mestiere. Da qui in poi è uno: raggio 14, la carta all'86%,
  * il vetro, e il bordo che si accende quando ci sei dentro.
  */
-function Scatola({ children, alto = false }: { children: ReactNode; alto?: boolean }) {
+export function Scatola({ children, alto = false }: { children: ReactNode; alto?: boolean }) {
   const [fuoco, setFuoco] = useState(false)
   return (
     <div onFocus={() => setFuoco(true)} onBlur={() => setFuoco(false)} style={{
@@ -116,7 +116,7 @@ function Scatola({ children, alto = false }: { children: ReactNode; alto?: boole
   )
 }
 /** Il campo dentro la scatola: senza bordo suo, è la scatola che lo veste. */
-const CAMPO: CSSProperties = {
+export const CAMPO: CSSProperties = {
   flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
   color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', padding: '7px 0'
 }
