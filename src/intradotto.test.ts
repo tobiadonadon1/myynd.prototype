@@ -173,6 +173,8 @@ const SEGNAPOSTO_TECNICI = new Set([
   // la forma della chiave di TypeSafe, per la stessa ragione delle altre
   'apikey_…',
   'xoxp-…',
+  // la forma di un token a grana fine di GitHub, per la stessa ragione
+  'github_pat_…',
   '…apps.googleusercontent.com',
   '00000000-0000-0000-0000-000000000000',
   // l'indirizzo di un fornitore, la forma della sua chiave e due nomi di

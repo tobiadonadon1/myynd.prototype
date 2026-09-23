@@ -102,6 +102,19 @@ test('quanti eventi ha letto il calendario', () => {
   assert.match(in_('it', () => frasi.agendaLetta('Lavoro', 3)), /«Lavoro» è collegata: 3 eventi letti\./)
 })
 
+test('GitHub e Granola contano come il calendario, al singolare e al plurale', () => {
+  // la conferma contata è il quarto pezzo della scheda del calendario: feedback del 23 settembre 2026
+  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 1, false)), 'Connected as tobia: 1 repository.')
+  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 12, false)), 'Connected as tobia: 12 repositories.')
+  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 100, true)), 'Connected as tobia: more than 100 repositories.')
+  assert.equal(in_('it', () => frasi.githubCollegato('tobia', 12, false)), 'Collegato come tobia: 12 repository.')
+  assert.equal(in_('it', () => frasi.githubCollegato('', 100, true)), 'Collegato: più di 100 repository.')
+  assert.equal(in_('en', () => frasi.granolaLette(1)), 'Connected: 1 meeting read.')
+  assert.equal(in_('en', () => frasi.granolaLette(37)), 'Connected: 37 meetings read.')
+  assert.equal(in_('it', () => frasi.granolaLette(1)), 'Collegato: 1 riunione letta.')
+  assert.equal(in_('it', () => frasi.granolaLette(37)), 'Collegato: 37 riunioni lette.')
+})
+
 test('una riga incollata è «una riga segnata», non «1 righe»', () => {
   assert.equal(in_('it', () => frasi.righeSegnate(1)), '1 riga segnata.')
   assert.equal(in_('it', () => frasi.righeSegnate(8)), '8 righe segnate.')

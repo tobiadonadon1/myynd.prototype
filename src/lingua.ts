@@ -1125,7 +1125,6 @@ const EN: Record<string, string> = {
   'Basta indirizzo e password: il server lo trovo io.': 'Address and password are enough: I will find the server.',
   'iCloud vuole una password specifica per le app, da appleid.apple.com.': 'iCloud needs an app-specific password, from appleid.apple.com.',
   'Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.': 'Yahoo needs an app password, from the account security settings.',
-  'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.': 'Outlook no longer accepts a password over IMAP: connect “Outlook and Calendar” instead of this card.',
   'Non ancora disponibile su questo server. Per la posta usa «Posta», con una password per le app.': 'Not available on this server yet. For mail, use “Mail” with an app password.',
   'Non ancora disponibile su questo server.': 'Not available on this server yet.',
   'Restano nel tuo spazio, e non escono di lì.': 'They stay in your space, and never leave it.',
@@ -2860,6 +2859,91 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  // — feedback 23 set: connessioni —
+  // GitHub: la pagina del token già compilata, i passi con le voci di GitHub, e i suoi no
+  'Crea il token su GitHub': 'Create the token on GitHub',
+  'Premi «Crea il token su GitHub»: la pagina si apre con nome, scadenza e permessi già scritti.':
+    'Press “Create the token on GitHub”: the page opens with the name, expiration and permissions already filled in.',
+  'In «Repository access» scegli «All repositories», o «Only select repositories» e quelli da leggere.':
+    'Under “Repository access” choose “All repositories”, or “Only select repositories” and the ones to read.',
+  'Se i repository sono di un’organizzazione, sceglila in «Resource owner»: un suo amministratore dovrà approvare il token.':
+    'If the repositories belong to an organization, pick it under “Resource owner”: one of its admins will have to approve the token.',
+  'In fondo alla pagina premi «Generate token».': 'At the bottom of the page press “Generate token”.',
+  'Copia il token, comincia per github_pat_, e incollalo qui sopra.': 'Copy the token, it starts with github_pat_, and paste it above.',
+  'Se la pagina si apre vuota: Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token, e in «Permissions» dai a Contents, Issues e Pull requests l’accesso «Read-only».':
+    'If the page opens empty: Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token, and under “Permissions” give Contents, Issues and Pull requests “Read-only” access.',
+  'Autorizza il token su GitHub': 'Authorize the token on GitHub',
+  'GitHub non riconosce questo token: è scaduto, è stato cancellato o è stato copiato a metà. Creane uno nuovo e incollalo qui.':
+    'GitHub does not recognise this token: it has expired, was deleted, or was only partly copied. Create a new one and paste it here.',
+  'A questo token mancano dei permessi. Su GitHub aprilo e, in «Permissions», dai a Contents, Issues e Pull requests l’accesso «Read-only».':
+    'This token is missing permissions. Open it on GitHub and, under “Permissions”, give Contents, Issues and Pull requests “Read-only” access.',
+  'La tua organizzazione su GitHub chiede l’accesso unico (SSO) per questo token: aprilo su GitHub, premi «Configure SSO» e poi «Authorize» accanto all’organizzazione.':
+    'Your GitHub organization requires single sign-on (SSO) for this token: open it on GitHub, press “Configure SSO”, then “Authorize” next to the organization.',
+  'Questa organizzazione non accetta i token classici: crea un token a grana fine con il bottone qui sopra.':
+    'This organization does not accept classic tokens: create a fine-grained token with the button above.',
+  'Questa organizzazione non accetta token che durano più di un anno: rigeneralo su GitHub con una scadenza entro 366 giorni.':
+    'This organization does not accept tokens that last more than a year: regenerate it on GitHub with an expiration within 366 days.',
+  'Questo token non vede nessun repository. Su GitHub aprilo e, in «Repository access», scegli «All repositories» o «Only select repositories» con quelli da leggere.':
+    'This token cannot see any repository. Open it on GitHub and, under “Repository access”, choose “All repositories”, or “Only select repositories” with the ones to read.',
+  'A questo token classico manca l’ambito «repo»: crea invece un token a grana fine con il bottone qui sopra.':
+    'This classic token is missing the “repo” scope: create a fine-grained token with the button above instead.',
+  'Scrivi i repository come owner/nome, uno per riga.': 'Write repositories as owner/name, one per line.',
+  // Granola: la ragione vera di quando non si legge
+  'Non trovo Granola su questo Mac. Se lo usi, aprilo una volta e riprova.': 'I cannot find Granola on this Mac. If you use it, open it once and try again.',
+  'Granola è su questo Mac ma non ha ancora salvato le riunioni. Aprilo, aspetta che le carichi e riprova.':
+    'Granola is on this Mac but has not saved your meetings yet. Open it, wait for them to load, and try again.',
+  'Questa versione di Granola cifra le note su questo Mac e le tiene nel suo cloud: da qui Myynd non le può più leggere.':
+    'This version of Granola encrypts your notes on this Mac and keeps them in its cloud: Myynd can no longer read them from here.',
+  'Granola tiene su questo Mac l’elenco delle riunioni ma non il loro testo, che sta nel suo cloud: da qui Myynd non lo può leggere.':
+    'Granola keeps the list of your meetings on this Mac but not their text, which lives in its cloud: Myynd cannot read it from here.',
+  // l'azienda che deve approvare: la riga, i due bottoni, e il passo in fondo ai «Dove trovo…?»
+  'La tua azienda non permette ad altre app di leggere la posta di Gmail. Può permetterlo il tuo amministratore.':
+    'Your company does not let other apps read Gmail. Your admin can allow it.',
+  'La tua azienda non permette di condividere l’agenda con un indirizzo. Può permetterlo il tuo amministratore.':
+    'Your company does not allow sharing your calendar by address. Your admin can allow it.',
+  'La tua azienda deve approvare Myynd su Google prima che tu possa collegarlo.': 'Your company has to approve Myynd on Google before you can connect it.',
+  'La tua azienda deve approvare Myynd su Google Drive prima che tu possa collegarlo.': 'Your company has to approve Myynd on Google Drive before you can connect it.',
+  'La tua azienda deve approvare Myynd su Microsoft prima che tu possa collegarlo.': 'Your company has to approve Myynd on Microsoft before you can connect it.',
+  'Un amministratore dell’organizzazione deve approvare questo token.': 'An admin of the organization has to approve this token.',
+  'Se il token è di un’organizzazione, un suo amministratore deve approvarlo.': 'If the token belongs to an organization, one of its admins has to approve it.',
+  'Scrivi all’amministratore': 'Email your admin',
+  'Copia la richiesta': 'Copy the request',
+  'Richiesta copiata': 'Request copied',
+  'Cosa c’è scritto nella richiesta': 'What the request says',
+  'Chiedi all’amministratore': 'Ask your admin',
+  'La voce non c’è? Su un account di lavoro può averla spenta la tua azienda.': 'Not there? On a work account your company may have turned it off.',
+  'La voce non c’è? Su Gmail serve la verifica in due passaggi; su un account di lavoro può averla spenta la tua azienda.':
+    'Not there? Gmail needs 2-Step Verification first; on a work account your company may have turned it off.',
+  // la posta: l'indirizzo d'esempio neutro, lo stesso della schermata d'accesso
+  // (la tester ha letto «tuodominio» come «serve un dominio tuo»). La stessa
+  // chiave c'è anche nel blocco «accesso e primo avvio» dell'integrazione:
+  // alla fusione ne resta una, con lo stesso valore
+  'nome@esempio.it': 'name@example.com',
+  // la posta: i passi con gli indirizzi, e Outlook senza il vicolo cieco
+  'Gmail: apri la pagina, scrivi «Myynd» come nome dell’app e premi «Crea».': 'Gmail: open the page, type “Myynd” as the app name and press “Create”.',
+  'iCloud: Accesso e sicurezza › Password specifiche per le app.': 'iCloud: Sign-In and Security › App-Specific Passwords.',
+  'Yahoo: Sicurezza dell’account › Crea password per app.': 'Yahoo: Account security › Create app password.',
+  'Sono sedici lettere: incollale qui sopra, al posto della password.': 'It is sixteen letters: paste them above, in place of the password.',
+  'Outlook non accetta più password dalle app di posta, nemmeno quelle per le app. Il collegamento con Outlook arriva presto.':
+    'Outlook no longer accepts passwords from mail apps, app passwords included. The Outlook connection is coming soon.',
+  // Notion, Slack, Dropbox e le chiavi dei fornitori: le voci che si vedono sull'altro sito
+  'Apri la pagina e premi «Create a new connection»: dagli un nome e scegli lo spazio di lavoro.':
+    'Open the page and press “Create a new connection”: give it a name and choose the workspace.',
+  'Nella scheda «Configuration» copia l’«Installation access token»: comincia per ntn_.': 'In the “Configuration” tab copy the “Installation access token”: it starts with ntn_.',
+  'Nella scheda «Content access» premi «Edit access» e scegli le pagine da leggere.': 'In the “Content access” tab press “Edit access” and choose the pages to read.',
+  'Crea l’app su Slack': 'Create the app on Slack',
+  'Premi «Crea l’app su Slack»: si apre già compilata, con il nome e i permessi.': 'Press “Create the app on Slack”: it opens already filled in, with the name and permissions.',
+  'Scegli il tuo spazio di lavoro, poi «Next» e «Create».': 'Choose your workspace, then “Next” and “Create”.',
+  'In «OAuth & Permissions» premi «Install to Workspace» e poi «Allow». Se c’è «Request to Install», la richiesta va al tuo amministratore di Slack.':
+    'In “OAuth & Permissions” press “Install to Workspace”, then “Allow”. If it says “Request to Install”, the request goes to your Slack admin.',
+  'Copia lo «User OAuth Token», che comincia per xoxp-, e incollalo qui sopra.': 'Copy the “User OAuth Token”, which starts with xoxp-, and paste it above.',
+  'A mano: crea un’app e in «User Token Scopes» aggiungi': 'By hand: create an app and under “User Token Scopes” add',
+  'Apri la pagina e premi «Create app»: scegli «Scoped access» e «Full Dropbox», dagli un nome.':
+    'Open the page and press “Create app”: choose “Scoped access” and “Full Dropbox”, and give it a name.',
+  'Nella scheda «Permissions» spunta files.metadata.read e files.content.read, poi premi «Submit».':
+    'In the “Permissions” tab tick files.metadata.read and files.content.read, then press “Submit”.',
+  'Nella scheda «Settings» copia la «App key» e incollala qui sopra.': 'In the “Settings” tab copy the “App key” and paste it above.',
+  'Crea una chiave nuova e incollala qui sopra: il sito la mostra una volta sola.': 'Create a new key and paste it above: the site shows it only once.',
 }
 
 
@@ -3030,6 +3114,26 @@ export const frasi = {
   eventiLetti: (n: number) => corrente === 'en'
     ? `Connected: ${n} event${n === 1 ? '' : 's'} read.`
     : `Collegata: ${n} event${n === 1 ? 'o letto' : 'i letti'}.`,
+
+  /*
+   * GitHub e Granola: la stessa conferma contata del calendario.
+   *
+   * Il numero è l'unica prova che chi ha incollato può controllare da solo:
+   * «12 repository» vuol dire che il token vede quello che deve vedere.
+   * `oltre` è la pagina piena: GitHub ne ha dati cento e ce ne sono altri, e
+   * scrivere «100» sarebbe scrivere un numero falso.
+   */
+  githubCollegato: (login: string, n: number, oltre: boolean) => {
+    const en = corrente === 'en'
+    const quanti = oltre
+      ? (en ? `more than ${n} repositories` : `più di ${n} repository`)
+      : (en ? `${n} repositor${n === 1 ? 'y' : 'ies'}` : `${n} repository`)
+    if (!login) return en ? `Connected: ${quanti}.` : `Collegato: ${quanti}.`
+    return en ? `Connected as ${login}: ${quanti}.` : `Collegato come ${login}: ${quanti}.`
+  },
+  granolaLette: (n: number) => corrente === 'en'
+    ? `Connected: ${n} meeting${n === 1 ? '' : 's'} read.`
+    : `Collegato: ${n} riunion${n === 1 ? 'e letta' : 'i lette'}.`,
 
   // — la rassegna —
   //

@@ -6,7 +6,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
 import type { ChatGPT, ClaudeCon, Stato } from '../api'
-import { frasi, t } from '../lingua'
+import { frasi, lingua, t } from '../lingua'
+import { casoDaErrore, mailto, richiestaAmministratore } from '../amministratore.ts'
+// lo stesso riconoscimento del server: una funzione pura, senza niente di Node
+import { dominioAziendale, type CasoAmministratore } from '../../server/connettori/amministratore.ts'
+import { AMBITI_SLACK, PAGINE, TOKEN_GITHUB_A_MANO, appSlack, paginaTokenGithub } from '../dove-trovarlo.ts'
 import { desktop } from '../desktop'
 import { knob, track } from '../ui'
 import { preparaApertura } from '../navigazione.ts'
@@ -115,6 +119,145 @@ function Aiuto({ tema, titolo, children }: { tema: Tema; titolo: string; childre
   )
 }
 
+/**
+ * Un indirizzo da aprire, scritto com'è.
+ *
+ * Il testo del collegamento è l'indirizzo senza `https://`, non «clicca qui»:
+ * è la stessa cosa che la persona vedrà nella barra del browser, e si legge
+ * uguale nelle due lingue. Si apre fuori: dentro l'app `target=_blank` finisce
+ * nel browser di sistema (`finestra.ts`), nel browser in una scheda nuova.
+ */
+function Vai({ tema, url, testo }: { tema: Tema; url: string; testo?: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" style={{ ...link(tema), overflowWrap: 'anywhere' }}>
+      {testo ?? url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+    </a>
+  )
+}
+
+/**
+ * La conferma che si conta: quello che ha letto, in una riga, e «Avanti».
+ *
+ * È il quarto pezzo della scheda del calendario, quello che la tester ha
+ * notato: un numero è l'unica prova che chi ha incollato può controllare da
+ * solo — «12 repository» vuol dire che il token vede quello che deve vedere,
+ * «0» vuol dire che qualcosa manca. La scheda del calendario la scrive per
+ * conto suo e resta com'è; le altre passano di qui.
+ */
+function Fatto({ tema, testo, ok }: { tema: Tema; testo: string; ok: () => void }) {
+  return (
+    <div>
+      <div role="status" style={guida(tema)}>{testo}</div>
+      <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
+    </div>
+  )
+}
+
+/**
+ * Quando a dire di no è l'azienda: una riga, e la richiesta già scritta.
+ *
+ * Non è rosso, perché non è uno sbaglio di chi collega: sta nella sabbia
+ * degli avvisi che valgono adesso. La riga dice chi può sbloccarlo; i due
+ * bottoni fanno la sola cosa che resta da fare — chiederglielo — con il
+ * messaggio già scritto: cosa legge Myynd, che è in sola lettura, dove
+ * restano i dati, e la voce esatta della console da cambiare
+ * (`src/amministratore.ts`). Chiuso sotto, per chi vuole leggerlo prima di
+ * mandarlo, c'è il testo intero.
+ *
+ * Uno solo per tutte le schede: la posta, l'agenda, GitHub, Google e
+ * Microsoft dicono la stessa cosa nello stesso modo.
+ */
+export function ChiediAllAmministratore({ tema, caso }: { tema: Tema; caso: CasoAmministratore }) {
+  const [copiata, setCopiata] = useState(false)
+  const [aperta, setAperta] = useState(false)
+  const [ospitato, setOspitato] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    api.stato().then(s => { if (vivo) setOspitato(s.ospitato ? window.location.host : null) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  const r = richiestaAmministratore(caso, { inglese: lingua() === 'en', ospitato })
+  const intera = `${r.oggetto}\n\n${r.corpo}`
+
+  const riga = caso.forse
+    ? t('Se il token è di un’organizzazione, un suo amministratore deve approvarlo.')
+    : caso.servizio === 'gmail' ? t('La tua azienda non permette ad altre app di leggere la posta di Gmail. Può permetterlo il tuo amministratore.')
+    : caso.servizio === 'calendario' ? t('La tua azienda non permette di condividere l’agenda con un indirizzo. Può permetterlo il tuo amministratore.')
+    : caso.servizio === 'google-oauth' ? t('La tua azienda deve approvare Myynd su Google prima che tu possa collegarlo.')
+    : caso.servizio === 'microsoft-oauth' ? t('La tua azienda deve approvare Myynd su Microsoft prima che tu possa collegarlo.')
+    : t('Un amministratore dell’organizzazione deve approvare questo token.')
+
+  const scrivi = async () => {
+    const url = mailto(r)
+    const d = desktop()
+    try { if (d) await d.apriFuori(url); else window.location.href = url }
+    catch { setAperta(true) }
+  }
+  const copia = async () => {
+    try { await navigator.clipboard.writeText(intera); setCopiata(true) }
+    // senza appunti (una pagina non sicura, un permesso negato) il testo si
+    // apre qui sotto, dove si può selezionare a mano
+    catch { setAperta(true) }
+  }
+
+  return (
+    <Avviso tema={tema}>
+      <div role="status">{riga}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        <button type="button" onClick={scrivi} style={azione(tema)}>{t('Scrivi all’amministratore')}</button>
+        <button type="button" onClick={copia} style={azione(tema)}>{copiata ? t('Richiesta copiata') : t('Copia la richiesta')}</button>
+      </div>
+      <details open={aperta} onToggle={e => setAperta((e.currentTarget as HTMLDetailsElement).open)} style={{ marginTop: 10 }}>
+        <summary style={sommario(tema)}>{t('Cosa c’è scritto nella richiesta')}</summary>
+        <div style={{ ...nota(tema), marginTop: 8, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}>{intera}</div>
+      </details>
+    </Avviso>
+  )
+}
+
+/**
+ * L'errore, o il no dell'azienda: mai tutti e due in rosso.
+ *
+ * Quando il server dice che è l'amministratore, la riga rossa non c'è: c'è
+ * il blocco con la richiesta. Quando è solo *una* delle spiegazioni (`forse`),
+ * c'è la riga rossa con la spiegazione più probabile, e sotto il blocco come
+ * seconda strada.
+ */
+function ErroreOAzienda({ tema, testo, caso, prima }: { tema: Tema; testo: string; caso: CasoAmministratore | null; prima?: string }) {
+  if (caso && !caso.forse) return <ChiediAllAmministratore tema={tema} caso={caso} />
+  return (
+    <>
+      <Errore testo={testo} prima={prima} />
+      {testo && caso && <ChiediAllAmministratore tema={tema} caso={caso} />}
+    </>
+  )
+}
+
+/**
+ * L'ultimo passo di un «Dove trovo…?», per quando la voce non c'è.
+ *
+ * Su un account di lavoro la voce che i passi nominano può semplicemente
+ * mancare: Google lo scrive nella sua guida («If you can't find the Secret
+ * Address, ask your admin»), e nessun errore arriva mai a Myynd, perché la
+ * persona non ha niente da incollare. Il posto dove se ne accorge è qui, a
+ * metà dei passi: e qui trova la richiesta da mandare.
+ */
+function PassoAzienda({ tema, testo, caso }: { tema: Tema; testo: string; caso: CasoAmministratore }) {
+  const [aperto, setAperto] = useState(false)
+  return (
+    <>
+      {testo}{' '}
+      {!aperto && (
+        <button type="button" onClick={() => setAperto(true)} style={{
+          border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 'inherit', textDecoration: 'underline', ...link(tema)
+        }}>{t('Chiedi all’amministratore')}</button>
+      )}
+      {aperto && <ChiediAllAmministratore tema={tema} caso={caso} />}
+    </>
+  )
+}
+
 /** I passi dentro un blocco aperto: una lista corta e numerata, non un paragrafo. */
 function Passi({ tema, passi, numerati = true }: {
   tema: Tema; passi: React.ReactNode[]; numerati?: boolean
@@ -155,9 +298,9 @@ function Avviso({ tema, children }: { tema: Tema; children: React.ReactNode }) {
  * Una chiave che non è nel dizionario torna sé stessa, quindi passare di qui
  * non può peggiorare niente: al massimo non traduce, come prima.
  */
-function Errore({ testo }: { testo: string }) {
+function Errore({ testo, prima }: { testo: string; prima?: string }) {
   if (!testo) return null
-  return <div style={{ fontSize: '12.5px', color: '#D4674A', marginTop: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{t(testo)}</div>
+  return <div style={{ fontSize: '12.5px', color: '#D4674A', marginTop: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{prima ? `${prima} · ` : ''}{t(testo)}</div>
 }
 
 /**
@@ -823,6 +966,15 @@ export function FormCompatibile({ tema, ok }: Props) {
       </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega il fornitore')}</Conferma>
+      <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
+        <Passi tema={tema} numerati={false} passi={[
+          <>OpenAI: <Vai tema={tema} url={PAGINE.chiaviOpenAI} /></>,
+          <>OpenRouter: <Vai tema={tema} url={PAGINE.chiaviOpenRouter} /></>,
+          <>Groq: <Vai tema={tema} url={PAGINE.chiaviGroq} /></>,
+          <>Mistral: <Vai tema={tema} url={PAGINE.chiaviMistral} /> › API Keys</>,
+          t('Crea una chiave nuova e incollala qui sopra: il sito la mostra una volta sola.')
+        ]} />
+      </Aiuto>
       <Aiuto tema={tema} titolo={t('Come si collega un modello sul mio computer')}>
         <Passi tema={tema} passi={[
           t('Accendi Ollama, LM Studio o llama.cpp sul tuo computer.'),
@@ -843,6 +995,7 @@ export function FormPosta({ tema, ok }: Props) {
   const [trovato, setTrovato] = useState(false)
   const [aMano, setAMano] = useState(false)
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
   const [avviso, setAvviso] = useState('')
   const [occupato, setOccupato] = useState(false)
 
@@ -867,7 +1020,7 @@ export function FormPosta({ tema, ok }: Props) {
   }, [utente, aMano])
 
   const collega = async () => {
-    setOccupato(true); setErr(''); setAvviso('')
+    setOccupato(true); setErr(''); setAvviso(''); setCaso(null)
     try {
       const r = await api.collegaPosta({ host, porta: 993, utente, password, giorni })
       setPassword('')
@@ -877,8 +1030,11 @@ export function FormPosta({ tema, ok }: Props) {
       ok()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
-      // se le credenziali sono giuste ma il server no, deve poterlo correggere
-      setAMano(true)
+      const c = casoDaErrore(e)
+      setCaso(c)
+      // se le credenziali sono giuste ma il server no, deve poterlo correggere;
+      // se ha detto di no l'azienda, il server era giusto e non c'è niente da correggere
+      if (!c) setAMano(true)
     }
     setOccupato(false)
   }
@@ -894,7 +1050,7 @@ export function FormPosta({ tema, ok }: Props) {
     ? t('Gmail vuole una «password per le app», non quella del tuo account.')
     : perLeApp === 'apple' ? t('iCloud vuole una password specifica per le app, da appleid.apple.com.')
     : perLeApp === 'yahoo' ? t('Yahoo vuole una password per le app, dalle impostazioni di sicurezza dell’account.')
-    : /office365|outlook|hotmail|live\./.test(h) ? t('Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.')
+    : /office365|outlook|hotmail|live\./.test(h) ? t('Outlook non accetta più password dalle app di posta, nemmeno quelle per le app. Il collegamento con Outlook arriva presto.')
     : ''
   const dove = perLeApp === 'google' ? 'https://myaccount.google.com/apppasswords'
     : perLeApp === 'apple' ? 'https://appleid.apple.com' : ''
@@ -930,7 +1086,7 @@ export function FormPosta({ tema, ok }: Props) {
           ) : undefined
       }>
         <input value={utente} onChange={e => { setUtente(e.target.value); setTrovato(false) }}
-          placeholder={t('tu@tuodominio.it')} autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
+          placeholder={t('nome@esempio.it')} autoComplete="username" className={classeCampo(tema)} style={campo(tema)} />
       </Campo>
 
       <Campo tema={tema} nome={t('Password della casella')}>
@@ -973,14 +1129,24 @@ export function FormPosta({ tema, ok }: Props) {
       */}
       {formaSbagliata && <Avviso tema={tema}>{frasi.nonSembraPerLeApp(nudo.length)}</Avviso>}
 
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       {avviso && <Avviso tema={tema}>{avviso}</Avviso>}
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega la posta')}</Conferma>
+      {/*
+        I passi nominano le voci che si vedono sull'altro sito, e ognuno porta
+        il suo indirizzo: la pagina delle password per le app di Google ha un
+        indirizzo diretto, e prima bisognava trovarla da «Sicurezza». L'ultimo
+        passo è per chi quella pagina la trova vuota: su un account di lavoro
+        è l'azienda che l'ha spenta, e la richiesta è già scritta.
+      */}
       <Aiuto tema={tema} titolo={t('Dove trovo la password per le app?')}>
         <Passi tema={tema} passi={[
-          t('Gmail: Account Google › Sicurezza › Password per le app.'),
-          t('iCloud: appleid.apple.com › Accesso e sicurezza › Password per le app.'),
-          t('Sono sedici lettere: incollale qui sopra.')
+          <>{t('Gmail: apri la pagina, scrivi «Myynd» come nome dell’app e premi «Crea».')}{' '}<Vai tema={tema} url={PAGINE.passwordAppGoogle} /></>,
+          <>{t('iCloud: Accesso e sicurezza › Password specifiche per le app.')}{' '}<Vai tema={tema} url={PAGINE.passwordAppApple} /></>,
+          <>{t('Yahoo: Sicurezza dell’account › Crea password per app.')}{' '}<Vai tema={tema} url={PAGINE.passwordAppYahoo} /></>,
+          t('Sono sedici lettere: incollale qui sopra, al posto della password.'),
+          <PassoAzienda tema={tema} caso={{ servizio: 'gmail', ...(dominioAziendale(utente) ? { dominio: dominioAziendale(utente) } : {}) }}
+            testo={t('La voce non c’è? Su Gmail serve la verifica in due passaggi; su un account di lavoro può averla spenta la tua azienda.')} />
         ]} />
       </Aiuto>
     </div>
@@ -1292,13 +1458,17 @@ export function FormDesktop({ tema, ok }: Props) {
 export function FormGranola({ tema, ok }: Props) {
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
+  // quante riunioni ha letto: la stessa conferma del calendario, contata
+  const [lette, setLette] = useState<number | null>(null)
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaGranola(); ok() }
+    try { setLette((await api.collegaGranola()).note) }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
+
+  if (lette !== null) return <Fatto tema={tema} testo={frasi.granolaLette(lette)} ok={ok} />
 
   return (
     <div>
@@ -1538,7 +1708,7 @@ export function FormConversazioni({ tema, ok }: Props) {
       <Aiuto tema={tema} titolo={t('Come si esportano le chat')}>
         <Passi tema={tema} passi={[
           t('ChatGPT: Impostazioni › Controlli dati › Esporta dati.'),
-          t('Claude: Impostazioni › Privacy › Esporta dati.'),
+          <>{t('Claude: Impostazioni › Privacy › Esporta dati.')}{' '}<Vai tema={tema} url={PAGINE.esportaClaude} /></>,
           t('Arriva un archivio via email: dentro c’è conversations.json.'),
           t('Scegli quel file qui sopra.')
         ]} />
@@ -1576,11 +1746,16 @@ export function FormNotion({ tema, ok }: Props) {
       </Campo>
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Notion')}</Conferma>
+      {/*
+        Le voci sono quelle di oggi: Notion ha chiamato «connessioni interne»
+        quelle che erano le integrazioni (developers.notion.com, «Internal
+        connections»), e il vecchio indirizzo porta lì.
+      */}
       <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
         <Passi tema={tema} passi={[
-          t('Su notion.so/my-integrations crea un’integrazione interna.'),
-          t('Copia il token: comincia per ntn_.'),
-          t('Su ogni pagina da leggere: Condividi › aggiungi l’integrazione.')
+          <>{t('Apri la pagina e premi «Create a new connection»: dagli un nome e scegli lo spazio di lavoro.')}{' '}<Vai tema={tema} url={PAGINE.notion} /></>,
+          t('Nella scheda «Configuration» copia l’«Installation access token»: comincia per ntn_.'),
+          t('Nella scheda «Content access» premi «Edit access» e scegli le pagine da leggere.')
         ]} />
       </Aiuto>
     </div>
@@ -1651,7 +1826,11 @@ export function FormCalendario({ tema, ok }: Props) {
           t('Scendi fino a «Integra il calendario».'),
           t('Copia l’indirizzo privato in formato iCal.'),
           t('Su Outlook e iCloud si chiama «pubblica calendario».'),
-          t('Se lo giri per sbaglio, rigeneralo da lì: il vecchio smette di funzionare.')
+          t('Se lo giri per sbaglio, rigeneralo da lì: il vecchio smette di funzionare.'),
+          // l'unico passo nuovo, e in fondo: su un account di lavoro la voce può
+          // mancare del tutto, e Google stessa dice di chiedere all'amministratore
+          <PassoAzienda tema={tema} caso={{ servizio: 'calendario' }}
+            testo={t('La voce non c’è? Su un account di lavoro può averla spenta la tua azienda.')} />
         ]} />
       </Aiuto>
     </div>
@@ -1677,15 +1856,16 @@ function ViaWeb({ tema, disponibile, avvia, nome }: {
   tema: Tema; disponibile: boolean; avvia: () => Promise<{ dove: string }>; nome: string
 }) {
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
   const [occupato, setOccupato] = useState(false)
   const vai = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setCaso(null)
     try {
       const { dove } = await avvia()
       // dentro l'app la finestra non va da Google: ci va il browser di sistema
       const d = desktop()
       if (d) { await d.apriFuori(dove); setOccupato(false) } else window.location.assign(dove)
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setOccupato(false) }
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setCaso(casoDaErrore(e)); setOccupato(false) }
   }
   return (
     <div>
@@ -1694,7 +1874,7 @@ function ViaWeb({ tema, disponibile, avvia, nome }: {
           ? frasi.viaWeb(nome)
           : t('Non ancora disponibile su questo server. Per la posta usa «Posta», con una password per le app.')}
       </div>
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       {disponibile && (
         <Conferma onClick={vai} occupato={occupato} tema={tema}>
           {occupato ? t('Un momento…') : frasi.collega(nome)}
@@ -1708,14 +1888,15 @@ export function FormGoogle({ tema, ok }: Props) {
   const [id, setId] = useState('')
   const [segreto, setSegreto] = useState('')
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
   const [occupato, setOccupato] = useState(false)
   const [s, setS] = useState<Stato | null>(null)
   useEffect(() => { api.stato().then(setS).catch(() => {}) }, [])
 
   const collega = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setCaso(null)
     try { await api.collegaGoogle(id.trim(), segreto.trim()); setId(''); setSegreto(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setCaso(casoDaErrore(e)) }
     setOccupato(false)
   }
 
@@ -1735,13 +1916,13 @@ export function FormGoogle({ tema, ok }: Props) {
           className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
       </Campo>
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Google')}
       </Conferma>
       <Aiuto tema={tema} titolo={t('Come si crea l’app su Google Cloud')}>
         <Passi tema={tema} passi={[
-          t('Su console.cloud.google.com crea un progetto.'),
+          <>{t('Su console.cloud.google.com crea un progetto.')}{' '}<Vai tema={tema} url="https://console.cloud.google.com/apis/credentials" /></>,
           t('Attiva Gmail API e Calendar API.'),
           t('Credenziali › ID client OAuth › Applicazione desktop.'),
           t('Incolla qui quello che ti dà.')
@@ -1775,6 +1956,9 @@ export function FormSlack({ tema, ok }: Props) {
   return (
     <div>
       <div style={guida(tema)}>{t('I canali di Slack di cui fai già parte, in sola lettura.')}</div>
+      {/* l'app si crea già compilata dal suo manifesto: nome e ambiti sono scritti */}
+      <a href={appSlack()} target="_blank" rel="noreferrer"
+        style={{ ...azione(tema), display: 'inline-block', marginTop: 12, textDecoration: 'none' }}>{t('Crea l’app su Slack')}</a>
       <Campo tema={tema} nome={t('Token utente')}>
         <input type="password" value={token} onChange={e => setToken(e.target.value)}
           placeholder="xoxp-…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
@@ -1784,10 +1968,11 @@ export function FormSlack({ tema, ok }: Props) {
       <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega Slack')}</Conferma>
       <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
         <Passi tema={tema} passi={[
-          t('Su api.slack.com/apps crea un’app.'),
-          t('In «OAuth & Permissions» aggiungi gli ambiti utente channels:history, groups:history, im:history, mpim:history, channels:read e users:read.'),
-          t('Installala nel tuo spazio.'),
-          t('Copia il token che comincia per xoxp-.')
+          t('Premi «Crea l’app su Slack»: si apre già compilata, con il nome e i permessi.'),
+          t('Scegli il tuo spazio di lavoro, poi «Next» e «Create».'),
+          t('In «OAuth & Permissions» premi «Install to Workspace» e poi «Allow». Se c’è «Request to Install», la richiesta va al tuo amministratore di Slack.'),
+          t('Copia lo «User OAuth Token», che comincia per xoxp-, e incollalo qui sopra.'),
+          <>{t('A mano: crea un’app e in «User Token Scopes» aggiungi')}{' '}<span style={{ overflowWrap: 'anywhere' }}>{AMBITI_SLACK.join(', ')}</span>.</>
         ]} />
       </Aiuto>
     </div>
@@ -1795,41 +1980,69 @@ export function FormSlack({ tema, ok }: Props) {
 }
 
 /**
- * GitHub: un campo obbligatorio, uno che quasi nessuno riempie.
+ * GitHub: un bottone che porta alla pagina giusta già compilata, un campo, e i passi.
  *
- * L'elenco dei repository è secondo apposta. Chi collega GitHub quasi sempre
- * vuole «quello su cui sto lavorando», e i trenta più vivi sono già quella
- * risposta: chiederglieli tutti scritti a mano sarebbe un modulo che si
- * abbandona. Ma chi ha quaranta repository e ne segue tre lo sa già mentre
- * incolla il token, e deve poterlo dire lì, non fra due settimane quando si
- * accorge che la rassegna gli racconta il lavoro di qualcun altro.
+ * La tester del 23 settembre 2026 si è fermata qui: «le istruzioni per GitHub
+ * non sono chiare». Lo erano per chi sa già cos'è un token a grana fine. I
+ * passi di prima dicevano «dagli la sola lettura su contenuti, issue e pull
+ * request» — tre parole che sulla pagina di GitHub non ci sono, in una
+ * pagina con trenta permessi da scegliere a mano.
  *
- * Il riquadro accetta una riga per repository, e quello che non è un
- * `owner/nome` lo butta il server: qui non si corregge nessuno mentre scrive.
+ * Adesso la pagina di GitHub si apre già compilata (`paginaTokenGithub`): nome,
+ * durata e i tre permessi di lettura sono scritti. Resta una scelta sola —
+ * quali repository — e i passi sotto «Dove trovo il token?» la nominano con le
+ * parole esatte di GitHub, «Repository access», «All repositories», «Generate
+ * token». La strada a mano c'è ancora, in fondo, per il giorno in cui GitHub
+ * aprisse la pagina vuota.
+ *
+ * Dopo, si dice quanti repository vede il token: come per il calendario, il
+ * numero è l'unica prova che chi ha incollato può controllare da solo.
+ *
+ * L'elenco dei repository resta secondo apposta. Chi collega GitHub quasi
+ * sempre vuole «quello su cui sto lavorando», e i trenta più vivi sono già
+ * quella risposta; ma chi ne segue tre su quaranta lo sa già mentre incolla il
+ * token, e deve poterlo dire lì. Il riquadro accetta una riga per repository,
+ * e quello che non è un `owner/nome` lo butta il server.
  */
 export function FormGithub({ tema, ok }: Props) {
   const [token, setToken] = useState('')
   const [repos, setRepos] = useState('')
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
+  /** Il repository di cui parla l'errore, se ne parla uno. */
+  const [quale, setQuale] = useState('')
+  /** L'indirizzo che GitHub stesso manda per sistemare le cose: l'autorizzazione SSO. */
+  const [dove, setDove] = useState('')
+  const [fatto, setFatto] = useState<{ login: string; repos: number; oltre: boolean } | null>(null)
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setCaso(null); setQuale(''); setDove('')
     try {
-      await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
-      setToken(''); setRepos(''); ok()
+      const r = await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
+      setToken(''); setRepos('')
+      setFatto({ login: r.login, repos: r.repos, oltre: r.oltre })
     }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      setCaso(casoDaErrore(e))
+      setQuale((e as { repo?: string }).repo ?? '')
+      setDove((e as { dove?: string }).dove ?? '')
+    }
     setOccupato(false)
   }
+
+  if (fatto) return <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre)} ok={ok} />
 
   return (
     <div>
       <div style={guida(tema)}>{t('Le pull request, le issue e i commit dei tuoi repository, in sola lettura.')}</div>
-      <Campo tema={tema} nome={t('Token di accesso')}
-        sotto={t('Comincia per github_pat_ se è a grana fine, per ghp_ se è classico.')}>
+      {/* il link si apre fuori: dentro l'app `target=_blank` va nel browser di sistema */}
+      <a href={paginaTokenGithub(lingua() === 'en')} target="_blank" rel="noreferrer"
+        style={{ ...azione(tema), display: 'inline-block', marginTop: 12, textDecoration: 'none' }}>{t('Crea il token su GitHub')}</a>
+      <Campo tema={tema} nome={t('Token di accesso')}>
         <input type="password" value={token} onChange={e => setToken(e.target.value)}
-          autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
+          placeholder="github_pat_…" autoComplete="new-password" className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && token) collega() }} />
       </Campo>
       <Campo tema={tema} nome={t('Solo questi repository (uno per riga, owner/nome)')}
@@ -1838,13 +2051,17 @@ export function FormGithub({ tema, ok }: Props) {
           autoComplete="off" spellCheck={false}
           className={classeCampo(tema)} style={{ ...campo(tema), resize: 'vertical' }} />
       </Campo>
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} prima={quale} />
+      {err && dove && <div style={{ ...nota(tema), marginTop: 6 }}><Vai tema={tema} url={dove} testo={t('Autorizza il token su GitHub')} /></div>}
       <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega GitHub')}</Conferma>
       <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
         <Passi tema={tema} passi={[
-          t('Su github.com: Settings › Developer settings › Personal access tokens.'),
-          t('Dagli la sola lettura su contenuti, issue e pull request dei repository che ti interessano.'),
-          t('Copia il token e incollalo qui.')
+          t('Premi «Crea il token su GitHub»: la pagina si apre con nome, scadenza e permessi già scritti.'),
+          t('In «Repository access» scegli «All repositories», o «Only select repositories» e quelli da leggere.'),
+          t('Se i repository sono di un’organizzazione, sceglila in «Resource owner»: un suo amministratore dovrà approvare il token.'),
+          t('In fondo alla pagina premi «Generate token».'),
+          t('Copia il token, comincia per github_pat_, e incollalo qui sopra.'),
+          <>{t('Se la pagina si apre vuota: Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token, e in «Permissions» dai a Contents, Issues e Pull requests l’accesso «Read-only».')}{' '}<Vai tema={tema} url={TOKEN_GITHUB_A_MANO} /></>
         ]} />
       </Aiuto>
     </div>
@@ -1863,6 +2080,7 @@ export function FormDrive({ tema, ok }: Props) {
   const [id, setId] = useState('')
   const [segreto, setSegreto] = useState('')
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
   const [occupato, setOccupato] = useState(false)
   const [daGmail, setDaGmail] = useState(false)
   const [s, setS] = useState<Stato | null>(null)
@@ -1877,9 +2095,9 @@ export function FormDrive({ tema, ok }: Props) {
   }, [])
 
   const collega = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setCaso(null)
     try { await api.collegaDrive(id.trim(), segreto.trim()); setId(''); setSegreto(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setCaso(casoDaErrore(e)) }
     setOccupato(false)
   }
 
@@ -1899,13 +2117,13 @@ export function FormDrive({ tema, ok }: Props) {
           className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
       </Campo>
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Drive')}
       </Conferma>
       <Aiuto tema={tema} titolo={t('Come si crea l’app su Google Cloud')}>
         <Passi tema={tema} passi={[
-          t('Su console.cloud.google.com crea un progetto.'),
+          <>{t('Su console.cloud.google.com crea un progetto.')}{' '}<Vai tema={tema} url="https://console.cloud.google.com/apis/credentials" /></>,
           t('Attiva Google Drive API.'),
           t('Credenziali › ID client OAuth › Applicazione desktop.'),
           t('Il consenso si rifà: stavolta riguarda i tuoi file.')
@@ -1927,6 +2145,7 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
   const [id, setId] = useState('')
   const [tenant, setTenant] = useState('')
   const [err, setErr] = useState('')
+  const [caso, setCaso] = useState<CasoAmministratore | null>(null)
   const [occupato, setOccupato] = useState(false)
   const [gia, setGia] = useState<string[]>([])
   const [s, setS] = useState<Stato | null>(null)
@@ -1944,9 +2163,9 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
   }, [])
 
   const collega = async () => {
-    setOccupato(true); setErr('')
+    setOccupato(true); setErr(''); setCaso(null)
     try { await api.collegaMicrosoft(id.trim(), tenant.trim(), parte); setId(''); ok() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); setCaso(casoDaErrore(e)) }
     setOccupato(false)
   }
 
@@ -1974,13 +2193,13 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
           className={classeCampo(tema)} style={campo(tema)}
           onKeyDown={e => { if (e.key === 'Enter' && id) collega() }} />
       </Campo>
-      <Errore testo={err} />
+      <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       <Conferma onClick={collega} occupato={occupato} disabilitato={!id} tema={tema}>
         {occupato ? t('Ti aspetto nel browser…') : t('Collega Microsoft')}
       </Conferma>
       <Aiuto tema={tema} titolo={t('Come si registra l’app su Entra ID')}>
         <Passi tema={tema} passi={[
-          t('Su entra.microsoft.com: Registrazioni app › Nuova registrazione.'),
+          <>{t('Su entra.microsoft.com: Registrazioni app › Nuova registrazione.')}{' '}<Vai tema={tema} url="https://entra.microsoft.com" /></>,
           t('Piattaforma «App per dispositivi mobili e desktop».'),
           t('Come URI di reindirizzamento aggiungi http://localhost.'),
           t('Copia qui l’ID applicazione.')
@@ -2046,9 +2265,9 @@ export function FormDropbox({ tema, ok }: Props) {
           <Conferma onClick={inizia} occupato={occupato} disabilitato={!chiave} tema={tema}>{t('Apri Dropbox')}</Conferma>
           <Aiuto tema={tema} titolo={t('Dove trovo la chiave?')}>
             <Passi tema={tema} passi={[
-              t('Su dropbox.com/developers/apps crea un’app «Scoped access».'),
-              t('In Permissions spunta files.metadata.read e files.content.read.'),
-              t('Copia qui la App key.')
+              <>{t('Apri la pagina e premi «Create app»: scegli «Scoped access» e «Full Dropbox», dagli un nome.')}{' '}<Vai tema={tema} url={PAGINE.dropbox} /></>,
+              t('Nella scheda «Permissions» spunta files.metadata.read e files.content.read, poi premi «Submit».'),
+              t('Nella scheda «Settings» copia la «App key» e incollala qui sopra.')
             ]} />
           </Aiuto>
         </>
@@ -2144,7 +2363,7 @@ export function FormWhatsapp({ tema, ok }: Props) {
       <Conferma onClick={collega} occupato={occupato} disabilitato={!pronto} tema={tema}>{t('Collega WhatsApp')}</Conferma>
       <Aiuto tema={tema} titolo={t('Dove li trovo?')}>
         <Passi tema={tema} passi={[
-          t('Su developers.facebook.com apri la tua app WhatsApp.'),
+          <>{t('Su developers.facebook.com apri la tua app WhatsApp.')}{' '}<Vai tema={tema} url={PAGINE.meta} /></>,
           t('In Configurazione dell’API copia l’ID del numero.'),
           t('Crea un token permanente da utente di sistema.'),
           t('Il segreto dell’app sta in Impostazioni › Di base.')
