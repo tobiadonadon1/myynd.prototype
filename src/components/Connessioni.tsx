@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, letturaDesktop, rigaSincronizzazione, type LetturaDesktop, type Stato } from '../api'
+import { api, letturaDesktop, type Stato } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
 import { AccessoDisco, Form } from './forms'
 import { frasi, loc, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
-import { avanzaLettura, chiudiLettura, iniziaLettura, leggiAlProprioTurno, type RigaLettura } from '../lettura-fonti'
+import { letturaFonti, useLettura } from '../lettura-app'
+import { RigheLettura } from './RigheLettura'
 import './connessioni.css'
 
 // Quelli che non portano documenti: niente «Rileggi», perché non c'è niente da rileggere.
@@ -40,30 +41,35 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
    * torna indietro.
    */
   const [daFinire, setDaFinire] = useState(false)
-  const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
-  const [avanzamento, setAvanzamento] = useState<string | null>(null)
+  /*
+   * La lettura è quella di tutta l'app (`lettura-app.ts`): se la pagina delle
+   * Fonti sta leggendo, qui si vede, e «Rileggi» aspetta invece di fare a gara.
+   * I nomi restano quelli di quando la teneva questo pannello.
+   */
+  const lettura = useLettura()
+  const fonteInLettura = lettura.occupato ? (lettura.inCorso && lettura.inCorso !== 'tutte' ? lettura.inCorso : '*') : null
+  const avanzamento = lettura.occupato && lettura.inCorso && lettura.inCorso !== 'tutte' ? lettura.riga : null
   const [guaio, setGuaio] = useState<string | null>(null)
   /*
-   * Come è andata l'ultima lettura del computer, finché la scheda è aperta.
+   * Come è andata l'ultima lettura del computer.
    *
    * Il collegamento sa dire quanti documenti ha; non sa dire quanti file ha
    * *visto e lasciato fuori*, né quante cartelle si sono chiuse in faccia — e
    * sono le due cose che spiegano un numero più basso di quello che una
-   * persona si aspetta. Arrivano in fondo alla lettura, e restano qui: sono i
-   * conti di quel giro, non una proprietà del collegamento.
+   * persona si aspetta. Arrivano in fondo alla lettura: sono i conti di quel
+   * giro, non una proprietà del collegamento.
    */
-  const [letturaDesk, setLetturaDesk] = useState<LetturaDesktop | null>(null)
-  /** Una riga per fonte, quando si leggono tutte insieme: dopo un collegamento, fino alla chiusura. */
-  const [righe, setRighe] = useState<RigaLettura[] | null>(null)
+  const letturaDesk = lettura.fineDesktop ? letturaDesktop(lettura.fineDesktop) : null
+  /** Le righe si vedono qui quando la lettura di tutte l'ha chiesta questo pannello, o mentre gira. */
+  const [righeQui, setRigheQui] = useState(false)
+  const righe = righeQui || (lettura.occupato && lettura.inCorso === 'tutte') ? lettura.righe : null
   const [subito, setSubito] = useState<string[]>([])
   const [collegando, setCollegando] = useState(false)
   const finestra = useRef<HTMLDivElement>(null)
   const indietro = useRef<HTMLButtonElement>(null)
   const ultimo = useRef(fonte || '')
-  /** Una lettura alla volta: lo stato arriva tardi dentro una chiusura, questo no. */
-  const leggendo = useRef(false)
-  /** Una fonte collegata mentre si leggeva le altre: si rilegge ancora, appena finito. */
-  const ancora = useRef(false)
+  /** Questa scheda ha già fatto partire la lettura quando il server ha detto sì: il suo «Avanti» non la raddoppia. */
+  const giaPartita = useRef(false)
   useFocoDialogo(finestra, chiudi)
 
   const ricarica = useMemo(() => rilettura(() => api.stato(), setS), [])
@@ -93,19 +99,11 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   }, [s])
 
   const leggi = async (id: string) => {
-    if (leggendo.current) return
-    leggendo.current = true
-    setFonteInLettura(id); setAvanzamento(null); setGuaio(null)
-    try {
-      await api.sincronizza(m => {
-        if (m.fase !== 'fine') setAvanzamento(rigaSincronizzazione(m))
-        const fine = letturaDesktop(m)
-        if (fine) setLetturaDesk(fine)
-      }, id)
-      await ricarica(); cambiato()
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')) }
-    leggendo.current = false
-    setFonteInLettura(null); setAvanzamento(null)
+    setGuaio(null)
+    await letturaFonti.leggiUna(id)
+    const detto = letturaFonti.stato().guaio
+    if (detto) setGuaio(detto)
+    await ricarica().catch(() => {}); cambiato()
   }
   /**
    * Collegata una fonte, si leggono tutte, e non solo quella.
@@ -114,36 +112,15 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
    * collegava il Mac, poi l'agenda, poi Notion, si trovava tre letture
    * separate, e ognuna diceva solo di sé. La prima persona di fuori si
    * aspettava di collegare tutto e vedere Myynd leggere tutto insieme. È la
-   * stessa lettura di «Rileggi tutto»: incrementale, e una fonte che non
-   * risponde non ferma le altre. Se ne arriva un'altra mentre si legge, si
-   * rilegge appena finito, invece di lasciarla ai prossimi dieci minuti.
+   * stessa lettura di «Rileggi tutto», e passa dalla stessa fila: se se ne
+   * sta già leggendo un'altra, questa parte appena finita.
    */
   const leggiTutte = async () => {
-    if (leggendo.current) { ancora.current = true; return }
-    leggendo.current = true
-    setFonteInLettura('*'); setAvanzamento(null); setGuaio(null)
-    try {
-      do {
-        ancora.current = false
-        const prima = await ricarica()
-        let r = iniziaLettura(prima.connettori.filter(c => c.collegato && !MOTORI.includes(c.id) && c.id !== 'mind2do').map(c => c.id))
-        const mostra = (nuove: RigaLettura[]) => { r = nuove; setRighe(nuove) }
-        mostra(r)
-        try {
-          await leggiAlProprioTurno(() => api.sincronizza(m => {
-            mostra(avanzaLettura(r, m))
-            const fine = letturaDesktop(m)
-            if (fine) setLetturaDesk(fine)
-          }))
-          const dopo = await ricarica(); cambiato()
-          mostra(chiudiLettura(r, id => dopo.connettori.find(c => c.id === id)?.documenti))
-        } catch (e) {
-          const detto = e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')
-          mostra(r.map(x => x.stato === 'attesa' || x.stato === 'leggo' ? { ...x, stato: 'guaio', testo: detto } : x))
-        }
-      } while (ancora.current)
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')) }
-    finally { leggendo.current = false; setFonteInLettura(null) }
+    setRigheQui(true); setGuaio(null)
+    await letturaFonti.leggiTutte()
+    const detto = letturaFonti.stato().guaio
+    if (detto) setGuaio(detto)
+    await ricarica().catch(() => {}); cambiato()
   }
   const collegaSubito = async (id: string) => {
     if (collegando) return
@@ -164,7 +141,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
-    ultimo.current = id; setSoloQuesta(id); setModifica(false); setDaFinire(false)
+    ultimo.current = id; setSoloQuesta(id); setModifica(false); setDaFinire(false); giaPartita.current = false
     requestAnimationFrame(() => indietro.current?.focus())
   }
   const torna = () => {
@@ -194,16 +171,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
       <div className="connections-dialog-body">
         {guaio && <div role="alert" className="connections-feedback">{guaio}{!s && <button className="connections-button" onClick={carica}>{t('Riprova')}</button>}</div>}
         {avanzamento && <div role="status" className="connections-progress">{avanzamento}</div>}
-        {righe && <ul className="connections-reading" aria-live="polite" aria-label={t('Lettura delle fonti')}>
-          {righe.map(r => <li key={r.id} className={`connections-reading-row is-${r.stato}`}>
-            <ConnectorIcon id={r.id} size={16} />
-            <span className="connections-reading-name">{t(s?.connettori.find(c => c.id === r.id)?.nome ?? r.id)}</span>
-            <span className="connections-reading-state">{r.stato === 'attesa' ? t('In coda')
-              : r.stato === 'leggo' ? r.testo || t('leggo…')
-              : r.stato === 'fatto' ? `✓ ${r.testo}`
-              : `${t('Non letta')} · ${r.testo}`}</span>
-          </li>)}
-        </ul>}
+        {righe && <RigheLettura righe={righe} classe="connections" nome={id => t(s?.connettori.find(c => c.id === id)?.nome ?? id)} />}
         {!s && !guaio && <p role="status" className="connections-progress">{t('carico…')}</p>}
         {s && !scelta && <>
           {/* Lo stesso taglio della pagina intera: quello che c'è sopra, quello che
@@ -280,7 +248,15 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
             // succedeva solo al primo collegamento, e cambiare le cartelle del
             // computer lasciava in piedi l'indice di quelle vecchie finché non
             // passavano sei ore. E si rileggono tutte, insieme: vedi `leggiTutte`
-            if (!MOTORI.includes(scelta.id)) void leggiTutte()
+            if (!MOTORI.includes(scelta.id) && !giaPartita.current) void leggiTutte()
+            giaPartita.current = false
+          }} collegato={() => {
+            // il server ha detto sì: la lettura parte adesso, non al suo «Avanti»,
+            // che la scheda del calendario non mostra più
+            if (MOTORI.includes(scelta.id)) return
+            giaPartita.current = true
+            void ricarica().catch(() => {}); cambiato()
+            void leggiTutte()
           }} /></div>}
         </div>}
       </div>

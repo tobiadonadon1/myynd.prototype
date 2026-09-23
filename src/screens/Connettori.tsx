@@ -11,10 +11,18 @@ export function Connettori({ v }: { v: Vals }) {
    * solo il bottone, una fonte alla volta, e alla fine non restava niente per
    * sapere quale era andata. Letta, torna a dire quello che dice sempre.
    */
-  const riga = (id: string) => v.letturaFonti?.find(r => r.id === id && r.stato !== 'fatto')
+  /*
+   * Una fonte che non si è letta lo dice finché lo dice il server: la lettura
+   * di sfondo dei dieci minuti che la trova a posto la toglie da
+   * `fontiNonLette`, e la scheda torna a dire i suoi documenti invece di un
+   * «non letta» rimasto lì da prima.
+   */
+  const riga = (id: string) => v.letturaFonti?.find(r => r.id === id
+    && (r.stato === 'attesa' || r.stato === 'leggo' ? !!v.sincronizzando : r.stato !== 'fatto' && v.fontiNonLette.includes(id)))
   const inLettura = (id: string, solita: string) => {
     const r = riga(id)
-    return !r ? solita : r.stato === 'attesa' ? t('In coda') : r.stato === 'leggo' ? r.testo || t('leggo…') : `${t('Non letta')} · ${r.testo}`
+    return !r ? solita : r.stato === 'attesa' ? t('In coda') : r.stato === 'leggo' ? r.testo || t('leggo…')
+      : r.stato === 'avviso' ? r.testo : `${t('Non letta')} · ${r.testo}`
   }
   const fonti = [
     ...v.connAttivi.map(c => ({ id: c.id, nome: c.nome, nota: inLettura(c.id, c.stato), collegata: true, problema: c.problema })),
