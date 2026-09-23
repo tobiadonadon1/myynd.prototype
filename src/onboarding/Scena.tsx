@@ -52,7 +52,7 @@ function Passi({ passo, passi }: { passo: number; passi: number }) {
     <span className="onboard-passi-segni" aria-hidden="true">
       {Array.from({ length: passi }, (_, i) => <i key={i} className={i < adesso ? 'is-fatto' : undefined} />)}
     </span>
-    <span>{frasi.passoDi(adesso, passi)}</span>
+    <span className="onboard-passi-testo" aria-live="polite">{frasi.passoDi(adesso, passi)}</span>
   </div>
 }
 

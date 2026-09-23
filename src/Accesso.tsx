@@ -1,9 +1,9 @@
 // Account access shares the onboarding artwork; authentication stays local to its existing flow.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { LightField } from './onboarding/LightField'
 import { api, DaVerificare, type Accesso as TipoAccesso } from './api'
-import { lingua, ricordaLingua, t } from './lingua'
+import { frasi, lingua, ricordaLingua, t } from './lingua'
 import { Marchio } from './components/Marchio'
 import { Hov, useLarghezza } from './ui'
 import './accesso.css'
@@ -358,14 +358,17 @@ export function Accesso({ accesso, entrato }: {
               {modo !== 'nuova' && (
                 <Casella key={modo === 'crea' ? 'crea' : 'accesso'} etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
                   onKeyDown={tasto} onBlur={() => setEmailToccata(true)} type="email" autoComplete="username" autoFocus={modo !== 'crea'}
-                  placeholder={t('nome@esempio.it')}
+                  placeholder={modo === 'crea' && accesso.domini?.length ? `${t('nome')}@${accesso.domini[0]}` : t('nome@esempio.it')}
                   /*
                    * «tu@tuodominio.it» ha fatto credere alla prima tester che
-                   * servisse un dominio suo. Il server prende qualsiasi
-                   * indirizzo (`server/conti.ts`): l'esempio è neutro, e chi
-                   * crea il conto lo legge anche scritto, una volta.
+                   * servisse un dominio suo. Di solito il server prende
+                   * qualsiasi indirizzo, e allora lo si dice; chi ospita può
+                   * limitarlo ai domini dell'azienda (`MYYND_DOMINI`), e allora
+                   * si dice quello, prima che lo dica un errore.
                    */
-                  nota={modo === 'crea' ? t('Va bene qualsiasi indirizzo, di lavoro o personale.') : undefined}
+                  nota={modo !== 'crea' ? undefined
+                    : accesso.domini?.length ? frasi.soloDomini(accesso.domini)
+                    : t('Va bene qualsiasi indirizzo, di lavoro o personale.')}
                   errore={modo !== 'entra' && emailToccata && !!email.trim() && !indirizzoValido(email) ? t('Questo non sembra un indirizzo email.') : undefined} />
               )}
 
@@ -621,33 +624,39 @@ function Casella({ etichetta, coda, errore, nota, ...campo }: {
   nota?: string
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   const [dentro, setDentro] = useState(false)
+  // la riga sotto sta fuori dall'etichetta: dentro, un lettore di schermo la
+  // leggeva come parte del nome del campo («Email Va bene qualsiasi…»)
+  const sotto = useId()
   return (
-    <label style={{ display: 'block' }}>
-      <div style={{
-        ...ETICHETTA, transition: 'color .18s',
-        color: dentro ? INCHIOSTRO : '#bdb0a4'
-      }}>{etichetta}</div>
-      <div style={{ position: 'relative' }}>
-        <input {...campo} className="scuro" aria-invalid={errore ? true : undefined}
-          onFocus={e => { setDentro(true); campo.onFocus?.(e) }}
-          onBlur={e => { setDentro(false); campo.onBlur?.(e) }}
-          style={{
-            ...CAMPO,
-            paddingRight: coda ? 52 : 14,
-            borderColor: errore ? SBAGLIATO : dentro ? ACCESO : 'rgba(246,242,235,.26)',
-            background: dentro ? 'rgba(246,242,235,.05)' : 'rgba(246,242,235,.025)'
-          }} />
-        {coda}
-      </div>
+    <div>
+      <label style={{ display: 'block' }}>
+        <div style={{
+          ...ETICHETTA, transition: 'color .18s',
+          color: dentro ? INCHIOSTRO : '#bdb0a4'
+        }}>{etichetta}</div>
+        <div style={{ position: 'relative' }}>
+          <input {...campo} className="scuro" aria-invalid={errore ? true : undefined}
+            aria-describedby={errore || nota ? sotto : undefined}
+            onFocus={e => { setDentro(true); campo.onFocus?.(e) }}
+            onBlur={e => { setDentro(false); campo.onBlur?.(e) }}
+            style={{
+              ...CAMPO,
+              paddingRight: coda ? 52 : 14,
+              borderColor: errore ? SBAGLIATO : dentro ? ACCESO : 'rgba(246,242,235,.26)',
+              background: dentro ? 'rgba(246,242,235,.05)' : 'rgba(246,242,235,.025)'
+            }} />
+          {coda}
+        </div>
+      </label>
       {errore ? (
-        <div role="alert" style={{
+        <div id={sotto} role="alert" style={{
           fontSize: '12px', color: SBAGLIATO, marginTop: 6, lineHeight: 1.5,
           textWrap: 'pretty', animation: 'entrasu .3s ease both'
         }}>{errore}</div>
       ) : nota && (
-        <div style={{ fontSize: '12px', color: '#bdb0a4', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>{nota}</div>
+        <div id={sotto} style={{ fontSize: '12px', color: '#bdb0a4', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>{nota}</div>
       )}
-    </label>
+    </div>
   )
 }
 

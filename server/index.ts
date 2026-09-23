@@ -355,7 +355,11 @@ app.get('/api/auth', async (req, res) => {
      * non arriverà mai, e non ha modo di saperlo.
      */
     verifica: auth.verificaAttiva(),
-    reimpostazione: auth.reimpostazionePossibile()
+    reimpostazione: auth.reimpostazionePossibile(),
+    // i domini ammessi, se chi ospita li ha limitati: la schermata li dice
+    // sotto al campo invece di lasciarli scoprire da un errore. Non sono un
+    // segreto: l'errore stesso li lascia indovinare a chiunque ci provi
+    domini: ospitato.DOMINI_AMMESSI.length ? ospitato.DOMINI_AMMESSI.slice(0, 3) : null
   })
   if (!dentro) return rispondi()
   chi.dentro((await conti.utenteDelToken(utente))!, rispondi)

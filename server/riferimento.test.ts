@@ -72,6 +72,29 @@ test('la lettura del codice: morti e bloccati per nome, e la negazione spegne la
   assert.deepEqual([...riferimento.progettiMorti('', suoi)], [])
 })
 
+test('«niente di abbandonato» non uccide un progetto, e «dropped the port» nemmeno', () => {
+  const suoi = [evermute, sito, ceru]
+  const morti = (t: string) => [...riferimento.progettiMorti(t, suoi)]
+  const bloccati = (t: string) => [...riferimento.progettiBloccati(t, suoi)]
+  // la risposta più comune per un progetto vivo, nelle due lingue
+  assert.deepEqual(morti('Evermute: working on 1.0, nothing dropped, nothing blocked.'), [])
+  assert.deepEqual(bloccati('Evermute: working on 1.0, nothing dropped, nothing blocked.'), [])
+  assert.deepEqual(morti('Evermute: lavoro alla 1.0, niente di abbandonato, niente di bloccato.'), [])
+  assert.deepEqual(bloccati('Evermute: lavoro alla 1.0, niente di abbandonato, niente di bloccato.'), [])
+  assert.deepEqual(morti('Evermute: nessun progetto abbandonato.'), [])
+  // una parte del progetto lasciata non è il progetto lasciato
+  assert.deepEqual(morti('Evermute: working on 1.0, dropped the Windows port.'), [])
+  assert.deepEqual(morti('Evermute: ho chiuso il contratto con Apple.'), [])
+  // la negazione vale fino alla virgola: dopo, la parola torna a contare
+  assert.deepEqual(bloccati('Ceru: nothing new, blocked on the contract.'), [ceru.id])
+  // i plurali italiani
+  assert.deepEqual(morti('Sito e Ceru: abbandonati.').sort(), [sito.id, ceru.id].sort())
+  assert.deepEqual(bloccati('Ceru e Sito: bloccati.').sort(), [sito.id, ceru.id].sort())
+  // e quello che valeva prima vale ancora
+  assert.deepEqual(morti('Sito: dead, I dropped it in August.'), [sito.id])
+  assert.deepEqual(morti('Evermute is not dead, just slow.'), [])
+})
+
 test('dopo due settimane si richiede, riaprendo la stessa riga', () => {
   const fra15 = Date.now() + 15 * GIORNO
   assert.equal(riferimento.fresco(fra15), false)

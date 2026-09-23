@@ -740,6 +740,8 @@ export type Accesso = {
   ospitato?: boolean
   /** Come ci si registra qui: liberi, con un codice, o per niente. */
   registrazione?: 'aperta' | 'invito' | 'chiusa'
+  /** I domini a cui chi ospita ha limitato i conti nuovi; `null` vuol dire tutti. */
+  domini?: string[] | null
   /**
    * Qui l'indirizzo va confermato prima di entrare. Serve alla schermata per
    * dire cosa aspettarsi dopo aver premuto «crea», invece di lasciarla ferma.

@@ -277,7 +277,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 2.2 : momento === 2 ? 2.6 : risultato ? 5 : 3
   // tre passi: l'obiettivo, le fonti (con i loro estratti), la prima attività.
   // L'introduzione ha i suoi, e mentre carica non si è ancora in nessun passo
-  const passo = carico || !avvio || !accountConfermato ? undefined : PASSO_AVVIO[momento]
+  const passo = carico || !avvio || !accountConfermato || avvio.risultato ? undefined : PASSO_AVVIO[momento]
 
   return <Scena progressione={progressione} passo={passo} passi={PASSI_AVVIO} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>

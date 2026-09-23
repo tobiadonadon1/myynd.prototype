@@ -44,7 +44,7 @@ export function scrivi(testo: string) {
   if (!pulito) throw new Error('Scrivi qualcosa.')
   store.scriviBlocco({
     etichetta: ETICHETTA,
-    descrizione: 'Su cosa sta lavorando adesso, progetto per progetto; cosa è morto; cosa è bloccato.',
+    descrizione: 'Su cosa sta lavorando adesso, progetto per progetto; cosa ha abbandonato; cosa è bloccato.',
     valore: pulito,
     tetto: TETTO
   })
@@ -202,23 +202,49 @@ export function esitoDelRiferimento(): string {
 // lo dice morto, la carta si ferma qui, a prescindere da cosa ha capito il
 // modello. La stessa lettura serve al prompt per dire quali sono i bloccati.
 
-const MORTO = /\b(?:mort[oa]|abbandonat[oa]|chius[oa]|finit[oa]|archiviat[oa]|dead|abandoned|killed|dropped|shelved|closed|finished|done|over|scrapped)\b/i
-const BLOCCATO = /\b(?:bloccat[oa]|ferm[oa]|in attesa|aspett[oa]|blocked|stuck|waiting|on hold|stalled)\b/i
-const NEGATO = /\b(?:non|not|isn'?t|aren'?t|never|mai|nemmeno)\b/i
+// I plurali contano quanto i singolari: «Sito e Ceru: abbandonati» è una
+// risposta normale a una domanda che chiede «per ogni progetto».
+const MORTO = /\b(?:mort[oaie]|abbandonat[oaie]|chius[oaie]|finit[oaie]|archiviat[oaie]|dead|abandoned|killed|dropped|shelved|closed|finished|done|over|scrapped)\b/gi
+const BLOCCATO = /\b(?:bloccat[oaie]|ferm[oaie]|in attesa|aspett[oaie]|blocked|stuck|waiting|on hold|stalled)\b/gi
+/*
+ * «Niente di abbandonato», «nothing dropped», «nessun blocco».
+ *
+ * La domanda chiede cosa hai abbandonato e cosa è bloccato, e la risposta più
+ * comune per un progetto vivo è dire che non c'è niente: senza queste parole
+ * «nothing dropped» segnava il progetto come morto, e un progetto morto perde
+ * tutte le sue priorità senza che nessuno lo veda.
+ */
+const NEGATO = /\b(?:non|not|isn'?t|aren'?t|never|mai|nemmeno|nothing|none|no|nulla|niente|nessun[oa]?|zero)\b/i
+/*
+ * «Dropped the Windows port», «ho chiuso il contratto»: la parola ha un
+ * oggetto, e l'oggetto è una parte del progetto, non il progetto. Si guarda la
+ * parola che segue: un articolo o un possessivo vuol dire che si parla d'altro.
+ */
+const HA_UN_OGGETTO = /^\s+(?:the|a|an|my|our|its|his|her|their|this|that|these|those|some|all|with|il|lo|la|i|gli|le|un|una|uno|l['’]|del|dello|della|dei|degli|delle|questo|questa|quel|quello|quella|con)\b/i
 
 /** Le frasi del riferimento, una per riga o per punto. */
 function frasi(testo: string): string[] {
   return testo.split(/\n+|(?<=[.;!?])\s+/).map(s => s.trim()).filter(Boolean)
 }
 
-/** Vero se la frase nomina il progetto e lo dice come dice `come`, senza negarlo. */
+/**
+ * Vero se la frase nomina il progetto e lo dice come dice `come`, senza negarlo.
+ *
+ * La negazione vale dentro il suo pezzo di frase, fino alla virgola prima:
+ * in «Ceru: niente di nuovo, bloccato sul contratto» il «niente» non spegne
+ * il «bloccato» che viene dopo.
+ */
 function detto(frase: string, nome: string, come: RegExp): boolean {
   if (!nominaAmbito(frase, nome)) return false
-  const m = come.exec(frase)
-  if (!m) return false
-  // «non è morto, va solo piano»: la negazione davanti alla parola la spegne
-  const prima = frase.slice(Math.max(0, m.index - 24), m.index)
-  return !NEGATO.test(prima)
+  for (const m of frase.matchAll(come)) {
+    const i = m.index ?? 0
+    const prima = frase.slice(Math.max(0, i - 32), i)
+    const pezzo = prima.slice(Math.max(prima.lastIndexOf(','), prima.lastIndexOf(';'), prima.lastIndexOf(':')) + 1)
+    if (NEGATO.test(pezzo)) continue
+    if (come === MORTO && HA_UN_OGGETTO.test(frase.slice(i + m[0].length))) continue
+    return true
+  }
+  return false
 }
 
 /** Gli id dei progetti che il riferimento dice morti. */

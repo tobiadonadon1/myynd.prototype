@@ -927,6 +927,9 @@ const EN: Record<string, string> = {
   'Il modello non ha risposto: la valutazione non si può fare.': 'The model did not answer: the evaluation cannot be done.',
   'Su cosa sta lavorando adesso, progetto per progetto; cosa è morto; cosa è bloccato.':
     'What they are working on right now, project by project; what is dead; what is blocked.',
+  // la stessa riga dopo il 23 set: la domanda dice «abbandonato», e la memoria con lei
+  'Su cosa sta lavorando adesso, progetto per progetto; cosa ha abbandonato; cosa è bloccato.':
+    'What they are working on right now, project by project; what they have dropped; what is blocked.',
   // gli altri nomi e il padre di un progetto, e l'unione di due (progetti.ts, index.ts)
   'Gli altri nomi di un progetto sono un elenco di parole.': 'A project’s other names are a list of words.',
   'Un progetto non può far parte di sé stesso.': 'A project cannot be part of itself.',
@@ -2846,6 +2849,8 @@ const EN: Record<string, string> = {
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
   // — feedback 23 set: accesso e primo avvio —
+  // la parte prima della chiocciola, nell'esempio dell'indirizzo aziendale
+  'nome': 'name',
   'Legge il tuo lavoro e ti dice cosa conta oggi.': 'It reads your work and tells you what matters today.',
   'nome@esempio.it': 'name@example.com',
   'Va bene qualsiasi indirizzo, di lavoro o personale.': 'Any address is fine, work or personal.',
@@ -3422,6 +3427,11 @@ export const frasi = {
     : (n === 1 ? 'Avanti · 1 collegata' : `Avanti · ${n} collegate`),
   // i passi dell'avvio, in alto al centro (Scena)
   passoDi: (n: number, di: number) => corrente === 'en' ? `Step ${n} of ${di}` : `Passo ${n} di ${di}`,
+  /** Sotto l'indirizzo, quando chi ospita ha limitato i conti ai domini dell'azienda. */
+  soloDomini: (domini: string[]) => {
+    const elenco = domini.map(d => `@${d}`).join(corrente === 'en' ? ' or ' : ' o ')
+    return corrente === 'en' ? `Use your company address (${elenco}).` : `Usa l’indirizzo dell’azienda (${elenco}).`
+  },
   documenti: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 document.' : `${n} documents.`)
     : (n === 1 ? '1 documento.' : `${n} documenti.`),
