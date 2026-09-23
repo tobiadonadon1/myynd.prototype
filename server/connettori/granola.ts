@@ -51,6 +51,12 @@
 // c'è, in tutte e due le forme, e quando le note non ci sono più — il
 // moncherino, i file cifrati — lo si dice con la ragione vera, invece di una
 // frase che manda a cercare il guasto nel posto sbagliato.
+//
+// **E da allora la scheda non passa più di qui.** «Collega Granola» fa
+// l'accesso con l'account, dal server MCP ufficiale (`granolaMcp.ts`). Questo
+// file resta per chi l'aveva collegato prima, su un Granola che la cache la
+// scrive ancora in chiaro: la precedenza fra le due strade sta in `index.ts`,
+// dove parte il giro di lettura.
 
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -58,10 +64,9 @@ import { join } from 'node:path'
 import type { Documento } from '../store.ts'
 import { lingua } from '../config.ts'
 
-export type ConfigGranola = {
-  /** Quante note ha letto l'ultima volta, per la scheda. */
-  note?: number
-}
+// la forma sta in `config.ts`, con le altre: qui si riprende per chi legge Granola
+export type { ConfigGranola } from '../config.ts'
+import type { ConfigGranola } from '../config.ts'
 
 /** Il tetto di note. Chi fa riunioni tutto il giorno da due anni ci arriva. */
 const TETTO = 4000
@@ -113,13 +118,26 @@ export async function trova(): Promise<DoveGranola> {
     throw e
   }
   let migliore: { n: number; nome: string } | null = null
+  let cifrataPiuNuova = -1
   for (const nome of nomi) {
-    const m = /^cache-v(\d+)\.json$/.exec(nome)
+    const m = /^cache-v(\d+)\.json(\.enc)?$/.exec(nome)
     if (!m) continue
     const n = Number(m[1])
+    if (m[2]) { cifrataPiuNuova = Math.max(cifrataPiuNuova, n); continue }
     if (!migliore || n > migliore.n) migliore = { n, nome }
   }
   const cifrato = nomi.some(n => /\.json\.enc$/.test(n) || n === 'granola.db')
+  /*
+   * La più nuova c'è solo cifrata: quella in chiaro è di un Granola di prima.
+   *
+   * Un `cache-v3.json` rimasto lì accanto a un `cache-v6.json.enc` è una
+   * fotografia di mesi fa, intera e leggibilissima: la si prendeva, la scheda
+   * diceva «Collegato: 1 riunione», e il giro dopo `riconcilia` toglieva
+   * dall'indice tutte le riunioni più nuove di quella fotografia. La versione
+   * si confronta anche con i file cifrati, e se vince uno di loro da qui non
+   * si legge.
+   */
+  if (migliore && cifrataPiuNuova > migliore.n) return { installato: true, file: null, cifrato: true }
   return { installato: true, file: migliore ? join(cartella(), migliore.nome) : null, cifrato }
 }
 
@@ -241,13 +259,13 @@ function daHtml(html: string): string {
 }
 
 /** Un contenuto che può arrivare in tre forme: albero dell'editor, HTML, testo. */
-function testoLibero(x: unknown): string {
+export function testoLibero(x: unknown): string {
   if (typeof x === 'string') return /<\/?[a-z][^>]*>/i.test(x) ? daHtml(x) : x
   return testoDi(x)
 }
 
 /** Righe vuote di fila e spazi in coda: una nota, non un file. */
-function ripulisci(s: string): string {
+export function ripulisci(s: string): string {
   return s.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim()
 }
 
@@ -502,6 +520,19 @@ export async function leggi(): Promise<EsitoGranola> {
   }
 
   if (!docs.length && vuote > 0) throw new Error(SENZA_TESTO)
+  /*
+   * Con i file cifrati accanto, il chiaro non è più tutta la verità.
+   *
+   * Un moncherino con `documents: {}` — o `[]` — accanto ai `.enc` tornava
+   * zero note con `troncato` spento: «Collegato: 0 riunioni», e il giro dopo
+   * `riconcilia` svuotava l'indice di Granola. Zero note accanto ai cifrati
+   * vuol dire che le note stanno di là, e si dice così; qualche nota in
+   * chiaro accanto ai cifrati si tiene, ma non basta a cancellare le altre.
+   */
+  if (dove.cifrato) {
+    if (!docs.length) throw new Error(CIFRATO)
+    troncato = true
+  }
   return { docs, vuote, troncato }
 }
 
@@ -516,8 +547,23 @@ export async function prova(): Promise<{ ok: true; note: number } | { ok: false;
   }
 }
 
+/**
+ * Quello che dice il giro di sfondo quando la cache non c'è più.
+ *
+ * Chi aveva collegato Granola da qui, e poi l'ha aggiornato, si trova le note
+ * cifrate: la strada adesso è l'account, e la frase dice quella — non «da qui
+ * non si legge», che è vero e non serve a niente.
+ */
+export const PASSA_ALL_ACCOUNT = 'Granola non tiene più le note su questo Mac: collegalo di nuovo, con il tuo account Granola.'
+
 export async function sincronizza(): Promise<EsitoGranola> {
-  return leggi()
+  try {
+    return await leggi()
+  } catch (e) {
+    const m = e instanceof Error ? e.message : ''
+    if (m === CIFRATO || m === SENZA_TESTO) throw new Error(PASSA_ALL_ACCOUNT)
+    throw e
+  }
 }
 
 export function collegato(c: { granola?: ConfigGranola }): boolean {
