@@ -112,8 +112,41 @@ export function scollega(c: { claude?: unknown; claudeCon?: unknown; abbonamento
   c.abbonamento = { attivo: false }
 }
 
+/*
+ * Pronto vuol dire anche «non ha detto di no».
+ *
+ * Scelto e installato non bastava: chi usciva da Claude Code nel Terminale si
+ * ritrovava la tessera, la prima pagina e la chat accese, le preferenze a dire
+ * «in uso con il tuo account», e la prima domanda che falliva. Qui conta
+ * l'ultima risposta *certa* di `claude auth status`, senza aspettarla: un «no»
+ * detto da Claude Code spegne la strada, un silenzio o una verifica non ancora
+ * fatta la lasciano com'era. Così `ragiona`, la tessera, le preferenze e il
+ * giro delle richieste in `modello.ts` dicono la stessa cosa.
+ */
 export function pronto(): boolean {
-  return scelto() && !!installato()
+  return scelto() && !!installato() && detto !== 'no'
+}
+
+/**
+ * Che la risposta non invecchi: chi guarda lo stato la rinnova, senza aspettarla.
+ *
+ * Costa `claude auth status` al massimo ogni mezzo minuto, e solo quando
+ * l'account è la strada scelta. Se la risposta cambia quello che si mostra,
+ * lo dice `quandoCambia`.
+ */
+export function riguarda(): void {
+  if (!scelto() || !installato()) return
+  void entrato().catch(() => {})
+}
+
+const aiCambi = new Set<() => void>()
+/** Chi vuole sapere quando «è entrato?» cambia risposta: la pagina va riletta. */
+export function quandoCambia(f: () => void): () => void {
+  aiCambi.add(f)
+  return () => { aiCambi.delete(f) }
+}
+function cambiato() {
+  for (const f of [...aiCambi]) { try { f() } catch { /* chi ascolta si arrangia */ } }
 }
 
 export function disponibile(): boolean {
@@ -139,6 +172,14 @@ export function disponibile(): boolean {
  */
 let accesso = { entrato: false, quando: 0, verificato: false }
 let verificaAccesso: Promise<boolean> | null = null
+/**
+ * L'ultima cosa che Claude Code ha detto per certo: «sì», «no», o ancora niente.
+ *
+ * Diverso da `accesso.entrato`, che dopo un silenzio resta quello che si
+ * sapeva ma smette di essere «verificato»: questa cambia solo con una risposta
+ * vera, o con un accesso appena riuscito. È quella che guarda `pronto()`.
+ */
+let detto: 'si' | 'no' | null = null
 /**
  * Cresce ogni volta che un accesso finisce.
  *
@@ -179,6 +220,7 @@ function dimenticaAccesso(riuscito: boolean) {
   giroAccesso++
   verificaAccesso = null
   accesso = { entrato: riuscito || accesso.entrato, quando: 0, verificato: false }
+  if (riuscito) detto = 'si'
 }
 
 async function verificaEntrato(): Promise<boolean> {
@@ -223,6 +265,10 @@ async function verificaEntrato(): Promise<boolean> {
   }
   if (accesso.entrato !== (esito === 'si') && accesso.quando) console.log(`myynd · Claude Code: ${esito === 'si' ? 'entrato' : 'non entrato'} (prima era il contrario)`)
   accesso = { entrato: esito === 'si', quando: Date.now(), verificato: true }
+  // cambia la risposta a «pronto?» solo passando dal «no» o arrivandoci
+  const primaNo = detto === 'no'
+  detto = esito
+  if (primaNo !== (esito === 'no')) cambiato()
   return accesso.entrato
 }
 
