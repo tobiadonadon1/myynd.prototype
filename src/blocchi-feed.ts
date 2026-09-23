@@ -25,8 +25,8 @@
 export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string; peso?: number | null }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
 export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null }
-/** Un progetto: solo quelli attivi hanno un blocco. */
-export type ProgettoDaBlocco = { id: string; nome: string; stato?: string }
+/** Un progetto: solo quelli attivi hanno un blocco. `priorita` «alta» lo porta davanti. */
+export type ProgettoDaBlocco = { id: string; nome: string; stato?: string; priorita?: string | null }
 
 export type RigaBlocco<V, C> =
   | { genere: 'voce'; voce: V }
@@ -42,6 +42,8 @@ export type Blocco<V, C> = {
   ultimo: string
   /** Il peso della cosa più pesante del blocco: decide l'ordine fra i blocchi, dopo chi aspetta lui. */
   peso: number
+  /** Il progetto l'ha segnato alto lui: il blocco sta davanti agli altri. */
+  alto?: boolean
 }
 
 /**
@@ -92,8 +94,18 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   massimoCompiti?: number
   /** Le righe che hanno appena finito: restano al loro posto finché il fuoco si posa. */
   fermi?: ReadonlySet<string>
+  /**
+   * Progetti che hanno un blocco anche senza righe: quelli appena nati.
+   *
+   * Un progetto senza niente sul tavolo non ha un blocco, ed è giusto: la
+   * prima pagina è il lavoro. Ma uno appena creato da qui deve comparire nel
+   * momento in cui lo si crea, con il posto per il primo passo, altrimenti il
+   * gesto sembra non aver fatto niente.
+   */
+  vuoti?: readonly string[]
 }): Blocco<V, C>[] {
   const attivi = new Map(dati.progetti.filter(p => !p.stato || p.stato === 'attivo').map(p => [p.id, p.nome]))
+  const alti = new Set(dati.progetti.filter(p => p.priorita === 'alta').map(p => p.id))
   // un progetto fermo o chiuso, o un id che non si conosce, non ha un blocco:
   // quello che lo nomina va fra il resto, non sparisce
   const chiave = (id: string | null | undefined) => (id && attivi.has(id) ? id : null)
@@ -177,20 +189,22 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
    * domanda su una riga), poi quello che ha notato Myynd dal più pesante al
    * più leggero (a parità, nell'ordine in cui è arrivato), poi le sue righe.
    */
+  for (const id of dati.vuoti ?? []) if (attivi.has(id)) blocco(id)
+  const vuoti = new Set(dati.vuoti ?? [])
   const pronti = [...blocchi.values()].map(b => ({
-    progetto: b.progetto, nome: b.nome, ultimo: b.ultimo, peso: b.peso,
+    progetto: b.progetto, nome: b.nome, ultimo: b.ultimo, peso: b.peso, alto: !!b.progetto && alti.has(b.progetto),
     righe: [
       ...b.attese,
       ...b.voci.sort((x, y) => y.peso - x.peso || x.i - y.i).map(x => x.riga),
       ...b.altre
     ]
-  })).filter(b => b.righe.length)
+  })).filter(b => b.righe.length || (b.progetto && vuoti.has(b.progetto)))
 
-  // il più recente in cima; «Il resto» sempre in fondo, qualunque data abbia
+  // quelli segnati alti in cima, poi il più recente; «Il resto» sempre in fondo, qualunque data abbia
   return pronti.sort((a, b) => {
     if (a.progetto === null) return 1
     if (b.progetto === null) return -1
-    return b.ultimo.localeCompare(a.ultimo) || a.nome.localeCompare(b.nome)
+    return Number(b.alto) - Number(a.alto) || b.ultimo.localeCompare(a.ultimo) || a.nome.localeCompare(b.nome)
   })
 }
 
@@ -230,7 +244,8 @@ function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco>
  * capire da sé quali sono le più urgenti, ma poterle trascinare sarebbe
  * meglio.» Sono due cose, e questa funzione le tiene separate apposta.
  *
- * Il nostro ordine è quello che capisce da sé: prima i progetti dove qualcosa
+ * Il nostro ordine è quello che capisce da sé, dopo l'unica cosa che ha detto
+ * lui: prima i progetti che ha segnato a priorità alta, poi quelli dove qualcosa
  * aspetta lui (una bozza pronta, una domanda senza risposta), poi quelli con
  * la cosa più pesante dentro («organise it by importance on my feed»), poi i
  * più recenti, e «Il resto» in fondo a parità, perché quello che non sta in
@@ -248,7 +263,8 @@ export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco>
   // «Il resto» sta dietro ai progetti a parità di attesa: il peso ordina i
   // progetti fra loro, non tira su quello che non sta in nessun progetto
   const predefinito = [...blocchi].sort((a, b) =>
-    Number(aspettaLui(b)) - Number(aspettaLui(a))
+    Number(!!b.alto) - Number(!!a.alto)
+    || Number(aspettaLui(b)) - Number(aspettaLui(a))
     || Number(a.progetto === null) - Number(b.progetto === null)
     || b.peso - a.peso
     || b.ultimo.localeCompare(a.ultimo)
@@ -257,6 +273,16 @@ export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco>
   const posto = new Map(ordine.map((id, i) => [id, i]))
   const dove = (b: Blocco<V, C>) => posto.get(chiaveBlocco(b)) ?? Number.MAX_SAFE_INTEGER
   return predefinito.sort((a, b) => dove(a) - dove(b))
+}
+
+/**
+ * L'ordine salvato con questo progetto in cima: quello che succede quando lo
+ * segna alto. È la stessa regola del server (`progetti.inCimaAllOrdine`), fatta
+ * anche qui perché il blocco salga nell'istante del gesto e non al giro dopo.
+ * Senza un ordine suo non se ne inventa uno: decide la priorità da sé.
+ */
+export function inCimaAllOrdine(ordine: readonly string[], id: string): string[] {
+  return ordine.length ? [id, ...ordine.filter(x => x !== id)] : []
 }
 
 /** Sposta un blocco da un posto all'altro. Fuori dall'elenco non si sposta niente. */
