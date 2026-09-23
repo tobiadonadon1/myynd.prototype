@@ -13,6 +13,8 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_quiet;
 uniform float u_stage;
+uniform vec2 u_pointer;
+uniform float u_presence;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
@@ -30,6 +32,11 @@ void main() {
   vec2 cells=vec2(u_resolution.x/3.6, u_resolution.y/8.5);
   vec2 cell=floor(uv*cells);
   vec2 p=(cell+.5)/cells;
+  // The pointer, measured from the cell and not the pixel: what lights up is a
+  // whole cell, so the response keeps the grain of the material.
+  vec2 toPointer=(p-u_pointer)*vec2(aspect,1.);
+  float reach=dot(toPointer,toPointer);
+  float halo=exp(-reach*34.)*u_presence;
   float t=u_time*.19;
   p.y += .012*u_stage;
   p.x += .008*u_stage;
@@ -37,6 +44,10 @@ void main() {
   float warp=field(vec2(p.x*6.+drift*2.1+t*.12+u_stage*.17,p.y*4.-t*.18));
   // A broad diagonal fabric, with a negative-space fold through its centre.
   float centre=.40+.22*sin(p.x*4.8-1.1+t*.16)+.08*(drift-.5)+.035*sin(p.x*7.-t*.6);
+  // The fabric leans toward the pointer: its centre line is pulled a little,
+  // only in the columns near it, so the light seems to notice where you are.
+  float lean=exp(-pow((p.x-u_pointer.x)*aspect*2.2,2.))*u_presence;
+  centre=mix(centre,u_pointer.y,.13*lean);
   float spread=.105+.105*smoothstep(.18,.8,p.x);
   float distance=(p.y-centre)/(spread+.03*sin(p.x*7.+t));
   float envelope=exp(-distance*distance*1.35);
@@ -47,6 +58,9 @@ void main() {
   energy*=smoothstep(.04,.34,p.x)*(1.-smoothstep(.94,1.32,p.x));
   float crossFold=1.-.85*exp(-pow((p.y-centre+.055+.025*sin(p.x*8.))/(.021+.012*warp),2.));
   energy*=crossFold;
+  // Cells under the pointer warm up: more where there is light already, and a
+  // faint ember where there is none, so the response is visible but never a spotlight.
+  energy=energy*(1.+.5*halo)+.09*halo;
   float grain=.73+.45*hash(cell);
   energy*=grain;
   vec3 deep=vec3(.21,.021,.003);
@@ -88,6 +102,12 @@ export function LightField({ quiet = false, stage = 0 }: { quiet?: boolean; stag
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
     let frame = 0, previous = 0, elapsed = 0, disposed = false, lost = false
     let currentStage = stageRef.current, currentQuiet = quietRef.current ? 1 : 0
+    // The pointer: where it is (target), where the light thinks it is (eased),
+    // and how present it is. Presence fades after a few still seconds, so a
+    // page left alone goes back to breathing on its own.
+    let bounds = canvas.getBoundingClientRect()
+    const target = { x: .62, y: .45 }, pointer = { x: .62, y: .45 }
+    let presence = 0, lastMove = -Infinity
     const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, powerPreference: 'low-power' })
     const ctx = fallback.getContext('2d')
     const paintFallback = (width: number, height: number) => {
@@ -139,16 +159,21 @@ export function LightField({ quiet = false, stage = 0 }: { quiet?: boolean; stag
     const time = gl && program ? gl.getUniformLocation(program, 'u_time') : null
     const quietUniform = gl && program ? gl.getUniformLocation(program, 'u_quiet') : null
     const stageUniform = gl && program ? gl.getUniformLocation(program, 'u_stage') : null
+    const pointerUniform = gl && program ? gl.getUniformLocation(program, 'u_pointer') : null
+    const presenceUniform = gl && program ? gl.getUniformLocation(program, 'u_presence') : null
     const draw = () => {
       if (!gl || !program || lost || disposed) return
       gl.uniform2f(resolution, canvas.width, canvas.height)
       gl.uniform1f(time, elapsed / 1000)
       gl.uniform1f(quietUniform, currentQuiet)
       gl.uniform1f(stageUniform, currentStage)
+      gl.uniform2f(pointerUniform, pointer.x, pointer.y)
+      // quieter behind a question: the field answers, but the words come first
+      gl.uniform1f(presenceUniform, presence * (1 - .45 * currentQuiet))
       gl.drawArrays(gl.TRIANGLES, 0, 6)
     }
     const resize = () => {
-      const bounds = canvas.getBoundingClientRect()
+      bounds = canvas.getBoundingClientRect()
       const ratio = Math.min(window.devicePixelRatio || 1, 1.25, 1800 / Math.max(1, bounds.width))
       canvas.width = Math.max(1, Math.round(bounds.width * ratio))
       canvas.height = Math.max(1, Math.round(bounds.height * ratio))
@@ -166,6 +191,12 @@ export function LightField({ quiet = false, stage = 0 }: { quiet?: boolean; stag
         const ease = 1 - Math.exp(-dt / 950)
         currentStage += (stageRef.current - currentStage) * ease
         currentQuiet += ((quietRef.current ? 1 : 0) - currentQuiet) * ease
+        // the light trails the pointer (a quarter of a second), it doesn't jump to it
+        const follow = 1 - Math.exp(-dt / 260)
+        pointer.x += (target.x - pointer.x) * follow
+        pointer.y += (target.y - pointer.y) * follow
+        const wanted = now - lastMove < 4000 ? 1 : 0
+        presence += (wanted - presence) * (1 - Math.exp(-dt / (wanted ? 500 : 1400)))
         previous = now; draw()
       }
       frame = requestAnimationFrame(tick)
@@ -178,6 +209,18 @@ export function LightField({ quiet = false, stage = 0 }: { quiet?: boolean; stag
     const contextLost = (event: Event) => {
       event.preventDefault(); lost = true; cancelAnimationFrame(frame); canvas.style.opacity = '0'
     }
+    // One passive listener on the window: the canvas never takes the pointer
+    // (it sits under the page), and reading coordinates costs nothing per frame.
+    const move = (event: PointerEvent) => {
+      if (!bounds.width || !bounds.height) return
+      target.x = (event.clientX - bounds.left) / bounds.width
+      target.y = 1 - (event.clientY - bounds.top) / bounds.height
+      if (presence < .02) { pointer.x = target.x; pointer.y = target.y }
+      lastMove = performance.now()
+    }
+    const leave = () => { lastMove = -Infinity }
+    window.addEventListener('pointermove', move, { passive: true })
+    document.documentElement.addEventListener('pointerleave', leave)
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
     canvas.addEventListener('webglcontextlost', contextLost)
@@ -186,6 +229,7 @@ export function LightField({ quiet = false, stage = 0 }: { quiet?: boolean; stag
     resize(); resume()
     return () => {
       disposed = true; cancelAnimationFrame(frame); observer.disconnect()
+      window.removeEventListener('pointermove', move); document.documentElement.removeEventListener('pointerleave', leave)
       canvas.removeEventListener('webglcontextlost', contextLost)
       document.removeEventListener('visibilitychange', resume); motion.removeEventListener('change', resume)
       if (gl) { if (buffer) gl.deleteBuffer(buffer); if (program) gl.deleteProgram(program); shaders.forEach(shader => gl.deleteShader(shader)) }
