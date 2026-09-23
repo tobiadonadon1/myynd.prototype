@@ -28,7 +28,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import * as chi from '../chi.ts'
-import { daGoogle, DaApprovare, APPROVA_GOOGLE } from './amministratore.ts'
+import { daGoogle, DaApprovare, APPROVA_GOOGLE, SOLO_ORGANIZZAZIONE, soloOrganizzazione } from './amministratore.ts'
 import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
@@ -106,6 +106,7 @@ function ascolta(idApp = ''): Promise<{ porta: number; codice: Promise<string>; 
       const caso = c ? null : daGoogle(errore, u.searchParams.get('error_description'), { clientId: idApp })
       if (c) dai(c)
       else if (caso) no(new DaApprovare(APPROVA_GOOGLE, caso))
+      else if (soloOrganizzazione(errore)) no(new Error(SOLO_ORGANIZZAZIONE))
       else no(new Error(errore === 'access_denied' ? 'Hai detto di no a Google.' : 'Google non ha mandato il codice.'))
     })
 

@@ -74,6 +74,7 @@ import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
 import * as github from './connettori/github.ts'
 import * as amministratore from './connettori/amministratore.ts'
+import { doveVanno } from './dove-vanno-i-dati.ts'
 import * as drive from './connettori/drive.ts'
 import * as microsoft from './connettori/microsoft.ts'
 import * as dropbox from './connettori/dropbox.ts'
@@ -320,6 +321,11 @@ app.get('/api/oauth/ritorno', async (req, res) => {
   const descrizione = req.query.error_description ? String(req.query.error_description) : null
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('Set-Cookie', `${BIGLIETTO}=; Path=/api/oauth/ritorno; Max-Age=0; HttpOnly; Secure; SameSite=Lax`)
+  // un amministratore che torna dal consenso per l'organizzazione: niente da
+  // completare, solo da dirgli com'è andata (vedi `consensoMicrosoft`)
+  if (req.query.admin_consent !== undefined && !stato) {
+    return res.send(oauth.paginaConsenso(!guaio && String(req.query.admin_consent).toLowerCase() === 'true'))
+  }
   try {
     const { nome } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
     res.send(oauth.paginaWeb(true, nome))
@@ -1249,6 +1255,17 @@ app.post('/api/connettori/desktop/carica-file', async (req, res) => {
  * ragione non passa da `ospitato.disponibile`: quel controllo tiene la scheda
  * fuori dalla vetrina di un server, e questa rotta si difende da sola.
  */
+/**
+ * Dove vanno i dati, per la richiesta all'amministratore.
+ *
+ * La scheda la scrive nella lingua di chi la manda, ma i fatti li sa solo il
+ * server: quale modello ragiona adesso, se sta su questa macchina, se Jev
+ * riceve pezzi dei documenti. Vedi `dove-vanno-i-dati.ts`.
+ */
+app.get('/api/amministratore/dati', (_req, res) => {
+  try { res.json(doveVanno()) } catch (e) { errore(res, e) }
+})
+
 app.post('/api/connettori/granola', async (_req, res) => {
   if (ospitato.OSPITATO) {
     return res.status(400).json({ errore: 'Granola si legge dal computer dove gira, e qui Myynd gira su un server.' })

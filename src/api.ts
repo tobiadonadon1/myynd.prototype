@@ -1253,6 +1253,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ clientId, clientSecret }) }),
 
   // niente da mandare: il file sta dove sta, e il percorso non si prende da qui
+  /** Chi riceve i dati su questa installazione: la riga vera della richiesta all'amministratore. */
+  datiPerAmministratore: () =>
+    json<{ ospitato: boolean; modello: { chi: string; locale: boolean } | null; jev: boolean }>('/api/amministratore/dati'),
+
   collegaGranola: () =>
     json<{ ok: true; note: number }>('/api/connettori/granola', { method: 'POST', body: '{}' }),
 

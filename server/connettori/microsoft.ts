@@ -28,7 +28,7 @@ import { filoDi, idPulito } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
 import { daMicrosoft } from './amministratore.ts'
-import { APP_MICROSOFT } from '../ospitato.ts'
+import { APP_MICROSOFT, oauthWeb } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
 import { riflua } from '../testo.ts'
@@ -84,14 +84,20 @@ function traduci(j: Record<string, unknown>, _stato: number): string | null {
   return null
 }
 
-function sportello(clientId: string, tenant: string, parti: Parte[], clientSecret?: string): Sportello {
+/**
+ * `ritorno` è l'indirizzo registrato per l'app: serve al link del consenso per
+ * l'organizzazione, che Microsoft accetta solo verso un ritorno registrato. In
+ * casa è `http://localhost`, come dicono i passi della scheda; ospitati è il
+ * nostro `/api/oauth/ritorno`.
+ */
+function sportello(clientId: string, tenant: string, parti: Parte[], clientSecret?: string, ritorno = 'http://localhost'): Sportello {
   const base = `https://login.microsoftonline.com/${encodeURIComponent(tenant || 'common')}/oauth2/v2.0`
   return {
     nome: 'Microsoft',
     gettoni: `${base}/token`,
     campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
     traduci,
-    approvazione: (e, d) => daMicrosoft(e, d, { clientId, tenant }),
+    approvazione: (e, d) => daMicrosoft(e, d, { clientId, tenant, ambiti: ambiti(parti), ritorno }),
     autorizza: ({ redirect, sfida, stato }) => {
       const u = new URL(`${base}/authorize`)
       u.searchParams.set('client_id', clientId)
@@ -134,7 +140,7 @@ export function avvia(parte: Parte): { dove: string; biglietto: string } {
   if (!app.clientId) throw new Error('Microsoft non è ancora disponibile su questo server.')
   const gia = leggi().microsoft
   const tutte = [...new Set([...(gia?.parti ?? []), parte])] as Parte[]
-  return avviaWeb(sportello(app.clientId, app.tenant, tutte, app.clientSecret), async g => {
+  return avviaWeb(sportello(app.clientId, app.tenant, tutte, app.clientSecret, oauthWeb().ritorno ?? undefined), async g => {
     if (!g.refresh_token) throw new Error('Microsoft non ha dato il permesso duraturo: riprova.')
     scriviConfig({
       ...leggi(),

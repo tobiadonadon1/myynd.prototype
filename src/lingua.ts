@@ -2976,6 +2976,24 @@ const EN: Record<string, string> = {
     'In the “Permissions” tab tick files.metadata.read and files.content.read, then press “Submit”.',
   'Nella scheda «Settings» copia la «App key» e incollala qui sopra.': 'In the “Settings” tab copy the “App key” and paste it above.',
   'Crea una chiave nuova e incollala qui sopra: il sito la mostra una volta sola.': 'Create a new key and paste it above: the site shows it only once.',
+  // la revisione: GitHub dice di rallentare, la rete manca, l'organizzazione ha le sue regole
+  'Apri su GitHub': 'Open on GitHub',
+  'Questa organizzazione non accetta token che durano così a lungo: rigeneralo su GitHub con una scadenza più breve.':
+    'This organization does not accept tokens that last this long: create it again on GitHub with a shorter expiration.',
+  'Questa organizzazione non accetta i token a grana fine. Chiedi a un suo amministratore di permetterli, in Organization settings › Personal access tokens, oppure usa un token classico con l’ambito «repo».':
+    'This organization does not accept fine-grained tokens. Ask one of its admins to allow them, in Organization settings › Personal access tokens, or use a classic token with the “repo” scope.',
+  'GitHub ha chiesto di rallentare, e il collegamento non è stato salvato. Riprova fra qualche minuto.':
+    'GitHub asked to slow down, and the connection was not saved. Try again in a few minutes.',
+  'Non riesco a raggiungere GitHub. Controlla la connessione a internet e riprova.': 'I can’t reach GitHub. Check your internet connection and try again.',
+  'GitHub non ha risposto in tempo. Controlla la connessione a internet e riprova fra poco.': 'GitHub did not answer in time. Check your internet connection and try again shortly.',
+  'Alcuni repository delle tue organizzazioni restano fuori finché non autorizzi il token per il loro accesso unico (SSO): su GitHub, accanto al token, premi «Configure SSO» e poi «Authorize».':
+    'Some repositories of your organizations stay out until you authorize the token for their single sign-on (SSO): on GitHub, next to the token, press “Configure SSO”, then “Authorize”.',
+  // Microsoft e Google: il no dell'azienda che non è un consenso, e l'app di un'altra organizzazione
+  'La tua azienda deve assegnarti Myynd su Microsoft prima che tu possa collegarlo.': 'Your company has to assign Myynd to you on Microsoft before you can connect it.',
+  'Un criterio di accesso della tua azienda ha bloccato Myynd su Microsoft. Il tuo amministratore può vedere perché e permetterlo.':
+    'A sign-in policy of your company blocked Myynd on Microsoft. Your admin can see why and allow it.',
+  'Questa app di Google accetta solo gli account dell’organizzazione che la gestisce: accedi con un account di quell’organizzazione.':
+    'This Google app only accepts accounts of the organization that runs it: sign in with an account of that organization.',
 }
 
 
