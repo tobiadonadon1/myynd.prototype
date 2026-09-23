@@ -34,6 +34,10 @@ export type ServizioAmministrato =
   | 'google-oauth'
   /** Entra ID: serve il consenso di un amministratore per i permessi chiesti. */
   | 'microsoft-oauth'
+  /** Entra ID: l'app chiede l'assegnazione, e questa persona non è assegnata (AADSTS50105). */
+  | 'microsoft-assegnazione'
+  /** Entra ID: un criterio di accesso condizionale, o le impostazioni di sicurezza predefinite, bloccano l'accesso (AADSTS53003, 530035). */
+  | 'microsoft-accesso'
   /** GitHub: l'organizzazione deve approvare il token a grana fine. */
   | 'github-org'
 
@@ -103,62 +107,101 @@ export function daImap(testo: string, utente = ''): CasoAmministratore | null {
  * I codici di Entra ID che vogliono dire «da solo non puoi».
  *
  * Da learn.microsoft.com, «Microsoft Entra authentication and authorization
- * error codes» e «Unexpected consent prompt»:
+ * error codes» e «Unexpected consent prompt». Sono tre no diversi, e ognuno
+ * chiede all'amministratore una cosa diversa: per questo sono tre casi, non
+ * uno con dentro sempre il link del consenso, che per due su tre non serve.
  *
- *   · 65001: nessuno ha dato il consenso a questa app per questi permessi;
- *   · 90094: un amministratore ha messo un criterio che impedisce di darlo
- *     da soli («Need admin approval»). Dal 2026 è il caso normale: con le
- *     impostazioni di serie una persona non può acconsentire da sola a
- *     Mail.Read e Calendars.Read;
- *   · 90095: c'è il flusso d'approvazione («Approval required», «Request
- *     approval»);
- *   · 50105: la persona non è assegnata all'app;
- *   · 53003 e 530035: accesso condizionale, o le impostazioni di sicurezza di
- *     serie del tenant.
+ *   · consenso (65001, 90094, 90095, `consent_required`): nessuno ha
+ *     approvato l'app per questi permessi, e la persona da sola non può. Dal
+ *     2026 è il caso normale: con le impostazioni di serie non si acconsente
+ *     da soli a Mail.Read e Calendars.Read. Si risolve con il consenso per
+ *     tutta l'organizzazione;
+ *   · assegnazione (50105): l'app chiede che le persone le siano assegnate, e
+ *     questa non lo è. Il consenso c'è già: serve aggiungerla fra gli utenti;
+ *   · accesso (53003, 530035): un criterio di accesso condizionale, o le
+ *     impostazioni di sicurezza predefinite, hanno fermato l'accesso. Il
+ *     perché sta nei log di accesso di Entra, e lo vede solo lui.
  *
  * 65004 («User declined to consent») no: vuol dire anche «ha detto di no», e
  * a volte «ha chiesto l'approvazione ed è tornato indietro». Resta un no suo.
  */
-const ENTRA_AMMINISTRATORE = /AADSTS(65001|90094|90095|50105|53003|530035)\b/
+const ENTRA_CONSENSO = /AADSTS(65001|90094|90095)\b/
+const ENTRA_ASSEGNAZIONE = /AADSTS50105\b/
+const ENTRA_ACCESSO = /AADSTS(53003|530035)\b/
 
-export function daMicrosoft(errore: string | null, descrizione: string | null, app?: { clientId: string; tenant?: string; dominio?: string }): CasoAmministratore | null {
+export type AppMicrosoft = {
+  clientId: string
+  tenant?: string
+  /** Il dominio dell'indirizzo di chi collega, se è di un'azienda. */
+  dominio?: string
+  /** I permessi che l'app chiede: finiscono nel link del consenso. */
+  ambiti?: readonly string[]
+  /** Il ritorno registrato per l'app: `http://localhost` in casa, il nostro dominio ospitati. */
+  ritorno?: string
+}
+
+export function daMicrosoft(errore: string | null, descrizione: string | null, app?: AppMicrosoft): CasoAmministratore | null {
   const e = (errore ?? '').toLowerCase()
-  const suo = ENTRA_AMMINISTRATORE.test(descrizione ?? '') || e === 'consent_required' || e === 'admin_consent_required'
-  if (!suo) return null
+  const d = descrizione ?? ''
+  const base = {
+    ...(app?.dominio ? { dominio: app.dominio } : {}),
+    ...(app?.clientId ? { app: app.clientId } : {})
+  }
+  if (ENTRA_ASSEGNAZIONE.test(d)) return { servizio: 'microsoft-assegnazione', ...base }
+  if (ENTRA_ACCESSO.test(d)) return { servizio: 'microsoft-accesso', ...base }
+  if (!ENTRA_CONSENSO.test(d) && e !== 'consent_required' && e !== 'admin_consent_required') return null
   return {
     servizio: 'microsoft-oauth',
-    ...(app?.dominio ? { dominio: app.dominio } : {}),
-    ...(app?.clientId ? { app: app.clientId, consenso: consensoMicrosoft(app.clientId, app.tenant || app.dominio) } : {})
+    ...base,
+    ...(app?.clientId ? { consenso: consensoMicrosoft(app) } : {})
   }
 }
 
 /**
- * L'indirizzo del consenso per tutta l'organizzazione, da mandare a chi amministra.
+ * L'indirizzo del consenso per tutta l'organizzazione, con l'endpoint v2.
  *
- * È la forma che Microsoft stessa dà da incollare a un amministratore
- * (learn.microsoft.com, «Grant tenant-wide admin consent to an application»):
- * `…/{organizzazione}/adminconsent?client_id=…`, dove l'organizzazione è l'ID
- * del tenant o un suo dominio verificato. Senza né l'uno né l'altro si usa
- * `common`: l'amministratore, aprendolo, entra nel suo.
+ * `…/{tenant}/v2.0/adminconsent?client_id=…&scope=…&redirect_uri=…`
+ * (learn.microsoft.com, «Admin consent on the Microsoft identity platform»).
+ * Tre regole, dalla stessa pagina:
+ *
+ *   · il tenant non è mai `common`: è l'ID o un dominio verificato
+ *     dell'organizzazione, e senza nessuno dei due `organizations`, che fa
+ *     entrare l'amministratore nel suo;
+ *   · lo scope sono i permessi di Graph che l'app chiede davvero, scritti per
+ *     intero; `offline_access` e gli altri di OpenID non si approvano così;
+ *   · il ritorno deve essere uno di quelli registrati per l'app.
  */
-export function consensoMicrosoft(clientId: string, tenant = ''): string {
-  const t = tenant.trim()
-  const dove = t && t !== 'common' && t !== 'organizations' ? t : 'common'
-  return `https://login.microsoftonline.com/${encodeURIComponent(dove)}/adminconsent?client_id=${encodeURIComponent(clientId)}`
+export function consensoMicrosoft(app: AppMicrosoft): string {
+  const t = (app.tenant ?? '').trim()
+  const generico = !t || ['common', 'organizations', 'consumers'].includes(t.toLowerCase())
+  const dove = !generico ? t : (app.dominio || 'organizations')
+  const graph = (app.ambiti ?? ['User.Read'])
+    .filter(a => !['offline_access', 'openid', 'profile', 'email'].includes(a))
+    .map(a => a.startsWith('https://') ? a : `https://graph.microsoft.com/${a}`)
+  const q = new URLSearchParams({
+    client_id: app.clientId,
+    scope: graph.join(' '),
+    redirect_uri: app.ritorno || 'http://localhost'
+  })
+  return `https://login.microsoftonline.com/${encodeURIComponent(dove)}/v2.0/adminconsent?${q.toString()}`
 }
 
 /**
  * Il no di Google quando l'app la deve approvare l'amministratore.
  *
- * `admin_policy_enforced` («Access blocked: Authorization Error»),
- * `org_internal` e `access_not_configured` (support.google.com/accounts,
- * answer 16668185). Google di solito li mostra sulla sua pagina e non torna
- * indietro; ma quando torna, torna così, e allora si dice.
+ * `admin_policy_enforced` («Access blocked: Authorization Error») e
+ * `access_not_configured` (support.google.com/accounts, answer 16668185).
+ * Google di solito li mostra sulla sua pagina e non torna indietro; ma quando
+ * torna, torna così, e allora si dice.
+ *
+ * `org_internal` non sta qui, anche se sembra dell'azienda: vuol dire che
+ * l'app è «interna» all'organizzazione che la gestisce, e che questo account
+ * non ne fa parte. L'amministratore di chi collega non può farci niente; la
+ * frase giusta è `SOLO_ORGANIZZAZIONE`, sotto.
  */
 export function daGoogle(errore: string | null, descrizione: string | null, app?: { clientId?: string; dominio?: string }): CasoAmministratore | null {
   const e = (errore ?? '').toLowerCase()
-  const codici = /^(admin_policy_enforced|org_internal|access_not_configured)$/
-  if (codici.test(e) || /admin_policy_enforced|org_internal/i.test(descrizione ?? '')) {
+  if (e === 'admin_policy_enforced' || e === 'access_not_configured' || /admin_policy_enforced/i.test(descrizione ?? '')) {
     return {
       servizio: 'google-oauth',
       ...(app?.dominio ? { dominio: app.dominio } : {}),
@@ -166,6 +209,11 @@ export function daGoogle(errore: string | null, descrizione: string | null, app?
     }
   }
   return null
+}
+
+/** `org_internal`: l'app accetta solo gli account dell'organizzazione che la gestisce. */
+export function soloOrganizzazione(errore: string | null): boolean {
+  return (errore ?? '').toLowerCase() === 'org_internal'
 }
 
 /**
@@ -183,6 +231,18 @@ export class DaApprovare extends Error {
   }
 }
 
+/**
+ * La riga che accompagna il caso, per chi legge solo la riga.
+ *
+ * Per il consenso il nome del servizio sta nella frase (Google, Google Drive,
+ * Microsoft); l'assegnazione e l'accesso bloccato esistono solo su Microsoft.
+ */
+export function fraseDelCaso(caso: CasoAmministratore, nome: string): string {
+  if (caso.servizio === 'microsoft-assegnazione') return NON_ASSEGNATO
+  if (caso.servizio === 'microsoft-accesso') return ACCESSO_BLOCCATO
+  return `La tua azienda deve approvare Myynd su ${nome} prima che tu possa collegarlo.`
+}
+
 /** Il caso dentro un errore qualunque, se c'è. */
 export function casoDi(e: unknown): CasoAmministratore | null {
   return e instanceof DaApprovare ? e.caso : null
@@ -191,4 +251,7 @@ export function casoDi(e: unknown): CasoAmministratore | null {
 /** Le frasi che accompagnano il caso, per chi legge solo la riga. */
 export const APPROVA_GOOGLE = 'La tua azienda deve approvare Myynd su Google prima che tu possa collegarlo.'
 export const APPROVA_MICROSOFT = 'La tua azienda deve approvare Myynd su Microsoft prima che tu possa collegarlo.'
+export const SOLO_ORGANIZZAZIONE = 'Questa app di Google accetta solo gli account dell’organizzazione che la gestisce: accedi con un account di quell’organizzazione.'
+export const NON_ASSEGNATO = 'La tua azienda deve assegnarti Myynd su Microsoft prima che tu possa collegarlo.'
+export const ACCESSO_BLOCCATO = 'Un criterio di accesso della tua azienda ha bloccato Myynd su Microsoft. Il tuo amministratore può vedere perché e permetterlo.'
 export const IMAP_SPENTO = 'La tua azienda non permette ad altre app di leggere la posta di Gmail. Può permetterlo il tuo amministratore.'

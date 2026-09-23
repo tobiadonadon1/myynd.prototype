@@ -34,7 +34,7 @@ import { oauthWeb } from '../ospitato.ts'
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { DaApprovare, type CasoAmministratore } from './amministratore.ts'
+import { DaApprovare, fraseDelCaso, SOLO_ORGANIZZAZIONE, soloOrganizzazione, type CasoAmministratore } from './amministratore.ts'
 
 const esegui = promisify(execFile)
 
@@ -158,7 +158,10 @@ function ascolta(atteso: string, nome: string, approvazione?: Sportello['approva
  */
 function noDelRitorno(nome: string, errore: string | null, descrizione: string | null, approvazione?: Sportello['approvazione']): Error {
   const caso = approvazione?.(errore, descrizione) ?? null
-  if (caso) return new DaApprovare(`La tua azienda deve approvare Myynd su ${nome} prima che tu possa collegarlo.`, caso)
+  if (caso) return new DaApprovare(fraseDelCaso(caso, nome), caso)
+  // Google: l'app è interna a un'altra organizzazione, e l'amministratore di
+  // chi collega non può farci niente
+  if (soloOrganizzazione(errore)) return new Error(SOLO_ORGANIZZAZIONE)
   if (errore === 'access_denied') return new Error(`Hai detto di no a ${nome}.`)
   return new Error(`${nome} non ha mandato il codice.`)
 }
@@ -210,7 +213,7 @@ export async function chiediGettoni(s: Sportello, corpo: Record<string, string>)
   const andata = r.ok && j.ok !== false
   if (!andata) {
     const caso = s.approvazione?.(typeof j.error === 'string' ? j.error : null, typeof j.error_description === 'string' ? j.error_description : null) ?? null
-    if (caso) throw new DaApprovare(`La tua azienda deve approvare Myynd su ${s.nome} prima che tu possa collegarlo.`, caso)
+    if (caso) throw new DaApprovare(fraseDelCaso(caso, s.nome), caso)
     const detto = s.traduci?.(j, r.status)
     if (detto) throw new Error(detto)
     throw new Error(`${s.nome} ha rifiutato il collegamento.`)
@@ -362,6 +365,24 @@ export async function completaWeb(stato: string, codice: string | null, errore: 
 /** Il testo che finisce dentro l'HTML non deve poterlo cambiare. */
 function senzaTag(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+}
+
+/**
+ * La pagina che vede l'amministratore dopo il consenso per tutta l'organizzazione.
+ *
+ * Il link della richiesta (`consensoMicrosoft`) lo apre lui, non chi collega:
+ * al ritorno non c'è nessuno `state` da ritrovare e nessun token da salvare,
+ * e mostrargli «questo collegamento non lo stavo aspettando» sarebbe dirgli
+ * che ha sbagliato qualcosa proprio quando ha fatto la cosa giusta.
+ */
+export function paginaConsenso(bene: boolean): string {
+  const testo = bene
+    ? '<b>Fatto.</b> Myynd è approvato per la tua organizzazione: chi te l’ha chiesto ora può collegarsi.<br><span style="opacity:.6">Done. Myynd is approved for your organization: whoever asked you can now connect.</span>'
+    : '<b>Il consenso non è stato dato.</b><br><span style="opacity:.6">Consent was not granted.</span>'
+  return '<!doctype html><meta charset="utf-8"><title>Myynd</title>' +
+    '<body style="font:16px -apple-system,Helvetica,sans-serif;background:#191715;color:#F4EFE8;' +
+    'display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:0 24px">' +
+    `<div style="max-width:420px;line-height:1.6;overflow-wrap:anywhere">${testo}</div>`
 }
 
 export function paginaWeb(bene: boolean, nomeGrezzo: string, messaggioGrezzo = ''): string {

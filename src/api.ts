@@ -397,6 +397,8 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     const altro = corpo as { repo?: unknown; dove?: unknown }
     if (typeof altro.repo === 'string' && altro.repo) (e as Error & { repo?: string }).repo = altro.repo
     if (typeof altro.dove === 'string' && /^https:\/\//.test(altro.dove)) (e as Error & { dove?: string }).dove = altro.dove
+    const giorni = (corpo as { giorni?: unknown }).giorni
+    if (typeof giorni === 'number' && giorni > 0) (e as Error & { giorni?: number }).giorni = giorni
     /*
      * Il no che non è suo: l'ha deciso l'amministratore della sua azienda.
      *
@@ -1285,6 +1287,10 @@ export const api = {
     json<AccessoGranola>(`/api/connettori/granola/avvia/${encodeURIComponent(id)}`, { signal }),
   annullaGranola: (id: string) =>
     json<{ ok: true } & AccessoGranola>(`/api/connettori/granola/avvia/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Chi riceve i dati su questa installazione: la riga vera della richiesta all'amministratore. */
+  datiPerAmministratore: () =>
+    json<{ ospitato: boolean; modello: { chi: string; locale: boolean } | null; jev: boolean }>('/api/amministratore/dati'),
+
 
   /** Le Note di Apple: come Granola, niente da mandare. Senza il permesso risponde con la strada per darlo. */
   collegaNote: () =>
@@ -1364,7 +1370,7 @@ export const api = {
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>
-    json<{ ok: true; login: string; repos: number; oltre: boolean }>('/api/connettori/github',
+    json<{ ok: true; login: string; repos: number; oltre: boolean; letti: number; sso: boolean }>('/api/connettori/github',
       { method: 'POST', body: JSON.stringify({ token, repos }) }),
 
   /** Drive: come Google, e appesa come Google finché il browser non ha finito. */

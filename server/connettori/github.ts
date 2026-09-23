@@ -84,11 +84,23 @@ function intestazioni(c: ConfigGithub): Record<string, string> {
   }
 }
 
+/**
+ * Una chiamata a GitHub, con la rete che può mancare.
+ *
+ * Senza questo `try`, una rete giù usciva così com'è dal `fetch` di Node —
+ * «fetch failed», «The operation was aborted due to timeout» — cioè una riga
+ * inglese e tecnica nella scheda, che non dice cosa fare.
+ */
 async function grezza(c: ConfigGithub, dove: string): Promise<Response> {
-  return await fetch(dove.startsWith('http') ? dove : `${API}${dove}`, {
-    headers: intestazioni(c),
-    signal: AbortSignal.timeout(30_000)
-  })
+  try {
+    return await fetch(dove.startsWith('http') ? dove : `${API}${dove}`, {
+      headers: intestazioni(c),
+      signal: AbortSignal.timeout(30_000)
+    })
+  } catch (e) {
+    const nome = e instanceof Error ? e.name : ''
+    throw new NoDiGithub(nome === 'TimeoutError' || nome === 'AbortError' ? LENTO : IRRAGGIUNGIBILE)
+  }
 }
 
 /**
@@ -101,10 +113,13 @@ async function grezza(c: ConfigGithub, dove: string): Promise<Response> {
 class NoDiGithub extends Error {
   dove?: string
   amministratore?: CasoAmministratore
-  constructor(messaggio: string, extra: { dove?: string; amministratore?: CasoAmministratore } = {}) {
+  /** La durata massima che l'organizzazione accetta, quando GitHub la dice. */
+  giorni?: number
+  constructor(messaggio: string, extra: { dove?: string; amministratore?: CasoAmministratore; giorni?: number } = {}) {
     super(messaggio)
     if (extra.dove) this.dove = extra.dove
     if (extra.amministratore) this.amministratore = extra.amministratore
+    if (extra.giorni) this.giorni = extra.giorni
   }
 }
 
@@ -113,7 +128,14 @@ const TOKEN_NON_VALIDO = 'GitHub non riconosce questo token: è scaduto, è stat
 const PERMESSI_MANCANTI = 'A questo token mancano dei permessi. Su GitHub aprilo e, in «Permissions», dai a Contents, Issues e Pull requests l’accesso «Read-only».'
 const SSO = 'La tua organizzazione su GitHub chiede l’accesso unico (SSO) per questo token: aprilo su GitHub, premi «Configure SSO» e poi «Authorize» accanto all’organizzazione.'
 const CLASSICO_VIETATO = 'Questa organizzazione non accetta i token classici: crea un token a grana fine con il bottone qui sopra.'
-const TROPPO_LUNGO = 'Questa organizzazione non accetta token che durano più di un anno: rigeneralo su GitHub con una scadenza entro 366 giorni.'
+const TROPPO_LUNGO = 'Questa organizzazione non accetta token che durano così a lungo: rigeneralo su GitHub con una scadenza più breve.'
+const GRANA_FINE_VIETATA = 'Questa organizzazione non accetta i token a grana fine. Chiedi a un suo amministratore di permetterli, in Organization settings › Personal access tokens, oppure usa un token classico con l’ambito «repo».'
+const RALLENTA_GIRO = 'GitHub ha detto di rallentare: riprendo al prossimo giro.'
+const RALLENTA_COLLEGAMENTO = 'GitHub ha chiesto di rallentare, e il collegamento non è stato salvato. Riprova fra qualche minuto.'
+const IRRAGGIUNGIBILE = 'Non riesco a raggiungere GitHub. Controlla la connessione a internet e riprova.'
+const LENTO = 'GitHub non ha risposto in tempo. Controlla la connessione a internet e riprova fra poco.'
+/** La pagina dei token classici, con l'ambito che serve: per le organizzazioni che non accettano gli altri. */
+const PAGINA_CLASSICO = 'https://github.com/settings/tokens/new?scopes=repo&description=Myynd'
 const CLASSICO_SENZA_REPO = 'A questo token classico manca l’ambito «repo»: crea invece un token a grana fine con il bottone qui sopra.'
 const NOME_STORTO = 'Scrivi i repository come owner/nome, uno per riga.'
 
@@ -150,12 +172,38 @@ async function controlla(r: Response): Promise<void> {
   }
   if (r.status === 403 || r.status === 429) {
     const restano = r.headers.get('x-ratelimit-remaining')
-    if (r.headers.get('retry-after') || restano === '0') {
-      throw new Limite('GitHub ha detto di rallentare: riprendo al prossimo giro.')
-    }
     const detto = await r.clone().json().then((j: unknown) => String((j as { message?: unknown })?.message ?? ''), () => '')
+    /*
+     * Il limite secondario arriva senza `retry-after` e senza un contatore a
+     * zero: lo dice solo la frase, «You have exceeded a secondary rate limit»
+     * (docs.github.com, «Rate limits for the REST API»). Letto come permesso
+     * mancante, mandava a rifare un token che andava benissimo.
+     */
+    if (r.headers.get('retry-after') || restano === '0' || /rate limit/i.test(detto)) {
+      throw new Limite(RALLENTA_GIRO)
+    }
     if (/forbids access via a personal access token \(classic\)/i.test(detto)) throw new NoDiGithub(CLASSICO_VIETATO)
-    if (/forbids access via a fine-grained/i.test(detto) && /lifetime/i.test(detto)) throw new NoDiGithub(TROPPO_LUNGO)
+    if (/forbids access via a fine-grained/i.test(detto)) {
+      /*
+       * La durata massima la decide l'organizzazione, da 1 a 366 giorni, e
+       * GitHub la scrive nella frase: «…if the token's lifetime is greater
+       * than 90 days. Please adjust your token's lifetime at the following
+       * URL: https://github.com/settings/personal-access-tokens/123»
+       * (composer#12711). Si prendono tutte e due, il numero e l'indirizzo.
+       */
+      if (/lifetime/i.test(detto)) {
+        const n = Number(/greater than (\d+) days?/i.exec(detto)?.[1]) || 0
+        const dove = /https:\/\/github\.com\/settings\/personal-access-tokens\/\d+/.exec(detto)?.[0]
+        if (n > 0) {
+          throw new NoDiGithub(
+            `Questa organizzazione accetta token che durano al massimo ${n} giorni: rigeneralo su GitHub con una scadenza di ${n} giorni o meno.`,
+            { giorni: n, ...(dove ? { dove } : {}) })
+        }
+        throw new NoDiGithub(TROPPO_LUNGO, dove ? { dove } : {})
+      }
+      // senza la durata di mezzo, l'organizzazione non li accetta proprio
+      throw new NoDiGithub(GRANA_FINE_VIETATA, { dove: PAGINA_CLASSICO })
+    }
     throw new NoDiGithub(PERMESSI_MANCANTI)
   }
   if (r.status === 404) throw new NoDiGithub('GitHub non trova questo repository, o il token non lo vede.')
@@ -195,18 +243,27 @@ const NESSUN_REPOSITORY = 'Questo token non vede nessun repository. Su GitHub ap
  *     con niente dentro: è quasi sempre «Repository access» lasciato su
  *     «Public repositories», o un token di un'organizzazione che aspetta
  *     l'approvazione — e si dice adesso, non fra sei ore;
+ *   · i repository scritti a mano si guardano uno per uno: la conferma li
+ *     conta, e contarne uno che il token non vede sarebbe un numero falso;
  *   · sul primo repository si fanno le tre letture che farà il giro, una
  *     riga ciascuna. Un permesso che manca a un token a grana fine lo dice
  *     solo una lettura vera (un 403 «Resource not accessible by personal
  *     access token»), e la prima lettura vera, altrimenti, sarebbe quella
  *     notturna.
  *
- * Il numero che torna è la conferma che la scheda mostra: «12 repository»
- * vuol dire che ha fatto il token giusto.
+ * Tornano due numeri: quanti repository vede (`repos`, e `oltre` se sono più
+ * di una pagina) e quanti ne legge davvero a ogni giro (`letti`, al massimo
+ * trenta). La conferma li dice tutti e due quando non coincidono.
+ *
+ * `sso` è il token classico che vede solo una parte delle organizzazioni:
+ * GitHub risponde 200 e lo scrive in `X-GitHub-SSO: partial-results`
+ * (docs.github.com, «Authenticating to the REST API», SAML SSO). Il
+ * collegamento funziona, ma alcuni repository restano fuori finché non lo
+ * autorizza: si dice accanto alla conferma.
  */
 export async function prova(c: ConfigGithub): Promise<
-  { ok: true; login: string; repos: number; oltre: boolean }
-  | { ok: false; errore: string; dove?: string; repo?: string; amministratore?: CasoAmministratore }
+  { ok: true; login: string; repos: number; oltre: boolean; letti: number; sso: boolean }
+  | { ok: false; errore: string; dove?: string; repo?: string; giorni?: number; amministratore?: CasoAmministratore }
 > {
   if (!c.token.trim()) return { ok: false, errore: 'Serve il token di GitHub.' }
   const cc: ConfigGithub = { ...c, token: c.token.trim() }
@@ -218,16 +275,32 @@ export async function prova(c: ConfigGithub): Promise<
       return { ok: false, errore: CLASSICO_SENZA_REPO }
     }
     const u = await r.json().catch(() => ({})) as { login?: string }
+    let sso = /partial-results/i.test(r.headers.get('x-github-sso') ?? '')
 
-    const scelti = (c.repos ?? []).map(x => x.trim()).filter(Boolean)
+    const scelti = (c.repos ?? []).map(x => x.trim()).filter(Boolean).slice(0, MAX_REPOS)
     let elenco: string[]
     let oltre = false
     if (scelti.length) {
-      elenco = scelti.slice(0, MAX_REPOS)
+      // uno per uno, qualche alla volta: sono al massimo trenta letture brevi
+      for (let i = 0; i < scelti.length; i += 6) {
+        const gruppo = scelti.slice(i, i + 6)
+        const esiti = await Promise.all(gruppo.map(async pieno => {
+          const parti = dividi(pieno)
+          if (!parti) return { pieno, errore: NOME_STORTO }
+          const x = await grezza(cc, `/repos/${parti.owner}/${parti.repo}`)
+          if (x.status === 404) return { pieno, errore: 'GitHub non trova questo repository, o il token non lo vede.' }
+          await controlla(x)
+          return null
+        }))
+        const guasto = esiti.find(Boolean)
+        if (guasto) return { ok: false, errore: guasto.errore, repo: guasto.pieno }
+      }
+      elenco = scelti
     } else {
       const l = await grezza(cc, `/user/repos?sort=pushed&per_page=${CONTATI}&affiliation=${AFFILIAZIONE}`)
       await controlla(l)
       oltre = /rel="next"/.test(l.headers.get('link') ?? '')
+      sso = sso || /partial-results/i.test(l.headers.get('x-github-sso') ?? '')
       const tutti = await l.json().catch(() => []) as Repo[]
       elenco = (Array.isArray(tutti) ? tutti : []).map(x => x.full_name ?? '').filter(Boolean)
       if (!elenco.length) {
@@ -246,24 +319,34 @@ export async function prova(c: ConfigGithub): Promise<
     }
 
     // le tre letture del giro, sul primo repository: una riga ciascuna
-    const primo = elenco[0]!
-    const parti = dividi(primo)
-    if (!parti) return { ok: false, errore: NOME_STORTO, repo: primo }
+    const parti = dividi(elenco[0]!)
+    if (!parti) return { ok: false, errore: NOME_STORTO, repo: elenco[0]! }
     const base = `/repos/${parti.owner}/${parti.repo}`
     for (const dove of [`${base}/commits?per_page=1`, `${base}/issues?per_page=1`, `${base}/pulls?per_page=1`]) {
       const x = await grezza(cc, dove)
       // 409: repository vuoto, niente da leggere ma nessun permesso che manca;
       // 410: issue spente su quel repository, idem
       if (x.status === 409 || x.status === 410) continue
-      if (x.status === 404 && scelti.length) {
-        return { ok: false, errore: 'GitHub non trova questo repository, o il token non lo vede.', repo: primo }
-      }
       await controlla(x)
     }
-    return { ok: true, login: u.login ?? '', repos: scelti.length || elenco.length, oltre }
+    return {
+      ok: true, login: u.login ?? '', repos: elenco.length, oltre,
+      letti: Math.min(elenco.length, MAX_REPOS), sso
+    }
   } catch (e) {
+    /*
+     * Il «rallenta» qui non è quello del giro: collegando non si è salvato
+     * niente, e «riprendo al prossimo giro» prometterebbe un giro che non
+     * c'è. Si dice che il collegamento non c'è ancora, e di riprovare.
+     */
+    if (e instanceof Limite) return { ok: false, errore: RALLENTA_COLLEGAMENTO }
     if (e instanceof NoDiGithub) {
-      return { ok: false, errore: e.message, ...(e.dove ? { dove: e.dove } : {}), ...(e.amministratore ? { amministratore: e.amministratore } : {}) }
+      return {
+        ok: false, errore: e.message,
+        ...(e.dove ? { dove: e.dove } : {}),
+        ...(e.giorni ? { giorni: e.giorni } : {}),
+        ...(e.amministratore ? { amministratore: e.amministratore } : {})
+      }
     }
     return { ok: false, errore: e instanceof Error ? e.message : String(e) }
   }

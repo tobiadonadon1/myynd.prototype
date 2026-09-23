@@ -8,7 +8,7 @@ import { api } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
 import type { ChatGPT, ClaudeCon, Stato } from '../api'
 import { frasi, lingua, t } from '../lingua'
-import { casoDaErrore, mailto, richiestaAmministratore } from '../amministratore.ts'
+import { casoDaErrore, mailto, richiestaAmministratore, type DoveVanno } from '../amministratore.ts'
 // lo stesso riconoscimento del server: una funzione pura, senza niente di Node
 import { dominioAziendale, type CasoAmministratore } from '../../server/connettori/amministratore.ts'
 import { AMBITI_SLACK, PAGINE, TOKEN_GITHUB_A_MANO, appSlack, paginaTokenGithub } from '../dove-trovarlo.ts'
@@ -171,14 +171,29 @@ function Fatto({ tema, testo, ok }: { tema: Tema; testo: string; ok: () => void 
 export function ChiediAllAmministratore({ tema, caso }: { tema: Tema; caso: CasoAmministratore }) {
   const [copiata, setCopiata] = useState(false)
   const [aperta, setAperta] = useState(false)
-  const [ospitato, setOspitato] = useState<string | null>(null)
+  /*
+   * Dove vanno i dati, chiesto al server: quale modello ragiona, se sta su
+   * questa macchina, se Jev riceve estratti. Finché non c'è, i bottoni
+   * aspettano: una richiesta per un revisore della sicurezza con una riga
+   * inventata è peggio di una richiesta che arriva un attimo dopo.
+   */
+  const [dati, setDati] = useState<DoveVanno | null>(null)
   useEffect(() => {
     let vivo = true
-    api.stato().then(s => { if (vivo) setOspitato(s.ospitato ? window.location.host : null) }).catch(() => {})
+    api.datiPerAmministratore()
+      .then(d => { if (vivo) setDati({ ospitato: d.ospitato ? window.location.host : null, modello: d.modello, jev: d.jev }) })
+      .catch(() => {})
     return () => { vivo = false }
   }, [])
-  const r = richiestaAmministratore(caso, { inglese: lingua() === 'en', ospitato })
-  const intera = `${r.oggetto}\n\n${r.corpo}`
+  // «Richiesta copiata» torna «Copia la richiesta» dopo due secondi: copiarla
+  // di nuovo, dopo averla ritoccata altrove, dev'essere un gesto che si vede
+  useEffect(() => {
+    if (!copiata) return
+    const t = setTimeout(() => setCopiata(false), 2_000)
+    return () => clearTimeout(t)
+  }, [copiata])
+  const r = dati ? richiestaAmministratore(caso, { inglese: lingua() === 'en', dati }) : null
+  const intera = r ? `${r.oggetto}\n\n${r.corpo}` : ''
 
   const riga = caso.forse
     ? t('Se il token è di un’organizzazione, un suo amministratore deve approvarlo.')
@@ -186,15 +201,19 @@ export function ChiediAllAmministratore({ tema, caso }: { tema: Tema; caso: Caso
     : caso.servizio === 'calendario' ? t('La tua azienda non permette di condividere l’agenda con un indirizzo. Può permetterlo il tuo amministratore.')
     : caso.servizio === 'google-oauth' ? t('La tua azienda deve approvare Myynd su Google prima che tu possa collegarlo.')
     : caso.servizio === 'microsoft-oauth' ? t('La tua azienda deve approvare Myynd su Microsoft prima che tu possa collegarlo.')
+    : caso.servizio === 'microsoft-assegnazione' ? t('La tua azienda deve assegnarti Myynd su Microsoft prima che tu possa collegarlo.')
+    : caso.servizio === 'microsoft-accesso' ? t('Un criterio di accesso della tua azienda ha bloccato Myynd su Microsoft. Il tuo amministratore può vedere perché e permetterlo.')
     : t('Un amministratore dell’organizzazione deve approvare questo token.')
 
   const scrivi = async () => {
+    if (!r) return
     const url = mailto(r)
     const d = desktop()
     try { if (d) await d.apriFuori(url); else window.location.href = url }
     catch { setAperta(true) }
   }
   const copia = async () => {
+    if (!intera) return
     try { await navigator.clipboard.writeText(intera); setCopiata(true) }
     // senza appunti (una pagina non sicura, un permesso negato) il testo si
     // apre qui sotto, dove si può selezionare a mano
@@ -205,13 +224,13 @@ export function ChiediAllAmministratore({ tema, caso }: { tema: Tema; caso: Caso
     <Avviso tema={tema}>
       <div role="status">{riga}</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-        <button type="button" onClick={scrivi} style={azione(tema)}>{t('Scrivi all’amministratore')}</button>
-        <button type="button" onClick={copia} style={azione(tema)}>{copiata ? t('Richiesta copiata') : t('Copia la richiesta')}</button>
+        <button type="button" onClick={scrivi} disabled={!r} style={azione(tema)}>{t('Scrivi all’amministratore')}</button>
+        <button type="button" onClick={copia} disabled={!r} style={azione(tema)}>{copiata ? t('Richiesta copiata') : t('Copia la richiesta')}</button>
       </div>
-      <details open={aperta} onToggle={e => setAperta((e.currentTarget as HTMLDetailsElement).open)} style={{ marginTop: 10 }}>
+      {r && <details open={aperta} onToggle={e => setAperta((e.currentTarget as HTMLDetailsElement).open)} style={{ marginTop: 10 }}>
         <summary style={sommario(tema)}>{t('Cosa c’è scritto nella richiesta')}</summary>
         <div style={{ ...nota(tema), marginTop: 8, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', userSelect: 'text' }}>{intera}</div>
-      </details>
+      </details>}
     </Avviso>
   )
 }
@@ -1141,7 +1160,9 @@ export function FormPosta({ tema, ok, collegato }: Props) {
         </>
       )}
 
-      {consiglio && (
+      {/* con il no dell'azienda il consiglio sulla password punta dalla parte
+          sbagliata: la password era giusta, e resta solo il blocco sotto */}
+      {consiglio && !caso && (
         <Avviso tema={tema}>
           {consiglio}
           {dove && (
@@ -1159,7 +1180,7 @@ export function FormPosta({ tema, ok, collegato }: Props) {
         Non è un errore e non sta in rosso: è un'osservazione su quello che ha
         appena scritto, e arriva prima di premere qualsiasi cosa.
       */}
-      {formaSbagliata && <Avviso tema={tema}>{frasi.nonSembraPerLeApp(nudo.length)}</Avviso>}
+      {formaSbagliata && !caso && <Avviso tema={tema}>{frasi.nonSembraPerLeApp(nudo.length)}</Avviso>}
 
       <ErroreOAzienda tema={tema} testo={err} caso={caso} />
       {avviso && <Avviso tema={tema}>{avviso}</Avviso>}
@@ -2148,15 +2169,17 @@ export function FormGithub({ tema, ok, collegato }: Props) {
   const [quale, setQuale] = useState('')
   /** L'indirizzo che GitHub stesso manda per sistemare le cose: l'autorizzazione SSO. */
   const [dove, setDove] = useState('')
-  const [fatto, setFatto] = useState<{ login: string; repos: number; oltre: boolean } | null>(null)
+  /** La durata massima che l'organizzazione accetta, quando GitHub l'ha detta. */
+  const [giorni, setGiorni] = useState(0)
+  const [fatto, setFatto] = useState<{ login: string; repos: number; oltre: boolean; letti: number; sso: boolean } | null>(null)
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
-    setOccupato(true); setErr(''); setCaso(null); setQuale(''); setDove('')
+    setOccupato(true); setErr(''); setCaso(null); setQuale(''); setDove(''); setGiorni(0)
     try {
       const r = await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
       setToken(''); setRepos('')
-      setFatto({ login: r.login, repos: r.repos, oltre: r.oltre })
+      setFatto({ login: r.login, repos: r.repos, oltre: r.oltre, letti: r.letti ?? r.repos, sso: !!r.sso })
       collegato?.(frasi.githubCollegato(r.login, r.repos, r.oltre))
     }
     catch (e) {
@@ -2164,11 +2187,28 @@ export function FormGithub({ tema, ok, collegato }: Props) {
       setCaso(casoDaErrore(e))
       setQuale((e as { repo?: string }).repo ?? '')
       setDove((e as { dove?: string }).dove ?? '')
+      setGiorni((e as { giorni?: number }).giorni ?? 0)
     }
     setOccupato(false)
   }
 
-  if (fatto) return <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre)} ok={ok} />
+  if (fatto) {
+    return (
+      <>
+        {/* un token classico che vede solo una parte delle organizzazioni: il
+            collegamento c'è, ma alcuni repository restano fuori finché non lo autorizza */}
+        {fatto.sso && (
+          <Avviso tema={tema}>
+            {t('Alcuni repository delle tue organizzazioni restano fuori finché non autorizzi il token per il loro accesso unico (SSO): su GitHub, accanto al token, premi «Configure SSO» e poi «Authorize».')}{' '}
+            <Vai tema={tema} url="https://github.com/settings/tokens" />
+          </Avviso>
+        )}
+        <div style={{ marginTop: fatto.sso ? 12 : 0 }}>
+          <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre, fatto.letti)} ok={ok} />
+        </div>
+      </>
+    )
+  }
 
   return (
     <div>
@@ -2187,8 +2227,13 @@ export function FormGithub({ tema, ok, collegato }: Props) {
           autoComplete="off" spellCheck={false}
           className={classeCampo(tema)} style={{ ...campo(tema), resize: 'vertical' }} />
       </Campo>
-      <ErroreOAzienda tema={tema} testo={err} caso={caso} prima={quale} />
-      {err && dove && <div style={{ ...nota(tema), marginTop: 6 }}><Vai tema={tema} url={dove} testo={t('Autorizza il token su GitHub')} /></div>}
+      {/* la durata l'ha detta GitHub, con il suo numero: la frase si scrive qui, nelle due lingue */}
+      <ErroreOAzienda tema={tema} testo={giorni ? frasi.githubDurataMassima(giorni) : err} caso={caso} prima={quale} />
+      {err && (dove || giorni > 0) && (
+        <div style={{ ...nota(tema), marginTop: 6 }}>
+          <Vai tema={tema} url={dove || paginaTokenGithub(lingua() === 'en', { giorni })} testo={t('Apri su GitHub')} />
+        </div>
+      )}
       <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega GitHub')}</Conferma>
       <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
         <Passi tema={tema} passi={[

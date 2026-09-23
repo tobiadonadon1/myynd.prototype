@@ -16,8 +16,15 @@ typo costs as much as telling them their correct password is wrong.
 | Where | What the service says | Case |
 |---|---|---|
 | Gmail IMAP login | `[ALERT] IMAP access is disabled for your domain. Please contact your domain administrator…` | `gmail` |
-| Entra ID return / token exchange | `AADSTS65001`, `90094`, `90095`, `50105`, `53003`, `530035`, `consent_required` | `microsoft-oauth`, with the admin consent link |
-| Google return | `admin_policy_enforced`, `org_internal`, `access_not_configured` | `google-oauth` |
+| Entra ID return / token exchange | `AADSTS65001`, `90094`, `90095`, `consent_required` | `microsoft-oauth`, with the v2 admin consent link |
+| Entra ID | `AADSTS50105` (user not assigned to the app) | `microsoft-assegnazione`: the admin assigns the user, no consent link |
+| Entra ID | `AADSTS53003`, `530035` (Conditional Access, security defaults) | `microsoft-accesso`: the admin reads the sign-in logs and allows it |
+| Google return | `admin_policy_enforced`, `access_not_configured` | `google-oauth` |
+
+`org_internal` is not an admin case: it means the Google app is internal to
+the organization that owns it, and the user signed in with an account from
+outside it. The user's own admin cannot fix that, so the card says to sign in
+with an account of that organization.
 | GitHub, token sees 0 repositories | nothing specific: a pending org token reads only public repos | `github-org` as **maybe** |
 
 Not detected, on purpose: Gmail `[AUTHENTICATIONFAILED] Invalid credentials`
@@ -51,17 +58,30 @@ Written in the interface language, five lines an admin can act on without
 writing back:
 
 - what the person wants to connect, and why IT is involved;
-- **what Myynd reads**, and exactly what that access can do. "Read-only" is
-  written only where it is true (the iCal address, Microsoft's `*.Read`
-  scopes, the GitHub token). Over IMAP Myynd saves drafts and archives when the
-  person presses a button, and the Google consent asks for `gmail.modify`, so
-  those say "never on its own, only when I press a button";
-- **where the data stays**: on this computer (or, hosted, on the named
-  server), and only the passages needed go to the connected AI model;
+- **what Myynd does with this access**, one fact per sentence, each pinned to
+  the code by a test in `server/amministratore.test.ts`. For Gmail over IMAP:
+  it reads mail and saves the replies it prepares to Drafts (also without a
+  button press, as soon as a draft is ready); it sends mail over SMTP with the
+  same password only from the send button; it moves mail to Archive or Trash
+  from a button, and on its own only archives mail from senders the person
+  wrote a rule for; it deletes nothing except older versions of its own
+  drafts. "Read-only" appears only where it is true (the iCal address,
+  Microsoft's `*.Read` scopes, the GitHub token);
+- **where the data goes**, from `GET /api/amministratore/dati`
+  (`server/dove-vanno-i-dati.ts`): stored on this computer (or, hosted, on the
+  named server); parts of it go to the AI model actually in use (Anthropic,
+  OpenAI, or a provider's host), when the person asks something **and in
+  background jobs** such as preparing the daily page; if the model runs on
+  the same machine, no AI provider receives it; if a TypeSafe key is set, short
+  excerpts go to TypeSafe (Jev). The buttons wait until this is known;
 - **what to change**, with the console path in the console's own words
   (for example `Apps › Google Workspace › Gmail › End User Access › POP and
-  IMAP access`), and for Microsoft the tenant-wide consent link
-  `https://login.microsoftonline.com/{tenant}/adminconsent?client_id=…`.
+  IMAP access`), and for Microsoft consent the v2 tenant-wide link
+  `https://login.microsoftonline.com/{tenant|domain|organizations}/v2.0/adminconsent?client_id=…&scope=<graph scopes>&redirect_uri=…`
+  (never `common`). Hosted, the admin comes back to `/api/oauth/ritorno`,
+  which now shows "Myynd is approved for your organization" instead of an
+  error; locally the registered return is `http://localhost`, where nothing
+  listens, but the consent is already granted by then.
 
 ## Open decisions for the owner
 

@@ -13,19 +13,21 @@ import assert from 'node:assert/strict'
 import { casoDaErrore, mailto, richiestaAmministratore } from './amministratore.ts'
 import { AMBITI_SLACK, appSlack, paginaTokenGithub } from './dove-trovarlo.ts'
 import type { CasoAmministratore, ServizioAmministrato } from '../server/connettori/amministratore.ts'
+import type { DoveVanno } from './amministratore.ts'
 
-const TUTTI: ServizioAmministrato[] = ['gmail', 'calendario', 'google-oauth', 'microsoft-oauth', 'github-org']
+const TUTTI: ServizioAmministrato[] = ['gmail', 'calendario', 'google-oauth', 'microsoft-oauth', 'microsoft-assegnazione', 'microsoft-accesso', 'github-org']
+
+/** Myynd in casa, con Claude che ragiona e senza Jev: il caso più comune. */
+const CASA: DoveVanno = { ospitato: null, modello: { chi: 'Anthropic (Claude)', locale: false }, jev: false }
 
 test('ogni richiesta dice le tre cose che un amministratore chiede, nelle due lingue', () => {
   for (const servizio of TUTTI) {
     for (const inglese of [true, false]) {
-      const r = richiestaAmministratore({ servizio }, { inglese })
+      const r = richiestaAmministratore({ servizio }, { inglese, dati: CASA })
       const dove = `${servizio} ${inglese ? 'en' : 'it'}`
       assert.ok(r.oggetto.length > 10, dove)
-      assert.match(r.corpo, inglese ? /What Myynd reads: / : /Cosa legge Myynd: /, dove)
-      // cosa può fare con quell'accesso: mai «sola lettura» dove non lo è
-      assert.match(r.corpo, inglese ? /(Read-only|on its own)/ : /(sola lettura|da solo)/, dove)
-      assert.match(r.corpo, inglese ? /Where the data stays: on my computer/ : /Dove restano i dati: sul mio computer/, dove)
+      assert.match(r.corpo, inglese ? /What Myynd does with this access: / : /Cosa fa Myynd con questo accesso: /, dove)
+      assert.match(r.corpo, inglese ? /Where the data goes: it is stored on my computer\./ : /Dove vanno i dati: stanno sul mio computer\./, dove)
       assert.match(r.corpo, inglese ? /What needs to change: / : /Cosa va cambiato: /, dove)
       // la regola di casa: niente lineette nel testo che si mostra o si manda
       assert.doesNotMatch(r.oggetto + r.corpo, /[—–]/, dove)
@@ -34,32 +36,35 @@ test('ogni richiesta dice le tre cose che un amministratore chiede, nelle due li
 })
 
 test('la voce della console è quella che l’amministratore cercherà', () => {
-  const gmail = richiestaAmministratore({ servizio: 'gmail', dominio: 'acme.it' }, { inglese: true }).corpo
+  const gmail = richiestaAmministratore({ servizio: 'gmail', dominio: 'acme.it' }, { inglese: true, dati: CASA }).corpo
   // knowledge.workspace.google.com, «Turn POP and IMAP on or off for users»
   assert.match(gmail, /Gmail › End User Access › POP and IMAP access/)
   assert.match(gmail, /Enable IMAP access for all users/)
   assert.match(gmail, /Allow any mail client/)
   assert.match(gmail, /\(acme\.it\)/)
 
-  const cal = richiestaAmministratore({ servizio: 'calendario' }, { inglese: true }).corpo
+  const cal = richiestaAmministratore({ servizio: 'calendario' }, { inglese: true, dati: CASA }).corpo
   assert.match(cal, /External sharing options for primary calendars/)
   // learn.microsoft.com: «Publish a calendar» manca senza il dominio Anonymous
   assert.match(cal, /“Anonymous” domain/)
 
-  const gh = richiestaAmministratore({ servizio: 'github-org' }, { inglese: false }).corpo
+  const gh = richiestaAmministratore({ servizio: 'github-org' }, { inglese: false, dati: CASA }).corpo
   assert.match(gh, /Personal access tokens › Pending requests/)
 })
 
 test('«sola lettura» si scrive solo dove è vero', () => {
-  // via IMAP Myynd salva bozze e archivia quando lo chiede la persona, e il
-  // consenso di Google chiede gmail.modify: dire «read-only» sarebbe falso
+  // via IMAP Myynd salva bozze, manda da un bottone e archiviano le regole, e
+  // il consenso di Google chiede gmail.modify: «read-only» sarebbe falso
   for (const servizio of ['gmail', 'google-oauth'] as const) {
-    const r = richiestaAmministratore({ servizio }, { inglese: true })
+    const r = richiestaAmministratore({ servizio }, { inglese: true, dati: CASA })
     assert.doesNotMatch(r.oggetto + r.corpo, /read-only/i, servizio)
   }
-  assert.match(richiestaAmministratore({ servizio: 'google-oauth' }, { inglese: true }).corpo, /gmail\.modify and calendar\.events/)
-  assert.match(richiestaAmministratore({ servizio: 'microsoft-oauth' }, { inglese: true }).corpo, /Mail\.Read and Calendars\.Read/)
-  assert.match(richiestaAmministratore({ servizio: 'github-org' }, { inglese: true }).corpo, /Contents, Issues, Pull requests and Metadata/)
+  // i fatti della posta, uno per frase (le prove sul codice stanno in server/amministratore.test.ts)
+  const gmail = richiestaAmministratore({ servizio: 'gmail' }, { inglese: true, dati: CASA }).corpo
+  assert.match(gmail, /saves the replies it prepares to my Drafts/)
+  assert.match(gmail, /sends an email \(over SMTP, with the same password\) only when I press its button/)
+  assert.match(gmail, /on its own it only archives mail from senders I have written a rule for/)
+  assert.doesNotMatch(gmail, /never sends/)
 })
 
 test('Microsoft: l’indirizzo del consenso sta nella richiesta così com’è', () => {
@@ -67,15 +72,50 @@ test('Microsoft: l’indirizzo del consenso sta nella richiesta così com’è',
     servizio: 'microsoft-oauth',
     consenso: 'https://login.microsoftonline.com/acme.onmicrosoft.com/adminconsent?client_id=abc'
   }
-  assert.ok(richiestaAmministratore(caso, { inglese: true }).corpo.includes(caso.consenso!))
+  assert.ok(richiestaAmministratore(caso, { inglese: true, dati: CASA }).corpo.includes(caso.consenso!))
   // senza, il percorso nell'interfaccia di Entra
-  assert.match(richiestaAmministratore({ servizio: 'microsoft-oauth' }, { inglese: true }).corpo, /Grant admin consent/)
+  assert.match(richiestaAmministratore({ servizio: 'microsoft-oauth' }, { inglese: true, dati: CASA }).corpo, /Grant admin consent/)
 })
 
-test('ospitati, i dati restano sul server di chi ospita, e la richiesta lo dice', () => {
-  const r = richiestaAmministratore({ servizio: 'gmail' }, { inglese: true, ospitato: 'myynd.acme.it' })
-  assert.match(r.corpo, /on the Myynd server at myynd\.acme\.it/)
-  assert.doesNotMatch(r.corpo, /on my computer/)
+test('dove vanno i dati: la riga segue chi li riceve davvero', () => {
+  const riga = (dati: DoveVanno) => richiestaAmministratore({ servizio: 'gmail' }, { inglese: true, dati }).corpo.split('\n').find(r => r.startsWith('Where the data goes'))!
+  /*
+   * «Solo i passaggi che servono, quando chiedo qualcosa» era falso: la pagina
+   * del giorno si prepara in sottofondo dopo ogni lettura, e così le
+   * automazioni. La riga lo dice.
+   */
+  const claude = riga(CASA)
+  assert.match(claude, /Parts of it go to Anthropic \(Claude\), the AI model I use, when I ask something and in background jobs/)
+  assert.doesNotMatch(claude, /only the passages it needs/)
+  assert.doesNotMatch(claude, /TypeSafe/)
+  // Jev riceve estratti: si dice, e solo quando c'è
+  assert.match(riga({ ...CASA, jev: true }), /Short excerpts also go to TypeSafe \(Jev\)/)
+  // un modello sulla stessa macchina: nessun fornitore, ma non se c'è Jev
+  assert.match(riga({ ...CASA, modello: { chi: '127.0.0.1', locale: true } }), /runs on my computer\. No AI provider receives it\./)
+  assert.doesNotMatch(riga({ ...CASA, modello: { chi: '127.0.0.1', locale: true }, jev: true }), /no AI provider/)
+  // nessun modello ancora: si dice cosa succederà, non una promessa
+  assert.match(riga({ ...CASA, modello: null }), /No AI model is connected yet/)
+  // ospitati, sul server di chi ospita
+  const server = riga({ ...CASA, ospitato: 'myynd.acme.it' })
+  assert.match(server, /stored in my account on the Myynd server at myynd\.acme\.it/)
+  assert.doesNotMatch(server, /on my computer/)
+})
+
+test('il dominio dell’azienda sta accanto all’account, non dopo il punto', () => {
+  const r = richiestaAmministratore({ servizio: 'microsoft-oauth', dominio: 'contoso.com' }, { inglese: true, dati: CASA }).corpo
+  assert.match(r, /my work Microsoft 365 account \(contoso\.com\) to Myynd/)
+  assert.doesNotMatch(r, /\. \(contoso\.com\)/)
+})
+
+test('assegnazione e accesso bloccato chiedono all’amministratore la cosa giusta, non un consenso', () => {
+  const ass = richiestaAmministratore({ servizio: 'microsoft-assegnazione', app: 'abc' }, { inglese: true, dati: CASA }).corpo
+  assert.match(ass, /Users and groups › “Add user\/group”/)
+  assert.match(ass, /“Assignment required\?”/)
+  assert.doesNotMatch(ass, /adminconsent/)
+  const acc = richiestaAmministratore({ servizio: 'microsoft-accesso' }, { inglese: true, dati: CASA }).corpo
+  assert.match(acc, /Sign-in logs/)
+  assert.match(acc, /Conditional Access/)
+  assert.doesNotMatch(acc, /adminconsent/)
 })
 
 test('la mail si apre con oggetto e corpo, e gli a capo come li vuole un programma di posta', () => {
@@ -98,8 +138,13 @@ test('la pagina del token GitHub porta i parametri documentati, e non quello dif
   // docs.github.com, «Pre-filling fine-grained personal access token details using URL parameters»
   const u = new URL(paginaTokenGithub(true))
   assert.equal(u.origin + u.pathname, 'https://github.com/settings/personal-access-tokens/new')
-  assert.equal(u.searchParams.get('name'), 'Myynd')
+  // il nome porta la data: la pagina lo vuole unico, e chi rifà il token ne ha già uno
+  assert.equal(new URL(paginaTokenGithub(true, { oggi: new Date('2026-09-23T10:00:00Z') })).searchParams.get('name'), 'Myynd 2026-09-23')
+  assert.match(u.searchParams.get('name') ?? '', /^Myynd \d{4}-\d{2}-\d{2}$/)
+  assert.ok((u.searchParams.get('name') ?? '').length <= 40)
   assert.equal(u.searchParams.get('expires_in'), '366')
+  // la durata massima di un'organizzazione, quando GitHub l'ha detta
+  assert.equal(new URL(paginaTokenGithub(true, { giorni: 90 })).searchParams.get('expires_in'), '90')
   assert.equal(u.searchParams.get('contents'), 'read')
   assert.equal(u.searchParams.get('issues'), 'read')
   assert.equal(u.searchParams.get('pull_requests'), 'read')

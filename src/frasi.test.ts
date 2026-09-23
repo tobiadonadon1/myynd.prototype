@@ -106,9 +106,14 @@ test('GitHub e Granola contano come il calendario, al singolare e al plurale', (
   // la conferma contata è il quarto pezzo della scheda del calendario: feedback del 23 settembre 2026
   assert.equal(in_('en', () => frasi.githubCollegato('tobia', 1, false)), 'Connected as tobia: 1 repository.')
   assert.equal(in_('en', () => frasi.githubCollegato('tobia', 12, false)), 'Connected as tobia: 12 repositories.')
-  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 100, true)), 'Connected as tobia: more than 100 repositories.')
+  // più di trenta: il giro legge i trenta più attivi, e la conferma lo dice
+  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 100, true, 30)), 'Connected as tobia: it sees more than 100 repositories and reads the 30 most active.')
+  assert.equal(in_('en', () => frasi.githubCollegato('tobia', 42, false, 30)), 'Connected as tobia: it sees 42 repositories and reads the 30 most active.')
+  assert.equal(in_('it', () => frasi.githubCollegato('tobia', 42, false, 30)), 'Collegato come tobia: vede 42 repository e legge i 30 più attivi.')
+  assert.equal(in_('en', () => frasi.githubDurataMassima(90)), 'This organization accepts tokens that last at most 90 days: create it again on GitHub with an expiration of 90 days or less.')
+  assert.match(in_('it', () => frasi.githubDurataMassima(1)), /al massimo 1 giorno: .* 1 giorno o meno\./)
   assert.equal(in_('it', () => frasi.githubCollegato('tobia', 12, false)), 'Collegato come tobia: 12 repository.')
-  assert.equal(in_('it', () => frasi.githubCollegato('', 100, true)), 'Collegato: più di 100 repository.')
+  assert.equal(in_('it', () => frasi.githubCollegato('', 100, true, 30)), 'Collegato: vede più di 100 repository e legge i 30 più attivi.')
   assert.equal(in_('en', () => frasi.granolaLette(1)), 'Connected: 1 meeting read.')
   assert.equal(in_('en', () => frasi.granolaLette(37)), 'Connected: 37 meetings read.')
   assert.equal(in_('it', () => frasi.granolaLette(1)), 'Collegato: 1 riunione letta.')
