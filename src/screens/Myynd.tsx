@@ -858,6 +858,8 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
 }) {
   const { attiva, props } = useAttiva()
   const [sopra, setSopra] = useState(false)
+  /** Il primo passo ha una frase a metà (o in fila): la barra resta anche con le righe arrivate. */
+  const [bozzaAperta, setBozzaAperta] = useState(false)
   const suo = b.progetto !== null
   const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(var(--inchiostro-rgb),.5)'
   const filo = suo ? velato(colore, .18) : 'rgba(var(--inchiostro-rgb),.09)'
@@ -931,7 +933,6 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
             style={{ ...GESTO, opacity: giu ? 1 : .35, cursor: giu ? 'pointer' : 'default' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta giù')}</Hov>
         </div>
       </div>
-      {!b.righe.length && b.progetto && lista && <PrimoPasso progetto={b.progetto} lista={lista} ultimo={v.progettiNuovi[v.progettiNuovi.length - 1] === b.progetto} />}
       {b.righe.map((r, i) => {
         const chiave = r.genere === 'voce' ? r.voce.id : r.compito.id
         return (
@@ -942,6 +943,12 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
           </div>
         )
       })}
+      {/* sotto le righe; resta anche quando il blocco ha già una riga, finché dentro c'è una
+          frase a metà: arrivata la prima riga, la seconda non deve sparire */}
+      {(!b.righe.length || bozzaAperta) && b.progetto && lista && (
+        <PrimoPasso progetto={b.progetto} lista={lista} ultimo={v.progettiNuovi[v.progettiNuovi.length - 1] === b.progetto}
+          primo={!b.righe.length} inCorso={setBozzaAperta} />
+      )}
     </section>
   )
 }
@@ -955,7 +962,13 @@ function Blocco({ b, v, lista, indice, su, giu, muovi }: {
  * della domanda. Il fuoco ci arriva da solo quando il progetto è appena
  * stato creato da qui.
  */
-function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: Lista; ultimo: boolean }) {
+function PrimoPasso({ progetto, lista, ultimo, primo, inCorso }: {
+  progetto: string; lista: Lista; ultimo: boolean
+  /** Il blocco non ha ancora righe: la domanda è quella del primo passo. */
+  primo: boolean
+  /** Dice al blocco se c'è una frase a metà, o in fila: allora la barra non si toglie. */
+  inCorso: (si: boolean) => void
+}) {
   const [testo, setTesto] = useState('')
   /*
    * L'id provvisorio: il server non lo conosce ancora, e una riga mandata
@@ -971,6 +984,8 @@ function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: List
     for (const riga of inFila) void lista.aggiungi(riga, 'poi', null, null, { progetto })
     setInFila([])
   }, [provvisorio, progetto, inFila, lista])
+  const aperto = !!testo.trim() || inFila.length > 0
+  useEffect(() => { inCorso(aperto) }, [aperto, inCorso])
   const manda = () => {
     const pulito = testo.trim()
     if (!pulito) return
@@ -984,7 +999,7 @@ function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: List
       {inFila.map((riga, i) => (
         <div key={i} style={{ ...TITOLO, padding: '4px 0 10px', opacity: .72 }}>{riga}</div>
       ))}
-      {!inFila.length && (
+      {!inFila.length && primo && (
         <label htmlFor={id} style={{ ...PERCHE, display: 'block', marginTop: 0, marginBottom: 8, color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13.5px' }}>
           {t('Qual è il primo passo?')}
         </label>
