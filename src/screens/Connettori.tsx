@@ -59,7 +59,7 @@ export function Connettori({ v }: { v: Vals }) {
   return <main className="connections-page">
     <header className="connections-header">
       <div>
-        <h1>{t('Connettori')}</h1>
+        <h1>{t('Fonti')}</h1>
         <p className="connections-lead">{t('Collega quello che usi già. Myynd legge le fonti ed esegue le azioni che abiliti.')}</p>
       </div>
       {/* la riga di avanzamento sta sulle schede, fonte per fonte: il bottone dice solo che sta leggendo */}

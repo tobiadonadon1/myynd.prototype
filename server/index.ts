@@ -375,7 +375,7 @@ app.get('/api/auth', async (req, res) => {
 })
 
 app.post('/api/auth/registra', async (req, res) => {
-  const { email, password, invito, nome } = req.body ?? {}
+  const { email, password, invito, nome, lingua } = req.body ?? {}
   const e = await auth.registra(String(email ?? ''), String(password ?? ''), String(invito ?? ''))
   if (!e.ok) return res.status(400).json({ errore: e.errore })
   /*
@@ -396,8 +396,16 @@ app.post('/api/auth/registra', async (req, res) => {
    * sessione e poi chiederle di confermare farebbe della conferma una
    * formalità che si può ignorare — cioè niente.
    */
+  /*
+   * E la lingua in cui ha visto la schermata, per la stessa ragione.
+   *
+   * Un conto nuovo nasceva in inglese: chi faceva tutto il primo avvio in
+   * italiano entrava in un'app inglese, perché l'app applica la lingua del
+   * server appena entra. Si scrive solo una delle due che l'app conosce.
+   */
+  const inLingua = lingua === 'it' || lingua === 'en' ? lingua : null
   chi.dentro(e.utente, () => {
-    if (comeSiChiama) cfg.aggiorna({ nome: comeSiChiama })
+    if (comeSiChiama || inLingua) cfg.aggiorna({ ...(comeSiChiama ? { nome: comeSiChiama } : {}), ...(inLingua ? { lingua: inLingua } : {}) })
     res.json({
       ok: true, token: e.token, account: auth.conto(), daVerificare: e.daVerificare === true,
       // «guarda la posta» si dice solo se la posta è partita davvero
@@ -2667,7 +2675,8 @@ app.post('/api/feed/genera', async (_req, res) => {
 
 // — quello che chiede lui —
 
-app.get('/api/domanda', (_req, res) => res.json({ domanda: store.domandaAperta() }))
+// la domanda sui progetti si riscrive con quelli di adesso: vedi `riferimento.aggiornata`
+app.get('/api/domanda', (_req, res) => res.json({ domanda: riferimento.aggiornata(store.domandaAperta()) }))
 
 app.post('/api/domanda/:id/rispondi', async (req, res) => {
   try {

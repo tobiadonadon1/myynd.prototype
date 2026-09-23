@@ -71,7 +71,7 @@ const ETICHETTE: Record<string, () => string> = {
   abbonamento: () => t('Con il tuo abbonamento'),
   motore: () => t('Con quale motore lavora'),
   fornitore: () => t('Un altro fornitore, o un modello sul tuo computer'),
-  connettori: () => t('Connettori'),
+  connettori: () => t('Fonti'),
   preferenze: () => t('Preferenze'),
   memoria: () => t('Memoria'),
   usaAbbonamento: () => t('Usa il tuo abbonamento'),

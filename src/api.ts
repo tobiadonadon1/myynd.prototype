@@ -1031,9 +1031,10 @@ export type ProjectWorkRequest = { cartella: string; passo: 'piano' | 'fai'; ric
 export const api = {
   accesso: () => json<Accesso>('/api/auth'),
 
-  registra: async (email: string, password: string, invito = '', nome = '') => {
+  /** `lingua`: quella in cui ha visto la schermata, che diventa la lingua del conto. */
+  registra: async (email: string, password: string, invito = '', nome = '', lingua = '') => {
     const r = await json<{ token: string; account: { email: string }; daVerificare?: boolean; mailPartita?: boolean }>(
-      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito, nome }) })
+      '/api/auth/registra', { method: 'POST', body: JSON.stringify({ email, password, invito, nome, lingua }) })
     // dove l'indirizzo va confermato il server non manda nessun token: il conto
     // c'è e non si entra ancora, e scrivere una sessione vuota qui vorrebbe
     // dire un'app che si crede dentro e prende 401 a ogni schermata

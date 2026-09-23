@@ -521,7 +521,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>
               <a href="#" onClick={v.goConn} style={v.menuConn}>
                 <IconSpina style={{ flex: 'none' }} />
-                <span style={{ flex: 1 }}>{t('Connettori')}</span>
+                <span style={{ flex: 1 }}>{t('Fonti')}</span>
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
               </a>
               {!desktop() && <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}

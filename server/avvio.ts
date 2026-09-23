@@ -11,6 +11,7 @@ import { giornoValido } from './giorno-compito.ts'
 import { parti } from './fuso.ts'
 import { CATALOGO } from './connettori/registro.ts'
 import { fonteCollegata } from './fonti-collegate.ts'
+import { recordSourceObservation } from './project-memory.ts'
 
 /** Quanto indietro si guarda per spiegare un progetto che comincia adesso. */
 const GIORNI_EVIDENZE = 180
@@ -177,7 +178,19 @@ function evidenze(s: Salvato): FattoAvvio[] {
     // literal so every displayed character remains verifiable at the source.
     const corpo = d.corpo.replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, '')
     const linee = corpo.split(/\r?\n/)
-    const contenuto = linee.filter((r, i) => !/^\s{0,3}#{1,6}(?:\s|$)/.test(r)
+    /*
+     * Anche il titolo di un file di testo è un titolo.
+     *
+     * Solo quelli in Markdown si toglievano, e «Open questions for the
+     * Northwind website launch», prima riga di un `.txt`, è diventato il primo
+     * estratto: nomina il progetto, ma non dice niente. Un titolo è la prima
+     * riga, corta, senza punto in fondo, con una riga vuota sotto e del testo
+     * dopo.
+     */
+    const primo = linee.findIndex(r => r.trim())
+    const titolo = primo >= 0 && linee[primo]!.trim().length <= 100 && !/[.!?…:;,]$/u.test(linee[primo]!.trim())
+      && !(linee[primo + 1] ?? '').trim() && linee.slice(primo + 2).some(r => r.trim()) ? primo : -1
+    const contenuto = linee.filter((r, i) => i !== titolo && !/^\s{0,3}#{1,6}(?:\s|$)/.test(r)
       && !/^\s*(?:=+|-+)\s*$/.test(r)
       && !/^\s*(?:=+|-+)\s*$/.test(linee[i + 1] ?? ''))
     const righe = contenuto.flatMap(r => r.split(/(?<=[.!?])\s+/u)).map(r => r.trim()).filter(r => r.length >= 35)
@@ -215,7 +228,8 @@ function pubblico(s: Salvato): StatoAvvio {
     fase: s.risultato ? 'completo' : !s.progetto ? 'progetto' : !s.fonteScelta ? 'fonte'
       : s.verificato ? 'azione' : 'verifica',
     progetto: s.progetto, fonti, fonte: fonti[0] ?? null, fonteSaltata: s.fonteScelta && !fonti.length,
-    fatti, azione: s.azione, risultato: s.risultato, aggiornato: s.aggiornato }
+    // un avvio salvato prima riempiva l'attività con l'obiettivo: non si mostra come scritta da lei
+    fatti, azione: !s.risultato && s.azione === s.progetto?.obiettivo ? '' : s.azione, risultato: s.risultato, aggiornato: s.aggiornato }
 }
 
 export function stato(): StatoAvvio { return pubblico(leggi()) }
@@ -228,7 +242,9 @@ export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: u
   if (s.progetto?.nome !== nome || s.progetto?.obiettivo !== obiettivo) {
     s.confermati = []; s.verificato = false
   }
-  s.progetto = { nome, obiettivo }; s.azione = obiettivo
+  // la prima attività parte vuota, con il suo esempio: riempita con
+  // l'obiettivo, bastava un Invio per salvare un'attività uguale all'obiettivo
+  s.progetto = { nome, obiettivo }
   return cambia(s)
 }
 
@@ -304,17 +320,43 @@ function finalizza(s: Salvato): Salvato {
   const p = (gia?.progetto ? progetti.trova(gia.progetto) : null) ?? progetti.scrivi({ ...progetto, origine: 'mano' })
   if (!gia && p.obiettivo !== progetto.obiettivo) progetti.cambia(p.id, { obiettivo: progetto.obiettivo })
   const traccia = { obiettivo: progetto.obiettivo, estratti, prossimaAzione: azione }
-  const nota = [en ? 'First outline — not a completed task.' : 'Prima traccia — attività ancora da svolgere.',
-    `${en ? 'Project' : 'Progetto'}: ${progetto.nome}`,
-    `${en ? 'Goal' : 'Obiettivo'}: ${traccia.obiettivo}`,
-    ...estratti.map(e => `${en ? 'Source' : 'Fonte'}: ${e.titolo}\n“${e.testo}”`),
-    `${en ? 'Next action' : 'Prossima azione'}: ${azione}`].join('\n\n')
+  /*
+   * Una riga, da leggere.
+   *
+   * Era un elenco di campi («Prima traccia — attività ancora da svolgere.
+   * Progetto: … Obiettivo: … Fonte: … Prossima azione: …») con un trattino
+   * lungo in testa, e la prima pagina lo mostrava sotto l'attività: il primo
+   * compito di tutti sembrava un file di configurazione. L'obiettivo sta già
+   * nel progetto, gli estratti confermati nella sua memoria (qui sotto), la
+   * prossima azione è l'attività stessa: qui resta da dire di dove viene.
+   */
+  const titoli = [...new Set(estratti.map(e => e.titolo))]
+  const elenco = (v: string[]) => v.length < 2 ? v.join('') : `${v.slice(0, -1).join(', ')} ${en ? 'and' : 'e'} ${v[v.length - 1]}`
+  const nota = (en ? `First step for ${progetto.nome}.` : `Primo passo per ${progetto.nome}.`)
+    + (titoli.length ? (en ? ` From ${elenco(titoli)}.` : ` Da ${elenco(titoli)}.`) : '')
   const data = parti(new Date())
   const oggi = `${data.anno}-${String(data.mese).padStart(2, '0')}-${String(data.giorno).padStart(2, '0')}`
   const quando = giorno ? giorno <= oggi ? 'oggi' : 'settimana' : 'poi'
   // If a crash occurred after task insertion, adopt that task intact.
   if (!gia) store.scriviCompito({ id, testo: azione, nota, giorno, quando, progetto: p.id,
     ordine: dopo(store.ultimoOrdine(quando)), origine: 'avvio', doc: estratti[0]?.doc ?? null })
+  /*
+   * Gli estratti confermati vanno nella memoria del progetto.
+   *
+   * Stavano solo nella nota dell'attività, e la pagina del progetto non li
+   * mostrava da nessuna parte: «Quello che Myynd sa» restava vuoto dopo che
+   * lei aveva scelto, frase per frase, cosa tenere. Si scrivono come
+   * osservazioni di una fonte, con la citazione e il documento, e valgono
+   * finché il documento resta com'era. Dopo un crash si riscrivono uguali, e
+   * la memoria non le raddoppia. Un documento sparito nel frattempo non ferma
+   * l'avvio: quell'estratto resta fuori, e basta.
+   */
+  for (const e of estratti) {
+    try {
+      recordSourceObservation({ projectId: p.id, key: `avvio:${createHash('sha256').update(`${e.doc}\0${e.testo}`).digest('hex').slice(0, 16)}`,
+        value: e.testo, sourceId: e.doc, quote: e.testo })
+    } catch { /* il documento non c'è più, o è cambiato: niente da citare */ }
+  }
   dopoCompitoPerProva?.()
   s.azione = gia?.testo ?? azione
   s.progetto = { ...progetto }

@@ -98,6 +98,8 @@ export function Introduzione({ avanti, pronto, riprendi, cambiaAccount, occupato
   const [fermo, setFermo] = useState(false)
   /** Ogni volta che il mouse se ne va il tempo riparte da capo, e la barra con lui. */
   const [giro, setGiro] = useState(0)
+  /** Dove stava il puntatore al primo movimento visto qui sopra: vedi `onMouseMove`. */
+  const puntatore = useRef<[number, number] | null>(null)
   // sempre l'ultima `avanti`: chiusa dentro un timer o un tasto, quella vecchia
   // non saprebbe di un conto arrivato dopo il primo disegno
   const avantiRef = useRef(avanti)
@@ -131,7 +133,24 @@ export function Introduzione({ avanti, pronto, riprendi, cambiaAccount, occupato
 
   const m = MOMENTI[i]
   return (
-    <div className={`intro${fermo ? ' is-fermo' : ''}`} onMouseEnter={() => setFermo(true)} onMouseLeave={() => { setFermo(false); setGiro(g => g + 1) }}>
+    /*
+     * Si ferma quando il mouse si muove sopra, non quando ci si trova sotto.
+     *
+     * Il riquadro è largo quasi tutta la finestra, e nasce proprio dove si è
+     * appena premuto «Crea il tuo Myynd»: con `mouseenter` il puntatore fermo
+     * lì bastava a tenerlo al primo momento per sempre. Il browser, quando
+     * una pagina cambia sotto un puntatore fermo, manda un movimento finto
+     * nello stesso punto: il primo movimento dice solo dov'è il puntatore, e
+     * ferma soltanto uno che arriva da un'altra parte.
+     */
+    <div className={`intro${fermo ? ' is-fermo' : ''}`}
+      onMouseMove={e => {
+        if (fermo) return
+        const p = puntatore.current
+        if (!p) { puntatore.current = [e.clientX, e.clientY]; return }
+        if (Math.abs(e.clientX - p[0]) + Math.abs(e.clientY - p[1]) > 2) setFermo(true)
+      }}
+      onMouseLeave={() => { puntatore.current = null; if (fermo) { setFermo(false); setGiro(g => g + 1) } }}>
       {/* la regione viva: chi ascolta sente ogni momento nuovo, senza che il fuoco si sposti */}
       <div className="intro-testo" key={m.chiave} aria-live="polite">
         <span className="onboard-kicker">{t(m.kicker)}</span>

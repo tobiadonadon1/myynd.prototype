@@ -187,6 +187,24 @@ export function chiediRiferimento(adesso = Date.now()): boolean {
   return true
 }
 
+/**
+ * La domanda sui progetti, com'è adesso.
+ *
+ * Il testo si scriveva una volta, quando si apriva la domanda: «I progetti
+ * che conosco: Sito Northwind», e restava così anche con tre progetti vivi,
+ * o con uno chiuso nel frattempo. Chi serve la domanda aperta la fa passare
+ * di qui, e se è questa si riscrive con i progetti di adesso: la stessa
+ * domanda, non una nuova, e senza toccare quando è stata aperta.
+ */
+export function aggiornata<D extends { id: string; tema: string; testo: string; spunto: string[] }>(d: D | null): D | null {
+  if (!d || d.tema !== TEMA) return d
+  const testo = domandaDiRiferimento()
+  const spunto = progetti.vivi().map(p => p.nome)
+  if (testo === d.testo && JSON.stringify(spunto) === JSON.stringify(d.spunto)) return d
+  store.aggiornaDomanda(d.id, testo, spunto)
+  return { ...d, testo, spunto }
+}
+
 /** Quello che gli si dice quando ha risposto: cosa cambia da adesso. */
 export function esitoDelRiferimento(): string {
   return lingua() === 'en'

@@ -3023,6 +3023,8 @@ const EN: Record<string, string> = {
   'Granola ci mette troppo a rispondere: riprovo al prossimo giro.': 'Granola is taking too long to respond: I will try again on the next round.',
   'Qualcosa non è andato leggendo Granola: riprova.': 'Something went wrong reading Granola: try again.',
   'Non riesco a salvare il collegamento con Granola su questo computer: riprova.': 'I cannot save the Granola connection on this computer: try again.',
+  // — revisione finale: fonti —
+  'Saltata': 'Skipped',
 }
 
 

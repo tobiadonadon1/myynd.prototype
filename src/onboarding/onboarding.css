@@ -73,3 +73,5 @@
 @keyframes onboard-pulse{50%{opacity:.25}}
 /* feedback 23 set, revisione: una collegata che non si è letta non è verde; letta a metà è ambra; la scheda aperta si ripara da sé */
 .onboard-source.is-failed{border-color:#d98a5a8c;background:#d98a5a14}.onboard-source-state.is-failed,.onboard-connected.is-failed{color:#e8a87c}.onboard-source-note{font-size:12px;line-height:1.55;color:#d1c6bc;margin:-6px 0 12px;overflow-wrap:anywhere}.onboard-source-note.is-failed{color:#f8d5c5}.onboard-source-actions{display:flex;align-items:center;gap:22px;margin:-4px 0 4px}.onboard-source-actions .onboard-secondary{padding:6px 0}.is-avviso .onboard-reading-state{color:#e8a87c}
+/* revisione finale: Indietro resta a sinistra anche da solo; la fonte di un estratto è una riga, senza freccia */
+.onboard-actions>.onboard-back{margin-left:0;margin-right:auto}.onboard-fact-source{margin:8px 0 0 42px;color:#b8a99c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}

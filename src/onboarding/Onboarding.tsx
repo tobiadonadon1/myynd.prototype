@@ -357,7 +357,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         <OnboardErrore testo={errore} />
         <div className="onboard-actions">
           {/* dopo una lettura con un guaio, Indietro riporta alle schede: lì si ricollega quella che non si è letta */}
-          <button className="onboard-secondary" disabled={occupato} onClick={() => lettura ? setVistaLettura(false) : vai(0)}>{t('Indietro')}</button>
+          {/* a sinistra anche quando è da solo: la regola «l'unico va a destra» lo lasciava lontano dal suo posto */}
+          <button className="onboard-secondary onboard-back" disabled={occupato} onClick={() => lettura ? setVistaLettura(false) : vai(0)}>{t('Indietro')}</button>
           {lettura
             ? !nonSalvate && <button className="onboard-primary" disabled={occupato} onClick={() => vai(2)}>{inLettura ? t('Leggo…') : t('Continua')}<Avanti /></button>
             /* un modulo aperto ha il suo bottone pieno, «Collega …»: di primario ce n'è uno, e intanto «Leggi» fa un passo indietro */
@@ -365,7 +366,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
               ? !!collegate.length && <button className="onboard-secondary" disabled={occupato} onClick={leggiFonti}>{frasi.leggiFonti(collegate.length)}</button>
               : <button className="onboard-primary" disabled={occupato || !collegate.length} onClick={leggiFonti}>{collegate.length ? frasi.leggiFonti(collegate.length) : t('Leggi le fonti')}<Avanti /></button>}
         </div>
-        {!occupato && !lettura && <button className="onboard-secondary onboard-skip" onClick={salta}>{t('Continua senza fonti')}</button>}
+        {/* con una fonte collegata «senza fonti» non è più vero: resta «Leggi» */}
+        {!occupato && !lettura && !collegate.length && <button className="onboard-secondary onboard-skip" onClick={salta}>{t('Continua senza fonti')}</button>}
       </>}
       {accountConfermato && momento === 2 && <>
         <h2 ref={titolo} tabIndex={-1}>{avvio.fatti.length ? t('Quali estratti vuoi tenere?') : t('Partiamo dal tuo obiettivo.')}</h2>
@@ -374,7 +376,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           <div className="onboard-facts">{avvio.fatti.map((f, i) => <article className={`onboard-fact ${confermati.includes(f.id) ? 'selected' : ''}`} key={f.id}>
             <label className="onboard-fact-choice"><input type="checkbox" disabled={occupato} checked={confermati.includes(f.id)} onChange={e => setConfermati(ids => e.target.checked ? [...ids, f.id] : ids.filter(id => id !== f.id))} /><span className="onboard-fact-number">{String(i + 1).padStart(2, '0')}</span><span>{f.testo}</span></label>
             {/* da quale fonte viene, prima del titolo: con più fonti è la prima cosa che si vuole sapere */}
-            <details><summary>{f.evidenza.fonte ? `${nomeFonte(f.evidenza.fonte)} · ${f.evidenza.titolo}` : f.evidenza.titolo}</summary><blockquote>{f.evidenza.estratto}</blockquote></details>
+            {/* da dove viene, e basta: la freccia apriva la stessa frase, parola per parola */}
+            <p className="onboard-fact-source">{f.evidenza.fonte ? `${nomeFonte(f.evidenza.fonte)} · ${f.evidenza.titolo}` : f.evidenza.titolo}</p>
           </article>)}</div>
         </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p><div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div></div>}
         <OnboardErrore testo={errore} />
