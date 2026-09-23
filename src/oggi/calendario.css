@@ -77,7 +77,9 @@
 .task-day-column > header {display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:0 1px 20px;}
 /* il giorno è il titolo della colonna: è lui a dire dove sei, e si legge da
    lontano. La data sotto è il di più, e sta sottovoce */
-.task-day-column h3 {font-size:20px;font-weight:400;line-height:1.25;margin:0 0 5px;color:var(--inchiostro);text-transform:capitalize;letter-spacing:-.025em;}
+/* maiuscola solo la prima lettera: «capitalize» faceva «Day After Tomorrow», e i giorni in italiano restano «lunedì» dentro la frase */
+.task-day-column h3 {font-size:20px;font-weight:400;line-height:1.25;margin:0 0 5px;color:var(--inchiostro);letter-spacing:-.025em;}
+.task-day-column h3::first-letter {text-transform:uppercase;}
 .task-day-column > header > div > span {font-size:12.5px;color:rgba(var(--inchiostro-rgb),.45);text-transform:capitalize;}
 .task-day-count {font-size:12px;color:rgba(var(--inchiostro-rgb),.42);}
 /* Aggiungere qui è un invito, non un bottone: era un riquadro tratteggiato
