@@ -82,8 +82,15 @@ export const REGISTRAZIONE = 'Granola non ha accettato Myynd come app: riprova p
 export const NON_LEGGE = 'Granola non mi ha dato le riunioni: riprova più tardi.'
 export const SENZA_DURATA = 'Granola non ha dato il permesso duraturo: riprova.'
 
-/** Da un guaio a una frase che dice cosa fare. Mai il messaggio tecnico. */
+/**
+ * Da un guaio a una frase che dice cosa fare. Mai il messaggio tecnico.
+ *
+ * Quello tecnico va nel registro, una riga: la frase dice cosa fare a chi
+ * collega, la riga dice a chi lo aiuta quale passo Granola ha rifiutato. Dentro
+ * ci sono indirizzi e stati HTTP, mai un token.
+ */
 export function frase(e: unknown): string {
+  console.error(`myynd · granola · ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`)
   if (e instanceof ErroreMcp) {
     if (e.tipo === 'rete') return RETE
     if (e.tipo === 'accesso') return NIENTE_ACCESSO

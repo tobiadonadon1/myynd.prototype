@@ -25,7 +25,8 @@
 //     favicon. Quella richiesta non ha nessun codice dentro, e la versione di
 //     prima la trattava come un fallimento — se fosse arrivata per prima
 //     avrebbe fatto saltare un collegamento perfettamente riuscito. Qui
-//     risponde solo la radice, e tutto il resto prende un 404 e viene ignorato.
+//     risponde solo la strada di ritorno (la radice, o `/callback` per chi la
+//     vuole), e tutto il resto prende un 404 e viene ignorato.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import * as chi from '../chi.ts'
@@ -69,9 +70,10 @@ function pagina(bene: boolean, nome: string): string {
   return '<!doctype html><meta charset="utf-8"><title>Myynd</title>' +
     '<body style="font:16px -apple-system,Helvetica,sans-serif;background:#191715;color:#F4EFE8;' +
     'display:grid;place-items:center;height:100vh;margin:0;text-align:center">' +
-    `<div>${bene
-      ? 'Fatto. Puoi chiudere questa pagina e tornare su Myynd.'
-      : `Non è andata con ${nome}. Torna su Myynd e riprova.`}</div>`
+    // nelle due lingue, come `paginaWeb`: qui non si sa ancora quale
+    `<div style="line-height:1.6;padding:0 24px">${bene
+      ? 'Fatto. Puoi chiudere questa pagina e tornare su Myynd.<br><span style="opacity:.6">Done. You can close this page and go back to Myynd.</span>'
+      : `Non è andata con ${nome}. Torna su Myynd e riprova.<br><span style="opacity:.6">It didn't work with ${nome}. Go back to Myynd and try again.</span>`}</div>`
 }
 
 /**
