@@ -1112,6 +1112,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     claudeOn,
     /** La scheda di Claude è collegata: la stessa risposta delle Fonti, per chi deve dirlo altrove. */
     claudeCollegato: !!connettori.find(c => c.id === 'claude')?.collegato,
+    /** Da quale strada passa Claude adesso, detto dal server: l'account solo se è pronto davvero. */
+    claudeVia: stato.config.claude?.via ?? null,
 
     // — feed —
     oggi: new Date().toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' }),

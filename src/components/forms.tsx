@@ -3,9 +3,9 @@
 //
 // Le credenziali le digiti tu, nella tua app, e vanno al tuo server locale.
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api'
-import { suCollegamento } from '../collegamenti'
+import { rilettura, suCollegamento } from '../collegamenti'
 import type { ChatGPT, ClaudeCon, Stato } from '../api'
 import { frasi, lingua, t } from '../lingua'
 import { casoDaErrore, mailto, richiestaAmministratore } from '../amministratore.ts'
@@ -391,7 +391,8 @@ function statoStrada(collegata: boolean, inUso: boolean, mancante?: string): { t
 export function FormClaude({ tema, ok }: Props) {
   const verifiche = useRef(0)
   const [s, setS] = useState<ClaudeCon | null>(null)
-  const guarda = useCallback(() => { api.claude().then(setS).catch(() => {}) }, [])
+  // una lettura alla volta: il fatto, il filo e la scheda stessa la chiedono insieme
+  const guarda = useMemo(() => { const r = rilettura(() => api.claude(), setS); return () => { void r().catch(() => {}) } }, [])
   useEffect(() => { guarda() }, [guarda])
   // le due strade si cambiano anche da fuori (le preferenze, l'altra strada): si rileggono
   useEffect(() => suCollegamento(guarda), [guarda])
@@ -523,6 +524,19 @@ function ConChiaveClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nul
   const [nellAmbiente, setNellAmbiente] = useState(false)
   const chiaveSalvata = !!s?.chiave.collegata
   const inUso = chiaveSalvata && s?.con === 'chiave'
+  /*
+   * La chiave se n'è andata: l'avviso parlava di lei.
+   *
+   * Scollegata Anthropic mentre diceva «la chiave è salvata, ma il conto non
+   * ha credito», la scheda restava su quell'avviso — «in uso», e un «Avanti»
+   * che non portava da nessuna parte — senza un campo dove rimettere una
+   * chiave. Si torna al campo.
+   */
+  const eraSalvata = useRef(chiaveSalvata)
+  useEffect(() => {
+    if (eraSalvata.current && !chiaveSalvata) { setAvviso(''); setDettaglio('') }
+    eraSalvata.current = chiaveSalvata
+  }, [chiaveSalvata])
 
   // se la chiave è già nell'ambiente non c'è motivo di farla incollare di nuovo
   useEffect(() => {
@@ -630,10 +644,13 @@ export function FormOpenAI({ tema, ok }: Props) {
   const [s, setS] = useState<Stato | null>(null)
   const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
   const [erroreChatgpt, setErroreChatgpt] = useState('')
-  const guarda = useCallback(() => {
-    api.stato().then(setS).catch(() => {})
-    api.chatgpt().then(c => { setChatgpt(c); setErroreChatgpt('') })
-      .catch(e => setErroreChatgpt(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'))
+  const guarda = useMemo(() => {
+    const stato = rilettura(() => api.stato(), setS)
+    const account = rilettura(() => api.chatgpt(), c => { setChatgpt(c); setErroreChatgpt('') })
+    return () => {
+      void stato().catch(() => {})
+      account().catch(e => setErroreChatgpt(e instanceof Error ? e.message : 'Non riesco a verificare l’accesso a ChatGPT.'))
+    }
   }, [])
   useEffect(() => { guarda() }, [guarda])
   useEffect(() => suCollegamento(guarda), [guarda])

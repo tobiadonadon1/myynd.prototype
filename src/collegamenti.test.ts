@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import * as ts from 'typescript'
 import { readFileSync } from 'node:fs'
-import { cambiaIlCollegamento, rilettura, suCollegamento } from './collegamenti.ts'
+import { cambiaIlCollegamento, guaioDelPunto, moduloDaFinire, rilettura, suCollegamento } from './collegamenti.ts'
 
 const apiUrl = new URL('./api.ts', import.meta.url).href
 const hooks = registerHooks({ load(url, context, nextLoad) {
@@ -119,21 +119,58 @@ test('rileggere lo stato non lo annuncia: nessun giro in tondo', async () => {
   })
 })
 
-test('una lettura partita prima del cambio non ricopre quella partita dopo', async () => {
+test('le letture si mettono in fila: una in volo e una dopo, e una vecchia non ricopre una nuova', async () => {
   const lenti: ((v: string) => void)[] = []
   const visti: string[] = []
   const rileggi = rilettura(() => new Promise<string>(r => lenti.push(r)), v => visti.push(v))
-  const vecchia = rileggi()
-  const nuova = rileggi()
-  lenti[1]('collegato')
-  await nuova
+  const prima = rileggi()
+  // tre domande mentre la prima è in volo: una lettura sola, dopo
+  const seconda = rileggi(), terza = rileggi(), quarta = rileggi()
+  assert.equal(lenti.length, 1, 'quattro domande sono diventate quattro letture')
   lenti[0]('da collegare')
-  await vecchia
-  assert.deepEqual(visti, ['collegato'], 'la risposta vecchia ha rimesso «da collegare» sopra «collegato»')
-  // nell'ordine giusto passano tutte e due
-  const terza = rileggi()
-  const quarta = rileggi()
-  lenti[2]('a'); await terza
-  lenti[3]('b'); await quarta
-  assert.deepEqual(visti, ['collegato', 'a', 'b'])
+  await prima
+  await new Promise(r => setImmediate(r))
+  assert.equal(lenti.length, 2, 'chi ha chiesto a cose cambiate deve ricevere una lettura partita dopo')
+  lenti[1]('collegato')
+  assert.deepEqual(await Promise.all([seconda, terza, quarta]), ['collegato', 'collegato', 'collegato'])
+  assert.deepEqual(visti, ['da collegare', 'collegato'])
+})
+
+test('una lettura che fallisce si riprova una volta, e un fallimento non mette in pagina niente', async () => {
+  let n = 0
+  const visti: string[] = []
+  const rileggi = rilettura(async () => { n++; if (n === 1) throw new Error('occupato'); return 'collegato' }, v => visti.push(v), { riprovaFra: 0 })
+  assert.equal(await rileggi(), 'collegato', 'un server occupato per un attimo lascia la pagina com’era')
+  assert.equal(n, 2)
+  const sempreGiu = rilettura(async () => { throw new Error('giù') }, v => visti.push(String(v)), { riprovaFra: 0 })
+  await assert.rejects(sempreGiu())
+  assert.deepEqual(visti, ['collegato'])
+})
+
+test('il modulo resta aperto quando la sua fonte si collega, e si richiude pulito quando si scollega', () => {
+  // collegata adesso, col modulo aperto: resta per dire «niente credito»
+  assert.equal(moduloDaFinire(false, false, true, true), true)
+  // scollegata mentre l’avviso era in vista: niente da finire
+  assert.equal(moduloDaFinire(true, true, false, true), false, 'lo scollegamento teneva il modulo fermo sull’avviso')
+  // collegata già prima, con il modulo chiuso: non si apre da sé
+  assert.equal(moduloDaFinire(false, true, true, false), false)
+  // un altro cambio, a fonte collegata: resta com’era
+  assert.equal(moduloDaFinire(true, true, true, true), true)
+})
+
+test('il «collega Claude» del punto se ne va quando si può ragionare, non a ogni collegamento', () => {
+  const g = 'Collega Claude e potrò ragionare sul tuo materiale.'
+  assert.equal(guaioDelPunto(g, false, false), g, 'collegare Notion non collega Claude')
+  assert.equal(guaioDelPunto(g, false, true), null)
+  assert.equal(guaioDelPunto('Il modello ha rifiutato la richiesta.', true, true), 'Il modello ha rifiutato la richiesta.')
+})
+
+test('i pezzi della cartella non dicono il fatto uno per uno: lo dice l’ultimo', async () => {
+  assert.equal(cambiaIlCollegamento('POST', '/api/connettori/desktop/carica-file', { ok: true }), false)
+  await conIlServer(() => Response.json({ ok: true, documenti: 3, tolti: 0 }), async fatti => {
+    for (let i = 0; i < 3; i++) await api.caricaFileDesktop({ file: [], radice: 'Documenti', completo: false, visti: [] })
+    assert.equal(fatti(), 0, 'ogni pezzo da quindici file faceva rileggere tutto')
+    await api.caricaFileDesktop({ file: [], radice: 'Documenti', completo: true, visti: [] })
+    assert.equal(fatti(), 1)
+  })
 })

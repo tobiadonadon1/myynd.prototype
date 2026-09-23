@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Punto } from './api'
-import { suCollegamento } from './collegamenti'
+import { guaioDelPunto } from './collegamenti'
 
 /** Da quante ore di assenza si rifà il punto al ritorno. */
 const ORE_VIA = 3
@@ -31,7 +31,8 @@ function scrivi(k: string, v: string) {
 
 const giorno = (ms: number) => new Date(ms).toDateString()
 
-export function usePunto() {
+/** `ragiona`: Myynd può ragionare adesso, la risposta del server (`stato.ragiona`). */
+export function usePunto(ragiona: boolean) {
   const [punto, setPunto] = useState<Punto | null>(null)
   const [nascosto, setNascosto] = useState<string | null>(() => leggi(CHIAVE_NASCOSTO))
   const [carico, setCarico] = useState(false)
@@ -107,10 +108,16 @@ export function usePunto() {
    * «Collega Claude e potrò ragionare sul tuo materiale» restava sotto il
    * punto anche dopo averlo collegato, finché la finestra non perdeva e
    * riprendeva il fuoco: le Fonti si aprono dentro la stessa finestra, e quel
-   * giro non c'era. Cambiato il collegamento, la frase si toglie. Non si
+   * giro non c'era. La frase si toglie quando smette di essere vera, cioè
+   * quando qualcuno può ragionare: collegare Notion non collega Claude. Non si
    * rifà il punto da qui: costa una chiamata, e lo decide lui col bottone.
    */
-  useEffect(() => suCollegamento(() => setGuaio(null)), [])
+  const ragionava = useRef(ragiona)
+  useEffect(() => {
+    const prima = ragionava.current
+    ragionava.current = ragiona
+    setGuaio(g => guaioDelPunto(g, prima, ragiona))
+  }, [ragiona])
 
   const rifai = useCallback(() => prendi(true), [prendi])
 

@@ -18,9 +18,9 @@
 //   · le caselle di testo sono quelle della barra di «Da fare»: stesso raggio,
 //     stesso fondo, stesso bordo che si accende quando ci scrivi.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
-import { suCollegamento } from '../collegamenti'
+import { rilettura, suCollegamento } from '../collegamenti'
 import { frasi, t } from '../lingua'
 import { Hov, daTastiera, knob, track } from '../ui'
 import { IconSpunta } from '../icons'
@@ -625,13 +625,15 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const [s, setS] = useState<ClaudeCon | null>(null)
   const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
   const [occupato, setOccupato] = useState(false)
-  const guarda = useCallback(() => { api.claude().then(setS).catch(() => setS(null)) }, [])
-  // e si rilegge quando cambia quello che è collegato: la scheda si apre
-  // sopra questa schermata, e chiudendola la riga deve dire «pronto» senza
-  // che uno esca e rientri
-  useEffect(() => { guarda() }, [guarda, v.claudeOn, v.compatibile, v.motore])
-  // e quando cambia un collegamento qualunque: passare dalla chiave all'account
-  // non tocca nessuna delle tre qui sopra, e la riga restava quella di prima
+  // una lettura alla volta: lo chiedono in cinque — il fatto, il filo, e tre
+  // valori qui sotto — e prima partivano quattro `/api/modello/claude` insieme
+  const guarda = useMemo(() => { const r = rilettura(() => api.claude(), setS); return () => { r().catch(() => setS(null)) } }, [])
+  // e si rilegge quando cambia un collegamento qualunque, da qui, dalla scheda
+  // che si apre sopra questa schermata o da un'altra finestra: è il fatto di
+  // `collegamenti.ts`. Prima si rileggeva anche a ogni nuovo `v.compatibile`
+  // e `v.openai`, che sono oggetti nuovi a ogni lettura dello stato: sei
+  // `/api/modello/claude` per un collegamento solo
+  useEffect(() => { guarda() }, [guarda])
   const [giroCollegamento, setGiroCollegamento] = useState(0)
   useEffect(() => suCollegamento(() => { guarda(); setGiroCollegamento(n => n + 1) }), [guarda])
   useEffect(() => {
@@ -639,7 +641,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     api.chatgpt(controller.signal).then(r => { if (!controller.signal.aborted) setChatgpt(r) })
       .catch(() => { if (!controller.signal.aborted) setChatgpt(null) })
     return () => controller.abort()
-  }, [v.motore, v.claudeOn, v.openai, giroCollegamento])
+  }, [giroCollegamento])
 
   const f = v.compatibile
   const o = v.openai
@@ -672,9 +674,10 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : 'claude'
   // Claude collegato, con la chiave o con l'account: lo dicono le Fonti, cioè
-  // il server. Rifatto qui dalla verifica di Claude Code, una verifica lenta o
-  // in sospeso diceva «da collegare» mentre la prima pagina diceva «collegato»
-  const claudeCollegato = !!s && v.claudeCollegato
+  // il server, e da subito. Legato anche alla risposta di `/api/modello/claude`,
+  // che aspetta Claude Code, per quindici secondi la riga diceva «in uso» con
+  // accanto «Collega», e non si lasciava premere
+  const claudeCollegato = v.claudeCollegato
   const accountChatGPT = !!chatgpt?.entrato
   const openaiCollegato = accountChatGPT || !!o?.collegato
   const accountChatGPTInUso = v.motore === 'chatgpt' && !!chatgpt?.acceso
@@ -683,7 +686,8 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const dettaglio = (via: Via): string | undefined => {
     if (via === 'claude') {
       if (!claudeCollegato) return undefined
-      return s?.abbonamentoPossibile && s.con === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
+      // la strada che lavora davvero: un account da cui si è usciti non è «con il tuo account»
+      return v.claudeVia === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
     }
     if (via === 'openai') {
       if (accountChatGPTInUso || (accountChatGPT && v.motore !== 'openai')) {
@@ -706,15 +710,13 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   /** Cosa manca a questa strada per poter lavorare adesso. Vuoto = niente. */
   const manca = (via: Via): string => {
-    if (via === 'claude') return claudeCollegato || !s ? '' : t('Non ancora collegato.')
+    if (via === 'claude') return claudeCollegato ? '' : t('Non ancora collegato.')
     if (via === 'openai') return openaiCollegato || !chatgpt ? '' : t('Non ancora collegato.')
     return f ? '' : t('Non ancora collegato.')
   }
 
   const scegli = async (via: Via) => {
     if (occupato) return
-    // finché non si sa cosa c'è, un clic non deve aprire schede a caso
-    if (via === 'claude' && !s) return
     // premere di nuovo la riga scelta serve solo a svegliare l'account dopo un
     // guasto: il server azzera il riposo e riprova alla richiesta successiva
     if (via === attuale) {
