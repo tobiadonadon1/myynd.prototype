@@ -521,7 +521,10 @@ export async function proponi(): Promise<Giro | null> {
     carta() ? `Chi è:\n${carta()}` : '',
     f ? `\nTi ha chiesto di concentrarti su questo, e viene prima del resto:\n${f}` : '',
     quadroAdesso ? `\nIN QUESTI TRE GIORNI LAVORA SU QUESTO (oggi è il ${oggi}), dalle sue sessioni con gli assistenti, dai commit e dai file che ha toccato. È il lavoro che ha in mano: le voci nascono prima di tutto da qui.\n${quadroAdesso}` : '',
-    suoi.length ? `\nI suoi progetti, con l'obiettivo e quello che ne sai:\n${progetti.perIlModello()}` : '\nNon ha ancora registrato progetti.',
+    suoi.length ? `\nI suoi progetti, con l'obiettivo e quello che ne sai:\n${progetti.perIlModello()}` +
+      // l'unico ordine fra i progetti che ha dato lui: le voci seguono quello
+      (suoi.some(p => p.priorita === 'alta') ? `\nQuelli con «priorità alta» li ha segnati lui come i più importanti: a parità di urgenza, le voci per quelli vengono prima.` : '')
+      : '\nNon ha ancora registrato progetti.',
     rif.testo
       ? `\nQUELLO CHE HA SCRITTO LUI, di suo pugno, su a che punto è ogni progetto (${(rif.aggiornato ?? '').slice(0, 10)}). Vale più dei file, dei commit e delle mail: se qui un progetto è morto o finito, per quel progetto non proporre niente, nemmeno una lettura; se è bloccato, l'unica voce buona è il passo che lo sblocca (chi deve rispondere, cosa manca, a chi scrivere); se dice che sta facendo una cosa, quella è la cosa in corso, e i file che dicono altro sono indietro.\n${rif.testo}` +
         (morti.size ? `\nMorti, secondo lui: ${perNome(morti).join(', ')}.` : '') +

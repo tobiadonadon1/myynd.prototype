@@ -2687,12 +2687,17 @@ app.patch('/api/progetti/:id', (req, res) => {
   // gli altri nomi per intero, e il padre: null o vuoto lo toglie. Il resto lo giudica `cambia`
   if (req.body?.alias !== undefined) c.alias = req.body.alias
   if (req.body?.genitore !== undefined) c.genitore = req.body.genitore === null ? null : String(req.body.genitore)
+  // «alta», o null per tornare normale; qualunque altra cosa la rifiuta `cambia`
+  if (req.body?.priorita !== undefined) c.priorita = req.body.priorita === null ? null : String(req.body.priorita)
   try {
     // chiudere dalla Memoria fa uscire la riga anche dal punto che la pagina
     // sta mostrando; il controllo sull'origine è solo di «non è un progetto»
     const p = progetti.cambia(req.params.id, c)
     if (p && c.stato === 'chiuso') punto.togliDalPunto(req.params.id)
     if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
+    // la priorità cambia l'ordine dei blocchi della prima pagina: chi ha
+    // un'altra finestra aperta lo sente dallo stesso annuncio di ogni cambio
+    if (c.priorita !== undefined) compiti.annunciaCambio()
     res.json({ ok: true, progetto: p })
   } catch (e) { errore(res, e, 400) }
 })

@@ -1126,7 +1126,9 @@ const ATTREZZO_AGGIORNA_PROGETTO: Anthropic.Tool = {
     'su quale si concentra, di cosa fa parte o di cosa è uno spin-off, a cosa punta, o una cosa da ' +
     'tenere a mente su di lui («aggiorna la memoria», «ricordati che»). Chiamalo PRIMA di rispondere, ' +
     'e poi di\' in una riga cosa hai salvato. Non dire mai «capito» o «segnato» senza averlo chiamato.\n\n' +
-    'Serve almeno uno fra stato, nota, obiettivo e parteDi. La nota si aggiunge a quelle che ci sono, ' +
+    'Se dice che un progetto è il più importante, che viene prima degli altri o che è la sua priorità, ' +
+    'è «priorita: alta»; se dice che non lo è più, «priorita: normale».\n\n' +
+    'Serve almeno uno fra stato, priorita, nota, obiettivo e parteDi. La nota si aggiunge a quelle che ci sono, ' +
     'con la data: non riscrive niente. Un progetto che non conosci si crea solo se lei lo nomina adesso ' +
     'e ne dice l\'obiettivo o di cosa fa parte: altrimenti chiedile di quale parla.',
   input_schema: {
@@ -1140,6 +1142,7 @@ const ATTREZZO_AGGIORNA_PROGETTO: Anthropic.Tool = {
           'indicarle, non l\'ha detto: non usare questo strumento.'
       },
       stato: { type: 'string', enum: ['attivo', 'fermo', 'chiuso'], description: "'fermo' se lo mette in pausa, 'attivo' se lo riprende, 'chiuso' se è finito o non è più un progetto." },
+      priorita: { type: 'string', enum: ['alta', 'normale'], description: "'alta' se dice che viene prima degli altri progetti, 'normale' se non più." },
       nota: { type: 'string', description: 'Una riga da tenere a mente sul progetto, con le sue parole.' },
       obiettivo: { type: 'string', description: 'A cosa punta, in una riga, con le sue parole. Solo se lo dice lei.' },
       parteDi: { type: 'string', description: 'Il nome del progetto di cui questo fa parte o di cui è uno spin-off.' }
@@ -1426,7 +1429,7 @@ function aggiungiNota(p: progetti.Progetto, testo: string): boolean {
  * si porta via la risposta per una citazione storta.
  */
 export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio: string): Anthropic.ToolResultBlockParam {
-  const dati = (input ?? {}) as { progetto?: unknown; citazione?: unknown; stato?: unknown; nota?: unknown; obiettivo?: unknown; parteDi?: unknown }
+  const dati = (input ?? {}) as { progetto?: unknown; citazione?: unknown; stato?: unknown; priorita?: unknown; nota?: unknown; obiettivo?: unknown; parteDi?: unknown }
   const testo = (v: unknown) => String(v ?? '').trim()
   const citazione = testo(dati.citazione)
   if (!citata(citazione, messaggio)) {
@@ -1436,11 +1439,13 @@ export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio
   }
   const nome = testo(dati.progetto)
   const stato = testo(dati.stato)
+  const priorita = testo(dati.priorita)
   const nota = testo(dati.nota)
   const obiettivo = senzaTrattini(testo(dati.obiettivo)).slice(0, 1000)
   const parteDi = testo(dati.parteDi)
   if (stato && !(progetti.STATI as string[]).includes(stato)) return nonCiRiesco(tool_use_id, 'Lo stato è uno fra «attivo», «fermo» e «chiuso».')
-  if (!stato && !nota && !obiettivo && !parteDi) return nonCiRiesco(tool_use_id, 'Non c\'è niente da salvare: serve almeno uno fra stato, nota, obiettivo e parteDi.')
+  if (priorita && priorita !== 'alta' && priorita !== 'normale') return nonCiRiesco(tool_use_id, 'La priorità è «alta» o «normale».')
+  if (!stato && !priorita && !nota && !obiettivo && !parteDi) return nonCiRiesco(tool_use_id, 'Non c\'è niente da salvare: serve almeno uno fra stato, priorita, nota, obiettivo e parteDi.')
   const madre = parteDi ? progettoNominato(parteDi) : null
   if (parteDi && !madre) return nonCiRiesco(tool_use_id, `Non conosco un progetto «${parteDi}». ${progettiConosciuti()} Chiedile di quale parla.`)
 
@@ -1464,6 +1469,14 @@ export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio
     recordStateDecision(p.id, stato, citazione)
     cambiato.push(`stato ${stato} (era ${prima})`)
   } else if (stato) cambiato.push(`stato già ${stato}`)
+  if (priorita) {
+    // la stessa colonna del gesto sulla scheda: detta in chat o segnata a mano è una cosa sola
+    const alta = priorita === 'alta'
+    if (alta !== (p.priorita === 'alta')) {
+      progetti.cambia(p.id, { priorita: alta ? 'alta' : null }, 'user-chat')
+      cambiato.push(alta ? 'priorità alta' : 'priorità normale')
+    } else cambiato.push(alta ? 'priorità già alta' : 'priorità già normale')
+  }
   if (obiettivo && obiettivo !== p.obiettivo) {
     progetti.cambia(p.id, { obiettivo }, 'user-chat')
     cambiato.push(`obiettivo «${obiettivo}»`)

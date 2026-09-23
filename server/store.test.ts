@@ -1137,7 +1137,7 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
   }
 
   const progetti = colonne('progetti')
-  for (const c of ['id', 'nome', 'obiettivo', 'stato', 'dal', 'aggiornato', 'note', 'origine']) {
+  for (const c of ['id', 'nome', 'obiettivo', 'stato', 'dal', 'aggiornato', 'note', 'origine', 'colore', 'alias', 'genitore', 'priorita']) {
     assert.ok(progetti.includes(c), `progetti non ha «${c}»: una migrazione è stata saltata`)
   }
   const notizie = colonne('notizie')

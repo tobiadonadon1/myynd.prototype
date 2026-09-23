@@ -1290,7 +1290,12 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // 45 → 46 · la priorità di una riga: «alta», «bassa», o niente (normale).
   // La chiede la scheda che si apre col «+» del calendario, insieme all'ora e
   // al progetto. In fondo, come tutte.
-  d => colonna(d, 'compiti', 'priorita', 'TEXT')
+  d => colonna(d, 'compiti', 'priorita', 'TEXT'),
+  // 46 → 47 · la priorità di un progetto: «alta», o niente (normale). La
+  // parola è la stessa delle righe, ma il gradino basso non c'è: per un
+  // progetto «meno importante» esiste già «fermo». Un progetto che c'era
+  // prima resta normale, cioè com'era. In fondo, come tutte.
+  d => colonna(d, 'progetti', 'priorita', 'TEXT')
 
 ]
 
@@ -1373,7 +1378,8 @@ const COLONNE: Record<string, [string, string][]> = {
   convinzioni: [['confermata', 'TEXT']],
   compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT'], ['priorita', 'TEXT']],
   feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']],
-  notizie: [['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']]
+  notizie: [['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']],
+  progetti: [['priorita', 'TEXT']]
 }
 
 function rimetti(db: DatabaseSync) {
