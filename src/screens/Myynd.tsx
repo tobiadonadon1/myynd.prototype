@@ -20,6 +20,7 @@ import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
+import { PrioritaProgetto } from '../components/PrioritaProgetto'
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
 const PIENO_SCURO: CSSProperties = {
@@ -841,6 +842,11 @@ export type BloccoPagina = BloccoFeed<VoceFeed, Compito>
  *
  * La testa si trascina: l'ordine dei blocchi lo decide lui, e chi decide
  * l'ordine lo fa prendendo la cosa e spostandola. Vedi `ordinaBlocchi`.
+ * Accanto al nome c'è la priorità del progetto: accesa si vede sempre, spenta
+ * compare sotto mano con gli altri gesti della testa.
+ *
+ * Un blocco senza righe esiste solo per un progetto appena nato: dentro c'è
+ * la domanda del primo passo, con la barra per scriverlo.
  */
 function Blocco({ b, v, lista, indice, ultimo, muovi }: {
   b: BloccoPagina; v: Vals; lista?: Lista
@@ -899,12 +905,16 @@ function Blocco({ b, v, lista, indice, ultimo, muovi }: {
         {suo && <span style={{ width: 8, height: 8, borderRadius: '50%', background: colore, flex: 'none' }} />}
         {suo
           ? (
-            // il nome porta al progetto, nella Memoria: è l'unico posto in cui si legge l'obiettivo
+            // il nome apre la pagina del progetto, qui sopra: l'obiettivo, i passi, quello che è fatto
             <Hov as="button" type="button" onClick={apriProgetto} title={t('Apri il progetto')}
               style={{ ...NOME, color: colore, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3 }}
               hover={{ textDecorationColor: 'currentColor' }}>{b.nome}</Hov>
           )
           : <span style={{ ...NOME, color: colore }}>{b.nome}</span>}
+        {suo && !b.progetto!.startsWith('nuovo-') && (
+          <PrioritaProgetto alta={!!b.alto} visibile={attiva} nome={b.nome}
+            cambia={alta => { v.cambiaProgetto(b.progetto!, { priorita: alta ? 'alta' : null }).catch(() => v.mostraToast(t('Non sono riuscito a salvarlo.'))) }} />
+        )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}>
           <Hov as="button" type="button" disabled={indice === 0} onClick={() => muovi(indice, indice - 1)}
@@ -915,6 +925,7 @@ function Blocco({ b, v, lista, indice, ultimo, muovi }: {
             style={{ ...GESTO, opacity: ultimo ? .35 : 1, cursor: ultimo ? 'default' : 'pointer' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta giù')}</Hov>
         </div>
       </div>
+      {!b.righe.length && b.progetto && lista && <PrimoPasso progetto={b.progetto} lista={lista} ultimo={v.progettiNuovi[v.progettiNuovi.length - 1] === b.progetto} />}
       {b.righe.map((r, i) => {
         const chiave = r.genere === 'voce' ? r.voce.id : r.compito.id
         return (
@@ -929,11 +940,109 @@ function Blocco({ b, v, lista, indice, ultimo, muovi }: {
   )
 }
 
+/**
+ * Il primo passo di un progetto appena nato: una domanda, e la barra sotto.
+ *
+ * «Empty states teach by doing»: il blocco vuoto non spiega cos'è un
+ * progetto, chiede la cosa che lo fa partire. La riga nasce nella lista con
+ * il progetto già scritto, e compare qui nell'istante di Invio, al posto
+ * della domanda. Il fuoco ci arriva da solo quando il progetto è appena
+ * stato creato da qui.
+ */
+function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: Lista; ultimo: boolean }) {
+  const [testo, setTesto] = useState('')
+  // l'id provvisorio: il server non lo conosce ancora, e una riga scritta ora
+  // finirebbe senza progetto. Dura il tempo di una risposta
+  const provvisorio = progetto.startsWith('nuovo-')
+  const manda = () => {
+    const pulito = testo.trim()
+    if (!pulito || provvisorio) return
+    setTesto('')
+    void lista.aggiungi(pulito, 'poi', null, null, { progetto })
+  }
+  const id = `primo-passo-${progetto}`
+  return (
+    <div style={{ padding: '8px 21px 16px' }}>
+      <label htmlFor={id} style={{ ...PERCHE, display: 'block', marginTop: 0, marginBottom: 8, color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13.5px' }}>
+        {t('Qual è il primo passo?')}
+      </label>
+      <form onSubmit={e => { e.preventDefault(); manda() }} style={{ display: 'flex' }}>
+        <Scatola>
+          <input id={id} autoFocus={ultimo} value={testo} maxLength={300} onChange={e => setTesto(e.target.value)}
+            placeholder={t('Manda il preventivo a Rossi')} style={CAMPO} />
+          {!!testo.trim() && <button type="submit" disabled={provvisorio} style={{ ...PILLOLA, flex: 'none' }}>{t('Aggiungi')}</button>}
+        </Scatola>
+      </form>
+    </div>
+  )
+}
+
+/**
+ * La riga dei progetti, sotto i blocchi: quelli che oggi non hanno niente sul
+ * tavolo, e il gesto per farne uno nuovo.
+ *
+ * «Users can only create one project.» Si poteva averne quanti si voleva, ma
+ * l'unico posto per farne uno era una scheda in fondo alla Memoria, dietro il
+ * menù del conto; e un progetto senza righe non compariva da nessuna parte
+ * della prima pagina. Qui c'è quello che serve e basta: i nomi dei progetti
+ * attivi che non hanno un blocco, ognuno apre la sua pagina, e «Nuovo
+ * progetto», che diventa la barra dove è scritto. Invio e il progetto c'è,
+ * con il suo blocco e la domanda del primo passo: prima la presa, poi l'esito.
+ */
+function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
+  const [scrivo, setScrivo] = useState(false)
+  const [nome, setNome] = useState('')
+  const conBlocco = new Set(blocchi.map(b => b.progetto).filter(Boolean))
+  const altri = v.progetti.filter(p => p.stato === 'attivo' && !conBlocco.has(p.id))
+  const crea = () => {
+    const pulito = nome.trim()
+    if (!pulito) return
+    setNome(''); setScrivo(false)
+    void v.nuovoProgetto(pulito)
+  }
+  if (scrivo) {
+    return (
+      <form onSubmit={e => { e.preventDefault(); crea() }} style={{ marginTop: 16, padding: '0 4px' }}>
+        <label htmlFor="nuovo-progetto" style={{ ...NOME, display: 'block', marginBottom: 8, color: 'rgba(var(--inchiostro-rgb),.55)' }}>{t('Nuovo progetto')}</label>
+        <div style={{ display: 'flex' }}>
+          <Scatola>
+            <input id="nuovo-progetto" autoFocus value={nome} maxLength={100} onChange={e => setNome(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setNome(''); setScrivo(false) } }}
+              onBlur={() => { if (!nome.trim()) setScrivo(false) }}
+              placeholder={t('Il rilancio del sito')} style={CAMPO} />
+            {!!nome.trim() && <button type="submit" style={{ ...PILLOLA, flex: 'none' }}>{t('Aggiungi')}</button>}
+          </Scatola>
+        </div>
+      </form>
+    )
+  }
+  const conProgetti = blocchi.some(b => b.progetto !== null)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px 14px', marginTop: 16, padding: '0 4px', minWidth: 0 }}>
+      {!!altri.length && <span style={{ ...NOME, color: 'rgba(var(--inchiostro-rgb),.5)' }}>{conProgetti ? t('Altri progetti') : t('Progetti')}</span>}
+      {altri.map(p => (
+        <Hov key={p.id} as="button" type="button" onClick={() => v.apriProgetto(p.id)}
+          style={{ ...GESTO, display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%', color: 'rgba(var(--inchiostro-rgb),.72)' }}
+          hover={{ color: 'var(--inchiostro)' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', background: v.coloreProgetto(p.id) }} />
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</span>
+          {p.priorita === 'alta' && <span style={{ color: 'var(--rame-testo)', fontSize: '11px' }}>{t('Priorità alta')}</span>}
+        </Hov>
+      ))}
+      <Hov as="button" type="button" onClick={() => setScrivo(true)}
+        style={{ ...GESTO, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        hover={{ color: 'var(--rame-testo)' }}>
+        <IconPiu size={12} />{t('Nuovo progetto')}
+      </Hov>
+    </div>
+  )
+}
+
 export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista; blocchi?: BloccoPagina[] }) {
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, vuoti: v.progettiNuovi })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi)
@@ -946,7 +1055,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
    * «Sposta su» vince sempre.
    */
   const pronta = v.feedCaricato && (!lista || lista.caricato)
-  const salvato = (v.ordineBlocchi ?? []).join('|')
+  // anche segnare un progetto alto è un ordine suo: la pagina lo lascia salire subito
+  const salvato = (v.ordineBlocchi ?? []).join('|') + '#' + v.progetti.filter(p => p.priorita === 'alta').map(p => p.id).join('|')
   const visto = useRef<{ chiavi: string[]; salvato: string } | null>(null)
   const tieni = pronta && visto.current !== null && visto.current.salvato === salvato
   const chiavi = tieni ? ordineStabile(ordinati.map(chiaveBlocco), visto.current!.chiavi) : ordinati.map(chiaveBlocco)
@@ -1053,6 +1163,10 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
         <Blocco key={chiaveBlocco(b)} b={b} v={v} lista={lista}
           indice={i} ultimo={i === blocchi.length - 1} muovi={muovi} />
       ))}
+
+      {/* i progetti che oggi non hanno un blocco, e «Nuovo progetto»: finché
+          non ce n'è nessuno lo dice la carta qui sopra, con il primo avvio */}
+      {v.feedCaricato && !v.senzaProgetto && <RigaProgetti v={v} blocchi={blocchi} />}
 
       {/* le sue domande, tutte in una carta, sotto il lavoro: «la carta dove
           mi fa domande deve stare sotto le priorità», e «if it's multiple
