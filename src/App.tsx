@@ -245,8 +245,12 @@ export default function App() {
       {/*
         Sopra tutto il resto, perché è l'unica cosa che spiega perché il resto
         non risponde. Sotto le connessioni no: ci si arriva anche da lì.
+
+        Ma non mentre le connessioni sono aperte: lì la scheda della chiave
+        dice già la stessa cosa, e due avvisi uguali uno sopra l'altro sono
+        uno di troppo. Chiusa la finestra, se il credito manca ancora, lo dice.
       */}
-      {stato.config.motore !== 'chatgpt' && stato.credito && stato.credito !== creditoVisto && (
+      {connessioni === null && stato.config.motore !== 'chatgpt' && stato.credito && stato.credito !== creditoVisto && (
         <Credito
           motivo={stato.credito}
           claude={stato.config.motore === 'claude'}
