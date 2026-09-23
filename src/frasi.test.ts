@@ -108,3 +108,9 @@ test('una riga incollata è «una riga segnata», non «1 righe»', () => {
   assert.equal(in_('en', () => frasi.righeSegnate(1)), '1 line noted.')
   assert.equal(in_('en', () => frasi.righeSegnate(8)), '8 lines noted.')
 })
+
+test('i passi dell’avvio dicono dove sei e quanti sono, nelle due lingue', () => {
+  assert.equal(in_('en', () => frasi.passoDi(1, 2)), 'Step 1 of 2')
+  assert.equal(in_('en', () => frasi.passoDi(3, 3)), 'Step 3 of 3')
+  assert.equal(in_('it', () => frasi.passoDi(1, 2)), 'Passo 1 di 2')
+})

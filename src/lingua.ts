@@ -3291,6 +3291,8 @@ export const frasi = {
   avantiCollegate: (n: number) => corrente === 'en'
     ? (n === 1 ? 'Next · 1 connected' : `Next · ${n} connected`)
     : (n === 1 ? 'Avanti · 1 collegata' : `Avanti · ${n} collegate`),
+  // i passi dell'avvio, in alto al centro (Scena)
+  passoDi: (n: number, di: number) => corrente === 'en' ? `Step ${n} of ${di}` : `Passo ${n} di ${di}`,
   documenti: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 document.' : `${n} documents.`)
     : (n === 1 ? '1 documento.' : `${n} documenti.`),

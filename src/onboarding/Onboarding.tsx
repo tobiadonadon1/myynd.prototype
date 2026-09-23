@@ -218,8 +218,12 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
 
   const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 3.4 : momento === 2 ? 3.7 : risultato ? 5 : 3
+  // due passi: l'obiettivo, poi la prima attività; la fonte si sceglie dalla
+  // prima attività e ne tiene il numero. L'introduzione ha i suoi, e mentre
+  // carica non si è ancora in nessun passo
+  const passo = carico || !avvio || !accountConfermato ? undefined : momento === 0 ? 1 : 2
 
-  return <Scena progressione={progressione} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
+  return <Scena progressione={progressione} passo={passo} passi={2} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
       {!accountConfermato && <Introduzione avanti={() => setAccountConfermato(true)} pronto={!!accountEmail} riprendi={!!avvio.progetto} cambiaAccount={() => void cambiaAccount()} occupato={occupato} />}
       {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
