@@ -3023,6 +3023,11 @@ const EN: Record<string, string> = {
   'Granola ci mette troppo a rispondere: riprovo al prossimo giro.': 'Granola is taking too long to respond: I will try again on the next round.',
   'Qualcosa non è andato leggendo Granola: riprova.': 'Something went wrong reading Granola: try again.',
   'Non riesco a salvare il collegamento con Granola su questo computer: riprova.': 'I cannot save the Granola connection on this computer: try again.',
+  // — feedback 23 set: finale y —
+  // la risposta della chat senza motore (server/claude.ts, SENZA_MOTORE_CHAT);
+  // la frase di prima resta per le chat già salvate, e dice la strada giusta
+  'Collega Claude nelle Fonti e potrò ragionare sul tuo materiale.': 'Connect Claude in Sources and I can reason over your material.',
+  'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.': 'Connect Claude in Sources and I can reason over your material.',
 }
 
 

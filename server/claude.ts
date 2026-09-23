@@ -963,7 +963,7 @@ export async function rispondi(
   const obiettivo = obiettivoRegistrato(domanda)
   if (obiettivo) return obiettivo
   const m = motore()
-  if (!m) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
+  if (!m) return { testo: SENZA_MOTORE_CHAT, fonti: [] }
 
   const compatto = m.tipo === 'compatibile'
   const docs = materialeChat(domanda, storico, compatto)
@@ -1029,6 +1029,16 @@ export type Attrezzi = {
  * che succede. Sono chiavi italiane: il client le passa da `t()`, e
  * `lingua.test.ts` controlla che ognuna abbia la sua traduzione.
  */
+/**
+ * La risposta della chat quando nessuno può ragionare.
+ *
+ * Diceva «nelle impostazioni», e Claude si collega nelle Fonti; ed era
+ * scritta qui e basta, fuori dal dizionario, quindi arrivava in italiano in
+ * una chat inglese. Adesso è una frase sola, tradotta in `src/lingua.ts`, e
+ * la chat la passa da `t()` (vedi `Chat.tsx`).
+ */
+export const SENZA_MOTORE_CHAT = 'Collega Claude nelle Fonti e potrò ragionare sul tuo materiale.'
+
 export const PASSI = {
   cerca: 'Cerco nelle tue fonti',
   memoria: 'Aggiorno la memoria',
@@ -1584,7 +1594,7 @@ export async function rispondiInStreaming(
   // fornitore come motore, il lavoro va a lui e basta
   const suoAbbonamento = !chatgpt.scelto() && abbonamento.disponibile() && m?.tipo !== 'compatibile'
   if (!m && !suoAbbonamento) {
-    return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
+    return { testo: SENZA_MOTORE_CHAT, fonti: [] }
   }
 
   /*
@@ -1659,7 +1669,7 @@ export async function rispondiInStreaming(
   // Arrivati qui il motore c'è di sicuro: senza, il ramo qui sopra ha già
   // risposto o lanciato. Il compilatore non può saperlo, e una riga che dice
   // una cosa vera costa meno di un `!` che la dà per scontata.
-  if (!m) return { testo: 'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.', fonti: [] }
+  if (!m) return { testo: SENZA_MOTORE_CHAT, fonti: [] }
 
   /**
    * Quello che ha letto, in ordine: la numerazione delle citazioni è la sua
