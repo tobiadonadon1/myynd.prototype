@@ -45,6 +45,9 @@ test('aprire, annullare o elencare non cambia niente, e nemmeno leggere', () => 
     ['POST', '/api/modello/chatgpt/login'],
     ['POST', '/api/modello/chatgpt/login/abc/cancel'],
     ['POST', '/api/connettori/google/avvia'],
+    ['POST', '/api/connettori/granola/avvia'],
+    // annullare l'accesso a Granola a metà: il collegamento è quello di prima
+    ['DELETE', '/api/connettori/granola/avvia/g1'],
     ['POST', '/api/connettori/dropbox/inizia'],
     ['POST', '/api/connettori/openai/modelli'],
     ['POST', '/api/modello/openai/modelli'],
@@ -62,6 +65,12 @@ test('un accesso nel browser conta quando risponde «completed», non prima', ()
     assert.equal(cambiaIlCollegamento('GET', url, { stato: 'failed' }), false)
     assert.equal(cambiaIlCollegamento('GET', url, { stato: 'completed' }), true)
   }
+  // Granola, con le sue parole: l'attesa e la lettura no, «fatto» sì
+  const granola = '/api/connettori/granola/avvia/g1'
+  assert.equal(cambiaIlCollegamento('GET', granola, { stato: 'attesa' }), false)
+  assert.equal(cambiaIlCollegamento('GET', granola, { stato: 'lettura' }), false)
+  assert.equal(cambiaIlCollegamento('GET', granola, { stato: 'errore' }), false)
+  assert.equal(cambiaIlCollegamento('GET', granola, { stato: 'fatto', note: 3 }), true)
 })
 
 /** Il server finto: risponde quello che gli si dice, e conta chi ha sentito il fatto. */

@@ -25,7 +25,8 @@
 //     favicon. Quella richiesta non ha nessun codice dentro, e la versione di
 //     prima la trattava come un fallimento — se fosse arrivata per prima
 //     avrebbe fatto saltare un collegamento perfettamente riuscito. Qui
-//     risponde solo la radice, e tutto il resto prende un 404 e viene ignorato.
+//     risponde solo la strada di ritorno (la radice, o `/callback` per chi la
+//     vuole), e tutto il resto prende un 404 e viene ignorato.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import * as chi from '../chi.ts'
@@ -69,9 +70,10 @@ function pagina(bene: boolean, nome: string): string {
   return '<!doctype html><meta charset="utf-8"><title>Myynd</title>' +
     '<body style="font:16px -apple-system,Helvetica,sans-serif;background:#191715;color:#F4EFE8;' +
     'display:grid;place-items:center;height:100vh;margin:0;text-align:center">' +
-    `<div>${bene
-      ? 'Fatto. Puoi chiudere questa pagina e tornare su Myynd.'
-      : `Non è andata con ${nome}. Torna su Myynd e riprova.`}</div>`
+    // nelle due lingue, come `paginaWeb`: qui non si sa ancora quale
+    `<div style="line-height:1.6;padding:0 24px">${bene
+      ? 'Fatto. Puoi chiudere questa pagina e tornare su Myynd.<br><span style="opacity:.6">Done. You can close this page and go back to Myynd.</span>'
+      : `Non è andata con ${nome}. Torna su Myynd e riprova.<br><span style="opacity:.6">It didn't work with ${nome}. Go back to Myynd and try again.</span>`}</div>`
 }
 
 /**
@@ -83,19 +85,25 @@ function pagina(bene: boolean, nome: string): string {
  * sola che si risolve alla fine, quando ormai è tardi per sapere dove mandare
  * la gente.
  */
-function ascolta(atteso: string, nome: string, approvazione?: Sportello['approvazione']): Promise<{
+function ascolta(atteso: string, nome: string, approvazione?: Sportello['approvazione'], opz: {
+  percorso?: string; durata?: number; ancheIPv6?: boolean
+} = {}): Promise<{
   porta: number; codice: Promise<string>; chiudi: () => void
 }> {
+  const percorso = opz.percorso || '/'
   return new Promise((pronto, male) => {
     let dai: (c: string) => void
     let no: (e: Error) => void
     const codice = new Promise<string>((a, b) => { dai = a; no = b })
+    // chi ha smesso di aspettare — un browser che non si è aperto, un
+    // «Annulla» — non deve lasciare dietro un rifiuto che nessuno raccoglie
+    codice.catch(() => {})
 
-    const s = createServer((req, res) => {
+    const risponde = (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => {
       const u = new URL(req.url ?? '/', 'http://127.0.0.1')
-      // solo la radice: la favicon e qualunque altra bussata non sono la
-      // risposta che stiamo aspettando, e non devono poterla rovinare
-      if (u.pathname !== '/') { res.writeHead(404); res.end(); return }
+      // solo la strada di ritorno: la favicon e qualunque altra bussata non
+      // sono la risposta che stiamo aspettando, e non devono poterla rovinare
+      if (u.pathname !== percorso) { res.writeHead(404); res.end(); return }
 
       const c = u.searchParams.get('code')
       const stato = u.searchParams.get('state') ?? ''
@@ -108,14 +116,33 @@ function ascolta(atteso: string, nome: string, approvazione?: Sportello['approva
       if (buono) dai(c!)
       else if (c) no(new Error('La risposta non è quella che aspettavo: riprova.'))
       else no(noDelRitorno(nome, errore, u.searchParams.get('error_description'), approvazione))
-    })
+    }
+    const s = createServer(risponde)
+    let s6: ReturnType<typeof createServer> | null = null
 
     s.on('error', male)
     // porta 0: la sceglie il sistema fra quelle libere
     s.listen(0, '127.0.0.1', () => {
       const porta = (s.address() as { port: number }).port
-      const chiudi = () => { try { s.close() } catch { /* già chiusa */ } }
-      setTimeout(() => { chiudi(); no(new Error(`Nessuna risposta da ${nome}: riprova.`)) }, 120_000).unref()
+      /*
+       * `localhost` nell'indirizzo di ritorno, per chi lo vuole così: il
+       * browser può provare prima ::1, e trovarlo chiuso. Di solito ripiega da
+       * solo su 127.0.0.1; la stessa porta aperta anche su ::1 toglie il «di
+       * solito». Se ::1 non c'è o la porta è presa, si resta come prima.
+       */
+      if (opz.ancheIPv6) {
+        s6 = createServer(risponde)
+        s6.on('error', () => { s6 = null })
+        s6.listen(porta, '::1')
+      }
+      const chiudi = () => {
+        try { s.close() } catch { /* già chiusa */ }
+        try { s6?.close() } catch { /* già chiusa */ }
+        // chi chiude prima del ritorno smette di aspettarlo: dopo, non cambia niente
+        no(new Error('Accesso annullato.'))
+      }
+      // prima la ragione vera, poi la chiusura: una promessa si rifiuta una volta sola
+      setTimeout(() => { no(new Error(`Nessuna risposta da ${nome}: riprova.`)); chiudi() }, opz.durata ?? 120_000).unref()
       pronto({ porta, codice, chiudi })
     })
   })
@@ -200,22 +227,60 @@ export async function chiediGettoni(s: Sportello, corpo: Record<string, string>)
  * copia scaduta di un segreto.
  */
 export async function consenso(s: Sportello): Promise<Gettoni> {
+  const l = await avviaLocale(s.nome, () => s)
+  try {
+    await apriIlBrowser(l.dove)
+    return await l.gettoni
+  } finally {
+    l.chiudi()
+  }
+}
+
+export type Locale = {
+  /** L'indirizzo a cui mandare la persona: lo apre chi chiama, non questo modulo. */
+  dove: string
+  /** L'indirizzo di ritorno, com'è scritto nella richiesta. */
+  redirect: string
+  /** I token, quando il browser torna con il codice. */
+  gettoni: Promise<Gettoni>
+  /** Smette di aspettare: chiude la porta, e `gettoni` si rifiuta se non era già arrivato. */
+  chiudi: () => void
+}
+
+/**
+ * Lo stesso ballo di `consenso`, in due tempi: prima l'indirizzo, poi i token.
+ *
+ * Serve a chi non può aprire il browser da qui. Dentro l'app lo apre il
+ * guscio, fuori lo apre la pagina, e in tutti e due i casi l'indirizzo deve
+ * arrivare a chi lo apre prima che il codice torni. `consenso` è questo più
+ * `apriIlBrowser`, e resta com'era per chi lo usa.
+ *
+ * `sportelloPer` riceve l'indirizzo di ritorno perché c'è chi deve saperlo
+ * prima di poter scrivere il proprio sportello: un server MCP registra l'app
+ * (DCR) con quell'indirizzo dentro, e la porta si conosce solo adesso.
+ */
+export async function avviaLocale(
+  nome: string,
+  sportelloPer: (redirect: string) => Sportello | Promise<Sportello>,
+  opz: { ospite?: '127.0.0.1' | 'localhost'; percorso?: string; durata?: number } = {}
+): Promise<Locale> {
   const { verifica, sfida } = pkce()
   const stato = randomBytes(24).toString('base64url')
-  const { porta, codice, chiudi } = await ascolta(stato, s.nome, s.approvazione)
-  const redirect = `http://127.0.0.1:${porta}`
-
-  try {
-    await apriIlBrowser(s.autorizza({ redirect, sfida, stato }))
-    return await chiediGettoni(s, {
-      code: await codice,
-      redirect_uri: redirect,
-      grant_type: 'authorization_code',
-      code_verifier: verifica
-    })
-  } finally {
-    chiudi()
-  }
+  let s: Sportello | null = null
+  const { porta, codice, chiudi } = await ascolta(stato, nome, (e, d) => s?.approvazione?.(e, d) ?? null, {
+    percorso: opz.percorso, durata: opz.durata, ancheIPv6: opz.ospite === 'localhost'
+  })
+  const redirect = `http://${opz.ospite ?? '127.0.0.1'}:${porta}${opz.percorso ?? ''}`
+  try { s = await sportelloPer(redirect) } catch (e) { chiudi(); throw e }
+  const sportello = s
+  const gettoni = codice.then(code => chiediGettoni(sportello, {
+    code,
+    redirect_uri: redirect,
+    grant_type: 'authorization_code',
+    code_verifier: verifica
+  }))
+  gettoni.catch(() => {})
+  return { dove: sportello.autorizza({ redirect, sfida, stato }), redirect, gettoni, chiudi }
 }
 
 // — ospitati: il ritorno passa dal nostro dominio, non da 127.0.0.1 —

@@ -37,10 +37,17 @@ export function annunciaCollegamento(): void {
  * lo stato è quello di prima, e rileggerlo non serve. Tutto il resto sotto
  * `/api/connettori/` e `/api/modello/` collega, scollega o cambia chi lavora.
  */
-const SOLO_PASSAGGI = /\/(avvia|inizia|modelli|annulla|cancel|scopri)$|^\/api\/modello\/(abbonamento\/accesso|chatgpt\/login)$/
+const SOLO_PASSAGGI = /\/(avvia|inizia|modelli|annulla|cancel|scopri)$|^\/api\/modello\/(abbonamento\/accesso|chatgpt\/login)$|^\/api\/connettori\/granola\/avvia\/[^/]+$/
 
-/** La domanda «a che punto è l'accesso?», che una volta risponde «fatto». */
-const ACCESSO = /^\/api\/modello\/(abbonamento\/accesso|chatgpt\/login)\/[^/]+$/
+/**
+ * La domanda «a che punto è l'accesso?», che una volta risponde «fatto».
+ *
+ * Granola risponde in italiano (`fatto`), gli accessi dei modelli come i loro
+ * programmi (`completed`): tutti e due vogliono dire che il collegamento è
+ * scritto, e l'intestazione della scheda deve dirlo subito, non all'«Avanti».
+ * Annullare quello di Granola (DELETE sulla stessa rotta) è un passaggio.
+ */
+const ACCESSO = /^\/api\/modello\/(abbonamento\/accesso|chatgpt\/login)\/[^/]+$|^\/api\/connettori\/granola\/avvia\/[^/]+$/
 
 /**
  * Questa risposta ha cambiato un collegamento?
@@ -53,7 +60,8 @@ export function cambiaIlCollegamento(metodo: string | undefined, url: string, co
   const percorso = url.split('?')[0]
   if (!/^\/api\/(connettori|modello)\//.test(percorso)) return false
   if ((metodo ?? 'GET').toUpperCase() === 'GET') {
-    return ACCESSO.test(percorso) && (corpo as { stato?: unknown } | null)?.stato === 'completed'
+    const stato = (corpo as { stato?: unknown } | null)?.stato
+    return ACCESSO.test(percorso) && (stato === 'completed' || stato === 'fatto')
   }
   return !SOLO_PASSAGGI.test(percorso)
 }

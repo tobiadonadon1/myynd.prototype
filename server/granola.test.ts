@@ -166,6 +166,40 @@ test('oggi (da maggio 2026): il moncherino cifrato dice la ragione vera, non «a
   assert.deepEqual(p, { ok: false, errore: granola.CIFRATO })
 })
 
+test('una cache vecchia in chiaro accanto a una più nuova solo cifrata non si legge', async () => {
+  /*
+   * Il guasto trovato rileggendo: un `cache-v3.json` intero rimasto dopo gli
+   * aggiornamenti, e la cache vera solo in `cache-v6.json.enc`. Si leggeva la
+   * v3 — «Collegato: 1 riunione» — e il giro dopo `riconcilia` toglieva
+   * dall'indice tutte le riunioni più nuove.
+   */
+  scrivi('cache-v3.json', cacheV3({ documents: { [ID]: RIUNIONE } }))
+  scrivi('cache-v6.json.enc', 'binario cifrato')
+  await assert.rejects(() => granola.leggi(), (e: Error) => e.message === granola.CIFRATO)
+  assert.deepEqual(await granola.prova(), { ok: false, errore: granola.CIFRATO })
+  // e il giro di sfondo manda all'account invece di cancellare
+  await assert.rejects(() => granola.sincronizza(), (e: Error) => e.message === granola.PASSA_ALL_ACCOUNT)
+})
+
+test('un moncherino con le note vuote accanto ai cifrati non vuol dire «Granola è vuoto»', async () => {
+  for (const vuoto of [{}, []]) {
+    rmSync(CARTELLA, { recursive: true, force: true })
+    scrivi('cache-v6.json', { cache: { version: 8, state: { documents: vuoto, transcripts: {} } } })
+    scrivi('cache-v6.json.enc', 'binario cifrato')
+    // zero documenti con `troncato` spento farebbero svuotare l'indice al giro dopo
+    await assert.rejects(() => granola.leggi(), (e: Error) => e.message === granola.CIFRATO)
+    assert.deepEqual(await granola.prova(), { ok: false, errore: granola.CIFRATO })
+  }
+})
+
+test('con i cifrati accanto, quello che si legge in chiaro non basta a cancellare le altre', async () => {
+  scrivi('cache-v6.json', { cache: { version: 8, state: { documents: { [ID]: RIUNIONE } } } })
+  scrivi('cache-v6.json.enc', 'binario cifrato')
+  const e = await granola.leggi()
+  assert.equal(e.docs.length, 1)
+  assert.equal(e.troncato, true)
+})
+
 test('i soli file cifrati, senza nessuna cache in chiaro: la stessa ragione', async () => {
   scrivi('cache-v6.json.enc', 'binario cifrato')
   scrivi('granola.db', 'SQLite cifrato')

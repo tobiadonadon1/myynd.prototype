@@ -39,6 +39,9 @@ test('Google si offre perché chi ospita ha registrato l’app; Microsoft no', (
   assert.equal(o.fermoSulServer('microsoft'), true)
   assert.equal(o.fermoSulServer('sharepoint'), true)
   assert.equal(o.fermoSulServer('posta'), false)
+  // Granola registra l'app da sola: col dominio noto si offre
+  assert.equal(o.fermoSulServer('granola'), false)
+  assert.equal(o.disponibile('granola'), true)
 })
 
 test('il desktop si offre anche su un server — legge dal browser, non dal disco', () => {

@@ -1451,41 +1451,136 @@ export function FormDesktop({ tema, ok }: Props) {
 }
 
 /**
- * Granola: una scheda senza un solo campo.
+ * Granola: un bottone, il browser, e il numero.
  *
- * È l'unico collegamento che non chiede niente — non un token, non un
- * indirizzo, non una cartella — e la scheda deve *sembrare* quello che è,
- * altrimenti chi la apre si mette a cercare la casella che non c'è. Quindi
- * una riga e un bottone; le due condizioni vere — Granola su questo Mac,
- * aperto almeno una volta — stanno chiuse sotto il loro titolo.
+ * Tiene la misura della scheda del calendario: una riga su cosa arriva, una
+ * cosa sola da fare, una conferma che si conta. Qui la cosa da fare non è
+ * incollare ma accedere a Granola, quindi non c'è un «Dove lo trovo?»: non
+ * c'è niente da trovare.
+ *
+ * Il bottone chiede al server l'indirizzo del consenso e lo apre fuori:
+ * dentro l'app nel browser di sistema, dal guscio; in un browser, nella
+ * scheda aperta al clic (dopo la risposta il browser la bloccherebbe). Poi la
+ * scheda segue il collegamento — l'attesa, con «Annulla»; la lettura; il
+ * numero — e ogni stato ha la sua riga. Ospitati la pagina va da Granola e
+ * torna da sola, come per Google.
  */
-export function FormGranola({ tema, ok }: Props) {
+export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () => void }) {
   const [err, setErr] = useState('')
+  const [avviso, setAvviso] = useState('')
   const [occupato, setOccupato] = useState(false)
-  // quante riunioni ha letto: la stessa conferma del calendario, contata
-  const [lette, setLette] = useState<number | null>(null)
+  const [attesa, setAttesa] = useState<{ id: string; dove: string; scade: number } | null>(null)
+  const [lettura, setLettura] = useState(false)
+  const [fatto, setFatto] = useState<{ note: number; trentaGiorni: boolean } | null>(null)
+  const [ospitato, setOspitato] = useState(false)
+  const vivo = useRef(true)
+  const inCorso = useRef<string | null>(null)
+
+  useEffect(() => {
+    vivo.current = true
+    api.stato().then(s => { if (vivo.current) setOspitato(!!s.ospitato) }).catch(() => {})
+    return () => {
+      vivo.current = false
+      // chi chiude la scheda mentre aspetta il browser non lascia una porta aperta
+      if (inCorso.current) { void api.annullaGranola(inCorso.current).catch(() => {}); inCorso.current = null }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!attesa) return
+    const fermo = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let sbagli = 0
+    const finisci = () => { inCorso.current = null; setAttesa(null); setLettura(false) }
+    const guarda = async () => {
+      try {
+        const s = await api.accessoGranola(attesa.id, fermo.signal)
+        if (fermo.signal.aborted) return
+        sbagli = 0
+        // il server ha scritto il collegamento: chi disegna le schede lo sa subito, prima del numero
+        if (s.stato === 'fatto') { finisci(); collegato?.(); setFatto({ note: s.note ?? 0, trentaGiorni: !!s.trentaGiorni }); return }
+        if (s.stato === 'errore') { finisci(); setErr(s.errore || 'Non sono riuscito a collegare.'); return }
+        if (s.stato === 'annullato') { finisci(); setAvviso(t('Accesso annullato.')); return }
+        setLettura(s.stato === 'lettura')
+        // il server chiude da sé allo scadere; questo è il margine se non risponde più
+        if (s.stato === 'attesa' && Date.now() > attesa.scade + 15_000) {
+          void api.annullaGranola(attesa.id).catch(() => {})
+          finisci(); setAvviso(t('Il tempo per l’accesso è terminato. Riprova.'))
+          return
+        }
+      } catch (e) {
+        if (fermo.signal.aborted) return
+        // una risposta persa si riprova; tre di fila vogliono dire che non c'è più
+        if (++sbagli >= 3) { finisci(); setErr(e instanceof Error ? e.message : String(e)); return }
+      }
+      timer = setTimeout(guarda, 1500)
+    }
+    void guarda()
+    return () => { fermo.abort(); clearTimeout(timer) }
+  }, [attesa])
 
   const collega = async () => {
-    setOccupato(true); setErr('')
-    try { setLette((await api.collegaGranola()).note) }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    setOccupato(false)
+    setOccupato(true); setErr(''); setAvviso('')
+    const d = desktop()
+    const finestra = !d && !ospitato ? window.open('', '_blank') : null
+    try {
+      const r = await api.avviaGranola()
+      if (!r.id) { finestra?.close(); window.location.assign(r.dove); return }
+      if (!vivo.current) { void api.annullaGranola(r.id).catch(() => {}); finestra?.close(); return }
+      inCorso.current = r.id
+      setAttesa({ id: r.id, dove: r.dove, scade: r.scade ?? Date.now() + 300_000 })
+      if (d) await d.apriFuori(r.dove).catch(() => {})
+      else if (finestra) { finestra.opener = null; finestra.location.href = r.dove }
+    } catch (e) {
+      finestra?.close()
+      if (vivo.current) setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      if (vivo.current) setOccupato(false)
+    }
   }
 
-  if (lette !== null) return <Fatto tema={tema} testo={frasi.granolaLette(lette)} ok={ok} />
+  const annulla = async () => {
+    const id = inCorso.current
+    inCorso.current = null; setAttesa(null); setLettura(false)
+    if (id) { try { await api.annullaGranola(id) } catch { /* era già finito */ } }
+    if (vivo.current) setAvviso(t('Accesso annullato.'))
+  }
+
+  if (fatto) {
+    return (
+      <div>
+        <div role="status" style={guida(tema)}>{frasi.granolaLette(fatto.note)}</div>
+        {fatto.trentaGiorni && <div style={{ ...nota(tema), marginTop: 6 }}>{t('Con il piano gratuito, Granola dà le riunioni degli ultimi 30 giorni.')}</div>}
+        {/* nel primo avvio il bottone che va avanti è uno, ed è quello della pagina */}
+        {!collegato && <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>}
+      </div>
+    )
+  }
+
+  if (attesa) {
+    return (
+      <div>
+        <div style={guida(tema)}>{t('Le note delle tue riunioni: accedi con il tuo account Granola.')}</div>
+        <div role="status" style={{ ...nota(tema), marginTop: 10 }}>
+          {lettura ? t('Leggo le tue riunioni…') : t('Accedi a Granola nel browser e torna qui.')}
+        </div>
+        {!lettura && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+            <button type="button" onClick={annulla} style={azione(tema)}>{t('Annulla')}</button>
+            {/* se il browser non si è aperto, o la pagina è stata chiusa: la stessa, di nuovo */}
+            <span style={nota(tema)}><Vai tema={tema} url={attesa.dove} testo={t('Riapri la pagina di Granola')} /></span>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div>
-      <div style={guida(tema)}>{t('Le riunioni che Granola ha già scritto su questo Mac.')}</div>
+      <div style={guida(tema)}>{t('Le note delle tue riunioni: accedi con il tuo account Granola.')}</div>
+      {avviso && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{avviso}</div>}
       <Errore testo={err} />
       <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Granola')}</Conferma>
-      <Aiuto tema={tema} titolo={t('Cosa serve per collegarlo')}>
-        <Passi tema={tema} numerati={false} passi={[
-          t('Granola installato su questo Mac.'),
-          t('Aperto almeno una volta.'),
-          t('Niente da incollare.')
-        ]} />
-      </Aiuto>
     </div>
   )
 }
@@ -2443,7 +2538,7 @@ export function Form({ id, tema, ok, collegato }: { id: string; collegato?: () =
   if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
   if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
   if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
-  if (id === 'granola') return <FormGranola tema={tema} ok={ok} />
+  if (id === 'granola') return <FormGranola tema={tema} ok={ok} collegato={collegato} />
   if (id === 'note') return <FormNote tema={tema} ok={ok} />
   if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} collegato={collegato} />

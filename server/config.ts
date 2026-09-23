@@ -642,14 +642,32 @@ export type ConfigNotion = { token: string }
 export type ConfigGithub = { token: string; repos?: string[] }
 
 /**
- * Granola: un collegamento senza niente dentro.
+ * Granola: quante note, e — da quando si collega con l'account — le chiavi.
  *
- * Non c'è un token, non c'è un indirizzo, non c'è un percorso — si legge un
- * file che sta sempre nello stesso posto sul Mac di chi collega. Quello che
- * resta scritto è solo che il collegamento c'è, e quante note aveva l'ultima
- * volta: serve alla scheda, non alla lettura.
+ * Collegato dalla cache (`connettori/granola.ts`) non c'è niente dentro oltre
+ * al numero: il file sta sempre nello stesso posto. Collegato con l'account
+ * (`connettori/granolaMcp.ts`) c'è l'app che si è registrata da sola presso
+ * Granola e il suo refresh. Stanno in cima e non in un oggetto dentro,
+ * apposta: `refresh` e `clientSecret` sono fra i campi che `scrivi` non lascia
+ * sparire da una scrittura qualunque, e lo guarda solo al primo livello.
  */
-export type ConfigGranola = { note?: number }
+export type ConfigGranola = {
+  /** Quante riunioni ha letto, per la scheda. */
+  note?: number
+  refresh?: string
+  clientId?: string
+  clientSecret?: string
+  /** Come si presenta l'app al token endpoint, se Granola le ha dato un segreto. */
+  metodo?: string
+  /** Il token endpoint scoperto al collegamento: si rinnova lì. */
+  gettoni?: string
+  /** La risorsa per cui valgono i token (RFC 8707). */
+  risorsa?: string
+  /** Il server MCP. */
+  mcp?: string
+  /** Granola ha detto che il piano dà solo gli ultimi trenta giorni. */
+  trentaGiorni?: boolean
+}
 
 /**
  * Le conversazioni con ChatGPT, Claude, Claude Code e Codex.
@@ -1175,7 +1193,7 @@ export function pubblica(c: Config = leggi()) {
     posta: c.posta ? { host: c.posta.host, utente: c.posta.utente, giorni: c.posta.giorni ?? 30 } : null,
     desktop: c.desktop ? { cartelle: c.desktop.cartelle, tutto: c.desktop.tutto === true } : null,
     notion: c.notion ? { collegato: true } : null,
-    // non ha niente da nascondere: non c'è nessuna credenziale, esce intera
+    // esce il numero, non le chiavi: con l'account dentro c'è un refresh
     granola: c.granola ? { collegato: true, note: c.granola.note ?? 0 } : null,
     note: c.note ? { collegato: true, note: c.note.note ?? 0 } : null,
     // i percorsi escono come le cartelle del desktop: in casa sono suoi, e la
