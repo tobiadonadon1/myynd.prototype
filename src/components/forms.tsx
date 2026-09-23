@@ -1523,13 +1523,14 @@ export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () =>
   const [attesa, setAttesa] = useState<{ id: string; dove: string; scade: number } | null>(null)
   const [lettura, setLettura] = useState(false)
   const [fatto, setFatto] = useState<{ note: number; trentaGiorni: boolean } | null>(null)
-  const [ospitato, setOspitato] = useState(false)
+  // già collegata: la scheda si è riaperta da «Cambia» per rifare l'accesso
+  const [gia, setGia] = useState(false)
   const vivo = useRef(true)
   const inCorso = useRef<string | null>(null)
 
   useEffect(() => {
     vivo.current = true
-    api.stato().then(s => { if (vivo.current) setOspitato(!!s.ospitato) }).catch(() => {})
+    api.stato().then(s => { if (vivo.current) setGia(!!s.config.granola?.collegato) }).catch(() => {})
     return () => {
       vivo.current = false
       // chi chiude la scheda mentre aspetta il browser non lascia una porta aperta
@@ -1573,7 +1574,13 @@ export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () =>
   const collega = async () => {
     setOccupato(true); setErr(''); setAvviso('')
     const d = desktop()
-    const finestra = !d && !ospitato ? window.open('', '_blank') : null
+    /*
+     * Fuori dall'app, in casa come ospitati, il consenso va in un'altra scheda
+     * e questa resta a seguirlo. La scheda si apre adesso, dentro il clic:
+     * dopo la risposta il browser la bloccherebbe. Se la blocca lo stesso,
+     * resta «Riapri la pagina di Granola», che è un clic vero.
+     */
+    const finestra = !d ? window.open('', '_blank') : null
     try {
       const r = await api.avviaGranola()
       if (!r.id) { finestra?.close(); window.location.assign(r.dove); return }
@@ -1631,7 +1638,7 @@ export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () =>
       <div style={guida(tema)}>{t('Le note delle tue riunioni: accedi con il tuo account Granola.')}</div>
       {avviso && <div role="status" style={{ ...nota(tema), marginTop: 8 }}>{avviso}</div>}
       <Errore testo={err} />
-      <Conferma onClick={collega} occupato={occupato} tema={tema}>{t('Collega Granola')}</Conferma>
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{gia ? t('Accedi di nuovo') : t('Collega Granola')}</Conferma>
     </div>
   )
 }

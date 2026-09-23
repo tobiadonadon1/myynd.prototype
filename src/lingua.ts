@@ -3016,6 +3016,13 @@ const EN: Record<string, string> = {
     'A sign-in policy of your company blocked Myynd on Microsoft. Your admin can see why and allow it.',
   'Questa app di Google accetta solo gli account dell’organizzazione che la gestisce: accedi con un account di quell’organizzazione.':
     'This Google app only accepts accounts of the organization that runs it: sign in with an account of that organization.',
+  // — feedback 23 set: granola revisione —
+  // rifare l'accesso da «Cambia», e i guai che non vogliono dire «ricollega»
+  'Accedi di nuovo': 'Sign in again',
+  'Granola non risponde in questo momento: riprova più tardi.': 'Granola is not responding right now: try again later.',
+  'Granola ci mette troppo a rispondere: riprovo al prossimo giro.': 'Granola is taking too long to respond: I will try again on the next round.',
+  'Qualcosa non è andato leggendo Granola: riprova.': 'Something went wrong reading Granola: try again.',
+  'Non riesco a salvare il collegamento con Granola su questo computer: riprova.': 'I cannot save the Granola connection on this computer: try again.',
 }
 
 
@@ -3578,6 +3585,9 @@ export const frasi = {
 
   nDocumenti: (n: string) => corrente === 'en'
     ? `${n} document${n === '1' ? '' : 's'}` : `${n} document${n === '1' ? 'o' : 'i'}`,
+  /** Le riunioni di Granola: la scheda le conta così, e l'intestazione con lei. */
+  nRiunioni: (n: string) => corrente === 'en'
+    ? `${n} meeting${n === '1' ? '' : 's'}` : `${n} riunion${n === '1' ? 'e' : 'i'}`,
 
   cercaFra: (n: string) =>
     corrente === 'en'
