@@ -1122,7 +1122,8 @@ export function FormPosta({ tema, ok, collegato }: Props) {
   const formaSbagliata = !!perLeApp && password.length > 0 && !/^[a-z]{16}$/i.test(nudo)
   return (
     <div>
-      <div style={guida(tema)}>{t('La tua posta, in sola lettura: chi ti scrive e cosa dice.')}</div>
+      {/* «in sola lettura» non era vero: le bozze delle risposte finiscono in Bozze, e dal suo bottone si manda. Vero è che senza di lui non parte niente */}
+      <div style={guida(tema)}>{t('La tua posta: chi ti scrive e cosa dice. Non manda niente senza di te.')}</div>
 
       <Campo tema={tema} nome={t('Indirizzo')} sotto={
         cerco ? t('Cerco il tuo server…')

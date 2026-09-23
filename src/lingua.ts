@@ -2477,8 +2477,6 @@ const EN: Record<string, string> = {
   'Scrivi il nome del modello che hai scaricato. La chiave non serve.':
     'Type the name of the model you downloaded. No key needed.',
 
-  'La tua posta, in sola lettura: chi ti scrive e cosa dice.':
-    'Your mail, read-only: who writes to you and what they say.',
   'Gmail vuole una «password per le app», non quella del tuo account.':
     'Gmail wants an app password, not your account password.',
   'Dove trovo la password per le app?': 'Where do I find the app password?',
@@ -2848,6 +2846,7 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  'La tua posta: chi ti scrive e cosa dice. Non manda niente senza di te.': 'Your mail: who writes to you and what they say. It sends nothing without you.',
   // — feedback 23 set: accesso e primo avvio —
   // la parte prima della chiocciola, nell'esempio dell'indirizzo aziendale
   'nome': 'name',
