@@ -260,3 +260,31 @@ test('il primo file del lotto sta fra quelli «appena arrivati» da quando dice 
   assert.deepEqual(arrivati, [`desktop:${f}`], 'il file che ha svegliato la vedetta non è fra gli arrivati')
   vedetta.ferma()
 })
+
+/*
+ * La cartella guardata che sparisce tutta non svuota l'indice.
+ *
+ * Un disco staccato, una cartella di rete caduta, un permesso tolto: dalla
+ * vedetta sembrano tutti file cancellati. La lettura intera su una radice
+ * illeggibile non riconcilia niente, e la vedetta deve fare lo stesso; se
+ * no il Mac restava a zero documenti e gli estratti del primo avvio sparivano.
+ */
+test('la cartella guardata che sparisce tutta non butta quello che era nell’indice', async () => {
+  vedetta.perProva({ attesa: 100, quiete: 500, minimo: 0, riprova: 60_000 })
+  const cartella = join(CASA, 'disco-esterno')
+  mkdirSync(join(cartella, 'sotto'), { recursive: true })
+  vedetta.avvia({ cartelle: [cartella] })
+  await finche(() => vedetta.stato().attiva, 'il lavoratore aprisse la cartella')
+  await dormi(500)
+  const primo = join(cartella, 'preventivo.md')
+  const secondo = join(cartella, 'sotto', 'verbale.md')
+  writeFileSync(primo, 'Preventivo per il cliente Verdi, consegna prevista entro la fine di ottobre.')
+  writeFileSync(secondo, 'Verbale della riunione di martedì con il gruppo di lavoro del progetto.')
+  await finche(() => !!store.documento(`desktop:${primo}`) && !!store.documento(`desktop:${secondo}`), 'i due file entrassero')
+
+  rmSync(cartella, { recursive: true, force: true })
+  await dormi(1_500)
+  assert.ok(store.documento(`desktop:${primo}`), 'una radice sparita non prova che i suoi file siano stati cancellati')
+  assert.ok(store.documento(`desktop:${secondo}`), 'e nemmeno quelli nelle sue cartelle')
+  vedetta.ferma()
+})

@@ -12,12 +12,23 @@ const progetti = await import('./progetti.ts')
 const chi = await import('./chi.ts')
 const conti = await import('./conti.ts')
 const desktop = await import('./connettori/desktop.ts')
+const cfg = await import('./config.ts')
 
 before(async () => { await conti.avvia() })
 beforeEach(() => { avvio.perProva.dopoCompito(null); store.azzeraTutto(); rmSync(join(casa, 'avvio.json'), { force: true }) })
 after(() => { store.chiudiIndici(); delete process.env.MYYND_DATI; rmSync(casa, { recursive: true, force: true }) })
 
+/** Le fonti che le prove leggono, collegate per chi sta chiedendo: l'avvio non ne accetta altre. */
+function collega() {
+  cfg.aggiorna({
+    desktop: { cartelle: [casa], scelte: true },
+    calendario: { url: 'https://example.invalid/agenda.ics' },
+    posta: { host: 'imap.example.invalid', porta: 993, utente: 'prova@example.invalid', password: 'x' }
+  })
+}
+
 function progetto() {
+  collega()
   return avvio.progetto({ nome: 'Aurora', obiettivo: 'Preparare il lancio della nuova piattaforma Aurora', revisione: avvio.stato().revisione })
 }
 
@@ -366,4 +377,12 @@ test('onboarding source lists stay per account', () => {
   assert.deepEqual(bruno.fonti, ['calendario'])
   assert.deepEqual(bruno.fatti, [], 'another account must never inherit document excerpts')
   assert.deepEqual(chi.dentro('avvio-anna-fonti', () => avvio.stato()).fonti, ['desktop', 'calendario'])
+})
+
+test('a source that is not connected cannot be chosen, and nothing changes', () => {
+  const p = progetto()
+  for (const corpo of [{ fonti: ['desktop', 'notion'] }, { fonte: 'slack' }]) {
+    assert.throws(() => avvio.fonte({ ...corpo, revisione: p.revisione }), /Collega questa fonte/, JSON.stringify(corpo))
+  }
+  assert.deepEqual(avvio.stato(), p)
 })

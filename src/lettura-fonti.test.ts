@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 
 ;(globalThis as unknown as { document: unknown }).document = { documentElement: { lang: '' } }
 const { impostaLingua } = await import('./lingua.ts')
-const { avanzaLettura, chiudiLettura, dettaglioSincronizzazione, iniziaLettura, leggiAlProprioTurno, nonLette, GIA_IN_CORSO } = await import('./lettura-fonti.ts')
+const { avanzaLettura, chiudiLettura, creaLettura, daGuardare, dettaglioSincronizzazione, iniziaLettura, leggiAlProprioTurno, leggiPoiScegli, nonLette, GIA_IN_CORSO } = await import('./lettura-fonti.ts')
 impostaLingua('en')
 
 test('each connected source gets its own row, in the order given, once', () => {
@@ -80,4 +80,151 @@ test('a reading already running is waited for, anything else is reported at once
   volte = 0
   await assert.rejects(leggiAlProprioTurno(async () => { volte++; throw new Error(GIA_IN_CORSO) }, async () => {}, 4), /già in corso/)
   assert.equal(volte, 5, 'it gives up after its limit instead of waiting forever')
+})
+
+/*
+ * Una cartella del Mac sparita o chiusa non è un successo.
+ *
+ * «✓ 0 documents · 1 folders without permission», in verde, e l'avvio che
+ * passava da solo agli estratti: la revisione l'ha trovato togliendo la
+ * cartella di prova. Zero documenti con una cartella che non si apre è una
+ * fonte non letta; qualche documento con una cartella chiusa è letta a metà,
+ * e nemmeno quella lascia andare avanti da soli.
+ */
+test('a Mac folder that cannot be opened is a problem row, never a green one', () => {
+  let r = iniziaLettura(['desktop', 'calendario'])
+  r = avanzaLettura(r, { fase: 'desktop', stato: 'fatto', documenti: 0, illeggibili: ['/Users/x/Lavoro'] })
+  assert.equal(r[0].stato, 'guaio')
+  assert.equal(r[0].testo, '1 folder would not open', 'no «0 documents» in front of the reason')
+  r = avanzaLettura(r, { fase: 'calendario', stato: 'fatto', documenti: 4 })
+  assert.equal(nonLette(r), 1)
+  assert.equal(daGuardare(r), 1)
+
+  let parte = iniziaLettura(['desktop'])
+  parte = avanzaLettura(parte, { fase: 'desktop', stato: 'fatto', documenti: 5, illeggibili: ['/Users/x/Privato'] })
+  assert.equal(parte[0].stato, 'avviso', 'some documents with a closed folder is read in part')
+  assert.equal(nonLette(parte), 0)
+  assert.equal(daGuardare(parte), 1, 'a warning stops the automatic step forward too')
+
+  // un conteggio di file illeggibili su un disco vero è la norma, non un avviso
+  let normale = iniziaLettura(['desktop'])
+  normale = avanzaLettura(normale, { fase: 'desktop', stato: 'fatto', documenti: 80, falliti: 3 })
+  assert.equal(normale[0].stato, 'fatto')
+})
+
+test('a source disconnected during the read leaves the rows', () => {
+  let r = iniziaLettura(['desktop', 'calendario'])
+  r = avanzaLettura(r, { fase: 'calendario', stato: 'scollegata' })
+  assert.deepEqual(r.map(x => x.id), ['desktop'])
+})
+
+/** Un server finto: una lettura alla volta, come il vero, che risponde 409 alla seconda. */
+function serverFinto(ms = 5) {
+  let attive = 0
+  const chiamate: (string | undefined)[] = []
+  let docs: Record<string, number> = { desktop: 3, calendario: 2 }
+  return {
+    chiamate,
+    togli(id: string) { const { [id]: _via, ...resto } = docs; docs = resto },
+    dipendenze: {
+      sincronizza: async (su: (m: Record<string, unknown>) => void, fonte?: string) => {
+        if (attive) throw new Error(GIA_IN_CORSO)
+        attive++
+        chiamate.push(fonte)
+        try {
+          await new Promise(r => setTimeout(r, ms))
+          for (const id of Object.keys(docs)) if (!fonte || fonte === id) su({ fase: id, stato: 'fatto', documenti: docs[id] })
+          su({ fase: 'fine' })
+        } finally { attive-- }
+      },
+      collegate: async () => ({ ...docs }),
+      attendi: async () => {}
+    }
+  }
+}
+
+/*
+ * Una lettura sola per tutta l'app.
+ *
+ * Il pannello delle connessioni e la pagina delle Fonti leggevano ognuno per
+ * conto suo: «Rileggi tutto» durante la lettura del pannello dava 409, le
+ * schede restavano indietro, e un collegamento durante «Rileggi» su una
+ * fonte sola andava perso.
+ */
+test('reads from the page and the dialog queue behind each other, never race, and none is lost', async () => {
+  const server = serverFinto()
+  const lettura = creaLettura(server.dipendenze)
+  const visti: boolean[] = []
+  lettura.ascolta(s => visti.push(s.occupato))
+
+  const una = lettura.leggiUna('desktop')           // «Rileggi» su una fonte, dal pannello
+  const tutte = lettura.leggiTutte()                 // un collegamento mentre quella gira
+  const ancora = lettura.leggiTutte()                // «Rileggi tutto» dalla pagina, nello stesso momento
+  assert.equal(lettura.stato().occupato, true)
+  assert.equal(tutte, ancora, 'two requests to read everything while waiting are one')
+  await una
+  const righe = await tutte
+  assert.deepEqual(server.chiamate, ['desktop', undefined], 'the single read, then one read of everything: no 409, nothing lost')
+  assert.equal(lettura.stato().guaio, null)
+  assert.deepEqual(righe.map(r => [r.id, r.stato]), [['desktop', 'fatto'], ['calendario', 'fatto']])
+  assert.equal(lettura.stato().occupato, false)
+  assert.equal(lettura.stato().finite, 2, 'whoever shows the state knows two reads ended')
+  assert.equal(visti[0], true)
+})
+
+test('after waiting two minutes behind another read, rows are closed from the index, not all marked unread', async () => {
+  const lettura = creaLettura({
+    sincronizza: async () => { throw new Error(GIA_IN_CORSO) },
+    collegate: async () => ({ desktop: 7, calendario: 1 }),
+    attendi: async () => {}
+  })
+  const righe = await lettura.leggiTutte()
+  assert.deepEqual(righe.map(r => [r.id, r.stato, r.testo]), [['desktop', 'fatto', '7 documents'], ['calendario', 'fatto', '1 document']])
+  assert.equal(lettura.stato().guaio, null)
+})
+
+test('a source disconnected while everything was read has no row at the end', async () => {
+  const server = serverFinto()
+  const lettura = creaLettura({ ...server.dipendenze, collegate: (() => {
+    let volta = 0
+    return async (): Promise<Record<string, number>> => (volta++ ? { desktop: 3 } : { desktop: 3, calendario: 2 })
+  })() })
+  const righe = await lettura.leggiTutte()
+  assert.deepEqual(righe.map(r => r.id), ['desktop'])
+})
+
+/*
+ * Le fonti dell'avvio si salvano a lettura finita, non prima.
+ *
+ * Salvate prima, chi ricaricava a metà lettura atterrava sugli estratti di
+ * una lettura mai finita.
+ */
+test('the first run saves its sources only after the read ends, and not at all if it did not end', async () => {
+  const ordine: string[] = []
+  const lettura = creaLettura({
+    sincronizza: async su => { ordine.push('legge'); su({ fase: 'desktop', stato: 'fatto', documenti: 2 }) },
+    collegate: async () => ({ desktop: 2 })
+  })
+  const esito = await leggiPoiScegli(lettura, ['desktop'], async fonti => { ordine.push(`salva ${fonti.join()}`) })
+  assert.deepEqual(ordine, ['legge', 'salva desktop'])
+  assert.equal(esito.salvate, true)
+
+  const rotta = creaLettura({
+    sincronizza: async () => { throw new Error('Lettura interrotta.') },
+    collegate: async () => ({ desktop: 2 })
+  })
+  let salvato = false
+  const fallito = await leggiPoiScegli(rotta, ['desktop'], async () => { salvato = true })
+  assert.equal(salvato, false, 'an interrupted read saves nothing')
+  assert.equal(fallito.salvate, false)
+  assert.equal(fallito.righe[0].stato, 'guaio')
+})
+
+test('a source that did not change still says how many documents it has', () => {
+  let r = iniziaLettura(['desktop', 'posta'])
+  r = avanzaLettura(r, { fase: 'desktop', stato: 'fatto', documenti: 0, invariati: 5 })
+  r = avanzaLettura(r, { fase: 'posta', stato: 'fatto', documenti: 2, giaLetti: 30, tolti: 1 })
+  assert.deepEqual(r.map(x => x.testo), ['5 documents', '32 documents · 1 gone'], 'while reading: what was seen, unchanged included')
+  r = chiudiLettura(r, id => ({ desktop: 5, posta: 32 } as Record<string, number>)[id])
+  assert.deepEqual(r.map(x => x.testo), ['5 documents', '32 documents · 1 gone'])
 })

@@ -330,7 +330,17 @@ function Conferma({ onClick, occupato, disabilitato = false, tema, children }: {
   )
 }
 
-type Props = { tema: Tema; ok: () => void }
+/*
+ * `collegato` suona appena il server ha detto sì, prima di qualunque «Avanti».
+ *
+ * Chi ospita la scheda (il primo avvio, il pannello delle connessioni) deve
+ * sapere subito che la fonte c'è: una scheda che si ferma a mostrare cosa ha
+ * letto («Work: 42 eventi», «collegato come …: 12 repository») lasciava la sua
+ * tessera «da collegare» accanto a una frase che diceva il contrario, e
+ * «Leggi N fonti» ne contava una in meno. Può portare la frase di conferma,
+ * per chi chiude la scheda e la vuole ripetere.
+ */
+type Props = { tema: Tema; ok: () => void; collegato?: (conferma?: string) => void }
 
 /** Una pastiglia di stato accanto al titolo di una strada: «in uso», «pronto», «da collegare». */
 function pastigliaStato(tema: Tema, pronto: boolean): CSSProperties {
@@ -1007,7 +1017,7 @@ export function FormCompatibile({ tema, ok }: Props) {
   )
 }
 
-export function FormPosta({ tema, ok }: Props) {
+export function FormPosta({ tema, ok, collegato }: Props) {
   const [utente, setUtente] = useState('')
   const [password, setPassword] = useState('')
   const [host, setHost] = useState('')
@@ -1048,6 +1058,7 @@ export function FormPosta({ tema, ok }: Props) {
       if (r.certificatoAdattato) {
         setAvviso(frasi.certificatoAltroNome(r.certificatoAdattato))
       }
+      collegato?.()
       ok()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -1206,7 +1217,7 @@ function base64Di(buf: ArrayBuffer): string {
  * carichi una foto — e da lì legge e manda i file uno a pezzi, senza che
  * nessun dato resti da qualche parte finché non lo mandi tu.
  */
-function FormDesktopBrowser({ tema, ok }: Props) {
+function FormDesktopBrowser({ tema, ok, collegato }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [stato, setStato] = useState<'fermo' | 'carico' | 'fatto' | 'guaio'>('fermo')
   const [avanzamento, setAvanzamento] = useState({ fatti: 0, totale: 0 })
@@ -1249,6 +1260,7 @@ function FormDesktopBrowser({ tema, ok }: Props) {
       }
       setFatti(documenti)
       setStato('fatto')
+      collegato?.()
       // `ok()` chiude la scheda: per un token digitato ha senso subito, qui
       // no — c'è un «N documenti sincronizzati» da lasciar leggere, o l'unica
       // conferma che ha funzionato sparisce nello stesso istante in cui appare
@@ -1296,7 +1308,7 @@ function FormDesktopBrowser({ tema, ok }: Props) {
  * il bottone è uno e collega tutto; chi vuole restringere apre «Solo alcune
  * cartelle», che è la stessa scheda di prima, chiusa.
  */
-export function FormDesktop({ tema, ok }: Props) {
+export function FormDesktop({ tema, ok, collegato }: Props) {
   const [cartelle, setCartelle] = useState<string[]>([])
   const [manuale, setManuale] = useState('')
   const [suggeriti, setSuggeriti] = useState<string[]>([])
@@ -1363,7 +1375,7 @@ export function FormDesktop({ tema, ok }: Props) {
   // primo. `null` finché non si sa: un lampo della scheda sbagliata mentre
   // arriva la risposta è peggio di un attimo vuoto.
   if (ospitato === null) return null
-  if (ospitato) return <FormDesktopBrowser tema={tema} ok={ok} />
+  if (ospitato) return <FormDesktopBrowser tema={tema} ok={ok} collegato={collegato} />
 
   const alterna = (c: string) => setCartelle(v => (v.includes(c) ? v.filter(x => x !== c) : [...v, c]))
 
@@ -1399,7 +1411,7 @@ export function FormDesktop({ tema, ok }: Props) {
   const collega = async (tutto: boolean) => {
     setOccupato(tutto ? 'tutto' : 'cartelle'); setErr('')
     const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
-    try { await api.collegaDesktop(tutto ? [] : tutte, tutto); ok() }
+    try { await api.collegaDesktop(tutto ? [] : tutte, tutto); collegato?.(); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(null)
   }
@@ -1612,7 +1624,7 @@ export function FormGranola({ tema, ok, collegato }: Props & { collegato?: () =>
  * dentro l'app, si offre il bottone che apre quella schermata. Myynd non la
  * apre mai da solo: lo fa chi preme.
  */
-export function FormNote({ tema, ok }: Props) {
+export function FormNote({ tema, ok, collegato }: Props) {
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
   const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
@@ -1633,7 +1645,7 @@ export function FormNote({ tema, ok }: Props) {
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaNote(); ok() }
+    try { await api.collegaNote(); collegato?.(); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -1727,7 +1739,7 @@ export function AccessoDisco({ tema, testo, coda }: {
  * Claude Code compare solo se la sua cartella c'è: un interruttore su una
  * cartella che non esiste è un bottone che fallisce.
  */
-export function FormConversazioni({ tema, ok }: Props) {
+export function FormConversazioni({ tema, ok, collegato }: Props) {
   const [file, setFile] = useState<string[]>([])
   const [manuale, setManuale] = useState('')
   const [codice, setCodice] = useState(false)
@@ -1760,7 +1772,7 @@ export function FormConversazioni({ tema, ok }: Props) {
   const collega = async () => {
     const tutti = manuale.trim() ? [...file, manuale.trim()] : file
     setOccupato(true); setErr('')
-    try { await api.collegaConversazioni(tutti, codice); ok() }
+    try { await api.collegaConversazioni(tutti, codice); collegato?.(); ok() }
     catch (e) {
       // il nome del file accanto alla frase, quando il server dice quale
       const quale = (e as { file?: string }).file
@@ -1840,14 +1852,14 @@ export function FormConversazioni({ tema, ok }: Props) {
   )
 }
 
-export function FormNotion({ tema, ok }: Props) {
+export function FormNotion({ tema, ok, collegato }: Props) {
   const [token, setToken] = useState('')
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaNotion(token); setToken(''); ok() }
+    try { await api.collegaNotion(token); setToken(''); collegato?.(); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -1890,14 +1902,12 @@ export function FormNotion({ tema, ok }: Props) {
  * può capire da solo di aver incollato la cosa giusta.
  */
 /**
- * `collegato` suona quando il server ha detto sì, prima di «Avanti».
- *
- * Il calendario è l'unica fonte che si ferma a mostrare cosa ha letto («Work:
- * 42 eventi») prima di chiamare `ok`: nel primo avvio la sua scheda restava
- * «da collegare» accanto a una frase che diceva il contrario, e il bottone
- * contava una fonte in meno. Chi disegna le schede lo sa da qui.
+ * Il calendario si ferma a mostrare cosa ha letto («Work: 42 eventi»). Con chi
+ * ascolta `collegato`, la frase gli arriva subito e «Avanti» non c'è: era un
+ * secondo bottone pieno accanto a «Leggi N fonti», e nel pannello delle
+ * connessioni la lettura aspettava lui. Senza, resta com'era.
  */
-export function FormCalendario({ tema, ok, collegato }: Props & { collegato?: () => void }) {
+export function FormCalendario({ tema, ok, collegato }: Props) {
   const [url, setUrl] = useState('')
   const [giorni, setGiorni] = useState(30)
   const [err, setErr] = useState('')
@@ -1910,7 +1920,7 @@ export function FormCalendario({ tema, ok, collegato }: Props & { collegato?: ()
       const r = await api.collegaCalendario({ url: url.trim(), giorni })
       setUrl('')
       setFatto({ nome: r.nome, eventi: r.eventi })
-      collegato?.()
+      collegato?.(r.nome ? frasi.agendaLetta(r.nome, r.eventi) : frasi.eventiLetti(r.eventi))
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -1921,7 +1931,7 @@ export function FormCalendario({ tema, ok, collegato }: Props & { collegato?: ()
         <div style={guida(tema)}>
           {fatto.nome ? frasi.agendaLetta(fatto.nome, fatto.eventi) : frasi.eventiLetti(fatto.eventi)}
         </div>
-        <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>
+        {!collegato && <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>}
       </div>
     )
   }
@@ -2066,14 +2076,14 @@ export function FormGoogle({ tema, ok }: Props) {
  * «dai i permessi necessari», che è il modo in cui una guida fa perdere un
  * pomeriggio.
  */
-export function FormSlack({ tema, ok }: Props) {
+export function FormSlack({ tema, ok, collegato }: Props) {
   const [token, setToken] = useState('')
   const [err, setErr] = useState('')
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaSlack(token.trim()); setToken(''); ok() }
+    try { await api.collegaSlack(token.trim()); setToken(''); collegato?.(); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -2129,7 +2139,7 @@ export function FormSlack({ tema, ok }: Props) {
  * token, e deve poterlo dire lì. Il riquadro accetta una riga per repository,
  * e quello che non è un `owner/nome` lo butta il server.
  */
-export function FormGithub({ tema, ok }: Props) {
+export function FormGithub({ tema, ok, collegato }: Props) {
   const [token, setToken] = useState('')
   const [repos, setRepos] = useState('')
   const [err, setErr] = useState('')
@@ -2147,6 +2157,7 @@ export function FormGithub({ tema, ok }: Props) {
       const r = await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
       setToken(''); setRepos('')
       setFatto({ login: r.login, repos: r.repos, oltre: r.oltre })
+      collegato?.(frasi.githubCollegato(r.login, r.repos, r.oltre))
     }
     catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -2350,7 +2361,7 @@ export function FormMicrosoft({ tema, ok, parte }: Props & { parte: 'posta' | 'f
  * chiave, poi il bottone che apre il browser, e solo allora il campo del
  * codice: ogni passo compare nel momento in cui si può fare.
  */
-export function FormDropbox({ tema, ok }: Props) {
+export function FormDropbox({ tema, ok, collegato }: Props) {
   const [chiave, setChiave] = useState('')
   const [codice, setCodice] = useState('')
   const [dove, setDove] = useState('')
@@ -2366,7 +2377,7 @@ export function FormDropbox({ tema, ok }: Props) {
 
   const finisci = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaDropbox(codice.trim()); setChiave(''); setCodice(''); setDove(''); ok() }
+    try { await api.collegaDropbox(codice.trim()); setChiave(''); setCodice(''); setDove(''); collegato?.(); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -2426,7 +2437,7 @@ export function FormDropbox({ tema, ok }: Props) {
  * informazione che, se manca, fa collegare una fonte che resterà a zero per
  * sempre senza che nessun errore lo dica.
  */
-export function FormWhatsapp({ tema, ok }: Props) {
+export function FormWhatsapp({ tema, ok, collegato }: Props) {
   const [token, setToken] = useState('')
   const [numero, setNumero] = useState('')
   const [segreto, setSegreto] = useState('')
@@ -2439,6 +2450,7 @@ export function FormWhatsapp({ tema, ok }: Props) {
     try {
       await api.collegaWhatsapp({ token: token.trim(), numero: numero.trim(), segreto: segreto.trim(), parola: parola.trim() })
       setToken(''); setNumero(''); setSegreto(''); setParola('')
+      collegato?.()
       ok()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
@@ -2546,27 +2558,28 @@ export function FormJev({ tema, ok }: Props) {
   )
 }
 
-export function Form({ id, tema, ok, collegato }: { id: string; collegato?: () => void } & Props) {
-  if (id === 'google') return <FormGoogle tema={tema} ok={ok} />
-  if (id === 'claude') return <FormClaude tema={tema} ok={ok} />
-  if (id === 'jev') return <FormJev tema={tema} ok={ok} />
-  if (id === 'openai') return <FormOpenAI tema={tema} ok={ok} />
-  if (id === 'compatibile') return <FormCompatibile tema={tema} ok={ok} />
-  if (id === 'posta') return <FormPosta tema={tema} ok={ok} />
-  if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} />
-  if (id === 'notion') return <FormNotion tema={tema} ok={ok} />
+// ogni scheda riceve `collegato`: chi ha una conferma lo chiama appena il server dice sì
+export function Form({ id, tema, ok, collegato }: { id: string } & Props) {
+  if (id === 'google') return <FormGoogle tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'claude') return <FormClaude tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'jev') return <FormJev tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'openai') return <FormOpenAI tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'compatibile') return <FormCompatibile tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'posta') return <FormPosta tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'desktop') return <FormDesktop tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'notion') return <FormNotion tema={tema} ok={ok} collegato={collegato} />
   if (id === 'granola') return <FormGranola tema={tema} ok={ok} collegato={collegato} />
-  if (id === 'note') return <FormNote tema={tema} ok={ok} />
-  if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
+  if (id === 'note') return <FormNote tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} collegato={collegato} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} collegato={collegato} />
-  if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
-  if (id === 'github') return <FormGithub tema={tema} ok={ok} />
-  if (id === 'drive') return <FormDrive tema={tema} ok={ok} />
+  if (id === 'slack') return <FormSlack tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'github') return <FormGithub tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'drive') return <FormDrive tema={tema} ok={ok} collegato={collegato} />
   // due schede diverse, lo stesso modulo con dentro una parola diversa: sono
   // due permessi, e la schermata del consenso di Microsoft lo dirà
-  if (id === 'microsoft') return <FormMicrosoft tema={tema} ok={ok} parte="posta" />
-  if (id === 'sharepoint') return <FormMicrosoft tema={tema} ok={ok} parte="file" />
-  if (id === 'dropbox') return <FormDropbox tema={tema} ok={ok} />
-  if (id === 'whatsapp') return <FormWhatsapp tema={tema} ok={ok} />
+  if (id === 'microsoft') return <FormMicrosoft tema={tema} ok={ok} collegato={collegato} parte="posta" />
+  if (id === 'sharepoint') return <FormMicrosoft tema={tema} ok={ok} collegato={collegato} parte="file" />
+  if (id === 'dropbox') return <FormDropbox tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'whatsapp') return <FormWhatsapp tema={tema} ok={ok} collegato={collegato} />
   return null
 }

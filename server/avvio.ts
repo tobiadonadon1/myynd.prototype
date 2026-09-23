@@ -10,6 +10,7 @@ import { dopo } from './ordine.ts'
 import { giornoValido } from './giorno-compito.ts'
 import { parti } from './fuso.ts'
 import { CATALOGO } from './connettori/registro.ts'
+import { fonteCollegata } from './fonti-collegate.ts'
 
 /** Quanto indietro si guarda per spiegare un progetto che comincia adesso. */
 const GIORNI_EVIDENZE = 180
@@ -246,6 +247,9 @@ export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown
   if (chieste.length > CATALOGO.length || chieste.some(f => !CATALOGO.some(c => c.legge && c.id === f))) {
     throw new ErroreAvvio('Scegli una fonte disponibile oppure continua senza.')
   }
+  // una fonte che non è collegata non si legge: gli estratti verrebbero da
+  // quello che era rimasto nell'indice, o da niente, sotto un nome scelto
+  if (chieste.some(f => !fonteCollegata(f as string))) throw new ErroreAvvio('Collega questa fonte prima di leggerla.')
   const fonti = [...new Set(chieste as string[])]
   // l'ordine non cambia cosa si legge: solo un'altra fonte, o una in meno, rimette in discussione gli estratti
   const prima = fontiDi(s)
