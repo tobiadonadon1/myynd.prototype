@@ -32,6 +32,7 @@ import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
 import * as progetti from './progetti.ts'
 import * as avvio from './avvio.ts'
+import { leggiSeAncoraCollegata } from './fonti-collegate.ts'
 import * as compiti from './compiti.ts'
 import * as dopoFatto from './dopo-fatto.ts'
 import * as automazioni from './automazioni.ts'
@@ -1814,7 +1815,8 @@ async function leggiTuttoDentro(
   const fonte = async (nome: string, leggi: () => Promise<number>) => {
     if (fermo() || (soloFonte && soloFonte !== nome)) return
     try {
-      totale += await leggi()
+      // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
+      totale += await leggiSeAncoraCollegata(nome, leggi, avvisa)
     } catch (err) {
       avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
     }
