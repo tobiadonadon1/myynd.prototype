@@ -2,26 +2,20 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Textare
 import { giornoLocale, spostaGiorno } from '../oggi/giorni'
 import { api, type Stato, type StatoAvvio } from '../api'
 import { frasi, t } from '../lingua'
-import { avanzaLettura, chiudiLettura, iniziaLettura, leggiAlProprioTurno, nonLette, type RigaLettura } from '../lettura-fonti'
+import { daGuardare, leggiPoiScegli, nonLette } from '../lettura-fonti'
+import { letturaFonti, useLettura } from '../lettura-app'
 import { ConnectorIcon } from '../components/ConnectorIcon'
 import { Form } from '../components/forms'
+import { RigheLettura } from '../components/RigheLettura'
+import { BottoneSicuro } from '../ui'
 import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 import { Introduzione } from './Introduzione'
+import { momentoAllaRipresa } from './passi'
 
 // i modelli non si leggono: OpenAI stava fra le fonti e il server lo rifiutava
 const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
 const PRIORITA_FONTI = ['desktop', 'google', 'posta', 'notion', 'slack', 'calendario']
-/*
- * Prima le fonti, poi l'attività.
- *
- * Le fonti stavano dentro la prima attività, come una riga facoltativa che
- * ne apriva una sola: la prima persona di fuori si aspettava l'opposto, di
- * collegare tutto quello che usa e poi farlo leggere insieme. Adesso vengono
- * subito dopo l'obiettivo: lette tutte, gli estratti, e l'attività per ultima,
- * quando c'è già qualcosa da cui partire.
- */
-const momentoDi = (fase: StatoAvvio['fase']): Momento => fase === 'progetto' ? 0 : fase === 'fonte' ? 1 : fase === 'verifica' ? 2 : 3
 /**
  * Il passo che vede la persona, per un indicatore «2 di 3»: le fonti e i loro
  * estratti sono un passo solo, perché gli estratti sono quello che la lettura ha trovato.
@@ -30,6 +24,8 @@ export const PASSO_AVVIO: Record<Momento, number> = { 0: 1, 1: 2, 2: 2, 3: 3 }
 export const PASSI_AVVIO = 3
 const pausa = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 const messaggio = (e: unknown) => e instanceof Error ? e.message : String(e)
+/** Il segno, per questa scheda del browser, che si stava leggendo: chi ricarica torna alle fonti. */
+const chiaveLettura = (id: string) => `myynd.avvio.lettura.${id}`
 /** La freccia del bottone che va avanti, nel suo riquadro scuro. */
 const Avanti = () => <span className="onboard-arrow"><IconFreccia /></span>
 
@@ -85,10 +81,20 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const [accountConfermato, setAccountConfermato] = useState(false)
   /** La scheda aperta sotto le fonti, per collegarne una: non è una scelta, le collegate si leggono tutte. */
   const [aperta, setAperta] = useState('')
-  /** Una riga per fonte mentre si leggono insieme, e dopo, finché si resta qui. */
-  const [lettura, setLettura] = useState<RigaLettura[] | null>(null)
+  /** Si guardano le righe della lettura, invece delle schede: mentre legge, e dopo, finché si resta qui. */
+  const [vistaLettura, setVistaLettura] = useState(false)
+  /** L'ultima lettura non è arrivata in fondo (la rete, il server): non si è salvato niente. */
+  const [nonSalvate, setNonSalvate] = useState(false)
+  /** La lettura di tutta l'app: le sue righe sono quelle che si mostrano qui. */
+  const letturaStato = useLettura()
   /** Collegate adesso e già confermate dal server, anche se la loro scheda aspetta ancora «Avanti». */
   const [appena, setAppena] = useState<string[]>([])
+  /** La frase con cui una scheda ha confermato il collegamento («Work: 4 eventi»): resta sotto la tessera chiusa. */
+  const [conferme, setConferme] = useState<Record<string, string>>({})
+  /** Ricollegate dopo l'ultima lettura: il loro «non letta» era della connessione di prima. */
+  const [riparate, setRiparate] = useState<string[]>([])
+  /** La scheda aperta di una fonte già collegata mostra di nuovo il suo modulo: «Cambia». */
+  const [modifica, setModifica] = useState(false)
   const [confermati, setConfermati] = useState<string[]>([])
   const [azione, setAzione] = useState('')
   const [giorno, setGiorno] = useState('')
@@ -118,7 +124,9 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       const url = new URL(window.location.href)
       const ritorno = url.searchParams.get('torno') === 'connetti'
       if (ritorno) { url.searchParams.delete('torno'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
-      setMomento(ritorno && !n.risultato ? 1 : momentoDi(n.fase))
+      let leggeva = false
+      try { leggeva = !!sessionStorage.getItem(chiaveLettura(n.id)); sessionStorage.removeItem(chiaveLettura(n.id)) } catch { /* senza memoria della scheda si riparte dal server */ }
+      setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva }))
       try {
         const salvata = sessionStorage.getItem(`myynd.avvio.fonte.${n.id}`)
         if (salvata && !n.risultato) setAperta(salvata)
@@ -170,7 +178,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       } catch { /* Keep the initial actionable error and every unsaved field. */ }
     } finally { lock.current = false; setOccupato(false) }
   }
-  const vai = (dove: Momento) => { setErrore(''); setLettura(null); setMomento(dove) }
+  const vai = (dove: Momento) => { setErrore(''); setVistaLettura(false); setMomento(dove) }
   const salvaProgetto = () => fai(async () => {
     if (!avvio || !progetto.trim() || !obiettivo.trim()) return
     const cambiato = progetto.trim() !== avvio.progetto?.nome || obiettivo.trim() !== avvio.progetto?.obiettivo
@@ -185,7 +193,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   }
   const apri = (id: string) => {
     const nuova = aperta === id ? '' : id
-    setAperta(nuova); setErrore('')
+    setAperta(nuova); setErrore(''); setModifica(false)
     if (avvio) try {
       if (nuova) sessionStorage.setItem(`myynd.avvio.fonte.${avvio.id}`, nuova)
       else sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`)
@@ -198,36 +206,50 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     try { sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`) } catch { /* optional return hint */ }
     const confermato = await api.avvioConferma({ ids: [], revisione: n.revisione }); setAvvio(confermato); vai(3)
   })
+  /** Il server ha detto sì: la tessera diventa verde adesso, e la scheda si chiude sulla sua frase. */
+  const collegataOra = (id: string, conferma?: string) => {
+    setAppena(a => a.includes(id) ? a : [...a, id])
+    setRiparate(r => r.includes(id) ? r : [...r, id])
+    if (conferma) setConferme(c => ({ ...c, [id]: conferma }))
+    setModifica(false)
+    void ricarica().catch(() => {})
+  }
+  const scollega = async (id: string) => {
+    await api.scollega(id)
+    setAppena(a => a.filter(x => x !== id)); setRiparate(r => r.filter(x => x !== id))
+    setConferme(({ [id]: _via, ...resto }) => resto)
+    setModifica(false)
+    await ricarica()
+  }
   /**
    * Tutte le fonti collegate, lette in una volta, con una riga ciascuna.
    *
    * La lettura è quella di sempre, `/api/sincronizza` senza una fonte: la
    * stessa del bottone «Rileggi tutto» e del giro dei dieci minuti, che legge
    * ogni fonte collegata e non si ferma se una non risponde. Qui si guarda
-   * passare, fonte per fonte. Se sono andate tutte, si passa da soli a quello
-   * che hanno dato; se una non si è letta si resta, perché il motivo va letto.
+   * passare, fonte per fonte. Le fonti si salvano nell'avvio solo a lettura
+   * finita (vedi `leggiPoiScegli`). Se sono andate tutte, si passa da soli a
+   * quello che hanno dato; se una non si è letta, o solo in parte, si resta,
+   * perché il motivo va letto.
    */
   const leggiFonti = () => fai(async () => {
     if (!avvio) return
     const ids = collegate.map(c => c.id)
-    let righe = iniziaLettura(ids)
-    const mostra = (nuove: RigaLettura[]) => { righe = nuove; setLettura(nuove) }
-    // le righe compaiono subito, prima della rete: il bottone ha già risposto
-    mostra(righe); setAperta('')
-    let n: StatoAvvio
-    // se non si è salvato niente non si è letto niente: via le righe, resta la frase del guaio
-    try { n = await api.avvioFonti({ fonti: ids, revisione: avvio.revisione }) } catch (e) { setLettura(null); throw e }
-    setAvvio(n)
-    let guasto = ''
-    try { await leggiAlProprioTurno(() => api.sincronizza(m => mostra(avanzaLettura(righe, m)))) }
-    catch (e) { guasto = t(messaggio(e)) }
-    const nuovo = await ricarica()
-    mostra(guasto
-      ? righe.map(r => r.stato === 'attesa' || r.stato === 'leggo' ? { ...r, stato: 'guaio', testo: guasto } : r)
-      : chiudiLettura(righe, id => nuovo.connettori.find(c => c.id === id)?.documenti))
-    const letto = await api.avvio(); setAvvio(letto); setConfermati(letto.fatti.filter(f => f.confermato).map(f => f.id))
+    setVistaLettura(true); setNonSalvate(false); setAperta(''); setModifica(false); setRiparate([])
+    try { sessionStorage.setItem(chiaveLettura(avvio.id), '1') } catch { /* il segno serve solo a chi ricarica */ }
+    let esito: Awaited<ReturnType<typeof leggiPoiScegli>>
+    try {
+      esito = await leggiPoiScegli(letturaFonti, ids, async fonti => {
+        const n = await api.avvioFonti({ fonti, revisione: avvio.revisione })
+        setAvvio(n); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+      })
+    } finally {
+      try { sessionStorage.removeItem(chiaveLettura(avvio.id)) } catch { /* come sopra */ }
+    }
+    await ricarica()
+    if (!esito.salvate) { setNonSalvate(true); setErrore(letturaFonti.stato().guaio ?? ''); return }
     // le righe verdi restano in vista un attimo: è la conferma che le ha lette tutte
-    if (!nonLette(righe)) { await pausa(900); vai(2) }
+    if (!daGuardare(esito.righe)) { await pausa(900); vai(2) }
   })
   const conferma = () => fai(async () => {
     if (!avvio) return
@@ -267,8 +289,13 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const nomeFonte = (id: string) => t(s.connettori.find(c => c.id === id)?.nome ?? id)
   /** Le fonti che l'avvio ha già letto: sulla prima attività si mostrano quelle. */
   const lette = (avvio?.fonti ?? []).map(id => s.connettori.find(c => c.id === id)).filter(c => !!c)
+  const lettura = vistaLettura ? letturaStato.righe : null
   // il titolo segue le righe: finché una è in coda o in lettura si sta leggendo
   const inLettura = !!lettura?.some(r => r.stato === 'attesa' || r.stato === 'leggo')
+  /** La fonte che l'ultima lettura non ha letto (o solo in parte), finché non la si ricollega. */
+  const nonLetta = (id: string) => riparate.includes(id) ? undefined
+    : letturaStato.righe?.find(r => r.id === id && (r.stato === 'guaio' || r.stato === 'avviso'))
+  const moduloAperto = !!scelta && (!collegata(scelta) || modifica)
   const risultato = avvio?.risultato
   const oggi = giornoLocale(), domani = spostaGiorno(oggi, 1)
   const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
@@ -279,7 +306,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   // L'introduzione ha i suoi, e mentre carica non si è ancora in nessun passo
   const passo = carico || !avvio || !accountConfermato || avvio.risultato ? undefined : PASSO_AVVIO[momento]
 
-  return <Scena progressione={progressione} passo={passo} passi={PASSI_AVVIO} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
+  return <Scena progressione={progressione} passo={passo} passi={PASSI_AVVIO} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto && !inLettura} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
       {!accountConfermato && <Introduzione avanti={() => setAccountConfermato(true)} pronto={!!accountEmail} riprendi={!!avvio.progetto} cambiaAccount={() => void cambiaAccount()} occupato={occupato} />}
       {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
@@ -298,35 +325,45 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       {accountConfermato && momento === 1 && <>
         <h2 ref={titolo} tabIndex={-1}>{!lettura ? t('Cosa deve leggere Myynd?') : inLettura ? t('Leggo le tue fonti…') : nonLette(lettura) ? frasi.fontiNonLetteInsieme(nonLette(lettura)) : t('Ho letto le tue fonti.')}</h2>
         {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
-        {lettura ? <ul className="onboard-reading" aria-live="polite">
-          {lettura.map(r => <li key={r.id} className={`onboard-reading-row is-${r.stato}`}>
-            <ConnectorIcon id={r.id} size={18} />
-            <span className="onboard-reading-name">{nomeFonte(r.id)}</span>
-            <span className="onboard-reading-state">{r.stato === 'attesa' ? t('In coda')
-              : r.stato === 'leggo' ? r.testo || t('Leggo…')
-              : r.stato === 'fatto' ? `✓ ${r.testo}`
-              : `${t('Non letta')} · ${r.testo}`}</span>
-          </li>)}
-        </ul> : <fieldset disabled={occupato} className="onboard-fieldset">
+        {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} /> : <fieldset disabled={occupato} className="onboard-fieldset">
           {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
-          {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata». */}
-          <div className="onboard-sources">{visibili.map(c => <button key={c.id} className={`onboard-source${collegata(c) ? ' is-connected' : ''}`} type="button" aria-pressed={aperta === c.id} aria-label={`${t(c.nome)} · ${collegata(c) ? t('Collegato') : t('Da collegare')}`} onClick={() => apri(c.id)}>
-            <ConnectorIcon id={c.id} size={25} /><span>{t(c.nome)}</span>
-            {collegata(c) && <em className="onboard-source-state" aria-hidden="true">✓ {t('Collegato')}</em>}
-          </button>)}</div>
+          {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata».
+              Una collegata che l'ultima lettura non ha letto non è verde: dice «non letta», e aprendola si ripara. */}
+          <div className="onboard-sources">{visibili.map(c => {
+            const guasta = collegata(c) ? nonLetta(c.id) : undefined
+            return <button key={c.id} className={`onboard-source${guasta ? ' is-failed' : collegata(c) ? ' is-connected' : ''}`} type="button" aria-pressed={aperta === c.id} aria-label={`${t(c.nome)} · ${guasta ? t('Non letta') : collegata(c) ? t('Collegato') : t('Da collegare')}`} onClick={() => apri(c.id)}>
+              <ConnectorIcon id={c.id} size={25} /><span>{t(c.nome)}</span>
+              {guasta ? <em className="onboard-source-state is-failed" aria-hidden="true">{t('Non letta')}</em>
+                : collegata(c) && <em className="onboard-source-state" aria-hidden="true">✓ {t('Collegato')}</em>}
+            </button>
+          })}</div>
           {fonti.length > 6 && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
-          {scelta && <div className="onboard-source-detail" key={scelta.id}>
-            <div className="onboard-source-title"><ConnectorIcon id={scelta.id} size={16} /><span>{t(scelta.nome)}</span>{collegata(scelta) && <span className="onboard-connected">✓ {t('Collegato')}</span>}</div>
-            {!scelta.collegato && <Form id={scelta.id} tema="scuro" ok={ricarica} collegato={() => setAppena(a => a.includes(scelta.id) ? a : [...a, scelta.id])} />}
-          </div>}
+          {scelta && (() => {
+            const guasta = collegata(scelta) ? nonLetta(scelta.id) : undefined
+            return <div className="onboard-source-detail" key={scelta.id}>
+              <div className="onboard-source-title"><ConnectorIcon id={scelta.id} size={16} /><span>{t(scelta.nome)}</span>
+                {guasta ? <span className="onboard-connected is-failed">{t('Non letta')}</span> : collegata(scelta) && <span className="onboard-connected">✓ {t('Collegato')}</span>}</div>
+              {/* il motivo, o la conferma della scheda che si è chiusa: una riga, e poi i due modi di rimediare */}
+              {guasta ? <p className="onboard-source-note is-failed">{guasta.testo}</p>
+                : collegata(scelta) && !modifica && conferme[scelta.id] && <p className="onboard-source-note">{conferme[scelta.id]}</p>}
+              {collegata(scelta) && !modifica && <div className="onboard-source-actions">
+                <button type="button" className="onboard-secondary" onClick={() => setModifica(true)}>{t('Cambia')}</button>
+                <BottoneSicuro chiaro titolo={t('Scollega')} guaio={m => setErrore(t(m))} fai={() => scollega(scelta.id)} style={{ fontSize: 11 }}>{t('Scollega')}</BottoneSicuro>
+              </div>}
+              {moduloAperto && <Form id={scelta.id} tema="scuro" ok={() => { setModifica(false); void ricarica().catch(() => {}) }} collegato={conferma => collegataOra(scelta.id, conferma)} />}
+            </div>
+          })()}
         </fieldset>}
         <OnboardErrore testo={errore} />
         <div className="onboard-actions">
           {/* dopo una lettura con un guaio, Indietro riporta alle schede: lì si ricollega quella che non si è letta */}
-          <button className="onboard-secondary" disabled={occupato} onClick={() => lettura ? setLettura(null) : vai(0)}>{t('Indietro')}</button>
+          <button className="onboard-secondary" disabled={occupato} onClick={() => lettura ? setVistaLettura(false) : vai(0)}>{t('Indietro')}</button>
           {lettura
-            ? <button className="onboard-primary" disabled={occupato} onClick={() => vai(2)}>{occupato ? t('Leggo…') : t('Continua')}<Avanti /></button>
-            : <button className="onboard-primary" disabled={occupato || !collegate.length} onClick={leggiFonti}>{collegate.length ? frasi.leggiFonti(collegate.length) : t('Leggi le fonti')}<Avanti /></button>}
+            ? !nonSalvate && <button className="onboard-primary" disabled={occupato} onClick={() => vai(2)}>{inLettura ? t('Leggo…') : t('Continua')}<Avanti /></button>
+            /* un modulo aperto ha il suo bottone pieno, «Collega …»: di primario ce n'è uno, e intanto «Leggi» fa un passo indietro */
+            : moduloAperto
+              ? !!collegate.length && <button className="onboard-secondary" disabled={occupato} onClick={leggiFonti}>{frasi.leggiFonti(collegate.length)}</button>
+              : <button className="onboard-primary" disabled={occupato || !collegate.length} onClick={leggiFonti}>{collegate.length ? frasi.leggiFonti(collegate.length) : t('Leggi le fonti')}<Avanti /></button>}
         </div>
         {!occupato && !lettura && <button className="onboard-secondary onboard-skip" onClick={salta}>{t('Continua senza fonti')}</button>}
       </>}

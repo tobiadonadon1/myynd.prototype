@@ -2859,6 +2859,7 @@ const EN: Record<string, string> = {
   'Sito nuovo': 'New website',
   'Una riga per progetto. Cmd+Invio per mandare.': 'One line per project. Cmd+Enter to send.',
   // — feedback 23 set: fonti —
+  'Collega questa fonte prima di leggerla.': 'Connect this source before reading it.',
   'Cosa deve leggere Myynd?': 'What should Myynd read?',
   'Collegane quante vuoi. Myynd le legge tutte insieme.': 'Connect as many as you like. Myynd reads them all together.',
   'Leggi le fonti': 'Read sources',
