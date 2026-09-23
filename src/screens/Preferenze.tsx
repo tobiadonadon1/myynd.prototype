@@ -582,7 +582,7 @@ function Cancella() {
             <div>
               <span className="prefs-etichetta">{t('Il tuo indirizzo, per conferma')}</span>
               <input type="email" className="prefs-campo" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"
-                placeholder={t('tu@tuodominio.it')} />
+                placeholder={t('nome@esempio.it')} />
             </div>
           </div>
           <div className="prefs-piede">
