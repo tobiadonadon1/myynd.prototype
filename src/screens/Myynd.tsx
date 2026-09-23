@@ -15,7 +15,7 @@ import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, sulTavolo } from '../blocchi-feed'
+import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
@@ -848,17 +848,23 @@ export type BloccoPagina = BloccoFeed<VoceFeed, Compito>
  * Un blocco senza righe esiste solo per un progetto appena nato: dentro c'è
  * la domanda del primo passo, con la barra per scriverlo.
  */
-function Blocco({ b, v, lista, indice, ultimo, muovi }: {
+function Blocco({ b, v, lista, indice, su, giu, muovi }: {
   b: BloccoPagina; v: Vals; lista?: Lista
   /** Dove sta adesso, e dove può andare: il trascinamento parla per posti, non per nomi. */
-  indice: number; ultimo: boolean; muovi: (da: number, a: number) => void
+  indice: number
+  /** Se può salire o scendere di un posto: solo dentro il suo gruppo (alti, o gli altri). */
+  su: boolean; giu: boolean
+  muovi: (da: number, a: number) => void
 }) {
   const { attiva, props } = useAttiva()
   const [sopra, setSopra] = useState(false)
   const suo = b.progetto !== null
   const colore = suo ? v.coloreProgetto(b.progetto!) : 'rgba(var(--inchiostro-rgb),.5)'
   const filo = suo ? velato(colore, .18) : 'rgba(var(--inchiostro-rgb),.09)'
-  const apriProgetto = () => { if (b.progetto) v.apriProgetto(b.progetto) }
+  // un progetto che sta ancora nascendo non ha una pagina: aprirla adesso la
+  // farebbe chiudere da sola, perché il server non lo conosce ancora
+  const provvisorio = !!b.progetto?.startsWith('nuovo-')
+  const apriProgetto = () => { if (b.progetto && !provvisorio) v.apriProgetto(b.progetto) }
 
   /*
    * Trascinare un blocco sopra un altro.
@@ -917,12 +923,12 @@ function Blocco({ b, v, lista, indice, ultimo, muovi }: {
         )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: attiva ? 1 : 0, pointerEvents: attiva ? 'auto' : 'none', transition: 'opacity .15s' }}>
-          <Hov as="button" type="button" disabled={indice === 0} onClick={() => muovi(indice, indice - 1)}
+          <Hov as="button" type="button" disabled={!su} onClick={() => muovi(indice, indice - 1)}
             aria-label={`${t('Sposta su')}: ${b.nome}`}
-            style={{ ...GESTO, opacity: indice === 0 ? .35 : 1, cursor: indice === 0 ? 'default' : 'pointer' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta su')}</Hov>
-          <Hov as="button" type="button" disabled={ultimo} onClick={() => muovi(indice, indice + 1)}
+            style={{ ...GESTO, opacity: su ? 1 : .35, cursor: su ? 'pointer' : 'default' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta su')}</Hov>
+          <Hov as="button" type="button" disabled={!giu} onClick={() => muovi(indice, indice + 1)}
             aria-label={`${t('Sposta giù')}: ${b.nome}`}
-            style={{ ...GESTO, opacity: ultimo ? .35 : 1, cursor: ultimo ? 'default' : 'pointer' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta giù')}</Hov>
+            style={{ ...GESTO, opacity: giu ? 1 : .35, cursor: giu ? 'pointer' : 'default' }} hover={{ color: 'var(--rame-testo)' }}>{t('Sposta giù')}</Hov>
         </div>
       </div>
       {!b.righe.length && b.progetto && lista && <PrimoPasso progetto={b.progetto} lista={lista} ultimo={v.progettiNuovi[v.progettiNuovi.length - 1] === b.progetto} />}
@@ -951,31 +957,51 @@ function Blocco({ b, v, lista, indice, ultimo, muovi }: {
  */
 function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: Lista; ultimo: boolean }) {
   const [testo, setTesto] = useState('')
-  // l'id provvisorio: il server non lo conosce ancora, e una riga scritta ora
-  // finirebbe senza progetto. Dura il tempo di una risposta
+  /*
+   * L'id provvisorio: il server non lo conosce ancora, e una riga mandata
+   * adesso finirebbe senza progetto. Invio però funziona subito: la riga si
+   * mette in fila, si vede qui sotto nell'istante, e parte appena arriva l'id
+   * vero. Il blocco non si rifà quando l'id cambia (la sua chiave è quella di
+   * nascita), quindi né la fila né quello che si sta scrivendo vanno persi.
+   */
   const provvisorio = progetto.startsWith('nuovo-')
+  const [inFila, setInFila] = useState<string[]>([])
+  useEffect(() => {
+    if (provvisorio || !inFila.length) return
+    for (const riga of inFila) void lista.aggiungi(riga, 'poi', null, null, { progetto })
+    setInFila([])
+  }, [provvisorio, progetto, inFila, lista])
   const manda = () => {
     const pulito = testo.trim()
-    if (!pulito || provvisorio) return
+    if (!pulito) return
     setTesto('')
-    void lista.aggiungi(pulito, 'poi', null, null, { progetto })
+    if (provvisorio) setInFila(f => [...f, pulito])
+    else void lista.aggiungi(pulito, 'poi', null, null, { progetto })
   }
   const id = `primo-passo-${progetto}`
   return (
     <div style={{ padding: '8px 21px 16px' }}>
-      <label htmlFor={id} style={{ ...PERCHE, display: 'block', marginTop: 0, marginBottom: 8, color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13.5px' }}>
-        {t('Qual è il primo passo?')}
-      </label>
+      {inFila.map((riga, i) => (
+        <div key={i} style={{ ...TITOLO, padding: '4px 0 10px', opacity: .72 }}>{riga}</div>
+      ))}
+      {!inFila.length && (
+        <label htmlFor={id} style={{ ...PERCHE, display: 'block', marginTop: 0, marginBottom: 8, color: 'rgba(var(--inchiostro-rgb),.78)', fontSize: '13.5px' }}>
+          {t('Qual è il primo passo?')}
+        </label>
+      )}
       <form onSubmit={e => { e.preventDefault(); manda() }} style={{ display: 'flex' }}>
         <Scatola>
           <input id={id} autoFocus={ultimo} value={testo} maxLength={300} onChange={e => setTesto(e.target.value)}
-            placeholder={t('Manda il preventivo a Rossi')} style={CAMPO} />
-          {!!testo.trim() && <button type="submit" disabled={provvisorio} style={{ ...PILLOLA, flex: 'none' }}>{t('Aggiungi')}</button>}
+            aria-label={t('Qual è il primo passo?')} placeholder={t('Manda il preventivo a Rossi')} style={CAMPO} />
+          {!!testo.trim() && <button type="submit" style={{ ...PILLOLA, flex: 'none' }}>{t('Aggiungi')}</button>}
         </Scatola>
       </form>
     </div>
   )
 }
+
+/** Quanti nomi di progetti sta nella riga sotto i blocchi prima di «altri N». */
+const ALTRI_IN_RIGA = 6
 
 /**
  * La riga dei progetti, sotto i blocchi: quelli che oggi non hanno niente sul
@@ -992,13 +1018,17 @@ function PrimoPasso({ progetto, lista, ultimo }: { progetto: string; lista: List
 function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   const [scrivo, setScrivo] = useState(false)
   const [nome, setNome] = useState('')
+  const [tutti, setTutti] = useState(false)
   const conBlocco = new Set(blocchi.map(b => b.progetto).filter(Boolean))
   const altri = v.progetti.filter(p => p.stato === 'attivo' && !conBlocco.has(p.id))
-  const crea = () => {
+  // una riga, non un muro: oltre sei nomi, «altri N» li mostra tutti
+  const visti = tutti ? altri : altri.slice(0, ALTRI_IN_RIGA)
+  const crea = async () => {
     const pulito = nome.trim()
     if (!pulito) return
     setNome(''); setScrivo(false)
-    void v.nuovoProgetto(pulito)
+    // non è nato: la barra torna con dentro il nome, come nella Memoria
+    if (!await v.nuovoProgetto(pulito)) { setNome(pulito); setScrivo(true) }
   }
   if (scrivo) {
     return (
@@ -1020,7 +1050,7 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px 14px', marginTop: 16, padding: '0 4px', minWidth: 0 }}>
       {!!altri.length && <span style={{ ...NOME, color: 'rgba(var(--inchiostro-rgb),.5)' }}>{conProgetti ? t('Altri progetti') : t('Progetti')}</span>}
-      {altri.map(p => (
+      {visti.map(p => (
         <Hov key={p.id} as="button" type="button" onClick={() => v.apriProgetto(p.id)}
           style={{ ...GESTO, display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%', color: 'rgba(var(--inchiostro-rgb),.72)' }}
           hover={{ color: 'var(--inchiostro)' }}>
@@ -1029,6 +1059,11 @@ function RigaProgetti({ v, blocchi }: { v: Vals; blocchi: BloccoPagina[] }) {
           {p.priorita === 'alta' && <span style={{ color: 'var(--rame-testo)', fontSize: '11px' }}>{t('Priorità alta')}</span>}
         </Hov>
       ))}
+      {altri.length > visti.length && (
+        <Hov as="button" type="button" onClick={() => setTutti(true)} style={GESTO} hover={{ color: 'var(--inchiostro)' }}>
+          {frasi.altriN(altri.length - visti.length)}
+        </Hov>
+      )}
       <Hov as="button" type="button" onClick={() => setScrivo(true)}
         style={{ ...GESTO, display: 'inline-flex', alignItems: 'center', gap: 6 }}
         hover={{ color: 'var(--rame-testo)' }}>
@@ -1045,7 +1080,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, vuoti: v.progettiNuovi })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
-  const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi)
+  const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi, v.progettiNuovi)
   /*
    * E mentre la pagina è aperta, l'ordine che vede resta quello (`ordineStabile`):
    * spuntare una riga non fa scambiare i blocchi sotto il dito. Si comincia a
@@ -1063,7 +1098,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   useEffect(() => { if (pronta) visto.current = { chiavi, salvato } })
   const blocchi = chiavi.map(k => ordinati.find(b => chiaveBlocco(b) === k)!)
   const muovi = (da: number, a: number) => {
-    if (da === a || a < 0 || a >= chiavi.length) return
+    // dentro il suo gruppo e basta: un normale sopra un alto tornerebbe giù da solo
+    if (da === a || !stessoGruppo(blocchi, da, a)) return
     v.salvaOrdineBlocchi(ordineDopoIlTrascinamento(chiavi, da, a, v.ordineBlocchi))
   }
   // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
@@ -1159,9 +1195,12 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
         Inclinato, quel bordo non è più verticale, e mentre si scorre sembra
         che si muova la finestra.
       */}
+      {/* la chiave è quella con cui il blocco è nato: un progetto appena creato
+          cambia id quando risponde il server, e con la chiave cambiata il blocco
+          si rifarebbe da capo, perdendo il primo passo che si stava scrivendo */}
       {blocchi.map((b, i) => (
-        <Blocco key={chiaveBlocco(b)} b={b} v={v} lista={lista}
-          indice={i} ultimo={i === blocchi.length - 1} muovi={muovi} />
+        <Blocco key={b.progetto ? v.chiaveDiNascita(b.progetto) : chiaveBlocco(b)} b={b} v={v} lista={lista}
+          indice={i} su={stessoGruppo(blocchi, i, i - 1)} giu={stessoGruppo(blocchi, i, i + 1)} muovi={muovi} />
       ))}
 
       {/* i progetti che oggi non hanno un blocco, e «Nuovo progetto»: finché

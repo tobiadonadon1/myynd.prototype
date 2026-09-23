@@ -2892,6 +2892,7 @@ const EN: Record<string, string> = {
   'Salvato da te': 'You saved this',
   'Risultato del lavoro': 'Work outcome',
   'Da ricontrollare': 'Needs rechecking',
+  'Un progetto chiuso non ha priorità.': 'A closed project has no priority.',
   // — feedback 23 set: connessioni —
   // GitHub: la pagina del token già compilata, i passi con le voci di GitHub, e i suoi no
   'Crea il token su GitHub': 'Create the token on GitHub',
@@ -3570,5 +3571,15 @@ export const frasi = {
   /** Il titolo quando una lettura di più fonti è finita con qualcuna che non si è letta. */
   fontiNonLetteInsieme: (n: number) => corrente === 'en'
     ? (n === 1 ? 'One source could not be read.' : `${n} sources could not be read.`)
-    : (n === 1 ? 'Una fonte non si è letta.' : `${n} fonti non si sono lette.`)
+    : (n === 1 ? 'Una fonte non si è letta.' : `${n} fonti non si sono lette.`),
+
+  // — feedback 23 set: progetti —
+  /** Un nome già usato: non si fa un doppione, si dice e si apre quello. */
+  progettoEsiste: (nome: string) => corrente === 'en' ? `${nome} already exists.` : `${nome} c’è già.`,
+  /** Un nome di un progetto chiuso: lo si riapre, normale, e lo si dice. */
+  progettoRiaperto: (nome: string) => corrente === 'en'
+    ? `${nome} was closed: it is open again, at normal priority.`
+    : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
+  /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
+  altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`)
 }
