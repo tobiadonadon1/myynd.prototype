@@ -29,7 +29,14 @@ test('la domanda nasce una volta, nella lingua dell’app, con i nomi dei proget
   assert.equal(riferimento.chiediRiferimento(), true)
   const d = store.domandaAperta()
   assert.ok(d && d.tema === riferimento.TEMA)
-  assert.match(d.testo, /^To get my bearings/)
+  // senza metafore in testa, e con le parole che la lettura riconosce nella risposta
+  assert.match(d.testo, /^For each project: /)
+  assert.doesNotMatch(d.testo, /bearings/i)
+  assert.match(d.testo, /\bdropped\b/)
+  assert.match(d.testo, /\bblocked\b/)
+  const suoi = [evermute, sito, ceru]
+  assert.deepEqual([...riferimento.progettiMorti('Sito: dropped.', suoi)], [sito.id])
+  assert.deepEqual([...riferimento.progettiBloccati('Ceru: blocked.', suoi)], [ceru.id])
   for (const n of ['Evermute', 'Sito', 'Ceru']) assert.ok(d.testo.includes(n), `la domanda nomina ${n}`)
   // già aperta: non se ne apre un'altra
   assert.equal(riferimento.chiediRiferimento(), false)

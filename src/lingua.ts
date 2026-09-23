@@ -261,7 +261,6 @@ const EN: Record<string, string> = {
   'Tu, a ogni passo': 'You, at every step',
   'Salta l’introduzione': 'Skip the intro',
   'Introduzione': 'Introduction',
-  'Serve a scegliere cosa conta, ogni mattina.': 'It is how I pick what matters, every morning.',
   'Finisce nella lista: è la prima cosa che vedrai.': 'It goes on your list: the first thing you will see.',
   // — l'intervista in chat, il progetto dalla prima pagina, e due carte più leggere —
   'Prima due parole su di te, così so con chi parlo.': 'First, a couple of things about you, so I know who I am talking to.',
@@ -290,7 +289,6 @@ const EN: Record<string, string> = {
   'Verifica della connessione in corso…': 'Checking the connection…',
   'Chiave collegata': 'Key connected',
   'Non ancora collegato.': 'Not connected yet.',
-  'Il tuo nome, un indirizzo e una password. Il resto te lo chiede dopo.': 'Your name, an address and a password. It asks for the rest later.',
   'Questo non sembra un indirizzo email.': 'That does not look like an email address.',
   'Priorità, autonomia e voce': 'Priorities, autonomy and voice',
   'Generale': 'General',
@@ -321,7 +319,6 @@ const EN: Record<string, string> = {
   "Cominciamo da te": "Start with you",
   "A cosa stai lavorando?": "What are you working on?",
   "Dove vuoi arrivare?": "Where do you want to go?",
-  "Il nome del tuo progetto": "Your project’s name",
 
   'Progetto': 'Project',
   'Prossima azione': 'Next action',
@@ -359,7 +356,6 @@ const EN: Record<string, string> = {
   "Nome del progetto": "Project name",
   "Il progetto a cui stai lavorando": "The project you’re working on",
   "Cosa vuoi ottenere?": "What do you want to achieve?",
-  "Un risultato concreto, con le tue parole.": "A concrete outcome, in your own words.",
   "Il tuo nome": "Your name",
   "Continua": "Continue",
   "Da cosa partiamo?": "What shall we start with?",
@@ -640,7 +636,6 @@ const EN: Record<string, string> = {
 // — l'accesso: quale delle due cose stai facendo, e dove sta girando —
   'Bentornato.': 'Welcome back.',
   'Crea il tuo accesso.': 'Create your account.',
-  'Entra con l’indirizzo con cui l’hai creato.': 'Sign in with the address you created it with.',
   'Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.':
     'There is no account here yet: what you type now creates it.',
   'Questo indirizzo è un Myynd a parte, con una memoria sua. L’account che hai sul tuo computer qui non esiste: non c’è nessun accesso centrale, e ogni Myynd tiene il suo dove gira.':
@@ -1428,7 +1423,6 @@ const EN: Record<string, string> = {
   // — quando è lui a chiedere —
   'Myynd chiede': 'Myynd asks',
   'Bastano cinque parole': 'Five words is plenty',
-  'Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.': 'One line per project: what you are on, what is dead, what is blocked. Cmd+Enter to send.',
   'Rispondi': 'Answer',
   'Perché me lo chiedi?': 'Why are you asking?',
   'Hai tolto di mezzo queste senza dirmi perché:': "You pushed these away without telling me why:",
@@ -2860,6 +2854,14 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  // — feedback 23 set: accesso e primo avvio —
+  'Legge il tuo lavoro e ti dice cosa conta oggi.': 'It reads your work and tells you what matters today.',
+  'nome@esempio.it': 'name@example.com',
+  'Va bene qualsiasi indirizzo, di lavoro o personale.': 'Any address is fine, work or personal.',
+  'Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.': 'Myynd uses this goal to decide what to show you first each morning.',
+  'Mettere online il sito nuovo entro ottobre': 'Put the new website online by October',
+  'Sito nuovo': 'New website',
+  'Una riga per progetto. Cmd+Invio per mandare.': 'One line per project. Cmd+Enter to send.',
 }
 
 
@@ -3289,6 +3291,8 @@ export const frasi = {
   avantiCollegate: (n: number) => corrente === 'en'
     ? (n === 1 ? 'Next · 1 connected' : `Next · ${n} connected`)
     : (n === 1 ? 'Avanti · 1 collegata' : `Avanti · ${n} collegate`),
+  // i passi dell'avvio, in alto al centro (Scena)
+  passoDi: (n: number, di: number) => corrente === 'en' ? `Step ${n} of ${di}` : `Passo ${n} di ${di}`,
   documenti: (n: number) => corrente === 'en'
     ? (n === 1 ? '1 document.' : `${n} documents.`)
     : (n === 1 ? '1 documento.' : `${n} documenti.`),

@@ -145,14 +145,22 @@ export function fresco(adesso = Date.now()): boolean {
   return adesso - Date.parse(r.aggiornato) < GIORNI_VALIDO * 86_400_000
 }
 
-/** La domanda, nella lingua dell'app, con i nomi dei suoi progetti dentro. */
+/**
+ * La domanda, nella lingua dell'app, con i nomi dei suoi progetti dentro.
+ *
+ * Cominciava con «Per orientarmi» («To get my bearings»), e la prima tester
+ * non l'ha capita: una metafora in testa a una domanda che si legge di
+ * passaggio. Adesso chiede le tre cose e basta, con le parole che la lettura
+ * qui sotto riconosce nella risposta: «abbandonato» e «bloccato», «dropped»
+ * e «blocked».
+ */
 export function domandaDiRiferimento(): string {
   const nomi = progetti.vivi().map(p => p.nome)
   if (lingua() === 'en') {
-    return 'To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked? Write it as it comes: it counts more than the files.' +
+    return 'For each project: what are you working on now, what have you dropped, and what is blocked?' +
       (nomi.length ? ` The projects I know: ${nomi.join(', ')}.` : '')
   }
-  return 'Per orientarmi: per ogni progetto, su cosa stai lavorando adesso? Cosa è morto, e cosa è bloccato? Scrivilo come viene: vale più dei file.' +
+  return 'Per ogni progetto: su cosa lavori adesso, cosa hai abbandonato e cosa è bloccato?' +
     (nomi.length ? ` I progetti che conosco: ${nomi.join(', ')}.` : '')
 }
 
@@ -182,8 +190,8 @@ export function chiediRiferimento(adesso = Date.now()): boolean {
 /** Quello che gli si dice quando ha risposto: cosa cambia da adesso. */
 export function esitoDelRiferimento(): string {
   return lingua() === 'en'
-    ? 'Noted. From now on the priorities start from what you wrote: dead projects will not come back, and for the blocked ones I look for the step that unblocks them.'
-    : 'Segnato. Da adesso le priorità partono da quello che hai scritto: i progetti morti non te li ripropongo, e su quelli bloccati cerco il passo che li sblocca.'
+    ? 'Noted. From now on the priorities start from what you wrote: dropped projects will not come back, and for the blocked ones I look for the step that unblocks them.'
+    : 'Segnato. Da adesso le priorità partono da quello che hai scritto: i progetti abbandonati non te li ripropongo, e su quelli bloccati cerco il passo che li sblocca.'
 }
 
 // — leggere il riferimento —

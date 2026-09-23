@@ -43,6 +43,8 @@
 }
 .accesso-pitch p { font-size: 14px; color: #c9bbae; line-height: 1.6; margin: 0; }
 .accesso-card .accesso-title { font-size: 40px; }
+/* stretta, la riga sotto al titolo sta nella carta: vicina al titolo, lontana dalle schede */
+.accesso-card .accesso-riga { font-size: 14px; color: #c9bbae; line-height: 1.6; margin: -14px 0 24px; text-wrap: pretty; }
 .accesso-card input.scuro { color-scheme: dark; box-shadow: none !important; }
 .accesso-card input.scuro::placeholder { color: #a6998c; opacity: 1; }
 .accesso-card input.scuro:focus { outline: none !important; border-color: #f6f2eb !important; box-shadow: 0 0 0 1px #f6f2eb30 !important; }

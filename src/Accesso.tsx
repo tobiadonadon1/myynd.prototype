@@ -285,6 +285,10 @@ export function Accesso({ accesso, entrato }: {
                 {titoloAccesso(modo)}
               </h1>
             )}
+            {/* stretta, la riga sotto al titolo lo segue nella carta: la stessa pagina a ogni larghezza */}
+            {!largo && rigaAccesso(modo) && (
+              <p className="accesso-riga" style={su(.08)}>{rigaAccesso(modo)}</p>
+            )}
 
             {/*
               Le due cose che si possono fare, tutte e due sempre lì.
@@ -302,18 +306,25 @@ export function Accesso({ accesso, entrato }: {
               </div>
             )}
 
-            <div style={{
-              fontSize: '13px', lineHeight: 1.55, color: '#bdb0a4',
-              marginBottom: 22, textWrap: 'pretty', ...su(.14)
-            }}>
-              {modo === 'scordata'
-                ? t('Scrivi il tuo indirizzo: se è qui, ti mandiamo un collegamento per scegliere una password nuova.')
-                : modo === 'nuova'
-                  ? t('Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.')
-                  : registrato
-                    ? t('Entra con l’indirizzo con cui l’hai creato.')
-                    : t('Il tuo nome, un indirizzo e una password. Il resto te lo chiede dopo.')}
-            </div>
+            {/*
+              Una riga di spiegazione solo dove serve per sapere cosa fare.
+
+              Su «Accedi» e «Crea un account» c'erano «Entra con l'indirizzo
+              con cui l'hai creato» e «Il tuo nome, un indirizzo e una
+              password»: ripetevano il titolo e i campi appena sotto, e la
+              prima tester le ha lette come rumore. Le due strade che arrivano
+              da una mail invece la tengono: lì la riga dice cosa succede.
+            */}
+            {(modo === 'scordata' || modo === 'nuova') && (
+              <div style={{
+                fontSize: '13px', lineHeight: 1.55, color: '#bdb0a4',
+                marginBottom: 22, textWrap: 'pretty', ...su(.14)
+              }}>
+                {modo === 'scordata'
+                  ? t('Scrivi il tuo indirizzo: se è qui, ti mandiamo un collegamento per scegliere una password nuova.')
+                  : t('Scegli una password nuova. Le sessioni aperte altrove si chiudono tutte.')}
+              </div>
+            )}
 
             {/*
               La porta chiusa si dice, invece di sparire.
@@ -333,7 +344,7 @@ export function Accesso({ accesso, entrato }: {
             {registrazione === 'chiusa' && modo === 'entra' && (
               <div style={{
                 fontSize: '12.5px', lineHeight: 1.6, color: '#bdb0a4',
-                marginTop: -8, marginBottom: 22, textWrap: 'pretty', ...su(.16)
+                marginBottom: 22, textWrap: 'pretty', ...su(.16)
               }}>
                 {t('Le registrazioni sono chiuse su questo server.')}
               </div>
@@ -347,7 +358,14 @@ export function Accesso({ accesso, entrato }: {
               {modo !== 'nuova' && (
                 <Casella key={modo === 'crea' ? 'crea' : 'accesso'} etichetta={t('Email')} value={email} onChange={e => setEmail(e.target.value)}
                   onKeyDown={tasto} onBlur={() => setEmailToccata(true)} type="email" autoComplete="username" autoFocus={modo !== 'crea'}
-                  placeholder={t('tu@tuodominio.it')}
+                  placeholder={t('nome@esempio.it')}
+                  /*
+                   * «tu@tuodominio.it» ha fatto credere alla prima tester che
+                   * servisse un dominio suo. Il server prende qualsiasi
+                   * indirizzo (`server/conti.ts`): l'esempio è neutro, e chi
+                   * crea il conto lo legge anche scritto, una volta.
+                   */
+                  nota={modo === 'crea' ? t('Va bene qualsiasi indirizzo, di lavoro o personale.') : undefined}
                   errore={modo !== 'entra' && emailToccata && !!email.trim() && !indirizzoValido(email) ? t('Questo non sembra un indirizzo email.') : undefined} />
               )}
 
@@ -463,11 +481,25 @@ function titoloAccesso(modo: Modo) {
         : t('Bentornato.')
 }
 
+/**
+ * La riga sotto al titolo: cosa ti dà la pagina, in una frase.
+ *
+ * «Accedi» l'aveva e «Crea il tuo Myynd» no, e le due pagine sembravano di
+ * due prodotti diversi. Adesso tutte e due hanno titolo e riga; le due strade
+ * che arrivano da una mail hanno la loro riga nella carta, perché lì dice
+ * cosa succede, e non ne hanno una qui.
+ */
+function rigaAccesso(modo: Modo): string {
+  return modo === 'entra' ? t('Riprende da dove l’hai lasciata.')
+    : modo === 'crea' ? t('Legge il tuo lavoro e ti dice cosa conta oggi.')
+      : ''
+}
+
 function Pitch({ modo }: { modo: Modo }) {
   return <div className="accesso-pitch">
     <div className="accesso-mark" style={su(0)}><Marchio dim={52} /></div>
     <h1 className="accesso-title" style={su(.07)}>{titoloAccesso(modo)}</h1>
-    {modo === 'entra' && <p style={su(.14)}>{t('Riprende da dove l’hai lasciata.')}</p>}
+    {rigaAccesso(modo) && <p className="accesso-riga" style={su(.14)}>{rigaAccesso(modo)}</p>}
   </div>
 }
 
@@ -579,12 +611,14 @@ function Riga({ colore, children, ruolo }: { colore: string; children: React.Rea
  * L'errore sta sotto al suo campo, non sotto al bottone: «le due password non
  * coincidono» accanto alla seconda password si capisce senza cercare quale.
  */
-function Casella({ etichetta, coda, errore, ...campo }: {
+function Casella({ etichetta, coda, errore, nota, ...campo }: {
   etichetta: string
   /** Quello che sta dentro la casella, a destra: l'occhio della password. */
   coda?: React.ReactNode
   /** Cosa non va in questo campo, se qualcosa non va. */
   errore?: string
+  /** Una riga sotto al campo, quando non c'è un errore: il segnaposto sparisce appena si scrive, questa no. */
+  nota?: string
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   const [dentro, setDentro] = useState(false)
   return (
@@ -605,11 +639,13 @@ function Casella({ etichetta, coda, errore, ...campo }: {
           }} />
         {coda}
       </div>
-      {errore && (
+      {errore ? (
         <div role="alert" style={{
           fontSize: '12px', color: SBAGLIATO, marginTop: 6, lineHeight: 1.5,
           textWrap: 'pretty', animation: 'entrasu .3s ease both'
         }}>{errore}</div>
+      ) : nota && (
+        <div style={{ fontSize: '12px', color: '#bdb0a4', marginTop: 6, lineHeight: 1.5, textWrap: 'pretty' }}>{nota}</div>
       )}
     </label>
   )

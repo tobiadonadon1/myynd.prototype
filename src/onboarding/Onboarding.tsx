@@ -218,17 +218,23 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
 
   const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 3.4 : momento === 2 ? 3.7 : risultato ? 5 : 3
+  // due passi: l'obiettivo, poi la prima attività; la fonte si sceglie dalla
+  // prima attività e ne tiene il numero. L'introduzione ha i suoi, e mentre
+  // carica non si è ancora in nessun passo
+  const passo = carico || !avvio || !accountConfermato ? undefined : momento === 0 ? 1 : 2
 
-  return <Scena progressione={progressione} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
+  return <Scena progressione={progressione} passo={passo} passi={2} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
       {!accountConfermato && <Introduzione avanti={() => setAccountConfermato(true)} pronto={!!accountEmail} riprendi={!!avvio.progetto} cambiaAccount={() => void cambiaAccount()} occupato={occupato} />}
       {accountConfermato && momento === 0 && <form onSubmit={e => { e.preventDefault(); invioProgetto() }}>
         <span className="onboard-kicker">{t('Cominciamo da te')}</span>
         <h2 ref={titolo} tabIndex={-1}>{t('Cosa vuoi ottenere?')}</h2>
-        <p className="onboard-why">{t('Serve a scegliere cosa conta, ogni mattina.')}</p>
+        {/* cosa ci fa Myynd, detto da fuori: «serve a scegliere cosa conta» non diceva chi sceglie, né cosa */}
+        <p className="onboard-why">{t('Myynd usa questo obiettivo per decidere cosa mostrarti per primo ogni mattina.')}</p>
         <fieldset disabled={occupato} className="onboard-fieldset">
-          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Cosa vuoi ottenere?')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Un risultato concreto, con le tue parole.')} /></label>
-          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Il nome del tuo progetto')} /></label>
+          {/* ogni campo la sua etichetta sopra, e nel segnaposto un esempio: l'obiettivo era l'unico senza */}
+          <label className="onboard-field onboard-answer"><span>{t('Obiettivo')}</span><Risposta value={obiettivo} onChange={e => setObiettivo(e.target.value)} invio={invioProgetto} required maxLength={1000} placeholder={t('Mettere online il sito nuovo entro ottobre')} /></label>
+          <label className="onboard-field"><span>{t('Progetto')}</span><input ref={nome} value={progetto} onChange={e => setProgetto(e.target.value)} required maxLength={160} autoComplete="off" placeholder={t('Sito nuovo')} /></label>
           <OnboardErrore testo={errore} />
           <div className="onboard-actions"><button className="onboard-primary" disabled={!progetto.trim() || !obiettivo.trim() || occupato}>{occupato ? t('Salvo…') : t('Continua')}<Avanti /></button></div>
         </fieldset>
