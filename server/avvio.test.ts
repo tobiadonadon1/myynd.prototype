@@ -240,3 +240,130 @@ test('un file di un anno fa non spiega un progetto che comincia adesso', async (
       `una prova viene da un file di un anno fa: ${f.evidenza.doc}`)
   }
 })
+
+/*
+ * Collegare tutto, poi leggere tutto insieme.
+ *
+ * La prima persona di fuori si aspettava di collegare le sue fonti e che
+ * Myynd le leggesse insieme; l'avvio ne leggeva una. Queste prove tengono
+ * ferme le regole di prima (estratti letterali, niente posta di massa, niente
+ * fonti non scelte) con più fonti alla volta.
+ */
+function tanteFonti() {
+  const docs = [
+    documento('brief', 'Aurora: la revisione della pagina prezzi è fissata per venerdì con il team prodotto.'),
+    documento('verbale', 'Per Aurora dobbiamo consegnare la nuova documentazione prima della revisione del lancio.'),
+    documento('bozza', 'Aurora prevede una prova con cinque clienti già invitati alla sessione della prossima settimana.'),
+    documento('riunione', 'Aurora: la riunione con i clienti pilota è fissata per martedì alle dieci in sala grande.', 'calendario'),
+    documento('prova', 'Aurora: la prova generale del lancio è in agenda giovedì con tutto il team prodotto.', 'calendario'),
+    { ...documento('invito', 'Aurora: iscriviti alla newsletter per scoprire tutte le novità della piattaforma.', 'calendario'), massa: true },
+    documento('posta', 'Aurora: questo messaggio della posta non deve apparire se la posta non è stata scelta.', 'posta')
+  ]
+  store.salvaDocumenti(docs)
+  return docs
+}
+
+test('several sources are read together: excerpts alternate across them, stay literal, and never come from an unchosen source', () => {
+  const docs = tanteFonti()
+  const p = progetto()
+  const s = avvio.fonte({ fonti: ['desktop', 'calendario'], revisione: p.revisione })
+  assert.equal(s.fase, 'verifica')
+  assert.deepEqual(s.fonti, ['desktop', 'calendario'])
+  assert.equal(s.fonte, 'desktop', 'the first source stays readable for older clients')
+  assert.equal(s.fonteSaltata, false)
+  assert.equal(s.fatti.length, 3)
+  assert.deepEqual(new Set(s.fatti.map(f => f.evidenza.fonte)), new Set(['desktop', 'calendario']), 'both chosen sources must be represented')
+  assert.equal(s.fatti[1].evidenza.fonte, 'calendario', 'the second excerpt comes from the second source, not the first source again')
+  for (const f of s.fatti) {
+    assert.equal(f.testo, f.evidenza.estratto)
+    const d = docs.find(x => x.id === f.evidenza.doc)
+    assert.ok(d?.corpo.includes(f.testo))
+    assert.equal(d?.fonte, f.evidenza.fonte)
+    assert.ok(!['invito', 'posta'].includes(f.evidenza.doc), f.evidenza.doc)
+  }
+  assert.deepEqual(avvio.stato(), s, 'polling must not invalidate the client revision')
+})
+
+test('a source with many matches does not crowd out the others', () => {
+  store.salvaDocumenti([
+    ...Array.from({ length: 45 }, (_, i) => documento(`mail-${i}`, `Aurora: aggiornamento numero ${i} sul lancio della piattaforma per i clienti pilota.`, 'posta')),
+    documento('piano', 'Aurora: il piano del lancio della piattaforma sta tutto in questo documento del progetto.')
+  ])
+  const p = progetto()
+  const s = avvio.fonte({ fonti: ['posta', 'desktop'], revisione: p.revisione })
+  assert.ok(s.fatti.some(f => f.evidenza.doc === 'piano'), 'the one project document on the Mac must still be quoted')
+})
+
+test('a session saved with one source resumes as a list of one, and the file keeps both shapes', () => {
+  tanteFonti()
+  const p = progetto()
+  // un avvio salvato da un'app di prima: `fonte` e nessuna lista
+  const vecchio = JSON.parse(readFileSync(join(casa, 'avvio.json'), 'utf8'))
+  delete vecchio.fonti
+  writeFileSync(join(casa, 'avvio.json'), JSON.stringify({ ...vecchio, fonte: 'desktop', fonteScelta: true, verificato: false }))
+  let s = avvio.stato()
+  assert.equal(s.revisione, p.revisione)
+  assert.deepEqual(s.fonti, ['desktop'])
+  assert.equal(s.fase, 'verifica')
+  assert.ok(s.fatti.length > 0 && s.fatti.every(f => f.evidenza.fonte === 'desktop'))
+  s = avvio.conferma({ ids: [s.fatti[0].id], revisione: s.revisione })
+  // la stessa fonte chiesta come lista non rimette in discussione quello che si è confermato
+  s = avvio.fonte({ fonti: ['desktop'], revisione: s.revisione })
+  assert.equal(s.fase, 'azione')
+  assert.equal(s.fatti.filter(f => f.confermato).length, 1)
+  const scritto = JSON.parse(readFileSync(join(casa, 'avvio.json'), 'utf8'))
+  assert.deepEqual(scritto.fonti, ['desktop'])
+  assert.equal(scritto.fonte, 'desktop', 'an older app reopening this file still finds its single source')
+})
+
+test('the single-source body still works, an empty list skips, and a reordered list keeps confirmations', () => {
+  tanteFonti()
+  let s = progetto()
+  s = avvio.fonte({ fonte: 'desktop', revisione: s.revisione })
+  assert.deepEqual(s.fonti, ['desktop'])
+  s = avvio.fonte({ fonti: ['desktop', 'calendario'], revisione: s.revisione })
+  s = avvio.conferma({ ids: s.fatti.slice(0, 2).map(f => f.id), revisione: s.revisione })
+  assert.equal(s.fase, 'azione')
+  s = avvio.fonte({ fonti: ['calendario', 'desktop'], revisione: s.revisione })
+  assert.equal(s.fase, 'azione', 'the same sources in another order are the same reading')
+  assert.equal(s.fatti.filter(f => f.confermato).length, 2)
+  s = avvio.fonte({ fonti: ['calendario', 'desktop', 'posta'], revisione: s.revisione })
+  assert.equal(s.fase, 'verifica', 'another source means other excerpts to look at')
+  assert.equal(s.fatti.filter(f => f.confermato).length, 0)
+  s = avvio.fonte({ fonti: [], revisione: s.revisione })
+  assert.equal(s.fonteSaltata, true)
+  assert.deepEqual(s.fonti, [])
+  assert.equal(s.fonte, null)
+  assert.equal(s.fase, 'azione')
+})
+
+test('a list with an unknown source, or a malformed body, changes nothing', () => {
+  const p = progetto()
+  for (const corpo of [{ fonti: ['desktop', 'inventata'] }, { fonti: ['claude'] }, { fonti: 'desktop' }, { fonti: [42] }, {}]) {
+    assert.throws(() => avvio.fonte({ ...corpo, revisione: p.revisione }), /fonte disponibile/, JSON.stringify(corpo))
+  }
+  assert.deepEqual(avvio.stato(), p)
+})
+
+test('duplicates collapse, and confirmed excerpts keep their own source in the saved result', () => {
+  tanteFonti()
+  let s = progetto()
+  s = avvio.fonte({ fonti: ['desktop', 'calendario', 'desktop'], revisione: s.revisione })
+  assert.deepEqual(s.fonti, ['desktop', 'calendario'])
+  const scelti = s.fatti
+  s = avvio.conferma({ ids: scelti.map(f => f.id), revisione: s.revisione })
+  const fatto = avvio.completa({ azione: 'Preparare la riunione con i clienti pilota', revisione: s.revisione })
+  assert.deepEqual(fatto.risultato!.traccia.estratti.map(e => e.fonte), scelti.map(f => f.evidenza.fonte))
+  assert.deepEqual(fatto.fatti.map(f => f.evidenza.fonte), scelti.map(f => f.evidenza.fonte),
+    'after completion each excerpt still names the source it came from')
+  assert.ok(fatto.fatti.some(f => f.evidenza.fonte === 'calendario'))
+})
+
+test('onboarding source lists stay per account', () => {
+  const anna = chi.dentro('avvio-anna-fonti', () => { tanteFonti(); const p = progetto(); return avvio.fonte({ fonti: ['desktop', 'calendario'], revisione: p.revisione }) })
+  const bruno = chi.dentro('avvio-bruno-fonti', () => { const p = progetto(); return avvio.fonte({ fonti: ['calendario'], revisione: p.revisione }) })
+  assert.deepEqual(anna.fonti, ['desktop', 'calendario'])
+  assert.deepEqual(bruno.fonti, ['calendario'])
+  assert.deepEqual(bruno.fatti, [], 'another account must never inherit document excerpts')
+  assert.deepEqual(chi.dentro('avvio-anna-fonti', () => avvio.stato()).fonti, ['desktop', 'calendario'])
+})

@@ -25,7 +25,8 @@ export type RisultatoAvvio = {
   tipo: 'prima_traccia'
   progetto: { id: string; nome: string; obiettivo: string }
   compito: { id: string; testo: string; giorno: string | null }
-  traccia: { obiettivo: string; estratti: { testo: string; doc: string; titolo: string }[]; prossimaAzione: string }
+  /** `fonte` manca negli avvii chiusi quando la fonte era una sola: era quella di `Salvato.fonte`. */
+  traccia: { obiettivo: string; estratti: { testo: string; doc: string; titolo: string; fonte?: string }[]; prossimaAzione: string }
 }
 
 export type StatoAvvio = {
@@ -33,6 +34,9 @@ export type StatoAvvio = {
   revisione: number
   fase: 'progetto' | 'fonte' | 'verifica' | 'azione' | 'completo'
   progetto: { nome: string; obiettivo: string } | null
+  /** Le fonti lette insieme per questo avvio, nell'ordine in cui le ha messe la persona. */
+  fonti: string[]
+  /** La prima di `fonti`: resta per chi parla ancora con una fonte sola. */
   fonte: string | null
   fonteSaltata: boolean
   fatti: FattoAvvio[]
@@ -41,11 +45,25 @@ export type StatoAvvio = {
   aggiornato: string
 }
 
+/*
+ * Le fonti sono diventate una lista, e il file resta alla versione 1.
+ *
+ * Prima di chiedere di collegarle tutte e leggerle insieme l'avvio ne teneva
+ * una sola, in `fonte`. Un avvio salvato così deve riprendere da dove era: se
+ * `fonti` manca, la lista è quella fonte sola (`fontiDi`). E si continua a
+ * scrivere anche `fonte`, la prima della lista, così un'app di prima che
+ * riapre questo file trova quello che si aspetta invece di un avvio illeggibile.
+ */
 type Salvato = {
   versione: 1; id: string; revisione: number; progetto: StatoAvvio['progetto']
-  fonte: string | null; fonteScelta: boolean; verificato: boolean; confermati: string[]
+  fonte: string | null; fonti?: string[]; fonteScelta: boolean; verificato: boolean; confermati: string[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
   inCorso?: Intenzione | null
+}
+
+function fontiDi(s: Salvato): string[] {
+  if (Array.isArray(s.fonti)) return s.fonti.filter((f): f is string => typeof f === 'string')
+  return s.fonte ? [s.fonte] : []
 }
 
 type Intenzione = {
@@ -70,7 +88,7 @@ function salva(s: Salvato) {
 
 function leggi(): Salvato {
   if (!existsSync(file())) {
-    const nuovo: Salvato = { versione: 1, id: randomUUID(), revisione: 0, progetto: null, fonte: null,
+    const nuovo: Salvato = { versione: 1, id: randomUUID(), revisione: 0, progetto: null, fonte: null, fonti: [],
       fonteScelta: false, verificato: false, confermati: [], azione: '', risultato: null, aggiornato: new Date().toISOString() }
     salva(nuovo)
     return nuovo
@@ -101,11 +119,20 @@ function cambia(s: Salvato): StatoAvvio {
   return pubblico(s)
 }
 
-/** At most three literal excerpts, from the selected source and real project matches. */
+/** At most three literal excerpts, from the selected sources and real project matches. */
 function evidenze(s: Salvato): FattoAvvio[] {
-  if (!s.progetto || !s.fonte) return []
+  const fonti = fontiDi(s)
+  if (!s.progetto || !fonti.length) return []
   const p = s.progetto
-  const documenti = [...store.cerca(p.nome, 30, [s.fonte]), ...store.cerca(p.obiettivo, 30, [s.fonte])]
+  /*
+   * Una ricerca per fonte, non una sola su tutte.
+   *
+   * Con trenta risultati in comune, una casella di posta che nomina il
+   * progetto in cinquanta messaggi riempie la lista da sola, e il documento
+   * del progetto che sta sul Mac non arriva nemmeno a essere guardato. Ogni
+   * fonte ha i suoi trenta, e più sotto si prende a turno da ognuna.
+   */
+  const documenti = fonti.flatMap(f => [...store.cerca(p.nome, 30, [f]), ...store.cerca(p.obiettivo, 30, [f])])
   /*
    * E non quello che è vecchio.
    *
@@ -131,7 +158,19 @@ function evidenze(s: Salvato): FattoAvvio[] {
   const recente = (d: store.Documento) => !d.quando || Date.parse(d.quando) >= soglia
   const unici = [...new Map(documenti.map(d => [d.id, d])).values()]
     .filter(d => !d.massa && recente(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
-  const perDocumento = unici.map(d => {
+  /*
+   * A turno fra le fonti: il primo documento di ognuna, poi il secondo.
+   *
+   * Il giro qui sotto prende la prima frase di ogni documento nell'ordine in
+   * cui li trova, e con le fonti una dopo l'altra i tre estratti venivano
+   * tutti dalla prima: chi aveva collegato il Mac e l'agenda vedeva solo il
+   * Mac, cioè l'avvio che ne legge una sola. Mescolati così, tre fonti danno
+   * un estratto ciascuna. Dentro una fonte resta l'ordine della ricerca.
+   */
+  const perFonte = fonti.map(f => unici.filter(d => d.fonte === f))
+  const alterni = Array.from({ length: Math.max(0, ...perFonte.map(l => l.length)) }, (_, i) => perFonte.map(l => l[i]))
+    .flat().filter((d): d is store.Documento => !!d)
+  const perDocumento = alterni.map(d => {
     // Markdown titles and metadata identify a document; they are not facts
     // about the project. Remove only structural lines, keeping body excerpts
     // literal so every displayed character remains verifiable at the source.
@@ -168,12 +207,13 @@ function evidenze(s: Salvato): FattoAvvio[] {
 function pubblico(s: Salvato): StatoAvvio {
   const fatti = s.risultato ? s.risultato.traccia.estratti.map(e => ({
     id: createHash('sha256').update(`${e.doc}\0${e.testo}`).digest('hex').slice(0, 24), testo: e.testo,
-    evidenza: { doc: e.doc, titolo: e.titolo, fonte: s.fonte ?? '', estratto: e.testo }, confermato: true
+    evidenza: { doc: e.doc, titolo: e.titolo, fonte: e.fonte ?? s.fonte ?? '', estratto: e.testo }, confermato: true
   })) : evidenze(s)
+  const fonti = fontiDi(s)
   return { id: s.id, revisione: s.revisione,
     fase: s.risultato ? 'completo' : !s.progetto ? 'progetto' : !s.fonteScelta ? 'fonte'
       : s.verificato ? 'azione' : 'verifica',
-    progetto: s.progetto, fonte: s.fonte, fonteSaltata: s.fonteScelta && !s.fonte,
+    progetto: s.progetto, fonti, fonte: fonti[0] ?? null, fonteSaltata: s.fonteScelta && !fonti.length,
     fatti, azione: s.azione, risultato: s.risultato, aggiornato: s.aggiornato }
 }
 
@@ -191,14 +231,31 @@ export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: u
   return cambia(s)
 }
 
-export function fonte(b: { fonte?: unknown; revisione?: unknown }): StatoAvvio {
+/**
+ * Le fonti da leggere insieme: `fonti`, una lista; vuota vuol dire «continuo senza».
+ *
+ * `fonte` da sola — una stringa, o `null` per saltare — è la domanda di prima,
+ * quando se ne sceglieva una: un client rimasto indietro la manda ancora, e
+ * vale come una lista di una.
+ */
+export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown }): StatoAvvio {
   const s = leggi(); esigiRevisione(s, b.revisione)
   if (s.risultato) return pubblico(s)
   if (!s.progetto) throw new ErroreAvvio('Scegli prima il progetto e l’obiettivo.')
-  if (b.fonte !== null && !CATALOGO.some(c => c.legge && c.id === b.fonte)) throw new ErroreAvvio('Scegli una fonte disponibile oppure continua senza.')
-  if (s.fonte !== b.fonte) { s.confermati = []; s.verificato = false }
-  s.fonte = b.fonte as string | null; s.fonteScelta = true
-  if (!s.fonte) s.verificato = true
+  const chieste: unknown[] = Array.isArray(b.fonti) ? b.fonti : b.fonte === null ? [] : [b.fonte]
+  if (chieste.length > CATALOGO.length || chieste.some(f => !CATALOGO.some(c => c.legge && c.id === f))) {
+    throw new ErroreAvvio('Scegli una fonte disponibile oppure continua senza.')
+  }
+  const fonti = [...new Set(chieste as string[])]
+  // l'ordine non cambia cosa si legge: solo un'altra fonte, o una in meno, rimette in discussione gli estratti
+  const prima = fontiDi(s)
+  const uguali = s.fonteScelta && prima.length === fonti.length && fonti.every(f => prima.includes(f))
+  s.fonti = fonti; s.fonte = fonti[0] ?? null; s.fonteScelta = true
+  // ma l'ordine decide chi parla per primo nel giro a turno: se un estratto
+  // confermato non c'è più fra i tre, la conferma non vale più
+  const ancora = uguali && s.confermati.length ? new Set(evidenze(s).map(f => f.id)) : null
+  if (!uguali || (ancora && s.confermati.some(id => !ancora.has(id)))) { s.confermati = []; s.verificato = false }
+  if (!fonti.length) s.verificato = true
   return cambia(s)
 }
 
@@ -225,7 +282,7 @@ export function completa(b: { azione?: unknown; giorno?: unknown; revisione?: un
   if (giorno !== null && !giornoValido(giorno)) throw new ErroreAvvio('Data non valida.')
   const fatti = evidenze(s)
   if (s.confermati.some(id => !fatti.some(f => f.id === id))) throw new ErroreAvvio('Gli estratti sono cambiati. Rileggili prima di confermare.', 409)
-  const estratti = fatti.filter(f => f.confermato).map(f => ({ testo: f.testo, doc: f.evidenza.doc, titolo: f.evidenza.titolo }))
+  const estratti = fatti.filter(f => f.confermato).map(f => ({ testo: f.testo, doc: f.evidenza.doc, titolo: f.evidenza.titolo, fonte: f.evidenza.fonte }))
   // Record the full intent before writing either project or task. A process
   // crash resumes this exact intent before another edit can be accepted.
   s.inCorso = { progetto: { ...s.progetto }, azione, giorno, estratti, inglese: lingua() === 'en' }
