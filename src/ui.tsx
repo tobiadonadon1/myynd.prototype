@@ -356,9 +356,19 @@ const FOCALIZZABILE = 'button:not([disabled]),[href],input:not([disabled]),selec
 /** Le finestre aperte, dalla più vecchia alla più nuova: il Tab lo tiene solo l'ultima. */
 const finestreAperte: HTMLElement[] = []
 
-/** Quello che dentro la finestra si può raggiungere con Tab adesso: visibile, non spento. */
+/**
+ * Quello che dentro la finestra si può raggiungere con Tab adesso: visibile,
+ * non spento, e non chiuso dentro una tendina (`<details>`) che non è aperta,
+ * dove Chrome tiene i campi disegnati ma il Tab li salta. Il `<summary>` di
+ * una tendina si raggiunge, anche se non è un bottone.
+ */
 function raggiungibili(el: HTMLElement): HTMLElement[] {
-  return [...el.querySelectorAll<HTMLElement>(FOCALIZZABILE)].filter(x => x.getClientRects().length > 0)
+  return [...el.querySelectorAll<HTMLElement>(`${FOCALIZZABILE},summary`)].filter(x => {
+    if (!x.getClientRects().length) return false
+    const chiusa = x.parentElement?.closest('details:not([open])')
+    if (chiusa && !(x.tagName === 'SUMMARY' && x.parentElement === chiusa)) return false
+    return getComputedStyle(x).visibility !== 'hidden'
+  })
 }
 
 /**
