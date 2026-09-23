@@ -170,7 +170,8 @@ export function Accesso({ accesso, entrato }: {
       }
       const r = registrato
         ? await api.entra(email, password)
-        : await api.registra(email, password, invito, nome.trim())
+        // la lingua di questa schermata: senza, un conto creato in italiano entrava in un'app inglese
+        : await api.registra(email, password, invito, nome.trim(), lingua())
       /*
        * Registrato, e non ancora dentro.
        *
