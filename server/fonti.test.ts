@@ -349,10 +349,10 @@ test('quando il file non si capisce più lo si dice, invece di collegarsi a zero
   await assert.rejects(() => granola.leggi(), /cambiato il modo in cui salva/)
 })
 
-test('Granola non si offre su un server, dove quella cartella non è di nessuno', () => {
-  // legge `~/Library/Application Support` del Mac di chi la usa: dentro un
-  // contenitore quella cartella o non c'è o è quella del server
-  assert.ok(ospitato.SOLO_IN_CASA.includes('granola'))
+test('Granola si offre anche su un server: l’accesso con l’account passa da internet, non dal disco', () => {
+  // la cache resta solo in casa (la sua rotta e il giro di lettura lo
+  // controllano da sé); la scheda fa l'accesso al server MCP di Granola
+  assert.ok(!ospitato.SOLO_IN_CASA.includes('granola'))
 })
 
 // — tutto il Mac: la casa come radice, con le regole larghe —

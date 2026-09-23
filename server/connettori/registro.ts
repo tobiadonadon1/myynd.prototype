@@ -87,15 +87,14 @@ export const CATALOGO: VoceConnettore[] = [
   { id: 'dropbox', nome: 'Dropbox', gruppo: 'File', pronto: true, legge: true, nota: 'I tuoi file su Dropbox.' },
   { id: 'notion', nome: 'Notion', gruppo: 'Note', pronto: true, legge: true, nota: 'Le pagine che condividi con Myynd.' },
   /*
-   * Granola, e la nota dice l'unica cosa che costa: niente.
+   * Granola, e la nota dice l'unica cosa che serve: il tuo account.
    *
-   * È l'altro collegamento senza attrito, insieme al Calendario — non c'è un
-   * token da andare a prendere, non c'è un'app da registrare — e la nota lo
-   * dice in chiaro perché è esattamente il contrario di quello che una persona
-   * si aspetta leggendo il nome di un'altra app. L'unica condizione vera è che
-   * Granola stia su questo computer, e quella la dice `SOLO_IN_CASA`.
+   * Prometteva «già su questo Mac», e da quando Granola cifra le note sul Mac
+   * non era più vero. Adesso si collega con l'accesso a Granola nel browser —
+   * niente token da andare a prendere, niente app da registrare — e le
+   * riunioni arrivano dal suo server, anche a un Myynd ospitato.
    */
-  { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, già su questo Mac.' },
+  { id: 'granola', nome: 'Granola', gruppo: 'Note', pronto: true, legge: true, nota: 'Le note delle tue riunioni, con il tuo account Granola.' },
   // Le Note di Apple stanno in una cartella che macOS protegge: senza «Accesso
   // completo al disco» si aprono con «operazione non permessa». Lo dice la
   // scheda, prima del bottone (AccessoDisco in forms.tsx), e lo dice la nota:

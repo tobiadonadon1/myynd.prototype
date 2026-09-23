@@ -2971,6 +2971,30 @@ const EN: Record<string, string> = {
     'In the “Permissions” tab tick files.metadata.read and files.content.read, then press “Submit”.',
   'Nella scheda «Settings» copia la «App key» e incollala qui sopra.': 'In the “Settings” tab copy the “App key” and paste it above.',
   'Crea una chiave nuova e incollala qui sopra: il sito la mostra una volta sola.': 'Create a new key and paste it above: the site shows it only once.',
+  // — feedback 23 set: granola mcp —
+  // la scheda: accesso con l'account, l'attesa del browser, la lettura
+  'Le note delle tue riunioni: accedi con il tuo account Granola.': 'Your meeting notes: sign in with your Granola account.',
+  'Le note delle tue riunioni, con il tuo account Granola.': 'Your meeting notes, with your Granola account.',
+  'Accedi a Granola nel browser e torna qui.': 'Sign in to Granola in your browser, then come back here.',
+  'Leggo le tue riunioni…': 'Reading your meetings…',
+  'Riapri la pagina di Granola': 'Open the Granola page again',
+  'Con il piano gratuito, Granola dà le riunioni degli ultimi 30 giorni.': 'On the free plan, Granola shares the meetings from the last 30 days.',
+  // quello che può rispondere il server, dal consenso alla lettura
+  'Hai detto di no a Granola.': 'You said no to Granola.',
+  'Granola non ha mandato il codice.': 'Granola did not send the code back.',
+  'Nessuna risposta da Granola: riprova.': 'No answer from Granola: try again.',
+  'Nessuna risposta da Granola in tempo: riprova.': 'No answer from Granola in time: try again.',
+  'Granola ha rifiutato il collegamento.': 'Granola refused the connection.',
+  'Granola non ha dato il permesso duraturo: riprova.': 'Granola did not grant lasting access: try again.',
+  'Non riesco a raggiungere Granola: controlla la connessione e riprova.': 'I cannot reach Granola: check your connection and try again.',
+  'Il collegamento con Granola è scaduto: collegalo di nuovo.': 'The Granola connection has expired: connect it again.',
+  'Granola non mi lascia più leggere le riunioni: collegalo di nuovo.': 'Granola no longer lets me read your meetings: connect it again.',
+  'Granola ha chiesto di rallentare: riprovo al prossimo giro.': 'Granola asked me to slow down: I will try again on the next round.',
+  'Granola ha cambiato il modo in cui si collega: questo collegamento va aggiornato.': 'Granola has changed the way it connects: this connection needs an update.',
+  'Granola non ha accettato Myynd come app: riprova più tardi.': 'Granola did not accept Myynd as an app: try again later.',
+  'Granola non mi ha dato le riunioni: riprova più tardi.': 'Granola did not give me your meetings: try again later.',
+  'Granola non tiene più le note su questo Mac: collegalo di nuovo, con il tuo account Granola.': 'Granola no longer keeps your notes on this Mac: connect it again, with your Granola account.',
+  'Questo collegamento non c’è più: riprova.': 'This connection is no longer there: try again.',
 }
 
 

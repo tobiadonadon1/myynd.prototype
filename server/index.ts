@@ -58,6 +58,7 @@ import * as vedetta from './connettori/vedetta.ts'
 import * as estrai from './connettori/estrai.ts'
 import * as notion from './connettori/notion.ts'
 import * as granola from './connettori/granola.ts'
+import * as granolaMcp from './connettori/granolaMcp.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
 import { fontiIncomplete, osservaLettura } from './lettura-feed.ts'
@@ -1252,9 +1253,44 @@ app.post('/api/connettori/granola', async (_req, res) => {
   try {
     const esito = await granola.prova()
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
-    cfg.aggiorna({ granola: { note: esito.note } })
+    // quello che c'era resta: un collegamento con l'account non si perde per una prova della cache
+    cfg.aggiorna({ granola: { ...cfg.leggi().granola, note: esito.note } })
     res.json({ ok: true, note: esito.note })
   } catch (e) { errore(res, e) }
+})
+
+/**
+ * Granola con l'account: la strada della scheda.
+ *
+ * `avvia` torna l'indirizzo del consenso e non apre niente: in casa lo apre
+ * la scheda (il guscio, dentro l'app), e poi segue il collegamento con
+ * `GET …/:id` — attesa, lettura, fatto — fino al numero di riunioni lette.
+ * Ospitati è il ballo di Google: il biglietto nel cookie, il browser che va e
+ * torna da `/api/oauth/ritorno`. In tutti e due i casi la prima lettura è la
+ * prova, e il collegamento si scrive solo se è andata.
+ */
+const azioniGranola: granolaMcp.Azioni = {
+  gia: () => store.quandoPerPrefisso('granola:'),
+  salva: async e => {
+    await salvaGranola(e)
+    return store.quandoPerPrefisso('granola:').size
+  }
+}
+app.post('/api/connettori/granola/avvia', async (_req, res) => {
+  try {
+    if (ospitato.OSPITATO) return partiPerIlConsenso(res, await granolaMcp.avviaSulWeb(azioniGranola))
+    res.json(await granolaMcp.avvia(azioniGranola))
+  } catch (e) { errore(res, e, 400) }
+})
+app.get('/api/connettori/granola/avvia/:id', (req, res) => {
+  const s = granolaMcp.statoDi(req.params.id)
+  if (!s) return res.status(404).json({ errore: 'Questo collegamento non c’è più: riprova.' })
+  res.json(s)
+})
+app.delete('/api/connettori/granola/avvia/:id', (req, res) => {
+  const s = granolaMcp.annulla(req.params.id)
+  if (!s) return res.status(404).json({ errore: 'Questo collegamento non c’è più: riprova.' })
+  res.json({ ok: true, ...s })
 })
 
 /**
@@ -1694,7 +1730,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   if (id === 'posta') delete c.posta
   else if (id === 'desktop') { delete c.desktop; vedetta.ferma() }
   else if (id === 'notion') delete c.notion
-  else if (id === 'granola') delete c.granola
+  else if (id === 'granola') { delete c.granola; granolaMcp.scorda() }
   else if (id === 'note') delete c.note
   else if (id === 'conversazioni') delete c.conversazioni
   else if (id === 'calendario') delete c.calendario
@@ -1763,6 +1799,18 @@ app.delete('/api/connettori/:id', (req, res) => {
  */
 const sincronizzazioniInCorso = new Set<string>()
 const sincronizzazioneInCorso = () => sincronizzazioniInCorso.has(chi.adesso() ?? '')
+
+/**
+ * Le riunioni lette dal server di Granola, nell'indice.
+ *
+ * Si cancella solo quello che Granola non elenca più *dentro* il tratto di
+ * date che ha elencato: `visti` porta anche le riunioni fuori da lì, che non
+ * sono sparite ma non si sono guardate. Una lettura a metà non cancella niente.
+ */
+async function salvaGranola(e: granolaMcp.EsitoMcp): Promise<number> {
+  await store.salvaDocumentiAPezzi(e.docs)
+  return store.riconcilia('granola', { completo: e.completo }, [...e.docs.map(d => d.id), ...e.visti])
+}
 
 /**
  * Rileggere le fonti. Una funzione sola, usata da due strade.
@@ -1889,18 +1937,34 @@ async function leggiTuttoDentro(
     return e.docs.length
   })
   /*
-   * Granola solo in casa, come il desktop e per la stessa ragione: legge un
-   * file di *questo* computer. Su un server il ramo non parte proprio, invece
-   * di partire e non trovare niente.
+   * Granola, da due strade, e una sola per volta.
+   *
+   * Con l'account (il refresh in configurazione) si legge dal server MCP di
+   * Granola, e la cache non si apre nemmeno: è la strada che la scheda fa
+   * prendere a tutti da quando Granola cifra le note sul Mac, e dà il
+   * riassunto che la cache non ha più. Senza account resta la cache, per chi
+   * l'aveva collegato così su un Granola che la scrive ancora in chiaro —
+   * solo in casa, perché è un file di *questo* computer. Le due strade
+   * scrivono gli stessi id (`granola:<id>`): passare dall'una all'altra
+   * aggiorna le riunioni invece di raddoppiarle.
    */
-  if (c.granola && !ospitato.OSPITATO) await fonte('granola', async () => {
+  const conAccount = granolaMcp.conAccount(c)
+  if (c.granola && (conAccount || !ospitato.OSPITATO)) await fonte('granola', async () => {
     avvisa({ fase: 'granola', stato: 'leggo le riunioni' })
+    if (conAccount) {
+      const e = await granolaMcp.sincronizza(store.quandoPerPrefisso('granola:'))
+      const tolti = await salvaGranola(e)
+      const g = cfg.leggi().granola
+      if (g) cfg.aggiorna({ granola: { ...g, note: store.quandoPerPrefisso('granola:').size, trentaGiorni: e.trentaGiorni || undefined } })
+      avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, giaLetti: e.giaLetti, vuote: e.vuote, troncato: e.troncato, tolti })
+      return e.docs.length
+    }
     const e = await granola.sincronizza()
     await store.salvaDocumentiAPezzi(e.docs)
     // una nota cancellata in Granola deve sparire anche di qui: il file è
     // sempre intero, quindi quello che non c'è dentro non c'è più
     const tolti = store.riconcilia('granola', { completo: !e.troncato }, e.docs.map(d => d.id))
-    cfg.aggiorna({ granola: { note: e.docs.length } })
+    cfg.aggiorna({ granola: { ...cfg.leggi().granola, note: e.docs.length } })
     avvisa({ fase: 'granola', stato: 'fatto', documenti: e.docs.length, vuote: e.vuote, troncato: e.troncato, tolti })
     return e.docs.length
   })

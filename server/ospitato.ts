@@ -247,15 +247,15 @@ export function origineAmmessa(origin: string, portaVera: number): boolean {
  */
 export const SOLO_IN_CASA: string[] = [
   /*
-   * Granola scrive le sue note in `~/Library/Application Support` **del Mac di
-   * chi la usa**. Dentro un contenitore quella cartella o non c'è o è quella
-   * del server, e in nessuno dei due casi ci sono le riunioni di qualcuno:
-   * offrire la scheda lì vorrebbe dire un bottone che si preme, che risponde
-   * «non trovo le note di Granola», e una persona che va a cercare il guasto
-   * nella sua installazione di Granola invece che nel posto in cui gira Myynd.
+   * Granola **non è più in questa lista**. Era qui perché si leggeva la sua
+   * cache, in `~/Library/Application Support` del Mac di chi la usa, e dentro
+   * un contenitore quella cartella non è di nessuno. Adesso la scheda fa
+   * l'accesso con l'account, al server MCP di Granola, e quella strada passa
+   * da internet: su un server funziona come Google, con il ritorno dal nostro
+   * dominio (`fermoSulServer` la spegne se il dominio non si sa). La cache
+   * resta chiusa ospitati, nella sua rotta e nel giro di lettura.
    */
-  'granola',
-  // per la stessa ragione: legge file di *questo* disco — i `conversations.json`
+  // legge file di *questo* disco — i `conversations.json`
   // scelti e `~/.claude/projects` — e su un server quel disco non è di nessuno
   'conversazioni',
   // le Note di Apple stanno in `~/Library/Group Containers` del Mac di chi le
@@ -331,6 +331,8 @@ export function fermoSulServer(connettore: string): boolean {
   const web = oauthWeb()
   if (connettore === 'google' || connettore === 'drive') return !web.google
   if (connettore === 'microsoft' || connettore === 'sharepoint') return !web.microsoft
+  // l'app su Granola si registra da sola: serve solo sapere dove tornare
+  if (connettore === 'granola') return !web.ritorno
   return false
 }
 
