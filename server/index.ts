@@ -2675,7 +2675,8 @@ app.post('/api/feed/genera', async (_req, res) => {
 
 // — quello che chiede lui —
 
-app.get('/api/domanda', (_req, res) => res.json({ domanda: store.domandaAperta() }))
+// la domanda sui progetti si riscrive con quelli di adesso: vedi `riferimento.aggiornata`
+app.get('/api/domanda', (_req, res) => res.json({ domanda: riferimento.aggiornata(store.domandaAperta()) }))
 
 app.post('/api/domanda/:id/rispondi', async (req, res) => {
   try {

@@ -3928,6 +3928,11 @@ export function riapriDomanda(id: string, testo: string, spunto: string[]) {
     .run(testo, JSON.stringify(spunto), new Date().toISOString(), id)
 }
 
+/** Lo stesso testo detto meglio, a domanda ancora aperta: niente riapertura, niente orario nuovo. */
+export function aggiornaDomanda(id: string, testo: string, spunto: string[]) {
+  db.prepare(`UPDATE domande SET testo = ?, spunto = ? WHERE id = ? AND stato = 'aperta'`).run(testo, JSON.stringify(spunto), id)
+}
+
 export function chiudiDomanda(id: string, stato: 'risposta' | 'ignorata', risposta?: string, esito?: string) {
   db.prepare('UPDATE domande SET stato = ?, risposta = ?, esito = ?, chiusa = ? WHERE id = ?')
     .run(stato, risposta ?? null, esito ?? null, new Date().toISOString(), id)

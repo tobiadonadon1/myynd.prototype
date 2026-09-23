@@ -152,3 +152,27 @@ test('«Evermute (everwave)» nel riferimento fa di everwave un altro nome di Ev
   assert.equal(a.get('evermute app'), ev.id)
   assert.equal(a.has('irrelevant'), false, 'un nome che non è un progetto non porta alias')
 })
+
+/*
+ * La domanda aperta dice i progetti di adesso.
+ *
+ * Il testo si scriveva all'apertura, e con tre progetti vivi diceva ancora
+ * «I progetti che conosco: Sito Northwind». Si riscrive servendola: la stessa
+ * domanda, con lo stesso orario, non una nuova.
+ */
+test('la domanda aperta si riscrive con i progetti di adesso, senza diventarne un’altra', () => {
+  const gia = store.domandaPerTema(riferimento.TEMA)!
+  store.riapriDomanda(gia.id, 'For each project: what are you working on now, what have you dropped, and what is blocked? The projects I know: Evermute.', ['Evermute'])
+  const prima = store.domandaAperta()!
+  progetti.scrivi({ nome: 'Northwind', obiettivo: 'Launch the new site' })
+  const d = riferimento.aggiornata(store.domandaAperta())!
+  assert.equal(d.id, prima.id)
+  for (const p of progetti.vivi()) assert.ok(d.testo.includes(p.nome), `the question names ${p.nome}: ${d.testo}`)
+  assert.deepEqual(d.spunto, progetti.vivi().map(p => p.nome))
+  const salvata = store.domandaAperta()!
+  assert.equal(salvata.testo, d.testo, 'what the page shows is what is stored')
+  assert.equal(salvata.creata, prima.creata, 'it is the same question, asked at the same time')
+  assert.equal(store.domandeConTema(riferimento.TEMA).length, 1)
+  // una domanda d'altro tema non si tocca
+  assert.equal(riferimento.aggiornata(null), null)
+})
