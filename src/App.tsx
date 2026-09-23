@@ -15,7 +15,7 @@ import { Mappa, MappaPiena } from './screens/Mappa'
 import { Myynd } from './screens/Myynd'
 import { Oggi } from './oggi/Oggi'
 import { useCompiti } from './oggi/useCompiti'
-import { blocchiFeed, sulTavolo } from './blocchi-feed'
+import { blocchiFeed, cheAspettano, sulTavolo } from './blocchi-feed'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
 import { PaginaProgetto } from './screens/PaginaProgetto'
@@ -305,7 +305,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, vuoti: v.progettiNuovi }),
     [v.voci, lista.compiti, v.progetti, lista.appenaFinite, v.progettiNuovi])
   // le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui
-  const sulTavoloAdesso = sulTavolo(blocchi, (v.domanda ? 1 : 0) + v.iniziative.length)
+  // e la carta di Myynd che ha scritto: lo stesso conto del titolo, da `cheAspettano`
+  const sulTavoloAdesso = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
 
   /**
    * Il giro è stato chiuso *adesso*, prima che il server lo racconti.
@@ -443,7 +444,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           <a href="#" onClick={v.goMyynd} style={nav(v.navMyynd)} title={rail ? 'Myynd' : undefined}>
             <Marchio dim={15} animato={false} colore="currentColor" />
             {!rail && <span style={{ flex: 1 }}>Myynd</span>}
-            {!rail && <span style={{ ...v.badge, opacity: sulTavoloAdesso ? 1 : 0.35 }}>{sulTavoloAdesso}</span>}
+            {/* a zero non si scrive: uno «0» accanto a una pagina con una carta da rispondere mente */}
+            {!rail && sulTavoloAdesso > 0 && <span style={{ ...v.badge, opacity: 1 }}>{sulTavoloAdesso}</span>}
           </a>
           <a href="#" onClick={v.goOggi} style={nav(v.navOggi)} title={rail ? t('Da fare') : undefined}>
             <IconSpunta size={15} style={{ flex: 'none' }} />
@@ -522,7 +524,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               <a href="#" onClick={v.goConn} style={v.menuConn}>
                 <IconSpina style={{ flex: 'none' }} />
                 <span style={{ flex: 1 }}>{t('Connettori')}</span>
-                <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connCount}</span>
+                {/* le tessere collegate della pagina delle Fonti, teste comprese: è quella pagina che apre */}
+                <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connAttivi.length}</span>
               </a>
               {!desktop() && <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}
               <div style={{ height: 1, background: 'rgba(var(--inchiostro-rgb),.1)', margin: '5px 8px' }} />
@@ -538,12 +541,17 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           <Hov as="button" type="button" onClick={v.toggleMenu} aria-haspopup="menu" aria-label={t('Il tuo conto')}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(var(--luce-rgb),.42)', border: '1px solid rgba(var(--luce-rgb),.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
             hover={{ background: 'rgba(var(--luce-rgb),.72)' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(140deg,var(--rame),#8FA593)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
+            <div style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', background: 'linear-gradient(140deg,var(--rame),#8FA593)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
             {/* il punto sta con il ruolo, non da solo in fondo alla riga: un nome
-                lungo mandava a capo dopo il separatore, e restava lì appeso */}
+                lungo mandava a capo dopo il separatore, e restava lì appeso.
+                E una riga sola: il ruolo è la prima risposta dell'intervista,
+                una frase intera, e occupava quattro righe su ogni schermata.
+                Quello che non ci sta finisce coi puntini, e si legge intero al
+                passaggio del mouse */}
             {!rail && (
-              <span style={{ flex: 1, minWidth: 0, fontSize: '13.5px', overflowWrap: 'anywhere' }}>
-                {v.nome}{v.ruolo && <span style={{ color: 'rgba(var(--inchiostro-rgb),.6)' }}>{' · '}{v.ruolo}</span>}
+              <span title={v.ruolo ? `${v.nome} · ${v.ruolo}` : v.nome}
+                style={{ flex: 1, minWidth: 0, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {v.nome}{v.ruolo && <span style={{ color: 'rgba(var(--inchiostro-rgb),.6)' }}>{' · '}{v.ruolo}</span>}
               </span>
             )}
             {!rail && <span style={v.chevron}><IconSuPiccola /></span>}

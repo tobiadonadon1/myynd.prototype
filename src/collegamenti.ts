@@ -132,3 +132,41 @@ export function moduloDaFinire(daFinire: boolean, eraCollegata: boolean | undefi
 export function guaioDelPunto(guaio: string | null, ragionavaPrima: boolean, ragionaAdesso: boolean): string | null {
   return !ragionavaPrima && ragionaAdesso ? null : guaio
 }
+
+/**
+ * Le teste non sono fonti.
+ *
+ * Anthropic, OpenAI e un modello sul computer ragionano sul materiale, non ne
+ * portano: contarle fra le fonti faceva dire alla prima pagina «3 fonti · 12
+ * documenti» a chi aveva collegato il Mac e il calendario. «Da fare» sta
+ * dentro l'app e si dichiara sempre collegato. È lo stesso taglio del primo
+ * avvio.
+ */
+export const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
+
+/** Le fonti collegate che portano documenti: quelle che la prima pagina conta. */
+export function fontiCollegate<C extends { id: string; collegato: boolean }>(connettori: C[]): C[] {
+  return connettori.filter(c => c.collegato && !NON_FONTI.has(c.id))
+}
+
+/**
+ * La riga fissa in cima alla prima pagina: il motore che manca, poi le fonti.
+ *
+ * Il motore che manca stava solo nella pagina vuota, e dopo il primo avvio la
+ * pagina non è mai vuota: chi non aveva collegato Claude non lo leggeva da
+ * nessuna parte. Qui c'è finché `ragiona` è falso, una volta sola. Un «Leggi
+ * adesso» fallito perché mancava Claude («collega Claude e potrò lavorarci»)
+ * non si aggiunge: senza motore lo dice già la prima frase, e con il motore
+ * collegato è una frase vecchia che non deve restare in pagina.
+ */
+export function rigaDelleMancanze(o: {
+  ragiona: boolean
+  serveClaude: string
+  guastoLettura: string | null
+  chiedeClaude: string
+  fontiNonLette: string | null
+}): string | null {
+  const guasto = o.guastoLettura === o.chiedeClaude ? null : o.guastoLettura
+  const frase = [o.ragiona ? null : o.serveClaude, guasto ?? o.fontiNonLette].filter(Boolean).join(' ')
+  return frase || null
+}

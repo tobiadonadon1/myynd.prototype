@@ -15,9 +15,10 @@ import type { VoceFeed } from '../data'
 import { quando } from '../data'
 import { dataFonte, testoCarta } from '../feed-carta'
 import { azioneEmail } from '../oggi/azione-email'
-import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo } from '../blocchi-feed'
+import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
+import { rigaDelleMancanze } from '../collegamenti'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
@@ -1119,7 +1120,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   }
   // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
   // carta. Lo stesso conto del menù, per costruzione.
-  const inPagina = sulTavolo(blocchi, (v.domanda ? 1 : 0) + v.iniziative.length)
+  const inPagina = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1250,9 +1251,20 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
  * Porta anche il motivo per cui l'ultima lettura a mano non è partita — la
  * chiave che manca, una lettura già in corso — perché è lo stesso genere di
  * cosa, e si sistema nello stesso posto.
+ *
+ * E prima di tutto il motore che manca. Stava solo nella pagina vuota, cioè
+ * mai: dopo il primo avvio c'è sempre almeno un'attività, e chi non aveva
+ * collegato Claude non lo leggeva da nessuna parte della prima pagina. Qui
+ * c'è sempre, una volta sola, e se ne va appena lo stato dice che si ragiona.
  */
 function Avviso({ v }: { v: Vals }) {
-  const frase = v.guastoLettura ?? (v.fontiIncomplete.length ? frasi.fontiNonLette(v.fontiIncomplete) : null)
+  const frase = rigaDelleMancanze({
+    ragiona: v.claudeOn,
+    serveClaude: t('Serve Claude per scegliere cosa conta.'),
+    guastoLettura: v.guastoLettura,
+    chiedeClaude: t('Collega Claude e potrò lavorarci.'),
+    fontiNonLette: v.fontiIncomplete.length ? frasi.fontiNonLette(v.fontiIncomplete) : null
+  })
   if (!frase) return null
   return (
     <div role="status" style={{
@@ -1469,7 +1481,8 @@ function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
  * pastiglia che porta alla lista, dove la barra aspetta già con il cursore.
  *
  * Restano, in una riga sola e senza carta, le mancanze vere: nessuna fonte,
- * niente letto, niente modello, nessun progetto, un feed che non si legge.
+ * niente letto, nessun progetto, un feed che non si legge. Il modello che
+ * manca sta nella riga fissa in cima, per tutte le pagine e non solo questa.
  * Sono le uniche cose che non si risolvono aggiungendo una riga.
  */
 function Vuoto({ v }: { v: Vals }) {
@@ -1487,9 +1500,9 @@ function Vuoto({ v }: { v: Vals }) {
       </div>
     )
   }
+  // il motore che manca lo dice la riga fissa in cima (`Avviso`): qui non si ripete
   const manca = senzaFonti ? { frase: t('Non hai collegato niente.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
     : senzaDocumenti ? { frase: t('Non ho ancora letto niente.'), gesto: null, vai: null }
-    : !v.claudeOn ? { frase: t('Serve Claude per scegliere cosa conta.'), gesto: t('Vai alle Fonti'), vai: v.goConn }
     : !conProgetti ? { frase: t('Nessun progetto attivo.'), gesto: t('Apri la memoria'), vai: v.goMemoria }
     : null
   return (
