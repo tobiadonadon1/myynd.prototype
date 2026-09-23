@@ -26,6 +26,7 @@ import { Marchio } from './components/Marchio'
 import { Mascotte } from './components/Mascotte'
 import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
+import { rilettura, suCollegamento } from './collegamenti'
 import { Accesso } from './Accesso'
 
 
@@ -71,6 +72,28 @@ export default function App() {
   const chiudiAvviso = useCallback(() => setAvviso(null), [])
 
   /**
+   * Lo stato, riletto da un posto solo.
+   *
+   * Lo rileggevano in tre — il filo del server, il pannello delle connessioni,
+   * la fine del primo avvio — ognuno con la sua chiamata, e l'ultima ad
+   * arrivare vinceva anche quando era partita prima del cambio. Qui una
+   * risposta più vecchia di quella in pagina non entra, e tutti passano di qui.
+   */
+  const rileggiStato = useMemo(() => rilettura(() => api.stato(), setStato), [])
+
+  /*
+   * Un collegamento è cambiato: la prima pagina, la chat, le preferenze e le
+   * Fonti leggono tutte da questo stato, e lo devono sapere subito. Prima lo
+   * rileggeva solo la scheda che chiamava `ok()`: una chiave salvata con un
+   * avviso non lo chiamava finché non si premeva «Avanti», e chi chiudeva la
+   * finestra si teneva «serve Claude» in prima pagina. Vedi `collegamenti.ts`.
+   */
+  useEffect(() => {
+    if (!accesso?.entrato) return
+    return suCollegamento(() => { void rileggiStato().catch(() => {}) })
+  }, [accesso?.entrato, rileggiStato])
+
+  /**
    * Il sito ascolta quello che succede nell'app.
    *
    * Sono due finestre sullo stesso cervello, e finora una delle due non sapeva
@@ -84,10 +107,10 @@ export default function App() {
     const chiudi = api.flussoCompiti(e => {
       if (e.fase !== 'cambiato' && e.fase !== 'pronto' && e.fase !== 'chiede') return
       clearTimeout(attesa)
-      attesa = setTimeout(() => { api.stato().then(setStato).catch(() => {}) }, 250)
+      attesa = setTimeout(() => { void rileggiStato().catch(() => {}) }, 250)
     })
     return () => { clearTimeout(attesa); chiudi() }
-  }, [accesso?.entrato])
+  }, [accesso?.entrato, rileggiStato])
 
   /*
    * Chi torna dal consenso di Google o Microsoft, a onboarding già fatto.
@@ -202,7 +225,7 @@ export default function App() {
           stato={stato}
           // se lo stato non torna, la schermata di guasto lo dice e riprova da sé:
           // prima «Entra» restava lì, premuto, e non succedeva niente
-          fatto={() => { api.stato().then(s => { setStato(s); setOnboarding(false) }).catch(e => setGuasto(guaio(e))) }}
+          fatto={() => { rileggiStato().then(() => setOnboarding(false)).catch(e => setGuasto(guaio(e))) }}
         />
         {avviso && <Avviso testo={avviso} chiudi={chiudiAvviso} />}
       </>
@@ -216,7 +239,7 @@ export default function App() {
         <Connessioni
           fonte={connessioni}
           chiudi={() => setConnessioni(null)}
-          cambiato={() => { api.stato().then(setStato).catch(() => {}) }}
+          cambiato={() => { void rileggiStato().catch(() => {}) }}
         />
       )}
       {/*

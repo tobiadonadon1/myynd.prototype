@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Punto } from './api'
+import { suCollegamento } from './collegamenti'
 
 /** Da quante ore di assenza si rifà il punto al ritorno. */
 const ORE_VIA = 3
@@ -99,6 +100,17 @@ export function usePunto() {
       window.removeEventListener('blur', partito)
     }
   }, [tornato])
+
+  /*
+   * Il perché dell'ultimo tentativo vale per il collegamento di allora.
+   *
+   * «Collega Claude e potrò ragionare sul tuo materiale» restava sotto il
+   * punto anche dopo averlo collegato, finché la finestra non perdeva e
+   * riprendeva il fuoco: le Fonti si aprono dentro la stessa finestra, e quel
+   * giro non c'era. Cambiato il collegamento, la frase si toglie. Non si
+   * rifà il punto da qui: costa una chiamata, e lo decide lui col bottone.
+   */
+  useEffect(() => suCollegamento(() => setGuaio(null)), [])
 
   const rifai = useCallback(() => prendi(true), [prendi])
 

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, letturaDesktop, rigaSincronizzazione, type LetturaDesktop, type Stato } from '../api'
+import { rilettura, suCollegamento } from '../collegamenti'
 import { AccessoDisco, Form } from './forms'
 import { frasi, loc, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
@@ -27,6 +28,17 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   const [s, setS] = useState<Stato | null>(null)
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
   const [modifica, setModifica] = useState(false)
+  /*
+   * Il modulo resta aperto finché non ha finito lui.
+   *
+   * Lo stato del pannello adesso si rilegge appena un collegamento cambia, non
+   * quando il modulo chiama `ok()`. Ma un modulo può avere ancora qualcosa da
+   * dire dopo aver collegato — «la chiave è salvata, ma il conto non ha
+   * credito» — e sparirebbe sotto le dita nel momento in cui l'intestazione
+   * diventa «Collegato». Si tiene aperto fino al suo `ok()`, o finché non si
+   * torna indietro.
+   */
+  const [daFinire, setDaFinire] = useState(false)
   const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
   const [avanzamento, setAvanzamento] = useState<string | null>(null)
   const [guaio, setGuaio] = useState<string | null>(null)
@@ -47,12 +59,19 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   const ultimo = useRef(fonte || '')
   useFocoDialogo(finestra, chiudi)
 
-  const ricarica = async () => { const n = await api.stato(); setS(n); return n }
+  const ricarica = useMemo(() => rilettura(() => api.stato(), setS), [])
   const carica = () => {
     setGuaio(null)
     void ricarica().catch(e => setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')))
   }
   useEffect(() => { carica() }, [])
+  // un collegamento cambiato da qui o da un altro posto: l'intestazione e le
+  // due liste dicono subito com'è, senza aspettare l'«Avanti» di una scheda
+  const moduloAperto = useRef(false)
+  useEffect(() => suCollegamento(() => {
+    if (moduloAperto.current) setDaFinire(true)
+    void ricarica().catch(() => {})
+  }), [ricarica])
   useEffect(() => {
     if (!s) return
     // il computer non ha più la via rapida: il suo modulo ha un bottone solo, che fa la stessa cosa
@@ -85,21 +104,24 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
     try {
       if (id === 'claude') await api.usaChiaveAmbiente()
       else return
-      await ricarica(); cambiato()
+      // qui non c'è un modulo che debba finire di parlare: si chiude come prima
+      await ricarica(); setDaFinire(false); cambiato()
     } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.')) }
     finally { setCollegando(false) }
   }
 
   const tutti = s?.connettori.filter(c => (c.pronto || c.collegato) && c.id !== 'mind2do') ?? []
   const scelta = tutti.find(c => c.id === soloQuesta)
+  const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire)
+  useEffect(() => { moduloAperto.current = moduloVisibile })
   const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
-    ultimo.current = id; setSoloQuesta(id); setModifica(false)
+    ultimo.current = id; setSoloQuesta(id); setModifica(false); setDaFinire(false)
     requestAnimationFrame(() => indietro.current?.focus())
   }
   const torna = () => {
-    setSoloQuesta(''); setModifica(false)
+    setSoloQuesta(''); setModifica(false); setDaFinire(false)
     requestAnimationFrame(() => {
       const tiles = finestra.current?.querySelectorAll<HTMLButtonElement>('[data-connector]')
       Array.from(tiles ?? []).find(el => el.dataset.connector === ultimo.current)?.focus()
@@ -195,8 +217,8 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
             <p>{t('la chiave di Claude che è già qui')}</p>
             <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
-          {(!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica)) && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
-            await ricarica(); setModifica(false); cambiato()
+          {moduloVisibile && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
+            await ricarica(); setModifica(false); setDaFinire(false); cambiato()
             // ogni volta che una fonte viene (ri)collegata si rilegge: prima
             // succedeva solo al primo collegamento, e cambiare le cartelle del
             // computer lasciava in piedi l'indice di quelle vecchie finché non

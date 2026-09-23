@@ -804,10 +804,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // schermata sotto diceva «non hai collegato niente»
   const connOn = connettori.filter(c => c.collegato && c.id !== 'mind2do')
   // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
-  // motore la chat e le domande funzionano uguale, e devono aprirsi
-  const claudeOn = stato.config.motore === 'chatgpt' ? !!stato.config.chatgpt?.attivo
-    : stato.config.motore === 'openai' ? !!stato.config.openai?.collegato
-    : !!connettori.find(c => c.id === 'claude')?.collegato || stato.config.motore === 'compatibile'
+  // motore la chat e le domande funzionano uguale, e devono aprirsi. Lo dice il
+  // server (`ragiona` in api.ts): rifatto qui da `motore` e dalle schede, non
+  // sempre coincideva con quello che il server sa fare
+  const claudeOn = stato.ragiona
   const th = threads.find(t => t.id === thread)
 
   /** Reach the original; a saved copy is an explicit fallback, never a fake destination. */
@@ -1064,6 +1064,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     sincronizzando,
     sincronizza: () => sincronizza(),
     claudeOn,
+    /** La scheda di Claude è collegata: la stessa risposta delle Fonti, per chi deve dirlo altrove. */
+    claudeCollegato: !!connettori.find(c => c.id === 'claude')?.collegato,
 
     // — feed —
     oggi: new Date().toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' }),
