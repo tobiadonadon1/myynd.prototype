@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, inCimaAllOrdine, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, inCimaAllOrdine, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -282,9 +282,39 @@ test('un progetto segnato alto passa davanti, anche a una bozza pronta e al più
   assert.deepEqual(b.map(x => [x.nome, x.alto]), [['Nextas', true], ['H-Farm', false], ['Il resto', false]])
   // l'ordine della pagina: il più leggero e il più vecchio, ma l'ha segnato lui
   assert.deepEqual(ordinaBlocchi(b).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
-  // e l'ordine che ha trascinato vince ancora: la priorità lo cambia salendo in cima all'ordine salvato
-  assert.deepEqual(ordinaBlocchi(b, ['hf', 'nx']).map(x => x.nome), ['H-Farm', 'Nextas', 'Il resto'])
+  // e anche con un ordine trascinato la priorità viene prima: l'ordine vale dentro il gruppo
+  assert.deepEqual(ordinaBlocchi(b, ['hf', 'nx']).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
   assert.deepEqual(ordinaBlocchi(b, inCimaAllOrdine(['hf', 'nx'], 'nx')).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
+})
+
+test('con un ordine trascinato: gli alti davanti, l’ordine suo dentro ogni gruppo; tolto l’«alta», il blocco torna fra i normali al suo posto', () => {
+  const progetti = (alti: string[]) => ['a', 'b', 'c', 'd'].map(id => ({ id, nome: id.toUpperCase(), stato: 'attivo', priorita: alti.includes(id) ? 'alta' : null }))
+  const voci = ['a', 'b', 'c', 'd'].map((id, i) => voce(`v${id}`, id, `2026-09-1${i}T10:00:00Z`))
+  const ordine = ['d', 'c', 'resto', 'b', 'a']
+  const conAlti = (alti: string[]) => ordinaBlocchi(blocchiFeed({ voci, compiti: [], progetti: progetti(alti), nomeResto: 'Il resto' }), ordine).map(x => x.nome)
+  // b e a sono alti: davanti, fra loro nell'ordine trascinato; poi d e c come li ha messi
+  assert.deepEqual(conAlti(['a', 'b']), ['B', 'A', 'D', 'C'])
+  // tolto l'«alta» a b: torna fra i normali, al posto che aveva nell'ordine, non in cima
+  assert.deepEqual(conAlti(['a']), ['A', 'D', 'C', 'B'])
+  assert.deepEqual(conAlti([]), ['D', 'C', 'B', 'A'])
+})
+
+test('un progetto appena creato va in cima ai normali anche con un ordine trascinato, non sotto «Il resto»', () => {
+  const progetti = [...PROGETTI, { id: 'nuovo', nome: 'Nuovo', stato: 'attivo' }]
+  const b = blocchiFeed({
+    voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z'), voce('v2', null, '2026-09-17T10:00:00Z')], compiti: [],
+    progetti, nomeResto: 'Il resto', vuoti: ['nuovo']
+  })
+  assert.deepEqual(ordinaBlocchi(b, ['hf', 'resto']).map(x => x.nome), ['H-Farm', 'Il resto', 'Nuovo'], 'senza sapere che è nuovo, in fondo come ogni sconosciuto')
+  assert.deepEqual(ordinaBlocchi(b, ['hf', 'resto'], ['nuovo']).map(x => x.nome), ['Nuovo', 'H-Farm', 'Il resto'])
+})
+
+test('trascinare si può solo dentro il proprio gruppo', () => {
+  const b = [{ alto: true }, { alto: true }, { alto: false }, {}]
+  assert.equal(stessoGruppo(b, 0, 1), true)
+  assert.equal(stessoGruppo(b, 1, 2), false)
+  assert.equal(stessoGruppo(b, 2, 3), true)
+  assert.equal(stessoGruppo(b, 3, 4), false)
 })
 
 test('segnarlo alto lo porta in cima all’ordine salvato; senza un ordine suo non se ne scrive uno', () => {
