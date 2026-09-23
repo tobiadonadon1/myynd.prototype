@@ -290,7 +290,6 @@ const EN: Record<string, string> = {
   'Verifica della connessione in corso…': 'Checking the connection…',
   'Chiave collegata': 'Key connected',
   'Non ancora collegato.': 'Not connected yet.',
-  'Il tuo nome, un indirizzo e una password. Il resto te lo chiede dopo.': 'Your name, an address and a password. It asks for the rest later.',
   'Questo non sembra un indirizzo email.': 'That does not look like an email address.',
   'Priorità, autonomia e voce': 'Priorities, autonomy and voice',
   'Generale': 'General',
@@ -640,7 +639,6 @@ const EN: Record<string, string> = {
 // — l'accesso: quale delle due cose stai facendo, e dove sta girando —
   'Bentornato.': 'Welcome back.',
   'Crea il tuo accesso.': 'Create your account.',
-  'Entra con l’indirizzo con cui l’hai creato.': 'Sign in with the address you created it with.',
   'Non c’è ancora nessun account qui: quello che scrivi adesso lo crea.':
     'There is no account here yet: what you type now creates it.',
   'Questo indirizzo è un Myynd a parte, con una memoria sua. L’account che hai sul tuo computer qui non esiste: non c’è nessun accesso centrale, e ogni Myynd tiene il suo dove gira.':
@@ -2860,6 +2858,10 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  // — feedback 23 set: accesso e primo avvio —
+  'Legge il tuo lavoro e ti dice cosa conta oggi.': 'It reads your work and tells you what matters today.',
+  'nome@esempio.it': 'name@example.com',
+  'Va bene qualsiasi indirizzo, di lavoro o personale.': 'Any address is fine, work or personal.',
 }
 
 
