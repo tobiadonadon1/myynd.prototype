@@ -162,8 +162,20 @@ export function useSalvataggi(id: string, cambia: Cambia) {
  * Il negativo dei margini pareggia il bordo e l'imbottitura della casella: è
  * quello che tiene ferme le due parole mentre una diventa l'altra.
  */
-export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, tornaAlFuoco, salvato }: {
+export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, tornaAlFuoco, salvato, aCapo = false, limite }: {
   valore: string
+  /**
+   * Va a capo invece di finire con i puntini: il nome e l'obiettivo sulla
+   * pagina di un progetto si leggono per intero, e si scrivono in una casella
+   * che cresce con quello che c'è dentro.
+   */
+  aCapo?: boolean
+  /**
+   * Quanti caratteri al massimo, detto mentre si scrive quando ne restano pochi.
+   * Un testo già più lungo (un obiettivo detto in chat) non si taglia: il tetto
+   * è per quello che si scrive qui, non per quello che c'era.
+   */
+  limite?: number
   /** Il carattere del testo: lo stesso da fermo e mentre si scrive. */
   testoStile: React.CSSProperties
   etichetta: string
@@ -198,40 +210,53 @@ export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubit
   }
 
   if (scrivo) {
+    const tetto = limite === undefined ? undefined : Math.max(limite, valore.length)
+    const resta = limite === undefined ? null : limite - testo.length
+    const campo = {
+      autoFocus: true,
+      ref: (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+        if (!el || el.dataset.pronto) return
+        el.dataset.pronto = '1'
+        if (apriSubito) el.select()
+        else el.setSelectionRange(el.value.length, el.value.length)
+      },
+      value: testo,
+      maxLength: tetto,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setTesto(e.target.value.replace(/\n/g, ' ')),
+      onClick: (e: React.MouseEvent) => e.stopPropagation(),
+      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        if (e.key === 'Enter') { e.preventDefault(); daTastiera.current = true; e.currentTarget.blur() }
+        else if (e.key === 'Escape') {
+          e.stopPropagation(); annulla.current = true; daTastiera.current = true; e.currentTarget.blur()
+        }
+      },
+      onBlur: () => {
+        const annullato = annulla.current
+        const tastiera = daTastiera.current
+        annulla.current = false
+        daTastiera.current = false
+        setScrivo(false)
+        if (tastiera) tornaAlFuoco?.()
+        if (annullato) return setTesto(valore)
+        const v = testo.trim()
+        if (v !== valore.trim()) salva(v)
+      },
+      'aria-label': etichetta, spellCheck: false,
+      style: {
+        ...comune, flex: '1 1 auto', width: '100%', outline: 'none',
+        background: 'var(--carta-alta)', borderColor: 'rgba(var(--rame-rgb),.45)', color: INCHIOSTRO,
+        ...(aCapo ? { resize: 'none', overflow: 'hidden', fieldSizing: 'content' } : {})
+      } as React.CSSProperties
+    }
     return (
-      <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input
-          autoFocus
-          ref={el => {
-            if (!el) return
-            if (apriSubito) el.select()
-            else el.setSelectionRange(el.value.length, el.value.length)
-          }}
-          value={testo}
-          onChange={e => setTesto(e.target.value.replace(/\n/g, ' '))}
-          onClick={e => e.stopPropagation()}
-          onKeyDown={e => {
-            if (e.key === 'Enter') { e.preventDefault(); daTastiera.current = true; e.currentTarget.blur() }
-            else if (e.key === 'Escape') {
-              e.stopPropagation(); annulla.current = true; daTastiera.current = true; e.currentTarget.blur()
-            }
-          }}
-          onBlur={() => {
-            const annullato = annulla.current
-            const tastiera = daTastiera.current
-            annulla.current = false
-            daTastiera.current = false
-            setScrivo(false)
-            if (tastiera) tornaAlFuoco?.()
-            if (annullato) return setTesto(valore)
-            const v = testo.trim()
-            if (v !== valore.trim()) salva(v)
-          }}
-          aria-label={etichetta} spellCheck={false}
-          style={{
-            ...comune, flex: '1 1 auto', width: '100%', outline: 'none',
-            background: 'var(--carta-alta)', borderColor: 'rgba(var(--rame-rgb),.45)', color: INCHIOSTRO
-          }} />
+      <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: aCapo ? 'column' : 'row', alignItems: aCapo ? 'stretch' : 'center', gap: 8 }}>
+        {aCapo ? <textarea rows={1} {...campo} /> : <input {...campo} />}
+        {/* il tetto si dice quando si avvicina, non dopo: una frase tagliata in silenzio è peggio di un numero */}
+        {resta !== null && resta < 40 && (
+          <span aria-live="polite" style={{ fontSize: '11.5px', color: resta < 10 ? RAME_TESTO : APPENA, marginTop: aCapo ? 2 : 0, whiteSpace: 'nowrap' }}>
+            {Math.max(0, resta)} {t('caratteri rimasti')}
+          </span>
+        )}
       </span>
     )
   }
@@ -246,7 +271,9 @@ export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubit
         }}
         style={{
           ...comune, display: 'block', cursor: 'text', borderColor: 'transparent',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          ...(aCapo
+            ? { whiteSpace: 'normal', overflowWrap: 'anywhere', textWrap: 'pretty' }
+            : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
           color: valore ? testoStile.color : APPENA
         }}
         hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
@@ -619,7 +646,8 @@ export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto,
     segnala('nome', '')
     void manda('nome', { nome: v })
   }
-  const salvaObiettivo = (v: string) => void manda('obiettivo', { obiettivo: v.slice(0, 200) })
+  // il tetto si vede mentre si scrive (`limite`): qui non si taglia niente in silenzio
+  const salvaObiettivo = (v: string) => void manda('obiettivo', { obiettivo: v })
 
   const togli = async () => {
     segnala('elimina', '')
@@ -647,7 +675,8 @@ export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto,
             textDecoration: chiuso ? 'line-through' : 'none'
           }} />
         {/* accesa si vede sempre; spenta compare sotto mano, come il cestino */}
-        {!chiuso && (
+        {/* solo per un attivo: in pausa la priorità non vale, e un gesto che non fa niente non si offre */}
+        {p.stato === 'attivo' && (
           <PrioritaProgetto alta={p.priorita === 'alta'} visibile={attiva} nome={p.nome}
             cambia={alta => void manda('priorita', { priorita: alta ? 'alta' : null })} />
         )}
@@ -657,7 +686,7 @@ export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto,
         <Cestino fai={togli} guaio={g => segnala('elimina', g)} titolo={t('Elimina')} visibile={attiva} />
       </span>
       <div className="mem-card-obiettivo">
-        <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} salva={salvaObiettivo} salvato={fatti.obiettivo}
+        <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} salva={salvaObiettivo} salvato={fatti.obiettivo} limite={200}
           vuoto={t('Obiettivo non ancora scritto.')} tornaAlFuoco={() => scheda.current?.focus()}
           testoStile={{ fontSize: '13px', color: 'rgba(var(--inchiostro-rgb),.55)', lineHeight: 1.4 }} />
       </div>

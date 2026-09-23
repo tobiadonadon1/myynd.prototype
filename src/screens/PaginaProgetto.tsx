@@ -55,6 +55,9 @@ const PROVENIENZA: Record<ProjectEvidence['provenance'], string> = {
   'source-inference': 'Dedotto da una fonte', 'task-record': 'Risultato del lavoro'
 }
 
+/** Quante righe mostra una sezione prima di «Mostra tutte». */
+const IN_VISTA = 8
+
 const giorno = (v: string | null | undefined) => v && Number.isFinite(Date.parse(v))
   ? new Date(v).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }) : ''
 
@@ -115,6 +118,9 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
     return () => { vivo = false }
   }, [p.id, p.aggiornato])
   const fatte = [...chiuseOra, ...storia.filter(c => !chiuseOra.some(x => x.id === c.id))]
+  // otto per sezione, e il resto a un clic: un elenco tagliato senza dirlo sembra finito
+  const [tutteFatte, setTutteFatte] = useState(false)
+  const [tuttoSa, setTuttoSa] = useState(false)
 
   const salvaNome = (nome: string) => {
     if (!nome) return segnala('nome', 'Un progetto ha bisogno di un nome.')
@@ -136,20 +142,21 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
             {padre && <span className="prog-dentro">{frasi.dentroProgetto(padre.nome)}</span>}
           </div>
           <h1 id="prog-titolo" className="prog-titolo">
-            <Scritta valore={p.nome} etichetta={t('Nome')} salva={salvaNome} salvato={fatti.nome}
+            <Scritta valore={p.nome} etichetta={t('Nome')} salva={salvaNome} salvato={fatti.nome} aCapo
               testoStile={{
                 fontSize: 30, fontWeight: 400, lineHeight: 1.2, letterSpacing: '-.03em', color: INCHIOSTRO,
                 fontFamily: 'var(--serif)', textDecoration: chiuso ? 'line-through' : 'none'
               }} />
           </h1>
           <div className="prog-obiettivo">
-            <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} vuoto={t('A cosa serve? Una riga.')}
-              salva={o => void manda('obiettivo', { obiettivo: o.slice(0, 200) })} salvato={fatti.obiettivo}
+            <Scritta valore={p.obiettivo} etichetta={t('Obiettivo')} vuoto={t('A cosa serve? Una riga.')} aCapo limite={200}
+              salva={o => void manda('obiettivo', { obiettivo: o })} salvato={fatti.obiettivo}
               testoStile={{ fontSize: '14.5px', color: 'rgba(var(--inchiostro-rgb),.66)', lineHeight: 1.45 }} />
           </div>
           <div className="prog-controlli">
             <Stati p={p} manda={manda} />
-            {!chiuso && (
+            {/* solo per un attivo: in pausa non vale, chiuso non c'è (il server la toglie) */}
+            {p.stato === 'attivo' && (
               <PrioritaProgetto alta={p.priorita === 'alta'} nome={p.nome}
                 cambia={alta => void manda('priorita', { priorita: alta ? 'alta' : null })} />
             )}
@@ -168,7 +175,7 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
             <section className="prog-sezione" aria-labelledby="prog-fatto">
               <h2 id="prog-fatto">{t('Fatto')}</h2>
               <ul className="prog-elenco">
-                {fatte.slice(0, 8).map(c => {
+                {(tutteFatte ? fatte : fatte.slice(0, IN_VISTA)).map(c => {
                   const esito = c.esito?.trim() || primoParagrafo(c.risultato ?? '')
                   return (
                     <li key={c.id} className="prog-fatta">
@@ -182,6 +189,9 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
                   )
                 })}
               </ul>
+              {!tutteFatte && fatte.length > IN_VISTA && (
+                <button type="button" className="prog-link" onClick={() => setTutteFatte(true)}>{frasi.mostraTutte(fatte.length)}</button>
+              )}
             </section>
           )}
 
@@ -189,7 +199,7 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
             <section className="prog-sezione" aria-labelledby="prog-sa">
               <h2 id="prog-sa">{t('Quello che Myynd sa')}</h2>
               <ul className="prog-elenco">
-                {sa.slice(0, 8).map(r => (
+                {(tuttoSa ? sa : sa.slice(0, IN_VISTA)).map(r => (
                   <li key={r.id} className="prog-ricordo" data-vecchio={r.stale ? '' : undefined}>
                     <p>{r.value}</p>
                     <small>
@@ -199,6 +209,9 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
                   </li>
                 ))}
               </ul>
+              {!tuttoSa && sa.length > IN_VISTA && (
+                <button type="button" className="prog-link" onClick={() => setTuttoSa(true)}>{frasi.mostraTutte(sa.length)}</button>
+              )}
             </section>
           )}
 
@@ -288,13 +301,31 @@ function Note({ p, manda, salvato, guaio }: {
   guaio?: string
 }) {
   const [nota, setNota] = useState('')
+  /*
+   * Una nota scritta e non ancora salvata non si perde chiudendo.
+   *
+   * Si salvava lasciando il campo; ma Esc (e ⌘K, e «Chiudi» da tastiera) toglie
+   * la pagina prima che il campo si lasci, e la nota spariva con lei. Quello che
+   * c'è nel campo si tiene qui, e se la pagina se ne va con qualcosa dentro lo
+   * si salva lo stesso, una volta sola.
+   */
+  const inSospeso = useRef({ nota, note: p.note, manda })
+  inSospeso.current = { nota, note: p.note, manda }
+  const scriviNota = (testo: string, prima: string, fai: typeof manda) => {
+    const data = new Date().toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })
+    void fai('note', { note: (prima ? `${prima}\n\n` : '') + `${data}\n${testo}` })
+  }
   const aggiungi = () => {
     const testo = nota.trim()
     if (!testo) return
-    const data = new Date().toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })
+    inSospeso.current.nota = ''
     setNota('')
-    void manda('note', { note: (p.note ? `${p.note}\n\n` : '') + `${data}\n${testo}` })
+    scriviNota(testo, p.note, manda)
   }
+  useEffect(() => () => {
+    const { nota: resta, note, manda: fai } = inSospeso.current
+    if (resta.trim()) scriviNota(resta.trim(), note, fai)
+  }, [])
   return (
     <section className="prog-sezione" aria-labelledby="prog-note">
       <div className="prog-testa"><h2 id="prog-note">{t('Note')}</h2><Tic mostra={salvato} /></div>
