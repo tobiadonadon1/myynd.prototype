@@ -18,6 +18,7 @@ import { useCompiti } from './oggi/useCompiti'
 import { blocchiFeed, sulTavolo } from './blocchi-feed'
 import { Preferenze } from './screens/Preferenze'
 import { Memoria } from './screens/Memoria'
+import { PaginaProgetto } from './screens/PaginaProgetto'
 import { Onboarding } from './onboarding/Onboarding'
 import { Stato as Indicatore } from './components/Stato'
 import { Connessioni } from './components/Connessioni'
@@ -293,8 +294,9 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
   // I blocchi della prima pagina, fatti qui una volta: la pagina li disegna
   // e il menù ne conta le righe. Un conto solo, da un posto solo: «dice
   // quattro cose sul tavolo, io ne conto cinque» non può più succedere.
-  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite }),
-    [v.voci, lista.compiti, v.progetti, lista.appenaFinite])
+  // i progetti appena nati da qui hanno il loro blocco anche vuoti: vedi `vuoti`
+  const blocchi = useMemo(() => blocchiFeed({ voci: v.voci, compiti: lista.compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista.appenaFinite, vuoti: v.progettiNuovi }),
+    [v.voci, lista.compiti, v.progetti, lista.appenaFinite, v.progettiNuovi])
   // le domande stanno nella loro carta, e ognuna è una cosa che aspetta lui
   const sulTavoloAdesso = sulTavolo(blocchi, (v.domanda ? 1 : 0) + v.iniziative.length)
 
@@ -583,6 +585,8 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
       </div>
 
       {v.mapFull && <MappaPiena v={v} />}
+      {/* la pagina di un progetto, sopra la schermata da cui la si apre */}
+      {v.progettoAperto && <PaginaProgetto v={v} lista={lista} />}
       {v.docOpen && <Documento v={v} />}
       {v.toastOn && <Toast v={v} />}
       {v.searchOpen && <Ricerca v={v} />}

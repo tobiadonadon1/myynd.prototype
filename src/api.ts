@@ -1937,15 +1937,24 @@ export type Progetto = {
   alias: string[]
   /** L'id del progetto dentro cui sta, se è uno spin-off di un altro. */
   genitore: string | null
+  /**
+   * «alta» se l'ha segnato lui come più importante degli altri, null è normale.
+   * Una parola sola, come quella delle righe: il gradino basso di un progetto è «fermo».
+   */
+  priorita: PrioritaProgetto | null
   /** L'ultimo ricordo attuale, per non lasciare vuota la scheda del progetto. */
   memoria: Pick<ProjectEvidence, 'kind' | 'value' | 'recordedAt'> | null
 }
+
+export type PrioritaProgetto = 'alta'
 
 /** Quello che si può cambiare di un progetto dalla Memoria. */
 export type CambioProgetto = {
   nome?: string
   obiettivo?: string
   stato?: StatoProgetto
+  /** null la riporta normale. */
+  priorita?: PrioritaProgetto | null
   note?: string
   colore?: string
   alias?: string[]

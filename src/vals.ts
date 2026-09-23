@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TEMI, TENUTE, TONI, parole, quando, type Gruppo, type Messaggio, type Screen, type Thread, type VoceFeed } from './data'
 import { DOMANDE, type Campo } from './intervista'
-import type { Progetto, Compito, ProjectInitiative } from './api'
+import type { CambioProgetto, Progetto, Compito, ProjectInitiative } from './api'
 import { coloreProgetto } from './colori-progetto'
+import { inCimaAllOrdine } from './blocchi-feed'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
@@ -190,6 +191,23 @@ export function registraPortaProgetto(f: ((id: string) => void) | null) { portaA
 export function portaAlProgetto(id: string) { (portaAllaMemoria ?? chiediProgetto)(id) }
 
 /**
+ * «I progetti sono cambiati», detto a chi li tiene in pagina.
+ *
+ * Adesso un progetto si apre nella sua pagina sopra qualunque schermata, e si
+ * cambia da tre posti: la pagina, la scheda nella Memoria, il blocco della
+ * prima pagina. Ognuno tiene la sua copia dell'elenco, e senza questo annuncio
+ * la Memoria dietro la pagina mostrerebbe il colore di prima, e la prima pagina
+ * un nome che non c'è più. Chi annuncia si passa come `da`, per non rileggere
+ * quello che ha appena scritto lui.
+ */
+const alCambioDeiProgetti = new Set<(da: unknown) => void>()
+export function annunciaProgetti(da?: unknown) { for (const f of alCambioDeiProgetti) f(da) }
+export function ascoltaProgetti(f: (da: unknown) => void): () => void {
+  alCambioDeiProgetti.add(f)
+  return () => { alCambioDeiProgetti.delete(f) }
+}
+
+/**
  * «Scomponila in chat», detto dalla lista.
  *
  * «Non c'è una vera intenzione dietro il compito che aggiunge. Per compiti
@@ -330,6 +348,22 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // e di nuovo ogni volta che si torna sulla prima pagina: un colore scelto in
   // Memoria deve vedersi sulle carte dei progetti senza ricaricare l'app
   useEffect(() => { if (screen === 'myynd') api.progetti().then(r => setProgetti(r.progetti)).catch(() => {}) }, [screen])
+  /** Il progetto aperto nella sua pagina, sopra la schermata in cui si era: uno solo. */
+  const [progettoAperto, setProgettoAperto] = useState<string | null>(null)
+  /**
+   * I progetti nati da qui in questa sessione.
+   *
+   * Hanno un blocco sulla prima pagina anche senza righe, con il posto per il
+   * primo passo (`blocchiFeed`, `vuoti`): un progetto creato che non compare
+   * da nessuna parte è un gesto che sembra non aver fatto niente, ed è così
+   * che si arrivava a credere che se ne potesse avere uno solo.
+   */
+  const [progettiNuovi, setProgettiNuovi] = useState<string[]>([])
+  const ricaricaProgetti = useCallback(async () => {
+    try { setProgetti((await api.progetti()).progetti) } catch { /* resta l'elenco di prima */ }
+  }, [])
+  const questaCopia = useRef({})
+  useEffect(() => ascoltaProgetti(da => { if (da !== questaCopia.current) void ricaricaProgetti() }), [ricaricaProgetti])
 
   const chiudiIntervista = () => { setPasso(null); setIntervistaFinita(false); setBattute([]) }
   const avviaIntervista = (tutte: boolean) => {
@@ -1015,8 +1049,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
    * per le schermate che non ricevono `v` — vedi lì sopra.
    */
   const apriProgetto = useCallback((id: string) => {
-    chiediProgetto(id)
-    setScreen('memoria'); setSearch(false); setMenu(false)
+    // la sua pagina si apre qui, sopra quello che si stava guardando: chiudendola
+    // si torna dov'eri, non in una Memoria che non avevi chiesto
+    setProgettoAperto(id); setSearch(false); setMenu(false)
   }, [])
   useEffect(() => {
     registraPortaProgetto(apriProgetto)
@@ -1255,6 +1290,68 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * riga sotto gli occhi appena si disegna.
      */
     apriProgetto,
+    /** Il progetto aperto nella sua pagina, o null. */
+    progettoAperto,
+    chiudiProgetto: () => setProgettoAperto(null),
+    progettiNuovi,
+    ricaricaProgetti,
+    /**
+     * Un progetto nuovo, da un nome: nella pagina subito, al server dopo.
+     *
+     * La riga c'è nell'istante di Invio, con un id provvisorio, e il blocco
+     * vuoto della prima pagina con lei; la risposta del server la sostituisce
+     * con quella vera. Se non passa, sparisce e lo dice. Torna quella vera, o
+     * null.
+     */
+    nuovoProgetto: async (nome: string): Promise<Progetto | null> => {
+      const pulito = nome.trim()
+      if (!pulito) return null
+      const adesso = new Date().toISOString()
+      const finto: Progetto = {
+        id: `nuovo-${Date.now()}`, nome: pulito, obiettivo: '', stato: 'attivo', dal: adesso, aggiornato: adesso,
+        note: '', origine: 'mano', colore: '', alias: [], genitore: null, priorita: null, memoria: null
+      }
+      setProgetti(ps => [...(ps ?? []), finto])
+      setProgettiNuovi(ns => [...ns, finto.id])
+      try {
+        const vero = (await api.nuovoProgetto(pulito)).progetto
+        // lo stesso nome è lo stesso progetto: se c'era già, resta uno
+        setProgetti(ps => {
+          const senza = (ps ?? []).filter(p => p.id !== finto.id && p.id !== vero.id)
+          return [...senza, { ...vero, memoria: null }]
+        })
+        setProgettiNuovi(ns => ns.map(x => (x === finto.id ? vero.id : x)))
+        annunciaProgetti(questaCopia.current)
+        return vero
+      } catch (e) {
+        setProgetti(ps => (ps ?? []).filter(p => p.id !== finto.id))
+        setProgettiNuovi(ns => ns.filter(x => x !== finto.id))
+        mostraToast(e instanceof Error ? t(e.message) : t('Non sono riuscito a crearlo.'))
+        return null
+      }
+    },
+    /**
+     * Cambiare un progetto: nella pagina subito, al server dopo.
+     *
+     * Il guaio non si mangia qui: torna a chi ha chiamato, che lo scrive sotto
+     * la cosa che l'ha causato. Segnato alto, il suo blocco sale anche
+     * nell'ordine che aveva trascinato, come fa il server.
+     */
+    cambiaProgetto: async (id: string, c: CambioProgetto): Promise<void> => {
+      const prima = progetti?.find(p => p.id === id)
+      setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...c } : p)) : ps)
+      const sale = c.priorita === 'alta' && prima?.priorita !== 'alta'
+      if (sale) setStato(s => ({ ...s, config: { ...s.config, ordineBlocchi: inCimaAllOrdine(s.config.ordineBlocchi ?? s.ordineBlocchi ?? [], id) } }))
+      try {
+        const vero = (await api.cambiaProgetto(id, c)).progetto
+        setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...vero } : p)) : ps)
+        annunciaProgetti(questaCopia.current)
+      } catch (e) {
+        void ricaricaProgetti()
+        if (sale) ricaricaStato()
+        throw e
+      }
+    },
 
     hasDone: fatte.length > 0, doneCount: fatte.length, doneOpen,
     toggleDone: () => setDoneOpen(v => !v),

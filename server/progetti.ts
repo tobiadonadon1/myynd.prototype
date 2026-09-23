@@ -32,6 +32,18 @@ import { senzaTrattini } from './testo.ts'
 export type Stato = 'attivo' | 'fermo' | 'chiuso'
 export const STATI: Stato[] = ['attivo', 'fermo', 'chiuso']
 
+/**
+ * La priorità di un progetto: «alta», o niente, che vuol dire normale.
+ *
+ * La parola è quella delle righe della lista (`store.PRIORITA`), e la
+ * pastiglia che la mostra è la stessa: la stessa cosa si scrive allo stesso
+ * modo. Il gradino basso invece non c'è. Per un progetto che conta meno degli
+ * altri esiste già «fermo», e due modi di dire «non adesso» sarebbero una
+ * domanda in più («bassa o in pausa?») senza una risposta diversa.
+ */
+export type Priorita = 'alta'
+export const PRIORITA: readonly Priorita[] = ['alta']
+
 export type Progetto = {
   id: string
   nome: string
@@ -53,6 +65,8 @@ export type Progetto = {
   alias: string[]
   /** L'id del progetto di cui fa parte (H-Brain è uno spin-off di Myynd), o null. */
   genitore: string | null
+  /** «alta» se l'ha segnato lui come più importante degli altri; null è normale. */
+  priorita: Priorita | null
 }
 
 const COLORE_VALIDO = /^#[0-9a-f]{6}$/i
@@ -68,7 +82,7 @@ export const ORDINE_BLOCCHI_MAX = 50
 type Riga = {
   id: string; nome: string; obiettivo: string | null; stato: string; dal: string
   aggiornato: string; note: string | null; origine: string | null; colore?: string | null
-  alias?: string | null; genitore?: string | null
+  alias?: string | null; genitore?: string | null; priorita?: string | null
 }
 
 /** La colonna `alias` è JSON: un elenco di parole, o niente. Una colonna storta è un elenco vuoto. */
@@ -91,7 +105,8 @@ const daRiga = (r: Riga): Progetto => ({
   origine: r.origine === 'punto' || r.origine === 'conversazione' ? r.origine : 'mano',
   colore: r.colore && COLORE_VALIDO.test(r.colore) ? r.colore : '',
   alias: aliasDaColonna(r.alias),
-  genitore: r.genitore?.trim() || null
+  genitore: r.genitore?.trim() || null,
+  priorita: r.priorita === 'alta' ? 'alta' : null
 })
 
 const chiave = (s: string) => s.trim().toLowerCase()
@@ -161,16 +176,40 @@ function importaDalPunto() {
 
 const nuovoId = () => `p${randomUUID().replace(/-/g, '').slice(0, 12)}`
 
-/** Tutti, o quelli in uno stato. Gli attivi prima, poi i fermi, i chiusi in fondo. */
+/** Dentro ogni stato, quelli segnati alti davanti. */
+const PRIMA_LE_ALTE = "CASE WHEN priorita = 'alta' THEN 0 ELSE 1 END"
+
+/**
+ * Tutti, o quelli in uno stato. Gli attivi prima, poi i fermi, i chiusi in fondo;
+ * dentro ogni stato quelli a priorità alta davanti, poi il più toccato di recente.
+ *
+ * L'ordine è questo per tutti quelli che leggono da qui: la Memoria, il
+ * modello (`perIlModello` tiene i primi otto, e un progetto segnato alto non
+ * deve restare fuori dal tetto perché nessuno lo tocca da una settimana), la
+ * rassegna che sceglie su quali progetti cercare notizie.
+ */
 export function elenco(stato?: Stato): Progetto[] {
   importaDalPunto()
   const righe = (stato
-    ? db.prepare('SELECT * FROM progetti WHERE stato = ? ORDER BY aggiornato DESC').all(stato)
+    ? db.prepare(`SELECT * FROM progetti WHERE stato = ? ORDER BY ${PRIMA_LE_ALTE}, aggiornato DESC`).all(stato)
     : db.prepare(`
         SELECT * FROM progetti
-        ORDER BY CASE stato WHEN 'attivo' THEN 0 WHEN 'fermo' THEN 1 ELSE 2 END, aggiornato DESC
+        ORDER BY CASE stato WHEN 'attivo' THEN 0 WHEN 'fermo' THEN 1 ELSE 2 END, ${PRIMA_LE_ALTE}, aggiornato DESC
       `).all()) as unknown as Riga[]
   return righe.map(daRiga)
+}
+
+/**
+ * L'ordine dei blocchi con questo progetto in cima. Pura.
+ *
+ * Sulla prima pagina l'ordine l'aveva già dato lui trascinando i blocchi, e il
+ * suo vince sempre (`ordinaBlocchi` nel client). Ma segnare un progetto «alto»
+ * è anche quello un ordine suo, e il più recente: se il blocco restasse dov'era
+ * la pagina direbbe che il gesto non è servito a niente. Quindi sale in cima
+ * all'ordine salvato, e da lì si può ancora trascinare dove vuole.
+ */
+export function inCimaAllOrdine(ordine: readonly string[], id: string): string[] {
+  return [id, ...ordine.filter(x => x !== id)]
 }
 
 /** Quelli che contano adesso: attivi e fermi. Un chiuso non è più un progetto. */
@@ -306,6 +345,8 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
  */
 export type Cambio = {
   nome?: string; obiettivo?: string; stato?: string; note?: string; colore?: string
+  /** «alta», o normale: null o vuoto. */
+  priorita?: string | null
   /** Gli altri nomi, per intero: quello che manda sostituisce quello che c'era. */
   alias?: unknown
   /** L'id del progetto di cui fa parte; null o vuoto lo toglie. */
@@ -329,6 +370,11 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
   if (c.alias !== undefined && (!Array.isArray(c.alias) || c.alias.some(a => typeof a !== 'string'))) {
     throw new Error('Gli altri nomi di un progetto sono un elenco di parole.')
   }
+  // «alta», o niente: un valore che non si conosce non diventa normale in silenzio
+  const priorita = c.priorita === undefined ? p.priorita : (c.priorita === null || c.priorita === '' ? null : c.priorita)
+  if (priorita !== null && !(PRIORITA as readonly string[]).includes(priorita)) {
+    throw new Error('La priorità di un progetto è alta o normale.')
+  }
   // un padre che non c'è, sé stesso, o un anello: nessuno dei tre si scrive
   const genitore = c.genitore === undefined ? p.genitore : (String(c.genitore ?? '').trim() || null)
   if (genitore && genitore !== p.genitore) {
@@ -342,7 +388,7 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
   const origine = c.nome !== undefined || c.obiettivo !== undefined
     ? (p.origine === 'mano' || provenienza !== 'user-chat' ? 'mano' : 'conversazione')
     : p.origine
-  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, alias = ?, genitore = ?, aggiornato = ? WHERE id = ?').run(
+  db.prepare('UPDATE progetti SET nome = ?, obiettivo = ?, stato = ?, note = ?, origine = ?, alias = ?, genitore = ?, priorita = ?, aggiornato = ? WHERE id = ?').run(
     nome,
     (c.obiettivo !== undefined ? c.obiettivo.trim() : p.obiettivo) || null,
     c.stato ?? p.stato,
@@ -350,9 +396,16 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
     origine,
     alias.length ? JSON.stringify(alias) : null,
     genitore,
+    priorita,
     new Date().toISOString(),
     id
   )
+  // appena segnato alto, il suo blocco sale in cima anche all'ordine che lui
+  // aveva trascinato; tornare normale non lo sposta: dove sta, l'ha visto salire
+  if (priorita === 'alta' && p.priorita !== 'alta') {
+    const ordine = leggiConfig().ordineBlocchi
+    if (ordine?.length) aggiornaConfig({ ordineBlocchi: inCimaAllOrdine(ordine, id) })
+  }
   const ora = new Date().toISOString()
   if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim(), ora, provenienza)
   if (c.note !== undefined && c.note.trim() !== p.note) recordProjectField(id, 'note', c.note.trim(), ora, provenienza)
@@ -510,8 +563,12 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
   const tutti = perContesto()
   const nominati = tutti.filter(p => nominaProgetto(discorso, p))
   const rilevanza = (p: Progetto) => nominaProgetto(discorso, p) ? 2 : Number(tocca(p, discorso))
+  // a parità di quanto c'entrano con il discorso: gli attivi prima dei fermi,
+  // e dentro ognuno quelli che ha segnato alti. Sono i primi a entrare nel
+  // tetto, e i primi che il modello legge
+  const rango = (p: Progetto) => (p.stato === 'attivo' ? 0 : 2) + (p.priorita === 'alta' ? 0 : 1)
   return (soloNominati && nominati.length ? nominati : tutti)
-    .sort((a, b) => rilevanza(b) - rilevanza(a)).slice(0, tetto)
+    .sort((a, b) => rilevanza(b) - rilevanza(a) || rango(a) - rango(b)).slice(0, tetto)
     .map(p => {
       const a = progresso(p.id)
       const stato = a.attivita.length ? ` · ${a.completate} attività concluse${a.prossima ? `; prossima: ${a.prossima.testo.slice(0, 160)} [${a.prossima.stato}]` : ''}` : ''
@@ -523,7 +580,8 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
       const dentro = padre ? ` · Fa parte di ${padre.nome}` : ''
       for (const task of a.attivita) recordTaskOutcome(task.id)
       const evidence = projectMemoryContext(p.id)
-      return `— Progetto: ${p.nome} (${p.stato}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}${altri}${dentro} · Aggiornato ${p.aggiornato}` +
+      const priorita = p.priorita === 'alta' ? '; priorità alta, segnata dalla persona: viene prima degli altri' : ''
+      return `— Progetto: ${p.nome} (${p.stato}${priorita}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}${altri}${dentro} · Aggiornato ${p.aggiornato}` +
         (p.note ? `\n${p.origine === 'punto' ? 'Note inferite, non confermate' : 'Note salvate dalla persona'}: ${JSON.stringify(p.note.slice(0,900))}` : '') +
         (evidence ? `\n${evidence}` : '')
     })

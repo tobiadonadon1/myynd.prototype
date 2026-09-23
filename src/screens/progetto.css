@@ -1,0 +1,89 @@
+/* — La pagina di un progetto —
+   Un foglio sopra la schermata in cui si era, con il velo dei documenti e
+   della ricerca: stessa alfa, stessa sfocatura. In cima cos'è (il nome nel
+   serif dei titoli di pagina, l'obiettivo come riga sotto), poi le sezioni
+   in colonna, ognuna con il titolo in maiuscoletto della Memoria. Il foglio
+   scorre per conto suo sotto la testa, che resta ferma. */
+
+.prog-velo{position:fixed;inset:0;z-index:48;background:rgba(40,30,22,.4);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.prog-foglio{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:680px;max-width:calc(100vw - 32px);max-height:calc(100vh - 72px);z-index:49;
+  display:flex;flex-direction:column;border-radius:20px;overflow:hidden;color:var(--inchiostro);
+  background:var(--carta-piena);border:1px solid rgba(var(--luce-rgb),.9);box-shadow:0 40px 90px rgba(var(--ombra-rgb),.34);
+  animation:editoresu .16s cubic-bezier(.16,1,.3,1)}
+
+.prog-cima{flex:none;padding:16px 26px 16px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.08)}
+.prog-riga{display:flex;align-items:center;gap:8px;min-width:0}
+/* «Chiudi» sta primo nel codice, perché il fuoco ci arrivi per primo, e ultimo a destra sullo schermo */
+.prog-chiudi{order:9;margin-left:auto;flex:none;border:1px solid rgba(var(--inchiostro-rgb),.16);background:none;border-radius:99px;padding:5px 13px;
+  font-family:inherit;font-size:12px;color:rgba(var(--inchiostro-rgb),.65);cursor:pointer}
+.prog-chiudi:hover{border-color:rgba(var(--rame-rgb),.45);color:var(--rame-testo)}
+.prog-kicker{flex:none;font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+.prog-dentro{min-width:0;font-size:12px;color:var(--inchiostro-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog-titolo{display:flex;min-width:0;margin:10px 0 0;font-size:30px;line-height:1.2}
+.prog-obiettivo{display:flex;min-width:0;margin-top:6px}
+.prog-controlli{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:14px;min-width:0}
+.prog-conto{margin-left:auto;font-size:12px;color:var(--inchiostro-3);white-space:nowrap}
+.prog-guaio{margin-top:8px;font-size:12px;line-height:1.5;color:var(--rame-testo);overflow-wrap:anywhere}
+
+.prog-corpo{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 26px 24px}
+.prog-sezione{margin-top:22px}
+.prog-sezione h2,.prog-testa h2{margin:0 0 10px;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.68)}
+.prog-testa{display:flex;align-items:center;gap:9px}
+.prog-testa h2{margin-bottom:10px}
+
+.prog-elenco{list-style:none;margin:0 0 10px;padding:0;border-radius:14px;background:rgba(var(--luce-rgb),.45);border:1px solid var(--filo)}
+.prog-elenco>li{display:flex;align-items:flex-start;gap:11px;min-width:0;padding:11px 14px}
+.prog-elenco>li+li{border-top:1px solid var(--filo)}
+.prog-testo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.prog-testo>span{font-size:13.5px;line-height:1.45;overflow-wrap:anywhere;text-wrap:pretty}
+.prog-testo>small{font-size:12px;line-height:1.45;color:var(--inchiostro-2);overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* la spunta: lo stesso cerchio della lista, e con il rame solo quando la riga aspetta lui */
+.prog-cerchio{flex:none;width:16px;height:16px;margin-top:2px;padding:0;border-radius:50%;background:none;cursor:pointer;
+  border:1.5px solid rgba(var(--inchiostro-rgb),.22)}
+.prog-cerchio[data-attende]{border:2px solid var(--rame)}
+.prog-cerchio:focus-visible{outline:2px solid var(--rame);outline-offset:2px}
+.prog-stato-riga{flex:none;margin-top:1px;font-size:11px;font-weight:500;padding:1px 8px;border-radius:99px;white-space:nowrap;
+  color:var(--inchiostro-2);background:rgba(var(--inchiostro-rgb),.06)}
+.prog-stato-riga[data-stato=pronto],.prog-stato-riga[data-stato=chiede]{color:var(--rame-testo);background:rgba(var(--rame-rgb),.12)}
+
+.prog-spunta-fatta{flex:none;display:grid;place-items:center;width:16px;height:16px;margin-top:2px;border-radius:50%;
+  color:var(--verde-cupo);background:rgba(var(--salvia-rgb),.18)}
+.prog-quando{flex:none;margin-top:2px;font-size:11.5px;color:var(--inchiostro-3);white-space:nowrap}
+
+.prog-elenco>.prog-ricordo{flex-direction:column;gap:4px}
+.prog-ricordo p{margin:0;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.prog-ricordo small{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--inchiostro-3)}
+.prog-ricordo[data-vecchio] p{color:var(--inchiostro-2)}
+.prog-da-ricontrollare{color:var(--rame-testo)}
+
+.prog-invito{display:block;margin:0 0 9px;font-size:14px;line-height:1.45;color:rgba(var(--inchiostro-rgb),.78)}
+.prog-barra{display:flex;min-width:0}
+.prog-aggiungi{flex:none;padding:5px 12px;border-radius:99px;border:0;background:var(--gradiente-rame);color:var(--avorio);
+  font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
+.prog-aggiungi:hover{opacity:.92}
+.prog-link{display:inline-block;margin-top:10px;border:0;background:none;padding:0;font-family:inherit;font-size:12.5px;color:var(--rame-testo);cursor:pointer}
+.prog-link:hover{color:var(--rame)}
+
+.prog-note{margin-bottom:9px;padding:12px 14px;border-radius:12px;background:rgba(var(--inchiostro-rgb),.035);
+  white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:rgba(var(--inchiostro-rgb),.74);max-height:260px;overflow-y:auto}
+
+/* in fondo, chiuso: quello che si tocca di rado */
+.prog-altro{margin-top:26px;padding-top:14px;border-top:1px solid rgba(var(--inchiostro-rgb),.08)}
+.prog-altro>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;
+  font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.55)}
+.prog-altro>summary::-webkit-details-marker{display:none}
+.prog-altro>summary:hover{color:var(--inchiostro)}
+.prog-altro>summary:focus-visible{outline:2px solid var(--rame);outline-offset:3px;border-radius:6px}
+.prog-freccia{display:flex;transform:rotate(-90deg);transition:transform .2s}
+.prog-altro[open] .prog-freccia{transform:none}
+
+@media(max-width:650px){
+  .prog-foglio{max-height:calc(100vh - 32px)}
+  .prog-cima{padding:14px 16px}
+  .prog-corpo{padding:2px 16px 18px}
+  .prog-titolo{font-size:26px}
+}
+@media(prefers-reduced-motion:reduce){.prog-foglio{animation:none}.prog-freccia{transition:none}}

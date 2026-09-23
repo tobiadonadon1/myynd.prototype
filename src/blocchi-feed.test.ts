@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, inCimaAllOrdine, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -268,6 +268,45 @@ test('un blocco che l’ordine salvato non conosce va in fondo, non in cima', ()
   assert.deepEqual(nomi(ordinaBlocchi(b, ['hf'])), ['H-Farm', 'Nextas', 'Il resto'])
   // «resto» si nomina così, e un id che non c'è più non sposta niente
   assert.deepEqual(nomi(ordinaBlocchi(b, ['resto', 'sparito', 'nx'])), ['Il resto', 'Nextas', 'H-Farm'])
+})
+
+// — la priorità di un progetto, e il progetto appena nato —
+
+test('un progetto segnato alto passa davanti, anche a una bozza pronta e al più recente', () => {
+  const progetti = [{ id: 'hf', nome: 'H-Farm', stato: 'attivo' }, { id: 'nx', nome: 'Nextas', stato: 'attivo', priorita: 'alta' }]
+  const b = blocchiFeed({
+    voci: [voce('v1', 'nx', '2026-09-01T10:00:00Z', 0), voce('v2', null, '2026-09-19T10:00:00Z')],
+    compiti: [compito('c1', 'hf', { stato: 'pronto', aggiornato: '2026-09-18T08:00:00Z' })],
+    progetti, nomeResto: 'Il resto'
+  })
+  assert.deepEqual(b.map(x => [x.nome, x.alto]), [['Nextas', true], ['H-Farm', false], ['Il resto', false]])
+  // l'ordine della pagina: il più leggero e il più vecchio, ma l'ha segnato lui
+  assert.deepEqual(ordinaBlocchi(b).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
+  // e l'ordine che ha trascinato vince ancora: la priorità lo cambia salendo in cima all'ordine salvato
+  assert.deepEqual(ordinaBlocchi(b, ['hf', 'nx']).map(x => x.nome), ['H-Farm', 'Nextas', 'Il resto'])
+  assert.deepEqual(ordinaBlocchi(b, inCimaAllOrdine(['hf', 'nx'], 'nx')).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
+})
+
+test('segnarlo alto lo porta in cima all’ordine salvato; senza un ordine suo non se ne scrive uno', () => {
+  assert.deepEqual(inCimaAllOrdine(['hf', 'resto', 'nx'], 'nx'), ['nx', 'hf', 'resto'])
+  assert.deepEqual(inCimaAllOrdine(['hf', 'resto'], 'nuovo'), ['nuovo', 'hf', 'resto'])
+  assert.deepEqual(inCimaAllOrdine([], 'nx'), [])
+})
+
+test('un progetto appena nato ha il suo blocco anche vuoto; uno fermo, sconosciuto o non nato adesso no', () => {
+  const progetti = [...PROGETTI, { id: 'nuovo', nome: 'Nuovo', stato: 'attivo' }, { id: 'pausa', nome: 'In pausa', stato: 'fermo' }]
+  const b = blocchiFeed({
+    voci: [voce('v1', 'hf', '2026-09-16T10:00:00Z')], compiti: [],
+    progetti, nomeResto: 'Il resto', vuoti: ['nuovo', 'pausa', 'sparito']
+  })
+  assert.deepEqual(b.map(x => [x.nome, x.righe.length]), [['H-Farm', 1], ['Nuovo', 0]])
+  // niente righe, niente conto: un blocco vuoto non è una cosa sul tavolo
+  assert.equal(sulTavolo(b, 0), 1)
+  // senza «vuoti» è la regola di sempre: un progetto senza righe non ha un blocco
+  assert.deepEqual(blocchiFeed({ voci: [], compiti: [], progetti, nomeResto: 'Il resto' }), [])
+  // e appena ha una riga è un blocco come gli altri
+  const pieno = blocchiFeed({ voci: [], compiti: [compito('c1', 'nuovo')], progetti, nomeResto: 'Il resto', vuoti: ['nuovo'] })
+  assert.deepEqual(pieno.map(x => [x.nome, x.righe.length]), [['Nuovo', 1]])
 })
 
 test('la chiave di un blocco è il progetto, e «resto» per quello senza', () => {

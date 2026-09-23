@@ -1,4 +1,4 @@
-// Un progetto: la sua scheda, e quello che sta dentro la scheda.
+// Un progetto: la sua scheda, e i pezzi che la scheda presta alla sua pagina.
 //
 // «Se voglio cancellare un progetto deve essere più immediato, e modificarli
 // deve essere più facile, quasi come se fosse una specie di dashboard.»
@@ -6,10 +6,10 @@
 // Quello che si fa tutti i giorni sta sulla scheda e non chiede di aprire
 // niente: il nome e l'obiettivo si scrivono cliccandoci sopra, il pallino
 // apre la tavolozza, lo stato è un interruttore a tre scatti, il cestino sta
-// in alto a destra e compare passandoci sopra. Dentro la scheda — cioè nella
-// finestra che si apre cliccandola — resta quello che si tocca di rado: gli
-// altri nomi, il progetto dentro cui sta, le note, quello che Myynd ricorda,
-// le attività, e unire.
+// in alto a destra e compare passandoci sopra. Cliccandola si apre la pagina
+// del progetto (`PaginaProgetto.tsx`): a cosa serve, i prossimi passi, quello
+// che è fatto e quello che Myynd sa; e in fondo, chiuso, quello che si tocca
+// di rado: gli altri nomi, il progetto dentro cui sta, unire.
 //
 // Quattro scelte, e perché:
 //
@@ -27,23 +27,18 @@
 //     alla schermata dice che qualcosa non è andato, non dice cosa.
 
 import { useEffect, useRef, useState } from 'react'
-import {
-  api, type CambioProgetto, type Progetto, type ProjectEvidence, type StatoProgetto
-} from '../api'
-import './project-evidence.css'
-import { AttivitaProgetto } from '../components/AttivitaProgetto'
-import { frasi, loc, t } from '../lingua'
+import { type CambioProgetto, type Progetto, type StatoProgetto } from '../api'
+import { PrioritaProgetto } from '../components/PrioritaProgetto'
+import { frasi, t } from '../lingua'
 import { Cestino, Hov, LABEL, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconGiu, IconSpunta } from '../icons'
 import { COLORE_VALIDO, TAVOLOZZA, coloreProgetto } from '../colori-progetto'
 import { SPIEGA_STATO, STATI, aggiungiAlias, aliasPuliti, togliAlias } from '../progetto-modifica'
-import { portaAlleAttivita, siPuoAprireLeCose } from '../vals'
-import { GRADIENTE, RAME } from '../tema'
+import { GRADIENTE } from '../tema'
 
 const INCHIOSTRO = 'var(--inchiostro)'
 const SPENTO = 'rgba(var(--inchiostro-rgb),.55)'
 const APPENA = 'rgba(var(--inchiostro-rgb),.42)'
-const RIGA = '1px solid rgba(var(--inchiostro-rgb),.08)'
 /** Il rame che fa da testo: di notte schiarisce da solo, un valore fisso no. */
 const RAME_TESTO = 'var(--rame-testo)'
 /** Il verde degli stati, che di notte schiarisce: la spunta e basta. */
@@ -58,7 +53,7 @@ export const COLORE_STATO: Record<StatoProgetto, { testo: string; fondo: string 
   chiuso: { testo: 'rgba(var(--inchiostro-rgb),.55)', fondo: 'rgba(var(--inchiostro-rgb),.08)' }
 }
 
-const CASELLA = {
+export const CASELLA = {
   width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', borderRadius: 10,
   border: '1px solid rgba(var(--inchiostro-rgb),.16)', background: 'rgba(var(--luce-rgb),.75)',
   color: INCHIOSTRO, fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none'
@@ -77,7 +72,7 @@ export function Tic({ mostra }: { mostra: boolean }) {
 }
 
 /** Un campo: la sua etichetta, la sua spunta, la sua riga di aiuto, il suo guaio. */
-function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
+export function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
   etichetta: string
   aiuto?: string
   guaio?: string
@@ -111,7 +106,7 @@ function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
  * e un elenco senza freccia si legge come una casella di testo che non si
  * lascia scrivere. La freccia gliela rimettiamo noi, con l'icona dell'app.
  */
-function Tendina({ children, ...resto }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Tendina({ children, ...resto }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <span style={{ position: 'relative', display: 'block' }}>
       <select {...resto} style={{ ...CASELLA, cursor: 'pointer', appearance: 'none', paddingRight: 36 }}>
@@ -133,7 +128,7 @@ function Tendina({ children, ...resto }: React.SelectHTMLAttributes<HTMLSelectEl
  * La riga e l'editor salvano allo stesso modo, ognuno per conto suo: una
  * spunta dove hai scritto, e il guaio sotto alla cosa che l'ha causato.
  */
-function useSalvataggi(id: string, cambia: Cambia) {
+export function useSalvataggi(id: string, cambia: Cambia) {
   const [guai, setGuai] = useState<Record<string, string>>({})
   const [fatti, setFatti] = useState<Record<string, boolean>>({})
   const orologi = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -167,7 +162,7 @@ function useSalvataggi(id: string, cambia: Cambia) {
  * Il negativo dei margini pareggia il bordo e l'imbottitura della casella: è
  * quello che tiene ferme le due parole mentre una diventa l'altra.
  */
-function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, tornaAlFuoco, salvato }: {
+export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, tornaAlFuoco, salvato }: {
   valore: string
   /** Il carattere del testo: lo stesso da fermo e mentre si scrive. */
   testoStile: React.CSSProperties
@@ -269,7 +264,7 @@ function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubito, torn
  * una schermata di distanza da dove il colore si vede. Qui è il pallino
  * stesso: si preme, si sceglie, si richiude.
  */
-function Pallino({ p, colore, manda, guaio, segnala }: {
+export function Pallino({ p, colore, manda, guaio, segnala }: {
   p: Progetto
   colore: string
   manda: (campo: string, c: CambioProgetto) => Promise<void>
@@ -367,7 +362,7 @@ function Pallino({ p, colore, manda, guaio, segnala }: {
  * compaiono sopra la riga, non dentro: una riga che cresce al passaggio del
  * mouse sposta tutte quelle sotto.
  */
-function Stati({ p, manda }: { p: Progetto; manda: (campo: string, c: CambioProgetto) => Promise<void> }) {
+export function Stati({ p, manda }: { p: Progetto; manda: (campo: string, c: CambioProgetto) => Promise<void> }) {
   const [sopra, setSopra] = useState(false)
   const [appena, setAppena] = useState(false)
   const bottoni = useRef<(HTMLButtonElement | null)[]>([])
@@ -456,93 +451,21 @@ function discendeDa(x: Progetto, radice: string, tutti: Progetto[]): boolean {
 }
 
 /**
- * Quello che Myynd ricorda di questo progetto: decisioni, lavoro, cose notate.
+ * Quello che di un progetto si tocca di rado: gli altri nomi, il progetto
+ * dentro cui sta, unirlo a un altro.
  *
- * Si carica solo aperto, e quello che non vale più resta visibile senza
- * sembrare attuale. Non c'è nessun «scordalo»: il server queste righe non le
- * cancella, e un bottone che non fa niente sarebbe peggio di nessun bottone.
- */
-function MemoriaProgetto({ p }: { p: Progetto }) {
-  const [aperto, setAperto] = useState(false)
-  const [righe, setRighe] = useState<ProjectEvidence[] | null>(null)
-  const [guasto, setGuasto] = useState(false)
-  const en = loc().startsWith('en')
-  useEffect(() => {
-    if (!aperto) return
-    let vivo = true
-    setGuasto(false)
-    api.memoriaProgetto(p.id).then(r => { if (vivo) setRighe(r.records) }).catch(() => { if (vivo) setGuasto(true) })
-    return () => { vivo = false }
-  }, [aperto, p.id, p.aggiornato])
-
-  const provenienza: Record<ProjectEvidence['provenance'], string> = {
-    'user-field': en ? 'You saved this' : 'Salvato da te',
-    'user-chat': en ? 'You said this in chat' : 'Dalla tua chat',
-    'source-inference': en ? 'Inferred from a source' : 'Dedotto da una fonte',
-    'task-record': en ? 'Recorded work outcome' : 'Risultato del lavoro'
-  }
-  const genere: Record<ProjectEvidence['kind'], string> = {
-    goal: en ? 'Goal' : 'Obiettivo', note: en ? 'Note' : 'Nota', decision: en ? 'Decision' : 'Decisione',
-    observation: en ? 'Observation' : 'Osservazione', work: en ? 'Work' : 'Lavoro'
-  }
-  const data = (v: string) => Number.isFinite(Date.parse(v))
-    ? new Date(v).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })
-    : (en ? 'Date unknown' : 'Data sconosciuta')
-
-  const riga = (r: ProjectEvidence) => (
-    <li key={r.id} className="project-evidence-item" data-history={!!r.supersededBy}>
-      <div className="project-evidence-meta">
-        <strong>{genere[r.kind]}</strong>
-        <span>{r.supersededBy ? (en ? 'Replaced' : 'Sostituito') : r.stale ? (en ? 'Needs rechecking' : 'Da ricontrollare') : (en ? 'Current record' : 'Attuale')}</span>
-      </div>
-      <p>{r.value || (en ? 'Removed from the current project' : 'Rimosso dal progetto')}</p>
-      <div className="project-evidence-origin">
-        {provenienza[r.provenance]} · <time dateTime={r.evidenceAt || undefined}>{data(r.evidenceAt)}</time>
-      </div>
-      {r.stale && (
-        <small className="project-evidence-warning">
-          {en ? 'Not used as current knowledge. The source or task changed, is missing, or is too old.'
-            : 'Non usato come informazione attuale: fonte o attività cambiata, mancante o datata.'}
-        </small>
-      )}
-      {r.quote && r.quote !== r.value && <blockquote>{r.quote}</blockquote>}
-    </li>
-  )
-
-  const attuali = righe?.filter(r => !r.supersededBy) ?? []
-  const prima = righe?.filter(r => r.supersededBy) ?? []
-  return (
-    <details className="project-evidence" onToggle={e => setAperto(e.currentTarget.open)}>
-      <summary>{en ? 'What Myynd remembers' : 'Cosa ricorda Myynd'} {righe ? <small>{attuali.length}</small> : null}</summary>
-      {guasto
-        ? <p role="alert">{en ? 'Could not load this project’s memory. Close and reopen to retry.' : 'Memoria non disponibile. Chiudi e riapri per riprovare.'}</p>
-        : !righe
-          ? <p role="status">{en ? 'Loading…' : 'Caricamento…'}</p>
-          : <>
-            {!righe.length && <p>{en ? 'No evidence history yet. Your saved goal and notes remain above.' : 'Nessuna cronologia. Obiettivo e note restano salvati.'}</p>}
-            <ul className="project-evidence-list">{attuali.map(riga)}</ul>
-            {!!prima.length && (
-              <details className="project-evidence-history">
-                <summary>{en ? 'Previous versions' : 'Versioni precedenti'} <small>{prima.length}</small></summary>
-                <ul className="project-evidence-list">{prima.map(riga)}</ul>
-              </details>
-            )}
-          </>}
-    </details>
-  )
-}
-
-/**
- * Il resto di un progetto: quello che si tocca di rado.
- *
- * Il nome, l'obiettivo, lo stato e il colore non stanno qui: si scrivono sulla
- * riga, e ripeterli qui dentro vorrebbe dire due caselle per la stessa cosa.
+ * Stava in cima alla finestra del progetto, e la finestra si apriva su tre
+ * caselle vuote («Altri nomi», «Dentro», «Note») che sembravano le
+ * impostazioni di qualcos'altro: la prima persona da fuori non ha capito a
+ * cosa servisse la pagina. Adesso sta in fondo alla pagina, chiuso, sotto un
+ * titolo che dice cosa c'è dentro; e senza le righe che spiegavano ogni
+ * campo: il titolo e il controllo bastano.
  *
  * `cambia` butta l'eccezione del server invece di mangiarsela: è l'unico modo
  * per cui il messaggio «Esiste già un progetto con questo nome» possa comparire
  * sotto al campo giusto invece che in fondo alla schermata.
  */
-export function ProgettoEditor({ p, tutti, cambia, unisci }: {
+export function NomiERaggruppamento({ p, tutti, cambia, unisci }: {
   p: Progetto
   tutti: Progetto[]
   cambia: Cambia
@@ -565,16 +488,6 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
   const padri = tutti.filter(x => x.id !== p.id && x.stato === 'attivo' && !discendeDa(x, p.id, tutti))
   const padre = tutti.find(x => x.id === p.genitore) ?? null
 
-  // — le note: quelle di prima restano dove sono, la nuova arriva datata —
-  const [nota, setNota] = useState('')
-  const aggiungiNota = () => {
-    const testo = nota.trim()
-    if (!testo) return
-    const data = new Date().toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })
-    setNota('')
-    void manda('note', { note: (p.note ? `${p.note}\n\n` : '') + `${data}\n${testo}` })
-  }
-
   // — unire due progetti che erano lo stesso progetto —
   const [dentroChi, setDentroChi] = useState('')
   const [unisco, setUnisco] = useState(false)
@@ -589,13 +502,10 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
     finally { setUnisco(false) }
   }
 
-  const chiuso = p.stato === 'chiuso'
-
   return (
-    <div id={`editor-${p.id}`} style={{ paddingBottom: 4 }}>
+    <div style={{ paddingBottom: 4 }}>
       {/* gli altri nomi: le cartelle e i soprannomi con cui lo chiama davvero */}
-      <Riquadro etichetta={t('Altri nomi')} salvato={fatti.alias} guaio={guai.alias}
-        aiuto={t('Le cartelle e i soprannomi con cui lo chiami: così Myynd lo riconosce anche scritto in un altro modo.')}>
+      <Riquadro etichetta={t('Altri nomi')} salvato={fatti.alias} guaio={guai.alias}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           {alias.map(a => (
             <span key={a} style={{
@@ -622,8 +532,7 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
       </Riquadro>
 
       {/* dentro quale progetto sta: H-Brain è uno spin-off di Myynd, non un progetto a parte */}
-      <Riquadro etichetta={t('Dentro')} salvato={fatti.genitore} guaio={guai.genitore}
-        aiuto={t('Se è un pezzo di un progetto più grande, dillo qui: Myynd li legge insieme.')}>
+      <Riquadro etichetta={t('Dentro')} salvato={fatti.genitore} guaio={guai.genitore}>
         <Tendina value={p.genitore ?? ''} aria-label={t('Dentro')}
           onChange={e => void manda('genitore', { genitore: e.target.value || null })}>
           <option value="">{t('Nessuno')}</option>
@@ -633,68 +542,35 @@ export function ProgettoEditor({ p, tutti, cambia, unisci }: {
         </Tendina>
       </Riquadro>
 
-      {/* le note: si aggiunge, non si riscrive */}
-      <Riquadro etichetta={t('Note')} salvato={fatti.note} guaio={guai.note}
-        aiuto={t('Quello che scrivi si aggiunge in fondo, con la data di oggi. Quello di prima resta dov’è.')}>
-        {p.note && (
-          <div style={{
-            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '13px', lineHeight: 1.65,
-            color: 'rgba(var(--inchiostro-rgb),.72)', background: 'rgba(var(--inchiostro-rgb),.035)', borderRadius: 10,
-            padding: '12px 14px', marginBottom: 8
-          }}>{p.note}</div>
-        )}
-        <textarea value={nota} onChange={e => setNota(e.target.value)} onBlur={aggiungiNota}
-          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) aggiungiNota() }}
-          rows={2} aria-label={t('Aggiungi una nota')}
-          placeholder={t('Aggiungi una nota')}
-          style={{ ...CASELLA, resize: 'vertical' }} />
-      </Riquadro>
-
-      {/* quello che Myynd ricorda, e le attività: si guardano, non si scrivono qui */}
-      <div style={{ marginTop: 22, paddingTop: 16, borderTop: RIGA }}>
-        <MemoriaProgetto p={p} />
-        <AttivitaProgetto id={p.id} chiuso={chiuso} />
-        {siPuoAprireLeCose() && (
-          <Hov as="button" type="button" onClick={() => portaAlleAttivita()}
-            style={{
-              border: 'none', background: 'none', padding: '8px 0 0', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: '12.5px', color: RAME_TESTO
-            }}
-            hover={{ color: RAME }}>{t('Aprile in Da fare')}</Hov>
-        )}
-      </div>
-
       {/* — unire due progetti che erano lo stesso progetto — */}
-      <div style={{ marginTop: 22, paddingTop: 16, borderTop: RIGA }}>
-        <Riquadro etichetta={t('Unisci in un altro')} guaio={guai.unisci}
-          aiuto={altri.length ? undefined : t('Non c’è nessun altro progetto in cui unirlo.')}>
-          {!!altri.length && (
-            <Tendina value={dentroChi} onChange={e => { setDentroChi(e.target.value); segnala('unisci', '') }}
-              aria-label={t('Unisci in un altro')}>
-              <option value="">{t('Scegli un progetto')}</option>
-              {altri.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
-            </Tendina>
-          )}
-          {bersaglio && (
-            <>
-              <div style={{ fontSize: '12.5px', color: SPENTO, marginTop: 9, lineHeight: 1.6, textWrap: 'pretty' }}>
-                {frasi.unisciDentro(p.nome, bersaglio.nome)}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 11 }}>
-                <Hov as="button" type="button" onClick={facciamoUno} disabled={unisco}
-                  style={{
-                    flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none', background: GRADIENTE,
-                    color: 'var(--avorio)', fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
-                    cursor: unisco ? 'default' : 'pointer'
-                  }}
-                  hover={unisco ? {} : { opacity: 0.92 }}>
-                  {unisco ? t('Unisco…') : t('Unisci')}
-                </Hov>
-              </div>
-            </>
-          )}
-        </Riquadro>
-      </div>
+      <Riquadro etichetta={t('Unisci in un altro')} guaio={guai.unisci}
+        aiuto={altri.length ? undefined : t('Non c’è nessun altro progetto in cui unirlo.')}>
+        {!!altri.length && (
+          <Tendina value={dentroChi} onChange={e => { setDentroChi(e.target.value); segnala('unisci', '') }}
+            aria-label={t('Unisci in un altro')}>
+            <option value="">{t('Scegli un progetto')}</option>
+            {altri.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+          </Tendina>
+        )}
+        {bersaglio && (
+          <>
+            <div style={{ fontSize: '12.5px', color: SPENTO, marginTop: 9, lineHeight: 1.6, textWrap: 'pretty' }}>
+              {frasi.unisciDentro(p.nome, bersaglio.nome)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 11 }}>
+              <Hov as="button" type="button" onClick={facciamoUno} disabled={unisco}
+                style={{
+                  flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none', background: GRADIENTE,
+                  color: 'var(--avorio)', fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
+                  cursor: unisco ? 'default' : 'pointer'
+                }}
+                hover={unisco ? {} : { opacity: 0.92 }}>
+                {unisco ? t('Unisco…') : t('Unisci')}
+              </Hov>
+            </div>
+          </>
+        )}
+      </Riquadro>
     </div>
   )
 }
@@ -770,6 +646,11 @@ export function SchedaProgetto({ p, tutti, cambia, elimina, apri, acceso, conto,
             fontSize: '15px', fontWeight: 500, color: INCHIOSTRO, lineHeight: 1.35,
             textDecoration: chiuso ? 'line-through' : 'none'
           }} />
+        {/* accesa si vede sempre; spenta compare sotto mano, come il cestino */}
+        {!chiuso && (
+          <PrioritaProgetto alta={p.priorita === 'alta'} visibile={attiva} nome={p.nome}
+            cambia={alta => void manda('priorita', { priorita: alta ? 'alta' : null })} />
+        )}
       </div>
       {/* il cestino dell'app, in alto a destra: compare sotto mano e chiede una volta */}
       <span className="mem-card-gesti" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
