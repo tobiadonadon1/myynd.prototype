@@ -22,12 +22,14 @@ export type RisultatoAvvio = {
   tipo: 'prima_traccia'
   progetto: { id: string; nome: string; obiettivo: string }
   compito: { id: string; testo: string; giorno: string | null }
-  traccia: { obiettivo: string; estratti: { testo: string; doc: string; titolo: string }[]; prossimaAzione: string }
+  traccia: { obiettivo: string; estratti: { testo: string; doc: string; titolo: string; fonte?: string }[]; prossimaAzione: string }
 }
 export type StatoAvvio = {
   id: string; revisione: number
   fase: 'progetto' | 'fonte' | 'verifica' | 'azione' | 'completo'
   progetto: { nome: string; obiettivo: string } | null
+  /** Le fonti lette insieme; `fonte` è la prima, per chi ne conosce una sola. */
+  fonti: string[]
   fonte: string | null; fonteSaltata: boolean; fatti: FattoAvvio[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
 }
@@ -151,8 +153,9 @@ export type Stato = {
   oauth: { google: boolean; microsoft: boolean; ritorno: string | null }
 }
 
-import { frasi, lingua, t } from './lingua.ts'
+import { frasi, t } from './lingua.ts'
 import { desktop } from './desktop.ts'
+import { dettaglioSincronizzazione } from './lettura-fonti.ts'
 
 const CHIAVE = 'myynd.token'
 
@@ -457,7 +460,6 @@ const NOME_FONTE: Record<string, string> = {
  * pannello e nel primo avvio: cioè quasi dappertutto.
  */
 export function rigaSincronizzazione(m: Record<string, unknown>): string {
-  const en = lingua() === 'en'
   const id = String(m.fase ?? '')
   /*
    * La fonte del computer si chiama come la macchina: «Il mio Mac», «Il mio
@@ -470,76 +472,7 @@ export function rigaSincronizzazione(m: Record<string, unknown>): string {
   const fonte = t(id === 'desktop'
     ? (desktop()?.piattaforma === 'win32' ? 'Il mio PC' : 'Il mio Mac')
     : (NOME_FONTE[id] ?? id))
-  // una fonte andata storta porta la sua frase: «calendario · guaio» non diceva niente
-  if (m.stato === 'guaio') return `${fonte} · ${t(String(m.errore ?? 'Non ce l’ha fatta.'))}`
-  // con i numeri si compone qui: «40 di 120 messaggi» scritto dal server non si traduce
-  if (m.stato !== 'fatto' && typeof m.fatti === 'number') {
-    if (typeof m.tot === 'number') return `${fonte} · ${m.fatti} ${en ? 'of' : 'di'} ${m.tot} ${en ? 'messages' : 'messaggi'}`
-    return `${fonte} · ${m.fatti} ${en ? 'documents' : 'documenti'}`
-  }
-  if (m.stato !== 'fatto') return `${fonte} · ${t(String(m.stato ?? ''))}`
-  const parti = [`${Number(m.documenti ?? 0)} ${en ? 'documents' : 'documenti'}`]
-  if (Number(m.tolti)) parti.push(`${Number(m.tolti)} ${en ? 'gone' : 'spariti'}`)
-  // la posta che c'era già e non è stata riscaricata: è quello che rende la rilettura leggera
-  if (Number(m.giaLetti)) parti.push(`${Number(m.giaLetti)} ${en ? 'already read' : 'già letti'}`)
-  if (Number(m.saltati)) parti.push(`${Number(m.saltati)} ${en ? 'code projects skipped' : 'progetti saltati'}`)
-  /*
-   * Quello che c'era e non è entrato, diviso per quello che è.
-   *
-   * «66 documenti» su un Mac con dentro dieci anni di lavoro è una riga che
-   * sembra un guasto, e non lo è: sono duemilaquattrocento file lasciati
-   * fuori apposta. Il totale da solo lasciava aperta la domanda che viene
-   * subito dopo — «perché così tanti?» — e la risposta è che il grosso sono
-   * foto e video, poi codice, poi roba di app e di sistema.
-   */
-  if (Number(m.saltatiPerTipo)) {
-    const st = (m.saltatiTipi ?? {}) as Record<string, unknown>
-    parti.push(frasi.tipiFuori(Number(st.media ?? 0), Number(st.codice ?? 0), Number(st.sistema ?? 0), Number(st.altro ?? 0)))
-  }
-  if (Number(m.falliti)) parti.push(`${Number(m.falliti)} ${en ? 'unreadable' : 'illeggibili'}`)
-  if (Number(m.parziali)) parti.push(`${Number(m.parziali)} ${en ? 'half pages' : 'pagine a metà'}`)
-  // le pagine di Notion che non sono cambiate e non si sono riscaricate
-  if (Number(m.invariate)) parti.push(`${Number(m.invariate)} ${en ? 'unchanged' : 'invariate'}`)
-  /*
-   * Le riunioni di Granola senza una parola dentro.
-   *
-   * Una riunione che parte e finisce senza che nessuno scriva niente resta
-   * nel file di Granola, e qui non diventa un documento — giusto, perché non
-   * c'è niente da indicizzare. Ma senza questa riga chi ha quaranta riunioni e
-   * legge «Granola · 12 documenti» conclude che il collegamento perde roba.
-   */
-  if (Number(m.vuote)) parti.push(`${Number(m.vuote)} ${en ? 'with no notes' : 'senza note'}`)
-  /*
-   * «Tetto raggiunto» non diceva la cosa che serve sapere.
-   *
-   * Ogni giro legge al massimo un tot per fonte, e prima quella riga era tutto
-   * quello che si sapeva: chi la leggeva non poteva distinguere «ne mancano
-   * dieci» da «ne mancano quattromila», né sapere che il giro dopo riprende da
-   * dove si era fermato. Adesso il connettore dice a che punto è, e questa riga
-   * lo ripete con i numeri suoi.
-   */
-  const resto = m.resto as { letti?: number; totale?: number; aGiorno?: boolean } | undefined
-  if (resto?.aGiorno) parti.push(en ? 'all in' : 'è tutto dentro')
-  else if (typeof resto?.letti === 'number') {
-    parti.push(typeof resto.totale === 'number'
-      ? `${resto.letti} ${en ? 'of' : 'di'} ${resto.totale} ${en ? 'read so far' : 'letti finora'}`
-      : `${resto.letti} ${en ? 'read so far' : 'letti finora'}`)
-  } else if (m.troncato) parti.push(en ? 'cap reached' : 'tetto raggiunto')
-  if (m.interrotto) parti.push(en ? 'interrupted by Notion' : 'interrotto da Notion')
-  const dirs = (m.illeggibili as string[] | undefined) ?? []
-  if (dirs.length) parti.push(`${dirs.length} ${en ? 'folders without permission' : 'cartelle senza permessi'}`)
-  /**
-   * Le cartelle di posta che non si sono aperte.
-   *
-   * Il server le contava già e le mandava in fondo alla lettura; qui non le
-   * leggeva nessuno. Quindi una casella con cinque cartelle di cui tre andate
-   * storte diceva «Posta · 40 documenti», identica a una andata bene — e da lì
-   * in poi Myynd rispondeva su un terzo della posta convinto di averla tutta.
-   * Il modo peggiore di sbagliare: non dice niente, e la risposta sembra buona.
-   */
-  const kaputt = (m.cartelleFallite as string[] | undefined) ?? []
-  if (kaputt.length) parti.push(frasi.cartelleNonLette(kaputt.length))
-  return `${fonte} · ${parti.join(' · ')}`
+  return `${fonte} · ${dettaglioSincronizzazione(m)}`
 }
 
 
@@ -1108,7 +1041,8 @@ export const api = {
   avvio: () => json<StatoAvvio>('/api/avvio'),
   avvioProgetto: (b: { nome: string; obiettivo: string; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/progetto', { method: 'POST', body: JSON.stringify(b) }),
-  avvioFonte: (b: { fonte: string | null; revisione: number }) =>
+  /** Le fonti da leggere insieme; una lista vuota vuol dire «continuo senza». */
+  avvioFonti: (b: { fonti: string[]; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/fonte', { method: 'POST', body: JSON.stringify(b) }),
   avvioConferma: (b: { ids: string[]; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/conferma', { method: 'POST', body: JSON.stringify(b) }),

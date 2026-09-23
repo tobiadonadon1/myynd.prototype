@@ -2860,6 +2860,19 @@ const EN: Record<string, string> = {
   'Myynd ti chiede': 'Myynd asks you',
   'Apri il progetto': 'Open the project',
   'Poi:': 'Next:',
+  // — feedback 23 set: fonti —
+  'Cosa deve leggere Myynd?': 'What should Myynd read?',
+  'Collegane quante vuoi. Myynd le legge tutte insieme.': 'Connect as many as you like. Myynd reads them all together.',
+  'Leggi le fonti': 'Read sources',
+  'Continua senza fonti': 'Continue without sources',
+  'Leggo le tue fonti…': 'Reading your sources…',
+  'Ho letto le tue fonti.': 'I’ve read your sources.',
+  'Non letta': 'Not read',
+  'Non ho trovato estratti pertinenti nelle fonti lette.': 'No relevant excerpts in the sources I read.',
+  'Cambia fonti': 'Change sources',
+  'Fonti': 'Sources',
+  'Lettura delle fonti': 'Reading your sources',
+  'Scrivere i testi della pagina iniziale': 'Write the copy for the home page',
 }
 
 
@@ -3417,5 +3430,15 @@ export const frasi = {
     const en = { oggi: 'Noted for today.', settimana: 'Noted for this week.', poi: 'Noted for later.' }
     const it = { oggi: 'Segnata per oggi.', settimana: 'Segnata per questa settimana.', poi: 'Segnata per prima o poi.' }
     return (corrente === 'en' ? en : it)[quando]
-  }
+  },
+
+  // — feedback 23 set: fonti —
+  /** Il bottone che legge insieme tutte le fonti collegate. */
+  leggiFonti: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'Read 1 source' : `Read ${n} sources`)
+    : (n === 1 ? 'Leggi 1 fonte' : `Leggi ${n} fonti`),
+  /** Il titolo quando una lettura di più fonti è finita con qualcuna che non si è letta. */
+  fontiNonLetteInsieme: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'One source could not be read.' : `${n} sources could not be read.`)
+    : (n === 1 ? 'Una fonte non si è letta.' : `${n} fonti non si sono lette.`)
 }

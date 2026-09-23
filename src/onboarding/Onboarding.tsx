@@ -1,16 +1,34 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from 'react'
 import { giornoLocale, spostaGiorno } from '../oggi/giorni'
-import { api, rigaSincronizzazione, type Stato, type StatoAvvio } from '../api'
-import { t } from '../lingua'
+import { api, type Stato, type StatoAvvio } from '../api'
+import { frasi, t } from '../lingua'
+import { avanzaLettura, chiudiLettura, iniziaLettura, leggiAlProprioTurno, nonLette, type RigaLettura } from '../lettura-fonti'
 import { ConnectorIcon } from '../components/ConnectorIcon'
 import { Form } from '../components/forms'
 import { IconFreccia } from '../icons'
 import { Scena, OnboardAttesa, OnboardErrore, type Momento } from './Scena'
 import { Introduzione } from './Introduzione'
 
-const NON_FONTI = new Set(['claude', 'compatibile', 'mind2do'])
+// i modelli non si leggono: OpenAI stava fra le fonti e il server lo rifiutava
+const NON_FONTI = new Set(['claude', 'openai', 'compatibile', 'mind2do'])
 const PRIORITA_FONTI = ['desktop', 'google', 'posta', 'notion', 'slack', 'calendario']
-const momentoDi = (fase: StatoAvvio['fase']): Momento => fase === 'progetto' ? 0 : fase === 'fonte' ? 3 : fase === 'verifica' ? 2 : 3
+/*
+ * Prima le fonti, poi l'attività.
+ *
+ * Le fonti stavano dentro la prima attività, come una riga facoltativa che
+ * ne apriva una sola: la prima persona di fuori si aspettava l'opposto, di
+ * collegare tutto quello che usa e poi farlo leggere insieme. Adesso vengono
+ * subito dopo l'obiettivo: lette tutte, gli estratti, e l'attività per ultima,
+ * quando c'è già qualcosa da cui partire.
+ */
+const momentoDi = (fase: StatoAvvio['fase']): Momento => fase === 'progetto' ? 0 : fase === 'fonte' ? 1 : fase === 'verifica' ? 2 : 3
+/**
+ * Il passo che vede la persona, per un indicatore «2 di 3»: le fonti e i loro
+ * estratti sono un passo solo, perché gli estratti sono quello che la lettura ha trovato.
+ */
+export const PASSO_AVVIO: Record<Momento, number> = { 0: 1, 1: 2, 2: 2, 3: 3 }
+export const PASSI_AVVIO = 3
+const pausa = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 const messaggio = (e: unknown) => e instanceof Error ? e.message : String(e)
 /** La freccia del bottone che va avanti, nel suo riquadro scuro. */
 const Avanti = () => <span className="onboard-arrow"><IconFreccia /></span>
@@ -65,11 +83,15 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const [obiettivo, setObiettivo] = useState('')
   /** Il benvenuto è passato: da solo dopo tre secondi, o premendo. */
   const [accountConfermato, setAccountConfermato] = useState(false)
-  const [fonte, setFonte] = useState('')
+  /** La scheda aperta sotto le fonti, per collegarne una: non è una scelta, le collegate si leggono tutte. */
+  const [aperta, setAperta] = useState('')
+  /** Una riga per fonte mentre si leggono insieme, e dopo, finché si resta qui. */
+  const [lettura, setLettura] = useState<RigaLettura[] | null>(null)
+  /** Collegate adesso e già confermate dal server, anche se la loro scheda aspetta ancora «Avanti». */
+  const [appena, setAppena] = useState<string[]>([])
   const [confermati, setConfermati] = useState<string[]>([])
   const [azione, setAzione] = useState('')
   const [giorno, setGiorno] = useState('')
-  const [progresso, setProgresso] = useState('')
   const [tutteFonti, setTutteFonti] = useState(false)
   const [cercaFonte, setCercaFonte] = useState('')
   const lock = useRef(false)
@@ -83,7 +105,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     try {
       const n = await api.avvio()
       setAvvio(n); setProgetto(n.progetto?.nome ?? ''); setObiettivo(n.progetto?.obiettivo ?? '')
-      setFonte(n.fonte ?? ''); setAzione(n.azione); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
+      setAzione(n.azione); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
       try {
         const bozza = JSON.parse(localStorage.getItem(`myynd.avvio.bozza.${n.id}`) ?? 'null')
         if (!n.risultato && bozza?.revisione === n.revisione) {
@@ -99,7 +121,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       setMomento(ritorno && !n.risultato ? 1 : momentoDi(n.fase))
       try {
         const salvata = sessionStorage.getItem(`myynd.avvio.fonte.${n.id}`)
-        if (salvata && !n.risultato) setFonte(salvata)
+        if (salvata && !n.risultato) setAperta(salvata)
       } catch { /* The saved server session remains usable with storage disabled. */ }
     } catch (e) { setErrore(messaggio(e)) }
     finally { setCarico(false) }
@@ -146,14 +168,14 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         setConfermati(ids => ids.filter(id => n.fatti.some(f => f.id === id)))
         if (n.risultato) setMomento(3)
       } catch { /* Keep the initial actionable error and every unsaved field. */ }
-    } finally { lock.current = false; setOccupato(false); setProgresso('') }
+    } finally { lock.current = false; setOccupato(false) }
   }
-  const vai = (dove: Momento) => { setErrore(''); setMomento(dove) }
+  const vai = (dove: Momento) => { setErrore(''); setLettura(null); setMomento(dove) }
   const salvaProgetto = () => fai(async () => {
     if (!avvio || !progetto.trim() || !obiettivo.trim()) return
     const cambiato = progetto.trim() !== avvio.progetto?.nome || obiettivo.trim() !== avvio.progetto?.obiettivo
     const n = cambiato ? await api.avvioProgetto({ nome: progetto.trim(), obiettivo: obiettivo.trim(), revisione: avvio.revisione }) : avvio
-    setAvvio(n); if (cambiato) setAzione(''); vai(3)
+    setAvvio(n); if (cambiato) setAzione(''); vai(1)
   })
   /** Invio sull'obiettivo: se manca il nome del progetto ci si va, se no si salva. */
   const invioProgetto = () => {
@@ -161,23 +183,51 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     if (!progetto.trim()) { nome.current?.focus(); return }
     void salvaProgetto()
   }
-  const scegliFonte = (id: string) => {
-    setFonte(id); setErrore('')
-    if (avvio) try { sessionStorage.setItem(`myynd.avvio.fonte.${avvio.id}`, id) } catch { /* optional return hint */ }
+  const apri = (id: string) => {
+    const nuova = aperta === id ? '' : id
+    setAperta(nuova); setErrore('')
+    if (avvio) try {
+      if (nuova) sessionStorage.setItem(`myynd.avvio.fonte.${avvio.id}`, nuova)
+      else sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`)
+    } catch { /* optional return hint */ }
   }
-  const leggiFonte = (salta = false) => fai(async () => {
+  const salta = () => fai(async () => {
     if (!avvio) return
-    const n = await api.avvioFonte({ fonte: salta ? null : fonte, revisione: avvio.revisione })
+    const n = await api.avvioFonti({ fonti: [], revisione: avvio.revisione })
+    setAperta(''); setConfermati([])
+    try { sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`) } catch { /* optional return hint */ }
+    const confermato = await api.avvioConferma({ ids: [], revisione: n.revisione }); setAvvio(confermato); vai(3)
+  })
+  /**
+   * Tutte le fonti collegate, lette in una volta, con una riga ciascuna.
+   *
+   * La lettura è quella di sempre, `/api/sincronizza` senza una fonte: la
+   * stessa del bottone «Rileggi tutto» e del giro dei dieci minuti, che legge
+   * ogni fonte collegata e non si ferma se una non risponde. Qui si guarda
+   * passare, fonte per fonte. Se sono andate tutte, si passa da soli a quello
+   * che hanno dato; se una non si è letta si resta, perché il motivo va letto.
+   */
+  const leggiFonti = () => fai(async () => {
+    if (!avvio) return
+    const ids = collegate.map(c => c.id)
+    let righe = iniziaLettura(ids)
+    const mostra = (nuove: RigaLettura[]) => { righe = nuove; setLettura(nuove) }
+    // le righe compaiono subito, prima della rete: il bottone ha già risposto
+    mostra(righe); setAperta('')
+    let n: StatoAvvio
+    // se non si è salvato niente non si è letto niente: via le righe, resta la frase del guaio
+    try { n = await api.avvioFonti({ fonti: ids, revisione: avvio.revisione }) } catch (e) { setLettura(null); throw e }
     setAvvio(n)
-    if (salta) {
-      setFonte(''); setConfermati([])
-      try { sessionStorage.removeItem(`myynd.avvio.fonte.${avvio.id}`) } catch { /* optional return hint */ }
-      const confermato = await api.avvioConferma({ ids: [], revisione: n.revisione }); setAvvio(confermato); vai(3); return
-    }
-    setProgresso(t('Leggo la fonte del progetto…'))
-    await api.sincronizza(m => { if (m.fase !== 'fine' && m.fase !== 'errore') setProgresso(rigaSincronizzazione(m)) }, fonte)
-    await ricarica()
-    const letto = await api.avvio(); setAvvio(letto); setConfermati(letto.fatti.filter(f => f.confermato).map(f => f.id)); vai(2)
+    let guasto = ''
+    try { await leggiAlProprioTurno(() => api.sincronizza(m => mostra(avanzaLettura(righe, m)))) }
+    catch (e) { guasto = t(messaggio(e)) }
+    const nuovo = await ricarica()
+    mostra(guasto
+      ? righe.map(r => r.stato === 'attesa' || r.stato === 'leggo' ? { ...r, stato: 'guaio', testo: guasto } : r)
+      : chiudiLettura(righe, id => nuovo.connettori.find(c => c.id === id)?.documenti))
+    const letto = await api.avvio(); setAvvio(letto); setConfermati(letto.fatti.filter(f => f.confermato).map(f => f.id))
+    // le righe verdi restano in vista un attimo: è la conferma che le ha lette tutte
+    if (!nonLette(righe)) { await pausa(900); vai(2) }
   })
   const conferma = () => fai(async () => {
     if (!avvio) return
@@ -189,7 +239,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     if (!avvio || !azione.trim()) return
     let corrente = avvio
     if (corrente.fase === 'fonte') {
-      corrente = await api.avvioFonte({ fonte: null, revisione: corrente.revisione }); setAvvio(corrente)
+      corrente = await api.avvioFonti({ fonti: [], revisione: corrente.revisione }); setAvvio(corrente)
     }
     if (corrente.fase === 'verifica') {
       if (!corrente.fonteSaltata) { vai(2); return }
@@ -209,15 +259,22 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     const ia = PRIORITA_FONTI.indexOf(a.id), ib = PRIORITA_FONTI.indexOf(b.id)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
   })
-  const visibili = (tutteFonti ? ordinate : ordinate.slice(0, 6)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
-  const scelta = fonti.find(c => c.id === fonte)
-  /** La fonte che l'avvio ha già letto, se c'è: sulla prima attività si mostra quella. */
-  const letta = avvio?.fonte ? s.connettori.find(c => c.id === avvio.fonte) : undefined
+  const collegata = (c: { id: string; collegato: boolean }) => c.collegato || appena.includes(c.id)
+  const collegate = ordinate.filter(collegata)
+  // una fonte collegata resta in vista anche oltre le prime sei: è una di quelle che si leggeranno
+  const visibili = (tutteFonti ? ordinate : ordinate.filter((c, i) => i < 6 || c.collegato)).filter(c => `${t(c.nome)} ${t(c.nota)}`.toLocaleLowerCase().includes(cercaFonte.toLocaleLowerCase()))
+  const scelta = fonti.find(c => c.id === aperta)
+  const nomeFonte = (id: string) => t(s.connettori.find(c => c.id === id)?.nome ?? id)
+  /** Le fonti che l'avvio ha già letto: sulla prima attività si mostrano quelle. */
+  const lette = (avvio?.fonti ?? []).map(id => s.connettori.find(c => c.id === id)).filter(c => !!c)
+  // il titolo segue le righe: finché una è in coda o in lettura si sta leggendo
+  const inLettura = !!lettura?.some(r => r.stato === 'attesa' || r.stato === 'leggo')
   const risultato = avvio?.risultato
   const oggi = giornoLocale(), domani = spostaGiorno(oggi, 1)
   const altroGiorno = !!giorno && giorno !== oggi && giorno !== domani
 
-  const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 3.4 : momento === 2 ? 3.7 : risultato ? 5 : 3
+  // la luce sale con i passi, che adesso sono obiettivo, fonti, estratti, attività
+  const progressione = benvenuto ? 0 : momento === 0 ? 1.5 : momento === 1 ? 2.2 : momento === 2 ? 2.6 : risultato ? 5 : 3
 
   return <Scena progressione={progressione} benvenuto={benvenuto} intro={benvenuto && !!avvio} momento={momento} progetto={avvio?.progetto?.nome} salvato={!!avvio?.progetto} esci={esci} occupato={occupato} accountEmail={accountEmail} uscita={stato.config.onboarding ? t('Torna a Myynd') : t('Esci')}>
     {carico ? <OnboardAttesa testo="Un momento…" /> : !avvio ? <><OnboardErrore testo={errore} /><div className="onboard-actions"><button className="onboard-primary" onClick={carica}>{t('Riprova')}<Avanti /></button></div></> : <>
@@ -234,21 +291,39 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         </fieldset>
       </form>}
       {accountConfermato && momento === 1 && <>
-        <h2 ref={titolo} tabIndex={-1}>{t('Quale fonte deve leggere Myynd?')}</h2>
-        {progresso ? <OnboardAttesa testo={progresso} /> : <>
-          <fieldset disabled={occupato} className="onboard-fieldset">
-            {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
-            <div className="onboard-sources">{visibili.map(c => <button key={c.id} className="onboard-source" type="button" aria-pressed={fonte === c.id} aria-label={`${t(c.nome)} · ${c.collegato ? t('Collegato') : t('Da collegare')}`} onClick={() => scegliFonte(c.id)}><ConnectorIcon id={c.id} size={25} /><span>{t(c.nome)}</span>{c.collegato && <i aria-hidden="true" />}</button>)}</div>
-            {fonti.length > 6 && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
-            {scelta && <div className="onboard-source-detail" key={scelta.id}>
-              <div className="onboard-source-title"><ConnectorIcon id={scelta.id} size={16} /><span>{t(scelta.nome)}</span>{scelta.collegato && <span className="onboard-connected">✓ {t('Collegato')}</span>}</div>
-              {!scelta.collegato && <Form id={scelta.id} tema="scuro" ok={ricarica} />}
-            </div>}
-          </fieldset>
-        </>}
+        <h2 ref={titolo} tabIndex={-1}>{!lettura ? t('Cosa deve leggere Myynd?') : inLettura ? t('Leggo le tue fonti…') : nonLette(lettura) ? frasi.fontiNonLetteInsieme(nonLette(lettura)) : t('Ho letto le tue fonti.')}</h2>
+        {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
+        {lettura ? <ul className="onboard-reading" aria-live="polite">
+          {lettura.map(r => <li key={r.id} className={`onboard-reading-row is-${r.stato}`}>
+            <ConnectorIcon id={r.id} size={18} />
+            <span className="onboard-reading-name">{nomeFonte(r.id)}</span>
+            <span className="onboard-reading-state">{r.stato === 'attesa' ? t('In coda')
+              : r.stato === 'leggo' ? r.testo || t('Leggo…')
+              : r.stato === 'fatto' ? `✓ ${r.testo}`
+              : `${t('Non letta')} · ${r.testo}`}</span>
+          </li>)}
+        </ul> : <fieldset disabled={occupato} className="onboard-fieldset">
+          {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
+          {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata». */}
+          <div className="onboard-sources">{visibili.map(c => <button key={c.id} className={`onboard-source${collegata(c) ? ' is-connected' : ''}`} type="button" aria-pressed={aperta === c.id} aria-label={`${t(c.nome)} · ${collegata(c) ? t('Collegato') : t('Da collegare')}`} onClick={() => apri(c.id)}>
+            <ConnectorIcon id={c.id} size={25} /><span>{t(c.nome)}</span>
+            {collegata(c) && <em className="onboard-source-state" aria-hidden="true">✓ {t('Collegato')}</em>}
+          </button>)}</div>
+          {fonti.length > 6 && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
+          {scelta && <div className="onboard-source-detail" key={scelta.id}>
+            <div className="onboard-source-title"><ConnectorIcon id={scelta.id} size={16} /><span>{t(scelta.nome)}</span>{collegata(scelta) && <span className="onboard-connected">✓ {t('Collegato')}</span>}</div>
+            {!scelta.collegato && <Form id={scelta.id} tema="scuro" ok={ricarica} collegato={() => setAppena(a => a.includes(scelta.id) ? a : [...a, scelta.id])} />}
+          </div>}
+        </fieldset>}
         <OnboardErrore testo={errore} />
-        <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(3)}>{t('Indietro')}</button><button className="onboard-primary" disabled={occupato || !scelta?.collegato} onClick={() => leggiFonte()}>{occupato ? t('Leggo…') : t('Leggi questa fonte')}<Avanti /></button></div>
-        {!occupato && <button className="onboard-secondary onboard-skip" onClick={() => leggiFonte(true)}>{t('Continuo senza una fonte')}</button>}
+        <div className="onboard-actions">
+          {/* dopo una lettura con un guaio, Indietro riporta alle schede: lì si ricollega quella che non si è letta */}
+          <button className="onboard-secondary" disabled={occupato} onClick={() => lettura ? setLettura(null) : vai(0)}>{t('Indietro')}</button>
+          {lettura
+            ? <button className="onboard-primary" disabled={occupato} onClick={() => vai(2)}>{occupato ? t('Leggo…') : t('Continua')}<Avanti /></button>
+            : <button className="onboard-primary" disabled={occupato || !collegate.length} onClick={leggiFonti}>{collegate.length ? frasi.leggiFonti(collegate.length) : t('Leggi le fonti')}<Avanti /></button>}
+        </div>
+        {!occupato && !lettura && <button className="onboard-secondary onboard-skip" onClick={salta}>{t('Continua senza fonti')}</button>}
       </>}
       {accountConfermato && momento === 2 && <>
         <h2 ref={titolo} tabIndex={-1}>{avvio.fatti.length ? t('Quali estratti vuoi tenere?') : t('Partiamo dal tuo obiettivo.')}</h2>
@@ -256,11 +331,12 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           <p className="onboard-note onboard-before-facts">{t('Seleziona gli estratti utili. Ogni frase ha una fonte.')}</p>
           <div className="onboard-facts">{avvio.fatti.map((f, i) => <article className={`onboard-fact ${confermati.includes(f.id) ? 'selected' : ''}`} key={f.id}>
             <label className="onboard-fact-choice"><input type="checkbox" disabled={occupato} checked={confermati.includes(f.id)} onChange={e => setConfermati(ids => e.target.checked ? [...ids, f.id] : ids.filter(id => id !== f.id))} /><span className="onboard-fact-number">{String(i + 1).padStart(2, '0')}</span><span>{f.testo}</span></label>
-            <details><summary>{f.evidenza.titolo}</summary><blockquote>{f.evidenza.estratto}</blockquote></details>
+            {/* da quale fonte viene, prima del titolo: con più fonti è la prima cosa che si vuole sapere */}
+            <details><summary>{f.evidenza.fonte ? `${nomeFonte(f.evidenza.fonte)} · ${f.evidenza.titolo}` : f.evidenza.titolo}</summary><blockquote>{f.evidenza.estratto}</blockquote></details>
           </article>)}</div>
-        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p><div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti in questa fonte.')}</div></div>}
+        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p><div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div></div>}
         <OnboardErrore testo={errore} />
-        <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(1)}>{t('Cambia fonte')}</button><button className="onboard-primary" disabled={occupato} onClick={conferma}>{occupato ? t('Salvo…') : confermati.length ? t('Conferma') : t('Continua senza estratti')}<Avanti /></button></div>
+        <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(1)}>{t('Cambia fonti')}</button><button className="onboard-primary" disabled={occupato} onClick={conferma}>{occupato ? t('Salvo…') : confermati.length ? t('Conferma') : t('Continua senza estratti')}<Avanti /></button></div>
       </>}
       {accountConfermato && momento === 3 && <>
         <h2 ref={titolo} tabIndex={-1}>{risultato ? t('Il tuo primo passo è pronto.') : t('Qual è la prima attività?')}</h2>
@@ -270,7 +346,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           <div className="onboard-result-body"><span className="onboard-result-label">{t('Obiettivo')}</span><p>{risultato.traccia.obiettivo}</p>{risultato.traccia.estratti.length > 0 && <><span className="onboard-result-label">{t('Estratti confermati')}</span>{risultato.traccia.estratti.map((e, i) => <blockquote key={`${e.doc}-${i}`}>{e.testo}<cite>{e.titolo}</cite></blockquote>)}</>}</div>
           <div className="onboard-result-source">{risultato.progetto.nome} · {t('Attività ancora da svolgere')}</div>
         </div> : <>
-          <label className="onboard-field onboard-answer"><span className="onboard-sr-only">{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => { setAzione(e.target.value); if (errore) setErrore('') }} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Un’azione concreta, con le tue parole.')} /></label>
+          {/* l'etichetta sopra e un esempio nel segnaposto, come l'obiettivo al primo passo */}
+          <label className="onboard-field onboard-answer"><span>{t('Prima attività')}</span><Risposta value={azione} disabled={occupato} onChange={e => { setAzione(e.target.value); if (errore) setErrore('') }} invio={() => { if (azione.trim() && !occupato) void prepara() }} maxLength={2000} placeholder={t('Scrivere i testi della pagina iniziale')} /></label>
           {/* La data e la fonte fanno parte dell'attività: due righe con la loro etichetta, sempre in vista. */}
           <div className="onboard-options">
             <div className="onboard-option">
@@ -280,19 +357,16 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
                 <label className={`onboard-chip onboard-chip-date${altroGiorno ? ' is-on' : ''}`}><input type="date" disabled={occupato} value={giorno} aria-label={t('Data')} onInput={e => setGiorno(e.currentTarget.value)} onChange={e => setGiorno(e.target.value)} /></label>
               </div>
             </div>
-            <button type="button" className="onboard-option onboard-option-button" disabled={occupato} onClick={() => {
-              // prima la domanda, poi la fonte: la fonte serve all'attività, non il contrario
-              if (!azione.trim()) { setErrore(t('Prima scrivi l’attività, poi la fonte.')); titolo.current?.closest('.onboard-panel')?.querySelector<HTMLElement>('textarea')?.focus(); return }
-              vai(1)
-            }}>
-              <span className="onboard-option-label">{t('Fonte')}</span>
-              <span className="onboard-option-body">{letta ? <><ConnectorIcon id={letta.id} size={16} /><strong>{t(letta.nome)}</strong><em>{t('Cambia')}</em></> : <><strong>{t('Aggiungi una fonte')}</strong><small>{t('Myynd la legge e cita quello che serve al progetto.')}</small></>}</span>
+            {/* le fonti vengono prima, adesso: qui si vede quali ha letto, e si torna a cambiarle */}
+            <button type="button" className="onboard-option onboard-option-button" disabled={occupato} onClick={() => vai(1)}>
+              <span className="onboard-option-label">{lette.length > 1 ? t('Fonti') : t('Fonte')}</span>
+              <span className="onboard-option-body">{lette.length ? <>{lette.map(c => <ConnectorIcon key={c.id} id={c.id} size={16} />)}<strong>{lette.map(c => t(c.nome)).join(', ')}</strong><em>{t('Cambia')}</em></> : <><strong>{t('Aggiungi una fonte')}</strong><small>{t('Myynd la legge e cita quello che serve al progetto.')}</small></>}</span>
               <span className="onboard-arrow onboard-option-arrow"><IconFreccia /></span>
             </button>
           </div>
         </>}
         <OnboardErrore testo={errore} />
-        <div className="onboard-actions">{!risultato && <button className="onboard-secondary" disabled={occupato} onClick={() => vai(0)}>{t('Indietro')}</button>}<button className="onboard-primary" disabled={occupato || (!risultato && !azione.trim())} onClick={risultato ? entra : prepara}>{occupato ? t('Salvo…') : risultato ? t('Apri Myynd') : t('Salva la prima attività')}<Avanti /></button></div>
+        <div className="onboard-actions">{!risultato && <button className="onboard-secondary" disabled={occupato} onClick={() => vai(avvio.fonti.length ? 2 : 1)}>{t('Indietro')}</button>}<button className="onboard-primary" disabled={occupato || (!risultato && !azione.trim())} onClick={risultato ? entra : prepara}>{occupato ? t('Salvo…') : risultato ? t('Apri Myynd') : t('Salva la prima attività')}<Avanti /></button></div>
       </>}
     </>}
   </Scena>
