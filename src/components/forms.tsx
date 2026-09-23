@@ -1598,7 +1598,15 @@ export function FormNotion({ tema, ok }: Props) {
  * Dopo, si dice quanti eventi ha letto. È l'unica conferma che chi ha incollato
  * può capire da solo di aver incollato la cosa giusta.
  */
-export function FormCalendario({ tema, ok }: Props) {
+/**
+ * `collegato` suona quando il server ha detto sì, prima di «Avanti».
+ *
+ * Il calendario è l'unica fonte che si ferma a mostrare cosa ha letto («Work:
+ * 42 eventi») prima di chiamare `ok`: nel primo avvio la sua scheda restava
+ * «da collegare» accanto a una frase che diceva il contrario, e il bottone
+ * contava una fonte in meno. Chi disegna le schede lo sa da qui.
+ */
+export function FormCalendario({ tema, ok, collegato }: Props & { collegato?: () => void }) {
   const [url, setUrl] = useState('')
   const [giorni, setGiorni] = useState(30)
   const [err, setErr] = useState('')
@@ -1611,6 +1619,7 @@ export function FormCalendario({ tema, ok }: Props) {
       const r = await api.collegaCalendario({ url: url.trim(), giorni })
       setUrl('')
       setFatto({ nome: r.nome, eventi: r.eventi })
+      collegato?.()
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -2202,7 +2211,7 @@ export function FormJev({ tema, ok }: Props) {
   )
 }
 
-export function Form({ id, tema, ok }: { id: string } & Props) {
+export function Form({ id, tema, ok, collegato }: { id: string; collegato?: () => void } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} />
   if (id === 'claude') return <FormClaude tema={tema} ok={ok} />
   if (id === 'jev') return <FormJev tema={tema} ok={ok} />
@@ -2214,7 +2223,7 @@ export function Form({ id, tema, ok }: { id: string } & Props) {
   if (id === 'granola') return <FormGranola tema={tema} ok={ok} />
   if (id === 'note') return <FormNote tema={tema} ok={ok} />
   if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} />
-  if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} />
+  if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} collegato={collegato} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} />
   if (id === 'github') return <FormGithub tema={tema} ok={ok} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} />

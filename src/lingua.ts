@@ -186,8 +186,6 @@ const EN: Record<string, string> = {
   //   opzioni della prima attività in vista invece che sotto una linguetta —
   'Qual è la prima attività?': 'What is the first task?',
   'Prima attività': 'First task',
-  'Un’azione concreta, con le tue parole.': 'One concrete action, in your own words.',
-  'Quale fonte deve leggere Myynd?': 'Which source should Myynd read?',
   'Quali estratti vuoi tenere?': 'Which excerpts do you want to keep?',
   'Per che giorno': 'When',
   'Fonte': 'Source',
@@ -225,7 +223,6 @@ const EN: Record<string, string> = {
   'Viene prima di tutto quando scelgo cosa metterti in prima pagina.': 'Comes first when I pick what goes on your front page.',
   'Cosa ti interessa nei giornali. Vuoto: un po’ di tutto.': 'What interests you in the papers. Empty: a bit of everything.',
   'Risposte e prima pagina. I documenti restano nella loro lingua.': 'Answers and front page. Documents stay in their own language.',
-  'Prima scrivi l’attività, poi la fonte.': 'Write the task first, then the source.',
   'Myynd ti ha scritto.': 'Myynd has written to you.',
   'Ha qualche domanda per conoscerti: due minuti.': 'A few questions to get to know you: two minutes.',
   // — l'introduzione del primo avvio: cinque momenti, una figura per momento —
@@ -350,7 +347,6 @@ const EN: Record<string, string> = {
   "Collega una fonte utile al progetto.": "Connect a source that knows this project.",
   "Controlla quello che Myynd ha trovato.": "Check what Myynd found.",
   "Un risultato da leggere, usare e migliorare.": "Something to read, use and build on.",
-  "Leggo la fonte del progetto…": "Reading your project’s source…",
   "Torna a Myynd": "Back to Myynd",
   "Completo più tardi": "Finish later",
   "Nome del progetto": "Project name",
@@ -363,15 +359,11 @@ const EN: Record<string, string> = {
   "Tutte le fonti": "All sources",
   "Ragionamento e automazioni": "Reasoning and automations",
   "Leggo…": "Reading…",
-  "Leggi questa fonte": "Read this source",
-  "Continuo senza una fonte": "Continue without a source",
   "Cosa vuoi tenere?": "What’s worth keeping?",
   "Partiamo dal tuo obiettivo.": "We’ll start with your goal.",
   "Seleziona gli estratti utili. Ogni frase ha una fonte.": "Choose useful excerpts. Each one has a source.",
   "Il tuo obiettivo": "Your goal",
   "Nessuna fonte collegata a questo avvio.": "No source connected to this setup.",
-  "Non ho trovato estratti pertinenti in questa fonte.": "No relevant excerpts found in this source.",
-  "Cambia fonte": "Change source",
   "Continua senza estratti": "Continue without excerpts",
   "La prima traccia è pronta.": "Your first outline is ready.",
   "Il prossimo passo": "The next step",
@@ -2862,6 +2854,19 @@ const EN: Record<string, string> = {
   'Mettere online il sito nuovo entro ottobre': 'Put the new website online by October',
   'Sito nuovo': 'New website',
   'Una riga per progetto. Cmd+Invio per mandare.': 'One line per project. Cmd+Enter to send.',
+  // — feedback 23 set: fonti —
+  'Cosa deve leggere Myynd?': 'What should Myynd read?',
+  'Collegane quante vuoi. Myynd le legge tutte insieme.': 'Connect as many as you like. Myynd reads them all together.',
+  'Leggi le fonti': 'Read sources',
+  'Continua senza fonti': 'Continue without sources',
+  'Leggo le tue fonti…': 'Reading your sources…',
+  'Ho letto le tue fonti.': 'I’ve read your sources.',
+  'Non letta': 'Not read',
+  'Non ho trovato estratti pertinenti nelle fonti lette.': 'No relevant excerpts in the sources I read.',
+  'Cambia fonti': 'Change sources',
+  'Fonti': 'Sources',
+  'Lettura delle fonti': 'Reading your sources',
+  'Scrivere i testi della pagina iniziale': 'Write the copy for the home page',
 }
 
 
@@ -3421,5 +3426,15 @@ export const frasi = {
     const en = { oggi: 'Noted for today.', settimana: 'Noted for this week.', poi: 'Noted for later.' }
     const it = { oggi: 'Segnata per oggi.', settimana: 'Segnata per questa settimana.', poi: 'Segnata per prima o poi.' }
     return (corrente === 'en' ? en : it)[quando]
-  }
+  },
+
+  // — feedback 23 set: fonti —
+  /** Il bottone che legge insieme tutte le fonti collegate. */
+  leggiFonti: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'Read 1 source' : `Read ${n} sources`)
+    : (n === 1 ? 'Leggi 1 fonte' : `Leggi ${n} fonti`),
+  /** Il titolo quando una lettura di più fonti è finita con qualcuna che non si è letta. */
+  fontiNonLetteInsieme: (n: number) => corrente === 'en'
+    ? (n === 1 ? 'One source could not be read.' : `${n} sources could not be read.`)
+    : (n === 1 ? 'Una fonte non si è letta.' : `${n} fonti non si sono lette.`)
 }
