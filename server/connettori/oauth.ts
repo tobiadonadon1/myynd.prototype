@@ -87,6 +87,8 @@ function pagina(bene: boolean, nome: string): string {
  */
 function ascolta(atteso: string, nome: string, approvazione?: Sportello['approvazione'], opz: {
   percorso?: string; durata?: number; ancheIPv6?: boolean
+  /** La porta da provare prima di lasciarla scegliere al sistema: quella di un ritorno già registrato. */
+  porta?: number
 } = {}): Promise<{
   porta: number; codice: Promise<string>; chiudi: () => void
 }> {
@@ -108,21 +110,40 @@ function ascolta(atteso: string, nome: string, approvazione?: Sportello['approva
       const c = u.searchParams.get('code')
       const stato = u.searchParams.get('state') ?? ''
       const errore = u.searchParams.get('error')
-      const buono = !!c && uguali(stato, atteso)
 
-      res.writeHead(buono ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(pagina(buono, nome))
-
-      if (buono) dai(c!)
-      else if (c) no(new Error('La risposta non è quella che aspettavo: riprova.'))
+      /*
+       * Solo chi porta lo `state` giusto conta, anche per dire di no.
+       *
+       * Sulla porta può bussare qualunque cosa giri su questa macchina: una
+       * pagina in un'altra scheda, un programma. Prima bastava bussare senza
+       * niente, o con `?error=access_denied`, per far saltare un accesso a
+       * metà — e la persona tornava dal browser con il sì dato e si sentiva
+       * dire che aveva detto di no. Adesso chi non ha lo `state` riceve un 400
+       * e il collegamento resta in attesa del ritorno vero. Un fornitore che
+       * dice di no lo rimanda (RFC 6749, §4.1.2.1), quindi il no vero conta.
+       */
+      if (!uguali(stato, atteso)) {
+        res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' })
+        res.end(pagina(false, nome))
+        return
+      }
+      res.writeHead(c ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(pagina(!!c, nome))
+      if (c) dai(c)
       else no(noDelRitorno(nome, errore, u.searchParams.get('error_description'), approvazione))
     }
     const s = createServer(risponde)
+    // la porta non tiene in vita il processo da sola: un accesso lasciato a metà scade col suo tempo
+    s.unref()
     let s6: ReturnType<typeof createServer> | null = null
 
-    s.on('error', male)
-    // porta 0: la sceglie il sistema fra quelle libere
-    s.listen(0, '127.0.0.1', () => {
+    // la porta chiesta, se c'è e se è libera; altrimenti la sceglie il sistema
+    let ripiegato = !opz.porta
+    s.on('error', (e: NodeJS.ErrnoException) => {
+      if (!ripiegato && e.code === 'EADDRINUSE') { ripiegato = true; s.listen(0, '127.0.0.1'); return }
+      male(e)
+    })
+    s.on('listening', () => {
       const porta = (s.address() as { port: number }).port
       /*
        * `localhost` nell'indirizzo di ritorno, per chi lo vuole così: il
@@ -132,6 +153,7 @@ function ascolta(atteso: string, nome: string, approvazione?: Sportello['approva
        */
       if (opz.ancheIPv6) {
         s6 = createServer(risponde)
+        s6.unref()
         s6.on('error', () => { s6 = null })
         s6.listen(porta, '::1')
       }
@@ -145,6 +167,7 @@ function ascolta(atteso: string, nome: string, approvazione?: Sportello['approva
       setTimeout(() => { no(new Error(`Nessuna risposta da ${nome}: riprova.`)); chiudi() }, opz.durata ?? 120_000).unref()
       pronto({ porta, codice, chiudi })
     })
+    s.listen(opz.porta ?? 0, '127.0.0.1')
   })
 }
 
@@ -185,6 +208,18 @@ export type Sportello = {
    * del codice. Vedi `amministratore.ts`.
    */
   approvazione?: (errore: string | null, descrizione: string | null) => CasoAmministratore | null
+  /**
+   * Ospitati, il consenso si fa in un'altra scheda e la pagina di Myynd resta
+   * dov'era, a seguire il collegamento: la pagina del ritorno dice di chiudere
+   * quella scheda invece di riportarci dentro una seconda copia di Myynd.
+   */
+  scheda?: boolean
+  /**
+   * Il ritorno via web è andato storto prima di `dopo` (un no, un codice
+   * rifiutato, troppo tempo): chi segue il collegamento da un'altra scheda lo
+   * sa da qui, invece di aspettare fino allo scadere.
+   */
+  fallito?: (e: unknown) => void
 }
 
 /**
@@ -265,13 +300,13 @@ export type Locale = {
 export async function avviaLocale(
   nome: string,
   sportelloPer: (redirect: string) => Sportello | Promise<Sportello>,
-  opz: { ospite?: '127.0.0.1' | 'localhost'; percorso?: string; durata?: number } = {}
+  opz: { ospite?: '127.0.0.1' | 'localhost'; percorso?: string; durata?: number; porta?: number } = {}
 ): Promise<Locale> {
   const { verifica, sfida } = pkce()
   const stato = randomBytes(24).toString('base64url')
   let s: Sportello | null = null
   const { porta, codice, chiudi } = await ascolta(stato, nome, (e, d) => s?.approvazione?.(e, d) ?? null, {
-    percorso: opz.percorso, durata: opz.durata, ancheIPv6: opz.ospite === 'localhost'
+    percorso: opz.percorso, durata: opz.durata, ancheIPv6: opz.ospite === 'localhost', porta: opz.porta
   })
   const redirect = `http://${opz.ospite ?? '127.0.0.1'}:${porta}${opz.percorso ?? ''}`
   try { s = await sportelloPer(redirect) } catch (e) { chiudi(); throw e }
@@ -340,7 +375,7 @@ export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { d
 }
 
 /** Secondo tempo: il codice è tornato. Lancia con una frase da mostrare. */
-export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = '', descrizione: string | null = null): Promise<{ nome: string }> {
+export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = '', descrizione: string | null = null): Promise<{ nome: string; scheda: boolean }> {
   const s = sospesi.get(stato)
   if (!s) throw new Error('Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.')
   const atteso = Buffer.from(biglietto(stato)), avuto = Buffer.from(portato)
@@ -348,17 +383,25 @@ export async function completaWeb(stato: string, codice: string | null, errore: 
     throw new Error('Questo collegamento è partito da un altro browser: riprova da Myynd, dallo stesso.')
   }
   sospesi.delete(stato)
-  if (s.scade < Date.now()) throw new Error(`Nessuna risposta da ${s.sportello.nome} in tempo: riprova.`)
-  if (!codice) throw noDelRitorno(s.sportello.nome, errore, descrizione, s.sportello.approvazione)
-  const g = await chiediGettoni(s.sportello, {
-    code: codice,
-    redirect_uri: oauthWeb().ritorno!,
-    grant_type: 'authorization_code',
-    code_verifier: s.verifica
-  })
+  let g: Gettoni
+  try {
+    if (s.scade < Date.now()) throw new Error(`Nessuna risposta da ${s.sportello.nome} in tempo: riprova.`)
+    if (!codice) throw noDelRitorno(s.sportello.nome, errore, descrizione, s.sportello.approvazione)
+    g = await chiediGettoni(s.sportello, {
+      code: codice,
+      redirect_uri: oauthWeb().ritorno!,
+      grant_type: 'authorization_code',
+      code_verifier: s.verifica
+    })
+  } catch (e) {
+    const avvisa = () => s.sportello.fallito?.(e)
+    if (s.utente) chi.dentro(s.utente, avvisa)
+    else avvisa()
+    throw e
+  }
   const salva = () => s.dopo(g)
   await (s.utente ? chi.dentro(s.utente, salva) : salva())
-  return { nome: s.sportello.nome }
+  return { nome: s.sportello.nome, scheda: !!s.sportello.scheda }
 }
 
 /** La pagina che vede chi torna da Google o Microsoft. Nelle due lingue: qui non si sa ancora quale. */
@@ -385,14 +428,16 @@ export function paginaConsenso(bene: boolean): string {
     `<div style="max-width:420px;line-height:1.6;overflow-wrap:anywhere">${testo}</div>`
 }
 
-export function paginaWeb(bene: boolean, nomeGrezzo: string, messaggioGrezzo = ''): string {
+export function paginaWeb(bene: boolean, nomeGrezzo: string, messaggioGrezzo = '', scheda = false): string {
   const nome = senzaTag(nomeGrezzo)
   const messaggio = senzaTag(messaggioGrezzo)
   const testo = bene
-    ? `<b>Fatto.</b> ${nome} è collegato. Torno su Myynd…<br><span style="opacity:.6">Done. ${nome} is connected. Taking you back to Myynd…</span>`
+    ? scheda
+      ? `<b>Fatto.</b> Puoi chiudere questa scheda e tornare su Myynd.<br><span style="opacity:.6">Done. You can close this tab and go back to Myynd.</span>`
+      : `<b>Fatto.</b> ${nome} è collegato. Torno su Myynd…<br><span style="opacity:.6">Done. ${nome} is connected. Taking you back to Myynd…</span>`
     : `<b>Non è andata.</b> ${messaggio}<br><span style="opacity:.6">It didn't work. Go back to Myynd and try again.</span>`
   return '<!doctype html><meta charset="utf-8"><title>Myynd</title>' +
-    (bene ? '<meta http-equiv="refresh" content="2;url=/?torno=connetti">' : '') +
+    (bene && !scheda ? '<meta http-equiv="refresh" content="2;url=/?torno=connetti">' : '') +
     '<body style="font:16px -apple-system,Helvetica,sans-serif;background:#191715;color:#F4EFE8;' +
     'display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:0 24px">' +
     `<div style="max-width:420px;line-height:1.6;overflow-wrap:anywhere">${testo}<br><br>` +
@@ -421,16 +466,24 @@ export function paginaWeb(bene: boolean, nomeGrezzo: string, messaggioGrezzo = '
 export class Vivo {
   private vivi = new Map<string, { token: string; scade: number }>()
   private rinnova: () => Promise<Gettoni>
+  private chiave: () => string
 
-  // il campo si dichiara e si assegna a mano, invece che con la scorciatoia
+  // i campi si dichiarano e si assegnano a mano, invece che con la scorciatoia
   // `constructor(private rinnova…)`: node esegue questo TypeScript togliendo i
   // tipi e basta, e quella scorciatoia è l'unica cosa che *genera* codice
-  constructor(rinnova: () => Promise<Gettoni>) {
+  /**
+   * `chiave` dice di chi è il token: di serie la persona. Chi può cambiare
+   * app registrata mentre un rinnovo è in volo (Granola, rifacendo l'accesso)
+   * ci mette anche quella: il token della registrazione di prima finisce sotto
+   * la chiave di prima, e non viene più dato a nessuno.
+   */
+  constructor(rinnova: () => Promise<Gettoni>, opz: { chiave?: () => string } = {}) {
     this.rinnova = rinnova
+    this.chiave = opz.chiave ?? (() => chi.adesso() ?? '')
   }
 
   async dammi(): Promise<string> {
-    const di = chi.adesso() ?? ''
+    const di = this.chiave()
     const v = this.vivi.get(di)
     if (v && v.scade > Date.now() + 60_000) return v.token
     const g = await this.rinnova()
@@ -440,5 +493,5 @@ export class Vivo {
   }
 
   /** Da usare quando si scollega, e nei test: dimentica quello di chi sta chiedendo. */
-  scorda() { this.vivi.delete(chi.adesso() ?? '') }
+  scorda() { this.vivi.delete(this.chiave()) }
 }

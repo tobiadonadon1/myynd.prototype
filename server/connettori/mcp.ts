@@ -35,6 +35,10 @@ export const VERSIONE_PROTOCOLLO = '2025-06-18'
  * che si legge la sceglie il connettore, che sa di chi sta parlando.
  */
 export type TipoGuaio = 'rete' | 'accesso' | 'limite' | 'protocollo' | 'strumento' | 'registrazione'
+  /** Il server c'è ma sta male (5xx): non è un collegamento da rifare. */
+  | 'servizio'
+  /** È finito il tempo dato all'intera lettura. */
+  | 'tempo'
 
 export class ErroreMcp extends Error {
   tipo: TipoGuaio
@@ -51,16 +55,54 @@ export class ErroreMcp extends Error {
 /**
  * Un indirizzo a cui si può mandare un segreto.
  *
- * https, e basta — tranne sul proprio computer, dove le prove mettono i loro
- * server finti. Un metadato che rimanda a un http qualunque è un metadato di
- * cui non ci si fida: il token viaggerebbe in chiaro.
+ * https, e basta. L'http su questo computer passa solo se chi chiama lo
+ * permette apposta (`httpLocale`): lo fanno le prove e il sandbox, che mettono
+ * lì i loro server finti con una variabile d'ambiente. Senza, un metadato che
+ * rimanda a `http://127.0.0.1:…` — qualunque programma in ascolto su questa
+ * macchina — riceverebbe il codice e il token in chiaro.
  */
-export function sicuro(url: string): boolean {
+export function sicuro(url: string, httpLocale = false): boolean {
   try {
     const u = new URL(url)
     if (u.protocol === 'https:') return true
-    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)
+    return httpLocale && u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)
   } catch { return false }
+}
+
+/** Il tetto di una risposta, in JSON come in SSE: oltre, non è una risposta, è un guasto. */
+const RISPOSTA_MAX = 20_000_000
+
+/**
+ * Il corpo di una risposta, letto fino al tetto e non oltre.
+ *
+ * `r.json()` legge tutto quello che arriva: un server rotto, o uno che vuole
+ * far male, può mandare un gigabyte e prendersi la memoria del processo che
+ * legge tutte le fonti di tutti.
+ */
+async function testoLimitato(r: Response, max = RISPOSTA_MAX): Promise<string> {
+  const dichiarata = Number(r.headers.get('content-length') ?? NaN)
+  if (Number.isFinite(dichiarata) && dichiarata > max) {
+    await r.body?.cancel().catch(() => {})
+    throw new ErroreMcp('protocollo', 'risposta troppo lunga')
+  }
+  if (!r.body) return ''
+  const lettore = r.body.getReader()
+  const dec = new TextDecoder()
+  let fuori = ''
+  let letti = 0
+  try {
+    for (;;) {
+      const { value, done } = await lettore.read()
+      if (value) {
+        letti += value.length
+        if (letti > max) throw new ErroreMcp('protocollo', 'risposta troppo lunga')
+        fuori += dec.decode(value, { stream: true })
+      }
+      if (done) return fuori + dec.decode()
+    }
+  } finally {
+    lettore.cancel().catch(() => {})
+  }
 }
 
 /** Lo stesso indirizzo, con o senza la barra in fondo. */
@@ -79,8 +121,11 @@ async function prendi(url: string, init: RequestInit = {}): Promise<Response> {
 
 async function jsonDa(url: string): Promise<Record<string, unknown> | null> {
   const r = await prendi(url, { headers: { accept: 'application/json' } })
-  if (!r.ok) return null
-  const j = await r.json().catch(() => null)
+  // un 5xx sui metadati è Granola che sta male, non Granola che è cambiata
+  if (r.status >= 500) { await r.body?.cancel().catch(() => {}); throw new ErroreMcp('servizio', `${url}: ${r.status}`, r.status) }
+  if (!r.ok) { await r.body?.cancel().catch(() => {}); return null }
+  let j: unknown = null
+  try { j = JSON.parse(await testoLimitato(r, 1_000_000)) } catch { j = null }
   return j && typeof j === 'object' && !Array.isArray(j) ? j as Record<string, unknown> : null
 }
 
@@ -133,8 +178,9 @@ export function parametriBearer(h: string | null): Record<string, string> {
  * autorizza lo conosce, ed è una scelta: senza, il token dura minuti e non si
  * rinnova, e il collegamento andrebbe rifatto a ogni lettura.
  */
-export async function scopri(endpoint: string): Promise<Scoperta> {
-  if (!sicuro(endpoint)) throw new ErroreMcp('protocollo', `endpoint non sicuro: ${endpoint}`)
+export async function scopri(endpoint: string, opz: { httpLocale?: boolean } = {}): Promise<Scoperta> {
+  const fidato = (u: string) => sicuro(u, !!opz.httpLocale)
+  if (!fidato(endpoint)) throw new ErroreMcp('protocollo', `endpoint non sicuro: ${endpoint}`)
   const base = new URL(endpoint)
 
   let indirizzoMetadati: string | null = null
@@ -150,7 +196,7 @@ export async function scopri(endpoint: string): Promise<Scoperta> {
   await r401.body?.cancel().catch(() => {})
   if (r401.status === 401) {
     const p = parametriBearer(r401.headers.get('www-authenticate'))
-    if (p.resource_metadata && sicuro(p.resource_metadata)) indirizzoMetadati = p.resource_metadata
+    if (p.resource_metadata && fidato(p.resource_metadata)) indirizzoMetadati = p.resource_metadata
     if (p.scope) ambitiDalServer = p.scope.split(/\s+/).filter(Boolean)
   }
 
@@ -169,7 +215,7 @@ export async function scopri(endpoint: string): Promise<Scoperta> {
   if (!stesso(dichiarata, endpoint) && !stesso(dichiarata, base.origin)) {
     throw new ErroreMcp('protocollo', `la risorsa dichiarata (${dichiarata}) non è questo server`)
   }
-  const chi = Array.isArray(risorsa.authorization_servers) ? risorsa.authorization_servers.find(x => typeof x === 'string' && sicuro(x)) as string | undefined : undefined
+  const chi = Array.isArray(risorsa.authorization_servers) ? risorsa.authorization_servers.find(x => typeof x === 'string' && fidato(x)) as string | undefined : undefined
   if (!chi) throw new ErroreMcp('protocollo', 'nessun server di autorizzazione')
 
   const as = new URL(chi)
@@ -183,15 +229,16 @@ export async function scopri(endpoint: string): Promise<Scoperta> {
     if (meta) break
   }
   if (!meta) throw new ErroreMcp('protocollo', 'metadati del server di autorizzazione assenti')
-  if (typeof meta.issuer === 'string' && !stesso(meta.issuer, chi)) {
-    throw new ErroreMcp('protocollo', `l'emittente (${meta.issuer}) non è quello chiesto (${chi})`)
+  // RFC 8414 lo vuole, e senza non c'è niente da confrontare: metadati di chiunque
+  if (typeof meta.issuer !== 'string' || !stesso(meta.issuer, chi)) {
+    throw new ErroreMcp('protocollo', `l'emittente (${String(meta.issuer ?? 'assente')}) non è quello chiesto (${chi})`)
   }
   const autorizza = String(meta.authorization_endpoint ?? '')
   const gettoni = String(meta.token_endpoint ?? '')
-  if (!sicuro(autorizza) || !sicuro(gettoni)) throw new ErroreMcp('protocollo', 'indirizzi di autorizzazione mancanti o non sicuri')
+  if (!fidato(autorizza) || !fidato(gettoni)) throw new ErroreMcp('protocollo', 'indirizzi di autorizzazione mancanti o non sicuri')
   const pkce = Array.isArray(meta.code_challenge_methods_supported) ? meta.code_challenge_methods_supported : []
   if (!pkce.includes('S256')) throw new ErroreMcp('protocollo', 'PKCE S256 non dichiarato')
-  const registra = typeof meta.registration_endpoint === 'string' && sicuro(meta.registration_endpoint) ? meta.registration_endpoint : null
+  const registra = typeof meta.registration_endpoint === 'string' && fidato(meta.registration_endpoint) ? meta.registration_endpoint : null
 
   const dichiarati = Array.isArray(risorsa.scopes_supported) ? risorsa.scopes_supported.filter((x): x is string => typeof x === 'string') : []
   const ambiti = [...(ambitiDalServer.length ? ambitiDalServer : dichiarati)]
@@ -201,7 +248,7 @@ export async function scopri(endpoint: string): Promise<Scoperta> {
   return {
     risorsa: dichiarata,
     ambiti,
-    emittente: typeof meta.issuer === 'string' ? meta.issuer : chi,
+    emittente: meta.issuer,
     autorizza,
     gettoni,
     registra,
@@ -284,6 +331,9 @@ export class ClienteMcp {
   private token: () => Promise<string>
   private scaduto: () => void
   private attesa: number
+  /** Quando deve essere finita l'intera lettura, non la singola richiesta. */
+  private scadenza: number
+  private ultimoToken = ''
   private sessione: string | null = null
   private versione = VERSIONE_PROTOCOLLO
   private prossimo = 1
@@ -291,11 +341,19 @@ export class ClienteMcp {
   /** Quante richieste sono partite: le prove lo guardano, il registro anche. */
   richieste = 0
 
-  constructor(o: { endpoint: string; token: () => Promise<string>; scaduto?: () => void; attesa?: number }) {
+  constructor(o: { endpoint: string; token: () => Promise<string>; scaduto?: () => void; attesa?: number; scadenza?: number }) {
     this.endpoint = o.endpoint
     this.token = o.token
     this.scaduto = o.scaduto ?? (() => {})
     this.attesa = o.attesa ?? 45_000
+    this.scadenza = o.scadenza ?? Infinity
+  }
+
+  /** Quanto resta prima della scadenza di tutta la lettura; lancia `tempo` se è finito. */
+  private resta(metodo: string): number {
+    const r = this.scadenza - Date.now()
+    if (r <= 0) throw new ErroreMcp('tempo', `${metodo}: tempo finito`)
+    return r
   }
 
   async strumenti(): Promise<Strumento[]> {
@@ -322,9 +380,10 @@ export class ClienteMcp {
     this.sessione = null
     this.pronto = null
     try {
+      // con l'ultimo token usato: rinnovarne uno per chiudere una sessione non vale la pena
       const r = await fetch(this.endpoint, {
         method: 'DELETE',
-        headers: { authorization: `Bearer ${await this.token()}`, 'mcp-session-id': sessione, 'mcp-protocol-version': this.versione },
+        headers: { authorization: `Bearer ${this.ultimoToken}`, 'mcp-session-id': sessione, 'mcp-protocol-version': this.versione },
         signal: AbortSignal.timeout(5_000)
       })
       await r.body?.cancel().catch(() => {})
@@ -369,18 +428,23 @@ export class ClienteMcp {
     let rinnovato = false
     let rallentato = 0
     for (;;) {
+      const resta = this.resta(metodo)
+      this.ultimoToken = await this.token()
       const intestazioni: Record<string, string> = {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
-        authorization: `Bearer ${await this.token()}`
+        authorization: `Bearer ${this.ultimoToken}`
       }
       if (this.sessione) intestazioni['mcp-session-id'] = this.sessione
       if (metodo !== 'initialize') intestazioni['mcp-protocol-version'] = this.versione
       this.richieste++
       let r: Response
+      // la singola richiesta ha il suo tetto, ma non oltre quello di tutta la lettura
+      const segnale = AbortSignal.timeout(Math.min(this.attesa, resta))
       try {
-        r = await fetch(this.endpoint, { method: 'POST', headers: intestazioni, body: corpo, signal: AbortSignal.timeout(this.attesa) })
+        r = await fetch(this.endpoint, { method: 'POST', headers: intestazioni, body: corpo, signal: segnale })
       } catch (e) {
+        if (Date.now() >= this.scadenza) throw new ErroreMcp('tempo', `${metodo}: tempo finito`)
         throw new ErroreMcp('rete', `${metodo}: ${e instanceof Error ? e.message : String(e)}`)
       }
       if (r.status === 401 && !rinnovato) {
@@ -398,12 +462,19 @@ export class ClienteMcp {
       if ((r.status === 429 || r.status === 503) && rallentato < 3) {
         await r.body?.cancel().catch(() => {})
         rallentato++
-        const detto = Number(r.headers.get('retry-after'))
-        await aspetta(Math.min(30, Number.isFinite(detto) && detto >= 0 ? detto : 5) * 1000)
+        // senza intestazione `Number(null)` fa zero, cioè «riprova subito»: il
+        // contrario di quello che un 429 chiede. Senza, cinque secondi.
+        const detto = Number(r.headers.get('retry-after') ?? NaN)
+        const pausa = Math.min(30, Number.isFinite(detto) && detto >= 0 ? detto : 5) * 1000
+        // una pausa che finisce dopo la scadenza non si fa: se ne riparla al giro dopo
+        if (Date.now() + pausa >= this.scadenza) throw new ErroreMcp('tempo', `${metodo}: ${r.status} oltre la scadenza`, r.status)
+        await aspetta(pausa)
         continue
       }
       if (r.status === 401 || r.status === 403) { await r.body?.cancel().catch(() => {}); throw new ErroreMcp('accesso', `${metodo}: ${r.status}`, r.status) }
       if (r.status === 429) { await r.body?.cancel().catch(() => {}); throw new ErroreMcp('limite', `${metodo}: 429`, 429) }
+      // un 5xx è Granola che sta male: non vuol dire che il collegamento sia da rifare
+      if (r.status >= 500) { await r.body?.cancel().catch(() => {}); throw new ErroreMcp('servizio', `${metodo}: ${r.status}`, r.status) }
       if (!r.ok) { await r.body?.cancel().catch(() => {}); throw new ErroreMcp('protocollo', `${metodo}: ${r.status}`, r.status) }
 
       const sessione = r.headers.get('mcp-session-id')
@@ -411,7 +482,19 @@ export class ClienteMcp {
       if (notifica || id === undefined) { await r.body?.cancel().catch(() => {}); return null }
 
       const tipo = (r.headers.get('content-type') ?? '').toLowerCase()
-      const messaggio = tipo.includes('text/event-stream') ? await dalFlusso(r, id) : await r.json().catch(() => null)
+      let messaggio: unknown = null
+      try {
+        if (tipo.includes('text/event-stream')) messaggio = await dalFlusso(r, id)
+        else {
+          const testo = await testoLimitato(r)
+          try { messaggio = JSON.parse(testo) } catch { messaggio = null }
+        }
+      } catch (e) {
+        // il corpo tagliato a metà dal tetto di tempo: la scadenza di tutto, o la rete
+        if (e instanceof ErroreMcp) throw e
+        if (Date.now() >= this.scadenza) throw new ErroreMcp('tempo', `${metodo}: tempo finito`)
+        throw new ErroreMcp('rete', `${metodo}: ${e instanceof Error ? e.message : String(e)}`)
+      }
       return risposta(messaggio, id, metodo)
     }
   }
@@ -422,14 +505,14 @@ function risposta(m: unknown, id: number, metodo: string): unknown {
   const tutti = Array.isArray(m) ? m : [m]
   const nostra = tutti.find(x => x && typeof x === 'object' && (x as { id?: unknown }).id === id) as { result?: unknown; error?: { message?: unknown; code?: unknown } } | undefined
   if (!nostra) throw new ErroreMcp('protocollo', `${metodo}: nessuna risposta`)
+  // un errore JSON-RPC è il server che risponde «no» a questa domanda: non ha
+  // cambiato protocollo, e non è un collegamento da rifare
   if (nostra.error) {
-    throw new ErroreMcp('protocollo', `${metodo}: ${String(nostra.error.message ?? 'errore')}`, Number(nostra.error.code) || 0)
+    throw new ErroreMcp('strumento', `${metodo}: ${String(nostra.error.message ?? 'errore')}`, Number(nostra.error.code) || 0)
   }
   return nostra.result
 }
 
-/** Il tetto di un flusso: oltre, non è una risposta, è un guasto. */
-const FLUSSO_MAX = 20_000_000
 
 /**
  * Un flusso SSE, letto fino alla risposta che aspettiamo.
@@ -456,7 +539,7 @@ async function dalFlusso(r: Response, id: number): Promise<unknown> {
       const { value, done } = await lettore.read()
       if (value) {
         letti += value.length
-        if (letti > FLUSSO_MAX) throw new ErroreMcp('protocollo', 'flusso troppo lungo')
+        if (letti > RISPOSTA_MAX) throw new ErroreMcp('protocollo', 'flusso troppo lungo')
         resto += dec.decode(value, { stream: true })
       }
       if (done) resto += '\n\n'

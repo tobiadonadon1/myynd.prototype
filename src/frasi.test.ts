@@ -118,6 +118,11 @@ test('GitHub e Granola contano come il calendario, al singolare e al plurale', (
   assert.equal(in_('en', () => frasi.granolaLette(37)), 'Connected: 37 meetings read.')
   assert.equal(in_('it', () => frasi.granolaLette(1)), 'Collegato: 1 riunione letta.')
   assert.equal(in_('it', () => frasi.granolaLette(37)), 'Collegato: 37 riunioni lette.')
+  // l'intestazione della scheda conta le stesse cose della conferma: riunioni, non documenti
+  assert.equal(in_('en', () => frasi.nRiunioni('1')), '1 meeting')
+  assert.equal(in_('en', () => frasi.nRiunioni('42')), '42 meetings')
+  assert.equal(in_('it', () => frasi.nRiunioni('1')), '1 riunione')
+  assert.equal(in_('it', () => frasi.nRiunioni('42')), '42 riunioni')
 })
 
 test('una riga incollata è «una riga segnata», non «1 righe»', () => {

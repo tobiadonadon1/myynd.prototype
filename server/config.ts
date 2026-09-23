@@ -651,6 +651,8 @@ export type ConfigGithub = { token: string; repos?: string[] }
  * apposta: `refresh` e `clientSecret` sono fra i campi che `scrivi` non lascia
  * sparire da una scrittura qualunque, e lo guarda solo al primo livello.
  */
+export type RegistrazioneMcp = { emittente: string; redirect: string; clientId: string; quando: number }
+
 export type ConfigGranola = {
   /** Quante riunioni ha letto, per la scheda. */
   note?: number
@@ -718,6 +720,14 @@ export type Config = {
   notion?: ConfigNotion
   github?: ConfigGithub
   granola?: ConfigGranola
+  /**
+   * Le app che Myynd ha registrato da sola presso un server MCP (DCR), una per
+   * emittente e indirizzo di ritorno: si riusano invece di registrarne una
+   * nuova a ogni «Collega». Fuori da `granola` apposta, perché scollegare non
+   * le butti: la registrazione non è un segreto (client pubblico, nessun
+   * `client_secret` qui dentro) e non dà accesso a niente senza il consenso.
+   */
+  registrazioniMcp?: RegistrazioneMcp[]
   note?: ConfigNote
   /** L'ordine dei blocchi della prima pagina scelto da lui trascinandoli: id di progetto, «resto» per il blocco senza progetto. */
   ordineBlocchi?: string[]

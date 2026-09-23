@@ -216,7 +216,10 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
                   : scelta.id === 'openai'
                     ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
                   : [
-                    scelta.documenti ? frasi.nDocumenti(scelta.documenti.toLocaleString(loc())) : null,
+                    // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
+                    scelta.documenti
+                      ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
+                      : null,
                     // il computer dice se è la macchina intera, e se la sta guardando
                     // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
                     // si indovina dalla finestra, si legge da quello.
