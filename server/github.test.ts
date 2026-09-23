@@ -61,7 +61,7 @@ test('un token buono torna il nome di chi è, e quanti repository vede', async (
   // chiave contenuta nell'indirizzo, e '/user' sta dentro tutti e due
   rispondi({ '/user/repos': [{ full_name: 'tobia/myynd' }, { full_name: 'tobia/sito' }], '/user': { login: 'tobia' } }, { 'x-oauth-scopes': 'repo, read:org' })
   const e = await gh.prova(TOKEN)
-  assert.deepEqual(e, { ok: true, login: 'tobia', repos: 2, oltre: false })
+  assert.deepEqual(e, { ok: true, login: 'tobia', repos: 2, oltre: false, letti: 2, sso: false })
   assert.ok(chiamate.every(c => c.metodo === 'GET'))
 })
 
@@ -92,7 +92,7 @@ test('un token a grana fine non dichiara ambiti, e non per questo è cieco', asy
   // assenza come «nessun permesso» vorrebbe dire rifiutare proprio i token che
   // consigliamo di fare
   rispondi({ '/user/repos': [{ full_name: 'tobia/myynd' }], '/user': { login: 'tobia' } })
-  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 1, oltre: false })
+  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 1, oltre: false, letti: 1, sso: false })
 })
 
 // — i no di GitHub, uno per uno: feedback del 23 settembre 2026 —
@@ -135,7 +135,7 @@ test('un repository vuoto o senza issue non è un permesso che manca', async () 
     '/commits': new Response('{"message":"Git Repository is empty."}', { status: 409 }),
     '/issues': new Response('{"message":"Issues are disabled for this repo"}', { status: 410 })
   })
-  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 1, oltre: false })
+  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 1, oltre: false, letti: 1, sso: false })
 })
 
 test('l’SSO dell’organizzazione si dice con l’indirizzo che manda GitHub', async () => {
@@ -163,22 +163,49 @@ test('i criteri dell’organizzazione hanno ognuno la sua frase', async () => {
   })
   assert.match((await gh.prova(TOKEN) as { errore: string }).errore, /non accetta i token classici/)
 
+  // la durata la decide l'organizzazione, da 1 a 366 giorni: si prende il suo numero, e il suo indirizzo
   rispondi({
     '/user/repos': [{ full_name: 'acme/app' }],
     '/user': { login: 'tobia' },
-    '/commits': new Response('{"message":"The \'acme\' organization forbids access via a fine-grained personal access tokens if the token\'s lifetime is greater than 366 days."}', { status: 403 })
+    '/commits': new Response('{"message":"The \'acme\' organization forbids access via a fine-grained personal access tokens if the token\'s lifetime is greater than 90 days. Please adjust your token\'s lifetime at the following URL: https://github.com/settings/personal-access-tokens/4242"}', { status: 403 })
   })
-  assert.match((await gh.prova(TOKEN) as { errore: string }).errore, /entro 366 giorni/)
+  const lungo = await gh.prova(TOKEN) as { errore: string; giorni?: number; dove?: string }
+  assert.match(lungo.errore, /al massimo 90 giorni/)
+  assert.equal(lungo.giorni, 90)
+  assert.equal(lungo.dove, 'https://github.com/settings/personal-access-tokens/4242')
+
+  // un'organizzazione che i token a grana fine non li accetta proprio
+  rispondi({
+    '/user/repos': [{ full_name: 'acme/app' }],
+    '/user': { login: 'tobia' },
+    '/commits': new Response('{"message":"The \'acme\' organization forbids access via a fine-grained personal access tokens. Please use a GitHub App, OAuth App, or a personal access token (classic)."}', { status: 403 })
+  })
+  const vietato = await gh.prova(TOKEN) as { errore: string; dove?: string }
+  assert.match(vietato.errore, /non accetta i token a grana fine/)
+  assert.match(vietato.dove ?? '', /^https:\/\/github\.com\/settings\/tokens\/new\?scopes=repo/)
 })
 
-test('un repository scritto a mano che il token non vede torna con il suo nome', async () => {
+test('ogni repository scritto a mano si guarda, non solo il primo: la conferma li conta', async () => {
   rispondi({
     '/user': { login: 'tobia' },
-    '/repos/tobia/segreto/': new Response('{"message":"Not Found"}', { status: 404 })
+    '/repos/tobia/segreto': new Response('{"message":"Not Found"}', { status: 404 })
   })
-  const e = await gh.prova({ ...TOKEN, repos: ['tobia/segreto'] }) as { ok: false; errore: string; repo?: string }
+  const e = await gh.prova({ ...TOKEN, repos: ['tobia/myynd', 'tobia/segreto'] }) as { ok: false; errore: string; repo?: string }
   assert.equal(e.ok, false)
   assert.equal(e.repo, 'tobia/segreto')
+  // tutti visti: si contano tutti, e si leggono tutti
+  rispondi({ '/user': { login: 'tobia' } })
+  assert.deepEqual(await gh.prova({ ...TOKEN, repos: ['tobia/a', 'tobia/b', 'tobia/c'] }),
+    { ok: true, login: 'tobia', repos: 3, oltre: false, letti: 3, sso: false })
+})
+
+test('un token classico che vede solo parte delle organizzazioni si collega, e lo dice', async () => {
+  // `X-GitHub-SSO: partial-results; organizations=…` su una risposta buona
+  rispondi({ '/user/repos': [{ full_name: 'tobia/myynd' }], '/user': { login: 'tobia' } },
+    { 'x-oauth-scopes': 'repo', 'x-github-sso': 'partial-results; organizations=21955855,20582480' })
+  const e = await gh.prova(TOKEN) as { ok: true; sso: boolean }
+  assert.equal(e.ok, true)
+  assert.equal(e.sso, true)
 })
 
 test('cento repository e un’altra pagina: «più di», non un numero falso', async () => {
@@ -190,7 +217,7 @@ test('cento repository e un’altra pagina: «più di», non un numero falso', a
     if (u.endsWith('/user')) return Response.json({ login: 'tobia' })
     return Response.json([])
   }) as typeof fetch
-  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 100, oltre: true })
+  assert.deepEqual(await gh.prova(TOKEN), { ok: true, login: 'tobia', repos: 100, oltre: true, letti: 30, sso: false })
 })
 
 test('i repository delle organizzazioni si guardano: un token d’organizzazione non legge a zero', async () => {
@@ -202,10 +229,30 @@ test('i repository delle organizzazioni si guardano: un token d’organizzazione
   assert.match(decodeURIComponent(elenco), /affiliation=owner,collaborator,organization_member/)
 })
 
-test('un «rallenta» non si traveste da permesso mancante', async () => {
+test('un «rallenta» collegando non si traveste da permesso mancante, e non promette un giro che non c’è', async () => {
   rispondi({ '/user': new Response('', { status: 403, headers: { 'retry-after': '60' } }) })
   const e = await gh.prova(TOKEN)
-  assert.deepEqual(e, { ok: false, errore: 'GitHub ha detto di rallentare: riprendo al prossimo giro.' })
+  // niente è stato salvato: «riprendo al prossimo giro» sarebbe una promessa falsa
+  assert.deepEqual(e, { ok: false, errore: 'GitHub ha chiesto di rallentare, e il collegamento non è stato salvato. Riprova fra qualche minuto.' })
+})
+
+test('il limite secondario si riconosce dalla frase, senza retry-after né contatore a zero', async () => {
+  // docs.github.com, «Rate limits for the REST API»: 403 con il messaggio, e basta
+  rispondi({
+    '/user/repos': [{ full_name: 'tobia/myynd' }],
+    '/user': { login: 'tobia' },
+    '/commits': new Response('{"message":"You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}', { status: 403 })
+  })
+  const e = await gh.prova(TOKEN) as { errore: string }
+  assert.match(e.errore, /rallentare/)
+  assert.doesNotMatch(e.errore, /Permissions/)
+})
+
+test('la rete che manca, o che non risponde, si dice in parole, non in «fetch failed»', async () => {
+  globalThis.fetch = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
+  assert.deepEqual(await gh.prova(TOKEN), { ok: false, errore: 'Non riesco a raggiungere GitHub. Controlla la connessione a internet e riprova.' })
+  globalThis.fetch = (async () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError') }) as typeof fetch
+  assert.deepEqual(await gh.prova(TOKEN), { ok: false, errore: 'GitHub non ha risposto in tempo. Controlla la connessione a internet e riprova fra poco.' })
 })
 
 // — i documenti —

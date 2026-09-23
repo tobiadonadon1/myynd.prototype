@@ -33,11 +33,22 @@
  * La funzione è stata tolta e rimessa nella documentazione di GitHub a maggio
  * 2026: per questo i passi della scheda dicono anche la strada a mano.
  */
-export function paginaTokenGithub(inglese: boolean): string {
+export function paginaTokenGithub(inglese: boolean, o: { giorni?: number; oggi?: Date } = {}): string {
+  /*
+   * Il nome porta la data, e non per bellezza. La pagina lo chiama «A unique
+   * name for this token», la documentazione non dice se due nomi uguali si
+   * rifiutano, e chi rifà il token dopo un errore ne avrebbe già uno che si
+   * chiama «Myynd». Con la data non c'è niente da scoprire.
+   *
+   * `giorni` è la durata massima che un'organizzazione accetta, quando GitHub
+   * l'ha detta: il token rifatto da qui nasce già dentro il suo criterio.
+   */
+  const oggi = (o.oggi ?? new Date()).toISOString().slice(0, 10)
+  const giorni = o.giorni && o.giorni > 0 ? Math.min(366, Math.floor(o.giorni)) : 366
   return 'https://github.com/settings/personal-access-tokens/new?' + new URLSearchParams({
-    name: 'Myynd',
+    name: `Myynd ${oggi}`,
     description: inglese ? 'Myynd reads your repositories, read-only' : 'Myynd legge i tuoi repository, in sola lettura',
-    expires_in: '366',
+    expires_in: String(giorni),
     contents: 'read',
     issues: 'read',
     pull_requests: 'read',

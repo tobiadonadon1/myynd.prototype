@@ -2047,26 +2047,43 @@ export function FormGithub({ tema, ok }: Props) {
   const [quale, setQuale] = useState('')
   /** L'indirizzo che GitHub stesso manda per sistemare le cose: l'autorizzazione SSO. */
   const [dove, setDove] = useState('')
-  const [fatto, setFatto] = useState<{ login: string; repos: number; oltre: boolean } | null>(null)
+  /** La durata massima che l'organizzazione accetta, quando GitHub l'ha detta. */
+  const [giorni, setGiorni] = useState(0)
+  const [fatto, setFatto] = useState<{ login: string; repos: number; oltre: boolean; letti: number; sso: boolean } | null>(null)
   const [occupato, setOccupato] = useState(false)
 
   const collega = async () => {
-    setOccupato(true); setErr(''); setCaso(null); setQuale(''); setDove('')
+    setOccupato(true); setErr(''); setCaso(null); setQuale(''); setDove(''); setGiorni(0)
     try {
       const r = await api.collegaGithub(token.trim(), repos.split('\n').map(r => r.trim()).filter(Boolean))
       setToken(''); setRepos('')
-      setFatto({ login: r.login, repos: r.repos, oltre: r.oltre })
+      setFatto({ login: r.login, repos: r.repos, oltre: r.oltre, letti: r.letti ?? r.repos, sso: !!r.sso })
     }
     catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
       setCaso(casoDaErrore(e))
       setQuale((e as { repo?: string }).repo ?? '')
       setDove((e as { dove?: string }).dove ?? '')
+      setGiorni((e as { giorni?: number }).giorni ?? 0)
     }
     setOccupato(false)
   }
 
-  if (fatto) return <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre)} ok={ok} />
+  if (fatto) {
+    return (
+      <>
+        {/* un token classico che vede solo una parte delle organizzazioni: il
+            collegamento c'è, ma alcuni repository restano fuori finché non lo autorizza */}
+        {fatto.sso && (
+          <Avviso tema={tema}>
+            {t('Alcuni repository delle tue organizzazioni restano fuori finché non autorizzi il token per il loro accesso unico (SSO): su GitHub, accanto al token, premi «Configure SSO» e poi «Authorize».')}{' '}
+            <Vai tema={tema} url="https://github.com/settings/tokens" />
+          </Avviso>
+        )}
+        <Fatto tema={tema} testo={frasi.githubCollegato(fatto.login, fatto.repos, fatto.oltre, fatto.letti)} ok={ok} />
+      </>
+    )
+  }
 
   return (
     <div>
@@ -2085,8 +2102,13 @@ export function FormGithub({ tema, ok }: Props) {
           autoComplete="off" spellCheck={false}
           className={classeCampo(tema)} style={{ ...campo(tema), resize: 'vertical' }} />
       </Campo>
-      <ErroreOAzienda tema={tema} testo={err} caso={caso} prima={quale} />
-      {err && dove && <div style={{ ...nota(tema), marginTop: 6 }}><Vai tema={tema} url={dove} testo={t('Autorizza il token su GitHub')} /></div>}
+      {/* la durata l'ha detta GitHub, con il suo numero: la frase si scrive qui, nelle due lingue */}
+      <ErroreOAzienda tema={tema} testo={giorni ? frasi.githubDurataMassima(giorni) : err} caso={caso} prima={quale} />
+      {err && (dove || giorni > 0) && (
+        <div style={{ ...nota(tema), marginTop: 6 }}>
+          <Vai tema={tema} url={dove || paginaTokenGithub(lingua() === 'en', { giorni })} testo={t('Apri su GitHub')} />
+        </div>
+      )}
       <Conferma onClick={collega} occupato={occupato} disabilitato={!token} tema={tema}>{t('Collega GitHub')}</Conferma>
       <Aiuto tema={tema} titolo={t('Dove trovo il token?')}>
         <Passi tema={tema} passi={[

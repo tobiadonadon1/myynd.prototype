@@ -138,8 +138,13 @@ test('la pagina del token GitHub porta i parametri documentati, e non quello dif
   // docs.github.com, «Pre-filling fine-grained personal access token details using URL parameters»
   const u = new URL(paginaTokenGithub(true))
   assert.equal(u.origin + u.pathname, 'https://github.com/settings/personal-access-tokens/new')
-  assert.equal(u.searchParams.get('name'), 'Myynd')
+  // il nome porta la data: la pagina lo vuole unico, e chi rifà il token ne ha già uno
+  assert.equal(new URL(paginaTokenGithub(true, { oggi: new Date('2026-09-23T10:00:00Z') })).searchParams.get('name'), 'Myynd 2026-09-23')
+  assert.match(u.searchParams.get('name') ?? '', /^Myynd \d{4}-\d{2}-\d{2}$/)
+  assert.ok((u.searchParams.get('name') ?? '').length <= 40)
   assert.equal(u.searchParams.get('expires_in'), '366')
+  // la durata massima di un'organizzazione, quando GitHub l'ha detta
+  assert.equal(new URL(paginaTokenGithub(true, { giorni: 90 })).searchParams.get('expires_in'), '90')
   assert.equal(u.searchParams.get('contents'), 'read')
   assert.equal(u.searchParams.get('issues'), 'read')
   assert.equal(u.searchParams.get('pull_requests'), 'read')

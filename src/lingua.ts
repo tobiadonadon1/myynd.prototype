@@ -2905,7 +2905,6 @@ const EN: Record<string, string> = {
   'Copia il token, comincia per github_pat_, e incollalo qui sopra.': 'Copy the token, it starts with github_pat_, and paste it above.',
   'Se la pagina si apre vuota: Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token, e in «Permissions» dai a Contents, Issues e Pull requests l’accesso «Read-only».':
     'If the page opens empty: Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token, and under “Permissions” give Contents, Issues and Pull requests “Read-only” access.',
-  'Autorizza il token su GitHub': 'Authorize the token on GitHub',
   'GitHub non riconosce questo token: è scaduto, è stato cancellato o è stato copiato a metà. Creane uno nuovo e incollalo qui.':
     'GitHub does not recognise this token: it has expired, was deleted, or was only partly copied. Create a new one and paste it here.',
   'A questo token mancano dei permessi. Su GitHub aprilo e, in «Permissions», dai a Contents, Issues e Pull requests l’accesso «Read-only».':
@@ -2914,8 +2913,6 @@ const EN: Record<string, string> = {
     'Your GitHub organization requires single sign-on (SSO) for this token: open it on GitHub, press “Configure SSO”, then “Authorize” next to the organization.',
   'Questa organizzazione non accetta i token classici: crea un token a grana fine con il bottone qui sopra.':
     'This organization does not accept classic tokens: create a fine-grained token with the button above.',
-  'Questa organizzazione non accetta token che durano più di un anno: rigeneralo su GitHub con una scadenza entro 366 giorni.':
-    'This organization does not accept tokens that last more than a year: regenerate it on GitHub with an expiration within 366 days.',
   'Questo token non vede nessun repository. Su GitHub aprilo e, in «Repository access», scegli «All repositories» o «Only select repositories» con quelli da leggere.':
     'This token cannot see any repository. Open it on GitHub and, under “Repository access”, choose “All repositories”, or “Only select repositories” with the ones to read.',
   'A questo token classico manca l’ambito «repo»: crea invece un token a grana fine con il bottone qui sopra.':
@@ -3173,14 +3170,29 @@ export const frasi = {
    * `oltre` è la pagina piena: GitHub ne ha dati cento e ce ne sono altri, e
    * scrivere «100» sarebbe scrivere un numero falso.
    */
-  githubCollegato: (login: string, n: number, oltre: boolean) => {
+  githubCollegato: (login: string, n: number, oltre: boolean, letti = n) => {
     const en = corrente === 'en'
-    const quanti = oltre
-      ? (en ? `more than ${n} repositories` : `più di ${n} repository`)
-      : (en ? `${n} repositor${n === 1 ? 'y' : 'ies'}` : `${n} repository`)
-    if (!login) return en ? `Connected: ${quanti}.` : `Collegato: ${quanti}.`
-    return en ? `Connected as ${login}: ${quanti}.` : `Collegato come ${login}: ${quanti}.`
+    const chi = login ? (en ? `Connected as ${login}` : `Collegato come ${login}`) : (en ? 'Connected' : 'Collegato')
+    /*
+     * Quanti ne vede e quanti ne legge, quando non sono lo stesso numero.
+     *
+     * Senza un elenco scritto a mano il giro legge i trenta più attivi: dire
+     * «più di 100 repository» e basta faceva credere che li leggesse tutti.
+     */
+    if (oltre || letti < n) {
+      const visti = oltre ? (en ? `more than ${n}` : `più di ${n}`) : String(n)
+      return en
+        ? `${chi}: it sees ${visti} repositories and reads the ${letti} most active.`
+        : `${chi}: vede ${visti} repository e legge i ${letti} più attivi.`
+    }
+    return en
+      ? `${chi}: ${n} repositor${n === 1 ? 'y' : 'ies'}.`
+      : `${chi}: ${n} repository.`
   },
+  /** La durata che l'organizzazione accetta, detta con il suo numero (GitHub la scrive nella risposta). */
+  githubDurataMassima: (n: number) => corrente === 'en'
+    ? `This organization accepts tokens that last at most ${n} day${n === 1 ? '' : 's'}: create it again on GitHub with an expiration of ${n} day${n === 1 ? '' : 's'} or less.`
+    : `Questa organizzazione accetta token che durano al massimo ${n} giorn${n === 1 ? 'o' : 'i'}: rigeneralo su GitHub con una scadenza di ${n} giorn${n === 1 ? 'o' : 'i'} o meno.`,
   granolaLette: (n: number) => corrente === 'en'
     ? `Connected: ${n} meeting${n === 1 ? '' : 's'} read.`
     : `Collegato: ${n} riunion${n === 1 ? 'e letta' : 'i lette'}.`,

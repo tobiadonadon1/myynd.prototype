@@ -1593,11 +1593,12 @@ app.post('/api/connettori/github', async (req, res) => {
         errore: e.errore,
         ...(e.dove ? { dove: e.dove } : {}),
         ...(e.repo ? { repo: e.repo } : {}),
+        ...(e.giorni ? { giorni: e.giorni } : {}),
         ...(e.amministratore ? { amministratore: e.amministratore } : {})
       })
     }
     cfg.aggiorna({ github: { token, ...(repos.length ? { repos } : {}) } })
-    res.json({ ok: true, login: e.login, repos: e.repos, oltre: e.oltre })
+    res.json({ ok: true, login: e.login, repos: e.repos, oltre: e.oltre, letti: e.letti, sso: e.sso })
   } catch (e) { errore(res, e) }
 })
 
