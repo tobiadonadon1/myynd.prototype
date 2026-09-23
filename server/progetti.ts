@@ -23,7 +23,7 @@ import { recordProjectField, recordTaskOutcome, projectMemoryContext, riassegnaM
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cartella, leggi as leggiConfig, aggiorna as aggiornaConfig } from './config.ts'
+import { cartella, leggi as leggiConfig, aggiorna as aggiornaConfig, lingua as linguaApp } from './config.ts'
 import { nominaAmbito, nomeNormalizzato } from './ambiti-memoria.ts'
 import db, { compito, riassegnaProgetto, type Compito } from './store.ts'
 import { compitiAttuali } from './attenzione.ts'
@@ -176,8 +176,26 @@ function importaDalPunto() {
 
 const nuovoId = () => `p${randomUUID().replace(/-/g, '').slice(0, 12)}`
 
-/** Dentro ogni stato, quelli segnati alti davanti. */
-const PRIMA_LE_ALTE = "CASE WHEN priorita = 'alta' THEN 0 ELSE 1 END"
+/**
+ * Dentro gli attivi, quelli segnati alti davanti. Un fermo o un chiuso con una
+ * priorità scritta non passa davanti a niente: la priorità vale per il lavoro
+ * che si fa adesso, e un progetto in pausa non è quello.
+ */
+const PRIMA_LE_ALTE = "CASE WHEN priorita = 'alta' AND stato = 'attivo' THEN 0 ELSE 1 END"
+
+/** La priorità che vale adesso: solo un progetto attivo ne ha una. */
+export const eAlto = (p: Pick<Progetto, 'stato' | 'priorita'>) => p.stato === 'attivo' && p.priorita === 'alta'
+
+/**
+ * Chi deve sapere che l'ordine dei progetti è cambiato.
+ *
+ * La priorità cambia l'ordine dei blocchi della prima pagina e l'elenco della
+ * Memoria, in ogni finestra aperta. Il gesto arriva da due strade (la rotta e
+ * lo strumento della chat) e l'annuncio sta in `compiti.ts`, che questo file
+ * non può importare senza un giro: lo registra `index.ts` all'avvio.
+ */
+let alCambioDiPriorita: (() => void) | null = null
+export function quandoCambiaLaPriorita(f: (() => void) | null) { alCambioDiPriorita = f }
 
 /**
  * Tutti, o quelli in uno stato. Gli attivi prima, poi i fermi, i chiusi in fondo;
@@ -308,6 +326,21 @@ function chiuderebbeUnAnello(id: string, genitore: string): boolean {
  * progetto che ha detto di non essere non ricompare.
  */
 export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto['origine']; dal?: string; note?: string }): Progetto {
+  return crea(p).progetto
+}
+
+/** Com'è andata una creazione: il progetto, e se c'era già (e se era chiuso, riaperto). */
+export type Creazione = { progetto: Progetto; esisteva: boolean; riaperto: boolean }
+
+/**
+ * `scrivi`, detto per intero a chi deve rispondere a una persona.
+ *
+ * «Nuovo progetto: Evermute» quando Evermute c'è già non faceva niente e non
+ * diceva niente; su uno chiuso lo riapriva in silenzio, con la priorità alta
+ * di mesi prima. Adesso chi chiama sa com'è andata e lo può dire; e un
+ * progetto riaperto riparte normale, perché la priorità era di quando c'era.
+ */
+export function crea(p: { nome: string; obiettivo?: string; origine?: Progetto['origine']; dal?: string; note?: string }): Creazione {
   const nome = p.nome.trim()
   if (!nome) throw new Error('Un progetto ha bisogno di un nome.')
   const ora = new Date().toISOString()
@@ -316,11 +349,12 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
   if (gia) {
     const obiettivo = gia.obiettivo || (p.obiettivo ?? '').trim()
     const stato: Stato = p.origine && p.origine !== 'mano' ? gia.stato : (gia.stato === 'chiuso' ? 'attivo' : gia.stato)
+    const riaperto = gia.stato === 'chiuso' && stato !== 'chiuso'
     const origine = !p.origine || p.origine === 'mano' ? 'mano' : gia.origine
-    db.prepare('UPDATE progetti SET obiettivo = ?, stato = ?, origine = ?, aggiornato = ? WHERE id = ?')
-      .run(obiettivo || null, stato, origine, ora, gia.id)
+    db.prepare('UPDATE progetti SET obiettivo = ?, stato = ?, origine = ?, priorita = ?, aggiornato = ? WHERE id = ?')
+      .run(obiettivo || null, stato, origine, riaperto ? null : gia.priorita, ora, gia.id)
     if (obiettivo !== gia.obiettivo && origine !== 'punto') recordProjectField(gia.id, 'goal', obiettivo, ora, origine === 'conversazione' ? 'user-chat' : 'user-field')
-    return trova(gia.id)!
+    return { progetto: trova(gia.id)!, esisteva: true, riaperto }
   }
   const id = nuovoId()
   db.prepare(`
@@ -331,7 +365,7 @@ export function scrivi(p: { nome: string; obiettivo?: string; origine?: Progetto
     if (p.obiettivo?.trim()) recordProjectField(id, 'goal', p.obiettivo.trim(), ora, p.origine === 'conversazione' ? 'user-chat' : 'user-field')
     if (p.note?.trim()) recordProjectField(id, 'note', p.note.trim(), ora, p.origine === 'conversazione' ? 'user-chat' : 'user-field')
   }
-  return trova(id)!
+  return { progetto: trova(id)!, esisteva: false, riaperto: false }
 }
 
 /**
@@ -370,11 +404,22 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
   if (c.alias !== undefined && (!Array.isArray(c.alias) || c.alias.some(a => typeof a !== 'string'))) {
     throw new Error('Gli altri nomi di un progetto sono un elenco di parole.')
   }
-  // «alta», o niente: un valore che non si conosce non diventa normale in silenzio
-  const priorita = c.priorita === undefined ? p.priorita : (c.priorita === null || c.priorita === '' ? null : c.priorita)
-  if (priorita !== null && !(PRIORITA as readonly string[]).includes(priorita)) {
+  // «alta», o normale (null, vuoto o «normale»): un valore che non si conosce
+  // non diventa normale in silenzio
+  const scritta = c.priorita === undefined ? p.priorita
+    : (c.priorita === null || c.priorita === '' || c.priorita === 'normale' ? null : c.priorita)
+  if (scritta !== null && !(PRIORITA as readonly string[]).includes(scritta)) {
     throw new Error('La priorità di un progetto è alta o normale.')
   }
+  const chiesta = scritta as Priorita | null
+  // un progetto chiuso non ha priorità: chiuderlo la toglie, e non se ne dà una a un chiuso
+  const statoDopo = (c.stato ?? p.stato) as Stato
+  if (statoDopo === 'chiuso' && c.stato === undefined && c.priorita === 'alta') {
+    throw new Error('Un progetto chiuso non ha priorità.')
+  }
+  // e riaprirlo lo fa ripartire normale: la priorità di prima era di quando c'era
+  const riaperto = p.stato === 'chiuso' && statoDopo !== 'chiuso' && c.priorita === undefined
+  const priorita = statoDopo === 'chiuso' || riaperto ? null : chiesta
   // un padre che non c'è, sé stesso, o un anello: nessuno dei tre si scrive
   const genitore = c.genitore === undefined ? p.genitore : (String(c.genitore ?? '').trim() || null)
   if (genitore && genitore !== p.genitore) {
@@ -401,11 +446,15 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
     id
   )
   // appena segnato alto, il suo blocco sale in cima anche all'ordine che lui
-  // aveva trascinato; tornare normale non lo sposta: dove sta, l'ha visto salire
-  if (priorita === 'alta' && p.priorita !== 'alta') {
+  // aveva trascinato; tornare normale non lo sposta: dove sta, l'ha visto salire.
+  // Solo per un attivo: un fermo non ha un blocco, e non deve prendersi il posto
+  const altoPrima = eAlto(p)
+  const altoDopo = eAlto({ stato: statoDopo, priorita })
+  if (altoDopo && !altoPrima) {
     const ordine = leggiConfig().ordineBlocchi
     if (ordine?.length) aggiornaConfig({ ordineBlocchi: inCimaAllOrdine(ordine, id) })
   }
+  if (altoDopo !== altoPrima || priorita !== p.priorita) alCambioDiPriorita?.()
   const ora = new Date().toISOString()
   if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim(), ora, provenienza)
   if (c.note !== undefined && c.note.trim() !== p.note) recordProjectField(id, 'note', c.note.trim(), ora, provenienza)
@@ -460,10 +509,20 @@ export function unisci(daId: string, inId: string): Unione {
   if (dentro.genitore === da.id) db.prepare('UPDATE progetti SET genitore = NULL WHERE id = ?').run(dentro.id)
 
   const giorno = new Date().toISOString().slice(0, 10)
-  const righe = [`${giorno}: unito il progetto «${da.nome}»${da.obiettivo ? `. Obiettivo: ${da.obiettivo}` : ''}`]
+  // la nota si legge nella Memoria, nella lingua dell'app: scritta in italiano
+  // spuntava in mezzo all'interfaccia inglese
+  const en = linguaApp() === 'en'
+  const righe = [en
+    ? `${giorno}: merged the project “${da.nome}”${da.obiettivo ? `. Goal: ${da.obiettivo}` : ''}`
+    : `${giorno}: unito il progetto «${da.nome}»${da.obiettivo ? `. Obiettivo: ${da.obiettivo}` : ''}`]
   if (da.note) righe.push(da.note)
   const note = senzaTrattini([dentro.note, ...righe].filter(Boolean).join('\n'))
   cambia(dentro.id, { alias: [...dentro.alias, da.nome, ...da.alias], note })
+  // la priorità alta di uno dei due resta: scritta direttamente, e non con
+  // `cambia`, che la porterebbe in cima all'ordine dei blocchi scelto da lui
+  if (!dentro.priorita && da.priorita && dentro.stato !== 'chiuso') {
+    db.prepare('UPDATE progetti SET priorita = ? WHERE id = ?').run(da.priorita, dentro.id)
+  }
 
   db.prepare('DELETE FROM progetti WHERE id = ?').run(da.id)
   // e sulla prima pagina il blocco del primo era dove lui l'aveva messo: lì resta, con il nome del secondo
@@ -566,7 +625,7 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
   // a parità di quanto c'entrano con il discorso: gli attivi prima dei fermi,
   // e dentro ognuno quelli che ha segnato alti. Sono i primi a entrare nel
   // tetto, e i primi che il modello legge
-  const rango = (p: Progetto) => (p.stato === 'attivo' ? 0 : 2) + (p.priorita === 'alta' ? 0 : 1)
+  const rango = (p: Progetto) => (p.stato === 'attivo' ? 0 : 2) + (eAlto(p) ? 0 : 1)
   return (soloNominati && nominati.length ? nominati : tutti)
     .sort((a, b) => rilevanza(b) - rilevanza(a) || rango(a) - rango(b)).slice(0, tetto)
     .map(p => {
@@ -580,7 +639,7 @@ export function perIlModello(discorso = '', tetto = PER_IL_MODELLO, soloNominati
       const dentro = padre ? ` · Fa parte di ${padre.nome}` : ''
       for (const task of a.attivita) recordTaskOutcome(task.id)
       const evidence = projectMemoryContext(p.id)
-      const priorita = p.priorita === 'alta' ? '; priorità alta, segnata dalla persona: viene prima degli altri' : ''
+      const priorita = eAlto(p) ? '; priorità alta, segnata dalla persona: viene prima degli altri' : ''
       return `— Progetto: ${p.nome} (${p.stato}${priorita}; ${origine}). Obiettivo di ${p.nome}: ${p.obiettivo || 'non registrato; non dedurlo da altri progetti'}.${stato}${altri}${dentro} · Aggiornato ${p.aggiornato}` +
         (p.note ? `\n${p.origine === 'punto' ? 'Note inferite, non confermate' : 'Note salvate dalla persona'}: ${JSON.stringify(p.note.slice(0,900))}` : '') +
         (evidence ? `\n${evidence}` : '')

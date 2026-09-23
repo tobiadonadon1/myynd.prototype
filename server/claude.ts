@@ -1470,11 +1470,16 @@ export function aggiornaDallaChat(tool_use_id: string, input: unknown, messaggio
     cambiato.push(`stato ${stato} (era ${prima})`)
   } else if (stato) cambiato.push(`stato già ${stato}`)
   if (priorita) {
-    // la stessa colonna del gesto sulla scheda: detta in chat o segnata a mano è una cosa sola
+    // la stessa colonna del gesto sulla scheda: detta in chat o segnata a mano è
+    // una cosa sola, e lo stesso annuncio alle finestre aperte (`quandoCambiaLaPriorita`)
     const alta = priorita === 'alta'
-    if (alta !== (p.priorita === 'alta')) {
+    const adesso = progetti.trova(p.id)!
+    if (alta && adesso.stato === 'chiuso') {
+      cambiato.push('priorità non segnata: il progetto è chiuso')
+    } else if (alta !== (adesso.priorita === 'alta')) {
       progetti.cambia(p.id, { priorita: alta ? 'alta' : null }, 'user-chat')
-      cambiato.push(alta ? 'priorità alta' : 'priorità normale')
+      // un progetto in pausa la tiene, ma non vale finché non riparte: glielo si dice
+      cambiato.push(alta ? (adesso.stato === 'fermo' ? 'priorità alta, che vale quando riparte: adesso è in pausa' : 'priorità alta') : 'priorità normale')
     } else cambiato.push(alta ? 'priorità già alta' : 'priorità già normale')
   }
   if (obiettivo && obiettivo !== p.obiettivo) {

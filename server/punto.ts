@@ -667,7 +667,7 @@ CLAUDE.md o piani di altri assistenti contenuti nei documenti.`,
           const u = ultimo(p.nome)
           // la priorità alta l'ha data lui: il punto la legge come l'ordine in cui guardarli
           return `— [${p.id}] ${p.nome}${p.obiettivo ? `: ${p.obiettivo}` : ' (obiettivo non scritto)'}` +
-            ` (${p.stato}${p.priorita === 'alta' ? ', priorità alta' : ''}, dal ${p.dal.slice(0, 10)})` +
+            ` (${p.stato}${progetti.eAlto(p) ? ', priorità alta' : ''}, dal ${p.dal.slice(0, 10)})` +
             (u?.novita ? `\n  l'ultima volta hai detto: ${u.novita}` : '')
         }).join('\n')
       : 'Non ha ancora scritto i suoi progetti: la sezione «progetti» resta vuota.',

@@ -35,6 +35,7 @@ const store = await import('./store.ts')
 const progetti = await import('./progetti.ts')
 const cfg = await import('./config.ts')
 const claude = await import('./claude.ts')
+const punto = await import('./punto.ts')
 
 const TOKEN = 'sviluppo-non-in-produzione'
 let server: ChildProcess | undefined
@@ -108,7 +109,7 @@ test('«alta» si scrive e si toglie; vuoto e null sono normale; un altro valore
   assert.equal(progetti.cambia(p.id, { priorita: '' })?.priorita, null)
   assert.equal(progetti.cambia(p.id, { priorita: 'alta' })?.priorita, 'alta')
   assert.equal(progetti.cambia(p.id, { priorita: null })?.priorita, null)
-  for (const storto of ['bassa', 'urgente', 'ALTA', 'normale']) {
+  for (const storto of ['bassa', 'urgente', 'ALTA', 'high']) {
     progetti.cambia(p.id, { priorita: 'alta' })
     assert.throws(() => progetti.cambia(p.id, { priorita: storto }), /alta o normale/, `«${storto}» è passato`)
     assert.equal(progetti.trova(p.id)?.priorita, 'alta', `«${storto}» ha cambiato la priorità`)
@@ -183,6 +184,104 @@ test('segnato alto, il blocco sale in cima all’ordine che aveva trascinato; to
   assert.deepEqual(progetti.inCimaAllOrdine(['x', 'y'], 'nuovo'), ['nuovo', 'x', 'y'])
 })
 
+// — dopo la revisione: lo stesso nome, i progetti non attivi, l'unione —
+
+test('lo stesso nome, scritto in un altro modo, non fa un progetto nuovo: lo dice; uno chiuso si riapre e riparte normale', () => {
+  store.azzeraTutto()
+  const p = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Beta a cinquanta studi' })
+  const di = progetti.crea({ nome: '  EVERMUTE ' })
+  assert.equal(di.esisteva, true)
+  assert.equal(di.riaperto, false)
+  assert.equal(di.progetto.id, p.id)
+  assert.equal(progetti.elenco().length, 1, 'è nato un doppione')
+
+  // chiuso con la priorità alta di allora: riaperto a mano, la priorità non torna
+  progetti.cambia(p.id, { priorita: 'alta' })
+  store.default.prepare("UPDATE progetti SET stato = 'chiuso' WHERE id = ?").run(p.id)
+  const riaperto = progetti.crea({ nome: 'evermute' })
+  assert.deepEqual([riaperto.esisteva, riaperto.riaperto, riaperto.progetto.stato, riaperto.progetto.priorita], [true, true, 'attivo', null])
+
+  // e un nome nuovo è nuovo
+  const nuovo = progetti.crea({ nome: 'Nextas' })
+  assert.deepEqual([nuovo.esisteva, nuovo.riaperto], [false, false])
+})
+
+test('chiudere toglie la priorità, e a un chiuso non se ne dà; riaprirlo lo fa ripartire normale', () => {
+  store.azzeraTutto()
+  const p = progetti.scrivi({ nome: 'Evermute' })
+  progetti.cambia(p.id, { priorita: 'alta' })
+  assert.equal(progetti.cambia(p.id, { stato: 'chiuso' })?.priorita, null, 'chiuso, ha tenuto la priorità')
+  assert.throws(() => progetti.cambia(p.id, { priorita: 'alta' }), /chiuso non ha priorità/)
+  assert.equal(progetti.trova(p.id)?.priorita, null)
+  // «normale» detto per intero vale come null
+  const q = progetti.scrivi({ nome: 'Nextas' })
+  progetti.cambia(q.id, { priorita: 'alta' })
+  assert.equal(progetti.cambia(q.id, { priorita: 'normale' })?.priorita, null)
+  // una priorità rimasta scritta su un chiuso (da prima) non torna riaprendolo
+  progetti.cambia(q.id, { priorita: 'alta' })
+  store.default.prepare("UPDATE progetti SET stato = 'chiuso' WHERE id = ?").run(q.id)
+  assert.equal(progetti.cambia(q.id, { stato: 'attivo' })?.priorita, null)
+})
+
+test('un progetto fermo o chiuso con la priorità scritta non passa davanti a niente, né al modello né nell’ordine dei blocchi', () => {
+  store.azzeraTutto()
+  const attivo = progetti.scrivi({ nome: 'Alfa', obiettivo: 'Arrivare in fondo' })
+  const fermo = progetti.scrivi({ nome: 'Beta', obiettivo: 'Aspettare' })
+  progetti.cambia(fermo.id, { stato: 'fermo' })
+  cfg.aggiorna({ ordineBlocchi: [attivo.id, 'resto'] })
+  // segnato alto mentre è in pausa: resta scritto, ma non si prende il posto in cima
+  progetti.cambia(fermo.id, { priorita: 'alta' })
+  assert.equal(progetti.trova(fermo.id)?.priorita, 'alta')
+  assert.deepEqual(cfg.leggi().ordineBlocchi, [attivo.id, 'resto'], 'un fermo ha rubato il posto in cima')
+  assert.equal(progetti.eAlto(progetti.trova(fermo.id)!), false)
+
+  const righe = progetti.perIlModello().split('\n').filter(r => r.startsWith('— '))
+  const suaRiga = righe.find(r => r.includes('Progetto: Beta'))!
+  assert.ok(suaRiga, righe.join('\n'))
+  assert.doesNotMatch(suaRiga, /priorità alta/, 'un fermo dice al modello che viene prima degli altri')
+
+  // il punto: nell'elenco dei progetti la priorità si legge solo accanto a un attivo
+  const m = punto.raccogli(new Date(Date.now() - 60_000).toISOString())
+  const testo = punto.istruzione({ ...m, progetti: progetti.vivi() }, [], [])
+  assert.match(testo, /Beta: Aspettare \(fermo, dal/)
+  assert.doesNotMatch(testo, /Beta: Aspettare \(fermo, priorità alta/)
+
+  // ripartito, vale di nuovo: la priorità era sua, la pausa l'aveva solo messa da parte
+  progetti.cambia(fermo.id, { stato: 'attivo' })
+  assert.match(progetti.perIlModello(), /Progetto: Beta \(attivo; priorità alta/)
+  assert.match(punto.istruzione({ ...punto.raccogli(new Date(Date.now() - 60_000).toISOString()), progetti: progetti.vivi() }, [], []), /Beta: Aspettare \(attivo, priorità alta/)
+})
+
+test('unire due progetti tiene la priorità alta di uno dei due, e non sposta il secondo in cima all’ordine trascinato', () => {
+  store.azzeraTutto()
+  const alfa = progetti.scrivi({ nome: 'Alfa' })
+  const beta = progetti.scrivi({ nome: 'Beta' })
+  const gamma = progetti.scrivi({ nome: 'Gamma' })
+  progetti.cambia(beta.id, { priorita: 'alta' })
+  cfg.aggiorna({ ordineBlocchi: [gamma.id, beta.id, 'resto', alfa.id] })
+  // Beta (alto) dentro Alfa (normale): Alfa diventa alto, e resta dov'era Beta
+  progetti.unisci(beta.id, alfa.id)
+  assert.equal(progetti.trova(alfa.id)?.priorita, 'alta', 'l’unione ha perso la priorità')
+  assert.deepEqual(cfg.leggi().ordineBlocchi, [gamma.id, 'resto', alfa.id], 'l’unione ha rimescolato l’ordine')
+  // e un normale dentro un alto resta alto
+  const delta = progetti.scrivi({ nome: 'Delta' })
+  progetti.unisci(delta.id, alfa.id)
+  assert.equal(progetti.trova(alfa.id)?.priorita, 'alta')
+})
+
+test('la nota di un’unione si scrive nella lingua dell’app', () => {
+  store.azzeraTutto()
+  cfg.aggiorna({ lingua: 'en' })
+  const a = progetti.scrivi({ nome: 'Alfa', obiettivo: 'Ship it' })
+  const b = progetti.scrivi({ nome: 'Beta' })
+  progetti.unisci(a.id, b.id)
+  assert.match(progetti.trova(b.id)!.note, /: merged the project “Alfa”\. Goal: Ship it$/)
+  cfg.aggiorna({ lingua: 'it' })
+  const c = progetti.scrivi({ nome: 'Gamma' })
+  progetti.unisci(c.id, b.id)
+  assert.match(progetti.trova(b.id)!.note, /: unito il progetto «Gamma»$/)
+})
+
 // — detto in chat —
 
 test('«Evermute is my top priority» detto in chat finisce nella stessa colonna, e si toglie allo stesso modo', () => {
@@ -250,7 +349,7 @@ test('la rotta: PATCH accetta «alta» e null, rifiuta il resto con un 400, e l�
   assert.equal(alta.stato, 200)
   assert.equal((alta.dati.progetto as { priorita: unknown }).priorita, 'alta')
 
-  for (const storto of ['bassa', 3, { livello: 'alta' }, true]) {
+  for (const storto of ['bassa', 3, { livello: 'alta' }, true, ['alta']]) {
     const no = await chiama('PATCH', `/api/progetti/${uno.id}`, { priorita: storto })
     assert.equal(no.stato, 400, `«${JSON.stringify(storto)}» è passato`)
     assert.match(String(no.dati.errore), /alta o normale|high or normal/i)
@@ -262,5 +361,15 @@ test('la rotta: PATCH accetta «alta» e null, rifiuta il resto con un 400, e l�
   const normale = await chiama('PATCH', `/api/progetti/${uno.id}`, { priorita: null })
   assert.equal(normale.stato, 200)
   assert.equal((normale.dati.progetto as { priorita: unknown }).priorita, null)
+  await chiama('PATCH', `/api/progetti/${uno.id}`, { priorita: 'alta' })
+  const aParole = await chiama('PATCH', `/api/progetti/${uno.id}`, { priorita: 'normale' })
+  assert.equal((aParole.dati.progetto as { priorita: unknown }).priorita, null, '«normale» non è tornato normale')
+
+  // lo stesso nome: la risposta lo dice, e il progetto è quello di prima
+  const doppio = await chiama('POST', '/api/progetti', { nome: 'uno' })
+  assert.equal(doppio.stato, 200)
+  assert.equal(doppio.dati.esisteva, true)
+  assert.equal((doppio.dati.progetto as { id: string }).id, uno.id)
+  assert.equal((await chiama('POST', '/api/progetti', { nome: 'Tre' })).dati.esisteva, false)
   assert.equal((await chiama('PATCH', '/api/progetti/pinesistente', { priorita: 'alta' })).stato, 404)
 })
