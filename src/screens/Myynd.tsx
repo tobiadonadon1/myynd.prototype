@@ -1260,7 +1260,7 @@ function RigaDomanda({ q, v, prima, testo, scrivi, manda, lascia }: {
         <Scatola alto={q.lunga}>
           {q.lunga ? (
             <textarea value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti} rows={4}
-              aria-label={t('Rispondi qui')} placeholder={t('Una riga per progetto: su cosa sei, cosa è morto, cosa è bloccato. Cmd+Invio per mandare.')}
+              aria-label={t('Rispondi qui')} placeholder={t('Una riga per progetto. Cmd+Invio per mandare.')}
               style={{ ...CAMPO, lineHeight: 1.5, resize: 'vertical' }} />
           ) : (
             <input value={testo} onChange={e => scrivi(e.target.value)} onKeyDown={tasti}
