@@ -139,6 +139,17 @@ export function disponibile(): boolean {
  */
 let accesso = { entrato: false, quando: 0, verificato: false }
 let verificaAccesso: Promise<boolean> | null = null
+/**
+ * Cresce ogni volta che un accesso finisce.
+ *
+ * `claude auth status` impiega da due decimi di secondo a qualche secondo: una
+ * verifica partita prima che l'accesso finisse ha visto «non entrato», e se
+ * arrivava dopo lo scriveva per mezzo minuto sopra un accesso appena fatto. La
+ * scheda e le preferenze dicevano «da collegare» a chi si era appena collegato.
+ * Una verifica scrive solo se nel frattempo il mondo non è cambiato;
+ * altrimenti si richiede.
+ */
+let giroAccesso = 0
 const ACCESSO_VALE = 30_000
 /**
  * Quanto si aspetta `claude auth status`. Erano cinque secondi, e un Mac
@@ -150,12 +161,30 @@ const ACCESSO_ATTESA = 15_000
 
 export function entrato(): Promise<boolean> {
   // Concurrent startup requests share one native check.
-  return verificaAccesso ??= verificaEntrato().finally(() => { verificaAccesso = null })
+  if (verificaAccesso) return verificaAccesso
+  const mia: Promise<boolean> = verificaEntrato().finally(() => { if (verificaAccesso === mia) verificaAccesso = null })
+  verificaAccesso = mia
+  return mia
+}
+
+/**
+ * Un accesso è appena finito: quello che si sapeva non vale più.
+ *
+ * Si richiede subito, e intanto si tiene quello che si sa per certo: se
+ * `claude auth login` è uscito bene ci è entrato, anche prima che `auth status`
+ * lo confermi. Una verifica già partita non scrive più, e chi la aspettava
+ * riceve quella nuova.
+ */
+function dimenticaAccesso(riuscito: boolean) {
+  giroAccesso++
+  verificaAccesso = null
+  accesso = { entrato: riuscito || accesso.entrato, quando: 0, verificato: false }
 }
 
 async function verificaEntrato(): Promise<boolean> {
   const exe = installato()
   if (!exe) return false
+  const mio = giroAccesso
 
   const ora = Date.now()
   if (ora - accesso.quando < ACCESSO_VALE) return accesso.entrato
@@ -183,6 +212,9 @@ async function verificaEntrato(): Promise<boolean> {
     })
     p.on('close', () => { if (male && !fuori) console.warn(`myynd · «claude auth status» non ha risposto: ${male.trim().slice(0, 200)}`) })
   })
+
+  // partita prima che un accesso finisse: ha visto il mondo di prima
+  if (mio !== giroAccesso) return entrato()
 
   if (esito === 'boh') {
     // si tiene lo stato di prima e si richiede fra cinque secondi, non fra trenta
@@ -603,7 +635,7 @@ export function iniziaAccesso(): { loginId: string; url: string | null } {
     if (codice !== 0) a.errore = 'L’accesso a Claude non è riuscito. Riprova.'
     // la risposta di «ci sei entrato?» vale mezzo minuto: dopo un accesso
     // appena fatto si chiede di nuovo subito
-    accesso = { entrato: false, quando: 0, verificato: false }
+    dimenticaAccesso(codice === 0)
   })
   return { loginId, url: a.url ?? null }
 }
