@@ -33,6 +33,7 @@ import { oauthWeb } from '../ospitato.ts'
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { DaApprovare, type CasoAmministratore } from './amministratore.ts'
 
 const esegui = promisify(execFile)
 
@@ -82,7 +83,7 @@ function pagina(bene: boolean, nome: string): string {
  * sola che si risolve alla fine, quando ormai è tardi per sapere dove mandare
  * la gente.
  */
-function ascolta(atteso: string, nome: string): Promise<{
+function ascolta(atteso: string, nome: string, approvazione?: Sportello['approvazione']): Promise<{
   porta: number; codice: Promise<string>; chiudi: () => void
 }> {
   return new Promise((pronto, male) => {
@@ -106,8 +107,7 @@ function ascolta(atteso: string, nome: string): Promise<{
 
       if (buono) dai(c!)
       else if (c) no(new Error('La risposta non è quella che aspettavo: riprova.'))
-      else if (errore === 'access_denied') no(new Error(`Hai detto di no a ${nome}.`))
-      else no(new Error(`${nome} non ha mandato il codice.`))
+      else no(noDelRitorno(nome, errore, u.searchParams.get('error_description'), approvazione))
     })
 
     s.on('error', male)
@@ -119,6 +119,21 @@ function ascolta(atteso: string, nome: string): Promise<{
       pronto({ porta, codice, chiudi })
     })
   })
+}
+
+/**
+ * Il no che torna dal browser, detto per quello che è.
+ *
+ * Prima di «hai detto di no» si guarda se a dire di no è stata l'azienda:
+ * Microsoft rimanda `error=access_denied` anche quando è l'amministratore ad
+ * aver chiuso la porta (AADSTS90094), e dire a qualcuno che ha rifiutato lui
+ * quando non ha potuto nemmeno scegliere è la frase più sbagliata possibile.
+ */
+function noDelRitorno(nome: string, errore: string | null, descrizione: string | null, approvazione?: Sportello['approvazione']): Error {
+  const caso = approvazione?.(errore, descrizione) ?? null
+  if (caso) return new DaApprovare(`La tua azienda deve approvare Myynd su ${nome} prima che tu possa collegarlo.`, caso)
+  if (errore === 'access_denied') return new Error(`Hai detto di no a ${nome}.`)
+  return new Error(`${nome} non ha mandato il codice.`)
 }
 
 export type Sportello = {
@@ -134,6 +149,12 @@ export type Sportello = {
   intestazioni?: Record<string, string>
   /** Da un errore del servizio a una frase che si può leggere. */
   traduci?: (j: Record<string, unknown>, stato: number) => string | null
+  /**
+   * Il no dell'amministratore, riconosciuto dal codice che il servizio manda
+   * (`error`, `error_description`): nel ritorno dal browser e nello scambio
+   * del codice. Vedi `amministratore.ts`.
+   */
+  approvazione?: (errore: string | null, descrizione: string | null) => CasoAmministratore | null
 }
 
 /**
@@ -161,6 +182,8 @@ export async function chiediGettoni(s: Sportello, corpo: Record<string, string>)
   // lascerebbe passare un fallimento come se fosse un collegamento riuscito
   const andata = r.ok && j.ok !== false
   if (!andata) {
+    const caso = s.approvazione?.(typeof j.error === 'string' ? j.error : null, typeof j.error_description === 'string' ? j.error_description : null) ?? null
+    if (caso) throw new DaApprovare(`La tua azienda deve approvare Myynd su ${s.nome} prima che tu possa collegarlo.`, caso)
     const detto = s.traduci?.(j, r.status)
     if (detto) throw new Error(detto)
     throw new Error(`${s.nome} ha rifiutato il collegamento.`)
@@ -179,7 +202,7 @@ export async function chiediGettoni(s: Sportello, corpo: Record<string, string>)
 export async function consenso(s: Sportello): Promise<Gettoni> {
   const { verifica, sfida } = pkce()
   const stato = randomBytes(24).toString('base64url')
-  const { porta, codice, chiudi } = await ascolta(stato, s.nome)
+  const { porta, codice, chiudi } = await ascolta(stato, s.nome, s.approvazione)
   const redirect = `http://127.0.0.1:${porta}`
 
   try {
@@ -249,7 +272,7 @@ export function avviaWeb(s: Sportello, dopo: (g: Gettoni) => Promise<void>): { d
 }
 
 /** Secondo tempo: il codice è tornato. Lancia con una frase da mostrare. */
-export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = ''): Promise<{ nome: string }> {
+export async function completaWeb(stato: string, codice: string | null, errore: string | null, portato = '', descrizione: string | null = null): Promise<{ nome: string }> {
   const s = sospesi.get(stato)
   if (!s) throw new Error('Questo collegamento non lo stavo aspettando, o è passato troppo tempo: riprova da Myynd.')
   const atteso = Buffer.from(biglietto(stato)), avuto = Buffer.from(portato)
@@ -258,11 +281,7 @@ export async function completaWeb(stato: string, codice: string | null, errore: 
   }
   sospesi.delete(stato)
   if (s.scade < Date.now()) throw new Error(`Nessuna risposta da ${s.sportello.nome} in tempo: riprova.`)
-  if (!codice) {
-    throw new Error(errore === 'access_denied'
-      ? `Hai detto di no a ${s.sportello.nome}.`
-      : `${s.sportello.nome} non ha mandato il codice.`)
-  }
+  if (!codice) throw noDelRitorno(s.sportello.nome, errore, descrizione, s.sportello.approvazione)
   const g = await chiediGettoni(s.sportello, {
     code: codice,
     redirect_uri: oauthWeb().ritorno!,

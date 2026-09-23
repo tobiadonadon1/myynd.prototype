@@ -391,6 +391,20 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     // il file che non si è aperto, se il server lo dice: la frase resta
     // traducibile, e il nome le si mette accanto nella scheda
     if (typeof c.file === 'string' && c.file) (e as Error & { file?: string }).file = c.file
+    // lo stesso per il repository che GitHub non trova, e per l'indirizzo che
+    // GitHub stesso manda per sistemare le cose (l'autorizzazione SSO)
+    const altro = corpo as { repo?: unknown; dove?: unknown }
+    if (typeof altro.repo === 'string' && altro.repo) (e as Error & { repo?: string }).repo = altro.repo
+    if (typeof altro.dove === 'string' && /^https:\/\//.test(altro.dove)) (e as Error & { dove?: string }).dove = altro.dove
+    /*
+     * Il no che non è suo: l'ha deciso l'amministratore della sua azienda.
+     *
+     * Viaggia accanto alla frase, come il nome del file qui sopra, perché la
+     * scheda non deve mostrarlo in rosso come uno sbaglio: deve mostrare chi
+     * può sbloccarlo e la richiesta già scritta da mandargli.
+     */
+    const capo = (corpo as { amministratore?: unknown }).amministratore
+    if (capo && typeof capo === 'object') (e as Error & { amministratore?: unknown }).amministratore = capo
     return e
   }
   if (r.status >= 500) return new MotoreGiu(`HTTP ${r.status} · ${r.url}`)
@@ -1318,7 +1332,7 @@ export const api = {
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>
-    json<{ ok: true; login: string }>('/api/connettori/github',
+    json<{ ok: true; login: string; repos: number; oltre: boolean }>('/api/connettori/github',
       { method: 'POST', body: JSON.stringify({ token, repos }) }),
 
   /** Drive: come Google, e appesa come Google finché il browser non ha finito. */

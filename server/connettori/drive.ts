@@ -24,6 +24,7 @@
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
+import { daGoogle } from './amministratore.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
@@ -77,6 +78,7 @@ function sportello(clientId: string, clientSecret?: string): Sportello {
     gettoni: 'https://oauth2.googleapis.com/token',
     campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
     traduci,
+    approvazione: (e, d) => daGoogle(e, d, { clientId }),
     autorizza: ({ redirect, sfida, stato }) => {
       const u = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       u.searchParams.set('client_id', clientId)

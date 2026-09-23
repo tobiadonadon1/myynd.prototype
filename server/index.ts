@@ -73,6 +73,7 @@ import * as conversazioni from './connettori/conversazioni.ts'
 import * as calendario from './connettori/calendario.ts'
 import * as slack from './connettori/slack.ts'
 import * as github from './connettori/github.ts'
+import * as amministratore from './connettori/amministratore.ts'
 import * as drive from './connettori/drive.ts'
 import * as microsoft from './connettori/microsoft.ts'
 import * as dropbox from './connettori/dropbox.ts'
@@ -316,10 +317,11 @@ app.get('/api/oauth/ritorno', async (req, res) => {
   const stato = String(req.query.state ?? '')
   const codice = req.query.code ? String(req.query.code) : null
   const guaio = req.query.error ? String(req.query.error) : null
+  const descrizione = req.query.error_description ? String(req.query.error_description) : null
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('Set-Cookie', `${BIGLIETTO}=; Path=/api/oauth/ritorno; Max-Age=0; HttpOnly; Secure; SameSite=Lax`)
   try {
-    const { nome } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req))
+    const { nome } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
     res.send(oauth.paginaWeb(true, nome))
   } catch (e) {
     res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
@@ -464,7 +466,10 @@ app.use(auth.guardia)
 const DA_COLLEGARE = /^Collega Claude|serve una chiave API/
 function errore(res: express.Response, e: unknown, stato = 500) {
   const m = e instanceof Error ? e.message : String(e)
-  res.status(stato).json({ errore: m, ...(DA_COLLEGARE.test(m) ? { collega: 'claude' } : {}) })
+  // il no dell'amministratore viaggia accanto alla frase: la scheda ne fa la
+  // richiesta da mandargli, invece di una riga rossa
+  const caso = amministratore.casoDi(e)
+  res.status(caso ? 400 : stato).json({ errore: m, ...(DA_COLLEGARE.test(m) ? { collega: 'claude' } : {}), ...(caso ? { amministratore: caso } : {}) })
 }
 
 // — stato generale —
@@ -1045,7 +1050,7 @@ app.post('/api/connettori/posta', async (req, res) => {
   }
   try {
     const esito = await posta.prova(c)
-    if (!esito.ok) return res.status(400).json({ errore: esito.errore })
+    if (!esito.ok) return res.status(400).json({ errore: esito.errore, ...(esito.amministratore ? { amministratore: esito.amministratore } : {}) })
     cfg.aggiorna({ posta: c })
     res.json({ ok: true, cartelle: esito.cartelle, certificatoAdattato: esito.certificatoAdattato })
   } catch (e) { errore(res, e) }
@@ -1559,10 +1564,19 @@ app.post('/api/connettori/github', async (req, res) => {
     .map((r: unknown) => String(r).trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, ''))
     .filter((r: string) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(r))
   try {
-    const e = await github.prova({ token })
-    if (!e.ok) return res.status(400).json({ errore: e.errore })
+    // la prova guarda anche i repository scritti a mano: uno che il token non
+    // vede si dice adesso, con il suo nome accanto, non al primo giro
+    const e = await github.prova({ token, ...(repos.length ? { repos } : {}) })
+    if (!e.ok) {
+      return res.status(400).json({
+        errore: e.errore,
+        ...(e.dove ? { dove: e.dove } : {}),
+        ...(e.repo ? { repo: e.repo } : {}),
+        ...(e.amministratore ? { amministratore: e.amministratore } : {})
+      })
+    }
     cfg.aggiorna({ github: { token, ...(repos.length ? { repos } : {}) } })
-    res.json({ ok: true, login: e.login })
+    res.json({ ok: true, login: e.login, repos: e.repos, oltre: e.oltre })
   } catch (e) { errore(res, e) }
 })
 

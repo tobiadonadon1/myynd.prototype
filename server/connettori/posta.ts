@@ -9,6 +9,7 @@ import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
 import { filoDi, idPulito } from '../filo.ts'
 import { resto, type Resto } from './ripresa.ts'
+import { daImap, IMAP_SPENTO, type CasoAmministratore } from './amministratore.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
@@ -192,7 +193,8 @@ async function apri(c: ConfigPosta): Promise<{ cl: ImapFlow; adattato: string | 
 
 /** Prova la connessione senza indicizzare niente. */
 export async function prova(c: ConfigPosta): Promise<
-  { ok: true; cartelle: string[]; certificatoAdattato: string | null } | { ok: false; errore: string }
+  { ok: true; cartelle: string[]; certificatoAdattato: string | null }
+  | { ok: false; errore: string; amministratore?: CasoAmministratore }
 > {
   let cl: ImapFlow | null = null
   try {
@@ -203,6 +205,10 @@ export async function prova(c: ConfigPosta): Promise<
     return { ok: true, cartelle: lista.map(l => l.path).slice(0, 40), certificatoAdattato: a.adattato }
   } catch (e) {
     if (cl) { try { await cl.close() } catch { /* già chiusa */ } }
+    // il no dell'amministratore prima di tutto: somiglia a una password
+    // sbagliata, e non lo è
+    const caso = daImap(testoDellErrore(e), c.utente)
+    if (caso) return { ok: false, errore: IMAP_SPENTO, amministratore: caso }
     return { ok: false, errore: messaggioErrore(e, c.host) }
   }
 }
@@ -248,22 +254,35 @@ export function normalizza(password: string, host: string): string {
  * non accetta più nessuna password via IMAP. Dirlo qui è la differenza fra
  * una persona che riprova la stessa password tre volte e una che sa dove andare.
  */
-function messaggioErrore(e: unknown, host = ''): string {
-  // imapflow dice «Command failed» nel message e mette il perché altrove:
-  // `authenticationFailed`, `responseText`, `serverResponseCode`. Guardando il
-  // solo message, la password sbagliata su Gmail usciva come «Command failed».
+/**
+ * Tutto quello che il server ha detto, in una riga.
+ *
+ * imapflow dice «Command failed» nel message e mette il perché altrove:
+ * `authenticationFailed`, `responseText`, `serverResponseCode`. Guardando il
+ * solo message, la password sbagliata su Gmail usciva come «Command failed».
+ */
+function testoDellErrore(e: unknown): string {
   const err = (e && typeof e === 'object' ? e : {}) as {
     message?: string; responseText?: string; response?: string
-    serverResponseCode?: string; authenticationFailed?: boolean; code?: string
+    serverResponseCode?: string; code?: string
   }
-  const m = [err.message, err.responseText, err.response, err.serverResponseCode, err.code]
+  return [err.message, err.responseText, err.response, err.serverResponseCode, err.code]
     .filter(Boolean).join(' ') || String(e)
+}
+
+function messaggioErrore(e: unknown, host = ''): string {
+  const err = (e && typeof e === 'object' ? e : {}) as { message?: string; authenticationFailed?: boolean }
+  const m = testoDellErrore(e)
   const h = host.toLowerCase()
   if (err.authenticationFailed || /auth|invalid credentials|login failed|password/i.test(m)) {
     if (/gmail|googlemail/.test(h)) return 'Gmail ha rifiutato questa password. Se sono meno di sedici lettere è quella del tuo account Google, e via IMAP non funziona mai: creane una su myaccount.google.com/apppasswords e incolla quella.'
     if (/mail\.me\.com|icloud/.test(h)) return 'iCloud ha rifiutato questa password. Ne serve una specifica per le app, sedici lettere, da appleid.apple.com.'
     if (/yahoo/.test(h)) return 'Yahoo ha rifiutato questa password. Ne serve una per le app, dalle impostazioni di sicurezza dell’account.'
-    if (/office365|outlook|hotmail|live\./.test(h)) return 'Outlook non accetta più la password via IMAP: collega «Outlook e Calendario» invece di questa scheda.'
+    // Microsoft ha spento le password per IMAP in tutti i tenant, e nessuno
+    // le può riaccendere (learn.microsoft.com, «Deprecation of Basic
+    // authentication in Exchange Online»): serve l'accesso con Microsoft, che
+    // non si offre ancora. Mandare a «Outlook e Calendario» era un vicolo cieco
+    if (/office365|outlook|hotmail|live\./.test(h)) return 'Outlook non accetta più password dalle app di posta, nemmeno quelle per le app. Il collegamento con Outlook arriva presto.'
     return 'Utente o password non accettati dal server.'
   }
   if (/ENOTFOUND|EAI_AGAIN/i.test(m)) return 'Host IMAP non trovato: controlla il nome del server.'
