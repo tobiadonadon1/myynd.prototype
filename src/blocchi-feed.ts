@@ -251,14 +251,21 @@ function aspettaLui<B extends { righe: RigaBlocco<VoceDaBlocco, CompitoDaBlocco>
  * più recenti, e «Il resto» in fondo a parità, perché quello che non sta in
  * nessun progetto non passa mai davanti a un progetto.
  *
- * Il suo vince sempre, e non si discute: un blocco che ha trascinato in cima
- * ci resta anche il giorno in cui un altro ha una bozza pronta. Un blocco che
- * nell'ordine salvato non c'è (un progetto nato ieri) va in fondo, fra gli
- * altri sconosciuti, nell'ordine che avrebbe avuto da solo: il riordino è
- * stabile, e chi non ha un posto resta come stava.
+ * Il suo vince sempre dentro il suo gruppo: un blocco che ha trascinato in cima
+ * ci resta anche il giorno in cui un altro ha una bozza pronta. I gruppi sono
+ * due, e li ha fatti lui con la pastiglia: i progetti a priorità alta stanno
+ * davanti, gli altri dietro, e l'ordine trascinato vale dentro ciascuno. Prima
+ * l'ordine salvato vinceva anche sulla priorità, e la pagina smetteva di dire
+ * il vero: un blocco tolto dall'«alta» restava in cima, uno segnato alto poteva
+ * stare in fondo.
+ *
+ * Un blocco che nell'ordine salvato non c'è (un progetto nato ieri) va in
+ * fondo al suo gruppo, fra gli altri sconosciuti, nell'ordine che avrebbe avuto
+ * da solo. Tranne uno appena creato da qui (`nuovi`): quello va in cima ai
+ * normali, dove lo si cerca, e non sotto «Il resto».
  */
 export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco>(
-  blocchi: Blocco<V, C>[], ordine?: readonly string[] | null
+  blocchi: Blocco<V, C>[], ordine?: readonly string[] | null, nuovi: readonly string[] = []
 ): Blocco<V, C>[] {
   // «Il resto» sta dietro ai progetti a parità di attesa: il peso ordina i
   // progetti fra loro, non tira su quello che non sta in nessun progetto
@@ -271,18 +278,23 @@ export function ordinaBlocchi<V extends VoceDaBlocco, C extends CompitoDaBlocco>
     || a.nome.localeCompare(b.nome))
   if (!ordine?.length) return predefinito
   const posto = new Map(ordine.map((id, i) => [id, i]))
-  const dove = (b: Blocco<V, C>) => posto.get(chiaveBlocco(b)) ?? Number.MAX_SAFE_INTEGER
-  return predefinito.sort((a, b) => dove(a) - dove(b))
+  const appena = new Set(nuovi)
+  const dove = (b: Blocco<V, C>) => posto.get(chiaveBlocco(b))
+    ?? (b.progetto && appena.has(b.progetto) ? -1 : Number.MAX_SAFE_INTEGER)
+  return predefinito.sort((a, b) => Number(!!b.alto) - Number(!!a.alto) || dove(a) - dove(b))
 }
 
 /**
- * L'ordine salvato con questo progetto in cima: quello che succede quando lo
- * segna alto. È la stessa regola del server (`progetti.inCimaAllOrdine`), fatta
- * anche qui perché il blocco salga nell'istante del gesto e non al giro dopo.
- * Senza un ordine suo non se ne inventa uno: decide la priorità da sé.
+ * Si può spostare il blocco da qui a lì? Solo dentro il suo gruppo.
+ *
+ * Con i due gruppi fissi, trascinare un blocco normale sopra uno alto (o
+ * viceversa) scriverebbe un ordine che la pagina non può mostrare: il blocco
+ * tornerebbe al suo posto e il gesto sembrerebbe rotto. Allora non si fa, e
+ * «Sposta su» al confine è spento.
  */
-export function inCimaAllOrdine(ordine: readonly string[], id: string): string[] {
-  return ordine.length ? [id, ...ordine.filter(x => x !== id)] : []
+export function stessoGruppo(blocchi: readonly { alto?: boolean }[], da: number, a: number): boolean {
+  if (a < 0 || a >= blocchi.length || da < 0 || da >= blocchi.length) return false
+  return !!blocchi[da].alto === !!blocchi[a].alto
 }
 
 /** Sposta un blocco da un posto all'altro. Fuori dall'elenco non si sposta niente. */

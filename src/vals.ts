@@ -3,7 +3,6 @@ import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TEMI, TENUTE, TONI, 
 import { DOMANDE, type Campo } from './intervista'
 import type { CambioProgetto, Progetto, Compito, ProjectInitiative } from './api'
 import { coloreProgetto } from './colori-progetto'
-import { inCimaAllOrdine } from './blocchi-feed'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
@@ -365,6 +364,23 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   }, [])
   const questaCopia = useRef({})
   useEffect(() => ascoltaProgetti(da => { if (da !== questaCopia.current) void ricaricaProgetti() }), [ricaricaProgetti])
+  // e quando cambia da fuori: la priorità detta in chat, un'altra finestra. Il
+  // server lo annuncia sul filo dei compiti; qui si rilegge una volta sola per raffica
+  useEffect(() => {
+    let attesa: ReturnType<typeof setTimeout> | undefined
+    const via = api.flussoCompiti(e => {
+      if (e.fase !== 'cambiato') return
+      clearTimeout(attesa)
+      attesa = setTimeout(() => { void ricaricaProgetti() }, 300)
+    })
+    return () => { clearTimeout(attesa); via() }
+  }, [ricaricaProgetti])
+  /**
+   * L'id con cui è nato sullo schermo ogni progetto creato da qui: il blocco
+   * della prima pagina lo tiene come chiave, così quando arriva l'id vero dal
+   * server non si rifà da capo (e non perde il primo passo che si scriveva).
+   */
+  const [nascite, setNascite] = useState<Record<string, string>>({})
 
   const chiudiIntervista = () => { setPasso(null); setIntervistaFinita(false); setBattute([]) }
   const avviaIntervista = (tutte: boolean) => {
@@ -449,6 +465,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const tasti = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        // la pagina di un progetto si chiude: la ricerca le starebbe sotto, e si
+        // scriverebbe in un campo che non si vede. La nota lasciata a metà si salva
+        setProgettoAperto(null)
         setSearch(true)
         return
       }
@@ -1293,6 +1312,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     progettoAperto,
     chiudiProgetto: () => setProgettoAperto(null),
     progettiNuovi,
+    chiaveDiNascita: (id: string) => nascite[id] ?? id,
     ricaricaProgetti,
     /**
      * Un progetto nuovo, da un nome: nella pagina subito, al server dopo.
@@ -1301,10 +1321,20 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * vuoto della prima pagina con lei; la risposta del server la sostituisce
      * con quella vera. Se non passa, sparisce e lo dice. Torna quella vera, o
      * null.
+     *
+     * Lo stesso nome è lo stesso progetto (maiuscole comprese). Se c'è già e
+     * non è chiuso, non si finge di averne fatto uno: lo si dice e si apre la
+     * sua pagina. Se era chiuso, il server lo riapre normale, e lo si dice.
      */
     nuovoProgetto: async (nome: string): Promise<Progetto | null> => {
       const pulito = nome.trim()
       if (!pulito) return null
+      const noto = (progetti ?? []).find(p => p.nome.trim().toLowerCase() === pulito.toLowerCase())
+      if (noto && noto.stato !== 'chiuso') {
+        mostraToast(frasi.progettoEsiste(noto.nome))
+        setProgettoAperto(noto.id)
+        return noto
+      }
       const adesso = new Date().toISOString()
       const finto: Progetto = {
         id: `nuovo-${Date.now()}`, nome: pulito, obiettivo: '', stato: 'attivo', dal: adesso, aggiornato: adesso,
@@ -1313,13 +1343,24 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       setProgetti(ps => [...(ps ?? []), finto])
       setProgettiNuovi(ns => [...ns, finto.id])
       try {
-        const vero = (await api.nuovoProgetto(pulito)).progetto
+        const r = await api.nuovoProgetto(pulito)
+        const vero = r.progetto
         // lo stesso nome è lo stesso progetto: se c'era già, resta uno
         setProgetti(ps => {
           const senza = (ps ?? []).filter(p => p.id !== finto.id && p.id !== vero.id)
           return [...senza, { ...vero, memoria: null }]
         })
-        setProgettiNuovi(ns => ns.map(x => (x === finto.id ? vero.id : x)))
+        if (r.esisteva && !r.riaperto) {
+          // c'era già (lo sapeva il server e non ancora lo schermo): niente
+          // blocco nuovo, lo si dice e si apre il suo
+          setProgettiNuovi(ns => ns.filter(x => x !== finto.id))
+          mostraToast(frasi.progettoEsiste(vero.nome))
+          setProgettoAperto(vero.id)
+        } else {
+          setNascite(n => ({ ...n, [vero.id]: finto.id }))
+          setProgettiNuovi(ns => ns.map(x => (x === finto.id ? vero.id : x)))
+          if (r.riaperto) mostraToast(frasi.progettoRiaperto(vero.nome))
+        }
         annunciaProgetti(questaCopia.current)
         return vero
       } catch (e) {
@@ -1333,21 +1374,17 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * Cambiare un progetto: nella pagina subito, al server dopo.
      *
      * Il guaio non si mangia qui: torna a chi ha chiamato, che lo scrive sotto
-     * la cosa che l'ha causato. Segnato alto, il suo blocco sale anche
-     * nell'ordine che aveva trascinato, come fa il server.
+     * la cosa che l'ha causato. L'ordine trascinato non si tocca: sulla prima
+     * pagina gli alti stanno davanti da sé (`ordinaBlocchi`).
      */
     cambiaProgetto: async (id: string, c: CambioProgetto): Promise<void> => {
-      const prima = progetti?.find(p => p.id === id)
       setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...c } : p)) : ps)
-      const sale = c.priorita === 'alta' && prima?.priorita !== 'alta'
-      if (sale) setStato(s => ({ ...s, config: { ...s.config, ordineBlocchi: inCimaAllOrdine(s.config.ordineBlocchi ?? s.ordineBlocchi ?? [], id) } }))
       try {
         const vero = (await api.cambiaProgetto(id, c)).progetto
         setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...vero } : p)) : ps)
         annunciaProgetti(questaCopia.current)
       } catch (e) {
         void ricaricaProgetti()
-        if (sale) ricaricaStato()
         throw e
       }
     },

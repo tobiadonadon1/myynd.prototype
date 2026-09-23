@@ -353,6 +353,24 @@ export function daTastiera(fai: () => void) {
 
 const FOCALIZZABILE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
+/** Le finestre aperte, dalla più vecchia alla più nuova: il Tab lo tiene solo l'ultima. */
+const finestreAperte: HTMLElement[] = []
+
+/**
+ * Quello che dentro la finestra si può raggiungere con Tab adesso: visibile,
+ * non spento, e non chiuso dentro una tendina (`<details>`) che non è aperta,
+ * dove Chrome tiene i campi disegnati ma il Tab li salta. Il `<summary>` di
+ * una tendina si raggiunge, anche se non è un bottone.
+ */
+function raggiungibili(el: HTMLElement): HTMLElement[] {
+  return [...el.querySelectorAll<HTMLElement>(`${FOCALIZZABILE},summary`)].filter(x => {
+    if (!x.getClientRects().length) return false
+    const chiusa = x.parentElement?.closest('details:not([open])')
+    if (chiusa && !(x.tagName === 'SUMMARY' && x.parentElement === chiusa)) return false
+    return getComputedStyle(x).visibility !== 'hidden'
+  })
+}
+
 /**
  * Il fuoco della tastiera dentro una finestra.
  *
@@ -393,7 +411,28 @@ export function useFocoDialogo(ref: RefObject<HTMLElement | null>, chiudi?: () =
      * `stopPropagation`, ed è quello che fa la casella con la chiocciola
      * aperta; per tutti gli altri Esc vuol dire «chiudi questa finestra».
      */
+    /*
+     * Tab resta dentro.
+     *
+     * Una finestra `aria-modal` promette che fuori non c'è niente da toccare,
+     * e il Tab portava lo stesso nella colonna di sinistra, dietro il velo: si
+     * premevano bottoni che non si vedevano. Dall'ultimo si torna al primo, e
+     * con Maiuscole dal primo all'ultimo. Lo fa solo la finestra aperta per
+     * ultima, se ce ne sono due una sopra l'altra.
+     */
+    if (el) finestreAperte.push(el)
     const tasti = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        if (!el || finestreAperte[finestreAperte.length - 1] !== el) return
+        const tutti = raggiungibili(el)
+        if (!tutti.length) { e.preventDefault(); el.focus(); return }
+        const primo = tutti[0], ultimo = tutti[tutti.length - 1]
+        const qui = document.activeElement as HTMLElement | null
+        const fuori = !qui || !el.contains(qui)
+        if (e.shiftKey && (fuori || qui === primo || qui === el)) { e.preventDefault(); ultimo.focus() }
+        else if (!e.shiftKey && (fuori || qui === ultimo)) { e.preventDefault(); primo.focus() }
+        return
+      }
       if (e.key !== 'Escape' || !chiudiRef.current) return
       const el2 = e.target as HTMLElement | null
       // un menu a tendina aperto se lo prende lui: chiuderlo non è chiudere la finestra
@@ -403,6 +442,8 @@ export function useFocoDialogo(ref: RefObject<HTMLElement | null>, chiudi?: () =
     document.addEventListener('keydown', tasti)
     return () => {
       document.removeEventListener('keydown', tasti)
+      const i = el ? finestreAperte.lastIndexOf(el) : -1
+      if (i >= 0) finestreAperte.splice(i, 1)
       if (prima && document.contains(prima)) prima.focus()
     }
   }, [ref])

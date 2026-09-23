@@ -292,6 +292,8 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
    */
   const [daMostrare, setDaMostrare] = useState<string | null>(progettoAtteso)
   const [acceso, setAcceso] = useState<string | null>(null)
+  /** L'ordine della griglia com'era quando il puntatore ci è entrato, o null. */
+  const [tenuto, setTenuto] = useState<string[] | null>(null)
   const [nome, setNome] = useState('')
   const [obiettivo, setObiettivo] = useState('')
   const [guaio, setGuaio] = useState('')
@@ -373,10 +375,21 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
    * con quella vera, e il fuoco va sul nome. Se non passa, sparisce e le
    * caselle tornano con dentro le sue parole.
    */
+  /** Una scheda che c'è già, portata sotto gli occhi con l'anello di rame per un attimo. */
+  const mostraScheda = (id: string) => {
+    requestAnimationFrame(() => document.getElementById(`progetto-${id}`)?.scrollIntoView({ block: 'center' }))
+    setAcceso(id)
+    setTimeout(() => setAcceso(a => (a === id ? null : a)), 1500)
+  }
+
   const aggiungi = async () => {
     const n = nome.trim()
     if (!n || nasce) return
     const o = obiettivo.trim()
+    // lo stesso nome è lo stesso progetto: se c'è già (e non è chiuso) non si
+    // finge di averne fatto uno, lo si dice e si indica il suo
+    const noto = (progetti ?? []).find(p => p.nome.trim().toLowerCase() === n.toLowerCase())
+    if (noto && noto.stato !== 'chiuso') { setGuaio(frasi.progettoEsiste(noto.nome)); mostraScheda(noto.id); return }
     const adesso = new Date().toISOString()
     const finto: Progetto = {
       id: `nuovo-${Date.now()}`, nome: n, obiettivo: o, stato: 'attivo', dal: adesso, aggiornato: adesso,
@@ -389,6 +402,12 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
       const r = await api.nuovoProgetto(n, o)
       annunciaProgetti(questaCopia.current)
       await carica()
+      if (r.esisteva) {
+        // c'era già, o era chiuso ed è stato riaperto (normale): si dice quale dei due
+        setGuaio(r.riaperto ? frasi.progettoRiaperto(r.progetto.nome) : frasi.progettoEsiste(r.progetto.nome))
+        mostraScheda(r.progetto.id)
+        return
+      }
       // appena nato, il fuoco va sulla sua scheda con il nome già selezionato:
       // è lì che si correggono il nome, l'obiettivo, lo stato e il colore, e
       // mandarlo altrove vorrebbe dire fargli cercare le stesse cose due volte
@@ -401,12 +420,17 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
     finally { setNasce(false) }
   }
 
+  const posto = (id: string) => { const i = tenuto?.indexOf(id) ?? -1; return i < 0 ? Number.MAX_SAFE_INTEGER : i }
+  const inOrdine = tenuto ? [...(progetti ?? [])].sort((a, b) => posto(a.id) - posto(b.id)) : (progetti ?? [])
+
   return (
     <section className="mem-section">
       <Testata titolo={t('Progetti')} conto={progetti ? String(progetti.length) : undefined} />
 
-      <div className="mem-grid">
-        {(progetti ?? []).map(p => (
+      {/* sotto il puntatore l'ordine sta fermo: la priorità o lo stato cambiati
+          riordinano la griglia quando il puntatore se ne va, non mentre si guarda */}
+      <div className="mem-grid" onMouseEnter={() => setTenuto((progetti ?? []).map(p => p.id))} onMouseLeave={() => setTenuto(null)}>
+        {inOrdine.map(p => (
           <SchedaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} elimina={elimina}
             apri={() => { if (!p.id.startsWith('nuovo-')) portaAlProgetto(p.id) }} acceso={acceso === p.id} conto={conti[p.id]} nato={nato === p.id} />
         ))}

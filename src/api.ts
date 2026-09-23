@@ -1470,8 +1470,9 @@ export const api = {
   progetti: (collegato?: string) => json<{ progetti: Progetto[] }>(`/api/progetti${collegato ? `?collegato=${encodeURIComponent(collegato)}` : ''}`),
   memoriaProgetto: (id: string) => json<{ records: ProjectEvidence[] }>(`/api/progetti/${encodeURIComponent(id)}/memoria`),
   attivitaProgetto: (id: string) => json<ProgressoProgetto>(`/api/progetti/${encodeURIComponent(id)}/attivita`),
+  /** `esisteva`: quel nome c'era già, ed è lui; `riaperto`: era chiuso, e adesso è aperto (normale). */
   nuovoProgetto: (nome: string, obiettivo = '') =>
-    json<{ ok: true; progetto: Progetto }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
+    json<{ ok: true; progetto: Progetto; esisteva?: boolean; riaperto?: boolean }>('/api/progetti', { method: 'POST', body: JSON.stringify({ nome, obiettivo }) }),
   cambiaProgetto: (id: string, c: CambioProgetto) =>
     json<{ ok: true; progetto: Progetto }>(`/api/progetti/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(c) }),
   /**

@@ -2829,6 +2829,10 @@ app.post('/api/punto/avvia', async (req, res) => {
 // un cambiamento, e la chiusura — che non cancella mai: un progetto chiuso
 // resta scritto, ed è quello che impedisce al punto di reinventarlo.
 
+// la priorità cambia l'ordine dei blocchi della prima pagina, dalla rotta come
+// dalla chat: chi ha una finestra aperta lo sente dallo stesso annuncio di ogni cambio
+progetti.quandoCambiaLaPriorita(() => compiti.annunciaCambio())
+
 app.get('/api/progetti', (req, res) => {
   const elenco = req.query.includiAlias === '1' ? progetti.elenco() : progetti.perContesto(true)
   // Existing tasks can still display/edit their exact linked legacy record.
@@ -2851,7 +2855,10 @@ app.get('/api/progetti/:id/attivita', (req, res) => {
 
 app.post('/api/progetti', (req, res) => {
   try {
-    res.json({ ok: true, progetto: progetti.scrivi({ nome: String(req.body?.nome ?? ''), obiettivo: String(req.body?.obiettivo ?? '') }) })
+    // `esisteva` e `riaperto`: lo stesso nome è lo stesso progetto, e chi l'ha
+    // scritto deve saperlo invece di credere di averne fatto uno nuovo
+    const r = progetti.crea({ nome: String(req.body?.nome ?? ''), obiettivo: String(req.body?.obiettivo ?? '') })
+    res.json({ ok: true, progetto: r.progetto, esisteva: r.esisteva, riaperto: r.riaperto })
   } catch (e) { errore(res, e, 400) }
 })
 
@@ -2864,16 +2871,19 @@ app.patch('/api/progetti/:id', (req, res) => {
   if (req.body?.alias !== undefined) c.alias = req.body.alias
   if (req.body?.genitore !== undefined) c.genitore = req.body.genitore === null ? null : String(req.body.genitore)
   // «alta», o null per tornare normale; qualunque altra cosa la rifiuta `cambia`
-  if (req.body?.priorita !== undefined) c.priorita = req.body.priorita === null ? null : String(req.body.priorita)
+  // una parola o null: un elenco o un numero non si traducono in «alta» per caso
+  if (req.body?.priorita !== undefined) {
+    if (req.body.priorita !== null && typeof req.body.priorita !== 'string') {
+      return res.status(400).json({ errore: 'La priorità di un progetto è alta o normale.' })
+    }
+    c.priorita = req.body.priorita
+  }
   try {
     // chiudere dalla Memoria fa uscire la riga anche dal punto che la pagina
     // sta mostrando; il controllo sull'origine è solo di «non è un progetto»
     const p = progetti.cambia(req.params.id, c)
     if (p && c.stato === 'chiuso') punto.togliDalPunto(req.params.id)
     if (!p) return res.status(404).json({ errore: 'Questo progetto non c’è.' })
-    // la priorità cambia l'ordine dei blocchi della prima pagina: chi ha
-    // un'altra finestra aperta lo sente dallo stesso annuncio di ogni cambio
-    if (c.priorita !== undefined) compiti.annunciaCambio()
     res.json({ ok: true, progetto: p })
   } catch (e) { errore(res, e, 400) }
 })

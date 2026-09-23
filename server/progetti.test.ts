@@ -279,6 +279,8 @@ test('il padre: un id che esiste, mai sé stesso, mai un anello; vuoto lo toglie
 test('unire: righe, voci, domande, chat, memoria, figli e decisioni passano; il nome resta come altro nome; il primo sparisce', async () => {
   pulisci()
   const cfg = await import('./config.ts')
+  // la nota dell'unione si scrive nella lingua dell'app: qui l'italiano
+  cfg.aggiorna({ lingua: 'it' })
   const memoria = await import('./project-memory.ts')
   const ev = progetti.scrivi({ nome: 'Evermute', obiettivo: 'Portare la app sullo store', note: 'Nota di Evermute' })
   const ew = progetti.scrivi({ nome: 'everwave', obiettivo: 'Chiudere la beta', note: 'Nota di everwave' })
@@ -371,6 +373,7 @@ test('cancellare: la riga sparisce, le attività restano senza progetto, la memo
 test('unire quando il secondo è già nell’ordine dei blocchi toglie il primo e basta', async () => {
   pulisci()
   const cfg = await import('./config.ts')
+  cfg.aggiorna({ lingua: 'it' })
   const a = progetti.scrivi({ nome: 'Alfa' })
   const b = progetti.scrivi({ nome: 'Beta' })
   cfg.aggiorna({ ordineBlocchi: [b.id, 'resto', a.id] })
