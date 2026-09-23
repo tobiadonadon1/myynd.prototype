@@ -3,7 +3,6 @@ import { AUTONOMIE, ESEMPIO_TONO, LINGUE, LIVELLI, MODELLI, TEMI, TENUTE, TONI, 
 import { DOMANDE, type Campo } from './intervista'
 import type { CambioProgetto, Progetto, Compito, ProjectInitiative } from './api'
 import { coloreProgetto } from './colori-progetto'
-import { inCimaAllOrdine } from './blocchi-feed'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
@@ -1376,21 +1375,17 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
      * Cambiare un progetto: nella pagina subito, al server dopo.
      *
      * Il guaio non si mangia qui: torna a chi ha chiamato, che lo scrive sotto
-     * la cosa che l'ha causato. Segnato alto, il suo blocco sale anche
-     * nell'ordine che aveva trascinato, come fa il server.
+     * la cosa che l'ha causato. L'ordine trascinato non si tocca: sulla prima
+     * pagina gli alti stanno davanti da sé (`ordinaBlocchi`).
      */
     cambiaProgetto: async (id: string, c: CambioProgetto): Promise<void> => {
-      const prima = progetti?.find(p => p.id === id)
       setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...c } : p)) : ps)
-      const sale = c.priorita === 'alta' && prima?.priorita !== 'alta' && prima?.stato === 'attivo'
-      if (sale) setStato(s => ({ ...s, config: { ...s.config, ordineBlocchi: inCimaAllOrdine(s.config.ordineBlocchi ?? s.ordineBlocchi ?? [], id) } }))
       try {
         const vero = (await api.cambiaProgetto(id, c)).progetto
         setProgetti(ps => ps ? ps.map(p => (p.id === id ? { ...p, ...vero } : p)) : ps)
         annunciaProgetti(questaCopia.current)
       } catch (e) {
         void ricaricaProgetti()
-        if (sale) ricaricaStato()
         throw e
       }
     },

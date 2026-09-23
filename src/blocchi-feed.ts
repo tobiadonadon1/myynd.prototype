@@ -297,16 +297,6 @@ export function stessoGruppo(blocchi: readonly { alto?: boolean }[], da: number,
   return !!blocchi[da].alto === !!blocchi[a].alto
 }
 
-/**
- * L'ordine salvato con questo progetto in cima: quello che succede quando lo
- * segna alto. È la stessa regola del server (`progetti.inCimaAllOrdine`), fatta
- * anche qui perché il blocco salga nell'istante del gesto e non al giro dopo.
- * Senza un ordine suo non se ne inventa uno: decide la priorità da sé.
- */
-export function inCimaAllOrdine(ordine: readonly string[], id: string): string[] {
-  return ordine.length ? [id, ...ordine.filter(x => x !== id)] : []
-}
-
 /** Sposta un blocco da un posto all'altro. Fuori dall'elenco non si sposta niente. */
 export function spostaBlocco(chiavi: readonly string[], da: number, a: number): string[] {
   const fuori = da < 0 || da >= chiavi.length || a < 0 || a >= chiavi.length

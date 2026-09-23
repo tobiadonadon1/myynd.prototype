@@ -217,18 +217,6 @@ export function elenco(stato?: Stato): Progetto[] {
   return righe.map(daRiga)
 }
 
-/**
- * L'ordine dei blocchi con questo progetto in cima. Pura.
- *
- * Sulla prima pagina l'ordine l'aveva già dato lui trascinando i blocchi, e il
- * suo vince sempre (`ordinaBlocchi` nel client). Ma segnare un progetto «alto»
- * è anche quello un ordine suo, e il più recente: se il blocco restasse dov'era
- * la pagina direbbe che il gesto non è servito a niente. Quindi sale in cima
- * all'ordine salvato, e da lì si può ancora trascinare dove vuole.
- */
-export function inCimaAllOrdine(ordine: readonly string[], id: string): string[] {
-  return [id, ...ordine.filter(x => x !== id)]
-}
 
 /** Quelli che contano adesso: attivi e fermi. Un chiuso non è più un progetto. */
 export function vivi(): Progetto[] {
@@ -445,15 +433,11 @@ export function cambia(id: string, c: Cambio, provenienza: 'user-field' | 'user-
     new Date().toISOString(),
     id
   )
-  // appena segnato alto, il suo blocco sale in cima anche all'ordine che lui
-  // aveva trascinato; tornare normale non lo sposta: dove sta, l'ha visto salire.
-  // Solo per un attivo: un fermo non ha un blocco, e non deve prendersi il posto
+  // L'ordine che lui ha trascinato non si riscrive: sulla prima pagina gli alti
+  // stanno davanti da sé (`ordinaBlocchi`), e l'ordine vale dentro ogni gruppo.
+  // Portarlo in cima all'ordine salvato lo lasciava in cima anche tolto l'«alta».
   const altoPrima = eAlto(p)
   const altoDopo = eAlto({ stato: statoDopo, priorita })
-  if (altoDopo && !altoPrima) {
-    const ordine = leggiConfig().ordineBlocchi
-    if (ordine?.length) aggiornaConfig({ ordineBlocchi: inCimaAllOrdine(ordine, id) })
-  }
   if (altoDopo !== altoPrima || priorita !== p.priorita) alCambioDiPriorita?.()
   const ora = new Date().toISOString()
   if (c.obiettivo !== undefined && c.obiettivo.trim() !== p.obiettivo) recordProjectField(id, 'goal', c.obiettivo.trim(), ora, provenienza)

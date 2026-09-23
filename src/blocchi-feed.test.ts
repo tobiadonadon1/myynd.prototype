@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, inCimaAllOrdine, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
+import { blocchiFeed, chiaveBlocco, COMPITI_IN_PAGINA, ordinaBlocchi, ordineDopoIlTrascinamento, pesoDi, SENZA_PESO, spostaBlocco, stessoGruppo, sulTavolo } from './blocchi-feed.ts'
 
 const voce = (id: string, progetto: string | null, quando: string, peso?: number | null) => ({ id, progetto, quando, peso })
 const compito = (id: string, progetto: string | null, altro: Partial<{ stato: string; origine: string; madre: string | null; aggiornato: string; testo: string; nota: string | null }> = {}) =>
@@ -284,7 +284,6 @@ test('un progetto segnato alto passa davanti, anche a una bozza pronta e al più
   assert.deepEqual(ordinaBlocchi(b).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
   // e anche con un ordine trascinato la priorità viene prima: l'ordine vale dentro il gruppo
   assert.deepEqual(ordinaBlocchi(b, ['hf', 'nx']).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
-  assert.deepEqual(ordinaBlocchi(b, inCimaAllOrdine(['hf', 'nx'], 'nx')).map(x => x.nome), ['Nextas', 'H-Farm', 'Il resto'])
 })
 
 test('con un ordine trascinato: gli alti davanti, l’ordine suo dentro ogni gruppo; tolto l’«alta», il blocco torna fra i normali al suo posto', () => {
@@ -315,12 +314,6 @@ test('trascinare si può solo dentro il proprio gruppo', () => {
   assert.equal(stessoGruppo(b, 1, 2), false)
   assert.equal(stessoGruppo(b, 2, 3), true)
   assert.equal(stessoGruppo(b, 3, 4), false)
-})
-
-test('segnarlo alto lo porta in cima all’ordine salvato; senza un ordine suo non se ne scrive uno', () => {
-  assert.deepEqual(inCimaAllOrdine(['hf', 'resto', 'nx'], 'nx'), ['nx', 'hf', 'resto'])
-  assert.deepEqual(inCimaAllOrdine(['hf', 'resto'], 'nuovo'), ['nuovo', 'hf', 'resto'])
-  assert.deepEqual(inCimaAllOrdine([], 'nx'), [])
 })
 
 test('un progetto appena nato ha il suo blocco anche vuoto; uno fermo, sconosciuto o non nato adesso no', () => {

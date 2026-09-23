@@ -162,26 +162,21 @@ test('il modello legge la priorità, e quello alto entra nel tetto per primo', (
 
 // — la prima pagina —
 
-test('segnato alto, il blocco sale in cima all’ordine che aveva trascinato; tornare normale non lo sposta', () => {
+test('segnare alto o normale non riscrive l’ordine che ha trascinato: gli alti stanno davanti da sé', () => {
   store.azzeraTutto()
   const a = progetti.scrivi({ nome: 'Alfa' })
   const b = progetti.scrivi({ nome: 'Beta' })
   const c = progetti.scrivi({ nome: 'Gamma' })
   cfg.aggiorna({ ordineBlocchi: [a.id, 'resto', b.id, c.id] })
+  // portarlo in cima all'ordine salvato lo lasciava in cima anche tolto l'«alta»
   progetti.cambia(c.id, { priorita: 'alta' })
-  assert.deepEqual(cfg.leggi().ordineBlocchi, [c.id, a.id, 'resto', b.id])
-  // di nuovo «alta»: già in cima per sua scelta o trascinato altrove, non si risposta
-  cfg.aggiorna({ ordineBlocchi: [a.id, c.id, 'resto', b.id] })
-  progetti.cambia(c.id, { priorita: 'alta' })
-  assert.deepEqual(cfg.leggi().ordineBlocchi, [a.id, c.id, 'resto', b.id])
+  assert.deepEqual(cfg.leggi().ordineBlocchi, [a.id, 'resto', b.id, c.id])
   progetti.cambia(c.id, { priorita: null })
-  assert.deepEqual(cfg.leggi().ordineBlocchi, [a.id, c.id, 'resto', b.id])
-  // senza un ordine suo non se ne scrive uno: decide la pagina, con la priorità
+  assert.deepEqual(cfg.leggi().ordineBlocchi, [a.id, 'resto', b.id, c.id])
+  // e senza un ordine suo non se ne scrive uno
   cfg.aggiorna({ ordineBlocchi: [] })
   progetti.cambia(b.id, { priorita: 'alta' })
   assert.deepEqual(cfg.leggi().ordineBlocchi, [])
-  assert.deepEqual(progetti.inCimaAllOrdine(['x', 'y', 'z'], 'z'), ['z', 'x', 'y'])
-  assert.deepEqual(progetti.inCimaAllOrdine(['x', 'y'], 'nuovo'), ['nuovo', 'x', 'y'])
 })
 
 // — dopo la revisione: lo stesso nome, i progetti non attivi, l'unione —
@@ -228,12 +223,11 @@ test('un progetto fermo o chiuso con la priorità scritta non passa davanti a ni
   const attivo = progetti.scrivi({ nome: 'Alfa', obiettivo: 'Arrivare in fondo' })
   const fermo = progetti.scrivi({ nome: 'Beta', obiettivo: 'Aspettare' })
   progetti.cambia(fermo.id, { stato: 'fermo' })
-  cfg.aggiorna({ ordineBlocchi: [attivo.id, 'resto'] })
-  // segnato alto mentre è in pausa: resta scritto, ma non si prende il posto in cima
+  // segnato alto mentre è in pausa: resta scritto, ma non vale
   progetti.cambia(fermo.id, { priorita: 'alta' })
   assert.equal(progetti.trova(fermo.id)?.priorita, 'alta')
-  assert.deepEqual(cfg.leggi().ordineBlocchi, [attivo.id, 'resto'], 'un fermo ha rubato il posto in cima')
   assert.equal(progetti.eAlto(progetti.trova(fermo.id)!), false)
+  assert.deepEqual(progetti.elenco().map(p => p.nome), ['Alfa', 'Beta'], 'un fermo alto è passato davanti')
 
   const righe = progetti.perIlModello().split('\n').filter(r => r.startsWith('— '))
   const suaRiga = righe.find(r => r.includes('Progetto: Beta'))!
