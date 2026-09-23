@@ -47,7 +47,7 @@ void main() {
   // The fabric leans toward the pointer: its centre line is pulled a little,
   // only in the columns near it, so the light seems to notice where you are.
   float lean=exp(-pow((p.x-u_pointer.x)*aspect*1.5,2.))*u_presence;
-  centre=mix(centre,u_pointer.y,.24*lean);
+  centre=mix(centre,u_pointer.y,.3*lean);
   float spread=.105+.105*smoothstep(.18,.8,p.x);
   float distance=(p.y-centre)/(spread+.03*sin(p.x*7.+t));
   float envelope=exp(-distance*distance*1.35);
@@ -60,7 +60,7 @@ void main() {
   energy*=crossFold;
   // Cells under the pointer warm up: more where there is light already, and a
   // faint ember where there is none, so the response is visible but never a spotlight.
-  energy=energy*(1.+.6*halo)+.13*halo;
+  energy=energy*(1.+.6*halo)+.2*halo;
   float grain=.73+.45*hash(cell);
   energy*=grain;
   vec3 deep=vec3(.21,.021,.003);
