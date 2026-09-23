@@ -78,7 +78,8 @@ export type Stato = {
     conversazioni: { collegato: boolean; file: string[]; codice: boolean } | null
     /** L'agenda letta da un indirizzo iCal. L'indirizzo non esce mai: solo il nome. */
     calendario: { collegato: boolean; nome: string | null; giorni: number } | null
-    claude: { collegato: boolean } | null
+    /** `via`: la strada che lavora davvero — l'account se è pronto, se no la chiave. */
+    claude: { collegato: boolean; via?: 'abbonamento' | 'chiave' | null } | null
     /** Jev, il giudizio rapido: se c'è, e quanto ha giudicato oggi. */
     jev?: { collegato: boolean; consumo: { giorno: string; giudizi: number; gettoni: number } } | null
     /** Con cosa lavora Claude, quando è lui: l'account (tramite Claude Code) o la chiave. */
@@ -733,6 +734,8 @@ export type EventoCompito =
   | { fase: 'cambiato' }
   /** Il feed è cambiato — una lettura in sottofondo, una voce chiusa altrove: si rilegge. */
   | { fase: 'feed' }
+  /** Un collegamento è cambiato, anche in un'altra finestra o dentro Claude Code: si rilegge lo stato. */
+  | { fase: 'collegamento' }
 
 export type Accesso = {
   entrato: boolean
@@ -1242,12 +1245,22 @@ export const api = {
   collegaDesktop: (cartelle: string[], tutto = false) =>
     json<{ ok: true; cartelle: string[]; tutto: boolean }>('/api/connettori/desktop', { method: 'POST', body: JSON.stringify({ cartelle, tutto }) }),
 
-  /** Un pezzo della cartella scelta nel browser, letta lì e mandata qui. */
-  caricaFileDesktop: (p: {
+  /**
+   * Un pezzo della cartella scelta nel browser, letta lì e mandata qui.
+   *
+   * Il collegamento cambia all'ultimo pezzo, non a ognuno: lo si dice lì
+   * (vedi `SOLO_PASSAGGI` in collegamenti.ts), o ogni quindici file la pagina
+   * rileggeva tutto.
+   */
+  caricaFileDesktop: async (p: {
     file: { percorso: string; base64: string; quando: number }[]
     radice: string; completo: boolean; visti: string[]
-  }) => json<{ ok: true; documenti: number; tolti: number }>(
-    '/api/connettori/desktop/carica-file', { method: 'POST', body: JSON.stringify(p) }),
+  }) => {
+    const r = await json<{ ok: true; documenti: number; tolti: number }>(
+      '/api/connettori/desktop/carica-file', { method: 'POST', body: JSON.stringify(p) })
+    if (p.completo) annunciaCollegamento()
+    return r
+  },
 
   /**
    * Google: la chiamata resta appesa finché non hai finito nel browser.

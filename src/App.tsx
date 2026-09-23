@@ -27,7 +27,7 @@ import { Marchio } from './components/Marchio'
 import { Mascotte } from './components/Mascotte'
 import { useVals, type Vals } from './vals'
 import { alloScadere, api, guaio, type Accesso as TipoAccesso, type Guaio, type Stato } from './api'
-import { rilettura, suCollegamento } from './collegamenti'
+import { annunciaCollegamento, rilettura, suCollegamento } from './collegamenti'
 import { Accesso } from './Accesso'
 
 
@@ -106,6 +106,9 @@ export default function App() {
     if (!accesso?.entrato) return
     let attesa: ReturnType<typeof setTimeout> | undefined
     const chiudi = api.flussoCompiti(e => {
+      // un collegamento cambiato altrove — un'altra finestra, Claude Code nel
+      // Terminale: qui lo si tratta come uno fatto da qui, e rileggono tutti
+      if (e.fase === 'collegamento') { annunciaCollegamento(); return }
       if (e.fase !== 'cambiato' && e.fase !== 'pronto' && e.fase !== 'chiede') return
       clearTimeout(attesa)
       attesa = setTimeout(() => { void rileggiStato().catch(() => {}) }, 250)
@@ -239,8 +242,12 @@ export default function App() {
       {connessioni !== null && (
         <Connessioni
           fonte={connessioni}
-          chiudi={() => setConnessioni(null)}
-          cambiato={() => { void rileggiStato().catch(() => {}) }}
+          // le connessioni leggono lo stato dell'app, non una copia loro: una
+          // verità sola, e una lettura sola per ogni collegamento. Chiudendo si
+          // rilegge ancora: se l'ultima lettura non era arrivata, arriva adesso
+          stato={stato}
+          rileggi={rileggiStato}
+          chiudi={() => { setConnessioni(null); void rileggiStato().catch(() => {}) }}
         />
       )}
       {/*

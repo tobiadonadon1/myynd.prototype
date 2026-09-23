@@ -285,7 +285,7 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
  * n'è uno di ieri: allora la carta c'è, e dice che è scaduto.
  */
 export function Punto({ v }: { v: Vals }) {
-  const p = usePunto()
+  const p = usePunto(v.claudeOn)
   if (!p.punto) return p.vecchio ? <Scaduto p={p} /> : null
   if (p.daVedere) return <Finestra v={v} p={p} />
   const quante = p.punto.progetti.length + p.punto.github.length + p.punto.daLeggere.length + p.punto.risposte.length + (p.punto.aggiornamenti?.length ?? 0)

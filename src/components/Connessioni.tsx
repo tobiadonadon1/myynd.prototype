@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, letturaDesktop, rigaSincronizzazione, type LetturaDesktop, type Stato } from '../api'
-import { rilettura, suCollegamento } from '../collegamenti'
+import { moduloDaFinire } from '../collegamenti'
 import { AccessoDisco, Form } from './forms'
 import { frasi, loc, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
@@ -24,10 +24,15 @@ const MOTORI = ['claude', 'openai', 'compatibile']
 const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop', 'granola']
 
 /** A quiet source picker; credentials and account controls appear only after choosing. */
-export function Connessioni({ fonte, chiudi, cambiato }: {
-  fonte?: string; chiudi: () => void; cambiato: () => void
+export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
+  /**
+   * Lo stato è quello dell'app, e lo rilegge l'app: prima il pannello ne
+   * teneva una copia sua, riletta per conto suo, e per ogni collegamento
+   * `/api/stato` partiva quattro volte — due qui, due fuori — con due verità
+   * che potevano non coincidere per un attimo.
+   */
+  fonte?: string; chiudi: () => void; stato: Stato; rileggi: () => Promise<Stato>
 }) {
-  const [s, setS] = useState<Stato | null>(null)
   const [soloQuesta, setSoloQuesta] = useState(fonte || '')
   const [modifica, setModifica] = useState(false)
   /*
@@ -38,7 +43,8 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
    * dire dopo aver collegato — «la chiave è salvata, ma il conto non ha
    * credito» — e sparirebbe sotto le dita nel momento in cui l'intestazione
    * diventa «Collegato». Si tiene aperto fino al suo `ok()`, o finché non si
-   * torna indietro.
+   * torna indietro — e si chiude pulito se la fonte si scollega: vedi
+   * `moduloDaFinire`.
    */
   const [daFinire, setDaFinire] = useState(false)
   const [fonteInLettura, setFonteInLettura] = useState<string | null>(null)
@@ -67,31 +73,24 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
   const ancora = useRef(false)
   useFocoDialogo(finestra, chiudi)
 
-  const ricarica = useMemo(() => rilettura(() => api.stato(), setS), [])
   const carica = () => {
     setGuaio(null)
     void ricarica().catch(e => setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')))
   }
   useEffect(() => { carica() }, [])
-  // un collegamento cambiato da qui o da un altro posto: l'intestazione e le
-  // due liste dicono subito com'è, senza aspettare l'«Avanti» di una scheda
-  const moduloAperto = useRef(false)
-  useEffect(() => suCollegamento(() => {
-    if (moduloAperto.current) setDaFinire(true)
-    void ricarica().catch(() => {})
-  }), [ricarica])
+  // conta solo se Claude è collegato: lo stato arriva nuovo a ogni lettura, e
+  // chiedere la chiave nell'ambiente a ognuna era una domanda in più per niente
+  const claudeCollegato = !!s?.connettori.find(c => c.id === 'claude')?.collegato
   useEffect(() => {
-    if (!s) return
     // il computer non ha più la via rapida: il suo modulo ha un bottone solo, che fa la stessa cosa
     const puoi: string[] = []
     let attuale = true
     api.chiaveNellAmbiente().then(r => {
       if (!attuale) return
-      const claude = s.connettori.find(c => c.id === 'claude')
-      setSubito(r.presente && claude && !claude.collegato ? [...puoi, 'claude'] : puoi)
+      setSubito(r.presente && !claudeCollegato ? [...puoi, 'claude'] : puoi)
     }).catch(() => { if (attuale) setSubito(puoi) })
     return () => { attuale = false }
-  }, [s])
+  }, [claudeCollegato])
 
   const leggi = async (id: string) => {
     if (leggendo.current) return
@@ -103,7 +102,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
         const fine = letturaDesktop(m)
         if (fine) setLetturaDesk(fine)
       }, id)
-      await ricarica(); cambiato()
+      await ricarica()
     } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')) }
     leggendo.current = false
     setFonteInLettura(null); setAvanzamento(null)
@@ -136,7 +135,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
             const fine = letturaDesktop(m)
             if (fine) setLetturaDesk(fine)
           }))
-          const dopo = await ricarica(); cambiato()
+          const dopo = await ricarica()
           mostra(chiudiLettura(r, id => dopo.connettori.find(c => c.id === id)?.documenti))
         } catch (e) {
           const detto = e instanceof Error ? t(e.message) : t('Non sono riuscito a rileggere questa fonte.')
@@ -153,15 +152,32 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
       if (id === 'claude') await api.usaChiaveAmbiente()
       else return
       // qui non c'è un modulo che debba finire di parlare: si chiude come prima
-      await ricarica(); setDaFinire(false); cambiato()
+      await ricarica(); setDaFinire(false)
     } catch (e) { setGuaio(e instanceof Error ? t(e.message) : t('Non sono riuscito a collegare.')) }
     finally { setCollegando(false) }
   }
 
   const tutti = s?.connettori.filter(c => (c.pronto || c.collegato) && c.id !== 'mind2do') ?? []
   const scelta = tutti.find(c => c.id === soloQuesta)
+  /*
+   * Si guarda il cambio mentre si disegna, non dopo.
+   *
+   * Nel disegno in cui la fonte diventa «Collegato» il modulo deve esserci
+   * ancora: un effetto arriverebbe dopo, il modulo sparirebbe per un
+   * fotogramma e con lui l'avviso che stava dicendo. È il modo di React di
+   * ricordare il disegno di prima: si confronta, e si corregge subito.
+   */
+  const collegata = scelta?.collegato
+  const [visto, setVisto] = useState({ id: soloQuesta, collegata })
+  if (visto.id !== soloQuesta || visto.collegata !== collegata) {
+    setVisto({ id: soloQuesta, collegata })
+    if (visto.id === soloQuesta) {
+      const eraAperto = !visto.collegata || (CAMBIABILI.includes(soloQuesta) && modifica) || daFinire
+      const dopo = moduloDaFinire(daFinire, visto.collegata, collegata, eraAperto)
+      if (dopo !== daFinire) setDaFinire(dopo)
+    }
+  }
   const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire)
-  useEffect(() => { moduloAperto.current = moduloVisibile })
   const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
@@ -228,7 +244,7 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
                   ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
                   // le due teste dicono da quale strada passano: l'account, o la chiave
                   : scelta.id === 'claude'
-                    ? (s?.config.claudeCon === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
+                    ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
                   : scelta.id === 'openai'
                     ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
                   : [
@@ -269,14 +285,14 @@ export function Connessioni({ fonte, chiudi, cambiato }: {
           {scelta.collegato && <div className="connection-detail-actions">
             {!MOTORI.includes(scelta.id) && scelta.id !== 'whatsapp' && <button className="connections-button" disabled={!!fonteInLettura} onClick={() => leggi(scelta.id)}>{fonteInLettura === scelta.id || (fonteInLettura === '*' && righe?.some(r => r.id === scelta.id && (r.stato === 'attesa' || r.stato === 'leggo'))) ? t('leggo…') : t('Rileggi')}</button>}
             {CAMBIABILI.includes(scelta.id) && <button className="connections-button" aria-expanded={modifica} onClick={() => setModifica(!modifica)}>{t('Cambia')}</button>}
-            <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica(); cambiato() }}>{t('Scollega')}</BottoneSicuro>
+            <BottoneSicuro titolo={t('Scollega')} guaio={m => setGuaio(t(m))} fai={async () => { await api.scollega(scelta.id); await ricarica() }}>{t('Scollega')}</BottoneSicuro>
           </div>}
           {!scelta.collegato && subito.includes(scelta.id) && <div className="connection-quick">
             <p>{t('la chiave di Claude che è già qui')}</p>
             <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
           {moduloVisibile && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
-            await ricarica(); setModifica(false); setDaFinire(false); cambiato()
+            await ricarica(); setModifica(false); setDaFinire(false)
             // ogni volta che una fonte viene (ri)collegata si rilegge: prima
             // succedeva solo al primo collegamento, e cambiare le cartelle del
             // computer lasciava in piedi l'indice di quelle vecchie finché non

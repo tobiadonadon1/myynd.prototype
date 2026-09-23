@@ -143,6 +143,11 @@ export function conClaude(): boolean {
   return conLaChiave() || abbonamento.pronto()
 }
 
+/** Da quale strada passa Claude adesso: l'account se è pronto, se no la chiave. */
+export function viaDiClaude(): 'abbonamento' | 'chiave' | null {
+  return abbonamento.pronto() ? 'abbonamento' : conLaChiave() ? 'chiave' : null
+}
+
 /**
  * Claude appena collegato, e un motore scelto che non può lavorare.
  *
@@ -156,6 +161,34 @@ export function conClaude(): boolean {
 export function scegliClaudeSeServe(): boolean {
   if (collegato() || !conClaude()) return false
   aggiorna({ motore: 'claude' })
+  return true
+}
+
+/**
+ * Il motore scelto non può lavorare: lavora uno di quelli collegati che può.
+ *
+ * È la stessa regola di `scegliClaudeSeServe`, girata dall'altra parte e
+ * allargata a tutti. Tre strade ci arrivano. Scollegare Claude con un modello
+ * sul computer ancora collegato lasciava `motore: 'claude'` e nessuno a
+ * ragionare. Spegnere ChatGPT in Myynd lasciava `motore: 'chatgpt'` scritto, e
+ * le configurazioni rimaste così non guarivano più: le Fonti dicevano Claude
+ * collegato, la prima pagina «serve Claude». E una configurazione vecchia letta
+ * all'avvio. L'ordine: Claude, per cui Myynd è messo a punto; il modello sul
+ * computer, che non costa niente; OpenAI con la chiave; l'account ChatGPT solo
+ * se in Myynd è acceso. Un motore che lavora non si tocca mai.
+ */
+export function riparaIlMotore(): boolean {
+  if (collegato()) return false
+  if (scegliClaudeSeServe()) return true
+  const c = leggi()
+  const candidati: ['compatibile' | 'openai' | 'chatgpt', boolean][] = [
+    ['compatibile', !!(c.compatibile?.url && c.compatibile.modello)],
+    ['openai', !!fornitoreOpenAI(c)],
+    ['chatgpt', c.chatgpt?.attivo === true && !!chatgpt.installato()]
+  ]
+  const via = candidati.find(([m, puo]) => puo && m !== c.motore)?.[0]
+  if (!via) return false
+  aggiorna({ motore: via })
   return true
 }
 
