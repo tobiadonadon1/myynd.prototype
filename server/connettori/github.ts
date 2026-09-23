@@ -31,6 +31,7 @@
 
 import type { ConfigGithub } from '../config.ts'
 import type { Documento } from '../store.ts'
+import type { CasoAmministratore } from './amministratore.ts'
 
 const API = 'https://api.github.com'
 
@@ -49,6 +50,17 @@ const MAX_DOCUMENTI = 400
 
 /** Quanto del testo di una pull request o di una issue entra nel documento. */
 const MAX_CORPO = 1_500
+
+/**
+ * Di chi sono i repository che si guardano: i suoi, quelli dove collabora, e
+ * quelli delle sue organizzazioni.
+ *
+ * Prima l'ultima voce mancava, e un token a grana fine fatto per
+ * un'organizzazione — che è il modo in cui GitHub chiede di farli, uno per
+ * proprietario — vedeva i repository del team attraverso l'appartenenza, non
+ * come collaboratore: l'elenco tornava vuoto e il collegamento leggeva zero.
+ */
+const AFFILIAZIONE = 'owner,collaborator,organization_member'
 
 /**
  * «Rallenta»: non è un guasto, è un limite che passa da solo.
@@ -80,31 +92,79 @@ async function grezza(c: ConfigGithub, dove: string): Promise<Response> {
 }
 
 /**
+ * Un no di GitHub che ha già la sua frase.
+ *
+ * `Limite` è l'unico che il giro di lettura tratta a parte; questo porta in
+ * più, quando c'è, l'indirizzo che GitHub stesso manda per sistemare le cose
+ * (l'autorizzazione SSO di un'organizzazione) e il caso da amministratore.
+ */
+class NoDiGithub extends Error {
+  dove?: string
+  amministratore?: CasoAmministratore
+  constructor(messaggio: string, extra: { dove?: string; amministratore?: CasoAmministratore } = {}) {
+    super(messaggio)
+    if (extra.dove) this.dove = extra.dove
+    if (extra.amministratore) this.amministratore = extra.amministratore
+  }
+}
+
+/** Le frasi, scritte una volta: la scheda e il giro di lettura dicono le stesse. */
+const TOKEN_NON_VALIDO = 'GitHub non riconosce questo token: è scaduto, è stato cancellato o è stato copiato a metà. Creane uno nuovo e incollalo qui.'
+const PERMESSI_MANCANTI = 'A questo token mancano dei permessi. Su GitHub aprilo e, in «Permissions», dai a Contents, Issues e Pull requests l’accesso «Read-only».'
+const SSO = 'La tua organizzazione su GitHub chiede l’accesso unico (SSO) per questo token: aprilo su GitHub, premi «Configure SSO» e poi «Authorize» accanto all’organizzazione.'
+const CLASSICO_VIETATO = 'Questa organizzazione non accetta i token classici: crea un token a grana fine con il bottone qui sopra.'
+const TROPPO_LUNGO = 'Questa organizzazione non accetta token che durano più di un anno: rigeneralo su GitHub con una scadenza entro 366 giorni.'
+const CLASSICO_SENZA_REPO = 'A questo token classico manca l’ambito «repo»: crea invece un token a grana fine con il bottone qui sopra.'
+const NOME_STORTO = 'Scrivi i repository come owner/nome, uno per riga.'
+
+/**
  * I modi in cui GitHub dice di no, separati uno per uno.
  *
- * Il 403 è il caso che conta: GitHub ci mette dentro due cose diverse — «non
- * hai il permesso» e «hai chiesto troppo» — e sono le sole intestazioni a
- * distinguerle. Trattarle uguali vuol dire o mandare qualcuno a rifare un
- * token che andava benissimo, o smettere di leggere una fonte per sempre
- * perché un mercoledì si era esaurito il limite orario.
+ * Il 403 è il caso che conta: GitHub ci mette dentro cose diversissime —
+ * «hai chiesto troppo», «al token manca un permesso», «l'organizzazione
+ * vuole l'SSO», «l'organizzazione non accetta questo tipo di token» — e a
+ * distinguerle sono le intestazioni e la frase del corpo. Trattarle uguali
+ * vuol dire o mandare qualcuno a rifare un token che andava benissimo, o
+ * smettere di leggere una fonte per sempre perché un mercoledì si era
+ * esaurito il limite orario. Le frasi di GitHub, e dove sono scritte:
+ *
+ *   · 401 «Bad credentials»: token sbagliato, scaduto o revocato
+ *     (docs.github.com, «Token expiration and revocation»: a scadenza il
+ *     token è revocato, e risponde come uno sbagliato);
+ *   · 403 «Resource not accessible by personal access token», con
+ *     `X-Accepted-GitHub-Permissions`: al token a grana fine manca il permesso
+ *     (docs.github.com, «Troubleshooting the REST API»);
+ *   · `X-GitHub-SSO: required; url=…`: l'organizzazione usa SAML e il token
+ *     classico non è autorizzato; l'indirizzo vale un'ora (docs.github.com,
+ *     «Authenticating to the REST API», SAML SSO);
+ *   · «forbids access via a personal access token (classic)» e «forbids access
+ *     via a fine-grained personal access token(s) if the token's lifetime is
+ *     greater than 366 days»: i criteri dell'organizzazione (composer#12711).
  */
-function controlla(r: Response): void {
+async function controlla(r: Response): Promise<void> {
   if (r.ok) return
-  if (r.status === 401) throw new Error('Il token di GitHub non è valido.')
+  if (r.status === 401) throw new NoDiGithub(TOKEN_NON_VALIDO)
+  const sso = r.headers.get('x-github-sso') ?? ''
+  if (/^required/i.test(sso)) {
+    throw new NoDiGithub(SSO, { dove: /url=(\S+)/.exec(sso)?.[1] })
+  }
   if (r.status === 403 || r.status === 429) {
     const restano = r.headers.get('x-ratelimit-remaining')
     if (r.headers.get('retry-after') || restano === '0') {
       throw new Limite('GitHub ha detto di rallentare: riprendo al prossimo giro.')
     }
-    throw new Error('A questo token mancano dei permessi: serve la lettura di contenuti, issue e pull request.')
+    const detto = await r.clone().json().then((j: unknown) => String((j as { message?: unknown })?.message ?? ''), () => '')
+    if (/forbids access via a personal access token \(classic\)/i.test(detto)) throw new NoDiGithub(CLASSICO_VIETATO)
+    if (/forbids access via a fine-grained/i.test(detto) && /lifetime/i.test(detto)) throw new NoDiGithub(TROPPO_LUNGO)
+    throw new NoDiGithub(PERMESSI_MANCANTI)
   }
-  if (r.status === 404) throw new Error('GitHub non trova questo repository, o il token non lo vede.')
-  throw new Error('GitHub non ha risposto come mi aspettavo.')
+  if (r.status === 404) throw new NoDiGithub('GitHub non trova questo repository, o il token non lo vede.')
+  throw new NoDiGithub('GitHub non ha risposto come mi aspettavo.')
 }
 
 async function chiama<T>(c: ConfigGithub, dove: string): Promise<T> {
   const r = await grezza(c, dove)
-  controlla(r)
+  await controlla(r)
   try {
     return await r.json() as T
   } catch {
@@ -116,31 +176,95 @@ export function collegato(c?: { github?: ConfigGithub }): boolean {
   return !!c?.github?.token
 }
 
+/** Quanti repository si contano per la conferma: una pagina, e poi «più di». */
+const CONTATI = 100
+
+const NESSUN_REPOSITORY = 'Questo token non vede nessun repository. Su GitHub aprilo e, in «Repository access», scegli «All repositories» o «Only select repositories» con quelli da leggere.'
+
 /**
- * Il token va bene, e vede qualcosa.
+ * Il token va bene, vede qualcosa, e può leggere quello che leggeremo.
  *
  * `/user` dice chi è: è la chiamata più economica che esista e non chiede
- * nessun permesso sui repository, quindi passa anche a un token cieco. Per
- * questo subito dopo si guardano gli ambiti: un token classico li dichiara in
- * `x-oauth-scopes`, e senza `repo` quel collegamento resterebbe a zero per
- * sempre senza che nessun errore lo dica. Uno a grana fine quell'intestazione
- * non la manda affatto — lì il permesso si scopre solo leggendo davvero, e
- * l'errore arriva dalla prima lettura.
+ * nessun permesso sui repository, quindi passa anche a un token cieco
+ * (docs.github.com: «The fine-grained token does not require any
+ * permissions»). Per questo subito dopo si guarda il resto:
+ *
+ *   · un token classico dichiara gli ambiti in `x-oauth-scopes`, e senza
+ *     `repo` quel collegamento resterebbe a zero per sempre;
+ *   · si contano i repository che vede. Zero non è un collegamento riuscito
+ *     con niente dentro: è quasi sempre «Repository access» lasciato su
+ *     «Public repositories», o un token di un'organizzazione che aspetta
+ *     l'approvazione — e si dice adesso, non fra sei ore;
+ *   · sul primo repository si fanno le tre letture che farà il giro, una
+ *     riga ciascuna. Un permesso che manca a un token a grana fine lo dice
+ *     solo una lettura vera (un 403 «Resource not accessible by personal
+ *     access token»), e la prima lettura vera, altrimenti, sarebbe quella
+ *     notturna.
+ *
+ * Il numero che torna è la conferma che la scheda mostra: «12 repository»
+ * vuol dire che ha fatto il token giusto.
  */
 export async function prova(c: ConfigGithub): Promise<
-  { ok: true; login: string } | { ok: false; errore: string }
+  { ok: true; login: string; repos: number; oltre: boolean }
+  | { ok: false; errore: string; dove?: string; repo?: string; amministratore?: CasoAmministratore }
 > {
   if (!c.token.trim()) return { ok: false, errore: 'Serve il token di GitHub.' }
+  const cc: ConfigGithub = { ...c, token: c.token.trim() }
   try {
-    const r = await grezza({ ...c, token: c.token.trim() }, '/user')
-    controlla(r)
+    const r = await grezza(cc, '/user')
+    await controlla(r)
     const ambiti = r.headers.get('x-oauth-scopes')
     if (ambiti !== null && !/\b(repo|public_repo)\b/.test(ambiti)) {
-      return { ok: false, errore: 'A questo token manca l’ambito «repo»: rifallo spuntando la lettura dei repository.' }
+      return { ok: false, errore: CLASSICO_SENZA_REPO }
     }
     const u = await r.json().catch(() => ({})) as { login?: string }
-    return { ok: true, login: u.login ?? '' }
+
+    const scelti = (c.repos ?? []).map(x => x.trim()).filter(Boolean)
+    let elenco: string[]
+    let oltre = false
+    if (scelti.length) {
+      elenco = scelti.slice(0, MAX_REPOS)
+    } else {
+      const l = await grezza(cc, `/user/repos?sort=pushed&per_page=${CONTATI}&affiliation=${AFFILIAZIONE}`)
+      await controlla(l)
+      oltre = /rel="next"/.test(l.headers.get('link') ?? '')
+      const tutti = await l.json().catch(() => []) as Repo[]
+      elenco = (Array.isArray(tutti) ? tutti : []).map(x => x.full_name ?? '').filter(Boolean)
+      if (!elenco.length) {
+        /*
+         * Zero repository, e il caso dell'organizzazione accanto.
+         *
+         * Un token a grana fine creato per un'organizzazione resta «pending»
+         * finché un suo amministratore non lo approva, e intanto legge solo
+         * quello che è pubblico (docs.github.com, «Managing your personal
+         * access tokens»). Da qui non si distingue da «Repository access»
+         * lasciato su «Public repositories»: si dicono tutte e due, e la
+         * scheda offre la richiesta per l'amministratore come seconda strada.
+         */
+        return { ok: false, errore: NESSUN_REPOSITORY, amministratore: { servizio: 'github-org', forse: true } }
+      }
+    }
+
+    // le tre letture del giro, sul primo repository: una riga ciascuna
+    const primo = elenco[0]!
+    const parti = dividi(primo)
+    if (!parti) return { ok: false, errore: NOME_STORTO, repo: primo }
+    const base = `/repos/${parti.owner}/${parti.repo}`
+    for (const dove of [`${base}/commits?per_page=1`, `${base}/issues?per_page=1`, `${base}/pulls?per_page=1`]) {
+      const x = await grezza(cc, dove)
+      // 409: repository vuoto, niente da leggere ma nessun permesso che manca;
+      // 410: issue spente su quel repository, idem
+      if (x.status === 409 || x.status === 410) continue
+      if (x.status === 404 && scelti.length) {
+        return { ok: false, errore: 'GitHub non trova questo repository, o il token non lo vede.', repo: primo }
+      }
+      await controlla(x)
+    }
+    return { ok: true, login: u.login ?? '', repos: scelti.length || elenco.length, oltre }
   } catch (e) {
+    if (e instanceof NoDiGithub) {
+      return { ok: false, errore: e.message, ...(e.dove ? { dove: e.dove } : {}), ...(e.amministratore ? { amministratore: e.amministratore } : {}) }
+    }
     return { ok: false, errore: e instanceof Error ? e.message : String(e) }
   }
 }
@@ -206,7 +330,7 @@ export function dividi(pieno: string): { owner: string; repo: string } | null {
 async function repositori(c: ConfigGithub): Promise<string[]> {
   const scelti = (c.repos ?? []).map(r => r.trim()).filter(Boolean)
   if (scelti.length) return scelti.slice(0, MAX_REPOS)
-  const r = await chiama<Repo[]>(c, `/user/repos?sort=pushed&per_page=${MAX_REPOS}&affiliation=owner,collaborator`)
+  const r = await chiama<Repo[]>(c, `/user/repos?sort=pushed&per_page=${MAX_REPOS}&affiliation=${AFFILIAZIONE}`)
   return (Array.isArray(r) ? r : []).map(x => x.full_name ?? '').filter(Boolean).slice(0, MAX_REPOS)
 }
 

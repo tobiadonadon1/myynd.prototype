@@ -28,6 +28,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { leggi, scrivi as scriviConfig } from '../config.ts'
 import * as chi from '../chi.ts'
+import { daGoogle, DaApprovare, APPROVA_GOOGLE } from './amministratore.ts'
 import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
@@ -85,7 +86,7 @@ async function apriIlBrowser(url: string) {
  * chiude la finestra del browser a metà, questo processo non deve restare in
  * ascolto per sempre.
  */
-function ascolta(): Promise<{ porta: number; codice: Promise<string>; chiudi: () => void }> {
+function ascolta(idApp = ''): Promise<{ porta: number; codice: Promise<string>; chiudi: () => void }> {
   return new Promise((pronto, male) => {
     let dai: (c: string) => void
     let no: (e: Error) => void
@@ -101,7 +102,10 @@ function ascolta(): Promise<{ porta: number; codice: Promise<string>; chiudi: ()
         'background:#191715;color:#F4EFE8;display:grid;place-items:center;height:100vh;margin:0">' +
         `<div>${c ? 'Fatto. Puoi chiudere questa pagina e tornare su Myynd.' : 'Non è andata. Torna su Myynd e riprova.'}</div>`
       )
+      // il no dell'amministratore prima di «hai detto di no»: vedi amministratore.ts
+      const caso = c ? null : daGoogle(errore, u.searchParams.get('error_description'), { clientId: idApp })
       if (c) dai(c)
+      else if (caso) no(new DaApprovare(APPROVA_GOOGLE, caso))
       else no(new Error(errore === 'access_denied' ? 'Hai detto di no a Google.' : 'Google non ha mandato il codice.'))
     })
 
@@ -145,7 +149,7 @@ async function chiediToken(corpo: Record<string, string>): Promise<Record<string
 export async function collega(clientId: string, clientSecret?: string): Promise<{ email: string }> {
   if (!clientId.trim()) throw new Error('Serve il client ID di Google.')
   const { verifica, sfida } = pkce()
-  const { porta, codice, chiudi } = await ascolta()
+  const { porta, codice, chiudi } = await ascolta(clientId)
   const redirect = `http://127.0.0.1:${porta}`
 
   try {
@@ -190,6 +194,7 @@ function sportello(clientId: string, clientSecret?: string): Sportello {
     gettoni: 'https://oauth2.googleapis.com/token',
     campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
     traduci: j => j.error === 'invalid_grant' ? 'Il collegamento con Google è scaduto: rifallo.' : null,
+    approvazione: (e, d) => daGoogle(e, d, { clientId }),
     autorizza: ({ redirect, sfida, stato }) => {
       const u = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       u.searchParams.set('client_id', clientId)

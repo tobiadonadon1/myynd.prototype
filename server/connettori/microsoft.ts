@@ -27,6 +27,7 @@ import type { Documento } from '../store.ts'
 import { filoDi, idPulito } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { consenso, chiediGettoni, Vivo, avviaWeb, type Sportello } from './oauth.ts'
+import { daMicrosoft } from './amministratore.ts'
 import { APP_MICROSOFT } from '../ospitato.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
@@ -78,7 +79,8 @@ function traduci(j: Record<string, unknown>, _stato: number): string | null {
   if (e === 'unauthorized_client' || /AADSTS7000218/.test(detto)) {
     return 'L’app su Entra ID non è registrata come applicazione desktop.'
   }
-  if (/AADSTS65001/.test(detto)) return 'Manca il consenso dell’amministratore per questi permessi.'
+  // AADSTS65001 e gli altri codici dell'amministratore non passano più di
+  // qui: li prende `approvazione`, che li porta alla scheda con la richiesta
   return null
 }
 
@@ -89,6 +91,7 @@ function sportello(clientId: string, tenant: string, parti: Parte[], clientSecre
     gettoni: `${base}/token`,
     campi: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
     traduci,
+    approvazione: (e, d) => daMicrosoft(e, d, { clientId, tenant }),
     autorizza: ({ redirect, sfida, stato }) => {
       const u = new URL(`${base}/authorize`)
       u.searchParams.set('client_id', clientId)
