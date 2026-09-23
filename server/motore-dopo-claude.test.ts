@@ -69,6 +69,6 @@ test('ogni strada che collega Claude passa dalla regola, e lo stato dice se si r
     "app.post('/api/modello/abbonamento',",
     "app.get('/api/modello/abbonamento/accesso/:id',"
   ]) assert.match(rotta(r), /mod\.scegliClaudeSeServe\(\)/, `${r} collega Claude senza guardare il motore`)
-  assert.match(rotta("app.get('/api/stato',"), /ragiona: mod\.collegato\(\)/,
+  assert.match(rotta("app.get('/api/stato',"), /const ragiona = mod\.collegato\(\)[\s\S]*\n\s+ragiona,/,
     'la pagina deve leggere «può ragionare» dal server, non rifarlo da sé')
 })

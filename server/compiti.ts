@@ -53,6 +53,8 @@ export type Evento =
   | { fase: 'cambiato' }
   /** Il feed è cambiato: qualcosa è arrivato, o una voce ha cambiato stato. Si rilegge. */
   | { fase: 'feed' }
+  /** Un collegamento è cambiato: chi mostra lo stato dei collegamenti lo rilegge. */
+  | { fase: 'collegamento' }
 
 /*
  * Ogni ascoltatore sa di chi vuole sentire.
@@ -103,6 +105,22 @@ export function annunciaCambio() {
  */
 export function annunciaFeed() {
   annuncia({ fase: 'feed' })
+}
+
+/**
+ * «Un collegamento è cambiato, rileggi lo stato.»
+ *
+ * La finestra che ha collegato lo sa già da sé (`src/collegamenti.ts`); sono
+ * le altre — il richiamo, un'altra scheda del browser — a restare indietro.
+ * `aTutti` serve a Claude Code, che è uno per macchina: quando dice «non sei
+ * più entrato» vale per chiunque abbia l'app aperta su questo computer, e la
+ * notizia non porta niente di nessuno, solo il fatto.
+ */
+export function annunciaCollegamento(aTutti = false) {
+  if (!aTutti) return annuncia({ fase: 'collegamento' })
+  for (const a of ascoltatori) {
+    try { a.f({ fase: 'collegamento' }) } catch { /* chi ascolta si arrangia */ }
+  }
 }
 
 /**

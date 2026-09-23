@@ -23,6 +23,7 @@ import * as jev from './jev.ts'
 import * as giudizi from './giudizi.ts'
 import * as compatibile from './compatibile.ts'
 import * as abbonamento from './abbonamento.ts'
+import { cambiaUnCollegamento } from './collegamenti.ts'
 import * as chatgpt from './chatgpt.ts'
 import * as memoria from './memoria.ts'
 import * as conoscenza from './conoscenza.ts'
@@ -459,6 +460,32 @@ app.post('/api/auth/reimposta', async (req, res) => {
 // da qui in giù serve essere dentro
 app.use(auth.guardia)
 
+/*
+ * Un collegamento cambiato si dice anche alle altre finestre.
+ *
+ * La finestra che ha collegato rilegge da sé appena riceve la risposta; il
+ * richiamo e un'altra scheda del browser restavano alla fotografia di prima
+ * finché qualcosa non li faceva rileggere. Il fatto viaggia sul filo dei
+ * compiti, che quelle finestre ascoltano già. Vedi `collegamenti.ts`.
+ */
+app.use((req, res, next) => {
+  if (cambiaUnCollegamento(req.method, req.path, req.body)) {
+    const di = chi.adesso()
+    res.on('finish', () => {
+      if (res.statusCode >= 400) return
+      if (di) chi.dentro(di, () => compiti.annunciaCollegamento())
+      else compiti.annunciaCollegamento()
+    })
+  }
+  next()
+})
+/*
+ * E quando è Claude Code a cambiare risposta — si è entrati o usciti nel
+ * Terminale — la tessera, la prima pagina e le preferenze lo devono sapere
+ * senza che nessuno prema niente: vale per tutti, è uno per macchina.
+ */
+abbonamento.quandoCambia(() => compiti.annunciaCollegamento(true))
+
 /**
  * Un guaio che si ripara collegando qualcosa.
  *
@@ -595,22 +622,34 @@ app.delete('/api/conto/gettoni/:id', async (req, res) => {
 })
 
 app.get('/api/stato', async (_req, res) => {
+  /*
+   * Prima di rispondere, un motore che non può lavorare si ripara: una
+   * configurazione rimasta con ChatGPT scelto e spento diceva «serve Claude»
+   * in prima pagina e «Claude collegato» nelle Fonti. Costa una lettura del
+   * file, e scrive solo quando serve. E la risposta di Claude Code si rinnova
+   * senza aspettarla: se cambia, lo dice il filo.
+   */
+  mod.riparaIlMotore()
+  abbonamento.riguarda()
   const c = cfg.leggi()
   const n = store.conteggi()
+  const ragiona = mod.collegato()
   res.json({
     // `pubblica()` guarda solo la chiave, perché da lì non si può chiedere a
     // `modello.ts` senza girare in tondo: la risposta vera — chiave *o*
     // abbonamento — si mette qui sopra, dove le due si conoscono entrambe
     config: {
       ...cfg.pubblica(c),
-      claude: mod.conClaude() ? { collegato: true } : null,
+      // `via` è la strada che lavora davvero, non quella scelta: l'account da
+      // cui si è usciti non è «con il tuo account», anche se è ancora scelto
+      claude: mod.conClaude() ? { collegato: true, via: mod.viaDiClaude() } : null,
       jev: jev.collegato() ? { collegato: true, consumo: jev.consumo() } : null
     },
     // «Myynd può ragionare adesso?», detto una volta sola e da qui. La pagina
     // lo rifaceva da sé con `motore` e le schede, e non sempre rispondeva come
     // `collegato()`, che è quello che guardano la chat, il punto e le deleghe
     // prima di chiamare qualcuno
-    ragiona: mod.collegato(),
+    ragiona,
     conteggi: n,
     // quelli che leggono *questa macchina* non si offrono su un server: dentro
     // un contenitore troverebbero una cartella vuota, e chi li prova penserebbe
@@ -664,7 +703,9 @@ app.get('/api/stato', async (_req, res) => {
      * Serve alla schermata per dirlo con un cartellino invece che con una riga
      * rossa dentro una chat, che è dove finora si perdeva.
      */
-    credito: mod.mancaIlCredito(),
+    // solo se qualcuno può ragionare: l'avviso parla del conto di una chiave,
+    // e senza chiave né motore resta a dirlo a chi non ha niente da ricaricare
+    credito: ragiona ? mod.mancaIlCredito() : null,
     // la vedetta: le cartelle del desktop guardate dal vivo, per questa persona
     vedetta: vedetta.stato(),
     suggerimentiDesktop: ospitato.OSPITATO ? [] : desktop.suggerimenti(),
@@ -906,6 +947,9 @@ app.post('/api/modello/chatgpt', async (req, res) => {
     } else {
       // This is only Myynd's selection. Never log out the user's Codex apps.
       cfg.aggiorna({ chatgpt: { attivo: false } })
+      // spento ChatGPT, lavora chi può: `motore: 'chatgpt'` rimasto scritto
+      // lasciava Myynd senza nessuno, con Claude collegato
+      mod.riparaIlMotore()
     }
     res.json({ ok: true, ...await chatgpt.stato() })
   } catch (e) { errore(res, e) }
@@ -932,9 +976,13 @@ app.get('/api/modello/abbonamento/accesso/:id', (req, res) => {
   if (!s) return res.status(404).json({ errore: 'Questo accesso non c’è più.' })
   if (s.stato === 'completed') {
     const c = cfg.leggi()
-    if (c.claudeCon !== 'abbonamento') { cfg.aggiorna({ claudeCon: 'abbonamento', abbonamento: { attivo: true }, motore: 'claude' }); abbonamento.riprova() }
-    // già scelto da prima, e rientrato: il motore può essere rimasto su uno spento
-    else mod.scegliClaudeSeServe()
+    if (c.claudeCon !== 'abbonamento') { cfg.aggiorna({ claudeCon: 'abbonamento', abbonamento: { attivo: true } }); abbonamento.riprova() }
+    // Claude lavora se nessun altro può; un motore che lavora — ChatGPT, il
+    // modello sul computer — resta dov'è. Scriverci sopra `motore: 'claude'`
+    // toglieva di mezzo quello che si era scelto, solo per aver fatto l'accesso
+    mod.scegliClaudeSeServe()
+    // le altre finestre: la tessera si accende anche lì
+    compiti.annunciaCollegamento()
   }
   res.json(s)
 })
@@ -1754,6 +1802,12 @@ app.delete('/api/connettori/:id', (req, res) => {
   // si dice nel registro: una credenziale che sparisce senza una riga è quello che è successo il 13 settembre
   console.log(`myynd · scollegata la fonte «${id}» su richiesta`)
   cfg.scrivi(c, { togli: [id, ...(id === 'claude' ? ['claudeCon'] : []), ...(id === 'compatibile' || id === 'openai' ? ['motore'] : [])] })
+  if (id === 'claude' || id === 'compatibile' || id === 'openai') {
+    // l'avviso del credito parlava del conto di questa testa: se ne va con lei
+    mod.scordaIlCredito()
+    // e se chi lavorava era lei, lavora un altro di quelli ancora collegati
+    mod.riparaIlMotore()
+  }
   if (id !== 'claude' && id !== 'compatibile' && id !== 'openai' && id !== 'jev') store.svuotaFonte(id)
   res.json({ ok: true })
 })
@@ -4613,6 +4667,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
+  }
+  // una configurazione rimasta con un motore che non può lavorare — ChatGPT
+  // scelto e spento — si ripara adesso, prima che i giri di fondo la usino
+  for (const u of conti.tutti()) {
+    try { if (chi.dentro(u, () => mod.riparaIlMotore())) console.log(`myynd · motore riparato all'avvio per ${u}`) } catch { /* uno rotto non ferma gli altri */ }
   }
   if (appesi) console.log(`myynd · ${appesi} compit${appesi === 1 ? 'o rimasto' : 'i rimasti'} a metà, riaperti`)
   const quantiConti = conti.quanti()
