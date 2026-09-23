@@ -371,12 +371,20 @@ export function saltaDalNome(percorso: string, radice: string, tutto = false, eC
  *
  * `regole` arriva da fuori perché non sono le stesse per tutti: chi ha scelto
  * `~/Pictures` a mano ci tiene le scansioni, e quei documenti non si buttano.
+ *
+ * E con le `radici` si giudica solo quello che sta *sotto* la cartella
+ * scelta, come fa `cammina`. Il percorso intero diceva `tmp` per una cartella
+ * scelta dentro `/tmp`, e `Library` per iCloud Drive, che sta sotto
+ * `~/Library` anche con tutto il Mac: a ogni lettura quei documenti uscivano
+ * dall'indice e si estraevano di nuovo, e se la cartella non si apriva più
+ * restavano fuori, con il Mac a zero.
  */
-export function daButtare(id: string, regole: Regole, sotto?: SottoAttrezzi): boolean {
+export function daButtare(id: string, regole: Regole, sotto?: SottoAttrezzi, radici: string[] = []): boolean {
   if (!id.startsWith('desktop:')) return false
   const percorso = id.slice('desktop:'.length)
   if (!percorso) return false
-  const pezzi = percorso.split(sep).filter(Boolean)
+  const radice = radici.map(r => resolve(r)).filter(r => percorso.startsWith(r + sep)).sort((a, b) => b.length - a.length)[0]
+  const pezzi = (radice ? percorso.slice(radice.length + 1) : percorso).split(sep).filter(Boolean)
   if (!pezzi.length) return false
   if (pezzi.some(n => regole.salta(n))) return true
   if (nomeDiMacchina(pezzi[pezzi.length - 1]!)) return true
@@ -446,7 +454,7 @@ export function sottoAttrezzi(radici: string[]): SottoAttrezzi {
 export function pulisciIndice(c: ConfigDesktop): number {
   const regole = regoleDi(c.tutto)
   const sotto = sottoAttrezzi(radici(c))
-  const buttare = store.idsConPrefisso('desktop:').filter(id => daButtare(id, regole, sotto))
+  const buttare = store.idsConPrefisso('desktop:').filter(id => daButtare(id, regole, sotto, radici(c)))
   if (!buttare.length) return 0
   return store.scordaDocumenti(buttare)
 }

@@ -216,6 +216,18 @@ async function guarda(posto: Posto, radice: string, percorso: string) {
   try { s = await stat(percorso) } catch { s = null }
 
   if (!s) {
+    /*
+     * Se è sparita la cartella guardata, non si sa cosa è successo.
+     *
+     * Un file che manca dentro una cartella che c'è è un file cancellato. Ma
+     * una radice che non risponde più può essere un disco staccato, una
+     * cartella di rete caduta, un permesso tolto: la stessa regola della
+     * lettura intera, che su una radice illeggibile non riconcilia niente.
+     * Qui buttava l'indice di tutta la cartella, e il Mac restava a zero con
+     * i suoi estratti spariti. La lettura dopo dirà che la cartella non si apre.
+     */
+    const radiceViva = await stat(radice).then(r => r.isDirectory(), () => false)
+    if (!radiceViva) return
     // per un percorso sparito si giudica dal nome: cancellare un file
     // ignorato non tocca niente, e una cartella si svuota per prefisso
     const id = `desktop:${percorso}`

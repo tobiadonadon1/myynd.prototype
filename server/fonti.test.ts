@@ -602,6 +602,35 @@ test('pulisciIndice toglie quello che le regole di adesso non farebbero più ent
   assert.equal(desktop.pulisciIndice({ cartelle: [CASA], tutto: true }), 0)
 })
 
+/*
+ * Si giudica quello che sta sotto la cartella scelta, non il percorso intero.
+ *
+ * Una cartella scelta dentro `/tmp` (o iCloud Drive, che sta sotto
+ * `~/Library`) aveva nel percorso un nome che le regole saltano: a ogni
+ * lettura i suoi documenti uscivano dall'indice prima di essere riletti, e
+ * con la cartella che non si apriva più il Mac restava a zero.
+ */
+test('pulisciIndice non butta una cartella scelta che sta sotto un nome saltato', () => {
+  const scelta = join(CASA, 'tmp', 'Lavoro')
+  const icloud = join(CASA, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')
+  const doc = (p: string) => ({
+    id: `desktop:${p}`, fonte: 'desktop', tipo: 'file', titolo: p.split('/').pop()!,
+    corpo: 'Il contenuto di prova, abbastanza lungo.', autore: null, percorso: p,
+    quando: '2026-09-01T00:00:00.000Z', gruppo: 'documenti'
+  })
+  const contratto = join(scelta, 'contratto.md')
+  const registro = join(scelta, 'logs', 'sessione.txt')
+  const nota = join(icloud, 'Progetti', 'piano.md')
+  store.salvaDocumenti([doc(contratto), doc(registro), doc(nota)])
+  // la cartella scelta non c'è più sul disco: il giudizio resta dal nome
+  assert.equal(desktop.pulisciIndice({ cartelle: [scelta, icloud], scelte: true }), 1, 'only the log inside the folder goes')
+  const ids = store.idsConPrefisso('desktop:')
+  assert.ok(ids.includes(`desktop:${contratto}`), 'a folder chosen under tmp keeps its documents')
+  assert.ok(ids.includes(`desktop:${nota}`), 'iCloud Drive under Library keeps its documents')
+  assert.ok(!ids.includes(`desktop:${registro}`), 'a log folder inside the chosen folder is still dropped')
+  store.scordaDocumenti([`desktop:${contratto}`, `desktop:${nota}`])
+})
+
 // — gli alberi degli attrezzi —
 //
 // Sul feed è comparsa una voce «Da leggere» intitolata «Cosa significa
