@@ -71,7 +71,7 @@ export type Stato = {
     posta: { host: string; utente: string; giorni: number } | null
     desktop: { cartelle: string[]; tutto: boolean } | null
     notion: { collegato: boolean } | null
-    /** Granola sul Mac: non c'è nessuna credenziale, solo quante note ha letto. */
+    /** Granola: quante riunioni ha letto. Le chiavi dell'account non escono dal server. */
     granola: { collegato: boolean; note: number } | null
     note: { collegato: boolean; note: number } | null
     /** I file esportati da ChatGPT e Claude, e se legge anche le sessioni di Claude Code. */
@@ -997,6 +997,14 @@ export type AccessoChatGPT = { stato: 'pending' | 'completed' | 'failed' | 'canc
 /** L'accesso all'account Claude, fatto da Claude Code: `url` è l'indirizzo di riserva se il browser non si apre. */
 export type AccessoClaude = { stato: 'pending' | 'completed' | 'failed' | 'cancelled'; url?: string; errore?: string }
 
+/** Un collegamento a Granola avviato: si aspetta il browser, si legge, è fatto (o no). */
+export type AccessoGranola = {
+  stato: 'attesa' | 'lettura' | 'fatto' | 'errore' | 'annullato'
+  errore?: string
+  note?: number
+  trentaGiorni?: boolean
+}
+
 export type ProjectExecutionReport = {
   id: string
   state: 'verified' | 'unverified' | 'failed' | 'cancelled' | 'no_changes'
@@ -1250,9 +1258,18 @@ export const api = {
     json<{ ok: true; email: string }>('/api/connettori/google',
       { method: 'POST', body: JSON.stringify({ clientId, clientSecret }) }),
 
-  // niente da mandare: il file sta dove sta, e il percorso non si prende da qui
-  collegaGranola: () =>
-    json<{ ok: true; note: number }>('/api/connettori/granola', { method: 'POST', body: '{}' }),
+  /**
+   * Granola con l'account, primo tempo: l'indirizzo del consenso.
+   *
+   * In casa torna anche `id`, e il browser lo apre la scheda; poi si segue con
+   * `accessoGranola`. Ospitati torna solo `dove`, e la pagina ci va.
+   */
+  avviaGranola: () =>
+    json<{ id?: string; dove: string; scade?: number }>('/api/connettori/granola/avvia', { method: 'POST', body: '{}' }),
+  accessoGranola: (id: string, signal?: AbortSignal) =>
+    json<AccessoGranola>(`/api/connettori/granola/avvia/${encodeURIComponent(id)}`, { signal }),
+  annullaGranola: (id: string) =>
+    json<{ ok: true } & AccessoGranola>(`/api/connettori/granola/avvia/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   /** Le Note di Apple: come Granola, niente da mandare. Senza il permesso risponde con la strada per darlo. */
   collegaNote: () =>

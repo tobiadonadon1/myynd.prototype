@@ -19,8 +19,9 @@ const MOTORI = ['claude', 'openai', 'compatibile']
  * senza un «Cambia» l'unica strada per passare da tre cartelle a tutto il Mac
  * era proprio quella — cioè nessuna, per chi non se la sente.
  */
-// Anthropic e OpenAI hanno due strade: «Cambia» riapre la scheda per scegliere l'altra, o cambiare chiave
-const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop']
+// Anthropic e OpenAI hanno due strade: «Cambia» riapre la scheda per scegliere l'altra, o cambiare chiave.
+// Granola: quando l'accesso scade si rifà da qui, e le riunioni già lette restano
+const CAMBIABILI = ['compatibile', 'claude', 'openai', 'desktop', 'granola']
 
 /** A quiet source picker; credentials and account controls appear only after choosing. */
 export function Connessioni({ fonte, chiudi, cambiato }: {
