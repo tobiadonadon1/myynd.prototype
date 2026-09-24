@@ -41,6 +41,7 @@ import * as chi from './chi.ts'
 import * as store from './store.ts'
 import * as compatibile from './compatibile.ts'
 import * as chatgpt from './chatgpt.ts'
+import * as tettoDiOggi from './tetto.ts'
 
 // — chi c'è —
 
@@ -274,6 +275,9 @@ export type Lavoro =
   | 'valutazione'   // il voto alle priorità, contro quello che lui ha scritto di suo pugno: attuali, morte, nel progetto giusto
   | 'email'         // dalla bozza all'email pronta: a chi va, che oggetto, che testo
   | 'revisione'     // rileggere il lavoro consegnato come lei e come chi lo riceve, prima di dirlo pronto
+  | 'collaudo'      // P6: la prova di un'automazione sugli ultimi trenta giorni, in un recinto che non scrive
+  | 'esame'         // P7: le domande dell'esame delle risposte, e il giudizio su ognuna
+  | 'verifica'      // P7: rileggere una risposta contro le fonti che cita, prima di fidarsene
 
 /*
  * Tre livelli, non due.
@@ -395,6 +399,29 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * due se la prima stesura non passa; il tetto lo tiene `compiti.ts`.
    */
   revisione:  { livello: 'frontiera',  ragiona: true,  sforzo: 'medium', attesa: 120_000 },
+  /*
+   * L'esame delle risposte (P7): scrivere le domande e dare il voto a quello
+   * che la chat ha risposto. Frontiera perché è il metro con cui si misura la
+   * chat, che è frontiera: un giudice più debole di chi giudica non vede
+   * l'errore che conta. Non ragiona: il voto è contro un testo che ha davanti.
+   */
+  esame:      { livello: 'frontiera',  ragiona: false, sforzo: 'medium', attesa: 90_000 },
+  /*
+   * La verifica di una risposta (P7): ogni frase contro la fonte che cita.
+   * Frontiera e col pensiero acceso, a sforzo basso: è il controllo che dice
+   * «questa cifra non sta scritta da nessuna parte», cioè esattamente quello
+   * che costa fiducia quando manca.
+   */
+  verifica:   { livello: 'frontiera',  ragiona: true,  sforzo: 'low',    attesa: 120_000 },
+  /*
+   * Il collaudo di un'automazione (P6): rifare sugli ultimi trenta giorni
+   * quello che la ricetta farebbe, dentro un recinto che non può scrivere.
+   * `media` e non frontiera: quello che produce non esce da qui, lo guarda lui
+   * prima di accenderla, e una prova gira su decine di documenti; ma un
+   * modello da due giga la farebbe peggio di come girerà davvero, e allora la
+   * prova direbbe il falso.
+   */
+  collaudo:   { livello: 'media',  ragiona: false, sforzo: 'low',    attesa: 120_000 },
 
   // Manovre interne: il locale le fa uguale.
   //
@@ -811,36 +838,22 @@ function nomeMotore(lavoro = ''): string {
   return f ? (f.nome || f.modello) : modelloPer(lavoro)
 }
 
-/** Da mezzanotte UTC: un giorno solare semplice, uguale per tutti i server. */
-function inizioDiOggi(): string {
-  return new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z'
-}
-
-/** Il tetto giornaliero in token (entrata + uscita, la cache non conta). Zero = nessuno. */
-export function tetto(): number {
-  const t = Number(leggi().tetto ?? 0)
-  return Number.isFinite(t) && t > 0 ? Math.floor(t) : 0
-}
-
-/** Quanto si è speso oggi, e se il tetto è stato raggiunto. */
-export function usoDiOggi(): store.Totale & { tetto: number; raggiunto: boolean } {
-  const t = tetto()
-  let oggi: store.Totale = { chiamate: 0, entrata: 0, cache: 0, uscita: 0 }
-  try { oggi = store.usoDal(inizioDiOggi()) } catch { /* senza indice non si conta */ }
-  return { ...oggi, tetto: t, raggiunto: t > 0 && oggi.entrata + oggi.uscita >= t }
-}
-
-const TETTO_RAGGIUNTO = 'Hai raggiunto il tetto di token di oggi. Si riparte domani, o lo alzi nelle preferenze.'
+/*
+ * Il tetto sta in `tetto.ts`, perché lo deve poter chiamare anche
+ * `abbonamento.ts`, che questo file importa. Da qui si riesporta com'era.
+ */
+export { tetto, usoDiOggi } from './tetto.ts'
 
 /**
  * Prima di ogni chiamata di frontiera: se il tetto è raggiunto non si parte.
  *
  * Il tetto è una scelta sua e sta nelle preferenze; zero vuol dire nessuno.
  * Si controlla qui, nell'unico posto da cui partono le chiamate che costano,
- * così vale per la chat, le bozze, il feed e le automazioni insieme.
+ * così vale per la chat, le bozze, il feed e le automazioni insieme. L'account
+ * Claude lo controlla da sé, in `abbonamento.ts`.
  */
 function controllaIlTetto() {
-  if (usoDiOggi().raggiunto) throw tradotto(new Error(TETTO_RAGGIUNTO))
+  try { tettoDiOggi.controllaIlTetto() } catch (e) { throw tradotto(e) }
 }
 
 // — la richiesta —
@@ -1032,6 +1045,9 @@ export async function chiedi(o: {
       const testo = await abbonamento.chiedi({ ...o, attesa, modello: modelloPer(o.lavoro) })
       return { testo, rifiutata: false, da: 'abbonamento' }
     } catch (e) {
+      // il tetto non è un guasto dell'account: niente riposo, e niente chiave
+      // di riserva, che costerebbe denaro per scavalcare una scelta sua
+      if (tettoDiOggi.delTetto(e)) throw tradotto(e)
       abbonamento.nonRisponde()
       console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}», passo alla chiave:`,
         e instanceof Error ? e.message : e)

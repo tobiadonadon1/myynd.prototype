@@ -93,3 +93,20 @@ test('i parametri di un lavoro «media» sono ancora quelli di prima', () => {
   assert.deepEqual(p.thinking, { type: 'adaptive' })
   assert.deepEqual(p.output_config, { effort: 'medium' })
 })
+
+test('i lavori delle fondamenta: l’esame e la verifica di frontiera, il collaudo non sull’economico', () => {
+  cfg.scrivi({ modello: 'claude-sonnet-5' })
+  // l'esame e la verifica misurano la chat: un giudice più debole di chi giudica non vede l'errore
+  assert.equal(mod.modelloPer('esame'), 'claude-sonnet-5')
+  assert.equal(mod.modelloPer('verifica'), 'claude-sonnet-5')
+  // il collaudo è `media`: in rete vale quanto la lettura, mai l'economico
+  assert.equal(mod.modelloPer('collaudo'), 'claude-sonnet-5')
+  assert.notEqual(mod.modelloPer('collaudo'), ECONOMICO)
+  assert.equal(mod.attesaDi('collaudo'), 120_000)
+  assert.equal(mod.attesaDi('esame'), 90_000)
+  assert.equal(mod.attesaDi('verifica'), 120_000)
+  // la verifica pensa, l'esame e il collaudo no
+  assert.ok(mod.parametri('verifica', 4000).thinking?.type !== 'disabled')
+  assert.equal(mod.parametri('esame', 4000).thinking?.type, 'disabled')
+  assert.equal(mod.parametri('collaudo', 4000).thinking?.type, 'disabled')
+})

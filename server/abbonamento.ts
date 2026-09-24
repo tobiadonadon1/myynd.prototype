@@ -39,6 +39,8 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { RADICE, leggi, modello } from './config.ts'
 import { installato } from './lavoro.ts'
+import * as store from './store.ts'
+import { controllaIlTetto } from './tetto.ts'
 
 /**
  * Una cartella vuota, che è tutto quello che gli diamo da guardare.
@@ -400,8 +402,48 @@ function motivo(b: { result?: string; subtype?: string }): string {
   return `Claude Code non ha risposto (${b.subtype ?? 'senza motivo'}).`
 }
 
+/** I token che Claude Code dice di aver usato, nella busta del risultato. */
+type UsoCLI = {
+  input_tokens?: number; output_tokens?: number
+  cache_read_input_tokens?: number; cache_creation_input_tokens?: number
+}
+
 /** Quello che torna dall'involucro JSON di Claude Code. */
-type Busta = { result?: string; is_error?: boolean; subtype?: string; total_cost_usd?: number }
+type Busta = { result?: string; is_error?: boolean; subtype?: string; total_cost_usd?: number; usage?: UsoCLI }
+
+/** Il nome con cui l'account Claude compare nel registro dell'uso. */
+export const MOTORE = 'Claude account'
+
+const numero = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.round(x) : null
+
+/**
+ * I token di una chiamata: quelli detti da Claude Code, o una stima.
+ *
+ * `claude -p --output-format json` (e la riga `result` dello streaming) porta
+ * `usage` come l'API: entrati, scritti in cache, letti dalla cache, usciti. Si
+ * contano come `modello.segnaUso`: entrata = entrati + scritti in cache. Se la
+ * busta non li porta — una versione vecchia, un risultato senza — si stima un
+ * token ogni quattro caratteri, e la riga lo dice nel nome del motore: una
+ * stima che si spaccia per una misura è peggio di nessuna riga.
+ */
+export function usoDellaBusta(u: unknown, entrato: string, uscito: string):
+  { entrata: number; cache: number; uscita: number; stima: boolean } {
+  const v = (u && typeof u === 'object' ? u : {}) as UsoCLI
+  const dentro = numero(v.input_tokens)
+  const fuori = numero(v.output_tokens)
+  if (dentro !== null && fuori !== null) {
+    return { entrata: dentro + (numero(v.cache_creation_input_tokens) ?? 0), cache: numero(v.cache_read_input_tokens) ?? 0, uscita: fuori, stima: false }
+  }
+  return { entrata: Math.ceil(entrato.length / 4), cache: 0, uscita: Math.ceil(uscito.length / 4), stima: true }
+}
+
+/** Una riga nel registro dell'uso, come per ogni altra strada. Non rompe mai la chiamata contata. */
+function segna(lavoro: string, u: unknown, entrato: string, uscito: string) {
+  const c = usoDellaBusta(u, entrato, uscito)
+  const motore = c.stima ? `${MOTORE} (stima)` : MOTORE
+  try { store.segnaUso({ lavoro, motore, entrata: c.entrata, cache: c.cache, uscita: c.uscita }) } catch { /* contare è accessorio */ }
+  console.log(`myynd · uso · ${lavoro} · ${motore} · entrata ${c.entrata}${c.cache ? ` (+${c.cache} dalla cache)` : ''} · uscita ${c.uscita}`)
+}
 
 /**
  * Una domanda, e il testo che torna.
@@ -417,14 +459,20 @@ export async function chiedi(o: {
   attesa: number
   /** Il modello del lavoro, scelto nelle preferenze per il suo livello. */
   modello?: string
+  /** Il lavoro, per il registro dell'uso. */
+  lavoro?: string
 }): Promise<string> {
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è su questa macchina.')
+  // il tetto di oggi vale anche qui: l'account Claude non è un modo di scavalcarlo
+  controllaIlTetto()
+  const sistema = conLoSchema(o.system, o.formato)
+  const domanda = unSoloPrompt(o.messages)
 
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
   return await new Promise<string>((risolvi, rifiuta) => {
-    const p = spawn(exe, argomenti(conLoSchema(o.system, o.formato), 'json', o.modello), { cwd: VUOTA, env: ambiente() })
+    const p = spawn(exe, argomenti(sistema, 'json', o.modello), { cwd: VUOTA, env: ambiente() })
 
     /*
       La domanda entra dallo stdin, non dagli argomenti.
@@ -436,7 +484,7 @@ export async function chiedi(o: {
       niente da confondere, e in più non c'è un tetto alla lunghezza.
     */
     p.stdin.on('error', () => { /* se è morto prima, lo dice `close` */ })
-    p.stdin.end(unSoloPrompt(o.messages))
+    p.stdin.end(domanda)
 
     let fuori = ''
     let male = ''
@@ -464,6 +512,7 @@ export async function chiedi(o: {
       if (b.is_error || typeof b.result !== 'string' || !b.result.trim()) {
         return rifiuta(new Error(motivo(b)))
       }
+      segna(o.lavoro ?? 'bozza', b.usage, sistema + domanda, b.result)
       risolvi(b.result)
     })
   })
@@ -476,6 +525,7 @@ type Pezzo = {
   result?: string
   is_error?: boolean
   subtype?: string
+  usage?: UsoCLI
 }
 
 /**
@@ -502,9 +552,13 @@ export async function inStreaming(o: {
   /** Quanto silenzio si accetta prima di dire che si è piantato. */
   silenzio: number
   onTesto: (pezzo: string) => void
+  /** Il lavoro, per il registro dell'uso: di qui passa la chat. */
+  lavoro?: string
 }): Promise<string> {
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è su questa macchina.')
+  controllaIlTetto()
+  const domanda = unSoloPrompt(o.messages)
 
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
@@ -512,9 +566,11 @@ export async function inStreaming(o: {
     const p = spawn(exe, argomenti(o.system, 'stream-json'), { cwd: VUOTA, env: ambiente() })
 
     p.stdin.on('error', () => { /* se è morto prima, lo dice `close` */ })
-    p.stdin.end(unSoloPrompt(o.messages))
+    p.stdin.end(domanda)
 
     let testo = ''
+    /** I token detti dalla riga finale, se li dice. */
+    let usoDetto: UsoCLI | undefined
     /** La riga rimasta a metà fra due pezzi di stdout: si completa col prossimo. */
     let resto = ''
     let male = ''
@@ -565,6 +621,7 @@ export async function inStreaming(o: {
           guasto = new Error(motivo(d))
           return
         }
+        usoDetto = d.usage
         // Se i pezzi non sono arrivati — una versione che non li manda — la
         // riga finale ha comunque tutta la risposta. Darla intera alla fine è
         // peggio che darla a poco a poco, ed è molto meglio che non darla.
@@ -595,6 +652,7 @@ export async function inStreaming(o: {
         return rifiuta(new Error(male.trim().split('\n')[0] || `Claude Code è uscito con ${codice}.`))
       }
       if (!testo.trim()) return rifiuta(new Error('Claude Code non ha risposto niente.'))
+      segna(o.lavoro ?? 'risposta', usoDetto, o.system + domanda, testo)
       risolvi(testo)
     })
   })

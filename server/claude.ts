@@ -20,6 +20,7 @@ import * as mani from './mani.ts'
 import { OSPITATO } from './ospitato.ts'
 import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
+import { delTetto } from './tetto.ts'
 import * as chatgpt from './chatgpt.ts'
 import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, stessoFilo, type Concessione, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
@@ -1653,6 +1654,8 @@ export async function rispondiInStreaming(
       })
       return { testo, fonti: fontiCitate(testo, docs) }
     } catch (e) {
+      // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
+      if (delTetto(e)) throw e
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
@@ -3000,6 +3003,7 @@ export async function svolgi(
       })
       return { ...risultatoVerificato(uscito), fatti }
     } catch (e) {
+      if (delTetto(e)) throw e
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
       // senza una chiave di riserva l'errore è la risposta: il compito torna
