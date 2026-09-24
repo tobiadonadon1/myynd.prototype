@@ -4381,6 +4381,41 @@ app.post('/api/azzera', (req, res) => {
 })
 
 // qualunque cosa sfugga ai singoli handler esce come JSON, non come stack HTML
+// Le rotte dei lavori P1…P10: ognuno scrive solo fra il suo «inizio» e la
+// sua «fine», sopra il 404, così i rami paralleli non si toccano.
+// — P1A: rotte, inizio —
+// — P1A: rotte, fine —
+
+// — P1B: rotte, inizio —
+// — P1B: rotte, fine —
+
+// — P2: rotte, inizio —
+// — P2: rotte, fine —
+
+// — P3: rotte, inizio —
+// — P3: rotte, fine —
+
+// — P4: rotte, inizio —
+// — P4: rotte, fine —
+
+// — P5: rotte, inizio —
+// — P5: rotte, fine —
+
+// — P6: rotte, inizio —
+// — P6: rotte, fine —
+
+// — P7: rotte, inizio —
+// — P7: rotte, fine —
+
+// — P8: rotte, inizio —
+// — P8: rotte, fine —
+
+// — P9: rotte, inizio —
+// — P9: rotte, fine —
+
+// — P10: rotte, inizio —
+// — P10: rotte, fine —
+
 /**
  * Un'API che non esiste risponde come un'API.
  *

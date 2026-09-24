@@ -642,6 +642,14 @@ export type Compito = {
   esito: string | null
   sparito: string | null
   versione: number
+  /** Le ipotesi del risultato, una riga ciascuna («I assumed Friday»). */
+  ipotesi?: string[] | null
+  /** Quante domande ha fatto questa riga: mai più di una. */
+  domandeFatte?: number
+  /** Come scrive a chi riceve la bozza, dalle mail che gli ha mandato. */
+  voceScritta?: { destinatario?: string; lingua?: string; esempi?: { id: string; label: string }[] } | null
+  /** La bozza è partita dalla sua posta: quale messaggio, quando, e quanto l'ha ritoccata. */
+  mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
 }
 
 export type Lista = { compiti: Compito[]; chiusi: Compito[]; fuoco: string }
@@ -2016,3 +2024,38 @@ export type CambioProgetto = {
 }
 
 export type ProjectInitiative = { id: string; projectId: string; projectName: string; goal: string; kind: 'next-step' | 'question'; title: string; description: string; question?: string; taskId?: string; provenance: 'explicit-project'; urgent: false }
+
+// I tipi e le chiamate dei lavori P1…P10: ognuno scrive solo fra il suo
+// «inizio» e la sua «fine», così i rami paralleli non si toccano.
+// — P1A: inizio —
+// — P1A: fine —
+
+// — P1B: inizio —
+// — P1B: fine —
+
+// — P2: inizio —
+// — P2: fine —
+
+// — P3: inizio —
+// — P3: fine —
+
+// — P4: inizio —
+// — P4: fine —
+
+// — P5: inizio —
+// — P5: fine —
+
+// — P6: inizio —
+// — P6: fine —
+
+// — P7: inizio —
+// — P7: fine —
+
+// — P8: inizio —
+// — P8: fine —
+
+// — P9: inizio —
+// — P9: fine —
+
+// — P10: inizio —
+// — P10: fine —

@@ -934,6 +934,17 @@ export type Config = {
     token: string; numero: string; segreto: string; parola: string
     etichetta?: string; arrivati?: number
   }
+  /**
+   * L'osservatore del Mac (P1): le app che ha davanti e, se lo accende, i
+   * titoli delle finestre. Appartiene al conto che lo accende su questo Mac.
+   * `pausaFino` è un istante ISO, o null quando non è in pausa; `escluse` sono
+   * gli identificativi delle app da non guardare mai.
+   */
+  osservatore?: { acceso: boolean; titoli?: boolean; dal?: string; pausaFino?: string | null; escluse?: string[] }
+  /** Il gemello (P1): le previsioni sigillate fino alla sera. */
+  gemello?: { previsioni?: boolean }
+  /** L'esame settimanale delle risposte (P7): spento se manca, perché costa. */
+  provaRisposte?: { attiva: boolean }
 }
 
 /**

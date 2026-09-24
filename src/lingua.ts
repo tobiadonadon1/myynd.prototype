@@ -3030,6 +3030,41 @@ const EN: Record<string, string> = {
   // la frase di prima resta per le chat già salvate, e dice la strada giusta
   'Collega Claude nelle Fonti e potrò ragionare sul tuo materiale.': 'Connect Claude in Sources and I can reason over your material.',
   'Collega Claude nelle impostazioni e potrò ragionare sul tuo materiale.': 'Connect Claude in Sources and I can reason over your material.',
+
+  // I blocchi dei lavori P1…P10: ognuno scrive le sue frasi solo fra il suo
+  // «inizio» e la sua «fine», così i rami paralleli non si toccano.
+  // — P1A: inizio —
+  // — P1A: fine —
+
+  // — P1B: inizio —
+  // — P1B: fine —
+
+  // — P2: inizio —
+  // — P2: fine —
+
+  // — P3: inizio —
+  // — P3: fine —
+
+  // — P4: inizio —
+  // — P4: fine —
+
+  // — P5: inizio —
+  // — P5: fine —
+
+  // — P6: inizio —
+  // — P6: fine —
+
+  // — P7: inizio —
+  // — P7: fine —
+
+  // — P8: inizio —
+  // — P8: fine —
+
+  // — P9: inizio —
+  // — P9: fine —
+
+  // — P10: inizio —
+  // — P10: fine —
 }
 
 

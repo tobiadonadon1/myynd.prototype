@@ -33,6 +33,12 @@ export type VoceFeed = {
   fonteTitolo?: string | null
   fonteQuando?: string | null
   fonteAutore?: string | null
+  /** Perché oggi, in una riga, da una fonte vera (P2). */
+  ragione?: string | null
+  /** Quando l'ha vista sullo schermo la prima volta (P2). */
+  vista?: string | null
+  /** Quando l'ha toccata: aperta, affidata, chiusa (P2). */
+  toccata?: string | null
 }
 
 export type Gruppo = { id: string; nome: string; colore: string; nodi: number }
