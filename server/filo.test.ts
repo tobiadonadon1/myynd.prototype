@@ -210,6 +210,15 @@ test('i destinatari: minuscoli, senza doppioni, nell’ordine in cui compaiono',
   ), 'uno@x.it,due@x.it')
 })
 
+test('un apostrofo dentro l’indirizzo resta, uno che lo racchiude no', () => {
+  assert.equal(destinatariDi("o'brien@x.com"), "o'brien@x.com")
+  assert.equal(destinatariDi("Pat O'Brien <Pat.O'Brien@X.com>, d'amico@y.it"), "pat.o'brien@x.com,d'amico@y.it")
+  assert.equal(destinatariDi({ value: [{ address: "o'brien@x.com", name: "O'Brien" }] }), "o'brien@x.com")
+  // il contro-caso: le virgolette semplici intorno non entrano nell'indirizzo
+  assert.equal(destinatariDi("'anna@x.com' <anna@x.com>"), 'anna@x.com')
+  assert.equal(destinatariDi("'Anna' <anna@x.com>"), 'anna@x.com')
+})
+
 test('senza un indirizzo vero i destinatari non ci sono', () => {
   assert.equal(destinatariDi('', undefined, null), null)
   assert.equal(destinatariDi('undisclosed-recipients:;'), null)

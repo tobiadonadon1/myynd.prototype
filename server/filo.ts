@@ -62,8 +62,12 @@ export function rispondeDi(inReplyTo: string | string[] | null | undefined): str
   return primoId(inReplyTo) || null
 }
 
-/** Un indirizzo email dentro un testo qualunque: «Anna <Anna@Esempio.it>» → anna@esempio.it. */
-const INDIRIZZO = /[^\s<>()[\],;:"']+@[^\s<>()[\],;:"']+\.[^\s<>()[\],;:"']+/g
+/**
+ * Un indirizzo email dentro un testo qualunque: «Anna <Anna@Esempio.it>» → anna@esempio.it.
+ * L'apostrofo sta bene dentro la parte locale (o'brien@…), non in testa né nel
+ * dominio: così «'anna@x.com'» fra virgolette semplici resta anna@x.com.
+ */
+const INDIRIZZO = /[^\s<>()[\],;:"'][^\s<>()[\],;:"]*@[^\s<>()[\],;:"']+\.[^\s<>()[\],;:"']+/g
 
 function indirizziIn(x: unknown, dentro: string[]) {
   if (!x) return
