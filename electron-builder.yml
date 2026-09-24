@@ -61,9 +61,9 @@ mac:
     LSMinimumSystemVersion: "13.0"
     # Le frasi che macOS mostra quando l'app apre una di queste cartelle.
     # Senza, la richiesta di permesso compare con un testo vuoto.
-    NSDesktopFolderUsageDescription: Myynd legge i documenti che tieni sulla Scrivania, se scegli di collegarla.
-    NSDocumentsFolderUsageDescription: Myynd legge i documenti che tieni in Documenti, se scegli di collegarla.
-    NSDownloadsFolderUsageDescription: Myynd legge i file che tieni in Download, se scegli di collegarla.
+    NSDesktopFolderUsageDescription: Myynd reads the documents on your Desktop, if you choose to connect it.
+    NSDocumentsFolderUsageDescription: Myynd reads the documents in your Documents folder, if you choose to connect it.
+    NSDownloadsFolderUsageDescription: Myynd reads the files in your Downloads folder, if you choose to connect it.
 
 # Un DMG nudo: l'app a sinistra, il collegamento ad Applicazioni a destra.
 dmg:
