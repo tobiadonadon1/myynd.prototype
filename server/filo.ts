@@ -52,6 +52,49 @@ function primoId(x: string | string[] | null | undefined): string {
   return idPulito(fra ? fra[0] : testo.trim().split(/[\s,]+/)[0])
 }
 
+/**
+ * Il messaggio a cui questa email risponde: l'`In-Reply-To`, senza parentesi.
+ *
+ * Null se non c'è. Un campo con più id (capita con programmi vecchi) dà il
+ * primo, che è quello a cui si risponde davvero.
+ */
+export function rispondeDi(inReplyTo: string | string[] | null | undefined): string | null {
+  return primoId(inReplyTo) || null
+}
+
+/** Un indirizzo email dentro un testo qualunque: «Anna <Anna@Esempio.it>» → anna@esempio.it. */
+const INDIRIZZO = /[^\s<>()[\],;:"']+@[^\s<>()[\],;:"']+\.[^\s<>()[\],;:"']+/g
+
+function indirizziIn(x: unknown, dentro: string[]) {
+  if (!x) return
+  if (typeof x === 'string') {
+    for (const m of x.matchAll(INDIRIZZO)) dentro.push(m[0].toLowerCase())
+    return
+  }
+  if (Array.isArray(x)) { for (const v of x) indirizziIn(v, dentro); return }
+  if (typeof x === 'object') {
+    // la forma di mailparser: { value: [{ address, name, group? }], text }
+    const o = x as { value?: unknown; address?: unknown; group?: unknown }
+    if (o.value !== undefined) { indirizziIn(o.value, dentro); return }
+    if (typeof o.address === 'string') indirizziIn(o.address, dentro)
+    if (o.group !== undefined) indirizziIn(o.group, dentro)
+  }
+}
+
+/**
+ * A chi è andata: gli indirizzi di A e Cc, in minuscolo, senza doppioni, in
+ * ordine di apparizione, separati da virgole. Null se non ce n'è nessuno.
+ *
+ * Accetta le intestazioni come testo (Gmail: «Anna <anna@x.it>, bob@y.com»)
+ * o come le consegna mailparser (oggetti con `value`, anche a gruppi).
+ */
+export function destinatariDi(...campi: unknown[]): string | null {
+  const tutti: string[] = []
+  for (const c of campi) indirizziIn(c, tutti)
+  const unici = [...new Set(tutti)]
+  return unici.length ? unici.join(',') : null
+}
+
 /** I prefissi che una risposta o un inoltro si mettono davanti all'oggetto. */
 const PREFISSI = /^\s*(?:(?:re|r|fwd|fw|i|aw)(?:\s*\[\d+\])?\s*:\s*)+/i
 

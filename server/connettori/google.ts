@@ -32,7 +32,7 @@ import { daGoogle, DaApprovare, APPROVA_GOOGLE, SOLO_ORGANIZZAZIONE, soloOrganiz
 import { avviaWeb, type Sportello } from './oauth.ts'
 import { APP_GOOGLE } from '../ospitato.ts'
 import type { Documento } from '../store.ts'
-import { filoDi, idPulito } from '../filo.ts'
+import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { postaAutomatica } from './segnaliPosta.ts'
 import { riflua } from '../testo.ts'
 
@@ -409,6 +409,8 @@ export async function sincronizza(
         // lo scriveva già, Gmail no — e le righe nate da una mail letta da qui
         // non portavano da nessuna parte
         messageId: idPulito(intestazione(m, 'Message-ID')) || null,
+        risponde: rispondeDi(intestazione(m, 'In-Reply-To')),
+        destinatari: destinatariDi(intestazione(m, 'To'), intestazione(m, 'Cc')),
         inviato: (m.labelIds ?? []).includes('SENT'),
         letto: !(m.labelIds ?? []).includes('UNREAD'),
         massa: postaAutomatica(m.payload?.headers) || (m.labelIds ?? []).some(l => ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_FORUMS', 'SPAM', 'TRASH'].includes(l))

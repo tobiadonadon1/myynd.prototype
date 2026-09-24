@@ -7,7 +7,7 @@ import { simpleParser, type ParsedMail } from 'mailparser'
 import type { ConfigPosta } from '../config.ts'
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
-import { filoDi, idPulito } from '../filo.ts'
+import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { resto, type Resto } from './ripresa.ts'
 import { daImap, IMAP_SPENTO, type CasoAmministratore } from './amministratore.ts'
 
@@ -816,6 +816,10 @@ export async function sincronizza(
               filo: filoDi({ messageId: p.messageId, inReplyTo: p.inReplyTo, references: p.references, oggetto: p.subject }),
               // il messaggio preciso, per poterci rispondere dentro il suo filo
               messageId: idPulito(p.messageId) || null,
+              // a quale messaggio risponde, e a chi è andata: legano una
+              // risposta mandata alla mail che l'aveva chiesta
+              risponde: rispondeDi(p.inReplyTo),
+              destinatari: destinatariDi(p.to, p.cc),
               // scritta da lei: cercabile e utile alla voce, ma non «arrivata»
               inviato: cartella === inviata,
               // l'ha già aperta, e se è posta in serie: due cose che il feed

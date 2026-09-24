@@ -222,3 +222,43 @@ test('un messaggio vecchio senza classificazione viene riletto una volta sola', 
   ])
   assert.equal(e.saltati, 2)
 })
+
+// — a cosa risponde, e a chi è andata —
+
+/** Una casella con due messaggi: una risposta con A e Cc, e un messaggio nuovo senza In-Reply-To. */
+function casellaConIntestazioni(): ImapFlow {
+  const grezzi: Record<number, string> = {
+    1: 'From: Tobia <io@esempio.it>\r\nTo: Anna Rossi <Anna@Cliente.it>, bob@cliente.it\r\n' +
+       'Cc: "Carla" <carla@cliente.it>, anna@cliente.it\r\nSubject: Re: Preventivo\r\n' +
+       'Date: Wed, 02 Sep 2026 10:00:00 +0200\r\nMessage-ID: <r1@esempio.it>\r\n' +
+       'In-Reply-To: <q1@cliente.it>\r\nReferences: <q0@cliente.it> <q1@cliente.it>\r\n\r\nEcco il preventivo.\r\n',
+    2: 'From: Rossi <rossi@esempio.it>\r\nSubject: Una domanda nuova\r\n' +
+       'Date: Wed, 02 Sep 2026 11:00:00 +0200\r\nMessage-ID: <n2@esempio.it>\r\n\r\nCiao, una domanda.\r\n'
+  }
+  const cl = {
+    connect: async () => {}, close: async () => {}, logout: async () => {},
+    list: async () => [{ path: 'INBOX', name: 'INBOX', specialUse: undefined }],
+    get mailbox() { return { uidValidity: 1n } },
+    getMailboxLock: async () => ({ release: () => {} }),
+    search: async () => [1, 2],
+    fetch: (quali: number[], cosa: { source?: boolean }) => (async function* () {
+      for (const uid of quali) {
+        yield cosa.source
+          ? { uid, flags: new Set<string>(), source: Buffer.from(grezzi[uid]), envelope: { date: new Date('2026-09-02T08:00:00Z') } }
+          : { uid, flags: new Set<string>() }
+      }
+    })()
+  }
+  return cl as unknown as ImapFlow
+}
+
+test('una risposta porta con sé il messaggio a cui risponde e i suoi destinatari', async () => {
+  usaClient(() => casellaConIntestazioni())
+  const e = await sincronizza({ ...CASELLA, cartelle: ['INBOX'], validita: { INBOX: '1' } }, undefined, () => new Set())
+  const per = Object.fromEntries(e.docs.map(d => [d.id, d]))
+  assert.equal(per['posta:INBOX:1'].risponde, 'q1@cliente.it')
+  assert.equal(per['posta:INBOX:1'].destinatari, 'anna@cliente.it,bob@cliente.it,carla@cliente.it')
+  // il contro-caso: un messaggio che non risponde a niente e senza A non si inventa niente
+  assert.equal(per['posta:INBOX:2'].risponde, null)
+  assert.equal(per['posta:INBOX:2'].destinatari, null)
+})

@@ -20,7 +20,7 @@ import type { Documento } from './store.ts'
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-filo-'))
 process.env.MYYND_DATI = CASA
 
-const { filoDi, oggettoNormalizzato, idPulito, rispostaA } = await import('./filo.ts')
+const { filoDi, oggettoNormalizzato, idPulito, rispostaA, rispondeDi, destinatariDi } = await import('./filo.ts')
 const store = await import('./store.ts')
 const claude = await import('./claude.ts')
 
@@ -186,4 +186,33 @@ test('un fratello già fra i risultati non si ripete', () => {
   ])
   const largo = claude.conIlFilo([store.documento('posta:INBOX:1')!, store.documento('posta:INBOX:2')!])
   assert.deepEqual(largo.map(d => d.id), ['posta:INBOX:1', 'posta:INBOX:2'])
+})
+
+// — a cosa risponde, e a chi è andata —
+
+test('In-Reply-To senza parentesi; il primo se sono più d’uno; niente se manca', () => {
+  assert.equal(rispondeDi('<abc@x.it>'), 'abc@x.it')
+  assert.equal(rispondeDi(' <abc@x.it> <def@x.it>'), 'abc@x.it')
+  assert.equal(rispondeDi(['<abc@x.it>']), 'abc@x.it')
+  // il contro-caso: un campo vuoto non diventa una chiave che tiene insieme tutto
+  assert.equal(rispondeDi(''), null)
+  assert.equal(rispondeDi('<>'), null)
+  assert.equal(rispondeDi(undefined), null)
+})
+
+test('i destinatari: minuscoli, senza doppioni, nell’ordine in cui compaiono', () => {
+  assert.equal(destinatariDi('Anna Rossi <Anna@Esempio.IT>, bob@y.com', 'anna@esempio.it, "Carla, Bianchi" <carla@z.org>'),
+    'anna@esempio.it,bob@y.com,carla@z.org')
+  // come li consegna mailparser: oggetti con `value`, anche a gruppi
+  assert.equal(destinatariDi(
+    { value: [{ address: 'Uno@X.it', name: 'Uno' }], text: 'Uno <Uno@X.it>' },
+    [{ value: [{ name: 'Squadra', group: [{ address: 'due@x.it' }, { address: 'uno@x.it' }] }] }]
+  ), 'uno@x.it,due@x.it')
+})
+
+test('senza un indirizzo vero i destinatari non ci sono', () => {
+  assert.equal(destinatariDi('', undefined, null), null)
+  assert.equal(destinatariDi('undisclosed-recipients:;'), null)
+  assert.equal(destinatariDi('Anna Rossi'), null)
+  assert.equal(destinatariDi({ value: [] }), null)
 })

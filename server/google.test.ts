@@ -124,3 +124,47 @@ test('il token si riusa finché è vivo', async () => {
   await g.archivia(['google:b'])
   assert.equal(token, 1, 'ha chiesto un token nuovo per ogni chiamata')
 })
+
+// — a cosa risponde, e a chi è andata —
+
+test('dalla posta di Gmail: In-Reply-To pulito, A e Cc in minuscolo', async () => {
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ ...cfg.leggi(), google: { clientId: 'x', refresh: 'r' } })
+  g.scordaIlToken()
+  const b64 = (t: string) => Buffer.from(t).toString('base64url')
+  const messaggi: Record<string, unknown> = {
+    m1: {
+      id: 'm1', threadId: 't1', internalDate: String(Date.parse('2026-09-20T10:00:00Z')), labelIds: ['SENT'],
+      payload: {
+        mimeType: 'text/plain', body: { data: b64('Hi Anna, here is the quote.') },
+        headers: [
+          { name: 'Subject', value: 'Re: Quote' }, { name: 'From', value: 'Me <me@example.org>' },
+          { name: 'To', value: 'Anna <Anna@Example.com>' }, { name: 'Cc', value: 'bob@example.com, anna@example.com' },
+          { name: 'Message-ID', value: '<s1@example.org>' }, { name: 'In-Reply-To', value: '<q1@example.com>' }
+        ]
+      }
+    },
+    m2: {
+      id: 'm2', threadId: 't2', internalDate: String(Date.parse('2026-09-20T11:00:00Z')), labelIds: ['INBOX'],
+      payload: {
+        mimeType: 'text/plain', body: { data: b64('A brand new question.') },
+        headers: [{ name: 'Subject', value: 'Question' }, { name: 'From', value: 'Anna <anna@example.com>' }, { name: 'Message-ID', value: '<q2@example.com>' }]
+      }
+    }
+  }
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url)
+    if (u.includes('/token')) return Response.json({ access_token: 'vivo', expires_in: 3600 })
+    if (u.includes('/messages?')) return Response.json({ messages: [{ id: 'm1' }, { id: 'm2' }] })
+    const id = u.match(/messages\/(\w+)\?/)?.[1] ?? ''
+    return Response.json(messaggi[id] ?? {})
+  }) as typeof fetch
+
+  const { docs } = await g.sincronizza({ clientId: 'x', refresh: 'r' })
+  const per = Object.fromEntries(docs.map(d => [d.id, d]))
+  assert.equal(per['google:m1'].risponde, 'q1@example.com')
+  assert.equal(per['google:m1'].destinatari, 'anna@example.com,bob@example.com')
+  // il contro-caso: un messaggio che non risponde a niente, e senza A né Cc
+  assert.equal(per['google:m2'].risponde, null)
+  assert.equal(per['google:m2'].destinatari, null)
+})
