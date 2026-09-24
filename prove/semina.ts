@@ -24,7 +24,14 @@
 //     "feed":      [{ "id": "f1", "tipo": "Priorità", "titolo": "…", "testo": "…", "progetto": "ev", "quando": "-3h", "peso": 2, "stato": "aperto", … }],
 //     "compiti":   [{ "id": "c1", "testo": "…", "quando": "oggi", "progetto": "ev", "stato": "pronto", "modo": "bozza", "risultato": "…", "chieste": […], "revisione": {…} }],
 //     "domande":   [{ "tema": "riferimento", "testo": "…", "progetto": "ev" }],
-//     "riferimento": "Evermute: shipping 1.0 this week." }
+//     "riferimento": "Evermute: shipping 1.0 this week.",
+//     "punto":     { "progetti": [{ "progetto": "ev", "novita": "…", "doc": "posta:INBOX:1" }],
+//                    "risposte": [{ "testo": "…", "doc": "…" }], "github": [], "daLeggere": [], "aggiornamenti": [] } }
+//
+// Senza «punto» il punto di oggi lo chiede il server al modello finto, che col
+// copione di base torna vuoto: la prima pagina direbbe «0 cose» sopra una
+// scrivania piena. Con «punto» si scrive il foglio di oggi com'è su disco, fatto
+// adesso, e il server non lo rifà per tre ore.
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
@@ -40,6 +47,13 @@ type Scena = {
   compiti?: (Record<string, unknown> & { id: string; testo: string })[]
   domande?: { tema: string; testo: string; progetto?: string }[]
   riferimento?: string
+  punto?: {
+    progetti?: { progetto: string; novita: string; doc?: string }[]
+    github?: { testo: string; doc?: string }[]
+    daLeggere?: { titolo: string; perche: string; link?: string }[]
+    risposte?: { testo: string; doc?: string }[]
+    aggiornamenti?: { testo: string; doc?: string }[]
+  }
 }
 
 function esci(m: string): never {
@@ -148,6 +162,27 @@ chi.dentro(conto.id, () => {
     store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })
   }
   if (scena.riferimento) riferimento.scrivi(scena.riferimento)
+
+  if (scena.punto) {
+    const adesso = new Date().toISOString()
+    const p = scena.punto
+    const riga = (r: { testo: string; doc?: string }) => ({ testo: r.testo, doc: r.doc ?? null })
+    const ultimo = {
+      quando: adesso, via: null,
+      progetti: (p.progetti ?? []).map(x => {
+        const id = progetto(x.progetto)
+        const nome = (scena.progetti ?? []).find(q => (q.chiave ?? q.nome) === x.progetto)?.nome ?? x.progetto
+        return { id, nome, novita: x.novita, doc: x.doc ?? null }
+      }),
+      github: (p.github ?? []).map(riga),
+      daLeggere: (p.daLeggere ?? []).map(n => ({ titolo: n.titolo, perche: n.perche, link: n.link ?? null })),
+      risposte: (p.risposte ?? []).map(riga),
+      aggiornamenti: (p.aggiornamenti ?? []).map(riga)
+    }
+    // la forma dell'archivio di server/punto.ts; una chiamata contata oggi, come se l'avesse fatto lui
+    writeFileSync(join(cfg.cartella(), 'punto.json'),
+      JSON.stringify({ ultimo, progetti: [], scartati: [], chiamate: [adesso], avviate: [] }, null, 2), { mode: 0o600 })
+  }
 })
 
 store.chiudiIndici()

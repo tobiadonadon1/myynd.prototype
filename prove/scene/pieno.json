@@ -37,5 +37,11 @@
   "domande": [
     { "tema": "riferimento", "testo": "To get my bearings: for each project, what are you working on right now? What is dead, and what is blocked?" }
   ],
-  "riferimento": "Northwind: fixing the review issues and shipping 1.0.4. Harbor Labs: pilot scope this week. Lumen Studio: course outline, not urgent."
+  "riferimento": "Northwind: fixing the review issues and shipping 1.0.4. Harbor Labs: pilot scope this week. Lumen Studio: course outline, not urgent.",
+  "punto": {
+    "progetti": [
+      { "progetto": "nw", "novita": "App Review rejected build 1.0.3 under guideline 4.3.", "doc": "posta:INBOX:201" },
+      { "progetto": "hb", "novita": "Nora wants the pilot scope agreed by Thursday.", "doc": "posta:INBOX:202" }
+    ]
+  }
 }
