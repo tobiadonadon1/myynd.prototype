@@ -1,0 +1,7 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind" }
+  ]
+}

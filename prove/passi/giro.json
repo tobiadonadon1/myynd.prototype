@@ -1,0 +1,13 @@
+[
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "passa": "Fix the three Northwind" },
+  { "scatta": "prima-sopra" },
+  { "clicca": "Your account" },
+  { "vai": "Memory" },
+  { "scatta": "memoria" },
+  { "testo": "memoria" },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "scatta": "preferenze" }
+]
