@@ -1117,22 +1117,25 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
 
   const documenti = colonne('documenti')
   for (const c of ['rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore', 'percorso',
-    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'radici', 'autoreIndirizzo', 'messageId', 'letto', 'massa']) {
+    'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'radici', 'autoreIndirizzo', 'messageId', 'letto', 'massa',
+    'risponde', 'destinatari']) {
     assert.ok(documenti.includes(c), `documenti non ha «${c}»: una migrazione è stata saltata`)
   }
 
   const compiti = colonne('compiti')
-  for (const c of ['id', 'testo', 'stato', 'modo', 'risultato', 'fonti', 'proposta', 'chieste', 'madre', 'attrezzi', 'email', 'priorita']) {
+  for (const c of ['id', 'testo', 'stato', 'modo', 'risultato', 'fonti', 'proposta', 'chieste', 'madre', 'attrezzi', 'email', 'priorita',
+    'consegna', 'revisione', 'giorno', 'ora', 'progetto', 'contesto', 'ipotesi', 'domandeFatte', 'voceScritta', 'mandata']) {
     assert.ok(compiti.includes(c), `compiti non ha «${c}»: una migrazione è stata saltata`)
   }
 
   const automazioni = colonne('automazioni')
-  for (const c of ['id', 'spenta', 'ultima', 'quante', 'esito', 'guaio', 'storia', 'giorno', 'bozze']) {
+  for (const c of ['id', 'spenta', 'ultima', 'quante', 'esito', 'guaio', 'tolta', 'raccolta', 'dal', 'storia', 'giorno', 'bozze', 'vista', 'vassoio']) {
     assert.ok(automazioni.includes(c), `automazioni non ha «${c}»: una migrazione è stata saltata`)
   }
 
   const feed = colonne('feed')
-  for (const c of ['id', 'tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'stato', 'quando', 'motivo', 'risposto', 'perche', 'contesto', 'offerta', 'progetto', 'peso']) {
+  for (const c of ['id', 'tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'stato', 'quando', 'motivo', 'risposto', 'perche', 'contesto', 'offerta', 'progetto', 'peso',
+    'ragione', 'vista', 'toccata']) {
     assert.ok(feed.includes(c), `feed non ha «${c}»: una migrazione è stata saltata`)
   }
 
@@ -1141,15 +1144,23 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
     assert.ok(progetti.includes(c), `progetti non ha «${c}»: una migrazione è stata saltata`)
   }
   const notizie = colonne('notizie')
-  for (const c of ['perche', 'importante', 'interesse']) {
+  for (const c of ['perche', 'scartata', 'importante', 'interesse']) {
     assert.ok(notizie.includes(c), `notizie non ha «${c}»: una migrazione è stata saltata`)
+  }
+  for (const [tabella, attese] of [
+    ['chat', ['progetto', 'iniziativa']], ['messaggi', ['verifica']], ['blocchi', ['daMe']], ['domande', ['progetto']]
+  ] as const) {
+    const ci = colonne(tabella)
+    for (const c of attese) assert.ok(ci.includes(c), `${tabella} non ha «${c}»: una migrazione è stata saltata`)
   }
 
   const tabelle = (store.default.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table'"
   ).all() as { name: string }[]).map(t => t.name)
   for (const t of ['documenti', 'ricerca', 'chat', 'messaggi', 'feed', 'convinzioni', 'blocchi',
-    'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso', 'progetti']) {
+    'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso', 'progetti',
+    'segnali', 'sessioni_app', 'agenda_viste', 'previsioni', 'punteggi', 'abitudini', 'fiducia', 'mancate',
+    'feed_esame', 'misure_compiti', 'prove', 'esiti', 'salute_fonti', 'stato_fonti']) {
     assert.ok(tabelle.includes(t), `manca la tabella «${t}»`)
   }
 })
@@ -1195,6 +1206,35 @@ test('il Message-ID arriva dopo, e non fa contare la email come cambiata', () =>
   // e una scrittura nuova lo porta con sé
   store.salvaDocumenti([{ ...base, id: 'mid:2', messageId: 'm2@x' }])
   assert.equal(store.documento('mid:2')!.messageId, 'm2@x')
+})
+
+test('a cosa risponde e a chi è andata arrivano dopo, e non fanno contare la email come cambiata', () => {
+  const base = {
+    id: 'rsp:1', fonte: 'posta', tipo: 'email', titolo: 'Re: Preventivo',
+    corpo: 'ecco il preventivo che mi avevi chiesto', autore: 'Io <io@esempio.it>',
+    percorso: 'Inviata', quando: '2026-09-01T10:00:00.000Z', gruppo: 'posta', inviato: true, messageId: 'r1@x'
+  }
+  store.salvaDocumenti([base])
+  const prima = store.default.prepare('SELECT indicizzato FROM documenti WHERE id = ?').get('rsp:1') as { indicizzato: string }
+  assert.equal(store.documento('rsp:1')!.risponde, null)
+  assert.equal(store.documento('rsp:1')!.destinatari, null)
+
+  const e = store.salvaDocumenti([{ ...base, risponde: 'q1@x', destinatari: 'anna@cliente.it,bob@cliente.it' }])
+  assert.deepEqual(e, { nuovi: 0, cambiati: 0, invariati: 1 })
+  assert.equal(store.documento('rsp:1')!.risponde, 'q1@x')
+  assert.equal(store.documento('rsp:1')!.destinatari, 'anna@cliente.it,bob@cliente.it')
+  const dopo = store.default.prepare('SELECT indicizzato FROM documenti WHERE id = ?').get('rsp:1') as { indicizzato: string }
+  assert.equal(dopo.indicizzato, prima.indicizzato, 'una chiave in più ha spostato «indicizzato»: sembrerebbe arrivata adesso')
+
+  // un contenuto cambiato sì che conta, e si porta dietro le due colonne
+  const c = store.salvaDocumenti([{ ...base, corpo: 'il preventivo corretto', risponde: 'q1@x', destinatari: 'anna@cliente.it' }])
+  assert.deepEqual(c, { nuovi: 0, cambiati: 1, invariati: 0 })
+  assert.equal(store.documento('rsp:1')!.destinatari, 'anna@cliente.it')
+
+  // e una scrittura nuova le porta con sé
+  store.salvaDocumenti([{ ...base, id: 'rsp:2', risponde: 'q2@x', destinatari: 'carla@z.org' }])
+  assert.equal(store.documento('rsp:2')!.risponde, 'q2@x')
+  assert.equal(store.documento('rsp:2')!.destinatari, 'carla@z.org')
 })
 
 test('l’email pronta si scrive e si legge com’è, e sparisce con la bozza', () => {
@@ -1306,4 +1346,29 @@ test('allargando la ricerca non passa chi ha una parola sola su sei', () => {
     'senza «stretta» la ricerca larga deve continuare ad allargarsi')
   assert.ok(!store.cerca('quote lease renewal', 20, undefined, true).map(d => d.id).includes('ms-affitto'),
     'con «stretta» una parola su tre non basta')
+})
+
+test('le colonne nuove della riga si leggono già pronte, e una storta non rompe la lista', () => {
+  store.scriviCompito({ id: 'cn1', testo: 'Rispondere a Marco', ordine: 'zz9' })
+  const c = store.compito('cn1')!
+  assert.equal(c.domandeFatte, 0)
+  assert.equal(c.ipotesi, null)
+  assert.equal(c.voceScritta, null)
+  assert.equal(c.mandata, null)
+
+  store.default.prepare('UPDATE compiti SET ipotesi = ?, voceScritta = ?, mandata = ?, domandeFatte = 1 WHERE id = ?').run(
+    JSON.stringify(['Ho supposto venerdì.']),
+    JSON.stringify({ destinatario: 'marco@x.it', lingua: 'it', esempi: [{ id: 'posta:Inviata:1', label: 'Re: Ordine' }] }),
+    JSON.stringify({ doc: 'posta:Inviata:9', quando: '2026-09-24T10:00:00.000Z', certezza: 'id', ritocco: 0.1 }),
+    'cn1')
+  const d = store.compito('cn1')!
+  assert.deepEqual(d.ipotesi, ['Ho supposto venerdì.'])
+  assert.equal(d.voceScritta?.lingua, 'it')
+  assert.equal(d.mandata?.certezza, 'id')
+  assert.equal(d.domandeFatte, 1)
+
+  // il contro-caso: un JSON storto scritto da qualcuno non fa cadere l'elenco
+  store.default.prepare("UPDATE compiti SET ipotesi = '{rotto' WHERE id = 'cn1'").run()
+  assert.equal(store.compito('cn1')!.ipotesi, null)
+  assert.ok(store.elencoCompiti().some(x => x.id === 'cn1'))
 })

@@ -435,6 +435,144 @@ function rifaiLIndice(d: DatabaseSync) {
 }
 
 /**
+ * Le tabelle nate dalla migrazione 48 in poi, ognuna col suo `CREATE` e i suoi
+ * indici, scritte una volta sola.
+ *
+ * La migrazione che le fa nascere esegue questa stringa, e `rimetti()` la
+ * riesegue a ogni apertura: `COLONNE` sa rimettere una colonna, non una
+ * tabella, e una migrazione saltata (una voce infilata in mezzo alla lista)
+ * lascerebbe il database senza la tabella intera, in silenzio. Tutto è
+ * `IF NOT EXISTS`, quindi riseguirla su un database sano non fa niente.
+ *
+ * **Questa è la forma con cui la tabella è nata, e non si cambia.** Una
+ * colonna aggiunta dopo va in una migrazione nuova con `colonna()`, e in
+ * `COLONNE`: `rimetti()` crea prima le tabelle che mancano e poi rimette le
+ * colonne, così anche una tabella ricreata qui arriva completa.
+ */
+const TABELLE = {
+  segnali: `
+    CREATE TABLE IF NOT EXISTS segnali (
+      id TEXT PRIMARY KEY, genere TEXT NOT NULL, quando TEXT NOT NULL, giorno TEXT NOT NULL,
+      chi TEXT, progetto TEXT, ref TEXT, valore REAL, dati TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_segnali_genere ON segnali(genere, giorno);
+    CREATE INDEX IF NOT EXISTS idx_segnali_giorno ON segnali(giorno);
+  `,
+  sessioni_app: `
+    CREATE TABLE IF NOT EXISTS sessioni_app (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, bundle TEXT NOT NULL, app TEXT NOT NULL, titolo TEXT,
+      inizio TEXT NOT NULL, fine TEXT NOT NULL, secondi INTEGER NOT NULL, giorno TEXT NOT NULL,
+      progetto TEXT, cartella TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessioni_app_giorno ON sessioni_app(giorno);
+  `,
+  agenda_viste: `
+    CREATE TABLE IF NOT EXISTS agenda_viste (
+      uid TEXT PRIMARY KEY, titolo TEXT, inizio TEXT, fine TEXT, originale TEXT,
+      stato TEXT, mio TEXT, visto TEXT NOT NULL
+    );
+  `,
+  previsioni: `
+    CREATE TABLE IF NOT EXISTS previsioni (
+      id TEXT PRIMARY KEY, giorno TEXT NOT NULL, genere TEXT NOT NULL, ref TEXT NOT NULL,
+      probabilita REAL NOT NULL, dati TEXT NOT NULL, fatta TEXT NOT NULL,
+      esito TEXT, verificata TEXT, prova TEXT,
+      UNIQUE (giorno, genere, ref)
+    );
+  `,
+  punteggi: `
+    CREATE TABLE IF NOT EXISTS punteggi (
+      giorno TEXT PRIMARY KEY, giuste INTEGER NOT NULL, sbagliate INTEGER NOT NULL,
+      annullate INTEGER NOT NULL, brier REAL, base REAL, calcolato TEXT NOT NULL
+    );
+  `,
+  abitudini: `
+    CREATE TABLE IF NOT EXISTS abitudini (
+      chiave TEXT PRIMARY KEY, genere TEXT NOT NULL, dati TEXT NOT NULL, prova TEXT NOT NULL,
+      fiducia REAL NOT NULL, stato TEXT NOT NULL DEFAULT 'osservata', testoSuo TEXT,
+      visto TEXT NOT NULL, aggiornato TEXT NOT NULL, tolta TEXT
+    );
+  `,
+  fiducia: `
+    CREATE TABLE IF NOT EXISTS fiducia (
+      genere TEXT PRIMARY KEY, giuste INTEGER NOT NULL, sbagliate INTEGER NOT NULL,
+      gradino TEXT NOT NULL DEFAULT 'guarda', aggiornato TEXT NOT NULL
+    );
+  `,
+  mancate: `
+    CREATE TABLE IF NOT EXISTS mancate (
+      id TEXT PRIMARY KEY, genere TEXT NOT NULL, doc TEXT, prova TEXT, mittente TEXT,
+      progetto TEXT, fase TEXT, motivo TEXT, certezza TEXT, arrivato TEXT,
+      agito TEXT NOT NULL, contesto TEXT, quando TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mancate_quando ON mancate(quando);
+  `,
+  feed_esame: `
+    CREATE TABLE IF NOT EXISTS feed_esame (
+      doc TEXT PRIMARY KEY, fase TEXT NOT NULL, motivo TEXT, quando TEXT NOT NULL
+    );
+  `,
+  misure_compiti: `
+    CREATE TABLE IF NOT EXISTS misure_compiti (
+      compito TEXT PRIMARY KEY, affidato TEXT NOT NULL, modo TEXT, origine TEXT,
+      domande INTEGER NOT NULL DEFAULT 0, presunte INTEGER NOT NULL DEFAULT 0,
+      cercate INTEGER NOT NULL DEFAULT 0, correzioni INTEGER NOT NULL DEFAULT 0,
+      mossa TEXT, genere TEXT, tipo TEXT, consegnato TEXT, inviato TEXT, via TEXT,
+      distanza REAL, parole INTEGER, classe TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_misure_affidato ON misure_compiti(affidato);
+  `,
+  prove: `
+    CREATE TABLE IF NOT EXISTS prove (
+      id TEXT PRIMARY KEY, automazione TEXT NOT NULL, tipo TEXT NOT NULL, origine TEXT,
+      impronta TEXT, ricetta TEXT, dal TEXT, al TEXT, stato TEXT NOT NULL,
+      documenti INTEGER, occorrenze INTEGER, gettoni INTEGER, guaio TEXT,
+      creata TEXT NOT NULL, finita TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_prove_auto ON prove(automazione, creata);
+  `,
+  esiti: `
+    CREATE TABLE IF NOT EXISTS esiti (
+      id TEXT PRIMARY KEY, prova TEXT NOT NULL, automazione TEXT NOT NULL, quando TEXT,
+      tipo TEXT NOT NULL, testo TEXT, nota TEXT, doc TEXT, docs TEXT, inLista TEXT,
+      modo TEXT, attrezzi TEXT, proposta TEXT, bozza TEXT, fonti TEXT, revisione TEXT,
+      stato TEXT NOT NULL, giudizio TEXT, perche TEXT, jev REAL, aPosteriori TEXT,
+      risposta TEXT, suo TEXT, compito TEXT, creato TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_esiti_prova ON esiti(prova);
+    CREATE INDEX IF NOT EXISTS idx_esiti_doc ON esiti(automazione, doc);
+  `,
+  salute_fonti: `
+    CREATE TABLE IF NOT EXISTS salute_fonti (
+      giorno TEXT NOT NULL, fonte TEXT NOT NULL,
+      letture INTEGER NOT NULL DEFAULT 0, pulite INTEGER NOT NULL DEFAULT 0,
+      incomplete INTEGER NOT NULL DEFAULT 0, guai INTEGER NOT NULL DEFAULT 0,
+      fila INTEGER NOT NULL DEFAULT 0, documenti INTEGER NOT NULL DEFAULT 0,
+      tolti INTEGER NOT NULL DEFAULT 0, totale INTEGER, durata INTEGER NOT NULL DEFAULT 0,
+      sonda TEXT, rimedio TEXT, frase TEXT, versione TEXT, prima TEXT, ultima TEXT, verdetto TEXT,
+      PRIMARY KEY (giorno, fonte)
+    );
+  `,
+  stato_fonti: `
+    CREATE TABLE IF NOT EXISTS stato_fonti (
+      fonte TEXT PRIMARY KEY, motivo TEXT NOT NULL, rimedio TEXT, frase TEXT,
+      dal TEXT NOT NULL, fila INTEGER NOT NULL DEFAULT 1, visto TEXT NOT NULL
+    );
+  `
+} as const
+
+/**
+ * Gli indici su colonne arrivate dopo, in tabelle vecchie.
+ *
+ * Stanno a parte da `TABELLE` perché si possono creare solo quando la colonna
+ * c'è: `rimetti()` li riesegue dopo aver rimesso le colonne.
+ */
+const INDICI = [
+  'CREATE INDEX IF NOT EXISTS idx_doc_risponde ON documenti(risponde)',
+  'CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)'
+]
+
+/**
  * Le migrazioni, in ordine: l'indice i porta dallo schema i allo schema i+1.
  * `PRAGMA user_version` dice dove siamo. Aggiungere uno schema significa
  * aggiungere una voce in fondo, mai modificarne una già uscita — quella l'ha
@@ -1295,7 +1433,73 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   // parola è la stessa delle righe, ma il gradino basso non c'è: per un
   // progetto «meno importante» esiste già «fermo». Un progetto che c'era
   // prima resta normale, cioè com'era. In fondo, come tutte.
-  d => colonna(d, 'progetti', 'priorita', 'TEXT')
+  d => colonna(d, 'progetti', 'priorita', 'TEXT'),
+
+  /*
+   * Da qui in giù: le fondamenta dei lavori P1…P10, scritte tutte insieme
+   * perché undici rami paralleli non si pestino i piedi su questa lista. Una
+   * voce per passo, in fondo, come tutte. Le tabelle nuove hanno il loro
+   * `CREATE` scritto una volta sola in `TABELLE` (più sotto): la migrazione lo
+   * esegue, e `rimetti()` lo riesegue se un giorno una di loro mancasse.
+   */
+
+  // 47 → 48 · P1/P3/P9 · a quale messaggio risponde un'email, e a chi è andata.
+  //   `risponde` è l'In-Reply-To pulito dalle parentesi angolari: è quello che
+  //   lega una risposta mandata alla mail che l'ha chiesta. `destinatari` sono
+  //   gli indirizzi di A e Cc, in minuscolo, separati da virgole.
+  d => {
+    colonna(d, 'documenti', 'risponde', 'TEXT')
+    colonna(d, 'documenti', 'destinatari', 'TEXT')
+    d.exec('CREATE INDEX IF NOT EXISTS idx_doc_risponde ON documenti(risponde)')
+  },
+  // 48 → 49 · P1 · i segnali: le cose piccole che succedono, una riga ciascuna.
+  d => d.exec(TABELLE.segnali),
+  // 49 → 50 · P1 · le app che ha davanti, a sessioni.
+  d => d.exec(TABELLE.sessioni_app),
+  // 50 → 51 · P1 · gli impegni dell'agenda com'erano quando li ha visti.
+  d => d.exec(TABELLE.agenda_viste),
+  // 51 → 52 · P1 · le previsioni, sigillate fino alla sera.
+  d => d.exec(TABELLE.previsioni),
+  // 52 → 53 · P1 · il punteggio di ogni giorno, accanto a quello ingenuo.
+  d => d.exec(TABELLE.punteggi),
+  // 53 → 54 · P1 · le abitudini osservate («come lavori»).
+  d => d.exec(TABELLE.abitudini),
+  // 54 → 55 · P1 · la scala della fiducia, per genere di lavoro.
+  d => d.exec(TABELLE.fiducia),
+  // 55 → 56 · P2 · perché oggi, quando l'ha vista, quando l'ha toccata.
+  d => { colonna(d, 'feed', 'ragione', 'TEXT'); colonna(d, 'feed', 'vista', 'TEXT'); colonna(d, 'feed', 'toccata', 'TEXT') },
+  // 56 → 57 · P2 · le carte che mancavano: quello che ha fatto lui senza che il feed l'avesse detto.
+  d => d.exec(TABELLE.mancate),
+  // 57 → 58 · P2 · cosa ha deciso l'esame di ogni documento.
+  d => d.exec(TABELLE.feed_esame),
+  // 58 → 59 · P3 · l'ipotesi scritta, le domande fatte, e come scrive a quella persona.
+  //   La colonna della voce si chiama `voceScritta` e non `voce`: `compiti.voce`
+  //   esiste dalla 7 ed è la voce del feed da cui la riga è nata.
+  d => {
+    colonna(d, 'compiti', 'ipotesi', 'TEXT')
+    colonna(d, 'compiti', 'domandeFatte', 'INTEGER NOT NULL DEFAULT 0')
+    colonna(d, 'compiti', 'voceScritta', 'TEXT')
+  },
+  // 59 → 60 · P3 · le misure del lavoro affidato.
+  d => d.exec(TABELLE.misure_compiti),
+  // 60 → 61 · P6 · le prove delle automazioni e i loro esiti; il vassoio.
+  //   Quelle già vive che sono girate almeno una volta non passano dal
+  //   vassoio: la data nel passato dice «già finito».
+  d => {
+    d.exec(TABELLE.prove)
+    d.exec(TABELLE.esiti)
+    colonna(d, 'automazioni', 'vassoio', 'TEXT')
+    d.exec("UPDATE automazioni SET vassoio = '1970-01-01T00:00:00.000Z' WHERE vassoio IS NULL AND spenta = 0 AND quante > 0")
+  },
+  // 61 → 62 · P7 · com'è stata verificata una risposta.
+  d => colonna(d, 'messaggi', 'verifica', 'TEXT'),
+  // 62 → 63 · P8 · la salute delle fonti, giorno per giorno, e lo stato di adesso.
+  d => { d.exec(TABELLE.salute_fonti); d.exec(TABELLE.stato_fonti) },
+  // 63 → 64 · P9 · una bozza mandata dalla posta, e un indice su quando si chiude una riga.
+  d => {
+    colonna(d, 'compiti', 'mandata', 'TEXT')
+    d.exec('CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)')
+  }
 
 ]
 
@@ -1363,7 +1567,9 @@ function istantanea(d: DatabaseSync, file: string, da: number) {
  * Aggiungere una colonna che manca è sicuro e costa una lettura di schema;
  * scoprire fra sei mesi perché una query dice «no such column» costa un
  * pomeriggio. Le colonne stanno scritte qui *e* nella loro migrazione, e le
- * due cose devono dire la stessa cosa — `store.test.ts` lo controlla.
+ * due cose devono dire la stessa cosa: `colonne.test.ts` legge questo file e
+ * lo controlla, colonna per colonna e tipo per tipo. Una colonna `NOT NULL
+ * DEFAULT` tiene qui il suo default, o non si potrebbe rimettere.
  */
 const COLONNE: Record<string, [string, string][]> = {
   documenti: [
@@ -1372,17 +1578,62 @@ const COLONNE: Record<string, [string, string][]> = {
     // tenersene una copia: senza, ogni ricerca in italiano smette di piegare
     // i plurali, e in silenzio
     ['radici', 'TEXT'], ['autoreIndirizzo', 'TEXT'], ['messageId', 'TEXT'],
-    ['letto', 'INTEGER'], ['massa', 'INTEGER']
+    ['letto', 'INTEGER'], ['massa', 'INTEGER'],
+    ['risponde', 'TEXT'], ['destinatari', 'TEXT']
   ],
-  automazioni: [['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0']],
+  automazioni: [
+    ['tolta', 'TEXT'], ['raccolta', 'TEXT'], ['dal', 'TEXT'], ['storia', 'TEXT'],
+    ['giorno', 'TEXT'], ['bozze', 'INTEGER NOT NULL DEFAULT 0'], ['vista', 'TEXT'],
+    ['vassoio', 'TEXT']
+  ],
   convinzioni: [['confermata', 'TEXT']],
-  compiti: [['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'], ['madre', 'TEXT'], ['contesto', 'TEXT'], ['priorita', 'TEXT']],
-  feed: [['perche', 'TEXT'], ['contesto', 'TEXT'], ['peso', 'REAL']],
-  notizie: [['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']],
-  progetti: [['priorita', 'TEXT']]
+  compiti: [
+    ['modo', "TEXT NOT NULL DEFAULT 'io'"], ['proposta', 'TEXT'], ['chieste', 'TEXT'], ['attrezzi', 'TEXT'],
+    ['consegna', 'TEXT'], ['email', 'TEXT'], ['giorno', 'TEXT'], ['ora', 'TEXT'], ['progetto', 'TEXT'],
+    ['madre', 'TEXT'], ['contesto', 'TEXT'], ['revisione', 'TEXT'], ['priorita', 'TEXT'],
+    ['ipotesi', 'TEXT'], ['domandeFatte', 'INTEGER NOT NULL DEFAULT 0'], ['voceScritta', 'TEXT'],
+    ['mandata', 'TEXT']
+  ],
+  feed: [
+    ['motivo', 'TEXT'], ['risposto', 'TEXT'], ['perche', 'TEXT'], ['contesto', 'TEXT'],
+    ['offerta', 'TEXT'], ['progetto', 'TEXT'], ['peso', 'REAL'],
+    ['ragione', 'TEXT'], ['vista', 'TEXT'], ['toccata', 'TEXT']
+  ],
+  blocchi: [['daMe', 'TEXT']],
+  domande: [['progetto', 'TEXT']],
+  chat: [['progetto', 'TEXT'], ['iniziativa', 'TEXT']],
+  messaggi: [['verifica', 'TEXT']],
+  notizie: [['scartata', 'TEXT'], ['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']],
+  progetti: [['colore', 'TEXT'], ['alias', 'TEXT'], ['genitore', 'TEXT'], ['priorita', 'TEXT']]
 }
 
+/*
+ * Prima le tabelle che mancano, poi le colonne, poi gli indici sulle colonne.
+ *
+ * L'ordine conta: una tabella ricreata da `TABELLE` nasce nella sua forma di
+ * partenza, e le colonne arrivatele dopo gliele rimette il giro sulle colonne;
+ * un indice su una colonna arrivata dopo si può fare solo quando la colonna
+ * c'è.
+ */
 function rimetti(db: DatabaseSync) {
+  for (const [nome, sql] of Object.entries(TABELLE)) {
+    try {
+      const c = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ?").get(nome) as { n: number }
+      db.exec(sql)
+      if (!c.n) console.log(`myynd · rimessa la tabella ${nome}, che una migrazione saltata non aveva scritto`)
+    } catch (e) {
+      console.error(`myynd · non riesco a rimettere la tabella ${nome}:`, e instanceof Error ? e.message : e)
+    }
+  }
+  rimettiColonne(db)
+  for (const sql of INDICI) {
+    try { db.exec(sql) } catch (e) {
+      console.error('myynd · non riesco a rimettere un indice:', e instanceof Error ? e.message : e)
+    }
+  }
+}
+
+function rimettiColonne(db: DatabaseSync) {
   for (const [tabella, colonne] of Object.entries(COLONNE)) {
     let ci: { name: string }[]
     try { ci = db.prepare(`PRAGMA table_info(${tabella})`).all() as { name: string }[] } catch { continue }
@@ -1548,6 +1799,14 @@ export type Documento = {
    * feed non la guarda nemmeno.
    */
   massa?: boolean | null
+  /**
+   * L'`In-Reply-To` di questa email, pulito dalle parentesi angolari: il
+   * messaggio a cui risponde. È quello che lega una risposta mandata alla mail
+   * che l'aveva chiesta, senza indovinare dall'oggetto.
+   */
+  risponde?: string | null
+  /** Gli indirizzi di A e Cc, in minuscolo, senza doppioni, separati da virgole. */
+  destinatari?: string | null
 }
 
 /**
@@ -1563,7 +1822,8 @@ export type Documento = {
  */
 const CAMPI_DOC = [
   'rid', 'id', 'fonte', 'tipo', 'titolo', 'corpo', 'autore',
-  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'messageId', 'letto', 'massa'
+  'percorso', 'quando', 'gruppo', 'indicizzato', 'filo', 'inviato', 'messageId', 'letto', 'massa',
+  'risponde', 'destinatari'
 ]
 const CAMPI = CAMPI_DOC.join(', ')
 /** Gli stessi, per la ricerca, dove `documenti` sta in una giunzione. */
@@ -1609,15 +1869,15 @@ function istr(): Istruzioni {
      * un documento che nessuna ricerca troverà mai.
      */
     selEsistente: d.prepare(
-      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, radici FROM documenti WHERE id = ?'
+      'SELECT rid, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, risponde, destinatari, radici FROM documenti WHERE id = ?'
     ),
     insDoc: d.prepare(`
-      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, radici, autoreIndirizzo, indicizzato)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO documenti (id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, filo, inviato, messageId, letto, massa, risponde, destinatari, radici, autoreIndirizzo, indicizzato)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `),
     updDoc: d.prepare(`
       UPDATE documenti SET titolo=?, corpo=?, autore=?, percorso=?, quando=?, gruppo=?, filo=?, inviato=?, messageId=?, letto=?, massa=?,
-        radici=?, autoreIndirizzo=?, indicizzato=?
+        risponde=?, destinatari=?, radici=?, autoreIndirizzo=?, indicizzato=?
       WHERE rid = ?
     `),
     /**
@@ -1635,9 +1895,10 @@ function istr(): Istruzioni {
      * `messageId` passa di qui per la stessa ragione: è arrivato dopo il filo,
      * e la prima lettura che lo porta non deve far sembrare nuova tutta la
      * casella. E `letto` e `massa` pure: aprire un'email nel programma di
-     * posta non la rende un'email nuova.
+     * posta non la rende un'email nuova. E `risponde` e `destinatari` lo
+     * stesso: arrivano con una lettura successiva su email che c'erano già.
      */
-    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ?, messageId = ?, letto = ?, massa = ? WHERE rid = ?')
+    updFilo: d.prepare('UPDATE documenti SET filo = ?, inviato = ?, messageId = ?, letto = ?, massa = ?, risponde = ?, destinatari = ? WHERE rid = ?')
   }
   istruzioni.set(d, i)
   return i
@@ -1728,7 +1989,8 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
         rid: number; titolo: string; corpo: string
         autore: string | null; percorso: string | null; quando: string | null; gruppo: string | null
         filo: string | null; inviato: number | null; messageId: string | null
-        letto: number | null; massa: number | null; radici: string | null
+        letto: number | null; massa: number | null; risponde: string | null; destinatari: string | null
+        radici: string | null
       } | undefined
 
       if (gia) {
@@ -1748,8 +2010,9 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
           // il filo e «l'ho scritta io» arrivano tutti e due dopo, e nessuno dei
           // due è un contenuto: si scrivono senza far contare il documento come cambiato
           if (gia.filo !== (d.filo ?? null) || !!gia.inviato !== !!d.inviato || gia.messageId !== (d.messageId ?? null) ||
-              (gia.letto ?? null) !== bit(d.letto) || (gia.massa ?? null) !== bit(d.massa)) {
-            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), gia.rid)
+              (gia.letto ?? null) !== bit(d.letto) || (gia.massa ?? null) !== bit(d.massa) ||
+              (gia.risponde ?? null) !== (d.risponde ?? null) || (gia.destinatari ?? null) !== (d.destinatari ?? null)) {
+            istr().updFilo.run(d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), d.risponde ?? null, d.destinatari ?? null, gia.rid)
           }
           esito.invariati++
           continue
@@ -1757,12 +2020,12 @@ export function salvaDocumenti(docs: Documento[]): EsitoScrittura {
 
         // l'indice full-text si aggiorna da solo: legge queste stesse colonne,
         // e i trigger su `documenti` gli dicono quando sono cambiate
-        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
+        istr().updDoc.run(d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), d.risponde ?? null, d.destinatari ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora, gia.rid)
         esito.cambiati++
         continue
       }
 
-      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
+      istr().insDoc.run(d.id, d.fonte, d.tipo, d.titolo, d.corpo, d.autore ?? null, d.percorso ?? null, d.quando ?? null, d.gruppo ?? null, d.filo ?? null, d.inviato ? 1 : 0, d.messageId ?? null, bit(d.letto), bit(d.massa), d.risponde ?? null, d.destinatari ?? null, radici(`${d.titolo} ${d.corpo} ${d.autore ?? ''}`), indirizzoDi(d.autore), ora)
       esito.nuovi++
     }
     db.exec('COMMIT')
@@ -3069,6 +3332,11 @@ export const perProva = {
   documentiNellIndice(): number {
     db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS ricerca_istanze USING fts5vocab('ricerca', 'instance')")
     return (db.prepare('SELECT COUNT(DISTINCT doc) AS n FROM ricerca_istanze').get() as { n: number }).n
+  },
+
+  /** Lo schema come lo conosce questo file: per `colonne.test.ts`. */
+  schema() {
+    return { migrazioni: MIGRAZIONI.length, colonne: COLONNE, tabelle: { ...TABELLE }, indici: [...INDICI] }
   }
 }
 
@@ -3185,6 +3453,21 @@ export type Compito = {
    * ce l'ha fatta — e allora l'interfaccia torna a chiederla in due passi.
    */
   email: EmailPronta | null
+  /** Le ipotesi del risultato di adesso, una riga ciascuna («Ho supposto venerdì»). Le scrive P3. */
+  ipotesi?: string[] | null
+  /** Quante domande questa riga ha fatto nella sua vita: mai più di una. Le conta P3. */
+  domandeFatte?: number
+  /**
+   * Come scrive a chi riceve la bozza, dalle mail che gli ha mandato (P3).
+   * Sta in `compiti.voceScritta` perché `voce` è la voce del feed da cui la
+   * riga è nata.
+   */
+  voceScritta?: { destinatario?: string; lingua?: string; esempi?: { id: string; label: string }[] } | null
+  /**
+   * La bozza è partita dalla sua posta (P9): quale messaggio, quando, con che
+   * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.
+   */
+  mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
 }
 
 /**
@@ -3268,9 +3551,24 @@ function portaDi(doc: unknown): 'posta' | 'file' | 'pagina' | null {
   return dove === 'posta' || dove === 'file' || dove === 'pagina' ? dove : null
 }
 
+/**
+ * Una colonna JSON che può non esserlo.
+ *
+ * Le colonne nuove le scrivono rami diversi: una riga storta in una di loro
+ * non deve far cadere l'elenco intero, che è la lista delle cose da fare.
+ */
+function jsonOppureNulla(v: unknown): unknown {
+  if (typeof v !== 'string' || !v) return null
+  try { return JSON.parse(v) } catch { return null }
+}
+
 function compitoDaRiga(r: Record<string, unknown>): Compito {
   return {
     ...r,
+    ipotesi: jsonOppureNulla(r.ipotesi),
+    voceScritta: jsonOppureNulla(r.voceScritta),
+    mandata: jsonOppureNulla(r.mandata),
+    domandeFatte: Number(r.domandeFatte ?? 0),
     porta: portaDi(r.doc),
     consegna: r.consegna ? JSON.parse(String(r.consegna)) : null,
     revisione: r.revisione ? JSON.parse(String(r.revisione)) : null,
@@ -4592,6 +4890,41 @@ export function potaSessioni() {
   db.prepare('DELETE FROM sessioni WHERE scade < ?').run(new Date().toISOString())
 }
 
+// — il fascicolo: le tabelle che si esportano intere —
+
+/**
+ * Le tabelle personali che «Scarica tutti i miei dati» esporta riga per riga.
+ *
+ * Il feed in tutti i suoi stati, le domande, le notizie (lette e scartate sono
+ * cose sue), le cartelle delle automazioni, e tutte quelle nate dalla 48 in
+ * poi: una tabella nuova scritta in `TABELLE` ci entra da sola, così il
+ * fascicolo non può dimenticarsela.
+ */
+export const TABELLE_DEL_FASCICOLO: readonly string[] = ['feed', 'domande', 'notizie', 'raccolte', ...Object.keys(TABELLE)]
+
+/**
+ * Tutte le righe di una di quelle tabelle, a pezzi.
+ *
+ * A pezzi per `rowid` e non con un `SELECT *` intero: le sessioni delle app
+ * di un mese sono decine di migliaia di righe, e in memoria non ce ne devono
+ * stare più di un pezzo per volta. Una tabella fuori dall'elenco non esce.
+ */
+export function* righeDi(tabella: string, pezzo = 500): Generator<Record<string, unknown>> {
+  if (!TABELLE_DEL_FASCICOLO.includes(tabella)) return
+  let da = Number.MIN_SAFE_INTEGER
+  for (;;) {
+    const righe = db.prepare(`SELECT rowid AS _riga, * FROM ${tabella} WHERE rowid > ? ORDER BY rowid LIMIT ?`)
+      .all(da, pezzo) as Record<string, unknown>[]
+    if (!righe.length) return
+    for (const r of righe) {
+      const { _riga, ...resto } = r
+      da = Number(_riga)
+      yield { ...resto }
+    }
+    if (righe.length < pezzo) return
+  }
+}
+
 /**
  * Svuota la mente. Anche la memoria: le convinzioni sono parte di quello che
  * Myynd sa di te, e lasciarle in piedi dopo un azzeramento significherebbe che
@@ -4605,6 +4938,9 @@ export function azzeraTutto() {
     DELETE FROM convinzioni; DELETE FROM blocchi; DELETE FROM domande;
     DELETE FROM compiti; DELETE FROM cursori; DELETE FROM progetti;
   `)
+  // e le tabelle nate dalla 48 in poi: sono tutte cose sue — quello che ha
+  // guardato, quello che Myynd ha previsto, le prove, la salute delle fonti
+  for (const t of Object.keys(TABELLE)) db.exec(`DELETE FROM ${t}`)
   /*
    * E non `DELETE FROM ricerca`.
    *
