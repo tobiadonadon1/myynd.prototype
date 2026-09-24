@@ -34,7 +34,7 @@ let base = ''
 
 before(async () => {
   server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, MYYND_DATI: CASA, MYYND_PORT: '0', MYYND_DEV: '1', NODE_ENV: 'test' },
+    env: { PATH: process.env.PATH, HOME: join(CASA, 'casa-finta'), MYYND_DATI: CASA, MYYND_PORT: '0', MYYND_DEV: '1', NODE_ENV: 'test' },
     stdio: ['ignore', 'pipe', 'pipe']
   })
   await new Promise<void>((pronto, guaio) => {

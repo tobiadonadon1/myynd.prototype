@@ -18,13 +18,28 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const casa = mkdtempSync(join(tmpdir(), 'myynd-lettura-a-mano-'))
 process.env.MYYND_DATI = casa
+/*
+ * Una casa finta, e una cartella scelta dentro di lei.
+ *
+ * Il server figlio senza HOME ripiegava sulla casa vera, e un desktop senza
+ * `scelte: true` veniva allargato all'avvio a tutta la casa più iCloud: la
+ * prova leggeva e sorvegliava il Mac di chi la lanciava, e accendeva le
+ * conversazioni di Claude Code e Codex che trovava lì. Adesso non c'è niente
+ * di vero da trovare.
+ */
+const home = join(casa, 'casa-finta')
+const cartella = join(home, 'Documents')
+mkdirSync(cartella, { recursive: true })
+// un file da leggere: la rilettura che parte dopo la prima pressione lo trova
+// nuovo e chiede al modello (lento apposta) cosa farne, tenendo il lucchetto
+writeFileSync(join(cartella, 'launch-plan.md'), '# Launch plan\n\nConfirm the scope with Giulia by Friday.\n')
 const conti = await import('./conti.ts')
 const chi = await import('./chi.ts')
 const store = await import('./store.ts')
@@ -35,15 +50,20 @@ let modello: ChildProcess | undefined
 let base = ''
 const token = 'manual-read-regression-token'
 
-/** Un fornitore compatibile finto, in un processo suo: risponde un feed vuoto. */
+/**
+ * Un fornitore compatibile finto, in un processo suo: risponde un feed vuoto,
+ * dopo un secondo e mezzo. La lentezza è la prova: prima la dava la casa vera
+ * del Mac, che la rilettura leggeva tutta; adesso la casa è finta, e quello che
+ * tiene il lucchetto abbastanza a lungo è il modello.
+ */
 const FINTO = `
 import { createServer } from 'node:http'
 createServer((req, res) => {
   req.resume()
-  req.on('end', () => {
+  req.on('end', () => setTimeout(() => {
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ id: 'x', model: 'finto', choices: [{ index: 0, message: { role: 'assistant', content: '{"voci":[]}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }))
-  })
+  }, 1500))
 }).listen(0, '127.0.0.1', function () { console.log('finto su ' + this.address().port) })
 `
 
@@ -73,7 +93,7 @@ before(async () => {
     cfg.scrivi({
       lingua: 'en', diSerie: false,
       // una fonte collegata, o la rilettura di sottofondo non parte nemmeno
-      desktop: { cartelle: [casa] },
+      desktop: { cartelle: [cartella], scelte: true },
       motore: 'compatibile',
       compatibile: { url: `http://127.0.0.1:${portaFinto}/v1/`, chiave: 'sk-finta', modello: 'finto' }
     })
@@ -86,7 +106,7 @@ before(async () => {
   store.chiudiIndici()
 
   servizio = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
-    env: { PATH: process.env.PATH, MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
+    env: { PATH: process.env.PATH, HOME: home, MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
   })
   base = `http://127.0.0.1:${await porta(servizio, /server su http:\/\/127\.0\.0\.1:(\d+)/, 'il server')}`
 })
@@ -112,7 +132,10 @@ const leggi = async () => {
 }
 
 test('premere «Leggi adesso» durante una lettura non torna un errore, ma dice che sta già leggendo', async () => {
-  const [prima, seconda] = await Promise.all([leggi(), leggi()])
+  // la prima genera e, dopo aver risposto, fa partire la rilettura delle fonti;
+  // la seconda arriva mentre quella rilettura aspetta il modello
+  const prima = await leggi()
+  const seconda = await leggi()
   for (const [quale, r] of [['la prima', prima], ['la seconda', seconda]] as const) {
     assert.equal(r.stato, 200, `${quale} pressione ha risposto ${r.stato}: ${JSON.stringify(r.corpo)}`)
     assert.equal(r.corpo.ok, true, `${quale} pressione non è andata bene`)

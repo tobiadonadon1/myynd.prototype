@@ -41,7 +41,7 @@ before(async () => {
   })
   store.chiudiIndici()
   servizio = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
-    env: { PATH: process.env.PATH, MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
+    env: { PATH: process.env.PATH, HOME: join(casa, 'casa-finta'), MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
   })
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('isolated API did not start')), 10000)

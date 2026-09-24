@@ -300,7 +300,7 @@ test('«Evermute is my top priority» detto in chat finisce nella stessa colonna
 
 async function avviaIlServer() {
   server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, MYYND_DATI: ROTTA, MYYND_PORT: '0', MYYND_DEV: '1', NODE_ENV: 'test' },
+    env: { PATH: process.env.PATH, HOME: join(ROTTA, 'casa-finta'), MYYND_DATI: ROTTA, MYYND_PORT: '0', MYYND_DEV: '1', NODE_ENV: 'test' },
     stdio: ['ignore', 'pipe', 'pipe']
   })
   await new Promise<void>((pronto, guaio) => {
