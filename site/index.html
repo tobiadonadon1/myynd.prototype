@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en" data-for="me">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Myynd · Wake up to work already done</title>
+<meta name="description" content="Myynd reads your mail, calendar, files and chats on your Mac, and hands you the replies, ready to send.">
+<meta name="theme-color" content="#0F0B09">
+<meta property="og:title" content="Myynd">
+<meta property="og:description" content="A second brain that does the work. For you, or for your whole company.">
+<link rel="icon" href="assets/marchio.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300..500&display=swap">
+<script>
+  // Before the first paint: who is this page for? A link can say it
+  // (?for=company), the last visit can remember it, and the default is one
+  // person. Written here so the page never flashes the wrong audience.
+  (function () {
+    var f = null;
+    try { var q = new URLSearchParams(location.search).get('for'); if (q) f = /^co/.test(q) ? 'co' : 'me'; } catch (e) {}
+    if (!f) { try { f = localStorage.getItem('myynd.for'); } catch (e) {} }
+    document.documentElement.setAttribute('data-for', f === 'co' ? 'co' : 'me');
+  })();
+</script>
+<link rel="stylesheet" href="scrollcraft.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="sc-grain" aria-hidden="true"></div>
+
+<header class="bar">
+  <a class="brand" href="#top" aria-label="Myynd, back to top">
+    <img src="assets/marchio.svg" alt="" width="28" height="28">
+    <span>Myynd</span>
+  </a>
+  <nav class="bar__links" aria-label="Sections">
+    <a href="#demo">How it works</a>
+    <a href="#price">Pricing</a>
+    <a href="#faq">Questions</a>
+  </nav>
+  <a class="btn btn--sm" href="#price" data-cta>
+    <span class="for-me">Get Myynd</span><span class="for-co">Book a pilot</span>
+  </a>
+</header>
+
+<!-- The signature: who is this page for. Always here, always switchable; early in
+     the tab order so a keyboard reaches it before the page, not after. -->
+<div class="aud" role="radiogroup" aria-label="Show this page for">
+  <span class="aud__label">For</span>
+  <button type="button" role="radio" class="aud__opt" data-aud="me">Individuals</button>
+  <button type="button" role="radio" class="aud__opt" data-aud="co">Companies</button>
+  <span class="aud__thumb" aria-hidden="true"></span>
+</div>
+
+<main id="top">
+
+  <!-- 1 · PROMISE. The first run's own light, under the pointer. -->
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="field" aria-hidden="true">
+      <canvas class="field__fallback"></canvas>
+      <canvas class="field__gl"></canvas>
+    </div>
+    <div class="hero__copy">
+      <h1 id="hero-h" class="display display--hero" data-swap>
+        <span class="for-me">Wake up to work already done.</span>
+        <span class="for-co">Your company runs on one head. Copy it.</span>
+      </h1>
+      <p class="hero__sub" data-swap>
+        <span class="for-me">Your digital twin. It reads mail, files and chats on your Mac and hands you the replies, ready to send.</span>
+        <span class="for-co">A digital twin of your founder: how they decide, learned from mail, files and one conversation.</span>
+      </p>
+      <div class="hero__act">
+        <a class="btn" href="#price" data-cta>
+          <span class="for-me">Get Myynd</span><span class="for-co">Book a pilot</span>
+        </a>
+        <p class="hero__small" data-swap>
+          <span class="for-me">$19 a month for the first 100 people. For Mac.</span>
+          <span class="for-co">Six weeks, set up for you. Three pilots at a time.</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · RECOGNITION. Quiet and dark on purpose: the silence before the peak. -->
+  <section class="morning" aria-label="The morning as it is">
+    <div class="sc-wrap morning__lines">
+      <div class="for-me">
+        <p class="line line--big" data-sc-in>7:40. Forty-three unread.</p>
+        <p class="line line--right" data-sc-in>Three projects. Two clients waiting. One quote you promised on Monday and forgot.</p>
+        <p class="line" data-sc-in>The first hour of every day goes to working out what matters. Then the day starts without you.</p>
+        <p class="line line--turn" data-sc-in>Claude remembers what you tell it.<br><em>Myynd learns from what you do.</em></p>
+      </div>
+      <div class="for-co">
+        <p class="line line--big" data-sc-in>Which supplier did we drop? Which file is the real one? What discount does Ferretti get?</p>
+        <p class="line line--right" data-sc-in>One person knows. Everyone else waits for them.</p>
+        <p class="line" data-sc-in>So the founder answers the same questions all day, and the company queues behind one head.</p>
+        <p class="line line--turn" data-sc-in>The models are good enough.<br><em>What they lack is your company.</em></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · PEAK. The ground cuts to the desk and the product runs under the hand. -->
+  <section id="demo" class="peak" data-sc-act="pin" data-sc-span="4.4" aria-label="A morning with Myynd, sample data">
+    <div data-sc-stage class="peak__stage">
+      <div class="peak__copy">
+        <div class="for-me">
+          <div class="beat" data-sc-cue="0 0.27 0">
+            <h2 class="display display--md">It reads everything.</h2>
+            <p>Mail, calendar, files, notes, meetings and chats, on your Mac. Nobody uploads anything.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.24 0.51">
+            <h2 class="display display--md">It works out what matters.</h2>
+            <p>One page each morning: who is waiting, what is due, what moved.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.48 0.77">
+            <h2 class="display display--md">It does the work.</h2>
+            <p>Replies in your voice with the right file attached. Documents made and saved where you keep them.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.74 1.12">
+            <h2 class="display display--md">You press send.</h2>
+            <p>It never sends, deletes or changes anything on its own. The button stays yours.</p>
+          </div>
+        </div>
+        <div class="for-co">
+          <div class="beat" data-sc-cue="0 0.27 0">
+            <h2 class="display display--md">It learns how the founder decides.</h2>
+            <p>From their mail, files and chats, and a twenty-minute conversation about how they choose.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.24 0.51">
+            <h2 class="display display--md">The team asks the brain.</h2>
+            <p>Anyone asks in plain words and gets the founder's answer, with the source it came from.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.48 0.77">
+            <h2 class="display display--md">The answer comes with the work.</h2>
+            <p>The reply is drafted, the right file attached. The report is already written.</p>
+          </div>
+          <div class="beat" data-sc-cue="0.74 1.12">
+            <h2 class="display display--md">Nobody was interrupted.</h2>
+            <p>The founder kept working. The team stopped waiting. A person still presses send.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="win" data-phase="0">
+        <div class="win__bar">
+          <span class="win__lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="win__title">Myynd</span>
+          <span class="win__tag">Sample data</span>
+        </div>
+        <div class="win__body">
+          <nav class="win__side" aria-hidden="true">
+            <span class="win__nav is-on">Today</span>
+            <span class="win__nav">Chat</span>
+            <span class="win__nav">Projects</span>
+            <span class="win__nav">Automations</span>
+            <span class="win__nav">Memory</span>
+            <span class="win__nav">Sources</span>
+          </nav>
+
+          <!-- individual -->
+          <div class="win__main for-me">
+            <div class="pane pane--read">
+              <p class="pane__kicker"><span class="pulse" aria-hidden="true"></span><span data-read-status>Reading 6 sources</span></p>
+              <ul class="reads">
+                <li data-read="312"><b>Mail</b><span class="reads__n"><i data-n>0</i> emails</span><span class="reads__dot"></span></li>
+                <li data-read="42"><b>Calendar</b><span class="reads__n"><i data-n>0</i> events</span><span class="reads__dot"></span></li>
+                <li data-read="1204"><b>My Mac</b><span class="reads__n"><i data-n>0</i> files</span><span class="reads__dot"></span></li>
+                <li data-read="88"><b>Notes</b><span class="reads__n"><i data-n>0</i> notes</span><span class="reads__dot"></span></li>
+                <li data-read="14"><b>Granola</b><span class="reads__n"><i data-n>0</i> meetings</span><span class="reads__dot"></span></li>
+                <li data-read="6"><b>Slack</b><span class="reads__n"><i data-n>0</i> channels</span><span class="reads__dot"></span></li>
+              </ul>
+              <p class="pane__line" data-read-line>Reading the thread with Studio Ferretti</p>
+            </div>
+
+            <div class="pane pane--page">
+              <p class="pane__date">Thursday 24 September</p>
+              <p class="pane__hello">Good morning, Sara.</p>
+              <article class="row row--reply" data-at="0.30">
+                <p class="row__proj">Studio Ferretti <span>· waiting since yesterday</span></p>
+                <h3 class="row__h">Marco is waiting for the Q4 quote.</h3>
+                <div class="draft"><div class="draft__inner">
+                  <p class="draft__to">To Marco Ferretti</p>
+                  <p class="draft__text">Hi Marco, here is the Q4 quote: twelve Arc chairs at the price we agreed in March, delivered in week 46. Talk soon, Sara</p>
+                  <div class="draft__foot">
+                    <span class="file">Quote Q4 v3.pdf</span>
+                    <button class="btn btn--send" type="button" data-send>Send</button>
+                  </div>
+                </div></div>
+                <p class="sent" role="status" aria-live="polite"></p>
+              </article>
+              <article class="row row--wait" data-at="0.36">
+                <p class="row__proj">Atelier Nord</p>
+                <h3 class="row__h">The contract renews on Friday.</h3>
+                <p class="row__note">Reminder drafted, contract attached.</p>
+              </article>
+              <article class="row row--work" data-at="0.42">
+                <canvas class="flame" aria-hidden="true"></canvas>
+                <p class="row__proj">Board</p>
+                <h3 class="row__h">Q4 review for Tuesday.</h3>
+                <p class="row__note row__note--todo">To prepare.</p>
+                <p class="row__note row__note--doing">Writing it from the Q3 numbers and last week's notes.</p>
+                <p class="row__note row__note--done"><span class="ok" aria-hidden="true"></span>Saved to your Desktop: Q4 review.pdf</p>
+              </article>
+            </div>
+          </div>
+
+          <!-- company -->
+          <div class="win__main for-co">
+            <div class="pane pane--read">
+              <p class="pane__kicker"><span class="pulse" aria-hidden="true"></span><span data-read-status>Reading 6 sources</span></p>
+              <ul class="reads">
+                <li data-read="18402"><b>Luca's mail</b><span class="reads__n"><i data-n>0</i> emails</span><span class="reads__dot"></span></li>
+                <li data-read="3120"><b>Dropbox</b><span class="reads__n"><i data-n>0</i> files</span><span class="reads__dot"></span></li>
+                <li data-read="41"><b>Slack</b><span class="reads__n"><i data-n>0</i> channels</span><span class="reads__dot"></span></li>
+                <li data-read="1380"><b>Calendar</b><span class="reads__n"><i data-n>0</i> events</span><span class="reads__dot"></span></li>
+                <li data-read="212"><b>Notion</b><span class="reads__n"><i data-n>0</i> pages</span><span class="reads__dot"></span></li>
+                <li data-read="22"><b>The interview</b><span class="reads__n"><i data-n>0</i> minutes</span><span class="reads__dot"></span></li>
+              </ul>
+              <p class="pane__line" data-read-line>Reading how Luca prices a repeat order</p>
+            </div>
+
+            <div class="pane pane--page">
+              <div class="ask" data-at="0.28">
+                <span class="ask__who" aria-hidden="true">G</span>
+                <p><b>Giulia, sales</b>What discount does Ferretti get on the Q4 order?</p>
+              </div>
+              <div class="answer" data-at="0.31">
+                <p class="answer__text" data-type="12%, the same as last year. Luca agreed it with Marco in March, on one condition: the order arrives before 15 November."></p>
+                <p class="answer__src">
+                  <button type="button" class="src" aria-describedby="src-1">1</button>
+                  <span role="tooltip" id="src-1" class="src__tip">Luca to Marco Ferretti, 12 March</span>
+                  <button type="button" class="src" aria-describedby="src-2">2</button>
+                  <span role="tooltip" id="src-2" class="src__tip">Price list 2026 v3.pdf</span>
+                </p>
+              </div>
+              <article class="row row--reply" data-at="0.52">
+                <div class="draft"><div class="draft__inner">
+                  <p class="draft__to">To Marco Ferretti</p>
+                  <p class="draft__text">Dear Marco, confirming 12% on the Q4 order, as long as it reaches us by 15 November. The price list is attached. Giulia</p>
+                  <div class="draft__foot">
+                    <span class="file">Price list 2026 v3.pdf</span>
+                    <button class="btn btn--send" type="button" data-send>Send</button>
+                  </div>
+                </div></div>
+                <p class="sent" role="status" aria-live="polite"></p>
+              </article>
+              <article class="row row--work" data-at="0.56">
+                <canvas class="flame" aria-hidden="true"></canvas>
+                <p class="row__proj">Board</p>
+                <h3 class="row__h">September report.</h3>
+                <p class="row__note row__note--todo">Asked by Luca.</p>
+                <p class="row__note row__note--doing">Writing it from the sales sheet and the Slack threads.</p>
+                <p class="row__note row__note--done"><span class="ok" aria-hidden="true"></span>Saved to the Board folder: September report.pdf</p>
+              </article>
+              <p class="quiet" data-at="0.8">Luca was not interrupted.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · SUBSTANCE. What it reads, and what it never does. Plain facts. -->
+  <section class="trust" id="trust" aria-label="What Myynd reads and what it never does">
+    <div class="sc-wrap trust__grid">
+      <div class="trust__reads" data-sc-in>
+        <h2 class="display display--md" data-swap>
+          <span class="for-me">It reads what you already have.</span>
+          <span class="for-co">It reads what the company already has.</span>
+        </h2>
+        <ul class="sources">
+          <li><span class="st st--on" aria-hidden="true"></span><b>Mail</b><span>Any inbox, Gmail included</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Calendar</b><span>Google, iCloud, Outlook</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>My Mac</b><span>Every folder, read only</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Apple Notes</b><span>Straight from the Mac</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Slack</b><span>The channels you are in</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>WhatsApp Business</b><span>One business number</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Notion</b><span>Pages you share with it</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Granola</b><span>Your meeting notes</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>GitHub</b><span>Issues, pull requests, commits</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>Dropbox</b><span>Your files there</span></li>
+          <li><span class="st st--on" aria-hidden="true"></span><b>ChatGPT and Claude</b><span>Your past chats</span></li>
+          <li><span class="st" aria-hidden="true"></span><b>Coming</b><span>Google in one click, Microsoft 365</span></li>
+        </ul>
+        <p class="engines">Thinks with Claude or GPT, or with a model that runs on your own Mac.</p>
+      </div>
+      <div class="trust__never" data-sc-in>
+        <h2 class="display display--md">What it never does.</h2>
+        <dl class="never">
+          <div><dt>Act alone.</dt><dd>It drafts and prepares. A person presses the button. Nothing is sent, deleted or changed on its own.</dd></div>
+          <div><dt>Guess.</dt><dd>Answers cite what they came from. When it can't find something, it says so.</dd></div>
+          <div class="for-me"><dt>Take your files.</dt><dd>Your files stay on your Mac. Only what a task needs goes to the AI you chose, and nothing does if the model runs on your Mac.</dd></div>
+          <div class="for-me"><dt>Hide what it did.</dt><dd>One page in the app says what it reads, what it writes and what leaves your computer. Delete means delete.</dd></div>
+          <div class="for-co"><dt>Leave the building.</dt><dd>It runs on your server or on ours. With a local model, nothing leaves at all.</dd></div>
+          <div class="for-co"><dt>Let anyone in.</dt><dd>Sign-in only with the company email. Credentials are encrypted. Any account can be exported or deleted.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · WORTH. The visitor's own numbers, computed, never claimed. -->
+  <section class="worth" id="worth" aria-labelledby="worth-h">
+    <div class="sc-wrap worth__grid">
+      <div class="worth__ask" data-sc-in>
+        <h2 id="worth-h" class="display display--md" data-swap>
+          <span class="for-me">What an hour back is worth.</span>
+          <span class="for-co">What one head is worth.</span>
+        </h2>
+        <div class="for-me sliders">
+          <label class="slide">
+            <span class="slide__q">If Myynd saves you <output data-out="me-min">30 minutes</output> a workday</span>
+            <input type="range" min="5" max="90" step="5" value="30" data-in="me-min">
+          </label>
+          <label class="slide">
+            <span class="slide__q">and an hour of your time is worth <output data-out="me-rate">$50</output></span>
+            <input type="range" min="20" max="300" step="10" value="50" data-in="me-rate">
+          </label>
+        </div>
+        <div class="for-co sliders">
+          <label class="slide">
+            <span class="slide__q">If the founder is interrupted <output data-out="co-n">20 times</output> a day</span>
+            <input type="range" min="5" max="60" step="1" value="20" data-in="co-n">
+          </label>
+          <label class="slide">
+            <span class="slide__q">for <output data-out="co-min">4 minutes</output> each, and the brain answers <output data-out="co-share">half</output> of them</span>
+            <input type="range" min="1" max="15" step="1" value="4" data-in="co-min" aria-label="Minutes per interruption">
+            <input type="range" min="25" max="90" step="5" value="50" data-in="co-share" aria-label="Share the brain answers">
+          </label>
+          <label class="slide">
+            <span class="slide__q">and an hour of the founder is worth <output data-out="co-rate">$100</output></span>
+            <input type="range" min="40" max="500" step="10" value="100" data-in="co-rate">
+          </label>
+        </div>
+      </div>
+      <div class="worth__result" aria-live="polite">
+        <p class="for-me result"><span class="result__big" data-res="me-hours">10.5 hours</span><span class="result__line">back every month, worth <b data-res="me-value">$525</b>.</span><span class="result__vs">Myynd costs $19. It pays for itself <b data-res="me-x">27 times</b>.</span></p>
+        <p class="for-co result"><span class="result__big" data-res="co-hours">14 hours</span><span class="result__line">of the founder back every month, worth <b data-res="co-value">$1,400</b>.</span><span class="result__vs">Plus the hours of everyone who used to wait.</span></p>
+        <p class="result__note">Your numbers, not ours. 21 workdays a month.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · COMMITMENT -->
+  <section class="price" id="price" aria-labelledby="price-h">
+    <div class="sc-wrap">
+      <h2 id="price-h" class="display display--lg price__h" data-sc-in data-swap>
+        <span class="for-me">The first 100 pay $19. Forever.</span>
+        <span class="for-co">A pilot first. A contract after.</span>
+      </h2>
+
+      <div class="for-me plans" data-sc-in>
+        <article class="plan plan--main">
+          <p class="plan__name">Founding member</p>
+          <p class="plan__price"><b>$19</b><span>a month, locked for life</span></p>
+          <ul class="plan__list">
+            <li>Everything Myynd does, on your Mac</li>
+            <li>The AI is included, up to a fair monthly limit</li>
+            <li>Or bring your own key, or run a local model, with no limit</li>
+            <li>English and Italian</li>
+            <li>Cancel any time</li>
+          </ul>
+          <a class="btn btn--wide" href="#" data-checkout="founding">Get Myynd</a>
+          <p class="plan__fine" data-checkout-note>In return: your feedback, when we ask for it.</p>
+        </article>
+        <article class="plan plan--after">
+          <p class="plan__name">After the first 100</p>
+          <p class="plan__price"><b>$29</b><span>a month, or $290 a year</span></p>
+          <p class="plan__why">Same product. The founding price is how the first hundred people get paid back for going first.</p>
+        </article>
+      </div>
+
+      <div class="for-co plans" data-sc-in>
+        <article class="plan plan--main">
+          <p class="plan__name">Pilot</p>
+          <p class="plan__price"><b>$7,500</b><span>once, six weeks</span></p>
+          <ul class="plan__list">
+            <li>The founder and up to five key people</li>
+            <li>We connect mail, files, calendars and chats</li>
+            <li>We interview the founder on how they decide</li>
+            <li>We build three to five automations for your real work</li>
+            <li>A check-in every week, and one number we agree on</li>
+            <li>First in line for the shared company brain, built with our pilots from January</li>
+          </ul>
+          <a class="btn btn--wide" href="#" data-pilot>Book a pilot</a>
+          <p class="plan__fine">We run three pilots at a time.</p>
+        </article>
+        <article class="plan plan--after">
+          <p class="plan__name">After the pilot</p>
+          <p class="plan__price"><b>$49</b><span>a person a month, billed yearly</span></p>
+          <p class="plan__why">From ten people. If the data can never leave the building: on your own server, with a local model, from $40,000 a year.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · DOUBTS. Compressed on purpose. -->
+  <section class="faq" id="faq" aria-labelledby="faq-h">
+    <div class="sc-wrap faq__grid">
+      <h2 id="faq-h" class="display display--md" data-sc-in>Questions.</h2>
+      <div class="faq__list for-me" data-sc-stagger="50" data-sc-in>
+        <details><summary>How is this different from ChatGPT or Claude?</summary><p>Claude remembers what you tell it. Myynd learns from what you do. It reads every project across mail, files, chats and calendar, works before you ask, and hands you the work done. And it runs on any AI, including one on your own Mac.</p></details>
+        <details><summary>Does it send email for me?</summary><p>Never on its own. It writes the reply and attaches the file. You read it and press send.</p></details>
+        <details><summary>Where does my data go?</summary><p>It stays on your Mac. Only what a task needs goes to the AI model, and nothing leaves at all if you run a local model. A page in the app lists exactly what leaves your computer.</p></details>
+        <details><summary>What do I need?</summary><p>A Mac, Apple silicon or Intel. Connect your sources, answer a short conversation about how you work, and your first page is ready.</p></details>
+        <details><summary>Windows? iPhone?</summary><p>Not yet. Mac first, done properly.</p></details>
+        <details><summary>Can I cancel?</summary><p>Any time. Founding members keep the $19 price for as long as they stay.</p></details>
+      </div>
+      <div class="faq__list for-co" data-sc-stagger="50" data-sc-in>
+        <details><summary>What happens in the six weeks?</summary><p>Week one, we connect your sources and interview the founder. Then we set up the founder and up to five key people, build three to five automations for your real work, and check in every week against one number agreed with the CEO.</p></details>
+        <details><summary>Where does our data live?</summary><p>On your server, or on ours. With a local AI model, nothing leaves your building. Sign-in is limited to your company email and credentials are encrypted.</p></details>
+        <details><summary>Does it act on its own?</summary><p>No. It drafts, prepares and answers. A person presses the button, every time.</p></details>
+        <details><summary>We run on Microsoft 365.</summary><p>Outlook, OneDrive and SharePoint are written and waiting on Microsoft's verification. Tell us on the call and we plan the pilot around it.</p></details>
+        <details><summary>What does it cost after the pilot?</summary><p>$49 a person a month, billed yearly, from ten people. The pilot is the setup: nothing more to pay to start.</p></details>
+        <details><summary>Is the shared company brain ready?</summary><p>We build it with our first pilots, from January 2027. A pilot starts at the top: the founder's twin and up to five key people, each with their own, on your server or ours.</p></details>
+        <details><summary>Why only three pilots?</summary><p>Because we set each one up ourselves, properly. Three at once is what we can do well.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · ACTION. The light comes back. One line, one button, and it holds. -->
+  <section class="close" data-sc-act="pin" data-sc-span="1.3" aria-labelledby="close-h">
+    <div data-sc-stage class="close__stage">
+      <div class="field" aria-hidden="true">
+        <canvas class="field__fallback"></canvas>
+        <canvas class="field__gl"></canvas>
+      </div>
+      <div class="close__inner" data-sc-cue="0 1 0 0">
+        <h2 id="close-h" class="display display--lg" data-swap>
+          <span class="for-me">Stop working out what matters. Start pressing send.</span>
+          <span class="for-co">Give the founder their afternoons back.</span>
+        </h2>
+        <a class="btn" href="#price" data-cta>
+          <span class="for-me">Get Myynd</span><span class="for-co">Book a pilot</span>
+        </a>
+      </div>
+      <footer class="foot">
+        <span class="brand brand--small"><img src="assets/marchio.svg" alt="" width="18" height="18"><span>Myynd</span></span>
+        <span>Made in Italy, for Mac.</span>
+        <a data-contact hidden></a>
+      </footer>
+    </div>
+  </section>
+
+</main>
+
+<div class="scan" aria-hidden="true"></div>
+
+<script src="config.js"></script>
+<script src="scrollcraft.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

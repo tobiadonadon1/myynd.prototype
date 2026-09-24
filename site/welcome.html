@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Myynd · Download</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0F0B09">
+<link rel="icon" href="assets/marchio.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300..500&display=swap">
+<link rel="stylesheet" href="scrollcraft.css">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Where Paddle sends a new member: one job, the download. */
+  .welcome { position: relative; min-height: 100svh; display: flex; align-items: center; padding: calc(var(--bar-h) + 32px) var(--edge) 64px; overflow: clip; background: #090605; }
+  .welcome::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(9, 6, 5, .94) 0%, rgba(9, 6, 5, .78) 45%, rgba(9, 6, 5, .2) 100%); }
+  .welcome__copy { position: relative; z-index: 2; max-width: 40rem; }
+  .welcome__sub { margin: 22px 0 0; max-width: 38ch; font-size: clamp(1.1rem, 1rem + .4vw, 1.3rem); line-height: 1.5; color: var(--ivory-soft); }
+  .dl { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin-top: 34px; }
+  .dl a:not(.btn) { color: var(--ivory-soft); font-size: 15px; }
+  .steps { list-style: none; margin: 44px 0 0; padding: 0; counter-reset: s; display: grid; gap: 0; max-width: 34rem; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 14px 0; border-top: 1px solid rgba(255, 247, 240, .1); color: var(--ivory-soft); line-height: 1.5; }
+  .steps li::before { content: counter(s); font-family: var(--serif); font-size: 1.3rem; line-height: 1.1; color: var(--copper-on-ink); }
+  .steps b { color: var(--ivory); font-weight: 600; }
+  .welcome__small { margin: 30px 0 0; font-size: 13.5px; color: var(--ivory-mute); }
+</style>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="./" aria-label="Myynd, home">
+    <img src="assets/marchio.svg" alt="" width="28" height="28"><span>Myynd</span>
+  </a>
+</header>
+<main class="welcome">
+  <div class="field" aria-hidden="true"><canvas class="field__fallback"></canvas><canvas class="field__gl"></canvas></div>
+  <div class="welcome__copy">
+    <h1 class="display display--lg">You're in.</h1>
+    <p class="welcome__sub">Thank you for going first. Download Myynd, open it, and it starts reading.</p>
+    <div class="dl">
+      <a class="btn" data-dl="arm64" href="#">Download for Mac</a>
+      <a data-dl="x64" href="#">Intel Mac? This one.</a>
+    </div>
+    <ol class="steps">
+      <li><span>Drag <b>Myynd</b> into Applications, and open it.</span></li>
+      <li data-unsigned hidden><span>The first time, macOS may stop it. Open <b>System Settings</b>, then <b>Privacy &amp; Security</b>, and press <b>Open Anyway</b>.</span></li>
+      <li><span>Sign up with the email you paid with, then connect your mail, calendar and folders.</span></li>
+      <li><span>Answer a short conversation about how you work. Your first page follows.</span></li>
+    </ol>
+    <p class="welcome__small" data-help>Stuck? Reply to your receipt email and a person answers.</p>
+  </div>
+</main>
+<script src="config.js"></script>
+<script>
+  (function () {
+    var cfg = window.MYYND || {}, dl = cfg.download || {};
+    document.querySelectorAll('[data-dl]').forEach(function (a) {
+      var url = dl[a.getAttribute('data-dl')];
+      if (url) a.href = url; else a.removeAttribute('href');
+    });
+    if (!cfg.signed) document.querySelector('[data-unsigned]').hidden = false;
+    if (cfg.contact) {
+      var p = document.querySelector('[data-help]');
+      p.textContent = 'Stuck? Write to ';
+      var a = document.createElement('a'); a.href = 'mailto:' + cfg.contact; a.textContent = cfg.contact;
+      p.appendChild(a); p.appendChild(document.createTextNode(' and a person answers.'));
+    }
+  })();
+</script>
+<script src="scrollcraft.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
