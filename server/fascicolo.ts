@@ -23,7 +23,11 @@ import * as cfg from './config.ts'
 import * as conti from './conti.ts'
 import * as store from './store.ts'
 import * as automazioni from './automazioni.ts'
+import * as progetti from './progetti.ts'
+import * as riferimento from './riferimento.ts'
 import type { Gettone } from './gettoni.ts'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 
 /** Il posto di una credenziale, quando la credenziale non c'è. */
 const TOLTA = '[credenziale rimossa / credential removed]'
@@ -60,6 +64,33 @@ export function senzaLeChiavi(valore: unknown, dentro = ''): unknown {
   for (const [k, v] of Object.entries(valore as Record<string, unknown>)) {
     if (SEGRETE.has(k) || (k === 'url' && dentro === 'calendario')) fuori[k] = v == null ? v : TOLTA
     else fuori[k] = senzaLeChiavi(v, k)
+  }
+  return fuori
+}
+
+/**
+ * I file di stato che Myynd tiene accanto all'indice: il punto, le priorità,
+ * il tavolo, le scoperte, le regole dei mittenti, le prove dei progetti.
+ *
+ * Tutti i `.json` della cartella di questa persona tranne la configurazione,
+ * che sta già sopra senza le chiavi: così un file nuovo ci entra da solo. Ognuno
+ * passa comunque da `senzaLeChiavi`, e uno che non si legge si dice invece di
+ * sparire. I file grossi (oltre dieci mega) si nominano e basta.
+ */
+function fileDiStato(): Record<string, unknown> {
+  const dove = cfg.cartella()
+  const fuori: Record<string, unknown> = {}
+  if (!existsSync(dove)) return fuori
+  for (const n of readdirSync(dove).sort()) {
+    if (!n.endsWith('.json') || n === 'config.json') continue
+    const p = join(dove, n)
+    try {
+      if (!statSync(p).isFile()) continue
+      if (statSync(p).size > 10_000_000) { fuori[n] = '[troppo grande / too large]'; continue }
+      fuori[n] = senzaLeChiavi(JSON.parse(readFileSync(p, 'utf8')))
+    } catch {
+      fuori[n] = '[illeggibile / unreadable]'
+    }
   }
   return fuori
 }
@@ -133,7 +164,36 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
   yield '\n]'
 
   // — la lista —
-  yield ',\n' + riga('compiti', { aperti: store.elencoCompiti(), chiusi: store.compitiChiusi(1000) })
+  yield ',\n' + riga('compiti', { aperti: store.elencoCompiti(), chiusi: store.compitiChiusi(1000), tolti: store.compitiTolti(36_500, 100_000) })
+
+  // — i progetti, tutti: attivi, fermi e chiusi —
+  yield ',\n' + riga('progetti', progetti.elenco())
+
+  // — il riferimento: su cosa sta lavorando, con le sue parole —
+  yield ',\n' + riga('riferimento', riferimento.leggi())
+
+  /*
+   * Le tabelle personali intere, riga per riga: il feed in ogni stato, le
+   * domande, le notizie, e tutto quello che è nato dopo (i segnali, le
+   * previsioni, le prove, la salute delle fonti). L'elenco sta in `store.ts`,
+   * accanto alle tabelle: una nuova ci entra da sola.
+   */
+  yield ',\n"tabelle":{'
+  let primaTabella = true
+  for (const t of store.TABELLE_DEL_FASCICOLO) {
+    yield (primaTabella ? '\n' : ',\n') + JSON.stringify(t) + ':['
+    primaTabella = false
+    let prima = true
+    for (const r of store.righeDi(t)) {
+      yield (prima ? '\n' : ',\n') + JSON.stringify(r)
+      prima = false
+    }
+    yield '\n]'
+  }
+  yield '\n}'
+
+  // — i file accanto all'indice: il punto, le priorità, il tavolo… —
+  yield ',\n' + riga('file', fileDiStato())
 
   // — quello che ha imparato su di te —
   yield ',\n' + riga('memoria', {
