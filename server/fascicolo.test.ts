@@ -90,3 +90,35 @@ test('righeDi esce a pezzi e non esporta tabelle fuori dall’elenco', () => {
   assert.deepEqual([...store.righeDi('uso')], [])
   assert.deepEqual([...store.righeDi('sqlite_master')], [])
 })
+
+test('la lista e le azioni escono intere: nessun tetto sui chiusi, sui tolti o sulle azioni', () => {
+  const ora = new Date().toISOString()
+  const metti = store.default.prepare('INSERT INTO compiti (id, testo, stato, ordine, chiuso, sparito, creato, aggiornato) VALUES (?,?,?,?,?,?,?,?)')
+  store.default.exec('BEGIN')
+  {
+    metti.run('c-aperto', 'Open one', 'aperto', 'a0', null, null, ora, ora)
+    for (let i = 0; i < 1203; i++) metti.run(`c-fatto-${i}`, `Done ${i}`, i % 2 ? 'fatto' : 'lasciato', `b${i}`, ora, null, ora, ora)
+    metti.run('c-strano', 'A state nobody lists', 'archiviato', 'c0', ora, null, ora, ora)
+    // tolto un secolo fa: anche il vecchio tetto dei giorni l'avrebbe perso
+    metti.run('c-tolto', 'Removed long ago', 'aperto', 'd0', null, '1920-01-01T00:00:00.000Z', ora, ora)
+    for (let i = 0; i < 5012; i++) {
+      store.default.prepare('INSERT INTO azioni (id, tipo, cosa, esito, quando) VALUES (?,?,?,?,?)').run(`a${i}`, 'email', `Mail ${i}`, 'fatta', ora)
+    }
+  }
+  store.default.exec('COMMIT')
+  try {
+    const f = tutto()
+    const c = f.compiti as Record<'aperti' | 'chiusi' | 'tolti', { id: string }[]>
+    assert.ok(c.aperti.some(x => x.id === 'c-aperto'))
+    assert.equal(c.chiusi.filter(x => x.id.startsWith('c-fatto-')).length, 1203)
+    assert.ok(c.chiusi.some(x => x.id === 'c-strano'), 'un compito in uno stato non elencato è uscito dal fascicolo')
+    assert.deepEqual(c.tolti.map(x => x.id), ['c-tolto'])
+    // ogni riga una volta sola
+    const tutti = [...c.aperti, ...c.chiusi, ...c.tolti].map(x => x.id)
+    assert.equal(new Set(tutti).size, tutti.length)
+    assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM compiti').get() as { n: number }).n, tutti.length)
+    assert.equal((f.azioni as unknown[]).length, 5012)
+  } finally {
+    store.default.exec("DELETE FROM compiti WHERE id LIKE 'c-%'; DELETE FROM azioni")
+  }
+})

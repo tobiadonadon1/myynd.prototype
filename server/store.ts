@@ -4926,6 +4926,43 @@ export function* righeDi(tabella: string, pezzo = 500): Generator<Record<string,
 }
 
 /**
+ * Tutti i compiti fuori dalla lista aperta, a pezzi: i chiusi (fatti, lasciati,
+ * e qualunque altro stato che non sia aperto) e i tolti. Il fascicolo li vuole
+ * tutti, non gli ultimi mille: aperti + chiusi + tolti sono ogni riga, una volta.
+ */
+export function* compitiDelFascicolo(quali: 'chiusi' | 'tolti', pezzo = 500): Generator<Compito> {
+  const dove = quali === 'tolti'
+    ? 'sparito IS NOT NULL'
+    : "sparito IS NULL AND (stato IS NULL OR stato NOT IN ('aperto','delegato','pronto','chiede'))"
+  let da = Number.MIN_SAFE_INTEGER
+  for (;;) {
+    const righe = db.prepare(`SELECT rowid AS _riga, * FROM compiti WHERE ${dove} AND rowid > ? ORDER BY rowid LIMIT ?`)
+      .all(da, pezzo) as Record<string, unknown>[]
+    for (const r of righe) {
+      const { _riga, ...resto } = r
+      da = Number(_riga)
+      yield compitoDaRiga(resto)
+    }
+    if (righe.length < pezzo) return
+  }
+}
+
+/** Ogni azione uscita da qui, a pezzi, dalla più vecchia: per il fascicolo. */
+export function* azioniDelFascicolo(pezzo = 500): Generator<Azione> {
+  let da = Number.MIN_SAFE_INTEGER
+  for (;;) {
+    const righe = db.prepare('SELECT rowid AS _riga, * FROM azioni WHERE rowid > ? ORDER BY rowid LIMIT ?')
+      .all(da, pezzo) as Record<string, unknown>[]
+    for (const r of righe) {
+      const { _riga, ...resto } = r
+      da = Number(_riga)
+      yield resto as unknown as Azione
+    }
+    if (righe.length < pezzo) return
+  }
+}
+
+/**
  * Svuota la mente. Anche la memoria: le convinzioni sono parte di quello che
  * Myynd sa di te, e lasciarle in piedi dopo un azzeramento significherebbe che
  * cancellare i documenti non cancella le conclusioni che ne aveva tratto.

@@ -100,6 +100,17 @@ function riga(chiave: string, valore: unknown): string {
   return `${JSON.stringify(chiave)}:${JSON.stringify(valore, null, 2)}`
 }
 
+/** Un elenco JSON scritto una riga alla volta: non sta mai tutto in memoria. */
+function* elenco(righe: Iterable<unknown>): Generator<string> {
+  let primo = true
+  yield '['
+  for (const r of righe) {
+    yield (primo ? '\n' : ',\n') + JSON.stringify(r)
+    primo = false
+  }
+  yield '\n]'
+}
+
 /**
  * Il fascicolo, un pezzo alla volta.
  *
@@ -163,8 +174,12 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
   }
   yield '\n]'
 
-  // — la lista —
-  yield ',\n' + riga('compiti', { aperti: store.elencoCompiti(), chiusi: store.compitiChiusi(1000), tolti: store.compitiTolti(36_500, 100_000) })
+  // — la lista: tutta, a pezzi; nessun tetto sui chiusi o sui tolti —
+  yield ',\n"compiti":{"aperti":' + JSON.stringify(store.elencoCompiti(), null, 2) + ',"chiusi":'
+  yield* elenco(store.compitiDelFascicolo('chiusi'))
+  yield ',"tolti":'
+  yield* elenco(store.compitiDelFascicolo('tolti'))
+  yield '}'
 
   // — i progetti, tutti: attivi, fermi e chiusi —
   yield ',\n' + riga('progetti', progetti.elenco())
@@ -215,10 +230,11 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
   yield ',\n' + riga('automazioni', automazioni.elenco())
 
   // — quello che è uscito da qui: mail mandate, file scritti —
-  yield ',\n' + riga('azioni', store.azioni(5000))
+  yield ',\n"azioni":'
+  yield* elenco(store.azioniDelFascicolo())
 
   // — quanto è costato ragionare —
-  yield ',\n' + riga('uso', store.usoPerGiorno(400))
+  yield ',\n' + riga('uso', store.usoPerGiorno(36_500))
 
   yield '\n}\n'
 }
