@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { detectRuntime, runRuntimeProcess, type RuntimeDetection, type RuntimeId } from './agent-runtime.ts'
 import { proofValid } from './capacita-verificate.ts'
 import type { ExecutionReport } from './esecuzione-isolata.ts'
+import { segnaAccount, usoDiOggi } from './tetto.ts'
 
 export type ReviewOutcome = 'approved' | 'rejected' | 'failed' | 'cancelled' | 'incomplete' | 'not_run'
 export type TeamEvidence = {
@@ -45,6 +46,8 @@ export async function reviewProjectReport(report:ExecutionReport, criteria:strin
       if(bytes>80_000 || content.includes(0)) return finish('incomplete',['The changes exceed the bounded text review limit.'])
       evidence[file.path]=content.toString('utf8')
     }
+    // Same Claude account as chat and code work: today's cap applies, and the run is counted.
+    if(usoDiOggi().raggiunto) return finish('not_run',['The daily token cap is reached, so the review did not run.'])
     const runtime=options.runtime ?? await detectRuntime('claude')
     if(runtime.id!=='claude' || runtime.status!=='supported' || !runtime.executable) return finish('failed',['A compatible Claude reviewer is not installed.'])
     roles[1].executable=runtime.executable;roles[1].version=runtime.version
@@ -52,6 +55,8 @@ export async function reviewProjectReport(report:ExecutionReport, criteria:strin
     const {ANTHROPIC_API_KEY:_myyndKey,...env}=process.env
     const result=await runRuntimeProcess(runtime.executable,reviewArguments(prompt),report.workspace,{...env,CLAUDE_CODE_DISABLE_AUTO_MEMORY:'1',CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:'1'},options.signal,60_000)
     roles[1].exitCode=result.exitCode;roles[1].finished=result.finished
+    // Text output carries no token counts: the row is an estimate and says so.
+    if(result.failure!=='authentication') segnaAccount('revisione',undefined,prompt,result.text)
     if(!result.finished) return finish(options.signal?.aborted?'cancelled':'failed',['Reviewer did not finish within the bounded run.'])
     if(result.exitCode!==0) return finish('failed',[`Reviewer did not finish (${result.failure ?? 'runtime'}).`])
     // Prose, fences and coerced truthy values are not a review verdict.

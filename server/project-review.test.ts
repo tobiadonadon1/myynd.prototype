@@ -60,3 +60,24 @@ test('subprocess failure and edits during review invalidate approval',async()=>f
   const tamper=await runner(root,"require('node:fs').writeFileSync('value.mjs','export const value=3\\n');process.stdout.write(JSON.stringify({accepted:true,findings:['Value is 2.']}))")
   assert.equal((await reviewProjectReport(report,'value must equal 2',{worker:'claude',runtime:tamper})).roles[1].outcome,'incomplete')
 }))
+
+// Same Claude account as chat and code work: today's cap applies before the reviewer starts, and the run is counted.
+test('the daily cap stops the reviewer before it starts, and a finished review is counted',async()=>fixture(async root=>{
+  const cfg=await import('./config.ts')
+  const store=await import('./store.ts')
+  const report=await verified(root)
+  const marker=join(root,'launched')
+  const runtime=await runner(root,`require('node:fs').writeFileSync(${JSON.stringify(marker)},'1');process.stdout.write(JSON.stringify({accepted:true,findings:["Value is 2 and its test passed."]}))`)
+  store.default.exec('DELETE FROM uso')
+  store.segnaUso({lavoro:'bozza',motore:'Claude account',entrata:900,cache:0,uscita:200})
+  cfg.aggiorna({tetto:1000})
+  try {
+    const stopped=await reviewProjectReport(report,'value must equal 2',{worker:'claude',runtime})
+    assert.equal(stopped.roles[1].outcome,'not_run');assert.equal(stopped.accepted,false)
+    await assert.rejects(()=>readFile(marker),'the reviewer ran past the cap')
+    cfg.aggiorna({tetto:0})
+    assert.equal((await reviewProjectReport(report,'value must equal 2',{worker:'claude',runtime})).accepted,true)
+    const rows=store.default.prepare("SELECT lavoro, motore FROM uso WHERE lavoro='revisione'").all() as {lavoro:string;motore:string}[]
+    assert.deepEqual(rows.map(r=>r.motore),['Claude account (stima)'])
+  } finally { cfg.aggiorna({tetto:0}); store.default.exec('DELETE FROM uso') }
+}))

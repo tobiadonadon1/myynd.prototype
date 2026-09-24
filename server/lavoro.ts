@@ -32,6 +32,7 @@ import { OSPITATO } from './ospitato.ts'
 import { executeInCopy, type ExecutionReport } from './esecuzione-isolata.ts'
 import { detectRuntime, runHermesPatch, type RuntimeId, type RuntimeProvenance } from './agent-runtime.ts'
 import { reviewProjectReport, type TeamEvidence } from './project-review.ts'
+import { controllaIlTetto, segnaAccount, type UsoCLI } from './tetto.ts'
 
 type ProjectReport = ExecutionReport & {runtimeProvenance?:RuntimeProvenance; team?:TeamEvidence}
 async function saveOutcome(report:ProjectReport, options:{runtime?:RuntimeId; team?:boolean; acceptanceCriteria?:string; signal?:AbortSignal}):Promise<void> {
@@ -122,7 +123,9 @@ export function argomentiDi(passo: Passo, richiesta = ''): string[] {
   return [
     '-p', richiesta,
     '--permission-mode', passo === 'piano' ? 'plan' : 'acceptEdits',
-    '--output-format', 'text',
+    // la busta JSON porta, oltre al testo, i token del lavoro intero: senza,
+    // il lavoro più lungo sull'account Claude non comparirebbe nell'uso
+    '--output-format', 'json',
 
     /*
      * Le impostazioni del progetto non sono le sue.
@@ -174,6 +177,9 @@ export async function fai(
   }
   const exe = installato()
   if (!exe) throw new Error('Claude Code non è installato su questo computer.')
+  // è lo stesso account delle domande e della chat: il tetto di oggi vale anche
+  // qui, e vale prima della copia, prima di tutto
+  controllaIlTetto()
 
   if (o.passo === 'fai') {
     const report = await executeInCopy(cartella, async (workspace, signal) => {
@@ -194,6 +200,27 @@ export async function fai(
   const result = await runClaude(exe, cartella, 'piano', o.richiesta, o.signal)
   if (result.exitCode !== 0 && !result.text) throw new Error('Claude Code non ce l’ha fatta.')
   return { passo: 'piano', testo: result.text, finito: result.finished && result.exitCode === 0, cartella }
+}
+
+const NON_COLLEGATO = 'Claude Code non è collegato: apri un terminale e fai «claude» una volta.'
+
+/**
+ * La busta di `--output-format json`: il testo finale e i token del lavoro
+ * intero, tutti i giri sommati. Null se non è una busta (una versione che
+ * risponde in testo, un lavoro fermato prima della fine): allora vale il testo
+ * così com'è, e i token si stimano.
+ */
+export function busta(fuori: string): { result: string; errore: boolean; usage?: UsoCLI } | null {
+  const pulito = fuori.trim()
+  if (!pulito) return null
+  type Riga = { type?: unknown; result?: unknown; is_error?: unknown; usage?: UsoCLI }
+  const leggi = (t: string): unknown => { try { return JSON.parse(t) } catch { return null } }
+  // un oggetto solo; con `--verbose` un elenco di messaggi; in ogni caso vale l'ultima riga `result`
+  const tutto = leggi(pulito)
+  const candidati = (Array.isArray(tutto) ? tutto : tutto ? [tutto] : [leggi(pulito.split('\n').filter(Boolean).at(-1) ?? '')]) as Riga[]
+  const b = candidati.filter(x => x && typeof x === 'object' && x.type === 'result').at(-1)
+  if (!b) return null
+  return { result: typeof b.result === 'string' ? b.result.trim() : '', errore: b.is_error === true, usage: b.usage }
 }
 
 async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: string, signal?: AbortSignal): Promise<{ text: string; exitCode: number | null; finished: boolean }> {
@@ -220,8 +247,9 @@ async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: stri
     }, TETTO_MINUTI[passo] * 60_000)
     signal?.addEventListener('abort', stop, { once: true })
 
+    // il doppio del tetto: la busta intorno al testo non deve tagliare il testo
     p.stdout.on('data', d => {
-      if (fuori.length < TETTO_TESTO) fuori += String(d)
+      if (fuori.length < TETTO_TESTO * 2) fuori += String(d)
     })
     p.stderr.on('data', d => { if (male.length < 4000) male += String(d) })
 
@@ -238,8 +266,13 @@ async function runClaude(exe: string, cwd: string, passo: Passo, richiesta: stri
       settled = true
       clearTimeout(tetto)
       signal?.removeEventListener('abort', stop)
-      const testo = fuori.trim()
-      if (!testo && /not logged in|authentication/i.test(male)) return rifiuta(new Error('Claude Code non è collegato: apri un terminale e fai «claude» una volta.'))
+      const b = busta(fuori)
+      const testo = (b ? b.result : fuori.trim()).slice(0, TETTO_TESTO)
+      const fuoriDalConto = /not logged in|authentication|invalid api key|\/login/i
+      if (!testo && fuoriDalConto.test(male)) return rifiuta(new Error(NON_COLLEGATO))
+      if (b?.errore && fuoriDalConto.test(b.result)) return rifiuta(new Error(NON_COLLEGATO))
+      // anche un lavoro fermato a metà ha speso: si conta quello che si sa
+      segnaAccount('codice', b?.usage, richiesta, testo)
       risolvi({ text: testo, exitCode: codice, finished: finito })
     })
   })

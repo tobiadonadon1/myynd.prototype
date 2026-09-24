@@ -39,8 +39,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { RADICE, leggi, modello } from './config.ts'
 import { installato } from './lavoro.ts'
-import * as store from './store.ts'
-import { controllaIlTetto } from './tetto.ts'
+import { controllaIlTetto, segnaAccount as segna, type UsoCLI } from './tetto.ts'
 
 /**
  * Una cartella vuota, che è tutto quello che gli diamo da guardare.
@@ -402,48 +401,11 @@ function motivo(b: { result?: string; subtype?: string }): string {
   return `Claude Code non ha risposto (${b.subtype ?? 'senza motivo'}).`
 }
 
-/** I token che Claude Code dice di aver usato, nella busta del risultato. */
-type UsoCLI = {
-  input_tokens?: number; output_tokens?: number
-  cache_read_input_tokens?: number; cache_creation_input_tokens?: number
-}
-
 /** Quello che torna dall'involucro JSON di Claude Code. */
 type Busta = { result?: string; is_error?: boolean; subtype?: string; total_cost_usd?: number; usage?: UsoCLI }
 
-/** Il nome con cui l'account Claude compare nel registro dell'uso. */
-export const MOTORE = 'Claude account'
-
-const numero = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.round(x) : null
-
-/**
- * I token di una chiamata: quelli detti da Claude Code, o una stima.
- *
- * `claude -p --output-format json` (e la riga `result` dello streaming) porta
- * `usage` come l'API: entrati, scritti in cache, letti dalla cache, usciti. Si
- * contano come `modello.segnaUso`: entrata = entrati + scritti in cache. Se la
- * busta non li porta — una versione vecchia, un risultato senza — si stima un
- * token ogni quattro caratteri, e la riga lo dice nel nome del motore: una
- * stima che si spaccia per una misura è peggio di nessuna riga.
- */
-export function usoDellaBusta(u: unknown, entrato: string, uscito: string):
-  { entrata: number; cache: number; uscita: number; stima: boolean } {
-  const v = (u && typeof u === 'object' ? u : {}) as UsoCLI
-  const dentro = numero(v.input_tokens)
-  const fuori = numero(v.output_tokens)
-  if (dentro !== null && fuori !== null) {
-    return { entrata: dentro + (numero(v.cache_creation_input_tokens) ?? 0), cache: numero(v.cache_read_input_tokens) ?? 0, uscita: fuori, stima: false }
-  }
-  return { entrata: Math.ceil(entrato.length / 4), cache: 0, uscita: Math.ceil(uscito.length / 4), stima: true }
-}
-
-/** Una riga nel registro dell'uso, come per ogni altra strada. Non rompe mai la chiamata contata. */
-function segna(lavoro: string, u: unknown, entrato: string, uscito: string) {
-  const c = usoDellaBusta(u, entrato, uscito)
-  const motore = c.stima ? `${MOTORE} (stima)` : MOTORE
-  try { store.segnaUso({ lavoro, motore, entrata: c.entrata, cache: c.cache, uscita: c.uscita }) } catch { /* contare è accessorio */ }
-  console.log(`myynd · uso · ${lavoro} · ${motore} · entrata ${c.entrata}${c.cache ? ` (+${c.cache} dalla cache)` : ''} · uscita ${c.uscita}`)
-}
+// il conto dei token sta in `tetto.ts`, dove può chiamarlo anche il lavoro sul codice
+export { MOTORE, usoDellaBusta } from './tetto.ts'
 
 /**
  * Una domanda, e il testo che torna.

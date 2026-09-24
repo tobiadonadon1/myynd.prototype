@@ -56,3 +56,48 @@ export function controllaIlTetto(): void {
 export function delTetto(e: unknown): boolean {
   return e instanceof Error && DEL_TETTO.has(e)
 }
+
+// — l'account Claude nel registro dell'uso —
+//
+// `abbonamento.ts` (le domande e la chat) e `lavoro.ts` (il lavoro sul codice)
+// lanciano lo stesso `claude` sullo stesso account: contano allo stesso modo.
+
+/** I token che Claude Code dice di aver usato, nella busta del risultato. */
+export type UsoCLI = {
+  input_tokens?: number; output_tokens?: number
+  cache_read_input_tokens?: number; cache_creation_input_tokens?: number
+}
+
+/** Il nome con cui l'account Claude compare nel registro dell'uso. */
+export const MOTORE = 'Claude account'
+
+const numero = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.round(x) : null
+
+/**
+ * I token di una chiamata: quelli detti da Claude Code, o una stima.
+ *
+ * `claude -p --output-format json` (e la riga `result` dello streaming) porta
+ * `usage` come l'API: entrati, scritti in cache, letti dalla cache, usciti. Si
+ * contano come `modello.segnaUso`: entrata = entrati + scritti in cache. Se la
+ * busta non li porta — una versione vecchia, un risultato senza — si stima un
+ * token ogni quattro caratteri, e la riga lo dice nel nome del motore: una
+ * stima che si spaccia per una misura è peggio di nessuna riga.
+ */
+export function usoDellaBusta(u: unknown, entrato: string, uscito: string):
+  { entrata: number; cache: number; uscita: number; stima: boolean } {
+  const v = (u && typeof u === 'object' ? u : {}) as UsoCLI
+  const dentro = numero(v.input_tokens)
+  const fuori = numero(v.output_tokens)
+  if (dentro !== null && fuori !== null) {
+    return { entrata: dentro + (numero(v.cache_creation_input_tokens) ?? 0), cache: numero(v.cache_read_input_tokens) ?? 0, uscita: fuori, stima: false }
+  }
+  return { entrata: Math.ceil(entrato.length / 4), cache: 0, uscita: Math.ceil(uscito.length / 4), stima: true }
+}
+
+/** Una riga nel registro dell'uso, come per ogni altra strada. Non rompe mai la chiamata contata. */
+export function segnaAccount(lavoro: string, u: unknown, entrato: string, uscito: string) {
+  const c = usoDellaBusta(u, entrato, uscito)
+  const motore = c.stima ? `${MOTORE} (stima)` : MOTORE
+  try { store.segnaUso({ lavoro, motore, entrata: c.entrata, cache: c.cache, uscita: c.uscita }) } catch { /* contare è accessorio */ }
+  console.log(`myynd · uso · ${lavoro} · ${motore} · entrata ${c.entrata}${c.cache ? ` (+${c.cache} dalla cache)` : ''} · uscita ${c.uscita}`)
+}
