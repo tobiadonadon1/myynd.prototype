@@ -16,6 +16,7 @@
  * la riga deve sparire da sola quando il permesso torna. Prima era una `Map`
  * in memoria, e un riavvio la cancellava.
  */
+import { AsyncResource } from 'node:async_hooks'
 import db from './store.ts'
 import { RIMEDI, type Rimedio } from './connettori/guaio.ts'
 import * as saluteFonti from './salute-fonti.ts'
@@ -159,5 +160,37 @@ export class LetturaInCorso extends Error {
   constructor() { super('Una lettura delle fonti è già in corso. Attendi che finisca e riprova.') }
   perLingua(lingua: 'it' | 'en'): string {
     return lingua === 'en' ? 'A source read is already running. Wait for it to finish and try again.' : this.message
+  }
+}
+
+/**
+ * Chi sta leggendo adesso, per conto, e le riletture che aspettano.
+ *
+ * Una rilettura chiesta mentre un'altra lettura è in corso (le Note appena
+ * tornate leggibili, durante il giro dei dieci minuti) non si perde: aspetta
+ * che quella finisca e parte subito dopo, nel contesto di chi l'ha chiesta.
+ * Una sola per fonte: chiederla due volte non la raddoppia.
+ */
+export function lettureInCorso() {
+  const inCorso = new Set<string>()
+  const inAttesa = new Map<string, Map<string, () => void>>()
+  return {
+    has: (conto: string) => inCorso.has(conto),
+    add: (conto: string) => { inCorso.add(conto) },
+    delete(conto: string): boolean {
+      const tolto = inCorso.delete(conto)
+      const coda = inAttesa.get(conto)
+      if (coda) {
+        inAttesa.delete(conto)
+        setImmediate(() => { for (const parti of coda.values()) { try { parti() } catch { /* la prossima lettura la rifà */ } } })
+      }
+      return tolto
+    },
+    /** Parte `parti` quando la lettura in corso di `conto` finisce. */
+    dopo(conto: string, fonte: string, parti: () => void) {
+      const coda = inAttesa.get(conto) ?? new Map<string, () => void>()
+      coda.set(fonte, AsyncResource.bind(parti))
+      inAttesa.set(conto, coda)
+    }
   }
 }

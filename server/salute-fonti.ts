@@ -86,6 +86,12 @@ const CURSORE_VERSIONE = (fonte: string) => `salute:versione:${fonte}`
  * che ha fallito di nuovo, e allora non si saprebbe più.
  */
 const CURSORE_DOPO = (fonte: string, giorno: string) => `salute:dopo:${fonte}:${giorno}`
+/**
+ * Quando un permesso è stato visto tornare dal vivo (`verificaPermessi`). Una
+ * lettura che era già in corso ha visto il permesso mancare *prima*: quel
+ * guaio è vecchio, e non deve riaprire la riga appena chiusa.
+ */
+const CURSORE_VIVO = (fonte: string) => `salute:vivo:${fonte}`
 
 // — le righe —
 
@@ -134,6 +140,11 @@ function rigaNuova(giorno: string, fonte: string): Riga {
  */
 export function registra(r: Registrazione, o: { risveglio?: number; adesso?: number } = {}): { cambiato: boolean } {
   const fallita = r.esito !== 'pulita'
+  // un permesso che mancava prima che lo si vedesse tornare dal vivo: vecchio
+  if (fallita && r.rimedio === 'permesso-disco') {
+    const vivo = cursore(CURSORE_VIVO(r.fonte))
+    if (vivo && r.quando < Date.parse(vivo)) return { cambiato: false }
+  }
   if (fallita && r.rimedio === 'attendi' && r.quando - (o.risveglio ?? ultimoRisveglio()) < DOPO_RISVEGLIO_MS) return { cambiato: false }
   const iso = new Date(r.quando).toISOString()
   let giorno = giornoIn(new Date(r.quando))
@@ -154,15 +165,19 @@ export function registra(r: Registrazione, o: { risveglio?: number; adesso?: num
       db.prepare('INSERT INTO stato_fonti (fonte, motivo, rimedio, frase, dal, fila, visto) VALUES (?,?,?,?,?,?,?)')
         .run(dopo.fonte, dopo.motivo, dopo.rimedio, dopo.frase, dopo.dal, dopo.fila, dopo.visto)
     } else {
+      const rimedio = peggiore(ep.rimedio, r.rimedio)
+      // da passeggero a una causa che resta: «dal» data la causa che la frase dice
+      const passeggero = (x: Rimedio | null) => x === 'attendi' || x === null
       dopo = {
         ...ep,
         motivo: ep.motivo === 'non-disponibile' || r.esito === 'guaio' ? 'non-disponibile' : 'incompleta',
-        rimedio: peggiore(ep.rimedio, r.rimedio),
+        rimedio,
         frase: r.frase ?? ep.frase,
-        ...(conta ? { fila: ep.fila + 1, visto: iso } : {})
+        ...(conta ? { fila: ep.fila + 1, visto: iso } : {}),
+        ...(passeggero(ep.rimedio) && !passeggero(rimedio) ? { dal: iso } : {})
       }
-      db.prepare('UPDATE stato_fonti SET motivo = ?, rimedio = ?, frase = ?, fila = ?, visto = ? WHERE fonte = ?')
-        .run(dopo.motivo, dopo.rimedio, dopo.frase, dopo.fila, dopo.visto, r.fonte)
+      db.prepare('UPDATE stato_fonti SET motivo = ?, rimedio = ?, frase = ?, dal = ?, fila = ?, visto = ? WHERE fonte = ?')
+        .run(dopo.motivo, dopo.rimedio, dopo.frase, dopo.dal, dopo.fila, dopo.visto, r.fonte)
     }
 
     // una lettura lunga, finita dopo che il suo giorno si è chiuso, conta
@@ -432,7 +447,8 @@ const VERIFICA_OGNI = 10 * 60_000
  * «leggibile» e l'episodio delle Note è un permesso mancante, l'episodio si
  * chiude adesso e chi chiama rilegge le Note in sottofondo. Una volta ogni
  * dieci minuti al massimo, per persona: se la lettura fallisce di nuovo, la
- * riga torna e non si rincorre. Il desktop no: `accessoCompleto()` guarda
+ * riga torna e non si rincorre; un guaio di permesso visto da una lettura
+ * partita prima di adesso invece non la riporta (`registra`). Il desktop no: `accessoCompleto()` guarda
  * altre cartelle da quelle che la lettura apre.
  */
 export function verificaPermessi(p: { note: string }, adesso = Date.now()): string[] {
@@ -443,6 +459,7 @@ export function verificaPermessi(p: { note: string }, adesso = Date.now()): stri
   if (adesso - (verificate.get(k) ?? -Infinity) < VERIFICA_OGNI) return []
   verificate.set(k, adesso)
   db.prepare('DELETE FROM stato_fonti WHERE fonte = ?').run('note')
+  segnaCursore(CURSORE_VIVO('note'), new Date(adesso).toISOString())
   return ['note']
 }
 

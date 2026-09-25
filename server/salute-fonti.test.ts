@@ -13,12 +13,14 @@ import type { Config } from './config.ts'
 
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-salute-'))
 process.env.MYYND_DATI = CASA
-delete process.env.MYYND_VERSIONE
+// una versione fissa: quella di package.json cambia a ogni consegna
+process.env.MYYND_VERSIONE = '0.9.0-prova'
 const conti = await import('./conti.ts')
 const chi = await import('./chi.ts')
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')
 const sf = await import('./salute-fonti.ts')
+const lettura = await import('./lettura-feed.ts')
 const db = store.default
 
 let A = ''
@@ -70,7 +72,7 @@ test('registra: i contatori del giorno, la fila, la durata più lunga, il totale
   assert.equal(r.durata, 60_000)
   assert.equal(r.rimedio, 'attendi')
   assert.equal(r.frase, 'Il calendario ci ha messo troppo a rispondere. Riprova.')
-  assert.equal(r.versione, '0.2.24')
+  assert.equal(r.versione, '0.9.0-prova')
   assert.equal(r.verdetto, null)
   // la frase non classificata non c'è: resta quella di prima
   reg({ fonte: 'calendario', quando: alle(20, 10), durata: 5, inventario: 41 })
@@ -106,7 +108,7 @@ test('l’episodio: si apre, si allunga solo sulle letture contate, prende la ca
   reg({ fonte: 'slack', quando: alle(20, 9, 40), esito: 'incompleta', rimedio: 'attendi' })
   assert.equal(ep('slack')!.rimedio, 'credenziale')
   assert.equal(ep('slack')!.motivo, 'non-disponibile')
-  assert.equal(ep('slack')!.dal, new Date(alle(20, 9)).toISOString())
+  assert.equal(ep('slack')!.dal, new Date(alle(20, 9, 30)).toISOString(), '«dal» è quando è cominciata la causa che resta')
   assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 10) }), { cambiato: true })
   assert.equal(ep('slack'), undefined)
 }))
@@ -154,13 +156,22 @@ test('«dopo l’aggiornamento»: solo per il disco, solo se l’ultima lettura 
   reg({ fonte: 'note', quando: alle(20, 9), esito: 'guaio', rimedio: 'permesso-disco' })
   assert.equal(sf.fontiIncomplete()[0].dopoAggiornamento, true)
   reg({ fonte: 'note', quando: alle(20, 10) })
-  assert.equal(store.cursore('salute:versione:note'), '0.2.24')
+  assert.equal(store.cursore('salute:versione:note'), '0.9.0-prova')
   reg({ fonte: 'note', quando: alle(20, 11), esito: 'guaio', rimedio: 'permesso-disco' })
   assert.equal(sf.fontiIncomplete()[0].dopoAggiornamento, undefined)
   // un'altra causa non è mai colpa dell'aggiornamento
   store.segnaCursore('salute:versione:posta', '0.2.23')
   reg({ fonte: 'posta', quando: alle(20, 11), esito: 'guaio', rimedio: 'credenziale' })
   assert.equal(sf.fontiIncomplete().find(f => f.fonte === 'posta')!.dopoAggiornamento, undefined)
+}))
+
+test('«dal»: da un inciampo passeggero a una causa che resta, data la causa; una causa che resta non si sposta (counter-case)', () => inA(() => {
+  reg({ fonte: 'calendario', quando: alle(20, 22, 51), esito: 'guaio', rimedio: 'attendi' })
+  reg({ fonte: 'calendario', quando: alle(20, 22, 52), esito: 'guaio', rimedio: 'credenziale' })
+  assert.equal(sf.fontiIncomplete()[0].dal, new Date(alle(20, 22, 52)).toISOString())
+  reg({ fonte: 'calendario', quando: alle(20, 23, 10), esito: 'guaio', rimedio: 'attendi' })
+  reg({ fonte: 'calendario', quando: alle(20, 23, 30), esito: 'guaio', rimedio: 'credenziale' })
+  assert.equal(sf.fontiIncomplete()[0].dal, new Date(alle(20, 22, 52)).toISOString())
 }))
 
 // — il permesso delle Note, dal vivo —
@@ -176,6 +187,32 @@ test('le Note guariscono dal vivo: leggibili e con un episodio di permesso, si c
   // un'altra causa non si tocca
   reg({ fonte: 'note', quando: alle(20, 9, 20), esito: 'guaio', rimedio: 'aggiorna' })
   assert.deepEqual(sf.verificaPermessi({ note: 'leggibile' }, alle(20, 10)), [])
+  assert.ok(ep('note'))
+}))
+
+test('una lettura già in corso, che ha visto le Note senza permesso prima della guarigione dal vivo, non riporta la riga', () => inA(() => {
+  reg({ fonte: 'note', quando: alle(20, 9), esito: 'guaio', rimedio: 'permesso-disco' })
+  let t = alle(20, 9, 10)
+  let cambi = 0
+  const oss = lettura.osservaLettura('', null, { adesso: () => t, risveglio: 0, quandoCambia: () => { cambi++ } })
+  oss.avvisa({ fase: 'posta', stato: 'inizio' })
+  oss.avvisa({ fase: 'note', stato: 'guaio', errore: 'x', rimedio: 'permesso-disco' })
+  // lui dà il permesso; /api/stato lo vede mentre la posta si legge ancora
+  assert.deepEqual(sf.verificaPermessi({ note: 'leggibile' }, alle(20, 9, 12)), ['note'])
+  assert.deepEqual(sf.fontiIncomplete(), [])
+  t = alle(20, 9, 15)
+  oss.avvisa({ fase: 'posta', stato: 'fatto', documenti: 3 })
+  oss.chiudi(false)
+  assert.deepEqual(sf.fontiIncomplete(), [], 'il guaio visto prima del permesso è vecchio')
+  assert.equal(ep('note'), undefined)
+  assert.equal(cambi, 0)
+  // controprova: una lettura che fallisce dopo la guarigione riporta la riga
+  reg({ fonte: 'note', quando: alle(20, 9, 13), esito: 'guaio', rimedio: 'permesso-disco' })
+  assert.deepEqual(sf.fontiIncomplete().map(f => f.fonte), ['note'])
+  // e un'altra causa, anche se vista prima, non è mai vecchia
+  sf.perProva()
+  assert.deepEqual(sf.verificaPermessi({ note: 'leggibile' }, alle(20, 9, 30)), ['note'])
+  reg({ fonte: 'note', quando: alle(20, 9, 20), esito: 'guaio', rimedio: 'guarda' })
   assert.ok(ep('note'))
 }))
 

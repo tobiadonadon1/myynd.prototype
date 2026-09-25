@@ -63,7 +63,7 @@ import * as granola from './connettori/granola.ts'
 import * as granolaMcp from './connettori/granolaMcp.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
-import { fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import { fontiIncomplete, lettureInCorso, osservaLettura } from './lettura-feed.ts'
 import * as saluteFonti from './salute-fonti.ts'
 import * as saluteTeste from './salute-teste.ts'
 import { fraseDi, rimedioDi } from './connettori/guaio.ts'
@@ -1951,19 +1951,20 @@ app.delete('/api/connettori/:id', (req, res) => {
  * voleva dire che mentre A leggeva la posta, B riceveva «sto già leggendo» e
  * il suo giro di sfondo veniva saltato: per persona, come tutto il resto.
  */
-const sincronizzazioniInCorso = new Set<string>()
+const sincronizzazioniInCorso = lettureInCorso()
 const sincronizzazioneInCorso = () => sincronizzazioniInCorso.has(chi.adesso() ?? '')
 
 /**
- * Una fonte sola, riletta in sottofondo, se non c'è già una lettura in corso.
+ * Una fonte sola, riletta in sottofondo, appena non c'è una lettura in corso.
  *
  * Serve quando un permesso è appena tornato: la riga fissa è già sparita, e
  * la lettura che segue lo conferma (o lo smentisce) senza aspettare il giro
- * dei dieci minuti. Stessa coda delle altre letture: non si pestano i piedi.
+ * dei dieci minuti. Stessa coda delle altre letture: non si pestano i piedi;
+ * se una è in corso, questa parte appena quella finisce.
  */
 function leggiInSottofondo(fonte: string) {
   const conto = chi.adesso() ?? ''
-  if (sincronizzazioniInCorso.has(conto)) return
+  if (sincronizzazioniInCorso.has(conto)) { sincronizzazioniInCorso.dopo(conto, fonte, () => leggiInSottofondo(fonte)); return }
   sincronizzazioniInCorso.add(conto)
   void (async () => {
     try { await leggiTutto(fonte, () => {}) }

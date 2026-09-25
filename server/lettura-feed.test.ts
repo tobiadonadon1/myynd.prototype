@@ -9,7 +9,8 @@ const CASA = mkdtempSync(join(tmpdir(), 'myynd-lettura-feed-'))
 process.env.MYYND_DATI = CASA
 const cfg = await import('./config.ts')
 const store = await import('./store.ts')
-const { dimenticaLetture, esitoLettura, fontiIncomplete, LetturaInCorso, motivoLettura, osservaLettura } = await import('./lettura-feed.ts')
+const { dimenticaLetture, esitoLettura, fontiIncomplete, LetturaInCorso, lettureInCorso, motivoLettura, osservaLettura } = await import('./lettura-feed.ts')
+const chi = await import('./chi.ts')
 after(() => { store.chiudiIndici(); rmSync(CASA, { recursive: true, force: true }) })
 
 // tutte le fonti di queste prove sono collegate: una scollegata non compare mai
@@ -128,4 +129,28 @@ test('una lettura già in corso è un 409 nella lingua scelta', () => {
   assert.equal(e.status, 409)
   assert.equal(e.perLingua('en'), 'A source read is already running. Wait for it to finish and try again.')
   assert.equal(e.perLingua('it'), 'Una lettura delle fonti è già in corso. Attendi che finisca e riprova.')
+})
+
+test('una rilettura chiesta durante una lettura aspetta che finisca, una volta per fonte, nel contesto di chi l’ha chiesta', async () => {
+  const letture = lettureInCorso()
+  const partite: string[] = []
+  letture.add('a')
+  chi.dentro('utente-a', () => {
+    letture.dopo('a', 'note', () => partite.push(`note:${chi.adesso()}`))
+    letture.dopo('a', 'note', () => partite.push(`note:${chi.adesso()}`))
+  })
+  // la lettura di un altro conto che finisce non la fa partire
+  letture.add('b')
+  letture.delete('b')
+  await new Promise(r => setImmediate(r))
+  assert.deepEqual(partite, [])
+  assert.equal(letture.has('a'), true)
+  letture.delete('a')
+  assert.equal(letture.has('a'), false)
+  await new Promise(r => setImmediate(r))
+  assert.deepEqual(partite, ['note:utente-a'])
+  // finita una volta, la coda è vuota
+  letture.add('a'); letture.delete('a')
+  await new Promise(r => setImmediate(r))
+  assert.deepEqual(partite, ['note:utente-a'])
 })
