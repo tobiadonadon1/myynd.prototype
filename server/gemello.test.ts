@@ -1,0 +1,266 @@
+// Il gemello: l'ordine del giro, il sigillo, la chiusura dei giorni, il punteggio.
+//
+//   node --test server/gemello.test.ts
+
+import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const CASA = mkdtempSync(join(tmpdir(), 'myynd-gemello-'))
+process.env.MYYND_DATI = CASA
+delete process.env.ANTHROPIC_API_KEY
+
+const conti = await import('./conti.ts')
+const chi = await import('./chi.ts')
+const cfg = await import('./config.ts')
+const store = await import('./store.ts')
+const seg = await import('./segnali.ts')
+const gem = await import('./gemello.ts')
+const progetti = await import('./progetti.ts')
+const ordine = await import('./ordine.ts')
+
+let anna = '', bruno = ''
+const GIORNO = 86_400_000
+const ORA = 3_600_000
+/** Le 8 di Roma del 24 settembre 2026. */
+const MATTINA = new Date('2026-09-24T06:00:00.000Z')
+const POSTA = { host: 'h', porta: 993, utente: 'anna@esempio.it', password: 'x' }
+
+before(async () => {
+  const a = await conti.registra('anna@esempio.it', 'passwordlunga1')
+  const b = await conti.registra('bruno@esempio.it', 'passwordlunga2')
+  assert.ok(a.ok && b.ok); anna = a.ok ? a.id : ''; bruno = b.ok ? b.id : ''
+  chi.dentro(anna, () => { cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', posta: POSTA }); store.azzeraTutto() })
+  chi.dentro(bruno, () => { cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome' }); store.azzeraTutto() })
+})
+after(() => { store.chiudiIndici(); rmSync(CASA, { recursive: true, force: true }) })
+
+let n = 0
+/** Una mail nell'indice, da `chi`, `quando`; con `dopoMin` anche la risposta mandata. */
+function mail(chi: string, nome: string, quando: Date, dopoMin: number | null, richiesta = false) {
+  n++
+  const docs: Parameters<typeof store.salvaDocumenti>[0] = [{
+    id: `posta:INBOX:${n}`, fonte: 'posta', tipo: 'email', titolo: `Mail ${n}${richiesta ? ' can you confirm?' : ''}`, corpo: richiesta ? 'Can you confirm please?' : 'Hello',
+    autore: `${nome} <${chi}>`, quando: quando.toISOString(), filo: `f${n}@x`, messageId: `m${n}@x`
+  }]
+  if (dopoMin !== null) docs.push({
+    id: `posta:Sent:${n}`, fonte: 'posta', tipo: 'email', titolo: `Re: Mail ${n}`, corpo: 'Sure', autore: 'Anna <anna@esempio.it>', inviato: true,
+    quando: new Date(quando.getTime() + dopoMin * 60_000).toISOString(), filo: `f${n}@x`, messageId: `s${n}@x`, risponde: `m${n}@x`, destinatari: chi
+  })
+  store.salvaDocumenti(docs)
+  return n
+}
+const prev = () => store.default.prepare('SELECT * FROM previsioni ORDER BY id').all() as { id: string; giorno: string; genere: string; ref: string; esito: string | null; verificata: string | null; dati: string }[]
+const azzera = () => { store.azzeraTutto(); store.default.exec('DELETE FROM cursori'); n = 0 }
+
+/** Trenta giorni di storia: Nora sempre risposta in un'ora, Priya mai (ma non nell'ultima settimana, o le sue riempiono il tetto). */
+function storia(fino: Date) {
+  for (let d = 30; d >= 1; d--) {
+    const q = new Date(fino.getTime() - d * GIORNO + 2 * ORA)
+    mail('nora@h.example', 'Nora Vance', q, 60)
+    if (d >= 8) mail('priya@a.example', 'Priya Shah', q, null, true)
+  }
+}
+
+test('senza una fonte, o senza documenti recenti, il giro non fa niente', async () => {
+  await chi.dentro(bruno, async () => {
+    await gem.giro(MATTINA)
+    assert.equal(store.cursore('gemello:mattina'), null)
+  })
+  await chi.dentro(anna, async () => {
+    azzera()
+    await gem.giro(MATTINA)
+    assert.equal(store.cursore('gemello:mattina'), null, 'niente indicizzato: niente giro')
+  })
+})
+
+test('la mattina prevede (dalle sei), una volta al giorno anche con zero affermazioni; il sigillo tiene fino alle venti', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    storia(MATTINA)
+    // le mail di oggi, arrivate alle 7 di Roma: Nora e Priya
+    mail('nora@h.example', 'Nora Vance', new Date('2026-09-24T05:00:00.000Z'), null)
+    mail('priya@a.example', 'Priya Shah', new Date('2026-09-24T05:00:00.000Z'), null, true)
+    await gem.giro(new Date('2026-09-24T03:30:00.000Z'))
+    assert.equal(store.cursore('gemello:mattina'), null, 'alle cinque e mezza non è mattina')
+    assert.equal(store.cursore('gemello:notte'), '2026-09-24', 'ma la notte sì, dalle tre')
+    await gem.giro(MATTINA)
+    assert.equal(store.cursore('gemello:mattina'), '2026-09-24')
+    const p = prev()
+    assert.ok(p.length >= 2, `${p.length} affermazioni`)
+    assert.ok(p.some(x => x.genere === 'posta.risponde' && x.ref.endsWith(`posta:INBOX:${n - 1}`)), 'Nora: risponderà')
+    assert.ok(p.some(x => x.genere === 'posta.non_risponde' && x.ref.endsWith(`posta:INBOX:${n}`)), 'Priya: non risponderà')
+    assert.ok(p.every(x => x.esito === null && x.verificata === null), 'niente si scrive prima che il giorno chiuda')
+    // il sigillo
+    const v1 = gem.vista(new Date('2026-09-24T17:59:00.000Z'))
+    assert.equal(v1.oggi.sigillate, true); assert.equal(v1.oggi.quante, p.length); assert.deepEqual(v1.oggi.previsioni, [])
+    // Nora ha risposto alle 10: dalle venti si vede solo quella decisa
+    store.salvaDocumenti([{ id: 'posta:Sent:900', fonte: 'posta', tipo: 'email', titolo: 'Re: Mail', corpo: 'ok', autore: 'Anna <anna@esempio.it>', inviato: true, quando: '2026-09-24T08:00:00.000Z', filo: `f${n - 1}@x`, messageId: 's900@x', risponde: `m${n - 1}@x`, destinatari: 'nora@h.example' }])
+    seg.raccogliPosta()
+    const v2 = gem.vista(new Date('2026-09-24T18:01:00.000Z'))
+    assert.equal(v2.oggi.sigillate, false)
+    assert.equal(v2.oggi.previsioni.find(x => x.genere === 'posta.risponde')?.esito, 'giusta')
+    assert.equal(v2.oggi.previsioni.find(x => x.genere === 'posta.non_risponde')?.esito, null, 'ancora aperta')
+    assert.ok(prev().every(x => x.esito === null), 'la sera mostra, non scrive')
+    // una seconda mattina nello stesso giorno non aggiunge niente
+    const quante = prev().length
+    store.default.exec('DELETE FROM previsioni WHERE 0')
+    await gem.giro(new Date('2026-09-24T09:00:00.000Z'))
+    assert.equal(prev().length, quante)
+  })
+})
+
+test('il giorno chiude solo dopo una lettura partita dopo la mezzanotte: la risposta delle 23:30 letta alle 08:10 fa giusta la previsione', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    storia(MATTINA)
+    const id = mail('nora@h.example', 'Nora Vance', new Date('2026-09-24T05:00:00.000Z'), null)
+    await gem.giro(MATTINA)
+    assert.ok(prev().some(x => x.genere === 'posta.risponde' && x.ref === `posta.arrivata|posta:INBOX:${id}`))
+    // la risposta alle 23:30 di Roma, che l'indice vede solo la mattina dopo
+    store.salvaDocumenti([{ id: 'posta:Sent:901', fonte: 'posta', tipo: 'email', titolo: 'Re', corpo: 'ok', autore: 'Anna <anna@esempio.it>', inviato: true, quando: '2026-09-24T21:30:00.000Z', filo: `f${id}@x`, messageId: 's901@x', risponde: `m${id}@x`, destinatari: 'nora@h.example' }])
+    // il giro delle 00:40 del 25, senza una lettura dopo mezzanotte: il giorno resta aperto
+    gem.dopoLaLettura('2026-09-24T20:00:00.000Z', true)
+    await gem.giro(new Date('2026-09-24T22:40:00.000Z'))
+    assert.ok(prev().every(x => x.verificata === null), 'nessuna lettura dopo la mezzanotte: ancora aperto')
+    assert.equal(gem.vista(new Date('2026-09-24T22:40:00.000Z')).ieri?.chiuso, false)
+    // la lettura delle 08:10 del 25 con la posta a posto
+    gem.dopoLaLettura('2026-09-25T06:10:00.000Z', true)
+    await gem.giro(new Date('2026-09-25T06:15:00.000Z'))
+    const r = prev().find(x => x.ref === `posta.arrivata|posta:INBOX:${id}`)!
+    assert.equal(r.esito, 'giusta'); assert.ok(r.verificata)
+    const punteggio = store.default.prepare("SELECT * FROM punteggi WHERE giorno = '2026-09-24'").get() as { giuste: number; sbagliate: number; annullate: number; base: number; brier: number }
+    assert.ok(punteggio); assert.ok(punteggio.giuste >= 1)
+    assert.equal(punteggio.base, prev().filter(x => x.giorno === '2026-09-24' && JSON.parse(x.dati).base === true).length, 'la base sulle stesse affermazioni')
+    const v = gem.vista(new Date('2026-09-25T06:20:00.000Z'))
+    assert.equal(v.ieri?.chiuso, true); assert.equal(v.ieri?.giorno, '2026-09-24'); assert.ok(v.ieri!.giuste >= 1)
+    assert.ok(v.punteggio && v.punteggio.totale >= 1 && v.punteggio.base <= v.punteggio.totale)
+    // una lettura con la posta rotta non chiude niente
+    azzera(); storia(MATTINA)
+    mail('nora@h.example', 'Nora Vance', new Date('2026-09-24T05:00:00.000Z'), null)
+    await gem.giro(MATTINA)
+    gem.dopoLaLettura('2026-09-25T06:10:00.000Z', false)
+    await gem.giro(new Date('2026-09-25T06:15:00.000Z'))
+    assert.ok(prev().every(x => x.verificata === null), 'la posta era rotta: il giorno resta aperto')
+  })
+})
+
+test('a D + 2 giorni 12:00 senza lettura le affermazioni sulla posta si annullano; senza casella il giorno chiude subito', async () => {
+  await chi.dentro(anna, async () => {
+    azzera(); storia(MATTINA)
+    mail('nora@h.example', 'Nora Vance', new Date('2026-09-24T05:00:00.000Z'), null)
+    await gem.giro(MATTINA)
+    await gem.giro(new Date('2026-09-26T09:59:00.000Z'))
+    assert.ok(prev().every(x => x.verificata === null))
+    await gem.giro(new Date('2026-09-26T10:01:00.000Z'))
+    const p = prev().filter(x => x.giorno === '2026-09-24')
+    assert.ok(p.length && p.every(x => x.verificata))
+    assert.ok(p.filter(x => x.genere.startsWith('posta.')).every(x => x.esito === 'annullata'))
+    assert.equal((store.default.prepare("SELECT annullate FROM punteggi WHERE giorno = '2026-09-24'").get() as { annullate: number }).annullate, p.filter(x => x.genere.startsWith('posta.')).length)
+  })
+  // senza una casella: i compiti chiudono al primo giro del giorno dopo
+  await chi.dentro(anna, async () => {
+    azzera()
+    // la casella se ne va davvero: `scrivi` conserva le credenziali se non glielo si dice
+    cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', desktop: { cartelle: [CASA], scelte: true } }, { togli: ['posta'] })
+    assert.equal(cfg.leggi().posta, undefined)
+    store.salvaDocumenti([{ id: 'file:1', fonte: 'desktop', tipo: 'file', titolo: 'x', corpo: 'x', quando: '2026-09-23T10:00:00.000Z' }])
+    for (let i = 0; i < 6; i++) {
+      const g = `2026-09-${String(10 + i).padStart(2, '0')}`
+      store.scriviCompito({ id: `s${i}`, testo: `Storia ${i}`, quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), giorno: g })
+      if (i < 4) store.default.prepare("UPDATE compiti SET stato = 'fatto', chiuso = ? WHERE id = ?").run(`${g}T15:00:00.000Z`, `s${i}`)
+    }
+    store.scriviCompito({ id: 'c1', testo: 'Reply to Apple', quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), giorno: '2026-09-24' })
+    store.default.prepare("UPDATE compiti SET priorita = 'alta', stato = 'pronto' WHERE id = 'c1'").run()
+    store.scriviCompito({ id: 'c2', testo: 'Old thing', quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), giorno: '2026-09-24' })
+    store.default.prepare("UPDATE compiti SET creato = '2026-09-01T00:00:00.000Z' WHERE id = 'c2'").run()
+    await gem.giro(MATTINA)
+    const p = prev()
+    assert.ok(p.some(x => x.genere === 'compito.chiude' && x.ref === 'c1'), JSON.stringify(p))
+    assert.ok(p.some(x => x.genere === 'compito.slitta' && x.ref === 'c2'))
+    store.cambiaStatoCompito('c1', 'fatto')
+    store.default.prepare("UPDATE compiti SET chiuso = '2026-09-24T15:00:00.000Z' WHERE id = 'c1'").run()
+    await gem.giro(new Date('2026-09-25T00:30:00.000Z'))
+    const dopo = prev()
+    assert.equal(dopo.find(x => x.ref === 'c1')?.esito, 'giusta')
+    assert.equal(dopo.find(x => x.ref === 'c2')?.esito, 'giusta', 'rimandata davvero')
+    assert.equal(JSON.parse(dopo.find(x => x.ref === 'c1')!.dati).base, true, 'la base «le pianificate chiudono» ci prende')
+    assert.equal(JSON.parse(dopo.find(x => x.ref === 'c2')!.dati).base, false)
+    cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', posta: POSTA })
+  })
+})
+
+test('il progetto del giorno: dai minuti; senza minuti la previsione si annulla', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    const nw = progetti.scrivi({ nome: 'Northwind', obiettivo: 'Ship' })
+    const hb = progetti.scrivi({ nome: 'Harbor Labs', obiettivo: 'Pilot' })
+    store.salvaDocumenti([{ id: 'file:1', fonte: 'desktop', tipo: 'file', titolo: 'x', corpo: 'x', quando: '2026-09-23T10:00:00.000Z' }])
+    const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
+    for (let i = 1; i <= 5; i++) {
+      const g = `2026-09-${String(24 - i).padStart(2, '0')}`
+      ins.run('com.apple.Safari', 'Safari', null, `${g}T07:00:00.000Z`, `${g}T09:00:00.000Z`, 7200, g, nw.id, null)
+      ins.run('com.apple.Safari', 'Safari', null, `${g}T10:00:00.000Z`, `${g}T10:30:00.000Z`, 1800, g, hb.id, null)
+    }
+    await gem.giro(MATTINA)
+    const p = prev().find(x => x.genere === 'progetto.del_giorno')!
+    assert.ok(p); assert.equal(p.ref, nw.id); assert.equal(JSON.parse(p.dati).ieri, nw.id)
+    // oggi lavora su Harbor
+    ins.run('com.apple.Safari', 'Safari', null, '2026-09-24T07:00:00.000Z', '2026-09-24T09:00:00.000Z', 7200, '2026-09-24', hb.id, null)
+    assert.equal(gem.minutiProgetto('2026-09-24').get(hb.id), 120)
+    gem.dopoLaLettura('2026-09-25T00:30:00.000Z', true)
+    await gem.giro(new Date('2026-09-25T06:00:00.000Z'))
+    const v = prev().find(x => x.genere === 'progetto.del_giorno' && x.giorno === '2026-09-24')!
+    assert.equal(v.esito, 'sbagliata'); assert.equal(JSON.parse(v.dati).vero, hb.id); assert.equal(JSON.parse(v.dati).base, false)
+    // il giorno dopo, senza minuti: annullata
+    const p2 = prev().find(x => x.genere === 'progetto.del_giorno' && x.giorno === '2026-09-25')!
+    assert.ok(p2)
+    gem.dopoLaLettura('2026-09-26T00:30:00.000Z', true)
+    await gem.giro(new Date('2026-09-26T06:00:00.000Z'))
+    assert.equal(prev().find(x => x.id === p2.id)!.esito, 'annullata')
+  })
+})
+
+test('due conti non si vedono; la fiducia si ricalcola idempotente e «già fatta» conta giusta', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    store.salvaDocumenti([{ id: 'file:1', fonte: 'desktop', tipo: 'file', titolo: 'x', corpo: 'x', quando: '2026-09-23T10:00:00.000Z' }])
+    store.default.prepare("INSERT INTO previsioni (id, giorno, genere, ref, probabilita, dati, fatta, esito, verificata) VALUES ('x','2026-09-20','posta.risponde','r',0.8,'{}','x','giusta','x')").run()
+    const insFeed = store.default.prepare("INSERT INTO feed (id, tipo, titolo, testo, stato, quando, ragione, vista, risposto) VALUES (?,?,?,?,?,?,?,?,?)")
+    insFeed.run('f1', 'Priorità', 'a', '', 'scartato', '2026-09-20T10:00:00.000Z', 'fatta', '2026-09-20T10:00:00.000Z', '2026-09-20T11:00:00.000Z')
+    insFeed.run('f2', 'Priorità', 'b', '', 'scartato', '2026-09-20T10:00:00.000Z', 'vecchia', '2026-09-20T10:00:00.000Z', '2026-09-20T11:00:00.000Z')
+    insFeed.run('f3', 'Priorità', 'c', '', 'scaduto', '2026-09-20T10:00:00.000Z', 'tetto', null, '2026-09-20T11:00:00.000Z')
+    insFeed.run('f4', 'Priorità', 'd', '', 'fatto', '2026-09-20T10:00:00.000Z', 'lui', '2026-09-20T10:00:00.000Z', '2026-09-20T11:00:00.000Z')
+    store.default.prepare("INSERT INTO misure_compiti (compito, affidato, classe, inviato) VALUES ('c1','x','ritocco','2026-09-20T10:00:00.000Z'), ('c2','x','riscritto','2026-09-20T10:00:00.000Z')").run()
+    gem.bozzaTenuta({ id: 'd1', risultato: 'Hello Nora, the plan is ready.' }, 'Hello Nora, the plan is ready.', new Date('2026-09-20T12:00:00.000Z'))
+    gem.bozzaTenuta({ id: 'd2', risultato: 'Hello Nora, the plan is ready.' }, 'Dear Nora, everything changed completely today.', new Date('2026-09-20T12:00:01.000Z'))
+    gem.perProva.ricalcolaFiducia(MATTINA)
+    gem.perProva.ricalcolaFiducia(MATTINA)
+    const f = Object.fromEntries((store.default.prepare('SELECT genere, giuste, sbagliate, gradino FROM fiducia').all() as { genere: string; giuste: number; sbagliate: number; gradino: string }[]).map(r => [r.genere, r]))
+    assert.deepEqual([f['feed.carta']!.giuste, f['feed.carta']!.sbagliate], [2, 1], 'già fatta e fatto sono giuste, vecchia sbagliata, tetto non conta')
+    assert.deepEqual([f['bozza.email']!.giuste, f['bozza.email']!.sbagliate], [1, 1])
+    assert.deepEqual([f['bozza.documento']!.giuste, f['bozza.documento']!.sbagliate], [1, 1])
+    assert.deepEqual([f['previsione.posta']!.giuste, f['previsione.posta']!.sbagliate], [1, 0])
+    assert.ok(Object.values(f).every(r => r.gradino === 'guarda'), 'il gradino non si tocca')
+    assert.equal(Object.keys(f).length, 6)
+  })
+  await chi.dentro(bruno, async () => {
+    assert.equal(prev().length, 0)
+    assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM fiducia').get() as { n: number }).n, 0)
+    assert.equal(gem.vista(MATTINA).punteggio, null)
+  })
+})
+
+test('punteggio per P9, misura, e la riga «non vedo la posta che mandi»', async () => {
+  await chi.dentro(anna, async () => {
+    const p = gem.punteggio({ dal: '2026-09-01', al: '2026-09-30' })
+    assert.deepEqual(p, { giuste: 1, sbagliate: 0, base: 0, giorni: 1 })
+    assert.equal(gem.punteggio({ dal: '2020-01-01', al: '2020-01-31' }), null)
+    const m = gem.misura(30, new Date('2026-09-25T06:00:00.000Z'))
+    assert.equal(m.affermazioni, 1); assert.equal(m.punteggio, 1); assert.equal(m.calibrazione.length, 5)
+    const v = gem.vista(MATTINA)
+    assert.deepEqual(v.guai, ['posta-inviata'], 'casella collegata e niente posta mandata')
+  })
+})
