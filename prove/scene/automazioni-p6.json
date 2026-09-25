@@ -1,0 +1,393 @@
+{
+ "lingua": "en",
+ "nome": "Alex",
+ "progetti": [
+  {
+   "chiave": "northwind",
+   "nome": "Northwind",
+   "obiettivo": "Fit-out of the Northwind offices"
+  }
+ ],
+ "documenti": [
+  {
+   "id": "posta:quote-0",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the lobby fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the lobby fit-out at Northwind? Labour and materials, please. Thanks, Dana",
+   "autore": "Dana Reyes <dana@northwind.example>",
+   "quando": "-29d",
+   "filo": "filo-quote-0",
+   "messageId": "<quote-0@example>"
+  },
+  {
+   "id": "posta:quote-1",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the kitchen fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the kitchen fit-out at Northwind? Labour and materials, please. Thanks, Lee",
+   "autore": "Lee Park <lee@contoso.example>",
+   "quando": "-26d",
+   "filo": "filo-quote-1",
+   "messageId": "<quote-1@example>"
+  },
+  {
+   "id": "posta:quote-2",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the office fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the office fit-out at Northwind? Labour and materials, please. Thanks, Sam",
+   "autore": "Sam Ito <sam@fabrikam.example>",
+   "quando": "-23d",
+   "filo": "filo-quote-2",
+   "messageId": "<quote-2@example>"
+  },
+  {
+   "id": "posta:quote-3",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the meeting room fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the meeting room fit-out at Northwind? Labour and materials, please. Thanks, Ana",
+   "autore": "Ana Ruiz <ana@tailspin.example>",
+   "quando": "-20d",
+   "filo": "filo-quote-3",
+   "messageId": "<quote-3@example>"
+  },
+  {
+   "id": "posta:quote-4",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the warehouse fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the warehouse fit-out at Northwind? Labour and materials, please. Thanks, Dana",
+   "autore": "Dana Reyes <dana@northwind.example>",
+   "quando": "-17d",
+   "filo": "filo-quote-4",
+   "messageId": "<quote-4@example>"
+  },
+  {
+   "id": "posta:quote-5",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the reception fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the reception fit-out at Northwind? Labour and materials, please. Thanks, Lee",
+   "autore": "Lee Park <lee@contoso.example>",
+   "quando": "-13d",
+   "filo": "filo-quote-5",
+   "messageId": "<quote-5@example>"
+  },
+  {
+   "id": "posta:quote-6",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the studio fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the studio fit-out at Northwind? Labour and materials, please. Thanks, Sam",
+   "autore": "Sam Ito <sam@fabrikam.example>",
+   "quando": "-9d",
+   "filo": "filo-quote-6",
+   "messageId": "<quote-6@example>"
+  },
+  {
+   "id": "posta:quote-7",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the terrace fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the terrace fit-out at Northwind? Labour and materials, please. Thanks, Ana",
+   "autore": "Ana Ruiz <ana@tailspin.example>",
+   "quando": "-5d",
+   "filo": "filo-quote-7",
+   "messageId": "<quote-7@example>"
+  },
+  {
+   "id": "posta:quote-8",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Quote for the archive fit-out",
+   "corpo": "Hi Alex, could you send me a quote for the archive fit-out at Northwind? Labour and materials, please. Thanks, Dana",
+   "autore": "Dana Reyes <dana@northwind.example>",
+   "quando": "-1d",
+   "filo": "filo-quote-8",
+   "messageId": "<quote-8@example>"
+  },
+  {
+   "id": "posta:reply-12",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Re: Quote for the reception fit-out",
+   "corpo": "Hi Lee, here is the quote for the reception fit-out: labour and materials included. Alex",
+   "autore": "Alex <alex@northwind.example>",
+   "quando": "-12d",
+   "filo": "filo-quote-5",
+   "messageId": "<reply-12@example>"
+  },
+  {
+   "id": "posta:news-2",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Fit-out weekly: prices and quotes",
+   "corpo": "This week in fit-out: steel prices, a quote of the week, and new suppliers. Unsubscribe here.",
+   "autore": "Fit-out Weekly <news@fitoutweekly.example>",
+   "quando": "-2d",
+   "filo": "filo-news-2"
+  },
+  {
+   "id": "posta:news-9",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Fit-out weekly: prices and quotes",
+   "corpo": "This week in fit-out: steel prices, a quote of the week, and new suppliers. Unsubscribe here.",
+   "autore": "Fit-out Weekly <news@fitoutweekly.example>",
+   "quando": "-9d",
+   "filo": "filo-news-9"
+  },
+  {
+   "id": "posta:news-16",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Fit-out weekly: prices and quotes",
+   "corpo": "This week in fit-out: steel prices, a quote of the week, and new suppliers. Unsubscribe here.",
+   "autore": "Fit-out Weekly <news@fitoutweekly.example>",
+   "quando": "-16d",
+   "filo": "filo-news-16"
+  },
+  {
+   "id": "posta:news-23",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Fit-out weekly: prices and quotes",
+   "corpo": "This week in fit-out: steel prices, a quote of the week, and new suppliers. Unsubscribe here.",
+   "autore": "Fit-out Weekly <news@fitoutweekly.example>",
+   "quando": "-23d",
+   "filo": "filo-news-23"
+  },
+  {
+   "id": "posta:invoice-3",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Invoice 2291 for the lobby works",
+   "corpo": "Hi Alex, attached is invoice 2291 for the lobby works, due in 30 days. Marta",
+   "autore": "Marta Diaz <marta@harbor.example>",
+   "quando": "-3d",
+   "filo": "filo-inv-3"
+  },
+  {
+   "id": "posta:invoice-1",
+   "fonte": "posta",
+   "tipo": "email",
+   "titolo": "Invoice 2305, kitchen materials",
+   "corpo": "Hello Alex, please find invoice 2305 for the kitchen materials, due on the 30th. Omar",
+   "autore": "Omar Haddad <omar@brightsupply.example>",
+   "quando": "-1d",
+   "filo": "filo-inv-1"
+  }
+ ],
+ "feed": [
+  {
+   "id": "card-nonmia",
+   "tipo": "Email",
+   "titolo": "Quote for the meeting room fit-out",
+   "testo": "Sam asks for a quote.",
+   "doc": "posta:quote-3",
+   "stato": "scartato",
+   "ragione": "non_mia",
+   "quando": "-19d",
+   "risposto": "-5d"
+  }
+ ],
+ "p6": {
+  "config": {
+   "posta": {
+    "host": "127.0.0.1",
+    "porta": 9,
+    "utente": "alex@northwind.example",
+    "password": "finta"
+   }
+  },
+  "inviati": [
+   "posta:reply-12"
+  ],
+  "ricette": [
+   {
+    "id": "quote-follow-ups",
+    "nome": "Quote follow-ups",
+    "spiega": "Every morning, a follow-up for each quote request.",
+    "quando": {
+     "ogni": "giorno",
+     "ora": 9
+    },
+    "guarda": {
+     "cerca": "quote",
+     "limite": 8
+    },
+    "fai": "Draft a follow-up for each quote request that is still waiting.",
+    "metti": {
+     "inLista": "oggi",
+     "modo": "bozza"
+    },
+    "attrezzi": [
+     "posta.leggi"
+    ],
+    "accesa": false,
+    "en": {
+     "nome": "Quote follow-ups",
+     "spiega": "Every morning, a follow-up for each quote request.",
+     "fai": "Draft a follow-up for each quote request that is still waiting.",
+     "cerca": "quote"
+    }
+   },
+   {
+    "id": "monday-summary",
+    "nome": "Monday summary",
+    "spiega": "Every Monday, what arrived and what is coming.",
+    "quando": {
+     "ogni": "settimana",
+     "giorno": 1,
+     "ora": 8
+    },
+    "guarda": {
+     "soloNuovi": true,
+     "limite": 8
+    },
+    "fai": "Write a short summary of the new mail and the week ahead.",
+    "metti": {
+     "inLista": "oggi",
+     "modo": "bozza"
+    },
+    "attrezzi": [
+     "posta.leggi",
+     "agenda.leggi"
+    ],
+    "accesa": false,
+    "en": {
+     "nome": "Monday summary",
+     "spiega": "Every Monday, what arrived and what is coming.",
+     "fai": "Write a short summary of the new mail and the week ahead."
+    }
+   },
+   {
+    "id": "invoices-arriving",
+    "nome": "Invoices arriving",
+    "spiega": "When an invoice arrives, a reply that confirms it.",
+    "quando": {
+     "quandoArriva": true
+    },
+    "guarda": {
+     "cerca": "invoice",
+     "soloNuovi": true,
+     "limite": 8
+    },
+    "fai": "Draft a short reply confirming each invoice.",
+    "metti": {
+     "inLista": "settimana",
+     "modo": "bozza"
+    },
+    "attrezzi": [
+     "posta.leggi"
+    ],
+    "accesa": true,
+    "en": {
+     "nome": "Invoices arriving",
+     "spiega": "When an invoice arrives, a reply that confirms it.",
+     "fai": "Draft a short reply confirming each invoice.",
+     "cerca": "invoice"
+    }
+   },
+   {
+    "id": "weekly-digest",
+    "nome": "Weekly digest",
+    "spiega": "Every Friday, the week in one page.",
+    "quando": {
+     "ogni": "settimana",
+     "giorno": 5,
+     "ora": 17
+    },
+    "guarda": {
+     "soloNuovi": true,
+     "limite": 8
+    },
+    "fai": "Summarise the week in one page.",
+    "metti": {
+     "inLista": "settimana",
+     "modo": "bozza"
+    },
+    "attrezzi": [
+     "posta.leggi"
+    ],
+    "accesa": true,
+    "en": {
+     "nome": "Weekly digest",
+     "spiega": "Every Friday, the week in one page.",
+     "fai": "Summarise the week in one page."
+    }
+   }
+  ],
+  "stati": [
+   {
+    "id": "invoices-arriving",
+    "vassoio": "+8d",
+    "ultima": "-10m"
+   },
+   {
+    "id": "weekly-digest",
+    "vassoio": "1970",
+    "ultima": "-1h",
+    "quante": 3
+   },
+   {
+    "id": "quote-follow-ups",
+    "ultima": "-2h"
+   },
+   {
+    "id": "monday-summary",
+    "ultima": "-2h"
+   }
+  ],
+  "vassoio": [
+   {
+    "automazione": "invoices-arriving",
+    "testo": "Confirm invoice 2291 to Marta",
+    "doc": "posta:invoice-3",
+    "stato": "scritta",
+    "quando": "-3d",
+    "bozza": "Hi Marta, thanks for invoice 2291 for the lobby works. We have it and it will be paid within 30 days.\n\nIf anything changes on the amount, I will let you know this week. Alex"
+   },
+   {
+    "automazione": "invoices-arriving",
+    "testo": "Confirm invoice 2305 to Omar",
+    "doc": "posta:invoice-1",
+    "stato": "senza bozza",
+    "quando": "-1d"
+   }
+  ],
+  "suggerimento": {
+   "id": "idea-chase-unpaid-invoices",
+   "nome": "Chase unpaid invoices",
+   "spiega": "Every Thursday, the invoices still unpaid after two weeks, with a reminder ready.",
+   "quanti": 2,
+   "esempi": [
+    "Invoice 2291 for the lobby works",
+    "Invoice 2305, kitchen materials"
+   ],
+   "prove": [
+    "posta:invoice-3",
+    "posta:invoice-1"
+   ],
+   "attrezzi": [
+    "posta.leggi"
+   ],
+   "quando": {
+    "ogni": "settimana",
+    "giorno": 4,
+    "ora": 10
+   },
+   "guarda": {
+    "cerca": "invoice"
+   },
+   "metti": {
+    "inLista": "settimana",
+    "modo": "bozza"
+   },
+   "giusti": 9,
+   "giudicati": 10
+  }
+ }
+}

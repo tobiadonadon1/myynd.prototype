@@ -15,6 +15,7 @@
 //     "risposte": [
 //       { "se": "regex", "in": "system" | "utente" | "tutto", "testo": "…" },
 //       { "se": "regex", "json": { … }, "attesa": 1500 }
+//       { "se": "regex", "chiama": "agenda_leggi" }   // una chiamata a quello strumento (P6), se offerto e non già fatto
 //     ],
 //     "predefinita": "testo quando niente combacia",
 //     "predefinitaJSON": { … }        // quando la richiesta vuole uno schema; senza,
@@ -95,6 +96,13 @@ function scegli(corpo) {
     let re
     try { re = new RegExp(r.se, 'i') } catch { continue }
     if (!re.test(dove[r.in || 'tutto'] ?? '')) continue
+    // P6: `chiama` risponde con una chiamata a quello strumento, se la richiesta lo offre e non l'ha già chiamato
+    if (r.chiama) {
+      const offerto = Array.isArray(corpo.tools) && corpo.tools.some(t => t?.function?.name === r.chiama)
+      const giaFatto = messaggi.some(m => m.role === 'tool')
+      if (!offerto || giaFatto) continue
+      return { regola: i, testo: '', chiama: String(r.chiama), attesa: Number(r.attesa || 0), system, utente: dove.utente }
+    }
     const testo = r.json !== undefined ? JSON.stringify(r.json) : String(r.testo ?? '')
     return { regola: i, testo, attesa: Number(r.attesa || 0), system, utente: dove.utente }
   }
@@ -144,6 +152,19 @@ const server = createServer(async (req, res) => {
   const id = 'finto-' + Date.now().toString(36)
   const usage = { prompt_tokens: entrata, completion_tokens: uscita, total_tokens: entrata + uscita }
 
+  const chiamata = s.chiama ? [{ index: 0, id: 'call-' + Date.now().toString(36), type: 'function', function: { name: s.chiama, arguments: '{}' } }] : null
+  if (chiamata && !corpo.stream) {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    return res.end(JSON.stringify({ id, object: 'chat.completion', model: modello, choices: [{ index: 0, message: { role: 'assistant', content: null, tool_calls: chiamata }, finish_reason: 'tool_calls' }], usage }))
+  }
+  if (chiamata) {
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+    const manda = o => res.write(`data: ${JSON.stringify(o)}\n\n`)
+    manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: { role: 'assistant', tool_calls: chiamata } }] })
+    manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }], usage })
+    res.write('data: [DONE]\n\n')
+    return res.end()
+  }
   if (!corpo.stream) {
     res.writeHead(200, { 'content-type': 'application/json' })
     return res.end(JSON.stringify({

@@ -953,6 +953,9 @@ export function ricettaDi(s: Suggerimento): auto.Automazione {
 
 // — P6: si mostrano solo dopo una prova passata —
 
+/** L'impronta del contesto con cui il foglio è stato scritto: la semina delle prove la scrive uguale. */
+export const contestoAttuale = () => improntaContesto()
+
 const BOCCIATA_PER = 14 * 86_400_000
 
 /** L'impronta di un suggerimento: quella della ricetta che `adotta` scriverebbe. */

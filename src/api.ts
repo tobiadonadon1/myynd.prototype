@@ -2140,6 +2140,7 @@ export type EsitoVista = {
   id: string; quando: string; anche: string[]; tipo: 'riga' | 'proposta'; testo: string; voci: VoceProva[]
   bozza: string | null; ipotesi: string[]; chiede: string | null; prova: ProvaPoi | null
   risposta: { doc: string; quando: string } | null; stato: string; suo: 'giusto' | 'sbagliato' | null; scrive: boolean
+  forma: 'documento' | 'riga' | 'proposta'
 }
 export type RiassuntoProva = {
   id: string; stato: string; esito: 'pronta' | 'poco' | 'non passa' | null; giusti: number; giudicati: number

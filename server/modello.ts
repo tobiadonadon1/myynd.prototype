@@ -787,8 +787,10 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return m.crea(p, attesa) },
       flusso: (p, onTesto, attesa, segnale, conversazione) => {
         controllaIlTetto()
-        segnaGuardato(true)
-        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => segnaGuardato(false))
+        // chi guarda è una persona: la stesura di una prova (P6) non fa aspettare la prova stessa
+        const suo = !provaChiusa.inProva()
+        if (suo) segnaGuardato(true)
+        return m.flusso(p, onTesto, attesa, segnale, conversazione).finally(() => { if (suo) segnaGuardato(false) })
       }
     }
   }
@@ -804,9 +806,10 @@ export function motore(): Motore | null {
       crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
-        segnaGuardato(true)
+        const suo = !provaChiusa.inProva()
+        if (suo) segnaGuardato(true)
         return compatibile.flusso(f, p as compatibile.Richiesta, onTesto, attesa, SILENZIO_MAX, segnale)
-          .finally(() => segnaGuardato(false))
+          .finally(() => { if (suo) segnaGuardato(false) })
           .catch(e => {
             if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
             segnaSeOpenAI(e)

@@ -31,10 +31,9 @@ function segno(e: EsitoVista): 'giusto' | 'sbagliato' | null {
 
 /** Quello che cambia da un risultato all'altro: chi e cosa, la riga, il riassunto. */
 function cosa(e: EsitoVista): string {
-  if (e.tipo === 'proposta') return e.testo
+  if (e.forma !== 'riga') return e.testo
   const nuovi = e.voci.filter(v => v.titolo)
-  if (nuovi.length && e.voci.length > 1) return nuovi.map(v => `${(v.chi ?? '').split(' <')[0] || v.titolo}: ${v.titolo}`).join(' · ')
-  return nuovi.length === 1 && e.testo === '' ? nuovi[0].titolo : e.testo
+  return nuovi.length ? nuovi.map(v => `${(v.chi ?? '').split(' <')[0] || v.titolo}: ${v.titolo}`).join(' · ') : e.testo
 }
 
 function primoParagrafo(s: string): string {

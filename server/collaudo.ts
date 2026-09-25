@@ -20,6 +20,7 @@ import * as giudizi from './giudizi.ts'
 import { delTetto, usoDiOggi } from './tetto.ts'
 import { stesura, FERRI_STESURA, type FerriStesura, type Riga } from './stesura.ts'
 import { senzaTrattini } from './testo.ts'
+import * as mani from './mani.ts'
 import { rigaIpotesi } from './cornice.ts'
 import { withBackgroundWork } from './lavoro-background.ts'
 import { ragioneDi } from './feed-esiti.ts'
@@ -58,6 +59,8 @@ export type EsitoVista = {
   id: string; quando: string; anche: string[]; tipo: 'riga' | 'proposta'; testo: string; voci: Voce[]
   bozza: string | null; ipotesi: string[]; chiede: string | null; prova: Prova | null
   risposta: { doc: string; quando: string } | null; stato: string; suo: 'giusto' | 'sbagliato' | null; scrive: boolean
+  /** Com'è nato: una riga per documento, una riga sola, una proposta. */
+  forma: 'documento' | 'riga' | 'proposta'
 }
 export type Parziale = 'agenda' | 'codice'
 export type RiassuntoProva = {
@@ -481,7 +484,8 @@ export async function stendiEsito(e: store.RigaEsito, o: {
     if (o.ancora && !o.ancora()) return null
     const ipotesi = s.ipotesiProposta ?? rigaIpotesi(s.testo)
     store.aggiornaEsito(e.id, {
-      stato: 'scritta', bozza: senzaTrattini(s.testo), fonti: JSON.stringify(s.fonti ?? []),
+      // la frase di chiusura («Done: …») è per la riga, non per la bozza
+      stato: 'scritta', bozza: senzaTrattini(mani.senzaChiusura(s.testo)), fonti: JSON.stringify(s.fonti ?? []),
       revisione: JSON.stringify({
         esito: s.verdetto?.esito ?? null, problemi: s.verdetto?.problemi ?? [], giri: s.giri,
         ipotesi: ipotesi ? [ipotesi] : [], domanda: s.mossa === 'chiedi' ? s.domanda : null,
@@ -565,7 +569,7 @@ export function vistaDiEsito(e: store.RigaEsito, perDocumento: boolean): EsitoVi
     testo: e.testo ?? '', voci, bozza: e.bozza, ipotesi: rev.ipotesi ?? [], chiede: rev.domanda ?? null,
     prova: primo ? { cosa: primo.cosa, quando: primo.quando } : null,
     risposta: e.risposta ? { doc: risposta ? e.risposta : '', quando: risposta?.quando ?? primo?.quando ?? '' } : null,
-    stato: e.stato, suo, scrive: !!e.modo
+    stato: e.stato, suo, scrive: !!e.modo, forma
   }
 }
 
