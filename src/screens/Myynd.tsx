@@ -200,11 +200,25 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   const [scegliendo, setScegliendo] = useState(false)
   const nonUtile = useRef<HTMLButtonElement | null>(null)
   const primaRagione = useRef<HTMLButtonElement | null>(null)
+  const gruppo = useRef<HTMLDivElement | null>(null)
+  // il fuoco torna su «Non utile» dopo che la riga si è ridisegnata: mentre le
+  // quattro ragioni sono su, quel bottone non c'è, e `focus()` subito non fa niente
+  const tornaAlBottone = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const riarma = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setScegliendo(false), 6000) }
+  const riarma = () => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      // sei secondi con il fuoco dentro le ragioni: il fuoco non cade sul corpo della pagina
+      tornaAlBottone.current = !!gruppo.current && gruppo.current.contains(document.activeElement)
+      setScegliendo(false)
+    }, 6000)
+  }
   const chiedi = () => { setScegliendo(true); riarma() }
-  const lascia = (alBottone = false) => { clearTimeout(timer.current); setScegliendo(false); if (alBottone) nonUtile.current?.focus() }
-  useEffect(() => { if (scegliendo) primaRagione.current?.focus() }, [scegliendo])
+  const lascia = (alBottone = false) => { clearTimeout(timer.current); tornaAlBottone.current = alBottone; setScegliendo(false) }
+  useEffect(() => {
+    if (scegliendo) { primaRagione.current?.focus(); return }
+    if (tornaAlBottone.current) { tornaAlBottone.current = false; nonUtile.current?.focus() }
+  }, [scegliendo])
   useEffect(() => () => clearTimeout(timer.current), [])
   /*
    * La pastiglia dice quando, in tre parole: «entro venerdì», «domani 9:30».
@@ -285,7 +299,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
           )}
         destra={scegliendo
           ? (
-            <div role="group" aria-label={t('Perché non è utile')} onMouseEnter={riarma} onFocus={riarma}
+            <div ref={gruppo} role="group" aria-label={t('Perché non è utile')} onMouseEnter={riarma} onFocus={riarma}
               onKeyDown={(e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); lascia(true) } }}
               style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px' }}>
               {RAGIONI_NON_UTILE.map((r, i) => (

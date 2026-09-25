@@ -72,7 +72,7 @@ import * as valutaFeed from './valuta-feed.ts'
 // P2 · il feed con l'asticella: le carte mancate, quando l'ha vista, se ha risposto dalla posta, la misura
 import * as mancate from './mancate.ts'
 import { segnaViste, risposteFuori } from './feed-dati.ts'
-import { MOTIVO_FUORI } from './feed-esiti.ts'
+import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
@@ -2721,6 +2721,8 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
     const stato = req.body?.stato ? String(req.body.stato) : undefined
     // P2 · «Non utile» con una delle quattro ragioni: vecchia, fatta, non_mia, non_chiara
     const ragione = typeof req.body?.ragione === 'string' ? req.body.ragione : undefined
+    // una ragione fuori dal vocabolario è un errore di chi chiede, non del server
+    if (ragione !== undefined && !eRagioneScarto(ragione)) return res.status(400).json({ errore: 'Ragione sconosciuta.' })
     const esito = await timone.rispondiAVoce(req.params.id, testo, stato, ragione)
     const ore = cfg.leggi().oreFatte ?? 48
     // di quale progetto è, subito: l'avviso sotto il bottone lo dice

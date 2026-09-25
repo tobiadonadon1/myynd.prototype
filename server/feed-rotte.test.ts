@@ -96,8 +96,10 @@ test('«Non utile» con una ragione: la carta si chiude con la ragione; una ragi
   assert.equal(e.motivo, 'Vecchia: non vale più.')
   assert.equal(riga(id)?.ragione, 'vecchia')
   const male = await chiama(`/api/feed/${encodeURIComponent(id)}/rispondi`, 'POST', { testo: '', stato: 'scartato', ragione: 'boh' })
-  assert.equal(male.status, 500)
+  // un errore di chi chiede, come «Stato sconosciuto.»: 400, non 500
+  assert.equal(male.status, 400)
   assert.equal((await male.json() as { errore: string }).errore, 'Ragione sconosciuta.')
+  assert.equal(riga(id)?.ragione, 'vecchia', 'la carta non si tocca')
   // «Annulla»: riaperta, senza ragione
   const annulla = await chiama(`/api/feed/${encodeURIComponent(id)}/aperto`, 'POST')
   assert.equal(annulla.status, 200)
