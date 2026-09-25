@@ -1,7 +1,9 @@
-// L'osservatore del Mac, nella scheda «L'app» delle Preferenze.
+// L'osservatore del Mac, nelle Preferenze.
 //
-// Quattro righe: guarda come lavoro, anche i titoli delle finestre, Myynd
-// sullo schermo, cancella le osservazioni. Si vede solo dentro l'app sul Mac
+// Due parti (P5): «osservazione» è la scheda Osservazione del primo pannello
+// (guarda come lavori, anche i titoli delle finestre, la pausa, cancella le
+// osservazioni); «schermo» è la riga «Myynd sullo schermo» nella scheda
+// «L'app», dove P1B l'aveva messa. Si vede solo dentro l'app sul Mac
 // e solo se il server risponde che c'è. Ogni interruttore scatta subito e
 // torna indietro se il server dice di no; ogni chiamata al guscio è con `?.`
 // e solo un `true` letterale vale sì (il guscio finto delle prove risponde
@@ -14,12 +16,26 @@ import { useCallback, useEffect, useState } from 'react'
 import { gemelloApi, type StatoOsservatore } from '../api'
 import { t } from '../lingua'
 import { desktop } from '../desktop'
-import { BottoneSicuro, knob, track } from '../ui'
+import { BottoneSicuro } from '../ui'
+import { Bottone, Interruttore } from '../components/forme'
 import { inPausaFino } from '../gemello-frasi'
 
 const vero = (x: unknown): boolean => x === true
 
-export function PreferenzeOsservatore() {
+/** Vero se l'osservatore c'è su questo Mac (lo dice il server): la scheda Osservazione si disegna solo allora. */
+export function useOsservatoreDisponibile(): boolean {
+  const d = desktop()
+  const [si, setSi] = useState(false)
+  useEffect(() => {
+    if (d?.piattaforma !== 'darwin') return
+    let vivo = true
+    gemelloApi.osservatore().then(v => { if (vivo) setSi(!!v.disponibile) }).catch(() => {})
+    return () => { vivo = false }
+  }, [d])
+  return si
+}
+
+export function PreferenzeOsservatore({ parte }: { parte: 'osservazione' | 'schermo' }) {
   const d = desktop()
   const [s, setS] = useState<StatoOsservatore | null>(null)
   const [permesso, setPermesso] = useState<boolean | null>(null)
@@ -101,56 +117,59 @@ export function PreferenzeOsservatore() {
   }
 
   const acceso = s.acceso && !s.altroConto
+  if (parte === 'schermo') {
+    return (
+      <>
+        <div className="f-riga">
+          <div className="f-nome">{t('Myynd sullo schermo')}</div>
+          <Interruttore acceso={compagno} cambia={() => void schermo()} etichetta={t('Myynd sullo schermo')} />
+        </div>
+        {guaio && <div className="f-stato rame">{guaio}</div>}
+      </>
+    )
+  }
   return (
     <>
-      <div className="prefs-riga">
+      <div className="f-riga">
         <div>
-          <div className="prefs-nome">{t('Osserva come lavoro')}</div>
-          {s.altroConto && <div className="prefs-stato">{t('Lo usa un altro account su questo Mac')}</div>}
+          <div className="f-nome">{t('Guarda come lavori')}</div>
+          {s.altroConto && <div className="f-stato">{t('Lo usa un altro conto su questo Mac')}</div>}
           {acceso && s.pausaFino && (
-            <div className="prefs-stato" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div className="f-stato" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span>{inPausaFino(s.pausaFino)}</span>
-              <button type="button" className="prefs-secondario" onClick={() => void riprendi()}>{t('Riprendi a guardare')}</button>
+              <Bottone tipo="parola" piccolo onClick={() => void riprendi()}>{t('Riprendi a guardare')}</Bottone>
             </div>
           )}
           {acceso && !s.pausaFino && (
-            <div className="prefs-stato"><button type="button" className="prefs-secondario" onClick={() => void pausa()}>{t('Pausa per un’ora')}</button></div>
+            <div className="f-stato"><Bottone tipo="parola" piccolo onClick={() => void pausa()}>{t('Pausa per un’ora')}</Bottone></div>
           )}
         </div>
-        <button type="button" role="switch" aria-checked={acceso} aria-label={t('Osserva come lavoro')}
-          onClick={() => void accendi()} style={track(acceso)}><span style={knob()} /></button>
+        <Interruttore acceso={acceso} cambia={() => void accendi()} etichetta={t('Guarda come lavori')} />
       </div>
 
       {acceso && (
-        <div className="prefs-riga">
+        <div className="f-riga">
           <div>
-            <div className="prefs-nome">{t('Anche i titoli delle finestre')}</div>
+            <div className="f-nome">{t('Anche i titoli delle finestre')}</div>
             {s.titoli && permesso !== true && (
-              <div className="prefs-stato" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div className="f-stato" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span>{t('I titoli aspettano il permesso')}</span>
-                <button type="button" className="prefs-secondario" onClick={() => { Promise.resolve(d.osservatore?.apriImpostazioniTitoli?.()).catch(() => {}) }}>{t('Apri Impostazioni')}</button>
+                <Bottone tipo="parola" piccolo onClick={() => { Promise.resolve(d.osservatore?.apriImpostazioniTitoli?.()).catch(() => {}) }}>{t('Apri Impostazioni')}</Bottone>
               </div>
             )}
           </div>
-          <button type="button" role="switch" aria-checked={s.titoli} aria-label={t('Anche i titoli delle finestre')}
-            onClick={() => void titoli()} style={track(s.titoli)}><span style={knob()} /></button>
+          <Interruttore acceso={s.titoli} cambia={() => void titoli()} etichetta={t('Anche i titoli delle finestre')} />
         </div>
       )}
 
-      <div className="prefs-riga">
-        <div className="prefs-nome">{t('Myynd sullo schermo')}</div>
-        <button type="button" role="switch" aria-checked={compagno} aria-label={t('Myynd sullo schermo')}
-          onClick={() => void schermo()} style={track(compagno)}><span style={knob()} /></button>
-      </div>
-
       {(acceso || s.osservate > 0) && (
-        <div className="prefs-riga">
-          <div className="prefs-nome">{t('Cancella le osservazioni')}</div>
+        <div className="f-riga">
+          <div className="f-nome">{t('Cancella le osservazioni')}</div>
           <BottoneSicuro fai={cancella} guaio={f => setGuaio(t(f))} titolo={t('Cancella le osservazioni')}>{t('Cancella')}</BottoneSicuro>
         </div>
       )}
 
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+      {guaio && <div className="f-stato rame">{guaio}</div>}
     </>
   )
 }

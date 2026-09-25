@@ -1125,7 +1125,7 @@ const EN: Record<string, string> = {
   'Non riesco a leggere le automazioni.': 'I cannot read the automations.',
   'Non sono riuscito a rileggere questa fonte.': 'I could not re-read this source.',
   'Non sono riuscito a collegare.': 'I could not connect.',
-  'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.': 'Prepares everything to the end. The last step, pressing send, stays yours.',
+  'Porta il lavoro fino all’ultimo passo. Invia resta tuo.': 'Takes work to the last step. Send stays yours.',
   'trascina per girare, rotella per lo zoom': 'drag to rotate, scroll to zoom',
   'Va bene così.': 'Good as is.',
   'Non sono riuscito a salvare la preferenza.': 'I could not save that preference.',
@@ -1624,9 +1624,9 @@ const EN: Record<string, string> = {
 
   // — le opzioni delle preferenze —
   'Solo osservare': 'Watch only',
-  'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.': 'Reads and indexes. Before suggesting anything to act on, it asks.',
+  'Chiede prima di preparare qualcosa da solo.': 'Asks before preparing anything on its own.',
   'Preparare e aspettare': 'Prepare and wait',
-  'Prepara il lavoro, niente esce senza il tuo Invia.': 'Prepares the work; nothing goes out without your Send.',
+  'Prepara in anticipo. Niente esce senza il tuo Invia.': 'Prepares ahead. Nothing leaves without your Send.',
   'Agire sulla routine': 'Act on the routine',
   'Archivia e risponde dove hai già confermato tre volte.': "Files and replies where you've already confirmed three times.",
   'Diretto': 'Direct',
@@ -3049,8 +3049,8 @@ const EN: Record<string, string> = {
   'Tolta.': 'Removed.',
   'Ieri · ancora aperte': 'Yesterday · still open',
   // le preferenze: l'osservatore del Mac
-  'Osserva come lavoro': 'Watch how I work',
-  'Lo usa un altro account su questo Mac': 'Another account on this Mac is using it',
+  'Guarda come lavori': 'Watch how you work',
+  'Lo usa un altro conto su questo Mac': 'Another account on this Mac is using it',
   'Lo usa un altro account su questo Mac.': 'Another account on this Mac is using it.',
   'Riprendi a guardare': 'Resume watching',
   'Pausa per un’ora': 'Pause watching for an hour',
@@ -3095,6 +3095,35 @@ const EN: Record<string, string> = {
   // — P4: fine —
 
   // — P5: inizio —
+  // le sezioni delle Preferenze e della Memoria, con le note di stato
+  'Il tuo Myynd': 'Your Myynd',
+  'Fuoco, notizie, autonomia, osservazione, tono': 'Focus, news, autonomy, watching, tone',
+  'Fuoco, notizie, autonomia, tono': 'Focus, news, autonomy, tone',
+  'Motore, modelli, consumo': 'Engine, models, usage',
+  'Motore da collegare': 'Engine not connected',
+  'Nome, lingua, aspetto, accesso, dati': 'Name, language, look, sign-in, data',
+  'Cosa ha fatto Myynd': 'What Myynd did',
+  'Fuoco': 'Focus',
+  'Motore': 'Engine',
+  'Un modello per ogni lavoro': 'A model for each job',
+  'Consumo': 'Usage',
+  'Nome e ruolo': 'Name and role',
+  'Accesso': 'Sign-in',
+  // da dove viene una convinzione: una sola etichetta, neutra
+  'Scritta da te': 'Written by you',
+  'Detta in chat': 'You said it in chat',
+  'Da una chat': 'From a chat',
+  'Da una bozza corretta': 'From a draft you fixed',
+  'Da un’attività chiusa': 'From a task you closed',
+  'Da un’attività lasciata': 'From a task you dropped',
+  'Da quello che scarti': 'From what you dismiss',
+  'Da una tua risposta': 'From your answer',
+  'Dal primo avvio': 'From setup',
+  'forse': 'maybe',
+  // le Preferenze
+  'Barra rapida': 'Quick bar',
+  'Notifiche': 'Notifications',
+  'Scritto da Myynd dalle tue attività e dai progetti.': 'Written by Myynd from your tasks and projects.',
   // — P5: fine —
 
   // — P6: inizio —
@@ -3819,5 +3848,29 @@ export const frasi = {
     ? `${nome} was closed: it is open again, at normal priority.`
     : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
   /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
-  altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`)
+  altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`),
+
+  // — P5: inizio —
+  /** La nota dei Progetti nella colonna della Memoria. */
+  attivi: (n: number) => corrente === 'en' ? `${n} active` : (n === 1 ? '1 attivo' : `${n} attivi`),
+  /** La nota di rame: cose che aspettano di essere guardate. */
+  quanteDaGuardare: (n: number) => corrente === 'en' ? `${n} to check` : `${n} da guardare`,
+  /** Quante convinzioni valgono, nella nota del ritratto. */
+  coseCheSa: (n: number) => corrente === 'en'
+    ? (n === 1 ? '1 thing it knows' : `${n} things it knows`)
+    : (n === 1 ? '1 cosa che sa' : `${n} cose che sa`),
+  /** Il tempo risparmiato questa settimana, arrotondato come lo direbbe una persona. */
+  questaSettimana: (minuti: number) => {
+    const m = Math.max(1, Math.round(minuti))
+    const h = Math.floor(m / 60), r = m % 60
+    if (corrente === 'en') return `This week: about ${h ? `${h} h${r ? ` ${r}` : ''}` : `${m} min`}`
+    return `Questa settimana: circa ${h ? `${h === 1 ? '1 ora' : `${h} ore`}${r ? ` e ${r}` : ''}` : `${m} minuti`}`
+  },
+  /** Quando ha scritto «Le tue parole». */
+  scritteIl: (data: string) => corrente === 'en' ? `Written ${data}` : `Scritte il ${data}`,
+  /** Dopo un salvataggio che ha fatto nascere dei progetti. */
+  nuoviProgetti: (nomi: string[]) => corrente === 'en'
+    ? `Saved. ${nomi.length === 1 ? 'New project' : 'New projects'}: ${nomi.join(', ')}.`
+    : `Salvato. ${nomi.length === 1 ? 'Nuovo progetto' : 'Nuovi progetti'}: ${nomi.join(', ')}.`
+  // — P5: fine —
 }

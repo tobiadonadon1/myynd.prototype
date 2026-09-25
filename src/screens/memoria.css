@@ -50,7 +50,6 @@
 .mem-progetto{cursor:pointer;outline:2px solid transparent;outline-offset:4px;transition:border-color .16s,box-shadow .16s,background .16s,opacity .22s ease,outline-color .3s}
 .mem-progetto:hover{border-color:rgba(var(--inchiostro-rgb),.2);box-shadow:0 12px 26px -16px rgba(var(--ombra-rgb),.7)}
 .mem-progetto:focus-visible{outline-color:rgba(var(--rame-rgb),.55)}
-.mem-progetto[data-acceso]{outline-color:var(--rame)}
 .mem-progetto[data-chiuso]{opacity:.72}
 .mem-progetto[data-chiuso]:hover,.mem-progetto[data-chiuso]:focus-within{opacity:1}
 
