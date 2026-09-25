@@ -178,4 +178,9 @@ test('la misura dalla rotta è quella del modulo, sui giorni chiesti', async () 
   assert.equal(senza.giorni, 14)
   const tetto = await (await chiama('/api/feed/misura?giorni=500')).json() as { giorni: number }
   assert.equal(tetto.giorni, 90)
+  // un numero negativo si stringe a uno, non ricade sui quattordici; zero è «nessun numero»
+  const sotto = await (await chiama('/api/feed/misura?giorni=-3')).json() as { giorni: number }
+  assert.equal(sotto.giorni, 1)
+  const zero = await (await chiama('/api/feed/misura?giorni=0')).json() as { giorni: number }
+  assert.equal(zero.giorni, 14)
 })

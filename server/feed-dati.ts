@@ -137,13 +137,18 @@ export function segnaEsame(righe: readonly { doc: string; fase: Fase | string; m
    * giorno il salto varrebbe un giorno solo. «gia» e «risposto» invece non
    * coprono una fase che dice dove il feed l'ha perso (carta, modello, posti,
    * verifica, regole): dicono solo che ormai è a posto, e a chi misura le
-   * mancate serve la fase di prima.
+   * mancate serve la fase di prima. Lo stesso per «regole» e «scartati» sopra
+   * una fase del modello: una mail che il modello ha detto di no il primo
+   * giorno passa fra le regole dopo sette (o appena letta), e la mancata
+   * sarebbe messa in conto alle regole invece che al modello. Le regole
+   * riempiono una riga nuova, o ne riscrivono una che era già delle regole.
    */
   const ins = db.prepare(`
     INSERT INTO feed_esame (doc, fase, motivo, quando) VALUES (?, ?, ?, ?)
     ON CONFLICT(doc) DO UPDATE SET fase = excluded.fase, motivo = excluded.motivo, quando = excluded.quando
     WHERE (feed_esame.fase IS NOT excluded.fase OR feed_esame.motivo IS NOT excluded.motivo OR excluded.fase IN ('modello', 'verifica'))
       AND NOT (excluded.fase IN ('gia', 'risposto') AND feed_esame.fase NOT IN ('gia', 'risposto'))
+      AND NOT (excluded.fase IN ('regole', 'scartati') AND feed_esame.fase NOT IN ('regole', 'scartati'))
   `)
   let scritte = 0
   db.exec('BEGIN')

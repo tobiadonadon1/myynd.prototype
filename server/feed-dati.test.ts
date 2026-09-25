@@ -121,6 +121,16 @@ test('segnaEsame scrive dove è finito ogni documento, tiene «quando» se non c
   assert.equal(dati.segnaEsame([{ doc: 'd', fase: 'gia' }], t2), 1)
   assert.equal(dati.segnaEsame([{ doc: 'd', fase: 'risposto' }], t2), 1)
   assert.equal(dati.esameDi(['d']).get('d')!.fase, 'risposto')
+  // «regole» e «scartati» non coprono una fase del modello: la mail che il
+  // modello ha detto no ieri, e oggi è fuori dai sette giorni, resta «modello»
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'regole', motivo: 'fonte_non_recente' }], t2), 0)
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'scartati' }], t2), 0)
+  assert.equal(dati.esameDi(['b']).get('b')!.fase, 'carta')
+  // ma una regola sopra una regola sì, e su un documento nuovo si scrivono
+  assert.equal(dati.segnaEsame([{ doc: 'a', fase: 'regole', motivo: 'letta_senza_richiesta' }], t2), 1)
+  assert.equal(dati.segnaEsame([{ doc: 'a', fase: 'scartati' }], t2), 1)
+  assert.equal(dati.segnaEsame([{ doc: 'e', fase: 'regole', motivo: 'posta_in_serie' }], t2), 1)
+  assert.deepEqual([dati.esameDi(['a']).get('a')!.fase, dati.esameDi(['e']).get('e')!.motivo], ['scartati', 'posta_in_serie'])
   store.default.prepare('DELETE FROM feed_esame WHERE doc = ?').run('d')
   assert.equal(dati.esameDi(['a', 'b', 'c']).size, 2)
   // sessanta giorni dopo: via le vecchie

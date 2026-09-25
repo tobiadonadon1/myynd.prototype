@@ -81,10 +81,15 @@ type Doc = Documento & { indicizzato: string; risponde?: string | null; destinat
 const idDi = (genere: string, doc: string, agito: string) =>
   createHash('sha1').update(`${genere}|${doc}|${agito}`).digest('hex').slice(0, 24)
 
-/** Dove è finito quel documento quando il feed l'ha guardato, o dove sarebbe finito. */
-function attribuzione(d: Doc, scartati: { indirizzi: string[] }): { fase: string; motivo: string | null } {
+/**
+ * Dove è finito quel documento quando il feed l'ha guardato, o dove sarebbe
+ * finito. Un esame «gia» o «risposto» scritto dopo che lui aveva già agito
+ * non dice dove il feed l'ha perso: dice solo che quando ha guardato era
+ * tardi. Si ricalcola, e una mail di persona che era del feed è «ignoto».
+ */
+function attribuzione(d: Doc, scartati: { indirizzi: string[] }, agito?: string): { fase: string; motivo: string | null } {
   const e = esameDi([d.id]).get(d.id)
-  if (e) return { fase: e.fase, motivo: e.motivo }
+  if (e && !(['gia', 'risposto'].includes(e.fase) && agito && e.quando > agito)) return { fase: e.fase, motivo: e.motivo }
   const adesso = Date.parse(d.indicizzato ?? '')
   const r = classificaAttenzione(d, { adesso: Number.isFinite(adesso) ? adesso : Date.now() })
   if (r.destinazione !== 'feed') return { fase: 'regole', motivo: r.motivo }
@@ -150,7 +155,7 @@ function risposte(dal: string, adesso: number, su: 'quando' | 'indicizzato', sca
     const corpo = corpoAttuale(i)
     const chiede = contieneRichiesta(corpo) || (giudizi.chiedeNoto(i.id) ?? 0) >= giudizi.SOGLIA_FEED || corpoAttuale(s).length >= RISPOSTA_LUNGA
     if (!chiede) continue
-    const dove = attribuzione(i, scartati)
+    const dove = attribuzione(i, scartati, s.quando)
     fuori.push({
       id: idDi('risposta', i.id, s.quando), genere: 'risposta', doc: i.id,
       prova: corpo.replace(/\s+/g, ' ').trim().slice(0, 300), mittente: addr, progetto: null,
@@ -236,7 +241,7 @@ async function compiti(dal: string, adesso: number, opz: { jev: boolean; limiteJ
 }
 
 function mancataCompito(c: Compito, d: Doc, certezza: 'parole' | 'jev', adessoIso: string, scartati: { indirizzi: string[] }): Mancata {
-  const dove = attribuzione(d, scartati)
+  const dove = attribuzione(d, scartati, c.creato)
   return {
     id: idDi('compito', d.id, c.creato), genere: 'compito', doc: d.id,
     prova: c.testo.replace(/\s+/g, ' ').trim().slice(0, 300), mittente: indirizzoAttenzione(d.autore) || null, progetto: c.progetto ?? null,

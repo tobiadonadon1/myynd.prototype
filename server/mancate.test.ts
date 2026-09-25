@@ -149,6 +149,12 @@ test('l’attribuzione: dall’esame se c’è, altrimenti dalle regole ricalcol
   semina([senzaRichiesta, inviata('posta:Sent:22', { quando: fa(20), risponde: 'i22@ex', destinatari: 'nora@harbor.example', messageId: 's22@ex', corpo: 'y'.repeat(220) })], { [senzaRichiesta.id]: fa(30) })
   const dopo = new Map((await trova()).mancate.map(m => [m.doc, m]))
   assert.deepEqual([dopo.get(senzaRichiesta.id)?.fase, dopo.get(senzaRichiesta.id)?.motivo], ['regole', 'letta_senza_richiesta'])
+  // un esame «risposto» scritto dopo la risposta dice solo che il feed ha guardato tardi: non è dove l'ha persa, e si ricalcola
+  feedDati.segnaEsame([{ doc: letta.id, fase: 'risposto' }], fa(10))
+  assert.equal(new Map((await trova()).mancate.map(m => [m.doc, m])).get(letta.id)?.fase, 'ignoto')
+  // lo stesso esame scritto prima della risposta invece vale
+  store.default.prepare('UPDATE feed_esame SET quando = ? WHERE doc = ?').run(fa(25), letta.id)
+  assert.equal(new Map((await trova()).mancate.map(m => [m.doc, m])).get(letta.id)?.fase, 'risposto')
 })
 
 // — tipo B: le righe scritte a mano —
@@ -256,15 +262,20 @@ test('forse: registra, scrive il segnalibro, guarda solo quello che è arrivato 
   store.salvaFeed([{ tipo: 'Da decidere', titolo: 'Qualcosa di prima', testo: 'Una cosa da fare di prima.', fonte: 'posta' }])
   store.default.prepare('UPDATE feed SET quando = ?').run(fa(24 * 5))
   const i = mail('posta:INBOX:60', { quando: fa(48), messageId: 'i60@ex' })
-  semina([i, inviata('posta:Sent:60', { quando: fa(24), risponde: 'i60@ex', destinatari: 'nora@harbor.example', messageId: 's60@ex' })], { [i.id]: fa(48) })
+  // la risposta è stata indicizzata un'ora fa, non adesso: così il segnalibro
+  // si distingue dall'ora del giro anche quando i due cadono nello stesso
+  // millisecondo (succedeva, su una macchina ferma)
+  const indicizzataAlle = fa(1)
+  semina([i, inviata('posta:Sent:60', { quando: fa(24), risponde: 'i60@ex', destinatari: 'nora@harbor.example', messageId: 's60@ex' })], { [i.id]: fa(48), 'posta:Sent:60': indicizzataAlle })
   const adesso = Date.now()
   assert.equal(await mancate.forse(adesso), 1)
   const file = join(cfg.cartella(), 'mancate.json')
   assert.ok(existsSync(file))
   // il segnalibro è l'ultima cosa guardata (il documento indicizzato più di recente), non l'ora del giro
   const ultimoIndicizzato = (store.default.prepare('SELECT MAX(indicizzato) AS m FROM documenti').get() as { m: string }).m
-  assert.equal(JSON.parse(readFileSync(file, 'utf8')).ultimo, ultimoIndicizzato)
-  assert.notEqual(ultimoIndicizzato, new Date(adesso).toISOString())
+  assert.equal(ultimoIndicizzato, indicizzataAlle)
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).ultimo, indicizzataAlle)
+  assert.ok(indicizzataAlle < new Date(adesso).toISOString(), 'il segnalibro sta prima dell’ora del giro')
   assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM mancate').get() as { n: number }).n, 1)
   // mezz'ora non è passata: niente, anche se c'è una risposta nuova
   const i2 = mail('posta:INBOX:61', { quando: fa(47), messageId: 'i61@ex' })

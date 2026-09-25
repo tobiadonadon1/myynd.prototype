@@ -4428,8 +4428,9 @@ app.post('/api/feed/viste', (req, res) => {
 /** La misura del feed su tanti giorni: per chi costruisce (il resoconto, P9, la mostrerà a lui). */
 app.get('/api/feed/misura', async (req, res) => {
   try {
+    // fra uno e novanta; senza un numero (o con zero) quattordici
     const n = Number(req.query.giorni)
-    const giorni = Number.isFinite(n) && n >= 1 ? Math.min(90, Math.floor(n)) : 14
+    const giorni = Number.isFinite(n) && n !== 0 ? Math.min(90, Math.max(1, Math.floor(n))) : 14
     await misuraFeed.caricaModuli()
     res.json(misuraFeed.misura(giorni))
   } catch (e) { errore(res, e) }
