@@ -21,8 +21,52 @@
  * appena la pagina si muove sotto — un menù rimasto appeso a mezz'aria mentre
  * si scorre è peggio di un menù che si chiude da solo.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { prossimaVoce } from '../campo.ts'
 import { createPortal } from 'react-dom'
+
+/**
+ * I tasti di un menù (P5), per questo e per il menù del conto: Esc chiude,
+ * un clic fuori chiude, le frecce, Home e Fine muovono fra le voci (e
+ * girano), la prima voce prende il fuoco all'apertura, e chiudendo il fuoco
+ * torna al bottone che l'aveva aperto.
+ */
+export function useTastiMenu(contenitore: RefObject<HTMLElement | null>, { chiudi, ritorno, aperto = true }: {
+  chiudi: () => void
+  ritorno?: RefObject<HTMLElement | null>
+  aperto?: boolean
+}) {
+  const perChiudere = useRef(chiudi)
+  perChiudere.current = chiudi
+  useEffect(() => {
+    if (!aperto) return
+    const voci = () => [...(contenitore.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+    voci()[0]?.focus()
+    const tasto = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); perChiudere.current(); return }
+      const tutte = voci()
+      const i = tutte.indexOf(document.activeElement as HTMLElement)
+      const dopo = prossimaVoce(e.key, i, tutte.length)
+      if (dopo < 0) return
+      e.preventDefault()
+      tutte[dopo]?.focus()
+    }
+    const fuori = (e: MouseEvent) => {
+      const dentro = contenitore.current?.contains(e.target as Node) || ritorno?.current?.contains(e.target as Node)
+      if (!dentro) perChiudere.current()
+    }
+    window.addEventListener('keydown', tasto, true)
+    document.addEventListener('mousedown', fuori)
+    const bottone = ritorno?.current
+    return () => {
+      window.removeEventListener('keydown', tasto, true)
+      document.removeEventListener('mousedown', fuori)
+      // il fuoco torna al bottone, se non è già andato altrove (una pagina nuova)
+      const qui = document.activeElement
+      if (bottone && (!qui || qui === document.body || contenitore.current?.contains(qui))) bottone.focus()
+    }
+  }, [aperto, contenitore, ritorno])
+}
 
 /** Quanto sta fra il bottone e il menù, e quanto resta dai bordi della finestra. */
 const ARIA = 8
@@ -88,11 +132,9 @@ export function MenuGiu({ ancora, chiudi, minLarghezza = 200, allinea = 'sinistr
     }
   }, [ancora, minLarghezza, allinea])
 
-  useEffect(() => {
-    const tasto = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); perChiudere.current() } }
-    window.addEventListener('keydown', tasto, true)
-    return () => window.removeEventListener('keydown', tasto, true)
-  }, [])
+  const ritorno = useRef<HTMLElement | null>(ancora)
+  ritorno.current = ancora
+  useTastiMenu(scatola, { chiudi: () => perChiudere.current(), ritorno })
 
   return createPortal(
     <>

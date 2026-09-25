@@ -3124,6 +3124,22 @@ const EN: Record<string, string> = {
   'Barra rapida': 'Quick bar',
   'Notifiche': 'Notifications',
   'Scritto da Myynd dalle tue attività e dai progetti.': 'Written by Myynd from your tasks and projects.',
+  // la Memoria
+  'Sezioni della memoria': 'Memory sections',
+  'Le tue parole': 'In your words',
+  'Northwind: la revisione dell’app, poi il lancio. Harbor Labs: in pausa fino a ottobre.': 'Northwind: app review, then launch. Harbor Labs: on hold until October.',
+  'Vendere il primo prodotto': 'Sell the first product',
+  'Da guardare': 'To check',
+  'Quello che sa': 'What it knows',
+  'Una cosa che deve sapere': 'Something it should know',
+  'Non faccio sconti sotto i mille euro': 'No discounts under €1,000',
+  'Prima pensava': 'It used to think',
+  'Aggiorna adesso': 'Update now',
+  'Aggiorno…': 'Updating…',
+  'Già aggiornato.': 'Already up to date.',
+  'Aggiornamento non riuscito.': 'Update failed.',
+  'Spostato o cancellato': 'Moved or deleted',
+  'Memoria, cose nuove da guardare': 'Memory, new things to check',
   // — P5: fine —
 
   // — P6: inizio —

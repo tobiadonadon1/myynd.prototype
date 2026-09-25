@@ -29,9 +29,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { type CambioProgetto, type Progetto, type StatoProgetto } from '../api'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
+import { Salvato } from '../components/forme'
 import { frasi, t } from '../lingua'
 import { Cestino, Hov, LABEL, daTastiera, useAttiva } from '../ui'
-import { IconAvanti, IconGiu, IconSpunta } from '../icons'
+import { IconAvanti, IconGiu } from '../icons'
 import { COLORE_VALIDO, TAVOLOZZA, coloreProgetto } from '../colori-progetto'
 import { SPIEGA_STATO, STATI, aggiungiAlias, aliasPuliti, togliAlias } from '../progetto-modifica'
 import { GRADIENTE } from '../tema'
@@ -41,8 +42,6 @@ const SPENTO = 'rgba(var(--inchiostro-rgb),.55)'
 const APPENA = 'rgba(var(--inchiostro-rgb),.42)'
 /** Il rame che fa da testo: di notte schiarisce da solo, un valore fisso no. */
 const RAME_TESTO = 'var(--rame-testo)'
-/** Il verde degli stati, che di notte schiarisce: la spunta e basta. */
-const VERDE = 'var(--verde-cupo)'
 
 /** Chi cambia un progetto: se il server dice di no, l'eccezione arriva a chi chiama. */
 export type Cambia = (id: string, c: CambioProgetto) => Promise<void>
@@ -59,18 +58,6 @@ export const CASELLA = {
   color: INCHIOSTRO, fontSize: '13.5px', lineHeight: 1.5, fontFamily: 'inherit', outline: 'none'
 }
 
-/** La spunta che dice «l'ho salvato», e se ne va da sola. */
-export function Tic({ mostra }: { mostra: boolean }) {
-  return (
-    <span aria-live="polite" style={{
-      flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11px',
-      color: VERDE, opacity: mostra ? 1 : 0, transition: 'opacity .35s'
-    }}>
-      {mostra && <><IconSpunta size={11} />{t('Salvato')}</>}
-    </span>
-  )
-}
-
 /** Un campo: la sua etichetta, la sua spunta, la sua riga di aiuto, il suo guaio. */
 export function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
   etichetta: string
@@ -83,7 +70,7 @@ export function Riquadro({ etichetta, aiuto, guaio, salvato, children }: {
     <div style={{ marginTop: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
         <span style={{ ...LABEL, flex: 'none' }}>{etichetta}</span>
-        <Tic mostra={!!salvato} />
+        <Salvato mostra={!!salvato} />
       </div>
       {children}
       {aiuto && (
@@ -279,7 +266,7 @@ export function Scritta({ valore, testoStile, etichetta, vuoto, salva, apriSubit
         hover={{ background: 'rgba(var(--inchiostro-rgb),.06)' }}>
         {valore || vuoto || etichetta}
       </Hov>
-      <Tic mostra={!!salvato} />
+      <Salvato mostra={!!salvato} />
     </span>
   )
 }
@@ -364,9 +351,6 @@ export function Pallino({ p, colore, manda, guaio, segnala }: {
             onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
             aria-label={t('Un altro colore, scritto #RRGGBB')} spellCheck={false} placeholder={colore}
             style={{ ...CASELLA, marginTop: 11, fontSize: '12.5px', padding: '7px 10px', letterSpacing: '.02em' }} />
-          <span style={{ display: 'block', fontSize: '11.5px', color: APPENA, marginTop: 8, lineHeight: 1.5, textWrap: 'pretty' }}>
-            {t('Senza sceglierne uno, Myynd gliene dà uno suo, diverso da quello degli altri.')}
-          </span>
           {guaio && (
             <span role="alert" style={{ display: 'block', fontSize: '11.5px', color: RAME_TESTO, marginTop: 7, lineHeight: 1.45 }}>
               {t(guaio)}

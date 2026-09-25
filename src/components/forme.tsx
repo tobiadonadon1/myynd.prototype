@@ -145,36 +145,44 @@ export function Campo({ etichetta, etichettaDa, valore, salva, esempio, righe = 
 }
 
 /**
- * Una casella di un modulo (una password, il nome di un progetto nuovo):
- * il valore lo tiene chi la usa, e la manda un bottone o Invio. Stessa
- * scatola e stessi tasti del campo: Invio va avanti o manda, Esc svuota.
+ * Una casella di un modulo (una password, il nome di un progetto nuovo, un
+ * passo da aggiungere): il valore lo tiene chi la usa, e la manda un bottone
+ * o Invio (⌘Invio se è lunga). Stessa scatola e stessi tasti del campo:
+ * Invio va avanti o manda, Esc svuota una casella scritta.
  */
-export function Casella({ etichetta, valore, cambia, invio, avanti, esempio, id, ...resto }: {
+export function Casella({ etichetta, valore, cambia, invio, alUscire, avanti, esempio, id, righe = 1, dopo, ...resto }: {
   etichetta?: string
   valore: string
   cambia: (v: string) => void
   /** Invio sull'ultima casella: manda il modulo. */
   invio?: () => void
+  alUscire?: () => void
   avanti?: boolean
   esempio?: string
   id?: string
-} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'placeholder' | 'id'>) {
+  righe?: number
+  /** Quello che sta dentro la scatola dopo il testo: un bottone «Aggiungi». */
+  dopo?: ReactNode
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'placeholder' | 'id' | 'onKeyDown' | 'onBlur'>) {
   const idCampo = useRef(id ?? nuovoId('casella')).current
+  const multilinea = righe >= 2
+  const tasti = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const g = tastiCampo({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing },
+      { multilinea, sporco: valore !== '', avanti: !!avanti, mac: MAC })
+    if (g === 'avanti') { e.preventDefault(); prossimoCampo(e.currentTarget) }
+    else if (g === 'salva') { e.preventDefault(); invio?.() }
+    else if (g === 'annulla') { e.preventDefault(); e.stopPropagation(); cambia('') }
+  }
   return (
     <div className="f-campo">
       {etichetta && <Etichetta per={idCampo}>{etichetta}</Etichetta>}
       <Scatola spento={resto.disabled}>
-        <input {...resto} id={idCampo} value={valore} placeholder={esempio}
-          aria-label={etichetta ? undefined : resto['aria-label']}
-          onChange={e => cambia(e.target.value)}
-          onKeyDown={e => {
-            const g = tastiCampo({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing },
-              { multilinea: false, sporco: valore !== '', avanti: !!avanti, mac: MAC })
-            if (g === 'avanti') { e.preventDefault(); prossimoCampo(e.currentTarget) }
-            else if (g === 'salva') { e.preventDefault(); invio?.() }
-            else if (g === 'annulla') { e.preventDefault(); e.stopPropagation(); cambia('') }
-            resto.onKeyDown?.(e)
-          }} />
+        {multilinea
+          ? <textarea id={idCampo} rows={righe} value={valore} placeholder={esempio} aria-label={etichetta ? undefined : resto['aria-label']}
+              maxLength={resto.maxLength} disabled={resto.disabled} onChange={e => cambia(e.target.value)} onKeyDown={tasti} onBlur={alUscire} />
+          : <input {...resto} id={idCampo} value={valore} placeholder={esempio} aria-label={etichetta ? undefined : resto['aria-label']}
+              onChange={e => cambia(e.target.value)} onKeyDown={tasti} onBlur={alUscire} />}
+        {dopo}
       </Scatola>
     </div>
   )

@@ -1193,7 +1193,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
     menuConn: screen === 'conn' ? MENU_ON : MENU_OFF,
     menuMemoria: screen === 'memoria' ? MENU_ON : MENU_OFF,
-    menuOpen: menu, toggleMenu: () => setMenu(m => !m),
+    menuOpen: menu, toggleMenu: () => setMenu(m => !m), chiudiMenu: () => setMenu(false),
     chevron: { display: 'flex', transform: menu ? 'none' : 'rotate(180deg)', transition: 'transform .2s' } as CSSProperties,
     goMyynd: go('myynd'), goChat: go('chat'), goAuto: go('auto'),
     goMappa: go('mappa'), goPref: go('pref'), goConn: go('conn'), goMemoria: go('memoria'),
