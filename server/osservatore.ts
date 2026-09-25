@@ -211,18 +211,35 @@ export function cartellaNelTitolo(titolo: string | null, nomi: string[]): string
 
 // — le sessioni —
 
+/** Gli stessi limiti del guscio (desktop/sessioni.ts): caratteri veri, non unità UTF-16. */
+export const TITOLO_MASSIMO = 160
+export const APP_MASSIMA = 120
+
+/**
+ * I primi `n` caratteri veri, come `taglia` nel guscio: un titolo con
+ * un'emoji conta 160 caratteri di là e 161 unità di qua, e non per questo
+ * la sessione, col suo tempo, deve sparire. Il testo in più si taglia e basta.
+ */
+function taglia(s: string, n: number): string {
+  const c = Array.from(s)
+  return c.length > n ? c.slice(0, n).join('').trimEnd() : s
+}
+
 function valida(x: unknown, adesso: Date): Sessione | null {
   if (!x || typeof x !== 'object') return null
   const s = x as Record<string, unknown>
   if (typeof s.bundle !== 'string' || !BUNDLE.test(s.bundle)) return null
-  if (typeof s.app !== 'string' || s.app.length > 120 || !s.app) return null
-  if (s.titolo !== null && (typeof s.titolo !== 'string' || s.titolo.length > 160)) return null
+  if (typeof s.app !== 'string' || !s.app) return null
+  if (s.titolo !== null && typeof s.titolo !== 'string') return null
   if (typeof s.inizio !== 'string' || typeof s.fine !== 'string') return null
   const i = Date.parse(s.inizio), f = Date.parse(s.fine)
   if (Number.isNaN(i) || Number.isNaN(f) || !(i < f)) return null
   if (f > adesso.getTime() + 5 * 60_000) return null
   if (typeof s.secondi !== 'number' || !Number.isInteger(s.secondi) || s.secondi < 1 || s.secondi > 86400) return null
-  return { bundle: s.bundle, app: s.app, titolo: s.titolo as string | null, inizio: new Date(i).toISOString(), fine: new Date(f).toISOString(), secondi: s.secondi }
+  const app = taglia(s.app, APP_MASSIMA)
+  if (!app) return null
+  const titolo = s.titolo === null ? null : taglia(s.titolo, TITOLO_MASSIMO) || null
+  return { bundle: s.bundle, app, titolo, inizio: new Date(i).toISOString(), fine: new Date(f).toISOString(), secondi: s.secondi }
 }
 
 /** Una sessione a cavallo della mezzanotte locale diventa due, i secondi in proporzione. */

@@ -341,19 +341,27 @@ function ricalcolaFiducia(adesso: Date): void {
   for (const [g, c] of conti) up.run(g, c.giuste, c.sbagliate, adesso.toISOString())
 }
 
+/**
+ * Le cartelle di lavoro nelle due cache (i commit e la cartella nel titolo).
+ * Le riempie la notte; e il primo giro dopo un avvio, perché stanno in
+ * memoria e l'app si riavvia spesso: senza, fino alle tre della notte dopo
+ * non si vedrebbe un commit e nessuna sessione avrebbe la sua cartella.
+ */
+async function aggiornaCartelle(): Promise<void> {
+  if (ospitato.OSPITATO) return
+  const desk = cfg.leggi().desktop
+  if (!desk) return
+  try {
+    const cartelle = (await desktopConn.cartelleDiLavoro(desktopConn.radici(desk))).map(c => c.percorso)
+    segnali.impostaCartelleDiLavoro(cartelle)
+    osservatore.impostaCartelleNote(cartelle)
+  } catch { /* senza cartelle: niente commit e niente cartella nel titolo */ }
+}
+
 async function notte(adesso: Date): Promise<boolean> {
   const oggi = fuso.giornoIn(adesso)
   if (store.cursore(CURS.notte) === oggi || fuso.parti(adesso).ora < ORA_NOTTE) return false
-  if (!ospitato.OSPITATO) {
-    const desk = cfg.leggi().desktop
-    if (desk) {
-      try {
-        const cartelle = (await desktopConn.cartelleDiLavoro(desktopConn.radici(desk))).map(c => c.percorso)
-        segnali.impostaCartelleDiLavoro(cartelle)
-        osservatore.impostaCartelleNote(cartelle)
-      } catch { /* senza cartelle: niente commit e niente cartella nel titolo */ }
-    }
-  }
+  await aggiornaCartelle()
   abitudini.ricalcola(adesso)
   ricalcolaFiducia(adesso)
   segnali.pota(adesso)
@@ -411,6 +419,8 @@ export async function giro(adesso = new Date()): Promise<void> {
     const raccolta = segnali.raccogliPosta(adesso)
     const indietro = registroIndietro(raccolta)
     if (!indietro) promuoviLetturaInAttesa()
+    // dopo un avvio la cache delle cartelle è vuota, qualunque cosa dica il cursore della notte
+    if (!segnali.cartelleImpostate()) await aggiornaCartelle()
     await segnali.raccogliCodice(adesso)
     chiudiGiorni(adesso, { indietro })
     // la notte aspetta il registro in pari: righe e fiducia contate su metà posta sarebbero false, e in vigore
@@ -442,6 +452,16 @@ export function dopoLaLettura(partita: string, postaOk: boolean): void {
 export function agendaLetta(e: { viste: segnali.VistaAgenda[]; finestra: { da: string; a: string }; troncato: boolean }): void {
   if (e.troncato || !e.viste) return
   segnali.raccogliAgenda(e.viste, e.finestra)
+}
+
+/**
+ * Da «Va bene» su una riga si conta solo una bozza di documento vera: senza
+ * una consegna (un file consegnato manda la riga per lei, non il documento,
+ * e /documento lo ha già contato col testo tenuto davvero) e senza una mail
+ * pronta (quella la misura P3 in `misure_compiti`, come «bozza.email»).
+ */
+export function contaComeDocumento(c: Pick<Compito, 'risultato' | 'consegna' | 'email'>): boolean {
+  return !!c.risultato && !c.consegna && !c.email
 }
 
 /** Prima che la sua versione sovrascriva la bozza: quanto l'ha ritoccata. */

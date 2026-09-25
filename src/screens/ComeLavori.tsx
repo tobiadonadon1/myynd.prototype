@@ -233,7 +233,7 @@ export function ComeLavori() {
     clearTimeout(v.orologio)
     setTolte(m => { const n = new Map(m); n.delete(a.chiave); return n })
     try { await gemelloApi.abitudine(a.chiave, 'ripristina', undefined, v.stato) }
-    catch { setGuaio(t('Non sono riuscito a toglierla.')); void carica() }
+    catch { setGuaio(t('Non sono riuscito a rimetterla.')); void carica() }
   }
 
   const vive = righe.filter(a => a.stato !== 'superata')

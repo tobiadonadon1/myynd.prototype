@@ -328,6 +328,9 @@ export function impostaCartelleDiLavoro(percorsi: string[]) {
 
 export function cartelleNote(): string[] { return cartelleDiLavoro.get(chi.adesso() ?? '') ?? [] }
 
+/** Se la cache di questo conto è già stata riempita, anche vuota: dopo un avvio non lo è. */
+export function cartelleImpostate(): boolean { return cartelleDiLavoro.has(chi.adesso() ?? '') }
+
 /** Una riga di `git log` col formato di `raccogliCodice`: hash, data, autore, oggetto, trailer. */
 export function leggiCommit(stdout: string): { hash: string; quando: string; autore: string; messaggio: string; agente: boolean }[] {
   return stdout.split('\x1e').map(r => r.replace(/^\n+/, '')).filter(Boolean).map(r => {

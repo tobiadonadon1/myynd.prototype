@@ -259,6 +259,9 @@ if (ricetta) {
     ]
     const docs: Record<string, unknown>[] = []
     let n = 1000
+    // una risposta non può stare nel futuro: quella della mattina dopo a una mail di ieri sera, se la scena
+    // parte prima di quell'ora, non c'è ancora (e la mail resta, com'è vero, senza risposta)
+    const tettoRisposte = Date.now() - 60_000
     for (let d = giorni; d >= 1; d--) {
       for (const m of mittenti) {
         if (caso() >= m.alGiorno) continue
@@ -274,6 +277,7 @@ if (ricetta) {
         })
         if (!m.massa && caso() < m.risponde) {
           const dopo = sera ? alle(d - 1, 9, 10 + Math.floor(caso() * 90)) : new Date(quando.getTime() + m.oreRisposta * 3_600_000 * (0.6 + caso() * 0.8))
+          if (dopo.getTime() > tettoRisposte) continue
           docs.push({
             id: `posta:Sent:${n}`, fonte: 'posta', tipo: 'email', titolo: `Re: ${titolo}`, corpo: `Hi ${m.nome.split(' ')[0]}, sure. Alex`,
             autore: 'Alex <alex@acme.example>', percorso: 'Sent', gruppo: 'posta', quando: dopo.toISOString(), inviato: true,

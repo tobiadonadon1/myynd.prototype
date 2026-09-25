@@ -162,10 +162,15 @@ export function nonValgonoPiu(n: number): string {
   return `${t('Non valgono più')} (${n})`
 }
 
+/** «12 set» / "Sep 12": la stessa regola delle ore, così la pagina ha una convenzione sola (en-GB scriverebbe «12 Sept» accanto a «1 PM»). */
+function giorno(d: Date): string {
+  return d.toLocaleDateString(en() ? 'en-US' : loc(), { day: 'numeric', month: 'short' })
+}
+
 /** «fino al 12 set» / "until Sep 12". */
 export function finoAl(iso: string): string {
   const d = new Date(iso)
-  const data = Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(loc(), { day: 'numeric', month: 'short' })
+  const data = Number.isNaN(d.getTime()) ? iso : giorno(d)
   return `${t('fino al')} ${data}`
 }
 
@@ -182,6 +187,6 @@ export function inPausaFino(iso: string): string {
 /** «12 set · Pilot scope»: un esempio del perché. */
 export function esempio(e: { quando: string; testo: string }): string {
   const d = new Date(e.quando)
-  const data = Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(loc(), { day: 'numeric', month: 'short' })
+  const data = Number.isNaN(d.getTime()) ? '' : giorno(d)
   return [data, e.testo].filter(Boolean).join(' · ')
 }

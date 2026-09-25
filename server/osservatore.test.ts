@@ -147,6 +147,32 @@ test('i titoli privati, segreti e di accesso diventano null; quelli normali rest
   })
 })
 
+test('un titolo tagliato dal guscio a 160 caratteri con un’emoji resta una sessione intera: gli stessi limiti contano i caratteri, non le unità UTF-16', { skip: !existsSync(GUSCIO) }, async () => {
+  const guscio = await import('../desktop/sessioni.ts')
+  // un tweet lungo con la nota musicale davanti: il guscio lo taglia a 160 caratteri, che sono 161 unità
+  const lungo = '🎵 ' + 'Northwind pricing thread, the long version with every detail spelled out for the team '.repeat(3)
+  const titolo = guscio.pulisciTitolo(lungo)!
+  assert.equal(Array.from(titolo).length, guscio.TITOLO_MASSIMO)
+  assert.ok(titolo.length > guscio.TITOLO_MASSIMO, 'la prova vale solo se il titolo ha un carattere astrale')
+  const app = '🎵'.repeat(guscio.APP_MASSIMA)
+  chi.dentro(anna, () => {
+    store.default.exec('DELETE FROM sessioni_app')
+    const n = oss.scriviSessioni([
+      sessione({ bundle: 'com.google.Chrome', app: 'Google Chrome', titolo }),
+      sessione({ bundle: 'com.google.Chrome', app, titolo: null, secondi: 30 }),
+      // più lungo del limite anche in caratteri: si taglia, e i secondi restano
+      sessione({ bundle: 'com.google.Chrome', app: 'Google Chrome', titolo: '🎵'.repeat(300), secondi: 40 }),
+      sessione({ titolo: 'Inbox (3) - Gmail' })
+    ], ADESSO)
+    assert.equal(n, 4, 'nessuna sessione cade per il conto dei caratteri')
+    const r = righe()
+    assert.deepEqual(r.map(x => x.secondi), [270, 30, 40, 270])
+    assert.equal(r[0]!.titolo, titolo, 'il titolo del guscio arriva intero')
+    assert.equal(Array.from(r[2]!.titolo!).length, guscio.TITOLO_MASSIMO)
+    assert.equal(Array.from((store.default.prepare('SELECT app FROM sessioni_app ORDER BY id').all() as { app: string }[])[1]!.app).length, guscio.APP_MASSIMA)
+  })
+})
+
 test('con i titoli spenti ogni titolo è null', () => {
   chi.dentro(anna, () => {
     store.default.exec('DELETE FROM sessioni_app')

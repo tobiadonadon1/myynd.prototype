@@ -3867,8 +3867,8 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   const stato = req.body?.stato === 'lasciato' ? 'lasciato' : 'fatto'
   const esito = String(req.body?.esito ?? '').trim()
   const tenuto = String(req.body?.tenuto ?? '')
-  // quanto l'ha ritoccata, prima che la sua versione sovrascriva la bozza (P1B)
-  if (tenuto.trim() && c.risultato) { try { gemello.bozzaTenuta(c, tenuto.trim()) } catch { /* la misura non ferma la chiusura */ } }
+  // quanto l'ha ritoccata, prima che la sua versione sovrascriva la bozza (P1B): solo su un documento vero
+  if (tenuto.trim() && gemello.contaComeDocumento(c)) { try { gemello.bozzaTenuta(c, tenuto.trim()) } catch { /* la misura non ferma la chiusura */ } }
 
   // Quello che hai tenuto davvero è la cosa più preziosa che passa di qui, e
   // finiva soltanto dentro una convinzione: il testo com'è uscito non lo
