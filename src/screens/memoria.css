@@ -50,9 +50,12 @@
 .mem-card-gesti{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:2px}
 .mem-card-obiettivo{display:flex;align-items:center;min-width:0;padding-left:31px}
 .mem-card-dentro{padding-left:31px;font-size:11.5px;line-height:1.4;color:rgba(var(--inchiostro-rgb),.62);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mem-card-piede{display:flex;align-items:center;gap:9px;min-width:0;margin-top:auto;padding-top:10px;border-top:1px solid rgba(var(--inchiostro-rgb),.07)}
+.mem-card-piede{display:flex;flex-wrap:wrap;align-items:center;gap:6px 9px;min-width:0;margin-top:auto;padding-top:10px;border-top:1px solid rgba(var(--inchiostro-rgb),.07)}
 .mem-card-piede.nudo{padding-top:2px;border-top:0}
-.mem-conto{flex:1;min-width:0;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* base fissa e non 0: sotto misura la fila del piede porta il conteggio su
+   una riga tutta sua (flex-wrap la sposta intera, mai a metà parola) invece
+   di tagliarlo con l'ellissi contro i tre bottoni dello stato */
+.mem-conto{flex:1 1 130px;min-width:130px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mem-apri{flex:none;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--rame-testo);opacity:0;transition:opacity .15s}
 .mem-progetto:hover .mem-apri,.mem-progetto:focus-within .mem-apri{opacity:1}
 .mem-guaio{font-size:12px;line-height:1.5;color:var(--rame-testo);overflow-wrap:anywhere}
