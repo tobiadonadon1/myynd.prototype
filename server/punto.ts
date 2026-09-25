@@ -28,6 +28,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { VASSOIO_GIORNI } from './verso.ts'
 import { cartella, lingua, nellaLingua } from './config.ts'
 import { attesaDi, chiedi, collegato, estraiJSON } from './modello.ts'
 import { linguaSbagliata, senzaTrattini, soloInLingua } from './testo.ts'
@@ -1634,6 +1635,8 @@ export async function avvia(frase: string): Promise<{ ok: true; id: string; nome
   const detta = frase.trim()
   if (!detta) throw new Error('Dimmi in una frase cosa dovrebbe fare.')
   const ricetta = await automazioni.daUnaFrase(detta)
+  // nasce accesa: comincia i suoi quattordici giorni nel vassoio di prova (P6)
+  store.apriVassoio(ricetta.id, new Date(Date.now() + VASSOIO_GIORNI * 86_400_000).toISOString())
   const a = leggiArchivio()
   a.avviate = [...(a.avviate ?? []), detta].slice(-40)
   scriviArchivio(a)

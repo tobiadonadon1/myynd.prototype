@@ -108,3 +108,17 @@ export function vietato(cosa: string): void {
 export function eChiusa(e: unknown): boolean {
   return !!e && typeof e === 'object' && (e as { codice?: unknown }).codice === 'prova-chiusa'
 }
+
+/**
+ * Un errore dell'account Claude dentro la prova: si segna, così la prova sa
+ * fermarsi «occupato» invece di chiamarlo un guaio suo.
+ */
+export function dallAccount(e: unknown): Error {
+  const x = e instanceof Error ? e : new Error(String(e))
+  ;(x as Error & { account?: boolean }).account = true
+  return x
+}
+
+export function eDellAccount(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { account?: unknown }).account === true
+}

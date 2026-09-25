@@ -24,6 +24,7 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { cartella, leggi, nellaLingua , lingua as cfgLingua } from './config.ts'
 import * as ricettario from './ricettario.ts'
 import { chiediJSON, collegato } from './modello.ts'
@@ -38,6 +39,7 @@ import { classificaAttenzione } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
 import { contestoOperativo } from './memoria.ts'
 import * as progetti from './progetti.ts'
+import { VERSO_LISTA, VERSO_VASSOIO, VASSOIO_GIORNI, type Verso } from './verso.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 
 // — la forma di una ricetta —
@@ -634,7 +636,7 @@ export function materialeRisposte(a: Automazione, docs: store.Documento[], adess
   })
 }
 
-function materiale(a: Automazione, s: store.StatoAutomazione | null, adesso = Date.now()) {
+function materiale(a: Automazione, s: store.StatoAutomazione | null, adesso = Date.now(), verso: Verso = VERSO_LISTA) {
   const limite = Math.min(Math.max(a.guarda.limite ?? 8, 1), 20)
   // Filter before taking the display/model limit, so newsletters cannot crowd out real requests.
   const pescata = richiesteDirette(a) || a.suggerita ? 200 : limite
@@ -655,7 +657,7 @@ function materiale(a: Automazione, s: store.StatoAutomazione | null, adesso = Da
     // da dove ha guardato l'ultima volta che ce l'ha fatta — non da quando è
     // partita l'ultima volta: un giro fallito non deve nascondere niente
     const dal = s?.vista ?? s?.ultima ?? new Date(adesso - 7 * 86_400_000).toISOString()
-    const nuovi = materialeRisposte(a, store.appenaArrivati(dal, pescata * 3)
+    const nuovi = materialeRisposte(a, verso.arrivati(dal, pescata * 3)
       .filter(d => !dentro || dentro.includes(d.fonte)), adesso)
     if (!a.guarda.cerca) return nuovi.slice(0, limite)
     // sia nuovi sia pertinenti: l'intersezione, che è quasi sempre quello che
@@ -734,7 +736,7 @@ async function cernita(a: Automazione, docs: store.Documento[]): Promise<store.P
   if (!solaPosta.length) return null
 
   const cestino = a.proponi === 'posta.cestina'
-  const out = await chiediJSON<{ voci: { id: string; perche: string }[] }>({
+  const out = await ferri.chiediJSON({
     severo: true,
     lavoro: 'cernita',
     max_tokens: 2000,
@@ -764,7 +766,7 @@ async function cernita(a: Automazione, docs: store.Documento[]): Promise<store.P
         inizio: d.corpo.slice(0, 400)
       })))
     }]
-  })
+  }) as { voci?: { id: string; perche: string }[] } | null
   if (!out?.voci?.length) return null
 
   const per = new Map(solaPosta.map(d => [d.id, d]))
@@ -889,9 +891,10 @@ async function faiPerDocumento(
   s: store.StatoAutomazione | null,
   docs: store.Documento[],
   opzioni: { aMano?: boolean; adesso?: Date },
-  risultatoFlusso?: string
+  risultatoFlusso?: string,
+  verso: Verso = VERSO_LISTA
 ): Promise<'fatta' | 'niente'> {
-  const gia = store.docsConRiga(docs.map(d => d.id), `auto:${a.id}`)
+  const gia = verso.docsConRiga(docs.map(d => d.id), `auto:${a.id}`)
   let candidati = docs.filter(d => !gia.has(d.id))
   /*
    * Prima di scomodare il modello: chi aspetta davvero una risposta?
@@ -910,7 +913,7 @@ async function faiPerDocumento(
    * nessun titolo per toglierle il materiale.
    */
   if (richiesteDirette(a) || a.suggerita) {
-    const aspettano = await giudizi.attenzione(candidati, 20)
+    const aspettano = await verso.attenzione(candidati, 20)
     if (aspettano.size) {
       candidati = candidati.filter(d => {
         const g = aspettano.get(d.id)
@@ -921,7 +924,7 @@ async function faiPerDocumento(
   // tutto già in lista, o niente che aspetti davvero: non si chiama nessun
   // modello per non dire niente
   if (!candidati.length) {
-    store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+    verso.girata(a.id, 'niente', undefined, docs.length)
     return 'niente'
   }
 
@@ -932,7 +935,7 @@ async function faiPerDocumento(
     scelte = scelte.filter(r => ancora.has(r.doc))
   }
   if (!scelte?.length) {
-    store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+    verso.girata(a.id, 'niente', undefined, docs.length)
     return 'niente'
   }
 
@@ -943,13 +946,13 @@ async function faiPerDocumento(
   const concessi = { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null,
     origine: 'automazione' as const, ...selezioneCompito(a) }
   const giorno = giornoDi(opzioni.adesso ?? new Date())
-  let bozze = bozzeOggi(s, opzioni.adesso)
+  let bozze = verso.bozzeOggi(s, opzioni.adesso)
   let lasciate = 0
 
   for (const r of scelte) {
     const d = perId.get(r.doc)!
     const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    store.scriviCompito({
+    verso.riga({
       id,
       testo: r.testo,
       // la stessa forma della nota di sempre — l'istruzione, poi «Da guardare» —
@@ -960,11 +963,11 @@ async function faiPerDocumento(
       origine: `auto:${a.id}`,
       doc: d.id,
       attrezzi: concessi
-    })
+    }, [d.id])
     if (!scrive) continue
     if (opzioni.aMano || bozze < BOZZE_AL_GIORNO) {
-      compiti.affida(id, modo, false)
-      bozze = store.segnaBozza(a.id, giorno)
+      verso.affida(id, modo)
+      bozze = verso.segnaBozza(a.id, giorno)
     } else {
       lasciate++
     }
@@ -976,12 +979,12 @@ async function faiPerDocumento(
     )
   }
 
-  store.automazioneGirata(a.id, 'fatta', undefined, docs.length, risultatoFlusso)
-  store.registraAzione({
+  verso.girata(a.id, 'fatta', undefined, docs.length, risultatoFlusso)
+  verso.azione({
     tipo: 'automazione', cosa: a.nome, esito: 'fatta',
     dettaglio: `${scelte.length} ${scelte.length === 1 ? 'riga' : 'righe'} da ${docs.length} document${docs.length === 1 ? 'o' : 'i'}`
   })
-  compiti.annunciaCambio()
+  verso.annuncia()
   return 'fatta'
 }
 
@@ -1047,17 +1050,36 @@ export async function fai(ricetta: Automazione, opzioni: { aMano?: boolean; ades
   const chiave = `${cartella()}:${ricetta.id}`
   if (inCorso.has(chiave)) return 'gia'
   inCorso.add(chiave)
-  try { return await faiInterna(ricetta, opzioni) }
+  try { return await faiInterna(ricetta, opzioni, versoPer(ricetta.id, opzioni.adesso ?? new Date())) }
   finally { inCorso.delete(chiave) }
 }
+
+/**
+ * Dove va un giro dal vivo (P6): nel vassoio di prova nei suoi primi quattordici
+ * giorni, in lista dopo. Una che non ha mai avuto un vassoio (accesa prima di
+ * questa versione, o accesa di serie) ci passa sopra: la data nel passato dice
+ * «già finito», e non ci entra mai più.
+ */
+function versoPer(id: string, adesso: Date): Verso {
+  if (store.nelVassoio(id, adesso)) return VERSO_VASSOIO
+  if (!store.statoAutomazione(id)?.vassoio) store.nonnoVassoio(id)
+  return VERSO_LISTA
+}
+
+/** Il giro senza la guardia di `inCorso`, con il verso che si vuole: per la prova (P6). */
+export function faiCon(ricetta: Automazione, verso: Verso, opzioni: { aMano?: boolean; adesso?: Date } = {}) {
+  return faiInterna(ricetta, opzioni, verso)
+}
+
 async function faiInterna(
   ricetta: Automazione,
-  opzioni: { aMano?: boolean; adesso?: Date } = {}
+  opzioni: { aMano?: boolean; adesso?: Date } = {},
+  verso: Verso = VERSO_LISTA
 ): Promise<'fatta' | 'niente' | 'gia' | 'saltata'> {
   // da qui in giù si lavora sulla ricetta nella lingua dell'installazione: il
   // testo che si scrive adesso lo leggerà una persona, e resta scritto
   const a = { ...nella(ricetta) }
-  const s = store.statoAutomazione(a.id)
+  const s = verso.stato(a.id)
 
   /*
    * Già una viva da questa automazione: non se ne aggiunge un'altra sopra.
@@ -1074,8 +1096,8 @@ async function faiInterna(
   // e sta in `faiPerDocumento`: la riga di Rossi non deve fermare quella di
   // Bianchi.
   const perDocumento = !!a.metti.perDocumento
-  if (!perDocumento && store.compitoVivoDa(a.id)) {
-    store.automazioneRimandata(a.id)
+  if (!perDocumento && verso.vivo(a.id)) {
+    verso.rimandata(a.id)
     return 'gia'
   }
 
@@ -1096,24 +1118,24 @@ async function faiInterna(
   const scrive = (faScrivere(modoScelto) && !a.proponi) || !!a.passi?.length
   // una riga per documento non si salta: le righe nascono lo stesso, e solo
   // la bozza aspetta domani — vedi `faiPerDocumento`
-  if (scrive && (!perDocumento || !!a.passi?.length) && !opzioni.aMano && bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
-    store.automazioneSaltata(a.id)
+  if (scrive && (!perDocumento || !!a.passi?.length) && !opzioni.aMano && verso.bozzeOggi(s, opzioni.adesso) >= BOZZE_AL_GIORNO) {
+    verso.saltata(a.id)
     console.log(`myynd · automazione «${a.nome}»: tetto del giorno raggiunto (${BOZZE_AL_GIORNO} bozze), riprende domani`)
     return 'saltata'
   }
 
-  const docs = materiale(a, s, opzioni.adesso?.getTime())
+  const docs = materiale(a, s, opzioni.adesso?.getTime(), verso)
   if (!docs.length) {
     // niente da guardare non è un fallimento: è la risposta normale, quasi
     // sempre. Si segna comunque, così l'elenco può dire «girata, niente da fare»
-    store.automazioneGirata(a.id, 'niente', undefined, 0)
+    verso.girata(a.id, 'niente', undefined, 0)
     return 'niente'
   }
 
   let risultatoFlusso: string | undefined
   if (a.passi?.length) {
     if (!ferri.collegato()) throw new Error('Connect an AI provider to run workflow steps.')
-    store.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
+    verso.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
     const risultato = await eseguiPassi(a.passi,
       docs.slice(0, 8).map(d => `[${d.id}] ${d.titolo}\nSource: ${d.fonte}; date: ${d.quando ?? 'unknown'}\n${d.corpo.slice(0, 3000)}`).join('\n\n'),
       async (passo, input) => {
@@ -1130,14 +1152,14 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
         return r as { continua: boolean; testo: string }
       })
     if (risultato === null) {
-      store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+      verso.girata(a.id, 'niente', undefined, docs.length)
       return 'niente'
     }
     risultatoFlusso = risultato
     a.fai = `${a.fai}\n\nWorkflow result:\n${risultato}`
   }
 
-  if (perDocumento) return faiPerDocumento(a, s, docs, opzioni, risultatoFlusso)
+  if (perDocumento) return faiPerDocumento(a, s, docs, opzioni, risultatoFlusso, verso)
 
   // Quelle che propongono scelgono *prima* di scrivere la riga. Se non c'è
   // niente da mettere via non deve comparire nessuna riga: «ho guardato e non
@@ -1149,7 +1171,7 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
     // diverso da quello di sopra, e la storia deve poterli distinguere —
     // «non c'era niente da leggere» e «ho letto e non c'era niente da fare»
     // si riparano in due modi opposti
-    store.automazioneGirata(a.id, 'niente', undefined, docs.length)
+    verso.girata(a.id, 'niente', undefined, docs.length)
     return 'niente'
   }
 
@@ -1162,7 +1184,7 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
     ...docs.slice(0, 8).map(d => `— [${d.id}] ${d.titolo}`)
   ].join('\n')
 
-  store.scriviCompito({
+  verso.riga({
     id,
     testo: a.nome,
     nota,
@@ -1177,28 +1199,27 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
     // quello che vale è quello che era stato concesso quando la riga è nata.
     attrezzi: { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null,
       origine: 'automazione' as const, ...selezioneCompito(a) }
-  })
+  }, docs.slice(0, 8).map(d => d.id))
 
   if (scelti) {
     // la riga nasce già pronta: non c'è niente da far fare al modello dopo, il
     // lavoro è fatto e quello che manca è il dito di una persona
-    store.proponi(id, scelti, riassunto(scelti))
-    compiti.annunciaPronto(id)
+    verso.proponi(id, scelti, riassunto(scelti))
   } else {
     const modo = a.metti.modo ?? 'io'
     if (faScrivere(modo)) {
-      compiti.affida(id, modo, false)
+      verso.affida(id, modo)
       // il tetto del giorno si conta qui, dove la bozza parte davvero
-      if (!a.passi?.length) store.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
+      if (!a.passi?.length) verso.segnaBozza(a.id, giornoDi(opzioni.adesso ?? new Date()))
     }
   }
 
-  store.automazioneGirata(a.id, 'fatta', undefined, docs.length, risultatoFlusso)
-  store.registraAzione({
+  verso.girata(a.id, 'fatta', undefined, docs.length, risultatoFlusso)
+  verso.azione({
     tipo: 'automazione', cosa: a.nome, compito: id, esito: 'fatta',
     dettaglio: `${docs.length} document${docs.length === 1 ? 'o' : 'i'}`
   })
-  compiti.annunciaCambio()
+  verso.annuncia()
   return 'fatta'
 }
 
@@ -1661,8 +1682,9 @@ quello che ti ha detto di cambiare e nient'altro, e ridammi la ricetta intera.`,
  * non è un aiuto: è una cosa di cui non ti puoi fidare. Qui lo chiedi, e quello
  * che torna resta modificabile campo per campo un secondo dopo.
  */
-export async function ottimizza(id: string): Promise<Automazione> {
-  return riscrivi(id, MIGLIORA)
+export async function ottimizza(id: string, esempi?: string): Promise<Automazione> {
+  // quello che la prova ha trovato giusto e sbagliato (P6), se c'è
+  return riscrivi(id, esempi?.trim() ? `${MIGLIORA}\n\n${esempi.trim()}` : MIGLIORA)
 }
 
 const MIGLIORA = `Guardala come la guarderebbe qualcuno che deve farla funzionare davvero, e
@@ -1885,9 +1907,28 @@ export type Vista = Automazione & {
   inRitardo: boolean
   /** Le ultime volte, per la strisciata sulla scheda. */
   storia: store.Giro[]
+  /** Fino a quando è nel vassoio di prova (P6). */
+  vassoio: string | null
+  /** Accesa e fuori dal vassoio: il bottone la fa girare dal vivo. */
+  dalVivo: boolean
+  /** Quanti risultati aspettano nel suo vassoio. */
+  inVassoio: number
+  /** L'ultima prova: la aggiunge chi conosce collaudo.ts (index.ts). */
+  prova?: unknown
 }
 
-export const accendi = store.accendiAutomazione
+let arricchita: ((v: Vista) => Vista) | null = null
+/** Chi conosce la prova la aggiunge alla scheda (P6): automazioni.ts non importa collaudo.ts. */
+export function arricchisci(f: (v: Vista) => Vista) { arricchita = f }
+
+/**
+ * Accesa o spenta. Accenderne una apre i suoi quattordici giorni nel vassoio di
+ * prova (P6), una volta sola: la seconda accensione non li riapre.
+ */
+export function accendi(id: string, accesa: boolean) {
+  store.accendiAutomazione(id, accesa)
+  if (accesa) store.apriVassoio(id, new Date(Date.now() + VASSOIO_GIORNI * 86_400_000).toISOString())
+}
 
 export function elenco(): Vista[] {
   // la data di nascita anche a chi apre solo la schermata: senza, una
@@ -1896,6 +1937,8 @@ export function elenco(): Vista[] {
   for (const a of ricette()) store.vediAutomazione(a.id)
   const stati = store.statiAutomazioni()
   const tolte = store.automazioniTolte()
+  const inAttesa = new Map<string, number>()
+  for (const e of store.vassoioInAttesa()) inAttesa.set(e.automazione, (inAttesa.get(e.automazione) ?? 0) + 1)
   return ricette().filter(r => !tolte.has(r.id)).map(r => {
     const a = nella(r)
     const s = stati[a.id]
@@ -1912,7 +1955,77 @@ export function elenco(): Vista[] {
       attrezzi: attrezzi.ripulisci(a.attrezzi),
       salute: salute(a, s ?? null),
       inRitardo: inRitardo(a, s ?? null),
-      storia: store.storiaDi(s)
+      storia: store.storiaDi(s),
+      vassoio: s?.vassoio ?? null,
+      dalVivo: !a.spenta && !s?.spenta && !store.nelVassoio(a.id),
+      inVassoio: inAttesa.get(a.id) ?? 0
     }
-  })
+  }).map(v => arricchita ? arricchita(v) : v)
+}
+
+// — P6: le volte di una ricetta nel passato, e la sua impronta —
+
+/**
+ * Le volte in cui una ricetta avrebbe girato fra due istanti (P6).
+ *
+ * A orologio: si chiede a `scadenza`, la sola definizione di «tocca a lei», un
+ * turno dopo l'altro, come se fosse accesa (una in pausa ha i suoi turni lo
+ * stesso: è quella che si vuole provare). All'arrivo: un giorno con documenti
+ * nel suo recinto è una volta, spezzata a pezzi di `limite` documenti, e ogni
+ * pezzo finisce al suo documento più nuovo.
+ */
+export function occorrenze(a: Automazione, da: Date, al: Date): { al: Date; dal: Date }[] {
+  const fuori: { al: Date; dal: Date }[] = []
+  if ('quandoArriva' in a.quando) {
+    const limite = Math.min(Math.max(a.guarda.limite ?? 8, 1), 20)
+    const dentro = fontiDi(a)
+    const docs = store.arrivatiFra(da.toISOString(), al.toISOString(), 5000)
+      .filter(d => d.quando && (!dentro || dentro.includes(d.fonte)))
+      .sort((x, y) => (x.quando ?? '').localeCompare(y.quando ?? ''))
+    const perGiorno = new Map<string, store.Documento[]>()
+    for (const d of docs) {
+      const g = giornoIn(new Date(d.quando!))
+      perGiorno.set(g, [...(perGiorno.get(g) ?? []), d])
+    }
+    let prima = da
+    for (const giorno of perGiorno.values()) {
+      for (let i = 0; i < giorno.length; i += limite) {
+        const pezzo = giorno.slice(i, i + limite)
+        const fine = new Date(pezzo[pezzo.length - 1].quando!)
+        fuori.push({ dal: prima, al: fine })
+        prima = fine
+      }
+    }
+    return fuori
+  }
+  let prev: Date | null = null
+  for (let n = 0; n < 400; n++) {
+    const s: store.StatoAutomazione = {
+      id: a.id, spenta: 0, quante: 0, esito: null, guaio: null,
+      ultima: prev ? prev.toISOString() : null, dal: da.toISOString()
+    }
+    const t = scadenza({ ...a, spenta: undefined }, s, prev ?? da)
+    if (!t || t > al) break
+    fuori.push({ dal: prev ?? da, al: t })
+    prev = t
+  }
+  return fuori
+}
+
+/**
+ * L'impronta di una ricetta (P6): cambia quando cambia quello che fa, non
+ * quando cambia il nome o la lingua dell'app. Il passo di pertinenza di una
+ * ricetta suggerita è scritto nella lingua di adesso: conta solo il suo tipo.
+ */
+export function impronta(r: Automazione): string {
+  const x = {
+    fai: r.fai, enFai: r.en?.fai ?? null,
+    cerca: r.guarda?.cerca ?? null, enCerca: r.en?.cerca ?? null,
+    soloNuovi: !!r.guarda?.soloNuovi, limite: r.guarda?.limite ?? null,
+    quando: r.quando, metti: r.metti,
+    attrezzi: [...attrezzi.ripulisci(r.attrezzi)].sort(),
+    passi: (r.passi ?? []).map(p => r.suggerita ? { tipo: p.tipo } : { tipo: p.tipo, testo: p.testo }),
+    proponi: r.proponi ?? null, selezione: r.selezione ?? null, cartella: r.cartella ?? null
+  }
+  return createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 32)
 }

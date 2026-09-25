@@ -32,7 +32,7 @@ import { documentoVero } from './veri.ts'
 import { attendibile, carta, cartaPerContesto, salvaProgettiEspliciti } from './memoria.ts'
 import { fuoco } from './timone.ts'
 import * as progetti from './progetti.ts'
-import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
+import { convinzioni, feedGiaVisto, feedAperto, compitiPerIlModello, docsConRiga, docsNelVassoio, docsSulFeed, mittentiScartati, indirizzoConosciuto } from './store.ts'
 /**
  * La lista, per la chat che la tocca.
  *
@@ -1665,7 +1665,8 @@ export async function rispondiInStreaming(
       return { testo, fonti: fontiCitate(testo, docs) }
     } catch (e) {
       // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
-      if (delTetto(e) || provaChiusa.inProva()) throw e
+      if (delTetto(e)) throw e
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
@@ -2054,7 +2055,8 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const ids = candidati.map(d => d.id)
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
-  const inLista = docsConRiga(ids)
+  // una mail che aspetta nel vassoio di prova (P6) non è anche una carta
+  const inLista = new Set([...docsConRiga(ids), ...docsNelVassoio(ids)])
   const ignorati = docsIgnoratiDalFeed(candidati)
   // e a chi ha già risposto: nel filo, dopo la mail, o per «risponde»
   const risposti = rispostiPerId(candidati.map(d => d.messageId ?? '').filter(Boolean))
@@ -3140,7 +3142,8 @@ export async function svolgi(
       })
       return { ...risultatoVerificato(uscito), fatti }
     } catch (e) {
-      if (delTetto(e) || provaChiusa.inProva()) throw e
+      if (delTetto(e)) throw e
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
       // senza una chiave di riserva l'errore è la risposta: il compito torna

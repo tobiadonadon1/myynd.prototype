@@ -1162,7 +1162,7 @@ export async function chiedi(o: {
       // di riserva, che costerebbe denaro per scavalcare una scelta sua
       if (tettoDiOggi.delTetto(e)) throw tradotto(e)
       // nella prova (P6) niente riposo e niente chiave: la prova si ferma «occupato»
-      if (provaChiusa.inProva()) throw e
+      if (provaChiusa.inProva()) throw provaChiusa.dallAccount(e)
       abbonamento.nonRisponde()
       console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}», passo alla chiave:`,
         e instanceof Error ? e.message : e)
