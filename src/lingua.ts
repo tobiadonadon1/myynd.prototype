@@ -3037,6 +3037,39 @@ const EN: Record<string, string> = {
   // — P1A: fine —
 
   // — P1B: inizio —
+  // la Memoria: «Come lavori» diventa la pagina delle righe osservate; i cinque blocchi sono il ritratto
+  'Il tuo ritratto': 'Your portrait',
+  'Non vedo la posta che mandi.': 'I can\'t see the mail you send.',
+  'giusta': 'right',
+  'sbagliata': 'wrong',
+  'ancora aperta': 'still open',
+  'non conta': 'doesn\'t count',
+  'Non valgono più': 'No longer true',
+  'Non sono riuscito a salvarla.': 'I couldn\'t save it.',
+  'Tolta.': 'Removed.',
+  'Ieri · ancora aperte': 'Yesterday · still open',
+  // le preferenze: l'osservatore del Mac
+  'Osserva come lavoro': 'Watch how I work',
+  'Lo usa un altro account su questo Mac': 'Another account on this Mac is using it',
+  'Lo usa un altro account su questo Mac.': 'Another account on this Mac is using it.',
+  'Riprendi a guardare': 'Resume watching',
+  'Pausa per un’ora': 'Pause watching for an hour',
+  'Anche i titoli delle finestre': 'Window titles too',
+  'I titoli aspettano il permesso': 'Window titles need permission',
+  'Myynd sullo schermo': 'Myynd on screen',
+  'Cancella le osservazioni': 'Delete observations',
+  'Cancella': 'Delete',
+  // gli errori del server (server/abitudini.ts, server/osservatore.ts)
+  'Azione sconosciuta.': 'Unknown action.',
+  'Scrivila in poche parole.': 'Write it in a few words.',
+  'È passato troppo tempo per annullare.': 'Too much time has passed to undo.',
+  'Quanto deve durare la pausa?': 'How long should the pause last?',
+  // la prova sul passato (server/gemello-prova.ts): frasi da terminale, tradotte per la regola
+  'Serve --dati con una copia dei dati: mai la cartella vera.': 'You need --dati with a copy of the data: never the live folder.',
+  'La copia in --dati non esiste.': 'The copy in --dati does not exist.',
+  'Serve --conto.': 'You need --conto.',
+  'Non trovo quel conto nella copia.': 'I cannot find that account in the copy.',
+  'La prova del gemello non usa la rete.': 'The twin backtest does not use the network.',
   // — P1B: fine —
 
   // — P2: inizio —

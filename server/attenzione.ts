@@ -28,12 +28,25 @@ function pertinente(d: store.Documento, adesso: number) {
  * nasceva senza progetto.
  */
 export function progettoDelTesto(testo: string): string | null {
+  return cercatoreDiProgetti()(testo)
+}
+
+/**
+ * Lo stesso cercatore, con i progetti e gli altri nomi letti una volta sola:
+ * per chi lo chiede migliaia di volte di fila (il registro dei segnali, che
+ * ripassa tutta la posta), dove rileggere i progetti a ogni riga costava più
+ * della riga.
+ */
+export function cercatoreDiProgetti(): (testo: string) => string | null {
   const attivi = [...progetti.elenco('attivo')].sort((a, b) => b.nome.length - a.nome.length)
-  const trovato = attivi.find(p => nominaAmbito(testo, p.nome))?.id
-  if (trovato) return trovato
   // gli altri nomi: quelli scritti nella Memoria e quelli fra parentesi nel riferimento
-  for (const [nome, id] of riferimento.alias()) if (nominaAmbito(testo, nome)) return id
-  return null
+  const alias = [...riferimento.alias()]
+  return testo => {
+    const trovato = attivi.find(p => nominaAmbito(testo, p.nome))?.id
+    if (trovato) return trovato
+    for (const [nome, id] of alias) if (nominaAmbito(testo, nome)) return id
+    return null
+  }
 }
 
 /** Una carta come la legge la pagina: la riga del feed più quello che si calcola a ogni caricamento. */

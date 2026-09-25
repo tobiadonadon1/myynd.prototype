@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { cartella } from './config.ts'
 import { documentoImpaginato, strutturaDocumento, type StileDocumento } from './document-layout.ts'
 import { OSPITATO } from './ospitato.ts'
+import { openInProva } from './senza-open.ts'
 
 export type DocumentoNativo = { app: 'Pages' | 'TextEdit'; titolo: string; testo: string; stile?: StileDocumento }
 export type DocumentoCreato = { app: DocumentoNativo['app']; titolo: string; percorso: string; verificato: true; caratteri: number; desktop?: string; anteprima?: string; pagine?: number; immagini?: string[]; stile?: string }
@@ -225,7 +226,9 @@ export async function apriDocumento(consegna: Pick<DocumentoCreato, 'app' | 'per
   const desktopRoot = join(homedir(), 'Desktop', 'Myynd')
   const allowedDesktop = !preview && consegna.desktop && existsSync(desktopRoot) && !lstatSync(desktopRoot).isSymbolicLink() && file.startsWith(realpathSync(desktopRoot) + sep)
   if (!app || (!file.startsWith(root + sep) && !allowedDesktop) || !file.endsWith(ext)) throw new Error('The saved document is outside this account’s deliverables folder.')
-  await new Promise<void>((resolve, reject) => execFile('/usr/bin/open', preview ? [file] : ['-b', app, file], { timeout: 15_000 }, error => error ? reject(new Error('The document could not be opened.')) : resolve()))
+  const argomenti = preview ? [file] : ['-b', app, file]
+  if (openInProva('documento', argomenti)) return
+  await new Promise<void>((resolve, reject) => execFile('/usr/bin/open', argomenti, { timeout: 15_000 }, error => error ? reject(new Error('The document could not be opened.')) : resolve()))
 }
 
 /** Render the exported Pages PDF, not a separate approximation of the layout. */

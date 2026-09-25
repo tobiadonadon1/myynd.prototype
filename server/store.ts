@@ -1502,8 +1502,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => {
     colonna(d, 'compiti', 'mandata', 'TEXT')
     d.exec('CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)')
-  }
-
+  },
+  // 64 → 65 · P1B · chi ha invitato a un'occorrenza dell'agenda: serve alla riga «gli inviti di X li rifiuti».
+  d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT')
 ]
 
 /**
@@ -1607,7 +1608,8 @@ const COLONNE: Record<string, [string, string][]> = {
   chat: [['progetto', 'TEXT'], ['iniziativa', 'TEXT']],
   messaggi: [['verifica', 'TEXT']],
   notizie: [['scartata', 'TEXT'], ['importante', 'INTEGER NOT NULL DEFAULT 0'], ['interesse', 'REAL']],
-  progetti: [['colore', 'TEXT'], ['alias', 'TEXT'], ['genitore', 'TEXT'], ['priorita', 'TEXT']]
+  progetti: [['colore', 'TEXT'], ['alias', 'TEXT'], ['genitore', 'TEXT'], ['priorita', 'TEXT']],
+  agenda_viste: [['organizzatore', 'TEXT']]
 }
 
 /*

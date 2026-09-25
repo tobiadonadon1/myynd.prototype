@@ -246,6 +246,11 @@ export function registraPortaCose(f: (() => void) | null) { portaAlleCose = f }
 export function siPuoAprireLeCose(): boolean { return !!portaAlleCose }
 export function portaAlleAttivita() { portaAlleCose?.() }
 
+/** «Vai alle Fonti», detto da chi non ha `v` (la riga fissa di «Come lavori», P1B). Stessa mano delle altre porte. */
+let portaAlleConnessioni: (() => void) | null = null
+export function registraPortaFonti(f: (() => void) | null) { portaAlleConnessioni = f }
+export function portaAlleFonti() { portaAlleConnessioni?.() }
+
 /**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
  *
@@ -1131,6 +1136,10 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   useEffect(() => {
     registraPortaCose(() => { setScreen('oggi'); setSearch(false); setMenu(false) })
     return () => registraPortaCose(null)
+  }, [])
+  useEffect(() => {
+    registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
+    return () => registraPortaFonti(null)
   }, [])
 
   return {

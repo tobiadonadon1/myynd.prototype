@@ -26,6 +26,7 @@ import * as store from './store.ts'
 import * as progetti from './progetti.ts'
 import { nomeNormalizzato, nominaAmbito } from './ambiti-memoria.ts'
 import { fuoco } from './timone.ts'
+import * as abitudini from './abitudini.ts'
 
 /** I blocchi che ogni installazione ha, anche vuoti: sono le domande da riempire. */
 export const BLOCCHI_BASE: { etichetta: string; descrizione: string }[] = [
@@ -151,6 +152,10 @@ export function carta(): string {
     righe.push('E di come lavora la sua azienda:')
     for (const k of azienda.slice(0, 8)) righe.push(riga(k))
   }
+
+  // per ultime le righe misurate di «Come lavori» (P1B): un taglio corto le perde per prime
+  const ritratto = abitudini.perIlRitratto()
+  if (ritratto) { righe.push(''); righe.push(ritratto) }
 
   return righe.join('\n')
 }

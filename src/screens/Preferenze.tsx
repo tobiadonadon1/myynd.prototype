@@ -26,6 +26,7 @@ import { Hov, daTastiera, knob, track } from '../ui'
 import { IconSpunta } from '../icons'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
+import { PreferenzeOsservatore } from './PreferenzeOsservatore'
 import './preferenze.css'
 import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
 
@@ -198,6 +199,9 @@ function LApp() {
         <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando un lavoro è pronto')}
           onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
       </div>
+
+      {/* l'osservatore del Mac (P1B): solo dentro l'app, solo se il server lo ha */}
+      <PreferenzeOsservatore />
 
       {guaio && <div className="prefs-stato rame">{guaio}</div>}
     </Scheda>

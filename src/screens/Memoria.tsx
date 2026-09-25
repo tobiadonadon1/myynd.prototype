@@ -37,6 +37,7 @@ import { IconGiu } from '../icons'
 import { Glifo } from '../components/Stato'
 import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso } from '../vals'
 import { SchedaProgetto, Tic } from './ProgettoEditor'
+import { ComeLavori } from './ComeLavori'
 import './memoria.css'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
@@ -576,9 +577,12 @@ export function Memoria() {
       {/* — i progetti: prima di tutto, perché sono la prima cosa che legge — */}
       <Progetti dimmi={contaProgetti} />
 
-      {/* — le cinque domande su come lavori — */}
+      {/* — come lavori, contato: le righe osservate e le previsioni (P1B) — */}
+      <ComeLavori />
+
+      {/* — le cinque domande: il tuo ritratto — */}
       <section className="mem-section">
-        <Testata titolo={t('Come lavori')} stato={dettoRitratto || undefined}>
+        <Testata titolo={t('Il tuo ritratto')} stato={dettoRitratto || undefined}>
           {/*
             Gira già da solo ogni sei ore. Questo sta qui per il momento in cui
             uno finisce una conversazione lunga e vuole *vedere* cosa ne è

@@ -263,3 +263,23 @@ test('porta: quello che fa partire davvero, e non fa partire altro', { skip: pro
     assert.equal(lanciati.length, 4, 'ha fatto partire qualcosa che non doveva')
   } finally { s.perProva.apri = null }
 })
+
+test('in una scena delle prove `open` non parte: con MYYND_PROVA_NIENTE_OPEN=1 si scrive nel registro; la mano delle prove viene prima; senza niente, `open`', () => {
+  const primaApri = s.perProva.apri, primaEnv = process.env.MYYND_PROVA_NIENTE_OPEN
+  try {
+    s.perProva.apri = null
+    delete process.env.MYYND_PROVA_NIENTE_OPEN
+    assert.equal(s.perProva.comeAprire(), 'open')
+    process.env.MYYND_PROVA_NIENTE_OPEN = '1'
+    assert.equal(s.perProva.comeAprire(), 'registro')
+    // «0» non basta: solo «1» spegne `open`
+    process.env.MYYND_PROVA_NIENTE_OPEN = '0'
+    assert.equal(s.perProva.comeAprire(), 'open')
+    process.env.MYYND_PROVA_NIENTE_OPEN = '1'
+    s.perProva.apri = () => {}
+    assert.equal(s.perProva.comeAprire(), 'finta')
+  } finally {
+    s.perProva.apri = primaApri
+    if (primaEnv === undefined) delete process.env.MYYND_PROVA_NIENTE_OPEN; else process.env.MYYND_PROVA_NIENTE_OPEN = primaEnv
+  }
+})

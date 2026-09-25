@@ -222,6 +222,127 @@ chi.dentro(conto.id, () => {
   }
 })
 
+// — P1B: inizio —
+// Il gemello: trentacinque giorni di posta con quattro mittenti, venti giorni di
+// sessioni delle app, le righe di oggi e di ieri, l'osservatore acceso; poi si
+// simula il passato con il codice vero (un giro alle otto, uno a mezzanotte e
+// quaranta, per quattordici giorni) così la pagina ha un punteggio e delle righe.
+//   "gemello": { "giorni": 35, "seme": 7, "osservatore": true }
+type ScenaGemello = { giorni?: number; seme?: number; osservatore?: boolean }
+const ricetta = (scena as unknown as { gemello?: ScenaGemello }).gemello
+if (ricetta) {
+  const gemello = await import(join(SERVER, 'gemello.ts'))
+  const osservatore = await import(join(SERVER, 'osservatore.ts'))
+  const fuso = await import(join(SERVER, 'fuso.ts'))
+  const GIORNO = 86_400_000
+  // un generatore piccolo e fisso: la stessa scena ogni volta
+  let stato = (ricetta.seme ?? 7) >>> 0 || 7
+  const caso = () => { stato = (stato * 1664525 + 1013904223) >>> 0; return stato / 4294967296 }
+  const giorni = ricetta.giorni ?? 35
+  const oggi = fuso.giornoIn(new Date())
+  const [aa, mm, gg] = oggi.split('-').map(Number) as [number, number, number]
+  const alle = (giorniFa: number, ore: number, minuti = 0) => new Date(fuso.istante(aa, mm, gg - giorniFa, ore).getTime() + minuti * 60_000)
+  const feriale = (d: Date) => { const s = fuso.parti(d).settimana; return s >= 1 && s <= 5 }
+
+  await chi.dentro(conto.id, async () => {
+    // la casella: serve perché il gemello parli di posta; l'indirizzo è il suo, e nessun server risponde lì
+    cfg.aggiorna({ posta: { host: '127.0.0.1', porta: 1, utente: 'alex@acme.example', password: 'finta', cartelle: ['INBOX', 'Sent'], giorni: 30 }, fuso: fuso.fusoDi() })
+    const idNw = progetti.elenco('attivo').find(p => p.nome === 'Northwind')?.id ?? null
+    const idHb = progetti.elenco('attivo').find(p => p.nome === 'Harbor Labs')?.id ?? null
+
+    type Mittente = { nome: string; indirizzo: string; alGiorno: number; risponde: number; oreRisposta: number; titoli: string[]; massa?: boolean }
+    const mittenti: Mittente[] = [
+      { nome: 'Nora Vance', indirizzo: 'nora@harbor.example', alGiorno: 1, risponde: 1, oreRisposta: 2, titoli: ['Harbor Labs pilot scope', 'Harbor Labs invoices batch', 'Harbor Labs kickoff notes'] },
+      { nome: 'Sam Ortiz', indirizzo: 'sam@lumen.example', alGiorno: 0.6, risponde: 0.9, oreRisposta: 4, titoli: ['Course outline draft', 'Lumen landing page copy', 'Pricing question'] },
+      { nome: 'Priya Shah', indirizzo: 'priya@audit.example', alGiorno: 0.8, risponde: 0.05, oreRisposta: 6, titoli: ['Audit checklist reminder', 'Can you confirm the audit slot?', 'Compliance questionnaire'] },
+      { nome: 'Deals Weekly', indirizzo: 'news@deals.example', alGiorno: 1, risponde: 0, oreRisposta: 0, titoli: ['This week: 40% off everything'], massa: true }
+    ]
+    const docs: Record<string, unknown>[] = []
+    let n = 1000
+    // una risposta non può stare nel futuro: quella della mattina dopo a una mail di ieri sera, se la scena
+    // parte prima di quell'ora, non c'è ancora (e la mail resta, com'è vero, senza risposta)
+    const tettoRisposte = Date.now() - 60_000
+    for (let d = giorni; d >= 1; d--) {
+      for (const m of mittenti) {
+        if (caso() >= m.alGiorno) continue
+        n++
+        // un terzo delle mail di Nora arriva la sera e ha risposta la mattina dopo: sono le affermazioni «risponderai»
+        const sera = m.nome === 'Nora Vance' && caso() < 0.35
+        const quando = sera ? alle(d, 18 + Math.floor(caso() * 3), Math.floor(caso() * 60)) : alle(d, 9 + Math.floor(caso() * 8), Math.floor(caso() * 60))
+        const titolo = m.titoli[Math.floor(caso() * m.titoli.length)]!
+        docs.push({
+          id: `posta:INBOX:${n}`, fonte: 'posta', tipo: 'email', titolo, corpo: m.massa ? 'Shop now. Unsubscribe here.' : `Hi Alex, ${titolo.toLowerCase()}. Could you have a look? Thanks, ${m.nome.split(' ')[0]}`,
+          autore: `${m.nome} <${m.indirizzo}>`, percorso: 'INBOX', gruppo: 'posta', quando: quando.toISOString(), filo: `f${n}@acme.example`, messageId: `m${n}@${m.indirizzo.split('@')[1]}`,
+          ...(m.massa ? { massa: true } : {})
+        })
+        if (!m.massa && caso() < m.risponde) {
+          const dopo = sera ? alle(d - 1, 9, 10 + Math.floor(caso() * 90)) : new Date(quando.getTime() + m.oreRisposta * 3_600_000 * (0.6 + caso() * 0.8))
+          if (dopo.getTime() > tettoRisposte) continue
+          docs.push({
+            id: `posta:Sent:${n}`, fonte: 'posta', tipo: 'email', titolo: `Re: ${titolo}`, corpo: `Hi ${m.nome.split(' ')[0]}, sure. Alex`,
+            autore: 'Alex <alex@acme.example>', percorso: 'Sent', gruppo: 'posta', quando: dopo.toISOString(), inviato: true,
+            filo: `f${n}@acme.example`, messageId: `s${n}@acme.example`, risponde: `m${n}@${m.indirizzo.split('@')[1]}`, destinatari: m.indirizzo
+          })
+        }
+      }
+    }
+    store.salvaDocumenti(docs as Parameters<typeof store.salvaDocumenti>[0])
+
+    // le sessioni delle app: venti giorni, Safari tre ore e mezza e Code due, dalle nove alle diciannove
+    const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
+    for (let d = 20; d >= 1; d--) {
+      if (!feriale(alle(d, 12))) continue
+      const giorno = fuso.giornoIn(alle(d, 12))
+      const blocchi: [string, string, string | null, number, number, string | null][] = [
+        ['com.apple.Safari', 'Safari', 'Northwind pricing - Google Docs', 9, 2, idNw],
+        ['com.microsoft.VSCode', 'Code', 'northwind - app.tsx', 11, 2, idNw],
+        ['com.apple.Safari', 'Safari', 'Inbox - Gmail', 14, 1.5, null],
+        ['com.apple.mail', 'Mail', null, 16, 1, null],
+        ['com.tinyspeck.slackmacgap', 'Slack', 'general - Harbor Labs', 17.5, 1.5, idHb]
+      ]
+      for (const [bundle, app, titolo, ora, ore, progetto] of blocchi) {
+        const inizio = alle(d, ora), fine = new Date(inizio.getTime() + ore * 3_600_000)
+        ins.run(bundle, app, titolo, inizio.toISOString(), fine.toISOString(), Math.round(ore * 3600), giorno, progetto, titolo?.startsWith('northwind') ? 'northwind' : null)
+      }
+    }
+
+    // le righe: tre di oggi (una pronta, una alta), otto nei giorni scorsi (cinque chiuse in giornata, tre dopo)
+    const riga = (id: string, testo: string, giorno: string, progetto: string | null) =>
+      store.scriviCompito({ id, testo, quando: 'oggi', ordine: chiavi.dopo(store.ultimoOrdine('oggi')), progetto, giorno })
+    riga('g-oggi-1', 'Reply to App Review with the differences from similar apps', oggi, idNw)
+    riga('g-oggi-2', 'Send Nora the pilot outline', oggi, idHb)
+    riga('g-oggi-3', 'Record the review video for build 1.0.4', oggi, idNw)
+    store.default.prepare("UPDATE compiti SET stato = 'pronto', risultato = 'Hi Nora, here is the outline.' WHERE id = 'g-oggi-2'").run()
+    store.default.prepare("UPDATE compiti SET priorita = 'alta' WHERE id = 'g-oggi-1'").run()
+    for (let i = 1; i <= 8; i++) {
+      const giornoRiga = fuso.giornoIn(alle(i + 1, 12))
+      riga(`g-passata-${i}`, `Planned thing ${i}`, giornoRiga, i % 2 ? idNw : idHb)
+      const chiusa = i <= 5 ? alle(i + 1, 16) : alle(i - 1 > 0 ? i - 1 : 0, 10)
+      store.default.prepare("UPDATE compiti SET stato = 'fatto', chiuso = ?, creato = ? WHERE id = ?").run(chiusa.toISOString(), alle(i + 2, 9).toISOString(), `g-passata-${i}`)
+    }
+
+    // l'osservatore: il conto di sviluppo è il proprietario, coi titoli
+    if (ricetta.osservatore) osservatore.imposta({ acceso: true, titoli: true })
+
+    // il passato, con il codice vero: ogni giorno D un giro alle otto, poi la lettura di mezzanotte e un giro alle 00:40
+    // la lettura di mezzanotte non può stare nel futuro: fra mezzanotte e le 00:30 vale un minuto fa
+    const tetto = Date.now() - 60_000
+    for (let d = 14; d >= 1; d--) {
+      await gemello.giro(alle(d, 8))
+      store.segnaCursore('gemello:letta', new Date(Math.min(alle(d - 1, 0, 30).getTime(), tetto)).toISOString())
+      await gemello.giro(alle(d - 1, 0, 40))
+    }
+    // anche la mattina di oggi alle otto (o adesso, se le otto non sono passate): dalle sedici non si afferma più
+    await gemello.giro(new Date(Math.min(alle(0, 8).getTime(), Date.now())))
+    await gemello.giro(new Date())
+    const affermazioni = (store.default.prepare('SELECT COUNT(*) AS n FROM previsioni').get() as { n: number }).n
+    const verificati = (store.default.prepare('SELECT COUNT(*) AS n FROM punteggi').get() as { n: number }).n
+    const righe = (store.default.prepare('SELECT COUNT(*) AS n FROM abitudini').get() as { n: number }).n
+    console.log(`semina · gemello: ${docs.length} mail, ${affermazioni} affermazioni, ${verificati} giorni verificati, ${righe} righe`)
+  })
+}
+// — P1B: fine —
+
 // — P8: inizio —
 if ((scena as Record<string, unknown>).p8) {
   const p8 = await import(join(QUI, 'semina-p8.ts'))

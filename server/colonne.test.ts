@@ -84,10 +84,10 @@ test('e COLONNE non ha colonne che nessuna migrazione aggiunge', () => {
   }
 })
 
-test('un database nuovo arriva allo schema 64, una voce per migrazione', () => {
+test('un database nuovo arriva allo schema 65, una voce per migrazione', () => {
   const voci = (testoMigrazioni().match(/^ {2}d =>/gm) ?? []).length
   assert.equal(voci, schema.migrazioni, 'il numero di voci scritte non è la lunghezza della lista')
-  assert.equal(schema.migrazioni, 64)
+  assert.equal(schema.migrazioni, 65)
   const v = (store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
   assert.equal(v, schema.migrazioni)
 })
@@ -170,7 +170,7 @@ test('un indice vero fermo alla 47 arriva alla 64 senza perdere niente', () => {
   writeFileSync(join(CASA, 'mente.db'), gunzipSync(readFileSync(join(QUI, 'fixture', 'mente-47.db.gz'))))
 
   const v = (store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
-  assert.equal(v, 64)
+  assert.equal(v, 65)
   // un indice con documenti dentro si copia prima di migrare
   assert.ok(existsSync(join(CASA, 'istantanee')) && readdirSync(join(CASA, 'istantanee')).some(n => /^mente-v47-/.test(n)),
     'nessuna istantanea prima della migrazione')
@@ -199,5 +199,5 @@ test('un indice vero fermo alla 47 arriva alla 64 senza perdere niente', () => {
 
   // e riaprirlo non rifà niente
   store.chiudiIndici()
-  assert.equal((store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 64)
+  assert.equal((store.default.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 65)
 })

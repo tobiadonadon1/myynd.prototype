@@ -82,8 +82,9 @@ if [[ "$COSTRUISCI" == si || ( "$COSTRUISCI" == auto && ( ! -f dist/index.html |
   env -i $AMBIENTE node_modules/.bin/vite build > "$OUT/vite.log" 2>&1 || { tail -20 "$OUT/vite.log" >&2; exit 1 }
 fi
 
-# 4. il server, con la sola casa finta
-env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA \
+# 4. il server, con la sola casa finta (APP=1: come dentro il guscio, per l'osservatore del Mac)
+#    MYYND_PROVA_NIENTE_OPEN=1: «Portami lì» e «Apri» scrivono nel registro invece di lanciare `open` sul Mac
+env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_PROVA_NIENTE_OPEN=1 ${APP:+MYYND_APP=1} \
   node --disable-warning=ExperimentalWarning server/index.ts > "$OUT/server.log" 2>&1 &
 SRV=$!
 aspetta_riga "$OUT/server.log" 'server su http' 40

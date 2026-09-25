@@ -1,0 +1,24 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "alias": ["northwind app", "nw"], "priorita": "alta" },
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Run a two-week AI pilot with the Harbor finance team" }
+  ],
+  "file": [
+    { "nome": "northwind-launch-plan.md", "testo": "# Northwind launch plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n3. Record the review video.\n" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:201", "fonte": "posta", "tipo": "email", "titolo": "App Review: guideline 4.3", "corpo": "Hello Alex, your submission Northwind 1.0.3 was rejected under guideline 4.3. Please reply with the differences from similar apps.", "autore": "App Review <review@appstore.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-5h", "messageId": "ar201@appstore.example" }
+  ],
+  "feed": [
+    { "id": "f1", "tipo": "Priorità", "titolo": "Fix the three Northwind account issues and upload the build", "testo": "Your partner is waiting on it to add the videos and submit.", "fonte": "posta", "doc": "posta:INBOX:201", "progetto": "nw", "quando": "-3h", "peso": 2, "offerta": "I can list the three fixes and the upload steps.", "perche": "Unblocks the App Store submission" }
+  ],
+  "punto": {
+    "progetti": [{ "progetto": "nw", "novita": "App Review rejected 1.0.3 under guideline 4.3: a reply with the differences is due.", "doc": "posta:INBOX:201" }],
+    "risposte": [{ "testo": "Nora agreed the pilot scope for Thursday.", "doc": "posta:INBOX:201" }],
+    "github": [], "daLeggere": [], "aggiornamenti": []
+  },
+  "gemello": { "giorni": 35, "seme": 7, "osservatore": true }
+}
