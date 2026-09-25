@@ -34,6 +34,8 @@ import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
+import { RigaIpotesi } from './RigaIpotesi'
+import { haSegnaposto, mandataValida, puoMandare, senzaRigaIpotesi } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -730,8 +732,13 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
 }
 
 /** La bozza, sotto la riga che l'ha chiesta. */
+/** Il testo della bozza da mostrare e correggere: senza la riga dell'ipotesi, che sta sotto con «Cambia». */
+function testoDellaBozza(c: Compito): string {
+  return c.ipotesi?.[0] ? senzaRigaIpotesi(c.risultato ?? '') : (c.risultato ?? '')
+}
+
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
-  const [testo, setTesto] = useState(c.risultato ?? '')
+  const [testo, setTesto] = useState(testoDellaBozza(c))
   const [modifico, setModifico] = useState(false)
   /**
    * Un prompt non si manda e non si salva: si copia. Il testo è quello che
@@ -748,7 +755,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
   const [pannello, setPannello] = useState<'' | 'manda' | 'salva' | 'lavora'>('')
   const area = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => { setTesto(c.risultato ?? '') }, [c.risultato])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setTesto(testoDellaBozza(c)) }, [c.risultato, c.ipotesi?.[0]])
   useEffect(() => {
     const a = area.current
     if (!modifico || !a) return
@@ -809,6 +817,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           <Testo testo={testo} fonti={c.fonti ?? []} />
         </div>
       )}
+      {c.stato === 'pronto' && c.ipotesi?.[0] && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
         {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}
@@ -1205,16 +1214,35 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
  */
 type Email = { a: string; oggetto: string; corpo: string; conosciuto: boolean }
 
+/** Il file da allegare (P3): sopra il pannello, con il nome che si apre. */
+function DaAllegare({ c }: { c: Compito }) {
+  const a = c.email?.allegato
+  if (!a) return null
+  return (
+    <div style={{ marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.64)' }}>
+      <span style={{ flex: 'none' }}>{t('Da allegare:')}</span>
+      <Hov as="button" type="button" title={a.titolo} onClick={() => { void api.portamiDocumento(a.id).catch(() => {}) }}
+        style={{ padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', maxWidth: 260, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        hover={{ textDecorationColor: 'currentColor' }}>{a.titolo}</Hov>
+    </div>
+  )
+}
+
 function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
   const casella = p.c.email?.casella
+  // partita dalla sua posta (P3): la bozza non c'è più, resta lo stato
+  if (casella && mandataValida(p.c)) return <div style={{ marginTop: 12, fontSize: 13 }}><p>{t('Mandata dalla tua posta.')}</p></div>
   if (casella) return <div style={{ marginTop: 12, fontSize: 13 }}>
-    {casella.stato === 'salvata' ? <><p>{t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
+    <DaAllegare c={p.c} />
+    {casella.stato === 'salvata' ? <><p>{p.c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
       : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {casella.errore}</p>}
   </div>
+  // un segnaposto nel corpo (P3): non si manda, la riga dell'ipotesi dice cosa manca
+  if (!puoMandare(p.c) || haSegnaposto(p.testo)) return null
   const azione = azioneEmail(p.c, p.testo)
   if (azione.tipo === 'nessuna') return null
   if (azione.tipo === 'copia') return <CopiaEmail c={p.c} l={p.l} bozza={azione} />
-  return <InvioEmail {...p} />
+  return <><DaAllegare c={p.c} /><InvioEmail {...p} /></>
 }
 
 function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopiare }) {

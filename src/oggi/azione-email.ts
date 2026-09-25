@@ -1,4 +1,5 @@
 import type { Compito, Portato } from '../api.ts'
+import { corpoPerChiRiceve } from '../lavoro-affidato.ts'
 
 type RigaEmail = Pick<Compito, 'doc' | 'porta' | 'email' | 'risultato' | 'puoInviare'>
 export type BozzaDaCopiare = { tipo: 'copia'; corpo: string; apri: boolean }
@@ -8,8 +9,9 @@ export function azioneEmail(c: RigaEmail, correzione?: string): { tipo: 'invia' 
   if (c.puoInviare !== false) return { tipo: 'invia' }
   const mail = /^(?:posta|google|gmail|microsoft|outlook):/i.test(c.doc ?? '')
   if (!mail && !c.email) return { tipo: 'nessuna' }
+  // la copia porta il testo per chi riceve: senza «Done:», senza le fonti, senza l'ipotesi
   const corpo = (correzione !== undefined && correzione !== (c.risultato ?? '')
-    ? correzione : c.email?.corpo || c.risultato || '').trim()
+    ? correzione : c.email?.corpo || corpoPerChiRiceve(c.risultato ?? '')).trim()
   if (!corpo) return { tipo: 'nessuna' }
   return { tipo: 'copia', corpo, apri: mail && (c.porta === 'posta' || c.porta === 'pagina') }
 }
