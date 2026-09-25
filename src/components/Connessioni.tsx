@@ -282,7 +282,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
             </div>
           </div>
           {/* i trenta giorni: solo le fonti che si leggono, non i motori */}
-          {!MOTORI.includes(scelta.id) && <SaluteFonte id={scelta.id} rileggi={`${scelta.documenti}:${problema ?? ''}:${fonteInLettura ?? ''}`} />}
+          {!MOTORI.includes(scelta.id) && (scelta.collegato || !!problema) && <SaluteFonte id={scelta.id} rileggi={`${scelta.documenti}:${problema ?? ''}:${fonteInLettura ?? ''}`} />}
           {moduloSopra && <div className="connection-detail-form" style={{ borderTop: 0, paddingTop: 0, marginBottom: 16 }}><Form id={scelta.id} tema="chiaro" ok={formOk} collegato={formCollegato} /></div>}
           {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
           {scelta.id === 'note' && s?.accessoDisco === 'no' && <div className="connection-detail-form"><AccessoDisco tema="chiaro" /></div>}

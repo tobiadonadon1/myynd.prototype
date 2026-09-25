@@ -1295,7 +1295,9 @@ function Avviso({ v }: { v: Vals }) {
     titoliNegati: v.osservaTitoli && titoliNegati,
     dopoImpostazioni,
     puoAprire: !!d,
-    puoRiavviare: !!d?.riavvia
+    puoRiavviare: !!d?.riavvia,
+    // senza la schermata dell'Accessibilità nel ponte «Aspetto il permesso…» aspetterebbe un'apertura mai avvenuta
+    puoAprireTitoli: !!osservatore()?.apriImpostazioniTitoli
   })
   if (!riga) return null
   return (

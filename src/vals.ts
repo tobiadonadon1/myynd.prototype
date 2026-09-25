@@ -18,7 +18,7 @@ import { nonLette } from './lettura-fonti.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi, desktop } from './desktop.ts'
-import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi } from './salute-fonti.ts'
+import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -722,9 +722,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     const prima = problemiPrima.current
     problemiPrima.current = dopo
     if (!prima) return
-    const collegati = new Set(stato.connettori.filter(c => c.collegato || !!c.problema).map(c => c.id))
     const nomeDi = (id: string) => nomeInFrase(id, stato.connettori.find(c => c.id === id)?.nome ?? id)
-    const tornati = ripresi(prima, dopo, collegati)
+    const tornati = ripresi(prima, dopo, saniDi(stato))
     const fonti = tornati.filter(id => id !== 'claude' && id !== 'openai')
     const detto: string[] = []
     if (fonti.length) detto.push(riempi(t('Posso di nuovo leggere {nome}.'), { nome: elenco(fonti.map(nomeDi)) }))

@@ -66,16 +66,18 @@ function giornoCorto(d: Date): string {
  * Da quando: «dalle 9:41», «da ieri alle 9:41», «dal 22 set», «dall’8 ott».
  *
  * Nell'ora locale di chi guarda. L'italiano elide davanti all'1, all'8 e
- * all'11 («dall’11 ott»); l'inglese dice «since» e basta.
+ * all'11, per il giorno e per l'ora («dall’11 ott», «dall’1:05», «da ieri
+ * all’8:30»); l'inglese dice «since» e basta.
  */
 export function da(iso: string, adesso = new Date()): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   const ora = `${d.getHours()}:${due(d.getMinutes())}`
   const stesso = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (stesso(d, adesso)) return riempi(t('dalle {ora}'), { ora })
+  const elide = [1, 8, 11].includes(d.getHours())
+  if (stesso(d, adesso)) return riempi(elide ? t('dall’{ora}') : t('dalle {ora}'), { ora })
   const ieri = new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate() - 1, 12)
-  if (stesso(d, ieri)) return riempi(t('da ieri alle {ora}'), { ora })
+  if (stesso(d, ieri)) return riempi(elide ? t('da ieri all’{ora}') : t('da ieri alle {ora}'), { ora })
   const giorno = giornoCorto(d)
   return riempi([1, 8, 11].includes(d.getDate()) ? t('dall’{giorno}') : t('dal {giorno}'), { giorno })
 }
@@ -136,6 +138,8 @@ export function rigaFonti(o: {
   dopoImpostazioni: boolean
   puoAprire: boolean
   puoRiavviare: boolean
+  /** Il guscio sa aprire la schermata dell'Accessibilità (un guscio vecchio no). */
+  puoAprireTitoli?: boolean
   adesso?: Date
 }): { frase: string; controllo: Controllo } | null {
   const adesso = o.adesso ?? new Date()
@@ -179,7 +183,7 @@ export function rigaFonti(o: {
   // 3. i titoli delle finestre
   if (o.titoliNegati) {
     frasi.push(t('Non vedo i titoli delle finestre: manca il permesso di Accessibilità.'))
-    primo(o.puoAprire ? { tipo: 'accessibilita' } : { tipo: 'fonti', id: null })
+    primo(o.puoAprire && o.puoAprireTitoli ? { tipo: 'accessibilita' } : { tipo: 'fonti', id: null })
   }
 
   if (!frasi.length || !controllo) return null
@@ -272,6 +276,15 @@ export function problemiVisibili(s: Stato): Map<string, string> {
   for (const f of s.letturaIncompleta ?? []) fuori.set(f.fonte, f.rimedio ?? (f.motivo === 'incompleta' ? 'attendi' : 'guarda'))
   if (s.testa) fuori.set(s.testa.id, s.testa.rimedio)
   return fuori
+}
+
+/**
+ * Chi è collegato e sano, per `ripresi`: una fonte scollegata non «si
+ * riprende», e nemmeno Anthropic quando la pagina smette di dirlo solo perché
+ * adesso lavora un altro motore (il suo connettore ha ancora il guaio).
+ */
+export function saniDi(s: Stato): Set<string> {
+  return new Set(s.connettori.filter(c => c.collegato && !c.problema).map(c => c.id))
 }
 
 /** Chi aveva un guaio e adesso no, ed è ancora collegato: una fonte scollegata non «si riprende». */

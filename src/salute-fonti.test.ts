@@ -31,7 +31,7 @@ function manca(id: string, rimedio: Mancanza['rimedio'], o: Partial<Mancanza> & 
   const scheda = o.scheda ?? ({ posta: 'Posta', calendario: 'Calendario', note: 'Note', desktop: 'Il mio Mac', slack: 'Slack', github: 'GitHub', notion: 'Notion', granola: 'Granola', whatsapp: 'WhatsApp Business', dropbox: 'Dropbox' } as Record<string, string>)[id] ?? id
   return { id, nome: sf.nomeInFrase(id, scheda), motivo: 'non-disponibile', rimedio, dal: ORA_FA, dopoAggiornamento: false, ...o }
 }
-const BASE = { ragiona: true, testa: null, guastoLettura: null, chiedeClaude: 'CHIEDE', titoliNegati: false, dopoImpostazioni: false, puoAprire: true, puoRiavviare: true, adesso: ADESSO }
+const BASE = { ragiona: true, testa: null, guastoLettura: null, chiedeClaude: 'CHIEDE', titoliNegati: false, dopoImpostazioni: false, puoAprire: true, puoRiavviare: true, puoAprireTitoli: true, adesso: ADESSO }
 const riga = (l: 'it' | 'en', mancanze: () => Mancanza[], o: Partial<Parameters<typeof sf.rigaFonti>[0]> = {}) =>
   in_(l, () => sf.rigaFonti({ ...BASE, mancanze: mancanze(), ...o }))
 
@@ -100,6 +100,8 @@ test('l’aggiornamento, il giro dalle Impostazioni, il browser, i titoli', () =
   const titoli = riga('en', () => [], { titoliNegati: true })
   assert.equal(titoli?.frase, 'I can’t see window titles: Accessibility is off.')
   assert.deepEqual(titoli?.controllo, { tipo: 'accessibilita' })
+  // un guscio che non sa aprire l'Accessibilità: si va alle Fonti, niente attesa a vuoto (counter-case)
+  assert.deepEqual(riga('en', () => [], { titoliNegati: true, puoAprireTitoli: false })?.controllo, { tipo: 'fonti', id: null })
   const insieme = riga('it', agg, { titoliNegati: true })
   assert.equal(insieme?.frase, 'Dall’aggiornamento non riesco a leggere le Note: togli e rimetti Myynd in Accesso completo al disco. Non vedo i titoli delle finestre: manca il permesso di Accessibilità.')
   assert.deepEqual(insieme?.controllo, { tipo: 'impostazioni' })
@@ -133,6 +135,14 @@ test('da quando: oggi, ieri, prima, e l’elisione italiana', () => {
   assert.equal(in_('en', () => sf.da(new Date(2026, 9, 8, 7, 0).toISOString(), ottobre)), 'since Oct 8')
   // il primo di gennaio, visto il due: è ieri anche a cavallo dell'anno
   assert.equal(in_('it', () => sf.da(new Date(2025, 11, 31, 23, 50).toISOString(), new Date(2026, 0, 1, 8))), 'da ieri alle 23:50')
+  // l'ora elide come il giorno: all'1, all'8 e all'11; alle 13 no
+  assert.equal(in_('it', () => sf.da(new Date(2026, 8, 24, 1, 5).toISOString(), a)), 'dall’1:05')
+  assert.equal(in_('it', () => sf.da(new Date(2026, 8, 24, 8, 30).toISOString(), a)), 'dall’8:30')
+  assert.equal(in_('it', () => sf.da(new Date(2026, 8, 24, 11, 0).toISOString(), a)), 'dall’11:00')
+  assert.equal(in_('it', () => sf.da(new Date(2026, 8, 24, 13, 5).toISOString(), a)), 'dalle 13:05')
+  assert.equal(in_('it', () => sf.da(new Date(2026, 8, 23, 8, 30).toISOString(), a)), 'da ieri all’8:30')
+  assert.equal(in_('en', () => sf.da(new Date(2026, 8, 24, 1, 5).toISOString(), a)), 'since 1:05')
+  assert.equal(in_('en', () => sf.da(new Date(2026, 8, 23, 8, 30).toISOString(), a)), 'since yesterday at 8:30')
 })
 
 test('la riga del pannello, una causa alla volta', () => {
@@ -226,6 +236,20 @@ test('ripresi e nuovi: chi si riprende ed è collegato, chi è nuovo; il primo c
   assert.deepEqual(sf.nuoviGuai(prima, dopo), ['posta'])
   assert.deepEqual(sf.nuoviGuai(null, dopo), [])
   assert.deepEqual(sf.ripresi(null, dopo, new Set(['posta'])), [])
+})
+
+test('Anthropic ancora fuori mentre lavora un altro motore non «si riprende»; rientrato sì', () => {
+  const claude = (x: object) => [{ id: 'claude', nome: 'Anthropic', ...x }, { id: 'compatibile', nome: 'Modello locale', collegato: true }] as Stato['connettori']
+  const prima = sf.problemiVisibili(statoCon({ testa: { id: 'claude', rimedio: 'accedi' }, connettori: claude({ collegato: false, problema: 'accedi' }) }))
+  // collega un modello locale: la testa sparisce, ma il connettore dice ancora «accedi»
+  const s1 = statoCon({ testa: null, connettori: claude({ collegato: false, problema: 'accedi' }) })
+  assert.deepEqual(sf.ripresi(prima, sf.problemiVisibili(s1), sf.saniDi(s1)), [])
+  // con una chiave che lavora al posto dell'account: collegato, ma ancora fuori
+  const s2 = statoCon({ testa: null, connettori: claude({ collegato: true, problema: 'accedi' }) })
+  assert.deepEqual(sf.ripresi(prima, sf.problemiVisibili(s2), sf.saniDi(s2)), [])
+  // rientrato davvero
+  const s3 = statoCon({ testa: null, connettori: claude({ collegato: true }) })
+  assert.deepEqual(sf.ripresi(prima, sf.problemiVisibili(s3), sf.saniDi(s3)), ['claude'])
 })
 
 test('le mancanze dallo stato: il nome della scheda con l’articolo, i rimedi di ripiego', () => {

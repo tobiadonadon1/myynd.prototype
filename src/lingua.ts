@@ -3085,6 +3085,8 @@ const EN: Record<string, string> = {
   'Non vedo i titoli delle finestre: manca il permesso di Accessibilità.': 'I can’t see window titles: Accessibility is off.',
   'dalle {ora}': 'since {ora}',
   'da ieri alle {ora}': 'since yesterday at {ora}',
+  'dall’{ora}': 'since {ora}',
+  'da ieri all’{ora}': 'since yesterday at {ora}',
   'dal {giorno}': 'since {giorno}',
   'dall’{giorno}': 'since {giorno}',
   'dall’aggiornamento': 'since the update',
