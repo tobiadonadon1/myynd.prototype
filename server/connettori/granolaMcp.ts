@@ -46,6 +46,7 @@ import { oauthWeb } from '../ospitato.ts'
 import { avviaLocale, avviaWeb, chiediGettoni, Vivo, type Gettoni, type Sportello } from './oauth.ts'
 import { ClienteMcp, ErroreMcp, registra, scopri, testoDi, type Registrazione, type Risultato, type Scoperta, type Strumento } from './mcp.ts'
 import { ripulisci, testoLibero, type ConfigGranola, type EsitoGranola } from './granola.ts'
+import { GuaioFonte, type Rimedio } from './guaio.ts'
 
 /** Il server di Granola. Le prove ci mettono il loro, finto, con `MYYND_GRANOLA_MCP`. */
 export const INDIRIZZO = 'https://mcp.granola.ai/mcp'
@@ -947,17 +948,32 @@ export async function leggiDa(cliente: ClienteMcp, gia: Map<string, string | nul
   }
 }
 
+/**
+ * Cosa serve perché Granola torni a leggersi, dalla frase che si dice.
+ *
+ * Un nuovo accesso quando Granola non ci riconosce più; aspettare quando è
+ * lenta, giù, o ci ha chiesto di rallentare; un aggiornamento di Myynd quando
+ * ha cambiato il modo in cui si collega.
+ */
+export function rimedioGranola(f: string): Rimedio {
+  if (f === SCADUTO || f === NIENTE_ACCESSO) return 'accedi'
+  if ([RETE, RALLENTA, GIU, LENTO, NON_LEGGE, REGISTRAZIONE, SENZA_DURATA].includes(f)) return 'attendi'
+  if (f === CAMBIATO) return 'aggiorna'
+  return 'guarda'
+}
+
 /** Il giro di sfondo: le chiavi dalla configurazione, il token rinnovato quando serve, un tempo per tutto. */
 export async function sincronizza(gia: Map<string, string | null>, ricordi: Ricordi = {}): Promise<EsitoMcp> {
   const c = chiaviDi(leggi().granola)
-  if (!c) throw new Error(NIENTE_ACCESSO)
+  if (!c) throw new GuaioFonte(NIENTE_ACCESSO, 'accedi')
   const cliente = new ClienteMcp({
     endpoint: c.mcp, token: () => vivo.dammi(), scaduto: () => vivo.scorda(), scadenza: Date.now() + DURATA_GIRO
   })
   try {
     return await leggiDa(cliente, gia, { ricordi })
   } catch (e) {
-    throw new Error(frase(e))
+    const f = frase(e)
+    throw new GuaioFonte(f, rimedioGranola(f))
   } finally {
     await cliente.chiudi()
   }

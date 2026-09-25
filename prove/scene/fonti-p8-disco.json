@@ -1,0 +1,24 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store" }
+  ],
+  "file": [
+    { "nome": "plan.md", "testo": "# Northwind plan\n\n1. Fix the three account issues.\n" }
+  ],
+  "punto": { "progetti": [] },
+  "p8": {
+    "config": { "note": {}, "osservatore": { "acceso": true, "titoli": true } },
+    "noteNegate": true,
+    "versioni": { "note": "0.2.23" },
+    "storia": [
+      { "fonte": "note", "giorni": "ppppppppppppppppppppppppppppgg", "rimedio": "permesso-disco", "totale": 120, "nuova": 2 },
+      { "fonte": "desktop", "giorni": "pppppppppppppppppppppppppppppp", "arrivi": 4 }
+    ],
+    "episodi": [
+      { "fonte": "note", "motivo": "non-disponibile", "rimedio": "permesso-disco", "dal": "-26h", "fila": 9, "visto": "-15m" }
+    ],
+    "saltaGiornaliero": true
+  }
+}

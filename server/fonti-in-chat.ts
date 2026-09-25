@@ -136,8 +136,17 @@ export function raccontaFonti(s: StatoFonti, lingua: 'it' | 'en', lettura: Lettu
     righe.push(`${en ? 'Connected sources, with how many documents each' : 'Fonti collegate, con quanti documenti ciascuna'}: ${voci.join(', ')}.`)
   }
   if (s.incomplete.length) {
-    const motivo = (m: FonteIncompleta['motivo']) => m === 'non-disponibile' ? (en ? 'could not be opened' : 'non si è aperta') : (en ? 'only partly read' : 'letta solo in parte')
-    const voci = s.incomplete.map(f => `${nome(f.fonte)} (${motivo(f.motivo)})`)
+    // fra parentesi la causa, quando si sa: è quella che dice cosa fare
+    const motivo = (f: FonteIncompleta) => {
+      if (f.rimedio === 'permesso-disco') return en ? 'Full Disk Access is off' : 'manca l’accesso completo al disco'
+      if (f.rimedio === 'accedi') return en ? 'needs a new sign-in' : 'serve un nuovo accesso'
+      if (f.rimedio === 'credenziale') return en ? 'the credential no longer works' : 'la credenziale non va più'
+      if (f.rimedio === 'amministratore') return en ? 'waiting for your admin’s approval' : 'aspetta il via libera del tuo amministratore'
+      if (f.motivo === 'incompleta') return en ? 'only partly read' : 'letta solo in parte'
+      if (f.rimedio === 'attendi') return en ? 'not responding' : 'non risponde'
+      return en ? 'could not be opened' : 'non si è aperta'
+    }
+    const voci = s.incomplete.map(f => `${nome(f.fonte)} (${motivo(f)})`)
     righe.push(en
       ? `Not fully read last time: ${voci.join(', ')}. Go to Sources to fix it.`
       : `Non lette per intero l'ultima volta: ${voci.join(', ')}. Vai alle Fonti per sistemarle.`)

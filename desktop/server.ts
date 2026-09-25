@@ -11,7 +11,7 @@
 // una chiusura che aspetta — il server scrive la configurazione mentre si
 // spegne, e chiuderlo a metà vorrebbe dire perdere l'ultima cosa salvata.
 
-import { utilityProcess, type UtilityProcess } from 'electron'
+import { app, utilityProcess, type UtilityProcess } from 'electron'
 import { execFile } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -170,7 +170,8 @@ export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {})
   // il server crede di essere un Node normale se lo trova: dentro un
   // utilityProcess non lo è, e con questa variabile Electron farebbe pasticci
   delete env.ELECTRON_RUN_AS_NODE
-  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1' })
+  // la versione: il server sa dire «dall'aggiornamento» quando le Note perdono il permesso
+  Object.assign(env, { PATH, MYYND_PORT: String(portaChiesta), NODE_ENV: 'production', MYYND_APP: '1', MYYND_VERSIONE: app.getVersion() })
   // MYYND_DEV acceso in produzione fa uscire il server con un errore: meglio
   // toglierlo qui che vedere la finestra di errore
   delete env.MYYND_DEV

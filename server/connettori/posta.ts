@@ -10,6 +10,7 @@ import { riflua } from '../testo.ts'
 import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { resto, type Resto } from './ripresa.ts'
 import { daImap, IMAP_SPENTO, type CasoAmministratore } from './amministratore.ts'
+import { GuaioFonte, type Rimedio } from './guaio.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
@@ -270,28 +271,52 @@ function testoDellErrore(e: unknown): string {
     .filter(Boolean).join(' ') || String(e)
 }
 
-function messaggioErrore(e: unknown, host = ''): string {
+/**
+ * La frase di un errore della casella, e il suo rimedio: o niente, se è
+ * testo del server che non sappiamo leggere.
+ */
+function classifica(e: unknown, host = ''): { frase: string; rimedio: Rimedio } | null {
   const err = (e && typeof e === 'object' ? e : {}) as { message?: string; authenticationFailed?: boolean }
   const m = testoDellErrore(e)
   const h = host.toLowerCase()
+  const credenziale = (frase: string) => ({ frase, rimedio: 'credenziale' as const })
   if (err.authenticationFailed || /auth|invalid credentials|login failed|password/i.test(m)) {
-    if (/gmail|googlemail/.test(h)) return 'Gmail ha rifiutato questa password. Se sono meno di sedici lettere è quella del tuo account Google, e via IMAP non funziona mai: creane una su myaccount.google.com/apppasswords e incolla quella.'
-    if (/mail\.me\.com|icloud/.test(h)) return 'iCloud ha rifiutato questa password. Ne serve una specifica per le app, sedici lettere, da appleid.apple.com.'
-    if (/yahoo/.test(h)) return 'Yahoo ha rifiutato questa password. Ne serve una per le app, dalle impostazioni di sicurezza dell’account.'
+    if (/gmail|googlemail/.test(h)) return credenziale('Gmail ha rifiutato questa password. Se sono meno di sedici lettere è quella del tuo account Google, e via IMAP non funziona mai: creane una su myaccount.google.com/apppasswords e incolla quella.')
+    if (/mail\.me\.com|icloud/.test(h)) return credenziale('iCloud ha rifiutato questa password. Ne serve una specifica per le app, sedici lettere, da appleid.apple.com.')
+    if (/yahoo/.test(h)) return credenziale('Yahoo ha rifiutato questa password. Ne serve una per le app, dalle impostazioni di sicurezza dell’account.')
     // Microsoft ha spento le password per IMAP in tutti i tenant, e nessuno
     // le può riaccendere (learn.microsoft.com, «Deprecation of Basic
     // authentication in Exchange Online»): serve l'accesso con Microsoft, che
     // non si offre ancora. Mandare a «Outlook e Calendario» era un vicolo cieco
-    if (/office365|outlook|hotmail|live\./.test(h)) return 'Outlook non accetta più password dalle app di posta, nemmeno quelle per le app. Il collegamento con Outlook arriva presto.'
-    return 'Utente o password non accettati dal server.'
+    if (/office365|outlook|hotmail|live\./.test(h)) return credenziale('Outlook non accetta più password dalle app di posta, nemmeno quelle per le app. Il collegamento con Outlook arriva presto.')
+    return credenziale('Utente o password non accettati dal server.')
   }
-  if (/ENOTFOUND|EAI_AGAIN/i.test(m)) return 'Host IMAP non trovato: controlla il nome del server.'
-  if (/ETIMEDOUT|timeout/i.test(m)) return 'Il server non risponde. Controlla host e porta.'
-  if (/altnames/i.test(m)) return 'Il certificato del server è intestato a un altro nome e non sono riuscito a combaciarlo.'
-  if (/certificate/i.test(m)) return 'Certificato TLS non valido sul server.'
-  if (/ECONNREFUSED/i.test(m)) return 'Il server rifiuta la connessione sulla porta 993.'
-  if (/Command failed/i.test(m)) return 'Il server di posta ha rifiutato la connessione.'
-  return err.message || m
+  if (/ENOTFOUND|EAI_AGAIN/i.test(m)) return { frase: 'Host IMAP non trovato: controlla il nome del server.', rimedio: 'attendi' }
+  if (/ETIMEDOUT|timeout/i.test(m)) return { frase: 'Il server non risponde. Controlla host e porta.', rimedio: 'attendi' }
+  if (/altnames/i.test(m)) return { frase: 'Il certificato del server è intestato a un altro nome e non sono riuscito a combaciarlo.', rimedio: 'guarda' }
+  if (/certificate/i.test(m)) return { frase: 'Certificato TLS non valido sul server.', rimedio: 'guarda' }
+  if (/ECONNREFUSED/i.test(m)) return { frase: 'Il server rifiuta la connessione sulla porta 993.', rimedio: 'attendi' }
+  if (/Command failed/i.test(m)) return { frase: 'Il server di posta ha rifiutato la connessione.', rimedio: 'guarda' }
+  return null
+}
+
+function messaggioErrore(e: unknown, host = ''): string {
+  const k = classifica(e, host)
+  if (k) return k.frase
+  const err = (e && typeof e === 'object' ? e : {}) as { message?: string }
+  return err.message || testoDellErrore(e)
+}
+
+/**
+ * Il guaio di una lettura, già capito: il no dell'amministratore prima di
+ * tutto (somiglia a una password sbagliata, e non lo è), poi le frasi che
+ * sappiamo. Il testo del server che non sappiamo leggere torna com'era, e
+ * resta senza rimedio: `fraseDi` non lo terrà.
+ */
+function guaioPosta(e: unknown, c: ConfigPosta): unknown {
+  if (daImap(testoDellErrore(e), c.utente)) return new GuaioFonte(IMAP_SPENTO, 'amministratore')
+  const k = classifica(e, c.host)
+  return k ? new GuaioFonte(k.frase, k.rimedio) : e
 }
 
 /**
@@ -684,7 +709,8 @@ export async function sincronizza(
   let dentroLaFinestra = 0
   /** Quanti di quelli restano da leggere dopo questo giro. */
   let arretrato = 0
-  const { cl } = await apri(c)
+  let cl: ImapFlow
+  try { ({ cl } = await apri(c)) } catch (e) { throw guaioPosta(e, c) }
 
   try {
     /*

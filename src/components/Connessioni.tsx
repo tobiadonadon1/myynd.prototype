@@ -7,6 +7,9 @@ import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import { letturaFonti, useLettura } from '../lettura-app'
 import { RigheLettura } from './RigheLettura'
+import { SaluteFonte } from './SaluteFonte'
+import { lineaPannello, mancanzeDi, parolaProblema } from '../salute-fonti'
+import { statoAccessoNote } from '../note-access'
 import './connessioni.css'
 
 // Quelli che non portano documenti: niente «Rileggi», perché non c'è niente da rileggere.
@@ -154,7 +157,53 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       if (dopo !== daFinire) setDaFinire(dopo)
     }
   }
-  const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire)
+  /*
+   * Il guaio di questa fonte (P8): la parola in rame al posto di «Collegato»,
+   * la riga con da quando e perché, e il modulo già aperto quando si sistema
+   * da lì (password, token, indirizzo, amministratore, un nuovo accesso).
+   * Il credito ha la sua carta: qui non è un guaio.
+   */
+  const problema = scelta?.problema && scelta.problema !== 'credito' ? scelta.problema : null
+  const mancanza = scelta && s ? mancanzeDi(s).find(m => m.id === scelta.id) ?? null : null
+  const daSistemare = problema === 'credenziale' || problema === 'amministratore' || problema === 'accedi'
+  const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire || daSistemare)
+  /** Con un guaio il modulo sta sopra i bottoni, come quando si collega. */
+  const moduloSopra = moduloVisibile && daSistemare
+  /*
+   * Una riga sola per dire cosa porta la fonte: se sotto c'è il suo modulo, la
+   * dice lui, più precisa. Prima la scheda la diceva due volte, qui e nella
+   * prima riga del modulo, con parole quasi uguali; e anche quando è un guaio
+   * ad aprire il modulo, qui resta solo il conto, se c'è.
+   */
+  const descrizione = !scelta || !(scelta.collegato || !moduloVisibile) ? ''
+    : scelta.collegato
+    ? scelta.id === 'compatibile' && s?.config.compatibile
+      ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
+      // le due teste dicono da quale strada passano: l'account, o la chiave
+      : scelta.id === 'claude'
+        ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
+      : scelta.id === 'openai'
+        ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
+      : [
+        // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
+        scelta.documenti
+          ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
+          : null,
+        // il computer dice se è la macchina intera, e se la sta guardando
+        // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
+        // si indovina dalla finestra, si legge da quello.
+        scelta.id === 'desktop' && s?.config.desktop?.tutto
+          ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
+          : null,
+        scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null,
+        // quello che c'era e non è entrato: è la riga che risponde
+        // a «sul mio Mac ce n'è molti di più», e senza di questa
+        // quel numero basso non ha nessuna spiegazione
+        scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
+          ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
+          : null
+      ].filter(Boolean).join(' · ') || (moduloSopra ? '' : t(scelta.nota))
+    : t(scelta.nota)
   const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
@@ -167,6 +216,25 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       const tiles = finestra.current?.querySelectorAll<HTMLButtonElement>('[data-connector]')
       Array.from(tiles ?? []).find(el => el.dataset.connector === ultimo.current)?.focus()
     })
+  }
+
+  const formOk = async () => {
+    if (!scelta) return
+    await ricarica(); setModifica(false); setDaFinire(false)
+    // ogni volta che una fonte viene (ri)collegata si rilegge: prima
+    // succedeva solo al primo collegamento, e cambiare le cartelle del
+    // computer lasciava in piedi l'indice di quelle vecchie finché non
+    // passavano sei ore. E si rileggono tutte, insieme: vedi `leggiTutte`
+    if (!MOTORI.includes(scelta.id) && !giaPartita.current) void leggiTutte()
+    giaPartita.current = false
+  }
+  const formCollegato = () => {
+    // il server ha detto sì: la lettura parte adesso, non al suo «Avanti»,
+    // che la scheda del calendario non mostra più
+    if (!scelta || MOTORI.includes(scelta.id)) return
+    giaPartita.current = true
+    void ricarica().catch(() => {})
+    void leggiTutte()
   }
 
   return <>
@@ -195,49 +263,23 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
               manca sotto. Qui conta ancora di più, perché il pannello si apre per
               collegare qualcosa — e la seconda lista è quella che si è venuti a
               leggere. Vedi `connessioni.css`, «collegate sopra, da collegare sotto». */}
-          {([['Collegate', pronti.filter(c => c.collegato), 'collegate'],
-             ['Da collegare', pronti.filter(c => !c.collegato), 'da-collegare']] as const).map(([titolo, quali, classe]) => !!quali.length &&
+          {([['Collegate', pronti.filter(c => c.collegato || !!c.problema), 'collegate'],
+             ['Da collegare', pronti.filter(c => !c.collegato && !c.problema), 'da-collegare']] as const).map(([titolo, quali, classe]) => !!quali.length &&
             <section key={classe} className={`connections-group ${classe}`} aria-labelledby={`gruppo-${classe}`}>
               <h3 className="connections-group-heading" id={`gruppo-${classe}`}>{t(titolo)}<span>{quali.length}</span></h3>
-              <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={t(c.nota)} collegata={c.collegato} apri={() => apri(c.id)} />)}</div>
+              <div className="connector-tiles compact">{quali.map(c => <ConnectorTile key={c.id} id={c.id} nome={c.nome} nota={t(c.nota)} collegata={c.collegato || !!c.problema}
+                problema={!!c.problema || (c.id === 'note' && c.collegato && statoAccessoNote(s).problema)}
+                parola={c.problema ? parolaProblema(c.id, c.problema) : undefined} apri={() => apri(c.id)} />)}</div>
             </section>)}
           {!!dopo.length && <details className="connections-future"><summary>{t('Più avanti')} <span>{dopo.length}</span></summary><div>{dopo.map(c => <span key={c.id} title={t(c.nota)}>{t(c.nome)}</span>)}</div></details>}
         </>}
         {scelta && <div className="connection-detail">
-          <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''}`}>
-            <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato} /></span>
-            <div><span className="connection-detail-status">{scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
-              {/* una riga sola per dire cosa porta la fonte: se sotto c'è il suo
-                  modulo, la dice lui, più precisa. Prima la scheda la diceva due
-                  volte, qui e nella prima riga del modulo, con parole quasi uguali */}
-              {(scelta.collegato || !moduloVisibile) && <p>{scelta.collegato
-                ? scelta.id === 'compatibile' && s?.config.compatibile
-                  ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
-                  // le due teste dicono da quale strada passano: l'account, o la chiave
-                  : scelta.id === 'claude'
-                    ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
-                  : scelta.id === 'openai'
-                    ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
-                  : [
-                    // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
-                    scelta.documenti
-                      ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
-                      : null,
-                    // il computer dice se è la macchina intera, e se la sta guardando
-                    // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
-                    // si indovina dalla finestra, si legge da quello.
-                    scelta.id === 'desktop' && s?.config.desktop?.tutto
-                      ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
-                      : null,
-                    scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null,
-                    // quello che c'era e non è entrato: è la riga che risponde
-                    // a «sul mio Mac ce n'è molti di più», e senza di questa
-                    // quel numero basso non ha nessuna spiegazione
-                    scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
-                      ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
-                      : null
-                  ].filter(Boolean).join(' · ') || t(scelta.nota)
-                : t(scelta.nota)}</p>}
+          <div className={`connection-detail-overview ${scelta.collegato ? 'connected' : ''} ${problema ? 'needs-access' : ''}`}>
+            <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato && !problema} /></span>
+            <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
+              {mancanza && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
+              {/* cosa porta la fonte: vedi `descrizione` */}
+              {descrizione && <p>{descrizione}</p>}
               {/* «perché lascia fuori così tanti file» è la domanda che segue il
                   numero di sopra: questa riga la chiude, dicendo cos'è un
                   documento per Myynd invece di lasciarlo indovinare. */}
@@ -245,6 +287,9 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
                 <p>{t('Myynd legge i documenti: PDF, Word, Excel, PowerPoint, testo, Markdown, HTML e RTF. Immagini, video, codice e file di sistema non sono documenti.')}</p>}
             </div>
           </div>
+          {/* i trenta giorni: solo le fonti che si leggono, non i motori */}
+          {!MOTORI.includes(scelta.id) && (scelta.collegato || !!problema) && <SaluteFonte id={scelta.id} rileggi={`${scelta.documenti}:${problema ?? ''}:${fonteInLettura ?? ''}`} />}
+          {moduloSopra && <div className="connection-detail-form" style={{ borderTop: 0, paddingTop: 0, marginBottom: 16 }}><Form id={scelta.id} tema="chiaro" ok={formOk} collegato={formCollegato} /></div>}
           {/* le Note senza il permesso restano a zero: la riga con la strada sta qui, dove si guarda */}
           {scelta.id === 'note' && s?.accessoDisco === 'no' && <div className="connection-detail-form"><AccessoDisco tema="chiaro" /></div>}
           {/* Il computer, dopo una lettura: le cartelle che si sono chiuse in
@@ -265,22 +310,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
             <p>{t('la chiave di Claude che è già qui')}</p>
             <button className="connections-button connect" onClick={() => collegaSubito(scelta.id)} disabled={collegando}>{collegando ? t('Collego…') : t('Consenti')}</button>
           </div>}
-          {moduloVisibile && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={async () => {
-            await ricarica(); setModifica(false); setDaFinire(false)
-            // ogni volta che una fonte viene (ri)collegata si rilegge: prima
-            // succedeva solo al primo collegamento, e cambiare le cartelle del
-            // computer lasciava in piedi l'indice di quelle vecchie finché non
-            // passavano sei ore. E si rileggono tutte, insieme: vedi `leggiTutte`
-            if (!MOTORI.includes(scelta.id) && !giaPartita.current) void leggiTutte()
-            giaPartita.current = false
-          }} collegato={() => {
-            // il server ha detto sì: la lettura parte adesso, non al suo «Avanti»,
-            // che la scheda del calendario non mostra più
-            if (MOTORI.includes(scelta.id)) return
-            giaPartita.current = true
-            void ricarica().catch(() => {})
-            void leggiTutte()
-          }} /></div>}
+          {moduloVisibile && !moduloSopra && <div className="connection-detail-form"><Form id={scelta.id} tema="chiaro" ok={formOk} collegato={formCollegato} /></div>}
         </div>}
       </div>
     </div>

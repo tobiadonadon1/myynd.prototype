@@ -88,8 +88,13 @@ export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; s
   </svg>
 }
 
-export function ConnectorTile({ id, nome, nota, collegata, problema = false, apri }: { id: string; nome: string; nota?: string; collegata: boolean; problema?: boolean; apri: () => void }) {
-  const stato = problema ? t('Serve l’accesso') : collegata ? t('Collegato') : t('Collega')
+export function ConnectorTile({ id, nome, nota, collegata, problema = false, parola, apri }: {
+  id: string; nome: string; nota?: string; collegata: boolean; problema?: boolean
+  /** La parola del guaio («Da sistemare», «Accedi di nuovo»…); senza, «Serve l’accesso» come per le Note. */
+  parola?: string
+  apri: () => void
+}) {
+  const stato = problema ? (parola ?? t('Serve l’accesso')) : collegata ? t('Collegato') : t('Collega')
   return <button type="button" className={`connector-tile ${collegata ? 'connected' : ''} ${problema ? 'needs-access' : ''}`} onClick={apri} data-connector={id}
     aria-label={`${t(nome)} · ${problema ? stato : collegata ? t('Collegato') : t('Da collegare')}`}>
     <span className="connector-tile-mark"><ConnectorIcon id={id} size={27} spenta={!collegata} /></span>

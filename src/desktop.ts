@@ -65,6 +65,8 @@ export type Desktop = {
    * finestra non è davanti: il guscio mostra e basta. Manca nei gusci vecchi.
    */
   notifica?(avviso: { titolo: string; corpo: string; dove: Dove }): void
+  /** Riapre l'app: serve quando un permesso dato adesso vale solo dopo un riavvio. Manca nei gusci vecchi. */
+  riavvia?(): Promise<void>
   /** Questa pagina è la barra del richiamo, non l'app intera. Manca nei gusci vecchi. */
   dentroIlRichiamo?: boolean
   /** Quello che la barra può chiedere al guscio. Manca nei gusci vecchi. */

@@ -67,6 +67,7 @@ import { lingua } from '../config.ts'
 // la forma sta in `config.ts`, con le altre: qui si riprende per chi legge Granola
 export type { ConfigGranola } from '../config.ts'
 import type { ConfigGranola } from '../config.ts'
+import { GuaioFonte } from './guaio.ts'
 
 /** Il tetto di note. Chi fa riunioni tutto il giorno da due anni ci arriva. */
 const TETTO = 4000
@@ -561,7 +562,11 @@ export async function sincronizza(): Promise<EsitoGranola> {
     return await leggi()
   } catch (e) {
     const m = e instanceof Error ? e.message : ''
-    if (m === CIFRATO || m === SENZA_TESTO) throw new Error(PASSA_ALL_ACCOUNT)
+    // il rimedio accanto alla frase: l'accesso con l'account, aprire l'app,
+    // o un Myynd più nuovo
+    if (m === CIFRATO || m === SENZA_TESTO) throw new GuaioFonte(PASSA_ALL_ACCOUNT, 'accedi')
+    if (m === NON_INSTALLATO || m === NIENTE_ANCORA) throw new GuaioFonte(m, 'apri-app')
+    if (m === CAMBIATO) throw new GuaioFonte(m, 'aggiorna')
     throw e
   }
 }

@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('myynd', {
   scegliFile: estensioni => chiedi('myynd:scegli-file', Array.isArray(estensioni) ? estensioni.map(String) : []),
   apriFuori: url => chiedi('myynd:apri-fuori', String(url)),
   mostraNelFinder: percorso => chiedi('myynd:mostra', String(percorso)),
+  // riapre l'app: un permesso dato adesso vale solo per la copia che parte dopo
+  riavvia: () => chiedi('myynd:riavvia'),
   segnala: inAttesa => ipcRenderer.send('myynd:segnala', Number(inAttesa)),
   lingua: l => ipcRenderer.send('myynd:lingua', l === 'en' ? 'en' : 'it'),
   scorciatoia: () => chiedi('myynd:scorciatoia'),

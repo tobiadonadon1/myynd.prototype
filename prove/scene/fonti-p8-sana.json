@@ -1,0 +1,17 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store" }
+  ],
+  "file": [
+    { "nome": "plan.md", "testo": "# Northwind plan\n\n1. Fix the three account issues.\n" }
+  ],
+  "punto": { "progetti": [] },
+  "p8": {
+    "storia": [
+      { "fonte": "desktop", "giorni": "pppppppppppppppppppppppppgppp", "rimedio": "attendi", "arrivi": 4 }
+    ],
+    "saltaGiornaliero": true
+  }
+}

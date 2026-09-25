@@ -17,6 +17,8 @@ import {statoAccessoNote} from './note-access.ts'
 import { nonLette } from './lettura-fonti.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
+import { avvisiAccesi, desktop } from './desktop.ts'
+import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -705,6 +707,42 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return s
   }, [])
 
+  /*
+   * Un guaio che si ripara mentre la pagina è aperta lo si dice (P8): la
+   * riga fissa sparisce, e senza una parola sembrerebbe un caso. Un guaio
+   * nuovo con la finestra dietro un'altra app diventa un avviso di sistema,
+   * solo se la persona gli avvisi li ha accesi, una volta per fonte. Mai al
+   * primo caricamento, mai per il silenzio (non è un guaio).
+   */
+  const problemiPrima = useRef<Map<string, string> | null>(null)
+  const notificati = useRef(new Set<string>())
+  const claudeDetto = useRef(0)
+  useEffect(() => {
+    const dopo = problemiVisibili(stato)
+    const prima = problemiPrima.current
+    problemiPrima.current = dopo
+    if (!prima) return
+    const nomeDi = (id: string) => nomeInFrase(id, stato.connettori.find(c => c.id === id)?.nome ?? id)
+    const tornati = ripresi(prima, dopo, saniDi(stato))
+    const fonti = tornati.filter(id => id !== 'claude' && id !== 'openai')
+    const detto: string[] = []
+    if (fonti.length) detto.push(riempi(t('Posso di nuovo leggere {nome}.'), { nome: elenco(fonti.map(nomeDi)) }))
+    if (tornati.includes('claude') && Date.now() - claudeDetto.current > 30_000) detto.push(t('Anthropic è di nuovo collegato.'))
+    if (detto.length) mostraToast(detto.join(' '))
+    const nuovi = nuoviGuai(prima, dopo).filter(id => !notificati.current.has(id))
+    if (nuovi.length && avvisiAccesi() && (document.hidden || !document.hasFocus())) {
+      const r = rigaFonti({
+        ragiona: true, testa: stato.testa && nuovi.includes(stato.testa.id) ? stato.testa : null,
+        guastoLettura: null, chiedeClaude: '', mancanze: mancanzeDi(stato).filter(m => nuovi.includes(m.id)),
+        titoliNegati: false, dopoImpostazioni: false, puoAprire: false, puoRiavviare: false
+      })
+      if (r) {
+        desktop()?.notifica?.({ titolo: r.frase, corpo: '', dove: 'oggi' })
+        for (const id of nuovi) notificati.current.add(id)
+      }
+    }
+  }, [stato, mostraToast])
+
   /**
    * Le proposte di automazione sono state mostrate: il fulmine si spegne.
    *
@@ -861,7 +899,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   // «Da fare» è dentro l'app e si dichiara collegato sempre: contarlo fra le
   // fonti diceva «1 fonte» a chi non aveva collegato niente, e la stessa
   // schermata sotto diceva «non hai collegato niente»
-  const connOn = connettori.filter(c => c.collegato && c.id !== 'mind2do')
+  // una fonte con un guaio resta fra le collegate: Anthropic da cui si è
+  // usciti non è «da collegare», è da far rientrare (P8)
+  const connOn = connettori.filter(c => (c.collegato || !!c.problema) && c.id !== 'mind2do')
   // le fonti, senza le teste: vedi `fontiCollegate`
   const fontiOn = fontiCollegate(connettori)
   // «può ragionare», non «c'è Claude»: con un fornitore compatibile scelto come
@@ -1170,6 +1210,17 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     fontiIncomplete: (stato.letturaIncompleta ?? []).map(f => ({
       nome: t(connettori.find(c => c.id === f.fonte)?.nome ?? f.fonte), motivo: f.motivo
     })),
+    /*
+     * La riga fissa, con il suo rimedio (P8): le fonti col nome che hanno in
+     * una frase, il motore che lavora se è uscito o ha la chiave rifiutata, e
+     * se i titoli delle finestre sono accesi (allora si chiede al guscio se
+     * l'Accessibilità c'è davvero).
+     */
+    mancanze: mancanzeDi(stato),
+    testaGuasta: stato.testa ?? null,
+    osservaTitoli: !!stato.osservaTitoli,
+    /** La riga ha appena detto lei «Anthropic è di nuovo collegato.»: il cambio di stato non lo ripete. */
+    claudeRipresoDaQui: () => { claudeDetto.current = Date.now() },
     feedCaricato,
     ricaricaFeed: () => { setGuastoFeed(null); setFeedCaricato(false); caricaFeed().catch(() => {}) },
     // Basta che non ci sia niente di aperto. Prima serviva anche zero fatte,
@@ -1743,18 +1794,21 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     connMeta: frasi.attiviDaCollegare(connOn.length, connettori.filter(c => c.pronto).length - connOn.length),
     connAttivi: connOn.map(c => ({
       id: c.id, nome: c.nome,
-      problema: c.id === 'note' && statoAccessoNote(stato).problema,
+      problema: !!c.problema || (c.id === 'note' && statoAccessoNote(stato).problema),
+      // la parola della scheda dice cosa serve: l'accesso, un nuovo accesso, un campo da sistemare
+      parola: c.problema ? parolaProblema(c.id, c.problema) : t('Serve l’accesso'),
       // il desktop dice anche se lo sta guardando dal vivo: è la differenza
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
       // a zero documenti «collegato» ripeteva il «Collegato» della tessera, una riga sotto
-      stato: [c.documenti ? frasi.statoConnettore(c.documenti) : null, c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+      // una fonte che tace lo dice al posto del conto: un fatto, e la scheda resta verde
+      stato: [c.silenzio ? lineaSilenzio(c.id, c.silenzio) : c.documenti ? frasi.statoConnettore(c.documenti) : null, c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
       // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
       // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto
       onClick: () => apriConnessioni(c.id)
 
     })),
-    connSpenti: connettori.filter(c => c.pronto && !c.collegato).map(c => ({
+    connSpenti: connettori.filter(c => c.pronto && !c.collegato && !c.problema).map(c => ({
       // il pannello si apre già su questa fonte: chi clicca "Posta" vuole
       // Posta, non l'elenco di tutto da ricominciare a cercare
       id: c.id, nome: c.nome, nota: c.nota, onClick: () => apriConnessioni(c.id)
