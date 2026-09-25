@@ -40,29 +40,29 @@ test('a mixed stream becomes one row per source, and green comes only when that 
   }
   assert.deepEqual(visti.slice(0, 4), ['leggo', 'leggo', 'leggo', 'leggo'])
   assert.equal(r.find(x => x.id === 'desktop')!.stato, 'fatto')
-  assert.equal(r.find(x => x.id === 'desktop')!.testo, '5 documents · 1 gone')
+  assert.equal(r.find(x => x.id === 'desktop')!.testo, '5 files · 1 gone')
   assert.equal(r.find(x => x.id === 'calendario')!.stato, 'leggo', 'a source that failed before it does not stop it')
   assert.equal(r.find(x => x.id === 'notion')!.stato, 'guaio')
   assert.ok(r.every(x => x.id !== 'x'), 'a phase without a card adds no row')
   assert.equal(nonLette(r), 1)
 
   r = avanzaLettura(r, { fase: 'calendario', stato: 'fatto', documenti: 1 })
-  assert.equal(r.find(x => x.id === 'calendario')!.testo, '1 document')
+  assert.equal(r.find(x => x.id === 'calendario')!.testo, '1 event')
   // WhatsApp non manda niente: alla fine è letta, con i documenti che ha
   r = chiudiLettura(r, id => id === 'whatsapp' ? 12 : undefined)
   assert.deepEqual(r.map(x => [x.id, x.stato, x.testo]), [
-    ['desktop', 'fatto', '5 documents · 1 gone'],
-    ['calendario', 'fatto', '1 document'],
+    ['desktop', 'fatto', '5 files · 1 gone'],
+    ['calendario', 'fatto', '1 event'],
     ['notion', 'guaio', 'Il token di Notion non è valido.'],
-    ['whatsapp', 'fatto', '12 documents']
+    ['whatsapp', 'fatto', '12 conversations']
   ])
 })
 
 test('the detail is the old progress line without the source name in front', () => {
   assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'x', fatti: 40, tot: 120 }), '40 of 120 messages')
-  assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'fatto', documenti: 7, giaLetti: 30 }), '7 documents · 30 already read')
+  assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'fatto', documenti: 7, giaLetti: 30 }), '7 emails · 30 already read')
   impostaLingua('it')
-  assert.equal(dettaglioSincronizzazione({ fase: 'desktop', stato: 'fatto', documenti: 1 }), '1 documento')
+  assert.equal(dettaglioSincronizzazione({ fase: 'desktop', stato: 'fatto', documenti: 1 }), '1 file')
   impostaLingua('en')
 })
 
@@ -179,7 +179,7 @@ test('after waiting two minutes behind another read, rows are closed from the in
     attendi: async () => {}
   })
   const righe = await lettura.leggiTutte()
-  assert.deepEqual(righe.map(r => [r.id, r.stato, r.testo]), [['desktop', 'fatto', '7 documents'], ['calendario', 'fatto', '1 document']])
+  assert.deepEqual(righe.map(r => [r.id, r.stato, r.testo]), [['desktop', 'fatto', '7 files'], ['calendario', 'fatto', '1 event']])
   assert.equal(lettura.stato().guaio, null)
 })
 
@@ -224,7 +224,83 @@ test('a source that did not change still says how many documents it has', () => 
   let r = iniziaLettura(['desktop', 'posta'])
   r = avanzaLettura(r, { fase: 'desktop', stato: 'fatto', documenti: 0, invariati: 5 })
   r = avanzaLettura(r, { fase: 'posta', stato: 'fatto', documenti: 2, giaLetti: 30, tolti: 1 })
-  assert.deepEqual(r.map(x => x.testo), ['5 documents', '32 documents · 1 gone'], 'while reading: what was seen, unchanged included')
+  assert.deepEqual(r.map(x => x.testo), ['5 files', '32 emails · 1 gone'], 'while reading: what was seen, unchanged included')
   r = chiudiLettura(r, id => ({ desktop: 5, posta: 32 } as Record<string, number>)[id])
-  assert.deepEqual(r.map(x => x.testo), ['5 documents', '32 documents · 1 gone'])
+  assert.deepEqual(r.map(x => x.testo), ['5 files', '32 emails · 1 gone'])
+})
+
+// — P4: i conti con il loro nome, le righe corte del primo avvio, e la lettura a cui ci si attacca —
+
+test('rows say what they counted: emails, events, files, never documents for mail', () => {
+  let r = iniziaLettura(['posta', 'postamac', 'agendamac', 'desktop', 'notion', 'slack'])
+  r = avanzaLettura(r, { fase: 'posta', stato: 'fatto', documenti: 60 })
+  r = avanzaLettura(r, { fase: 'postamac', stato: 'fatto', documenti: 1 })
+  r = avanzaLettura(r, { fase: 'agendamac', stato: 'fatto', documenti: 42 })
+  r = avanzaLettura(r, { fase: 'desktop', stato: 'leggo', fatti: 1204 })
+  r = avanzaLettura(r, { fase: 'notion', stato: 'fatto', documenti: 40 })
+  r = avanzaLettura(r, { fase: 'slack', stato: 'fatto', documenti: 3 })
+  assert.deepEqual(r.map(x => x.testo), ['60 emails', '1 email', '42 events', '1,204 files', '40 pages', '3 conversations'])
+  impostaLingua('it')
+  assert.equal(dettaglioSincronizzazione({ fase: 'desktop', stato: 'leggo', fatti: 1204 }), '1.204 file')
+  assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'fatto', documenti: 312 }), '312 email')
+  assert.equal(dettaglioSincronizzazione({ fase: 'agendamac', stato: 'fatto', documenti: 1 }), '1 evento')
+  // «40 di 120 messaggi» della posta resta com'era
+  assert.equal(dettaglioSincronizzazione({ fase: 'posta', stato: 'x', fatti: 40, tot: 120 }), '40 di 120 messaggi')
+  impostaLingua('en')
+})
+
+test('a Calendar on this Mac read skipped while Calendar is closed says so, with its count', () => {
+  assert.equal(dettaglioSincronizzazione({ fase: 'agendamac', stato: 'fatto', saltata: true, documenti: 42 }), '42 events · Paused while Calendar is closed')
+})
+
+test('short rows keep only the count, how much mail is left, and failures', () => {
+  const m = { fase: 'posta', stato: 'fatto', documenti: 400, giaLetti: 0, tolti: 3, troncato: true, resto: { letti: 400, totale: 3000, aGiorno: false }, cartelleFallite: ['Archivio'] }
+  assert.equal(dettaglioSincronizzazione(m), '400 emails · 3 gone · 400 of 3,000 read so far · 1 folder could not be read')
+  assert.equal(dettaglioSincronizzazione(m, true, true), '400 emails · 400 of 3,000 read so far · 1 folder could not be read')
+  const mac = { fase: 'desktop', stato: 'fatto', documenti: 1204, saltati: 3, saltatiPerTipo: 800, saltatiTipi: { media: 700, codice: 50, sistema: 30, altro: 20 }, illeggibili: ['/Users/x/Private'] }
+  assert.equal(dettaglioSincronizzazione(mac, true, true), '1,204 files · 1 folder would not open')
+  // tutta dentro: niente «è tutto dentro» nella riga corta (counter-case: la lunga lo dice)
+  const tutta = { fase: 'posta', stato: 'fatto', documenti: 60, resto: { letti: 60, totale: 60, aGiorno: true } }
+  assert.equal(dettaglioSincronizzazione(tutta, true, true), '60 emails')
+  assert.equal(dettaglioSincronizzazione(tutta), '60 emails · all in')
+})
+
+test('the list of sources a read will visit is not a row', () => {
+  let r = iniziaLettura(['posta'])
+  r = avanzaLettura(r, { fase: 'inizio', fonti: ['posta'] })
+  assert.deepEqual(r.map(x => [x.id, x.stato]), [['posta', 'attesa']])
+})
+
+test('attaching to a read already running: a source it does not visit gets one more read, never «✓ 0»', async () => {
+  let letture = 0
+  const lettura = creaLettura({
+    sincronizza: async su => {
+      letture++
+      if (letture === 1) {
+        // la lettura a cui ci si attacca è partita prima che Mail del Mac fosse collegata
+        su({ fase: 'inizio', fonti: ['calendario'] })
+        su({ fase: 'calendario', stato: 'fatto', documenti: 42 })
+        su({ fase: 'fine', totale: 42 })
+      } else {
+        su({ fase: 'inizio', fonti: ['calendario', 'postamac'] })
+        su({ fase: 'calendario', stato: 'fatto', documenti: 0, invariati: 42 })
+        su({ fase: 'postamac', stato: 'fatto', documenti: 60 })
+        su({ fase: 'fine', totale: 60 })
+      }
+    },
+    collegate: async () => ({ calendario: 42, postamac: letture >= 2 ? 60 : 0 })
+  })
+  const righe = await lettura.leggiTutte(['calendario', 'postamac'])
+  assert.equal(letture, 2)
+  assert.deepEqual(righe.map(r => [r.id, r.stato, r.testo]), [['calendario', 'fatto', '42 events'], ['postamac', 'fatto', '60 emails']])
+})
+
+test('when the read visits every row, no second read (counter-case)', async () => {
+  let letture = 0
+  const lettura = creaLettura({
+    sincronizza: async su => { letture++; su({ fase: 'inizio', fonti: ['calendario'] }); su({ fase: 'calendario', stato: 'fatto', documenti: 4 }) },
+    collegate: async () => ({ calendario: 4 })
+  })
+  await lettura.leggiTutte(['calendario'])
+  assert.equal(letture, 1)
 })

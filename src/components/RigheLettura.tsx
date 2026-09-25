@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { t } from '../lingua'
-import { aperta, type RigaLettura } from '../lettura-fonti'
+import { aperta, dettaglioSincronizzazione, type RigaLettura } from '../lettura-fonti'
 import { ConnectorIcon } from './ConnectorIcon'
 
 /** Quello che una riga dice di sé, a destra del nome. */
@@ -22,9 +22,18 @@ const NASCOSTO: CSSProperties = { position: 'absolute', width: 1, height: 1, pad
  * ogni avanzamento: «12 documenti», «13 documenti», «14 documenti». Adesso si
  * annuncia una fonte quando finisce (letta, a metà, o non letta), una volta.
  */
-export function RigheLettura({ righe, nome, classe, icona = 16 }: {
+/** La stessa riga, detta corta (il primo avvio, P4): il conto, quanto manca, i guasti. */
+export function breve(r: RigaLettura): RigaLettura {
+  if (!r.ultimo || r.stato === 'guaio' || r.stato === 'attesa') return r
+  return { ...r, testo: dettaglioSincronizzazione(r.ultimo, true, true) || r.testo }
+}
+
+export function RigheLettura({ righe: tutte, nome, classe, icona = 16, corte = false }: {
   righe: RigaLettura[]; nome: (id: string) => string; classe: 'onboard' | 'connections'; icona?: number
+  /** Righe corte: solo il conto, quanto manca e i guasti (il primo avvio). */
+  corte?: boolean
 }) {
+  const righe = corte ? tutte.map(breve) : tutte
   return <>
     <ul className={`${classe}-reading`} aria-label={t('Lettura delle fonti')}>
       {righe.map(r => <li key={r.id} className={`${classe}-reading-row is-${r.stato}`}>

@@ -40,6 +40,8 @@ export type StatoAvvio = {
   fonti: string[]
   fonte: string | null; fonteSaltata: boolean; fatti: FattoAvvio[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
+  /** Una prima lettura sta girando sul server (P4): chi ricarica torna a guardarla. */
+  leggendo?: boolean
 }
 
 export type Stato = {
@@ -491,7 +493,8 @@ const NOME_FONTE: Record<string, string> = {
   claude: 'Claude', jev: 'Jev', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
-  whatsapp: 'WhatsApp Business'
+  whatsapp: 'WhatsApp Business',
+  agendamac: 'Calendario del Mac', postamac: 'Mail del Mac'
 }
 
 /**
@@ -504,6 +507,8 @@ const NOME_FONTE: Record<string, string> = {
  */
 export function rigaSincronizzazione(m: Record<string, unknown>): string {
   const id = String(m.fase ?? '')
+  // l'elenco delle fonti che la lettura visiterà non è una riga (P4)
+  if (id === 'inizio') return ''
   /*
    * La fonte del computer si chiama come la macchina: «Il mio Mac», «Il mio
    * PC». Il nome vero lo decide il server e viaggia dentro `stato.connettori`,
@@ -1261,7 +1266,7 @@ export const api = {
     json('/api/profilo', { method: 'POST', body: JSON.stringify({ ordineBlocchi: ids }) }),
 
   collegaPosta: (p: { host: string; porta: number; utente: string; password: string; giorni: number }) =>
-    json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null }>(
+    json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null; messaggi?: number; giorni?: number }>(
       '/api/connettori/posta', { method: 'POST', body: JSON.stringify(p) }),
 
   /** Le cartelle scelte — o, con `tutto`, la casa intera: allora le cartelle le decide il server. */
@@ -1319,7 +1324,7 @@ export const api = {
 
   /** I `conversations.json` scelti, e l'interruttore per le sessioni di Claude Code. */
   collegaConversazioni: (file: string[], codice: boolean) =>
-    json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number }>(
+    json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number; conversazioni?: number }>(
       '/api/connettori/conversazioni', { method: 'POST', body: JSON.stringify({ file, codice }) }),
 
   collegaNotion: (token: string) =>
@@ -1387,7 +1392,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ url, chiave }) }),
 
   collegaSlack: (token: string) =>
-    json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
+    json<{ ok: true; squadra: string; canali?: number; oltre?: boolean }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>
@@ -2085,6 +2090,24 @@ export const apiP2 = {
 // — P3: fine —
 
 // — P4: inizio —
+/** Che cosa è un documento, per contarlo: lo stesso elenco di `server/generi.ts`. */
+export type Genere = import('../server/generi.ts').Genere
+/** Lo stato della prima pagina, e quello della prima lettura (`GET /api/avvio/pagina`). */
+export type StatoPrimaPagina = 'nessuna' | 'attesa' | 'lavoro' | 'pronta' | 'senza-motore' | 'guaio'
+export type PaginaAvvio = {
+  /** `prima`: la prima lettura sta girando; `coda`: il resto dei novanta giorni in sottofondo. */
+  lettura: 'prima' | 'coda' | null
+  trovato: Partial<Record<Genere, number>>
+  pagina: StatoPrimaPagina
+  carte: number
+}
+export const apiP4 = {
+  avvioPagina: () => json<PaginaAvvio>('/api/avvio/pagina'),
+  /** Calendario del Mac: niente da incollare; la prima volta macOS chiede il permesso. */
+  collegaAgendaMac: () => json<{ ok: true; eventi: number; calendari: number }>('/api/connettori/agendamac', { method: 'POST', body: '{}' }),
+  /** Mail del Mac: niente da incollare; serve l'accesso completo al disco. */
+  collegaPostaMac: () => json<{ ok: true; email: number; caselle: number }>('/api/connettori/postamac', { method: 'POST', body: '{}' })
+}
 // — P4: fine —
 
 // — P5: inizio —

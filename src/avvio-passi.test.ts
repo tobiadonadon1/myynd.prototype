@@ -27,3 +27,20 @@ test('without an interrupted read, each phase opens where it was', () => {
   // tornando da un consenso chiesto da una scheda, si torna alle schede
   assert.equal(momentoAllaRipresa('verifica', { ritorno: true }), 1)
 })
+
+// — P4: la lettura che il server porta avanti anche senza la pagina —
+
+test('a reload during a first read resumes on the reading view, not on the tiles', async () => {
+  const { riprendeLeggendo } = await import('./onboarding/passi.ts')
+  assert.equal(momentoAllaRipresa('fonte', { leggendo: true }), 1)
+  assert.equal(riprendeLeggendo('fonte', true), true)
+})
+
+test('without a read running, today’s rules (counter-case)', async () => {
+  const { riprendeLeggendo } = await import('./onboarding/passi.ts')
+  assert.equal(riprendeLeggendo('fonte', false), false)
+  // sources already chosen with an early Continue: the excerpts step stays where it was
+  assert.equal(riprendeLeggendo('verifica', true), false)
+  assert.equal(momentoAllaRipresa('verifica', { leggendo: true }), 2)
+  assert.equal(momentoAllaRipresa('completo', { leggendo: true }), momentoDi('completo'))
+})

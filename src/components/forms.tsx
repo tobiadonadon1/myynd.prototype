@@ -4,7 +4,8 @@
 // Le credenziali le digiti tu, nella tua app, e vanno al tuo server locale.
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { api } from '../api'
+import { api, apiP4 } from '../api'
+import { carta } from '../conta-fonti.ts'
 import { rilettura, suCollegamento } from '../collegamenti'
 import type { ChatGPT, ClaudeCon, Stato } from '../api'
 import { frasi, lingua, t } from '../lingua'
@@ -1098,7 +1099,8 @@ export function FormPosta({ tema, ok, collegato }: Props) {
       if (r.certificatoAdattato) {
         setAvviso(frasi.certificatoAltroNome(r.certificatoAdattato))
       }
-      collegato?.()
+      // quante email leggerà la prima lettura: la conferma che si conta (P4)
+      collegato?.(typeof r.messaggi === 'number' ? carta.posta(r.messaggi, r.giorni ?? giorni) : undefined)
       ok()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -1454,7 +1456,11 @@ export function FormDesktop({ tema, ok, collegato }: Props) {
   const collega = async (tutto: boolean) => {
     setOccupato(tutto ? 'tutto' : 'cartelle'); setErr('')
     const tutte = manuale.trim() ? [...cartelle, manuale.trim()] : cartelle
-    try { await api.collegaDesktop(tutto ? [] : tutte, tutto); collegato?.(); ok() }
+    try {
+      const r = await api.collegaDesktop(tutto ? [] : tutte, tutto)
+      collegato?.(carta.desktop({ tutto: r.tutto, cartelle: r.cartelle.length, mac: desktop()?.piattaforma !== 'win32' }))
+      ok()
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(null)
   }
@@ -1696,7 +1702,7 @@ export function FormNote({ tema, ok, collegato }: Props) {
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaNote(); collegato?.(); ok() }
+    try { const r = await api.collegaNote(); collegato?.(carta.note(r.note)); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -1823,7 +1829,11 @@ export function FormConversazioni({ tema, ok, collegato }: Props) {
   const collega = async () => {
     const tutti = manuale.trim() ? [...file, manuale.trim()] : file
     setOccupato(true); setErr('')
-    try { await api.collegaConversazioni(tutti, codice); collegato?.(); ok() }
+    try {
+      const r = await api.collegaConversazioni(tutti, codice)
+      collegato?.(typeof r.conversazioni === 'number' ? carta.conversazioni(r.conversazioni) : undefined)
+      ok()
+    }
     catch (e) {
       // il nome del file accanto alla frase, quando il server dice quale
       const quale = (e as { file?: string }).file
@@ -1910,7 +1920,7 @@ export function FormNotion({ tema, ok, collegato }: Props) {
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaNotion(token); setToken(''); collegato?.(); ok() }
+    try { const r = await api.collegaNotion(token); setToken(''); collegato?.(carta.notion(r.pagine)); ok() }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -2135,7 +2145,11 @@ export function FormSlack({ tema, ok, collegato }: Props) {
 
   const collega = async () => {
     setOccupato(true); setErr('')
-    try { await api.collegaSlack(token.trim()); setToken(''); collegato?.(); ok() }
+    try {
+      const r = await api.collegaSlack(token.trim()); setToken('')
+      collegato?.(typeof r.canali === 'number' ? carta.slack(r.oltre ? 200 : r.canali, !!r.oltre) : undefined)
+      ok()
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     setOccupato(false)
   }
@@ -2634,6 +2648,75 @@ export function FormJev({ tema, ok }: Props) {
   )
 }
 
+/**
+ * Calendario del Mac (P4): i calendari che Calendario ha già, senza niente da
+ * incollare. Si preme, macOS chiede il permesso la prima volta, e la scheda
+ * dice quanti eventi e da quanti calendari.
+ */
+export function FormAgendaMac({ tema, ok, collegato }: Props) {
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  const [fatto, setFatto] = useState<string | null>(null)
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      const r = await apiP4.collegaAgendaMac()
+      const frase = carta.agendaMac(r.eventi, r.calendari)
+      setFatto(frase)
+      collegato?.(frase)
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  if (fatto) return <div><div style={guida(tema)}>{fatto}</div>{!collegato && <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>}</div>
+  return (
+    <div>
+      <div style={guida(tema)}>{t('Legge i calendari di Calendario su questo Mac.')}</div>
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{frasi.collega(t('Calendario del Mac'))}</Conferma>
+    </div>
+  )
+}
+
+/**
+ * Mail del Mac (P4): le email di Mail su questo Mac, arrivate e inviate, lette
+ * dal disco. Serve l'accesso completo al disco: senza, la riga del permesso
+ * sta sopra il bottone, e dopo averlo dato si riapre Myynd.
+ */
+export function FormPostaMac({ tema, ok, collegato }: Props) {
+  const [err, setErr] = useState('')
+  const [occupato, setOccupato] = useState(false)
+  const [fatto, setFatto] = useState<string | null>(null)
+  const [accesso, setAccesso] = useState<'si' | 'no' | 'non-mac' | null>(null)
+  const d = desktop()
+  useEffect(() => {
+    let vivo = true
+    const guarda = () => api.stato().then(s => { if (vivo) setAccesso(s.accessoDisco) }).catch(() => {})
+    void guarda()
+    window.addEventListener('focus', guarda)
+    return () => { vivo = false; window.removeEventListener('focus', guarda) }
+  }, [])
+  const collega = async () => {
+    setOccupato(true); setErr('')
+    try {
+      const r = await apiP4.collegaPostaMac()
+      const frase = carta.postaMac(r.email, r.caselle)
+      setFatto(frase)
+      collegato?.(frase)
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    setOccupato(false)
+  }
+  if (fatto) return <div><div style={guida(tema)}>{fatto}</div>{!collegato && <Conferma onClick={ok} occupato={false} tema={tema}>{t('Avanti')}</Conferma>}</div>
+  return (
+    <div>
+      <div style={guida(tema)}>{t('Legge le email di Mail su questo Mac: arrivate e inviate.')}</div>
+      {accesso === 'no' && <AccessoDisco tema={tema} testo={t('Per leggere Mail serve l’accesso completo al disco')} />}
+      {accesso === 'no' && d?.riavvia && <button type="button" onClick={() => { void d.riavvia?.() }} style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 12.5, color: tema === 'scuro' ? CHIARO : 'var(--rame-testo)', textDecoration: 'underline', cursor: 'pointer' }}>{t('Riapri Myynd')}</button>}
+      <Errore testo={err} />
+      <Conferma onClick={collega} occupato={occupato} tema={tema}>{frasi.collega(t('Mail del Mac'))}</Conferma>
+    </div>
+  )
+}
+
 // ogni scheda riceve `collegato`: chi ha una conferma lo chiama appena il server dice sì
 export function Form({ id, tema, ok, collegato }: { id: string } & Props) {
   if (id === 'google') return <FormGoogle tema={tema} ok={ok} collegato={collegato} />
@@ -2648,6 +2731,8 @@ export function Form({ id, tema, ok, collegato }: { id: string } & Props) {
   if (id === 'note') return <FormNote tema={tema} ok={ok} collegato={collegato} />
   if (id === 'conversazioni') return <FormConversazioni tema={tema} ok={ok} collegato={collegato} />
   if (id === 'calendario') return <FormCalendario tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'agendamac') return <FormAgendaMac tema={tema} ok={ok} collegato={collegato} />
+  if (id === 'postamac') return <FormPostaMac tema={tema} ok={ok} collegato={collegato} />
   if (id === 'slack') return <FormSlack tema={tema} ok={ok} collegato={collegato} />
   if (id === 'github') return <FormGithub tema={tema} ok={ok} collegato={collegato} />
   if (id === 'drive') return <FormDrive tema={tema} ok={ok} collegato={collegato} />
