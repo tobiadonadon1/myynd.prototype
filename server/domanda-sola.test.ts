@@ -61,6 +61,19 @@ test('un blocco è una fonte o un permesso che mancano, non un dato', () => {
   assert.equal(bloccoDalTesto('I need Full Disk Access to read Notes.'), 'permesso')
   assert.equal(bloccoDalTesto('Non ho accesso a Notion: collegalo.'), 'fonte')
   assert.equal(bloccoDalTesto('I need Notion connected to read the page.'), 'fonte')
+  // (contro) un archivio in rete non è «i file del Mac»: collegare le cartelle non lo sblocca, e con
+  // le cartelle già collegate la riga diventerebbe una domanda invece di un blocco
+  assert.equal(bloccoDalTesto('I need access to your Google Drive to find the signed contract.'), 'fonte')
+  assert.equal(bloccoDalTesto('I can\'t access your Dropbox, where the price list lives.'), 'fonte')
+  assert.equal(bloccoDalTesto('I can\'t access your OneDrive folder with the deck.'), 'fonte')
+  assert.equal(bloccoDalTesto('Mi serve l\'accesso al tuo Drive per trovare il listino.'), 'fonte')
+  assert.equal(bloccoDalTesto('Non ho accesso a SharePoint: collegalo.'), 'fonte')
+  // (contro) un filo di Slack o di WhatsApp non è la posta
+  assert.equal(bloccoDalTesto('I don\'t have access to the Slack thread with Dana.'), 'fonte')
+  assert.equal(bloccoDalTesto('Non ho accesso al filo WhatsApp con Dana.'), 'fonte')
+  // e il filo della posta resta la posta, il disco del Mac resta i file
+  assert.equal(bloccoDalTesto('I don\'t have access to the mail thread with Dana: connect your mailbox.'), 'posta')
+  assert.equal(bloccoDalTesto('I cannot access the folder on your hard drive: connect it.'), 'file')
   // i contro: un dato che manca, un lavoro fatto, un testo lungo
   assert.equal(bloccoDalTesto('I need the price for 20 people before I can write the quote.'), null)
   // «link» da solo è un dato che manca, non una fonte da collegare

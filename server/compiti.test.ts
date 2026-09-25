@@ -1257,7 +1257,8 @@ test('P3 · (contro) un dato duro è una domanda sola, contata una volta; dopo l
   assert.deepEqual(c.ipotesi, ['Missing: the price for 20 people. I left it blank.'])
   assert.equal(lavoroDati.misura(id)!.domande, 1)
   assert.equal(lavoroDati.misura(id)!.mossa, 'segnaposto')
-  assert.match(dopo.ricevute[1].nota ?? '', /Manca un dato che nessuna fonte contiene/)
+  // la risposta sta nella nota: il giro in più dice prima di usarla, e solo altrimenti di lasciare il posto vuoto
+  assert.match(dopo.ricevute[1].nota ?? '', /^dana@example\.com\n\nNon fermarti a chiedere «What is the price for 20 people\?»: se la nota qui sopra lo dice già \(la sua risposta\), vale quella, usala\. Se davvero non c'è, manca un dato che nessuna fonte contiene/)
   o2.smetti()
 })
 
@@ -1361,7 +1362,7 @@ test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fis
   o3.smetti()
 })
 
-test('P3 · (contro) un cambio di salute di una fonte (P8) non riprende una riga ferma; un collegamento sì', async () => {
+test('P3 · (contro) una fonte che si rompe (P8) non riprende una riga ferma, e nemmeno un collegamento tolto; una fonte che guarisce sì', async () => {
   const { BLOCCHI } = await import('./domanda-sola.ts')
   compiti.scordaRiprese()
   const { svolgi, ricevute } = svolgiInFila(['Done: the note.\n\nThe note about the Notion page, long enough to be a note and not a status line.'])
@@ -1369,19 +1370,64 @@ test('P3 · (contro) un cambio di salute di una fonte (P8) non riprende una riga
   const id = riga('Summarize the Notion page, again')
   store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
   const o = orecchio(id)
-  // una fonte che si rompe o guarisce a una lettura: il fatto arriva alle finestre, la riga resta ferma
+  // una fonte che si rompe a una lettura: il fatto arriva alle finestre, la riga resta ferma
   const sentiti: string[] = []
   const smetti = compiti.ascolta(e => { sentiti.push(e.fase) }, null)
+  compiti.annunciaSalute({ guarite: [] })
   compiti.annunciaSalute()
   await pausa(150)
   assert.ok(sentiti.includes('collegamento'), 'il fatto non è arrivato alle finestre')
-  assert.equal(ricevute.length, 0, 'ripresa per un cambio di salute')
+  assert.equal(ricevute.length, 0, 'ripresa per una fonte che si è rotta')
   assert.equal(store.compito(id)!.stato, 'aperto')
-  // un collegamento aggiunto: si riprende
-  compiti.annunciaCollegamento()
+  // un collegamento tolto (DELETE /api/connettori/:id): le finestre lo sanno, la riga resta ferma
+  compiti.annunciaCollegamento(false, { riprendi: false })
+  await pausa(150)
+  assert.equal(ricevute.length, 0, 'ripresa per un collegamento tolto')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  // una fonte che guarisce alla lettura dopo (un token rimesso, un permesso dato): si riprende
+  compiti.annunciaSalute({ guarite: ['notion'] })
   await o.aspetta('pronto')
   assert.equal(ricevute.length, 1)
+  assert.equal(store.compito(id)!.stato, 'pronto')
   smetti(); o.smetti()
+})
+
+test('P3 · all\'avvio una riga ferma su un permesso si riprende (lui l\'ha dato e ha riaperto Myynd); una ferma su un\'altra fonte aspetta il collegamento o la guarigione', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi, ricevute } = svolgiInFila(['Done: the note.\n\nThe note from Apple Notes, long enough to be a note and not a status line.'])
+  let motore = false
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => false, motorePronto: () => motore })
+  const permesso = riga('Summarize my Apple Notes about the pilot')
+  const fonte = riga('Summarize the Notion page about the pilot')
+  const posta = riga('Reply to Dana about the pilot')
+  const ieri = new Date(Date.now() - 86_400_000).toISOString()
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.permesso, ieri, permesso)
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, ieri, fonte)
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, ieri, posta)
+  const o = orecchio(permesso)
+  // (contro) senza un motore che lavora non si riprende niente: il guaio del motore coprirebbe «la riprendo da qui»
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 0)
+  assert.equal(store.compito(permesso)!.guaio, BLOCCHI.permesso)
+  motore = true
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 1)
+  await o.aspetta('pronto')
+  assert.equal(store.compito(permesso)!.stato, 'pronto')
+  assert.equal(store.compito(fonte)!.stato, 'aperto', 'una fonte non si collega con Myynd chiuso: all\'avvio non c\'è niente di nuovo')
+  assert.equal(store.compito(fonte)!.guaio, BLOCCHI.fonte)
+  assert.equal(store.compito(posta)!.stato, 'aperto', 'la posta non è collegata')
+  assert.equal(ricevute.length, 1)
+  o.smetti()
+  // (contro) la stessa riga sul permesso non si riprende due volte nello stesso giorno
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 0)
+  // e una fonte che guarisce riprende quella ferma sulla fonte
+  const o2 = orecchio(fonte)
+  compiti.annunciaSalute({ guarite: ['notion'] })
+  await o2.aspetta('pronto')
+  assert.equal(ricevute.length, 2)
+  o2.smetti()
+  // la riga sulla posta resta ferma: si toglie, o le prove dopo con la posta collegata la riprenderebbero
+  store.scordaCompito(posta)
 })
 
 test('P3 · (contro) con la chiave del motore respinta (P8) una riga ferma non si riprende, e tiene «la riprendo da qui»; con la chiave a posto sì', async () => {

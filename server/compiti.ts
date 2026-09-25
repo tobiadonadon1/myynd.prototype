@@ -43,7 +43,7 @@ import * as mani from './mani.ts'
 import * as ordine from './ordine.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
-import { rifiutata, testaAlLavoro } from './modello.ts'
+import { collegato as motoreCollegato, rifiutata, testaAlLavoro } from './modello.ts'
 import { stendi } from './stesura.ts'
 import { corpoPerChiRiceve, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
@@ -122,11 +122,13 @@ export function annunciaFeed() {
  * più entrato» vale per chiunque abbia l'app aperta su questo computer, e la
  * notizia non porta niente di nessuno, solo il fatto.
  */
-export function annunciaCollegamento(aTutti = false) {
+export function annunciaCollegamento(aTutti = false, o: { riprendi?: boolean } = {}) {
   if (!aTutti) {
     annuncia({ fase: 'collegamento' })
-    // una fonte in più può sbloccare una riga ferma (P3): si guarda, senza aspettare
-    void riprendiBloccati().catch(() => {})
+    // una fonte in più può sbloccare una riga ferma (P3): si guarda, senza
+    // aspettare. Una fonte tolta no: rifare il lavoro per un collegamento
+    // in meno lo farebbe fermare di nuovo sulla stessa riga
+    if (o.riprendi !== false) void riprendiBloccati().catch(() => {})
     return
   }
   for (const a of ascoltatori) {
@@ -138,12 +140,17 @@ export function annunciaCollegamento(aTutti = false) {
  * «La salute di una fonte è cambiata, rileggi lo stato.»
  *
  * Lo stesso fatto sul filo, per la riga fissa delle fonti (P8): una fonte
- * che si rompe o guarisce a una lettura. Non è un collegamento in più, e
- * non riprende le righe ferme (P3): rifare un lavoro intero perché una
- * fonte si è rotta, ogni giorno, per una settimana, non sbloccherebbe niente.
+ * che si rompe o guarisce a una lettura. Non è un collegamento in più: una
+ * fonte che si rompe non riprende le righe ferme (P3), perché rifare un
+ * lavoro intero per un guaio non sbloccherebbe niente. Una che guarisce sì:
+ * un permesso dato nelle Impostazioni di sistema, un token rimesso, una
+ * cartella tornata leggibile non passano da nessuna rotta di collegamento,
+ * e Myynd li vede solo così, alla lettura dopo. «La riprendo da qui» vale
+ * anche per loro.
  */
-export function annunciaSalute() {
+export function annunciaSalute(o: { guarite?: string[] } = {}) {
   annuncia({ fase: 'collegamento' })
+  if (o.guarite?.length) void riprendiBloccati().catch(() => {})
 }
 
 /**
@@ -304,6 +311,8 @@ type Ferri = {
   postaCollegata: () => boolean
   /** Il motore che lavora ha la chiave respinta (P8): riprendere una riga ferma adesso la manderebbe a sbattere. */
   motoreRifiutato: () => boolean
+  /** C'è un motore che può lavorare: all'avvio, senza, una riga ferma ripresa morirebbe e il guaio del motore coprirebbe «la riprendo da qui». */
+  motorePronto: () => boolean
   /** La rilettura del lavoro, come lei e come chi lo riceve: quinta chiamata, stesso motivo. */
   giudica: typeof giudica
   /** La cosa dopo, in una riga: sesta, e l'ultima. */
@@ -336,7 +345,8 @@ const VERI: Ferri = {
   motoreRifiutato: () => {
     const t = testaAlLavoro()
     return (t === 'claude' || t === 'openai') && !!rifiutata(t)
-  }
+  },
+  motorePronto: () => motoreCollegato()
 }
 let ferri: Ferri = VERI
 
@@ -916,10 +926,17 @@ export function imparaDallaRisposta(
  * «Collega la posta e la riprendo da qui» è una promessa: si mantiene qui,
  * a qualunque età della riga, perché la riga la dice finché resta ferma.
  * La posta riparte quando la posta è collegata, i file quando c'è una
- * cartella, gli altri due a ogni collegamento aggiunto o cambiato (non a un
- * cambio di salute: `annunciaSalute`). Nessuna più di una volta al giorno
- * per riga (a memoria, per persona): una riga che torna a bloccarsi non
- * deve rifare il lavoro intero a ogni giro. Non lancia mai.
+ * cartella, gli altri due a ogni collegamento aggiunto o cambiato e a ogni
+ * fonte che guarisce (`annunciaSalute`, non quando una si rompe). Nessuna
+ * più di una volta al giorno per riga (a memoria, per persona): una riga
+ * che torna a bloccarsi non deve rifare il lavoro intero a ogni giro. Non
+ * lancia mai.
+ *
+ * All'avvio (`avvio`) si guarda una volta, per chi ha dato un permesso e
+ * riaperto Myynd come la riga fissa gli ha chiesto (P8, «Riapri Myynd»):
+ * un permesso non passa da nessuna rotta. Le righe ferme su un'altra fonte
+ * no: una fonte si collega solo con Myynd aperto, e una che era rotta
+ * guarisce alla prima lettura, che passa da qui da sola.
  *
  * E nessuna finché il motore che lavora ha la chiave respinta (P8): il
  * lavoro ripreso morirebbe sulla chiave, e il guaio della chiave si
@@ -929,16 +946,17 @@ export function imparaDallaRisposta(
  */
 const ripresi = new Map<string, number>()
 const RIPRESA_OGNI = 24 * 3_600_000
-export async function riprendiBloccati(): Promise<number> {
+export async function riprendiBloccati(o: { avvio?: boolean } = {}): Promise<number> {
   let quante = 0
   try {
     if (ferri.motoreRifiutato()) return 0
+    if (o.avvio && !ferri.motorePronto()) return 0
     const conf = cfg.leggi()
     const posta = ferri.postaCollegata()
     const file = !!conf.desktop?.cartelle?.length
     for (const c of lavoroDati.bloccatiDaRiprendere()) {
       const g = generaBlocco(c.guaio)
-      if (!g) continue
+      if (!g || (o.avvio && g === 'fonte')) continue
       const k = chiave(c.id)
       const adesso = Date.now()
       const fonteViva = g === 'posta' ? posta : g === 'file' ? file : true

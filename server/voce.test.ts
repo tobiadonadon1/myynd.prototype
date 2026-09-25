@@ -201,6 +201,23 @@ test('controlla segnala solo la lingua sbagliata, e solo con almeno tre mail a q
   assert.deepEqual(voce.controlla('Hi', null), [])
 })
 
+test('un mittente «Cognome, Nome» (l\'Outlook di un\'azienda) ha per nome quello dopo la virgola; un titolo dopo la virgola non è un nome', () => {
+  store.salvaDocumenti([
+    { id: 'posta:INBOX:801', fonte: 'posta', tipo: 'email', titolo: 'Fattura', corpo: 'Buongiorno', autore: '"Rossi, Marco" <marco.rossi@acme.example>', quando: giorniFa(1) },
+    { id: 'posta:INBOX:802', fonte: 'posta', tipo: 'email', titolo: 'Fattura', corpo: 'Buongiorno', autore: 'Rossi, Marco Antonio <ma.rossi@acme.example>', quando: giorniFa(1) },
+    { id: 'posta:INBOX:803', fonte: 'posta', tipo: 'email', titolo: 'Paper', corpo: 'Hi', autore: 'Marco Rossi, PhD <m.rossi@uni.example>', quando: giorniFa(1) },
+    { id: 'posta:INBOX:804', fonte: 'posta', tipo: 'email', titolo: 'Ciao', corpo: 'Ciao', autore: 'Marco Rossi <marco@rossi.example>', quando: giorniFa(1) }
+  ])
+  const nome = (doc: string) => voce.destinatarioDi({ doc, testo: 'Reply', nota: null })!.nome
+  assert.equal(nome('posta:INBOX:801'), 'Marco')
+  assert.equal(nome('posta:INBOX:802'), 'Marco')
+  // (contro) il titolo dopo la virgola non diventa il nome, e un nome semplice resta com'era
+  assert.equal(nome('posta:INBOX:803'), 'Marco')
+  assert.equal(nome('posta:INBOX:804'), 'Marco')
+  // e nel blocco della voce il nome arriva pulito: mai «Rossi,»
+  assert.equal(voce.destinatarioDi({ doc: 'posta:INBOX:801', testo: 'Reply', nota: null })!.indirizzo, 'marco.rossi@acme.example')
+})
+
 test('due persone non vedono le mail l\'una dell\'altra nella cache', async () => {
   const chi = await import('./chi.ts')
   const conti = await import('./conti.ts')

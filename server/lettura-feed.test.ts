@@ -101,6 +101,28 @@ test('la lettura dopo pulisce quello che si è sistemato; una fonte sola tocca s
   assert.equal(c, 1)
 })
 
+test('a chi ascolta si dice quali fonti sono guarite: una che si rompe non è guarita, una che si chiude perché non si legge più nemmeno', () => {
+  const guarite: string[][] = []
+  const leggiE = (eventi: unknown[], minuto: number, soloFonte: string | null = null) => {
+    const t = Date.parse('2026-09-20T10:00:00Z') + minuto * 60_000
+    const oss = osservaLettura('conto', soloFonte, { adesso: () => t, quandoCambia: c => { guarite.push(c.guarite) }, risveglio: 0 })
+    for (const e of eventi) oss.avvisa(e)
+    oss.chiudi(false)
+  }
+  // si rompe: cambiata, nessuna guarita
+  leggiE([{ fase: 'note', stato: 'guaio', errore: 'x', rimedio: 'permesso-disco' }, { fase: 'slack', stato: 'guaio', errore: 'token', rimedio: 'credenziale' }], 0)
+  assert.deepEqual(guarite, [[]])
+  // le Note tornano leggibili (il permesso dato): guarite le Note, Slack ancora rotto
+  leggiE([{ fase: 'note', stato: 'fatto', documenti: 3 }, { fase: 'slack', stato: 'guaio', errore: 'token', rimedio: 'credenziale' }], 10)
+  assert.deepEqual(guarite, [[], ['note']])
+  // (contro) una lettura intera che non legge più Slack chiude il suo episodio, ma non è una guarigione
+  leggiE([{ fase: 'note', stato: 'fatto', documenti: 3 }], 20)
+  assert.deepEqual(guarite, [[], ['note'], []])
+  // (contro) una lettura pulita senza un guaio prima non cambia niente e non dice niente
+  leggiE([{ fase: 'note', stato: 'fatto', documenti: 3 }], 30)
+  assert.deepEqual(guarite, [[], ['note'], []])
+})
+
 test('una fonte scollegata a metà lettura perde il suo episodio', () => {
   leggi([{ fase: 'note', stato: 'guaio', errore: 'x', rimedio: 'permesso-disco' }])
   leggi([{ fase: 'note', stato: 'scollegata' }], { soloFonte: 'note', minuto: 10 })

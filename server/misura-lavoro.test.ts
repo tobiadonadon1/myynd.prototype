@@ -36,20 +36,22 @@ test('l\'aritmetica: senza domande, con una, presunte, blocchi e guai a parte, i
     riga({ compito: 'j', affidato: giorniFa(40), consegnato: giorniFa(40) }),
     riga({ compito: 'k', inviato: giorniFa(1), via: 'smtp', classe: 'identico' }), riga({ compito: 'l', inviato: giorniFa(1), via: 'casella', classe: 'ritocco' }),
     riga({ compito: 'm', inviato: giorniFa(1), via: 'casella', classe: 'modificato' }), riga({ compito: 'n', inviato: giorniFa(1), via: 'propria', classe: 'riscritto' }),
-    riga({ compito: 'o', inviato: giorniFa(1), via: 'copia' }), riga({ compito: 'p', inviato: giorniFa(1), via: 'smtp', classe: 'ritocco' })
+    riga({ compito: 'o', inviato: giorniFa(1), via: 'copia' }), riga({ compito: 'p', inviato: giorniFa(1), via: 'smtp', classe: 'ritocco' }),
+    // ha chiesto la sua domanda, e dopo la risposta si è fermata su un dato che mancava: la domanda conta lo stesso
+    riga({ compito: 'q', domande: 1, mossa: 'guaio', consegnato: null })
   ]
   const m = calcola(righe, { giorni: 30, dal: giorniFa(30), postaInviata: true })
-  // a, b, c, d, e, k..p sono lavori (j è fuori finestra, f e g a parte, h e i fondo)
-  assert.equal(m.lavori.arrivati, 11)
+  // a, b, c, d, e, k..p, q sono lavori (j è fuori finestra, f e g a parte, h e i fondo)
+  assert.equal(m.lavori.arrivati, 12)
   assert.equal(m.lavori.senzaDomande, 9)
-  assert.equal(m.lavori.conUna, 2)
+  assert.equal(m.lavori.conUna, 3)
   assert.equal(m.lavori.max, 1)
   assert.equal(m.lavori.presunte, 1)
   assert.equal(m.lavori.segnaposto, 1)
   assert.equal(m.lavori.correzioni, 2)
-  assert.equal(m.lavori.tassoSenza, Math.round((9 / 11) * 1000) / 1000)
+  assert.equal(m.lavori.tassoSenza, Math.round((9 / 12) * 1000) / 1000)
   assert.equal(m.blocchi, 1)
-  assert.equal(m.guai, 1)
+  assert.equal(m.guai, 2)
   assert.deepEqual(m.fondo, { arrivati: 2, segnaposto: 1, domande: 0 })
   assert.equal(m.bozze.inviate, 5)
   assert.deepEqual([m.bozze.identiche, m.bozze.ritocchi, m.bozze.modificate, m.bozze.riscritte], [1, 2, 1, 1])

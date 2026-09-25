@@ -80,9 +80,17 @@ export function istruzionePresumi(domanda: string, ipotesi: string | null): stri
     'Fai il lavoro intero e in fondo scrivi l\'ipotesi in una riga sola che comincia con «Ho supposto».'
 }
 
-/** La riga con cui si chiede di lasciare il posto vuoto, invece di inventare o chiedere. */
-export function istruzioneSegnaposto(domanda: string): string {
-  return `Manca un dato che nessuna fonte contiene: «${domanda}». Non inventarlo e non chiederlo. ` +
+/**
+ * La riga con cui si chiede di lasciare il posto vuoto, invece di inventare o
+ * chiedere. Dopo la domanda già fatta (`rispostaInNota`) la nota porta la sua
+ * risposta: si dice prima di usare quella, o il modello che richiede lo stesso
+ * dato leggerebbe «non inventarlo e non chiederlo» sotto la riga che lo dice.
+ */
+export function istruzioneSegnaposto(domanda: string, o: { rispostaInNota?: boolean } = {}): string {
+  const manca = o.rispostaInNota
+    ? `Non fermarti a chiedere «${domanda}»: se la nota qui sopra lo dice già (la sua risposta), vale quella, usala. Se davvero non c'è, manca un dato che nessuna fonte contiene: non inventarlo e non chiederlo. `
+    : `Manca un dato che nessuna fonte contiene: «${domanda}». Non inventarlo e non chiederlo. `
+  return manca +
     'Fai il lavoro intero e dove andrebbe scrivi «[da completare: cosa]» («[to fill: what]» in inglese). ' +
     'In fondo una riga sola che comincia con «Manca» («Missing» in inglese) e dice cosa manca.'
 }
@@ -120,6 +128,8 @@ export async function stendi(o: {
   let riletture = 0
   let giri = 1
   let extraFatto = false
+  /** Che giro in più è stato: un segnaposto chiesto e poi non lasciato (la risposta era nella nota) non è un'ipotesi. */
+  let extraMossa: 'presumi' | 'segnaposto' | null = null
   let riscritto = false
   let notaGiro = o.nota
   /** L'istruzione del giro in più (presumi o segnaposto): resta in nota anche nella riscrittura dopo la rilettura. */
@@ -169,8 +179,11 @@ export async function stendi(o: {
       const mossa = decidi({ chiede: true, blocco, duro, peso }, { nativa: o.nativa, domandeFatte, secondoGiro: extraFatto })
       if ((mossa === 'presumi' || mossa === 'segnaposto') && !extraFatto && chiamate < STESURE_MAX) {
         extraFatto = true
+        extraMossa = mossa
         ipotesiProposta = ipotesiDaDomanda(testo)
-        istruzioneExtra = mossa === 'presumi' ? istruzionePresumi(domanda, ipotesiProposta) : istruzioneSegnaposto(domanda)
+        istruzioneExtra = mossa === 'presumi'
+          ? istruzionePresumi(domanda, ipotesiProposta)
+          : istruzioneSegnaposto(domanda, { rispostaInNota: domandeFatte > 0 && !!o.nota })
         console.info(`myynd · lavoro · ${c.id} · ${mossa} · ${genere ?? '-'} · giro in più`)
         notaGiro = [o.nota, istruzioneExtra].filter(Boolean).join('\n\n')
         uscita = await chiama(notaGiro, { fissa: lette, giri: 2 })
@@ -183,7 +196,7 @@ export async function stendi(o: {
 
     // una cosa fatta: la frase di chiusura in prima riga, non su un prompt
     if (!esito.chiede && c.modo !== 'prompt') testo = mani.conFraseDiChiusura(testo, uscita.fatti ?? [], o.lingua)
-    const mossaConsegna = (): Mossa => haSegnaposto(testo) ? 'segnaposto' : extraFatto ? 'presumi' : 'produci'
+    const mossaConsegna = (): Mossa => haSegnaposto(testo) ? 'segnaposto' : extraMossa === 'presumi' ? 'presumi' : 'produci'
 
     if (eseguito || !RILETTI.has(c.modo) || riletture >= RILETTURE_MAX) {
       const m = mossaConsegna()

@@ -26,7 +26,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
-import { nomePorta, portaAlProgetto, portaInChat, siPuoParlarne } from '../vals'
+import { nomePorta, portaAlleFonti, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
@@ -35,7 +35,7 @@ import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
-import { haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
+import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -226,8 +226,29 @@ function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; mo
       {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
         : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
     </div>
-    {c.guaio && <p className="task-planning-error">{t(c.guaio)}</p>}
+    {c.guaio && (bloccoDi(c) ? <Ferma guaio={c.guaio} carta /> : <p className="task-planning-error">{t(c.guaio)}</p>)}
   </li>
+}
+
+/**
+ * La riga ferma su una fonte che manca (P3), in Da fare: la frase nel colore
+ * di una riga, non di un guaio, e sotto il link alle Fonti, lo stesso della
+ * prima pagina. Non è una domanda e non è un errore: è una strada.
+ */
+function Ferma({ guaio, carta }: { guaio: string; carta?: boolean }) {
+  const vai = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); portaAlleFonti() }
+  return (
+    <div style={{ fontSize: carta ? '11px' : '12px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.64)', marginTop: carta ? 6 : 3, overflowWrap: 'anywhere', overflow: 'hidden' }}
+      onClick={e => e.stopPropagation()}>
+      <span>{t(guaio)}</span>
+      {siPuoAprireLeFonti() && <>
+        {' '}
+        <Hov as="a" href="#" onClick={vai}
+          style={{ color: 'var(--rame-testo)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+          hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Fonti')}</Hov>
+      </>}
+    </div>
+  )
 }
 
 /**
@@ -363,9 +384,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
               }}
               hover={{ color: 'var(--rame-testo)' }}>{c.testo}</Hov>
 
-          {c.guaio && (
-            <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
-          )}
+          {c.guaio && (bloccoDi(c)
+            ? <Ferma guaio={c.guaio} />
+            : <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>)}
 
           {/* cosa sta facendo, finché ci lavora: una riga sola, smorzata, che
               non può sforare — un titolo di documento può essere lungo quanto vuole */}

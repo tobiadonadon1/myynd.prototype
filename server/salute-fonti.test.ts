@@ -84,7 +84,7 @@ test('registra: i contatori del giorno, la fila, la durata più lunga, il totale
 test('un guaio passeggero 90 secondi dopo un risveglio non conta; tre minuti dopo sì; uno che resta conta sempre', () => inA(() => {
   const sveglia = alle(20, 8)
   const r1 = sf.registra({ fonte: 'posta', esito: 'guaio', rimedio: 'attendi', frase: null, durata: 0, tolti: 0, inventario: null, quando: sveglia + 90_000 }, { risveglio: sveglia })
-  assert.deepEqual(r1, { cambiato: false })
+  assert.deepEqual(r1, { cambiato: false, guarita: false })
   assert.equal(rigaDi('2026-09-20', 'posta'), undefined)
   assert.equal(ep('posta'), undefined)
   sf.registra({ fonte: 'posta', esito: 'guaio', rimedio: 'attendi', frase: null, durata: 0, tolti: 0, inventario: null, quando: sveglia + 180_000 }, { risveglio: sveglia })
@@ -94,14 +94,14 @@ test('un guaio passeggero 90 secondi dopo un risveglio non conta; tre minuti dop
 }))
 
 test('l’episodio: si apre, si allunga solo sulle letture contate, prende la causa peggiore, si chiude alla prima pulita', () => inA(() => {
-  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 9), esito: 'guaio', rimedio: 'attendi' }), { cambiato: false })
+  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 9), esito: 'guaio', rimedio: 'attendi' }), { cambiato: false, guarita: false })
   assert.equal(ep('slack')!.fila, 1)
   reg({ fonte: 'slack', quando: alle(20, 9, 5), esito: 'guaio', rimedio: 'attendi' })
   assert.equal(ep('slack')!.fila, 1, 'cinque minuti dopo non si conta')
   reg({ fonte: 'slack', quando: alle(20, 9, 10), esito: 'guaio', rimedio: 'attendi' })
   assert.equal(ep('slack')!.fila, 2)
   assert.deepEqual(sf.fontiIncomplete(), [], 'due letture passeggere non si mostrano')
-  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 9, 20), esito: 'guaio', rimedio: 'attendi' }), { cambiato: true })
+  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 9, 20), esito: 'guaio', rimedio: 'attendi' }), { cambiato: true, guarita: false })
   assert.deepEqual(sf.fontiIncomplete().map(f => [f.fonte, f.motivo, f.rimedio]), [['slack', 'non-disponibile', 'attendi']])
   // una causa che resta prende il posto della passeggera, e non torna indietro
   reg({ fonte: 'slack', quando: alle(20, 9, 30), esito: 'guaio', rimedio: 'credenziale' })
@@ -109,12 +109,13 @@ test('l’episodio: si apre, si allunga solo sulle letture contate, prende la ca
   assert.equal(ep('slack')!.rimedio, 'credenziale')
   assert.equal(ep('slack')!.motivo, 'non-disponibile')
   assert.equal(ep('slack')!.dal, new Date(alle(20, 9, 30)).toISOString(), '«dal» è quando è cominciata la causa che resta')
-  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 10) }), { cambiato: true })
+  // la lettura pulita chiude il guaio che si vedeva: cambiata, e guarita (una riga ferma su Slack può ripartire, P3)
+  assert.deepEqual(reg({ fonte: 'slack', quando: alle(20, 10) }), { cambiato: true, guarita: true })
   assert.equal(ep('slack'), undefined)
 }))
 
 test('una causa che resta si mostra subito; una lettura del desktop con cartelle negate pure', () => inA(() => {
-  assert.deepEqual(reg({ fonte: 'note', quando: alle(20, 9), esito: 'guaio', rimedio: 'permesso-disco' }), { cambiato: true })
+  assert.deepEqual(reg({ fonte: 'note', quando: alle(20, 9), esito: 'guaio', rimedio: 'permesso-disco' }), { cambiato: true, guarita: false })
   reg({ fonte: 'desktop', quando: alle(20, 9), esito: 'incompleta', rimedio: 'permesso-disco' })
   assert.deepEqual(sf.fontiIncomplete().map(f => [f.fonte, f.motivo, f.rimedio]), [['note', 'non-disponibile', 'permesso-disco'], ['desktop', 'incompleta', 'permesso-disco']])
 }))

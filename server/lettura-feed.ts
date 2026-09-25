@@ -106,7 +106,7 @@ type Fine = NonNullable<ReturnType<typeof esitoLettura>> & { quando: number }
 export function osservaLettura(
   _conto: string,
   soloFonte: string | null,
-  o: { quandoCambia?: () => void; adesso?: () => number; risveglio?: number } = {}
+  o: { quandoCambia?: (cosa: { guarite: string[] }) => void; adesso?: () => number; risveglio?: number } = {}
 ) {
   const ora = o.adesso ?? (() => Date.now())
   const fasi = new Map<string, { primo: number; fine?: Fine }>()
@@ -125,6 +125,8 @@ export function osservaLettura(
     },
     chiudi(interrotta = false) {
       let cambiato = false
+      /** Le fonti il cui guaio si è chiuso con questa lettura: una riga ferma su una di loro può ripartire (P3). */
+      const guarite: string[] = []
       const lette = new Set<string>()
       for (const [fonte, f] of fasi) {
         if (!f.fine) continue
@@ -136,6 +138,7 @@ export function osservaLettura(
             inventario: x.esito === 'pulita' && saluteFonti.portaInventario(fonte) ? x.documenti : null, quando: x.quando
           }, o.risveglio === undefined ? {} : { risveglio: o.risveglio })
           if (r.cambiato) cambiato = true
+          if (r.guarita) guarite.push(fonte)
         } catch (err) {
           console.error(`myynd · fonti · la lettura di ${fonte} non si è scritta:`, err instanceof Error ? err.message : err)
         }
@@ -146,7 +149,7 @@ export function osservaLettura(
       } catch (err) {
         console.error('myynd · fonti · gli episodi non si sono chiusi:', err instanceof Error ? err.message : err)
       }
-      if (cambiato) { try { o.quandoCambia?.() } catch { /* chi ascolta si arrangia */ } }
+      if (cambiato) { try { o.quandoCambia?.({ guarite }) } catch { /* chi ascolta si arrangia */ } }
     }
   }
 }

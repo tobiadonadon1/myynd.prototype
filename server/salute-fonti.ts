@@ -136,16 +136,18 @@ function rigaNuova(giorno: string, fonte: string): Riga {
  * nei primi due minuti dopo un risveglio non si scrive nemmeno; due letture
  * fallite a meno di otto minuti contano una volta. Torna se la riga fissa in
  * prima pagina deve cambiare: l'episodio di questa fonte è diventato
- * visibile, o ha smesso di esserlo.
+ * visibile, o ha smesso di esserlo. E dice il verso: `guarita` quando un
+ * guaio che si vedeva si è chiuso con questa lettura, perché una fonte che
+ * guarisce può sbloccare una riga ferma (P3), una che si rompe no.
  */
-export function registra(r: Registrazione, o: { risveglio?: number; adesso?: number } = {}): { cambiato: boolean } {
+export function registra(r: Registrazione, o: { risveglio?: number; adesso?: number } = {}): { cambiato: boolean; guarita: boolean } {
   const fallita = r.esito !== 'pulita'
   // un permesso che mancava prima che lo si vedesse tornare dal vivo: vecchio
   if (fallita && r.rimedio === 'permesso-disco') {
     const vivo = cursore(CURSORE_VIVO(r.fonte))
-    if (vivo && r.quando < Date.parse(vivo)) return { cambiato: false }
+    if (vivo && r.quando < Date.parse(vivo)) return { cambiato: false, guarita: false }
   }
-  if (fallita && r.rimedio === 'attendi' && r.quando - (o.risveglio ?? ultimoRisveglio()) < DOPO_RISVEGLIO_MS) return { cambiato: false }
+  if (fallita && r.rimedio === 'attendi' && r.quando - (o.risveglio ?? ultimoRisveglio()) < DOPO_RISVEGLIO_MS) return { cambiato: false, guarita: false }
   const iso = new Date(r.quando).toISOString()
   let giorno = giornoIn(new Date(r.quando))
   const versione = versioneApp()
@@ -154,6 +156,11 @@ export function registra(r: Registrazione, o: { risveglio?: number; adesso?: num
     const ep = episodio(r.fonte)
     const primaVisibile = !!ep && visibile(ep)
     const conta = fallita && contata(ep ? Date.parse(ep.visto) : null, r.quando)
+    /** Com'è finita per la riga fissa: cambiata se si vede diversamente da prima, guarita se un guaio visibile si è chiuso. */
+    const esito = () => {
+      const dopoVisibile = !!dopo && visibile(dopo)
+      return { cambiato: primaVisibile !== dopoVisibile, guarita: primaVisibile && !dopoVisibile }
+    }
 
     // l'episodio, prima: la riga del giorno ne prende la fila
     let dopo: Episodio | null = null
@@ -200,7 +207,7 @@ export function registra(r: Registrazione, o: { risveglio?: number; adesso?: num
     }
     if (!giorno) {
       db.exec('COMMIT')
-      return { cambiato: primaVisibile !== (!!dopo && visibile(dopo)) }
+      return esito()
     }
     g = g ?? rigaNuova(giorno, r.fonte)
     g.letture += 1
@@ -223,7 +230,7 @@ export function registra(r: Registrazione, o: { risveglio?: number; adesso?: num
     g.ultima = iso
     scriviRiga(g)
     db.exec('COMMIT')
-    return { cambiato: primaVisibile !== (!!dopo && visibile(dopo)) }
+    return esito()
   } catch (e) {
     db.exec('ROLLBACK')
     throw e
@@ -480,7 +487,7 @@ const WHATSAPP_ZITTO = 'Meta non ha risposto.'
  */
 export function sondaWhatsapp(
   esito: { ok: true } | { ok: false; errore: string }, durata: number, quando = Date.now()
-): { cambiato: boolean } {
+): { cambiato: boolean; guarita: boolean } {
   if (esito.ok) return registra({ fonte: 'whatsapp', esito: 'pulita', rimedio: null, frase: null, durata, tolti: 0, inventario: null, sonda: 'ok', quando })
   const rimedio: Rimedio = esito.errore === WHATSAPP_TOKEN ? 'credenziale' : esito.errore === WHATSAPP_ZITTO ? 'attendi' : 'guarda'
   return registra({ fonte: 'whatsapp', esito: 'guaio', rimedio, frase: esito.errore, durata, tolti: 0, inventario: null, sonda: rimedio, quando })

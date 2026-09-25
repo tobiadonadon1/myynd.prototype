@@ -71,10 +71,16 @@ const INDIRIZZO = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
 const DI_POSTA = /^(?:posta|google|gmail|microsoft|outlook):/i
 
 /** Il nome di chi ha scritto, senza l'indirizzo e le virgolette; il primo nome, se ce n'è più d'uno. */
+/** «Marco Rossi, PhD»: quello che sta dopo la virgola è un titolo, non il nome. */
+const TITOLO_DOPO_VIRGOLA = /^(?:phd|md|mba|jr|sr|cpa|esq|dr|ing|avv|dott)\b\.?$/i
 function primoNome(autore: string | null | undefined, indirizzo: string): string {
   const senza = (autore ?? '').replace(/<[^>]*>/g, '').replace(/["']/g, '').trim()
-  const nome = senza && !senza.includes('@') ? senza : indirizzo.split('@')[0]
-  const primo = nome.split(/[\s.]+/).filter(Boolean)[0] ?? nome
+  let nome = senza && !senza.includes('@') ? senza : indirizzo.split('@')[0]
+  // «Rossi, Marco» (l'Outlook di un'azienda): il nome sta dopo la virgola.
+  // Uno o due nomi dopo, e non un titolo: «Marco Rossi, PhD» resta Marco
+  const cognomePrima = /^([^,]+),\s*(\p{L}[\p{L}'’.-]*(?:\s+\p{L}[\p{L}'’.-]*)?)$/u.exec(nome)
+  if (cognomePrima && !TITOLO_DOPO_VIRGOLA.test(cognomePrima[2])) nome = cognomePrima[2]
+  const primo = (nome.split(/[\s.]+/).filter(Boolean)[0] ?? nome).replace(/[,;:!?]+$/, '')
   return primo.charAt(0).toUpperCase() + primo.slice(1)
 }
 

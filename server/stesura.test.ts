@@ -101,9 +101,30 @@ test('c. dopo una domanda già fatta, un prezzo che manca diventa un segnaposto,
   assert.equal(s.mossa, 'segnaposto')
   assert.equal(s.genere, 'cifra')
   assert.equal(chiamate.length, 2)
-  assert.match(chiamate[1].nota ?? '', /Manca un dato che nessuna fonte contiene: «What is the price for 20 people\?»\. Non inventarlo e non chiederlo\./)
+  // la domanda è già stata fatta e la nota c'è: prima si dice di usare la risposta che sta lì, poi il segnaposto
+  assert.match(chiamate[1].nota ?? '', /Non fermarti a chiedere «What is the price for 20 people\?»: se la nota qui sopra lo dice già \(la sua risposta\), vale quella, usala\. Se davvero non c'è, manca un dato che nessuna fonte contiene: non inventarlo e non chiederlo\./)
   assert.match(s.testo, /\[to fill: price for 20 people\]/)
   assert.deepEqual(pesate, [])
+})
+
+test('c2. (contro) nel fondo, senza una domanda fatta, l\'istruzione del segnaposto non parla di una risposta nella nota', async () => {
+  const { lavora, chiamate } = copione(['I read the thread.\nWhat is the price for 20 people?', 'Done: the quote.\n\nHi Nora,\n\nthe price is [to fill: price for 20 people].\n\nBest,\nAlex\n\nMissing: the price for 20 people.'])
+  const s = (await base(lavora, ferri({}).f, { nativa: false }))!
+  assert.equal(s.mossa, 'segnaposto')
+  assert.match(chiamate[1].nota ?? '', /Manca un dato che nessuna fonte contiene: «What is the price for 20 people\?»\. Non inventarlo e non chiederlo\./)
+  assert.ok(!(chiamate[1].nota ?? '').includes('la sua risposta'))
+})
+
+test('c3. dopo la domanda, se il modello richiede lo stesso dato e poi lo prende dalla nota, la consegna è «produci»: niente ipotesi, niente segnaposto', async () => {
+  const { lavora, chiamate } = copione(['I read the thread.\nWhich Giulia is the quote for?', 'Done: the quote to Giulia Neri.\n\nHi Giulia,\n\nhere is the course quote for Lumen, with the price from the list and the dates we discussed.\n\nBest,\nAlex'])
+  const { f, pesate } = ferri({})
+  const s = (await base(lavora, f, { c: { ...c, domandeFatte: 1 }, nota: 'Which Giulia is the quote for? → Giulia Neri' }))!
+  assert.equal(s.mossa, 'produci')
+  assert.equal(chiamate.length, 2)
+  assert.match(chiamate[1].nota ?? '', /^Which Giulia is the quote for\? → Giulia Neri\n\nNon fermarti a chiedere «Which Giulia is the quote for\?»: se la nota qui sopra lo dice già/)
+  assert.ok(!(chiamate[1].nota ?? '').includes('Manca un dato che nessuna fonte contiene: «Which'), 'la nota diceva insieme «ecco la risposta» e «manca»')
+  // «Which Giulia» non è nel pavimento: si pesa, e senza etichetta è dura, quindi il giro del segnaposto e non una seconda domanda
+  assert.deepEqual(pesate, ['Which Giulia is the quote for?'])
 })
 
 test('d. tre domande dal modello: ne resta una, con il classificatore vero e senza modello', async () => {
@@ -152,6 +173,18 @@ test('f2. (contro) lo stesso testo con la posta collegata non è un blocco: è u
   const { lavora: l2 } = copione(['I don\'t have access to Dana\'s thread in your mail.'])
   const s2 = (await base(l2, ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a) }).f, { collegata: () => false }))!
   assert.equal(s2.mossa, 'blocco')
+})
+
+test('f4. (contro) un archivio in rete che manca resta un blocco anche con le cartelle del Mac collegate: non è una domanda', async () => {
+  for (const testo of ['I need access to your Google Drive to find the signed contract.', 'I don\'t have access to the Slack thread with Dana.']) {
+    const { lavora, chiamate } = copione([testo])
+    const { f, pesate } = ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a), peso: { genere: 'collegamento', costo: 'alto' } })
+    // le cartelle del Mac e la posta sono collegate: quello che manca è un'altra fonte
+    const s = (await base(lavora, f, { collegata: g => g === 'file' || g === 'posta' }))!
+    assert.equal(s.mossa, 'blocco', `«${testo}» con i file del Mac collegati è diventata una domanda`)
+    assert.equal(chiamate.length, 1)
+    assert.deepEqual(pesate, [], 'un blocco non si pesa')
+  }
 })
 
 test('f3. (contro) la posta è collegata e l\'etichetta dice «collegamento»: non torna un blocco, è una domanda dura', async () => {

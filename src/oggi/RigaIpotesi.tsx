@@ -18,8 +18,10 @@ import { CAMPO, Scatola } from './Scatola'
 import { eUnaMancanza } from '../lavoro-affidato'
 
 const RIGA: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 3, minWidth: 0, maxWidth: '100%' }
+// il testo prende solo lo spazio che gli serve e si accorcia con i puntini
+// quando deve: «Cambia» segue la frase, non sta appeso al bordo destro della riga
 const TESTO: CSSProperties = {
-  flex: 1, minWidth: 0, fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.64)',
+  flex: '0 1 auto', minWidth: 0, fontSize: '13px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.64)',
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
 }
 /** «Cambia», nel rame: un gesto scritto, non una pastiglia, e sempre visibile. */

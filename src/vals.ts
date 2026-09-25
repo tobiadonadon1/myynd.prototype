@@ -247,6 +247,20 @@ export function siPuoAprireLeCose(): boolean { return !!portaAlleCose }
 export function portaAlleAttivita() { portaAlleCose?.() }
 
 /**
+ * «Portami alle Fonti», detto da chi non ha `v`.
+ *
+ * Una riga ferma su una fonte che manca (P3) dice «Collega la posta e la
+ * riprendo da qui» anche in Da fare, e lì la frase da sola era una promessa
+ * senza la strada: il link alle Fonti che la prima pagina ha (`v.goConn`) qui
+ * passa da questa mano, per la stessa ragione delle altre tre.
+ */
+let portaAlleConnessioni: (() => void) | null = null
+export function registraPortaFonti(f: (() => void) | null) { portaAlleConnessioni = f }
+/** Vera quando c'è chi sa aprirle: senza, il collegamento non si disegna. */
+export function siPuoAprireLeFonti(): boolean { return !!portaAlleConnessioni }
+export function portaAlleFonti() { portaAlleConnessioni?.() }
+
+/**
  * Come si chiama il bottone che porta lì: dice *cosa* apre.
  *
  * «Portami lì» era una parola sola per tre posti diversi, e su una riga che non
@@ -1131,6 +1145,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
   useEffect(() => {
     registraPortaCose(() => { setScreen('oggi'); setSearch(false); setMenu(false) })
     return () => registraPortaCose(null)
+  }, [])
+
+  // e quella delle Fonti, per una riga ferma in Da fare: vedi `portaAlleFonti`
+  useEffect(() => {
+    registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
+    return () => registraPortaFonti(null)
   }, [])
 
   return {

@@ -63,7 +63,10 @@ export function calcola(righe: Misura[], o: { giorni: number; dal: string; posta
   const affidate = righe.filter(r => r.affidato >= o.dal && !r.compito.startsWith('rev-'))
   const fondo = affidate.filter(r => r.origine === 'fondo')
   const proprie = affidate.filter(r => r.origine !== 'fondo')
-  const lavori = proprie.filter(r => r.mossa !== 'blocco' && r.mossa !== 'guaio' && (r.consegnato !== null || r.domande > 0))
+  // una domanda fatta davvero conta sempre, anche se poi la riga si è fermata
+  // su un dato che mancava (guaio): altrimenti il tasso senza domande salirebbe
+  // proprio sulle righe che hanno chiesto. Un blocco, o un guaio senza domanda, resta fuori
+  const lavori = proprie.filter(r => r.domande > 0 || (r.mossa !== 'blocco' && r.mossa !== 'guaio' && r.consegnato !== null))
   const senzaDomande = lavori.filter(r => r.domande === 0).length
   const tasso = (n: number, su: number) => su >= MINIMO ? Math.round((n / su) * 1000) / 1000 : null
 

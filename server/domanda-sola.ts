@@ -42,8 +42,23 @@ export function duroDalTesto(domanda: string): Genere | null {
 
 /** La forma di chi si ferma perché gli manca una fonte: la stessa che legge `chiedeAiuto`. */
 const BLOCCATO = /^(?:I (?:need|cannot|can't|can’t|don['’]t have)|I['’]m (?:missing|unable)|Mi (?:manca|mancano|serve|servono)|Non (?:posso|ho accesso|riesco)|Collega(?:mi)?\b)/i
-const POSTA = /\b(?:mail|e-?mail|posta|casella|inbox|mailbox|gmail|outlook|thread|filo)\b/i
-const FILE = /\b(?:file|files|folder|folders|cartell[ae]|disk|disco|desktop|scrivania|documents|documenti|drive|dropbox|sharepoint)\b/i
+/**
+ * La posta: le parole della casella. Non «thread» o «filo» da soli: un filo
+ * di Slack o di WhatsApp non è la posta, e con la posta collegata la riga
+ * chiederebbe invece di fermarsi su «Collega la fonte che serve».
+ */
+const POSTA = /\b(?:mail|e-?mail|posta|casella|inbox|mailbox|gmail|outlook)\b/i
+/** I file del Mac: le cartelle sul disco, non un archivio in rete (quello sta in ALTRA_FONTE). */
+const FILE = /\b(?:file|files|folder|folders|cartell[ae]|disk|disco|desktop|scrivania|documents|documenti)\b/i
+/**
+ * Una fonte che si collega nelle Fonti e non è né la posta né i file del
+ * Mac: Drive, Dropbox, SharePoint, OneDrive, Slack, WhatsApp, Notion, GitHub,
+ * Granola. «I can't access your OneDrive folder» nomina una cartella, ma la
+ * cartella sta su OneDrive: collegare i file del Mac non la sblocca, e con
+ * le cartelle del Mac già collegate la riga diventerebbe una domanda. Un
+ * «hard drive» resta il disco.
+ */
+const ALTRA_FONTE = /\b(?:dropbox|sharepoint|onedrive|slack|whatsapp|notion|github|granola|teams)\b|(?<!\bhard\s)(?<!\bexternal\s)(?<!\bdisco\s)\bdrive\b/i
 const PERMESSO = /\b(?:permess\w*|permission\w*|autorizz\w*|authori[sz]\w*|full disk|accessibility|accessibilità)\b/i
 /**
  * Le parole che dicono «è una fonte che manca», e non un dato: senza, «I need
@@ -65,6 +80,7 @@ export function bloccoDalTesto(testo: string): 'posta' | 'file' | 'fonte' | 'per
   const apertura = /^(?:Collega|Non ho accesso|I cannot access|I can['’]t access|I don['’]t have access)/i.test(prima)
   if (!apertura && !COLLEGAMENTO.test(prima)) return null
   if (PERMESSO.test(prima) && !/\b(?:connect|colleg)/i.test(prima)) return 'permesso'
+  if (ALTRA_FONTE.test(prima)) return 'fonte'
   if (POSTA.test(prima)) return 'posta'
   if (FILE.test(prima)) return 'file'
   if (PERMESSO.test(prima)) return 'permesso'

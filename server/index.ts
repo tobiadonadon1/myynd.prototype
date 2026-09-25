@@ -508,10 +508,13 @@ app.use(auth.guardia)
 app.use((req, res, next) => {
   if (cambiaUnCollegamento(req.method, req.path, req.body)) {
     const di = chi.adesso()
+    // un collegamento tolto è un fatto per le finestre, non una fonte in più
+    // per le righe ferme (P3): riprenderle le farebbe fermare di nuovo
+    const dillo = () => compiti.annunciaCollegamento(false, { riprendi: req.method.toUpperCase() !== 'DELETE' })
     res.on('finish', () => {
       if (res.statusCode >= 400) return
-      if (di) chi.dentro(di, () => compiti.annunciaCollegamento())
-      else compiti.annunciaCollegamento()
+      if (di) chi.dentro(di, dillo)
+      else dillo()
     })
   }
   next()
@@ -2034,8 +2037,9 @@ async function leggiTutto(
    * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
-  // un cambio di salute è un fatto per la riga fissa, non un collegamento in più: le righe ferme (P3) non si riprendono per questo
-  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaSalute() })
+  // un cambio di salute è un fatto per la riga fissa, non un collegamento in
+  // più: le righe ferme (P3) si riprendono solo per una fonte che guarisce
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: c => compiti.annunciaSalute(c) })
   try {
     return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
   } finally { oss.chiudi(fermo()) }
@@ -5100,6 +5104,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
+  }
+  // e le righe ferme su un permesso (P3): lui l'ha dato nelle Impostazioni di
+  // sistema e ha riaperto Myynd, come la riga fissa gli ha chiesto (P8)
+  for (const u of conti.tutti()) {
+    try { chi.dentro(u, () => { void compiti.riprendiBloccati({ avvio: true }).catch(() => {}) }) } catch { /* idem */ }
   }
   // una configurazione rimasta con un motore che non può lavorare — ChatGPT
   // scelto e spento — si ripara adesso, prima che i giri di fondo la usino
