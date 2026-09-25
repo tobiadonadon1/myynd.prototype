@@ -83,7 +83,8 @@ if [[ "$COSTRUISCI" == si || ( "$COSTRUISCI" == auto && ( ! -f dist/index.html |
 fi
 
 # 4. il server, con la sola casa finta
-env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA \
+# P4: MYYND_SENZA_APP_MAC=1, così Calendario del Mac non tocca mai il Calendario vero di chi prova
+env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_SENZA_APP_MAC=1 \
   node --disable-warning=ExperimentalWarning server/index.ts > "$OUT/server.log" 2>&1 &
 SRV=$!
 aspetta_riga "$OUT/server.log" 'server su http' 40

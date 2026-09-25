@@ -1,0 +1,71 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "p4": {
+    "onboarding": false,
+    "imbuto": true,
+    "calendario": {
+      "url": "http://127.0.0.1:18751/statici/lavoro.ics",
+      "nome": "Work"
+    },
+    "postaMac": {
+      "caselle": 2,
+      "inArrivo": 900,
+      "inviate": 12,
+      "vecchie": 10,
+      "spazzatura": 5
+    },
+    "fileDatati": [
+      {
+        "nome": "homepage-notes.md",
+        "testo": "Homepage notes\n\nThe new website needs a shorter homepage headline before the October launch.\nThe new website should show the team photo on the About page, as Sara suggested.",
+        "giorni": 3
+      },
+      {
+        "nome": "launch-plan.md",
+        "testo": "Launch plan\n\nThe new website goes live in October, after the copy review with Maya.\nFor the new website we still need the hosting renewal and the domain transfer.",
+        "giorni": 6
+      },
+      {
+        "nome": "pricing-draft.txt",
+        "testo": "Pricing draft\n\nThe pricing page of the new website lists three plans and a yearly discount.",
+        "giorni": 12
+      },
+      {
+        "nome": "meeting-notes-maya.md",
+        "testo": "Meeting with Maya\n\nMaya will send the homepage copy for the new website by the end of the week.",
+        "giorni": 20
+      },
+      {
+        "nome": "photo-brief.md",
+        "testo": "Photo brief\n\nThe photo shoot for the new website is planned in the studio with natural light.",
+        "giorni": 35
+      },
+      {
+        "nome": "domain-transfer.txt",
+        "testo": "Domain transfer\n\nThe domain for the new website moves to the new registrar before the launch.",
+        "giorni": 60
+      },
+      {
+        "nome": "old-course-notes.md",
+        "testo": "Course notes\n\nNotes from an evening course on typography, kept for reference.",
+        "giorni": 200
+      },
+      {
+        "nome": "tax-2025.txt",
+        "testo": "Tax notes\n\nReceipts for last year, sorted by month.",
+        "giorni": 220
+      },
+      {
+        "nome": "old-trip.md",
+        "testo": "Trip\n\nPacking list for a trip last spring.",
+        "giorni": 260
+      },
+      {
+        "nome": "cv-2024.md",
+        "testo": "Curriculum\n\nAn old version of the CV, kept for reference.",
+        "giorni": 300
+      }
+    ]
+  }
+}
