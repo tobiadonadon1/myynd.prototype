@@ -1437,7 +1437,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           l'unica cosa che qui deve leggersi per intero, e la nota in fondo
           può scendere sotto senza perdere niente */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
-        <button type="button" onClick={manda} disabled={!puo} style={{
+        <button type="button" onClick={manda} disabled={!puo} title={c.email?.allegato ? a : undefined} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
           background: puo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
           color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
@@ -1445,7 +1445,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           cursor: puo ? 'pointer' : 'default',
           // l'indirizzo sta dentro il bottone: lungo, si tronca — non esce dal riquadro
           maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-        }}>{mando ? t('Mando…') : daControllare ? t('Controlla e manda') : frasi.mandaA(a)}</button>
+        }}>{mando ? t('Mando…') : daControllare ? t('Controlla e manda') : c.email?.allegato ? t('Manda senza allegato') : frasi.mandaA(a)}</button>
         <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio(''); setScrivo(false) }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',

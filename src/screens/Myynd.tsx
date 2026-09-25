@@ -28,7 +28,7 @@ import { PrioritaProgetto } from '../components/PrioritaProgetto'
 import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { Testo } from '../Testo'
-import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siCambia } from '../lavoro-affidato'
+import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
 export { CAMPO, Scatola }
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
@@ -594,7 +594,7 @@ function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
   // fatte, la scelta presa. Il documento sta nel file, non qui.
-  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') || fraseFinita(c) : ''
+  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c) || fraseFinita(c) : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
   // una figlia di revisione non mostra mai la sua nota: è il blocco di
@@ -629,10 +629,12 @@ function domande(c: Compito): { visto: string; tutte: Chiesta[] } {
 }
 
 /** Quello che viene dopo la frase di chiusura, se è corto: la riga per lei. */
-function dopoLaChiusura(risultato: string): string {
-  // la riga dell'ipotesi si mostra da sola, con «Cambia»: qui non si ripete; e i
-  // numeri delle fonti non hanno senso in una riga piana
-  const [, ...resto] = senzaRigaIpotesi(risultato).trim().split(/\n\s*\n/)
+function dopoLaChiusura(c: Compito): string {
+  // la riga dell'ipotesi si mostra da sola, con «Cambia»: qui non si ripete,
+  // ma solo quando la riga la porta davvero (una riga consegnata prima, senza
+  // `ipotesi`, la tiene nel testo, come nella lista); e i numeri delle fonti
+  // non hanno senso in una riga piana
+  const [, ...resto] = testoMostrato(c.risultato, c.ipotesi).trim().split(/\n\s*\n/)
   // la riga delle fonti («From Nora's mail [1].») è provenienza, non un
   // riassunto: da sola non è la riga del corpo (resta la frase «Done:»)
   const nota = resto.join('\n').split('\n').filter(r => !/\[\d{1,2}\]/.test(r)).join('\n').trim()
@@ -861,7 +863,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           </div>
           {testo && (aperta && pronto && !c.consegna
             // aperta, il lavoro intero si legge con le fonti in apice, senza la riga dell'ipotesi che sta già sotto
-            ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={senzaRigaIpotesi(intero)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
+            ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={testoMostrato(intero, c.ipotesi)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
             : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
           {siCambia(c) && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
           {bloccata && <Bloccata v={v} />}

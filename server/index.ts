@@ -47,6 +47,7 @@ import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
 import * as invii from './invii-osservati.ts'
 import * as lavoroDati from './lavoro-dati.ts'
+import * as voce from './voce.ts'
 import * as revisioni from './revisioni.ts'
 import { misuraLavoro } from './misura-lavoro.ts'
 import { corpoPerChiRiceve, testoMostrato } from './cornice.ts'
@@ -3434,8 +3435,13 @@ app.post('/api/compiti/:id/prepara-email', async (req, res) => {
 
   try {
     // dalle fonti che la bozza ha citato, non da una ricerca nuova: il
-    // destinatario deve venire da quello che ha letto lei
-    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti, c.doc)
+    // destinatario deve venire da quello che ha letto lei. E nella lingua di
+    // chi riceve (P3): quella salvata sulla riga alla consegna, altrimenti la
+    // voce ricalcolata adesso; senza, il modello riscriveva in inglese una
+    // risposta italiana a Marco. Anche il file da allegare si propone qui.
+    const lingua = c.voceScritta?.lingua
+    const consegna = lingua === 'it' || lingua === 'en' ? lingua : voce.perRiga(c)?.consegna
+    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti, c.doc, { consegna, candidati: claude.candidatiAllegato([], c.fonti ?? []) })
     if (!e) return res.status(400).json({ errore: 'Non sono riuscito a ricavarne un\'email.' })
     const pronta: store.EmailPronta = { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
     if (c.stato === 'pronto') store.scriviEmailCompito(c.id, pronta)

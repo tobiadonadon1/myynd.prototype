@@ -2469,9 +2469,9 @@ PROPOSTA basata sull'obiettivo noto e indica cosa resta da verificare. La
 proposta richiesta è già un risultato utile, anche senza un rapporto sullo
 stato attuale. Fai domande solo quando manca un dato duro, uno che
 nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario,
-una data, un file che non esiste. Una preferenza, un formato, un livello di
-dettaglio non sono dati duri: si sceglie la strada più ragionevole e la si
-dice nella riga finale.
+la data di un impegno preso a suo nome, un file che non esiste. Una preferenza,
+un formato, un livello di dettaglio, un giorno da proporre non sono dati duri:
+si sceglie la strada più ragionevole e la si dice nella riga finale.
 
 ${DOMANDA_AL_PIU}
 
@@ -3429,16 +3429,16 @@ const SCHEMA_CHIESTE = {
 export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
 
 /**
- * Da «non ho capito» a tre domande con le risposte già pronte da toccare.
+ * Da «non ho capito» a una domanda sola con le risposte già pronte da toccare.
  *
  * Il modo vecchio era un paragrafo e una casella vuota: «Non ho trovato nessun
  * blog né un sito con articoli associati a un cliente specifico…». Tutto vero, e
  * inutile — rimanda addosso a chi legge il lavoro di capire cosa manca e di
  * scriverlo in prosa, che è più fatica del compito stesso.
  *
- * Tre o quattro domande con due o quattro opzioni si rispondono in dieci
- * secondi con il pollice, e la casella di testo resta lì sotto per quello che
- * le opzioni non prevedono. La differenza non è di comodità: è che una domanda
+ * Una domanda con due o quattro opzioni si risponde in dieci secondi con il
+ * pollice, e la casella di testo resta lì sotto per quello che le opzioni non
+ * prevedono. Una sola, dal 24 settembre 2026: «One question at most». La differenza non è di comodità: è che una domanda
  * con delle opzioni *dice anche cosa può fare* — le scelte sono il modo in cui
  * si scopre di cosa è capace, senza doverglielo chiedere.
  *
@@ -3546,8 +3546,8 @@ const SCHEMA_ESITO = {
       type: 'boolean',
       description:
         'Vero se il testo NON è un lavoro consegnabile ma una richiesta di un dato duro che ' +
-        'nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, una ' +
-        'data, un file che non esiste, un collegamento da fare. ' +
+        'nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, la ' +
+        'data di un impegno preso a suo nome, un file che non esiste, un collegamento da fare. ' +
         'Falso se è la cosa finita (un\'email scritta, un riassunto, un confronto, una ' +
         'definizione, un piano con chi fa cosa ed entro quando), anche se in fondo aggiunge ' +
         'una riga con le ipotesi fatte o un dubbio. Falso anche quando il compito era un ' +
@@ -3623,8 +3623,9 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
       'lui ha prodotto la cosa concreta più utile (una definizione scritta, un piano con chi ' +
       'fa cosa ed entro quando, una bozza) dicendo in fondo le ipotesi che ha fatto, quella è ' +
       'la cosa fatta: non trasformarla in una domanda. Chiede solo se gli manca un dato duro ' +
-      'che nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, una ' +
-      'data, un file. Una domanda su una preferenza o un formato non è una richiesta di aiuto.\n\n' +
+      'che nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, la ' +
+      'data di un impegno preso a suo nome, un file. Una domanda su una preferenza, un formato ' +
+      'o un giorno da proporre non è una richiesta di aiuto.\n\n' +
       'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + DOMANDA_AL_PIU
     ),
     formato: SCHEMA_ESITO,

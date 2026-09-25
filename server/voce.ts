@@ -169,7 +169,12 @@ export function profilo(corpi: string[], nome = ''): Profilo {
   let it = 0, en = 0
   for (const c of corpi) { if (sembraItaliano(c)) it++; else if (sembraInglese(c)) en++ }
   const lingua: Profilo['lingua'] = it > en ? 'it' : en > it ? 'en' : null
-  const maschera = (r: string) => nome ? r.replace(new RegExp(`\\b${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), '{nome}') : r
+  // il nome nel saluto diventa «{nome}»: quello del destinatario se lo si sa,
+  // altrimenti ogni nome proprio dopo la prima parola («Ciao Marco,» delle sue
+  // ultime mail non è il saluto per Giulia, e un modello lo ricopierebbe)
+  const maschera = (r: string) => nome
+    ? r.replace(new RegExp(`\\b${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), '{nome}')
+    : r.replace(/^(\S+\s+)(\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*)*)/u, '$1{nome}')
   const saluto = piuFrequente(tutte.map(r => maschera(r[0])))
   const chiusura = piuFrequente(tutte.map(r => { const fine = r.slice(1).reverse().find(x => CHIUSURA.test(x)); return fine ?? '' }))
   const conteggi = corpi.map(c => c.split(/\s+/).filter(Boolean).length).sort((a, b) => a - b)

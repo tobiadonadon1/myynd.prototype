@@ -80,6 +80,8 @@ before(async () => {
     risposte: [
       { se: 'Guardi il risultato di un compito affidato', in: 'system', json: { chiede: false, manca: [], domanda: '', visto: '' } },
       { se: 'Sei il revisore di un lavoro', in: 'system', json: { esito: 'pass', per: 'Dana', comeTe: 'ok', comeLoro: 'ok', problemi: [], verificato: ['x'] } },
+      // l'email ricavata dopo, dalla lista: il modello finto tiene l'italiano e sceglie il file fra i candidati
+      { se: 'Prendi una bozza scritta per una persona[\\s\\S]*Reply to Marco about the course quote', in: 'tutto', json: { a: 'marco.rossi@lumen.example', oggetto: 'Re: Preventivo corso', corpo: 'Ciao Marco,\n\nil corso per dodici persone costa 890 euro a persona.\n\nA presto,\nAlex', allegato: 'desktop:q4-plan.md' } },
       { se: 'Un assistente ha appena finito un lavoro', in: 'system', json: { prossimo: '' } },
       { se: 'Il compito: Write to Dana[\\s\\S]*Monday', in: 'utente', testo: 'Done: the note to Dana, with the new date.\n\nHi Dana,\n\nthe note says Monday, October 5, and that is all it says for now.\n\nBest\n\nFrom the mail [1].' },
       { se: 'Il compito: Write to Dana', in: 'utente', testo: 'Done: the note to Dana.\n\nHi Dana,\n\nthe note says Friday, and that is all it says for now.\n\nBest\n\nFrom the mail [1].\nI assumed Friday as the deadline.' }
@@ -102,7 +104,16 @@ before(async () => {
       posta: { host: '127.0.0.1', porta: 1, utente: 'alex@harbor.example', password: 'x', smtp: { host: '127.0.0.1', porta: portaSmtp } },
       motore: 'compatibile', compatibile: { url: `http://127.0.0.1:${portaFinto}/v1/`, chiave: 'sk-finta', modello: 'finto' }
     })
-    store.salvaDocumenti([{ id: 'posta:INBOX:503', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: new Date().toISOString(), messageId: 'l1@studio.example', filo: 'f-leo' }])
+    store.salvaDocumenti([
+      { id: 'posta:INBOX:503', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: new Date().toISOString(), messageId: 'l1@studio.example', filo: 'f-leo' },
+      { id: 'posta:INBOX:501', fonte: 'posta', tipo: 'email', titolo: 'Preventivo corso', corpo: 'Ciao Alex, ci mandi il preventivo per il corso da dodici persone? Grazie, Marco', autore: 'Marco Rossi <marco.rossi@lumen.example>', quando: new Date().toISOString(), messageId: 'm501@lumen.example', filo: 'f-marco' },
+      { id: 'desktop:q4-plan.md', fonte: 'desktop', tipo: 'file', titolo: 'q4-plan.md', corpo: 'The Q4 plan.', percorso: FILE_PIANO, quando: new Date().toISOString() }
+    ])
+    // una risposta italiana a Marco, consegnata senza email (la posta non c'era): l'email si ricava dopo, dalla lista
+    store.scriviCompito({ id: 'c-r1', testo: 'Reply to Marco about the course quote', ordine: chiavi.dopo(store.ultimoOrdine('oggi')), doc: 'posta:INBOX:501' })
+    store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, fonti = ?, voceScritta = ? WHERE id = 'c-r1'")
+      .run(new Date(Date.now() - 3_600_000).toISOString(), 'Done: the reply to Marco, with the price from the list.\n\nCiao Marco,\n\nil corso per dodici persone costa 890 euro a persona.\n\nA presto,\nAlex\n\nPrice from the plan [1].',
+        JSON.stringify([{ id: 'desktop:q4-plan.md', label: 'q4-plan.md' }]), JSON.stringify({ destinatario: 'Marco', lingua: 'it', quanti: 4, esempi: [] }))
     // una bozza già partita dalla posta: la mandata è più recente della delega
     store.scriviCompito({ id: 'c-s1', testo: 'Reply to Leo about the logo files', ordine: chiavi.dopo(store.ultimoOrdine('oggi')), doc: 'posta:INBOX:503' })
     const email = { casella: { stato: 'salvata', id: 'd1' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere they are.\n\nBest', conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }
@@ -243,6 +254,27 @@ test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo de
   assert.match(piatto, /Avevo preparato questo:[^"]*Hi Leo,/)
   assert.doesNotMatch(piatto, /Done: the reply to Leo/)
   assert.doesNotMatch(piatto, /From the mail \[1\]/)
+})
+
+test('l\'email ricavata dopo tiene la lingua di chi riceve e propone il file da allegare, come alla consegna', async () => {
+  const r = await post('/api/compiti/c-r1/prepara-email')
+  assert.equal(r.stato, 200, JSON.stringify(r.corpo))
+  const email = r.corpo as { a: string; corpo: string; allegato?: { id: string; titolo: string } | null }
+  assert.equal(email.a, 'marco.rossi@lumen.example')
+  assert.match(email.corpo, /^Ciao Marco,/)
+  assert.deepEqual(email.allegato, { id: 'desktop:q4-plan.md', titolo: 'q4-plan.md' })
+  // il modello ha ricevuto la regola della lingua di chi riceve, non quella dell'app che riscrive tutto in inglese
+  const registro = readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+  const richiesta = registro.find(x => x.includes('Prendi una bozza scritta per una persona') && x.includes('Reply to Marco about the course quote'))
+  assert.ok(richiesta, 'nessuna richiesta di email al modello finto')
+  assert.match(richiesta!, /Write the deliverable itself, the message or document for the recipient, in Italian: it is the language this recipient reads\./)
+  assert.doesNotMatch(richiesta!, /anche quando il materiale che stai leggendo/)
+  assert.match(richiesta!, /desktop:q4-plan\.md · q4-plan\.md/)
+  // e l'email è salvata sulla riga così com'è: la seconda chiamata la rilegge senza il modello
+  const di_nuovo = await post('/api/compiti/c-r1/prepara-email')
+  assert.equal(di_nuovo.stato, 200)
+  assert.deepEqual((di_nuovo.corpo as { allegato?: unknown }).allegato, { id: 'desktop:q4-plan.md', titolo: 'q4-plan.md' })
+  assert.equal(registro.length, readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(Boolean).length)
 })
 
 /** Le misure di una riga, lette dall'indice del conto della prova (il server ha il suo processo: si rilegge da disco). */
