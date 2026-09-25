@@ -1,6 +1,8 @@
 import { SenderRules } from '../components/SenderRules'
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Attrezzo, type Automazione, type Raccolta, type SuggerimentoAutomazione } from '../api'
+import { api, apiP6, type Attrezzo, type Automazione, type GruppoVassoio, type Raccolta, type SuggerimentoAutomazione } from '../api'
+import { Vassoio } from '../automazioni/Vassoio'
+import { frasiProva } from '../prova'
 import { loc, t } from '../lingua'
 import { Editor, Nuova } from '../automazioni/Editor'
 import { quandoGira } from '../automazioni/Scheda'
@@ -47,6 +49,11 @@ export function Automazioni({ v }: { v: Vals }) {
   const [errore, setErrore] = useState('')
   const [occupato, setOccupato] = useState('')
   const [scoperteErrore, setScoperteErrore] = useState('')
+  // il vassoio di prova e le prove d'idea che girano (P6)
+  const [vassoio, setVassoio] = useState<GruppoVassoio[]>([])
+  const [inProva, setInProva] = useState(0)
+  const [inizio, setInizio] = useState<'prova' | undefined>(undefined)
+  const segnaVassoio = v.segnaVassoioVisto
   const connessioni = v.connAttivi.map(c => c.id).sort().join(',')
   const segnaVisti = v.segnaSuggerimentiVisti
   /*
@@ -63,7 +70,8 @@ export function Automazioni({ v }: { v: Vals }) {
   const caricaSuggerimenti = useCallback(async (rifai = false) => {
     setCercoSuggerimenti(true); setScoperteErrore('')
     try {
-      setSuggerimenti((await api.suggerimentiAutomazioni(rifai)).suggerimenti)
+      const r = await apiP6.suggerimentiConProva(rifai)
+      setSuggerimenti(r.suggerimenti); setInProva(r.inProva ?? 0)
       segnaVisti().catch(() => {})
     } catch (e) { setScoperteErrore(e instanceof Error ? e.message : String(e)) }
     finally { setCercoSuggerimenti(false) }
@@ -71,6 +79,8 @@ export function Automazioni({ v }: { v: Vals }) {
   const carica = useCallback(async () => {
     setCarico(true); setErrore('')
     void caricaSuggerimenti()
+    // aprire la pagina segna visto il vassoio: il punto in colonna si spegne
+    apiP6.vassoio().then(x => { setVassoio(x.gruppi); segnaVassoio().catch(() => {}) }).catch(() => {})
     const risultati = await Promise.allSettled([api.automazioni(), api.attrezzi(), api.raccolte(), api.iniziativa()])
     const [a, c, r, i] = risultati
     if (a.status === 'fulfilled') { setTutte(a.value.automazioni); setRepo(!!a.value.ricette.repo) }
@@ -82,7 +92,7 @@ export function Automazioni({ v }: { v: Vals }) {
     if (i.status === 'fulfilled') setIniziativa(i.value)
     else setErrore(String(i.reason?.message ?? i.reason))
     setCarico(false)
-  }, [caricaSuggerimenti])
+  }, [caricaSuggerimenti, segnaVassoio])
   useEffect(() => { void carica() }, [carica, connessioni])
   const azione = async (id: string, fai: () => Promise<void>) => {
     if (occupato) return
@@ -156,6 +166,8 @@ export function Automazioni({ v }: { v: Vals }) {
     <div className="auto-card-top"><span className="auto-status suggested">{t('Suggerita')}</span></div>
     <div className="auto-card-open"><h3>{s.nome}</h3><p>{s.spiega}</p>{fonti(s.attrezzi)}</div>
     <div className="auto-card-footer"><span>{quandoGira({ quando: s.quando } as Automazione)}</span></div>
+    {s.prova && <div className="auto-card-prova">{frasiProva.contoIdea(s.prova.giusti, s.prova.giudicati)}</div>}
+    <div className="auto-card-line">{t('Non manda e non cancella. Le bozze ti aspettano.')}</div>
     <div className="auto-card-actions">
       {/* accendere è il gesto intero: la scrive, la accende, e la scheda resta dov'è */}
       <button className="auto-button" disabled={!!occupato} onClick={() => azione(s.id, async () => {
@@ -166,7 +178,7 @@ export function Automazioni({ v }: { v: Vals }) {
       {/* o la si guarda prima: nasce spenta, e l'interruttore resta suo */}
       <button className="auto-button subtle" disabled={!!occupato} onClick={() => azione(s.id, async () => {
         const r = await api.adottaAutomazione(s.id)
-        setTutte(r.automazioni); setAperto(r.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
+        setTutte(r.automazioni); setInizio('prova'); setAperto(r.id); setSuggerimenti(x => x.filter(y => y.id !== s.id))
       })}>{t('Modifica')}</button>
       <button className="auto-button subtle auto-card-no" disabled={!!occupato} aria-label={`${t('Non ora')}: ${s.nome}`} title={t('Non ora')}
         onClick={() => azione(s.id, async () => {
@@ -200,10 +212,14 @@ export function Automazioni({ v }: { v: Vals }) {
     <div className="auto-card-top">
       <button className="auto-switch" role="switch" aria-checked={a.accesa} aria-label={`${a.accesa ? t('Mettila in pausa') : t('Accendila')}: ${a.nome}`} disabled={!!occupato}
         onClick={() => azione(a.id, async () => { setTutte((await api.accendiAutomazione(a.id, !a.accesa)).automazioni) })}><span /></button>
-      <span className={`auto-switch-word ${a.accesa ? 'on' : ''}`} aria-hidden="true">{a.accesa ? t('Attiva') : t('In pausa')}</span>
+      {/* nei primi quattordici giorni l'interruttore resta acceso, e la parola dice fino a quando (P6) */}
+      {a.accesa && a.vassoio && a.vassoio > new Date().toISOString()
+        ? <span className="auto-switch-word prova" aria-hidden="true">{frasiProva.inProvaFino(a.vassoio)}</span>
+        : <span className={`auto-switch-word ${a.accesa ? 'on' : ''}`} aria-hidden="true">{a.accesa ? t('Attiva') : t('In pausa')}</span>}
     </div>
-    <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>{fonti(a.attrezzi)}</button>
-    <div className="auto-card-footer"><span>{ritmo(a)}</span></div>
+    <button className="auto-card-open" onClick={() => { setInizio(undefined); setAperto(a.id) }}><h3>{a.nome}</h3><p>{a.spiega}</p>{fonti(a.attrezzi)}</button>
+    <div className="auto-card-footer"><span>{ritmo(a)}{a.prova && ['in coda', 'in corso'].includes(a.prova.stato) ? ` · ${t('La provo…')}` : ''}</span></div>
+    <div className="auto-card-line">{t('Non manda e non cancella. Le bozze ti aspettano.')}</div>
     {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
       const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
       v.apriConnessioni(mancante?.serve === 'agenda' ? 'calendario' : mancante?.serve === 'sharepoint' ? 'microsoft' : mancante?.serve ?? '')
@@ -233,6 +249,9 @@ export function Automazioni({ v }: { v: Vals }) {
       alla pagina, una volta. Resta solo la riga del perché è spento, che
       non spiega il prodotto — dice perché quell'interruttore non fa niente.
     */}
+    {/* il vassoio di prova, in cima e solo quando aspetta qualcosa (P6) */}
+    <Vassoio gruppi={vassoio} cambia={setVassoio} guaio={setErrore} avvisa={v.mostraToast}
+      listaCambiata={() => { api.automazioni().then(r => setTutte(r.automazioni)).catch(() => {}) }} />
     {iniziativa && <section className="auto-initiative" aria-label={t('Bozze pronte prima che le chieda')}>
       <div><h2>{t('Bozze pronte prima che le chieda')}</h2>
       {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}</div>
@@ -302,7 +321,7 @@ export function Automazioni({ v }: { v: Vals }) {
           */}
           {g.conSuggeriti && !!suggeriti.length && <div className="auto-coda-suggerimenti">
             <button className="auto-link" onClick={rinfresca} disabled={!!occupato || carico}>
-              {occupato === 'suggerimenti' ? t('Guardo…') : t('Aggiorna i suggerimenti')}</button>
+              {occupato === 'suggerimenti' ? t('Guardo…') : inProva > 0 ? frasiProva.neProvo(inProva) : t('Aggiorna i suggerimenti')}</button>
           </div>}
         </section>)}
       {!carico && !viste.length && !suggeriti.length && <div className="auto-empty">
@@ -320,7 +339,8 @@ export function Automazioni({ v }: { v: Vals }) {
       <span>{v.ospitato ? t('Le automazioni girano nel tuo spazio.') : t('Le automazioni girano mentre Myynd è aperto su questo computer.')}</span>
       {repo && <button className="auto-link" disabled={!!occupato} onClick={() => azione('recipes', async () => { const r = await api.aggiornaRicette(); setTutte(r.automazioni) })}>{t('Cerca automazioni nuove')}</button>}
     </footer>
-    {scelta && <Editor key={scelta.id} a={scelta} catalogo={catalogo} cartelle={cartelle} raccolte={raccolte} cambiata={setTutte} chiudi={() => setAperto(null)} spostata={sposta} />}
+    {scelta && <Editor key={scelta.id} a={scelta} catalogo={catalogo} cartelle={cartelle} raccolte={raccolte} cambiata={setTutte} chiudi={() => setAperto(null)} spostata={sposta}
+      inizio={inizio} vaiAlleFonti={() => v.apriConnessioni()} />}
     {aperto === '' && <Nuova catalogo={catalogo} cartelle={cartelle} chiudi={() => setAperto(null)} fatta={(a, id) => { setTutte(a); setAperto(id) }} />}
   </main>
 }

@@ -50,6 +50,8 @@ export type Da = 'tuo' | 'mosse' | 'modello' | null
 export type Voce = {
   doc: string | null; titolo: string; chi: string | null; quando: string | null
   verdetto: Verdetto; da: Da; perche: string | null
+  /** Le prime righe del documento, per aprire il risultato sul posto. */
+  estratto: string | null
 }
 export type Prova = { cosa: 'risposto' | 'fatto' | 'riga' | 'scartato'; quando: string }
 export type EsitoVista = {
@@ -552,6 +554,7 @@ export function vistaDiEsito(e: store.RigaEsito, perDocumento: boolean): EsitoVi
     })
     return {
       doc: doc ? d : null, titolo: doc?.titolo ?? item?.titolo ?? '', chi: doc?.autore ?? null, quando: doc?.quando ?? null,
+      estratto: doc ? doc.corpo.slice(0, 360) : null,
       ...v, perche: v.verdetto === 'sbagliato' && v.da === 'modello' ? g?.perche ?? null : null
     }
   })

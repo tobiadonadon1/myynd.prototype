@@ -6,7 +6,7 @@ import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
-import { api, apiP2, type Connettore, type Stato } from './api'
+import { api, apiP2, apiP6, type Connettore, type Stato } from './api'
 import type { RagioneNonUtile } from './feed-carta'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
@@ -757,6 +757,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     await api.segnaSuggerimentiVisti()
     setStato(s => ({ ...s, suggerimentiNuovi: 0 }))
   }, [])
+  // il vassoio di prova (P6): aprire la pagina lo segna visto, e il punto si spegne
+  const segnaVassoioVisto = useCallback(async () => {
+    setStato(s => ({ ...s, vassoioNuovi: 0 }))
+    await apiP6.vassoioVisto()
+  }, [])
 
   // — azioni —
 
@@ -1148,6 +1153,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     navAuto: screen === 'auto' ? NAV_ON : NAV_OFF,
     /** Le automazioni proposte che non ha ancora visto: il fulmine in colonna si accende. */
     suggerimentiNuovi: stato.suggerimentiNuovi ?? 0,
+    vassoioNuovi: stato.vassoioNuovi ?? 0,
+    segnaVassoioVisto,
     segnaSuggerimentiVisti,
     menuPref: screen === 'pref' ? MENU_ON : MENU_OFF,
     menuMappa: screen === 'mappa' ? MENU_ON : MENU_OFF,
