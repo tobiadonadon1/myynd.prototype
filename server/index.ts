@@ -872,6 +872,12 @@ const profilo = async (req: express.Request, res: express.Response) => {
   for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
+  // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
+  // seminato è parte della scena: il client lo sovrascriverebbe da solo con
+  // quello vero della macchina appena aperta la pagina (App.tsx dilloIlFuso),
+  // rendendo il conto del resoconto impossibile da riprodurre fuori da quel
+  // fuso. Fuori da una scena il campo funziona come sempre.
+  if (process.env.MYYND_DEV === '1' && process.env.MYYND_ADESSO) delete patch.fuso
   // l'ordine dei blocchi della prima pagina: id di progetti che esistono e
   // «resto», puliti da `progetti.ordineBlocchiValido`; un id che non c'è più cade
   if (b.ordineBlocchi !== undefined) {

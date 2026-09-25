@@ -64,10 +64,10 @@ test("periodo: l'elisione e i mesi a cavallo", () => {
   assert.equal(tutte(() => p.periodo(loc(2026, 9, 1), loc(2026, 9, 23), 'inizio')).it, 'dall’1 settembre')
 })
 
-test('punteggio: la frase del gemello, con la base, nelle due lingue', () => {
+test('punteggio: i conti veri (non su 10), nelle due lingue', () => {
   const f = tutte(() => p.punteggio({ giuste: 35, totale: 42, base: 23 }))
-  assert.match(f.it!, /Ci ha preso .* Senza conoscerti, \d+\./)
-  assert.match(f.en!, /Right .* Without knowing you, \d+\./)
+  assert.equal(f.it, 'Ci ha preso 35 volte su 42. Senza conoscerti, 23.')
+  assert.equal(f.en, 'Right 35 times out of 42. Without knowing you, 23.')
 })
 
 test('le altre frasi con un numero', () => {

@@ -7,7 +7,6 @@
 
 import { lingua, t } from './lingua.ts'
 import type { GenereResoconto, QualeResoconto, VoceResoconto } from './api.ts'
-import { frasePunteggio } from './gemello-frasi.ts'
 
 const en = () => lingua() === 'en'
 const scegli = (f: { it: string; en: string }) => (en() ? f.en : f.it)
@@ -104,9 +103,16 @@ export function stima(stime: { genere: GenereResoconto; minuti: number }[], risc
   return scegli({ it: `Stima: ${pezzi.join(', ')}${coda}.`, en: `Estimate: ${pezzi.join(', ')}${coda}.` })
 }
 
-/** Il gemello, con chi non ti conosce accanto: la stessa frase della Memoria (P1B). */
+/**
+ * Il gemello, con chi non ti conosce accanto: qui i conti veri, non su 10
+ * come nella Memoria (P1B normalizza per il ritratto; il foglio no, come le
+ * altre statistiche del resoconto: niente percentuali, niente scale).
+ */
 export function punteggio(p: { giuste: number; totale: number; base: number }): string {
-  return frasePunteggio(p.giuste, p.totale, p.base)
+  return scegli({
+    it: `Ci ha preso ${p.giuste} volte su ${p.totale}. Senza conoscerti, ${p.base}.`,
+    en: `Right ${p.giuste} times out of ${p.totale}. Without knowing you, ${p.base}.`
+  })
 }
 
 /** «2 pronte prima che le chiedessi»: il vantaggio di chi fa le cose prima. */

@@ -44,7 +44,7 @@
   ],
   "punto": { "progetti": [{ "progetto": "nw", "novita": "Dana confirmed the contract.", "doc": "posta:INBOX:3" }] },
   "p9": {
-    "config": { "fuso": "America/New_York" },
+    "config": { "fuso": "Europe/Rome" },
     "compiti": [
       { "id": "m1", "origine": "iniziativa", "creato": "2026-09-16T08:20:00.000Z", "chiesto": "2026-09-16T08:30:00.000Z", "chiuso": "2026-09-17T09:00:00.000Z", "email": { "a": "dana@northwind.example", "oggetto": "Re: October quote", "corpo": "Hi Dana, the quote is attached.", "conosciuto": true } },
       { "id": "m2", "origine": "mano", "voce": "f-x", "creato": "2026-09-15T07:00:00.000Z", "chiesto": "2026-09-15T07:10:00.000Z", "chiuso": "2026-09-15T10:00:00.000Z", "email": { "a": "leo@harbor.example", "oggetto": "Re: Harbor pilot dates", "corpo": "Hi Leo, the 5th works.", "conosciuto": true } },

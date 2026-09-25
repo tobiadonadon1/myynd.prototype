@@ -22,6 +22,7 @@ const cfg = await import('./config.ts')
 let servizio: ChildProcess | undefined
 let base = ''
 let cartella = ''
+let utente = ''
 const token = 'resoconto-rotte-token-di-prova'
 
 function porta(p: ChildProcess): Promise<string> {
@@ -41,6 +42,7 @@ function porta(p: ChildProcess): Promise<string> {
 before(async () => {
   const k = await conti.registra('resoconto-rotte@esempio.test', 'parola-di-prova-lunga')
   assert.ok(k.ok)
+  utente = k.id
   await conti.perProva.apriCon(token, k.id)
   chi.dentro(k.id, () => {
     cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome', diSerie: false, onboarding: true, giro: true, desktop: { cartelle: [join(home, 'Documents')], scelte: true } })
@@ -103,6 +105,18 @@ test('sommario e lunedì, poi visto', async () => {
   assert.ok(existsSync(join(cartella, 'resoconto.json')))
   assert.deepEqual(JSON.parse(readFileSync(join(cartella, 'resoconto.json'), 'utf8')), { visto: '2026-09-21' })
   assert.deepEqual(await (await chiama('/api/resoconto/lunedi')).json(), { mostra: false })
+})
+
+test('con l’orologio fermo della scena, il fuso del client (App.tsx dilloIlFuso) non sovrascrive quello seminato', async () => {
+  const prima = chi.dentro(utente, () => cfg.leggi().fuso)
+  assert.equal(prima, 'Europe/Rome')
+  const p = await chiama('/api/profilo', 'POST', { fuso: 'America/New_York' })
+  assert.equal(p.status, 200)
+  const dopo = chi.dentro(utente, () => cfg.leggi().fuso)
+  assert.equal(dopo, 'Europe/Rome')
+  // il resoconto resta quello della scena, calcolato nel fuso seminato
+  const r = await (await chiama('/api/resoconto?quale=scorsa')).json() as { resoconto: { lunedi: string } }
+  assert.equal(r.resoconto.lunedi, '2026-09-21')
 })
 
 test('senza sessione: 401', async () => {
