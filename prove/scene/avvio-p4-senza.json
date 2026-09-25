@@ -5,7 +5,7 @@
     "onboarding": false,
     "imbuto": true,
     "calendario": {
-      "url": "http://127.0.0.1:18751/statici/lavoro.ics?attesa=16000",
+      "url": "{{modello}}/statici/lavoro.ics?attesa=16000",
       "nome": "Work"
     },
     "postaMac": {
