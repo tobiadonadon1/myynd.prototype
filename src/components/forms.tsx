@@ -1716,7 +1716,7 @@ export function FormNote({ tema, ok, collegato }: Props) {
 }
 
 /** L'indirizzo che apre la schermata del permesso. Lo stesso, alla lettera, che il guscio accetta. */
-const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+export const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
 /**
  * La riga del permesso mancante: inchiostro su sabbia, e dentro l'app il bottone.

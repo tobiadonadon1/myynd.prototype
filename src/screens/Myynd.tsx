@@ -18,7 +18,9 @@ import { azioneEmail } from '../oggi/azione-email'
 import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { compitoInEsecuzione } from '../compito-attivo'
-import { rigaDelleMancanze } from '../collegamenti'
+import { rigaFonti } from '../salute-fonti'
+import { RimedioFonte, osservatore } from '../components/RimedioFonte'
+import { desktop } from '../desktop'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
@@ -1258,14 +1260,44 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
  * c'è sempre, una volta sola, e se ne va appena lo stato dice che si ragiona.
  */
 function Avviso({ v }: { v: Vals }) {
-  const frase = rigaDelleMancanze({
+  /*
+   * P8: la riga dice cosa serve, e il suo controllo lo fa. Tornati dalle
+   * Impostazioni con il permesso del disco ancora mancante, la frase cambia e
+   * il controllo diventa «Riapri Myynd» (un permesso dato adesso vale per la
+   * copia che parte dopo). Con i titoli delle finestre accesi si chiede al
+   * guscio se l'Accessibilità c'è davvero, all'avvio e a ogni ritorno.
+   */
+  const [dopoImpostazioni, setDopoImpostazioni] = useState(false)
+  const [titoliNegati, setTitoliNegati] = useState(false)
+  const disco = v.mancanze.length > 0 && v.mancanze.every(m => m.rimedio === 'permesso-disco')
+  if (dopoImpostazioni && !disco) setDopoImpostazioni(false)
+  useEffect(() => {
+    if (!v.osservaTitoli) { setTitoliNegati(false); return }
+    let vivo = true
+    const prova = () => {
+      const o = osservatore()
+      if (!o?.permessoTitoli) return
+      Promise.resolve(o.permessoTitoli()).then(r => { if (vivo) setTitoliNegati(r === false) }).catch(() => {})
+    }
+    prova()
+    const f = () => { if (document.visibilityState !== 'hidden') prova() }
+    window.addEventListener('focus', f)
+    document.addEventListener('visibilitychange', f)
+    return () => { vivo = false; window.removeEventListener('focus', f); document.removeEventListener('visibilitychange', f) }
+  }, [v.osservaTitoli])
+  const d = desktop()
+  const riga = rigaFonti({
     ragiona: v.claudeOn,
-    serveClaude: t('Serve Claude per scegliere cosa conta.'),
+    testa: v.testaGuasta,
     guastoLettura: v.guastoLettura,
     chiedeClaude: t('Collega Claude e potrò lavorarci.'),
-    fontiNonLette: v.fontiIncomplete.length ? frasi.fontiNonLette(v.fontiIncomplete) : null
+    mancanze: v.mancanze,
+    titoliNegati: v.osservaTitoli && titoliNegati,
+    dopoImpostazioni,
+    puoAprire: !!d,
+    puoRiavviare: !!d?.riavvia
   })
-  if (!frase) return null
+  if (!riga) return null
   return (
     <div role="status" style={{
       flex: 'none', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
@@ -1273,10 +1305,8 @@ function Avviso({ v }: { v: Vals }) {
       color: 'var(--rame-testo)', fontSize: 13, lineHeight: 1.5
     }}>
       <span style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: 'var(--rame)' }} />
-      <span style={{ flex: '1 1 220px', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{frase}</span>
-      <Hov as="a" href="#" onClick={v.goConn}
-        style={{ flex: 'none', color: 'var(--rame-testo)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
-        hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Fonti')}</Hov>
+      <span style={{ flex: '1 1 220px', minWidth: 0, textWrap: 'pretty', overflowWrap: 'anywhere' }}>{riga.frase}</span>
+      <RimedioFonte controllo={riga.controllo} v={v} quandoImpostazioni={setDopoImpostazioni} quandoTitoli={setTitoliNegati} />
     </div>
   )
 }
