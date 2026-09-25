@@ -56,6 +56,21 @@ export function giorniDi(fonte: string, giorni: number | undefined, base = 30): 
   return statoPrima(fonte) === 'in-corso' ? Math.max(suoi, GIORNI_PRIMA) : suoi
 }
 
+/**
+ * Come si legge il Mac in questo giro: la prima volta i file degli ultimi
+ * novanta giorni e al massimo millecinquecento nuovi, poi duemila nuovi per
+ * giro. Estrarre costa, e il tetto si conta sui file che l'indice non ha.
+ *
+ * Verso un server ospitato niente di tutto questo: lì la lettura non sa cosa
+ * c'è già (si spinge tutto, a ogni giro), quindi ogni file conterebbe come
+ * nuovo e ogni giro si fermerebbe agli stessi primi file, per sempre. Si legge
+ * per intero, come prima, e il primo giro basta.
+ */
+export function opzioniMac(prima: boolean, remoto: boolean, adesso = Date.now()): { dal?: number; nuoviMax?: number } {
+  if (remoto) return {}
+  return prima ? { dal: adesso - GIORNI_PRIMA * 86_400_000, nuoviMax: 1500 } : { nuoviMax: 2000 }
+}
+
 /** La prima lettura di questa fonte è finita. */
 export function finita(fonte: string, perche = 'letta'): void {
   store.segnaCursore(segno(fonte), 'fatto')
@@ -146,11 +161,26 @@ export function perProva(o: { pausa?: number; giri?: number; occupato?: number }
 }
 
 const inVolo = new Map<string, Promise<void>>()
+/** I conti dove una persona ha chiesto di leggere mentre girava il resto: il resto cede il passo. */
+const cedute = new Set<string>()
 const aspetta = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 /** Il resto della prima lettura sta girando in sottofondo per questo conto. */
 export function inCoda(conto: string): boolean {
   return inVolo.has(conto)
+}
+
+/**
+ * Una persona vuole leggere e ha trovato la serratura presa dal resto.
+ *
+ * Il resto legge una fonte dopo l'altra e fra una e l'altra la serratura
+ * resta libera per un istante solo: chi preme «Leggi», o collega una fonte,
+ * riproverebbe per due minuti senza mai trovarla libera. Così il resto finisce
+ * la fonte che sta leggendo e si ferma; la lettura della persona, finita, lo
+ * fa ripartire. Senza un resto in corso non fa niente.
+ */
+export function cedi(conto: string): void {
+  if (inVolo.has(conto)) cedute.add(conto)
 }
 
 /**
@@ -169,6 +199,11 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
     const via = () => cancellati.cancellata(cfg.cartella())
     const saltate = new Set<string>()
     let fermo = false
+    const cede = () => {
+      if (!cedute.has(conto)) return false
+      console.log('myynd · prima lettura · il resto cede il passo a una lettura chiesta')
+      return true
+    }
     for (let giro = 0; giro < giriMassimi && !fermo; giro++) {
       if (via()) return
       const mancano = inCorso().filter(f => !saltate.has(f))
@@ -176,6 +211,7 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
       if (giro > 0) await aspetta(pausaTraGiri)
       for (const fonte of mancano) {
         if (via()) return
+        if (cede()) { fermo = true; break }
         // finita nel frattempo (da un'altra lettura): non si rilegge
         if (!inCorso().includes(fonte)) continue
         let e = await leggiUna(fonte)
@@ -192,11 +228,12 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
       store.segnaCursore('prima:imparato', new Date().toISOString())
     }
   }
-  const p = (async () => {
+  // si comincia al giro dopo: il conto è già «in coda» quando il primo passo parte
+  const p = Promise.resolve().then(async () => {
     try { await (conto ? chi.dentro(conto, lavoro) : lavoro()) }
     catch (err) { console.error('myynd · prima lettura · il resto non si è letto:', err instanceof Error ? err.message : err) }
-    finally { inVolo.delete(conto) }
-  })()
+    finally { inVolo.delete(conto); cedute.delete(conto) }
+  })
   inVolo.set(conto, p)
   return p
 }

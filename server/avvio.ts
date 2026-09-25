@@ -46,6 +46,8 @@ export type StatoAvvio = {
   /** La prima di `fonti`: resta per chi parla ancora con una fonte sola. */
   fonte: string | null
   fonteSaltata: boolean
+  /** Scelte a metà lettura: «non ho trovato estratti» non si può dire, le fonti non si sono lette tutte (P4). */
+  aMetaLettura?: boolean
   fatti: FattoAvvio[]
   azione: string
   risultato: RisultatoAvvio | null
@@ -74,6 +76,8 @@ type Salvato = {
   lettoFino?: string
   /** Il riferimento come l'ha scritto l'avvio: finché è uguale, è nostro e si può completare. */
   riferimentoNostro?: string
+  /** Le fonti si sono scelte mentre la lettura andava ancora («Continua», P4): gli estratti non hanno visto tutto. */
+  aMetaLettura?: boolean
 }
 
 function fontiDi(s: Salvato): string[] {
@@ -134,6 +138,11 @@ function cambia(s: Salvato): StatoAvvio {
   salva(s)
   return pubblico(s)
 }
+
+/** Le fonti i cui documenti sono eventi scritti da `corpoEvento` del calendario: la prima riga è la data. */
+const EVENTI = new Set(['calendario', 'agendamac'])
+/** La riga della data di un evento: corta, con l'anno, finita col punto (vedi `corpo` in calendario.ts). */
+const rigaDiData = (r: string) => r.trim().length <= 100 && /\b(?:19|20)\d{2}\b/.test(r) && /\.\s*$/.test(r)
 
 /** At most three literal excerpts, from the selected sources and real project matches. */
 function evidenze(s: Salvato): FattoAvvio[] {
@@ -197,7 +206,16 @@ function evidenze(s: Salvato): FattoAvvio[] {
     // about the project. Remove only structural lines, keeping body excerpts
     // literal so every displayed character remains verifiable at the source.
     const corpo = d.corpo.replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, '')
-    const linee = corpo.split(/\r?\n/)
+    const tutte = corpo.split(/\r?\n/)
+    /*
+     * La prima riga di un evento è la sua data e ora («Friday, 2 October 2026
+     * at 06:00 — 07:00.»), scritta dal calendario per rileggerla nella vista
+     * della settimana: non è un fatto del progetto, e la sua lineetta finiva
+     * sullo schermo dell'avvio. Il documento resta com'è; qui non si cita (P4).
+     */
+    const prima = tutte.findIndex(r => r.trim())
+    const data = EVENTI.has(d.fonte) && prima >= 0 && rigaDiData(tutte[prima]!) ? prima : -1
+    const linee = data >= 0 ? tutte.filter((_, i) => i !== data) : tutte
     /*
      * Anche il titolo di un file di testo è un titolo.
      *
@@ -248,11 +266,25 @@ function pubblico(s: Salvato): StatoAvvio {
     fase: s.risultato ? 'completo' : !s.progetto ? 'progetto' : !s.fonteScelta ? 'fonte'
       : s.verificato ? 'azione' : 'verifica',
     progetto: s.progetto, fonti, fonte: fonti[0] ?? null, fonteSaltata: s.fonteScelta && !fonti.length,
+    ...(s.aMetaLettura && s.fonteScelta && fonti.length ? { aMetaLettura: true } : {}),
     // un avvio salvato prima riempiva l'attività con l'obiettivo: non si mostra come scritta da lei
     fatti, azione: !s.risultato && s.azione === s.progetto?.obiettivo ? '' : s.azione, risultato: s.risultato, aggiornato: s.aggiornato }
 }
 
 export function stato(): StatoAvvio { return pubblico(leggi()) }
+
+/**
+ * Le fonti dell'avvio sono state scelte (o saltate), o l'avvio è finito. Si
+ * guarda il file senza crearlo: il lavoro di fondo non scrive mai l'avvio.
+ * `null` se l'avvio non è mai cominciato, o non si lascia leggere.
+ */
+export function fontiScelte(): boolean | null {
+  if (!existsSync(file())) return null
+  try {
+    const s = JSON.parse(readFileSync(file(), 'utf8')) as Partial<Salvato>
+    return !!s.fonteScelta || !!s.risultato
+  } catch { return null }
+}
 
 export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: unknown }): StatoAvvio {
   const s = leggi(); esigiRevisione(s, b.revisione)
@@ -299,7 +331,7 @@ function scriviRiferimento(s: Salvato, testo: string, registra = false): void {
  * quando se ne sceglieva una: un client rimasto indietro la manda ancora, e
  * vale come una lista di una.
  */
-export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown }): StatoAvvio {
+export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown }, o: { durante?: boolean } = {}): StatoAvvio {
   const s = leggi(); esigiRevisione(s, b.revisione)
   if (s.risultato) return pubblico(s)
   if (!s.progetto) throw new ErroreAvvio('Scegli prima il progetto e l’obiettivo.')
@@ -316,6 +348,9 @@ export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown
   const uguali = s.fonteScelta && prima.length === fonti.length && fonti.every(f => prima.includes(f))
   s.fonti = fonti; s.fonte = fonti[0] ?? null; s.fonteScelta = true
   s.lettoFino = new Date().toISOString()
+  // scelte con la lettura ancora in corso: gli estratti si fermano a qui, ma le fonti non sono lette tutte
+  if (o.durante) s.aMetaLettura = true
+  else delete s.aMetaLettura
   // ma l'ordine decide chi parla per primo nel giro a turno: se un estratto
   // confermato non c'è più fra i tre, la conferma non vale più
   const ancora = uguali && s.confermati.length ? new Set(evidenze(s).map(f => f.id)) : null

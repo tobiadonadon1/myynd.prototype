@@ -183,6 +183,22 @@ test('after waiting two minutes behind another read, rows are closed from the in
   assert.equal(lettura.stato().guaio, null)
 })
 
+test('after waiting in vain, a source with no documents stays queued: never «✓ 0» for a source that was not read', async () => {
+  const lettura = creaLettura({
+    sincronizza: async () => { throw new Error(GIA_IN_CORSO) },
+    collegate: async () => ({ desktop: 7, postamac: 0 }),
+    attendi: async () => {}
+  })
+  const righe = await lettura.leggiTutte()
+  assert.deepEqual(righe.map(r => [r.id, r.stato]), [['desktop', 'fatto'], ['postamac', 'attesa']])
+  assert.equal(lettura.stato().guaio, null)
+})
+
+test('a read that ran closes an empty source as a true zero (counter-case)', () => {
+  const r = chiudiLettura(iniziaLettura(['postamac']), () => 0)
+  assert.equal(r[0]!.stato, 'fatto')
+})
+
 test('a source disconnected while everything was read has no row at the end', async () => {
   const server = serverFinto()
   const lettura = creaLettura({ ...server.dipendenze, collegate: (() => {

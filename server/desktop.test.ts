@@ -88,3 +88,21 @@ test('la riga riceve il conto intero ogni duecento nuovi e alla fine di ogni rad
   assert.deepEqual(visti, [200, 400, 450, 453])
   assert.equal(e.versati + e.docs.length, 453)
 })
+
+test('verso un server ospitato (senza `gia`) si legge tutto a ogni giro: nessun tetto, la radice è completa', async () => {
+  const { opzioniMac } = await import('./prima-lettura.ts')
+  for (let i = 0; i < 1600; i++) file(`r-${String(i).padStart(4, '0')}.md`, 1 + (i % 200))
+  // come in index.ts con MYYND_DESKTOP_REMOTO: `gia` non c'è, prima lettura in corso
+  const e = await desktop.sincronizza({ cartelle: [cartella], scelte: true }, undefined, undefined, async () => {}, opzioniMac(true, true))
+  assert.equal(e.docs.length + e.versati, 1600, 'tutti i file, anche oltre i millecinquecento')
+  assert.equal(e.rimandati, 0, 'niente `dal`: i vecchi non si rimandano, si spingono')
+  assert.equal(e.pieno, false, 'la prima lettura finisce al primo giro')
+  assert.equal(e.complete.length, 1, 'e la radice si può riconciliare')
+  // counter-case: sulla macchina la prima lettura rimanda i vecchi, e il tetto c'è
+  const qui = await desktop.sincronizza({ cartelle: [cartella], scelte: true }, undefined, undefined, async () => {}, opzioniMac(true, false))
+  assert.ok(qui.rimandati > 0, 'i file oltre i novanta giorni aspettano')
+  assert.ok(qui.docs.length + qui.versati < 1600)
+  const tetto = await desktop.sincronizza({ cartelle: [cartella], scelte: true }, undefined, undefined, async () => {}, { nuoviMax: 1500 })
+  assert.equal(tetto.docs.length + tetto.versati, 1500)
+  assert.equal(tetto.pieno, true)
+})

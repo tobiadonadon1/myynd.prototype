@@ -496,3 +496,41 @@ test('cambiando il nome al primo passo, il riferimento nostro segue; uno cambiat
   avvio.progetto({ nome: 'Aurora Tre', obiettivo: 'Preparare il lancio', revisione: s.revisione })
   assert.equal(riferimento.leggi().testo, 'Aurora Due: lo scrivo io.')
 })
+
+test('la riga della data di un evento non è un estratto: si cita quello che l’evento dice, mai la sua lineetta', () => {
+  collega()
+  store.salvaDocumenti([
+    { id: 'calendario:ev1', fonte: 'calendario', tipo: 'evento', titolo: 'Aurora launch review', quando: '2026-09-08T12:00:00Z',
+      corpo: 'Friday, 2 October 2026 at 06:00 — 07:00.\nWhere: Sala grande del terzo piano\n\nRivedere con il team la lista del lancio di Aurora prima di mandare gli inviti.' },
+    { id: 'calendario:ev2', fonte: 'calendario', tipo: 'evento', titolo: 'Aurora standup', quando: '2026-09-08T12:00:00Z',
+      corpo: 'Monday, 5 October 2026 at 09:00 — 09:15.' }
+  ])
+  const p = progetto()
+  const s = avvio.fonte({ fonti: ['calendario'], revisione: p.revisione })
+  const testi = s.fatti.map(f => f.testo)
+  assert.ok(testi.length >= 1, 'le note dell’evento restano un estratto')
+  assert.ok(testi.every(t => !/[—–]/.test(t)), testi.join(' | '))
+  assert.ok(testi.includes('Rivedere con il team la lista del lancio di Aurora prima di mandare gli inviti.'), testi.join(' | '))
+  // e il documento nell'indice non cambia
+  assert.match(store.documento('calendario:ev1')!.corpo, /^Friday, 2 October 2026 at 06:00 — 07:00\./)
+})
+
+test('la prima riga di un file sul Mac con una lineetta resta citabile: solo gli eventi perdono la data (counter-case)', () => {
+  store.salvaDocumenti([documento('nota', 'Aurora: la revisione del lancio è fissata per venerdì mattina con il team.\nSeconda riga.')])
+  const p = progetto()
+  const s = avvio.fonte({ fonti: ['desktop'], revisione: p.revisione })
+  assert.ok(s.fatti.some(f => f.testo.startsWith('Aurora: la revisione del lancio')), s.fatti.map(f => f.testo).join(' | '))
+})
+
+test('fonti scelte a metà lettura: lo stato lo dice, e scelte di nuovo a lettura finita non più (counter-case)', () => {
+  fonti()
+  let s = progetto()
+  s = avvio.fonte({ fonti: ['desktop'], revisione: s.revisione }, { durante: true })
+  assert.equal(s.aMetaLettura, true)
+  assert.equal(avvio.stato().aMetaLettura, true, 'resta anche ricaricando')
+  s = avvio.fonte({ fonti: ['desktop'], revisione: s.revisione })
+  assert.equal(s.aMetaLettura, undefined)
+  // saltare le fonti non è una lettura a metà
+  s = avvio.fonte({ fonti: [], revisione: s.revisione }, { durante: true })
+  assert.equal(s.aMetaLettura, undefined)
+})

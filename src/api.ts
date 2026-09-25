@@ -42,6 +42,8 @@ export type StatoAvvio = {
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
   /** Una prima lettura sta girando sul server (P4): chi ricarica torna a guardarla. */
   leggendo?: boolean
+  /** Le fonti sono state scelte a metà lettura («Continua», P4): gli estratti non hanno visto tutto. */
+  aMetaLettura?: boolean
 }
 
 export type Stato = {

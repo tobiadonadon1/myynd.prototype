@@ -229,3 +229,36 @@ test('il giorno grande della prima lettura non fa sembrare muta la fonte nei gio
   // e una fonte davvero muta resta muta (counter-case)
   assert.equal(silenzioArrivi([3000, 20, 18, 25, 22, 19, 21], 2), true)
 })
+
+test('le opzioni del Mac: prima novanta giorni e 1500, poi 2000; verso un server ospitato nessuna (counter-case)', () => {
+  const adesso = Date.parse('2026-09-25T10:00:00Z')
+  assert.deepEqual(prima.opzioniMac(true, false, adesso), { dal: adesso - 90 * 86_400_000, nuoviMax: 1500 })
+  assert.deepEqual(prima.opzioniMac(false, false, adesso), { nuoviMax: 2000 })
+  assert.deepEqual(prima.opzioniMac(true, true, adesso), {})
+  assert.deepEqual(prima.opzioniMac(false, true, adesso), {})
+})
+
+test('una lettura chiesta mentre gira il resto: il resto finisce la fonte che ha in mano e cede il passo', async () => {
+  collega()
+  const viste: string[] = []
+  await prima.continua('', async fonte => {
+    viste.push(fonte)
+    // la persona preme «Leggi» mentre il resto legge la prima fonte
+    if (viste.length === 1) prima.cedi('')
+    return 'letta'
+  })
+  assert.equal(viste.length, 1, 'la fonte in mano si finisce, la seconda non si comincia')
+  assert.equal(prima.inCoda(''), false, 'la serratura resta libera per chi l’ha chiesta')
+  // e la volta dopo (la lettura della persona, finita, lo fa ripartire) il resto riprende
+  const poi: string[] = []
+  await prima.continua('', async fonte => { poi.push(fonte); prima.finita(fonte); return 'letta' })
+  assert.deepEqual(poi.sort(), ['calendario', 'posta'])
+})
+
+test('cedere senza un resto in corso non ferma il resto che parte dopo (counter-case)', async () => {
+  collega()
+  prima.cedi('')
+  const viste: string[] = []
+  await prima.continua('', async fonte => { viste.push(fonte); prima.finita(fonte); return 'letta' })
+  assert.deepEqual(viste.sort(), ['calendario', 'posta'])
+})

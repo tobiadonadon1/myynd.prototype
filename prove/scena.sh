@@ -84,7 +84,9 @@ fi
 
 # 4. il server, con la sola casa finta
 # P4: MYYND_SENZA_APP_MAC=1, così Calendario del Mac non tocca mai il Calendario vero di chi prova
+# MYYND_PRIMA_RILETTURA_MS anticipa il primo giro di fondo (di serie un minuto dopo l'avvio)
 env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_SENZA_APP_MAC=1 \
+  ${MYYND_PRIMA_RILETTURA_MS:+MYYND_PRIMA_RILETTURA_MS=$MYYND_PRIMA_RILETTURA_MS} \
   node --disable-warning=ExperimentalWarning server/index.ts > "$OUT/server.log" 2>&1 &
 SRV=$!
 aspetta_riga "$OUT/server.log" 'server su http' 40

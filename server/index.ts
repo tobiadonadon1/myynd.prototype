@@ -860,7 +860,8 @@ app.post('/api/avvio/progetto', (req, res) => {
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/fonte', (req, res) => {
-  try { res.json(avvio.fonte(req.body ?? {})) }
+  // «Continua» durante la lettura di tutte le fonti (P4): gli estratti non avranno visto tutto
+  try { res.json(avvio.fonte(req.body ?? {}, { durante: viva.di(chi.adesso() ?? '')?.tutte === true })) }
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/conferma', (req, res) => {
@@ -2118,10 +2119,12 @@ async function leggiTuttoDentro(
     /*
      * La prima volta, i file degli ultimi novanta giorni e al massimo
      * millecinquecento nuovi per giro; gli altri restano ai giri dopo, che non
-     * hanno `dal`. Sempre un tetto di nuovi per giro: estrarre costa (P4).
+     * hanno `dal`. Un tetto di nuovi per giro: estrarre costa (P4). Ma non
+     * verso un server ospitato, dove senza `gia` ogni file è nuovo: lì per
+     * intero, come prima (`primaLettura.opzioniMac`).
      */
     const primaDelMac = primaLettura.statoPrima('desktop') === 'in-corso'
-    const opzioni = primaDelMac ? { dal: Date.now() - primaLettura.GIORNI_PRIMA * giorno, nuoviMax: 1500 } : { nuoviMax: 2000 }
+    const opzioni = primaLettura.opzioniMac(primaDelMac, desktopRemoto.ATTIVO)
     const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: 'leggo', fatti: n }), gia, async lotto => { await store.salvaDocumentiAPezzi(lotto) }, opzioni)
     await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
@@ -2514,12 +2517,15 @@ function fontiCheLeggera(soloFonte: string | null): string[] {
   return FONTI.filter(f => fonteCollegata(f, c))
 }
 
-/** La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura di chi la chiama (P4). */
-function paginaSeDovuta(prima: boolean): () => Promise<void> | null {
+/**
+ * La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura
+ * di chi la chiama (P4). `dal` è l'inizio della lettura, per il registro.
+ */
+function paginaSeDovuta(prima: boolean, dal = Date.now()): () => Promise<void> | null {
   let pagina: Promise<void> | null = null
   return () => {
     if (!pagina && prima && primaPagina.dovuta()) {
-      pagina = withBackgroundWork(() => primaPagina.prepara())
+      pagina = withBackgroundWork(() => primaPagina.prepara(dal))
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
     }
     return pagina
@@ -2541,6 +2547,9 @@ app.get('/api/sincronizza', async (req, res) => {
   if (sincronizzazioneInCorso()) {
     const v = viva.di(conto)
     if (v?.tutte && !soloFonte) return viva.attacca(req, res, v)
+    // se la serratura è del resto della prima lettura, finisce la fonte che
+    // ha in mano e si ferma: il prossimo tentativo di chi chiede la trova libera
+    primaLettura.cedi(conto)
     return res.status(409).json({ errore: 'Una lettura è già in corso.' })
   }
   sincronizzazioniInCorso.add(conto)
@@ -2573,7 +2582,9 @@ app.get('/api/sincronizza', async (req, res) => {
   } finally {
     viva.chiudi(conto)
     sincronizzazioniInCorso.delete(conto)
-    if (!soloFonte) void primaLettura.continua(conto, leggiUna)
+    // anche dopo una fonte sola: il resto può aver ceduto il passo a questa
+    // lettura, e senza nessuna prima lettura in corso non fa niente
+    void primaLettura.continua(conto, leggiUna)
   }
 })
 
@@ -2697,7 +2708,14 @@ async function rileggiDaSola() {
   let prima = false
   try { prima = primaLettura.eUnaPrima(c) } catch { /* lo dirà la lettura */ }
   const v = viva.apri(conto, { tutte: true, prima, fonti: fontiCheLeggera(null) })
-  const pagina = paginaSeDovuta(true)
+  /*
+   * La pagina da sola, sì, ma non mentre lui è ancora sul passo delle fonti:
+   * sarebbe fatta con le schede collegate fin lì, senza la posta che sta per
+   * collegare, e non si rifarebbe più. Lì la fa «Leggi».
+   */
+  let scelte = false
+  try { scelte = primaPagina.fontiScelte() } catch { /* lo dirà il giro dopo */ }
+  const pagina = paginaSeDovuta(scelte)
   let conPagina = false
   try {
     const totale = await leggiTutto(null, d => {
@@ -4765,7 +4783,7 @@ app.get('/api/avvio/pagina', (_req, res) => {
   try {
     const conto = chi.adesso() ?? ''
     let s = primaPagina.stato()
-    if (s.pagina === 'attesa' && !sincronizzazioniInCorso.has(conto) && primaPagina.dovuta()) {
+    if (s.pagina === 'attesa' && !sincronizzazioniInCorso.has(conto) && primaPagina.fontiScelte() && primaPagina.dovuta()) {
       sincronizzazioniInCorso.add(conto)
       void withBackgroundWork(() => primaPagina.prepara())
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
@@ -4997,7 +5015,8 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // la prima rilettura non è all'avvio ma dopo un minuto: accendere l'app non
   // deve voler dire aspettare che abbia finito di leggere la posta
   const rilettura = perOgnuno('la rilettura automatica si è fermata', rileggiDaSola)
-  setTimeout(rilettura, 60_000)
+  // le prove e le scene la anticipano (MYYND_PRIMA_RILETTURA_MS): un minuto è lungo da aspettare
+  setTimeout(rilettura, Number(process.env.MYYND_PRIMA_RILETTURA_MS) || 60_000)
   setInterval(rilettura, OGNI)
 
   // La vedetta, subito e per ognuno: le cartelle del desktop si guardano dal

@@ -7,7 +7,7 @@
 
 import { test, before, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -136,4 +136,51 @@ test('la pagina che finisce fra la lettura dell’avvio e «Salva la prima attiv
   assert.equal(avvio.stato().revisione, letta, 'la pagina non ha scritto nell’avvio')
   const fatto = avvio.completa({ azione: 'Write the homepage copy', giorno: null, revisione: letta })
   assert.equal(fatto.fase, 'completo')
+})
+
+test('una pagina rimasta vuota si rifà quando arriva una fonte nuova, una volta; una pagina con delle carte mai più', async () => {
+  store.salvaDocumenti([futuro(1)])
+  let giri = 0
+  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => { giri++; return 0 } })
+  await pagina.prepara()
+  assert.match(store.cursore('prima:pagina') ?? '', /^vuota\|.+\|calendario$/, 'il segno dice con quali fonti è rimasta vuota')
+  assert.equal(pagina.dovuta(), false, 'la stessa agenda non la rifà (counter-case)')
+  pagina.dimentica()
+  assert.equal(pagina.stato().pagina, 'nessuna')
+  // la posta collegata dopo: la pagina è di nuovo dovuta, e la riga lo dice
+  store.salvaDocumenti([mail(0)])
+  assert.equal(pagina.dovuta(), true)
+  assert.equal(pagina.stato().pagina, 'attesa')
+  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => { giri++; store.salvaFeed([{ tipo: 'priorita', titolo: 'Send Maya the checklist', testo: 'She asked twice.' }]); return 1 } })
+  await pagina.prepara()
+  assert.equal(giri, 2)
+  assert.doesNotMatch(store.cursore('prima:pagina') ?? '', /^vuota/)
+  // con delle carte è fatta per sempre: un'altra fonte nuova non la rifà
+  store.salvaDocumenti([{ id: 'slack:C1:1', fonte: 'slack', tipo: 'messaggio', titolo: 'general', corpo: 'Ciao a tutti.', quando: new Date().toISOString() }])
+  pagina.dimentica()
+  assert.equal(pagina.dovuta(), false)
+  assert.equal(pagina.stato().pagina, 'nessuna')
+})
+
+test('il giro di fondo aspetta che le fonti dell’avvio siano scelte, e non crea l’avvio per saperlo', () => {
+  rmSync(join(cfg.cartella(), 'avvio.json'), { force: true })
+  cfg.aggiorna({ onboarding: false })
+  // un conto appena nato, ancora nell'introduzione: niente pagina, e nessun file scritto
+  assert.equal(pagina.fontiScelte(), false)
+  assert.equal(existsSync(join(cfg.cartella(), 'avvio.json')), false)
+  // sul passo delle fonti: ancora no
+  let s = avvio.progetto({ nome: 'New website', obiettivo: 'Launch the new website by October', revisione: avvio.stato().revisione })
+  assert.equal(s.fase, 'fonte')
+  assert.equal(pagina.fontiScelte(), false)
+  // scelte (o saltate): sì
+  cfg.aggiorna({ calendario: { url: 'https://example.invalid/a.ics' } })
+  s = avvio.fonte({ fonti: ['calendario'], revisione: s.revisione })
+  assert.equal(pagina.fontiScelte(), true)
+})
+
+test('chi ha finito l’avvio ha le sue fonti scelte, anche senza il file dell’avvio (counter-case)', () => {
+  rmSync(join(cfg.cartella(), 'avvio.json'), { force: true })
+  cfg.aggiorna({ onboarding: true })
+  assert.equal(pagina.fontiScelte(), true)
+  cfg.aggiorna({ onboarding: false })
 })

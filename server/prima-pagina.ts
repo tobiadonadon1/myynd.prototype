@@ -20,6 +20,8 @@ import * as compiti from './compiti.ts'
 import * as cancellati from './cancellati.ts'
 import * as viva from './lettura-viva.ts'
 import * as primaLettura from './prima-lettura.ts'
+import * as avvio from './avvio.ts'
+import { FONTI } from './connettori/registro.ts'
 import { generaFeed } from './claude.ts'
 import { feedAttuale } from './attenzione.ts'
 
@@ -52,16 +54,54 @@ const stati = new Map<string, { pagina: StatoPagina; carte: number; quando: numb
 const conto = () => chi.adesso() ?? ''
 const metti = (pagina: StatoPagina, carte = 0) => { stati.set(conto(), { pagina, carte, quando: Date.now() }) }
 
-/** La prima pagina va ancora fatta: c'è chi ragiona, c'è da leggere, e non ha mai avuto una carta. */
-export function dovuta(): boolean {
-  return ferri.collegato() && !store.cursore(SEGNO) && store.nessunaCarta() && store.haDocumenti()
+/** Le fonti che hanno documenti adesso, fra quelle che si collegano. */
+function fontiConDocumenti(): string[] {
+  const vere = new Set(FONTI)
+  return store.conteggi().perFonte.filter(r => r.n > 0 && vere.has(r.fonte)).map(r => r.fonte).sort()
 }
 
-/** Prepara la prima pagina. Chi chiama tiene la serratura della lettura. */
-export async function prepara(): Promise<void> {
+/*
+ * La pagina è fatta. Una pagina rimasta vuota però vale solo per le fonti che
+ * aveva: il segno dice quali erano («vuota|quando|calendario,desktop»), e
+ * quando ne arriva una nuova (la posta collegata dopo) la pagina si rifà, una
+ * volta per fonte. Una pagina con delle carte è fatta per sempre.
+ */
+function fatta(): boolean {
+  const v = store.cursore(SEGNO)
+  if (!v) return false
+  if (!v.startsWith('vuota|')) return true
+  const aveva = new Set((v.split('|')[2] ?? '').split(',').filter(Boolean))
+  return !fontiConDocumenti().some(f => !aveva.has(f))
+}
+
+/**
+ * Chi è nell'avvio ha già scelto le sue fonti (o l'avvio è finito).
+ *
+ * Il giro dei dieci minuti legge quello che è collegato, anche mentre lui è
+ * ancora sul passo delle fonti con due schede su quattro: una pagina fatta
+ * lì è fatta con l'agenda e il Mac, senza la posta che sta per collegare, e
+ * non si rifarebbe. Il giro di fondo la lascia a dopo; «Leggi», premuto da
+ * lui, la fa (è la lettura delle fonti che ha scelto).
+ */
+export function fontiScelte(): boolean {
+  if (cfg.leggi().onboarding) return true
+  return avvio.fontiScelte() === true
+}
+
+/** La prima pagina va ancora fatta: c'è chi ragiona, c'è da leggere, e non ha mai avuto una carta. */
+export function dovuta(): boolean {
+  return ferri.collegato() && !fatta() && store.nessunaCarta() && store.haDocumenti()
+}
+
+/**
+ * Prepara la prima pagina. Chi chiama tiene la serratura della lettura.
+ * `dal`: quando è cominciata la lettura che la prepara, per il tempo nel registro.
+ */
+export async function prepara(dal?: number): Promise<void> {
   const via = () => cancellati.cancellata(cfg.cartella())
   if (via()) return
   metti('lavoro')
+  const inizio = Date.now()
   console.log('myynd · prima pagina · comincia')
   try {
     if (ferri.motore()) {
@@ -74,10 +114,13 @@ export async function prepara(): Promise<void> {
     if (via()) return
     ferri.annuncia()
     const carte = feedAttuale().length
-    store.segnaCursore(SEGNO, new Date().toISOString())
+    const quando = new Date().toISOString()
+    // nessuna carta, in nessuno stato: il segno ricorda con quali fonti
+    store.segnaCursore(SEGNO, store.nessunaCarta() ? `vuota|${quando}|${fontiConDocumenti().join(',')}` : quando)
     metti('pronta', carte)
-    const dal = Date.parse(store.cursore('prima:iniziata') ?? '')
-    console.log(`myynd · prima pagina · pronta in ${Number.isNaN(dal) ? 0 : Date.now() - dal} ms · ${carte} carte`)
+    // dall'inizio della lettura che l'ha preparata (spec 8), e quanto è durata la pagina da sola
+    const suo = Date.now() - inizio
+    console.log(`myynd · prima pagina · pronta in ${dal === undefined ? suo : Date.now() - dal} ms · ${carte} carte · la pagina ${suo} ms`)
   } catch (e) {
     if (via()) return
     metti('guaio')
@@ -90,7 +133,7 @@ export function stato(): { pagina: StatoPagina; carte: number } {
   const m = stati.get(conto())
   if (m && Date.now() - m.quando < VALE_MS) return { pagina: m.pagina, carte: m.carte }
   // un conto che ha già avuto la sua pagina, o delle carte, non vede mai la riga
-  if (store.cursore(SEGNO) || !store.nessunaCarta()) return { pagina: 'nessuna', carte: 0 }
+  if (fatta() || !store.nessunaCarta()) return { pagina: 'nessuna', carte: 0 }
   const legge = viva.di(conto())?.prima === true || primaLettura.inCorso().length > 0
   if (!ferri.collegato()) return { pagina: store.haDocumenti() || legge ? 'senza-motore' : 'nessuna', carte: 0 }
   if (dovuta() || legge) return { pagina: 'attesa', carte: 0 }

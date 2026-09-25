@@ -551,7 +551,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
             {/* da dove viene, e basta: la freccia apriva la stessa frase, parola per parola */}
             <p className="onboard-fact-source">{f.evidenza.fonte ? `${nomeFonte(f.evidenza.fonte)} · ${f.evidenza.titolo}` : f.evidenza.titolo}</p>
           </article>)}</div>
-        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p>{/* mentre legge ancora, «non ho trovato» non è vero: la riga non c'è (P4) */}{(avvio.fonteSaltata || !leggeAncora) && <div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div>}</div>}
+        </> : <div className="onboard-goal-card"><span>{t('Il tuo obiettivo')}</span><p>{avvio.progetto?.obiettivo}</p>{/* mentre legge ancora, o scelte a metà lettura, «non ho trovato» non è vero: la riga non c'è (P4) */}{(avvio.fonteSaltata || (!leggeAncora && !avvio.aMetaLettura)) && <div>{t(avvio.fonteSaltata ? 'Nessuna fonte collegata a questo avvio.' : 'Non ho trovato estratti pertinenti nelle fonti lette.')}</div>}</div>}
         <OnboardErrore testo={errore} />
         <div className="onboard-actions"><button className="onboard-secondary" disabled={occupato} onClick={() => vai(1)}>{t('Cambia fonti')}</button><button className="onboard-primary" disabled={occupato} onClick={conferma}>{occupato ? t('Salvo…') : confermati.length ? t('Conferma') : t('Continua senza estratti')}<Avanti /></button></div>
       </>}

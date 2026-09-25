@@ -197,9 +197,11 @@ export function avanzaLettura(righe: RigaLettura[], m: Record<string, unknown>):
  * documenti» accanto a cinque documenti veri. Quello che non si è riletto
  * perché uguale («30 già letti») è dentro il totale, e non si ripete.
  */
-export function chiudiLettura(righe: RigaLettura[], documenti: (id: string) => number | undefined): RigaLettura[] {
+export function chiudiLettura(righe: RigaLettura[], documenti: (id: string) => number | undefined, o: { vuoteInCoda?: boolean } = {}): RigaLettura[] {
   return righe.map(r => {
     const n = documenti(r.id)
+    // dopo aver aspettato invano il proprio turno, una fonte senza documenti non si è letta: resta in coda, mai «✓ 0»
+    if (o.vuoteInCoda && aperta(r) && !(n && n > 0)) return { ...r, stato: 'attesa', testo: '' }
     if (aperta(r)) return { ...r, stato: 'fatto', testo: contaGenere(genereDi(r.id), n ?? 0), ultimo: { fase: r.id, stato: 'fatto', documenti: n ?? 0 } }
     if (r.stato === 'fatto' && r.ultimo && n !== undefined) {
       const ultimo = { ...r.ultimo, documenti: n, giaLetti: 0, invariate: 0 }
@@ -322,6 +324,8 @@ export function creaLettura(d: DipendenzeLettura) {
     const mostra = (nuove: RigaLettura[]) => { r = nuove; metti({ righe: nuove }) }
     mostra(r)
     let guasto = ''
+    /** Due minuti in fila dietro un'altra lettura, senza mai leggere: le righe vuote restano in coda. */
+    let senzaTurno = false
     /*
      * Le fonti che la lettura visita davvero (P4): chi si attacca a una
      * lettura già partita riceve l'elenco di quella, e una fonte collegata
@@ -341,6 +345,7 @@ export function creaLettura(d: DipendenzeLettura) {
       // dopo due minuti di fila dietro a un'altra lettura non è un guasto di
       // nessuna fonte: si guarda com'è l'indice adesso, sotto
       if (messaggio(e) !== GIA_IN_CORSO) guasto = t(messaggio(e))
+      else senzaTurno = true
     }
     const dopo = await d.collegate().catch(() => null)
     if (guasto) {
@@ -348,7 +353,7 @@ export function creaLettura(d: DipendenzeLettura) {
       metti({ guaio: guasto })
     } else {
       // una fonte scollegata nel frattempo non ha più una riga
-      mostra(chiudiLettura(dopo ? r.filter(x => x.id in dopo) : r, id => dopo?.[id]))
+      mostra(chiudiLettura(dopo ? r.filter(x => x.id in dopo) : r, id => dopo?.[id], { vuoteInCoda: senzaTurno }))
     }
     return r
   }
