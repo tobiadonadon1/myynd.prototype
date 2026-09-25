@@ -495,3 +495,23 @@ test('l’avanzamento conta i repository, non i documenti', async () => {
   await gh.sincronizza({ token: 'x', repos: ['o/a', 'o/b'] }, (fatti, tot) => passi.push(`${fatti}/${tot}`))
   assert.deepEqual(passi, ['1/2', '2/2'])
 })
+
+// — P8: il guaio di GitHub porta il suo rimedio —
+
+test('un 401 in lettura è «credenziale»; un limite è passeggero; la rete pure', async () => {
+  const { rimedioDi } = await import('./connettori/guaio.ts')
+  rispondi({ '/user/repos': new Response('', { status: 401 }) })
+  let e = await gh.sincronizza(TOKEN).catch(x => x)
+  assert.equal(rimedioDi(e), 'credenziale')
+  rispondi({ '/user/repos': new Response('', { status: 403, headers: { 'retry-after': '60' } }) })
+  e = await gh.sincronizza(TOKEN).catch(x => x)
+  assert.equal(rimedioDi(e), 'attendi')
+  globalThis.fetch = (async () => { throw new TypeError('fetch failed') }) as typeof fetch
+  e = await gh.sincronizza(TOKEN).catch(x => x)
+  assert.equal(rimedioDi(e), 'attendi')
+  // un 404 non si sa: resta «guarda» (counter-case)
+  rispondi({ '/user/repos': new Response('', { status: 404 }) })
+  e = await gh.sincronizza(TOKEN).catch(x => x)
+  assert.ok(e instanceof Error)
+  assert.equal(rimedioDi(e), 'guarda')
+})

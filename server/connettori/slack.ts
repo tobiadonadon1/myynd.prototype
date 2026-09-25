@@ -29,6 +29,7 @@
 import type { Documento } from '../store.ts'
 import { riflua } from '../testo.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
+import { GuaioFonte, type Rimedio } from './guaio.ts'
 
 export type ConfigSlack = {
   token: string
@@ -69,15 +70,22 @@ async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> 
   // sempre: al quinto no si smette, o un limite che non passa tiene il giro
   // appeso per ore e tutte le fonti dopo restano ad aspettare
   if (r.status === 429) {
-    if (tentativo >= 4) throw new Error(spiega('ratelimited'))
+    if (tentativo >= 4) throw new GuaioFonte(spiega('ratelimited'), 'attendi')
     const aspetta = Math.min(30, Number(r.headers.get('retry-after') ?? 5))
     await new Promise(f => setTimeout(f, aspetta * 1000))
     return api<T>(c, metodo, q, tentativo + 1)
   }
 
   const j = await r.json().catch(() => ({ ok: false, error: 'risposta_illeggibile' })) as T & Risposta
-  if (!j.ok) throw new Error(spiega(j.error ?? ''))
+  if (!j.ok) throw new GuaioFonte(spiega(j.error ?? ''), rimedioSlack(j.error ?? ''))
   return j
+}
+
+/** Cosa serve perché Slack torni a leggersi: un token nuovo, o solo aspettare. */
+function rimedioSlack(e: string): Rimedio {
+  if (['invalid_auth', 'not_authed', 'token_revoked', 'account_inactive', 'missing_scope'].includes(e)) return 'credenziale'
+  if (e === 'ratelimited') return 'attendi'
+  return 'guarda'
 }
 
 /** Gli errori di Slack che capitano davvero, detti a chi li subisce. */

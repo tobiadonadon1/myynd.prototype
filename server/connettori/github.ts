@@ -32,6 +32,7 @@
 import type { ConfigGithub } from '../config.ts'
 import type { Documento } from '../store.ts'
 import type { CasoAmministratore } from './amministratore.ts'
+import type { Rimedio } from './guaio.ts'
 
 const API = 'https://api.github.com'
 
@@ -71,7 +72,10 @@ const AFFILIAZIONE = 'owner,collaborator,organization_member'
  * vorrebbe dire o perdere il lavoro fatto, o insistere su un'API che ha già
  * detto di no.
  */
-class Limite extends Error {}
+class Limite extends Error {
+  /** Passa da solo: la salute delle fonti non lo conta come un guasto finché non si ripete. */
+  rimedio: Rimedio = 'attendi'
+}
 
 function intestazioni(c: ConfigGithub): Record<string, string> {
   return {
@@ -99,7 +103,7 @@ async function grezza(c: ConfigGithub, dove: string): Promise<Response> {
     })
   } catch (e) {
     const nome = e instanceof Error ? e.name : ''
-    throw new NoDiGithub(nome === 'TimeoutError' || nome === 'AbortError' ? LENTO : IRRAGGIUNGIBILE)
+    throw new NoDiGithub(nome === 'TimeoutError' || nome === 'AbortError' ? LENTO : IRRAGGIUNGIBILE, { rimedio: 'attendi' })
   }
 }
 
@@ -115,11 +119,14 @@ class NoDiGithub extends Error {
   amministratore?: CasoAmministratore
   /** La durata massima che l'organizzazione accetta, quando GitHub la dice. */
   giorni?: number
-  constructor(messaggio: string, extra: { dove?: string; amministratore?: CasoAmministratore; giorni?: number } = {}) {
+  /** Cosa serve perché torni a leggersi: lo legge `rimedioDi`, senza sapere che è GitHub. */
+  rimedio?: Rimedio
+  constructor(messaggio: string, extra: { dove?: string; amministratore?: CasoAmministratore; giorni?: number; rimedio?: Rimedio } = {}) {
     super(messaggio)
     if (extra.dove) this.dove = extra.dove
     if (extra.amministratore) this.amministratore = extra.amministratore
     if (extra.giorni) this.giorni = extra.giorni
+    if (extra.rimedio) this.rimedio = extra.rimedio
   }
 }
 
@@ -165,10 +172,10 @@ const NOME_STORTO = 'Scrivi i repository come owner/nome, uno per riga.'
  */
 async function controlla(r: Response): Promise<void> {
   if (r.ok) return
-  if (r.status === 401) throw new NoDiGithub(TOKEN_NON_VALIDO)
+  if (r.status === 401) throw new NoDiGithub(TOKEN_NON_VALIDO, { rimedio: 'credenziale' })
   const sso = r.headers.get('x-github-sso') ?? ''
   if (/^required/i.test(sso)) {
-    throw new NoDiGithub(SSO, { dove: /url=(\S+)/.exec(sso)?.[1] })
+    throw new NoDiGithub(SSO, { dove: /url=(\S+)/.exec(sso)?.[1], rimedio: 'credenziale' })
   }
   if (r.status === 403 || r.status === 429) {
     const restano = r.headers.get('x-ratelimit-remaining')
@@ -182,7 +189,8 @@ async function controlla(r: Response): Promise<void> {
     if (r.headers.get('retry-after') || restano === '0' || /rate limit/i.test(detto)) {
       throw new Limite(RALLENTA_GIRO)
     }
-    if (/forbids access via a personal access token \(classic\)/i.test(detto)) throw new NoDiGithub(CLASSICO_VIETATO)
+    // quello che si sistema cambiando il token, nel pannello: «credenziale»
+    if (/forbids access via a personal access token \(classic\)/i.test(detto)) throw new NoDiGithub(CLASSICO_VIETATO, { rimedio: 'credenziale' })
     if (/forbids access via a fine-grained/i.test(detto)) {
       /*
        * La durata massima la decide l'organizzazione, da 1 a 366 giorni, e
@@ -197,14 +205,14 @@ async function controlla(r: Response): Promise<void> {
         if (n > 0) {
           throw new NoDiGithub(
             `Questa organizzazione accetta token che durano al massimo ${n} giorni: rigeneralo su GitHub con una scadenza di ${n} giorni o meno.`,
-            { giorni: n, ...(dove ? { dove } : {}) })
+            { giorni: n, ...(dove ? { dove } : {}), rimedio: 'credenziale' })
         }
-        throw new NoDiGithub(TROPPO_LUNGO, dove ? { dove } : {})
+        throw new NoDiGithub(TROPPO_LUNGO, { ...(dove ? { dove } : {}), rimedio: 'credenziale' })
       }
       // senza la durata di mezzo, l'organizzazione non li accetta proprio
-      throw new NoDiGithub(GRANA_FINE_VIETATA, { dove: PAGINA_CLASSICO })
+      throw new NoDiGithub(GRANA_FINE_VIETATA, { dove: PAGINA_CLASSICO, rimedio: 'credenziale' })
     }
-    throw new NoDiGithub(PERMESSI_MANCANTI)
+    throw new NoDiGithub(PERMESSI_MANCANTI, { rimedio: 'credenziale' })
   }
   if (r.status === 404) throw new NoDiGithub('GitHub non trova questo repository, o il token non lo vede.')
   throw new NoDiGithub('GitHub non ha risposto come mi aspettavo.')

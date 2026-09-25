@@ -312,3 +312,25 @@ test('una lettura fermata a metà si dichiara troncata, e non cancella l’agend
   assert.equal(e.troncato, true)
   assert.ok(e.docs.length > 0)
 })
+
+// — P8: il guaio del calendario porta il suo rimedio —
+
+test('401 e 403 sono «credenziale»; 404 è «guarda»; timeout e 500 sono passeggeri', async () => {
+  const esito = async (f: typeof fetch) => {
+    cal.usaRete(f)
+    return cal.sincronizza({ url: 'https://esempio.test/a.ics', giorni: 30 }).then(() => null, (e: { rimedio?: string; message: string }) => e)
+  }
+  for (const status of [401, 403]) {
+    const e = await esito((async () => new Response('', { status })) as typeof fetch)
+    assert.equal(e?.rimedio, 'credenziale', String(status))
+    assert.match(e?.message ?? '', /rigeneralo/)
+  }
+  assert.equal((await esito((async () => new Response('', { status: 404 })) as typeof fetch))?.rimedio, 'guarda')
+  assert.equal((await esito((async () => new Response('', { status: 500 })) as typeof fetch))?.rimedio, 'attendi')
+  assert.equal((await esito((async () => { throw new DOMException('scaduto', 'TimeoutError') }) as typeof fetch))?.rimedio, 'attendi')
+  assert.equal((await esito((async () => { throw new TypeError('fetch failed') }) as typeof fetch))?.rimedio, 'attendi')
+  // una pagina che non è un calendario non è la rete: «guarda»
+  assert.equal((await esito((async () => new Response('<html>ciao</html>')) as typeof fetch))?.rimedio, 'guarda')
+  // e un calendario buono non ha guai (counter-case)
+  assert.equal(await esito((async () => new Response('BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n', { headers: { 'content-type': 'text/calendar' } })) as typeof fetch), null)
+})
