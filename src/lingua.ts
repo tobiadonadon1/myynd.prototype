@@ -2887,7 +2887,7 @@ const EN: Record<string, string> = {
   'Quello che Myynd sa': 'What Myynd knows',
   'Nomi e raggruppamento': 'Names and grouping',
   'Decisione': 'Decision',
-  'Osservazione': 'Observation',
+  'Osservazione': 'Watching',
   'Lavoro': 'Work',
   'Salvato da te': 'You saved this',
   'Risultato del lavoro': 'Work outcome',
