@@ -318,6 +318,10 @@ export type Evento = {
   organizzatore: string
   invitati: string[]
   stato: string
+  /** L'istante originale di un'eccezione di una serie (il RECURRENCE-ID); vuoto per le altre. */
+  originale?: Date
+  /** Ogni ATTENDEE con l'indirizzo minuscolo e il suo PARTSTAT: serve al gemello (P1B). */
+  partecipanti: { indirizzo: string; stato: string }[]
 }
 
 /** Un indirizzo, senza il `mailto:` e senza il resto. */
@@ -343,6 +347,7 @@ export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi
   let corrente: Record<string, Riga> & { EXDATE?: Riga } | null = null
   let esclusi: number[] = []
   let invitati: string[] = []
+  let partecipanti: { indirizzo: string; stato: string }[] = []
   let troncato = false
   /** Dentro quale blocco annidato dell'evento siamo: un VALARM, di solito. */
   let sotto = ''
@@ -398,11 +403,11 @@ export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi
     }
 
     if (r.nome === 'BEGIN' && r.valore.toUpperCase() === 'VEVENT') {
-      dentro = true; corrente = {}; esclusi = []; invitati = []
+      dentro = true; corrente = {}; esclusi = []; invitati = []; partecipanti = []
       continue
     }
     if (r.nome === 'END' && r.valore.toUpperCase() === 'VEVENT') {
-      if (corrente) chiudiEvento(corrente, esclusi, invitati)
+      if (corrente) chiudiEvento(corrente, esclusi, invitati, partecipanti)
       dentro = false; corrente = null
       continue
     }
@@ -421,11 +426,15 @@ export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi
       }
       continue
     }
-    if (r.nome === 'ATTENDEE') { invitati.push(chi(r)); continue }
+    if (r.nome === 'ATTENDEE') {
+      invitati.push(chi(r))
+      partecipanti.push({ indirizzo: r.valore.replace(/^mailto:/i, '').trim().toLowerCase(), stato: (r.parametri.PARTSTAT ?? '').toUpperCase() })
+      continue
+    }
     corrente[r.nome] = r
   }
 
-  function chiudiEvento(v: Record<string, Riga>, esclusi: number[], invitati: string[]) {
+  function chiudiEvento(v: Record<string, Riga>, esclusi: number[], invitati: string[], partecipanti: { indirizzo: string; stato: string }[]) {
     if (troncato) return
     const uid = v.UID?.valore.trim()
     const dt = v.DTSTART ? data(v.DTSTART, ctx) : null
@@ -444,13 +453,14 @@ export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi
       note: ripulisci(v.DESCRIPTION?.valore ?? '').slice(0, 4000),
       organizzatore: v.ORGANIZER ? chi(v.ORGANIZER) : '',
       invitati: invitati.slice(0, 40),
+      partecipanti: partecipanti.slice(0, 60),
       stato: (v.STATUS?.valore ?? '').toUpperCase()
     }
 
     const ricorrenza = v['RECURRENCE-ID'] ? data(v['RECURRENCE-ID'], ctx) : null
     if (ricorrenza) {
       eccezioni.set(`${uid}@${ricorrenza.quando.getTime()}`, {
-        ...base, inizio: dt.quando, fine: durata == null ? null : new Date(dt.quando.getTime() + durata)
+        ...base, originale: ricorrenza.quando, inizio: dt.quando, fine: durata == null ? null : new Date(dt.quando.getTime() + durata)
       })
       return
     }
@@ -818,7 +828,12 @@ export function daDocumento(
   return { inizio, fine, tuttoIlGiorno, luogo: d.percorso?.trim() || null, note: note || null }
 }
 
-export type EsitoCalendario = { docs: Documento[]; nome: string; troncato: boolean }
+/** Un'occorrenza com'è adesso, per il registro dei cambi (P1B): chiave `UID|inizio originale`. */
+export type VistaAgenda = {
+  chiave: string; titolo: string; inizio: string; fine: string | null; originale: string; stato: string
+  organizzatore?: string; partecipanti: { indirizzo: string; stato: string }[]
+}
+export type EsitoCalendario = { docs: Documento[]; nome: string; troncato: boolean; viste: VistaAgenda[]; finestra: { da: string; a: string } }
 
 export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario> {
   const i = indirizzo(c.url)
@@ -877,7 +892,12 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
    * dall'indice ogni impegno che non è arrivato — cioè il grosso di un'agenda
    * grande, sparito senza che niente lo dica.
    */
-  return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato }
+  const viste: VistaAgenda[] = eventi.map(e => ({
+    chiave: `${e.uid}|${(e.originale ?? e.inizio).toISOString()}`, titolo: e.titolo, inizio: e.inizio.toISOString(),
+    fine: e.fine ? e.fine.toISOString() : null, originale: (e.originale ?? e.inizio).toISOString(), stato: e.stato,
+    organizzatore: e.organizzatore.match(/[^\s<>]+@[^\s<>]+/)?.[0].toLowerCase(), partecipanti: e.partecipanti ?? []
+  }))
+  return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato, viste, finestra: { da: da.toISOString(), a: a.toISOString() } }
 }
 
 /** Le occorrenze che non ci sono più: si tolgono solo se la lettura è arrivata in fondo. */

@@ -24,6 +24,7 @@ import { join, resolve, sep } from 'node:path'
 import * as conti from './conti.ts'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
+import * as osservatore from './osservatore.ts'
 
 /**
  * La cartella di questo conto si può cancellare?
@@ -71,6 +72,9 @@ export async function cancella(utente: string): Promise<Esito> {
   } else {
     console.error(`myynd · il conto ${utente} è stato cancellato, ma i suoi file stanno in ${dove} — fuori da utenti/ — e li ho lasciati lì.`)
   }
+
+  // 4b. l'osservatore del Mac, se era suo: il guscio smette di mandare
+  osservatore.dimentica(utente)
 
   // 5. per ultima la riga del conto, con le sessioni e i gettoni che le stanno
   //    attaccati: finché c'è, quello che sta sul disco ha ancora un nome.

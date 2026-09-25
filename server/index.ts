@@ -94,6 +94,9 @@ import * as chi from './chi.ts'
 import * as trasloco from './trasloco.ts'
 import * as fuso from './fuso.ts'
 import * as sveglia from './sveglia.ts'
+import * as osservatore from './osservatore.ts'
+import * as gemello from './gemello.ts'
+import * as abitudini from './abitudini.ts'
 import * as oauth from './connettori/oauth.ts'
 import { riflua, senzaTrattini } from './testo.ts'
 
@@ -1942,9 +1945,19 @@ async function leggiTutto(
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
   const oss = osservaLettura(chi.adesso() ?? '', soloFonte)
+  // per il gemello (P1B): quando è partita, e se la posta è arrivata a posto
+  const partita = new Date().toISOString()
+  let postaOk = true
   try {
-    return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
-  } finally { oss.chiudi(fermo()) }
+    return await leggiTuttoDentro(soloFonte, d => {
+      const x = d as { fase?: string; stato?: string }
+      if ((x.fase === 'posta' || x.fase === 'google' || x.fase === 'microsoft') && x.stato === 'guaio') postaOk = false
+      oss.avvisa(d); avvisa(d)
+    }, fermo)
+  } finally {
+    oss.chiudi(fermo())
+    try { gemello.dopoLaLettura(partita, postaOk) } catch { /* il registro non ferma la lettura */ }
+  }
 }
 
 async function leggiTuttoDentro(
@@ -2122,6 +2135,7 @@ async function leggiTuttoDentro(
       iCal è sempre completo, quindi quello che non c'è dentro non c'è.
     */
     const tolti = store.riconcilia('calendario', { completo: !e.troncato }, e.docs.map(d => d.id))
+    try { gemello.agendaLetta(e) } catch { /* il registro dei cambi non ferma la lettura */ }
     avvisa({ fase: 'calendario', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
     return e.docs.length
   })
@@ -3499,6 +3513,7 @@ app.post('/api/compiti/:id/documento', async (req, res) => {
     // È una consegna vera, non solo una riga nel registro: così resta nello
     // scaffale della Memoria e «Portami lì» può riaprirla anche fra mesi.
     store.scriviConsegnaCompito(c.id, { app: 'File', titolo: f.nome, percorso: f.percorso })
+    try { gemello.bozzaTenuta(c, testo) } catch { /* la misura non ferma la consegna */ }
     store.tieniLaTua(c.id, testo)
     store.cambiaStatoCompito(c.id, 'fatto', `Salvato in «${f.nome}».`)
     res.json({ ok: true, ...f, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
@@ -3750,6 +3765,8 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   const stato = req.body?.stato === 'lasciato' ? 'lasciato' : 'fatto'
   const esito = String(req.body?.esito ?? '').trim()
   const tenuto = String(req.body?.tenuto ?? '')
+  // quanto l'ha ritoccata, prima che la sua versione sovrascriva la bozza (P1B)
+  if (tenuto.trim() && c.risultato) { try { gemello.bozzaTenuta(c, tenuto.trim()) } catch { /* la misura non ferma la chiusura */ } }
 
   // Quello che hai tenuto davvero è la cosa più preziosa che passa di qui, e
   // finiva soltanto dentro una convinzione: il testo com'è uscito non lo
@@ -4386,6 +4403,70 @@ app.post('/api/azzera', (req, res) => {
 // — P1A: rotte, fine —
 
 // — P1B: rotte, inizio —
+app.get('/api/gemello', (_req, res) => {
+  try { res.json(gemello.vista()) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/gemello/abitudini/:chiave', (req, res) => {
+  const azione = String(req.body?.azione ?? '')
+  if (!['tieni', 'correggi', 'togli', 'ripristina'].includes(azione)) return res.status(400).json({ errore: 'Azione sconosciuta.' })
+  try {
+    abitudini.cambia(req.params.chiave, azione as 'tieni' | 'correggi' | 'togli' | 'ripristina',
+      typeof req.body?.testo === 'string' ? req.body.testo : undefined,
+      typeof req.body?.prima === 'string' ? req.body.prima : undefined)
+    res.json({ ok: true })
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e)
+    errore(res, e, m === 'Non la trovo.' ? 404 : m === 'È passato troppo tempo per annullare.' ? 409 : 400)
+  }
+})
+
+const senzaOsservatore = (res: express.Response) => res.status(404).json({ disponibile: false })
+
+app.get('/api/osservatore', (_req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  try { res.json(osservatore.statoPerChiChiede()) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/osservatore', (req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  const v: { acceso?: boolean; titoli?: boolean } = {}
+  if (typeof req.body?.acceso === 'boolean') v.acceso = req.body.acceso
+  if (typeof req.body?.titoli === 'boolean') v.titoli = req.body.titoli
+  try { res.json(osservatore.imposta(v)) } catch (e) { errore(res, e) }
+})
+
+app.post('/api/osservatore/pausa', (req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  const minuti = Number(req.body?.minuti)
+  if (!Number.isInteger(minuti) || minuti < 1 || minuti > osservatore.PAUSA_MAX) return res.status(400).json({ errore: 'Quanto deve durare la pausa?' })
+  try {
+    osservatore.pausa(minuti)
+    osservatore.annuncia()
+    res.json(osservatore.statoPerChiChiede())
+  } catch (e) {
+    errore(res, e, e instanceof Error && e.message === 'Lo usa un altro account su questo Mac.' ? 403 : 400)
+  }
+})
+
+app.post('/api/osservatore/riprendi', (_req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  try {
+    osservatore.riprendi()
+    osservatore.annuncia()
+    res.json(osservatore.statoPerChiChiede())
+  } catch (e) { errore(res, e) }
+})
+
+app.delete('/api/osservatore/osservazioni', (_req, res) => {
+  if (!osservatore.disponibile()) return senzaOsservatore(res)
+  try {
+    osservatore.cancellaOsservazioni()
+    abitudini.ricalcola()
+    osservatore.annuncia()
+    res.json({ ok: true })
+  } catch (e) { errore(res, e) }
+})
 // — P1B: rotte, fine —
 
 // — P2: rotte, inizio —
@@ -4701,11 +4782,15 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
+    await runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro()))
   })
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
     recupero()
   })
+  // l'osservatore (P1B): solo dentro l'app sul Mac; il guscio riceve subito lo stato
+  if (osservatore.disponibile()) osservatore.ascolta()
+  osservatore.annuncia()
 
   // Le automazioni guardano l'orologio ogni quarto d'ora. Il primo giro dopo
   // due minuti e non subito: all'avvio c'è già la lettura delle fonti, e due
@@ -4726,6 +4811,10 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
+  // il gemello (P1B): raccoglie, chiude i giorni, di notte rifà le righe, la mattina prevede
+  const gemelloGiro = perOgnuno('il gemello non ha finito il giro', () => runScheduled('gemello', 15 * 60_000, () => store.senzaToccare(() => gemello.giro())))
+  setTimeout(gemelloGiro, 200_000)
+  setInterval(gemelloGiro, 15 * 60_000)
 
   // E le ricette nuove: subito dopo l'avvio — è il momento in cui una persona
   // ha appena riaperto l'app e potrebbe averne una che l'aspetta — e poi ogni
