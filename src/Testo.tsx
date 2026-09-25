@@ -87,14 +87,16 @@ function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: F
   // Il segno resta piccolo, la zona che risponde no: sedici pixel di
   // larghezza (la cifra ne occupa sei, il cerchietto cinque) di imbottitura
   // trasparente, ripresi dal margine, e il testo non si muove. Ma due segni
-  // attaccati («¹²») non si coprono: dal lato dove ce n'è un altro
-  // l'imbottitura è un pixel solo, non ripreso dal margine, così fra le due
-  // cifre resta un filo di spazio e puntare la prima non apre la seconda.
+  // attaccati («¹²») non si coprono: dal lato dove ce n'è un altro la zona
+  // si ferma al bordo della cifra, senza imbottitura e senza margine, così
+  // le due zone si toccano e non si sovrappongono, le cifre restano
+  // attaccate come prima (un pixel di imbottitura si vedeva: «¹ ²»), e
+  // puntare la prima non apre la seconda.
   const largo = memoria ? 6 : 5
-  const sinistra = vicini?.prima ? 1 : largo
-  const destra = vicini?.dopo ? 1 : largo
+  const sinistra = vicini?.prima ? 0 : largo
+  const destra = vicini?.dopo ? 0 : largo
   const padding = `4px ${destra}px 4px ${sinistra}px`
-  const margin = `-4px ${vicini?.dopo ? 0 : -largo}px -4px ${vicini?.prima ? 0 : -largo}px`
+  const margin = `-4px ${-destra}px -4px ${-sinistra}px`
 
   return (
     <span style={{ position: 'relative', whiteSpace: 'nowrap' }}>

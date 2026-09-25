@@ -344,3 +344,48 @@ test('un rifiuto che cita una fonte non è un rifiuto nel verbale; la forma da s
   assert.equal(conCifra.verifica.rifiuto, true)
   assert.deepEqual(conCifra.verifica.scoperti, ['2900'])
 })
+
+test('una riga da compilare dopo il punto («Il sottoscritto.______, nato») non ferma il server: sessanta underscore o asterischi in meno di cento millisecondi', () => {
+  for (const ch of ['_', '*']) {
+    const corpo = 'Il sottoscritto.' + ch.repeat(60) + ', nato a Roma, accetta la quota di €4.800 per la prima fase.'
+    const visti = [doc('c', 'Contratto', corpo, { fonte: 'desktop', tipo: 'documento' })]
+    const t0 = Date.now()
+    const r = ancora('La quota è di €4.800 per la prima fase [1].', { visti, estratti: new Map([['c', 4000]]), letto: corpo, memoria: false, via: 'claude' })
+    assert.ok(Date.now() - t0 < 100, `${ch}: ${Date.now() - t0} ms`)
+    assert.ok(r.fonti[0].passo?.includes('€4.800'), ch)
+    assert.deepEqual(r.verifica.scoperti, [])
+  }
+  // e le chiusure restano chiusure: il punto dentro il sottolineato chiude la frase, e il segno dopo porta il suo passo
+  const sottolineato = ancora('__The fee is €4,800 for the first phase.__[1] The Harbor pilot starts on 14 October 2026.[1]', { visti: [doc('a', 'Harbor pilot kickoff', HARBOR)], estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'claude' })
+  assert.deepEqual(sottolineato.fonti[0].passi, ['The fee is €4,800 for the first phase.', 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.'])
+})
+
+test('due segni nella stessa frase: ognuno prova il suo pezzo, dal segno prima fino a lui', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
+  const o = { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'claude' as const }
+  const data = 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.'
+  const quota = 'The fee is €4,800 for the first phase.'
+  for (const testo of [
+    'The Harbor pilot starts on 14 October 2026 [1], and the fee for the first phase is €4,800 [1].',
+    'The Harbor pilot starts on 14 October 2026 [1]; the fee is €4,800 [1].',
+    'Start: 14 October 2026 [1] · Fee: €4,800 [1]'
+  ]) {
+    const r = ancora(testo, o)
+    assert.deepEqual(r.fonti[0].passi, [data, quota], testo)
+    assert.equal(r.fonti[0].passo, data, testo)
+  }
+  // nell'ordine inverso il primo segno prova la quota
+  assert.deepEqual(ancora('The fee is €4,800 [1], and the pilot starts on 14 October 2026 [1].', o).fonti[0].passi, [quota, data])
+  // il segno di un'altra fonte in mezzo spartisce lo stesso
+  const visti2 = [doc('a', 'Harbor pilot kickoff', HARBOR), doc('b', 'Consegna del logo', LOGO)]
+  const misto = ancora('The logo comes on 14 October 2026 [2], and the fee is €4,800 [1].', { ...o, visti: visti2, estratti: new Map([['a', 4000], ['b', 4000]]) })
+  assert.equal(misto.fonti[0].passo, quota)
+  assert.equal(misto.fonti[1].passo, 'Ciao Alex, la consegna dei file del logo è confermata per venerdì 14 ottobre 2026.')
+  // controcaso: un pezzo senza fatti e senza parole in comune tiene il passo della frase intera
+  const vago = ancora('The Harbor pilot starts on 14 October 2026 [1], and it serves your goal [1].', o)
+  assert.deepEqual(vago.fonti[0].passi, [data, data])
+  // ma un pezzo con un fatto che l'estratto non ha resta senza passo: la data non prova un'altra quota
+  const finto = ancora('The Harbor pilot starts on 14 October 2026 [1], and the fee is €9,900 [1].', o)
+  assert.deepEqual(finto.fonti[0].passi, [data, null])
+  assert.deepEqual(finto.verifica.scoperti, ['9900'])
+})

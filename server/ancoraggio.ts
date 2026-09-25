@@ -30,13 +30,13 @@ export type FonteAncorata = {
   autore?: string | null
   quando?: string | null
   inviato?: boolean
-  /** Il passo che regge la frase del primo segno, alla lettera dall'estratto visto; al massimo 220 caratteri. */
+  /** Il passo che regge la frase del primo segno (il pezzo fino al segno, se ne ha uno), alla lettera dall'estratto visto; al massimo 220 caratteri. */
   passo?: string
   /**
    * Un passo per ogni segno [n] di questa fonte, nell'ordine in cui compaiono
    * nel testo, null dove la frase non ne ha uno. Solo quando la fonte è
    * citata più di una volta: la data non prova il prezzo, e il secondo segno
-   * mostra il suo passo, non quello del primo.
+   * mostra il suo passo, non quello del primo, anche dentro la stessa frase.
    */
   passi?: (string | null)[]
 }
@@ -288,9 +288,16 @@ const senzaSegni = (s: string) => s.replace(SEGNO, '').replace(/\s{2,}/g, ' ').t
  * o la fine di un grassetto o di un corsivo («**…phase.**[1]»): il punto
  * dentro le virgolette chiude la frase lo stesso. E i tre puntini «…» sono
  * un punto come gli altri.
+ *
+ * Le chiusure sono una classe di caratteri sola, non un'alternativa fra
+ * «**», «__», «*» e «_»: quell'alternativa era ambigua, e davanti a una
+ * riga da compilare («Il sottoscritto.____________, nato a») il motore
+ * provava ogni modo di spartire gli underscore prima di arrendersi, con
+ * un costo che raddoppiava quasi a ogni carattere; cinquanta bastavano a
+ * fermare il server per minuti, dentro la risposta di tutti.
  */
 const SEGNI_DOPO_IL_PUNTO = '(?:[ \\t]*\\[(?:\\d{1,3}|M)\\])*'
-const CHIUSURE_DOPO_IL_PUNTO = '(?:[»”’"\')\\]]|\\*\\*|__|\\*|_)*'
+const CHIUSURE_DOPO_IL_PUNTO = '[»”’"\')\\]*_]*'
 const FINE_FRASE = `${CHIUSURE_DOPO_IL_PUNTO}${SEGNI_DOPO_IL_PUNTO}(?=\\s|$)`
 const FRASE = new RegExp(`(?:[^.!?…\\n]|[.!?…](?!${FINE_FRASE}))+(?:[.!?…]+${FINE_FRASE}|\\n|$)`, 'g')
 
@@ -374,20 +381,32 @@ export function passoPer(frase: string, estratto: string): string | undefined {
 
 // — l'ancora —
 
-/** La frase della risposta attorno a ogni comparsa del segno dato, nell'ordine del testo. */
-function frasiCol(testo: string, segno: string): string[] {
+/**
+ * Per ogni comparsa del segno dato, nell'ordine del testo: la frase della
+ * risposta che lo porta, e il suo pezzo, dal segno precedente (di qualunque
+ * fonte, o dall'inizio della frase) fino a lui.
+ *
+ * Claude e GPT citano spesso ogni proposizione da sé: «X il 14 ottobre [1],
+ * e la quota è 4.800 € [1].» è una frase sola con due segni, e il segno
+ * dopo la quota deve provare la quota, non la data.
+ */
+function frasiCol(testo: string, segno: string): { frase: string; pezzo: string }[] {
   const frasi = frasiCon(testo)
-  const fuori: string[] = []
+  const fuori: { frase: string; pezzo: string }[] = []
   for (let i = testo.indexOf(segno); i >= 0; i = testo.indexOf(segno, i + segno.length)) {
     const f = frasi.find(x => i >= x.inizio && i < x.fine)
-    fuori.push(f ? f.testo : '')
+    if (!f) { fuori.push({ frase: '', pezzo: '' }); continue }
+    const prima = f.testo.slice(0, i - f.inizio)
+    let da = 0
+    for (const m of prima.matchAll(SEGNO)) da = m.index + m[0].length
+    fuori.push({ frase: f.testo, pezzo: prima.slice(da) })
   }
   return fuori
 }
 
 /** La frase della risposta che porta il primo segno dato. */
 function fraseCol(testo: string, segno: string): string {
-  return frasiCol(testo, segno)[0] ?? ''
+  return frasiCol(testo, segno)[0]?.frase ?? ''
 }
 
 /** Il progetto nominato nella frase, se ce n'è esattamente uno. */
@@ -441,9 +460,19 @@ export function ancora(testo: string, o: {
     // vuole il suo passo (o nessuno), non quello della prima
     const estratto = d.corpo.slice(0, o.estratti.get(d.id) ?? 0)
     const trovati = new Map<string, string | null>()
-    const passi = frasiCol(prosa.testo, `[${n}]`).map(fr => {
+    const cerca = (fr: string) => {
       if (!trovati.has(fr)) trovati.set(fr, passoPer(prosa.rimetti(fr), estratto) ?? null)
       return trovati.get(fr)!
+    }
+    // Prima il pezzo di frase fino al segno: con due segni nella stessa
+    // frase, quello dopo la quota prova la quota. Un pezzo senza fatti duri
+    // e senza abbastanza parole in comune («e serve al tuo obiettivo [1]»)
+    // torna alla frase intera; un pezzo con un fatto che l'estratto non ha
+    // resta senza passo, perché la frase intera proverebbe un'altra cosa
+    const passi = frasiCol(prosa.testo, `[${n}]`).map(({ frase, pezzo }) => {
+      const p = cerca(pezzo)
+      if (p !== null || pezzo === frase) return p
+      return fattiDuri(senzaSegni(prosa.rimetti(pezzo))).length ? null : cerca(frase)
     })
     if (passi[0]) f.passo = passi[0]
     if (passi.length > 1) f.passi = passi

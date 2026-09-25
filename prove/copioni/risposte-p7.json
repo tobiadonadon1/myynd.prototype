@@ -1,12 +1,14 @@
 {
   "modello": "finto",
   "risposte": [
+    { "se": "^Prima domanda:[\\s\\S]*date and the fee", "in": "utente", "testo": "Date and fee" },
     { "se": "^Prima domanda:[\\s\\S]*Nora write", "in": "utente", "testo": "Nora on the fee" },
     { "se": "^Prima domanda:[\\s\\S]*kickoff", "in": "utente", "testo": "Kickoff confirmed" },
     { "se": "^Prima domanda:[\\s\\S]*Harbor pilot", "in": "utente", "testo": "Harbor pilot start" },
     { "se": "^Prima domanda:[\\s\\S]*Lisbon", "in": "utente", "testo": "Lisbon office rent" },
     { "se": "giudice delle risposte[\\s\\S]*Keel ordered", "in": "tutto", "json": { "corrisponde": false, "sostenuta": false, "rispondeDavvero": true, "motivo": "No document says how many seats Keel ordered." } },
     { "se": "giudice delle risposte", "in": "system", "json": { "corrisponde": true, "sostenuta": true, "rispondeDavvero": true, "motivo": "The cited passage says it." } },
+    { "se": "Domanda: What are the date and the fee of the Harbor pilot", "in": "utente", "testo": "The Harbor pilot starts on 14 October 2026 [1], and the fee for the first phase is €4,800 [1]." },
     { "se": "Domanda: What did Nora write about the fee for the first phase", "in": "utente", "testo": "Nora wrote: “The fee is €4,800 for the first phase.”[1] The Harbor pilot starts on 14 October 2026.[1]" },
     { "se": "Domanda: What was confirmed about the Harbor pilot kickoff", "in": "utente", "testo": "The Harbor pilot starts on 14 October 2026 [1][2]. The fee is €4,800 [1]." },
     { "se": "Domanda: When does the Harbor pilot start", "in": "utente", "testo": "The Harbor pilot starts on 14 October 2026 [1] — with Brightline and Keel. It serves your Harbor Labs goal [M]. The fee is €4,800 [1][9]." },
