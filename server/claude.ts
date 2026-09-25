@@ -12,8 +12,10 @@ import { leggi, modello, nellaLingua, tono as tonoScelto, autonomia as autonomia
 import * as attrezzi from './attrezzi.ts'
 import { briefProduzione } from './stile-lavoro.ts'
 import { revisioneVisiva, type RevisioneVisiva } from './revisione-visiva.ts'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { corpoPerChiRiceve, SE_NON_RISPONDI } from './cornice.ts'
+import { bloccoDalTesto, DURI, opzioniDalMateriale, type Genere } from './domanda-sola.ts'
 import { appDocumento, CREA_DOCUMENTO, validaDocumento, pagineDocumento } from './delega-documento.ts'
 import { creaDocumento, pubblicaDocumentoDesktop, apriDocumento, type DocumentoCreato } from './native-document.ts'
 import * as mani from './mani.ts'
@@ -2290,72 +2292,62 @@ Scrivi in ${nellaLingua()}.`),
  *
  * La legge chi svolge il compito, e la rilegge chi classifica quello che ha
  * scritto (`chiedeAiuto`): le due metà devono dire la stessa cosa, o una
- * domanda scritta bene viene riscritta male. Le sue parole, del diciassette
- * settembre: «mi dice cosa ha visto, mi fa l'unica domanda che gli serve per
- * essere sicuro di aver capito, propone la strada o dice che se ne occupa».
+ * domanda scritta bene viene riscritta male.
  *
- * Tre cose, quindi, e nell'ordine: cosa ha visto, in una riga; le domande,
- * e solo quelle la cui risposta cambia il risultato; altrimenti niente
- * domanda, si va avanti e lo si dice.
- *
- * Dal ventuno settembre le domande sono *tutte insieme*, prima di produrre.
- * Erano una alla volta — «le altre due si chiedono dopo, se servono ancora»
- * — e lui ha visto cosa vuol dire: una domanda, il lavoro, un'altra domanda
- * sotto il lavoro, un altro giro. «Why doesn't he ask me all in one go,
- * right as one task, before he produces this pages document? That would
- * work way better.» Quindi un giro solo di domande, fino a tre, e poi la
- * cosa finita. Esportata per le prove: una regola che non si può leggere da
+ * Dal 24 settembre, con le sue parole: «One question at most... The whole
+ * point is that there is no friction.» Di regola nessuna domanda; una sola,
+ * e solo quando manca un dato duro che nessuna fonte contiene e sbagliarlo
+ * costerebbe; per tutto il resto si fa il lavoro e si scrive l'ipotesi in
+ * una riga. Esportata per le prove: una regola che non si può leggere da
  * fuori non si può provare.
  */
-export const DOMANDE_INSIEME =
-  'Quando ti fermi per chiedere, lo fai una volta sola, prima di produrre. Quello che scrivi ' +
-  'sono poche righe. La prima dice cosa hai visto: cosa hai letto, cosa hai trovato e cosa no, ' +
-  'in una riga sola. Poi le domande che ti servono per fare il lavoro intero: tutte, insieme, ' +
-  'da una a tre, una per riga, ognuna come la farebbe un collega alzando la testa dalla ' +
-  'scrivania, «Di quale unità parliamo?». Chi legge deve poter rispondere a ciascuna in cinque ' +
-  'parole senza rileggere niente. Non un piano, non dei passi numerati, non «per aiutarti ' +
-  'dovrei prima analizzare». Se ti mancano tre cose, chiedile tutte e tre adesso: un giro ' +
-  'solo. Quello che non chiedi adesso non lo chiedi dopo, e quando ha risposto produci la ' +
-  'cosa finita senza tornare a chiedere.\n\n' +
-  'E chiedi solo quello la cui risposta cambia quello che consegni. Se non lo cambia, o se una ' +
-  'strada è chiaramente più ragionevole delle altre, non fermarti: prendila, fai il lavoro, ' +
-  'e nella riga finale per lei di\' in una riga cosa hai scelto e perché, così sa che te ne ' +
-  'stai occupando e può correggerti dopo. Una domanda che non cambia niente le costa ' +
-  'un\'attesa, e a te un giro.'
+export const DOMANDA_AL_PIU =
+  'Di regola non chiedi niente: fai il lavoro. Chi sono i suoi clienti, le scadenze e come ' +
+  'scrive lo sai dal materiale e dal ritratto, e quello che non sai lo cerchi con cerca e apri ' +
+  'prima di pensare a una domanda. Ti fermi solo quando mancano insieme due cose: un dato duro ' +
+  'che nessuna fonte contiene (un indirizzo, una cifra, la data di un impegno preso a suo nome, ' +
+  'un file che non esiste, quale di due persone) e un errore che costerebbe (una mail alla ' +
+  'persona sbagliata, un prezzo sbagliato, un impegno preso a suo nome). Allora scrivi al ' +
+  'massimo tre righe: cosa hai visto, in una riga; una domanda sola, a cui si risponde in cinque ' +
+  'parole; e, se c\'è una strada ragionevole, una riga che comincia con «Se non rispondi:» ' +
+  '(«Otherwise I\'ll assume» in inglese) e dice cosa faresti. Mai due domande, mai un elenco, ' +
+  'mai un piano. In ogni altro caso scegli la strada più ragionevole, fai il lavoro intero e in ' +
+  'fondo scrivi l\'ipotesi in una riga sola, sotto le quindici parole, che comincia con «Ho ' +
+  'supposto» («I assumed» in inglese): «Ho supposto venerdì come scadenza.» Lei corregge dopo, ' +
+  'non prima. Una preferenza, un formato, un tono, una lunghezza o un giorno da proporre non ' +
+  'sono mai una domanda. Se nella nota c\'è già la risposta a una tua domanda, non chiedi più niente.'
 
 export const SVOLGERE = `
 
 Adesso non ti è stata fatta una domanda: ti è stato affidato un compito dalla
 sua lista di cose da fare.
 
-Non spiegare cosa faresti. Fallo, e consegna la cosa finita:
+Non spiegare cosa faresti. Fallo, e consegna la cosa finita.
 
-— se il compito è scrivere a qualcuno, scrivi il messaggio per intero, pronto
-  da rileggere e mandare. Con l'oggetto, se è un'email. Nella sua voce, non
-  nella tua: quello che sai di come scrive serve esattamente a questo.
-— se è preparare qualcosa — un riassunto, un confronto, una scaletta — consegna
-  la cosa preparata, non le istruzioni per prepararla.
-— se è decidere, dai la risposta e la ragione in una riga, non le opzioni.
+Se il compito è scrivere a qualcuno, scrivi il messaggio per intero, pronto
+da rileggere e mandare. Con l'oggetto, se è un'email. Nella sua voce, non
+nella tua: quello che sai di come scrive serve esattamente a questo.
+Se è preparare qualcosa (un riassunto, un confronto, una scaletta), consegna
+la cosa preparata, non le istruzioni per prepararla.
+Se è decidere, dai la risposta e la ragione in una riga, non le opzioni.
 
 Non aggiungere cappelli. Niente «Ecco la bozza:», niente «Spero sia utile».
 Comincia dalla prima parola della cosa vera.
 
 La prima riga di quello che consegni è la frase di chiusura: comincia con
 «Fatto: » se scrivi in italiano o «Done: » se scrivi in inglese, e dice in
-una frase cosa hai prodotto e dove sta. «Done: the pilot definition is
-written below.» «Fatto: la risposta a Rossi è pronta qui sotto, con il
-preventivo dal listino.» «Done: the note «Call with Bianchi» is in Apple
-Notes.» Si legge da sola sotto il titolo del compito, e dev'essere vera
-contro gli attrezzi che hai usato davvero: «salvato», «creato», «scritto in»
-solo se lo strumento che lo fa ti ha risposto che l'ha fatto. Poi una riga
-vuota, e solo dopo il resto: l'email, l'elenco, la bozza intera. Niente
-cappelli in mezzo, niente «Ecco…».
+una frase cosa hai prodotto e dove sta. «Fatto: la risposta a Rossi, con il
+prezzo del listino.» «Done: the pilot definition.» «Done: the note «Call with
+Bianchi» is in Apple Notes.» Si legge da sola sotto il titolo del compito, e
+dev'essere vera contro gli attrezzi che hai usato davvero: «salvato»,
+«creato», «scritto in» solo se lo strumento che lo fa ti ha risposto che l'ha
+fatto. Poi una riga vuota, e solo dopo il resto: l'email, l'elenco, la bozza
+intera. Niente cappelli in mezzo, niente «Ecco…».
 
-Quello che devi dire *a lei* e non al destinatario — un dubbio, una scelta
-che hai fatto, un'ipotesi su cui ti sei basato — sta in una riga sola in
-fondo, dopo un'altra riga vuota. Non è una domanda: le domande si fanno
-prima di produrre, tutte insieme, e sotto una cosa consegnata non se ne
-fanno più.
+In fondo, dopo una riga vuota, al massimo due righe per lei: la riga delle
+fonti, con i numeri («Prezzo dal listino [2].»), e, se hai supposto qualcosa,
+la riga «Ho supposto …». Niente elenchi, niente domande sotto una cosa
+consegnata.
 
 Non inventare fatti, nomi, cifre o stati di avanzamento mancanti. Se ti è
 stata richiesta una proposta, un piano o una scaletta, consegnala come
@@ -2363,16 +2355,15 @@ PROPOSTA basata sull'obiettivo noto e indica cosa resta da verificare. La
 proposta richiesta è già un risultato utile, anche senza un rapporto sullo
 stato attuale. Fai domande solo quando manca un dato duro, uno che
 nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario,
-una data, un file che non esiste. E falle tutte insieme, in un giro solo,
-prima di produrre: quello che ti servirà dopo chiedilo adesso. Una
-preferenza, un formato, un livello di dettaglio non sono dati duri: si
-sceglie la strada più ragionevole e la si dice nella riga finale.
+una data, un file che non esiste. Una preferenza, un formato, un livello di
+dettaglio non sono dati duri: si sceglie la strada più ragionevole e la si
+dice nella riga finale.
 
-${DOMANDE_INSIEME}
+${DOMANDA_AL_PIU}
 
-E le righe che sono obiettivi, non compiti — «definire un pilota di Myynd in
+E le righe che sono obiettivi, non compiti («definire un pilota di Myynd in
 H-Farm», «solidificare i sistemi», «ingerire una fonte vera in produzione»,
-titoli di cose grosse senza la cosa finita scritta accanto — si fanno lo
+titoli di cose grosse senza la cosa finita scritta accanto) si fanno lo
 stesso. Non chiedere cosa deve esserci alla fine: decidilo tu. Leggi il
 materiale del progetto, cerca quello che manca, e scegli il risultato
 concreto più utile che si possa produrre oggi con quello che c'è: una
@@ -2385,21 +2376,21 @@ purché sia concreto e non finga di aver eseguito i passi.
 
 Un preventivo con il prezzo sbagliato costa più di un preventivo non scritto.
 
-Due regole di prima qui non valgono, e questa ha la precedenza:
+Due regole di prima qui non valgono, e questa ha la precedenza.
 
-— NIENTE numeri fra parentesi quadre dentro la cosa che consegni. Un'email che
-  esce dall'azienda con dei [1] in mezzo è inutilizzabile.
-  Ma nella riga finale — quella che dici a lei, non al destinatario — le fonti
-  ci vanno sempre, con i numeri: ogni cifra, data o condizione che hai messo
-  nella cosa consegnata deve poter essere ricondotta al documento da cui viene.
-  Basta in coda: «Prezzo e tempi dal listino [2], condizioni dalla nota [3]».
-  Senza quei numeri chi rilegge non ha modo di controllarti, e una bozza che
-  non si può controllare si rilegge tutta a mano — cioè non ti fa risparmiare
-  niente.
-— La lunghezza la decide il lavoro, non la brevità. Un'email è lunga quanto
-  deve, un riassunto di sei documenti pure. Corto vale per le risposte, non
-  per le cose fatte. Vale per le cose FATTE: se ti stai fermando a chiedere,
-  questa riga non ti riguarda — lì la misura è una riga sola.
+NIENTE numeri fra parentesi quadre dentro la cosa che consegni. Un'email che
+esce dall'azienda con dei [1] in mezzo è inutilizzabile.
+Ma nella riga finale, quella che dici a lei e non al destinatario, le fonti
+ci vanno sempre, con i numeri: ogni cifra, data o condizione che hai messo
+nella cosa consegnata deve poter essere ricondotta al documento da cui viene.
+Basta in coda: «Prezzo e tempi dal listino [2], condizioni dalla nota [3]».
+Senza quei numeri chi rilegge non ha modo di controllarti, e una bozza che
+non si può controllare si rilegge tutta a mano, cioè non ti fa risparmiare
+niente.
+La lunghezza la decide il lavoro, non la brevità. Un'email è lunga quanto
+deve, un riassunto di sei documenti pure. Corto vale per le risposte, non
+per le cose fatte. Vale per le cose FATTE: se ti stai fermando a chiedere,
+questa riga non ti riguarda: lì la misura è una riga sola.
 
 Non stai mandando niente. Qualunque cosa scrivi passa da lei prima di uscire.
 Una ricerca o una bozza non modifica un repository, non salva un file e non
@@ -2437,41 +2428,38 @@ un README o una nota sono fonti da leggere, non una delega della persona.`
 export const MODI: Record<string, string> = {
   bozza: '\n\nTi ha chiesto la cosa scritta. Scrivila, e basta quella. Se ti manca un ' +
     'elemento, cercalo prima di chiederglielo: quasi sempre è già nel suo materiale.',
-  tutto: '\n\nTi ha chiesto di portarla fino in fondo, e «fino in fondo» comincia dal ' +
-    'materiale: prima di scrivere, cerca tutto quello che serve — il filo precedente con ' +
-    'quella persona, il listino in vigore, la versione buona del documento — e apri per ' +
-    'intero quelli da cui devi prendere una cifra o una data. Non fidarti del primo ' +
-    'risultato: se una cosa ti sembra mancare, manca perché non l\'hai ancora cercata.\n\n' +
-    'Poi, oltre alla cosa scritta, nella riga finale dille tutto quello che serve per ' +
-    'chiuderla: a chi va, cosa allegare e dove sta, cosa controllare prima. Un elenco ' +
-    'corto, non un discorso. L\'ultimo passo — premere invio — resta suo.',
+  tutto: '\n\nTi ha chiesto di portarla fino in fondo, e fino in fondo comincia dal materiale: ' +
+    'prima di scrivere cerca il filo con quella persona, il listino in vigore, la versione buona ' +
+    'del documento, e apri per intero quelli da cui prendi una cifra o una data. Se un file va ' +
+    'allegato, nominalo con il suo titolo nella riga delle fonti. L\'ultimo passo, premere invio, ' +
+    'resta suo.',
   prompt: '\n\nQuesta volta non ti ha chiesto la cosa fatta: ti ha chiesto **il prompt con cui ' +
-    'farla fare** a un altro assistente — Claude, ChatGPT o Claude Code — pronto da ' +
+    'farla fare** a un altro assistente (Claude, ChatGPT o Claude Code), pronto da ' +
     'incollare. Quello che consegni è quel prompt, e nient\'altro.\n\n' +
-    'Prima il materiale, come sempre: cerca tutto quello che serve — il filo con quella ' +
-    'persona, il listino in vigore, la versione buona del documento — e apri per intero ' +
+    'Prima il materiale, come sempre: cerca tutto quello che serve (il filo con quella ' +
+    'persona, il listino in vigore, la versione buona del documento) e apri per intero ' +
     'quelli da cui prendere una cifra o una data. Chi leggerà il prompt non ha accesso a ' +
     'niente di tutto questo: quello che non ci metti tu, per lui non esiste.\n\n' +
     'Il prompt è rivolto all\'assistente («tu»), si regge da solo, e in quest\'ordine dice:\n' +
-    '— l\'obiettivo, in una riga: cosa deve uscire e per chi;\n' +
-    '— il contesto che serve: nomi, cifre, date, vincoli, e i passi rilevanti del suo ' +
-    'materiale citati fra virgolette, non riassunti — un prezzo parafrasato è un prezzo ' +
+    '1. l\'obiettivo, in una riga: cosa deve uscire e per chi;\n' +
+    '2. il contesto che serve: nomi, cifre, date, vincoli, e i passi rilevanti del suo ' +
+    'materiale citati fra virgolette, non riassunti: un prezzo parafrasato è un prezzo ' +
     'da ricontrollare;\n' +
-    '— come scrive lei e cosa preferisce, preso da quello che sai di lei: il tono, la ' +
+    '3. come scrive lei e cosa preferisce, preso da quello che sai di lei: il tono, la ' +
     'lingua, la lunghezza, le formule che usa e quelle che non usa;\n' +
-    '— cosa deve uscire e in che forma: un\'email con l\'oggetto, una tabella, tre opzioni, ' +
+    '4. cosa deve uscire e in che forma: un\'email con l\'oggetto, una tabella, tre opzioni, ' +
     'un file;\n' +
-    '— cosa non fare: inventare cifre, aggiungere cappelli, cambiare destinatario.\n' +
+    '5. cosa non fare: inventare cifre, aggiungere cappelli, cambiare destinatario.\n' +
     'Se è lavoro dentro un progetto di codice, scrivilo per Claude Code: la cartella, i ' +
     'file da cui partire, cosa non toccare.\n\n' +
     'Testo semplice, da incollare com\'è: niente titoli, al massimo un\'etichetta di una ' +
     'riga («Contesto:», «Formato:») davanti a un blocco. NIENTE numeri fra parentesi ' +
     'quadre dentro il prompt: chi lo legge non ha i tuoi documenti e un [2] in mezzo a una ' +
     'frase è un pezzo di codice avanzato. Le fonti stanno in fondo al prompt, in un blocco ' +
-    'che comincia con «Fonti:» e ha una riga per documento — il numero fra parentesi ' +
-    'quadre, il titolo, e cosa ne hai preso — così chi lo incolla sa da dove viene ogni ' +
+    'che comincia con «Fonti:» e ha una riga per documento (il numero fra parentesi ' +
+    'quadre, il titolo, e cosa ne hai preso), così chi lo incolla sa da dove viene ogni ' +
     'cifra, e chi rilegge qui può controllarti.\n\n' +
-    'La riga per lei — un dubbio, una scelta che hai fatto, cosa manca — resta dov\'è ' +
+    'La riga per lei (un dubbio, una scelta che hai fatto, cosa manca) resta dov\'è ' +
     'sempre: una riga sola in fondo, dopo una riga vuota, fuori dal prompt.'
 }
 
@@ -2530,8 +2518,7 @@ export function obiettivoDaProdurre(): string {
     'piano con chi fa cosa ed entro quando, una bozza, un documento. Producilo per intero, ' +
     'senza fingere di aver eseguito niente, e nella riga finale per lei di\' in una riga quali ' +
     'ipotesi hai fatto per sceglierlo. Chiedi solo se manca un dato duro che nessuna fonte ' +
-    'contiene e che cambia il risultato; e se ti mancano più cose, chiedile tutte insieme in un ' +
-    'giro solo, prima di produrre: mai una adesso e le altre dopo.'
+    'contiene e che costa sbagliare: una domanda sola.'
 }
 
 /**
@@ -2583,7 +2570,7 @@ export function inMano(): string {
     ho.length ? `Quello che puoi leggere: ${ho.join(', ')}.` : 'Non hai nessuna fonte collegata.',
     manca.length ? `Quello che NON è collegato, e che quindi non puoi né leggere né usare: ${manca.join(', ')}.` : ''
   ].filter(Boolean)
-  return `\n\n${righe.join(' ')}\n\nSe il compito ha bisogno di qualcosa che non è collegato, dillo — «collegami la casella e te la scrivo» è la risposta giusta, non un ripiego. Non scrivere mai come se potessi fare una cosa che non puoi fare.`
+  return `\n\n${righe.join(' ')}\n\nSe il compito deve leggere qualcosa che non è collegato e senza quello non si può fare, scrivi una riga sola che comincia con «Mi manca» e nomina la fonte. Un messaggio si scrive anche senza la casella collegata: scrivilo, lei lo copia. Non scrivere mai come se potessi fare una cosa che non puoi fare.`
 }
 
 /**
@@ -2770,14 +2757,21 @@ export async function svolgi(
    */
   doc?: string | null,
   selezione?: SelezioneLavoro | null,
-  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string },
+  /**
+   * Come si esegue. Le quattro voci nuove (P3) sono tutte facoltative:
+   * `fissa` sono documenti da tenere davanti fin dall'inizio (quelli letti
+   * al giro prima, quando si riscrive), dentro lo stesso recinto di `dalla`;
+   * `giri` abbassa il tetto dei giri; `voce` è come scrive a chi riceve;
+   * `consegna` è la lingua in cui legge chi riceve.
+   */
+  esecuzione?: { nativa: boolean; signal: AbortSignal; taskId?: string; fissa?: string[]; giri?: number; voce?: string; consegna?: 'it' | 'en' },
   /**
    * Il materiale del progetto di cui la riga fa parte, se ne ha uno: la
    * cartella di lavoro come fonte fissa, la memoria e il riferimento nel
    * prompt di sistema. Vedi `MaterialeProgetto`.
    */
   progetto?: MaterialeProgetto | null
-): Promise<{ testo: string; fonti: Fonte[]; verificaDocumenti?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>}; fatti?: mani.Fatto[] }> {
+): Promise<{ testo: string; fonti: Fonte[]; lette?: string[]; verificaDocumenti?: string[]; eseguito?: boolean; daChiedere?: boolean; consegna?: DocumentoCreato & {revisione?: Pick<RevisioneVisiva, 'esito' | 'problemi'>}; fatti?: mani.Fatto[] }> {
   const produzioneIniziata = Date.now()
   const tracciaProduzione = (fase: string) => console.info(`myynd · production · run=${produzioneIniziata} · ${fase} · elapsed_ms=${Date.now() - produzioneIniziata}`)
   tracciaProduzione('provider-selection-start')
@@ -2843,6 +2837,19 @@ export async function svolgi(
    */
   const dallaCartella = progetto?.cartella
   if (dallaCartella && !selezioneAttiva && (!recinto || recinto.includes(dallaCartella.fonte)) && !dalla.some(d => d.id === dallaCartella.id)) dalla.push(dallaCartella)
+  /*
+   * I documenti fissati da chi chiama (P3): quelli letti al giro prima,
+   * quando si riscrive con un'ipotesi o con i problemi della rilettura. Lo
+   * stesso recinto e la stessa selezione di `dalla`: uno sconosciuto o uno
+   * fuori dal recinto si salta in silenzio.
+   */
+  for (const id of esecuzione?.fissa ?? []) {
+    if (dalla.some(d => d.id === id)) continue
+    const d = documento(id)
+    if (!d || (recinto && !recinto.includes(d.fonte))) continue
+    if (!documentiPerSelezione([d], selezione, domanda).length) continue
+    dalla.push(d)
+  }
   const fissati = new Set(selezioneAttiva ? [] : dalla.map(d => d.id))
   /*
    * L'obiettivo nudo si fa, non si chiede.
@@ -2871,7 +2878,7 @@ export async function svolgi(
   const partenza = [
     ...dalla,
     ...perQuestoLavoro(materiale(domanda, [], recinto)).filter(d => !giaDentro.has(d.id))
-  ].slice(0, compatto ? 4 : Math.max(MATERIALE_MAX, dalla.length))
+  ].slice(0, compatto ? Math.max(4, dalla.length) : Math.max(MATERIALE_MAX, dalla.length))
 
   /**
    * Tutto quello che ha letto, in ordine di apparizione.
@@ -2887,7 +2894,7 @@ export async function svolgi(
   const risultatoVerificato = (testo: string) => {
     const ids = visti.map(d => d.id)
     if (!verificaFontiSelezione(ids, selezione, domanda)) throw new Error('Una fonte è stata completata, scartata o non è più pertinente mentre preparavo il risultato. Rileggi le fonti prima di riprovare.')
-    return { testo, fonti: fontiCitate(testo, visti), ...(selezioneAttiva ? { verificaDocumenti: ids } : {}) }
+    return { testo, fonti: fontiCitate(testo, visti), lette: ids, ...(selezioneAttiva ? { verificaDocumenti: ids } : {}) }
   }
   const nuoviDa = (trovati: Documento[]) => {
     const freschi = perQuestoLavoro(trovati).filter(t => !visti.some(v => v.id === t.id))
@@ -2950,8 +2957,14 @@ export async function svolgi(
     : []
   const ferri = [...ATTREZZI_LAVORO, ...attrezzi.tools(concessi), ...leMani, ...(appNativa ? [CREA_DOCUMENTO] : [])]
 
-  const tettoGiri = GIRI[modo as keyof typeof GIRI] ?? GIRI.bozza
-  let sistemaLavoro = sistema(domanda, false, compatto) + SVOLGERE +
+  const tettoGiri = Math.max(1, Math.min(GIRI[modo as keyof typeof GIRI] ?? GIRI.bozza, esecuzione?.giri ?? Infinity))
+  /*
+   * Ogni `svolgi` è lavoro affidato con un gesto (decisioni P3: premere
+   * «Se ne occupa Myynd» è il consenso): la riga dell'autonomia che dice
+   * «chiedi prima» vale per proporre in chat, non per svolgere. Qui diventa
+   * «prepara e lascia pronto», e la chat tiene la sua.
+   */
+  let sistemaLavoro = sistema(domanda, false, compatto).replace(AUTONOMIE.chiedere, AUTONOMIE.preparare) + SVOLGERE +
     (MODI[modo] ?? MODI.bozza) + inMano() + conQuali(concessi) + mani.spiega(leMani) +
     '\n\nSe la persona chiede esplicitamente un piano, una scaletta o prossimi passi ' +
     'proposti, quello è il risultato da consegnare. Usa il suo obiettivo registrato ' +
@@ -2973,7 +2986,10 @@ export async function svolgi(
         (memoria ? `\n${memoria}` : '')
     }
   }
+  // come scrive a chi riceve (P3, `voce.ts`): prova, non istruzione, prima del brief
+  if (esecuzione?.voce) sistemaLavoro += '\n\n' + esecuzione.voce
   sistemaLavoro += '\n\n' + brief.testo
+  const consegna = esecuzione?.consegna
   let ultimaConsegna: (DocumentoCreato & {revisione: Pick<RevisioneVisiva, 'esito' | 'problemi'>}) | undefined
   let tentativiVisivi = 0
   if (appNativa) sistemaLavoro += `\n\nLa persona ti ha delegato un documento in ${appNativa}. Hai crea_documento_app: usalo per produrre il documento completo nell'app e salvarlo, non limitarti a descriverlo. Questa creazione locale è già autorizzata. Usa un titolo e una struttura ragionevoli senza chiedere preferenze facoltative. Chiedi solo se manca il tema o un dato indispensabile. Non inventare ricerche, citazioni o fatti personali. Il testo dello strumento contiene solo il documento, senza il riepilogo iniziale previsto per le bozze in chat. Non dichiarare successo senza la verifica dello strumento.`
@@ -2992,11 +3008,13 @@ export async function svolgi(
   if (soloAbbonamento && !appNativa) {
     passo({ passo: 'scrivo' })
     const senzaAttrezzi = sistemaLavoro +
-      '\n\nQuesto è tutto il materiale che avrai: non puoi cercarne altro. Se per fare il ' +
-      'compito ti serve qualcosa che qui non c\'è, dillo in una riga invece di inventarlo.'
+      '\n\nQuesto è tutto il materiale che avrai. Se manca un dato duro che costa sbagliare, un ' +
+      'indirizzo, una cifra, quale di due persone, fai una domanda sola. Per tutto il resto scegli ' +
+      'la strada più ragionevole, fai il lavoro intero e scrivi l\'ipotesi in una riga che comincia ' +
+      'con «Ho supposto».'
     try {
       const uscito = await abbonamento.chiedi({
-        system: conLaLingua(senzaAttrezzi),
+        system: conLaLingua(senzaAttrezzi, { consegna }),
         messages: [{ role: 'user', content: testoDi(messaggi[0].content) }],
         attesa: attesaDi('bozza'),
         modello: modelloPer('bozza')
@@ -3039,7 +3057,7 @@ export async function svolgi(
     tracciaProduzione(`provider-turn-${giro + 1}-start`)
     const finale = await m.flusso({
       ...parametri('bozza', 16000),
-      system: [{ type: 'text', text: conLaLingua(sistemaLavoro), cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: conLaLingua(sistemaLavoro, { consegna }), cache_control: { type: 'ephemeral' } }],
       messages: messaggi,
       tools: ferri,
       ...(ultimo && !appNativa ? { tool_choice: { type: 'none' } } : {})
@@ -3309,49 +3327,98 @@ export type Chiesta = { domanda: string; opzioni: string[]; multipla: boolean }
  * Non lancia mai: se non riesce, resta la domanda in prosa di prima, che
  * funzionava già.
  */
-export async function domandeDaFare(compito: string, risposta: string): Promise<Chiesta[]> {
+export async function domandeDaFare(compito: string, risposta: string, o?: { genere?: Genere | null; materiale?: string }): Promise<Chiesta[]> {
   /*
-   * Tutte insieme, fino a tre, dal ventuno settembre. Il diciassette erano
-   * diventate una — «l'unica domanda che gli serve» — e le altre «si
-   * chiedono dopo, se servono ancora». Il dopo l'ha visto lui: la risposta,
-   * il lavoro, un'altra domanda sotto il lavoro, un altro giro. «Why doesn't
-   * he ask me all in one go, right as one task, before he produces?» Quindi
-   * un giro solo: le domande che servono per fare il lavoro intero, sullo
-   * stesso tema, con le opzioni da toccare, e poi la cosa finita. Restano
-   * solo quelle la cui risposta cambia il risultato: se gliene manca una,
-   * una.
+   * Una sola, dal 24 settembre: la più importante, quella la cui risposta
+   * cambia il risultato. E le opzioni vengono solo dal materiale: un nome
+   * inventato fra le opzioni è una persona inventata, e per i generi duri
+   * (un destinatario, una cifra, quale di due persone, un file, un impegno)
+   * e per una data si controlla nel codice che ogni opzione compaia davvero
+   * nel materiale. Con meno di due opzioni vere resta la domanda in prosa.
    */
+  const materiale = (o?.materiale ?? '').slice(0, 24_000)
   const out = await chiediJSON<{ righe: Chiesta[] }>({
     lavoro: 'domande',
-    max_tokens: 1200,
+    max_tokens: 800,
     system: conLaLingua(
       'Un assistente si è fermato su un compito perché gli manca qualcosa. Trasforma ' +
-      'quello che ha scritto nelle domande a scelta multipla che gli servono per fare il ' +
-      'lavoro intero: da una a tre, tutte insieme, sullo stesso tema, nell\'ordine in cui ' +
-      'contano. È l\'unico giro di domande che farà: quello che non si chiede qui non si ' +
-      'chiede dopo. Ma solo quelle la cui risposta cambia il risultato: se gliene manca una ' +
-      'sola, una sola.\n\n' +
-      'Ogni domanda ha da due a quattro opzioni: concrete, diverse fra loro, e ognuna ' +
-      'una scelta che si può fare davvero. Niente «altro» fra le opzioni: chi risponde ' +
-      'ha comunque una casella per scrivere.\n\n' +
+      'quello che ha scritto in una domanda a scelta multipla: una domanda sola, la più ' +
+      'importante, quella la cui risposta cambia il risultato. Mai due.\n\n' +
+      'Le opzioni vengono solo dal materiale: nomi, indirizzi, cifre e date che compaiono nei ' +
+      'documenti letti o nel compito. Se il materiale non ne offre almeno due, nessuna ' +
+      'opzione. Da due a quattro, concrete, diverse fra loro, e ognuna una scelta che si può ' +
+      'fare davvero. Niente «altro» fra le opzioni: chi risponde ha comunque una casella per ' +
+      'scrivere.\n\n' +
       'Se la risposta è ovvia dal compito stesso, non fare nessuna domanda: sarebbe far ' +
       'perdere tempo per sembrare accurato.'
     ),
     formato: SCHEMA_CHIESTE,
-    messages: [{ role: 'user', content: `Il compito era: ${compito}\n\nSi è fermato dicendo:\n${risposta.slice(0, 3000)}` }]
+    messages: [{ role: 'user', content: `Il compito era: ${compito}\n\nSi è fermato dicendo:\n${risposta.slice(0, 3000)}` + (materiale ? `\n\nIl materiale che aveva davanti:\n${materiale}` : '') }]
   })
+  const dalMateriale = !!o?.genere && (DURI.includes(o.genere) || o.genere === 'data')
   return (out?.righe ?? [])
-    .filter(r => r?.domanda?.trim() && Array.isArray(r.opzioni))
-    .map(r => ({
-      domanda: r.domanda.trim(),
-      // due opzioni sono il minimo perché sia una scelta; oltre quattro si
-      // legge come un modulo, e un modulo non si compila
-      opzioni: r.opzioni.map(o => String(o).trim()).filter(Boolean).slice(0, 4),
-      multipla: !!r.multipla
-    }))
-    .filter(r => r.opzioni.length >= 2)
-    // tre al massimo: oltre si legge come un modulo, e un modulo non si compila
-    .slice(0, 3)
+    .filter(r => r?.domanda?.trim())
+    .map(r => {
+      const opzioni = (Array.isArray(r.opzioni) ? r.opzioni : []).map(x => String(x).trim()).filter(Boolean).slice(0, 4)
+      const vere = dalMateriale ? opzioniDalMateriale(opzioni, `${compito}\n${materiale}`) : opzioni
+      // due opzioni sono il minimo perché sia una scelta: con meno, resta la
+      // domanda in prosa, che la lista sa già disegnare con la sua casella
+      return { domanda: r.domanda.trim(), opzioni: vere.length >= 2 ? vere : [], multipla: !!r.multipla && vere.length >= 2 }
+    })
+    .slice(0, 1)
+}
+
+const SCHEMA_PESO = {
+  type: 'object',
+  properties: {
+    genere: {
+      type: 'string',
+      enum: ['destinatario', 'cifra', 'identita', 'file', 'impegno', 'data', 'preferenza', 'collegamento', 'permesso', 'altro'],
+      description:
+        'Di che genere è il dato che manca: destinatario (a chi va, un indirizzo), cifra (un ' +
+        'prezzo, un importo), identita (quale di due persone), file (un documento che non ' +
+        'esiste), impegno (la data di un impegno preso a suo nome), data (un giorno da ' +
+        'proporre), preferenza (un formato, un tono, una lunghezza, un perimetro), ' +
+        'collegamento (una fonte non collegata), permesso (un accesso negato), altro.'
+    },
+    costo: {
+      type: 'string',
+      enum: ['alto', 'basso'],
+      description: 'alto se sbagliarlo finirebbe in una mail alla persona sbagliata, in un prezzo sbagliato o in un impegno preso a suo nome; basso se è un giorno da proporre, un formato, una lunghezza, un tono o un perimetro.'
+    }
+  },
+  required: ['genere', 'costo'],
+  additionalProperties: false
+} as const
+
+/**
+ * Di che genere è il dato che manca, e se sbagliarlo costa (P3).
+ *
+ * L'etichetta con cui `domanda-sola.decidi` separa una cosa da chiedere da
+ * una cosa da presumere, quando il pavimento deterministico non ha già
+ * deciso. Non lancia mai: senza risposta torna null, e null per chi decide
+ * vuol dire «duro», che è la strada sicura.
+ */
+export async function pesaLaDomanda(compito: string, domanda: string, visto = ''): Promise<{ genere: Genere; costo: 'alto' | 'basso' } | null> {
+  try {
+    const out = await chiediJSON<{ genere: Genere; costo: 'alto' | 'basso' }>({
+      lavoro: 'presumere',
+      max_tokens: 200,
+      system: conLaLingua(
+        'Una domanda che un assistente vorrebbe fare prima di consegnare un lavoro. Di\' di che ' +
+        'genere è il dato che manca e se sbagliarlo costerebbe: alto se finirebbe in una mail ' +
+        'alla persona sbagliata, in un prezzo sbagliato o in un impegno preso a suo nome; basso ' +
+        'se è un giorno da proporre, un formato, una lunghezza, un tono o un perimetro.'
+      ),
+      formato: SCHEMA_PESO,
+      messages: [{ role: 'user', content: `Il compito: ${compito}\n${visto ? `Cosa ha visto: ${visto}\n` : ''}La domanda: ${domanda}` }]
+    })
+    const generi = SCHEMA_PESO.properties.genere.enum as readonly string[]
+    if (!out || !generi.includes(out.genere) || (out.costo !== 'alto' && out.costo !== 'basso')) return null
+    return { genere: out.genere, costo: out.costo }
+  } catch {
+    return null
+  }
 }
 
 const SCHEMA_ESITO = {
@@ -3363,8 +3430,8 @@ const SCHEMA_ESITO = {
         'Vero se il testo NON è un lavoro consegnabile ma una richiesta di un dato duro che ' +
         'nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, una ' +
         'data, un file che non esiste, un collegamento da fare. ' +
-        'Falso se è la cosa finita — un\'email scritta, un riassunto, un confronto, una ' +
-        'definizione, un piano con chi fa cosa ed entro quando — anche se in fondo aggiunge ' +
+        'Falso se è la cosa finita (un\'email scritta, un riassunto, un confronto, una ' +
+        'definizione, un piano con chi fa cosa ed entro quando), anche se in fondo aggiunge ' +
         'una riga con le ipotesi fatte o un dubbio. Falso anche quando il compito era un ' +
         'obiettivo (una direzione, una cosa grossa da far succedere) e il testo è il ' +
         'risultato concreto che l\'assistente ha scelto di produrre: quello è lavoro, non una ' +
@@ -3378,12 +3445,10 @@ const SCHEMA_ESITO = {
     domanda: {
       type: 'string',
       description:
-        'Se chiede: le domande, da una a tre, una per riga, ognuna come la farebbe un ' +
-        'collega alzando la testa dalla scrivania. Ogni riga una frase sotto le venti parole ' +
-        'che finisce col punto interrogativo. Tutte quelle che gli servono per fare il lavoro ' +
-        'intero senza tornare a chiedere, e solo quelle la cui risposta cambia il risultato. ' +
-        'Niente premesse, niente elenchi numerati, niente piani, niente «per assisterti ' +
-        'dovrei». Nominano la cosa vera che gli manca. Vuota se non chiede.'
+        'Se chiede: una domanda sola, sotto le venti parole, col punto interrogativo, come la ' +
+        'farebbe un collega alzando la testa dalla scrivania. Quella la cui risposta cambia il ' +
+        'risultato. Niente premesse, niente elenchi numerati, niente piani, niente «per ' +
+        'assisterti dovrei». Nomina la cosa vera che gli manca. Vuota se non chiede.'
     },
     visto: {
       type: 'string',
@@ -3419,7 +3484,7 @@ const SCHEMA_ESITO = {
  * qualcosa: chi confronta il risultato con `{ chiede, manca, domanda }` non
  * deve vedersi comparire una chiave vuota.
  */
-export async function chiedeAiuto(compito: string, risposta: string, nota?: string | null): Promise<{ chiede: boolean; manca: string[]; domanda: string; visto?: string }> {
+export async function chiedeAiuto(compito: string, risposta: string, nota?: string | null): Promise<{ chiede: boolean; manca: string[]; domanda: string; visto?: string; bloccato?: boolean }> {
   // Lavoro da modello piccolo: è una domanda con due risposte possibili su un
   // testo che è già stato scritto. Se c'è un modello su questa macchina lo fa
   // lui, gratis; se non c'è, o se sbaglia, si passa a Claude senza che nessuno
@@ -3431,19 +3496,18 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
     system: conLaLingua(
       'Guardi il risultato di un compito affidato a un assistente e dici se è la cosa ' +
       'fatta o una richiesta di aiuto. Se è una richiesta di aiuto, la riscrivi come ' +
-      'deve essere: una riga che dice cosa ha visto, e le domande dirette che gli servono, ' +
-      'da una a tre, una per riga, tutte insieme: quelle la cui risposta cambia il risultato. ' +
-      'Quello che ha scritto lui è lungo, e chi legge deve poter rispondere a ciascuna in ' +
-      'cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
+      'deve essere: una riga che dice cosa ha visto, e una domanda sola, diretta, quella la ' +
+      'cui risposta cambia il risultato. Quello che ha scritto lui è lungo, e chi legge deve ' +
+      'poter rispondere in cinque parole. Se ha fatto una scelta e l\'ha detta invece ' +
       'di chiedere, è la cosa fatta: non trasformare una scelta dichiarata in una domanda.\n\n' +
       'E un obiettivo non è una richiesta di aiuto. Se il compito era una direzione ' +
       '(«definire un pilota», «solidificare i sistemi», «ingerire una fonte in produzione») e ' +
-      'lui ha prodotto la cosa concreta più utile — una definizione scritta, un piano con chi ' +
-      'fa cosa ed entro quando, una bozza — dicendo in fondo le ipotesi che ha fatto, quella è ' +
+      'lui ha prodotto la cosa concreta più utile (una definizione scritta, un piano con chi ' +
+      'fa cosa ed entro quando, una bozza) dicendo in fondo le ipotesi che ha fatto, quella è ' +
       'la cosa fatta: non trasformarla in una domanda. Chiede solo se gli manca un dato duro ' +
       'che nessuna fonte contiene e che cambia il risultato: una cifra, un destinatario, una ' +
       'data, un file. Una domanda su una preferenza o un formato non è una richiesta di aiuto.\n\n' +
-      'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + DOMANDE_INSIEME
+      'La regola che lui doveva seguire, e che vale anche per come la riscrivi tu:\n' + DOMANDA_AL_PIU
     ),
     formato: SCHEMA_ESITO,
     messages: [{ role: 'user', content: `Il compito era: ${compito}${dettaglioDellaRiga(nota) ? `\nCon questo dettaglio: ${dettaglioDellaRiga(nota).slice(0, 1200)}` : ''}\n\nHa risposto:\n${risposta.slice(0, 4000)}${aggiunta}` }]
@@ -3454,19 +3518,25 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
   const INTERROGATIVA = /^(?:what|which|who|where|when|how|can you|could you|do you|should|is|are|cosa|che cosa|che|quale|quali|chi|dove|quando|come|quanto|quanti|puoi|mi dici|di qual)\b/i
   // una riga che chiede: interrogativa anche dopo un «e» o un «and» in testa
   const chiedeLaRiga = (r: string) => r.endsWith('?') && INTERROGATIVA.test(r.replace(/^(?:and|or|also|e|o|oppure|inoltre)\s+/i, ''))
-  const righe = pulita.split('\n').map(r => r.trim()).filter(Boolean)
-  // solo domande, da una a tre: è una richiesta, e si tiene com'è
+  const tutteLeRighe = pulita.split('\n').map(r => r.trim()).filter(Boolean)
+  // la riga «Se non rispondi: …» in coda è la strada proposta, non una domanda: si mette da parte
+  const conStrada = tutteLeRighe.length >= 2 && SE_NON_RISPONDI.test(tutteLeRighe[tutteLeRighe.length - 1])
+  const righe = conStrada ? tutteLeRighe.slice(0, -1) : tutteLeRighe
+  // solo domande: è una richiesta, e se ne tiene la prima
   const domandaSola = pulita.length <= 500 && righe.length >= 1 && righe.length <= 3 && righe.every(chiedeLaRiga)
   /*
-   * Una riga e poi le domande, con il punto interrogativo: è la forma che la
-   * regola chiede a chi svolge — cosa ha visto, e le domande, fino a tre — e
-   * non c'è niente da riscrivere. Si tiene com'è, senza chiamare nessuno.
+   * Una riga e poi la domanda, con il punto interrogativo: è la forma che la
+   * regola chiede a chi svolge (cosa ha visto, una domanda sola, e magari la
+   * strada) e non c'è niente da riscrivere. Si tiene com'è, senza chiamare
+   * nessuno. Se le domande sono più d'una, resta la prima.
    */
   const dopo = righe.slice(1)
   const vistoEDomanda = righe.length >= 2 && righe.length <= 4 && pulita.length <= 900 && dopo.every(chiedeLaRiga) && !righe[0].endsWith('?') &&
     // un'email di due righe che finisce con una domanda è lavoro, non una richiesta
     !/^(?:subject|oggetto|re:|dear|hi|hello|hey|ciao|gentile|buongiorno|buonasera|salve|caro|cara)\b/i.test(righe[0])
   const bloccato = pulita.length <= 700 && /^(?:I (?:need|cannot|can't|don['’]t have)|I['’]m (?:missing|unable)|Mi (?:manca|mancano|serve|servono)|Non (?:posso|ho accesso|riesco)|Collega(?:mi)?\b)/i.test(prima)
+  // un blocco vero (P3): gli manca una fonte o un permesso, non un dato
+  const blocco = bloccato && bloccoDalTesto(pulita) !== null
   /*
    * Un piano al posto della cosa, su una riga che era un obiettivo, ieri
    * tornava qui come domanda del risultato senza chiedere al modello. Oggi
@@ -3475,8 +3545,8 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
    * che non hanno bisogno di nessuno: la domanda sola, e le due righe.
    */
   const ripiego = vistoEDomanda
-    ? { chiede: true, manca: [] as string[], domanda: dopo.join('\n'), visto: senzaTrattini(righe[0]).slice(0, 240) }
-    : { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? righe.join('\n') : '' }
+    ? { chiede: true, manca: [] as string[], domanda: dopo[0], visto: senzaTrattini(righe[0]).slice(0, 240) }
+    : { chiede: domandaSola || bloccato, manca: [] as string[], domanda: domandaSola ? righe[0] : '', ...(blocco ? { bloccato: true } : {}) }
   if (ripiego.chiede && vistoEDomanda) return ripiego
   let e = await chiama()
   if (!e || typeof e.chiede !== 'boolean') return ripiego
@@ -3495,7 +3565,8 @@ export async function chiedeAiuto(compito: string, risposta: string, nota?: stri
    */
   const l = cfgLingua(leggi())
   if (e.domanda && linguaSbagliata(e.domanda, l)) e = await chiama(`\n\n${soloInLingua(l)}`) ?? e
-  const domanda = typeof e.domanda === 'string' ? e.domanda.trim() : ''
+  // una domanda sola: se il modello ne ha scritte due, resta la prima riga
+  const domanda = typeof e.domanda === 'string' ? (e.domanda.split('\n').map(r => r.trim()).find(Boolean) ?? '') : ''
   // la riga di cosa ha visto vale solo con una domanda accanto, e nella lingua giusta
   const visto = e.chiede && domanda && typeof e.visto === 'string' ? senzaTrattini(e.visto).trim().slice(0, 240) : ''
 
@@ -3529,7 +3600,7 @@ const SCHEMA_EMAIL = {
     a: {
       type: 'string',
       description:
-        'L\'indirizzo del destinatario, copiato alla lettera dal materiale — dal campo ' +
+        'L\'indirizzo del destinatario, copiato alla lettera dal materiale: dal campo ' +
         'autore di un messaggio, o da una firma. Se nel materiale non c\'è un indirizzo ' +
         'vero, lascia VUOTO: non ricostruirlo da un nome e da un dominio, non inventarlo, ' +
         'non metterci un esempio. Un indirizzo sbagliato manda il lavoro a uno sconosciuto.'
@@ -3544,12 +3615,18 @@ const SCHEMA_EMAIL = {
       type: 'string',
       description:
         'Il testo che riceve il destinatario, e nient\'altro. Fuori la riga dell\'oggetto, ' +
-        'e fuori tutto quello che nella bozza era rivolto a chi l\'ha chiesta — le note in ' +
+        'e fuori tutto quello che nella bozza era rivolto a chi l\'ha chiesta: le note in ' +
         'coda, i dubbi, le fonti fra parentesi quadre. Quello che resta si legge come una ' +
         'email scritta da una persona.'
+    },
+    allegato: {
+      type: 'string',
+      description:
+        'Se la bozza dice di allegare un file e fra i candidati c\'è quel file: il suo id, ' +
+        'copiato alla lettera. Altrimenti VUOTO. Mai un id che non sta fra i candidati.'
     }
   },
-  required: ['a', 'oggetto', 'corpo'],
+  required: ['a', 'oggetto', 'corpo', 'allegato'],
   additionalProperties: false
 } as const
 
@@ -3559,6 +3636,26 @@ export type Email = {
   corpo: string
   /** Il messaggio a cui risponde, quando la bozza risponde a una email dell'indice. */
   rispondeA?: { messageId: string; references?: string[] } | null
+  /** Il file da allegare, suggerito e verificato: esiste nell'indice, e sul disco se è del Mac (P3). */
+  allegato?: { id: string; titolo: string } | null
+}
+
+/** Le fonti da cui può venire un allegato: file veri, non mail né note. */
+const FONTI_ALLEGABILI = new Set(['desktop', 'drive', 'dropbox', 'sharepoint'])
+
+/**
+ * I file fra quelli letti e citati che si potrebbero allegare (P3, fase 1:
+ * si suggerisce e si apre, non si mette dentro la bozza).
+ */
+export function candidatiAllegato(lette: string[], fonti: Fonte[]): { id: string; label: string }[] {
+  const fuori: { id: string; label: string }[] = []
+  for (const id of [...fonti.map(f => f.id), ...lette]) {
+    if (fuori.some(c => c.id === id)) continue
+    const d = documento(id)
+    if (!d || !FONTI_ALLEGABILI.has(d.fonte) || d.tipo === 'email') continue
+    fuori.push({ id, label: d.titolo })
+  }
+  return fuori.slice(0, 8)
 }
 
 /**
@@ -3593,12 +3690,15 @@ export async function preparaEmail(
    */
   fonti?: Fonte[] | null,
   /** Il documento da cui è nata la riga, se ne viene: una email, di solito. */
-  doc?: string | null
+  doc?: string | null,
+  /** La lingua di chi riceve, e i file che si potrebbero allegare (P3). */
+  o?: { consegna?: 'it' | 'en'; candidati?: { id: string; label: string }[] }
 ): Promise<Email | null> {
   const dalleFonti = (fonti ?? [])
     .map(f => documento(f.id))
     .filter((d): d is Documento => !!d)
   const docs = dalleFonti.length ? dalleFonti : materiale(compito, [])
+  const candidati = o?.candidati ?? []
   /*
    * Se risponde a una email, il destinatario e l'oggetto non si chiedono al
    * modello: sono chi l'ha scritta e «Re: » più il suo oggetto. Il modello
@@ -3608,22 +3708,37 @@ export async function preparaEmail(
    */
   const origine = aCuiRisponde(doc, fonti)
   const mittente = origine ? indirizzoDi(origine.autore) : null
-  const e = await chiediJSON<Email>({
+  const e = await chiediJSON<Email & { allegato?: string }>({
     lavoro: 'email',
     max_tokens: 4000,
-    system:
+    system: conLaLingua(
       'Prendi una bozza scritta per una persona e ricavane un\'email pronta da mandare: ' +
-      'a chi va, che oggetto ha, e il solo testo che deve ricevere il destinatario.',
+      'a chi va, che oggetto ha, e il solo testo che deve ricevere il destinatario. Il testo ' +
+      'resta nella lingua in cui la bozza l\'ha scritto per chi lo riceve.',
+      { consegna: o?.consegna }
+    ),
     formato: SCHEMA_EMAIL,
     messages: [{
       role: 'user',
       content:
         (docs.length ? `Il materiale da cui è nata:\n\n${contesto(docs, 1, 1200)}\n\n---\n\n` : '') +
         (origine ? `La bozza risponde al messaggio «${origine.titolo}» di ${origine.autore ?? 'mittente ignoto'}.\n\n---\n\n` : '') +
+        (candidati.length ? `I file che si potrebbero allegare (id e titolo):\n${candidati.map(c => `${c.id} · ${c.label}`).join('\n')}\n\n---\n\n` : '') +
         `Il compito era: ${compito}\n\n---\n\nLa bozza:\n${bozza}`
     }]
   })
   if (!e || !e.corpo?.trim()) return null
+  /*
+   * L'allegato, solo se è vero: fra i candidati, ancora nell'indice, e sul
+   * disco se è un file del Mac. Un id inventato o un file sparito non
+   * diventano una riga «Da allegare» che poi non si apre.
+   */
+  const idAllegato = typeof e.allegato === 'string' ? e.allegato.trim() : ''
+  let allegato: Email['allegato'] = null
+  if (idAllegato && candidati.some(c => c.id === idAllegato)) {
+    const d = documento(idAllegato)
+    if (d && (d.fonte !== 'desktop' || (d.percorso && existsSync(d.percorso)))) allegato = { id: d.id, titolo: d.titolo }
+  }
   // un indirizzo che non è un indirizzo vale meno di nessun indirizzo: meglio
   // il campo vuoto, che l'interfaccia mostra come «dimmi tu a chi»
   const valido = (x: string | null | undefined) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x?.trim() ?? '')
@@ -3648,7 +3763,10 @@ export async function preparaEmail(
     const suo = origine!.titolo.trim()
     oggetto = /^re\s*:/i.test(suo) ? suo : `Re: ${suo}`
   }
-  return { a, oggetto, corpo: e.corpo.trim(), rispondeA: rispostaAlMittente ? rispostaA(origine!) : null }
+  // il corpo passa dalla cornice anche nel codice: la prima riga «Fatto:», la
+  // riga delle fonti e l'ipotesi non arrivano mai a chi riceve, qualunque
+  // cosa abbia capito il modello. Un segnaposto invece resta: è da riempire.
+  return { a, oggetto, corpo: corpoPerChiRiceve(e.corpo.trim()), rispondeA: rispostaAlMittente ? rispostaA(origine!) : null, allegato }
 }
 
 export async function titoloChat(domanda: string): Promise<string> {

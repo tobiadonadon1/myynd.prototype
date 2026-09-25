@@ -22,6 +22,7 @@
 import * as store from './store.ts'
 import * as posta from './connettori/posta.ts'
 import type { ConfigPosta } from './config.ts'
+import { haSegnaposto } from './cornice.ts'
 
 const INDIRIZZO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -66,6 +67,8 @@ export function daMandare(
   const corpo = dato('corpo') ?? c.email?.corpo ?? ''
   if (!INDIRIZZO.test(a)) return { ok: false, errore: 'Manca un indirizzo valido.' }
   if (!corpo) return { ok: false, errore: 'Il messaggio è vuoto.' }
+  // un segnaposto nel corpo (P3) è un dato che manca ancora: non parte
+  if (haSegnaposto(corpo)) return { ok: false, errore: 'C\'è ancora un pezzo da completare.' }
   const stessoDestinatario = a.toLowerCase() === (c.email?.a ?? '').trim().toLowerCase()
   const rispondeA = stessoDestinatario ? (c.email?.rispondeA ?? null) : null
   return { ok: true, m: { a, oggetto, corpo, rispondeA } }

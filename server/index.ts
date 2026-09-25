@@ -45,6 +45,12 @@ import * as domande from './domande.ts'
 import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
+import * as invii from './invii-osservati.ts'
+import * as lavoroDati from './lavoro-dati.ts'
+import * as revisioni from './revisioni.ts'
+import { misuraLavoro } from './misura-lavoro.ts'
+import { corpoPerChiRiceve } from './cornice.ts'
+import { classe as classeRitocco, parole as paroleDi, ritocco } from './ritocco.ts'
 import * as scrivania from './scrivania.ts'
 import { apriDocumento } from './native-document.ts'
 import { landReport } from './esecuzione-isolata.ts'
@@ -2328,6 +2334,8 @@ app.get('/api/sincronizza', async (req, res) => {
       () => annullata
     )
     invia({ fase: 'fine', totale, conteggi: store.conteggi() })
+    // una bozza salvata nella sua posta può essere partita: si guarda adesso (P3)
+    await invii.osserva().catch(() => 0)
     // «quando arriva» vale anche per quello che è arrivato premendo il bottone,
     // non solo per il giro delle sei ore
     if (totale > 0 && claude.collegato()) {
@@ -2432,6 +2440,8 @@ async function rileggiDaSola() {
     })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
+    // una bozza salvata nella sua posta può essere partita: si guarda prima del feed (P3)
+    await invii.osserva().catch(() => 0)
     await dopoLArrivo(daQuando, nuovi)
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
@@ -3288,6 +3298,8 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
   compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
+  // la risposta si impara (P3): la stessa domanda non deve tornare sulla riga dopo
+  if (c.stato === 'chiede') compiti.imparaDallaRisposta(c, c.risultato, testo, 'risposta')
 })
 
 /**
@@ -3343,6 +3355,13 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
   const conf = cfg.leggi()
   if (!conf.posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
 
+  // se la bozza è già partita dalla sua posta, non parte due volte (P3)
+  await invii.osservaUno(c).catch(() => null)
+  const adesso = store.compito(c.id) ?? c
+  if (adesso.mandata && adesso.chiesto && adesso.mandata.quando >= adesso.chiesto) {
+    return res.status(409).json({ errore: 'L\'hai già mandata dalla tua posta.' })
+  }
+
   const d = invio.daMandare(c, req.body)
   if (!d.ok) return res.status(400).json({ errore: d.errore })
 
@@ -3353,8 +3372,16 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
 
   res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
-  // quello che hai tenuto davvero passa alla memoria come per ogni altra chiusura
-  compiti.imparaSeCorretto(c.risultato, d.m.corpo)
+  /*
+   * Quello che hai tenuto davvero passa alla memoria come per ogni altra
+   * chiusura. La coppia giusta è il corpo dell'email contro il corpo mandato
+   * (P3): il risultato intero porta la prima riga «Fatto:», l'oggetto e la
+   * riga delle fonti, e confrontato con il corpo pulito non coincideva mai.
+   */
+  const bozza = c.email?.corpo ?? corpoPerChiRiceve(c.risultato ?? '')
+  const r = ritocco(bozza, d.m.corpo)
+  lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
+  compiti.imparaSeCorretto(bozza, d.m.corpo)
 })
 
 /**
@@ -4392,6 +4419,46 @@ app.post('/api/azzera', (req, res) => {
 // — P2: rotte, fine —
 
 // — P3: rotte, inizio —
+
+/**
+ * «Cambia» sotto l'ipotesi: quello che vale invece (P3).
+ *
+ * Non è una risposta a una domanda e non chiude mai la riga: è una
+ * correzione di una cosa già consegnata. Una riga con una bozza salvata
+ * nella posta o con un file consegnato passa dalla revisione (una riga
+ * figlia `rev-`, la versione di prima al sicuro); una riga semplice si
+ * riaffida con la correzione in nota. La correzione si impara, dopo.
+ */
+app.post('/api/compiti/:id/correggi', async (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return res.status(400).json({ errore: 'Scrivi cosa cambia.' })
+  if (c.stato !== 'pronto' || !c.ipotesi?.length) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
+  const riga = c.ipotesi[0]
+  try {
+    if (c.email?.casella?.stato === 'salvata' || c.consegna) {
+      await revisioni.rivediDaCorrezione(c.id, testo)
+    } else {
+      store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${testo}` : testo })
+      store.cambiaStatoCompito(c.id, 'aperto')
+      store.sbozzaCompito(c.id)
+      compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
+    }
+    lavoroDati.registraCorrezione(c.id)
+  } catch (e) { return errore(res, e) }
+  res.json({ ok: true, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
+  compiti.imparaDallaRisposta(c, riga, testo, 'correzione')
+})
+
+/** Le misure del lavoro affidato (P3): quante senza domande, quante bozze partite com'erano. */
+app.get('/api/lavoro/misura', async (req, res) => {
+  const giorni = Number(req.query.giorni ?? 30)
+  try { res.json(await misuraLavoro(Number.isFinite(giorni) && giorni > 0 ? giorni : 30)) }
+  catch (e) { errore(res, e) }
+})
+
 // — P3: rotte, fine —
 
 // — P4: rotte, inizio —

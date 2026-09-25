@@ -218,7 +218,7 @@ export function soloDomanda(testo: string): string {
  * e chi le legge risponde a tutte in un colpo. Se non ne trova nessuna con
  * il punto interrogativo, torna quello che tornava `soloDomanda`.
  */
-export function tutteLeDomande(testo: string, max = 3): string {
+export function tutteLeDomande(testo: string, max = 1): string {
   const righe = senzaSegni(testo).split('\n').map(r => r.trim()).filter(r => r.includes('?'))
   const domande: string[] = []
   for (const riga of righe) {

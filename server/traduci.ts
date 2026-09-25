@@ -13,6 +13,8 @@
 
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
+import * as lavoroDati from './lavoro-dati.ts'
+import { rigaIpotesi } from './cornice.ts'
 
 const SCHEMA = {
   type: 'object',
@@ -67,6 +69,8 @@ const SPIA_ITALIANO = /\b(che|non|una|per|con|della|nella|sono|come|quando|perch
 function compitiStorti(lingua: string) {
   if (lingua === 'it') return []
   return store.elencoCompiti()
+    // una bozza scritta apposta nella lingua di chi la riceve (P3) non è storta: si lascia
+    .filter(c => !(c.voceScritta?.lingua && c.voceScritta.lingua !== lingua))
     .filter(c => (c.risultato ?? '').trim().length > 15 && SPIA_ITALIANO.test(c.risultato!))
 }
 
@@ -190,6 +194,9 @@ async function compitiInLingua(lingua: string): Promise<number> {
     // cancellerebbe una bozza per aver cambiato lingua
     if (!prima || !r.testo?.trim() || r.testo.trim() === prima) continue
     store.traduciRisultato(r.id, r.testo.trim())
+    // la riga dell'ipotesi sta dentro il risultato: tradotto quello, si rilegge da lì
+    const ipotesi = rigaIpotesi(r.testo.trim())
+    lavoroDati.scriviIpotesi(r.id, ipotesi ? [ipotesi] : null)
     n++
   }
   return n

@@ -237,11 +237,15 @@ test('i due punti dentro la domanda non le portano via l’inizio', () => {
   )
 })
 
-// — tutte le domande, dal ventuno settembre —
+// — una domanda sola, dal 24 settembre (P3) —
 
-test('tutteLeDomande tiene tutte le domande, fino a tre, pulite e senza doppioni; senza domande torna quella sola', () => {
+test('tutteLeDomande tiene una domanda sola di serie, pulita; con un tetto più alto ne tiene di più senza doppioni; senza domande torna quella sola', () => {
   assert.equal(
     tutteLeDomande('Ho letto il filo.\n- Di quale unità parliamo? E chi tiene il numero?\n- Per andare avanti: entro quando?\n- Di quale unità parliamo?\n- Una quarta?'),
+    'Di quale unità parliamo?'
+  )
+  assert.equal(
+    tutteLeDomande('Ho letto il filo.\n- Di quale unità parliamo? E chi tiene il numero?\n- Per andare avanti: entro quando?\n- Di quale unità parliamo?\n- Una quarta?', 3),
     'Di quale unità parliamo?\nE chi tiene il numero?\nentro quando?'
   )
   assert.equal(tutteLeDomande('Which unit is the audit about?'), 'Which unit is the audit about?')

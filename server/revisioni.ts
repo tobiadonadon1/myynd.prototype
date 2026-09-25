@@ -95,6 +95,27 @@ export async function rivediDallaChat(input: unknown, domanda: string,
   // Grounding is enforced before reading any artifact or changing the task list.
   const parent = store.compito(x.id)
   if (!parent || parent.sparito || parent.stato === 'delegato' || (!parent.consegna && !parent.risultato)) throw new Error('That work is unavailable or still running. Choose a delivered document or draft.')
+  return creaRevisione(parent, feedback, avvia, letture)
+}
+
+/**
+ * Una revisione chiesta cambiando l'ipotesi sotto la riga (P3): «Cambia» su
+ * «I assumed Friday». Non passa dai controlli della chat (non c'è un
+ * messaggio da cui il testo debba venire, né un verbo di comando da
+ * riconoscere): il gesto è già la richiesta. Il resto è la stessa strada,
+ * con la versione precedente al sicuro.
+ */
+export async function rivediDaCorrezione(id: string, feedback: string, avvia?: (id: string, modo: string) => void, letture:Letture = {}): Promise<{id:string;giaAvviato:boolean}> {
+  const testo = feedback.trim()
+  if (!testo) throw new Error('Scrivi cosa cambia.')
+  const parent = store.compito(id)
+  if (!parent || parent.sparito || parent.stato === 'delegato' || (!parent.consegna && !parent.risultato)) throw new Error('That work is unavailable or still running. Choose a delivered document or draft.')
+  return creaRevisione(parent, testo.slice(0, 8000), avvia, letture)
+}
+
+/** La riga figlia di una revisione, con la base verificata: la usano la chat e la correzione dell'ipotesi. */
+export async function creaRevisione(parent: store.Compito, feedback: string,
+  avvia?: (id: string, modo: string) => void, letture:Letture = {}): Promise<{id:string;giaAvviato:boolean}> {
   const current = await versioneAttuale(parent,letture)
   const id = 'rev-' + createHash('sha256').update(parent.id + '\0' + parent.aggiornato + '\0' + current.impronta + '\0' + feedback).digest('hex').slice(0,24)
   if (store.compito(id)) return {id,giaAvviato:true}

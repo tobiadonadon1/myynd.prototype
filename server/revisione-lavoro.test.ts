@@ -173,48 +173,67 @@ test('due righe che dicono la stessa cosa si riconoscono, in tutte e due le ling
  * cose — cosa ha visto, una domanda sola, altrimenti vai avanti e dillo — e
  * che arrivi davvero a tutti e due.
  */
-test('la regola delle domande dice le tre cose, tutte insieme e prima, e la legge chi svolge', () => {
-  const r = claude.DOMANDE_INSIEME
+test('la regola della domanda dice le tre cose: di regola niente, una sola quando serve, e l\'ipotesi in fondo; e la legge chi svolge', () => {
+  const r = claude.DOMANDA_AL_PIU
+  assert.match(r, /non chiedi niente/)
+  assert.match(r, /una domanda sola/)
+  assert.match(r, /Ho supposto/)
+  assert.match(r, /Mai due domande/)
   assert.match(r, /cosa hai visto/i)
-  // dal ventuno settembre: tutte insieme, un giro solo, prima di produrre
-  assert.match(r, /tutte, insieme/)
-  assert.match(r, /un giro solo/)
-  assert.match(r, /prima di produrre/)
-  assert.match(r, /non lo chiedi dopo/)
-  assert.match(r, /solo quello la cui risposta cambia quello che consegni/)
-  assert.match(r, /non fermarti/)
+  assert.match(r, /Se non rispondi/)
   assert.ok(claude.SVOLGERE.includes(r), 'la regola non è nel prompt di chi svolge')
   // e sotto una cosa consegnata non si chiede più niente
-  assert.match(claude.SVOLGERE, /sotto una cosa consegnata non se ne\nfanno più/)
+  assert.match(claude.SVOLGERE, /niente domande sotto una cosa\s+consegnata/)
+  // niente del ventuno settembre, e niente lineette, in nessuno dei prompt di P3
+  for (const [nome, testo] of [['SVOLGERE', claude.SVOLGERE], ['MODI.bozza', claude.MODI.bozza], ['MODI.tutto', claude.MODI.tutto], ['MODI.prompt', claude.MODI.prompt], ['DOMANDA_AL_PIU', r], ['obiettivoDaProdurre', claude.obiettivoDaProdurre()], ['inMano', claude.inMano()]] as const) {
+    assert.doesNotMatch(testo, /da una a tre/, `${nome} dice ancora «da una a tre»`)
+    assert.doesNotMatch(testo, /tutte insieme/, `${nome} dice ancora «tutte insieme»`)
+    assert.ok(!testo.includes('—'), `${nome} ha una lineetta`)
+  }
+  assert.match(claude.MODI.tutto, /Se un file va allegato/)
+  assert.match(claude.obiettivoDaProdurre(), /una domanda sola\.$/)
+  assert.match(claude.inMano(), /comincia con «Mi manca»/)
 })
 
 test('chi classifica legge la stessa regola, e restituisce cosa ha visto accanto alla domanda', async () => {
   const ricevute = modelloJSON({ chiede: true, manca: ['unit'], domanda: 'Which unit is the audit about?', visto: 'I read the H-Farm thread: the audit names two units.' })
   const e = await claude.chiedeAiuto('Reply to H-Farm about the audit', 'Here is my analysis of the audit.\n\n1. Scope\n2. Timeline\n\nWhich unit? And when?')
   assert.equal(ricevute.length, 1)
-  assert.ok(ricevute[0].system.includes(claude.DOMANDE_INSIEME), 'la regola non è arrivata a chi classifica')
+  assert.ok(ricevute[0].system.includes(claude.DOMANDA_AL_PIU), 'la regola non è arrivata a chi classifica')
+  assert.match(ricevute[0].system, /una domanda sola/)
+  assert.match(String((ricevute[0].schema as { properties?: { domanda?: { description?: string } } } | undefined)?.properties?.domanda?.description ?? ''), /una domanda sola, sotto le venti parole, col punto interrogativo/)
   assert.deepEqual(e, { chiede: true, manca: ['unit'], domanda: 'Which unit is the audit about?', visto: 'I read the H-Farm thread: the audit names two units.' })
+
+  // due domande dal modello: resta la prima
+  modelloJSON({ chiede: true, manca: ['unit', 'when'], domanda: 'Which unit is the audit about?\nBy when?', visto: '' })
+  assert.equal((await claude.chiedeAiuto('Reply to H-Farm about the audit', 'Here is my analysis of the audit.\n\n1. Scope\n2. Timeline\n\nWhich unit? And when?')).domanda, 'Which unit is the audit about?')
 
   // senza domanda, niente riga di cosa ha visto: e la chiave non compare
   modelloJSON({ chiede: false, manca: [], domanda: '', visto: 'I read everything.' })
   assert.deepEqual(await claude.chiedeAiuto('Draft a message', 'Subject: Proposal\n\nHello Alex, the proposal is ready.'), { chiede: false, manca: [], domanda: '' })
 })
 
-test('le domande con le opzioni sono tutte insieme, fino a tre, in un giro solo', async () => {
+test('la domanda con le opzioni è una sola, e le opzioni di un genere duro vengono solo dal materiale', async () => {
   const ricevute = modelloJSON({ righe: [
-    { domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false },
-    { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false },
-    { domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false },
-    { domanda: 'Una quarta?', opzioni: ['a', 'b'], multipla: false }
+    { domanda: 'Which Giulia is the quote for?', opzioni: ['Giulia Neri', 'Giulia Bassi', 'Giulia Verdi'], multipla: false },
+    { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false }
   ] })
-  const righe = await claude.domandeDaFare('Reply to H-Farm', 'Which unit? By when? Which format?')
-  assert.match(ricevute[0].system, /da una a tre, tutte insieme/)
-  assert.match(ricevute[0].system, /non si chiede dopo/)
-  assert.deepEqual(righe, [
-    { domanda: 'Which unit?', opzioni: ['Sales', 'Ops'], multipla: false },
-    { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false },
-    { domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false }
-  ])
+  const materiale = 'Giulia Neri <giulia.neri@lumen.example>\nCourse quote for Lumen\n\nGiulia Bassi <giulia@harbor.example>\nCourse quote for Harbor'
+  const righe = await claude.domandeDaFare('Send the course quote to Giulia', 'Which Giulia?', { genere: 'identita', materiale })
+  assert.match(ricevute[0].system, /una domanda sola/)
+  assert.match(ricevute[0].system, /Le opzioni vengono solo dal materiale/)
+  assert.doesNotMatch(ricevute[0].system, /da una a tre/)
+  assert.deepEqual(righe, [{ domanda: 'Which Giulia is the quote for?', opzioni: ['Giulia Neri', 'Giulia Bassi'], multipla: false }])
+
+  // meno di due opzioni vere: la domanda resta, senza opzioni (la prosa con la casella)
+  modelloJSON({ righe: [{ domanda: 'Which Giulia is the quote for?', opzioni: ['Giulia Neri', 'Giulia Verdi'], multipla: false }] })
+  assert.deepEqual(await claude.domandeDaFare('Send the course quote to Giulia', 'Which Giulia?', { genere: 'identita', materiale }),
+    [{ domanda: 'Which Giulia is the quote for?', opzioni: [], multipla: false }])
+
+  // un genere morbido tiene le opzioni del modello, e comunque una domanda sola
+  modelloJSON({ righe: [{ domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false }, { domanda: 'By when?', opzioni: ['Today', 'Friday'], multipla: false }] })
+  assert.deepEqual(await claude.domandeDaFare('Reply to H-Farm', 'Which format? By when?', { genere: 'preferenza', materiale: '' }),
+    [{ domanda: 'Which format?', opzioni: ['Email', 'Call'], multipla: false }])
 })
 
 /*

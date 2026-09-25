@@ -132,8 +132,10 @@ test('le bozze passano dall’abbonamento quando è quello scelto', () => {
   assert.match(m, /export function soloAbbonamento\(\): boolean \{\s*return !chatgpt\.scelto\(\) && abbonamento\.disponibile\(\)/)
   // senza attrezzi non ha senso mandargli le loro istruzioni: gli si dice che
   // quello che ha davanti è tutto quello che avrà
-  assert.match(c, /non puoi cercarne altro/,
+  assert.match(c, /Questo è tutto il materiale che avrai/,
     'gli si chiede una bozza con gli attrezzi che non ha: cercherà, non troverà, e lo dirà come un guasto')
+  // e la regola della domanda sola (P3) vale anche su questa strada
+  assert.match(c, /fai una domanda sola\. Per tutto il resto scegli/)
 })
 
 test('anche la chat passa dall’abbonamento, non solo il resto', () => {
