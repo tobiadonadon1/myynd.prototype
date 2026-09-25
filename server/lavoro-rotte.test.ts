@@ -7,7 +7,10 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer as creaTcp, type Server as Tcp } from 'node:net'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +30,34 @@ const chiavi = await import('./ordine.ts')
 let servizio: ChildProcess | undefined
 let modello: ChildProcess | undefined
 let base = ''
+/** Un SMTP finto che dice sempre di sì e tiene il messaggio: «Manda» deve poter partire senza che parta niente. */
+let smtp: Tcp | undefined
+const mandate: string[] = []
+function smtpFinto(): Promise<number> {
+  smtp = creaTcp(socket => {
+    let dati = false
+    let corpo = ''
+    socket.write('220 finto ESMTP\r\n')
+    socket.on('data', d => {
+      for (const riga of String(d).split('\r\n')) {
+        if (dati) {
+          if (riga === '.') { dati = false; mandate.push(corpo); corpo = ''; socket.write('250 OK\r\n') }
+          else corpo += riga + '\n'
+          continue
+        }
+        if (!riga) continue
+        const c = riga.toUpperCase()
+        if (c.startsWith('EHLO') || c.startsWith('HELO')) socket.write('250-finto\r\n250 AUTH PLAIN LOGIN\r\n')
+        else if (c.startsWith('AUTH')) socket.write('235 OK\r\n')
+        else if (c.startsWith('MAIL') || c.startsWith('RCPT')) socket.write('250 OK\r\n')
+        else if (c.startsWith('DATA')) { dati = true; socket.write('354 go\r\n') }
+        else if (c.startsWith('QUIT')) { socket.write('221 bye\r\n'); socket.end() }
+        else socket.write('250 OK\r\n')
+      }
+    })
+  })
+  return new Promise(ok => smtp!.listen(0, '127.0.0.1', () => ok((smtp!.address() as { port: number }).port)))
+}
 const token = 'lavoro-rotte-token'
 const QUI = fileURLToPath(new URL('.', import.meta.url))
 
@@ -57,6 +88,7 @@ before(async () => {
   }))
   modello = spawn(process.execPath, [join(QUI, '..', 'prove', 'finto-modello.mjs')], { env: { PATH: process.env.PATH, FINTO_PORTA: '0', FINTO_COPIONE: copione, FINTO_REGISTRO: join(casa, 'modello.jsonl') }, stdio: ['ignore', 'pipe', 'pipe'] })
   const portaFinto = await porta(modello, /finto su (\d+)/, 'il modello finto')
+  const portaSmtp = await smtpFinto()
 
   const account = await conti.registra('lavoro-rotte@example.com', 'isolated-test-password')
   assert.ok(account.ok)
@@ -66,8 +98,8 @@ before(async () => {
     cfg.scrivi({
       lingua: 'en', diSerie: false, onboarding: true, giro: true,
       desktop: { cartelle: [cartella], scelte: true },
-      // una posta «collegata» che non risponde: serve solo perché «Manda» esista
-      posta: { host: '127.0.0.1', porta: 1, utente: 'alex@harbor.example', password: 'x' },
+      // una posta «collegata» il cui SMTP è finto: «Manda» parte, e non parte niente
+      posta: { host: '127.0.0.1', porta: 1, utente: 'alex@harbor.example', password: 'x', smtp: { host: '127.0.0.1', porta: portaSmtp } },
       motore: 'compatibile', compatibile: { url: `http://127.0.0.1:${portaFinto}/v1/`, chiave: 'sk-finta', modello: 'finto' }
     })
     store.salvaDocumenti([{ id: 'posta:INBOX:503', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: new Date().toISOString(), messageId: 'l1@studio.example', filo: 'f-leo' }])
@@ -82,16 +114,26 @@ before(async () => {
       .run(new Date(Date.now() - 3_600_000).toISOString(), 'Done: «q4-plan.md» is in Documents.\n\nI assumed four weeks.', JSON.stringify(['I assumed four weeks.']), JSON.stringify({ app: 'File', titolo: 'q4-plan.md', percorso: FILE_PIANO, dove: 'documenti' }))
     // una riga aperta: niente da cambiare
     store.scriviCompito({ id: 'c-a1', testo: 'An open task', ordine: chiavi.dopo(store.ultimoOrdine('oggi')) })
+    // una bozza pronta da mandare da qui: il risultato intero e il corpo dell'email sono due cose diverse
+    store.scriviCompito({ id: 'c-m1', testo: 'Reply to Leo about the invoice', ordine: chiavi.dopo(store.ultimoOrdine('oggi')), doc: 'posta:INBOX:503' })
+    const bozza = 'Hi Leo,\n\nthe invoice is attached, with the two lines you asked about.\n\nBest,\nAlex'
+    store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ? WHERE id = 'c-m1'")
+      .run(new Date(Date.now() - 3_600_000).toISOString(), `Done: the reply to Leo, with the invoice.\n\n${bozza}\n\nFrom the mail [1].`,
+        JSON.stringify({ a: 'leo@studio.example', oggetto: 'Re: Invoice', corpo: bozza, conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }))
   })
   store.chiudiIndici()
 
   servizio = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', join(QUI, 'index.ts')], {
     env: { PATH: process.env.PATH, HOME: home, MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe']
   })
+  // il registro del server, per leggere cosa ha fatto dopo aver risposto
+  servizio.stdout!.on('data', d => appendFileSync(join(casa, 'server.log'), d))
+  servizio.stderr!.on('data', d => appendFileSync(join(casa, 'server.log'), d))
   base = `http://127.0.0.1:${await porta(servizio, /server su http:\/\/127\.0\.0\.1:(\d+)/, 'il server')}`
 })
 
 after(async () => {
+  smtp?.close()
   for (const p of [servizio, modello]) {
     if (p && p.exitCode === null) { const spento = new Promise<void>(r => p.once('exit', () => r())); p.kill('SIGTERM'); await spento }
   }
@@ -162,11 +204,48 @@ test('«Manda» su una bozza già partita dalla sua posta risponde 409, e la rig
   assert.equal(c?.stato, 'pronto')
 })
 
-test('la rotta «invia» impara dal corpo dell\'email, non dal risultato intero, e registra l\'invio', () => {
-  const sorgente = readFileSync(join(QUI, 'index.ts'), 'utf8')
-  const rotta = sorgente.slice(sorgente.indexOf("app.post('/api/compiti/:id/invia'"), sorgente.indexOf("app.post('/api/compiti/:id/esegui'"))
-  assert.doesNotMatch(rotta, /imparaSeCorretto\(c\.risultato/)
-  assert.match(rotta, /const bozza = c\.email\?\.corpo \?\? corpoPerChiRiceve\(c\.risultato \?\? ''\)/)
-  assert.match(rotta, /imparaSeCorretto\(bozza, d\.m\.corpo\)/)
-  assert.match(rotta, /registraInvio\(c\.id, \{ via: 'smtp'/)
+test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo dell\'email, e impara da quel corpo e non dal risultato intero', async () => {
+  // una parola cambiata: contro il corpo dell'email è un ritocco; contro il risultato intero («Done: …», la riga delle fonti) non lo sarebbe
+  const corretto = 'Hi Leo,\n\nthe invoice is attached, with the three lines you asked about.\n\nBest,\nAlex'
+  const r = await post('/api/compiti/c-m1/invia', { corpo: corretto })
+  assert.equal(r.stato, 200, JSON.stringify(r.corpo))
+  assert.equal(mandate.length, 1, 'niente è arrivato allo SMTP finto')
+  assert.match(mandate[0], /the three lines/)
+  const chiusa = ((r.corpo.chiusi ?? []) as Riga[]).find(x => x.id === 'c-m1')
+  assert.equal(chiusa?.stato, 'fatto')
+
+  // le misure: via smtp, e una distanza piccola, perché il confronto è con il corpo dell'email e non con «Done: …» e la riga delle fonti
+  const m = await get('/api/lavoro/misura?giorni=30')
+  const bozze = m.corpo.bozze as { inviate: number; via: { smtp: number } }
+  assert.equal(bozze.via.smtp, 1)
+  const misure = readMisure('c-m1')
+  assert.equal(misure?.via, 'smtp')
+  assert.equal(misure?.classe, 'ritocco', `distanza ${misure?.distanza}`)
+
+  // la memoria ha ricevuto la coppia giusta: il corpo preparato contro quello mandato, senza la cornice
+  const inizio = Date.now()
+  const fine = inizio + 60000
+  let richiesta: string | undefined
+  while (!richiesta && Date.now() < fine) {
+    const registro = readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(Boolean)
+    richiesta = registro.find(x => x.includes('Avevo preparato questo') && x.includes('the three lines'))
+    if (!richiesta) await new Promise(x => setTimeout(x, 250))
+  }
+  assert.ok(richiesta, 'nessuna correzione è arrivata alla memoria:\n' + readFileSync(join(casa, 'modello.jsonl'), 'utf8').trim().split('\n').filter(x => x.includes('Avevo preparato') || x.includes('Ho mandato invece')).map(x => String((JSON.parse(x) as { utente: string }).utente).slice(0, 1500)).join('\n') + '\n---\n' + readFileSync(join(casa, 'server.log'), 'utf8').split('\n').slice(-8).join('\n'))
+  console.log(`la correzione è arrivata alla memoria dopo ${Date.now() - inizio} ms`)
+  const testo = JSON.parse(richiesta!) as unknown
+  const piatto = JSON.stringify(testo)
+  assert.match(piatto, /Avevo preparato questo:[^"]*Hi Leo,/)
+  assert.doesNotMatch(piatto, /Done: the reply to Leo/)
+  assert.doesNotMatch(piatto, /From the mail \[1\]/)
 })
+
+/** Le misure di una riga, lette dall'indice del conto della prova (il server ha il suo processo: si rilegge da disco). */
+function readMisure(id: string): { via: string | null; classe: string | null; distanza: number | null } | null {
+  const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
+  const file = readdirSync(join(casa, 'utenti')).map(u => join(casa, 'utenti', u, 'mente.db')).find(f => existsSync(f))
+  if (!file) return null
+  const d = new DatabaseSync(file, { readOnly: true })
+  try { return (d.prepare('SELECT via, classe, distanza FROM misure_compiti WHERE compito = ?').get(id) as { via: string | null; classe: string | null; distanza: number | null } | undefined) ?? null }
+  finally { d.close() }
+}

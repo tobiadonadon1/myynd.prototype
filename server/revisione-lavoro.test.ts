@@ -173,7 +173,7 @@ test('due righe che dicono la stessa cosa si riconoscono, in tutte e due le ling
  * cose — cosa ha visto, una domanda sola, altrimenti vai avanti e dillo — e
  * che arrivi davvero a tutti e due.
  */
-test('la regola della domanda dice le tre cose: di regola niente, una sola quando serve, e l\'ipotesi in fondo; e la legge chi svolge', () => {
+test('la regola della domanda dice le tre cose: di regola niente, una sola quando serve, e l\'ipotesi in fondo; e la legge chi svolge', async () => {
   const r = claude.DOMANDA_AL_PIU
   assert.match(r, /non chiedi niente/)
   assert.match(r, /una domanda sola/)
@@ -190,6 +190,16 @@ test('la regola della domanda dice le tre cose: di regola niente, una sola quand
     assert.doesNotMatch(testo, /tutte insieme/, `${nome} dice ancora «tutte insieme»`)
     assert.ok(!testo.includes('—'), `${nome} ha una lineetta`)
   }
+  // anche i pezzi che entrano in ogni giro di chi svolge: l'attrezzo «cerca», il recinto, la riga nata da una mail
+  const attrezzi = await import('./attrezzi.ts')
+  for (const [nome, testo] of [
+    ['cerca', claude.ATTREZZI_LAVORO.map(a => a.description ?? '').join('\n')],
+    ['conQuali', claude.conQuali(attrezzi.ATTREZZI.map(a => a.nome))],
+    ['RISPONDI_A_UNO', claude.RISPONDI_A_UNO]
+  ] as const) {
+    assert.ok(!testo.includes('—') && !testo.includes('–'), `${nome} ha una lineetta`)
+  }
+  assert.doesNotMatch(claude.conQuali(attrezzi.ATTREZZI.map(a => a.nome)), /dillo e fermati/)
   assert.match(claude.MODI.tutto, /Se un file va allegato/)
   assert.match(claude.obiettivoDaProdurre(), /una domanda sola\.$/)
   assert.match(claude.inMano(), /comincia con «Mi manca»/)

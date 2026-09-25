@@ -59,3 +59,24 @@ test('senzaRigaIpotesi toglie solo quella riga, e il paragrafo se resta vuoto', 
   const senza = 'Done.\n\nBody.\n\nFrom the notes [1].'
   assert.equal(senzaRigaIpotesi(senza), senza)
 })
+
+test('un «Assuming…» in fondo a una mail nuda è la frase di chi scrive, non la cornice; sotto «Done:» sì', () => {
+  const mail = 'Hi Leo,\n\nThanks.\n\nAssuming you agree, we start Monday.'
+  assert.equal(corpoPerChiRiceve(mail), mail)
+  assert.equal(rigaIpotesi(mail), null)
+  assert.equal(senzaRigaIpotesi(mail), mail)
+  // «Missing» in fondo a una mail nuda, senza segnaposto: testo
+  const manca = 'Hi Leo,\n\nThanks.\n\nMissing files were added last week.'
+  assert.equal(corpoPerChiRiceve(manca), manca)
+  // le forme forti restano cornice anche senza «Done:»: le scrive chi consegna, mai chi scrive a Leo
+  assert.equal(corpoPerChiRiceve('Hi Leo,\n\nThanks.\n\nI assumed Friday.'), 'Hi Leo,\n\nThanks.')
+})
+
+test('la riga delle fonti e l\'ipotesi in due paragrafi se ne vanno tutte e due; un terzo paragrafo no', () => {
+  const due = 'Done: the reply.\n\nHi Leo,\n\nBody here.\n\nBest,\nAlex\n\nPrice from the list [2].\n\nI assumed Friday.'
+  assert.equal(corpoPerChiRiceve(due), 'Hi Leo,\n\nBody here.\n\nBest,\nAlex')
+  assert.equal(rigaIpotesi(due), 'I assumed Friday.')
+  // tre paragrafi di cornice: il primo dei tre resta, con i numeri tolti (al massimo due se ne vanno)
+  const tre = 'Done.\n\nBody.\n\nFrom the mail [1].\n\nPrice from the list [2].\n\nI assumed Friday.'
+  assert.equal(corpoPerChiRiceve(tre), 'Body.\n\nFrom the mail.')
+})

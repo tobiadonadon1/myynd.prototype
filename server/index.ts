@@ -4439,6 +4439,8 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
   try {
     if (c.email?.casella?.stato === 'salvata' || c.consegna) {
       await revisioni.rivediDaCorrezione(c.id, testo)
+      // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi da cambiare
+      lavoroDati.scriviIpotesi(c.id, null)
     } else {
       store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${testo}` : testo })
       store.cambiaStatoCompito(c.id, 'aperto')

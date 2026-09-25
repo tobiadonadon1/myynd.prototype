@@ -140,6 +140,20 @@ test('f. una fonte che manca è un blocco, non una domanda, e non si pesa', asyn
   assert.deepEqual(pesate, [])
 })
 
+test('f2. (contro) lo stesso testo con la posta collegata non è un blocco: è una domanda, e si pesa', async () => {
+  const { lavora, chiamate } = copione(['I don\'t have access to Dana\'s thread in your mail.'])
+  const { f, pesate } = ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a), peso: null })
+  const s = (await base(lavora, f, { collegata: g => g === 'posta' }))!
+  assert.notEqual(s.mossa, 'blocco')
+  assert.equal(s.mossa, 'chiedi')
+  assert.equal(chiamate.length, 1)
+  assert.equal(pesate.length, 1)
+  // con la posta scollegata resta un blocco
+  const { lavora: l2 } = copione(['I don\'t have access to Dana\'s thread in your mail.'])
+  const s2 = (await base(l2, ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a) }).f, { collegata: () => false }))!
+  assert.equal(s2.mossa, 'blocco')
+})
+
 test('g. il fondo non chiede mai: un prezzo che manca è un segnaposto al primo giro', async () => {
   const { lavora, chiamate } = copione(['I read the thread.\nWhat is the price for 20 people?', 'Done: the quote.\n\nHi Nora, the price is [to fill: price for 20 people].\n\nMissing: the price.'])
   const { f } = ferri({})

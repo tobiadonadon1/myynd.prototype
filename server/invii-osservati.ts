@@ -7,10 +7,13 @@
 // misura quanto la bozza è stata ritoccata (`ritocco.ts`), e si scrive
 // `compiti.mandata` nella forma che legge P9 e la riga di `misure_compiti`.
 //
-// Tre cose che non fa: non chiude mai la riga (togliere una cosa visibile
-// vuole il suo sì), non riscrive una `mandata` già scritta, e non impara
-// da una risposta che ha riscritto da capo (quella è sua, non una
-// correzione della bozza). Gira dentro il contesto di chi legge.
+// Quattro cose che non fa: non chiude mai la riga (togliere una cosa visibile
+// vuole il suo sì), non riscrive una `mandata` già scritta, non impara da una
+// risposta che ha riscritto da capo (quella è sua, non una correzione della
+// bozza), e non guarda due volte una riga di cui un invio è già segnato: una
+// bozza partita da «Manda» (SMTP) finisce anche lei nella posta inviata, e
+// senza questo la stessa mail contava due volte e si imparava due volte.
+// Gira dentro il contesto di chi legge.
 
 import { createHash } from 'node:crypto'
 import * as store from './store.ts'
@@ -36,13 +39,17 @@ export function idDellaBozza(task: string, source: string): string {
   return `myynd-${createHash('sha256').update(task + '\n' + source).digest('hex')}@draft.myynd.local`
 }
 
-/** Le righe che possono essere partite: bozza salvata, non ancora segnate, degli ultimi trenta giorni. */
+/**
+ * Le righe che possono essere partite: bozza salvata, non ancora segnate,
+ * senza un invio già scritto nelle misure (da «Manda», o una risposta sua
+ * vista al giro prima), degli ultimi trenta giorni.
+ */
 function candidati(): store.Compito[] {
   const da = new Date(Date.now() - FINESTRA).toISOString()
   const righe = store.default.prepare(`
-    SELECT id FROM compiti
-    WHERE email LIKE '%"stato":"salvata"%' AND doc IS NOT NULL AND mandata IS NULL AND sparito IS NULL
-      AND chiesto IS NOT NULL AND chiesto >= ?
+    SELECT c.id FROM compiti c LEFT JOIN misure_compiti m ON m.compito = c.id
+    WHERE c.email LIKE '%"stato":"salvata"%' AND c.doc IS NOT NULL AND c.mandata IS NULL AND c.sparito IS NULL
+      AND c.chiesto IS NOT NULL AND c.chiesto >= ? AND m.inviato IS NULL
   `).all(da) as { id: string }[]
   return righe.map(r => store.compito(r.id)).filter((c): c is store.Compito => !!c)
 }
@@ -51,12 +58,15 @@ export type Visto = { mandata: true; certezza: 'id' | 'filo'; ritocco: number } 
 
 /**
  * Una riga sola: se una sua mail è partita, lo si scrive. Torna cosa ha visto,
- * o null se non ha trovato niente. Idempotente: una riga già segnata torna
- * senza scrivere.
+ * o null se non ha trovato niente o non ha scritto niente. Idempotente: una
+ * riga già segnata, o con un invio già nelle misure, torna senza scrivere.
  */
 export async function osservaUno(c: store.Compito): Promise<Visto> {
   if (c.mandata || !c.doc || c.email?.casella?.stato !== 'salvata' || !c.chiesto) return null
   const m = lavoroDati.misura(c.id)
+  // un invio c'è già: da «Manda», o una risposta sua vista prima. La copia
+  // nella posta inviata è quella mail, non una seconda
+  if (m?.inviato) return null
   const dopo = m?.consegnato ?? c.chiesto
   const sorgente = store.documento(c.doc)
   const filo = sorgente?.filo && !sorgente.filo.startsWith('s:') ? sorgente.filo : null
@@ -69,7 +79,7 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
   const r = ritocco(bozza, corpo)
   const quando = inviata.quando ?? new Date().toISOString()
   if (certezza === 'filo' && r > SOGLIA_PROPRIA) {
-    lavoroDati.registraInvio(c.id, { via: 'propria', inviato: quando, classe: 'riscritto' })
+    if (!lavoroDati.registraInvio(c.id, { via: 'propria', inviato: quando, classe: 'riscritto' })) return null
     return { mandata: false, via: 'propria' }
   }
   if (!lavoroDati.segnaMandata(c.id, { doc: inviata.id, quando, certezza, ritocco: r })) return null

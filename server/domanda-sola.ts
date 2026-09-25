@@ -45,8 +45,12 @@ const BLOCCATO = /^(?:I (?:need|cannot|can't|can’t|don['’]t have)|I['’]m (
 const POSTA = /\b(?:mail|e-?mail|posta|casella|inbox|mailbox|gmail|outlook|thread|filo)\b/i
 const FILE = /\b(?:file|files|folder|folders|cartell[ae]|disk|disco|desktop|scrivania|documents|documenti|drive|dropbox|sharepoint)\b/i
 const PERMESSO = /\b(?:permess\w*|permission\w*|autorizz\w*|authori[sz]\w*|full disk|accessibility|accessibilità)\b/i
-/** Le parole che dicono «è una fonte che manca», e non un dato: senza, «I need the price» sarebbe un blocco. */
-const COLLEGAMENTO = /\b(?:connect\w*|colleg\w*|linked|link|not (?:available|connected|set up)|non (?:è|e') (?:collegat|disponibil)|unavailable|access|accesso|permission|permess\w*|full disk|read (?:your|the) (?:mail|inbox|files?|folder|calendar)|leggere (?:la|le|i|il) (?:posta|mail|file|cartell|calendario))\b/i
+/**
+ * Le parole che dicono «è una fonte che manca», e non un dato: senza, «I need
+ * the price» sarebbe un blocco. Non «link» da solo: «I need the link to the
+ * pitch deck» chiede un dato, e nessuna fonte da collegare lo sblocca.
+ */
+const COLLEGAMENTO = /\b(?:connect\w*|colleg\w*|not (?:available|connected|set up)|non (?:è|e') (?:collegat|disponibil)|unavailable|access|accesso|permission|permess\w*|full disk|read (?:your|the) (?:mail|inbox|files?|folder|calendar)|leggere (?:la|le|i|il) (?:posta|mail|file|cartell|calendario))\b/i
 
 /**
  * Un blocco, non una domanda: gli manca una fonte o un permesso, e nessuna

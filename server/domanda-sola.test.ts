@@ -63,6 +63,9 @@ test('un blocco è una fonte o un permesso che mancano, non un dato', () => {
   assert.equal(bloccoDalTesto('I need Notion connected to read the page.'), 'fonte')
   // i contro: un dato che manca, un lavoro fatto, un testo lungo
   assert.equal(bloccoDalTesto('I need the price for 20 people before I can write the quote.'), null)
+  // «link» da solo è un dato che manca, non una fonte da collegare
+  assert.equal(bloccoDalTesto('I need the link to the pitch deck before I can write this.'), null)
+  assert.equal(bloccoDalTesto('Mi manca il link al documento condiviso.'), null)
   assert.equal(bloccoDalTesto('Mi manca il listino: quale uso?'), null)
   assert.equal(bloccoDalTesto('Done: the reply to Marco.\n\nCiao Marco, ecco il preventivo.'), null)
   assert.equal(bloccoDalTesto('I need ' + 'x'.repeat(800)), null)

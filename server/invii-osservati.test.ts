@@ -114,3 +114,30 @@ test('modificata si impara; una bozza non salvata nella posta non si guarda', as
   mandata('posta:Sent:91', { quando: oreFa(0.5) })
   assert.equal(await invii.osservaUno(senza), null)
 })
+
+test('(contro) una bozza partita da «Manda» e poi vista nella posta inviata non si segna due volte, e non si impara due volte', async () => {
+  const c = riga('c-s7')
+  // «Manda»: la riga si chiude e le misure hanno già l'invio via smtp
+  store.cambiaStatoCompito(c.id, 'fatto')
+  lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: oreFa(1), distanza: 0.2, parole: 12, classe: 'modificato' })
+  // alla lettura dopo, la copia in «Inviata» risponde allo stesso messaggio
+  mandata('posta:Sent:70', { quando: oreFa(0.9), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'smtp')
+  assert.equal(m.classe, 'modificato')
+  assert.equal(imparate.length, 0, 'ha imparato una seconda volta')
+})
+
+test('una risposta sua si segna una volta sola: al giro dopo non è più candidata e non si annuncia niente', async () => {
+  const c = riga('c-s8')
+  mandata('posta:Sent:81', { quando: oreFa(1), risponde: null, corpo: 'Leo, sorry, the logo files are still with the designer: I will send them on Monday together with the brand guide. Alex' })
+  assert.equal(await invii.osserva(), 1)
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+})

@@ -13,6 +13,13 @@
 
 /** Una riga che dichiara un'ipotesi, nelle due lingue. */
 export const IPOTESI = /^(?:ho supposto|ho ipotizzato|ho dato per scontato|i assumed|i['’]ve assumed|i have assumed|assuming)\b/i
+/**
+ * Le forme che sono un'ipotesi dichiarata e basta. «Assuming you agree, we
+ * start Monday.» è una frase che una mail può finire con: conta come cornice
+ * solo sotto una prima riga «Fatto:»/«Done:», cioè dentro una consegna che ha
+ * la forma della cornice; in un corpo nudo resta la frase di chi scrive.
+ */
+const IPOTESI_FORTE = /^(?:ho supposto|ho ipotizzato|ho dato per scontato|i assumed|i['’]ve assumed|i have assumed)\b/i
 /** Una riga che dice cosa manca, quando nel testo c'è un segnaposto. */
 export const MANCA = /^(?:manca|mancano|missing)\b/i
 /** Il segnaposto lasciato al posto di un dato che nessuna fonte contiene. */
@@ -61,7 +68,7 @@ function rigaGrezza(testo: string): string | null {
   const p = paragrafi(testo)
   if (!p.length || !p[0]) return null
   const ultimo = righeDi(p[p.length - 1])
-  const ipotesi = ultimo.find(r => IPOTESI.test(r))
+  const ipotesi = ultimo.find(r => IPOTESI_FORTE.test(r)) ?? (conChiusura(p) ? ultimo.find(r => IPOTESI.test(r)) : undefined)
   if (ipotesi) return ipotesi
   if (!haSegnaposto(testo)) return null
   const manca = ultimo.find(r => MANCA.test(r))
@@ -84,30 +91,46 @@ export function rigaIpotesi(testo: string): string | null {
   return riga ? pulita(riga) : null
 }
 
-/** Una riga della cornice: fonti con i numeri, un'ipotesi, un «manca». */
-function eDellaCornice(riga: string): boolean {
-  return /\[\d{1,2}\]/.test(riga) || IPOTESI.test(riga) || MANCA.test(riga)
+/** Il testo comincia con la frase di chiusura: ha la forma di una consegna, cornice compresa. */
+function conChiusura(p: string[]): boolean {
+  return CHIUSURA.test((p[0] ?? '').split('\n')[0].trim())
 }
 
 /**
- * Il testo per chi riceve: senza la prima riga «Fatto:»/«Done:», senza il
- * paragrafo finale quando ogni sua riga è una riga della cornice, e senza
- * nessun [n]. Il segnaposto resta: è la cosa che lei deve ancora riempire, e
- * togliendolo la mail sembrerebbe finita.
+ * Una riga della cornice: fonti con i numeri, un'ipotesi dichiarata, un
+ * «manca» quando c'è un segnaposto; e, sotto una prima riga «Fatto:», anche
+ * un «assuming» e un «manca» nudi.
+ */
+function eDellaCornice(riga: string, o: { chiusura: boolean; segnaposto: boolean }): boolean {
+  return /\[\d{1,2}\]/.test(riga) || IPOTESI_FORTE.test(riga)
+    || (MANCA.test(riga) && (o.segnaposto || o.chiusura))
+    || (o.chiusura && IPOTESI.test(riga))
+}
+
+/** Quanti paragrafi di cornice si tolgono dal fondo, al massimo: le fonti e l'ipotesi, quando stanno in due. */
+const CORNICE_MAX = 2
+
+/**
+ * Il testo per chi riceve: senza la prima riga «Fatto:»/«Done:», senza i
+ * paragrafi finali (al massimo due) in cui ogni riga è una riga della
+ * cornice, e senza nessun [n]. Il segnaposto resta: è la cosa che lei deve
+ * ancora riempire, e togliendolo la mail sembrerebbe finita.
  */
 export function corpoPerChiRiceve(testo: string): string {
   const p = paragrafi(testo)
   if (!p.length || !p[0]) return ''
+  const cornice = { chiusura: conChiusura(p), segnaposto: haSegnaposto(testo) }
   // la frase di chiusura sta sulla prima riga del primo paragrafo, da sola o no
   const primeRighe = p[0].split('\n')
-  if (CHIUSURA.test(primeRighe[0].trim())) {
+  if (cornice.chiusura) {
     const resto = primeRighe.slice(1).join('\n').trim()
     if (resto) p[0] = resto
     else p.shift()
   }
-  if (p.length > 1) {
+  for (let tolti = 0; tolti < CORNICE_MAX && p.length > 1; tolti++) {
     const ultime = righeDi(p[p.length - 1])
-    if (ultime.length && ultime.every(eDellaCornice)) p.pop()
+    if (!ultime.length || !ultime.every(r => eDellaCornice(r, cornice))) break
+    p.pop()
   }
   return p.map(x => x.replace(CITAZIONE, '')).join('\n\n').trim()
 }

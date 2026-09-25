@@ -1340,6 +1340,72 @@ test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fis
   assert.equal(store.compito(vecchia)!.stato, 'aperto')
 })
 
+test('P3 · (contro) un lavoro sul codice che finisce «chiede» e una revisione della bozza fallita non toccano domandeFatte né le misure', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  // il lavoro sul codice (la rotta `lavora` di index.ts) scrive il risultato da sé, con lo stato del giro
+  const codice = riga('Fix the login bug in the Harbor repo')
+  store.affidaCompito(codice, 'tutto')
+  lavoroDati.registraAffido(store.compito(codice)!, true)
+  assert.ok(store.risultatoCompito(codice, 'I read the repo. Should the fix cover the signup form too?', [], 'chiede'))
+  const c1 = store.compito(codice)!
+  assert.equal(c1.stato, 'chiede')
+  assert.equal(c1.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(codice)!.domande, 0)
+
+  // una riga figlia di revisione senza una base verificabile: la bozza si prepara, la revisione fallisce, la riga chiede
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const d = { id: 'posta:leo-9', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: new Date().toISOString(), messageId: 'l9@studio.example' }
+  store.salvaDocumenti([d])
+  const { svolgi } = svolgiInFila(['Done: the reply to Leo.\n\nHi Leo,\n\nHere are the logo files in all three formats and the icon set.\n\nBest,\nAlex\n\nFrom the mail [1].'])
+  prova({
+    svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => ({ a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', allegato: null })
+  })
+  const madre = riga('Reply to Leo about the logo files')
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', risultato = ? WHERE id = ?").run('Done: the reply.\n\nHi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', madre)
+  const m = store.compito(madre)!
+  const { createHash } = await import('node:crypto')
+  const base = { tipo: 'testo', task: madre, versione: m.versione, impronta: createHash('sha256').update((m.risultato ?? '').trim()).digest('hex') }
+  const id = 'rev-prova-1'
+  store.scriviCompito({ id, testo: 'Reply to Leo about the logo files', ordine: id, doc: d.id, madre, nota: `REVISION REQUEST: add the icon set\n\nREVISION BASELINE: ${JSON.stringify(base)}` })
+  // la casella dice di no alla bozza rivista: la riga figlia chiede, con il guaio come testo
+  prova({
+    svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => ({ a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', allegato: null }),
+    salvaBozzaCasella: async () => ({ stato: 'errore', errore: 'The mailbox did not confirm the revised draft identity.' })
+  })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  // l'annuncio segue lo stato finale: la riga chiede, ma non ha fatto una domanda
+  await o.aspetta('chiede')
+  const c2 = store.compito(id)!
+  assert.equal(c2.stato, 'chiede')
+  assert.match(c2.risultato ?? '', /did not confirm/)
+  assert.equal(c2.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(id)!.domande, 0)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'produci')
+  o.smetti()
+})
+
+test('P3 · anche un blocco sulla posta si riprende al più una volta al giorno', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi } = svolgiInFila(['Done: the reply.\n\nHi Dana,\n\nthe invoice is attached, with the two lines you asked about.\n\nBest'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true })
+  const id = riga('Reply to Dana about the invoice, again')
+  const ferma = () => store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, new Date().toISOString(), id)
+  ferma()
+  const o = orecchio(id)
+  assert.equal(await compiti.riprendiBloccati(), 1)
+  await o.aspetta('pronto')
+  // torna a bloccarsi nello stesso giorno: non si rifà il lavoro a ogni cambio di collegamento
+  ferma()
+  assert.equal(await compiti.riprendiBloccati(), 0)
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  o.smetti()
+})
+
 test('P3 · un blocco generico si riprende al più una volta al giorno, e due persone non si vedono', async () => {
   const chi = await import('./chi.ts')
   const conti = await import('./conti.ts')

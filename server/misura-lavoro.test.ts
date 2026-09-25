@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -94,6 +94,13 @@ test('la riga di comando rifiuta senza --dati, rifiuta la casa vera senza aprirl
   assert.equal(eLaCasaVera(join(CASA, '.myynd'), CASA), true)
   assert.equal(eLaCasaVera(join(CASA, '.myynd', 'utenti', 'x'), CASA), true)
   assert.equal(eLaCasaVera(join(CASA, 'copia'), CASA), false)
+  // un collegamento alla casa vera, o le maiuscole cambiate, sono la casa vera
+  mkdirSync(join(CASA, '.myynd', 'utenti'), { recursive: true })
+  symlinkSync(join(CASA, '.myynd'), join(CASA, 'link-alla-casa'))
+  assert.equal(eLaCasaVera(join(CASA, 'link-alla-casa'), CASA), true)
+  assert.equal(eLaCasaVera(join(CASA, 'link-alla-casa', 'utenti', 'x'), CASA), true)
+  assert.equal(eLaCasaVera(join(CASA, '.MYYND'), CASA), true)
+  assert.equal(eLaCasaVera(join(CASA, '.MYYND', 'utenti', 'non-esiste'), CASA), true)
   // niente rete in questo file: nessun fetch, nessun modulo http
   const sorgente = readFileSync(cli, 'utf8')
   assert.doesNotMatch(sorgente, /fetch\(|node:http|node:https|node:net/)

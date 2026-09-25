@@ -106,6 +106,13 @@ export async function stendi(o: {
   ferri: Ferri
   fermo: () => boolean
   controllaVoce?: (testo: string) => string[]
+  /**
+   * La fonte che il testo dice di non avere è collegata davvero? Se sì, quel
+   * testo non è un blocco: è una domanda, e si tratta come le altre. Senza,
+   * ogni «non ho accesso alla posta» diventerebbe «Collega la posta» anche
+   * con la posta collegata, e la riga direbbe una cosa falsa.
+   */
+  collegata?: (genere: 'posta' | 'file' | 'fonte' | 'permesso') => boolean
 }): Promise<Stesa | null> {
   const { c } = o
   const domandeFatte = c.domandeFatte ?? 0
@@ -146,7 +153,8 @@ export async function stendi(o: {
 
     if (esito.chiede && !eseguito) {
       const domanda = esito.domanda.trim() || primaRiga(testo)
-      const blocco = !!esito.bloccato || bloccoDalTesto(testo) !== null
+      const genereBlocco = bloccoDalTesto(testo) ?? (esito.bloccato ? 'fonte' : null)
+      const blocco = genereBlocco !== null && !(o.collegata?.(genereBlocco) ?? false)
       const duro = blocco ? null : duroDalTesto(domanda)
       const peso = !blocco && !duro ? await o.ferri.pesaLaDomanda(c.testo, domanda, esito.visto ?? '') : undefined
       if (o.fermo()) return null

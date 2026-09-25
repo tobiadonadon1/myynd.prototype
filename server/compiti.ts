@@ -425,7 +425,10 @@ async function svolgiUno(id: string, nativa: boolean) {
       lavora,
       ferri: { chiedeAiuto: ferri.chiedeAiuto, pesaLaDomanda: ferri.pesaLaDomanda, giudica: ferri.giudica },
       fermo: () => richiamati.has(chiave(id)),
-      controllaVoce: v ? testo => voce.controlla(testo, v) : undefined
+      controllaVoce: v ? testo => voce.controlla(testo, v) : undefined,
+      // un blocco vale solo se la fonte manca davvero: con la posta collegata
+      // «non ho accesso alla posta» è una domanda, non «Collega la posta»
+      collegata: g => g === 'posta' ? ferri.postaCollegata() : g === 'file' ? !!cfg.leggi().desktop?.cartelle?.length : false
     })
     if (!stesa) return
     let { testo } = stesa
@@ -889,9 +892,11 @@ export function imparaDallaRisposta(
  *
  * «Collega la posta e la riprendo da qui» è una promessa: si mantiene qui.
  * La posta riparte quando la posta è collegata, i file quando c'è una
- * cartella, gli altri due a ogni cambio di collegamento ma non più di una
- * volta al giorno per riga (a memoria, per persona). Sette giorni, poi la
- * riga resta sua. Non lancia mai.
+ * cartella, gli altri due a ogni cambio di collegamento. Nessuna più di una
+ * volta al giorno per riga (a memoria, per persona): un cambio di
+ * collegamento arriva a ogni lettura, e una riga che torna a bloccarsi non
+ * deve rifare il lavoro intero a ogni giro. Sette giorni, poi la riga resta
+ * sua. Non lancia mai.
  */
 const ripresi = new Map<string, number>()
 const RIPRESA_OGNI = 24 * 3_600_000
@@ -906,11 +911,8 @@ export async function riprendiBloccati(): Promise<number> {
       if (!g) continue
       const k = chiave(c.id)
       const adesso = Date.now()
-      let via = false
-      if (g === 'posta') via = posta
-      else if (g === 'file') via = file
-      else via = adesso - (ripresi.get(k) ?? 0) >= RIPRESA_OGNI
-      if (!via) continue
+      const fonteViva = g === 'posta' ? posta : g === 'file' ? file : true
+      if (!fonteViva || adesso - (ripresi.get(k) ?? 0) < RIPRESA_OGNI) continue
       ripresi.set(k, adesso)
       const m = lavoroDati.misura(c.id)
       affida(c.id, c.modo && c.modo !== 'io' ? c.modo : 'tutto', m?.origine !== 'fondo')
@@ -937,7 +939,8 @@ export function scordaRiprese() { ripresi.clear() }
  */
 export function imparaSeCorretto(bozza: string | null, tenuto: string) {
   if (!bozza?.trim() || !tenuto.trim()) return
-  memoria.imparaDallaCorrezione(bozza, tenuto).catch(() => { /* la memoria è un di più */ })
+  memoria.imparaDallaCorrezione(bozza, tenuto)
+    .catch(e => console.warn('myynd · la correzione non è arrivata alla memoria:', e instanceof Error ? e.message : e))
 }
 
 /**

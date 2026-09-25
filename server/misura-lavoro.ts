@@ -18,7 +18,8 @@
 // Gli import sono dinamici perché `--dati` deve valere prima che `config.ts`
 // legga l'ambiente.
 
-import { resolve } from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { Misura } from './lavoro-dati.ts'
@@ -134,9 +135,29 @@ export function leggiArgomenti(argv: string[]): Argomenti {
 }
 
 /** La cartella è quella vera, o ci sta dentro: non si apre nemmeno. */
+/**
+ * Il percorso vero: i collegamenti risolti (sull'antenato che esiste, se il
+ * percorso non c'è ancora) e le maiuscole appiattite, perché il disco del Mac
+ * non le distingue. Senza, `--dati /tmp/link` verso `~/.myynd`, o `~/.MYYND`,
+ * passerebbero il controllo e aprirebbero i dati veri.
+ */
+function percorsoVero(p: string): string {
+  let radice = resolve(p)
+  const resto: string[] = []
+  while (!existsSync(radice)) {
+    const su = dirname(radice)
+    if (su === radice) break
+    resto.unshift(basename(radice))
+    radice = su
+  }
+  let vero = radice
+  try { vero = realpathSync(radice) } catch { /* resta com'è */ }
+  return join(vero, ...resto).toLowerCase()
+}
+
 export function eLaCasaVera(dati: string, casa = homedir()): boolean {
-  const d = resolve(dati)
-  const vera = resolve(casa, '.myynd')
+  const d = percorsoVero(dati)
+  const vera = percorsoVero(resolve(casa, '.myynd'))
   return d === vera || d.startsWith(vera + '/')
 }
 
