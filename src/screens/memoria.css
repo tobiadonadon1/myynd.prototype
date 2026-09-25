@@ -178,7 +178,7 @@ textarea.mem-campo{resize:vertical;min-height:62px}
 @media(prefers-reduced-motion:reduce){.mem-card,.mem-apri,.mem-campo{transition:none}.mem-finestra{animation:none}}
 
 /* — Come lavori (P1B): le righe osservate, le affermazioni, il punteggio — */
-.cl-section{scroll-margin-top:24px;border-radius:22px;transition:box-shadow .3s}
+.cl-section{scroll-margin-top:24px;border-radius:20px;transition:box-shadow .3s}
 .cl-section.cl-cerchiata{box-shadow:0 0 0 2px rgba(var(--rame-rgb),.75)}
 .cl-riga-fissa{display:flex;align-items:center;gap:12px;min-width:0;padding:11px 14px;margin:0 0 12px;border-radius:14px;
   border:1px solid rgba(var(--inchiostro-rgb),.1);background:rgba(var(--carta-rgb),.6);font-size:13.5px;color:var(--inchiostro)}

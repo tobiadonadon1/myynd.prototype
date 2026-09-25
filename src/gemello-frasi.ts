@@ -169,10 +169,13 @@ export function finoAl(iso: string): string {
   return `${t('fino al')} ${data}`
 }
 
-/** «In pausa fino alle 15:10» / "Paused until 15:10". */
+/** «In pausa fino alle 15:10» / "Paused until 3:10 PM": la stessa regola delle ore di `ora()`, così la pagina ha un orologio solo. */
 export function inPausaFino(iso: string): string {
   const d = new Date(iso)
-  const o = Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(loc(), { hour: '2-digit', minute: '2-digit' })
+  let o = iso
+  if (!Number.isNaN(d.getTime())) {
+    try { o = new Intl.DateTimeFormat(en() ? 'en-US' : loc(), { hour: 'numeric', minute: '2-digit' }).format(d) } catch { o = d.toLocaleTimeString() }
+  }
   return scegli({ it: `In pausa fino alle ${o}`, en: `Paused until ${o}` })
 }
 

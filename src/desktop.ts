@@ -65,6 +65,8 @@ export type Desktop = {
    * finestra non è davanti: il guscio mostra e basta. Manca nei gusci vecchi.
    */
   notifica?(avviso: { titolo: string; corpo: string; dove: Dove }): void
+  /** Riapre l'app: serve quando un permesso dato adesso vale solo dopo un riavvio. Manca nei gusci vecchi. */
+  riavvia?(): Promise<void>
   /** Questa pagina è la barra del richiamo, non l'app intera. Manca nei gusci vecchi. */
   dentroIlRichiamo?: boolean
   /** Quello che la barra può chiedere al guscio. Manca nei gusci vecchi. */
@@ -82,10 +84,14 @@ export type Desktop = {
      */
     mostrato?(cb: () => void): () => void
   }
-  /** L'osservatore delle app (P1A): il permesso di Accessibilità per i titoli delle finestre. Manca nei gusci vecchi. */
+  /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
   osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
-  /** La mascotte sullo schermo (P1A). Manca nei gusci vecchi. */
-  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void> }
+  /**
+   * Il mostriciattolo sullo schermo (P1). Manca nei gusci vecchi. `suCambio`
+   * dice acceso o spento ogni volta che cambia, anche da «Togli dallo
+   * schermo» sul mostriciattolo; torna la funzione per smettere.
+   */
+  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void>; suCambio?(cb: (on: boolean) => void): () => void }
 }
 
 declare global {

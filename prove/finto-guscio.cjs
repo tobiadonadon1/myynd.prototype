@@ -11,11 +11,7 @@ function finto() {
     get(_t, k) {
       if (k === 'piattaforma') return 'darwin'
       if (k === 'versione') return '0.0.0-prova'
-      if (k === Symbol.toPrimitive || k === Symbol.iterator) return undefined
-      // una promessa che si risolve a niente: `await guscio.cosa()` e `.then(cb)` non
-      // si inchiodano e non schiantano (la pagina chiama `.then` sulle risposte del
-      // guscio), e nessuna risposta è mai un `true` letterale
-      if (k === 'then') return (ok) => { if (typeof ok === 'function') ok(undefined); return finto() }
+      if (k === 'then' || k === Symbol.toPrimitive || k === Symbol.iterator) return undefined
       return finto()
     },
     apply() { return finto() }

@@ -137,14 +137,26 @@ function righePosta(adesso: Date): Candidata[] {
 
 type Vista = { uid: string; titolo: string | null; inizio: string | null; originale: string | null; mio: string | null; organizzatore: string | null }
 
+/** La serie di un'occorrenza: il testo prima della prima barra (`UID|inizio originale`), o la chiave intera per un impegno singolo. */
+const serieDi = (uid: string) => uid.split('|')[0]!
+
+/**
+ * Le righe dell'agenda si contano sul passato: le occorrenze già avvenute
+ * nella finestra, mai quelle future (un'agenda ne porta sei mesi). E un
+ * invito è una serie, non un'occorrenza: rifiutare una riunione settimanale è
+ * una decisione sola, non trenta.
+ */
 function righeAgenda(adesso: Date): Candidata[] {
   const fuori: Candidata[] = []
   const da30 = new Date(adesso.getTime() - 30 * GIORNO).toISOString()
   const da90 = new Date(adesso.getTime() - 90 * GIORNO).toISOString()
   const ora = adesso.toISOString()
   const viste = db.prepare('SELECT uid, titolo, inizio, originale, mio, organizzatore FROM agenda_viste').all() as Vista[]
-  const occorrenze = viste.filter(v => v.originale && v.originale >= da30 && v.originale <= ora)
-  const spostate = segnali.leggi('agenda.spostato', da30, ora)
+  const passate = viste.filter(v => v.originale && v.originale <= ora)
+  // gli spostamenti: sulle stesse occorrenze del denominatore, quelle avvenute negli ultimi trenta giorni
+  const occorrenze = passate.filter(v => v.originale! >= da30)
+  const chiavi = new Set(occorrenze.map(v => v.uid))
+  const spostate = segnali.leggi('agenda.spostato', da90, ora).filter(s => s.ref && chiavi.has(s.ref))
   const spostateRef = new Set(spostate.map(s => s.ref))
   if (occorrenze.length >= 10) {
     const quota = spostateRef.size / occorrenze.length
@@ -153,18 +165,22 @@ function righeAgenda(adesso: Date): Candidata[] {
         prova: { casi: spostateRef.size, su: occorrenze.length, esempi: spostate.slice(-5).reverse().map(s => ({ quando: s.quando, testo: String(s.dati.titolo ?? ''), doc: null })) }, fiducia: quota })
     }
   }
-  const perOrganizzatore = new Map<string, { nome: string; inviti: Vista[] }>()
-  for (const v of viste) {
+  // gli inviti per chi organizza: una serie è un invito; rifiutato se ogni sua occorrenza passata lo è
+  const perOrganizzatore = new Map<string, { nome: string; serie: Map<string, Vista[]> }>()
+  for (const v of passate) {
     const o = segnali.organizzatoreDi(v.organizzatore)
-    if (!o || !v.originale || v.originale < da90) continue
-    const l = perOrganizzatore.get(o.indirizzo) ?? { nome: o.nome, inviti: [] }
-    l.inviti.push(v); l.nome = o.nome; perOrganizzatore.set(o.indirizzo, l)
+    if (!o || v.originale! < da90) continue
+    const l = perOrganizzatore.get(o.indirizzo) ?? { nome: o.nome, serie: new Map<string, Vista[]>() }
+    const s = l.serie.get(serieDi(v.uid)) ?? []
+    s.push(v); l.serie.set(serieDi(v.uid), s); l.nome = o.nome; perOrganizzatore.set(o.indirizzo, l)
   }
-  for (const [addr, { nome, inviti }] of perOrganizzatore) {
-    const rifiutati = inviti.filter(v => v.mio === 'DECLINED')
+  for (const [addr, { nome, serie }] of perOrganizzatore) {
+    const inviti = [...serie.values()].map(occ => occ.slice().sort((x, y) => x.originale!.localeCompare(y.originale!)))
+    const rifiutati = inviti.filter(occ => occ.every(v => v.mio === 'DECLINED'))
     if (inviti.length >= 4 && rifiutati.length / inviti.length >= 0.75) {
+      const ultime = rifiutati.map(occ => occ[occ.length - 1]!).sort((x, y) => x.originale!.localeCompare(y.originale!))
       fuori.push({ chiave: `agenda.rifiuta:${addr}`, genere: 'agenda.rifiuta', dati: { nome },
-        prova: { casi: rifiutati.length, su: inviti.length, esempi: rifiutati.slice(-5).map(v => ({ quando: v.inizio ?? '', testo: v.titolo ?? '', doc: null })) }, fiducia: rifiutati.length / inviti.length })
+        prova: { casi: rifiutati.length, su: inviti.length, esempi: ultime.slice(-5).reverse().map(v => ({ quando: v.inizio ?? '', testo: v.titolo ?? '', doc: null })) }, fiducia: rifiutati.length / inviti.length })
     }
   }
   return fuori

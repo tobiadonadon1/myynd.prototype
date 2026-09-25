@@ -7,7 +7,7 @@
 //      `gemello:letta`), o subito se non c'è una casella; le affermazioni sulla
 //      posta ancora sospese a due giorni e mezzo diventano `annullata`;
 //   3. una volta al giorno, dalle tre di notte: le righe di «Come lavori», la
-//      scala della fiducia, la conservazione, la potatura;
+//      scala della fiducia, la potatura;
 //   4. la mattina, dalle sei: le affermazioni di oggi, sigillate.
 //
 // Il sigillo lo tiene il server: prima delle venti `vista()` dà solo il
@@ -15,11 +15,16 @@
 // decise. Niente si scrive prima che il giorno sia chiuso.
 //
 // Il registro della posta cammina a pezzi (segnali.ts): finché è indietro
-// rispetto all'indice, nessun giorno si chiude e nessuna mattina afferma
-// niente, perché una risposta non ancora nel registro farebbe «sbagliata»
-// una previsione giusta. Una lettura finita mentre il registro è indietro
-// resta in attesa (`gemello:letta:attesa`) e vale come letta al primo giro in
-// cui il registro è arrivato in fondo.
+// rispetto all'indice, nessun giorno si chiude, nessuna mattina afferma
+// niente e la notte non conta le righe, perché una risposta non ancora nel
+// registro farebbe «sbagliata» una previsione giusta e «resta senza risposta»
+// una mail risposta. Una lettura finita mentre il registro è indietro resta
+// in attesa (`gemello:letta:attesa`) e vale come letta al primo giro in cui
+// il registro è arrivato in fondo.
+//
+// La conservazione delle osservazioni (i titoli delle finestre restano
+// trenta giorni) sta prima di ogni altra condizione: vale anche per un conto
+// senza fonti o con l'indice fermo, perché non dipende dalle fonti.
 //
 // Nessun modello, da nessuna parte: tutto è contato.
 
@@ -44,7 +49,7 @@ const GIORNO = 86_400_000
 export const ORA_SIGILLO = 20
 export const ORA_MATTINA = 6
 export const ORA_NOTTE = 3
-const CURS = { letta: 'gemello:letta', attesa: 'gemello:letta:attesa', notte: 'gemello:notte', mattina: 'gemello:mattina' }
+const CURS = { letta: 'gemello:letta', attesa: 'gemello:letta:attesa', notte: 'gemello:notte', mattina: 'gemello:mattina', conserva: 'gemello:conserva' }
 
 export type EsitoPrev = 'giusta' | 'sbagliata' | 'annullata'
 export type PrevisioneVista = { id: string; genere: string; nome: string; titolo: string | null; esito: EsitoPrev | null }
@@ -349,7 +354,6 @@ async function notte(adesso: Date): Promise<boolean> {
       } catch { /* senza cartelle: niente commit e niente cartella nel titolo */ }
     }
   }
-  osservatore.conserva(adesso)
   abitudini.ricalcola(adesso)
   ricalcolaFiducia(adesso)
   segnali.pota(adesso)
@@ -361,6 +365,20 @@ async function notte(adesso: Date): Promise<boolean> {
   const m = misura(30, adesso)
   if (m.affermazioni) console.log(`myynd · gemello · ${rigaMisura(m)}`)
   store.segnaCursore(CURS.notte, oggi)
+  return true
+}
+
+/**
+ * La conservazione delle osservazioni, una volta al giorno locale, per ogni
+ * conto: dopo trenta giorni le sessioni perdono il titolo, dopo quattrocento
+ * se ne vanno. Non aspetta né una fonte né il registro della posta: la
+ * promessa sui titoli vale da sola.
+ */
+function conservaOsservazioni(adesso: Date): boolean {
+  const oggi = fuso.giornoIn(adesso)
+  if (store.cursore(CURS.conserva) === oggi) return false
+  osservatore.conserva(adesso)
+  store.segnaCursore(CURS.conserva, oggi)
   return true
 }
 
@@ -385,16 +403,18 @@ function promuoviLetturaInAttesa(): void {
 export async function giro(adesso = new Date()): Promise<void> {
   const me = chi.adesso() ?? ''
   if (inCorso.has(me)) return
-  if (!fonteCollegata() || !indicizzatoDiRecente(adesso)) return
   inCorso.add(me)
   const partenza = Date.now()
   try {
+    conservaOsservazioni(adesso)
+    if (!fonteCollegata() || !indicizzatoDiRecente(adesso)) return
     const raccolta = segnali.raccogliPosta(adesso)
     const indietro = registroIndietro(raccolta)
     if (!indietro) promuoviLetturaInAttesa()
     await segnali.raccogliCodice(adesso)
     chiudiGiorni(adesso, { indietro })
-    await notte(adesso)
+    // la notte aspetta il registro in pari: righe e fiducia contate su metà posta sarebbero false, e in vigore
+    if (!indietro) await notte(adesso)
     mattina(adesso, indietro)
   } finally {
     inCorso.delete(me)
@@ -491,7 +511,8 @@ export function vista(adesso = new Date()): Gemello {
   } : null
   const fiducia = (db.prepare('SELECT genere, giuste, sbagliate FROM fiducia').all() as { genere: string; giuste: number; sbagliate: number }[])
     .filter(r => r.giuste + r.sbagliate >= 10).map(r => ({ genere: r.genere, giuste: r.giuste, totale: r.giuste + r.sbagliate }))
-  const guai: 'posta-inviata'[] = fontePosta() && !segnali.coperturaInviata(adesso) ? ['posta-inviata'] : []
+  // «non vedo la posta che mandi» solo a registro in pari: mentre il primo ripasso cammina, la cartella Sent può non essere ancora arrivata
+  const guai: 'posta-inviata'[] = fontePosta() && !segnali.postaDaRipassare() && !segnali.coperturaInviata(adesso) ? ['posta-inviata'] : []
   return { punteggio, oggi: { quante: diOggi.length, sigillate, previsioni: previsioniOggi }, ieri: vistaIeri, fiducia, abitudini: abitudini.tutte(), guai }
 }
 

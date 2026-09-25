@@ -37,11 +37,17 @@ export function PreferenzeOsservatore() {
 
   useEffect(() => {
     if (d?.piattaforma !== 'darwin') return
-    void carica(); void leggiPermesso()
-    Promise.resolve(d.compagno?.acceso?.()).then(v => setCompagno(vero(v))).catch(() => {})
-    const alFuoco = () => { void leggiPermesso(); void carica() }
+    const leggiCompagno = () => { Promise.resolve(d.compagno?.acceso?.()).then(v => setCompagno(vero(v))).catch(() => {}) }
+    void carica(); void leggiPermesso(); leggiCompagno()
+    // il mostriciattolo si toglie anche dal suo menu: l'interruttore lo segue, e si rilegge al fuoco
+    let smetti: unknown = null
+    try { smetti = d.compagno?.suCambio?.(on => setCompagno(vero(on))) } catch { /* un guscio vecchio non lo sa fare */ }
+    const alFuoco = () => { void leggiPermesso(); void carica(); leggiCompagno() }
     window.addEventListener('focus', alFuoco)
-    return () => window.removeEventListener('focus', alFuoco)
+    return () => {
+      window.removeEventListener('focus', alFuoco)
+      try { if (typeof smetti === 'function') smetti() } catch { /* niente da smettere */ }
+    }
   }, [d, carica, leggiPermesso])
 
   if (d?.piattaforma !== 'darwin' || !s) return null

@@ -299,6 +299,8 @@ test('punteggio per P9, misura, e la riga «non vedo la posta che mandi»', asyn
     assert.equal(gem.punteggio({ dal: '2020-01-01', al: '2020-01-31' }), null)
     const m = gem.misura(30, new Date('2026-09-25T06:00:00.000Z'))
     assert.equal(m.affermazioni, 1); assert.equal(m.punteggio, 1); assert.equal(m.calibrazione.length, 5)
+    // la riga fissa si mostra solo a registro in pari: il giro lo porta in pari a ogni quarto d'ora
+    seg.raccogliPosta(MATTINA)
     const v = gem.vista(MATTINA)
     assert.deepEqual(v.guai, ['posta-inviata'], 'casella collegata e niente posta mandata')
   })
@@ -391,5 +393,87 @@ test('le misure: un giorno è attivo con almeno cinque candidate, il Brier sta g
     const riga = gem.rigaMisura(m)
     assert.match(riga, /30 giorni · 10 affermazioni · giuste \d+% · senza conoscerti \d+% · 2 giorni attivi, 4\.0 al giorno, 50% con cinque · brier 0\.\d\d/)
     assert.doesNotMatch(riga, /[—–]/)
+  })
+})
+
+test('col registro indietro la notte aspetta: niente gemello:notte e nessuna riga di «Come lavori» contata su metà posta', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    const doc = (id: string, autore: string, quando: Date, x: Record<string, unknown> = {}) =>
+      ({ id, fonte: 'posta', tipo: 'email', titolo: `Mail ${id}`, corpo: 'Hello', autore, quando: quando.toISOString(), ...x })
+    // nell'ordine dell'indice: le quaranta mail di Nora e tre di Sam con risposta, poi cinquemila mail
+    // vecchie, e in fondo le quaranta risposte a Nora: a metà registro Nora sembra lasciata senza risposta
+    const prime: Record<string, unknown>[] = []
+    for (let d = 40; d >= 1; d--) prime.push(doc(`posta:INBOX:n${d}`, 'Nora Vance <nora@h.example>', new Date(MATTINA.getTime() - d * GIORNO + 2 * ORA), { filo: `fn${d}@x`, messageId: `mn${d}@x` }))
+    for (let d = 42; d >= 40; d--) {
+      const q = new Date(MATTINA.getTime() - d * GIORNO + 2 * ORA)
+      prime.push(doc(`posta:INBOX:s${d}`, 'Sam Ortiz <sam@l.example>', q, { filo: `fs${d}@x`, messageId: `ms${d}@x` }))
+      prime.push(doc(`posta:Sent:s${d}`, 'Anna <anna@esempio.it>', new Date(q.getTime() + ORA), { inviato: true, filo: `fs${d}@x`, messageId: `ss${d}@x`, risponde: `ms${d}@x`, destinatari: 'sam@l.example' }))
+    }
+    store.salvaDocumenti(prime as Parameters<typeof store.salvaDocumenti>[0])
+    const vecchie = [...Array(5000)].map((_, i) => doc(`posta:Vecchie:${i}`, `p${i % 40}@vecchio.example`, new Date(Date.parse('2026-07-01T00:00:00.000Z') + i * 60_000)))
+    for (let i = 0; i < vecchie.length; i += 1500) store.salvaDocumenti(vecchie.slice(i, i + 1500) as Parameters<typeof store.salvaDocumenti>[0])
+    const risposte: Record<string, unknown>[] = []
+    for (let d = 40; d >= 1; d--) risposte.push(doc(`posta:Sent:n${d}`, 'Anna <anna@esempio.it>', new Date(MATTINA.getTime() - d * GIORNO + 3 * ORA), { inviato: true, filo: `fn${d}@x`, messageId: `sn${d}@x`, risponde: `mn${d}@x`, destinatari: 'nora@h.example' }))
+    store.salvaDocumenti(risposte as Parameters<typeof store.salvaDocumenti>[0])
+    const righe = () => store.default.prepare('SELECT chiave, genere FROM abitudini').all() as { chiave: string; genere: string }[]
+    await gem.giro(MATTINA)
+    assert.ok(seg.postaDaRipassare(), 'il primo giro non arriva in fondo a cinquemila mail')
+    assert.equal(store.cursore('gemello:notte'), null, 'la notte aspetta il registro in pari')
+    assert.deepEqual(righe(), [], 'nessuna riga contata su metà posta')
+    assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM fiducia').get() as { n: number }).n, 0, 'nemmeno la fiducia si conta su metà posta')
+    // i giri dopo portano il registro in pari: la notte fa le sue, e Nora è una a cui risponde sempre
+    for (let i = 1; i <= 12 && store.cursore('gemello:notte') !== '2026-09-24'; i++) await gem.giro(new Date(MATTINA.getTime() + i * 15 * 60_000))
+    assert.equal(store.cursore('gemello:notte'), '2026-09-24')
+    assert.ok(!seg.postaDaRipassare())
+    assert.ok(righe().some(r => r.chiave === 'posta.risponde_sempre:nora@h.example'), JSON.stringify(righe()))
+    assert.ok(!righe().some(r => r.genere === 'posta.lascia'), 'mai «resta senza risposta» su Nora')
+  })
+})
+
+test('«non vedo la posta che mandi» tace finché il registro cammina, e compare solo a registro in pari', async () => {
+  await chi.dentro(anna, async () => {
+    azzera()
+    const doc = (id: string, autore: string, quando: Date, x: Record<string, unknown> = {}) =>
+      ({ id, fonte: 'posta', tipo: 'email', titolo: `Mail ${id}`, corpo: 'Hello', autore, quando: quando.toISOString(), ...x })
+    const semina = (quante: number) => {
+      const molte = [...Array(quante)].map((_, i) => doc(`posta:Molte:${i}`, `p${i % 40}@molte.example`, new Date(MATTINA.getTime() - 20 * GIORNO + i * 60_000)))
+      for (let i = 0; i < molte.length; i += 1500) store.salvaDocumenti(molte.slice(i, i + 1500) as Parameters<typeof store.salvaDocumenti>[0])
+    }
+    semina(6000)
+    // la cartella Sent arriva in fondo all'indice: cinquanta risposte mandate ieri
+    store.salvaDocumenti([...Array(50)].map((_, i) => doc(`posta:Sent:${i}`, 'Anna <anna@esempio.it>', new Date(MATTINA.getTime() - GIORNO + i * 60_000), { inviato: true, destinatari: `p${i}@molte.example` })) as Parameters<typeof store.salvaDocumenti>[0])
+    let r = seg.raccogliPosta(MATTINA)
+    assert.equal(r.finito, false)
+    assert.deepEqual(gem.vista(MATTINA).guai, [], 'il registro è indietro: la riga fissa non compare')
+    for (let i = 0; i < 12 && !r.finito; i++) r = seg.raccogliPosta(MATTINA)
+    assert.ok(r.finito)
+    assert.deepEqual(gem.vista(MATTINA).guai, [], 'in pari, e la posta mandata c’è')
+    // senza posta mandata: zitta finché cammina, poi la riga
+    azzera(); semina(4500)
+    r = seg.raccogliPosta(MATTINA)
+    assert.equal(r.finito, false)
+    assert.deepEqual(gem.vista(MATTINA).guai, [])
+    for (let i = 0; i < 12 && !r.finito; i++) r = seg.raccogliPosta(MATTINA)
+    assert.ok(r.finito)
+    assert.deepEqual(gem.vista(MATTINA).guai, ['posta-inviata'])
+  })
+})
+
+test('la conservazione delle osservazioni non aspetta una fonte: senza fonti, una sessione di trentun giorni perde il titolo lo stesso', async () => {
+  await chi.dentro(bruno, async () => {
+    store.default.exec('DELETE FROM sessioni_app; DELETE FROM cursori')
+    const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
+    const vecchio = new Date(MATTINA.getTime() - 31 * GIORNO).toISOString().slice(0, 10)
+    const recente = new Date(MATTINA.getTime() - 2 * GIORNO).toISOString().slice(0, 10)
+    ins.run('com.apple.Safari', 'Safari', 'Northwind pricing - Google Docs', `${vecchio}T07:00:00.000Z`, `${vecchio}T07:10:00.000Z`, 600, vecchio, null, null)
+    ins.run('com.apple.Safari', 'Safari', 'Inbox - Gmail', `${recente}T07:00:00.000Z`, `${recente}T07:10:00.000Z`, 600, recente, null, null)
+    await gem.giro(MATTINA)
+    assert.equal(store.cursore('gemello:mattina'), null, 'senza fonti il resto del giro non parte')
+    assert.equal(store.cursore('gemello:notte'), null)
+    assert.equal(store.cursore('gemello:conserva'), '2026-09-24')
+    const titoli = (store.default.prepare('SELECT giorno, titolo FROM sessioni_app ORDER BY giorno').all() as { giorno: string; titolo: string | null }[]).map(r => [r.giorno, r.titolo])
+    assert.deepEqual(titoli, [[vecchio, null], [recente, 'Inbox - Gmail']])
+    store.default.exec('DELETE FROM sessioni_app')
   })
 })

@@ -182,6 +182,21 @@ function scriviDocPosta(d: DocPosta, a: Attrezzi): 'arrivata' | 'inviata' | null
 export function ripassoInCorso(): boolean { return store.cursore(CURSORE_RIPASSO) !== null }
 
 /**
+ * Il registro è indietro rispetto all'indice: il primo ripasso a metà, o
+ * posta indicizzata oltre il cursore che nessuna chiamata ha ancora visto.
+ * Chi legge il registro per dire qualcosa di certo (una fonte che non vede
+ * la posta mandata) aspetta che sia in pari.
+ */
+export function postaDaRipassare(): boolean {
+  if (ripassoInCorso()) return true
+  const cursore = store.cursore(CURSORE_POSTA)
+  if (cursore === null) return true
+  const rid = Number(store.cursore(CURSORE_POSTA_RID) ?? -1)
+  return !!db.prepare("SELECT 1 FROM documenti WHERE tipo = 'email' AND (indicizzato > ? OR (indicizzato = ? AND rid > ?)) LIMIT 1")
+    .get(cursore, cursore, Number.isFinite(rid) ? rid : -1)
+}
+
+/**
  * La posta indicizzata dall'ultima volta, in righe del registro.
  *
  * La prima volta (senza cursore) si percorre tutto l'indice, e le righe
@@ -366,8 +381,10 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
   ultimeOcchiate.set(me, occhiate)
   const daQuando = store.cursore(CURSORE_COMMIT) ?? new Date(adesso.getTime() - 90 * GIORNO).toISOString()
   const miei = mieiIndirizzi()
-  const globale = await emailGitGlobale()
-  if (globale) miei.add(globale)
+  // l'indirizzo globale di git si legge una volta per giro, e solo alla prima cartella cambiata: un Mac
+  // senza gli strumenti da riga di comando ha in /usr/bin/git una finestra che chiede di installarli,
+  // e non deve aprirsi ogni quarto d'ora per niente
+  let globale: string | null = null
   // una cartella su cui git non ha risposto (il tempo scaduto, un registro rotto) tiene fermo il cursore:
   // altrimenti i suoi commit di oggi finirebbero prima di `--since` e non entrerebbero mai
   let guasti = 0
@@ -375,6 +392,7 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
     let m = 0
     try { m = statSync(join(dir, '.git', 'logs', 'HEAD')).mtimeMs } catch { continue }
     if ((occhiate.get(dir) ?? 0) >= m) continue
+    if (globale === null) { globale = await emailGitGlobale(); if (globale) miei.add(globale) }
     let stdout = ''
     try {
       const r = await execFileP('git', ['-C', dir, 'log', `--since=${daQuando}`, '--no-merges', '--format=%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C)%x1e'], { timeout: 5000, maxBuffer: 1 << 22 })

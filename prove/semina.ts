@@ -284,9 +284,11 @@ if (ricetta) {
     if (ricetta.osservatore) osservatore.imposta({ acceso: true, titoli: true })
 
     // il passato, con il codice vero: ogni giorno D un giro alle otto, poi la lettura di mezzanotte e un giro alle 00:40
+    // la lettura di mezzanotte non può stare nel futuro: fra mezzanotte e le 00:30 vale un minuto fa
+    const tetto = Date.now() - 60_000
     for (let d = 14; d >= 1; d--) {
       await gemello.giro(alle(d, 8))
-      store.segnaCursore('gemello:letta', alle(d - 1, 0, 30).toISOString())
+      store.segnaCursore('gemello:letta', new Date(Math.min(alle(d - 1, 0, 30).getTime(), tetto)).toISOString())
       await gemello.giro(alle(d - 1, 0, 40))
     }
     await gemello.giro(new Date())

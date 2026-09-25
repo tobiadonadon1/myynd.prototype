@@ -14,10 +14,14 @@ import { portaAlleFonti } from '../vals'
 import { preparaApertura } from '../navigazione'
 import * as g from '../gemello-frasi'
 
-/** Quante righe per mittente prima di «Tutte (n)». */
-const MITTENTI_IN_VISTA = 5
-const PER_MITTENTE = new Set(['posta.risponde_sempre', 'posta.lascia', 'agenda.rifiuta'])
-const gruppoDi = (genere: string): 'posta' | 'agenda' | 'lavoro' =>
+type Gruppo = 'posta' | 'agenda' | 'lavoro'
+/** I tagli «Tutte (n)»: cinque righe per mittente (posta e agenda), tre per cartella; il resto si apre con un tocco. */
+const TAGLI: Record<Gruppo, { generi: Set<string>; quante: number }> = {
+  posta: { generi: new Set(['posta.risponde_sempre', 'posta.lascia']), quante: 5 },
+  agenda: { generi: new Set(['agenda.rifiuta']), quante: 5 },
+  lavoro: { generi: new Set(['codice.con_agenti']), quante: 3 }
+}
+const gruppoDi = (genere: string): Gruppo =>
   genere.startsWith('posta.') ? 'posta' : genere.startsWith('agenda.') ? 'agenda' : 'lavoro'
 
 type Prova = { riga: string; esempi: AbitudineVista['esempi'] }
@@ -155,7 +159,8 @@ export function ComeLavori() {
   const [tolte, setTolte] = useState<Map<string, { stato: AbitudineVista['stato']; orologio: ReturnType<typeof setTimeout> }>>(new Map())
   /** Per riga: il «togli» che non è riuscito, mostrato dentro la scheda tornata al suo posto. */
   const [guai, setGuai] = useState<Map<string, string>>(new Map())
-  const [tutteLePosta, setTutteLePosta] = useState(false)
+  /** I gruppi in cui «Tutte (n)» è stato premuto. */
+  const [aperti, setAperti] = useState<Set<Gruppo>>(new Set())
   const [superateAperte, setSuperateAperte] = useState(false)
   const [cerchiata, setCerchiata] = useState(false)
   const [guaio, setGuaio] = useState('')
@@ -171,10 +176,23 @@ export function ComeLavori() {
     let vai = ''
     try { vai = sessionStorage.getItem(VAI) ?? ''; if (vai) sessionStorage.removeItem(VAI) } catch { /* senza deposito */ }
     if (vai !== 'come-lavori') return
-    sezione.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    const s = sezione.current
+    if (!s) return
+    // senza animazione: uno scorrimento morbido ancora in corso quando la pagina cresce continua verso un
+    // punto vecchio, e la sezione finisce mezza fuori; il cerchio di rame è il segno, non il movimento
+    s.scrollIntoView({ block: 'start' })
     setCerchiata(true)
+    // i blocchi sopra (i progetti) possono arrivare dopo e spingere giù la sezione: per un secondo e mezzo,
+    // ogni volta che la sezione cambia posto nella pagina, si riatterra in cima
+    let posto = s.offsetTop
+    const segui = setInterval(() => {
+      if (s.offsetTop === posto) return
+      posto = s.offsetTop
+      s.scrollIntoView({ block: 'start' })
+    }, 120)
+    const basta = setTimeout(() => clearInterval(segui), 1500)
     const o = setTimeout(() => setCerchiata(false), 1600)
-    return () => clearTimeout(o)
+    return () => { clearTimeout(o); clearTimeout(basta); clearInterval(segui) }
   }, [d])
 
   if (!d) return null
@@ -228,7 +246,7 @@ export function ComeLavori() {
         inAttesa={!a.inVigore} guaioFuori={guai.get(a.chiave)} correggi={correggi(a)} tieni={a.inVigore ? undefined : tieni(a)} scorda={scorda(a)} />
     )
   }
-  const gruppi: { chiave: 'posta' | 'agenda' | 'lavoro'; titolo: string }[] = [
+  const gruppi: { chiave: Gruppo; titolo: string }[] = [
     { chiave: 'posta', titolo: t('Posta') }, { chiave: 'agenda', titolo: t('Agenda') }, { chiave: 'lavoro', titolo: t('Lavoro') }
   ]
   const punteggio = d.punteggio ? g.frasePunteggio(d.punteggio.giuste, d.punteggio.totale, d.punteggio.base) : ''
@@ -271,19 +289,20 @@ export function ComeLavori() {
       {gruppi.map(gr => {
         const mie = vive.filter(a => gruppoDi(a.genere) === gr.chiave)
         if (!mie.length) return null
-        const perMittente = mie.filter(a => PER_MITTENTE.has(a.genere))
-        const altre = mie.filter(a => !PER_MITTENTE.has(a.genere))
-        const nascoste = gr.chiave === 'posta' && !tutteLePosta && perMittente.length > MITTENTI_IN_VISTA
-        const mostrate = nascoste ? perMittente.slice(0, MITTENTI_IN_VISTA) : perMittente
-        // per numero di mail o giorni contati (`su`, lo stesso della regola dei venti casi; `casi` dove non c'è):
-        // le più forti in cima; il taglio «Tutte (n)» vale solo per i mittenti
+        const taglio = TAGLI[gr.chiave]
+        // per numero di mail o giorni contati (`su`, lo stesso della regola dei venti casi; `casi` dove non c'è): le più forti in cima
         const peso = (a: AbitudineVista) => a.su ?? a.casi
-        const inOrdine = [...mostrate, ...altre].sort((x, y) => peso(y) - peso(x) || y.casi - x.casi || x.chiave.localeCompare(y.chiave))
+        const inOrdine = (xs: AbitudineVista[]) => xs.slice().sort((x, y) => peso(y) - peso(x) || y.casi - x.casi || x.chiave.localeCompare(y.chiave))
+        // il taglio «Tutte (n)» vale per le righe per mittente o per cartella: le prime restano, le altre aspettano un tocco
+        const contate = inOrdine(mie.filter(a => taglio.generi.has(a.genere)))
+        const altre = mie.filter(a => !taglio.generi.has(a.genere))
+        const nascoste = !aperti.has(gr.chiave) && contate.length > taglio.quante
+        const mostrate = nascoste ? contate.slice(0, taglio.quante) : contate
         return (
           <div key={gr.chiave} className="cl-blocco">
             <div className="cl-gruppo">{gr.titolo}</div>
-            <div className="cl-griglia">{inOrdine.map(riga)}</div>
-            {nascoste && <button type="button" className="cl-altre" onClick={() => setTutteLePosta(true)}>{g.tutte(perMittente.length)}</button>}
+            <div className="cl-griglia">{inOrdine([...mostrate, ...altre]).map(riga)}</div>
+            {nascoste && <button type="button" className="cl-altre" onClick={() => setAperti(v => new Set(v).add(gr.chiave))}>{g.tutte(contate.length)}</button>}
           </div>
         )
       })}

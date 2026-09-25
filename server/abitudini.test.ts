@@ -253,3 +253,35 @@ test('perMittente e imparateDal', () => {
     assert.equal(ab.imparateDal('2099-01-01T00:00:00.000Z').length, 0)
   })
 })
+
+test('agenda: una serie rifiutata è un invito solo, le occorrenze future non contano, e gli spostamenti si contano sulle stesse occorrenze del denominatore', () => {
+  chi.dentro(anna, () => {
+    pulisci()
+    const up = store.default.prepare("INSERT INTO agenda_viste (uid, titolo, inizio, fine, originale, stato, mio, visto, organizzatore) VALUES (?,?,?,?,?,?,?,?,?)")
+    const TOM = 'Tom Brill <tom@brill.example>'
+    const a = (giorni: number) => new Date(ADESSO.getTime() + giorni * GIORNO).toISOString()
+    // una settimanale di Tom dalle quattro settimane fa alle venticinque avanti, rifiutata: trenta occorrenze, una decisione
+    for (let w = -4; w <= 25; w++) up.run(`serie-tom|${a(7 * w)}`, 'Weekly', a(7 * w), null, a(7 * w), 'CONFIRMED', 'DECLINED', ADESSO.toISOString(), TOM)
+    ab.ricalcola(ADESSO)
+    assert.equal(riga('agenda.rifiuta:tom@brill.example'), undefined, 'una serie rifiutata non fa riga da sola')
+    assert.ok(!ab.perIlRitratto().includes('Tom Brill'))
+    // quattro inviti singoli passati, tre rifiutati, e uno futuro rifiutato che non conta: con la serie, quattro su cinque
+    for (let i = 0; i < 4; i++) up.run(`solo-${i}`, `Call ${i}`, a(-10 - i), null, a(-10 - i), 'CONFIRMED', i < 3 ? 'DECLINED' : 'ACCEPTED', ADESSO.toISOString(), TOM)
+    up.run('solo-futuro', 'Call', a(3), null, a(3), 'CONFIRMED', 'DECLINED', ADESSO.toISOString(), TOM)
+    ab.ricalcola(ADESSO)
+    const tom = riga('agenda.rifiuta:tom@brill.example')!
+    assert.ok(tom); assert.equal(tom.casi, 4); assert.equal(tom.su, 5); assert.equal(tom.inVigore, false)
+    assert.ok(tom.esempi.every(e => e.quando <= ADESSO.toISOString()), 'gli esempi sono nel passato')
+    // gli spostamenti: una riunione al giorno, dodici passate e venti future
+    pulisci()
+    for (let i = -12; i <= 20; i++) { if (i === 0) continue; up.run(`daily|${a(i)}`, 'Standup', a(i), null, a(i), 'CONFIRMED', null, ADESSO.toISOString(), 'kim@lee.example') }
+    const spostata = (i: number) => seg.scrivi({ id: `agenda.spostato|daily|${a(i)}|x`, genere: 'agenda.spostato', quando: a(-1), ref: `daily|${a(i)}`, valore: 30, dati: { titolo: 'Standup' } })
+    for (let i = 5; i <= 7; i++) spostata(i)
+    ab.ricalcola(ADESSO)
+    assert.equal(riga('agenda.sposta'), undefined, 'tre riunioni future spostate non sono una riga sul passato')
+    for (let i = -3; i <= -1; i++) spostata(i)
+    ab.ricalcola(ADESSO)
+    const sp = riga('agenda.sposta')!
+    assert.ok(sp); assert.equal(sp.casi, 3); assert.equal(sp.su, 12); assert.equal(sp.dati.ogni, 4)
+  })
+})

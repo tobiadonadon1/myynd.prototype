@@ -187,6 +187,15 @@ test('raccogliAgenda: occorrenze separate, una spostata, una sparita in futuro; 
     assert.equal(seg.raccogliAgenda([rifiutata, dopo[1]!], FIN, adesso), 1)
     assert.equal(seg.leggi('agenda.rifiutato', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z').length, 1)
     assert.equal(seg.raccogliAgenda([rifiutata, dopo[1]!], FIN, adesso), 0, 'la seconda volta non è un nuovo rifiuto')
+    // una vista già rifiutata la prima volta che la si vede: non c'è un prima, non è un rifiuto suo
+    const giaRifiutata = vista('n|2026-09-16T09:00:00.000Z', '2026-09-16T09:00:00.000Z', { partecipanti: [{ indirizzo: 'anna@esempio.it', stato: 'DECLINED' }] })
+    assert.equal(seg.raccogliAgenda([rifiutata, dopo[1]!, giaRifiutata], FIN, adesso), 0)
+    assert.equal(seg.leggi('agenda.rifiutato', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z').length, 1)
+    // e un NEEDS-ACTION che diventa DECLINED alla lettura dopo è un rifiuto
+    const indecisa = vista('q|2026-09-18T09:00:00.000Z', '2026-09-18T09:00:00.000Z', { partecipanti: [{ indirizzo: 'anna@esempio.it', stato: 'NEEDS-ACTION' }] })
+    assert.equal(seg.raccogliAgenda([rifiutata, dopo[1]!, giaRifiutata, indecisa], FIN, adesso), 0)
+    assert.equal(seg.raccogliAgenda([rifiutata, dopo[1]!, giaRifiutata, { ...indecisa, partecipanti: [{ indirizzo: 'anna@esempio.it', stato: 'DECLINED' }] }], FIN, adesso), 1)
+    assert.deepEqual(seg.leggi('agenda.rifiutato', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z').map(s => s.ref).sort(), ['q|2026-09-18T09:00:00.000Z', 'w|2026-09-07T09:00:00.000Z'])
   })
 })
 
