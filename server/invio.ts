@@ -23,6 +23,7 @@ import * as store from './store.ts'
 import * as posta from './connettori/posta.ts'
 import type { ConfigPosta } from './config.ts'
 import { haSegnaposto } from './cornice.ts'
+import { vietato } from './prova-chiusa.ts'
 
 const INDIRIZZO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -90,6 +91,7 @@ export const perProva = {
  * tenuto davvero prende il posto della bozza, così la memoria impara da lì.
  */
 export async function manda(c: store.Compito, conf: ConfigPosta, m: posta.DaMandare): Promise<void> {
+  vietato('invio.manda')
   try {
     await inviaVera(conf, m)
   } catch (e) {

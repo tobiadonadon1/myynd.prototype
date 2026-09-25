@@ -11,6 +11,7 @@ import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { resto, type Resto } from './ripresa.ts'
 import { daImap, IMAP_SPENTO, type CasoAmministratore } from './amministratore.ts'
 import { GuaioFonte, type Rimedio } from './guaio.ts'
+import { vietato } from '../prova-chiusa.ts'
 
 export const PRESET: Record<string, { host: string; porta: number; smtp: string; smtpPorta: number }> = {
   'register.it': { host: 'imap.register.it', porta: 993, smtp: 'smtp.register.it', smtpPorta: 465 },
@@ -398,6 +399,7 @@ export function messaggioDa(c: ConfigPosta, m: DaMandare): {
  * esattamente quello che hai approvato.
  */
 export async function invia(c: ConfigPosta, m: DaMandare): Promise<{ id: string }> {
+  vietato('posta.invia')
   const dove = smtpDi(c)
   const { createTransport } = await import('nodemailer')
   const posta = createTransport({
@@ -493,6 +495,7 @@ export async function sposta(
   mosse: Mossa[],
   ruolo: '\\Trash' | '\\Archive'
 ): Promise<{ spostati: number; dove: string }> {
+  vietato('posta.sposta')
   if (!mosse.length) return { spostati: 0, dove: '' }
   const { cl } = await apri(c)
   try {
@@ -930,6 +933,7 @@ export async function sincronizza(
 /** APPEND with the Draft flag, never SMTP. Only an existing server Drafts
  * folder is used; no guessed folders or new message windows. */
 export async function salvaBozza(c: ConfigPosta, source: string, e: import('../store.ts').EmailPronta, messageId: string): Promise<{ id: string; url: string }> {
+  vietato('posta.salvaBozza')
   const { mimeBozza, destinatarioVerificato } = await import('../mailbox-drafts.ts')
   const m = source.match(/^posta:(.+):(\d+)$/)
   if (!m) throw new Error('Cannot locate the original email.')
@@ -978,6 +982,7 @@ export async function leggiBozza(c: ConfigPosta, id: string):Promise<{stato:'pre
 
 /** Read live From and Message-ID under the same UID mailbox lock as moving. */
 export async function verificaEArchiviaPerRegola(c: ConfigPosta, id: string, sender: string, expectedMessageId: string | null): Promise<number> {
+  vietato('posta.verificaEArchiviaPerRegola')
   const moves=mosseDa([id])
   if(moves.length!==1 || !expectedMessageId)throw new Error('IMAP message lacks a stable indexed identity.')
   const {cartella,uid}=moves[0]
@@ -1023,6 +1028,7 @@ export async function verificaEArchiviaPerRegola(c: ConfigPosta, id: string, sen
  * use plain EXPUNGE, which can delete other users' already-deleted messages. */
 export async function aggiornaBozza(c:ConfigPosta,source:string,oldId:string,e:import('../store.ts').EmailPronta,messageId:string,
   baseline:import('../mailbox-drafts.ts').BozzaAttuale):Promise<{id:string;url:string}> {
+  vietato('posta.aggiornaBozza')
   const {mimeBozza,destinatarioVerificato}=await import('../mailbox-drafts.ts')
   const originalId=source.match(/^posta:(.+):(\d+)$/), draftId=oldId.match(/^(.+):(\d+)$/)
   if (!originalId || !draftId || baseline.source!==source || baseline.id!==oldId || !baseline.uidValidity) throw new Error('The saved IMAP draft has no stable source and UID validity for safe replacement.')

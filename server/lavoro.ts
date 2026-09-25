@@ -33,6 +33,7 @@ import { executeInCopy, type ExecutionReport } from './esecuzione-isolata.ts'
 import { detectRuntime, runHermesPatch, type RuntimeId, type RuntimeProvenance } from './agent-runtime.ts'
 import { reviewProjectReport, type TeamEvidence } from './project-review.ts'
 import { controllaIlTetto, segnaAccount, type UsoCLI } from './tetto.ts'
+import { vietato } from './prova-chiusa.ts'
 
 type ProjectReport = ExecutionReport & {runtimeProvenance?:RuntimeProvenance; team?:TeamEvidence}
 async function saveOutcome(report:ProjectReport, options:{runtime?:RuntimeId; team?:boolean; acceptanceCriteria?:string; signal?:AbortSignal}):Promise<void> {
@@ -157,6 +158,7 @@ export async function fai(
   desktop: ConfigDesktop | null | undefined,
   o: { cartella: string; richiesta: string; passo: Passo; signal?: AbortSignal; runtime?: RuntimeId; hermes?: { files: string[]; model: string; provider: string }; team?:boolean; acceptanceCriteria?:string }
 ): Promise<Esito> {
+  vietato('lavoro.fai')
   // Prima quello che riguarda la richiesta, poi quello che riguarda la
   // macchina: se la cartella è fuori dal recinto va detto *quello*, anche su un
   // computer dove Claude Code manca. Sono due notizie diverse, e la prima è

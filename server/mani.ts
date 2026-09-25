@@ -47,6 +47,7 @@ import { IPOTESI, MANCA } from './cornice.ts'
 import * as lavoro from './lavoro.ts'
 import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
+import { vietato } from './prova-chiusa.ts'
 
 // — cosa è stato fatto —
 
@@ -611,6 +612,7 @@ export function scriviFile(o: { percorso: string; testo: string }, copia?: strin
  * come per ogni altra scrittura sulla Scrivania.
  */
 export function salvaConsegna(o: { titolo: string; testo: string; luogo: Luogo }): { percorso: string; nome: string; luogo: Luogo } {
+  vietato('mani.salvaConsegna')
   if (ferri.ospitato()) throw new Error('Su un server non ho una Scrivania su cui scrivere.')
   const percorso = scriviFile({ percorso: join(cartellaDelLuogo(o.luogo), `${nomeFile(o.titolo)}.md`), testo: o.testo }, null, o.luogo)
   return { percorso, nome: basename(percorso), luogo: o.luogo }
@@ -898,6 +900,8 @@ export type Uscita = { testo: string; male?: boolean; fatto: Fatto; copia?: stri
  * collega a cui il sito non risponde.
  */
 export async function esegui(nome: string, input: unknown, contesto: Contesto = {}): Promise<Uscita> {
+  // nella prova (P6) le mani che scrivono non si aprono: si lancia fuori, non è un guaio della mano
+  if (nome === CREA_NOTA.name || nome === SCRIVI_FILE.name || nome === LAVORA_NEL_CODICE.name) vietato(`mani.${nome}`)
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const s = (k: string) => typeof i[k] === 'string' ? i[k] as string : ''
   const guaio = (attrezzo: Attrezzo, dettaglio: string, e: unknown): Uscita =>

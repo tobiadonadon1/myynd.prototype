@@ -39,6 +39,7 @@ import { COLORE_NOTE } from './colori-fonti.ts'
 // modifica qualcosa da solo alle sette di mattina, questo prodotto ha smesso di
 // essere affidabile.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import type Anthropic from '@anthropic-ai/sdk'
 import { leggi } from './config.ts'
 import * as store from './store.ts'
@@ -528,6 +529,9 @@ export async function esegui(
    * l'attrezzo risponderebbe «manca la query» per sempre.
    */
   if (nome === 'agenda.leggi') {
+    // nel passato il calendario non si legge (P6): la prova lo dice e va avanti
+    const prova = provaChiusa.inProva()
+    if (prova) { prova.parziale.add('agenda'); return { testo: 'Il calendario nel passato non si legge.', docs: [], male: true } }
     const giorni = Math.min(30, Math.max(1, Math.round(Number(input.giorni) || 7)))
     try {
       const eventi = await prossimiOvunque(giorni)
@@ -588,6 +592,8 @@ export async function esegui(
   }
 
   if (nome === 'claude.lavora') {
+    const prova = provaChiusa.inProva()
+    if (prova) { prova.parziale.add('codice'); return { testo: 'Claude Code nel passato non gira.', docs: [], male: true } }
     const richiesta = String(input.richiesta ?? '').trim()
     if (!richiesta) return { testo: 'Non c’è niente da chiedergli.', docs: [], male: true }
     const cartella = String(input.cartella ?? '').trim() || contesto?.cartella || ''

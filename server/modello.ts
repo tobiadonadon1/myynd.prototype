@@ -33,6 +33,7 @@
 // con un indirizzo, come qualunque altro fornitore: si vede cosa lavora, e
 // quando non risponde lo si sa.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'node:crypto'
 import { aggiorna, leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
@@ -1160,6 +1161,8 @@ export async function chiedi(o: {
       // il tetto non è un guasto dell'account: niente riposo, e niente chiave
       // di riserva, che costerebbe denaro per scavalcare una scelta sua
       if (tettoDiOggi.delTetto(e)) throw tradotto(e)
+      // nella prova (P6) niente riposo e niente chiave: la prova si ferma «occupato»
+      if (provaChiusa.inProva()) throw e
       abbonamento.nonRisponde()
       console.warn(`myynd · Claude Code non ce l'ha fatta su «${o.lavoro}», passo alla chiave:`,
         e instanceof Error ? e.message : e)

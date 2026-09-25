@@ -34,6 +34,7 @@
 // modello di casa *e* non c'è una chiave. Fra spendere il suo tetto e mandargli
 // una bolletta, si spende il tetto.
 
+import * as provaChiusa from './prova-chiusa.ts'
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -638,6 +639,8 @@ export async function inStreaming(o: {
  * parte e muore prima di andare dove sarebbe dovuto andare subito.
  */
 export function nonRisponde() {
+  // una prova sul passato non mette a riposo l'account di nessuno (P6)
+  if (provaChiusa.inProva()) return
   spento = Date.now() + RIPOSO
 }
 

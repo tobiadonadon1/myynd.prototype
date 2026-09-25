@@ -1,4 +1,5 @@
 import { recordUserDecision, recordNextResult, recordStateDecision } from './project-memory.ts'
+import * as provaChiusa from './prova-chiusa.ts'
 import { concludiDaTrascrizione, toccaConcludere, type Chiusura } from './chiusura-progetto.ts'
 import { richiestaSulleFonti, rispostaSulleFonti, type Lettura } from './fonti-in-chat.ts'
 import * as riferimento from './riferimento.ts'
@@ -589,7 +590,7 @@ export function sistema(discorso = '', conLaLista = false, compatto = false, con
   if (progetto) pezzi.push(`\nProgetti attuali e obiettivi registrati, con attività reali:\n${compatto ? aRighe(progetto, 1100) : progetto}\nUsali per orientare il lavoro. Un obiettivo non è una scadenza né una nuova attività; "pronto" significa da rivedere, non completato.`)
   const direzione = fuoco()
   if (direzione) pezzi.push(`\nPriorità attuale indicata dalla persona: ${direzione.slice(0, compatto ? 200 : 700)}`)
-  pezzi.push(`\nData attuale: ${new Date().toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
+  pezzi.push(`\nData attuale: ${new Date(provaChiusa.adesso()).toISOString().slice(0, 10)}. Controlla le date delle fonti prima di chiamare qualcosa attuale o urgente.`)
   pezzi.push('\nNon dichiarare di avere salvato o modificato progetti e obiettivi: una proposta scritta non è un salvataggio. I salvataggi espliciti sono confermati dal sistema dopo la scrittura in Memoria.')
 
   // In fondo, e solo con gli strumenti in mano. Sta dentro il blocco tenuto in
@@ -1664,7 +1665,7 @@ export async function rispondiInStreaming(
       return { testo, fonti: fontiCitate(testo, docs) }
     } catch (e) {
       // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
-      if (delTetto(e)) throw e
+      if (delTetto(e) || provaChiusa.inProva()) throw e
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla chat:',
         e instanceof Error ? e.message : e)
@@ -3139,7 +3140,7 @@ export async function svolgi(
       })
       return { ...risultatoVerificato(uscito), fatti }
     } catch (e) {
-      if (delTetto(e)) throw e
+      if (delTetto(e) || provaChiusa.inProva()) throw e
       abbonamento.nonRisponde()
       console.warn('myynd · Claude Code non ce l\'ha fatta sulla bozza:', e instanceof Error ? e.message : e)
       // senza una chiave di riserva l'errore è la risposta: il compito torna
@@ -3224,6 +3225,7 @@ export async function svolgi(
         // Verification is checked before the side effect and again on return.
         risultatoVerificato('')
         passo({ passo: 'apro', dettaglio: appNativa })
+        provaChiusa.vietato('mani.crea_documento_app')
         const documentoCreato = await creaDocumento({...input, stile: {pagine:pagineRichieste, corpo: brief.tipografia.font, titolo: brief.tipografia.font, dimensione: brief.tipografia.punti, nome: brief.tipografia.origine === 'documento' ? 'From a relevant reference' : brief.tipografia.origine === 'preferenza_esplicita' ? 'Your requested style' : 'Editorial'}}, esecuzione?.signal)
         esecuzione?.signal.throwIfAborted()
         passo({passo:'scrivo', dettaglio: cfgLingua() === 'en' ? 'Checking the rendered pages' : 'Controllo le pagine impaginate'})
