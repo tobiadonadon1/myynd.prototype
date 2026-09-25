@@ -261,8 +261,9 @@ export function resoconto(quale: Quale, ora = adesso()): Resoconto {
 export function sommario(ora = adesso()): { inizio: string; righe: { quale: Quale; numeri: Resoconto['numeri'] }[] } {
   const f = fuso.fusoDi()
   const ini = inizio()
-  const m = materiale(ini, ora.toISOString())
   const q = settimana(ora, 'questa', f), s = settimana(ora, 'scorsa', f)
+  // di solito l'inizio è prima della settimana scorsa; se no, si legge da lì
+  const m = materiale(Date.parse(ini) < Date.parse(s.da) ? ini : s.da, ora.toISOString())
   const finestre: [Quale, string, string][] = [['questa', q.da, q.a], ['scorsa', s.da, s.a], ['inizio', ini, ora.toISOString()]]
   const righe: { quale: Quale; numeri: Resoconto['numeri'] }[] = []
   for (const [quale, da, a] of finestre) {
