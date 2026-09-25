@@ -72,7 +72,7 @@ function statoInFondo(a: Automazione): { testo: string; tinta: string; pallino: 
 
   switch (a.salute.stato) {
     case 'scollegata':
-      return { testo: t('manca una connessione'), tinta: ROSSO, pallino: ROSSO }
+      return { testo: t('manca una fonte'), tinta: ROSSO, pallino: ROSSO }
     case 'guaio':
       return { testo: t('l’ultima volta è andata storta'), tinta: ROSSO, pallino: ROSSO }
     case 'muta':

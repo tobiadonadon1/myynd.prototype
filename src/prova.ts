@@ -94,7 +94,7 @@ export function intestazione(p: RiassuntoProva): Intestazione {
     case 'in_coda': return riga(p.davanti ? frasiProva.inCoda(p.davanti) : t('La provo sugli ultimi 30 giorni…'))
     case 'in_corso': return riga(t('La provo sugli ultimi 30 giorni…'))
     case 'senza_modello': return riga(t('Collega un modello per provarla.'), 'fonti')
-    case 'scollegata': return riga(t('manca una connessione'), 'collega')
+    case 'scollegata': return riga(t('manca una fonte'), 'collega')
     case 'basta_per_oggi': return riga(t('Sei prove oggi. La prossima domani.'))
     case 'fermata': return riga(p.al ? frasiProva.fermata(p.al) : t('La prova non è riuscita.'), 'riprova')
     case 'tetto': return riga(t('Fermata al tetto di spesa di oggi.'))
