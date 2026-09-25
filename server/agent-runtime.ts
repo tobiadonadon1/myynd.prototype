@@ -34,8 +34,36 @@ export function runtimeCandidates(id: RuntimeId, home = homedir()): string[] {
   return [join(home, '.local', 'bin', id), `/opt/homebrew/bin/${id}`, `/usr/local/bin/${id}`]
 }
 
+/*
+ * P10 · la risposta si tiene: due `--help` e un `--version` per ogni volta
+ * che la pagina chiedeva «c'è Claude Code?» erano secondi. Un runtime trovato
+ * vale dieci minuti, finché il file resta lo stesso (percorso vero, data,
+ * dimensione); uno che manca quindici secondi, così installarlo si vede presto.
+ */
+const TROVATO_MS = 10 * 60_000
+const MANCA_MS = 15_000
+const giaVisti = new Map<string, { quando: number; firma: string | null; esito: RuntimeDetection }>()
+async function firmaDi(path: string | null): Promise<string | null> {
+  if (!path) return null
+  try { const vero = await realpath(path); const s = await lstat(vero); return `${vero}·${s.mtimeMs}·${s.size}` } catch { return null }
+}
+/** Per le prove: dimentica le risposte tenute. */
+export function dimenticaRuntime() { giaVisti.clear() }
+
 export async function detectRuntime(id: RuntimeId, candidates = runtimeCandidates(id)): Promise<RuntimeDetection> {
   if (OSPITATO) return { id, executable: null, status: 'missing', reason: 'Local agent runtimes require the desktop.' }
+  const chiave = `${id}|${candidates.join('|')}`
+  const visto = giaVisti.get(chiave)
+  if (visto) {
+    const eta = Date.now() - visto.quando
+    if (visto.esito.executable === null ? eta < MANCA_MS : eta < TROVATO_MS && visto.firma !== null && await firmaDi(visto.esito.executable) === visto.firma) return visto.esito
+  }
+  const esito = await rilevaDavvero(id, candidates)
+  giaVisti.set(chiave, { quando: Date.now(), firma: await firmaDi(esito.executable), esito })
+  return esito
+}
+
+async function rilevaDavvero(id: RuntimeId, candidates: string[]): Promise<RuntimeDetection> {
   for (const path of candidates) {
     try {
       await access(path, constants.X_OK)

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { applyHermesPatch, detectRuntime, hermesArguments, hermesDefaults, patchContext, runHermesPatch, runRuntimeProcess } from './agent-runtime.ts'
+import { applyHermesPatch, detectRuntime, dimenticaRuntime, hermesArguments, hermesDefaults, patchContext, runHermesPatch, runRuntimeProcess } from './agent-runtime.ts'
 import { executeInCopy } from './esecuzione-isolata.ts'
 
 async function fixture(fn: (root: string) => Promise<void>): Promise<void> {
@@ -82,4 +82,24 @@ test('cancelled runtime cannot apply a patch', async () => fixture(async root =>
   setTimeout(() => controller.abort(), 80)
   const result = await runRuntimeProcess(process.execPath, ['-e', 'setTimeout(()=>{},10000)'], root, process.env, controller.signal, 500)
   assert.equal(result.finished, false)
+}))
+
+test('P10 · la risposta si tiene: un runtime trovato non si riprova, finché il file non cambia', async () => fixture(async root => {
+  dimenticaRuntime()
+  const executable = join(root, 'claude')
+  const conta = join(root, 'lanci.txt')
+  const scrivi = (extra = '') => writeFile(executable, `#!/bin/sh\necho x >> "${conta}"\necho "--permission-mode --strict-mcp-config --disallowedTools --setting-sources ${extra}"\n`)
+  await scrivi(); await chmod(executable, 0o755)
+  const lanci = async () => (await readFile(conta, 'utf8').catch(() => '')).split('\n').filter(Boolean).length
+  assert.equal((await detectRuntime('claude', [executable])).status, 'supported')
+  const dopoUna = await lanci()
+  assert.equal((await detectRuntime('claude', [executable])).status, 'supported')
+  assert.equal(await lanci(), dopoUna, 'la seconda volta non ha lanciato niente')
+  // un aggiornamento (file diverso) si vede subito
+  await scrivi('--nuova'); await chmod(executable, 0o755)
+  await detectRuntime('claude', [executable])
+  assert.ok(await lanci() > dopoUna)
+  // e uno che manca resta «manca» per poco, poi si riguarda
+  assert.equal((await detectRuntime('claude', [join(root, 'non-c-e')])).status, 'missing')
+  dimenticaRuntime()
 }))
