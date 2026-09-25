@@ -59,10 +59,13 @@ function porta(p: ChildProcess, quale: RegExp, cosa: string): Promise<string> {
   })
 }
 const avviaServer = async (extra: Record<string, string> = {}) => {
-  const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
+  const prof = BANCO && process.env.MYYND_VELOCITA_PROFILO ? ['--cpu-prof', `--cpu-prof-dir=${process.env.MYYND_VELOCITA_PROFILO}`] : []
+  const p = spawn(process.execPath, [...prof, '--disable-warning=ExperimentalWarning', fileURLToPath(new URL('./index.ts', import.meta.url))], {
     env: { PATH: process.env.PATH, HOME: home, MYYND_DATI: casa, MYYND_PORT: '0', NODE_ENV: 'test', ANTHROPIC_BASE_URL: finto, ...extra },
     stdio: ['ignore', 'pipe', 'pipe']
   })
+  // nel banco il registro del server si tiene, per leggere le righe «myynd · tempi»
+  if (BANCO && process.env.MYYND_VELOCITA_REGISTRO) p.stdout!.on('data', c => { try { writeFileSync(process.env.MYYND_VELOCITA_REGISTRO!, String(c), { flag: 'a' }) } catch { /* solo un aiuto */ } })
   const url = `http://127.0.0.1:${await porta(p, /server su http:\/\/127\.0\.0\.1:(\d+)/, 'il server')}`
   return { p, url }
 }
@@ -335,6 +338,6 @@ test('il banco: occhio, chat e ciclo con ottomila documenti', { skip: !BANCO }, 
     attese.push(performance.now() - t0)
     await aspetta(50)
   }
-  tabella.push(['Mentre legge 400 file · GET /api/compiti p99', `${Math.round(p99(attese))} ms (${attese.length} richieste)`], ['Mentre legge 400 file · mediana', `${Math.round(mediana(attese))} ms`])
+  tabella.push(['Mentre legge 400 file · GET /api/compiti p99', `${Math.round(p99(attese))} ms (${attese.length} richieste)`], ['Mentre legge 400 file · mediana', `${Math.round(mediana(attese))} ms`], ['Mentre legge 400 file · le tre più lente', [...attese].sort((a, b) => b - a).slice(0, 3).map(x => `${Math.round(x)} ms`).join(', ')])
   console.log('\nbanco P10\n' + tabella.map(([a, b]) => `  ${a.padEnd(60)} ${b}`).join('\n') + '\n')
 })

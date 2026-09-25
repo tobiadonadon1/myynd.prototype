@@ -56,8 +56,8 @@ const INSERISCI = 'INSERT OR IGNORE INTO segnali (id, genere, quando, giorno, ch
 type Istruzione = ReturnType<typeof db.prepare>
 
 /** Scrive un segnale; torna `true` se era nuovo. Chi ne scrive migliaia di fila passa l'istruzione preparata una volta. */
-export function scrivi(s: Segnale, ins: Istruzione = db.prepare(INSERISCI)): boolean {
-  const giorno = s.giorno ?? fuso.giornoIn(new Date(s.quando))
+export function scrivi(s: Segnale, ins: Istruzione = db.prepare(INSERISCI), fusoOra?: string): boolean {
+  const giorno = s.giorno ?? fuso.giornoIn(new Date(s.quando), fusoOra)
   const r = ins.run(s.id, s.genere, s.quando, giorno, s.chi ?? null, s.progetto ?? null, s.ref ?? null, s.valore ?? null, s.dati ? JSON.stringify(s.dati) : null)
   return Number(r.changes) > 0
 }
@@ -152,7 +152,7 @@ export function indirizziDi(destinatari: string | null | undefined): string[] {
   return String(destinatari ?? '').split(/[,;]/).map(x => indirizzoAttenzione(x)).filter(Boolean)
 }
 
-type Attrezzi = { miei: Set<string>; ricostruito: boolean; ins: Istruzione; progettoDi: (testo: string) => string | null }
+type Attrezzi = { miei: Set<string>; ricostruito: boolean; ins: Istruzione; progettoDi: (testo: string) => string | null; fuso: string }
 
 function scriviDocPosta(d: DocPosta, a: Attrezzi): 'arrivata' | 'inviata' | null {
   if (!d.quando) return null
@@ -163,7 +163,7 @@ function scriviDocPosta(d: DocPosta, a: Attrezzi): 'arrivata' | 'inviata' | null
     return scrivi({
       id: `posta.inviata|${d.id}`, genere: 'posta.inviata', quando: d.quando, chi: destinatari[0] ?? null, ref: d.id,
       dati: { messageId: d.messageId, risponde: d.risponde, filo: d.filo, destinatari, ...(a.ricostruito ? { ricostruito: true } : {}) }
-    }, a.ins) ? 'inviata' : null
+    }, a.ins, a.fuso) ? 'inviata' : null
   }
   if (d.massa === 1 || !autore || mittenteAutomatico(d.autore ?? autore)) return null
   const titolo = String(d.titolo ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
@@ -175,7 +175,7 @@ function scriviDocPosta(d: DocPosta, a: Attrezzi): 'arrivata' | 'inviata' | null
       richiesta: contieneRichiesta(`${titolo} ${String(d.corpo ?? '').slice(0, 1500)}`),
       ...(a.ricostruito ? { ricostruito: true } : {})
     }
-  }, a.ins) ? 'arrivata' : null
+  }, a.ins, a.fuso) ? 'arrivata' : null
 }
 
 /** Il primo ripasso dell'indice è ancora a metà. */
@@ -221,7 +221,8 @@ export function raccogliPosta(adesso = new Date(), o: { tutto?: boolean } = {}):
   let cursore = store.cursore(CURSORE_POSTA)
   if (cursore === null) { store.segnaCursore(CURSORE_RIPASSO, '1'); store.segnaCursore(CURSORE_POSTA, ''); cursore = '' }
   const ricostruito = ripassoInCorso()
-  const a: Attrezzi = { miei: mieiIndirizzi(), ricostruito, ins: db.prepare(INSERISCI), progettoDi: cercatoreDiProgetti() }
+  // P10 · il fuso si legge una volta: letto per ogni mail era la configurazione riletta dal disco migliaia di volte (150 ms di ciclo fermo)
+  const a: Attrezzi = { miei: mieiIndirizzi(), ricostruito, ins: db.prepare(INSERISCI), progettoDi: cercatoreDiProgetti(), fuso: fuso.fusoDi() }
   const conta = { arrivate: 0, inviate: 0 }
   // Si cammina per (indicizzato, rid): una lettura scrive migliaia di righe con lo
   // stesso `indicizzato`, e «maggiore del cursore» ne salterebbe metà a ogni

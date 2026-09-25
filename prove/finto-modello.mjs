@@ -192,7 +192,7 @@ const server = createServer(async (req, res) => {
   registra({
     quando: new Date().toISOString(), modello, stream: !!corpo.stream, regola: s.regola,
     formato: corpo.response_format?.type ?? null, attrezzi: Array.isArray(corpo.tools) ? corpo.tools.length : 0,
-    ...(corpo.max_tokens !== undefined ? { max_tokens: corpo.max_tokens } : {}),
+    ...((corpo.max_tokens ?? corpo.max_completion_tokens) !== undefined ? { max_tokens: corpo.max_tokens ?? corpo.max_completion_tokens } : {}),
     ...(corpo.options?.num_predict !== undefined ? { num_predict: corpo.options.num_predict, num_ctx: corpo.options.num_ctx } : {}),
     system: s.system, utente: s.utente, risposta: s.testo
   })
