@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { riflua, senzaTrattini, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
+import { riflua, senzaTrattini, senzaTrattiniFuoriCodice, senzaCodice, sembraInglese, sembraItaliano, linguaSbagliata, soloDomanda, tutteLeDomande } from './testo.ts'
 
 test('la frase spezzata dalla larghezza della pagina torna intera', () => {
   const pdf = [
@@ -248,3 +248,12 @@ test('tutteLeDomande tiene tutte le domande, fino a tre, pulite e senza doppioni
   assert.equal(tutteLeDomande('Non ho trovato niente.'), soloDomanda('Non ho trovato niente.'))
 })
 
+
+test('senzaTrattiniFuoriCodice pulisce la prosa e lascia stare il codice, a blocchi e fra apici', () => {
+  assert.equal(senzaTrattiniFuoriCodice('Use this:\n```\nx = a — b\n```\nDone — really.'), 'Use this:\n```\nx = a — b\n```\nDone. Really.')
+  assert.equal(senzaTrattiniFuoriCodice('Inline `a — b` stays — ok'), 'Inline `a — b` stays. Ok')
+  assert.equal(senzaTrattiniFuoriCodice('Niente codice — solo prosa'), 'Niente codice. Solo prosa')
+  const c = senzaCodice('a `b[1]` c')
+  assert.ok(!c.testo.includes('b[1]'))
+  assert.equal(c.rimetti(c.testo), 'a `b[1]` c')
+})

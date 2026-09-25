@@ -29,6 +29,7 @@ import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, si
 import { PreferenzeOsservatore } from './PreferenzeOsservatore'
 import './preferenze.css'
 import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
+import { ProvaRisposte } from './ProvaRisposte'
 
 /** Una scheda: il titolo è la gerarchia, e sotto ci sta quello che si tocca. */
 function Scheda({ titolo, larga, quieta, children }: {
@@ -329,6 +330,8 @@ function Uso() {
           })}
         </div>
       )}
+      {/* la prova delle risposte (P7): l'interruttore e la riga di stato, solo con un insieme */}
+      <ProvaRisposte />
       {guaio && <div className="prefs-stato rame">{guaio}</div>}
     </Scheda>
   )

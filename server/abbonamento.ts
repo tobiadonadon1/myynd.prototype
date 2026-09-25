@@ -351,9 +351,24 @@ function conLoSchema(system: string, formato?: object): string {
  * domani si aggiunge un attrezzo da negare, si aggiunge per entrambe: il modo
  * in cui un recinto si buca è che qualcuno ne costruisca un secondo.
  */
+/**
+ * Un `claude` che non conosce `--no-session-persistence`.
+ *
+ * Stato della macchina, non della persona: la versione di Claude Code è una
+ * sola. Si scopre alla prima chiamata che cade per quel motivo, si ritenta
+ * quella chiamata senza l'opzione, e da lì in poi non si passa più.
+ */
+let senzaPersistenzaNo = false
+const NON_CONOSCE_LA_PERSISTENZA = /no-session-persistence/i
+/** Per le prove: dimentica quello che ha imparato sulla versione di `claude`. */
+export function dimenticaLaVersione() { senzaPersistenzaNo = false }
+
 function argomenti(system: string, uscita: 'json' | 'stream-json', modello?: string): string[] {
   return [
     '-p',
+    // Niente trascrizioni delle chiamate di Myynd sotto ~/.claude/projects:
+    // sono copie del suo materiale, e non le legge nessuno
+    ...(senzaPersistenzaNo ? [] : ['--no-session-persistence']),
     '--restricted',
     '--output-format', uscita,
     // `--include-partial-messages` senza `--verbose` non manda niente: la
@@ -443,7 +458,18 @@ export async function chiedi(o: {
 
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
-  return await new Promise<string>((risolvi, rifiuta) => {
+  try {
+    return await lanciaIntero(exe, sistema, domanda, o)
+  } catch (e) {
+    // una versione vecchia che non conosce l'opzione: si ritenta senza, una volta
+    if (senzaPersistenzaNo || !(e instanceof Error) || !NON_CONOSCE_LA_PERSISTENZA.test(e.message)) throw e
+    senzaPersistenzaNo = true
+    return await lanciaIntero(exe, sistema, domanda, o)
+  }
+}
+
+function lanciaIntero(exe: string, sistema: string, domanda: string, o: { attesa: number; modello?: string; lavoro?: string }): Promise<string> {
+  return new Promise<string>((risolvi, rifiuta) => {
     const p = spawn(exe, argomenti(sistema, 'json', o.modello), { cwd: VUOTA, env: ambiente() })
 
     /*
@@ -534,7 +560,17 @@ export async function inStreaming(o: {
 
   try { mkdirSync(VUOTA, { recursive: true, mode: 0o700 }) } catch { /* c'è già */ }
 
-  return await new Promise<string>((risolvi, rifiuta) => {
+  try {
+    return await lanciaInStreaming(exe, domanda, o)
+  } catch (e) {
+    if (senzaPersistenzaNo || !(e instanceof Error) || !NON_CONOSCE_LA_PERSISTENZA.test(e.message)) throw e
+    senzaPersistenzaNo = true
+    return await lanciaInStreaming(exe, domanda, o)
+  }
+}
+
+function lanciaInStreaming(exe: string, domanda: string, o: { system: string; silenzio: number; onTesto: (pezzo: string) => void; lavoro?: string }): Promise<string> {
+  return new Promise<string>((risolvi, rifiuta) => {
     const p = spawn(exe, argomenti(o.system, 'stream-json'), { cwd: VUOTA, env: ambiente() })
 
     p.stdin.on('error', () => { /* se è morto prima, lo dice `close` */ })

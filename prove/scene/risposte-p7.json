@@ -1,0 +1,19 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Launch the Harbor invoice pilot with two suppliers" },
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "alias": ["nw"] }
+  ],
+  "file": [
+    { "nome": "Northwind release checklist.md", "testo": "# Northwind release checklist\n\nOwner: Priya Shah. Build 1.0.3 goes to App Review on 2 October 2026.\n\n- Fix the three account issues\n- Record the review video\n" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:701", "fonte": "posta", "tipo": "email", "titolo": "Harbor pilot kickoff", "corpo": "Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel. The fee is €4,800 for the first phase. Nora", "autore": "Nora Vance <nora@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-3d", "messageId": "k701@harbor.example", "filo": "k701@harbor.example" },
+    { "id": "posta:INBOX:702", "fonte": "posta", "tipo": "email", "titolo": "Consegna del logo Northwind", "corpo": "Ciao Alex, la consegna dei file del logo è confermata per venerdì 9 ottobre 2026. Il preventivo resta 1.200 € più IVA. Marco", "autore": "Marco Rossi <marco@studio-rossi.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-2d", "messageId": "l702@studio-rossi.example", "filo": "l702@studio-rossi.example" },
+    { "id": "posta:Sent:704", "fonte": "posta", "tipo": "email", "titolo": "Re: Harbor pilot kickoff", "corpo": "Thanks Nora, confirmed on our side. Alex", "autore": "Alex <alex@northwind.example>", "percorso": "Sent", "gruppo": "posta", "quando": "-2d", "inviato": true, "messageId": "s704@northwind.example", "risponde": "k701@harbor.example", "filo": "k701@harbor.example", "destinatari": "nora@harbor.example" },
+    { "id": "posta:INBOX:705", "fonte": "posta", "tipo": "email", "titolo": "Weekly digest: supplier news", "corpo": "This week in supplier news: three new marketplaces, one merger, and a webinar on invoicing. Unsubscribe at any time.", "autore": "Digest <news@supplierweekly.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-1d", "massa": true, "messageId": "d705@supplierweekly.example" }
+  ],
+  "risposte": { "insieme": "prove/risposte/domande.json", "attiva": true }
+}

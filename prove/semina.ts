@@ -47,6 +47,8 @@ type Scena = {
   compiti?: (Record<string, unknown> & { id: string; testo: string })[]
   domande?: { tema: string; testo: string; progetto?: string }[]
   riferimento?: string
+  /** P7: l'insieme delle domande della prova, copiato nel conto; `attiva` accende la prova settimanale. */
+  risposte?: { insieme?: string; attiva?: boolean }
   punto?: {
     progetti?: { progetto: string; novita: string; doc?: string }[]
     github?: { testo: string; doc?: string }[]
@@ -199,6 +201,20 @@ chi.dentro(conto.id, () => {
     store.apriDomanda({ tema: d.tema, testo: d.testo, spunto: [], progetto: progetto(d.progetto) })
   }
   if (scena.riferimento) riferimento.scrivi(scena.riferimento)
+
+  // — P7: inizio —
+  if (scena.risposte) {
+    if (scena.risposte.insieme) {
+      const dove = join(cfg.cartella(), 'valutazioni', 'risposte')
+      mkdirSync(dove, { recursive: true, mode: 0o700 })
+      // un documento del disco ha per id il suo percorso, e la casa finta cambia
+      // a ogni scena: «desktop:~/…» nell'insieme diventa la casa di questa scena
+      const insieme = readFileSync(resolve(QUI, '..', scena.risposte.insieme), 'utf8').replaceAll('desktop:~/', `desktop:${resolve(CASA)}/`)
+      writeFileSync(join(dove, 'domande.json'), insieme, { mode: 0o600 })
+    }
+    if (scena.risposte.attiva !== undefined) cfg.aggiorna({ provaRisposte: { attiva: scena.risposte.attiva } })
+  }
+  // — P7: fine —
 
   if (scena.punto) {
     const adesso = new Date().toISOString()

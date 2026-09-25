@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, chmodSync, copyFileSync, openSync, readSync, clo
 import { cartella } from './config.ts'
 import * as chi from './chi.ts'
 import { OSPITATO } from './ospitato.ts'
+import { etichettato } from './etichetta-uso.ts'
 import { radici, radice, termini } from './lingua.ts'
 import { dovePortare } from './scrivania.ts'
 import { contestoAttenzione, stessaRichiesta, mittenteAutomatico, indirizzoAttenzione, type ContestoAttenzione } from './rilevanza.ts'
@@ -2547,8 +2548,9 @@ export function segnaUso(u: Uso) {
    * Contare è accessorio; scrivere in un indice orfano no.
    */
   if (OSPITATO && !chi.adesso()) return
+  // con l'etichetta del contesto («prova:risposta»), se una prova sta girando: vedi etichetta-uso.ts
   db.prepare('INSERT INTO uso (quando, lavoro, motore, entrata, cache, uscita) VALUES (?,?,?,?,?,?)')
-    .run(new Date().toISOString(), u.lavoro, u.motore, u.entrata, u.cache, u.uscita)
+    .run(new Date().toISOString(), etichettato(u.lavoro), u.motore, u.entrata, u.cache, u.uscita)
 }
 
 export type Totale = { chiamate: number; entrata: number; cache: number; uscita: number }
@@ -2647,20 +2649,29 @@ export function eliminaChat(id: string) {
   db.prepare('DELETE FROM chat WHERE id = ?').run(id)
 }
 
-export function salvaMessaggio(m: { id: string; chat: string; ruolo: string; testo: string; fonti?: unknown }) {
-  db.prepare('INSERT INTO messaggi (id, chat, ruolo, testo, fonti, quando) VALUES (?,?,?,?,?,?)')
-    .run(m.id, m.chat, m.ruolo, m.testo, m.fonti ? JSON.stringify(m.fonti) : null, new Date().toISOString())
+export function salvaMessaggio(m: { id: string; chat: string; ruolo: string; testo: string; fonti?: unknown; verifica?: unknown }) {
+  db.prepare('INSERT INTO messaggi (id, chat, ruolo, testo, fonti, verifica, quando) VALUES (?,?,?,?,?,?,?)')
+    .run(m.id, m.chat, m.ruolo, m.testo, m.fonti ? JSON.stringify(m.fonti) : null, m.verifica ? JSON.stringify(m.verifica) : null, new Date().toISOString())
 }
 
 export function togliMessaggio(id: string) {
   db.prepare('DELETE FROM messaggi WHERE id = ?').run(id)
 }
 
-export function messaggi(chat: string) {
+/**
+ * `conVerifica`: anche il verbale di ogni risposta (`messaggi.verifica`, P7).
+ * La rotta e il client non lo chiedono; lo chiede il fascicolo, che deve
+ * portare tutto.
+ */
+export function messaggi(chat: string, conVerifica = false) {
   const righe = db.prepare('SELECT * FROM messaggi WHERE chat = ? ORDER BY quando, id').all(chat) as {
-    id: string; ruolo: string; testo: string; fonti: string | null
+    id: string; ruolo: string; testo: string; fonti: string | null; verifica: string | null
   }[]
-  return righe.map(r => ({ id: r.id, role: r.ruolo, text: r.testo, sources: r.fonti ? JSON.parse(r.fonti) : undefined }))
+  const leggi = (s: string | null) => { if (!s) return undefined; try { return JSON.parse(s) as unknown } catch { return undefined } }
+  return righe.map(r => ({
+    id: r.id, role: r.ruolo, text: r.testo, sources: r.fonti ? JSON.parse(r.fonti) : undefined,
+    ...(conVerifica ? { verifica: leggi(r.verifica) } : {})
+  }))
 }
 
 export function esisteChat(id: string): boolean {

@@ -115,7 +115,9 @@ test('direct named-goal questions return exact current saved facts without retri
   const first = await claude.rispondiInStreaming('What is my saved goal for H-Farm?', [], s => deltas.push(s))
   assert.match(first.testo, /H-Farm: Validate one internal support pilot\./)
   assert.equal(deltas.join(''), first.testo)
-  assert.deepEqual(first.fonti, [])
+  // una risposta presa dal registro porta il segno della memoria (P7): la fonte è il progetto che nomina
+  assert.deepEqual(first.fonti, [{ id: `memoria:progetto:${p.id}`, label: '[M] H-Farm', fonte: 'memoria' }])
+  assert.equal(first.verifica.via, 'scorciatoia')
   progetti.cambia(p.id, { obiettivo: 'Validate two workflows before building', stato: 'fermo' })
   const corrected = await claude.rispondi('Remind me of my goal for H-Farm.')
   assert.match(corrected.testo, /Validate two workflows before building/)

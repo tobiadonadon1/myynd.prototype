@@ -124,6 +124,35 @@ export function senzaTrattini(testo: string): string {
     .replace(new RegExp(SEGNAPOSTO, 'g'), '–')
 }
 
+const SEGNAPOSTO_CODICE = /(\d+)/g
+
+/**
+ * Il codice messo da parte: i blocchi ``` ``` e gli `apici`.
+ *
+ * Dentro ci sono parentesi quadre, lineette e spazi allineati che non sono
+ * segni né refusi: `items[0]` resta `items[0]`, `x = a — b` resta com'è, e
+ * `[1, 2, 3]` resta una lista. Al posto di ogni pezzo un segnaposto (area
+ * privata di Unicode) che nessuna regola tocca; `rimetti` li rimette al
+ * loro posto.
+ */
+export function senzaCodice(testo: string): { testo: string; rimetti(t: string): string } {
+  const pezzi: string[] = []
+  const t = testo.replace(/```[\s\S]*?(?:```|$)|`[^`\n]+`/g, m => { pezzi.push(m); return `${pezzi.length - 1}` })
+  return { testo: t, rimetti: s => s.replace(SEGNAPOSTO_CODICE, (_, i: string) => pezzi[Number(i)] ?? '') }
+}
+
+/**
+ * Via i trattini lunghi dalla prosa, non dal codice.
+ *
+ * Una risposta con un blocco di codice dentro ha lineette che sono sintassi
+ * o testo di un programma: `a — b` non è un inciso, e riscriverlo in
+ * «a. B» rompe quello che si copia. La prosa attorno si pulisce come sempre.
+ */
+export function senzaTrattiniFuoriCodice(testo: string): string {
+  const codice = senzaCodice(testo)
+  return codice.rimetti(senzaTrattini(codice.testo))
+}
+
 /*
  * Una domanda sola, e che si legga.
  *

@@ -2123,6 +2123,18 @@ export const apiP2 = {
 // — P6: fine —
 
 // — P7: inizio —
+/** Una fonte di una risposta, ancorata: chi, quando, e il passo che regge la frase. «[M] …» per la memoria. La stessa forma di `Fonte` in src/citazioni.ts e di `FonteAncorata` sul server. */
+export type FonteChat = {
+  id: string; label: string; fonte?: string; tipo?: string; autore?: string | null; quando?: string | null; inviato?: boolean; passo?: string
+  /** Un passo per ogni segno [n] di questa fonte, nell'ordine del testo; c'è solo quando i segni sono più di uno. */
+  passi?: (string | null)[]
+}
+/** La riga delle preferenze sulla prova delle risposte: `riga` è già nella lingua dell'app, scritta dal server. */
+export type ProvaRisposteStato = { insieme: boolean; attiva: boolean; riga: string | null; inCorso: boolean }
+export const provaRisposte = {
+  stato: () => json<ProvaRisposteStato>('/api/risposte/valutazione'),
+  attiva: (attiva: boolean) => json<{ ok: true; attiva: boolean }>('/api/risposte/attiva', { method: 'POST', body: JSON.stringify({ attiva }) })
+}
 // — P7: fine —
 
 // — P8: inizio —

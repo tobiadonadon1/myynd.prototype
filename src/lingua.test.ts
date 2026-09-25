@@ -163,6 +163,8 @@ const INTERNI = new Set([
   'manca il risultato',
   'Questa non è una conversazione su un progetto.',
   'non posso mettere niente in lista da qui',
+  // la prova delle risposte (P7) nega ogni strumento che scrive: torna al modello, non a una persona
+  'sola lettura in questa prova',
   // un'etichetta per una corsa persa contro il cronometro, presa lì accanto
   'troppo lento',
   // parla a chi impacchetta l'app, e succede prima che esista una finestra

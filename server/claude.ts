@@ -21,6 +21,7 @@ import { OSPITATO } from './ospitato.ts'
 import { attesaDi, attesaPrimaParola, chiedi, chiediJSON, collegato as claudeCollegato, conLaLingua, estraiJSON, inItaliano, modelloPer, motivo, motore, parametri, perIlCredito as senzaCredito, segnaSenzaCredito, segnaUso, SILENZIO_MAX, soloAbbonamento as conLAccountClaude } from './modello.ts'
 import * as abbonamento from './abbonamento.ts'
 import { delTetto } from './tetto.ts'
+import { ancora, eUnRifiuto, NON_CE_LHO, type FonteAncorata, type Verifica, type Via } from './ancoraggio.ts'
 import * as chatgpt from './chatgpt.ts'
 import { cerca, compito as compitoDi, documento, feedbackAttenzione, indirizzoDi, recenti, stessoFilo, type Concessione, type Documento } from './store.ts'
 import { rispostaA } from './filo.ts'
@@ -310,7 +311,7 @@ un documento per rispondere su ciò che ti ha detto. I fatti esterni richiedono
 fonti: se mancano, dillo invece di inventare. Distingui fatti e proposte.
 
 Per una domanda che richiede fatti dai documenti, una ricerca irrilevante non
-è una risposta: dì «Non ho trovato niente su questo». Questo non vale per
+è una risposta: dì {{RIFIUTO}}. Questo non vale per
 domande sulla conversazione o sui progetti già registrati. Non dire di cosa parlano
 quei documenti, non spiegare perché non c'entrano, non proporre dove cercare.
 E non nominare mai il materiale: niente «i documenti forniti», niente «le email
@@ -534,6 +535,11 @@ export function sistema(discorso = '', conLaLista = false, compatto = false, con
   // Chat needs concise instructions, even on a cloud provider. This switch
   // preserves the full saved memory, project context and task list.
   const pezzi = [compatto || conciso ? BASE_CORTA : BASE]
+  // La riga del rifiuto: in chat («conciso») è quella esatta della lingua
+  // dell'app, «Non ce l’ho.» / «I don’t have that.»; per il lavoro affidato
+  // (`svolgi`, che passa di qui senza `conciso`) resta la frase di sempre.
+  const riga = NON_CE_LHO[cfgLingua(c) === 'en' ? 'en' : 'it']
+  pezzi[0] = pezzi[0].replace('{{RIFIUTO}}', conciso ? `«${riga}»` : '«Non ho trovato niente su questo»')
 
   // La lingua sta in cima perché è la prima cosa che deve decidere, e perché
   // sotto ci sono le convinzioni — scritte nella lingua in cui gliele hai dette,
@@ -746,28 +752,6 @@ export function materiale(domanda: string, storico: Turno[], recinto?: string[] 
 }
 
 /**
- * Niente materiale, niente risposta.
- *
- * Prima qui c'era `recenti(8)`: senza risultati Myynd rispondeva comunque, su
- * otto documenti scelti per data e senza rapporto con la domanda. È esattamente
- * il modo di sbagliare che il prodotto non si può permettere — quindi non si
- * chiama nemmeno il modello.
- */
-function senzaMateriale(): { testo: string; fonti: Fonte[] } {
-  // in inglese anche questa: era l'unica frase dell'app che restava in
-  // italiano *dentro la chat*, ed è pure quella che si legge più spesso
-  const en = cfgLingua() === 'en'
-  return {
-    testo: recenti(1).length
-      ? (en ? 'I found nothing on this.' : 'Non ho trovato niente su questo.')
-      : (en
-        ? 'Your mind is still empty: connect a source and let me read something.'
-        : 'La tua mente è ancora vuota: collega una fonte e fammi leggere qualcosa.'),
-    fonti: []
-  }
-}
-
-/**
  * Quali fonti ha citato davvero.
  *
  * Il numero si legge con una regex ancorata: con `includes('[1]')` la citazione
@@ -814,6 +798,21 @@ export function materialeChat(domanda: string, storico: Turno[], compatto = fals
   return materiale(domanda, storico).slice(0, compatto ? DOCS_COMPATTI : DOCS_CHAT)
 }
 
+/**
+ * Le regole che valgono solo in chat, dopo `sistema()`: il rifiuto esatto,
+ * cercare prima di dirlo, e il segno della memoria. Costanti con un nome,
+ * così chi sposta il prompt le sposta intere.
+ */
+export const regolaRifiuto = (riga: string) =>
+  `\nSe il fatto chiesto non è in quello che hai letto, la risposta intera è «${riga}», più al massimo una frase corta che nomina la cosa che manca: niente cifre, date o nomi che non hai letto, niente dove hai cercato, niente dove cercare. Se una parte della domanda ha risposta, rispondi a quella con la citazione e di' in una frase quale parte non hai.`
+export const REGOLA_CERCA_PRIMA = '\nPrima di dire che non ce l’hai, cerca con le parole che userebbe chi ha scritto il documento, anche nell’altra lingua.'
+export const REGOLA_MEMORIA = '\nQuando una frase usa quello che sai di lei (ritratto, progetti, lista) e non un documento, chiudila con [M], una volta sola in tutta la risposta. [M] non è un numero di fonte: non va mai su un fatto preso da un documento.'
+/** La riga del rifiuto nella lingua dell'app. */
+export function rigaDelRifiuto(): string { return NON_CE_LHO[cfgLingua() === 'en' ? 'en' : 'it'] }
+function regoleChat(puoCercare: boolean): string {
+  return regolaRifiuto(rigaDelRifiuto()) + (puoCercare ? REGOLA_CERCA_PRIMA : '') + REGOLA_MEMORIA
+}
+
 const PIANO_SENZA_FONTI = 'Non ho trovato richieste assegnate attuali nelle fonti collegate per questo progetto. La copertura delle fonti è limitata: questo NON significa che la persona non debba nulla a nessuno. Usa l’obiettivo registrato per proporre passi pratici, indica che sono proposte e che lo stato attuale non è verificato. Non cercare vecchie menzioni per riempire i vuoti.'
 
 export function corpoRichiesta(domanda: string, storico: Turno[], docs: Documento[], conLaLista = false, compatto = false, puoCercare = !compatto, progettoInChat?: string, risultatoSalvato?: string): Anthropic.MessageCreateParamsNonStreaming {
@@ -846,7 +845,7 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
     // solo il materiale — riletto dalla cache costa un decimo.
     // la regola sui progetti sta con gli strumenti che la eseguono: senza
     // «aggiorna_progetto» in mano sarebbe un ordine che nessuno può eseguire
-    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + (conLaLista && puoCercare ? REGOLA_PROGETTI : '') + conversazioneProgetto + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: conLaLingua(sistema(discorso, conLaLista, compatto, true) + regoleChat(puoCercare) + (conLaLista && puoCercare ? REGOLA_PROGETTI : '') + conversazioneProgetto + (pianoAttuale ? '\nPer questo piano: gli obiettivi salvati sono intenzioni, non obblighi. Solo fonti attuali pertinenti e attività esplicitamente aperte possono provare una richiesta assegnata. Le risposte precedenti non provano lo stato attuale. Se non trovi richieste, di’ soltanto che non ne hai trovate nelle fonti collegate; non concludere che la persona non deve nulla a nessuno. Separa i passi proposti dagli impegni verificati.' : '') + (puoCercare ? '\nLe fonti iniziali sono estratti. Per leggere oltre usa cerca con il titolo della fonte: può restituire un estratto più ampio della stessa fonte, con lo stesso numero. Non dedurre assenza di un fatto da un estratto troncato.' : '\nIn questo passaggio non hai strumenti: usa il contesto disponibile e non dichiarare modifiche o azioni esterne.')), cache_control: { type: 'ephemeral' } }],
     messages: [
       ...conversazione.slice(-8).map(t => ({
         role: (t.ruolo === 'u' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -884,11 +883,11 @@ export function corpoRichiesta(domanda: string, storico: Turno[], docs: Document
               ? `Fra i suoi documenti non c'è niente che risponda. Se la domanda riguarda ` +
                 `la sua lista, i suoi progetti o quello che sai di lei, rispondi con quello ` +
                 `che hai qui sopra: è roba tua, non è materiale da cercare. Se invece la ` +
-                `risposta starebbe in un documento, dillo in una riga e basta.` +
+                `risposta starebbe in un documento, rispondi «${rigaDelRifiuto()}».` +
                 `\n\n---\n\nDomanda: ${domanda}`
               : `La prima ricerca non ha trovato documenti. Per la conversazione, i progetti ` +
                 `e le attività usa prima il contesto che hai già. Se servono fatti da una fonte, usa \`cerca\` con parole diverse, e se può essere scritto in ` +
-                `un'altra lingua, con quelle.\n\n---\n\nDomanda: ${domanda}`,
+                `un'altra lingua, con quelle. Se dopo aver cercato non c'è, rispondi «${rigaDelRifiuto()}».\n\n---\n\nDomanda: ${domanda}`,
           cache_control: { type: 'ephemeral' as const }
         }]
       }
@@ -958,33 +957,90 @@ export function salutoDiretto(domanda: string): { testo: string; fonti: Fonte[] 
   return { testo: `${en ? 'Hi' : 'Ciao'}${nome ? `, ${nome}` : ''}. ${en ? 'What would you like to work on?' : 'Su cosa vuoi lavorare?'}`, fonti: [] }
 }
 
+/** Quello che la chat torna: il testo pulito, le fonti ancorate, il verbale; `estratti` solo nella prova. */
+export type Risposta = { testo: string; fonti: FonteAncorata[]; verifica: Verifica; estratti?: Record<string, number> }
+
+/** C'è della memoria nel prompt: il ritratto, un progetto vivo, o una riga in lista. */
+export function haMemoria(): boolean {
+  return !!carta() || progetti.vivi().length > 0 || compitiPerIlModello(1).length > 0
+}
+
+/** I progetti vivi nella forma che `ancora` vuole per dare un nome a un [M]. */
+const progettiPerLAncora = () => progetti.vivi().map(p => ({ id: p.id, nome: p.nome, alias: p.alias }))
+
+/** Una risposta nata da un registro o da una regola, non dal modello: nessun documento, niente di scoperto. */
+function scorciatoia(testo: string, via: Via = 'scorciatoia', memoria = false, fonti: FonteAncorata[] = []): Risposta {
+  return { testo, fonti, verifica: { v: 1, via, ricominciata: false, citazioni: 0, memoria, nonValide: [], scoperti: [], rifiuto: eUnRifiuto(testo), senzaFonti: false } }
+}
+
+const scappa = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Il segno della memoria su una risposta presa dai progetti registrati.
+ *
+ * Le scorciatoie che rispondono dai registri (`panoramicaProgetti`,
+ * `obiettivoRegistrato`) non passano dal modello, e la regola sul [M] non le
+ * riguarda: il segno lo mette il codice, in fondo alla prima frase, prima del
+ * suo punto (come lo scrive il modello: «goal [M].»). Una prima riga senza un
+ * punto, «I tuoi progetti:», lo prende in fondo. La fonte punta al progetto
+ * se la risposta ne nomina uno solo, altrimenti alla Memoria.
+ */
+export function conSegnoMemoria(r: { testo: string }): Risposta {
+  const righe = r.testo.split('\n')
+  const i = righe.findIndex(x => x.trim())
+  if (i >= 0) {
+    const riga = righe[i].replace(/\s+$/, '')
+    // il primo punto che chiude una frase: seguito da uno spazio o dalla fine, così «1.0» resta intero
+    const m = riga.match(/[.!?]+(?=\s|$)/)
+    righe[i] = m && m.index !== undefined ? `${riga.slice(0, m.index).replace(/\s+$/, '')}[M]${riga.slice(m.index)}` : `${riga}[M]`
+  }
+  const testo = righe.join('\n')
+  const nominati = progettiPerLAncora().filter(p => [p.nome, ...p.alias].some(n =>
+    n.trim() && new RegExp(`(?<![\\p{L}\\p{N}])${scappa(n.trim())}(?![\\p{L}\\p{N}])`, 'iu').test(testo)))
+  const fonte: FonteAncorata = nominati.length === 1
+    ? { id: `memoria:progetto:${nominati[0].id}`, label: `[M] ${nominati[0].nome}`, fonte: 'memoria' }
+    : { id: 'memoria', label: '[M]', fonte: 'memoria' }
+  return scorciatoia(testo, 'scorciatoia', true, [fonte])
+}
+
+/** Tutto quello che il modello ha letto: il sistema e i turni, in un testo solo. */
+function tuttoIlLetto(system: unknown, messages: { content: unknown }[]): string[] {
+  return [testoDi(system), ...messages.map(m => testoDi(m.content))]
+}
+
 export async function rispondi(
   domanda: string,
   storico: Turno[] = []
-): Promise<{ testo: string; fonti: Fonte[] }> {
+): Promise<Risposta> {
   const saluto = salutoDiretto(domanda)
-  if (saluto) return saluto
+  if (saluto) return scorciatoia(saluto.testo)
   const salvati = salvaProgettiDallaChat(domanda)
-  if (salvati) return salvati
+  if (salvati) return scorciatoia(salvati.testo)
   const registrati = panoramicaProgetti(domanda)
-  if (registrati) return registrati
+  if (registrati) return conSegnoMemoria(registrati)
   const obiettivo = obiettivoRegistrato(domanda)
-  if (obiettivo) return obiettivo
+  if (obiettivo) return conSegnoMemoria(obiettivo)
   const m = motore()
-  if (!m) return { testo: SENZA_MOTORE_CHAT, fonti: [] }
+  if (!m) return scorciatoia(SENZA_MOTORE_CHAT, 'nessuno')
 
   const compatto = m.tipo === 'compatibile'
   const docs = materialeChat(domanda, storico, compatto)
-  const risposta = await m.crea(corpoRichiesta(domanda, storico, docs, false, compatto, false))
+  const b = corpoRichiesta(domanda, storico, docs, false, compatto, false)
+  const risposta = await m.crea(b)
   if (risposta.stop_reason === 'refusal') {
     // il corpo di un messaggio non passa da `t()`: qui la lingua la sceglie chi scrive
-    return { testo: leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', fonti: [] }
+    return scorciatoia(leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', m.tipo)
   }
   const testo = risposta.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text)
     .join('')
-  return { testo, fonti: fontiCitate(testo, docs) }
+  // senza `cerca` il materiale entra intero, fino a quattromila caratteri: è
+  // quello che `corpoRichiesta` manda quando non si può cercare
+  return ancora(testo, {
+    visti: docs, estratti: new Map(docs.map(d => [d.id, compatto ? ESTRATTO_COMPATTO : 4000])),
+    letto: tuttoIlLetto(b.system, b.messages).join('\n'), memoria: haMemoria(), progetti: progettiPerLAncora(), via: m.tipo
+  })
 }
 
 /**
@@ -1569,9 +1625,20 @@ export async function rispondiInStreaming(
    * risposta seguita dalla stessa risposta intera. Chi ascolta questo lo
    * traduce in un evento e il testo mostrato si azzera.
    */
-  onRicomincia?: () => void
-): Promise<{ testo: string; fonti: Fonte[] }> {
+  onRicomincia?: () => void,
+  /**
+   * `prova`: la chat vera, in sola lettura, per l'esame delle risposte (P7).
+   *
+   * Il prompt è quello della chat con gli strumenti in mano, la lista con
+   * gli id compresa, così la risposta è quella che darebbe dal vivo; ma ogni
+   * strumento che scrive torna un errore prima di toccare niente, e le
+   * scorciatoie che salvano non si guardano nemmeno. Torna anche `estratti`:
+   * quanti caratteri di ogni documento il modello ha visto.
+   */
+  opz?: { prova?: boolean }
+): Promise<Risposta> {
   segnale?.throwIfAborted()
+  const prova = !!opz?.prova
   // il passo si dice prima di farlo; chi guarda può anche non esserci più
   const passo = (testo: string) => { try { attrezzi?.onPasso?.(testo) } catch { /* chi guarda si arrangia */ } }
   if (attrezzi?.compitoId && richiestaRevisione(domanda)) {
@@ -1581,28 +1648,31 @@ export async function rispondiInStreaming(
       ? 'I’m revising it with your feedback. The previous version is saved; you’ll see the new one in your feed when it’s ready.'
       : 'Sto rivedendo il lavoro con le tue indicazioni. La versione precedente resta salvata; troverai quella nuova nel feed quando sarà pronta.'
     onTesto(testo)
-    return { testo, fonti: [] }
+    return scorciatoia(testo)
   }
   const saluto = salutoDiretto(domanda)
-  if (saluto) { onTesto(saluto.testo); return saluto }
+  if (saluto) { onTesto(saluto.testo); return scorciatoia(saluto.testo) }
   // «leggi le mie fonti», «quante fonti hai»: uno stato, non una domanda al
   // materiale. Prima del modello, e anche senza un modello.
   const sulleFonti = richiestaSulleFonti(domanda)
   if (sulleFonti) passo(sulleFonti.rileggi ? PASSI.fontiLettura : PASSI.fontiStato)
   const fonti = rispostaSulleFonti(domanda, attrezzi?.rileggiFonti)
-  if (fonti) { onTesto(fonti); return { testo: fonti, fonti: [] } }
-  const salvati = salvaProgettiDallaChat(domanda)
-  if (salvati) { onTesto(salvati.testo); return salvati }
+  if (fonti) { onTesto(fonti); return scorciatoia(fonti) }
+  // salva i progetti che dice: nella prova no, perché scrive
+  if (!prova) {
+    const salvati = salvaProgettiDallaChat(domanda)
+    if (salvati) { onTesto(salvati.testo); return scorciatoia(salvati.testo) }
+  }
   const registrati = panoramicaProgetti(domanda)
-  if (registrati) { onTesto(registrati.testo); return registrati }
+  if (registrati) { const r = conSegnoMemoria(registrati); onTesto(r.testo); return r }
   const obiettivo = obiettivoRegistrato(domanda)
-  if (obiettivo) { onTesto(obiettivo.testo); return obiettivo }
+  if (obiettivo) { const r = conSegnoMemoria(obiettivo); onTesto(r.testo); return r }
   const m = motore()
   // l'abbonamento è un modo di pagare Claude di meno: se ha scelto un altro
   // fornitore come motore, il lavoro va a lui e basta
   const suoAbbonamento = !chatgpt.scelto() && abbonamento.disponibile() && m?.tipo !== 'compatibile'
   if (!m && !suoAbbonamento) {
-    return { testo: SENZA_MOTORE_CHAT, fonti: [] }
+    return scorciatoia(SENZA_MOTORE_CHAT, 'nessuno')
   }
 
   /*
@@ -1616,6 +1686,13 @@ export async function rispondiInStreaming(
    */
   const compatto = m?.tipo === 'compatibile'
   const docs = materialeChat(domanda, storico, compatto)
+  // c'è della memoria nel prompt: decide se un [M] scritto dal modello vale
+  const memoria = haMemoria()
+  const vivi = progettiPerLAncora()
+  // l'account è caduto dopo aver già scritto: chi guarda ha buttato la mezza risposta
+  let ricominciata = false
+  const conEstratti = (r: Risposta, estratti: Map<string, number>): Risposta =>
+    prova ? { ...r, estratti: Object.fromEntries(estratti) } : r
 
   /**
    * La chat sul suo abbonamento.
@@ -1645,21 +1722,23 @@ export async function rispondiInStreaming(
     const conta = (pezzo: string) => { detto += pezzo.length; onTesto(pezzo) }
     try {
       const b = corpoRichiesta(domanda, storico, docs, false, false, false, attrezzi?.progetto)
-      const testo = await abbonamento.inStreaming({
-        // L'ha già avvolto `corpoRichiesta`, e si riavvolge qui: la funzione è
-        // idempotente apposta, e una garanzia sulla lingua deve vedersi dove il
-        // prompt parte, non due funzioni più in là.
-        system: conLaLingua(testoDi(b.system)),
-        // solo i turni veri e solo il testo: i blocchi servono alla cache
-        // dell'SDK, e di là non hanno dove andare
-        messages: b.messages.flatMap(m => {
-          const testo = testoDi(m.content)
-          return (m.role === 'user' || m.role === 'assistant') && testo ? [{ role: m.role, content: testo }] : []
-        }),
-        silenzio: SILENZIO_MAX,
-        onTesto: conta
+      // L'ha già avvolto `corpoRichiesta`, e si riavvolge qui: la funzione è
+      // idempotente apposta, e una garanzia sulla lingua deve vedersi dove il
+      // prompt parte, non due funzioni più in là.
+      const system = conLaLingua(testoDi(b.system))
+      // solo i turni veri e solo il testo: i blocchi servono alla cache
+      // dell'SDK, e di là non hanno dove andare
+      const messages = b.messages.flatMap(m => {
+        const testo = testoDi(m.content)
+        return (m.role === 'user' || m.role === 'assistant') && testo ? [{ role: m.role, content: testo }] : []
       })
-      return { testo, fonti: fontiCitate(testo, docs) }
+      const testo = await abbonamento.inStreaming({ system, messages, silenzio: SILENZIO_MAX, onTesto: conta })
+      // senza `cerca` il materiale entra intero: quattromila caratteri a documento
+      const estratti = new Map(docs.map(d => [d.id, 4000]))
+      return conEstratti(ancora(testo, {
+        visti: docs, estratti, letto: [system, ...messages.map(x => x.content)].join('\n'),
+        memoria, progetti: vivi, via: 'abbonamento'
+      }), estratti)
     } catch (e) {
       // il tetto di oggi non è un guasto dell'account, e la chiave non lo scavalca
       if (delTetto(e)) throw e
@@ -1668,7 +1747,7 @@ export async function rispondiInStreaming(
         e instanceof Error ? e.message : e)
       // è caduto dopo aver già scritto qualcosa: il motore qui sotto ricomincia
       // da capo, e senza questa riga le due risposte si accodavano
-      if (detto > 0) { try { onRicomincia?.() } catch { /* chi guarda si arrangia */ } }
+      if (detto > 0) { ricominciata = true; try { onRicomincia?.() } catch { /* chi guarda si arrangia */ } }
       // Con un motore in tasca si va avanti e non se ne accorge nessuno. Senza,
       // l'errore è la risposta: `index.ts` lo manda come `fase: errore` e toglie
       // la domanda rimasta orfana.
@@ -1679,19 +1758,25 @@ export async function rispondiInStreaming(
   // Arrivati qui il motore c'è di sicuro: senza, il ramo qui sopra ha già
   // risposto o lanciato. Il compilatore non può saperlo, e una riga che dice
   // una cosa vera costa meno di un `!` che la dà per scontata.
-  if (!m) return { testo: SENZA_MOTORE_CHAT, fonti: [] }
+  if (!m) return scorciatoia(SENZA_MOTORE_CHAT, 'nessuno')
 
   /**
    * Quello che ha letto, in ordine: la numerazione delle citazioni è la sua
    * posizione qui dentro, e un documento trovato al secondo giro prende il
    * numero dopo invece di ricominciare da uno.
+   *
+   * `estratti` dice quanti caratteri di ognuno ha visto: il primo giro un
+   * estratto, `cerca` la porzione larga. Il passo di una citazione si cerca
+   * solo lì dentro.
    */
   const visti: Documento[] = [...docs]
+  const estratti = new Map<string, number>(docs.map(d => [d.id, compatto ? ESTRATTO_COMPATTO : ESTRATTO_CHAT]))
   const ampliati = new Set<string>()
   const nuoviDa = (trovati: Documento[]) => {
     const freschi = evidenzePerPiano(domanda, trovati).filter(t => !visti.some(v => v.id === t.id))
     const da = visti.length + 1
     visti.push(...freschi)
+    for (const f of freschi) estratti.set(f.id, 4000)
     return { freschi, da }
   }
 
@@ -1722,15 +1807,19 @@ export async function rispondiInStreaming(
       .catch(e => { console.error('myynd · non sono riuscito a chiudere la chat sul progetto:', e instanceof Error ? e.message : e); return null })
   }
   const concluso = attrezzi?.risultatoSalvato || chiusura?.risultato
-  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto && !concluso ? [ATTREZZO_CONCLUDI] : [])] : [ATTREZZO_CERCA]
+  // nella prova gli strumenti si offrono come dal vivo, e si negano dopo: la
+  // risposta dev'essere quella che darebbe con gli strumenti in mano
+  const arnesi = locale ? [] : attrezzi ? [ATTREZZO_CERCA, ...STRUMENTI, ...(attrezzi.progetto && !concluso ? [ATTREZZO_CONCLUDI] : [])] : prova ? [ATTREZZO_CERCA, ...STRUMENTI] : [ATTREZZO_CERCA]
   // La lista va nel prompt insieme agli strumenti che la toccano, e per la
   // stessa ragione: sono due metà della stessa cosa.
-  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi, compatto, undefined, attrezzi?.progetto, concluso)
-  if (attrezzi && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
+  const base = corpoRichiesta(domanda, storico, docs, !!attrezzi || prova, compatto, undefined, attrezzi?.progetto, concluso)
+  if ((attrezzi || prova) && Array.isArray(base.system)) base.system.push({ type: 'text', text: contestoRevisioni() || 'No previous delivered work.' })
   if (chiusura && Array.isArray(base.system)) {
     base.system.push({ type: 'text', text: `Hai appena salvato, davvero, con lo strumento: il risultato da inseguire sul progetto è «${chiusura.risultato}»${chiusura.passi.length ? `, e in lista, sulla sua prima pagina, ci sono questi primi passi: ${chiusura.passi.map(p => `«${p}»`).join(', ')}` : ''}. Rispondi in due frasi al massimo, riprendendo le sue parole: cosa hai segnato come risultato, e che i passi sono nella sua lista sulla prima pagina. Nessuna domanda, nessun altro strumento.` })
   }
   const richiesta: Anthropic.MessageStreamParams = { ...base, tools: arnesi, ...(chiusura && arnesi.length ? { tool_choice: { type: 'none' } } : {}) }
+  // tutto quello che il modello legge, giro dopo giro: un fatto che sta qui non è scoperto
+  const letto: string[] = tuttoIlLetto(richiesta.system, richiesta.messages)
 
   /*
    * Prima di tutto: c'è qualcuno dall'altra parte?
@@ -1764,7 +1853,7 @@ export async function rispondiInStreaming(
     segnaUso('risposta', finale.usage, `giro ${giro + 1} · ${m.nome}`)
 
     if (finale.stop_reason === 'refusal') {
-      return { testo: leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', fonti: [] }
+      return scorciatoia(leggi().lingua === 'en' ? 'I cannot answer this one.' : 'Su questa richiesta non posso rispondere.', m.tipo)
     }
 
     testoTotale += finale.content
@@ -1781,6 +1870,12 @@ export async function rispondiInStreaming(
     // il passo, prima di ogni strumento: una frase per strumento, non una per chiamata
     for (const frase of new Set(chiamate.map(c => passoPer(c.name)))) if (frase) passo(frase)
     const risultati: Anthropic.ToolResultBlockParam[] = await Promise.all(chiamate.map(async c => {
+      // Nella prova si legge e basta: qualunque strumento che non sia `cerca`
+      // torna un errore prima che il suo esecutore venga anche solo guardato.
+      // La frase sta in `INTERNI` di lingua.test.ts: non la legge nessuno.
+      if (prova && c.name !== 'cerca') {
+        return { type: 'tool_result' as const, tool_use_id: c.id, is_error: true, content: 'sola lettura in questa prova' }
+      }
       try {
         if (c.name === 'cerca') {
           const q = String((c.input as { query?: string }).query ?? '').trim()
@@ -1788,15 +1883,16 @@ export async function rispondiInStreaming(
           const trovati = evidenzePerPiano(domanda, cerca(q, 8))
           const daAmpliare = trovati.filter(d => visti.some(v => v.id === d.id) && !ampliati.has(d.id))
           const { freschi, da } = nuoviDa(trovati)
-          const estratti = daAmpliare.map(d => {
+          const estrattiLarghi = daAmpliare.map(d => {
             ampliati.add(d.id)
+            estratti.set(d.id, 4000)
             return contesto([d], visti.findIndex(v => v.id === d.id) + 1)
           })
-          if (freschi.length) estratti.push(contesto(freschi, da))
+          if (freschi.length) estrattiLarghi.push(contesto(freschi, da))
           return {
             type: 'tool_result' as const, tool_use_id: c.id,
-            content: estratti.length
-              ? `Fonti lette o ampliate, con i numeri già assegnati:\n\n${estratti.join('\n\n---\n\n')}`
+            content: estrattiLarghi.length
+              ? `Fonti lette o ampliate, con i numeri già assegnati:\n\n${estrattiLarghi.join('\n\n---\n\n')}`
               : progettiPerPiano(domanda).length ? PIANO_SENZA_FONTI : 'Niente di nuovo con queste parole. Se il materiale potrebbe essere in un\'altra lingua, riprova con quelle parole.'
           }
         }
@@ -1860,6 +1956,8 @@ export async function rispondiInStreaming(
         }
       }
     }))
+    // quello che gli strumenti gli hanno detto, il modello l'ha letto
+    for (const r of risultati) if (typeof r.content === 'string') letto.push(r.content)
 
     // A successful revision already has a concrete queued result. Replace any
     // provisional streamed narration instead of asking the model to repeat it.
@@ -1870,14 +1968,16 @@ export async function rispondiInStreaming(
         : 'Sto rivedendo il lavoro con le tue indicazioni. La versione precedente resta salvata; troverai quella nuova nel feed quando sarà pronta.'
       if (onRicomincia) { onRicomincia(); onTesto(testo) }
       else if (!testoTotale) onTesto(testo)
-      return { testo, fonti: [] }
+      return scorciatoia(testo, m.tipo)
     }
 
     messaggi.push({ role: 'assistant', content: finale.content })
     messaggi.push({ role: 'user', content: risultati })
   }
 
-  return { testo: testoTotale, fonti: fontiCitate(testoTotale, visti) }
+  return conEstratti(ancora(testoTotale, {
+    visti, estratti, letto: letto.join('\n'), memoria, progetti: vivi, via: m.tipo, ricominciata
+  }), estratti)
 }
 
 /**

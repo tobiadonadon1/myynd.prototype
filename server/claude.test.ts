@@ -414,7 +414,10 @@ test('concise cloud chat preserves full saved memory, project goals and task ide
   assert.equal([...short.matchAll(/\[c-carico-\d+\]/g)].length, 20)
   const request = claude.corpoRichiesta(domanda, [], [], true)
   assert.match(claude.testoDi(request.system), /PRESERVE_EXPLICIT_RULE/)
-  assert.ok(claude.testoDi(request.system).length < full.length - 2000)
+  // al netto delle regole che valgono solo in chat (il rifiuto esatto, cerca
+  // prima, il segno della memoria: P7), che il prompt intero non porta
+  const regoleChat = claude.regolaRifiuto(claude.rigaDelRifiuto()) + claude.REGOLA_CERCA_PRIMA + claude.REGOLA_MEMORIA
+  assert.ok(claude.testoDi(request.system).length - regoleChat.length < full.length - 2000)
   progetti.chiudi(p.id)
   scaricaIlConto()
 })

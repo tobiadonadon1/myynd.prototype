@@ -25,6 +25,7 @@ import * as conti from './conti.ts'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
 import * as osservatore from './osservatore.ts'
+import * as risposteArchivio from './risposte-archivio.ts'
 
 /**
  * La cartella di questo conto si può cancellare?
@@ -65,11 +66,19 @@ export async function cancella(utente: string): Promise<Esito> {
   await cfg.cancella(utente)
 
   // 4. i file: l'indice, i documenti, le automazioni scritte da lei.
+  //    Prima le copie private della prova delle risposte, in tutt'e due i
+  //    casi: `togli` ferma anche la prova che sta girando in questo processo,
+  //    e senza quella fermata la prova continuava con le domande che
+  //    restavano, riapriva l'indice sotto la cartella appena tolta e la
+  //    faceva tornare, orfana, con dentro un mente.db nuovo
+  risposteArchivio.togli(dove)
   let file = false
   if (suaDavvero(dove)) {
     rmSync(dove, { recursive: true, force: true })
     file = true
   } else {
+    // la cartella resta, ma le copie private della prova delle risposte no:
+    // sono domande e risposte tratte dal suo materiale
     console.error(`myynd · il conto ${utente} è stato cancellato, ma i suoi file stanno in ${dove} — fuori da utenti/ — e li ho lasciati lì.`)
   }
 

@@ -1,9 +1,10 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Hov, useFocoDialogo } from './ui'
 import { frasi, lingua, loc, t } from './lingua'
 import { IconCerca } from './icons'
 import { leggibile } from './leggibile.ts'
+import { doveNelBlocco, trovaPasso } from './citazioni.ts'
 import type { Vals } from './vals'
 
 const VELO = (z: number, alpha: number, blur: number) => ({
@@ -16,8 +17,18 @@ export function Documento({ v }: { v: Vals }) {
   const d = v.doc
   const finestra = useRef<HTMLDivElement>(null)
   useFocoDialogo(finestra, v.chiudiDoc)
+  // il passo di una citazione: si evidenzia e si porta al centro, una volta, all'apertura
+  const evidenziato = useRef<HTMLElement>(null)
+  useEffect(() => { evidenziato.current?.scrollIntoView({ block: 'center' }) }, [d?.id, d?._passo])
   if (!d) return null
   const data = d.quando ? new Date(d.quando).toLocaleString(loc(), { dateStyle: 'long', timeStyle: 'short' }) : ''
+  const blocchi = leggibile(d.corpo)
+  const conPasso = d._passo ? trovaPasso(blocchi, d._passo) : -1
+  const marcato = (testo: string) => {
+    const dove = d._passo ? doveNelBlocco(testo, d._passo) : null
+    if (!dove) return testo
+    return <>{testo.slice(0, dove[0])}<mark ref={evidenziato} style={{ background: 'var(--selezione)', color: 'inherit', borderRadius: 3 }}>{testo.slice(dove[0], dove[1])}</mark>{testo.slice(dove[1])}</>
+  }
   return (
     <>
       <div onClick={v.chiudiDoc} style={VELO(48, 0.4, 4)} />
@@ -45,7 +56,7 @@ export function Documento({ v }: { v: Vals }) {
               documento. Il testo semplice non lo tocca: una mail esce riga
               per riga come è entrata. */}
           <div style={{ fontSize: 14, color: 'rgba(var(--inchiostro-rgb),.86)', marginTop: 26 }}>
-            {leggibile(d.corpo).map((b, i) => (
+            {blocchi.map((b, i) => (
               b.tipo === 'vuota' ? <div key={i} style={{ height: 13 }} />
                 : b.tipo === 'titolo' ? (
                   <div key={i} style={{ fontSize: '15px', fontWeight: 600, lineHeight: 1.5, marginTop: i ? 18 : 0, marginBottom: 2, color: 'var(--inchiostro)', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
@@ -54,7 +65,7 @@ export function Documento({ v }: { v: Vals }) {
                   // riquadro, e il foglio resta fermo
                   <pre key={i} style={{ margin: '10px 0', padding: '12px 14px', borderRadius: 8, background: 'rgba(var(--inchiostro-rgb),.05)', border: '1px solid rgba(var(--inchiostro-rgb),.09)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12.5px', lineHeight: 1.6, overflowX: 'auto', whiteSpace: 'pre' }}>{b.testo}</pre>
                 ) : (
-                  <div key={i} style={{ lineHeight: 1.75, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{b.testo}</div>
+                  <div key={i} style={{ lineHeight: 1.75, whiteSpace: 'pre-wrap', textWrap: 'pretty', overflowWrap: 'anywhere' }}>{i === conPasso ? marcato(b.testo) : b.testo}</div>
                 )
             ))}
           </div>
