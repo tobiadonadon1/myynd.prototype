@@ -35,6 +35,8 @@ function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: 
   const [fuoco, setFuoco] = useState(false)
   const [dalMouse, setDalMouse] = useState(false)
   const [posto, setPosto] = useState<Posto | null>(null)
+  // cresce a ogni scorrimento della colonna mentre il segno ha il fuoco: la nuvoletta si rimisura e lo segue
+  const [giro, setGiro] = useState(0)
   const segno = useRef<HTMLElement>(null)
   const nuvola = useRef<HTMLSpanElement>(null)
   const en = lingua() === 'en'
@@ -59,11 +61,17 @@ function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: 
     const ciSta = r.top - box.top >= alta + 8
     const top = ciSta ? r.top - alta - 8 : r.bottom + 8
     const left = Math.max(box.left + 8, Math.min(r.left + r.width / 2 - larga / 2, box.right - 8 - larga))
-    setPosto({ top, left, larga })
-    const chiudi = () => { setSopra(false); setFuoco(false) }
-    a?.addEventListener('scroll', chiudi, { passive: true })
-    return () => a?.removeEventListener('scroll', chiudi)
-  }, [aperta, passo, titolo, riga])
+    // un segno scorso fuori dalla colonna: la nuvoletta non si vede, il fuoco resta
+    setPosto(r.bottom < box.top || r.top > box.bottom ? null : { top, left, larga })
+    // Uno scorrimento chiude la nuvoletta del mouse; col fuoco la sposta e
+    // basta. Il Tab verso un segno sotto la piega fa scorrere la colonna da
+    // sé, e chiudere lì spegneva anche il fuoco: chi arrivava da tastiera
+    // trovava il segno senza anello e senza nuvoletta. Il fuoco se ne va
+    // solo col blur o con Esc.
+    const scorre = () => { setSopra(false); setGiro(g => g + 1) }
+    a?.addEventListener('scroll', scorre, { passive: true })
+    return () => a?.removeEventListener('scroll', scorre)
+  }, [aperta, passo, titolo, riga, giro])
 
   const tasti = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apri() }
