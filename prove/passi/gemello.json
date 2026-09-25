@@ -1,0 +1,20 @@
+[
+  { "clicca": "Open" },
+  { "aspetta": 900 },
+  { "scatta": "brief" },
+  { "clicca": "Yesterday I got" },
+  { "aspetta": 900 },
+  { "scatta": "memoria-come-lavori" },
+  { "testo": "memoria" },
+  { "passa": "You always answer Nora Vance" },
+  { "scatta": "riga-sopra" },
+  { "clicca": "why" },
+  { "aspetta": 300 },
+  { "scatta": "perche" },
+  { "clicca": "Your account" },
+  { "vai": "Preferences" },
+  { "clicca": "Account and app" },
+  { "aspetta": 600 },
+  { "scatta": "preferenze" },
+  { "testo": "preferenze" }
+]
