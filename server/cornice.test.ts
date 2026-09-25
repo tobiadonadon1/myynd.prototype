@@ -90,3 +90,14 @@ test('testoMostrato: senza la riga dell\'ipotesi solo quando la riga la mostra d
   assert.equal(testoMostrato(testo, []), testo)
   assert.equal(testoMostrato(null, ['x']), '')
 })
+
+test('un\'ipotesi attaccata alla firma, senza la riga vuota, è la riga per lei e non va a chi riceve', () => {
+  const attaccata = 'Done: the reply to Marco.\n\nHi Marco,\n\nsee you Friday.\n\nBest,\nAlex\nI assumed Friday for the call.'
+  assert.equal(rigaIpotesi(attaccata), 'I assumed Friday for the call.')
+  assert.equal(corpoPerChiRiceve(attaccata), 'Hi Marco,\n\nsee you Friday.\n\nBest,\nAlex')
+  // e la riga «Manca» attaccata, con il segnaposto nel corpo
+  const manca = 'Done: the quote.\n\nHi Nora,\n\nthe price is [to fill: price for 20 people].\n\nBest,\nAlex\nMissing: the price for 20 people.'
+  assert.equal(corpoPerChiRiceve(manca), 'Hi Nora,\n\nthe price is [to fill: price for 20 people].\n\nBest,\nAlex')
+  // (contro) una riga «Assuming …» in coda a una mail nuda è della mail
+  assert.equal(corpoPerChiRiceve('Hi Leo,\n\nThanks.\n\nBest,\nAlex\nAssuming you agree, we start Monday.'), 'Hi Leo,\n\nThanks.\n\nBest,\nAlex\nAssuming you agree, we start Monday.')
+})

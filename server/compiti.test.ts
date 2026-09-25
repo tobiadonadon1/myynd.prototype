@@ -1299,6 +1299,24 @@ test('P3 · un documento nativo bocciato dalla revisione visiva resta «chiede»
   o.smetti()
 })
 
+test('P3 · una consegna nativa (Pages) passata dalla revisione visiva tiene la sua riga «I assumed», come le altre', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  prova({
+    svolgi: async () => ({ testo: 'Done: the plan is in Pages.\n\nI assumed four weeks for the pilot.', fonti: [], eseguito: true, consegna: { app: 'Pages', titolo: 'Piano', percorso: '/tmp/piano.pages', revisione: { esito: 'pass', problemi: [] } } as never }),
+    chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda
+  })
+  const id = riga('Write the plan in Pages')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('pronto')
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.deepEqual(c.ipotesi, ['I assumed four weeks for the pilot.'])
+  assert.equal(c.consegna?.app, 'Pages')
+  assert.equal(lavoroDati.misura(id)!.mossa, 'produci')
+  o.smetti()
+})
+
 test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fissa, senza «chiede», e si riprende quando la posta si collega', async () => {
   const claude = await import('./claude.ts')
   const lavoroDati = await import('./lavoro-dati.ts')

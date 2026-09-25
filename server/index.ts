@@ -4439,7 +4439,9 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
   if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
   const testo = String(req.body?.testo ?? '').trim()
   if (!testo) return res.status(400).json({ errore: 'Scrivi cosa cambia.' })
-  if (c.stato !== 'pronto' || !c.ipotesi?.length) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
+  // partita dalla sua posta: la bozza non c'è più e la mail è già andata, non c'è più niente da cambiare (lo schermo non lo offre)
+  const partita = !!c.mandata && !!c.chiesto && c.mandata.quando >= c.chiesto
+  if (c.stato !== 'pronto' || !c.ipotesi?.length || partita) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
   const riga = c.ipotesi[0]
   try {
     let contata = true
@@ -4450,13 +4452,26 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
       // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi da cambiare
       lavoroDati.scriviIpotesi(c.id, null)
     } else {
-      store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${testo}` : testo })
+      // la nota dice cosa cambia e al posto di cosa: «Friday» da solo, senza
+      // l'ipotesi che corregge, chi rifà il lavoro non sa dove metterlo.
+      // Nella lingua dell'app, perché la riga la mostra mentre lavora
+      const en = cfg.lingua() === 'en'
+      const manca = /^(?:manca|mancano|missing)\b/i.test(riga)
+      const correzione = manca
+        ? (en ? `In place of «${riga}»: ${testo}` : `Al posto di «${riga}»: ${testo}`)
+        : (en ? `Instead of «${riga}»: ${testo}` : `Invece di «${riga}»: ${testo}`)
+      store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${correzione}` : correzione })
       store.cambiaStatoCompito(c.id, 'aperto')
       store.sbozzaCompito(c.id)
       compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
     }
     if (contata) lavoroDati.registraCorrezione(c.id)
-  } catch (e) { return errore(res, e) }
+  } catch (e) {
+    // un no che ha causato lei (la bozza non c'è più, la posta scollegata) è un 4xx nella lingua di casa, non un 500
+    const rifiuto = revisioni.rifiutoCorrezione(e)
+    if (rifiuto) return res.status(rifiuto.stato).json({ errore: rifiuto.errore })
+    return errore(res, e)
+  }
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
   compiti.imparaDallaRisposta(c, riga, testo, 'correzione')

@@ -28,14 +28,15 @@
     { "id": "c-b1", "testo": "Reply to Dana about the invoice", "quando": "oggi", "stato": "aperto" },
     {
       "id": "c-s1", "testo": "Reply to Leo about the logo files", "quando": "oggi", "doc": "posta:INBOX:503", "stato": "pronto", "modo": "tutto", "chiesto": "-1h",
-      "risultato": "Done: the reply to Leo.\n\nHi Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex",
+      "risultato": "Done: the reply to Leo.\n\nHi Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex\n\nI assumed he wants the SVG, PNG and PDF formats.",
+      "ipotesi": ["I assumed he wants the SVG, PNG and PDF formats."],
       "email": { "casella": { "stato": "salvata", "id": "d1", "url": "https://mail.example/d1" }, "a": "leo@studio.example", "oggetto": "Re: Logo files", "corpo": "Hi Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex", "conosciuto": true, "rispondeA": { "messageId": "l1@studio.example" } }
     },
     {
       "id": "c-v1", "testo": "Send Nora the quote for twenty people", "quando": "oggi", "stato": "pronto", "modo": "tutto", "chiesto": "-2h",
       "risultato": "Done: the quote to Nora.\n\nHi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex\n\nDelivery from the price list [1].\nMissing: the price for 20 people. I left it blank: the price list stops at twelve people and no mail from Nora names a budget for the larger group.",
       "ipotesi": ["Missing: the price for 20 people. I left it blank: the price list stops at twelve people and no mail from Nora names a budget for the larger group."],
-      "email": { "a": "nora@harbor.example", "oggetto": "Course quote for twenty people", "corpo": "Hi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex", "conosciuto": true }
+      "email": { "a": "nora@harbor.example", "oggetto": "Course quote for twenty people", "corpo": "Hi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex", "conosciuto": true, "allegato": { "id": "desktop:price-list-2026.md", "titolo": "price-list-2026.md" } }
     }
   ],
   "punto": { "progetti": [{ "progetto": "hb", "novita": "Nora asked for the kickoff notes.", "doc": "posta:INBOX:502" }], "risposte": [], "github": [], "daLeggere": [], "aggiornamenti": [] }

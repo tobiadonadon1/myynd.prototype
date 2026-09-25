@@ -30,18 +30,22 @@ test('con l\'app in inglese una risposta a Marco resta in italiano, e la bozza s
   const storta = 'Fatto: la nota.\n\nLa nota dice che il corso parte a novembre con dodici persone nella sede di Milano.\n\nHo supposto venerdì come scadenza.'
   store.scriviCompito({ id: 'c-storta', testo: 'Write the note', ordine: 'b' })
   store.default.prepare("UPDATE compiti SET stato = 'pronto', risultato = ?, ipotesi = ? WHERE id = 'c-storta'").run(storta, JSON.stringify(['Ho supposto venerdì come scadenza.']))
+  // la stessa bozza a cui «Cambia» ha tolto l'ipotesi (passata alla figlia): tradotta, l'ipotesi non torna
+  store.scriviCompito({ id: 'c-corretta', testo: 'Write the other note', ordine: 'c' })
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', risultato = ?, ipotesi = NULL WHERE id = 'c-corretta'").run(storta)
 
   const richieste: string[] = []
   compatibile.usaRete((async (_u, init) => {
     const corpo = JSON.parse(String(init?.body ?? '{}'))
     const utente = String((corpo.messages ?? []).find((m: { role: string }) => m.role === 'user')?.content ?? '')
     richieste.push(utente)
-    const righe = utente.includes('c-storta') ? [{ id: 'c-storta', testo: 'Done: the note.\n\nThe note says the course starts in November with twelve people at the Milan office.\n\nI assumed Friday as the deadline.' }] : []
+    const tradotta = 'Done: the note.\n\nThe note says the course starts in November with twelve people at the Milan office.\n\nI assumed Friday as the deadline.'
+    const righe = utente.includes('c-storta') ? [{ id: 'c-storta', testo: tradotta }, { id: 'c-corretta', testo: tradotta }] : []
     return Response.json({ id: 'c1', model: 'finto', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ righe }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } })
   }) as typeof fetch)
 
   const n = await traduci.inLingua('en')
-  assert.equal(n, 1)
+  assert.equal(n, 2)
   assert.ok(richieste.some(r => r.includes('c-storta')), 'la bozza storta non è stata mandata a tradurre')
   assert.ok(!richieste.some(r => r.includes('c-marco')), 'la risposta a Marco è stata mandata a tradurre')
   const marco = store.compito('c-marco')!
@@ -51,5 +55,8 @@ test('con l\'app in inglese una risposta a Marco resta in italiano, e la bozza s
   const tradotta = store.compito('c-storta')!
   assert.match(tradotta.risultato ?? '', /^Done: the note\./)
   assert.deepEqual(tradotta.ipotesi, ['I assumed Friday as the deadline.'])
+  const corretta = store.compito('c-corretta')!
+  assert.match(corretta.risultato ?? '', /^Done: the note\./)
+  assert.equal(corretta.ipotesi ?? null, null, 'l\'ipotesi tolta da «Cambia» è tornata con la lingua')
   assert.equal(lavoroDati.misura('c-storta'), null, 'tradurre non è un affido')
 })

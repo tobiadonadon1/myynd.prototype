@@ -132,6 +132,19 @@ export function corpoPerChiRiceve(testo: string): string {
     if (!ultime.length || !ultime.every(r => eDellaCornice(r, cornice))) break
     p.pop()
   }
+  // senza la riga vuota dopo la firma, l'ipotesi («I assumed …») o il «Manca»
+  // restano attaccati in coda all'ultimo paragrafo: sono la cornice lo stesso,
+  // e a chi riceve non vanno. Solo le righe forti, e solo dal fondo
+  if (p.length) {
+    const righe = p[p.length - 1].split('\n')
+    let fine = righe.length
+    while (fine > 0 && (!righe[fine - 1].trim() || IPOTESI_FORTE.test(righe[fine - 1].trim()) || (cornice.segnaposto && MANCA.test(righe[fine - 1].trim())))) fine--
+    if (fine < righe.length) {
+      const resto = righe.slice(0, fine).join('\n').trim()
+      if (resto) p[p.length - 1] = resto
+      else p.pop()
+    }
+  }
   return p.map(x => x.replace(CITAZIONE, '')).join('\n\n').trim()
 }
 

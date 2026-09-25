@@ -35,7 +35,7 @@ import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
-import { haSegnaposto, mandataValida, puoMandare, testoDellaBozza } from '../lavoro-affidato'
+import { haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -819,7 +819,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           <Testo testo={testo} fonti={c.fonti ?? []} aCapo />
         </div>
       )}
-      {c.stato === 'pronto' && c.ipotesi?.[0] && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
+      {siCambia(c) && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
         {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}

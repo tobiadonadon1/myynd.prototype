@@ -84,8 +84,11 @@ export function registraCorrezione(id: string) {
 
 /**
  * Un invio: dalla casella (SMTP), dalla sua posta (osservato), scritto da
- * lei («propria»), o copiato. Il primo vince. Una riga vecchia senza misure
- * ne riceve una, con l'affido alla data della delega.
+ * lei («propria»), o copiato. Il primo vince, con un'eccezione: una
+ * «propria» è una lettura del filo (una mail sua, non la bozza), e la bozza
+ * partita davvero dopo, da «Manda» o dalla sua posta, prende il suo posto.
+ * Una riga vecchia senza misure ne riceve una, con l'affido alla data della
+ * delega.
  */
 export function registraInvio(id: string, i: { via: 'smtp' | 'casella' | 'propria' | 'copia'; inviato: string; distanza?: number | null; parole?: number | null; classe?: string | null }): boolean {
   const c = store.compito(id)
@@ -93,8 +96,8 @@ export function registraInvio(id: string, i: { via: 'smtp' | 'casella' | 'propri
     .run(id, c?.chiesto ?? ora(), c?.modo ?? null, c?.origine || 'mano')
   const r = db.prepare(`
     UPDATE misure_compiti SET via = ?, inviato = ?, distanza = ?, parole = ?, classe = ?
-    WHERE compito = ? AND inviato IS NULL
-  `).run(i.via, i.inviato, i.distanza ?? null, i.parole ?? null, i.classe ?? null, id)
+    WHERE compito = ? AND (inviato IS NULL OR (via = 'propria' AND ? IN ('smtp', 'casella')))
+  `).run(i.via, i.inviato, i.distanza ?? null, i.parole ?? null, i.classe ?? null, id, i.via)
   return Number(r.changes) > 0
 }
 

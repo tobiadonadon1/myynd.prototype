@@ -56,7 +56,9 @@ test('una mail mandata dopo la consegna, che risponde al messaggio, segna la rig
   assert.equal(m.inviato, dopo.mandata!.quando)
   assert.ok(m.parole! > 5)
   assert.equal(imparate.length, 1, 'un ritocco si impara')
-  assert.equal(imparate[0][0], BOZZA)
+  // la coppia è pari: la firma («Alex») tolta da tutte e due le parti
+  assert.equal(imparate[0][0], BOZZA.replace(/\nAlex$/, ''))
+  assert.equal(imparate[0][1], 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,')
   // idempotente: al giro dopo non riscrive niente
   assert.equal(await invii.osserva(), 0)
   assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:61')
@@ -175,4 +177,62 @@ test('(contro) una mail già segnata su una riga non si abbina a un\'altra riga 
   const segnate = [a, b].map(c => store.compito(c.id)!.mandata?.doc ?? null)
   assert.deepEqual(segnate.filter(Boolean), ['posta:Sent:10'])
   assert.equal(imparate.length, 0)
+})
+
+test('(contro) una sua risposta corta nel filo prima della bozza non nasconde l\'invio vero: si sceglie la mail con il Message-ID della bozza, o la più vicina', async () => {
+  const c = riga('c-s9')
+  // prima una riga sua («arrivo»), poi la bozza di Myynd mandata com'era, con il suo Message-ID
+  mandata('posta:Sent:60', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  mandata('posta:Sent:61', { quando: oreFa(1), messageId: invii.idDellaBozza(c.id, 'posta:INBOX:503') })
+  const v = await invii.osservaUno(store.compito(c.id)!)
+  assert.ok(v && v.mandata && v.certezza === 'id', JSON.stringify(v))
+  assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:61')
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'casella')
+  assert.equal(m.classe, 'identico')
+  assert.equal(imparate.length, 0)
+
+  // senza il Message-ID vince la più vicina alla bozza, non la più vecchia
+  const d = riga('c-s10')
+  mandata('posta:Sent:62', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  mandata('posta:Sent:63', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  const w = await invii.osservaUno(store.compito(d.id)!)
+  assert.ok(w && w.mandata && w.certezza === 'filo', JSON.stringify(w))
+  assert.equal(store.compito(d.id)!.mandata?.doc, 'posta:Sent:63')
+  assert.equal(lavoroDati.misura(d.id)!.classe, 'ritocco')
+})
+
+test('una risposta sua vista al giro prima («propria») lascia il posto alla bozza partita dopo: mandata, e le misure dicono «casella»', async () => {
+  const c = riga('c-s11')
+  mandata('posta:Sent:64', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  assert.deepEqual(await invii.osservaUno(store.compito(c.id)!), { mandata: false, via: 'propria' })
+  assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
+  // al giro dopo, la bozza è partita davvero
+  mandata('posta:Sent:65', { quando: oreFa(1) })
+  assert.equal(await invii.osserva(), 1)
+  const dopo = store.compito(c.id)!
+  assert.equal(dopo.mandata?.doc, 'posta:Sent:65')
+  assert.equal(dopo.stato, 'pronto')
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'casella')
+  assert.equal(m.classe, 'identico')
+  assert.equal(m.inviato, dopo.mandata!.quando)
+  // e un altro giro non scrive più niente
+  assert.equal(await invii.osserva(), 0)
+})
+
+test('la coppia che si impara è pari: la firma manca da tutte e due le parti, non solo da quella mandata', async () => {
+  // cinque mail sue che finiscono con «Best,» e il nome: la firma comune è «Alex»
+  for (let i = 1; i <= 5; i++) {
+    store.salvaDocumenti([{ id: `posta:Sent:${100 + i}`, fonte: 'posta', tipo: 'email', titolo: `Mail ${i}`, inviato: true, quando: oreFa(24 * i), autore: 'Alex <alex@harbor.example>', corpo: `Hi,\n\nnote number ${i}.\n\nBest,\nAlex`, filo: `f-${i}` }])
+  }
+  const c = riga('c-s12')
+  mandata('posta:Sent:66', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  assert.ok(await invii.osservaUno(store.compito(c.id)!))
+  assert.equal(imparate.length, 1)
+  const [bozza, inviata] = imparate[0]
+  assert.doesNotMatch(bozza, /\nAlex\s*$/, 'la bozza imparata porta ancora la firma')
+  assert.doesNotMatch(inviata, /\nAlex\s*$/)
+  assert.match(bozza, /Best,\s*$/)
+  assert.match(inviata, /Best,\s*$/)
 })

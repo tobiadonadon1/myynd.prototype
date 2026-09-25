@@ -31,6 +31,16 @@ export function mandataValida(c: Pick<Compito, 'mandata' | 'chiesto'>): boolean 
   return !!c.mandata && !!c.chiesto && c.mandata.quando >= c.chiesto
 }
 
+/**
+ * La riga dell'ipotesi con «Cambia» si disegna solo dove cambiare serve a
+ * qualcosa: una riga pronta con un'ipotesi, e non ancora partita dalla sua
+ * posta. Partita, la bozza nella casella non c'è più e la mail è già andata
+ * con quello che diceva: un «Cambia» lì fallirebbe sempre.
+ */
+export function siCambia(c: Pick<Compito, 'stato' | 'ipotesi' | 'mandata' | 'chiesto'>): boolean {
+  return c.stato === 'pronto' && !!c.ipotesi?.[0] && !mandataValida(c)
+}
+
 /** Una correzione passa dalla revisione (riga figlia) quando c'è una bozza salvata nella posta o un file consegnato. */
 export function siRivede(c: Pick<Compito, 'email' | 'consegna'>): boolean {
   return c.email?.casella?.stato === 'salvata' || !!c.consegna

@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { appenaFinite, bloccoDi, eUnaMancanza, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siRivede } from './lavoro-affidato.ts'
+import { appenaFinite, bloccoDi, eUnaMancanza, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siCambia, siRivede } from './lavoro-affidato.ts'
 
 test('mandataValida: una mandata più vecchia della delega è di un giro prima', () => {
   assert.equal(mandataValida({ mandata: { doc: 'posta:Sent:61', quando: '2026-09-24T10:00:00.000Z', certezza: 'filo', ritocco: 0.1 }, chiesto: '2026-09-24T09:00:00.000Z' }), true)
@@ -58,4 +58,16 @@ test('testoDellaBozza: il testo della lista è il risultato senza la riga dell\'
   assert.equal(testoDellaBozza({ risultato, ipotesi: ['I assumed twelve people.'] }), 'Done: the quote.\n\nHi Nora,\n\nThe price is 890 EUR.\n\nBest,\nAlex\n\nPrice from the list [2].')
   assert.equal(testoDellaBozza({ risultato, ipotesi: null }), risultato)
   assert.equal(testoDellaBozza({ risultato: null, ipotesi: null }), '')
+})
+
+test('siCambia: la riga dell\'ipotesi con «Cambia» solo su una riga pronta con un\'ipotesi e non ancora partita dalla sua posta', () => {
+  const ipotesi = ['I assumed Friday as the deadline.']
+  const chiesto = '2026-09-24T09:00:00.000Z'
+  assert.equal(siCambia({ stato: 'pronto', ipotesi, mandata: null, chiesto }), true)
+  // partita dalla sua posta dopo la delega: la bozza non c'è più, «Cambia» fallirebbe sempre
+  assert.equal(siCambia({ stato: 'pronto', ipotesi, mandata: { doc: 'posta:Sent:61', quando: '2026-09-24T10:00:00.000Z', certezza: 'filo', ritocco: 0.1 }, chiesto }), false)
+  // una mandata di un giro prima non conta
+  assert.equal(siCambia({ stato: 'pronto', ipotesi, mandata: { doc: 'posta:Sent:61', quando: '2026-09-23T10:00:00.000Z', certezza: 'filo', ritocco: 0.1 }, chiesto }), true)
+  assert.equal(siCambia({ stato: 'pronto', ipotesi: null, mandata: null, chiesto }), false)
+  assert.equal(siCambia({ stato: 'chiede', ipotesi, mandata: null, chiesto }), false)
 })

@@ -106,8 +106,8 @@ before(async () => {
     // una bozza già partita dalla posta: la mandata è più recente della delega
     store.scriviCompito({ id: 'c-s1', testo: 'Reply to Leo about the logo files', ordine: chiavi.dopo(store.ultimoOrdine('oggi')), doc: 'posta:INBOX:503' })
     const email = { casella: { stato: 'salvata', id: 'd1' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere they are.\n\nBest', conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }
-    store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ?, mandata = ? WHERE id = 'c-s1'")
-      .run(new Date(Date.now() - 3_600_000).toISOString(), 'Done: the reply.\n\nHi Leo,\n\nHere they are.\n\nBest', JSON.stringify(email), JSON.stringify({ doc: 'posta:Sent:61', quando: new Date().toISOString(), certezza: 'filo', ritocco: 0.1 }))
+    store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ?, mandata = ?, ipotesi = ? WHERE id = 'c-s1'")
+      .run(new Date(Date.now() - 3_600_000).toISOString(), 'Done: the reply.\n\nHi Leo,\n\nHere they are.\n\nBest\n\nI assumed all three formats.', JSON.stringify(email), JSON.stringify({ doc: 'posta:Sent:61', quando: new Date().toISOString(), certezza: 'filo', ritocco: 0.1 }), JSON.stringify(['I assumed all three formats.']))
     // un file consegnato con un'ipotesi: «Cambia» passa dalla revisione
     store.scriviCompito({ id: 'c-l1', testo: 'Write the Q4 plan', ordine: chiavi.dopo(store.ultimoOrdine('oggi')) })
     store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, ipotesi = ?, consegna = ? WHERE id = 'c-l1'")
@@ -145,7 +145,7 @@ after(async () => {
 const h = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
 const post = async (via: string, corpo?: unknown) => { const r = await fetch(`${base}${via}`, { method: 'POST', headers: h, body: JSON.stringify(corpo ?? {}) }); return { stato: r.status, corpo: await r.json() as Record<string, unknown> } }
 const get = async (via: string) => { const r = await fetch(`${base}${via}`, { headers: h }); return { stato: r.status, corpo: await r.json() as Record<string, unknown> } }
-type Riga = { id: string; stato: string; ipotesi?: string[] | null; madre?: string | null; risultato?: string | null; modo?: string }
+type Riga = { id: string; stato: string; ipotesi?: string[] | null; madre?: string | null; risultato?: string | null; modo?: string; nota?: string | null }
 async function riga(id: string, finche: (c: Riga | undefined) => boolean, ms = 75000): Promise<Riga | undefined> {
   const fine = Date.now() + ms
   for (;;) {
@@ -173,6 +173,8 @@ test('«Cambia» su una riga semplice la rifà con la correzione, conta la corre
   assert.equal(r.stato, 200, JSON.stringify(r.corpo))
   const subito = ((r.corpo.compiti) as Riga[]).find(x => x.id === 'c-n1')
   assert.equal(subito?.stato, 'delegato')
+  // la nota dice cosa cambia e al posto di cosa, nella lingua dell'app: chi rifà il lavoro sa dove va la correzione
+  assert.equal(subito?.nota, 'Instead of «I assumed Friday as the deadline.»: Monday, not now')
   const rifatta = await riga('c-n1', c => c?.stato === 'pronto')
   assert.equal(rifatta?.stato, 'pronto')
   assert.match(rifatta?.risultato ?? '', /Monday, October 5/)
@@ -196,12 +198,15 @@ test('«Cambia» su un file consegnato apre una revisione figlia e lascia la rig
   assert.equal(figlia!.modo, 'tutto')
 })
 
-test('«Manda» su una bozza già partita dalla sua posta risponde 409, e la riga resta', async () => {
+test('«Manda» su una bozza già partita dalla sua posta risponde 409, e la riga resta; «Cambia» lì non ha niente da cambiare', async () => {
   const r = await post('/api/compiti/c-s1/invia')
   assert.equal(r.stato, 409)
   assert.equal(r.corpo.errore, 'L\'hai già mandata dalla tua posta.')
   const c = await riga('c-s1', () => true, 0)
   assert.equal(c?.stato, 'pronto')
+  // la mail è già andata con quello che diceva: il server dice di no come lo schermo, che non disegna «Cambia»
+  assert.deepEqual(await post('/api/compiti/c-s1/correggi', { testo: 'Only the SVG' }), { stato: 400, corpo: { errore: 'Questa riga non ha niente da cambiare.' } })
+  assert.deepEqual((await riga('c-s1', () => true, 0))?.ipotesi, ['I assumed all three formats.'])
 })
 
 test('la rotta «invia» manda, registra l\'invio via smtp misurato sul corpo dell\'email, e impara da quel corpo e non dal risultato intero', async () => {

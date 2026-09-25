@@ -566,7 +566,11 @@ async function svolgiUno(id: string, nativa: boolean) {
       lavoroDati.registraEsito(id, { mossa, genere, tipo, consegnato: new Date().toISOString() })
       await preparaLaMail(c, testo, fonti, { consegna: v?.consegna, candidati: claude.candidatiAllegato(lette, fonti) })
     } else {
-      lavoroDati.scriviIpotesi(id, null)
+      // una consegna nativa (Pages, Note) ha la sua ipotesi come le altre: si
+      // mostra e si cambia, e «Cambia» passa dalla revisione della consegna.
+      // Bocciata dalla revisione visiva, resta «chiede» e senza ipotesi
+      const riga = chiedeNativo ? null : rigaIpotesi(testo)
+      lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
       lavoroDati.registraEsito(id, { mossa: 'produci', genere: null, tipo, ...(chiedeNativo ? {} : { consegnato: new Date().toISOString() }) })
     }
 

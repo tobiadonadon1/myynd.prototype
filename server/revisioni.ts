@@ -114,6 +114,18 @@ export async function rivediDaCorrezione(id: string, feedback: string, avvia?: (
   return creaRevisione(parent, testo.slice(0, 8000), avvia, letture, { titolo: titoloOriginale(parent.testo) })
 }
 
+/**
+ * Un no della revisione che dipende da lei, detto nella lingua di casa e con
+ * lo stato giusto: la bozza salvata non c'è più (409), la posta è scollegata
+ * (400). Il resto (un guasto vero) torna null e resta un 500.
+ */
+export function rifiutoCorrezione(e: unknown): { stato: number; errore: string } | null {
+  const m = e instanceof Error ? e.message : String(e)
+  if (/mailbox draft was removed or sent/i.test(m)) return { stato: 409, errore: 'La bozza salvata nella tua posta non c\'è più.' }
+  if (/^Reconnect your email account/i.test(m)) return { stato: 400, errore: 'Collega la posta per rileggere la bozza salvata.' }
+  return null
+}
+
 /** Il compito com'era, senza le istruzioni di una revisione precedente. */
 export function titoloOriginale(testo: string): string {
   return testo.split('\n\nOriginal task: ').at(-1)?.trim() || testo

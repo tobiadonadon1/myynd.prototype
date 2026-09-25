@@ -25,7 +25,7 @@ import { PrioritaProgetto } from '../components/PrioritaProgetto'
 import { CAMPO, Scatola } from '../oggi/Scatola'
 import { RigaIpotesi } from '../oggi/RigaIpotesi'
 import { Testo } from '../Testo'
-import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi } from '../lavoro-affidato'
+import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siCambia } from '../lavoro-affidato'
 export { CAMPO, Scatola }
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
@@ -792,7 +792,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             // aperta, il lavoro intero si legge con le fonti in apice, senza la riga dell'ipotesi che sta già sotto
             ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={senzaRigaIpotesi(intero)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
             : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
-          {pronto && c.ipotesi?.[0] && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
+          {siCambia(c) && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
           {bloccata && <Bloccata v={v} />}
           <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}

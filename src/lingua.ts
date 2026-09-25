@@ -3059,6 +3059,8 @@ const EN: Record<string, string> = {
   'Questa riga non ha niente da cambiare.': 'This task has nothing to change.',
   'L\'hai già mandata dalla tua posta.': 'You already sent it from your mail.',
   'C\'è ancora un pezzo da completare.': 'There is still a blank to fill.',
+  'La bozza salvata nella tua posta non c\'è più.': 'The draft saved in your mail is gone.',
+  'Collega la posta per rileggere la bozza salvata.': 'Connect your mail to read the saved draft.',
   // — P3: fine —
 
   // — P4: inizio —
