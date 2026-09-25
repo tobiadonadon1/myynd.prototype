@@ -67,6 +67,11 @@ const argomenti = process.argv.slice(2)
 const fileScena = argomenti.find(a => !a.startsWith('--'))
 const iModello = argomenti.indexOf('--modello')
 const urlModello = iModello >= 0 ? argomenti[iModello + 1] : ''
+/** L'origine del modello finto (`http://127.0.0.1:<porta>`), per le scene P4 che
+ * servono un file statico da lì (`{{modello}}` in `p4.calendario.url`): la
+ * porta cambia a ogni giro (P4 ha la sua, l'integrazione un'altra), e un URL
+ * scritto a mano nella scena punterebbe sempre alla porta sbagliata altrove. */
+const origineModello = urlModello ? new URL(urlModello).origin : ''
 if (!fileScena) esci('manca la scena: prove/semina.ts <scena.json> [--modello <url>]')
 
 const DATI = process.env.MYYND_DATI
@@ -421,7 +426,7 @@ if (p4) {
   chi.dentro(conto.id, () => {
     const c = cfg.leggi()
     if (p4.onboarding === false) { c.onboarding = false; c.giro = false }
-    if (p4.calendario) c.calendario = { url: p4.calendario.url, ...(p4.calendario.nome ? { nome: p4.calendario.nome } : {}) }
+    if (p4.calendario) c.calendario = { url: p4.calendario.url.replace('{{modello}}', origineModello), ...(p4.calendario.nome ? { nome: p4.calendario.nome } : {}) }
     if (p4.senzaModello) { delete c.compatibile; delete c.motore }
     cfg.scrivi(c, { togli: p4.senzaModello ? ['compatibile', 'motore', 'credenzialiModelli'] : [] })
     if (p4.imbuto) imbuto.nasce()

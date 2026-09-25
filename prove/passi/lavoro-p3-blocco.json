@@ -1,9 +1,21 @@
 [
   {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }; const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const fatte = []; for (const id of ['c-p1', 'c-b1']) { const c = righe.find(x => x.id === id); if (c && c.stato === 'aperto' && !c.guaio) { await fetch('/api/compiti/' + id + '/delega', { method: 'POST', headers: h, body: JSON.stringify({ modo: 'tutto' }) }); fatte.push(id) } } return 'affidate: ' + (fatte.join(', ') || 'nessuna (già fatte)') })()"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const fine = Date.now() + 85000; for (;;) { const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const ferme = ['c-p1', 'c-b1'].map(id => righe.find(x => x.id === id)).filter(c => c && c.stato === 'delegato'); if (!ferme.length) return 'tutte ferme: ' + ['c-p1', 'c-b1'].map(id => { const c = righe.find(x => x.id === id); return id + '=' + (c ? c.stato : '?') + (c && c.guaio ? ' (' + c.guaio + ')' : '') }).join(' '); if (Date.now() > fine) return 'ancora al lavoro: ' + ferme.map(c => c.id).join(', '); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "aspetta": 600
+  },
+  {
     "scatta": "blocco"
   },
   {
     "testo": "blocco"
+  },
+  {
+    "js": "(() => { const riga = [...document.querySelectorAll('.task-aurora-row')].find(r => r.textContent.includes('Reply to Dana about the invoice')); if (!riga) return 'riga di c-b1 non trovata'; const corpo = riga.textContent.includes('Connect your mail') || riga.textContent.includes('pick it up from here'); const link = [...riga.querySelectorAll('a')].some(a => a.textContent.trim() === 'Go to Sources'); return 'corpo del blocco: ' + corpo + ' · Go to Sources: ' + link })()"
   },
   {
     "clicca": "Change: Write the kickoff note for the Harbor pilot"

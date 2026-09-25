@@ -15,7 +15,7 @@
   { "scatta": "casa-dopo" },
   { "clicca": "Your account" },
   { "vai": "Memory" },
-  { "js": "(() => { const s = document.querySelector('[data-sezione=cosa-ha-fatto]'); if (s) s.scrollIntoView(); return !!s })()" },
+  { "js": "(async () => { const fine = Date.now() + 3000; for (;;) { const s = document.querySelector('[data-sezione=cosa-ha-fatto]'); if (s) { s.scrollIntoView(); return true } if (Date.now() > fine) return false; await new Promise(r => setTimeout(r, 100)) } })()" },
   { "aspetta": 400 },
   { "scatta": "memoria" },
   { "testo": "memoria" },

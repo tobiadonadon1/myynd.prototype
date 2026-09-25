@@ -4,7 +4,7 @@ import { Hov, useFocoDialogo } from './ui'
 import { frasi, lingua, loc, t } from './lingua'
 import { IconCerca } from './icons'
 import { leggibile } from './leggibile.ts'
-import { doveNelBlocco, trovaPasso } from './citazioni.ts'
+import { doveNelBlocco, nomeFonteDoc, trovaPasso } from './citazioni.ts'
 import type { Vals } from './vals'
 
 const VELO = (z: number, alpha: number, blur: number) => ({
@@ -36,7 +36,7 @@ export function Documento({ v }: { v: Vals }) {
         style={{ position: 'absolute', top: 60, bottom: 60, left: '50%', transform: 'translateX(-50%)', width: 640, maxWidth: '86%', zIndex: 49, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 12px', color: 'var(--avorio)' }}>
           <span style={{ fontSize: 13, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.titolo}</span>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>{d.fonte}</span>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>{nomeFonteDoc(d.fonte, d.tipo)}</span>
           <button onClick={v.chiudiDoc} style={{ padding: '6px 13px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'rgba(var(--luce-rgb),.14)', color: 'var(--avorio)', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('Chiudi')}</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', background: 'var(--carta-alta)', borderRadius: 6, boxShadow: '0 40px 90px rgba(20,12,6,.5)', padding: '44px 48px' }}>
