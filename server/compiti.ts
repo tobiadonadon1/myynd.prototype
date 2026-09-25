@@ -43,7 +43,7 @@ import * as mani from './mani.ts'
 import * as ordine from './ordine.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as voce from './voce.ts'
-import { stendi } from './stesura.ts'
+import { stendi, type Stesa } from './stesura.ts'
 import { corpoPerChiRiceve, rigaIpotesi } from './cornice.ts'
 import { BLOCCHI, bloccoDalTesto, generaBlocco, MANCA_UN_DATO, tipoDiLavoro } from './domanda-sola.ts'
 
@@ -326,6 +326,15 @@ export function perProva(f: Partial<Ferri> | null) {
   ferri = f ? { ...VERI, ...f } : VERI
 }
 
+/**
+ * C'è lavoro dal vivo di questa persona, in fila o in corso? (P6)
+ *
+ * La prova e il vassoio aspettano: il suo lavoro affidato viene prima.
+ */
+export function occupatoPer(utente: string): boolean {
+  return inCorsoDi.has(utente) || coda.some(v => (v.utente ?? '') === utente)
+}
+
 async function svolgiUno(id: string, nativa: boolean) {
   // tutto dentro il try, compresa la lettura: `compito()` può fallire come
   // qualunque altra query, e se fallisce fuori di qui si porta via la coda
@@ -431,154 +440,7 @@ async function svolgiUno(id: string, nativa: boolean) {
       collegata: g => g === 'posta' ? ferri.postaCollegata() : g === 'file' ? !!cfg.leggi().desktop?.cartelle?.length : false
     })
     if (!stesa) return
-    let { testo } = stesa
-    const { fonti, verificaDocumenti, eseguito, consegna, mossa, genere, domanda, lette, verdetto, giri } = stesa
-    const fatti = stesa.fatti
-    /** Il lavoro per intero, prima che la riga ne tenga solo la chiusura: la cosa dopo si cerca da qui. */
-    const lavoroIntero = testo
-    /** Chiede lei: una domanda scritta, o un documento nativo la cui revisione visiva non è passata. */
-    const chiedeNativo = eseguito && !!consegna?.revisione && consegna.revisione.esito !== 'pass'
-    const chiede = mossa === 'chiedi' || chiedeNativo
-
-    /*
-     * Un blocco non è una domanda (decisioni P3): gli manca una fonte o un
-     * permesso, e la riga torna sua con una frase fissa che dice quale; si
-     * riprende da sola quando quella fonte si collega (`riprendiBloccati`).
-     * Un guaio è il secondo giro che si ferma ancora: la riga torna sua e lo
-     * dice. Né l'uno né l'altro contano come domanda.
-     */
-    if (mossa === 'blocco' || mossa === 'guaio') {
-      const frase = mossa === 'blocco'
-        ? BLOCCHI[bloccoDalTesto(testo) ?? (genere === 'permesso' ? 'permesso' : 'fonte')]
-        : MANCA_UN_DATO
-      lavoroDati.registraEsito(id, { mossa, genere })
-      ritentati.delete(chiave(id))
-      if (!store.guaioCompito(id, frase)) return
-      annuncia({ fase: 'guaio', id, guaio: frase })
-      return
-    }
-
-    /*
-     * Il lavoro finito è un file, non un testo incollato sotto la riga.
-     *
-     * Le sue parole, del ventuno settembre: «once the work was produced, he
-     * just pasted it under the task on my feed. That's not okay. He should
-     * tell me, "Hey, I saved it to your desktop"». Quindi una pagina scritta
-     * — una definizione, un piano, una proposta — si salva come file nel
-     * luogo delle consegne (`mani.vaSalvato` decide cosa è una pagina e cosa
-     * no: un messaggio da mandare resta sulla riga, e così una risposta
-     * corta), e sulla riga resta la frase che dice dove sta, più la riga
-     * per lei se c'era. Il luogo lo impara dalle sue parole: «save it to my
-     * Desktop» nel compito o nella risposta vale da quel momento in poi.
-     * Se il file non si può scrivere — un server, un disco che dice di no —
-     * il testo resta sulla riga com'era: meglio incollato che perso.
-     */
-    // è un messaggio se nasce dalla posta, se il compito è scrivere a
-    // qualcuno, o se la bozza ha un saluto o una firma: «write the plan»
-    // da solo non basta, o ogni pagina scritta resterebbe sulla riga
-    const messaggio = [c.doc, ...fonti.map(f => f.id)].some(x => !!x && x.startsWith('posta:'))
-      || EPISTOLARE.test(c.testo) || invio.sembraUnMessaggio('', testo)
-    let consegnaFile: store.ConsegnaCompito | null = null
-    if (!chiede && !eseguito && RILETTI.has(c.modo)) {
-      const dettoDaLei = mani.luogoNelTesto(`${c.testo}\n${claude.dettaglioDellaRiga(nota)}`)
-      const diPrima = mani.luogoPreferito()
-      const luogo = dettoDaLei ?? diPrima
-      const imparato = !!dettoDaLei && dettoDaLei !== diPrima
-      if (imparato) {
-        try { cfg.aggiorna({ consegne: { luogo } }); console.info(`myynd · consegne · ${id} · da oggi ${luogo}`) }
-        catch (e) { console.warn('myynd · non riesco a ricordare dove salvare:', e instanceof Error ? e.message : e) }
-      }
-      if (mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei })) {
-        try {
-          const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
-          const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo })
-          fatti.push({ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: salvato.percorso })
-          testo = mani.fraseDelFile(salvato, cfg.lingua(), imparato) + (perLei ? `\n\n${perLei}` : '')
-          consegnaFile = {
-            app: 'File', titolo: salvato.nome, percorso: salvato.percorso, dove: salvato.luogo,
-            ...(verdetto && verdetto.esito !== 'unavailable' ? { revisione: { esito: verdetto.esito, problemi: verdetto.problemi } } : {})
-          }
-          console.info(`myynd · consegna · ${id} · file · ${salvato.percorso}`)
-        } catch (e) {
-          console.warn(`myynd · compito ${id}: il lavoro è pronto, il file no —`, e instanceof Error ? e.message : e)
-        }
-      }
-    }
-
-    /*
-     * Quando chiede, sotto la riga ci va la domanda. Una sola, dal 24
-     * settembre, e davanti la riga di cosa ha visto, se c'è: le duecento
-     * parole del ragionamento restano dove sono nate (servono a
-     * `domandeDaFare`) e sulla riga compare la domanda sola.
-     */
-    const detto = mossa === 'chiedi' && domanda ? [stesa.visto, tutteLeDomande(domanda, 1)].filter(Boolean).join('\n') : testo
-
-    // Classification is asynchronous too: feedback arriving after drafting
-    // must still win before an automated current-email summary becomes ready.
-    const controlla = verificaDocumenti ?? [...fonti.map(f => f.id), ...(c.doc ? [c.doc] : [])]
-    if (!claude.verificaFontiSelezione(controlla, dato, `${c.testo}\n${nota ?? ''}`)) {
-      throw new Error('Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.')
-    }
-
-    if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
-      // Withdraw automatic work without inventing user dismissal feedback.
-      store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
-      annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
-    }
-
-    await verificaBaseRevisione(c)
-
-    // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
-    // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
-    if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
-    if (consegna) store.scriviConsegnaCompito(id, consegna as store.ConsegnaCompito)
-    else if (consegnaFile) store.scriviConsegnaCompito(id, consegnaFile)
-    // il verdetto si riscrive a ogni giro, anche quando non c'è: una riga
-    // riaffidata che stavolta chiede non deve portarsi dietro il «passa» di ieri
-    const revisione = verdetto ? { ...verdetto, giri } : null
-    store.scriviRevisioneCompito(id, revisione)
-    if (revisione) console.info(`myynd · revisione · ${id} · ${revisione.esito} · ${giri} giri`)
-    ritentati.delete(chiave(id))
-
-    const tipo = tipoDiLavoro({ testo: c.testo, modo: c.modo, consegna: consegna ?? consegnaFile, email: messaggio, codice: !!dato?.cartella || leManiSulCodice(c.testo, c.nota) })
-    if (mossa === 'chiedi') {
-      /*
-       * La domanda scritta: si conta qui e solo qui, sulla riga e nelle
-       * misure. Un documento nativo bocciato dalla revisione visiva, un
-       * codice che gira, una revisione della casella fallita non contano.
-       */
-      lavoroDati.contaDomanda(id)
-      lavoroDati.scriviIpotesi(id, null)
-      lavoroDati.registraEsito(id, { mossa, genere, tipo })
-      // le opzioni vengono dal materiale: il compito, la nota, e i documenti letti
-      const materialeDomande = [c.testo, nota ?? '', ...lette.slice(0, 6).map(did => {
-        const d = store.documento(did)
-        return d ? [d.autore ?? '', d.titolo, (d.corpo ?? '').slice(0, 4000)].filter(Boolean).join('\n') : ''
-      })].filter(Boolean).join('\n\n')
-      const righe = await ferri.domandeDaFare(c.testo, testo, { genere, materiale: materialeDomande }).catch(() => [])
-      if (righe.length && !richiamati.has(chiave(id))) store.chiediSuCompito(id, righe.slice(0, 1))
-    } else if (!eseguito) {
-      // e se è pronta, l'email lo è già: si annuncia dopo, così il «pronto»
-      // arriva con dentro a chi va — un gesto solo, non due attese
-      const riga = rigaIpotesi(testo)
-      lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
-      lavoroDati.scriviVoceScritta(id, v?.scritta ?? null)
-      lavoroDati.registraEsito(id, { mossa, genere, tipo, consegnato: new Date().toISOString() })
-      await preparaLaMail(c, testo, fonti, { consegna: v?.consegna, candidati: claude.candidatiAllegato(lette, fonti) })
-    } else {
-      // una consegna nativa (Pages, Note) ha la sua ipotesi come le altre: si
-      // mostra e si cambia, e «Cambia» passa dalla revisione della consegna.
-      // Bocciata dalla revisione visiva, resta «chiede» e senza ipotesi
-      const riga = chiedeNativo ? null : rigaIpotesi(testo)
-      lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
-      lavoroDati.registraEsito(id, { mossa: 'produci', genere: null, tipo, ...(chiedeNativo ? {} : { consegnato: new Date().toISOString() }) })
-    }
-
-    const fatto = store.compito(id)
-    if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
-    // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
-    // non deve aspettare una riga in più che quasi sempre non c'è
-    if (fatto?.stato === 'pronto') await proponiIlSeguito(c, lavoroIntero, progetto)
+    await dopoLaStesura(c, stesa, progetto, { nota, voce: v, fermato: () => richiamati.has(chiave(id)) })
   } catch (e) {
     if (richiamati.has(chiave(id))) return
     const guaio = e instanceof Error ? e.message : String(e)
@@ -604,6 +466,175 @@ async function svolgiUno(id: string, nativa: boolean) {
     }
     annuncia({ fase: 'guaio', id, guaio })
   }
+}
+
+/**
+ * Quello che succede dopo la stesura (P6): il file, la verifica delle fonti,
+ * il risultato sulla riga, la domanda o la mail, l'annuncio, la cosa dopo.
+ *
+ * Era la seconda metà di `svolgiUno`, nello stesso ordine. Sta qui a parte
+ * perché la stessa sequenza serve quando un risultato del vassoio di prova
+ * va in lista: una bozza promossa fa esattamente quello che fa una bozza
+ * nata dal vivo. Le misure di P3 restano dove erano, intrecciate ai passi.
+ */
+export async function dopoLaStesura(
+  c: store.Compito,
+  stesa: Stesa,
+  progetto: progetti.Progetto | null,
+  o: { nota: string | null; voce: voce.Voce | null; fermato: () => boolean }
+): Promise<void> {
+  const id = c.id
+  const nota = o.nota
+  const v = o.voce
+  const dato = c.attrezzi
+  let { testo } = stesa
+  const { fonti, verificaDocumenti, eseguito, consegna, mossa, genere, domanda, lette, verdetto, giri } = stesa
+  const fatti = stesa.fatti
+  /** Il lavoro per intero, prima che la riga ne tenga solo la chiusura: la cosa dopo si cerca da qui. */
+  const lavoroIntero = testo
+  /** Chiede lei: una domanda scritta, o un documento nativo la cui revisione visiva non è passata. */
+  const chiedeNativo = eseguito && !!consegna?.revisione && consegna.revisione.esito !== 'pass'
+  const chiede = mossa === 'chiedi' || chiedeNativo
+
+  /*
+   * Un blocco non è una domanda (decisioni P3): gli manca una fonte o un
+   * permesso, e la riga torna sua con una frase fissa che dice quale; si
+   * riprende da sola quando quella fonte si collega (`riprendiBloccati`).
+   * Un guaio è il secondo giro che si ferma ancora: la riga torna sua e lo
+   * dice. Né l'uno né l'altro contano come domanda.
+   */
+  if (mossa === 'blocco' || mossa === 'guaio') {
+    const frase = mossa === 'blocco'
+      ? BLOCCHI[bloccoDalTesto(testo) ?? (genere === 'permesso' ? 'permesso' : 'fonte')]
+      : MANCA_UN_DATO
+    lavoroDati.registraEsito(id, { mossa, genere })
+    ritentati.delete(chiave(id))
+    if (!store.guaioCompito(id, frase)) return
+    annuncia({ fase: 'guaio', id, guaio: frase })
+    return
+  }
+
+  /*
+   * Il lavoro finito è un file, non un testo incollato sotto la riga.
+   *
+   * Le sue parole, del ventuno settembre: «once the work was produced, he
+   * just pasted it under the task on my feed. That's not okay. He should
+   * tell me, "Hey, I saved it to your desktop"». Quindi una pagina scritta
+   * — una definizione, un piano, una proposta — si salva come file nel
+   * luogo delle consegne (`mani.vaSalvato` decide cosa è una pagina e cosa
+   * no: un messaggio da mandare resta sulla riga, e così una risposta
+   * corta), e sulla riga resta la frase che dice dove sta, più la riga
+   * per lei se c'era. Il luogo lo impara dalle sue parole: «save it to my
+   * Desktop» nel compito o nella risposta vale da quel momento in poi.
+   * Se il file non si può scrivere — un server, un disco che dice di no —
+   * il testo resta sulla riga com'era: meglio incollato che perso.
+   */
+  // è un messaggio se nasce dalla posta, se il compito è scrivere a
+  // qualcuno, o se la bozza ha un saluto o una firma: «write the plan»
+  // da solo non basta, o ogni pagina scritta resterebbe sulla riga
+  const messaggio = [c.doc, ...fonti.map(f => f.id)].some(x => !!x && x.startsWith('posta:'))
+    || EPISTOLARE.test(c.testo) || invio.sembraUnMessaggio('', testo)
+  let consegnaFile: store.ConsegnaCompito | null = null
+  if (!chiede && !eseguito && RILETTI.has(c.modo)) {
+    const dettoDaLei = mani.luogoNelTesto(`${c.testo}\n${claude.dettaglioDellaRiga(nota)}`)
+    const diPrima = mani.luogoPreferito()
+    const luogo = dettoDaLei ?? diPrima
+    const imparato = !!dettoDaLei && dettoDaLei !== diPrima
+    if (imparato) {
+      try { cfg.aggiorna({ consegne: { luogo } }); console.info(`myynd · consegne · ${id} · da oggi ${luogo}`) }
+      catch (e) { console.warn('myynd · non riesco a ricordare dove salvare:', e instanceof Error ? e.message : e) }
+    }
+    if (mani.vaSalvato({ risultato: testo, fatti, messaggio, chiesto: !!dettoDaLei })) {
+      try {
+        const { corpo, nota: perLei } = mani.rigaPerLei(mani.senzaChiusura(testo))
+        const salvato = ferri.salvaConsegna({ titolo: c.testo, testo: corpo, luogo })
+        fatti.push({ attrezzo: 'scrivi_file', esito: 'ok', dettaglio: salvato.percorso })
+        testo = mani.fraseDelFile(salvato, cfg.lingua(), imparato) + (perLei ? `\n\n${perLei}` : '')
+        consegnaFile = {
+          app: 'File', titolo: salvato.nome, percorso: salvato.percorso, dove: salvato.luogo,
+          ...(verdetto && verdetto.esito !== 'unavailable' ? { revisione: { esito: verdetto.esito, problemi: verdetto.problemi } } : {})
+        }
+        console.info(`myynd · consegna · ${id} · file · ${salvato.percorso}`)
+      } catch (e) {
+        console.warn(`myynd · compito ${id}: il lavoro è pronto, il file no —`, e instanceof Error ? e.message : e)
+      }
+    }
+  }
+
+  /*
+   * Quando chiede, sotto la riga ci va la domanda. Una sola, dal 24
+   * settembre, e davanti la riga di cosa ha visto, se c'è: le duecento
+   * parole del ragionamento restano dove sono nate (servono a
+   * `domandeDaFare`) e sulla riga compare la domanda sola.
+   */
+  const detto = mossa === 'chiedi' && domanda ? [stesa.visto, tutteLeDomande(domanda, 1)].filter(Boolean).join('\n') : testo
+
+  // Classification is asynchronous too: feedback arriving after drafting
+  // must still win before an automated current-email summary becomes ready.
+  const controlla = verificaDocumenti ?? [...fonti.map(f => f.id), ...(c.doc ? [c.doc] : [])]
+  if (!claude.verificaFontiSelezione(controlla, dato, `${c.testo}\n${nota ?? ''}`)) {
+    throw new Error('Una fonte è stata completata, scartata o non è più pertinente. Rileggi le fonti prima di riprovare.')
+  }
+
+  if (c.origine === 'iniziativa' && !fonteValida(c.doc)) {
+    // Withdraw automatic work without inventing user dismissal feedback.
+    store.cambiaStatoCompito(id, 'ritirato', 'Source changed or preparation paused')
+    annuncia({ fase: 'richiamato', id }); annunciaCambio(); return
+  }
+
+  await verificaBaseRevisione(c)
+
+  // `risultatoCompito` scrive solo se la riga è ancora affidata: se nel
+  // frattempo l'hai chiusa tu, la bozza in ritardo non la riapre
+  if (!store.risultatoCompito(id, detto, chiede ? [] : fonti, chiede ? 'chiede' : 'pronto')) return
+  if (consegna) store.scriviConsegnaCompito(id, consegna as store.ConsegnaCompito)
+  else if (consegnaFile) store.scriviConsegnaCompito(id, consegnaFile)
+  // il verdetto si riscrive a ogni giro, anche quando non c'è: una riga
+  // riaffidata che stavolta chiede non deve portarsi dietro il «passa» di ieri
+  const revisione = verdetto ? { ...verdetto, giri } : null
+  store.scriviRevisioneCompito(id, revisione)
+  if (revisione) console.info(`myynd · revisione · ${id} · ${revisione.esito} · ${giri} giri`)
+  ritentati.delete(chiave(id))
+
+  const tipo = tipoDiLavoro({ testo: c.testo, modo: c.modo, consegna: consegna ?? consegnaFile, email: messaggio, codice: !!dato?.cartella || leManiSulCodice(c.testo, c.nota) })
+  if (mossa === 'chiedi') {
+    /*
+     * La domanda scritta: si conta qui e solo qui, sulla riga e nelle
+     * misure. Un documento nativo bocciato dalla revisione visiva, un
+     * codice che gira, una revisione della casella fallita non contano.
+     */
+    lavoroDati.contaDomanda(id)
+    lavoroDati.scriviIpotesi(id, null)
+    lavoroDati.registraEsito(id, { mossa, genere, tipo })
+    // le opzioni vengono dal materiale: il compito, la nota, e i documenti letti
+    const materialeDomande = [c.testo, nota ?? '', ...lette.slice(0, 6).map(did => {
+      const d = store.documento(did)
+      return d ? [d.autore ?? '', d.titolo, (d.corpo ?? '').slice(0, 4000)].filter(Boolean).join('\n') : ''
+    })].filter(Boolean).join('\n\n')
+    const righe = await ferri.domandeDaFare(c.testo, testo, { genere, materiale: materialeDomande }).catch(() => [])
+    if (righe.length && !o.fermato()) store.chiediSuCompito(id, righe.slice(0, 1))
+  } else if (!eseguito) {
+    // e se è pronta, l'email lo è già: si annuncia dopo, così il «pronto»
+    // arriva con dentro a chi va — un gesto solo, non due attese
+    const riga = rigaIpotesi(testo)
+    lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
+    lavoroDati.scriviVoceScritta(id, v?.scritta ?? null)
+    lavoroDati.registraEsito(id, { mossa, genere, tipo, consegnato: new Date().toISOString() })
+    await preparaLaMail(c, testo, fonti, { consegna: v?.consegna, candidati: claude.candidatiAllegato(lette, fonti) })
+  } else {
+    // una consegna nativa (Pages, Note) ha la sua ipotesi come le altre: si
+    // mostra e si cambia, e «Cambia» passa dalla revisione della consegna.
+    // Bocciata dalla revisione visiva, resta «chiede» e senza ipotesi
+    const riga = chiedeNativo ? null : rigaIpotesi(testo)
+    lavoroDati.scriviIpotesi(id, riga ? [riga] : null)
+    lavoroDati.registraEsito(id, { mossa: 'produci', genere: null, tipo, ...(chiedeNativo ? {} : { consegnato: new Date().toISOString() }) })
+  }
+
+  const fatto = store.compito(id)
+  if (fatto) annuncia({ fase: fatto.stato === 'chiede' ? 'chiede' : 'pronto', id, compito: fatto })
+  // e la cosa dopo: si cerca *dopo* aver annunciato, perché il risultato
+  // non deve aspettare una riga in più che quasi sempre non c'è
+  if (fatto?.stato === 'pronto') await proponiIlSeguito(c, lavoroIntero, progetto)
 }
 
 /**

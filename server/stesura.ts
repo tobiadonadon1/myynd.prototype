@@ -20,9 +20,13 @@ import * as mani from './mani.ts'
 import { corpoPerChiRiceve, haSegnaposto } from './cornice.ts'
 import { bloccoDalTesto, decidi, duroDalTesto, ipotesiDaDomanda, type Genere, type Mossa } from './domanda-sola.ts'
 import { feedbackPer, type Giudizio } from './revisione-lavoro.ts'
-import type * as store from './store.ts'
+import * as store from './store.ts'
 import type { Progetto } from './progetti.ts'
 import type { Fonte } from './claude.ts'
+import * as claude from './claude.ts'
+import * as cfg from './config.ts'
+import * as voce from './voce.ts'
+import { giudica } from './revisione-lavoro.ts'
 
 /** Quello che torna da una stesura: la forma di `claude.svolgi`, con le letture. */
 export type Uscita = {
@@ -213,4 +217,74 @@ export async function stendi(o: {
     console.info(`myynd · lavoro · ${c.id} · ${m} · ${genere ?? '-'} · chiamate=${chiamate}`)
     return base(m)
   }
+}
+
+/*
+ * La stesura di una riga che non è (ancora) in lista (P6).
+ *
+ * La prova sugli ultimi trenta giorni e il vassoio scrivono bozze per righe
+ * che non esistono: qui si costruisce il `lavora` che `svolgiUno` costruisce
+ * per una riga vera, con le stesse chiamate, e si passa a `stendi`. Nessuna
+ * scrittura: chi chiama salva quello che torna dove vuole.
+ */
+
+/** Una riga da stendere: quello che `svolgiUno` legge da `store.compito`. */
+export type Riga = {
+  id: string
+  testo: string
+  nota: string | null
+  modo: string
+  doc: string | null
+  attrezzi: store.Concessione | null
+  progetto: Progetto | null
+  materiale: claude.MaterialeProgetto | null
+  cartella: string | null
+}
+
+/** Le mani della stesura: quelle di `stendi` più `svolgi` e la voce. */
+export type FerriStesura = Ferri & {
+  svolgi: typeof claude.svolgi
+  voce: (c: Pick<store.Compito, 'doc' | 'testo' | 'nota'>) => voce.Voce | null
+}
+
+export const FERRI_STESURA: FerriStesura = {
+  svolgi: (...a) => claude.svolgi(...a),
+  chiedeAiuto: (...a) => claude.chiedeAiuto(...a),
+  pesaLaDomanda: (...a) => claude.pesaLaDomanda(...a),
+  giudica: (...a) => giudica(...a),
+  voce: c => voce.perRiga(c)
+}
+
+export async function stesura(
+  c: Riga,
+  ferri: FerriStesura,
+  o: { nativa: boolean; signal: AbortSignal; fermato: () => boolean; passo: (p: claude.Passo) => void }
+): Promise<Stesa | null> {
+  if (o.fermato()) return null
+  let v: voce.Voce | null = null
+  try { v = ferri.voce(c) } catch { v = null }
+  const concessi = [...(c.attrezzi?.nomi ?? [])] as Parameters<typeof claude.svolgi>[3]
+  const cartella = c.attrezzi?.cartella ?? c.cartella ?? c.materiale?.cartella?.percorso ?? null
+  const lavora = (notaGiro: string | null, extra?: { fissa?: string[]; giri?: number }) => ferri.svolgi(
+    c.testo, notaGiro, c.modo, concessi, cartella, o.passo, c.doc, c.attrezzi,
+    {
+      nativa: o.nativa, signal: o.signal, taskId: c.id, ...(extra ?? {}),
+      ...(v?.blocco ? { voce: v.blocco } : {}), ...(v?.consegna ? { consegna: v.consegna } : {})
+    },
+    c.materiale
+  )
+  const posta = () => {
+    const x = cfg.leggi()
+    return !!(x.posta || x.google || x.microsoft?.parti.includes('posta'))
+  }
+  return stendi({
+    c: { id: c.id, testo: c.testo, modo: c.modo, domandeFatte: 0 },
+    nota: c.nota, progetto: c.progetto, nativa: o.nativa,
+    doc: c.doc ? store.documento(c.doc) : null,
+    lingua: cfg.lingua(), consegna: v?.consegna, voce: v?.blocco,
+    lavora, ferri,
+    fermo: o.fermato,
+    controllaVoce: v ? testo => voce.controlla(testo, v) : undefined,
+    collegata: g => g === 'posta' ? posta() : g === 'file' ? !!cfg.leggi().desktop?.cartelle?.length : false
+  })
 }

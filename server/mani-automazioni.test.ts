@@ -60,7 +60,7 @@ compiti.perProva({
   preparaEmail: async () => null,
   prossimoPasso: async () => null,
   salvaConsegna: () => { throw new Error('nessun file in questa prova') }
-} as Parameters<typeof compiti.perProva>[0])
+} as unknown as Parameters<typeof compiti.perProva>[0])
 
 store.salvaDocumenti([{
   id: 'posta:INBOX:piano', fonte: 'posta', tipo: 'email', titolo: 'Weekly plan request',
