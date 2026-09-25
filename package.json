@@ -18,9 +18,10 @@
     "app": "electron .",
     "app:dev": "MYYND_APP_WEB=http://127.0.0.1:5173 electron .",
     "pacchetto": "npm run build && electron-builder --config build/configura.cjs --mac --win",
-    "pacchetto:mac": "npm run build && electron-builder --config build/configura.cjs --mac && node build/verifica-firma.cjs",
+    "pacchetto:mac": "node build/fronte.cjs && npm run build && electron-builder --config build/configura.cjs --mac && node build/verifica-firma.cjs",
     "pacchetto:win": "npm run build && electron-builder --config build/configura.cjs --win --x64",
     "prova:app": "node prove/app.mjs",
+    "fronte": "node build/fronte.cjs",
     "valuta:feed": "node server/valuta-feed.ts",
     "prova:jev": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/prova-jev.ts"
   },
