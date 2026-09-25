@@ -5,7 +5,8 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { leggiAsn, leggiLsappinfo, leggiRiga, percorsoHelper, spacchettato } from './fronte.ts'
+import { creaRipiego, leggiAsn, leggiLsappinfo, leggiRiga, percorsoHelper, spacchettato } from './fronte.ts'
+import type { EventoFronte } from './sessioni.ts'
 
 test('leggiRiga: una riga valida', () => {
   const riga = '{"bundle":"com.apple.Safari","app":"Safari","pid":123,"titolo":"Inbox (3) - Gmail","t":1727160000000}'
@@ -74,4 +75,39 @@ test('spacchettato: solo la cartella app.asar, non un nome che la contiene', () 
   assert.equal(spacchettato('/a/app.asar/b'), '/a/app.asar.unpacked/b')
   assert.equal(spacchettato('/a/myapp.asarx/b'), '/a/myapp.asarx/b')
   assert.equal(spacchettato('/a/app.asar.unpacked/b'), '/a/app.asar.unpacked/b')
+})
+
+test('ripiego: un chiedi() arrivato a metà di un giro si rifà appena il giro finisce', async () => {
+  // un finto `lsappinfo`: ogni chiamata aspetta finché la prova non la lascia andare
+  let davanti = { nome: 'Safari', bundle: 'com.apple.Safari', pid: 11 }
+  const attese: Array<() => void> = []
+  const esegui = (_cmd: string, argomenti: string[]) => new Promise<string>(risolvi => {
+    attese.push(() => risolvi(argomenti[0] === 'front'
+      ? 'ASN:0x0-0x1:\n'
+      : `"LSDisplayName"="${davanti.nome}"\n"CFBundleIdentifier"="${davanti.bundle}"\n"pid"=${davanti.pid}\n`))
+  })
+  const passo = async () => { attese.shift()?.(); await new Promise(r => setImmediate(r)) }
+  const lascia = async () => { while (attese.length) await passo() }
+  const eventi: EventoFronte[] = []
+  const f = creaRipiego({ titoli: false, suEvento: e => eventi.push(e), suFine: () => {} }, esegui)
+  try {
+    await lascia()
+    assert.deepEqual(eventi.map(e => e.app), ['Safari'], 'il primo giro dice chi c’è')
+    // un giro parte e vede ancora Safari; a metà lo schermo si sblocca su Mail
+    f.chiedi()
+    await passo()
+    f.chiedi()
+    await passo()
+    assert.deepEqual(eventi.map(e => e.app), ['Safari', 'Safari'])
+    davanti = { nome: 'Mail', bundle: 'com.apple.mail', pid: 12 }
+    await lascia()
+    assert.deepEqual(eventi.map(e => e.app), ['Safari', 'Safari', 'Mail'], 'il chiedi() arrivato a metà si rifà e vede Mail')
+    // controcaso: senza chiedi() a metà, un giro solo
+    const prima = eventi.length
+    f.chiedi()
+    await lascia()
+    assert.equal(eventi.length, prima + 1)
+  } finally {
+    f.ferma()
+  }
 })

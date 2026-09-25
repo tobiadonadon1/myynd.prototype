@@ -135,7 +135,7 @@ function creaAiutante(percorso: string, o: OpzioniFonte): FonteFronte {
 
 const OGNI_RIPIEGO = 5_000
 
-function esegui(cmd: string, argomenti: string[]): Promise<string> {
+function eseguiVero(cmd: string, argomenti: string[]): Promise<string> {
   return new Promise(risolvi => {
     execFile(cmd, argomenti, { timeout: 3_000, maxBuffer: 64 * 1024 }, (errore, stdout) => {
       risolvi(errore ? '' : String(stdout ?? ''))
@@ -143,13 +143,19 @@ function esegui(cmd: string, argomenti: string[]): Promise<string> {
   })
 }
 
-/** `lsappinfo` ogni cinque secondi: solo l'app, e solo quando cambia. */
-function creaRipiego(o: OpzioniFonte): FonteFronte {
+/**
+ * `lsappinfo` ogni cinque secondi: solo l'app, e solo quando cambia.
+ * `esegui` si cambia solo nelle prove.
+ */
+export function creaRipiego(o: OpzioniFonte, esegui: (cmd: string, argomenti: string[]) => Promise<string> = eseguiVero): FonteFronte {
   let fermata = false
   let ultimo = ''
   let inCorso = false
+  // un chiedi() arrivato mentre un giro è a metà: si rifà appena finisce
+  let richiesto = false
   const giro = async (sempre: boolean) => {
-    if (fermata || inCorso) return
+    if (fermata) return
+    if (inCorso) { if (sempre) richiesto = true; return }
     inCorso = true
     try {
       const asn = leggiAsn(await esegui('lsappinfo', ['front']))
@@ -162,6 +168,7 @@ function creaRipiego(o: OpzioniFonte): FonteFronte {
       o.suEvento(e)
     } finally {
       inCorso = false
+      if (richiesto && !fermata) { richiesto = false; void giro(true) }
     }
   }
   const orologio = setInterval(() => { void giro(false) }, OGNI_RIPIEGO)
