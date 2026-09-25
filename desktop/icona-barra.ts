@@ -10,18 +10,13 @@ import { inPausa } from './sessioni.ts'
  * Il file dell'icona. Sul Mac un PNG con il suo `@2x` accanto (Electron lo
  * prende da sé), su Windows un `.ico` con le misure della barra.
  * `guarda` è vero solo mentre l'osservatore guarda davvero: acceso e non in
- * pausa. Quando è spento — cioè per chiunque non l'abbia acceso — il
- * mostriciattolo è smorto, perché non sta guardando. Fuori dal Mac
- * l'osservatore non c'è: smorto per sempre non direbbe niente, quindi a colori.
+ * pausa. Quando è spento (cioè per chiunque non l'abbia acceso, e sempre
+ * fuori dal Mac, dove l'osservatore non c'è) il mostriciattolo è smorto:
+ * è vero che non sta guardando.
  */
 export function iconaPer(s: { guarda: boolean; attesa: boolean; piattaforma: string }): string {
-  const nome = `mascotte${smorto(s) ? 'Spenta' : ''}${s.attesa ? 'Attesa' : ''}`
+  const nome = `mascotte${s.guarda ? '' : 'Spenta'}${s.attesa ? 'Attesa' : ''}`
   return `${nome}.${s.piattaforma === 'win32' ? 'ico' : 'png'}`
-}
-
-/** Smorto solo dove l'osservatore può guardare, e non guarda. */
-export function smorto(s: { guarda: boolean; piattaforma: string }): boolean {
-  return s.piattaforma === 'darwin' && !s.guarda
 }
 
 export type Voce = 'pausa' | 'riprendi' | 'apri' | 'nuova-chat' | 'preferenze' | 'esci' | 'togli' | '-'

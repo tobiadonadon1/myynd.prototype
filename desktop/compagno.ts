@@ -19,7 +19,7 @@
 import { BrowserWindow, Menu, ipcMain, screen, type IpcMainEvent, type MenuItemConstructorOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import * as impostazioni from './impostazioni.ts'
-import { smorto, vociCompagno, type Voce } from './icona-barra.ts'
+import { vociCompagno, type Voce } from './icona-barra.ts'
 import { t } from './lingua.ts'
 import type { StatoLocale } from './osservatore.ts'
 import { LATO_COMPAGNO, posizioneCompagno, trascinaCompagno } from './posizione.ts'
@@ -64,7 +64,7 @@ function suo(e: IpcMainEvent): BrowserWindow | null {
 function mandaStato() {
   const w = attuale()
   if (!w) return
-  w.webContents.send('compagno:stato', { guarda: !smorto({ guarda: osservatore.guarda, piattaforma: process.platform }), attesa: inAttesa > 0 })
+  w.webContents.send('compagno:stato', { guarda: osservatore.guarda, attesa: inAttesa > 0 })
 }
 
 function riposiziona() {
