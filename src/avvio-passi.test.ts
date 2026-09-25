@@ -33,14 +33,19 @@ test('without an interrupted read, each phase opens where it was', () => {
 test('a reload during a first read resumes on the reading view, not on the tiles', async () => {
   const { riprendeLeggendo } = await import('./onboarding/passi.ts')
   assert.equal(momentoAllaRipresa('fonte', { leggendo: true }), 1)
-  assert.equal(riprendeLeggendo('fonte', true), true)
+  assert.equal(riprendeLeggendo(true, false), true)
+  // the server marks the sources chosen (and the phase moves to 'verifica')
+  // the instant «Leggi» is pressed, well before the read itself is done: the
+  // phase can never be trusted to say a read is still running (round 4)
+  assert.equal(momentoAllaRipresa('verifica', { leggendo: true }), 1)
+  assert.equal(riprendeLeggendo(true, false), true)
 })
 
 test('without a read running, today’s rules (counter-case)', async () => {
   const { riprendeLeggendo } = await import('./onboarding/passi.ts')
-  assert.equal(riprendeLeggendo('fonte', false), false)
+  assert.equal(riprendeLeggendo(false, false), false)
   // sources already chosen with an early Continue: the excerpts step stays where it was
-  assert.equal(riprendeLeggendo('verifica', true), false)
-  assert.equal(momentoAllaRipresa('verifica', { leggendo: true }), 2)
+  assert.equal(riprendeLeggendo(true, true), false)
+  assert.equal(momentoAllaRipresa('verifica', { leggendo: true, aMetaLettura: true }), 2)
   assert.equal(momentoAllaRipresa('completo', { leggendo: true }), momentoDi('completo'))
 })

@@ -161,9 +161,11 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       let leggeva = false
       try { leggeva = !!sessionStorage.getItem(chiaveLettura(n.id)); sessionStorage.removeItem(chiaveLettura(n.id)) } catch { /* senza memoria della scheda si riparte dal server */ }
       const leggendo = !!n.leggendo
-      setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva, leggendo }))
-      // la lettura non si è fermata con la pagina: si torna a guardarla, senza ripassare dal benvenuto (P4)
-      if (riprendeLeggendo(n.fase, leggendo)) { setRiattacca(true); setAccountConfermato(true) }
+      const aMetaLettura = !!n.aMetaLettura
+      setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva, leggendo, aMetaLettura }))
+      // la lettura non si è fermata con la pagina: non si ripassa dal benvenuto, e si torna a
+      // guardarla a righe se non è stato un «Continua» a metà a mandarla avanti da sé (P4)
+      if (leggendo) { setAccountConfermato(true); if (riprendeLeggendo(leggendo, aMetaLettura)) setRiattacca(true) }
       try {
         // in localStorage e non nella scheda del browser: sopravvive a «Riapri Myynd» dopo un permesso
         const salvata = localStorage.getItem(chiaveScheda(n.id))
