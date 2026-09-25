@@ -703,6 +703,8 @@ export function useCompiti(
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
     appenaFinite, appenaCorrette,
+    /** La riga è appena stata rimessa com'era da `indietro`: il passaggio da affidata a pronta non è un lavoro finito. */
+    ripristinata: (id: string) => ripristinate.current.has(id),
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
     aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,

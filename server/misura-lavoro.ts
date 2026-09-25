@@ -58,7 +58,9 @@ export const MINIMO = 5
 
 /** L'aritmetica, pura: si prova con righe a mano. */
 export function calcola(righe: Misura[], o: { giorni: number; dal: string; postaInviata: boolean }): MisuraLavoro {
-  const affidate = righe.filter(r => r.affidato >= o.dal)
+  // una figlia di revisione («Cambia», o una revisione dalla chat) non è una
+  // delega in più: la correzione è già contata sulla madre. Il suo invio sì
+  const affidate = righe.filter(r => r.affidato >= o.dal && !r.compito.startsWith('rev-'))
   const fondo = affidate.filter(r => r.origine === 'fondo')
   const proprie = affidate.filter(r => r.origine !== 'fondo')
   const lavori = proprie.filter(r => r.mossa !== 'blocco' && r.mossa !== 'guaio' && (r.consegnato !== null || r.domande > 0))

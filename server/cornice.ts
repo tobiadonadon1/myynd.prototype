@@ -149,3 +149,14 @@ export function senzaRigaIpotesi(testo: string): string {
     .filter(paragrafo => paragrafo.trim())
   return fuori.join('\n\n').trim()
 }
+
+/**
+ * Il testo che la riga mostra e che si corregge: senza la riga dell'ipotesi
+ * quando la riga la mostra da sola (con «Cambia»), altrimenti il risultato
+ * intero. È il metro di una correzione: «Va bene» su questo testo com'è non
+ * è una correzione, e nemmeno la copia negli appunti di questo testo com'è.
+ */
+export function testoMostrato(risultato: string | null | undefined, ipotesi: readonly string[] | null | undefined): string {
+  const r = risultato ?? ''
+  return ipotesi?.[0] ? senzaRigaIpotesi(r) : r
+}

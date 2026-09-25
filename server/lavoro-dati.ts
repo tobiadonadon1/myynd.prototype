@@ -98,6 +98,24 @@ export function registraInvio(id: string, i: { via: 'smtp' | 'casella' | 'propri
   return Number(r.changes) > 0
 }
 
+/**
+ * La riga ha una figlia di revisione («Cambia» su una bozza salvata) che ha
+ * a sua volta la bozza nella posta: la bozza nella casella è della figlia,
+ * la più recente, e la madre non la guarda più.
+ */
+export function figliaConBozza(id: string): boolean {
+  return !!db.prepare(`
+    SELECT 1 FROM compiti WHERE madre = ? AND id LIKE 'rev-%' AND sparito IS NULL AND email LIKE '%"stato":"salvata"%' LIMIT 1
+  `).get(id)
+}
+
+/** Quella mail inviata è già segnata come partita su un'altra riga: una mail parte una volta sola. */
+export function mandataGiaSegnata(doc: string, tranne: string): boolean {
+  return !!db.prepare(`
+    SELECT 1 FROM compiti WHERE id != ? AND mandata IS NOT NULL AND json_extract(mandata, '$.doc') = ? LIMIT 1
+  `).get(tranne, doc)
+}
+
 export function misura(id: string): Misura | null {
   return (db.prepare('SELECT * FROM misure_compiti WHERE compito = ?').get(id) as Misura | undefined) ?? null
 }
@@ -141,18 +159,32 @@ export function inviatiVerso(indirizzo: string, limite = 12): store.Documento[] 
   const chi = indirizzo.trim().toLowerCase()
   if (!chi) return []
   const da = new Date(Date.now() - 90 * 86_400_000).toISOString()
-  const righe = db.prepare(`
+  // Due interrogazioni, non una con OR: insieme SQLite le pianificava come una
+  // scansione dell'indice intero, sul filo del server, per ogni destinatario.
+  // Separate, la prima cammina sui fili (idx_doc_filo) e la seconda sui novanta
+  // giorni (idx_doc_quando); si uniscono qui, senza doppioni, le più recenti prima
+  const perFilo = db.prepare(`
     SELECT ${CAMPI} FROM documenti
-    WHERE inviato = 1 AND (
-      (filo IS NOT NULL AND filo NOT LIKE 's:%' AND filo IN (
-        SELECT filo FROM documenti WHERE autoreIndirizzo = ? AND inviato = 0 AND filo IS NOT NULL
-      ))
-      OR (quando >= ? AND destinatari IS NOT NULL AND (',' || destinatari || ',') LIKE ?)
+    WHERE inviato = 1 AND filo IS NOT NULL AND filo NOT LIKE 's:%' AND filo IN (
+      SELECT filo FROM documenti WHERE autoreIndirizzo = ? AND inviato = 0 AND filo IS NOT NULL
     )
     ORDER BY quando DESC
     LIMIT ?
-  `).all(chi, da, `%,${chi},%`, limite) as Record<string, unknown>[]
-  return documenti(righe)
+  `).all(chi, limite) as Record<string, unknown>[]
+  // «_» e «%» dentro un indirizzo sono lettere, non jolly: a_b@x non è axb@x
+  const cercato = `%,${chi.replace(/[\\%_]/g, x => `\\${x}`)},%`
+  const perDestinatari = db.prepare(`
+    SELECT ${CAMPI} FROM documenti
+    WHERE inviato = 1 AND quando >= ? AND destinatari IS NOT NULL AND (',' || destinatari || ',') LIKE ? ESCAPE '\\'
+    ORDER BY quando DESC
+    LIMIT ?
+  `).all(da, cercato, limite) as Record<string, unknown>[]
+  const visti = new Set<string>()
+  const insieme = [...perFilo, ...perDestinatari]
+    .filter(r => { const id = String(r.id); if (visti.has(id)) return false; visti.add(id); return true })
+    .sort((a, b) => String(b.quando ?? '').localeCompare(String(a.quando ?? '')))
+    .slice(0, limite)
+  return documenti(insieme)
 }
 
 /** Le ultime mail che ha mandato, a chiunque: la voce di tutti i giorni. */

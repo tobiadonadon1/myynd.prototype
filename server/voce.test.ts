@@ -136,3 +136,13 @@ test('due persone non vedono le mail l\'una dell\'altra nella cache', async () =
   assert.equal(diA, 4)
   assert.equal(diB, 0)
 })
+
+test('inviatiVerso: «_» in un indirizzo è una lettera, non un jolly', () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    { id: 'posta:Sent:201', fonte: 'posta', tipo: 'email', titolo: 'A', inviato: true, quando: giorniFa(3), autore: 'Alex <alex@harbor.example>', destinatari: 'a_b@x.example', corpo: 'Hi' },
+    { id: 'posta:Sent:202', fonte: 'posta', tipo: 'email', titolo: 'B', inviato: true, quando: giorniFa(2), autore: 'Alex <alex@harbor.example>', destinatari: 'axb@x.example', corpo: 'Hi' }
+  ])
+  assert.deepEqual(lavoroDati.inviatiVerso('a_b@x.example').map(d => d.id), ['posta:Sent:201'])
+  assert.deepEqual(lavoroDati.inviatiVerso('axb@x.example').map(d => d.id), ['posta:Sent:202'])
+})

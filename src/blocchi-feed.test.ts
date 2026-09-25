@@ -406,3 +406,20 @@ test('una riga appena corretta con «Cambia» resta al suo posto mentre si rifà
   const b2 = blocchiFeed({ voci: [], compiti: pronte, progetti: PROGETTI, nomeResto: 'Il resto', corrette: new Set(['p2']) })
   assert.deepEqual(b2.flatMap(ids), ['p0', 'p1', 'p2', 'p3', 'p4', 'p5'])
 })
+
+test('(P3) una riga ferma su un blocco o su un dato che manca aspetta lui: sta in prima pagina anche a pagina piena', () => {
+  const compiti = [
+    ...Array.from({ length: 8 }, (_, i) => compito(`a${i}`, 'hf')),
+    { ...compito('bloccata', 'nx'), guaio: 'Collega la posta e la riprendo da qui.' },
+    { ...compito('senzaDato', 'nx'), guaio: 'Non sono riuscito a finirla senza un dato che manca.' },
+    // un guaio qualunque su una riga aperta non la porta davanti
+    { ...compito('altroGuaio', 'nx'), guaio: 'Il modello non ha risposto.' }
+  ]
+  const b = blocchiFeed({ voci: [], compiti, progetti: PROGETTI, nomeResto: 'Il resto' })
+  const tutte = b.flatMap(ids)
+  assert.equal(tutte.length, COMPITI_IN_PAGINA)
+  assert.ok(tutte.includes('bloccata'), 'la riga bloccata è sparita sotto il tetto')
+  assert.ok(tutte.includes('senzaDato'), 'la riga ferma su un dato che manca è sparita sotto il tetto')
+  assert.ok(!tutte.includes('altroGuaio'))
+  assert.deepEqual(ids(b.find(x => x.nome === 'Nextas')!), ['bloccata', 'senzaDato'])
+})

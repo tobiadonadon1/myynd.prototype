@@ -35,7 +35,7 @@ import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
 import { RigaIpotesi } from './RigaIpotesi'
-import { haSegnaposto, mandataValida, puoMandare, senzaRigaIpotesi } from '../lavoro-affidato'
+import { haSegnaposto, mandataValida, puoMandare, testoDellaBozza } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -733,13 +733,15 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
 
 /** La bozza, sotto la riga che l'ha chiesta. */
 /** Il testo della bozza da mostrare e correggere: senza la riga dell'ipotesi, che sta sotto con «Cambia». */
-function testoDellaBozza(c: Compito): string {
-  return c.ipotesi?.[0] ? senzaRigaIpotesi(c.risultato ?? '') : (c.risultato ?? '')
-}
-
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
   const [testo, setTesto] = useState(testoDellaBozza(c))
   const [modifico, setModifico] = useState(false)
+  /**
+   * Quello che ha tenuto, se l'ha cambiato: il testo della lista com'è (senza
+   * la riga dell'ipotesi, che sta sotto da sola) non è una correzione, e
+   * mandarlo come tale faceva imparare a Myynd una lezione falsa a ogni «Va bene».
+   */
+  const tenuto = testo !== testoDellaBozza(c) ? testo : undefined
   /**
    * Un prompt non si manda e non si salva: si copia. Il testo è quello che
    * finirà negli appunti — testo semplice, senza le fonti trasformate in
@@ -790,8 +792,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             e.target.style.height = `${Math.min(e.target.scrollHeight, 400)}px`
           }}
           onKeyDown={e => {
-            if (e.key === 'Escape') { e.stopPropagation(); setTesto(c.risultato ?? ''); setModifico(false) }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), testo)
+            if (e.key === 'Escape') { e.stopPropagation(); setTesto(testoDellaBozza(c)); setModifico(false) }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), tenuto)
           }}
           aria-label={prompt ? t('Il prompt') : t('Il lavoro')}
           style={{
@@ -826,7 +828,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             style={pannello ? CONTORNO : PIENO}
             hover={pannello ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Copia il prompt')}</Hov>
         )}
-        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
+        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), tenuto)}
           style={pannello || spezzato ? CONTORNO : PIENO}
           hover={pannello || spezzato ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
 

@@ -523,10 +523,15 @@ function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
   // fatte, la scelta presa. Il documento sta nel file, non qui.
-  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') : ''
+  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') || fraseFinita(c) : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
-  return presentazioneRevisione(c, lingua() === 'en')?.descrizione || c.nota || ''
+  // una figlia di revisione non mostra mai la sua nota: è il blocco di
+  // istruzioni della revisione (REVISION REQUEST, la base, il documento di
+  // prima per intero), non una riga per lei. Richiamata, resta il titolo
+  const revisione = presentazioneRevisione(c, lingua() === 'en')
+  if (revisione) return revisione.descrizione
+  return c.nota || ''
 }
 
 /**
@@ -557,7 +562,9 @@ function dopoLaChiusura(risultato: string): string {
   // la riga dell'ipotesi si mostra da sola, con «Cambia»: qui non si ripete; e i
   // numeri delle fonti non hanno senso in una riga piana
   const [, ...resto] = senzaRigaIpotesi(risultato).trim().split(/\n\s*\n/)
-  const nota = resto.join('\n').replace(/\s*\[\d{1,2}\]/g, '').trim()
+  // la riga delle fonti («From Nora's mail [1].») è provenienza, non un
+  // riassunto: da sola non è la riga del corpo (resta la frase «Done:»)
+  const nota = resto.join('\n').split('\n').filter(r => !/\[\d{1,2}\]/.test(r)).join('\n').trim()
   return nota.length <= 400 ? nota : ''
 }
 
@@ -748,9 +755,11 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const eraAffidato = useRef(affidato)
   const [finita, setFinita] = useState(false)
   useEffect(() => {
-    if (eraAffidato.current && !affidato && (c.stato === 'pronto' || c.stato === 'chiede')) setFinita(true)
+    // rimessa com'era dopo un errore («Non sono riuscito a rifarla»): non è
+    // finita, e il fuoco che si posa direbbe «fatto» sopra un guaio
+    if (eraAffidato.current && !affidato && (c.stato === 'pronto' || c.stato === 'chiede') && !l.ripristinata(c.id)) setFinita(true)
     eraAffidato.current = affidato
-  }, [affidato, c.stato])
+  }, [affidato, c.stato, c.id, l])
   const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
   const testo = corpo(c)
   // quello che ha scritto per intero: si legge aprendo la riga, dove stava, e

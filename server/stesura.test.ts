@@ -154,6 +154,27 @@ test('f2. (contro) lo stesso testo con la posta collegata non è un blocco: è u
   assert.equal(s2.mossa, 'blocco')
 })
 
+test('f3. (contro) la posta è collegata e l\'etichetta dice «collegamento»: non torna un blocco, è una domanda dura', async () => {
+  for (const genere of ['collegamento', 'permesso'] as const) {
+    const { lavora, chiamate } = copione(['I don\'t have access to Dana\'s thread in your mail.'])
+    const { f, pesate } = ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a), peso: { genere, costo: 'alto' } })
+    const s = (await base(lavora, f, { collegata: g => g === 'posta' }))!
+    assert.notEqual(s.mossa, 'blocco', `con l'etichetta «${genere}» la riga direbbe «Collega la posta» con la posta collegata`)
+    assert.equal(s.mossa, 'chiedi')
+    assert.equal(s.genere, 'altro')
+    assert.equal(chiamate.length, 1)
+    assert.equal(pesate.length, 1)
+    // nel fondo, o dopo una domanda, lo stesso testo lascia il posto vuoto: mai un blocco
+    const { lavora: l2 } = copione(['I don\'t have access to Dana\'s thread in your mail.', 'Done: the reply.\n\nHi Dana, [to fill: the invoice number].\n\nMissing: the invoice number.'])
+    const s2 = (await base(l2, ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a), peso: { genere, costo: 'alto' } }).f, { collegata: g => g === 'posta', nativa: false }))!
+    assert.equal(s2.mossa, 'segnaposto')
+  }
+  // senza la fonte collegata l'etichetta «collegamento» resta un blocco, anche su un testo senza la forma di chi si ferma
+  const { lavora: l3 } = copione(['Which mailbox has Dana\'s thread?'])
+  const s3 = (await base(l3, ferri({ chiedeAiuto: (...a) => claude.chiedeAiuto(...a), peso: { genere: 'collegamento', costo: 'alto' } }).f, { collegata: () => false }))!
+  assert.equal(s3.mossa, 'blocco')
+})
+
 test('g. il fondo non chiede mai: un prezzo che manca è un segnaposto al primo giro', async () => {
   const { lavora, chiamate } = copione(['I read the thread.\nWhat is the price for 20 people?', 'Done: the quote.\n\nHi Nora, the price is [to fill: price for 20 people].\n\nMissing: the price.'])
   const { f } = ferri({})

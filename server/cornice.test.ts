@@ -80,3 +80,13 @@ test('la riga delle fonti e l\'ipotesi in due paragrafi se ne vanno tutte e due;
   const tre = 'Done.\n\nBody.\n\nFrom the mail [1].\n\nPrice from the list [2].\n\nI assumed Friday.'
   assert.equal(corpoPerChiRiceve(tre), 'Body.\n\nFrom the mail.')
 })
+
+test('testoMostrato: senza la riga dell\'ipotesi solo quando la riga la mostra da sola', async () => {
+  const { testoMostrato } = await import('./cornice.ts')
+  const testo = 'Done: the reply to Nora.\n\nHi Nora,\n\nThe kickoff is on Tuesday.\n\nBest,\nAlex\n\nFrom Nora\'s mail [1].\nI assumed Tuesday, October 6 as the kickoff.'
+  assert.equal(testoMostrato(testo, ['I assumed Tuesday, October 6 as the kickoff.']), senzaRigaIpotesi(testo))
+  assert.ok(!testoMostrato(testo, ['I assumed Tuesday, October 6 as the kickoff.']).includes('I assumed'))
+  assert.equal(testoMostrato(testo, null), testo)
+  assert.equal(testoMostrato(testo, []), testo)
+  assert.equal(testoMostrato(null, ['x']), '')
+})

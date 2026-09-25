@@ -51,3 +51,11 @@ test('appenaFinite: da affidata a pronta è finita; rimessa com\'era dopo un err
   // la prima lista non è un passaggio
   assert.deepEqual(appenaFinite(null, adesso), { pronte: [], finite: [] })
 })
+
+test('testoDellaBozza: il testo della lista è il risultato senza la riga dell\'ipotesi, e intero senza ipotesi', async () => {
+  const { testoDellaBozza } = await import('./lavoro-affidato.ts')
+  const risultato = 'Done: the quote.\n\nHi Nora,\n\nThe price is 890 EUR.\n\nBest,\nAlex\n\nPrice from the list [2].\nI assumed twelve people.'
+  assert.equal(testoDellaBozza({ risultato, ipotesi: ['I assumed twelve people.'] }), 'Done: the quote.\n\nHi Nora,\n\nThe price is 890 EUR.\n\nBest,\nAlex\n\nPrice from the list [2].')
+  assert.equal(testoDellaBozza({ risultato, ipotesi: null }), risultato)
+  assert.equal(testoDellaBozza({ risultato: null, ipotesi: null }), '')
+})

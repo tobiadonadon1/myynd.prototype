@@ -141,3 +141,38 @@ test('una risposta sua si segna una volta sola: al giro dopo non è più candida
   assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
   assert.equal(store.compito(c.id)!.mandata ?? null, null)
 })
+
+test('(contro) dopo «Cambia» su una bozza salvata, una mail partita si segna sulla figlia sola: una mandata, un invio, niente imparato dalla madre', async () => {
+  const madre = riga('c-m')
+  // la figlia di revisione ha riscritto la stessa bozza nella casella, con la data corretta
+  const corpoFiglia = 'Hi Leo,\n\nHere are the logo files in all three formats, by Monday.\n\nBest,\nAlex'
+  store.scriviCompito({ id: 'rev-abc', testo: 'Reply to Leo about the logo files', ordine: 'rev-abc', doc: 'posta:INBOX:503', madre: madre.id, origine: 'chat',
+    nota: 'REVISION REQUEST: Monday, not Friday\n\nREVISION BASELINE: {"tipo":"bozza"}' })
+  const email = { casella: { stato: 'salvata', id: 'd1', url: 'https://mail.example/d1' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: corpoFiglia, conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ? WHERE id = ?").run(oreFa(1.5), `Done: the reply to Leo.\n\n${corpoFiglia}`, JSON.stringify(email), 'rev-abc')
+  lavoroDati.registraAffido(store.compito('rev-abc')!, true)
+  lavoroDati.registraEsito('rev-abc', { mossa: 'produci', tipo: 'risposta', consegnato: oreFa(1.2) })
+  // una mail sola parte dalla sua posta, con il corpo della figlia
+  mandata('posta:Sent:9', { quando: oreFa(1), corpo: corpoFiglia })
+
+  assert.equal(await invii.osserva(), 1, 'una mail sola, una riga sola')
+  assert.equal(store.compito(madre.id)!.mandata ?? null, null, 'la madre non ha più la bozza: non è partita lei')
+  assert.equal(store.compito('rev-abc')!.mandata?.doc, 'posta:Sent:9')
+  assert.equal(lavoroDati.misura(madre.id)!.inviato, null)
+  assert.equal(lavoroDati.misura('rev-abc')!.via, 'casella')
+  assert.equal(lavoroDati.misura('rev-abc')!.classe, 'identico')
+  assert.equal(imparate.length, 0, 'la revisione di Myynd non è una correzione sua')
+  // e anche guardando la madre da sola (la guardia di «Manda») non si scrive niente
+  assert.equal(await invii.osservaUno(store.compito(madre.id)!), null)
+  assert.equal(await invii.osserva(), 0)
+})
+
+test('(contro) una mail già segnata su una riga non si abbina a un\'altra riga con la stessa bozza', async () => {
+  const a = riga('c-a')
+  const b = riga('c-b')
+  mandata('posta:Sent:10', { quando: oreFa(1) })
+  assert.equal(await invii.osserva(), 1, 'la stessa mail non parte due volte')
+  const segnate = [a, b].map(c => store.compito(c.id)!.mandata?.doc ?? null)
+  assert.deepEqual(segnate.filter(Boolean), ['posta:Sent:10'])
+  assert.equal(imparate.length, 0)
+})

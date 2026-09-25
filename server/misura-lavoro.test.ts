@@ -116,3 +116,17 @@ test('la riga di comando rifiuta senza --dati, rifiuta la casa vera senza aprirl
   assert.match(vera.stderr, /dati veri/)
   assert.deepEqual(readdirSync(join(casaFinta, '.myynd')), []) // resta vuota: non ha scritto niente
 })
+
+test('(P3) una figlia di revisione non è una delega in più: fuori dai lavori, ma il suo invio conta', () => {
+  const righe: Misura[] = [
+    riga({ compito: 'a', correzioni: 1 }), riga({ compito: 'b' }), riga({ compito: 'c' }), riga({ compito: 'd' }), riga({ compito: 'e' }),
+    riga({ compito: 'rev-abc', origine: 'chat' }),
+    riga({ compito: 'rev-def', origine: 'chat', inviato: giorniFa(1), via: 'casella', classe: 'identico' })
+  ]
+  const m = calcola(righe, { giorni: 30, dal: giorniFa(30), postaInviata: true })
+  assert.equal(m.lavori.arrivati, 5)
+  assert.equal(m.lavori.tassoSenza, 1)
+  assert.equal(m.lavori.correzioni, 1)
+  assert.equal(m.bozze.inviate, 1)
+  assert.equal(m.bozze.via.casella, 1)
+})

@@ -154,10 +154,17 @@ export async function stendi(o: {
     if (esito.chiede && !eseguito) {
       const domanda = esito.domanda.trim() || primaRiga(testo)
       const genereBlocco = bloccoDalTesto(testo) ?? (esito.bloccato ? 'fonte' : null)
-      const blocco = genereBlocco !== null && !(o.collegata?.(genereBlocco) ?? false)
+      /** Il testo dice «non ho accesso a…», ma quella fonte è collegata davvero. */
+      const fonteCollegata = genereBlocco !== null && (o.collegata?.(genereBlocco) ?? false)
+      const blocco = genereBlocco !== null && !fonteCollegata
       const duro = blocco ? null : duroDalTesto(domanda)
-      const peso = !blocco && !duro ? await o.ferri.pesaLaDomanda(c.testo, domanda, esito.visto ?? '') : undefined
+      let peso = !blocco && !duro ? await o.ferri.pesaLaDomanda(c.testo, domanda, esito.visto ?? '') : undefined
       if (o.fermo()) return null
+      // La fonte c'è: l'etichetta del modello («collegamento», «permesso»)
+      // non può rifarne un blocco, o la riga direbbe «Collega la posta» con
+      // la posta collegata. È un dato che il modello non ha trovato in una
+      // fonte che ha: una domanda dura, che si fa o lascia il posto vuoto.
+      if (fonteCollegata && peso && (peso.genere === 'collegamento' || peso.genere === 'permesso')) peso = { genere: 'altro', costo: 'alto' }
       genere = duro ?? peso?.genere ?? null
       const mossa = decidi({ chiede: true, blocco, duro, peso }, { nativa: o.nativa, domandeFatte, secondoGiro: extraFatto })
       if ((mossa === 'presumi' || mossa === 'segnaposto') && !extraFatto && chiamate < STESURE_MAX) {

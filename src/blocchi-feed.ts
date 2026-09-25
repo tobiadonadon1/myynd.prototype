@@ -22,9 +22,11 @@
  * (`server/rifinitura.ts`): «organise it by importance on my feed». Chi non
  * l'ha, perché è nata prima o perché Jev non c'era, sta in mezzo.
  */
+import { BLOCCHI, MANCA_UN_DATO } from './lavoro-affidato.ts'
+
 export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string; peso?: number | null }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
-export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null }
+export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null; guaio?: string | null }
 /** Un progetto: solo quelli attivi hanno un blocco. `priorita` «alta» lo porta davanti. */
 export type ProgettoDaBlocco = { id: string; nome: string; stato?: string; priorita?: string | null }
 
@@ -68,10 +70,16 @@ const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
  * stanno rifacendo: restano al posto della riga pronta che erano, così il
  * gesto si vede dove l'ha fatto e la riga non sparisce sotto il tetto.
  */
-const pesoRiga = (c: { id: string; stato: string }, fermi?: ReadonlySet<string>, corrette?: ReadonlySet<string>) =>
+const pesoRiga = (c: { id: string; stato: string; guaio?: string | null }, fermi?: ReadonlySet<string>, corrette?: ReadonlySet<string>) =>
   fermi?.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede') ? ATTESA.delegato
     : corrette?.has(c.id) && c.stato === 'delegato' ? ATTESA.pronto
+    // ferma su una fonte che manca, o su un dato che nessuna fonte aveva (P3):
+    // aspetta lui come una domanda, e non deve sparire sotto il tetto
+    : c.stato === 'aperto' && fermaDi(c) ? ATTESA.chiede
     : ATTESA[c.stato] ?? 2
+
+/** Una riga ferma su un blocco o su un dato che manca: l'ha affidata lui e aspetta lui. Le stesse frasi del server. */
+export const fermaDi = (c: { guaio?: string | null }): boolean => !!c.guaio && (BLOCCHI.includes(c.guaio) || c.guaio === MANCA_UN_DATO)
 
 /** Una riga figlia di revisione («Cambia» su un file o su una bozza salvata): sta sotto sua madre. */
 const eRevisione = (c: { id: string; madre?: string | null }): c is { id: string; madre: string } =>

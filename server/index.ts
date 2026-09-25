@@ -49,7 +49,7 @@ import * as invii from './invii-osservati.ts'
 import * as lavoroDati from './lavoro-dati.ts'
 import * as revisioni from './revisioni.ts'
 import { misuraLavoro } from './misura-lavoro.ts'
-import { corpoPerChiRiceve } from './cornice.ts'
+import { corpoPerChiRiceve, testoMostrato } from './cornice.ts'
 import { classe as classeRitocco, parole as paroleDi, ritocco } from './ritocco.ts'
 import * as scrivania from './scrivania.ts'
 import { apriDocumento } from './native-document.ts'
@@ -3782,9 +3782,14 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // finiva soltanto dentro una convinzione: il testo com'è uscito non lo
   // rileggevi più da nessuna parte. Adesso resta sulla riga, e quando la
   // riapri fra le fatte trovi la versione tua, non la sua.
-  if (tenuto && tenuto.trim() && tenuto.trim() !== (c.risultato ?? '').trim()) {
-    store.tieniLaTua(c.id, tenuto.trim())
-  }
+  //
+  // Il metro è il testo che la riga mostra: su una riga con l'ipotesi sotto
+  // (P3) la lista mostra il risultato senza quella riga, e «Va bene» su quel
+  // testo com'è non è una correzione. Contarla come tale faceva imparare a
+  // Myynd, a ogni «Va bene», che lei toglie la riga «Ho supposto».
+  const mostrato = testoMostrato(c.risultato, c.ipotesi).trim()
+  const corretto = !!tenuto.trim() && tenuto.trim() !== mostrato && tenuto.trim() !== (c.risultato ?? '').trim()
+  if (corretto) store.tieniLaTua(c.id, tenuto.trim())
   store.cambiaStatoCompito(c.id, stato, esito || undefined)
   // di quale progetto è, subito e senza modello: l'avviso sotto il bottone lo dice
   const fatto: dopoFatto.Fatto = { genere: 'compito', id: c.id }
@@ -3798,7 +3803,7 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // della sua bozza dice come scrivi; quello che hai *scritto* chiudendo dice
   // com'è andata e perché. Prima si raccoglieva solo la prima, che è anche la
   // più rara — e tutte le righe chiuse a mano passavano senza lasciare niente.
-  if (tenuto) compiti.imparaSeCorretto(c.risultato, tenuto)
+  if (corretto) compiti.imparaSeCorretto(mostrato, tenuto)
   compiti.imparaDallaChiusura(c, stato, esito)
   // E il traguardo: si segna nella memoria del progetto, e si guarda il passo
   // dopo, o glielo si chiede. Una riga lasciata perdere non è un traguardo.
@@ -4437,8 +4442,11 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
   if (c.stato !== 'pronto' || !c.ipotesi?.length) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
   const riga = c.ipotesi[0]
   try {
+    let contata = true
     if (c.email?.casella?.stato === 'salvata' || c.consegna) {
-      await revisioni.rivediDaCorrezione(c.id, testo)
+      const r = await revisioni.rivediDaCorrezione(c.id, testo)
+      // la stessa correzione due volte è una revisione sola, e una correzione sola
+      contata = !r.giaAvviato
       // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi da cambiare
       lavoroDati.scriviIpotesi(c.id, null)
     } else {
@@ -4447,7 +4455,7 @@ app.post('/api/compiti/:id/correggi', async (req, res) => {
       store.sbozzaCompito(c.id)
       compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
     }
-    lavoroDati.registraCorrezione(c.id)
+    if (contata) lavoroDati.registraCorrezione(c.id)
   } catch (e) { return errore(res, e) }
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()

@@ -13,6 +13,10 @@
 // bozza), e non guarda due volte una riga di cui un invio è già segnato: una
 // bozza partita da «Manda» (SMTP) finisce anche lei nella posta inviata, e
 // senza questo la stessa mail contava due volte e si imparava due volte.
+// E una quinta: una mail partita si segna su una riga sola. Dopo «Cambia» su
+// una bozza salvata la bozza nella casella è della figlia di revisione, e la
+// madre non la guarda più; una mail già segnata su un'altra riga non si
+// abbina una seconda volta.
 // Gira dentro il contesto di chi legge.
 
 import { createHash } from 'node:crypto'
@@ -50,6 +54,9 @@ function candidati(): store.Compito[] {
     SELECT c.id FROM compiti c LEFT JOIN misure_compiti m ON m.compito = c.id
     WHERE c.email LIKE '%"stato":"salvata"%' AND c.doc IS NOT NULL AND c.mandata IS NULL AND c.sparito IS NULL
       AND c.chiesto IS NOT NULL AND c.chiesto >= ? AND m.inviato IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM compiti f WHERE f.madre = c.id AND f.id LIKE 'rev-%' AND f.sparito IS NULL AND f.email LIKE '%"stato":"salvata"%'
+      )
   `).all(da) as { id: string }[]
   return righe.map(r => store.compito(r.id)).filter((c): c is store.Compito => !!c)
 }
@@ -67,10 +74,16 @@ export async function osservaUno(c: store.Compito): Promise<Visto> {
   // un invio c'è già: da «Manda», o una risposta sua vista prima. La copia
   // nella posta inviata è quella mail, non una seconda
   if (m?.inviato) return null
+  // «Cambia» su questa bozza ha fatto una figlia che ha riscritto la stessa
+  // bozza nella casella: la bozza è sua, e la mail che parte è sua. Guardare
+  // anche la madre contava una mail due volte e imparava la revisione di
+  // Myynd come se fosse una correzione di lei
+  if (lavoroDati.figliaConBozza(c.id)) return null
   const dopo = m?.consegnato ?? c.chiesto
   const sorgente = store.documento(c.doc)
   const filo = sorgente?.filo && !sorgente.filo.startsWith('s:') ? sorgente.filo : null
-  const mandate = lavoroDati.inviatiDopo(c.email.rispondeA?.messageId, filo, dopo)
+  // una mail partita si segna su una riga sola: quelle già di un'altra riga non si guardano
+  const mandate = lavoroDati.inviatiDopo(c.email.rispondeA?.messageId, filo, dopo).filter(d => !lavoroDati.mandataGiaSegnata(d.id, c.id))
   if (!mandate.length) return null
   const inviata = mandate[0]
   const certezza: 'id' | 'filo' = inviata.messageId && inviata.messageId === idDellaBozza(c.id, c.doc) ? 'id' : 'filo'

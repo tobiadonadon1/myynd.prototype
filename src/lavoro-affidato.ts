@@ -8,9 +8,9 @@
 // del server: `server/cornice.ts`, senza import, letta da tutte e due le parti.
 
 import type { Compito } from './api'
-import { haSegnaposto, MANCA } from '../server/cornice.ts'
+import { haSegnaposto, MANCA, testoMostrato } from '../server/cornice.ts'
 
-export { corpoPerChiRiceve, haSegnaposto, rigaIpotesi, senzaRigaIpotesi } from '../server/cornice.ts'
+export { corpoPerChiRiceve, haSegnaposto, rigaIpotesi, senzaRigaIpotesi, testoMostrato } from '../server/cornice.ts'
 
 /** Le quattro frasi con cui una riga si ferma su una fonte che manca: le stesse del server. */
 export const BLOCCHI = [
@@ -19,6 +19,9 @@ export const BLOCCHI = [
   'Collega la fonte che serve e la riprendo da qui.',
   'Dai a Myynd il permesso che serve e la riprendo da qui.'
 ]
+
+/** La frase con cui una riga si ferma dopo il secondo giro: un dato che nessuna fonte aveva. La stessa del server. */
+export const MANCA_UN_DATO = 'Non sono riuscito a finirla senza un dato che manca.'
 
 /** Quante mail a quella persona servono perché la voce sia la sua, e si dica. */
 export const VOCE_MINIMA = 3
@@ -48,6 +51,14 @@ export function bloccoDi(c: Pick<Compito, 'guaio'>): boolean {
 /** Con un segnaposto nel corpo non si manda: manca ancora un dato. Il server guarda `mandata`. */
 export function puoMandare(c: Pick<Compito, 'email'>): boolean {
   return !haSegnaposto(c.email?.corpo)
+}
+
+/**
+ * Il testo della bozza com'è mostrato nella lista: senza la riga dell'ipotesi,
+ * che sta sotto da sola con «Cambia». Una correzione si misura contro questo.
+ */
+export function testoDellaBozza(c: Pick<Compito, 'risultato' | 'ipotesi'>): string {
+  return testoMostrato(c.risultato, c.ipotesi)
 }
 
 /** La riga dell'ipotesi è una riga «Manca»: la casella chiede cosa ci va, non cosa vale invece. */

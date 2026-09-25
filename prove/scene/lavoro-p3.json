@@ -32,14 +32,9 @@
       "email": { "casella": { "stato": "salvata", "id": "d1", "url": "https://mail.example/d1" }, "a": "leo@studio.example", "oggetto": "Re: Logo files", "corpo": "Hi Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex", "conosciuto": true, "rispondeA": { "messageId": "l1@studio.example" } }
     },
     {
-      "id": "c-l1", "testo": "Write the Q4 plan for the Harbor pilot", "quando": "oggi", "progetto": "hb", "stato": "pronto", "modo": "tutto", "chiesto": "-2h",
-      "risultato": "Done: the Q4 plan for the Harbor pilot.\n\nThe pilot runs for four weeks with two engineers on supplier invoices first, a review with the CFO at the end, and a decision on the rollout in December.\n\nFrom the pilot plan [1].\nI assumed the budget stays at last quarter's level and that the three pilot sites keep their current staff through December.",
-      "ipotesi": ["I assumed the budget stays at last quarter's level and that the three pilot sites keep their current staff through December."]
-    },
-    {
       "id": "c-v1", "testo": "Send Nora the quote for twenty people", "quando": "oggi", "stato": "pronto", "modo": "tutto", "chiesto": "-2h",
-      "risultato": "Done: the quote to Nora.\n\nHi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex\n\nDelivery from the price list [1].\nMissing: the price for 20 people. I left it blank.",
-      "ipotesi": ["Missing: the price for 20 people. I left it blank."],
+      "risultato": "Done: the quote to Nora.\n\nHi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex\n\nDelivery from the price list [1].\nMissing: the price for 20 people. I left it blank: the price list stops at twelve people and no mail from Nora names a budget for the larger group.",
+      "ipotesi": ["Missing: the price for 20 people. I left it blank: the price list stops at twelve people and no mail from Nora names a budget for the larger group."],
       "email": { "a": "nora@harbor.example", "oggetto": "Course quote for twenty people", "corpo": "Hi Nora,\n\nfor twenty people the course costs [to fill: price for 20 people], with delivery three weeks from the signed order.\n\nBest,\nAlex", "conosciuto": true }
     }
   ],
