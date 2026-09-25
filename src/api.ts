@@ -2034,6 +2034,39 @@ export type ProjectInitiative = { id: string; projectId: string; projectName: st
 // — P1B: fine —
 
 // — P2: inizio —
+
+/** La misura del feed (`server/misura-feed.ts`): per chi costruisce, non per la pagina. */
+export type MisuraFeed = {
+  da: string; a: string; giorni: number
+  carte: {
+    nate: number; viste: number; storiche: number
+    agite: number; fuori: number; tardive: number; tenute: number
+    scartate: { vecchia: number; non_mia: number; non_chiara: number; senza: number }
+    scadute: { tempo: number; data: number; tetto: number }
+    superate: number
+  }
+  precisione: number | null
+  precisioneChiusa: number | null
+  mancate: { totale: number; risposte: number; compiti: number; perFase: Record<string, number> }
+  mancanza: number | null
+  mancanzaCompiti: number | null
+  perGiorno: { giorno: string; nate: number; viste: number; giuste: number; sbagliate: number; mancate: number }[]
+  perMittente: { mittente: string; viste: number; giuste: number; sbagliate: number }[]
+  copertura: { postaInviata: boolean }
+}
+
+type EsitoVoce = { stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[]; registrato?: Registrato }
+
+/** Le chiamate del feed con l'asticella: «Non utile» con una ragione, le carte viste, la misura. */
+export const apiP2 = {
+  /** «Non utile», con una delle quattro ragioni: la carta si chiude senza parole e senza modello. */
+  scartaFeed: (id: string, ragione: 'vecchia' | 'fatta' | 'non_mia' | 'non_chiara') =>
+    json<EsitoVoce>(`/api/feed/${encodeURIComponent(id)}/rispondi`, { method: 'POST', body: JSON.stringify({ testo: '', stato: 'scartato', ragione }) }),
+  /** Le carte che ha visto davvero (`feed-vista.ts`): il server le segna una volta, e non ricarica niente. */
+  segnaViste: (ids: string[]) => json<{ ok: true; segnate: number }>('/api/feed/viste', { method: 'POST', body: JSON.stringify({ ids }) }),
+  misuraFeed: (giorni?: number) => json<MisuraFeed>(`/api/feed/misura${giorni ? `?giorni=${giorni}` : ''}`)
+}
+
 // — P2: fine —
 
 // — P3: inizio —

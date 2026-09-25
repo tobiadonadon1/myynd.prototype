@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { frasi, lingua, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconOcchio, IconPiu, IconSpunta } from '../icons'
@@ -13,7 +13,8 @@ import { giornoLocale } from '../oggi/giorni'
 import type { Chiesta, Compito } from '../api'
 import type { VoceFeed } from '../data'
 import { quando } from '../data'
-import { dataFonte, testoCarta } from '../feed-carta'
+import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from '../feed-carta'
+import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
 import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
@@ -59,6 +60,14 @@ const PASTIGLIA: CSSProperties = {
  */
 const PASTIGLIA_FATTA: CSSProperties = {
   ...PASTIGLIA, color: 'var(--avorio)', background: 'var(--rame)', borderColor: 'var(--rame)'
+}
+/**
+ * La pastiglia di uno stato: «Risposto», quando ha già risposto dalla sua
+ * posta. Verde, perché è uno stato e non un'urgenza: l'unico verde della
+ * riga. La carta resta finché non preme Fatto.
+ */
+const PASTIGLIA_STATO: CSSProperties = {
+  ...PASTIGLIA, color: 'var(--verde-cupo)', background: 'rgba(var(--salvia-rgb),.14)', border: '1px solid rgba(var(--salvia-rgb),.3)'
 }
 /** Il nome del progetto in cima al blocco: maiuscoletto spaziato, nel suo colore. */
 const NOME: CSSProperties = { fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' }
@@ -170,14 +179,33 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
   const carta = testoCarta(voce)
   const priorita = voce.tipo === 'Priorità'
   const proposta = priorita || voce.tipo === 'Proposta'
-  const perche = proposta ? (carta.testo || carta.perche) : (carta.perche || carta.testo)
-  const altro = [carta.testo, carta.perche].filter(x => x && x !== perche)
+  // la seconda riga è il perché oggi, per ogni genere; il testo si apre col clic
+  const { riga: perche, dettaglio: altro } = secondaRiga(voce)
   const corta = taglia(perche, 150)
   const espandibile = corta !== perche || altro.length > 0
   const apri = () => { if (espandibile) setAperta(x => !x) }
   const offerta = voce.offerta ?? ''
-  const fonte = voce.doc || voce.fonte ? parolaFonte(voce.fonte, voce.doc) : ''
-  const ora = quando(dataFonte(voce))
+  // una carta nata dalla memoria di un progetto o dal riferimento: la fonte è il progetto
+  const dalProgetto = !voce.doc && (voce.fonte === 'memoria' || voce.fonte === 'riferimento') && voce.progetto ? voce.progetto : null
+  const nomeProgetto = dalProgetto ? v.progetti.find(p => p.id === dalProgetto)?.nome ?? '' : ''
+  const fonte = dalProgetto ? '' : voce.doc || voce.fonte ? parolaFonte(voce.fonte, voce.doc) : ''
+  const ora = dalProgetto ? '' : quando(dataFonte(voce))
+  // vista davvero: metà della carta, un secondo, con la finestra davanti
+  const radice = useVista(voce.id)
+  /*
+   * «Non utile» chiede una ragione, sul posto: il lato destro della fascia
+   * diventa quattro parole. Esc torna al bottone, il fuoco che esce o sei
+   * secondi senza un gesto chiudono la domanda. Niente sotto la riga.
+   */
+  const [scegliendo, setScegliendo] = useState(false)
+  const nonUtile = useRef<HTMLButtonElement | null>(null)
+  const primaRagione = useRef<HTMLButtonElement | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const riarma = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setScegliendo(false), 6000) }
+  const chiedi = () => { setScegliendo(true); riarma() }
+  const lascia = (alBottone = false) => { clearTimeout(timer.current); setScegliendo(false); if (alBottone) nonUtile.current?.focus() }
+  useEffect(() => { if (scegliendo) primaRagione.current?.focus() }, [scegliendo])
+  useEffect(() => () => clearTimeout(timer.current), [])
   /*
    * La pastiglia dice quando, in tre parole: «entro venerdì», «domani 9:30».
    *
@@ -209,16 +237,19 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
     v.mostraToast(t('Affidata a Myynd: la trovi nella lista.'))
   }
 
-  const fatto = <Hov as="button" type="button" onClick={fermo(() => v.risolviVoce(voce))} style={proposta && lista ? GESTO : PILLOLA} hover={proposta && lista ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{t('Fatto')}</Hov>
+  // con la risposta già mandata dalla posta, «Fatto» è il bottone della riga anche su una priorità
+  const fattoPiccolo = proposta && lista && !voce.risposta
+  const fatto = <Hov as="button" type="button" onClick={fermo(() => v.risolviVoce(voce))} style={fattoPiccolo ? GESTO : PILLOLA} hover={fattoPiccolo ? { color: 'var(--rame-testo)' } : PILLOLA_SOPRA}>{t('Fatto')}</Hov>
   const affidalo = lista && (
     <Hov as="button" type="button" onClick={fermo(() => { void affida() })} disabled={affidando}
       style={{ ...(proposta ? PILLOLA : GESTO), opacity: affidando ? .6 : 1 }} hover={proposta ? PILLOLA_SOPRA : { color: 'var(--rame-testo)' }}>{t('Affidalo a Myynd')}</Hov>
   )
 
   return (
-    <div role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
+    <div ref={radice} role={espandibile ? 'button' : undefined} tabIndex={0} onClick={apri} onKeyDown={daTastiera(apri)} {...props}
+      onBlur={(e: FocusEvent) => { props.onBlur(e); if (scegliendo && !e.currentTarget.contains(e.relatedTarget as Node | null)) lascia() }}
       aria-expanded={espandibile ? aperta : undefined}
-      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva ? 'var(--riga-sopra)' : 'transparent' }}>
+      style={{ ...RIGA, cursor: espandibile ? 'pointer' : 'default', background: attiva || scegliendo ? 'var(--riga-sopra)' : 'transparent' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={TITOLO}>{carta.titolo}</div>
@@ -229,26 +260,48 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <div style={OFFERTA}><span style={{ fontWeight: 600 }}>{t('Posso farlo io:')}</span> {offerta}</div>
           )}
         </div>
-        {conPastiglia && <span style={PASTIGLIA}>{pastiglia}</span>}
+        {voce.risposta
+          ? <span style={PASTIGLIA_STATO}>{t('Risposto')}</span>
+          : conPastiglia && <span style={PASTIGLIA}>{pastiglia}</span>}
       </div>
-      <Fascia attiva={attiva}
-        sinistra={(fonte || ora) && (
-          <>
-            <span>{[fonte, ora].filter(Boolean).join(' · ')}</span>
-            {voce.doc && (
-              <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo}
-                onClick={fermo(() => { void v.portamiFonte(voce.doc!) })}
-                style={{ ...LINK, cursor: aprendo ? 'wait' : 'pointer' }} hover={{ textDecorationColor: 'currentColor' }}>{aprendo ? t('Un momento…') : t('Portami lì')}</Hov>
-            )}
-          </>
-        )}
-        destra={
-          <>
-            {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
-            <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
-            <Hov as="button" type="button" onClick={fermo(() => v.scartaVoce(voce))} title={t('Toglila dal feed')} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non mi interessa')}</Hov>
-          </>
-        } />
+      <Fascia attiva={attiva || scegliendo}
+        sinistra={dalProgetto
+          ? (
+            <>
+              <span>{t('Da')}</span>
+              <Hov as="button" type="button" title={nomeProgetto} onClick={fermo(() => v.apriProgetto(dalProgetto))}
+                style={{ ...LINK, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} hover={{ textDecorationColor: 'currentColor' }}>{nomeProgetto ? `${t('il progetto')} ${nomeProgetto}` : t('il progetto')}</Hov>
+            </>
+          )
+          : (fonte || ora) && (
+            <>
+              <span>{[fonte, ora].filter(Boolean).join(' · ')}</span>
+              {voce.doc && (
+                <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo}
+                  onClick={fermo(() => { void v.portamiFonte(voce.doc!) })}
+                  style={{ ...LINK, cursor: aprendo ? 'wait' : 'pointer' }} hover={{ textDecorationColor: 'currentColor' }}>{aprendo ? t('Un momento…') : t('Portami lì')}</Hov>
+              )}
+            </>
+          )}
+        destra={scegliendo
+          ? (
+            <div role="group" aria-label={t('Perché non è utile')} onMouseEnter={riarma} onFocus={riarma}
+              onKeyDown={(e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); lascia(true) } }}
+              style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px' }}>
+              {RAGIONI_NON_UTILE.map((r, i) => (
+                <Hov key={r.ragione} as="button" type="button" ref={i === 0 ? primaRagione : undefined}
+                  onClick={fermo(() => { lascia(); v.scartaVoce(voce, r.ragione) })}
+                  style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t(r.etichetta)}</Hov>
+              ))}
+            </div>
+          )
+          : (
+            <>
+              {proposta && lista ? <>{affidalo}{fatto}</> : <>{fatto}{affidalo}</>}
+              <Hov as="button" type="button" onClick={fermo(() => v.parlaneDi(voce))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Parlane in chat')}</Hov>
+              <Hov as="button" type="button" ref={nonUtile} onClick={fermo(chiedi)} title={t('Toglila dal feed')} aria-label={`${t('Non utile')}: ${carta.titolo}`} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Non utile')}</Hov>
+            </>
+          )} />
     </div>
   )
 }
