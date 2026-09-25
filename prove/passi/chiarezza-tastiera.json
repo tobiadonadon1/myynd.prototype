@@ -1,37 +1,110 @@
 [
-  { "clicca": "Your account" },
-  { "vai": "Preferences" },
-  { "clicca": "Your Myynd" },
-  { "aspetta": 800 },
-  { "js": "(document.querySelector('.f-nav button[aria-current=page]')?.focus(), 1)" },
-  { "premi": "Tab" },
-  { "premi": "Tab" },
-  { "scatta": "t1-tab-fuoco" },
-  { "js": "(document.querySelector('[role=radiogroup][aria-label=Tone] [role=radio][aria-checked=true]')?.focus(), document.activeElement?.textContent)" },
-  { "premi": "Right" },
-  { "js": "JSON.stringify({ fuoco: document.activeElement?.textContent, scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })" },
-  { "scatta": "t2-freccia-non-sceglie" },
-  { "premi": "Space" },
-  { "aspetta": 400 },
-  { "js": "JSON.stringify({ scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })" },
-  { "premi": "Left" },
-  { "premi": "Enter" },
-  { "aspetta": 400 },
-  { "js": "JSON.stringify({ scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })" },
-  { "clicca": "Account and app" },
-  { "aspetta": 800 },
-  { "scrivi": "Alexandra", "in": "Name" },
-  { "premi": "Escape" },
-  { "aspetta": 300 },
-  { "js": "JSON.stringify({ nome: document.getElementById(document.querySelector('label.f-etichetta')?.htmlFor)?.value })" },
-  { "scatta": "t3-esc-rimette" },
-  { "clicca": "Your account" },
-  { "js": "JSON.stringify({ fuoco: document.activeElement?.textContent?.trim() })" },
-  { "premi": "Down" },
-  { "js": "JSON.stringify({ fuoco: document.activeElement?.textContent?.trim() })" },
-  { "scatta": "t4-menu-frecce" },
-  { "premi": "Escape" },
-  { "aspetta": 300 },
-  { "js": "JSON.stringify({ menu: !!document.querySelector('[role=menu]'), fuoco: document.activeElement?.getAttribute('aria-label') })" },
-  { "scatta": "t5-menu-chiuso" }
+ {
+  "clicca": "Your account"
+ },
+ {
+  "vai": "Preferences"
+ },
+ {
+  "clicca": "Your Myynd"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "js": "(document.querySelector('.f-nav button[aria-current=page]')?.focus(), 1)"
+ },
+ {
+  "premi": "Tab"
+ },
+ {
+  "premi": "Tab"
+ },
+ {
+  "scatta": "t1-tab-fuoco"
+ },
+ {
+  "js": "(document.querySelector('[role=radiogroup][aria-label=Tone] [role=radio][aria-checked=true]')?.focus(), document.activeElement?.textContent)"
+ },
+ {
+  "premi": "Right"
+ },
+ {
+  "js": "JSON.stringify({ fuoco: document.activeElement?.textContent, scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })"
+ },
+ {
+  "scatta": "t2-freccia-non-sceglie"
+ },
+ {
+  "premi": "Space"
+ },
+ {
+  "aspetta": 400
+ },
+ {
+  "js": "JSON.stringify({ scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })"
+ },
+ {
+  "premi": "Left"
+ },
+ {
+  "premi": "Enter"
+ },
+ {
+  "aspetta": 400
+ },
+ {
+  "js": "JSON.stringify({ scelto: document.querySelector('[role=radiogroup][aria-label=Tone] [aria-checked=true]')?.textContent })"
+ },
+ {
+  "clicca": "Account and app"
+ },
+ {
+  "aspetta": 800
+ },
+ {
+  "js": "(document.querySelector('[data-scheda=nome] input')?.focus(), 1)"
+ },
+ {
+  "scrivi": "Alexandra"
+ },
+ {
+  "premi": "Escape"
+ },
+ {
+  "aspetta": 300
+ },
+ {
+  "js": "JSON.stringify({ nome: document.querySelector('[data-scheda=nome] input')?.value })"
+ },
+ {
+  "scatta": "t3-esc-rimette"
+ },
+ {
+  "clicca": "Your account"
+ },
+ {
+  "js": "JSON.stringify({ fuoco: document.activeElement?.textContent?.trim() })"
+ },
+ {
+  "premi": "Down"
+ },
+ {
+  "js": "JSON.stringify({ fuoco: document.activeElement?.textContent?.trim() })"
+ },
+ {
+  "scatta": "t4-menu-frecce"
+ },
+ {
+  "premi": "Escape"
+ },
+ {
+  "aspetta": 300
+ },
+ {
+  "js": "JSON.stringify({ menu: !!document.querySelector('[role=menu]'), fuoco: document.activeElement?.getAttribute('aria-label') })"
+ },
+ {
+  "scatta": "t5-menu-chiuso"
+ }
 ]

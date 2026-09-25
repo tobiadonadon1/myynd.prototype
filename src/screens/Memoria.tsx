@@ -395,7 +395,11 @@ export function Memoria({ v }: { v: Vals }) {
     if (quante > 0) { tutto(); v.memoriaVista() }
   }, [quante]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sezioni = sezioniMemoria(sommario)
+  // le note del ritratto seguono la pagina, non l'ultima lettura: «Tienila» o il cestino le cambiano nello stesso fotogramma
+  const sommarioVero: Sommario | null = sommario && d
+    ? { ...sommario, ritratto: { sa: d.convinzioni.filter(c => !inAttesa(c)).length, daGuardare: d.convinzioni.filter(inAttesa).length } }
+    : sommario
+  const sezioni = sezioniMemoria(sommarioVero)
   const [sezione, setSezione] = useState<SezioneMem>(() => sezioneIniziale({
     pagina: 'memoria', richiesta: sezioneAttesa('memoria')?.sezione ?? vaiComeLavori(), biglietto: !!progettoAtteso(),
     nuove: allApertura.current.quante > 0 ? allApertura.current.dove : null,
