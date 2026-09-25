@@ -149,5 +149,11 @@ test('premere «Leggi adesso» durante una lettura non torna un errore, ma dice 
   for (const r of gia) {
     assert.ok(Array.isArray(r.corpo.feed), 'la risposta calma porta comunque il feed di adesso')
     assert.equal(r.corpo.generate, 0, 'niente voci nuove: la lettura è quella già in corso')
+    // P10 · e la lettura a cui si è attaccata (o null, se la riga è di un altro)
+    assert.ok('lettura' in r.corpo, 'la risposta calma dice a quale lettura si attacca')
   }
+  // P10 · la prima risponde subito con la lettura avviata, la seconda si attacca alla stessa
+  const l1 = prima.corpo.lettura as { id?: string } | null
+  const l2 = seconda.corpo.lettura as { id?: string } | null
+  if (l1 && l2) assert.equal(l2.id, l1.id, 'due pressioni, una lettura sola')
 })

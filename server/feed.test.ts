@@ -179,6 +179,29 @@ test('quello che è già sul feed non si rilegge e si dice al modello per titolo
   assert.equal(store.elencoFeed('aperto').length, 2)
 })
 
+test('P10 · i passi della lettura: «scelgo» con i documenti del prompt, niente «arrivato» senza Jev, e chi ascolta non la rompe', async () => {
+  store.azzeraTutto()
+  store.salvaDocumenti([
+    doc('posta:INBOX:40', 'Fattura Verdi', { corpo: 'Puoi pagare la fattura entro venerdì?' }),
+    doc('posta:INBOX:41', 'Contratto Neri', { corpo: 'Puoi firmare il contratto entro lunedì?' })
+  ])
+  const ricevute = fornitoreFinto([])
+  const passi: [string, number | undefined][] = []
+  await claude.generaFeed([], (p, n) => { passi.push([p, n]) })
+  assert.equal(ricevute.length, 1)
+  const mandati = (testoDi(ricevute[0]).match(/^id: /gm) ?? []).length
+  const scelgo = passi.find(([p]) => p === 'scelgo')
+  assert.ok(scelgo, 'il passo «scelgo» non è arrivato')
+  assert.equal(scelgo![1], mandati, 'il numero dei documenti non è quello del prompt')
+  assert.ok(!passi.some(([p]) => p === 'arrivato'), 'senza Jev non si dice «guardo cosa è arrivato»')
+  assert.ok(passi.some(([p]) => p === 'ordine'))
+  // un ascoltatore che esplode non ferma la lettura
+  store.azzeraTutto()
+  store.salvaDocumenti([doc('posta:INBOX:42', 'Ordine', { corpo: 'Puoi firmare l’ordine entro lunedì?' })])
+  fornitoreFinto([])
+  await assert.doesNotReject(claude.generaFeed([], () => { throw new Error('ascoltatore rotto') }))
+})
+
 test('con tutto già sul feed non si chiama nessun modello', async () => {
   store.azzeraTutto()
   store.salvaDocumenti([doc('posta:INBOX:20', 'Unico')])

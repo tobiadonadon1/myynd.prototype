@@ -19,6 +19,8 @@ import { useVista } from '../feed-vista'
 import { azioneEmail } from '../oggi/azione-email'
 import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, ordineDopoIlTrascinamento, ordineStabile, stessoGruppo, sulTavolo, cheAspettano } from '../blocchi-feed'
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
+import { RigaCheLavora } from '../components/RigaCheLavora'
+import { testoPasso } from '../lettura-passo'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { rigaFonti } from '../salute-fonti'
 import { RimedioFonte, osservatore } from '../components/RimedioFonte'
@@ -1234,6 +1236,8 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
   // carta. Lo stesso conto del menù, per costruzione.
   const inPagina = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
+  // P10 · l'occhio è premuto dalla pressione alla fine della lettura
+  const leggendo = v.generando || !!v.lettura
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1264,13 +1268,14 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
               «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
               la lettura ormai parte da sola ogni dieci minuti, questo è per
               chi non vuole aspettarli. Il nome lo dice al passaggio. */}
-          <Hov as="button" type="button" onClick={v.genera} disabled={v.generando}
-            title={v.generando ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+          {/* P10 · premuto nello stesso istante, mai spento: un anello di rame mentre legge */}
+          <Hov as="button" type="button" onClick={v.genera}
+            title={leggendo ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
+            aria-pressed={leggendo} aria-busy={leggendo || undefined}
             style={{
               flex: 'none', marginTop: 6, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '50%', border: '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
-              color: 'var(--rame)', cursor: v.generando ? 'wait' : 'pointer', padding: 0,
-              opacity: v.generando ? 0.55 : 1, animation: v.generando ? 'pulse 1.2s ease-in-out infinite' : undefined
+              borderRadius: '50%', border: leggendo ? '1.5px solid var(--rame)' : '1px solid rgba(var(--rame-rgb),.35)', background: 'rgba(var(--luce-rgb),.7)',
+              color: 'var(--rame)', cursor: 'pointer', padding: 0
             }}
             hover={{ background: 'var(--carta-alta)', borderColor: 'var(--rame)' }}>
             <IconOcchio size={15} />
@@ -1279,6 +1284,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       </div>
 
       <Avviso v={v} />
+      {/* P10 · la lettura di «Leggi adesso»: una riga che lavora, sotto la riga fissa */}
+      {(leggendo || v.finita) && (
+        <RigaCheLavora titolo={t('Leggo le tue fonti')} passo={testoPasso(v.lettura)}
+          finita={!leggendo && v.finita} onFinita={() => v.setFinita(false)} />
+      )}
 
       {/* Myynd ha scritto: le domande per conoscerti aspettano in chat. Sta in
           cima a tutto, perché rispondergli viene prima del resto. */}

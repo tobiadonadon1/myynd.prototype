@@ -48,6 +48,7 @@ import {
 import * as ordine from './ordine.ts'
 import { classificaAttenzione, validaVoceFeed, corpoAttuale, giornoFondato, contieneRichiesta, indirizzoAttenzione } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
+import { collegato as jevCollegato } from './jev.ts'
 import { rifinisci } from './rifinitura.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
 // P2 · la lettura con l'asticella: quello che ha imparato dalle sue ragioni,
@@ -2091,9 +2092,11 @@ export function candidatoDaFeed(
  * «questo è fatto». Adesso sa tre cose in più: chi sei, su cosa hai detto di
  * concentrarti, e cosa hai già liquidato e perché.
  */
-export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
+export async function generaFeed(nuovi: Documento[] = [], onPasso?: (p: 'arrivato' | 'scelgo' | 'ordine', n?: number) => void): Promise<VoceFeed[]> {
   const m = motore()
   if (!m) return []
+  // P10 · a che punto è, per la riga che lavora: un ascoltatore non rompe mai una lettura
+  const passo = (p: 'arrivato' | 'scelgo' | 'ordine', n?: number) => { try { onPasso?.(p, n) } catch { /* chi ascolta si arrangia */ } }
   // Indexing an old document does not make it recent. Newly arrived sources
   // still pass the same source-date and relevance checks as indexed sources.
   const arrivati = new Set(nuovi.map(d => d.id))
@@ -2219,6 +2222,7 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * E se Jev non c'è — nessuna chiave, rete giù, tetto del giorno finito —
    * `attenzione` torna una Map vuota e la fila resta quella che era.
    */
+  if (inFila.length && jevCollegato()) passo('arrivato')
   const visti = await giudizi.attenzione(inFila.slice(0, GIUDIZI_PER_LETTURA))
   const davanti = new Set(inFila.filter(d => imp.daNonPerdere.has(mittenteDi(d))).map(d => d.id))
   const dietro = new Set(inFila.filter(d => {
@@ -2470,6 +2474,7 @@ Scrivi in ${nellaLingua()}.`),
    */
   const l = cfgLingua()
   const daLeggere = (v: VoceFeed) => `${v.titolo} ${v.testo} ${v.perche ?? ''}`
+  passo('scelgo', docs.length)
   let voci = await chiama('')
   if (voci.some(v => linguaSbagliata(daLeggere(v), l))) voci = await chiama(`\n\n${soloInLingua(l)}`)
   const buone = voci.filter(v => !linguaSbagliata(daLeggere(v), l))
@@ -2483,6 +2488,7 @@ Scrivi in ${nellaLingua()}.`),
    * *voce*, non sul documento da cui viene, e si fanno dopo che è nata e
    * prima che si salvi. Senza Jev restano solo le lineette via e la pillola.
    */
+  passo('ordine')
   const rifinite = await rifinisci(buone, { progetti: suoi, registro: 'lettura', sogliaChiara: imp.sogliaChiara, oscure: imp.oscure })
   const sopravvissute = new Set(rifinite.map(v => v.doc))
   for (const v of buone) { const d = documento(v.doc); if (d) finito(d, sopravvissute.has(v.doc) ? 'carta' : 'doppione') }

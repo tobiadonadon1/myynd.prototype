@@ -29,6 +29,7 @@ import * as memoria from './memoria.ts'
 import * as conoscenza from './conoscenza.ts'
 import * as timone from './timone.ts'
 import * as tempi from './tempi.ts'
+import * as letturaChiesta from './lettura-chiesta.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
@@ -2529,12 +2530,18 @@ const OGNI = 10 * 60 * 1000
  * token di oggi sta dentro `modello.ts` e ferma `generaFeed` come tutto il
  * resto: qui lo si lascia salire, e chi chiama lo scrive nel registro.
  */
-async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
+function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
+  return tempi.misuraLavoro('arrivi', () => dopoLArrivoDentro(nuovi))
+}
+
+async function dopoLArrivoDentro(nuovi: store.Documento[]): Promise<number> {
   if (!nuovi.length || !await mod.disponibilePer('lettura')) return nuovi.length
 
-  const voci = await claude.generaFeed(nuovi)
+  // P10 · mentre «Leggi adesso» sceglie dall'indice intero, una seconda lettura del modello qui non serve
+  const voci = letturaChiesta.staScegliendo() ? [] : await claude.generaFeed(nuovi)
   const nuove = voci.length ? store.salvaFeed(voci) : 0
   if (nuove) {
+    tempi.carteNate(nuove)
     console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)
     // e chi ha la pagina aperta lo sa adesso, non alla prossima ricarica
     compiti.annunciaFeed()
@@ -2548,7 +2555,12 @@ async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuan
   return nuovi.length
 }
 
-async function rileggiDaSola() {
+/** P10 · il giro dei dieci minuti, misurato come un lavoro solo. */
+function rileggiDaSola(): Promise<void> {
+  return tempi.misuraLavoro('rilettura', rileggiDaSolaDentro)
+}
+
+async function rileggiDaSolaDentro() {
   if (sincronizzazioneInCorso()) return
   const c = cfg.leggi()
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
@@ -2576,7 +2588,7 @@ async function rileggiDaSola() {
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
-    if (await priorita.forse()) compiti.annunciaFeed()
+    if (await tempi.misuraLavoro('priorita', () => priorita.forse())) compiti.annunciaFeed()
     // niente tavolo qui: le righe inventate per riempire un progetto vuoto
     // erano «messed-up tasks that do not mean anything». Vedi `tavolo.ts`.
     // e le automazioni che non si è ancora scritto. Il cancello — un giro al
@@ -2695,7 +2707,13 @@ app.get('/api/feed', (_req, res) => {
   const ore = cfg.leggi().oreFatte ?? 48
   // e le fonti che l'ultima lettura non ha letto: la riga fissa della prima
   // pagina si aggiorna con il feed, cioè anche dopo una rilettura di fondo
-  res.json({ aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(chi.adesso() ?? '') })
+  // P10 · e, nella stessa risposta, la lettura che corre, il fuoco e la domanda:
+  // la prima pagina non fa più tre giri per disegnarsi
+  const conto = chi.adesso() ?? ''
+  res.json({
+    aperti: feedAttuale(), fatte: store.elencoFeed('fatto', ore), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto),
+    lettura: letturaChiesta.inCorso(conto), fuoco: timone.fuoco(), domanda: riferimento.aggiornata(store.domandaAperta())
+  })
 })
 
 /**
@@ -2751,71 +2769,73 @@ app.post('/api/feed/genera', async (_req, res) => {
   }
   try {
     /*
-     * Prima si rileggevano tutte le fonti, e poi si generava: «quando premo
-     * Leggi adesso ci mette un'eternità». Adesso si genera subito da quello
-     * che c'è in indice — la risposta arriva in pochi secondi — e le fonti si
-     * rileggono dopo, di fondo, con lo stesso giro delle sei ore: quello che
-     * arriva passa da `dopoLArrivo` e compare da solo, e la riga delle fonti
-     * non lette si aggiorna con il feed.
+     * «Quando premo Leggi adesso ci mette un'eternità» (P10).
+     *
+     * La risposta arriva subito, e la lettura corre di fondo come un lavoro
+     * solo per conto (`lettura-chiesta.ts`): la pagina la segue sul filo dei
+     * compiti, con una riga che lavora e i suoi passi, e alla fine una frase.
+     *
+     * Premere di nuovo, da un'altra finestra o dopo un ricaricamento, non è un
+     * errore e non fa partire una seconda lettura: si riceve quella che corre,
+     * con lo stesso id. Era un 409 addosso a chi aveva appena premuto («There
+     * is an error that comes up every time that I click that eye… it added two
+     * things to my feed while giving me an error»), poi un «sto già leggendo»;
+     * adesso è la stessa riga, già lì. E se una lettura delle fonti tiene già
+     * il lucchetto, la si segue invece di farne partire un'altra.
      */
     const conto = chi.adesso() ?? ''
-    /*
-     * Premere l'occhio mentre sta già leggendo non è un errore.
-     *
-     * Era un 409 — «A source read is already running. Wait for it to finish
-     * and try again.» — e arrivava addosso a chi aveva appena premuto: una
-     * striscia rossa in alto a destra che se ne andava in cinque secondi, e
-     * subito dopo due carte nuove nel feed. «There is an error that comes up
-     * every time that I click that eye… it added two things to my feed while
-     * giving me an error.» Erano la stessa cosa: la rilettura di fondo che
-     * parte da *questo* bottone tiene il lucchetto per una mezza minuto, e
-     * in quel mezzo minuto ogni altra pressione era un errore. Poi la
-     * rilettura finiva e metteva le sue carte.
-     *
-     * Adesso si risponde con quello che c'è — il feed di adesso, le fonti —
-     * e si dice che sta già leggendo. Niente modello e nessuna seconda
-     * rilettura: quella in corso è la stessa che avrebbe chiesto lui.
-     */
-    if (sincronizzazioniInCorso.has(conto)) {
-      return res.json({
-        ok: true, generate: 0, gia: true,
-        feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
-      })
-    }
-    const voci = await claude.generaFeed()
-    // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
-    // è quello che impedisce a una rilettura di duplicare il feed. Quello che
-    // si passava veniva ignorato a ogni giro. Il conto è delle voci *nuove*:
-    // «tre cose nuove» quando erano già tutte lì è un'altra bugia.
-    const nuove = store.salvaFeed(voci)
-    // niente di nuovo: si dice perché, in numeri, invece di un «niente» secco
-    // e quello che la lettura non ha letto, perché la pagina lo dica accanto
-    // a quello che ha trovato invece di fermarsi lì
-    // niente di nuovo dalle fonti: si guarda il quadro intero, subito dopo
-    // aver risposto, e la pagina lo sa («guardo tutto il resto») — così il
-    // «niente» non è l'ultima parola quando c'è un modello per dirne un'altra
-    const cerco = !nuove && priorita.pronta(true)
-    res.json({ ok: true, generate: nuove, feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto), ...(nuove ? {} : { vuoto: percheVuoto(), cerco }) })
-    // le altre finestre della stessa persona: la lettura l'ha chiesta una sola
-    compiti.annunciaFeed()
-
-    // Dopo aver risposto, non prima: capire se c'è qualcosa da chiedere non deve
-    // mai far aspettare una lettura. Quasi sempre non conclude niente, ed è giusto.
-    domande.forseChiedi().catch(() => {})
-    // e la rilettura delle fonti, dopo e di fondo; alla fine si avvisa la
-    // pagina, così la riga delle fonti dice quello che questa lettura ha visto
-    const utente = chi.adesso()
-    // prima le fonti, poi il quadro: le priorità devono vedere quello che
-    // la rilettura ha appena portato — le cartelle di lavoro, la posta di
-    // oggi — non il materiale di ieri. La pagina lo sa comunque subito.
-    const rileggi = async () => {
-      await rileggiDaSola(); compiti.annunciaFeed()
-      if (cerco && await priorita.forse(true)) compiti.annunciaFeed()
-    }
-    void (utente ? chi.dentro(utente, rileggi) : rileggi())
-      .catch(e => console.error('myynd · la rilettura dopo «Leggi adesso» non è riuscita:', e instanceof Error ? e.message : e))
+    const gia = letturaChiesta.inCorso(conto)
+    const giaCosi = (lettura: letturaChiesta.Lettura | null) => res.json({
+      ok: true, gia: true, generate: 0, lettura,
+      feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
+    })
+    if (gia) return giaCosi(gia)
+    const unita = sincronizzazioniInCorso.has(conto)
+    const { lettura } = letturaChiesta.avvia(conto, unita ? seguiLaLettura : catenaDellaLettura, { unita })
+    if (unita) return giaCosi(lettura)
+    res.json({ ok: true, avviata: true, generate: 0, lettura })
   } catch (e) { errore(res, e) }
 })
+
+/**
+ * La catena di «Leggi adesso», di fondo (P10): il modello sceglie
+ * dall'indice, le fonti si rileggono (sempre da `rileggiDaSola`, cioè da
+ * `leggiTutto`), e se non era arrivato niente il quadro dei progetti.
+ * Prima le fonti, poi il quadro: le priorità devono vedere quello che la
+ * rilettura ha appena portato, non il materiale di ieri.
+ */
+async function catenaDellaLettura(c: letturaChiesta.Controllo): Promise<void> {
+  const voci = await c.scegli(() => claude.generaFeed([], (p, n) => c.passo(p, n)))
+  // niente id costruito qui: salvaFeed calcola il suo da (doc | titolo), ed
+  // è quello che impedisce a una rilettura di duplicare il feed
+  const nuove = store.salvaFeed(voci)
+  if (nuove) { compiti.annunciaFeed(); tempi.carteNate(nuove) }
+  // niente di nuovo dalle fonti: dopo la rilettura si guarda il quadro intero
+  const cerco = !nuove && priorita.pronta(true)
+  // capire se c'è qualcosa da chiedere non deve mai far aspettare una lettura
+  domande.forseChiedi().catch(() => {})
+  c.passo('fonti')
+  if (sincronizzazioneInCorso()) await finoAlLucchettoLibero()
+  else await rileggiDaSola()
+  compiti.annunciaFeed()
+  if (cerco) {
+    c.passo('progetti')
+    if (await priorita.forse(true)) compiti.annunciaFeed()
+  }
+}
+
+/** Una lettura delle fonti tiene già il lucchetto: la si segue fino in fondo, senza modello. */
+async function seguiLaLettura(c: letturaChiesta.Controllo): Promise<void> {
+  c.passo('fonti')
+  await finoAlLucchettoLibero()
+  compiti.annunciaFeed()
+}
+
+/** Aspetta che la lettura delle fonti di questo conto finisca: un'occhiata al secondo, al massimo dieci minuti. */
+async function finoAlLucchettoLibero(): Promise<void> {
+  const fino = Date.now() + 10 * 60_000
+  while (sincronizzazioneInCorso() && Date.now() < fino) await new Promise(r => setTimeout(r, 1000))
+}
 
 // — quello che chiede lui —
 
@@ -5245,7 +5265,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const filtraMittenti = perOgnuno('sender rules paused', () => runScheduled('sender_rules', 15 * 60_000, runSenderRules))
   setTimeout(filtraMittenti, 135_000)
   setInterval(filtraMittenti, 15 * 60_000)
-  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro())))
+  const giro = perOgnuno('il giro delle automazioni si è fermato', () => runScheduled('automations', 15 * 60_000, () => tempi.misuraLavoro('automazioni', () => store.senzaToccare(() => automazioni.giro()))))
   setTimeout(giro, 120_000)
   setInterval(giro, automazioni.OGNI)
   // il vassoio di prova (P6): una bozza per giro, nella fila delle prove
@@ -5346,7 +5366,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   // a new local day past 06:00, so the run 10 s after launch is already enough:
   // an app opened at eight after a night closed refreshes in the background,
   // and one left open crosses 06:00 on this same 60 s loop.
-  const giornali = perOgnuno('la rassegna non si è aggiornata', () => rassegna.aggiorna(false))
+  const giornali = perOgnuno('la rassegna non si è aggiornata', () => tempi.misuraLavoro('rassegna', () => rassegna.aggiorna(false)))
   setTimeout(giornali, 10_000)
   setInterval(giornali, 60_000)
 
