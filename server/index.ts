@@ -2792,6 +2792,21 @@ app.post('/api/feed/genera', async (_req, res) => {
       feed: feedAttuale(), iniziative: iniziativeProgetti(), fonti: fontiIncomplete(conto)
     })
     if (gia) return giaCosi(gia)
+    /*
+     * PROMEMORIA PER CHI UNISCE (P4 non è ancora nel ramo di P10): quando P4
+     * sta preparando la prima pagina fuori dal lucchetto di
+     * `sincronizzazioniInCorso` (`primaPagina.prepara()`, dentro
+     * `paginaSeDovuta()`), un occhio premuto qui non deve far partire una
+     * seconda `letturaChiesta.avvia` con una seconda chiamata a
+     * `claude.generaFeed`: la riga di P4 occupa già il posto. Verificato su
+     * `lavoro/p4:server/prima-pagina.ts`: il nome giusto è esattamente quello
+     * ipotizzato dalla spec 3.6 passo 3, `primaPagina.statoPagina(conto) ===
+     * 'lavoro'` (vale per tutta la `prepara()`, dal `metti('lavoro')` iniziale
+     * al `metti('pronta', …)` o `metti('guaio')` finale). All'unione,
+     * aggiungere qui:
+     *   if (primaPagina.statoPagina(conto) === 'lavoro') return giaCosi(null)
+     * (`giaCosi` accetta già `lettura: null`, pronto per questo).
+     */
     const unita = sincronizzazioniInCorso.has(conto)
     const { lettura } = letturaChiesta.avvia(conto, unita ? seguiLaLettura : catenaDellaLettura, { unita })
     if (unita) return giaCosi(lettura)
