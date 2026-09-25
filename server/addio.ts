@@ -24,6 +24,7 @@ import { join, resolve, sep } from 'node:path'
 import * as conti from './conti.ts'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
+import * as cancellati from './cancellati.ts'
 
 /**
  * La cartella di questo conto si può cancellare?
@@ -57,6 +58,8 @@ export async function cancella(utente: string): Promise<Esito> {
   // 2. l'indice aperto in questo processo. Solo il suo: `chiudiIndici()`
   //    farebbe cadere le richieste in volo di tutti gli altri.
   const dove = cfg.cartellaDi(utente)
+  // da qui nessuno riapre né riscrive questa cartella: una lettura in volo la ricreava (P4)
+  cancellati.segna(dove)
   try { store.chiudiIndice(dove) } catch { /* non era aperto: tanto meglio */ }
 
   // 3. la configurazione — la riga su Postgres, e la copia in memoria con

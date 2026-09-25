@@ -12,6 +12,9 @@ import { parti } from './fuso.ts'
 import { CATALOGO } from './connettori/registro.ts'
 import { fonteCollegata } from './fonti-collegate.ts'
 import { recordSourceObservation } from './project-memory.ts'
+import * as riferimento from './riferimento.ts'
+import * as cancellati from './cancellati.ts'
+import { senzaTrattini } from './testo.ts'
 
 /** Quanto indietro si guarda per spiegare un progetto che comincia adesso. */
 const GIORNI_EVIDENZE = 180
@@ -34,6 +37,8 @@ export type RisultatoAvvio = {
 export type StatoAvvio = {
   id: string
   revisione: number
+  /** Una prima lettura sta girando adesso (la rotta lo aggiunge, P4). */
+  leggendo?: boolean
   fase: 'progetto' | 'fonte' | 'verifica' | 'azione' | 'completo'
   progetto: { nome: string; obiettivo: string } | null
   /** Le fonti lette insieme per questo avvio, nell'ordine in cui le ha messe la persona. */
@@ -61,6 +66,14 @@ type Salvato = {
   fonte: string | null; fonti?: string[]; fonteScelta: boolean; verificato: boolean; confermati: string[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
   inCorso?: Intenzione | null
+  /**
+   * Fin dove si guarda per gli estratti (P4): quando ha scelto le fonti. La
+   * lettura continua dopo, in sottofondo, e un documento entrato dopo non deve
+   * spostare gli estratti sotto i suoi occhi (né far rispondere 409 a «Conferma»).
+   */
+  lettoFino?: string
+  /** Il riferimento come l'ha scritto l'avvio: finché è uguale, è nostro e si può completare. */
+  riferimentoNostro?: string
 }
 
 function fontiDi(s: Salvato): string[] {
@@ -82,6 +95,7 @@ export class ErroreAvvio extends Error {
 
 const file = () => join(cartella(), 'avvio.json')
 function salva(s: Salvato) {
+  if (cancellati.cancellata(cartella())) throw new ErroreAvvio(cancellati.CONTO_CANCELLATO, 410)
   mkdirSync(cartella(), { recursive: true, mode: 0o700 })
   const temporaneo = `${file()}.${randomUUID()}.tmp`
   writeFileSync(temporaneo, JSON.stringify(s, null, 2), { mode: 0o600, flush: true })
@@ -158,8 +172,14 @@ function evidenze(s: Salvato): FattoAvvio[] {
    */
   const soglia = Date.now() - GIORNI_EVIDENZE * 86_400_000
   const recente = (d: store.Documento) => !d.quando || Date.parse(d.quando) >= soglia
+  // quello entrato dopo la scelta delle fonti non sposta gli estratti (P4)
+  const fino = s.lettoFino ? Date.parse(s.lettoFino) : NaN
+  const giaLetto = (d: store.Documento) => {
+    const quando = (d as store.Documento & { indicizzato?: string | null }).indicizzato
+    return Number.isNaN(fino) || !quando || Date.parse(quando) <= fino
+  }
   const unici = [...new Map(documenti.map(d => [d.id, d])).values()]
-    .filter(d => !d.massa && recente(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
+    .filter(d => !d.massa && recente(d) && giaLetto(d) && progetti.tocca(p, `${d.titolo}\n${d.corpo}`))
   /*
    * A turno fra le fonti: il primo documento di ognuna, poi il secondo.
    *
@@ -245,7 +265,31 @@ export function progetto(b: { nome?: unknown; obiettivo?: unknown; revisione?: u
   // la prima attività parte vuota, con il suo esempio: riempita con
   // l'obiettivo, bastava un Invio per salvare un'attività uguale all'obiettivo
   s.progetto = { nome, obiettivo }
+  scriviRiferimento(s, `${nome}: ${senzaPunto(obiettivo)}.`)
   return cambia(s)
+}
+
+/** Una frase sua, senza il punto in fondo (lo rimette chi compone) e senza lineette. */
+const senzaPunto = (t: string) => senzaTrattini(t.trim()).replace(/[.。]+$/u, '').trim()
+
+/**
+ * Le sue parole del primo avvio diventano il riferimento, se non ne ha uno.
+ *
+ * Le priorità partono dal riferimento («su cosa lavora adesso»), e la prima
+ * pagina gira mentre lui è ancora qui: senza, la prima domanda che vedrebbe
+ * entrando è proprio quella a cui ha appena risposto. Si scrive solo se è
+ * vuoto o se è ancora quello scritto da qui; uno scritto da lui non si tocca.
+ */
+function scriviRiferimento(s: Salvato, testo: string, registra = false): void {
+  try {
+    const attuale = riferimento.leggi().testo.trim()
+    if (attuale && attuale !== s.riferimentoNostro) return
+    if (attuale === testo) return
+    riferimento.scrivi(testo, { registra })
+    s.riferimentoNostro = testo
+  } catch (e) {
+    console.warn('myynd · avvio · il riferimento non si è scritto:', e instanceof Error ? e.message : e)
+  }
 }
 
 /**
@@ -271,6 +315,7 @@ export function fonte(b: { fonti?: unknown; fonte?: unknown; revisione?: unknown
   const prima = fontiDi(s)
   const uguali = s.fonteScelta && prima.length === fonti.length && fonti.every(f => prima.includes(f))
   s.fonti = fonti; s.fonte = fonti[0] ?? null; s.fonteScelta = true
+  s.lettoFino = new Date().toISOString()
   // ma l'ordine decide chi parla per primo nel giro a turno: se un estratto
   // confermato non c'è più fra i tre, la conferma non vale più
   const ancora = uguali && s.confermati.length ? new Set(evidenze(s).map(f => f.id)) : null
@@ -363,6 +408,10 @@ function finalizza(s: Salvato): Salvato {
   s.risultato = { tipo: 'prima_traccia', progetto: { id: p.id, ...progetto },
     compito: { id, testo: gia?.testo ?? azione, giorno: gia?.giorno ?? giorno }, traccia: { ...traccia, prossimaAzione: gia?.testo ?? azione } }
   s.inCorso = null
+  // il riferimento, se è ancora quello scritto al primo passo, si completa con la prima attività
+  scriviRiferimento(s, en
+    ? `${progetto.nome}: ${senzaPunto(progetto.obiettivo)}. Now: ${senzaPunto(azione)}.`
+    : `${progetto.nome}: ${senzaPunto(progetto.obiettivo)}. Adesso: ${senzaPunto(azione)}.`, true)
   s.revisione++
   s.aggiornato = new Date().toISOString()
   salva(s)

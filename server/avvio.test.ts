@@ -426,3 +426,73 @@ test('a session saved when the first task was filled with the goal shows it empt
   writeFileSync(join(casa, 'avvio.json'), JSON.stringify({ ...salvato, azione: p.progetto!.obiettivo }))
   assert.equal(avvio.stato().azione, '')
 })
+
+// — P4: gli estratti fermi a quello letto, e il riferimento dalle sue parole —
+
+const riferimento = await import('./riferimento.ts')
+const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+test('un documento migliore arrivato dopo la scelta delle fonti non sposta gli estratti, e «Conferma» non fa 409', async () => {
+  fonti()
+  let s = progetto()
+  s = avvio.fonte({ fonte: 'desktop', revisione: s.revisione })
+  const prima = s.fatti.map(f => f.id)
+  await pausa(5)
+  // la lettura continua in sottofondo e porta un documento che combacia meglio
+  store.salvaDocumenti([documento('nuovo', 'Aurora: il lancio della nuova piattaforma Aurora è confermato per lunedì con i primi clienti.')])
+  assert.deepEqual(avvio.stato().fatti.map(f => f.id), prima)
+  s = avvio.conferma({ ids: prima.slice(0, 2), revisione: s.revisione })
+  assert.equal(s.fase, 'azione')
+})
+
+test('senza il segno di fin dove si è letto (un avvio di prima), gli estratti guardano tutto l’indice (counter-case)', () => {
+  fonti()
+  let s = progetto()
+  s = avvio.fonte({ fonte: 'desktop', revisione: s.revisione })
+  const file = join(casa, 'avvio.json')
+  const salvato = JSON.parse(readFileSync(file, 'utf8'))
+  delete salvato.lettoFino
+  writeFileSync(file, JSON.stringify(salvato))
+  store.salvaDocumenti([documento('ultimo', 'Aurora: la nuova piattaforma Aurora entra in prova con cinque clienti già da lunedì prossimo.')])
+  assert.ok(avvio.stato().fatti.some(f => f.evidenza.doc === 'ultimo'))
+})
+
+test('le sue parole del primo passo diventano il riferimento, e la prima attività lo completa', () => {
+  cfg.aggiorna({ lingua: 'it' })
+  let s = progetto()
+  assert.equal(riferimento.leggi().testo, 'Aurora: Preparare il lancio della nuova piattaforma Aurora.')
+  s = avvio.fonte({ fonti: [], revisione: s.revisione })
+  avvio.completa({ azione: 'Scrivere la pagina prezzi.', revisione: s.revisione })
+  assert.equal(riferimento.leggi().testo, 'Aurora: Preparare il lancio della nuova piattaforma Aurora. Adesso: Scrivere la pagina prezzi.')
+  assert.equal(progetti.elenco().length, 1, 'il progetto nasce una volta sola')
+  assert.equal(riferimento.chiediRiferimento(), false, 'la domanda del riferimento non arriva il primo giorno')
+})
+
+test('in inglese, senza punti doppi e senza lineette', () => {
+  cfg.aggiorna({ lingua: 'en' })
+  collega()
+  let s = avvio.progetto({ nome: 'New website', obiettivo: 'Launch the new website — by October...', revisione: avvio.stato().revisione })
+  s = avvio.fonte({ fonti: [], revisione: s.revisione })
+  avvio.completa({ azione: 'Write the homepage copy.', revisione: s.revisione })
+  const t = riferimento.leggi().testo
+  assert.equal(t, 'New website: Launch the new website. By October. Now: Write the homepage copy.')
+  assert.doesNotMatch(t, /\.\.|—|–/)
+  cfg.aggiorna({ lingua: 'it' })
+})
+
+test('un riferimento scritto da lui non si tocca, né al primo passo né alla fine (counter-case)', () => {
+  riferimento.scrivi('Aurora: aspetta il via del cliente.\nAltro: fermo.')
+  let s = progetto()
+  s = avvio.fonte({ fonti: [], revisione: s.revisione })
+  avvio.completa({ azione: 'Scrivere la pagina prezzi', revisione: s.revisione })
+  assert.equal(riferimento.leggi().testo, 'Aurora: aspetta il via del cliente.\nAltro: fermo.')
+})
+
+test('cambiando il nome al primo passo, il riferimento nostro segue; uno cambiato da lui nel frattempo no', () => {
+  let s = progetto()
+  s = avvio.progetto({ nome: 'Aurora Due', obiettivo: 'Preparare il lancio', revisione: s.revisione })
+  assert.equal(riferimento.leggi().testo, 'Aurora Due: Preparare il lancio.')
+  riferimento.scrivi('Aurora Due: lo scrivo io.')
+  avvio.progetto({ nome: 'Aurora Tre', obiettivo: 'Preparare il lancio', revisione: s.revisione })
+  assert.equal(riferimento.leggi().testo, 'Aurora Due: lo scrivo io.')
+})

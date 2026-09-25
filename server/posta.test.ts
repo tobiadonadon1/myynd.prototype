@@ -302,3 +302,42 @@ test('il testo del server che non sappiamo leggere torna com’era, senza rimedi
   assert.equal(e, grezzo)
   assert.equal(e.rimedio, undefined)
 })
+
+// — P4: la scheda conta quello che leggerà la prima lettura —
+
+test('la prova conta i messaggi della finestra nella posta in arrivo e in quella inviata', async () => {
+  const cercate: { cartella: string; since: Date }[] = []
+  let aperta = ''
+  const cl = {
+    connect: async () => {}, close: async () => {}, logout: async () => {},
+    list: async () => [
+      { path: 'INBOX', name: 'INBOX', specialUse: undefined },
+      { path: 'Posta inviata', name: 'Posta inviata', specialUse: '\\Sent' },
+      { path: 'Spam', name: 'Spam', specialUse: '\\Junk' }
+    ],
+    getMailboxLock: async (c: string) => { aperta = c; return { release: () => {} } },
+    search: async (q: { since: Date }) => { cercate.push({ cartella: aperta, since: q.since }); return aperta === 'INBOX' ? [1, 2, 3, 4, 5] : [9, 10] }
+  }
+  usaClient(() => cl as unknown as ImapFlow)
+  const { prova } = await import('./connettori/posta.ts')
+  const e = await prova(CASELLA, 90)
+  assert.ok(e.ok)
+  assert.equal(e.ok && e.messaggi, 7)
+  assert.deepEqual(cercate.map(c => c.cartella), ['INBOX', 'Posta inviata'], 'mai lo spam')
+  const giorni = (Date.now() - cercate[0]!.since.getTime()) / 86_400_000
+  assert.ok(giorni > 89.9 && giorni < 90.1)
+})
+
+test('una cartella che non risponde alla ricerca non ferma il collegamento (counter-case)', async () => {
+  const cl = {
+    connect: async () => {}, close: async () => {}, logout: async () => {},
+    list: async () => [{ path: 'INBOX', name: 'INBOX', specialUse: undefined }],
+    getMailboxLock: async () => ({ release: () => {} }),
+    search: async () => { throw new Error('BAD') }
+  }
+  usaClient(() => cl as unknown as ImapFlow)
+  const { prova } = await import('./connettori/posta.ts')
+  const e = await prova(CASELLA)
+  assert.ok(e.ok)
+  assert.equal(e.ok && e.messaggi, 0)
+})

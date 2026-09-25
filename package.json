@@ -25,6 +25,7 @@
     "fronte": "node build/fronte.cjs",
     "valuta:feed": "node server/valuta-feed.ts",
     "misura:feed": "node --disable-warning=ExperimentalWarning server/misura-feed.ts",
+    "imbuto": "node --disable-warning=ExperimentalWarning server/imbuto-cli.ts",
     "prova:jev": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/prova-jev.ts"
   },
   "dependencies": {

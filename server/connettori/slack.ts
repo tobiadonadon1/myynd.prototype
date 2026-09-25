@@ -109,15 +109,28 @@ export function collegato(c?: { slack?: ConfigSlack }): boolean {
   return !!c?.slack?.token
 }
 
+/**
+ * Prova il token, e conta i posti di cui fa parte (P4): canali pubblici e
+ * privati, gruppi e messaggi diretti, dalla prima pagina di duecento. Oltre
+ * quella si dice «più di 200», senza sfogliare il resto.
+ */
 export async function prova(c: ConfigSlack): Promise<
-  { ok: true; squadra: string; utente: string } | { ok: false; errore: string }
+  { ok: true; squadra: string; utente: string; canali: number; oltre: boolean } | { ok: false; errore: string }
 > {
   if (!/^xox[pbe]-/.test(c.token.trim())) {
     return { ok: false, errore: 'Un token di Slack comincia per xoxp- o xoxb-.' }
   }
   try {
     const r = await api<{ team?: string; user?: string }>(c, 'auth.test')
-    return { ok: true, squadra: r.team ?? '', utente: r.user ?? '' }
+    let canali = 0, oltre = false
+    try {
+      const l = await api<{ channels?: Canale[] }>(c, 'users.conversations', {
+        types: 'public_channel,private_channel,mpim,im', exclude_archived: 'true', limit: '200'
+      })
+      canali = (l.channels ?? []).filter(x => !x.is_archived).length
+      oltre = !!l.response_metadata?.next_cursor
+    } catch { /* il conto è un di più: il token va bene lo stesso */ }
+    return { ok: true, squadra: r.team ?? '', utente: r.user ?? '', canali, oltre }
   } catch (e) {
     return { ok: false, errore: e instanceof Error ? e.message : String(e) }
   }
@@ -222,6 +235,12 @@ export type EsitoSlack = {
   troncato: boolean
   /** Quanti canali ci sono, quanti ne ha fatti, quanti ne restano. */
   resto: Resto
+  /**
+   * Da dove la finestra è letta per intero (ISO): il primo giorno pieno. Il
+   * giorno a metà in testa non si può dire letto, e fuori da qui non si
+   * cancella niente (P4).
+   */
+  dal: string
 }
 
 /**
@@ -333,5 +352,7 @@ export async function sincronizza(
   }
 
   segna('slack', fatteCanali < elenco.length ? ultimo : null)
-  return { docs, falliti, troncato, resto: resto(fatteCanali, elenco.length) }
+  const inizio = new Date(da * 1000)
+  const dal = new Date(inizio.getFullYear(), inizio.getMonth(), inizio.getDate() + 1).toISOString()
+  return { docs, falliti, troncato, resto: resto(fatteCanali, elenco.length), dal }
 }

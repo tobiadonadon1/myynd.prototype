@@ -90,7 +90,19 @@ import * as drive from './connettori/drive.ts'
 import * as microsoft from './connettori/microsoft.ts'
 import * as dropbox from './connettori/dropbox.ts'
 import * as whatsapp from './connettori/whatsapp.ts'
-import { CATALOGO } from './connettori/registro.ts'
+import { CATALOGO, FONTI } from './connettori/registro.ts'
+// — P4: il primo avvio —
+import * as primaLettura from './prima-lettura.ts'
+import * as primaPagina from './prima-pagina.ts'
+import * as viva from './lettura-viva.ts'
+import * as imbuto from './imbuto.ts'
+import * as cancellati from './cancellati.ts'
+import * as generi from './generi.ts'
+import * as apple from './agenda-apple.ts'
+import * as agendaMac from './connettori/agenda-mac.ts'
+import * as postaMac from './connettori/posta-mac.ts'
+import { fonteCollegata } from './fonti-collegate.ts'
+import { qualcosaDaFeed } from './rilevanza.ts'
 import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
 import * as gettoni from './gettoni.ts'
@@ -414,6 +426,8 @@ app.post('/api/auth/registra', async (req, res) => {
   const inLingua = lingua === 'it' || lingua === 'en' ? lingua : null
   chi.dentro(e.utente, () => {
     if (comeSiChiama || inLingua) cfg.aggiorna({ ...(comeSiChiama ? { nome: comeSiChiama } : {}), ...(inLingua ? { lingua: inLingua } : {}) })
+    // P4 · l'imbuto del primo giorno comincia qui, e solo per i conti nuovi
+    try { imbuto.nasce() } catch (err) { console.warn('myynd · imbuto:', err instanceof Error ? err.message : err) }
     res.json({
       ok: true, token: e.token, account: auth.conto(), daVerificare: e.daVerificare === true,
       // «guarda la posta» si dice solo se la posta è partita davvero
@@ -719,7 +733,8 @@ app.get('/api/stato', async (_req, res) => {
     // che sia rotto Myynd invece che fuori posto
     // su un server, e senza l'app di chi ospita, il ballo di Google e Microsoft
     // non può girare: la scheda lo dice invece di chiedere un client ID e fallire
-    connettori: CATALOGO.filter(v => ospitato.disponibile(v.id)).map(v => ({
+    // Mail e Calendario del Mac solo su un Mac (P4)
+    connettori: CATALOGO.filter(v => ospitato.disponibile(v.id) && (process.platform === 'darwin' || (v.id !== 'agendamac' && v.id !== 'postamac'))).map(v => ({
       ...v,
       // solo su una scheda che *sarebbe* offerta: se il catalogo la dà già per
       // «arriva presto», la sua nota dice qualcosa di più utile di questa
@@ -732,6 +747,8 @@ app.get('/api/stato', async (_req, res) => {
         v.id === 'note' ? note.collegato(c) :
         v.id === 'conversazioni' ? conversazioni.collegato(c) :
         v.id === 'calendario' ? !!c.calendario :
+        v.id === 'agendamac' ? !!c.agendamac :
+        v.id === 'postamac' ? !!c.postamac :
         // la scheda parla di Claude — chiave o abbonamento — e non di «Myynd
         // può ragionare», che da quando c'è un altro fornitore non coincide più
         v.id === 'claude' ? mod.conClaude() :
@@ -811,6 +828,8 @@ app.get('/api/stato', async (_req, res) => {
     app: ospitato.APP,
     oauth: ospitato.oauthWeb()
   })
+  // P4 · i primi passi di un conto nuovo, contati una volta, dopo la risposta
+  try { imbuto.controlla() } catch { /* l'imbuto non ferma mai la pagina */ }
 })
 
 /**
@@ -832,7 +851,8 @@ app.post('/api/argomenti/proposta', async (_req, res) => {
 // Durable first-project onboarding. Existing authenticated request context
 // scopes both the state file and document/task access to this account.
 app.get('/api/avvio', (_req, res) => {
-  try { res.json(avvio.stato()) }
+  // `leggendo`: una prima lettura sta girando, e chi ricarica torna a guardarla (P4)
+  try { res.json({ ...avvio.stato(), leggendo: viva.di(chi.adesso() ?? '')?.prima === true }) }
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/progetto', (req, res) => {
@@ -1173,10 +1193,13 @@ app.post('/api/connettori/posta', async (req, res) => {
     giorni: Number(giorni) || 30, cartelle
   }
   try {
-    const esito = await posta.prova(c)
+    // quanti giorni leggerà la prima lettura (P4): novanta per una casella
+    // nuova. La configurazione tiene i suoi trenta
+    const finestra = primaLettura.giorniDi('posta', c.giorni)
+    const esito = await posta.prova(c, finestra)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore, ...(esito.amministratore ? { amministratore: esito.amministratore } : {}) })
     cfg.aggiorna({ posta: c })
-    res.json({ ok: true, cartelle: esito.cartelle, certificatoAdattato: esito.certificatoAdattato })
+    res.json({ ok: true, cartelle: esito.cartelle, certificatoAdattato: esito.certificatoAdattato, messaggi: esito.messaggi, giorni: finestra })
   } catch (e) { errore(res, e) }
 })
 
@@ -1478,7 +1501,9 @@ app.post('/api/connettori/conversazioni', async (req, res) => {
     const esito = await conversazioni.prova(voluto)
     if (!esito.ok) return res.status(400).json({ errore: esito.errore, file: esito.file ?? null })
     cfg.aggiorna({ conversazioni: voluto })
-    res.json({ ok: true, file: esito.file, codice: esito.codice })
+    // quante conversazioni in tutto, per la conferma della scheda (P4)
+    const quante = (esito.file ?? []).reduce((n, f) => n + (Number(f.conversazioni) || 0), 0) + (Number(esito.codice) || 0)
+    res.json({ ok: true, file: esito.file, codice: esito.codice, conversazioni: quante })
   } catch (e) { errore(res, e) }
 })
 
@@ -1508,7 +1533,8 @@ app.post('/api/connettori/calendario', async (req, res) => {
   if (!url.trim()) return res.status(400).json({ errore: 'Serve l’indirizzo del calendario.' })
   try {
     const c: cfg.ConfigCalendario = { url: url.trim(), nome: nome.trim() || undefined, giorni }
-    const esito = await calendario.prova(c)
+    // la scheda conta quello che leggerà la prima lettura (P4); si salvano i giorni scelti
+    const esito = await calendario.prova({ ...c, giorni: primaLettura.giorniDi('calendario', c.giorni) })
     if (!esito.ok) return res.status(400).json({ errore: esito.errore })
     cfg.aggiorna({ calendario: { ...c, nome: esito.nome || undefined } })
     res.json({ ok: true, nome: esito.nome, eventi: esito.eventi })
@@ -1729,7 +1755,7 @@ app.post('/api/connettori/slack', async (req, res) => {
     const e = await slack.prova({ token })
     if (!e.ok) return res.status(400).json({ errore: e.errore })
     cfg.aggiorna({ slack: { token, squadra: e.squadra, utente: e.utente, giorni: 30 } })
-    res.json({ ok: true, squadra: e.squadra })
+    res.json({ ok: true, squadra: e.squadra, canali: e.canali, oltre: e.oltre })
   } catch (e) { errore(res, e) }
 })
 
@@ -1887,6 +1913,8 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'note') delete c.note
   else if (id === 'conversazioni') delete c.conversazioni
   else if (id === 'calendario') delete c.calendario
+  else if (id === 'agendamac') delete c.agendamac
+  else if (id === 'postamac') delete c.postamac
   /*
     «Scollega» su Claude vuol dire che Myynd deve smettere di ragionare, e da
     quando le strade sono due toglierne una sola non lo fa: chi ha collegato il
@@ -1933,6 +1961,7 @@ app.delete('/api/connettori/:id', (req, res) => {
   else if (id === 'microsoft' || id === 'sharepoint') {
     microsoft.scollega(id === 'microsoft' ? 'posta' : 'file')
     store.svuotaFonte(id)
+    primaLettura.scorda(id)
     return res.json({ ok: true })
   }
   else return res.status(400).json({ errore: 'Connettore sconosciuto.' })
@@ -1945,7 +1974,11 @@ app.delete('/api/connettori/:id', (req, res) => {
     // e se chi lavorava era lei, lavora un altro di quelli ancora collegati
     mod.riparaIlMotore()
   }
-  if (id !== 'claude' && id !== 'compatibile' && id !== 'openai' && id !== 'jev') store.svuotaFonte(id)
+  if (id !== 'claude' && id !== 'compatibile' && id !== 'openai' && id !== 'jev') {
+    store.svuotaFonte(id)
+    // ricollegata, la fonte ricomincia la sua prima lettura (P4)
+    primaLettura.scorda(id)
+  }
   res.json({ ok: true })
 })
 
@@ -2008,10 +2041,19 @@ function ricordiGranola(): granolaMcp.Ricordi {
  * brief è netto su questo: deve migliorare da solo, senza che nessuno gli dia
  * da mangiare.
  */
+/**
+ * `o.dopoLeVeloci` (P4): durante una prima lettura, chiamato quando la posta e
+ * l'agenda sono dentro e il Mac (che è lungo) non è ancora partito: è lì che
+ * comincia la prima pagina. `o.sfondo`: nessuno ha premuto niente, e allora
+ * Calendario chiuso resta chiuso.
+ */
+type OpzioniLettura = { dopoLeVeloci?: () => void; sfondo?: boolean }
+
 async function leggiTutto(
   soloFonte: string | null,
   avvisa: (d: unknown) => void,
-  fermo: () => boolean = () => false
+  fermo: () => boolean = () => false,
+  o: OpzioniLettura = {}
 ): Promise<number> {
   /*
    * Quello che non si è letto si tiene a mente per conto, in `lettura-feed`:
@@ -2021,17 +2063,26 @@ async function leggiTutto(
    */
   const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaCollegamento() })
   try {
-    return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
+    return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo, o)
   } finally { oss.chiudi(fermo()) }
 }
 
 async function leggiTuttoDentro(
   soloFonte: string | null,
   avvisa: (d: unknown) => void,
-  fermo: () => boolean
+  fermo: () => boolean,
+  o: OpzioniLettura = {}
 ): Promise<number> {
   const c = cfg.leggi()
   let totale = 0
+  /*
+   * Le fonti si mettono in fila e poi si leggono (P4): nell'ordine di sempre,
+   * o, durante una prima lettura, prima l'agenda e la posta e il Mac per
+   * ultimo (`primaLettura.ordina`). Nessun passo usa il risultato di un
+   * altro: l'ordine si può cambiare senza toccare cosa fanno.
+   */
+  const passi: { nome: string; leggi: () => Promise<number> }[] = []
+  const giorno = 86_400_000
 
   /*
    * Ogni fonte per conto suo.
@@ -2042,18 +2093,7 @@ async function leggiTuttoDentro(
    * guaio si dice, con la fonte accanto, e si passa alla successiva; il totale
    * conta solo quello che è arrivato davvero.
    */
-  const fonte = async (nome: string, leggi: () => Promise<number>) => {
-    if (fermo() || (soloFonte && soloFonte !== nome)) return
-    try {
-      // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
-      totale += await leggiSeAncoraCollegata(nome, leggi, avvisa)
-    } catch (err) {
-      // il rimedio accanto alla frase: la salute delle fonti sa cosa fare; la
-      // frase si tiene solo se l'ha scritta un connettore
-      const frase = fraseDi(err)
-      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
-    }
-  }
+  const fonte = (nome: string, leggi: () => Promise<number>) => { passi.push({ nome, leggi }) }
 
   // su un server il desktop non si legge da qui: arriva dal browser o da un
   // Myynd in casa, e le «cartelle» in configurazione sono nomi, non percorsi
@@ -2075,7 +2115,14 @@ async function leggiTuttoDentro(
      * deve ricevere tutto — lì si rilegge per intero, come prima.
      */
     const gia = desktopRemoto.ATTIVO ? undefined : store.quandoPerPrefisso('desktop:')
-    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: `${n} documenti`, fatti: n }), gia, async lotto => { await store.salvaDocumentiAPezzi(lotto) })
+    /*
+     * La prima volta, i file degli ultimi novanta giorni e al massimo
+     * millecinquecento nuovi per giro; gli altri restano ai giri dopo, che non
+     * hanno `dal`. Sempre un tetto di nuovi per giro: estrarre costa (P4).
+     */
+    const primaDelMac = primaLettura.statoPrima('desktop') === 'in-corso'
+    const opzioni = primaDelMac ? { dal: Date.now() - primaLettura.GIORNI_PRIMA * giorno, nuoviMax: 1500 } : { nuoviMax: 2000 }
+    const e = await desktop.sincronizza(desk, n => avvisa({ fase: 'desktop', stato: 'leggo', fatti: n }), gia, async lotto => { await store.salvaDocumentiAPezzi(lotto) }, opzioni)
     await store.salvaDocumentiAPezzi(e.docs)
     // si cancella solo dalle radici percorse fino in fondo: altrove il
     // silenzio non prova niente
@@ -2104,8 +2151,11 @@ async function leggiTuttoDentro(
       // di più», e senza di questa quella domanda resta senza risposta
       // `saltati` qui sopra è già preso — le cartelle di codice saltate intere —
       // quindi la divisione per tipo viaggia sotto un altro nome
-      saltatiPerTipo: e.saltatiPerTipo, saltatiTipi: e.saltati, saltateCartelle: e.saltateCartelle
+      saltatiPerTipo: e.saltatiPerTipo, saltatiTipi: e.saltati, saltateCartelle: e.saltateCartelle,
+      rimandati: e.rimandati, pieno: e.pieno
     })
+    // la prima lettura del Mac è finita quando un giro non si ferma al tetto dei nuovi
+    primaLettura.esito('desktop', !e.pieno)
     // Verso un server ospitato, se qualcuno l'ha impostato: la stessa lettura
     // appena fatta, mandata anche là. Un guaio qui non deve fermare le altre
     // fonti — la posta non aspetta che il desktop sia arrivato a destinazione.
@@ -2196,7 +2246,7 @@ async function leggiTuttoDentro(
   const cal = c.calendario
   if (cal) await fonte('calendario', async () => {
     avvisa({ fase: 'calendario', stato: 'apro l’agenda' })
-    const e = await calendario.sincronizza(cal)
+    const e = await calendario.sincronizza({ ...cal, giorni: primaLettura.giorniDi('calendario', cal.giorni) })
     await store.salvaDocumentiAPezzi(e.docs)
     /*
       Si riconcilia, ed è il caso in cui serve di più: un impegno spostato o
@@ -2204,8 +2254,32 @@ async function leggiTuttoDentro(
       riunione che non c'è più — che è peggio che non saperne niente. Il file
       iCal è sempre completo, quindi quello che non c'è dentro non c'è.
     */
-    const tolti = store.riconcilia('calendario', { completo: !e.troncato }, e.docs.map(d => d.id))
+    // solo dentro la finestra letta: novanta giorni la prima volta, poi trenta (P4)
+    const tolti = store.riconcilia('calendario', { completo: !e.troncato, dal: e.finestra.da, al: e.finestra.a }, e.docs.map(d => d.id))
+    // il file si rilegge intero ogni volta: una lettura andata basta alla prima
+    primaLettura.esito('calendario', true)
     avvisa({ fase: 'calendario', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
+    return e.docs.length
+  })
+  /*
+   * Calendario del Mac (P4): solo su un Mac, solo in casa. Un giro di
+   * sottofondo non apre mai Calendario: con l'app chiusa si salta, e la riga
+   * lo dice. Aperta, si rilegge al massimo una volta l'ora.
+   */
+  if (c.agendamac && process.platform === 'darwin' && !ospitato.OSPITATO) await fonte('agendamac', async () => {
+    const prima = primaLettura.statoPrima('agendamac') === 'in-corso'
+    if (!agendaMac.daLeggere({ prima, sfondo: !!o.sfondo, aperto: await apple.aperto(), ultima: store.cursore('agendamac:ultima') })) {
+      avvisa({ fase: 'agendamac', stato: 'fatto', saltata: true, documenti: store.idsConPrefisso('agendamac:').length })
+      return 0
+    }
+    avvisa({ fase: 'agendamac', stato: 'apro l’agenda' })
+    const giorni = primaLettura.giorniDi('agendamac', undefined)
+    const e = await agendaMac.sincronizza({ dal: new Date(Date.now() - giorni * giorno), al: new Date(Date.now() + agendaMac.GIORNI_AVANTI * giorno) })
+    await store.salvaDocumentiAPezzi(e.docs)
+    const tolti = store.riconcilia('agendamac', { completo: !e.troncato, dal: e.dal, al: e.al }, e.docs.map(d => d.id))
+    store.segnaCursore('agendamac:ultima', new Date().toISOString())
+    primaLettura.esito('agendamac', true)
+    avvisa({ fase: 'agendamac', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato, tolti })
     return e.docs.length
   })
   const pst = c.posta
@@ -2216,9 +2290,12 @@ async function leggiTuttoDentro(
       store.idsConPrefisso(`posta:${cartella}:`).map(id => Number(id.slice(id.lastIndexOf(':') + 1))).filter(n => n > 0)
     )
     const daClassificare = (cartella: string) => store.uidPostaDaClassificare(cartella)
-    const e = await posta.sincronizza(pst, (fatti, tot) =>
+    // novanta giorni finché la prima lettura non è tutta dentro; la configurazione resta com'è (P4)
+    const e = await posta.sincronizza({ ...pst, giorni: primaLettura.giorniDi('posta', pst.giorni) }, (fatti, tot) =>
       avvisa({ fase: 'posta', stato: `${fatti} di ${tot} messaggi`, fatti, tot }), giaIndicizzati, daClassificare)
     await store.salvaDocumentiAPezzi(e.docs)
+    // la stessa email già letta da Mail del Mac: vince la casella
+    store.togliDoppioniMac(e.docs)
     // le bandiere «letto» dei messaggi che erano già dentro: solo la colonna
     store.segnaLetti(e.letti)
     /*
@@ -2238,10 +2315,24 @@ async function leggiTuttoDentro(
     if (JSON.stringify(e.validita) !== JSON.stringify(pst.validita ?? {})) {
       cfg.aggiorna({ posta: { ...pst, validita: e.validita } })
     }
+    primaLettura.esito('posta', !!e.resto.aGiorno)
     avvisa({
       fase: 'posta', stato: 'fatto', documenti: e.docs.length, giaLetti: e.saltati, tolti,
       cartelleFallite: e.cartelleFallite, troncato: e.troncato, resto: e.resto
     })
+    return e.docs.length
+  })
+  /*
+   * Mail del Mac (P4): i file di Mail, letti e basta, i più recenti per primi,
+   * quattrocento per giro. Solo su un Mac e in casa.
+   */
+  if (c.postamac && process.platform === 'darwin' && !ospitato.OSPITATO) await fonte('postamac', async () => {
+    avvisa({ fase: 'postamac', stato: 'apro la posta' })
+    const e = await postaMac.sincronizza({ giorni: primaLettura.giorniDi('postamac', undefined) })
+    await store.salvaDocumentiAPezzi(e.docs)
+    const tolti = store.riconcilia('postamac', { completo: true, dal: e.dal }, [...e.docs.map(d => d.id), ...e.visti])
+    primaLettura.esito('postamac', e.resto.aGiorno)
+    avvisa({ fase: 'postamac', stato: 'fatto', documenti: e.docs.length, tolti, resto: e.resto })
     return e.docs.length
   })
   const ggl = c.google
@@ -2250,6 +2341,7 @@ async function leggiTuttoDentro(
     const e = await google.sincronizza(ggl, (fatti, tot) =>
       avvisa({ fase: 'google', stato: `${fatti} di ${tot} messaggi`, fatti, tot }))
     await store.salvaDocumentiAPezzi(e.docs)
+    store.togliDoppioniMac(e.docs)
     avvisa({ fase: 'google', stato: 'fatto', documenti: e.docs.length, troncato: e.troncato })
     return e.docs.length
   })
@@ -2308,7 +2400,7 @@ async function leggiTuttoDentro(
   const slk = c.slack
   if (slk) await fonte('slack', async () => {
     avvisa({ fase: 'slack', stato: 'apro le conversazioni' })
-    const e = await slack.sincronizza(slk, (fatti, tot) =>
+    const e = await slack.sincronizza({ ...slk, giorni: primaLettura.giorniDi('slack', slk.giorni) }, (fatti, tot) =>
       avvisa({ fase: 'slack', stato: `${fatti} di ${tot} canali` }))
     await store.salvaDocumentiAPezzi(e.docs)
     /*
@@ -2317,16 +2409,20 @@ async function leggiTuttoDentro(
       sparite — e cancellarle vorrebbe dire perdere mesi di scambi per un
       errore di rete durato tre secondi.
     */
-    const tolti = store.riconcilia('slack', { completo: !e.falliti.length && !e.troncato },
+    // e solo dentro la finestra letta: novanta giorni la prima volta, poi trenta (P4)
+    const tolti = store.riconcilia('slack', { completo: !e.falliti.length && !e.troncato, dal: e.dal },
       e.docs.map(d => d.id))
+    primaLettura.esito('slack', true)
     avvisa({ fase: 'slack', stato: 'fatto', documenti: e.docs.length, falliti: e.falliti, troncato: e.troncato, tolti, resto: e.resto })
     return e.docs.length
   })
   const gh = c.github
   if (gh) await fonte('github', async () => {
     avvisa({ fase: 'github', stato: 'apro i repository' })
+    // la prima volta novanta giorni, poi le solite due settimane (P4)
+    const dalGithub = primaLettura.statoPrima('github') === 'in-corso' ? new Date(Date.now() - primaLettura.GIORNI_PRIMA * giorno) : undefined
     const e = await github.sincronizza(gh, (fatti, tot) =>
-      avvisa({ fase: 'github', stato: `${fatti} di ${tot} repository` }))
+      avvisa({ fase: 'github', stato: `${fatti} di ${tot} repository` }), dalGithub)
     await store.salvaDocumentiAPezzi(e.docs)
     /*
       Non si riconcilia, e qui è l'unica scelta giusta.
@@ -2337,6 +2433,7 @@ async function leggiTuttoDentro(
       giorni — non perché sia sparito da GitHub, ma perché non era nella
       finestra. È la stessa ragione per cui non riconciliano Gmail e Outlook.
     */
+    primaLettura.esito('github', true)
     avvisa({
       fase: 'github', stato: 'fatto', documenti: e.docs.length,
       falliti: e.falliti, troncato: e.troncato, limite: e.limite, repos: e.repos
@@ -2384,33 +2481,85 @@ async function leggiTuttoDentro(
     fa niente, e — molto peggio — la tentazione di riconciliarla: un giro che
     non trova nessun id cancellerebbe dall'indice tutte le conversazioni.
   */
+  /*
+   * E adesso si legge, una fonte per volta (P4). Durante una prima lettura
+   * l'agenda e la posta vengono prima, e prima del Mac si dà il via alla
+   * prima pagina: non deve aspettare migliaia di file per leggere la posta.
+   */
+  const prima = primaLettura.eUnaPrima(c)
+  let veloci = false
+  for (const p of primaLettura.ordina(passi, prima)) {
+    if (prima && !veloci && p.nome === 'desktop') { veloci = true; o.dopoLeVeloci?.() }
+    if (fermo() || (soloFonte && soloFonte !== p.nome)) continue
+    const inizio = Date.now()
+    try {
+      // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
+      const n = await leggiSeAncoraCollegata(p.nome, p.leggi, avvisa)
+      totale += n
+      if (prima) console.log(`myynd · prima lettura · ${p.nome} · ${n} documenti · ${Date.now() - inizio} ms`)
+    } catch (err) {
+      // una lettura andata storta conta anche lei fra i giri della prima lettura
+      try { primaLettura.esito(p.nome, false) } catch { /* l'indice può essere chiuso: il giro dopo conta */ }
+      // il rimedio accanto alla frase: la salute delle fonti sa cosa fare; la
+      // frase si tiene solo se l'ha scritta un connettore
+      const frase = fraseDi(err)
+      avvisa({ fase: p.nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
+    }
+  }
+  if (prima && !veloci) o.dopoLeVeloci?.()
   return totale
 }
 
+/** Le fonti collegate che una lettura visiterà: tutte, o quella sola (P4). */
+function fontiCheLeggera(soloFonte: string | null): string[] {
+  if (soloFonte) return [soloFonte]
+  const c = cfg.leggi()
+  return FONTI.filter(f => fonteCollegata(f, c))
+}
+
+/** La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura di chi la chiama (P4). */
+function paginaSeDovuta(prima: boolean): () => Promise<void> | null {
+  let pagina: Promise<void> | null = null
+  return () => {
+    if (!pagina && prima && primaPagina.dovuta()) {
+      pagina = withBackgroundWork(() => primaPagina.prepara())
+        .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
+    }
+    return pagina
+  }
+}
+
+/*
+ * Una lettura sola, che va fino in fondo (P4).
+ *
+ * La lettura di tutte le fonti non si ferma più quando la pagina se ne va: è
+ * quella che mette dentro i novanta giorni del primo avvio, e chi ricarica o
+ * preme di nuovo «Leggi» si attacca (`lettura-viva.ts`) e vede tutto, dal
+ * principio. Una fonte sola, invece, si ferma con la pagina come prima, e
+ * durante una lettura in corso risponde 409 come sempre.
+ */
 app.get('/api/sincronizza', async (req, res) => {
+  const conto = chi.adesso() ?? ''
+  const soloFonte = typeof req.query.fonte === 'string' ? req.query.fonte : null
   if (sincronizzazioneInCorso()) {
+    const v = viva.di(conto)
+    if (v?.tutte && !soloFonte) return viva.attacca(req, res, v)
     return res.status(409).json({ errore: 'Una lettura è già in corso.' })
   }
-  sincronizzazioniInCorso.add(chi.adesso() ?? '')
-
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
-  const invia = (d: unknown) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(d)}\n\n`) }
-
-  let annullata = false
-  req.on('close', () => { annullata = true })
-  // lo stesso battito della chat: fra «mi collego alla casella» e il primo
-  // messaggio il filo tace, e un proxy che lo vede tacere lo chiude
-  const battito = setInterval(() => { if (!res.writableEnded) res.write(': vivo\n\n') }, 15_000)
-
+  sincronizzazioniInCorso.add(conto)
+  let prima = false
+  try { prima = !soloFonte && primaLettura.eUnaPrima() } catch { /* lo dirà la lettura */ }
+  const v = viva.apri(conto, { tutte: !soloFonte, prima, fonti: fontiCheLeggera(soloFonte) })
+  viva.attacca(req, res, v)
+  let chiusa = false
+  req.on('close', () => { chiusa = true })
+  const fermo = () => (soloFonte ? chiusa : false) || cancellati.cancellata(cfg.cartella())
+  const pagina = paginaSeDovuta(!soloFonte)
+  const dopoLeVeloci = () => { if (prima) void pagina() }
   try {
-    const totale = await leggiTutto(
-      typeof req.query.fonte === 'string' ? req.query.fonte : null,
-      invia,
-      () => annullata
-    )
-    invia({ fase: 'fine', totale, conteggi: store.conteggi() })
+    const totale = await withBackgroundWork(() => leggiTutto(soloFonte, e => v.avvisa(e), fermo, { dopoLeVeloci }))
+    // ogni risposta attaccata finisce qui
+    v.avvisa({ fase: 'fine', totale, conteggi: store.conteggi() })
     // «quando arriva» vale anche per quello che è arrivato premendo il bottone,
     // non solo per il giro delle sei ore
     if (totale > 0 && claude.collegato()) {
@@ -2419,14 +2568,45 @@ app.get('/api/sincronizza', async (req, res) => {
       void (utente ? chi.dentro(utente, gira) : gira())
         .catch(e => console.error('myynd · le automazioni «quando arriva» non sono partite:', e instanceof Error ? e.message : e))
     }
+    // la serratura resta finché la prima pagina non è salvata
+    if (!soloFonte && !fermo()) await pagina()
   } catch (e) {
-    invia({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
+    v.avvisa({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
+    await pagina()
   } finally {
-    clearInterval(battito)
-    sincronizzazioniInCorso.delete(chi.adesso() ?? '')
-    if (!res.writableEnded) res.end()
+    viva.chiudi(conto)
+    sincronizzazioniInCorso.delete(conto)
+    if (!soloFonte) void primaLettura.continua(conto, leggiUna)
   }
 })
+
+/**
+ * Una fonte sola, per il resto della prima lettura (P4): la chiama
+ * `primaLettura.continua`, un giro dopo l'altro. Con la serratura presa da
+ * un'altra lettura dice «occupato» e non aspetta; niente «quando arriva»:
+ * è roba vecchia, non posta nuova.
+ */
+async function leggiUna(fonte: string): Promise<'letta' | 'occupato' | 'guaio'> {
+  const conto = chi.adesso() ?? ''
+  if (sincronizzazioniInCorso.has(conto)) return 'occupato'
+  sincronizzazioniInCorso.add(conto)
+  const v = viva.apri(conto, { tutte: false, prima: false, fonti: [fonte] })
+  let guaio = false
+  try {
+    await withBackgroundWork(() => store.senzaToccare(() => leggiTutto(fonte, e => {
+      v.avvisa(e)
+      const x = e as { fase?: string; stato?: string; errore?: string }
+      if (x.fase === fonte && x.stato === 'guaio') { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
+    }, () => cancellati.cancellata(cfg.cartella()), { sfondo: true })))
+    return guaio ? 'guaio' : 'letta'
+  } catch (e) {
+    console.error(`myynd · prima lettura · ${fonte} non si è letta:`, e instanceof Error ? e.message : e)
+    return 'guaio'
+  } finally {
+    viva.chiudi(conto)
+    sincronizzazioniInCorso.delete(conto)
+  }
+}
 
 /**
  * La rilettura che nessuno chiede.
@@ -2479,7 +2659,13 @@ const OGNI = 10 * 60 * 1000
 async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
   if (!nuovi.length || !await mod.disponibilePer('lettura')) return nuovi.length
 
-  const voci = await claude.generaFeed(nuovi)
+  /*
+   * Il modello si chiama solo se fra gli arrivi c'è qualcosa da feed (P4): un
+   * giro che ha portato solo file vecchi del Mac, o impegni, non paga una
+   * lettura per sentirsi dire «niente». Le domande e «quando arriva» sotto
+   * restano come sono.
+   */
+  const voci = qualcosaDaFeed(nuovi) ? await claude.generaFeed(nuovi) : []
   const nuove = voci.length ? store.salvaFeed(voci) : 0
   if (nuove) {
     console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)
@@ -2499,25 +2685,39 @@ async function rileggiDaSola() {
   if (sincronizzazioneInCorso()) return
   const c = cfg.leggi()
   // una fonte nuova che non compare qui è una fonte che non si aggiorna mai
-  // da sola: il bottone funziona, e in silenzio l'indice resta indietro
-  if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
-    && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni
-    && !c.github && !c.x) return
-  sincronizzazioniInCorso.add(chi.adesso() ?? '')
+  // da sola: l'elenco è quello del registro, non uno scritto a mano (P4)
+  if (!FONTI.some(f => fonteCollegata(f, c)) && !c.x) return
+  const conto = chi.adesso() ?? ''
+  sincronizzazioniInCorso.add(conto)
   const daQuando = new Date().toISOString()
+  /*
+   * Anche il giro dei dieci minuti ha il suo registro (P4): un «Leggi»
+   * premuto adesso si attacca invece di aspettare un 409, e chi ha collegato
+   * le fonti senza mai premere «Leggi» riceve lo stesso la sua prima pagina.
+   */
+  let prima = false
+  try { prima = primaLettura.eUnaPrima(c) } catch { /* lo dirà la lettura */ }
+  const v = viva.apri(conto, { tutte: true, prima, fonti: fontiCheLeggera(null) })
+  const pagina = paginaSeDovuta(true)
+  let conPagina = false
   try {
     const totale = await leggiTutto(null, d => {
+      v.avvisa(d)
       // il giro silenzioso resta silenzioso, ma un guaio no: un token del
       // desktop remoto scaduto era un 401 che nessuno vedeva mai, e ogni giro
       // fallito in silenzio sembrava un giro andato bene
       const x = d as { fase?: string; stato?: string; errore?: string }
       if (x.stato === 'guaio') console.error(`myynd · ${x.fase === 'desktop-remoto' ? 'desktop remoto' : x.fase}: ${x.errore}`)
-    })
+    }, () => cancellati.cancellata(cfg.cartella()), { dopoLeVeloci: () => { if (prima) void pagina() }, sfondo: true })
+    v.avvisa({ fase: 'fine', totale, conteggi: store.conteggi() })
+    const p = pagina()
+    if (p) { conPagina = true; await p }
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
     // P2 · le carte mancate: una risposta mandata dalla posta, una riga scritta a mano. Senza modello.
     await mancate.forse().catch(e => console.warn('myynd · mancate:', e instanceof Error ? e.message : e))
-    await dopoLArrivo(daQuando, nuovi)
+    // la prima pagina ha appena letto la stessa posta: il feed non si rifà in questo giro
+    if (!conPagina) await dopoLArrivo(daQuando, nuovi)
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
@@ -2536,10 +2736,13 @@ async function rileggiDaSola() {
     // il motore, ogni dieci minuti anche senza chiamate: il suo giorno si scrive
     abbonamento.riguarda(); saluteTeste.segnaTesta()
   } catch (e) {
+    v.avvisa({ fase: 'errore', errore: e instanceof Error ? e.message : String(e) })
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
   } finally {
-    sincronizzazioniInCorso.delete(chi.adesso() ?? '')
+    viva.chiudi(conto)
+    sincronizzazioniInCorso.delete(conto)
+    void primaLettura.continua(conto, leggiUna)
   }
 }
 
@@ -4522,6 +4725,58 @@ app.get('/api/feed/misura', async (req, res) => {
 // — P3: rotte, fine —
 
 // — P4: rotte, inizio —
+/*
+ * Il primo avvio (P4): Calendario e Mail di questo Mac, senza niente da
+ * incollare, e lo stato della prima pagina per la riga che lavora.
+ *
+ * Il primo giro di apprendimento dopo i novanta giorni (`primaLettura.
+ * quandoFinisce`) aspetta P1B: le sue funzioni non sono ancora qui, e finché
+ * non ci sono non si registra niente.
+ */
+const soloSuQuestoMac = () => process.platform === 'darwin' && !ospitato.OSPITATO
+
+app.post('/api/connettori/agendamac', async (_req, res) => {
+  if (!soloSuQuestoMac()) return res.status(400).json({ errore: apple.NON_QUI })
+  try {
+    const e = await agendaMac.prova()
+    cfg.aggiorna({ agendamac: { attiva: true } })
+    res.json({ ok: true, eventi: e.eventi, calendari: e.calendari })
+  } catch (e) {
+    res.status(400).json({ errore: e instanceof Error ? e.message : String(e), rimedio: rimedioDi(e) })
+  }
+})
+
+app.post('/api/connettori/postamac', async (_req, res) => {
+  if (!soloSuQuestoMac()) return res.status(400).json({ errore: postaMac.NON_C_E })
+  try {
+    const e = await postaMac.prova(primaLettura.giorniDi('postamac', undefined))
+    cfg.aggiorna({ postamac: { attiva: true } })
+    res.json({ ok: true, email: e.email, caselle: e.caselle })
+  } catch (e) {
+    res.status(400).json({ errore: e instanceof Error ? e.message : String(e), rimedio: rimedioDi(e) })
+  }
+})
+
+/*
+ * A che punto sono la prima lettura e la prima pagina, con quello che si è
+ * trovato per genere. Se un modello è arrivato dopo la lettura, e la pagina
+ * è ancora da fare, parte da qui (con la serratura della lettura).
+ */
+app.get('/api/avvio/pagina', (_req, res) => {
+  try {
+    const conto = chi.adesso() ?? ''
+    let s = primaPagina.stato()
+    if (s.pagina === 'attesa' && !sincronizzazioniInCorso.has(conto) && primaPagina.dovuta()) {
+      sincronizzazioniInCorso.add(conto)
+      void withBackgroundWork(() => primaPagina.prepara())
+        .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
+        .finally(() => { sincronizzazioniInCorso.delete(conto) })
+      s = primaPagina.stato()
+    }
+    const lettura = viva.di(conto)?.prima ? 'prima' : primaLettura.inCoda(conto) ? 'coda' : null
+    res.json({ lettura, trovato: generi.perGenere(store.conteggi().perFonte), pagina: s.pagina, carte: s.carte })
+  } catch (e) { errore(res, e) }
+})
 // — P4: rotte, fine —
 
 // — P5: rotte, inizio —

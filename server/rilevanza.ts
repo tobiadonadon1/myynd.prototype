@@ -1,6 +1,7 @@
 import { suppressSender } from './sender-rules.ts'
 import type { Documento } from './store.ts'
 import { documentoVero } from './veri.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 /** Arrival/indexing time never substitutes for the date of the source. */
 export const GIORNI_ATTENZIONE = 7
@@ -25,7 +26,8 @@ export function mittenteAutomatico(autore?: string | null): boolean {
 
 const INTERNO = /(?:\b(?:claude|agents?|skill)\.md\b|\b(?:system prompt|developer instructions|tool_use|tool_result|prompt injection)\b|\b(?:agent|agente)\s+[a-z0-9]\s+(?:must|should|will|to|deve)|\b(?:ignore|ignora)\b.{0,45}\b(?:previous|precedenti|system)\b.{0,30}\b(?:instructions|istruzioni)\b)/i
 const COMANDO_AGENTE = /\b(?:agent|agente)\s+[a-z0-9]\s+(?:must|should|will|to|deve)|\b(?:ignore|ignora)\b.{0,45}\b(?:previous|precedenti|system)\b.{0,30}\b(?:instructions|istruzioni)\b/i
-const eEmail = (d: Pick<Documento, 'tipo' | 'fonte'>) => d.tipo === 'email' || ['posta', 'gmail', 'outlook'].includes(d.fonte)
+const DI_POSTA = new Set<string>([...FONTI_POSTA, 'gmail', 'outlook', 'imap'])
+const eEmail = (d: Pick<Documento, 'tipo' | 'fonte'>) => d.tipo === 'email' || DI_POSTA.has(d.fonte)
 const istruzioniInterne = (testo: string, d: Pick<Documento, 'tipo' | 'fonte'>) => (eEmail(d) ? COMANDO_AGENTE : INTERNO).test(testo)
 const ARCHIVIO = /(?:^|[\s_./-])(?:cv|résumé|resume|curriculum(?: vitae)?)(?:$|[\s_./-])|\b(?:employment history|work experience|esperienze lavorative)\b/i
 const PROMO = /\b(?:unsubscribe|disiscriviti|annulla l.iscrizione|view (?:this email )?in (?:your )?browser|offerta esclusiva|exclusive offer|limited.time offer|shop now|buy now|flash sale|sale ends|newsletter|weekly digest|daily digest|codice sconto|discount code)\b/i
@@ -247,4 +249,16 @@ export function stessaRichiesta(d: Documento, precedente: ContestoAttenzione): b
   const parole = paroleRilevanti(corpo), altre = paroleRilevanti(prima)
   return soggetto.size >= 2 && vecchio.size >= 2 && parole.size >= 3 && altre.size >= 3 &&
     sovrapposizione(soggetto, vecchio) >= 0.8 && sovrapposizione(parole, altre) >= 0.7
+}
+
+/**
+ * Fra quello che è appena arrivato c'è almeno una cosa da feed (P4)?
+ *
+ * Il giro dei dieci minuti chiamava la lettura del feed per qualunque arrivo:
+ * anche per un Mac che aveva appena riletto dei file vecchi di mesi, che il
+ * feed poi scarta tutti. Il modello si chiama solo se almeno uno passerebbe.
+ * Il progetto conta come attivo: dirlo qui costa meno che sbagliare per difetto.
+ */
+export function qualcosaDaFeed(nuovi: Pick<Documento, 'id' | 'tipo' | 'fonte' | 'titolo' | 'corpo' | 'autore' | 'quando' | 'percorso'>[], adesso = Date.now()): boolean {
+  return nuovi.some(d => classificaAttenzione(d as Documento, { adesso, progettoAttivo: true }).destinazione === 'feed')
 }

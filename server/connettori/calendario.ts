@@ -780,6 +780,20 @@ function corpo(e: Evento, p: Parole, quando: Intl.DateTimeFormat, giorno: Intl.D
 }
 
 /**
+ * Il corpo di un evento come lo scrive questo connettore, con i formati e la
+ * lingua di chi legge. Lo usa anche Calendario del Mac (P4), così un evento
+ * si legge uguale da qualunque parte arrivi, e `daDocumento` lo rilegge.
+ */
+export function corpoEvento(e: Evento): string {
+  const p = parole()
+  const mio = fusoDi()
+  const quando = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full', timeStyle: 'short', timeZone: mio })
+  const giorno = new Intl.DateTimeFormat(p.loc, { dateStyle: 'full', timeZone: 'UTC' })
+  const ora = new Intl.DateTimeFormat(p.loc, { hour: '2-digit', minute: '2-digit', timeZone: mio })
+  return corpo(e, p, quando, giorno, ora)
+}
+
+/**
  * Il contrario di `corpo`: da un documento dell'indice, i due istanti.
  *
  * La vista della settimana mette insieme il Calendario del Mac e questa
@@ -821,7 +835,11 @@ export function daDocumento(
   return { inizio, fine, tuttoIlGiorno, luogo: d.percorso?.trim() || null, note: note || null }
 }
 
-export type EsitoCalendario = { docs: Documento[]; nome: string; troncato: boolean }
+export type EsitoCalendario = {
+  docs: Documento[]; nome: string; troncato: boolean
+  /** Il tratto di date letto (ISO): fuori da qui un evento che manca non è sparito. */
+  finestra: { da: string; a: string }
+}
 
 export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario> {
   const i = indirizzo(c.url)
@@ -880,7 +898,7 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
    * dall'indice ogni impegno che non è arrivato — cioè il grosso di un'agenda
    * grande, sparito senza che niente lo dica.
    */
-  return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato }
+  return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato, finestra: { da: da.toISOString(), a: a.toISOString() } }
 }
 
 /** Le occorrenze che non ci sono più: si tolgono solo se la lettura è arrivata in fondo. */
