@@ -530,7 +530,11 @@ function ConAccountClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nu
   if (s && !s.abbonamentoPossibile) return null
   const a = s?.abbonamento
   const inUso = !!a?.entrato && s?.con === 'abbonamento'
-  const stato = !s ? null : a?.verificaInSospeso ? { testo: t('Verifica della connessione in corso…'), pronto: false } : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
+  // l'account è la strada scelta e se n'è usciti: la stessa parola della testata del pannello
+  const uscito = s?.con === 'abbonamento' && !!a?.installato && !a.entrato
+  const stato = !s ? null : a?.verificaInSospeso ? { testo: t('Verifica della connessione in corso…'), pronto: false }
+    : uscito ? { testo: t('Accedi di nuovo'), pronto: false }
+    : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
 
   return (
     <Strada tema={tema} titolo={t('Con il tuo account Claude')} stato={stato}>

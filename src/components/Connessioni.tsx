@@ -169,6 +169,41 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
   const moduloVisibile = !!scelta && (!scelta.collegato || (CAMBIABILI.includes(scelta.id) && modifica) || daFinire || daSistemare)
   /** Con un guaio il modulo sta sopra i bottoni, come quando si collega. */
   const moduloSopra = moduloVisibile && daSistemare
+  /*
+   * Una riga sola per dire cosa porta la fonte: se sotto c'è il suo modulo, la
+   * dice lui, più precisa. Prima la scheda la diceva due volte, qui e nella
+   * prima riga del modulo, con parole quasi uguali; e anche quando è un guaio
+   * ad aprire il modulo, qui resta solo il conto, se c'è.
+   */
+  const descrizione = !scelta || !(scelta.collegato || !moduloVisibile) ? ''
+    : scelta.collegato
+    ? scelta.id === 'compatibile' && s?.config.compatibile
+      ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
+      // le due teste dicono da quale strada passano: l'account, o la chiave
+      : scelta.id === 'claude'
+        ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
+      : scelta.id === 'openai'
+        ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
+      : [
+        // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
+        scelta.documenti
+          ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
+          : null,
+        // il computer dice se è la macchina intera, e se la sta guardando
+        // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
+        // si indovina dalla finestra, si legge da quello.
+        scelta.id === 'desktop' && s?.config.desktop?.tutto
+          ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
+          : null,
+        scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null,
+        // quello che c'era e non è entrato: è la riga che risponde
+        // a «sul mio Mac ce n'è molti di più», e senza di questa
+        // quel numero basso non ha nessuna spiegazione
+        scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
+          ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
+          : null
+      ].filter(Boolean).join(' · ') || (moduloSopra ? '' : t(scelta.nota))
+    : t(scelta.nota)
   const pronti = tutti
   const dopo = s?.connettori.filter(c => !c.pronto && !c.collegato) ?? []
   const apri = (id: string) => {
@@ -243,37 +278,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
             <span className="connector-tile-mark"><ConnectorIcon id={scelta.id} size={30} spenta={!scelta.collegato && !problema} /></span>
             <div><span className="connection-detail-status">{problema ? parolaProblema(scelta.id, problema) : scelta.collegato ? t('Collegato') : t('Da collegare')}</span>
               {mancanza && <p className="connection-detail-since">{lineaPannello(mancanza)}</p>}
-              {/* una riga sola per dire cosa porta la fonte: se sotto c'è il suo
-                  modulo, la dice lui, più precisa. Prima la scheda la diceva due
-                  volte, qui e nella prima riga del modulo, con parole quasi uguali */}
-              {(scelta.collegato || !moduloVisibile) && <p>{scelta.collegato
-                ? scelta.id === 'compatibile' && s?.config.compatibile
-                  ? [s.config.compatibile.nome, s.config.compatibile.modello].filter(Boolean).join(' · ')
-                  // le due teste dicono da quale strada passano: l'account, o la chiave
-                  : scelta.id === 'claude'
-                    ? (s?.config.claude?.via === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API'))
-                  : scelta.id === 'openai'
-                    ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
-                  : [
-                    // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
-                    scelta.documenti
-                      ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
-                      : null,
-                    // il computer dice se è la macchina intera, e se la sta guardando
-                    // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
-                    // si indovina dalla finestra, si legge da quello.
-                    scelta.id === 'desktop' && s?.config.desktop?.tutto
-                      ? (scelta.nome === 'Il mio PC' ? t('tutto il PC') : t('tutto il Mac'))
-                      : null,
-                    scelta.id === 'desktop' && s?.vedetta?.attiva ? t('in ascolto') : null,
-                    // quello che c'era e non è entrato: è la riga che risponde
-                    // a «sul mio Mac ce n'è molti di più», e senza di questa
-                    // quel numero basso non ha nessuna spiegazione
-                    scelta.id === 'desktop' && letturaDesk?.saltatiPerTipo
-                      ? frasi.tipiFuori(letturaDesk.saltati.media, letturaDesk.saltati.codice, letturaDesk.saltati.sistema, letturaDesk.saltati.altro)
-                      : null
-                  ].filter(Boolean).join(' · ') || t(scelta.nota)
-                : t(scelta.nota)}</p>}
+              {/* cosa porta la fonte: vedi `descrizione` */}
+              {descrizione && <p>{descrizione}</p>}
               {/* «perché lascia fuori così tanti file» è la domanda che segue il
                   numero di sopra: questa riga la chiude, dicendo cos'è un
                   documento per Myynd invece di lasciarlo indovinare. */}
