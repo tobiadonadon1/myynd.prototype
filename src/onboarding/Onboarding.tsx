@@ -162,8 +162,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
       try { leggeva = !!sessionStorage.getItem(chiaveLettura(n.id)); sessionStorage.removeItem(chiaveLettura(n.id)) } catch { /* senza memoria della scheda si riparte dal server */ }
       const leggendo = !!n.leggendo
       setMomento(momentoAllaRipresa(n.fase, { ritorno, leggeva, leggendo }))
-      // la lettura non si è fermata con la pagina: si torna a guardarla (P4)
-      if (riprendeLeggendo(n.fase, leggendo)) setRiattacca(true)
+      // la lettura non si è fermata con la pagina: si torna a guardarla, senza ripassare dal benvenuto (P4)
+      if (riprendeLeggendo(n.fase, leggendo)) { setRiattacca(true); setAccountConfermato(true) }
       try {
         // in localStorage e non nella scheda del browser: sopravvive a «Riapri Myynd» dopo un permesso
         const salvata = localStorage.getItem(chiaveScheda(n.id))
@@ -408,8 +408,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     const x = setTimeout(() => setAdesso(Date.now()), resta + 20)
     return () => clearTimeout(x)
   }, [leggiDa])
-  // P4 · quello che ha trovato: ogni secondo e mezzo mentre legge, ogni secondo alla fine
-  const chiediPagina = inLettura || !!fine
+  // P4 · quello che ha trovato: ogni secondo e mezzo mentre si guarda la lettura, ogni secondo alla fine
+  const chiediPagina = (momento === 1 && vistaLettura) || !!fine
   useEffect(() => {
     if (!chiediPagina) return
     let vivo = true
@@ -418,6 +418,14 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     const x = setInterval(giro, fine ? 1000 : 1500)
     return () => { vivo = false; clearInterval(x) }
   }, [chiediPagina, fine])
+  // P4 · e subito, ogni volta che una fonte finisce: il conto non aspetta il prossimo giro
+  const finite = lettura?.filter(r => !rigaAperta(r)).length ?? 0
+  useEffect(() => {
+    if (!finite || !vistaLettura) return
+    let vivo = true
+    void apiP4.avvioPagina().then(p => { if (vivo) setPagina(p) }).catch(() => {})
+    return () => { vivo = false }
+  }, [finite, vistaLettura])
   // P4 · la fine: si entra un secondo e mezzo dopo che la prima lettura ha finito, due se aveva già finito, venti al massimo
   useEffect(() => {
     if (!fine) return

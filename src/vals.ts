@@ -77,11 +77,11 @@ export { primoParagrafo }
  * diventava «Apri la pagina». L'id invece è costruito da noi, e il pezzo
  * prima dei due punti è sempre il connettore.
  */
-const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook'])
+const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook', 'postamac'])
 const FILE = new Set(['desktop', 'drive', 'dropbox', 'sharepoint', 'mac'])
 const CARTELLE = new Set(['lavoro'])
 const NOTE = new Set(['note', 'granola', 'conversazioni'])
-const AGENDA = new Set(['calendario', 'agenda', 'ical'])
+const AGENDA = new Set(['calendario', 'agenda', 'ical', 'agendamac'])
 
 /** Il connettore da cui viene: dall'id del documento, e solo in mancanza dalla voce. */
 const connettoreDi = (fonte: string | null | undefined, doc: string | null | undefined) =>

@@ -70,7 +70,7 @@ export function costruisciMail(casa: string, f: Forma): { inArrivo: string[]; in
     const oggetto = OGGETTI[i % OGGETTI.length]!
     const corpo = inviata
       ? `Hi ${persona[0].split(' ')[0]},\n\nThanks, I will send the revised version by Friday.\n\nAlex`
-      : `Hi Alex,\n\nQuick note about "${oggetto}". Could you get back to me by Thursday? I need your answer to move ahead with the new website.\n\nThanks,\n${persona[0]}`
+      : `Hi Alex,\n\nQuick note about "${oggetto}". Could you get back to me on this? I need your answer to move ahead with the new website.\n\nThanks,\n${persona[0]}`
     const file = join(dir, `${n}.emlx`)
     writeFileSync(file, emlx({
       da: inviata ? IO : persona, a: inviata ? persona : IO, oggetto: inviata ? `Re: ${oggetto}` : oggetto,
