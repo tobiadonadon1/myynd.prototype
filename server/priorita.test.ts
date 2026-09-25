@@ -44,34 +44,84 @@ test('per le priorità contano anche le mail lette e i file vecchi, non la posta
   assert.ok(ids.includes('conversazioni:claude:abc'), 'una sua chat con un modello è il quadro, anche se parla di system prompt')
 })
 
+/** Dove `ripulisci` cerca le prove, nelle prove: la mail di App Review, la memoria di Evermute, un riferimento. */
+const RIFERIMENTO = 'Evermute: waiting on Apple, the recording goes out on Friday.\nSito: the three offers are drafted, pricing pending.'
+const fontiDiProva = (): import('./priorita.ts').FontiPriorita => ({
+  testoDoc: id => {
+    const d = store.documento(id)
+    return d ? { titolo: d.titolo, testo: d.corpo, quando: d.quando ?? null, autore: d.autore ?? null } : null
+  },
+  memoria: id => priorita.testoDelProgetto(id),
+  riferimento: RIFERIMENTO,
+  nomiDi: id => id === p.id ? ['Evermute'] : [],
+  progetti: [p]
+})
+const PROVA_APPLE = 'we need a recording of the app on a physical device and setup instructions'
+
 test('ripulisci chiude la porta: verbo, misure, documento fra quelli letti, progetto per nome, niente doppioni, niente lineette', () => {
   const ids = new Set(['posta:INBOX:1'])
   const nomi = new Map([['evermute', p.id]])
-  const buona = priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions — nothing went back yet.', perche: 'Unblocks the Evermute App Store release', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist and the setup steps.' }, ids, nomi, [])
+  const fonti = fontiDiProva()
+  const buona = priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions — nothing went back yet.', perche: 'Apple waits for the device recording to continue the review.', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist and the setup steps.', prova: PROVA_APPLE }, ids, nomi, [], new Set(), fonti)
   assert.ok(buona)
   assert.equal(buona.progetto, p.id)
   assert.equal(buona.doc, 'posta:INBOX:1')
+  assert.equal(buona.origine, 'doc')
   assert.doesNotMatch(buona.testo, /—/)
-  // un documento non fra quelli letti e un progetto sconosciuto diventano «nessuno», non un errore
-  const senza = priorita.ripulisci({ genere: 'proposta', titolo: 'Write three info products from the website material', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'Moves tobiadonadon.com from copy to products', progetto: 'Nope', doc: 'posta:INBOX:99', offerta: 'I outline the three products with a price and a first chapter each.' }, ids, nomi, [])
-  assert.ok(senza && senza.progetto === null && senza.doc === null)
+  // un documento non fra quelli letti diventa «nessuno»: allora serve il progetto e la prova nella sua memoria
+  const senza = priorita.ripulisci({ genere: 'proposta', titolo: 'Write three info products from the website material', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'The App Store release waits on the three products.', progetto: 'Evermute', doc: 'posta:INBOX:99', offerta: 'I outline the three products with a price and a first chapter each.', prova: 'Ship Evermute 1.0 on the App Store' }, ids, nomi, [], new Set(), fonti)
+  assert.ok(senza && senza.progetto === p.id && senza.doc === null && senza.origine === 'memoria')
   // già in lista con altre parole: fuori
-  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked for a recording on a physical device and setup instructions.', perche: 'Unblocks the Evermute App Store release', progetto: '', doc: '', offerta: 'I draft the reply with the recording checklist.' }, ids, nomi, ['Reply to Apple App Review with the recording of the device']), null)
+  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked for a recording on a physical device and setup instructions.', perche: 'Apple waits for the device recording to continue the review.', progetto: '', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist.', prova: PROVA_APPLE }, ids, nomi, ['Reply to Apple App Review with the recording of the device'], new Set(), fonti), null)
   // senza offerta non è una priorità di Myynd: è un appunto
-  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked for a recording on a physical device and setup instructions.', perche: 'Unblocks the Evermute App Store release', progetto: '', doc: '', offerta: '' }, ids, nomi, []), null)
-  assert.equal(priorita.ripulisci({ genere: 'boh', titolo: 'x', testo: 'y', perche: 'z', progetto: '', doc: '', offerta: 'w' }, ids, nomi, []), null)
+  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked for a recording on a physical device and setup instructions.', perche: 'Apple waits for the device recording to continue the review.', progetto: '', doc: 'posta:INBOX:1', offerta: '', prova: PROVA_APPLE }, ids, nomi, [], new Set(), fonti), null)
+  assert.equal(priorita.ripulisci({ genere: 'boh', titolo: 'x', testo: 'y', perche: 'z', progetto: '', doc: '', offerta: 'w' }, ids, nomi, [], new Set(), fonti), null)
   // il gergo non arriva sulla prima pagina: «non capisco, parole semplici e dirette»
-  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Redesign the two text-heavy cards', testo: 'The note asks for a cleaner layout of the two project cards on the first page.', perche: 'Moves Myynd toward a finished product', progetto: '', doc: '', offerta: 'I will turn the note into a concise UI specification with layout, hierarchy, and acceptance criteria.' }, ids, nomi, []), null)
+  assert.equal(priorita.ripulisci({ genere: 'priorita', titolo: 'Redesign the two text-heavy cards', testo: 'The note asks for a cleaner layout of the two project cards on the first page.', perche: 'The first page waits on the two cards.', progetto: 'Evermute', doc: '', offerta: 'I will turn the note into a concise UI specification with layout, hierarchy, and acceptance criteria.', prova: 'Ship Evermute 1.0 on the App Store' }, ids, nomi, [], new Set(), fonti), null)
   assert.equal(priorita.conGergo('Ti preparo la risposta ad Apple con il video e le istruzioni'), false)
+})
+
+test('la prova: nel documento citato, nella memoria del progetto, o in una riga del riferimento che lo nomina; altrimenti la voce non c’è', () => {
+  const ids = new Set(['posta:INBOX:1', 'posta:INBOX:3'])
+  const nomi = new Map([['evermute', p.id]])
+  const fonti = fontiDiProva()
+  const base = { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions.', perche: 'Apple waits for the device recording to continue the review.', offerta: 'I draft the reply with the recording checklist.' }
+  // nel documento
+  assert.equal(priorita.ripulisci({ ...base, progetto: '', doc: 'posta:INBOX:1', prova: PROVA_APPLE }, ids, nomi, [], new Set(), fonti)?.origine, 'doc')
+  // un documento vero, ma la prova non ci sta: la carta «appesa a un documento a caso» non nasce
+  assert.equal(priorita.ripulisci({ ...base, progetto: '', doc: 'posta:INBOX:3', prova: PROVA_APPLE }, ids, nomi, [], new Set(), fonti), null)
+  // nella memoria del progetto
+  const memoria = priorita.ripulisci({ ...base, perche: 'The App Store release waits on the recording.', progetto: 'Evermute', doc: '', prova: 'Ship Evermute 1.0 on the App Store' }, ids, nomi, [], new Set(), fonti)
+  assert.equal(memoria?.origine, 'memoria')
+  // una citazione dalla memoria, senza progetto: non si sa di chi è
+  assert.equal(priorita.ripulisci({ ...base, perche: 'The App Store release waits on the recording.', progetto: '', doc: '', prova: 'Ship Evermute 1.0 on the App Store' }, ids, nomi, [], new Set(), fonti), null)
+  // in una riga del riferimento che nomina il progetto
+  const rif = priorita.ripulisci({ ...base, perche: 'The recording for Apple goes out on Friday.', progetto: 'Evermute', doc: '', prova: 'the recording goes out on Friday' }, ids, nomi, [], new Set(), fonti)
+  assert.equal(rif?.origine, 'riferimento')
+  // una riga del riferimento che nomina un altro progetto: no
+  assert.equal(priorita.ripulisci({ ...base, perche: 'The three offers wait on the pricing.', progetto: 'Evermute', doc: '', prova: 'the three offers are drafted' }, ids, nomi, [], new Set(), fonti), null)
+  // una prova che non sta da nessuna parte
+  assert.equal(priorita.ripulisci({ ...base, progetto: 'Evermute', doc: '', prova: 'this sentence was never written anywhere' }, ids, nomi, [], new Set(), fonti), null)
+  // un perché che parla del progetto invece che di chi aspetta
+  assert.equal(priorita.ripulisci({ ...base, perche: 'Matters for the Evermute project.', progetto: '', doc: 'posta:INBOX:1', prova: PROVA_APPLE }, ids, nomi, [], new Set(), fonti), null)
+  // la voce di una carta dalla memoria: fonte «memoria», niente documento, l'istantanea con la prova
+  const voce = priorita.voceDelFeed(memoria!) as { fonte?: string; doc?: string }
+  assert.equal(voce.fonte, 'memoria')
+  assert.ok(!('doc' in voce))
+  assert.deepEqual(JSON.parse((voce as { contesto: string }).contesto), { fonte: 'memoria', progetto: p.id, prova: 'Ship Evermute 1.0 on the App Store' })
+  // lo schema e il prompt non dicono un numero di voci
+  assert.doesNotMatch(JSON.stringify(priorita.FORMA_PER_PROVA.properties.priorita.description), /\d|sei|fino a/i)
 })
 
 test('i generi nuovi: una scadenza vuole la data letta nella fonte, una cosa da leggere vuole il documento', () => {
   const ids = new Set(['posta:INBOX:1'])
   const nomi = new Map([['evermute', p.id]])
-  const base = { titolo: 'Renew the Apple developer membership', testo: 'The renewal notice sits in the inbox and the card on file has expired.', perche: 'Keeps Evermute on the App Store', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I prepare the renewal with the new card details.' }
-  assert.equal(priorita.ripulisci({ genere: 'scadenza', ...base, quando: '' }, ids, nomi, []), null, 'senza data non è una scadenza')
-  assert.equal(priorita.ripulisci({ genere: 'scadenza', ...base, quando: 'soon' }, ids, nomi, []), null)
-  const con = priorita.ripulisci({ genere: 'scadenza', ...base, quando: 'renews 3 October' }, ids, nomi, [])
+  const fonti = fontiDiProva()
+  const base = { titolo: 'Renew the Apple developer membership', testo: 'The renewal notice sits in the inbox and the card on file has expired.', perche: 'Apple waits for the recording before the review continues.', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I prepare the renewal with the new card details.', prova: PROVA_APPLE }
+  const pulisci = (g: Record<string, unknown>, gia: string[] = []) => priorita.ripulisci(g, ids, nomi, gia, new Set(), fonti)
+  assert.equal(pulisci({ genere: 'scadenza', ...base, quando: '' }), null, 'senza data non è una scadenza')
+  assert.equal(pulisci({ genere: 'scadenza', ...base, quando: 'soon' }), null)
+  const con = pulisci({ genere: 'scadenza', ...base, quando: 'renews 3 October' })
   assert.ok(con && con.genere === 'scadenza' && con.quando === 'renews 3 October')
   const voce = priorita.voceDelFeed(con!)
   assert.equal(voce.tipo, 'Scadenza')
@@ -79,16 +129,16 @@ test('i generi nuovi: una scadenza vuole la data letta nella fonte, una cosa da 
   assert.equal(priorita.eProposta(voce), true, 'una scadenza del giro ha l’offerta, e il feed la tratta come le priorità')
   assert.equal(priorita.eProposta({ tipo: 'Scadenza', offerta: '' }), false, 'una scadenza della lettura normale no')
   // la data può stare nel testo
-  const nelTesto = priorita.ripulisci({ genere: 'scadenza', ...base, testo: 'The membership renews on 2026-10-03 and the card on file has expired.', quando: '' }, ids, nomi, [])
+  const nelTesto = pulisci({ genere: 'scadenza', ...base, testo: 'The membership renews on 2026-10-03 and the card on file has expired.', quando: '' })
   assert.ok(nelTesto)
   assert.equal(priorita.conUnaData('entro venerdì'), true)
   assert.equal(priorita.conUnaData('next week maybe'), false)
   // da leggere: senza un documento fra quelli letti non c'è niente da aprire
-  assert.equal(priorita.ripulisci({ genere: 'da-leggere', ...base, doc: '' }, ids, nomi, []), null)
-  const leggi = priorita.ripulisci({ genere: 'da-leggere', ...base }, ids, nomi, [])
+  assert.equal(pulisci({ genere: 'da-leggere', ...base, doc: '' }), null)
+  const leggi = pulisci({ genere: 'da-leggere', ...base })
   assert.ok(leggi && priorita.voceDelFeed(leggi).tipo === 'Da leggere')
   // «Imposto un'automazione…» è una proposta anche se l'ha chiamata priorità
-  const auto = priorita.ripulisci({ genere: 'priorita', ...base, offerta: 'I set up an automation that files the App Review mails every Monday.' }, ids, nomi, [])
+  const auto = pulisci({ genere: 'priorita', ...base, offerta: 'I set up an automation that files the App Review mails every Monday.' })
   assert.equal(auto?.genere, 'proposta')
 })
 
@@ -98,10 +148,11 @@ test('con il riferimento, un progetto che lui ha detto morto non si propone, nem
   const nomi = new Map([['evermute', p.id], ['sito', sito.id]])
   const morti = riferimento.progettiMorti('Evermute: shipping. Sito: dead, I dropped it in August.', [p, sito])
   assert.deepEqual([...morti], [sito.id])
-  const g = { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'Moves the site from copy to products', progetto: 'Sito', doc: '', offerta: 'I outline the three products with a price each.' }
-  assert.equal(priorita.ripulisci(g, ids, nomi, [], morti), null, 'il progetto morto non passa')
-  assert.equal(priorita.ripulisci({ ...g, progetto: '', titolo: 'Rewrite the Sito offers page' }, ids, nomi, [], morti), null, 'nemmeno nominato nel titolo senza progetto')
-  assert.ok(priorita.ripulisci({ ...g, progetto: 'Evermute', titolo: 'Write the Evermute release notes' }, ids, nomi, [], morti), 'un progetto vivo passa')
+  const fonti = { ...fontiDiProva(), nomiDi: (id: string) => id === p.id ? ['Evermute'] : id === sito.id ? ['Sito'] : [] }
+  const g = { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'The three offers wait on the pricing.', progetto: 'Sito', doc: '', offerta: 'I outline the three products with a price each.', prova: 'Three offers online' }
+  assert.equal(priorita.ripulisci(g, ids, nomi, [], morti, fonti), null, 'il progetto morto non passa')
+  assert.equal(priorita.ripulisci({ ...g, progetto: '', titolo: 'Rewrite the Sito offers page' }, ids, nomi, [], morti, fonti), null, 'nemmeno nominato nel titolo senza progetto')
+  assert.ok(priorita.ripulisci({ ...g, progetto: 'Evermute', titolo: 'Write the Evermute release notes', perche: 'The App Store release waits on the notes.', prova: 'Ship Evermute 1.0 on the App Store' }, ids, nomi, [], morti, fonti), 'un progetto vivo passa')
   progetti.chiudi(sito.id)
 })
 
@@ -119,10 +170,15 @@ test('forse: con un modello mette le priorità sul feed, con l’offerta, e non 
       assert.match(o.system, /conversazioni con i modelli/, 'e il prompt dice cosa sono')
       assert.match(o.system, /Non ha ancora scritto a che punto è ogni progetto/, 'senza riferimento il prompt lo dice, e chiede di domandare')
       assert.match(o.system, /Collega quello che vedi fra progetti/, 'il collegamento fra progetti è una richiesta esplicita')
+      // l'asticella, e nessun numero: né «fino a sei», né «zero è sbagliato», né «almeno metà»
+      assert.match(o.system, /Scrivi solo le priorità che passano l'asticella/)
+      assert.match(o.system, /Zero è una risposta giusta\./)
+      assert.doesNotMatch(o.system, /zero voci è una risposta sbagliata|Almeno metà|Scrivi fino a/)
+      assert.match(o.system, /citi alla lettera in «prova»/)
       return { priorita: [
-        { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions; nothing went back yet.', perche: 'Unblocks the Evermute App Store release', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist and the setup steps.' },
-        { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide with a price.', perche: 'Moves tobiadonadon.com from copy to products', progetto: '', doc: 'desktop:/Users/t/Desktop/note.md', offerta: 'I outline the three products with a price and a first chapter each.' },
-        { genere: 'priorita', titolo: 'short', testo: 'no', perche: 'no', progetto: '', doc: '', offerta: '' }
+        { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording on a physical device and setup instructions; nothing went back yet.', perche: 'Apple waits for the recording before the review continues.', progetto: 'Evermute', doc: 'posta:INBOX:1', offerta: 'I draft the reply with the recording checklist and the setup steps.', prova: 'we need a recording of the app on a physical device and setup instructions' },
+        { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide with a price.', perche: 'The draft pricing is still pending on the offers note.', progetto: '', doc: 'desktop:/Users/t/Desktop/note.md', offerta: 'I outline the three products with a price and a first chapter each.', prova: 'Draft pricing pending.' },
+        { genere: 'priorita', titolo: 'short', testo: 'no', perche: 'no', progetto: '', doc: '', offerta: '', prova: '' }
       ] }
     }) as never
   })
@@ -169,8 +225,8 @@ test('con il riferimento scritto: sta nel prompt, il progetto morto cade dal gir
       assert.match(o.system, /Bloccati, secondo lui: Evermute/)
       return {
         priorita: [
-          { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'Moves the site from copy to products', progetto: 'Sito', doc: 'desktop:/Users/t/Desktop/note.md', offerta: 'I outline the three products with a price each.', quando: '' },
-          { genere: 'scadenza', titolo: 'Sign the Ceru contract before the keys', testo: 'Marta wrote two months ago that the keys wait on your signature.', perche: 'Unblocks the move to Ceru', progetto: '', doc: 'posta:INBOX:3', offerta: 'I draft the reply to Marta with the signed pages.', quando: '' }
+          { genere: 'proposta', titolo: 'Turn the three website offers into info products', testo: 'The offers note lists audit, workshop and retainer: each can become a paid guide.', perche: 'The draft pricing is still pending on the offers note.', progetto: 'Sito', doc: 'desktop:/Users/t/Desktop/note.md', offerta: 'I outline the three products with a price each.', quando: '', prova: 'Draft pricing pending.' },
+          { genere: 'scadenza', titolo: 'Sign the Ceru contract before the keys', testo: 'Marta wrote two months ago that the keys wait on your signature.', perche: 'Marta waits for your signature before the keys.', progetto: '', doc: 'posta:INBOX:3', offerta: 'I draft the reply to Marta with the signed pages.', quando: '', prova: 'we still need your signature on the contract' }
         ],
         domande: [
           { progetto: 'Evermute', testo: 'Did the recording for App Review go out on Friday?', fonti: ['posta:INBOX:1', 'boh'] },
@@ -196,12 +252,13 @@ test('con il riferimento scritto: sta nel prompt, il progetto morto cade dal gir
 
 test('una priorità che non si capisce arriva sul feed riscritta, con il peso; senza Jev arriva com’è', async () => {
   priorita.dimentica()
-  const confusa = { genere: 'priorita', titolo: 'Verify Jev keeps Myynd data local before expanding it', testo: 'The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service.', perche: 'Privacy is the promise of Myynd', progetto: 'Evermute', doc: '', offerta: 'I read the TypeSafe terms and write down what leaves the Mac.', quando: '' }
+  // senza documento: la prova sta nella memoria di Evermute (il suo obiettivo)
+  const confusa = { genere: 'priorita', titolo: 'Verify Jev keeps Myynd data local before expanding it', testo: 'The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service.', perche: 'The App Store release waits on the privacy check.', progetto: 'Evermute', doc: '', offerta: 'I read the TypeSafe terms and write down what leaves the Mac.', quando: '', prova: 'Ship Evermute 1.0 on the App Store' }
   priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [confusa], domande: [] })) as never })
   let riscritture = 0
   rifinitura.perProva({ collegato: () => true, chiediJSON: (async () => {
     riscritture++
-    return { titolo: 'Record the Myynd walkthrough video', testo: 'Your founder post needs the app video you asked for on September 18.', urgenza: '' }
+    return { titolo: 'Record the Myynd walkthrough video', testo: 'Your founder post needs the app video you asked for on September 18.', urgenza: '', perche: 'The founder post waits on the app video.' }
   }) as never })
   // senza Jev: la carta arriva sul feed com’è, senza peso, e il modello non riscrive
   assert.equal(await priorita.forse(true), 1)
@@ -227,7 +284,7 @@ test('una priorità che non si capisce arriva sul feed riscritta, con il peso; s
     return Response.json({ answers: { peso: { type: 'score', score: 1.5, confidence: 0.9, probabilities: {}, legend: {} } } })
   })
   // un'altra carta confusa: la prima è stata scartata, e una scartata non si ripropone
-  const cucita = { ...confusa, titolo: 'Record the Myynd walkthrough and attach it to the founder post', testo: 'Your September 18 request specified an app video, while recent feedback says the posts lack pictures and links.', perche: 'The founder post is the launch of Myynd', offerta: 'I write the shot list for the walkthrough video.' }
+  const cucita = { ...confusa, titolo: 'Record the Myynd walkthrough and attach it to the founder post', testo: 'Your September 18 request specified an app video, while recent feedback says the posts lack pictures and links.', perche: 'The App Store release waits on the walkthrough video.', offerta: 'I write the shot list for the walkthrough video.' }
   priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: [cucita], domande: [] })) as never })
   try {
     assert.equal(await priorita.forse(true), 1)
@@ -330,6 +387,7 @@ test('il giro toglie le sue carte superate, e solo le sue: la carta di una mail 
   const dopo = store.feedAperto(40)
   assert.ok(!dopo.some(v => v.id === mia.id), 'la sua carta superata esce')
   assert.equal(store.voceFeed(mia.id)?.stato, 'scaduto', 'scaduta, non fatta: non l’ha fatta lui')
+  assert.equal(store.voceFeed(mia.id)?.ragione, 'superata', 'la ragione dice che l’ha tolta il giro, non il tempo')
   assert.ok(dopo.some(v => v.id === posta.id), 'la carta di una mail la toglie solo lui')
   priorita.perProva(null)
 })
