@@ -17,6 +17,7 @@ import { desktop, type Dove } from '../desktop'
 import { frasi, lingua, t } from '../lingua'
 import { COMANDI, type Comando, type Modo } from '../oggi/Barra'
 import { righeDaTesto } from '../oggi/righe'
+import { senzaTrattiniFuoriCodice } from '../../server/testo.ts'
 import { nuovoId, type Secchio } from '../oggi/useCompiti'
 import { Hov } from '../ui'
 
@@ -34,7 +35,8 @@ const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
  * una frase è solo un pezzo di codice avanzato.
  */
 function paragrafi(testo: string): string[] {
-  return testo.replace(/\*\*/g, '').replace(/\s*\[(?:\d+(?:,\s*\d+)*|M)\]/g, '')
+  // e le lineette: la regola vale per tutto quello che si legge, anche mentre scorre
+  return senzaTrattiniFuoriCodice(testo).replace(/\*\*/g, '').replace(/\s*\[(?:\d+(?:,\s*\d+)*|M)\]/g, '')
     .split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
 }
 

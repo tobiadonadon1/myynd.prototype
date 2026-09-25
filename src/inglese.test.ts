@@ -20,7 +20,8 @@ import { readFileSync } from 'node:fs'
  * inglesi o pezzi di altro, e darebbero rumore invece che segnale.
  */
 const ITALIANE = new RegExp(
-  '\\b(che|non|una|uno|della|dello|delle|degli|con|sono|questo|questa|quello|quella|' +
+  // non dopo un trattino: «--anche-locale» è il nome di un flag, non una parola
+  '(?<!-)\\b(che|non|una|uno|della|dello|delle|degli|con|sono|questo|questa|quello|quella|' +
   'nella|nello|quando|perché|perche|anche|tutto|tutti|tutte|ancora|adesso|solo|senza|' +
   'dopo|prima|già|gia|niente|nessuno|qualcosa|cosa|cose|scrivi|leggi|collega|apri|chiudi|' +
   'fatto|fatta|detto|detta|dalla|sulla|tuoi|puoi|deve|devi|serve|vuoi|oppure|invece|' +

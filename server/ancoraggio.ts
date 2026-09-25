@@ -30,8 +30,15 @@ export type FonteAncorata = {
   autore?: string | null
   quando?: string | null
   inviato?: boolean
-  /** Il passo che regge la frase, alla lettera dall'estratto visto; al massimo 220 caratteri. */
+  /** Il passo che regge la frase del primo segno, alla lettera dall'estratto visto; al massimo 220 caratteri. */
   passo?: string
+  /**
+   * Un passo per ogni segno [n] di questa fonte, nell'ordine in cui compaiono
+   * nel testo, null dove la frase non ne ha uno. Solo quando la fonte è
+   * citata più di una volta: la data non prova il prezzo, e il secondo segno
+   * mostra il suo passo, non quello del primo.
+   */
+  passi?: (string | null)[]
 }
 
 export type Verifica = {
@@ -142,8 +149,10 @@ function fattiConPosizione(testo: string): Fatto[] {
     if (!giornoValido(Number(m[2]), mese)) return null
     return m[3] ? `${m[3]}-${due(mese)}-${due(Number(m[2]))}` : `${due(mese)}-${due(Number(m[2]))}`
   })
-  // le ore
+  // le ore: «9:30», e «alle 9.30», «ore 9.30», «at 9.30» col punto all'italiana,
+  // che senza la parola davanti sarebbe il decimale nove virgola tre
   prendi(/\b(\d{1,2}):(\d{2})\b/g, m => Number(m[1]) < 24 && Number(m[2]) < 60 ? `${due(Number(m[1]))}:${m[2]}` : null)
+  prendi(/\b(?:alle|dalle|ore|at|h)\s+(\d{1,2})\.(\d{2})\b(?![.,]\d)/gi, m => Number(m[1]) < 24 && Number(m[2]) < 60 ? `${due(Number(m[1]))}:${m[2]}` : null)
   // i codici: lettere e cifre attaccate, «INV-2231», «AB1234»
   prendi(/\b[A-Za-z]{2,6}-?\d{2,}\b/g, m => m[0].toUpperCase())
   // le cifre: con valuta, unità o decimali sempre; da sole, solo con almeno due
@@ -155,7 +164,10 @@ function fattiConPosizione(testo: string): Fatto[] {
     const cifre = grezzo.replace(/\D/g, '')
     const conSegno = !!m[1] || !!m[3] || /[.,]\d+$/.test(grezzo) && !(/[.,]\d{3}$/.test(grezzo))
     if (cifre.length < 2 && !conSegno) return null
-    return numeroPiano(grezzo)
+    const piano = numeroPiano(grezzo)
+    // «4.8k» e «€4,800» sono la stessa cifra: la k vale mille
+    if (m[3] && /^k$/i.test(m[3]) && /^\d+(?:\.\d+)?$/.test(piano)) return String(Math.round(Number(piano) * 1000))
+    return piano
   })
   return fuori.sort((a, b) => a.inizio - b.inizio)
 }
@@ -205,10 +217,12 @@ const RIGHE_DI_RIFIUTO = [
  * metà che rifiuta solo l'ultima parte.
  */
 export function eUnRifiuto(testo: string): boolean {
-  const t = apostrofi(testo).trim().toLowerCase()
-  const riga = RIGHE_DI_RIFIUTO.find(r => t.startsWith(r) && /^(?:[.!]|\s*$|\n)/.test(t.slice(r.length)))
+  // il prompt mostra la riga fra virgolette: un modello che la ricopia con le
+  // virgolette, o in grassetto, ha rifiutato lo stesso
+  const t = apostrofi(testo).trim().replace(/^[«»“”"'*_\s]+/, '').replace(/[«»“”"'*_\s]+$/, '').toLowerCase()
+  const riga = RIGHE_DI_RIFIUTO.find(r => t.startsWith(r) && /^(?:[.!]|[«»“”"'*_]|\s*$|\n)/.test(t.slice(r.length)))
   if (riga === undefined) return false
-  const dopo = t.slice(riga.length).replace(/^[.!\s]+/, '').trim()
+  const dopo = t.slice(riga.length).replace(/^[.!\s«»“”"'*_]+/, '').trim()
   if (!dopo) return true
   const frasi = dopo.split(/[.!?]+(?:\s+|$)/).map(f => f.trim()).filter(Boolean)
   if (frasi.length > 1) return false
@@ -293,19 +307,20 @@ function attorno(finestra: string, dove: number, tetto = 220): string {
 /**
  * Il passo dell'estratto che regge una frase della risposta.
  *
- * Dieci punti per ogni fatto duro della frase che la finestra contiene, uno
- * per ogni radice in comune. Una frase con dei fatti duri vale solo con
- * almeno uno di quei fatti nella finestra: «Build 1.0.3 goes to App Review»
- * non prova «the build is 1.0.9», per quante parole abbiano in comune. Una
- * frase senza fatti vale con almeno tre radici. Altrimenti non c'è nessun
- * passo, e non se ne inventa uno.
+ * Vince la finestra con più fatti duri della frase; a parità, quella con più
+ * radici in comune, contate una volta sola ciascuna (una riga che ripete
+ * «pilot» undici volte non batte la frase che porta la data). Una frase con
+ * dei fatti duri vale solo con almeno uno di quei fatti nella finestra:
+ * «Build 1.0.3 goes to App Review» non prova «the build is 1.0.9», per quante
+ * parole abbiano in comune. Una frase senza fatti vale con almeno tre radici.
+ * Altrimenti non c'è nessun passo, e non se ne inventa uno.
  */
 export function passoPer(frase: string, estratto: string): string | undefined {
   const f = senzaSegni(frase)
   if (!f || !estratto.trim()) return undefined
   const fatti = fattiDuri(f)
   const radici = radiciDi(f)
-  let migliore: { punti: number; fatti: number; radici: number; testo: string; dove: number } | null = null
+  let migliore: { fatti: number; radici: number; testo: string; dove: number } | null = null
   for (const fin of frasiCon(estratto)) {
     const suoi = fattiConPosizione(fin.testo)
     const valori = suoi.map(x => x.valore)
@@ -319,16 +334,18 @@ export function passoPer(frase: string, estratto: string): string | undefined {
         dove = p ? p.inizio : 0
       }
     }
-    let nRadici = 0
+    const inComune = new Set<string>()
     for (const t of termini(fin.testo)) {
       const r = radice(t)
       if (!radici.has(r)) continue
-      nRadici++
+      inComune.add(r)
       if (dove < 0) dove = Math.max(0, fin.testo.toLowerCase().indexOf(t))
     }
-    const punti = nFatti * 10 + nRadici
-    if (!punti) continue
-    if (!migliore || punti > migliore.punti) migliore = { punti, fatti: nFatti, radici: nRadici, testo: fin.testo, dove: Math.max(0, dove) }
+    const nRadici = inComune.size
+    if (!nFatti && !nRadici) continue
+    if (!migliore || nFatti > migliore.fatti || (nFatti === migliore.fatti && nRadici > migliore.radici)) {
+      migliore = { fatti: nFatti, radici: nRadici, testo: fin.testo, dove: Math.max(0, dove) }
+    }
   }
   if (!migliore || (fatti.length > 0 ? migliore.fatti < 1 : migliore.radici < 3)) return undefined
   return attorno(migliore.testo, migliore.dove)
@@ -336,12 +353,20 @@ export function passoPer(frase: string, estratto: string): string | undefined {
 
 // — l'ancora —
 
+/** La frase della risposta attorno a ogni comparsa del segno dato, nell'ordine del testo. */
+function frasiCol(testo: string, segno: string): string[] {
+  const frasi = frasiCon(testo)
+  const fuori: string[] = []
+  for (let i = testo.indexOf(segno); i >= 0; i = testo.indexOf(segno, i + segno.length)) {
+    const f = frasi.find(x => i >= x.inizio && i < x.fine)
+    fuori.push(f ? f.testo : '')
+  }
+  return fuori
+}
+
 /** La frase della risposta che porta il primo segno dato. */
 function fraseCol(testo: string, segno: string): string {
-  const i = testo.indexOf(segno)
-  if (i < 0) return ''
-  const f = frasiCon(testo).find(x => i >= x.inizio && i < x.fine)
-  return f ? f.testo : ''
+  return frasiCol(testo, segno)[0] ?? ''
 }
 
 /** Il progetto nominato nella frase, se ce n'è esattamente uno. */
@@ -391,8 +416,16 @@ export function ancora(testo: string, o: {
       id: d.id, label: `[${n}] ${d.titolo}`,
       fonte: d.fonte, tipo: d.tipo, autore: d.autore ?? null, quando: d.quando ?? null, inviato: !!d.inviato
     }
-    const passo = passoPer(prosa.rimetti(fraseCol(prosa.testo, `[${n}]`)), d.corpo.slice(0, o.estratti.get(d.id) ?? 0))
-    if (passo) f.passo = passo
+    // un passo per ogni segno: la frase del secondo [n] è un'altra frase, e
+    // vuole il suo passo (o nessuno), non quello della prima
+    const estratto = d.corpo.slice(0, o.estratti.get(d.id) ?? 0)
+    const trovati = new Map<string, string | null>()
+    const passi = frasiCol(prosa.testo, `[${n}]`).map(fr => {
+      if (!trovati.has(fr)) trovati.set(fr, passoPer(prosa.rimetti(fr), estratto) ?? null)
+      return trovati.get(fr)!
+    })
+    if (passi[0]) f.passo = passi[0]
+    if (passi.length > 1) f.passi = passi
     fonti.push(f)
   })
   const memoria = o.memoria && prosa.testo.includes('[M]')

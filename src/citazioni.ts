@@ -16,6 +16,19 @@ export type Fonte = {
   quando?: string | null
   inviato?: boolean
   passo?: string
+  /** Un passo per ogni segno [n] di questa fonte, nell'ordine del testo; c'è solo quando i segni sono più di uno. */
+  passi?: (string | null)[]
+}
+
+/**
+ * Il passo del k-esimo segno di una fonte (da zero). Con `passi` è quello
+ * della sua frase; senza, `passo` vale solo per il primo segno: la data del
+ * primo non prova il prezzo del secondo, e un segno senza passo resta senza.
+ */
+export function passoDi(f: Fonte | undefined, k: number): string | undefined {
+  if (!f) return undefined
+  if (f.passi) return f.passi[k] ?? undefined
+  return k === 0 ? f.passo : undefined
 }
 
 /** La fonte il cui numero combacia con quello scritto nel testo, non la posizione nell'elenco. */

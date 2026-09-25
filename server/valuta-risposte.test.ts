@@ -501,3 +501,50 @@ test('una versione è un fatto intero anche per la prova: «1.0.9» al posto di 
   assert.equal(r.voci[0].esito, 'giusta')
   assert.equal(r.voci[0].fonti[0]?.passo, 'Build 1.0.3 goes to App Review on 2 October 2026.')
 })
+
+test('una prova a secco non dice «in corso»: stato.json resta com’era', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  archivio.scriviInsieme(INSIEME())
+  archivio.scriviStato({ ultima: { quando: ieri(2), origine: 'comando', via: 'claude', fatte: 6, quante: 6, giuste: 5, senzaFonte: 0, sbagliate: 1, inventate: 0, rifiutateMale: 0, daRivedere: 0, passa: false, gettoni: 100, file: 'x' } })
+  const prima = readFileSync(join(archivio.cartellaRisposte(), 'stato.json'), 'utf8')
+  let inCorsoVisto = false
+  vr.perProva({ rispondi: (async () => { inCorsoVisto = inCorsoVisto || !!archivio.leggiStato().inCorso; throw new Error('a secco non si chiama') }) as never })
+  const r = await vr.valutaRisposte({ origine: 'comando', secco: true })
+  assert.equal(inCorsoVisto, false)
+  assert.equal(readFileSync(join(archivio.cartellaRisposte(), 'stato.json'), 'utf8'), prima, 'a secco stato.json non si tocca')
+  assert.equal(archivio.rigaDiStato(archivio.leggiStato(), true, true, false)?.startsWith('Last check'), true)
+  // e un documento che l'indice non ha proprio si dice, invece di un «-» che sembra un recupero mancato
+  const ins = INSIEME()
+  ins.domande.push(item('q07', { domanda: 'When is the Lumen offsite?', tipo: 'risponde', genere: 'data', attesa: '3 March 2027', doc: { id: 'desktop:manca', titolo: 'Lumen offsite.md', fonte: 'desktop', quando: ieri(2) }, citazione: 'The Lumen offsite is on 3 March 2027.', scarto: 0 }))
+  archivio.scriviInsieme(ins)
+  const conMancante = await vr.valutaRisposte({ origine: 'comando', secco: true })
+  assert.equal(conMancante.voci.find(v => v.id === 'q07')!.codice.docNellIndice, false)
+  assert.equal(conMancante.voci.find(v => v.id === 'q01')!.codice.docNellIndice, true)
+  assert.match(vr.tabella(conMancante, true), /q07 .*document not in the index/)
+  assert.ok(!/q01 .*document not in the index/.test(vr.tabella(conMancante, true)))
+  void r
+})
+
+test('«svuota la mente» a metà prova: la prova si ferma e le copie private non tornano', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  archivio.scriviInsieme(INSIEME())
+  const giudice = giudiceFinto()
+  let fatte = 0
+  const chat = chatFinta(COPIONE)
+  vr.perProva({
+    rispondi: (async (...args: Parameters<typeof chat>) => {
+      fatte++
+      // alla seconda domanda lui svuota la mente: la cartella se ne va
+      if (fatte === 2) archivio.togli()
+      return chat(...args)
+    }) as never,
+    chiediJSON: giudice.chiediJSON
+  })
+  const r = await vr.valutaRisposte({ origine: 'comando' })
+  assert.equal(r.interrotta, 'annullata')
+  assert.ok(fatte <= 2, `si ferma alla domanda dopo: ${fatte}`)
+  assert.equal(r.file, null)
+  assert.ok(!existsSync(archivio.cartellaRisposte()), 'niente stato, storico o rapporto risorti')
+  assert.equal(archivio.inCorso(), false)
+  vr.perProva(null)
+})

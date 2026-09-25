@@ -76,7 +76,7 @@ export type VoceRisposta = {
   esito: EsitoRisposta | null
   codice: {
     rifiuto: boolean; corrisponde: boolean | null; supportata: boolean | null; scoperti: string[]; nonValide: number[]
-    docCitato: boolean; docNelMateriale: number | null; docInCerca: number | null; scarto: number | null; estratto: number
+    docCitato: boolean; docNelMateriale: number | null; docInCerca: number | null; docNellIndice: boolean | null; scarto: number | null; estratto: number
     /** La citazione attesa sta dentro l'estratto che il modello vede al primo giro. */
     dentroEstratto: boolean | null
   }
@@ -231,6 +231,14 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
   }
   const lucchetto = archivio.prendi()
   if (!lucchetto) throw new Error('Una prova delle risposte è già in corso.')
+  // si ferma al segnale di chi chiama e a «svuota la mente» o all'addio al
+  // conto (`togli`), che portano via la cartella mentre la prova gira
+  const fermata = new AbortController()
+  const segnale = fermata.signal
+  const ferma = () => fermata.abort()
+  o.segnale?.addEventListener('abort', ferma, { once: true })
+  lucchetto.segnale.addEventListener('abort', ferma, { once: true })
+  if (o.segnale?.aborted) ferma()
   const dal = new Date().toISOString()
   const { ferri } = await moduli()
   const partenza = ferri.adesso()
@@ -246,13 +254,14 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
     let interrotta: Interrotta | undefined
     const accordo = { casi: 0, concordi: 0 }
     const stato = archivio.leggiStato()
-    const segnaInCorso = (fatte: number) => archivio.scriviStato({ ...stato, inCorso: { dal, fatte, quante: domande.length } })
+    // a secco nessun modello lavora: la riga delle preferenze non deve dire «Prova in corso»
+    const segnaInCorso = (fatte: number) => { if (!o.secco && lucchetto.tenuto()) archivio.scriviStato({ ...stato, inCorso: { dal, fatte, quante: domande.length } }) }
     segnaInCorso(0)
     const contestoMemoria = () => [memoria.carta(), progetti.perIlModello('', 8, true), store.compitiPerIlModello(12).join('\n')].filter(Boolean).join('\n\n')
 
     await etichetta.conEtichetta('prova', async () => {
       for (const d of domande) {
-        if (o.segnale?.aborted) { interrotta = 'annullata'; break }
+        if (segnale.aborted) { interrotta = 'annullata'; break }
         if (!o.secco && ferri.adesso() - partenza >= TEMPO_RUN) { interrotta = 'tempo'; break }
         if (!o.secco && dp.gettoniDellaProva(dal) >= BUDGET_RUN) { interrotta = 'budget'; break }
 
@@ -262,6 +271,8 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
         const codice: VoceRisposta['codice'] = {
           rifiuto: false, corrisponde: null, supportata: null, scoperti: [], nonValide: [], docCitato: false,
           docNelMateriale: nelMateriale >= 0 ? nelMateriale + 1 : null, docInCerca: inCerca >= 0 ? inCerca + 1 : null,
+          // un documento che l'indice non ha proprio (letto non ancora finito, file sparito) si dice: non è un recupero mancato
+          docNellIndice: d.doc ? !!store.documento(d.doc.id) : null,
           scarto: d.scarto, estratto: estrattoIniziale,
           dentroEstratto: d.scarto === null ? null : d.scarto + d.citazione.length <= estrattoIniziale
         }
@@ -276,10 +287,10 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
         let prima: number | null = null
         let r: Awaited<ReturnType<typeof ferri.rispondi>>
         try {
-          r = await ferri.rispondi(d.domanda, [], () => { if (prima === null) prima = ferri.adesso() - t0 }, undefined, o.segnale, undefined, { prova: true })
+          r = await ferri.rispondi(d.domanda, [], () => { if (prima === null) prima = ferri.adesso() - t0 }, undefined, segnale, undefined, { prova: true })
         } catch (e) {
           if (tetto.delTetto(e)) { interrotta = 'tetto'; break }
-          if (o.segnale?.aborted) { interrotta = 'annullata'; break }
+          if (segnale.aborted) { interrotta = 'annullata'; break }
           // la rete, un motore giù, «ci ha messo troppo»: la voce resta senza etichetta,
           // la prova si ferma e il rapporto parziale si salva lo stesso, con quello che è costato
           voce.errore = messaggio(e); voce.ms.totale = ferri.adesso() - t0
@@ -322,7 +333,7 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
             // la voce resta nel rapporto, senza etichetta e con il perché
             voce.errore = messaggio(e); voci.push(voce)
             if (tetto.delTetto(e)) { interrotta = 'tetto'; break }
-            if (o.segnale?.aborted) { interrotta = 'annullata'; break }
+            if (segnale.aborted) { interrotta = 'annullata'; break }
             interrotta = 'errore'; break
           }
           // un giudizio che non si legge non è un giudizio: la voce resta senza etichetta, mai «sbagliata» per questo
@@ -358,7 +369,10 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
       ...(interrotta ? { interrotta } : {}), file: null
     }
     if (o.secco) return rapporto
+    // la cartella è stata svuotata mentre la prova girava: il rapporto torna a chi ha chiamato, ma su disco non torna niente
+    if (!lucchetto.tenuto()) return rapporto
     rapporto.file = archivio.salvaRapporto(rapporto, quando)
+    if (!rapporto.file) return rapporto
     const riassunto: Riassunto = {
       quando, origine: o.origine, via, fatte: t.fatte, quante: t.quante, totale: domande.length, giuste: t.giuste, senzaFonte: t.senza_fonte, sbagliate: t.sbagliata,
       inventate: t.inventata, rifiutateMale: t.rifiutata_male, daRivedere: t.da_rivedere, passa: rapporto.passa,
@@ -376,9 +390,13 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
     })
     return rapporto
   } finally {
+    const scrivibile = !o.secco && lucchetto.tenuto()
     lucchetto.lascia()
-    const { inCorso: _via, ...senzaInCorso } = archivio.leggiStato()
-    archivio.scriviStato(senzaInCorso)
+    o.segnale?.removeEventListener('abort', ferma)
+    if (scrivibile) {
+      const { inCorso: _via, ...senzaInCorso } = archivio.leggiStato()
+      archivio.scriviStato(senzaInCorso)
+    }
   }
 }
 
@@ -494,7 +512,11 @@ export function tabella(r: RapportoRisposte, en: boolean): string {
   righe.push(en ? ' id   label            via          ms     question' : ' id   esito            via          ms     domanda')
   for (const v of r.voci) {
     const esito = v.esito ? ETICHETTE[v.esito][en ? 'en' : 'it'] : v.errore ? (en ? 'error' : 'errore') : (en ? 'no model' : 'senza modello')
-    const rec = v.tipo === 'risponde' ? ` · ${en ? 'material' : 'materiale'} ${v.codice.docNelMateriale ?? '-'} · ${en ? 'search' : 'cerca'} ${v.codice.docInCerca ?? '-'} · ${en ? 'offset' : 'scarto'} ${v.codice.scarto ?? '-'}/${v.codice.estratto}` : ''
+    const rec = v.tipo === 'risponde'
+      ? v.codice.docNellIndice === false
+        ? ` · ${en ? 'document not in the index' : 'documento non nell’indice'}`
+        : ` · ${en ? 'material' : 'materiale'} ${v.codice.docNelMateriale ?? '-'} · ${en ? 'search' : 'cerca'} ${v.codice.docInCerca ?? '-'} · ${en ? 'offset' : 'scarto'} ${v.codice.scarto ?? '-'}/${v.codice.estratto}`
+      : ''
     righe.push(` ${v.id.padEnd(4)} ${esito.padEnd(16)} ${(v.verifica?.via ?? '-').padEnd(12)} ${String(v.ms.totale).padStart(6)} ${v.domanda}${rec}`)
   }
   const t = r.totali
@@ -596,11 +618,24 @@ async function main() {
     const r = await dentro(() => valutaRisposte({ origine: 'comando', solo: a.solo ?? undefined, secco: a.secco, ancheLocale: a.ancheLocale, segnale: controllo.signal }))
     console.log(tabella(r, en))
   } catch (e) {
-    console.error(e instanceof Error ? e.message : String(e))
+    const m = e instanceof Error ? e.message : String(e)
+    // la tabella parla la lingua dell'app: anche il motivo per cui non è partita
+    let en = false
+    try { en = await dentro(() => config.lingua()) === 'en' } catch { /* resta l'italiano */ }
+    console.error(en ? (IN_INGLESE[m] ?? m) : m)
     process.exitCode = 1
   } finally {
     store.chiudiIndici()
   }
+}
+
+/** I rifiuti della riga di comando in inglese: le stesse frasi del dizionario dell'app (src/lingua.ts, blocco P7). */
+const IN_INGLESE: Record<string, string> = {
+  'Una prova delle risposte è già in corso.': 'An answers check is already running.',
+  'Non c’è ancora un insieme di domande: costruiscilo con --genera.': 'There is no question set yet: build it with --genera.',
+  'Nessun motore collegato: la prova non parte.': 'No engine connected: the check cannot start.',
+  'Su un modello locale la prova gira solo con --anche-locale.': 'On a local model the check runs only with --anche-locale.',
+  'La cartella del conto sta fuori da --dati: mi fermo, per non toccare i dati veri.': 'The account folder is outside --dati: stopping, so the real data is not touched.'
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

@@ -127,3 +127,27 @@ test('portare via uno stantio controlla di aver spostato proprio quello: se un a
   // un file che non c'è più (l'ha portato via un altro): no, senza errori
   assert.equal(a.portaViaStantio(file, stantio), false)
 })
+
+test('togli mentre il lucchetto è tenuto: la prova si ferma e nessuna scrittura rifà la cartella', () => {
+  const presa = a.prendi()
+  assert.ok(presa)
+  assert.equal(presa!.tenuto(), true)
+  assert.equal(presa!.segnale.aborted, false)
+  a.togli()
+  assert.equal(presa!.segnale.aborted, true, 'la prova in corso riceve il segnale')
+  assert.equal(presa!.tenuto(), false)
+  a.scriviStato({ inCorso: { dal: 'x', fatte: 1, quante: 6 } })
+  a.aggiungiAlloStorico(riassunto('2026-09-22T10:00:00.000Z'))
+  a.scriviInsieme({ versione: 1, domande: [] })
+  assert.equal(a.salvaRapporto({ voci: [] }, '2026-09-22T10:00:00.000Z'), null)
+  assert.ok(!existsSync(DOVE), 'le copie private non tornano')
+  presa!.lascia()
+  // lasciato il lucchetto, la cartella si può rifare: una prova nuova parte da zero
+  a.scriviStato({})
+  assert.ok(existsSync(join(DOVE, 'stato.json')))
+  const dopo = a.prendi()
+  assert.ok(dopo)
+  assert.equal(dopo!.tenuto(), true)
+  dopo!.lascia()
+  a.togli()
+})

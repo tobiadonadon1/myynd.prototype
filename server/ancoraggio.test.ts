@@ -232,3 +232,48 @@ test('una lineetta dentro il codice resta: la prosa attorno si pulisce', () => {
   const r = ancora('Use this — it works:\n```\nx = a — b\n```\nDone `c — d` [1].', { visti: [d], estratti: new Map([['a', 100]]), letto: 'x', memoria: false, via: 'claude' })
   assert.equal(r.testo, 'Use this. It works:\n```\nx = a — b\n```\nDone `c — d`[1].')
 })
+
+test('un rifiuto fra virgolette o in grassetto è un rifiuto lo stesso', () => {
+  assert.ok(eUnRifiuto('«Non ce l’ho.»'))
+  assert.ok(eUnRifiuto('"I don’t have that."'))
+  assert.ok(eUnRifiuto('**I don’t have that.**'))
+  assert.ok(eUnRifiuto('**I don’t have that.** I found no rent for the Lisbon office.'))
+  assert.ok(!eUnRifiuto('«Non ce l’ho fatta.»'))
+  assert.ok(!eUnRifiuto('"Delivery is Friday[1]. I don’t have the price."'))
+})
+
+test('«alle 9.30» è un’ora, «9.30 euro» no; la k vale mille', () => {
+  assert.deepEqual(fattiDuri('la riunione è alle 9.30'), ['09:30'])
+  assert.deepEqual(fattiDuri('ore 14.05 in sede'), ['14:05'])
+  assert.deepEqual(fattiDuri('at 9.30 AM sharp'), ['09:30'])
+  assert.deepEqual(fattiDuri('costa 9.30 euro'), ['9.3'])
+  assert.deepEqual(fattiDuri('alle 9.75'), ['9.75'], 'settantacinque minuti non sono un’ora')
+  assert.deepEqual(fattiDuri('4.8k'), ['4800'])
+  assert.deepEqual(fattiDuri('10k users and €4,800'), ['10000', '4800'])
+  const r = ancora('The meeting is on Tuesday at 9:30 AM [1].', { visti: [doc('a', 'Riunione', 'La riunione è confermata per martedì alle 9.30 in sede.')], estratti: new Map([['a', 350]]), letto: 'Materiale: La riunione è confermata per martedì alle 9.30 in sede.', memoria: false, via: 'compatibile' })
+  assert.deepEqual(r.verifica.scoperti, [], 'l’ora inglese è coperta da quella italiana col punto')
+  assert.ok(r.fonti[0].passo?.includes('alle 9.30'), String(r.fonti[0].passo))
+})
+
+test('vince la finestra col fatto, non quella che ripete le parole: le radici si contano una volta sola', () => {
+  const estratto = 'Harbor pilot Harbor pilot Harbor pilot Harbor pilot Harbor pilot Harbor pilot Keel Brightline harbor harbor pilot.\nThe pilot begins 14 October 2026.'
+  assert.equal(passoPer('The Harbor pilot with Brightline and Keel starts on 14 October 2026 [1].', estratto), 'The pilot begins 14 October 2026.')
+  // senza fatti nella frase, una riga che ripete «pilot» dieci volte non vale tre radici
+  assert.equal(passoPer('The pilot is here.', 'pilot pilot pilot pilot pilot pilot pilot pilot pilot pilot.'), undefined)
+})
+
+test('due segni sulla stessa fonte: ogni segno porta il passo della sua frase, e il secondo non mostra la data del primo', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
+  const r = ancora('The Harbor pilot starts on 14 October 2026 [1]. It serves your goal. The fee is €4,800 [1]. Nothing else [1].', { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' })
+  assert.equal(r.fonti.length, 1)
+  assert.ok(r.fonti[0].passo?.includes('14 October 2026'))
+  assert.deepEqual(r.fonti[0].passi, [
+    'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.',
+    'The fee is €4,800 for the first phase.',
+    null
+  ])
+  // con un segno solo `passi` non c'è: la forma di prima
+  const uno = ancora('The fee is €4,800 [1].', { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' })
+  assert.equal(uno.fonti[0].passi, undefined)
+  assert.equal(uno.fonti[0].passo, 'The fee is €4,800 for the first phase.')
+})

@@ -17,6 +17,12 @@ import { join } from 'node:path'
 import * as cfg from './config.ts'
 import type { Via } from './ancoraggio.ts'
 
+// Per chi legge storico.json e stato.json da fuori (P9): rispetto alla forma
+// della spec 3.7 ci sono, tutti facoltativi o in più, `Interrotta` 'errore',
+// `Riassunto.totale`, `StatoProva.ultimaSettimanale`; e nell'insieme il
+// `perche` 'da_rivedere'. Chi fa uno switch sui valori di `Interrotta` tenga
+// un ramo di riserva.
+
 /** Perché una prova si è fermata: il budget, i minuti, il tetto di oggi, il segnale, o un guasto della strada (rete, motore). */
 export type Interrotta = 'budget' | 'tempo' | 'tetto' | 'annullata' | 'errore'
 
@@ -66,9 +72,26 @@ export function cartellaRisposte(cartella?: string): string {
   return join(cartella ?? cfg.cartella(), 'valutazioni', 'risposte')
 }
 
-function assicura(dove: string) {
-  if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
+/**
+ * I lucchetti presi da questo processo, per cartella: «svuota la mente» e
+ * l'addio al conto (`togli`) fermano la prova che sta girando lì, e nessuna
+ * scrittura rifà una cartella sparita mentre la si teneva.
+ */
+const prese = new Map<string, AbortController>()
+
+/**
+ * La cartella c'è, o si fa: 0700. Torna false, senza farla, quando questo
+ * processo la teneva col lucchetto e non c'è più: l'ha portata via «svuota la
+ * mente» o l'addio al conto mentre la prova girava, e le copie private che
+ * la prova avrebbe scritto alla fine non devono tornare.
+ */
+function assicura(dove: string): boolean {
+  if (!existsSync(dove)) {
+    if (prese.has(dove)) return false
+    mkdirSync(dove, { recursive: true, mode: 0o700 })
+  }
   try { chmodSync(dove, 0o700) } catch { /* non è nostra */ }
+  return true
 }
 
 function scriviAtomico(file: string, contenuto: string) {
@@ -135,16 +158,38 @@ export function portaViaStantio(file: string, vecchio: Lucchetto | null): boolea
  * nel frattempo un altro l'ha rifatto, al giro dopo si trova il suo, vivo, e
  * ci si ferma. Torna null se un altro lo tiene davvero.
  */
-export function prendi(cartella?: string): { lascia(): void } | null {
+export type Presa = {
+  lascia(): void
+  /** Il lucchetto è ancora il nostro e la cartella c'è: si può scrivere. */
+  tenuto(): boolean
+  /** Scatta quando `togli` porta via la cartella in questo processo: la prova si ferma. */
+  segnale: AbortSignal
+}
+
+export function prendi(cartella?: string): Presa | null {
   const dove = cartellaRisposte(cartella)
-  assicura(dove)
+  if (!assicura(dove)) return null
   const file = join(dove, '.in-corso')
   for (let tentativo = 0; tentativo < 2; tentativo++) {
     try {
       const fd = openSync(file, 'wx', 0o600)
-      writeSync(fd, JSON.stringify({ pid: process.pid, dal: new Date().toISOString() }))
+      const mio: Lucchetto = { pid: process.pid, dal: new Date().toISOString() }
+      writeSync(fd, JSON.stringify(mio))
       closeSync(fd)
-      return { lascia: () => { try { unlinkSync(file) } catch { /* già via */ } } }
+      const fermata = new AbortController()
+      prese.set(dove, fermata)
+      return {
+        lascia: () => {
+          if (prese.get(dove) === fermata) prese.delete(dove)
+          try { unlinkSync(file) } catch { /* già via */ }
+        },
+        tenuto: () => {
+          if (fermata.signal.aborted || !existsSync(dove)) return false
+          const l = leggiJSON<Lucchetto>(file)
+          return !!l && l.pid === mio.pid && l.dal === mio.dal
+        },
+        segnale: fermata.signal
+      }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
       const vecchio = leggiJSON<Lucchetto>(file)
@@ -170,7 +215,7 @@ export function leggiStato(cartella?: string): StatoProva {
 
 export function scriviStato(s: StatoProva, cartella?: string) {
   const dove = cartellaRisposte(cartella)
-  assicura(dove)
+  if (!assicura(dove)) return
   scriviAtomico(join(dove, 'stato.json'), JSON.stringify(s, null, 2))
 }
 
@@ -185,7 +230,7 @@ export function leggiStorico(cartella?: string): Riassunto[] {
 /** In coda allo storico, tenendo gli ultimi 52. */
 export function aggiungiAlloStorico(r: Riassunto, cartella?: string) {
   const dove = cartellaRisposte(cartella)
-  assicura(dove)
+  if (!assicura(dove)) return
   const tutti = [...leggiStorico(cartella), r].slice(-STORICO_MAX)
   scriviAtomico(join(dove, 'storico.json'), JSON.stringify(tutti, null, 2))
 }
@@ -193,10 +238,10 @@ export function aggiungiAlloStorico(r: Riassunto, cartella?: string) {
 const nomeRapporto = (quando: string) => `${quando.replace(/[:.]/g, '-')}.json`
 const eUnRapporto = (n: string) => /^\d{4}-\d{2}-\d{2}T[\d-]+Z?\.json$/.test(n)
 
-/** Il rapporto intero, e via i più vecchi oltre i dodici. Torna il percorso. */
-export function salvaRapporto(rapporto: unknown, quando: string, cartella?: string): string {
+/** Il rapporto intero, e via i più vecchi oltre i dodici. Torna il percorso, o null se la cartella è stata svuotata sotto la prova. */
+export function salvaRapporto(rapporto: unknown, quando: string, cartella?: string): string | null {
   const dove = cartellaRisposte(cartella)
-  assicura(dove)
+  if (!assicura(dove)) return null
   const file = join(dove, nomeRapporto(quando))
   scriviAtomico(file, JSON.stringify(rapporto, null, 2))
   const vecchi = readdirSync(dove).filter(eUnRapporto).sort()
@@ -220,13 +265,18 @@ export function leggiInsieme<T = unknown>(cartella?: string): T | null {
 
 export function scriviInsieme(insieme: unknown, cartella?: string) {
   const dove = cartellaRisposte(cartella)
-  assicura(dove)
+  if (!assicura(dove)) return
   scriviAtomico(join(dove, 'domande.json'), JSON.stringify(insieme, null, 2))
 }
 
-/** Via tutto: `valutazioni/risposte`, e solo quella. */
+/**
+ * Via tutto: `valutazioni/risposte`, e solo quella. Una prova che sta girando
+ * in questo processo si ferma alla domanda dopo, e non riscrive niente.
+ */
 export function togli(cartella?: string) {
-  rmSync(cartellaRisposte(cartella), { recursive: true, force: true })
+  const dove = cartellaRisposte(cartella)
+  prese.get(dove)?.abort()
+  rmSync(dove, { recursive: true, force: true })
 }
 
 /** Per «Scarica i miei dati»: l'insieme, lo storico e l'ultimo rapporto; null se non c'è niente. */

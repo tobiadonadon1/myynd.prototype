@@ -3064,7 +3064,7 @@ const EN: Record<string, string> = {
   'Una prova delle risposte è già in corso.': 'An answers check is already running.',
   'Non c’è ancora un insieme di domande: costruiscilo con --genera.': 'There is no question set yet: build it with --genera.',
   'Nessun motore collegato: la prova non parte.': 'No engine connected: the check cannot start.',
-  'Su un modello locale la prova gira solo con --anche-locale.': 'On a local model the check runs only with the local flag.',
+  'Su un modello locale la prova gira solo con --anche-locale.': 'On a local model the check runs only with --anche-locale.',
   // — P7: fine —
 
   // — P8: inizio —

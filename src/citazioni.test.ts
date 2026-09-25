@@ -69,3 +69,16 @@ test('dove sta un passo: trovato, non trovato, e con i «…» del taglio', () =
   // apostrofi e spazi diversi non contano
   assert.equal(trovaPasso([{ testo: 'l’ufficio  di Lisbona è chiuso' }], "l'ufficio di Lisbona"), 0)
 })
+
+test('il passo del k-esimo segno: da «passi» quando c’è, altrimenti «passo» vale solo per il primo', async () => {
+  const { passoDi } = await import('./citazioni.ts')
+  const conPassi = { id: 'a', label: '[1] Harbor', passo: 'data', passi: ['data', 'prezzo', null] }
+  assert.equal(passoDi(conPassi, 0), 'data')
+  assert.equal(passoDi(conPassi, 1), 'prezzo')
+  assert.equal(passoDi(conPassi, 2), undefined)
+  assert.equal(passoDi(conPassi, 3), undefined)
+  const solo = { id: 'a', label: '[1] Harbor', passo: 'data' }
+  assert.equal(passoDi(solo, 0), 'data')
+  assert.equal(passoDi(solo, 1), undefined, 'la data del primo non prova il secondo')
+  assert.equal(passoDi(undefined, 0), undefined)
+})

@@ -15,11 +15,13 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { IMPAGINATO, leggibile, type Blocco } from './leggibile.ts'
 import { lingua, t } from './lingua'
-import { perNumero, fonteMemoria, rigaFonte, titoloDi, virgolette, type Fonte } from './citazioni.ts'
+import { perNumero, fonteMemoria, passoDi, rigaFonte, titoloDi, virgolette, type Fonte } from './citazioni.ts'
 
 export type { Fonte }
 
 type Posto = { top: number; left: number; larga: number }
+/** Quante volte ogni numero è già comparso nel testo: il k-esimo [n] mostra il k-esimo passo. */
+type Conteggi = Map<number, number>
 
 /**
  * Il segno della citazione: si vede se lo cerchi, non se non lo cerchi.
@@ -30,7 +32,7 @@ type Posto = { top: number; left: number; larga: number }
  * e sta sopra il segno, o sotto se sopra non c'è posto, sempre dentro la
  * colonna che scorre.
  */
-function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: (id: string, passo?: string) => void }) {
+function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; passo?: string; onApri?: (id: string, passo?: string) => void }) {
   const [sopra, setSopra] = useState(false)
   const [fuoco, setFuoco] = useState(false)
   const [dalMouse, setDalMouse] = useState(false)
@@ -44,7 +46,6 @@ function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: 
   const attivo = !!fonte
   const titolo = fonte ? (memoria ? t('Dalla tua memoria') : titoloDi(fonte)) : ''
   const riga = fonte ? (memoria ? titoloDi(fonte) : rigaFonte(fonte)) : ''
-  const passo = fonte?.passo
   const aperta = (sopra || fuoco) && !!titolo
   // la nuvoletta si chiude aprendo: il mouse non esce dal segno finché la finestra del documento è sopra
   const apri = () => { if (!fonte) return; setSopra(false); setFuoco(false); onApri?.(fonte.id, passo) }
@@ -121,7 +122,7 @@ function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: 
 }
 
 /** Grassetto, corsivo, codice e citazioni dentro una riga. */
-function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: string) => void): ReactNode[] {
+function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: string) => void, conteggi: Conteggi = new Map()): ReactNode[] {
   const pezzi: ReactNode[] = []
   // Nuova a ogni chiamata: `lastIndex` è di stato, e la ricorsione qui sotto
   // condividerebbe la posizione con il chiamante
@@ -132,9 +133,9 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: str
     if (m.index > ultimo) pezzi.push(testo.slice(ultimo, m.index))
     if (m[1] !== undefined) {
       // ricorsivo: una citazione dentro il grassetto resta una citazione
-      pezzi.push(<strong key={m.index} style={{ fontWeight: 600 }}>{inline(m[1], fonti, onApri)}</strong>)
+      pezzi.push(<strong key={m.index} style={{ fontWeight: 600 }}>{inline(m[1], fonti, onApri, conteggi)}</strong>)
     } else if (m[2] !== undefined) {
-      pezzi.push(<em key={m.index}>{inline(m[2], fonti, onApri)}</em>)
+      pezzi.push(<em key={m.index}>{inline(m[2], fonti, onApri, conteggi)}</em>)
     } else if (m[3] !== undefined) {
       pezzi.push(
         <code key={m.index} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
@@ -147,7 +148,13 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: str
       // l'elenco contiene solo quelle davvero citate, quindi se il modello cita
       // [3] e [7] l'array ha due elementi e fonti[6] non esiste — ed era il
       // motivo per cui cliccare il numerino non apriva niente.
-      pezzi.push(<Segno key={m.index} n={n} fonte={perNumero(fonti, n)} onApri={onApri} />)
+      // Il k-esimo [n] del testo porta il k-esimo passo della fonte: la
+      // frase del secondo segno è un'altra frase, e la data della prima non
+      // prova il prezzo della seconda.
+      const k = conteggi.get(n) ?? 0
+      conteggi.set(n, k + 1)
+      const fonte = perNumero(fonti, n)
+      pezzi.push(<Segno key={m.index} n={n} fonte={fonte} passo={passoDi(fonte, k)} onApri={onApri} />)
     }
     ultimo = m.index + m[0].length
   }
@@ -198,6 +205,8 @@ export function Testo({ testo, fonti = [], onApri }: {
   onApri?: (id: string, passo?: string) => void
 }) {
   const blocchi = leggibile(attacca(testo.trim()), IMPAGINATO)
+  // nuovo a ogni impaginazione: i segni si contano dall'inizio del testo
+  const conteggi: Conteggi = new Map()
   const pezzi: ReactNode[] = []
   let i = 0
   // `primo` e non `i`: l'aria in cima si toglie guardando cosa si è già messo
@@ -218,7 +227,7 @@ export function Testo({ testo, fonti = [], onApri }: {
       pezzi.push(
         <El key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {voci.map((v, j) => (
-            <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>{inline(v.testo, fonti, onApri)}</li>
+            <li key={j} style={{ lineHeight: 1.6, overflowWrap: 'anywhere' }}>{inline(v.testo, fonti, onApri, conteggi)}</li>
           ))}
         </El>
       )
@@ -245,7 +254,7 @@ export function Testo({ testo, fonti = [], onApri }: {
         <p key={pezzi.length} style={{
           margin: primo() ? 0 : '12px 0 0', lineHeight: 1.5, fontWeight: 600,
           textWrap: 'pretty', overflowWrap: 'anywhere'
-        }}>{inline(b.testo, fonti, onApri)}</p>
+        }}>{inline(b.testo, fonti, onApri, conteggi)}</p>
       )
       continue
     }
@@ -255,7 +264,7 @@ export function Testo({ testo, fonti = [], onApri }: {
     while (i < blocchi.length && blocchi[i].tipo === 'riga') { righe.push(blocchi[i].testo); i++ }
     pezzi.push(
       <p key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-        {inline(righe.join(' '), fonti, onApri)}
+        {inline(righe.join(' '), fonti, onApri, conteggi)}
       </p>
     )
   }
