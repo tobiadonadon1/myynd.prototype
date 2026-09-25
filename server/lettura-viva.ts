@@ -80,6 +80,22 @@ export function primaChiesta(conto: string): boolean {
   return !!v && v.prima && v.chiesta
 }
 
+/**
+ * Chi ricarica adesso torna a guardare la lettura (`leggendo` di `/api/avvio`).
+ *
+ * Una prima lettura chiesta da una persona, come sempre; e, sul passo delle
+ * fonti, anche una lettura di tutte che ha chiesto lei e che non è più una
+ * prima: il giro di fondo e il resto possono aver già finito i novanta giorni
+ * di tutto quello che era collegato, e «Leggi» parte allora come una lettura
+ * qualunque. Chi ricaricava finiva sull'introduzione, con la lettura che
+ * andava avanti senza che nessuno la guardasse (P4).
+ */
+export function daGuardare(conto: string, faseAvvio: string | null | undefined): boolean {
+  const v = di(conto)
+  if (!v || !v.chiesta) return false
+  return v.prima || (v.tutte && faseAvvio === 'fonte')
+}
+
 /** La lettura è chiusa: il registro se ne va. */
 export function chiudi(conto: string): void {
   vive.delete(conto)

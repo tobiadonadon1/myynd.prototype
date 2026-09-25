@@ -851,9 +851,12 @@ app.post('/api/argomenti/proposta', async (_req, res) => {
 // Durable first-project onboarding. Existing authenticated request context
 // scopes both the state file and document/task access to this account.
 app.get('/api/avvio', (_req, res) => {
-  // `leggendo`: una prima lettura chiesta da lui sta girando, e chi ricarica torna a guardarla (P4);
+  // `leggendo`: una lettura chiesta da lui sta girando, e chi ricarica torna a guardarla (P4);
   // il giro dei dieci minuti sul passo delle fonti non è una lettura sua
-  try { res.json({ ...avvio.stato(), leggendo: viva.primaChiesta(chi.adesso() ?? '') }) }
+  try {
+    const s = avvio.stato()
+    res.json({ ...s, leggendo: viva.daGuardare(chi.adesso() ?? '', s.fase) })
+  }
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/progetto', (req, res) => {
@@ -861,8 +864,13 @@ app.post('/api/avvio/progetto', (req, res) => {
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/fonte', (req, res) => {
-  // «Continua» durante la lettura di tutte le fonti (P4): gli estratti non avranno visto tutto
-  try { res.json(avvio.fonte(req.body ?? {}, { durante: viva.di(chi.adesso() ?? '')?.tutte === true })) }
+  // «Continua» durante la lettura di tutte le fonti (P4): gli estratti non avranno visto tutto.
+  // Lo dice il client, che sa di non aver finito anche quando aspetta ancora il suo turno
+  // (dietro al resto della prima lettura, o a una fonte sola); il registro vale per chi non lo dice
+  try {
+    const durante = req.body?.durante === true || viva.di(chi.adesso() ?? '')?.tutte === true
+    res.json(avvio.fonte(req.body ?? {}, { durante }))
+  }
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/conferma', (req, res) => {
@@ -2525,6 +2533,8 @@ async function leggiTuttoDentro(
       const frase = fraseDi(err)
       avvisa({ fase: p.nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
     }
+    // letta, vuota o andata male: una lettura ci è passata, la prima pagina non la aspetta più
+    try { primaLettura.visitata(p.nome) } catch { /* serve solo alla prima pagina */ }
   }, o.dopoLeVeloci)
   return totale
 }
@@ -2537,14 +2547,41 @@ function fontiCheLeggera(soloFonte: string | null): string[] {
 }
 
 /**
- * La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura
- * di chi la chiama (P4). `dal` è l'inizio della lettura, per il registro.
+ * Le fonti collegate adesso, alla loro prima lettura, che nessuna lettura ha
+ * mai visto, fuori da `fonti` (quelle che la lettura di chi chiede visita).
+ * Finché ce n'è una, la prima pagina aspetta (P4). Solo le fonti a finestra
+ * (la posta, l'agenda, il Mac, Slack, GitHub) e solo quelle che si leggono da
+ * qui (`primaLettura.inCorso`): WhatsApp non si rilegge, e su un server il Mac
+ * non si legge, e aspettarle vorrebbe dire aspettare per sempre.
  */
-function paginaSeDovuta(prima: boolean | (() => boolean), dal = Date.now()): () => Promise<void> | null {
+function nonAncoraLette(fonti: string[] = []): string[] {
+  return primaLettura.inCorso().filter(f => !fonti.includes(f) && primaLettura.maiLetta(f))
+}
+
+/**
+ * La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura
+ * di chi la chiama (P4). `fonti`: quelle che questa lettura visita. `dal` è
+ * l'inizio della lettura, per il registro.
+ *
+ * Solo se la lettura copre tutto quello che è collegato adesso. La posta
+ * collegata dopo che la lettura è partita (quella del Mac, dopo il riavvio per
+ * l'accesso al disco, mentre il giro di fondo cammina sul Mac) non è fra le
+ * sue fonti: una pagina fatta qui uscirebbe senza, e con una carta non si
+ * rifarebbe più. La fa la lettura che viene dopo (quella che il client fa
+ * partire per le righe rimaste «In coda», o il giro dopo), che la legge.
+ */
+function paginaSeDovuta(prima: boolean | (() => boolean), fonti: string[], dal = Date.now()): () => Promise<void> | null {
   let pagina: Promise<void> | null = null
+  let detto = false
   const puo = typeof prima === 'function' ? prima : () => prima
   return () => {
     if (!pagina && puo() && primaPagina.dovuta()) {
+      const mancano = nonAncoraLette(fonti)
+      if (mancano.length) {
+        if (!detto) console.log(`myynd · prima pagina · aspetta la lettura di ${mancano.join(', ')}`)
+        detto = true
+        return null
+      }
       pagina = withBackgroundWork(() => primaPagina.prepara(dal))
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
     }
@@ -2567,7 +2604,9 @@ app.get('/api/sincronizza', async (req, res) => {
   if (sincronizzazioneInCorso()) {
     const v = viva.di(conto)
     if (v?.tutte && !soloFonte) {
-      // da qui è anche sua: la prima pagina si fa alla fine, e chi ricarica ci torna
+      // da qui è anche sua: chi ricarica ci torna, e la prima pagina si fa alla
+      // fine, se questa lettura copre le fonti collegate intanto (`paginaSeDovuta`);
+      // se no la fa la lettura che il client fa partire per le righe «In coda»
       if (!v.chiesta) { v.chiesta = true; try { v.prima = primaLettura.eUnaPrima() } catch { /* resta com'era */ } }
       return viva.attacca(req, res, v)
     }
@@ -2581,12 +2620,14 @@ app.get('/api/sincronizza', async (req, res) => {
   sincronizzazioniInCorso.add(conto)
   let prima = false
   try { prima = !soloFonte && primaLettura.eUnaPrima() } catch { /* lo dirà la lettura */ }
+  // il tempo della prima pagina si conta dalla prima di queste letture (spec 8)
+  if (prima) try { primaPagina.segnaInizioLettura() } catch { /* serve solo al registro */ }
   const v = viva.apri(conto, { tutte: !soloFonte, prima, fonti: fontiCheLeggera(soloFonte) })
   viva.attacca(req, res, v)
   let chiusa = false
   req.on('close', () => { chiusa = true })
   const fermo = () => (soloFonte ? chiusa : false) || cancellati.cancellata(cfg.cartella())
-  const pagina = paginaSeDovuta(!soloFonte)
+  const pagina = paginaSeDovuta(!soloFonte, v.fonti)
   const dopoLeVeloci = () => { if (prima) void pagina() }
   try {
     const totale = await withBackgroundWork(() => leggiTutto(soloFonte, e => v.avvisa(e), fermo, { dopoLeVeloci }))
@@ -2737,16 +2778,17 @@ async function rileggiDaSola() {
    */
   let prima = false
   try { prima = primaLettura.eUnaPrima(c) } catch { /* lo dirà la lettura */ }
+  if (prima) try { primaPagina.segnaInizioLettura() } catch { /* serve solo al registro */ }
   /*
    * La pagina da sola, sì, ma non mentre lui è ancora sul passo delle fonti:
    * sarebbe fatta con le schede collegate fin lì, senza la posta che sta per
    * collegare, e non si rifarebbe più. Lì la fa «Leggi», anche quando si
    * attacca a questa lettura (`chiesta`). E lì questa lettura non è sua: chi
-   * ricarica sul passo delle fonti non la guarda (`viva.primaChiesta`).
+   * ricarica sul passo delle fonti non la guarda (`viva.daGuardare`).
    */
   const scelte = () => { try { return primaPagina.fontiScelte() } catch { return false } }
   const v = viva.apri(conto, { tutte: true, prima, fonti: fontiCheLeggera(null), chiesta: scelte() })
-  const pagina = paginaSeDovuta(() => v.chiesta || scelte())
+  const pagina = paginaSeDovuta(() => v.chiesta || scelte(), v.fonti)
   let conPagina = false
   try {
     const totale = await leggiTutto(null, d => {
@@ -4823,7 +4865,8 @@ app.get('/api/avvio/pagina', (_req, res) => {
   try {
     const conto = chi.adesso() ?? ''
     let s = primaPagina.stato()
-    if (s.pagina === 'attesa' && !sincronizzazioniInCorso.has(conto) && primaPagina.fontiScelte() && primaPagina.dovuta()) {
+    // e non prima che ogni fonte collegata sia passata da una lettura: la posta collegata per ultima non resta fuori
+    if (s.pagina === 'attesa' && !sincronizzazioniInCorso.has(conto) && primaPagina.fontiScelte() && primaPagina.dovuta() && !nonAncoraLette().length) {
       sincronizzazioniInCorso.add(conto)
       void withBackgroundWork(() => primaPagina.prepara())
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
@@ -4831,7 +4874,13 @@ app.get('/api/avvio/pagina', (_req, res) => {
       s = primaPagina.stato()
     }
     const lettura = viva.primaChiesta(conto) ? 'prima' : primaLettura.inCoda(conto) ? 'coda' : null
-    res.json({ lettura, trovato: generi.perGenere(store.conteggi().perFonte), pagina: s.pagina, carte: s.carte })
+    const perFonte = store.conteggi().perFonte
+    res.json({
+      lettura, trovato: generi.perGenere(perFonte),
+      // per fonte anche: la riga dei conti non conta una fonte la cui riga è ancora «In coda»
+      perFonte: Object.fromEntries(perFonte.filter(r => Number(r.n) > 0).map(r => [r.fonte, Number(r.n)])),
+      pagina: s.pagina, carte: s.carte
+    })
   } catch (e) { errore(res, e) }
 })
 // — P4: rotte, fine —

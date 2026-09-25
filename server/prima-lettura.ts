@@ -97,7 +97,38 @@ export function esito(fonte: string, completa: boolean): void {
 export function scorda(fonte: string): void {
   store.segnaCursore(segno(fonte), null)
   store.segnaCursore(giri(fonte), null)
+  visitate.get(chi.adesso() ?? '')?.delete(fonte)
 }
+
+/*
+ * Le fonti che una lettura ha già visitato, da quando il server è acceso, per
+ * conto: anche quelle andate male o rimaste vuote. Serve alla prima pagina,
+ * che non si fa finché una fonte collegata non è mai passata da una lettura:
+ * la posta collegata a lettura già partita si legge solo dopo, e una pagina
+ * fatta prima non la vedrebbe mai (P4).
+ */
+const visitate = new Map<string, Set<string>>()
+
+/** Una lettura è passata da questa fonte (letta, vuota, o andata male). */
+export function visitata(fonte: string): void {
+  const conto = chi.adesso() ?? ''
+  const s = visitate.get(conto) ?? new Set<string>()
+  s.add(fonte)
+  visitate.set(conto, s)
+}
+
+/**
+ * Nessuna lettura ci è ancora passata: niente nell'indice, la prima lettura
+ * non è finita, e da quando il server è acceso nessuna lettura l'ha visitata.
+ */
+export function maiLetta(fonte: string): boolean {
+  if (visitate.get(chi.adesso() ?? '')?.has(fonte)) return false
+  if (store.haDocumenti(fonte)) return false
+  return store.cursore(segno(fonte)) !== 'fatto'
+}
+
+/** Solo per le prove: dimentica le fonti visitate. */
+export function dimenticaVisitate(): void { visitate.clear() }
 
 /** Le fonti collegate la cui prima lettura non è finita. */
 export function inCorso(c: cfg.Config = cfg.leggi()): string[] {
@@ -225,7 +256,13 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
         // finita nel frattempo (da un'altra lettura): non si rilegge
         if (!inCorso().includes(fonte)) continue
         let e = await leggiUna(fonte)
-        if (e === 'occupato') { await aspetta(attesaOccupato); if (via()) return; e = await leggiUna(fonte) }
+        if (e === 'occupato') {
+          await aspetta(attesaOccupato)
+          if (via()) return
+          // chi ha chiesto di leggere durante l'attesa passa prima: il resto non gli ruba la serratura appena libera
+          if (cede()) { fermo = true; break }
+          e = await leggiUna(fonte)
+        }
         if (e === 'occupato') { fermo = true; break }
         if (e === 'guaio') saltate.add(fonte)
       }

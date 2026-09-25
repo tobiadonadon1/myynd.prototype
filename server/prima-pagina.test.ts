@@ -93,7 +93,7 @@ test('senza modello nessuna riga che lavora; appena arriva un modello la pagina 
 test('una volta sola: dopo, nemmeno ricominciando da capo', async () => {
   store.salvaDocumenti([mail(0)])
   let giri = 0
-  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => { giri++; return 0 } })
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => true, forse: async () => { giri++; return 0 } })
   await pagina.prepara()
   assert.equal(pagina.dovuta(), false)
   pagina.dimentica()
@@ -141,7 +141,7 @@ test('la pagina che finisce fra la lettura dell’avvio e «Salva la prima attiv
 test('una pagina rimasta vuota si rifà quando arriva una fonte nuova, una volta; una pagina con delle carte mai più', async () => {
   store.salvaDocumenti([futuro(1)])
   let giri = 0
-  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => { giri++; return 0 } })
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => true, forse: async () => { giri++; return 0 } })
   await pagina.prepara()
   assert.match(store.cursore('prima:pagina') ?? '', /^vuota\|.+\|calendario$/, 'il segno dice con quali fonti è rimasta vuota')
   assert.equal(pagina.dovuta(), false, 'la stessa agenda non la rifà (counter-case)')
@@ -151,7 +151,7 @@ test('una pagina rimasta vuota si rifà quando arriva una fonte nuova, una volta
   store.salvaDocumenti([mail(0)])
   assert.equal(pagina.dovuta(), true)
   assert.equal(pagina.stato().pagina, 'attesa')
-  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => { giri++; store.salvaFeed([{ tipo: 'priorita', titolo: 'Send Maya the checklist', testo: 'She asked twice.' }]); return 1 } })
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => true, forse: async () => { giri++; store.salvaFeed([{ tipo: 'priorita', titolo: 'Send Maya the checklist', testo: 'She asked twice.' }]); return 1 } })
   await pagina.prepara()
   assert.equal(giri, 2)
   assert.doesNotMatch(store.cursore('prima:pagina') ?? '', /^vuota/)
@@ -178,7 +178,10 @@ test('una pagina rimasta vuota più di un giorno fa è fatta: una fonte nuova no
 
 test('il tempo della pagina partita da sola si conta dall’inizio della prima lettura (spec 8)', async () => {
   store.salvaDocumenti([mail(0)])
-  store.segnaCursore('prima:iniziata', new Date(Date.now() - 90_000).toISOString())
+  // il primo collegamento è di dieci minuti fa, la prima lettura di un minuto e mezzo fa: conta la lettura
+  store.segnaCursore('prima:iniziata', new Date(Date.now() - 600_000).toISOString())
+  pagina.segnaInizioLettura(Date.now() - 90_000)
+  pagina.segnaInizioLettura(Date.now() - 30_000)
   pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => 0 })
   const righe: string[] = []
   const log = console.log
@@ -189,6 +192,7 @@ test('il tempo della pagina partita da sola si conta dall’inizio della prima l
   const m = riga!.match(/^myynd · prima pagina · pronta in (\d+) ms · 0 carte$/)
   assert.ok(m, riga)
   assert.ok(Number(m![1]) >= 90_000, `dall'inizio della prima lettura, non dalla pagina: ${riga}`)
+  assert.ok(Number(m![1]) < 600_000, `dalla lettura, non dal primo collegamento: ${riga}`)
   // con `dal` (la lettura che l'ha preparata) si conta da lì (counter-case)
   pagina.dimentica(); store.segnaCursore('prima:pagina', null)
   righe.length = 0
@@ -219,4 +223,35 @@ test('chi ha finito l’avvio ha le sue fonti scelte, anche senza il file dell�
   cfg.aggiorna({ onboarding: true })
   assert.equal(pagina.fontiScelte(), true)
   cfg.aggiorna({ onboarding: false })
+})
+
+test('una pagina vuota rifatta prima dei dieci minuti delle priorità non segna la fonte nuova come vista: si rifà alla lettura dopo', async () => {
+  store.salvaDocumenti([futuro(1)])
+  let giri = 0
+  const forse = async () => { giri++; return 0 }
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => true, forse })
+  await pagina.prepara()
+  const primo = store.cursore('prima:pagina') ?? ''
+  assert.match(primo, /^vuota\|.+\|calendario$/)
+  // la posta arriva cinque minuti dopo: le priorità hanno appena girato, e non ripartono
+  store.salvaDocumenti([mail(0)])
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => false, forse })
+  await pagina.prepara()
+  assert.equal(store.cursore('prima:pagina'), primo, 'il segno resta quello della prima pagina: la posta non è stata vista dalle priorità')
+  assert.equal(pagina.dovuta(), true, 'e la pagina si rifà alla lettura dopo')
+  // passati i dieci minuti, la pagina rifatta con le priorità segna la posta (counter-case)
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => true, forse })
+  await pagina.prepara()
+  const [, quando, fonti] = (store.cursore('prima:pagina') ?? '').split('|')
+  assert.equal(fonti, 'calendario,posta')
+  assert.equal(quando, primo.split('|')[1], 'il primo giorno si conta dalla prima pagina')
+  assert.equal(pagina.dovuta(), false)
+})
+
+test('la prima pagina senza priorità (appena girate) resta dovuta: nessuna fonte è vista (counter-case al segno scritto comunque)', async () => {
+  store.salvaDocumenti([mail(0)])
+  pagina.perProva({ collegato: () => true, motore: () => null, pronta: () => false, forse: async () => 0 })
+  await pagina.prepara()
+  assert.match(store.cursore('prima:pagina') ?? '', /^vuota\|[^|]+\|$/)
+  assert.equal(pagina.dovuta(), true)
 })

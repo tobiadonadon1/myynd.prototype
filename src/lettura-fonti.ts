@@ -344,14 +344,29 @@ export function creaLettura(d: DipendenzeLettura) {
      * una volta per lei: mai «✓ 0» per una fonte che non si è letta.
      */
     let visitate: string[] | null = null
+    /*
+     * La seconda lettura, per le righe rimaste «In coda», rilegge tutto (è una
+     * lettura di tutte le fonti: così fa anche la prima pagina con la posta).
+     * Le righe già chiuse non tornano indietro: una fonte letta non torna a
+     * «apro l'agenda» mentre si aspetta quella che mancava. Il suo conto sì,
+     * quando questa lettura la finisce: il Mac riletto per intero ha anche i
+     * file più vecchi dei novanta giorni, e la riga dice quanti sono.
+     */
+    let soloAperte: Set<string> | null = null
     const su = (m: Record<string, unknown>) => {
       if (m.fase === 'inizio') { visitate = Array.isArray(m.fonti) ? m.fonti.map(String) : null; return }
-      ascolta(m); mostra(avanzaLettura(r, m))
+      ascolta(m)
+      if (soloAperte && !soloAperte.has(String(m.fase ?? '')) && m.stato !== 'fatto') return
+      mostra(avanzaLettura(r, m))
     }
     const fuori = () => { const v: string[] | null = visitate; return v ? r.filter(x => aperta(x) && !v.includes(x.id)) : [] }
     try {
       await leggiAlProprioTurno(() => d.sincronizza(su), d.attendi)
-      if (fuori().length) { visitate = null; await leggiAlProprioTurno(() => d.sincronizza(su), d.attendi) }
+      if (fuori().length) {
+        visitate = null
+        soloAperte = new Set(r.filter(aperta).map(x => x.id))
+        await leggiAlProprioTurno(() => d.sincronizza(su), d.attendi)
+      }
     } catch (e) {
       // dopo due minuti di fila dietro a un'altra lettura non è un guasto di
       // nessuna fonte: si guarda com'è l'indice adesso, sotto

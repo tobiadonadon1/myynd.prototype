@@ -7,7 +7,7 @@
 // React e niente rete: le prove lo guardano da Node.
 
 import { lingua, loc } from './lingua.ts'
-import { ORDINE_GENERI, type Genere } from '../server/generi.ts'
+import { ORDINE_GENERI, perGenere, type Genere } from '../server/generi.ts'
 
 const en = () => lingua() === 'en'
 
@@ -44,6 +44,24 @@ export function trovato(conti: Partial<Record<Genere, number>> | null | undefine
   const posto = (g: Genere) => { const i = ORDINE_GENERI.indexOf(g); return i >= 0 ? i : ORDINE_GENERI.length }
   pieni.sort((a, b) => posto(a[0]) - posto(b[0]) || b[1] - a[1])
   return pieni.slice(0, 4).map(([g, n]) => contaGenere(g, n)).join(', ')
+}
+
+/**
+ * La riga di quello che si è trovato mentre si guardano le righe della
+ * lettura: le fonti la cui riga è ancora «In coda» non si contano. Il resto
+ * della prima lettura può aver già letto la posta del Mac mentre la sua riga
+ * aspetta ancora il turno, e lo schermo direbbe due cose diverse: «60 email»
+ * sopra, «In coda» sotto. Senza i conti per fonte (un server più vecchio),
+ * quelli per genere, com'erano.
+ */
+export function trovatoDurante(
+  pagina: { trovato?: Partial<Record<Genere, number>>; perFonte?: Record<string, number> } | null | undefined,
+  inCoda: string[]
+): string | null {
+  if (!pagina) return null
+  if (!pagina.perFonte) return trovato(pagina.trovato)
+  const fuori = new Set(inCoda)
+  return trovato(perGenere(Object.entries(pagina.perFonte).filter(([f]) => !fuori.has(f)).map(([fonte, n]) => ({ fonte, n }))))
 }
 
 // — le conferme delle schede, una frase ciascuna —

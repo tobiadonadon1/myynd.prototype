@@ -289,3 +289,17 @@ test('cedere senza un resto in corso non ferma il resto che parte dopo (counter-
   await prima.continua('', async fonte => { viste.push(fonte); prima.finita(fonte); return 'letta' })
   assert.deepEqual(viste.sort(), ['calendario', 'posta'])
 })
+
+test('chi chiede di leggere mentre il resto aspetta una serratura presa: il resto non riprova, cede il passo', async () => {
+  collega()
+  const viste: string[] = []
+  await prima.continua('', async fonte => {
+    viste.push(fonte)
+    // la serratura è presa (il giro dei dieci minuti) e, durante l'attesa, la persona preme «Leggi» e prende un 409
+    prima.cedi('')
+    return 'occupato'
+  })
+  assert.equal(viste.length, 1, 'nessun secondo tentativo: la serratura che si libera è di chi l’ha chiesta')
+  assert.equal(prima.inCoda(''), false)
+  prima.fermaRiprese()
+})

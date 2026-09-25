@@ -336,3 +336,34 @@ test('when the read visits every row, no second read (counter-case)', async () =
   await lettura.leggiTutte(['calendario'])
   assert.equal(letture, 1)
 })
+
+test('the second read for a queued row leaves the rows already read as they are', async () => {
+  let letture = 0
+  const viste: string[][] = []
+  const lettura = creaLettura({
+    sincronizza: async su => {
+      letture++
+      if (letture === 1) {
+        su({ fase: 'inizio', fonti: ['calendario'] })
+        su({ fase: 'calendario', stato: 'fatto', documenti: 42 })
+        su({ fase: 'fine', totale: 42 })
+      } else {
+        su({ fase: 'inizio', fonti: ['calendario', 'postamac'] })
+        // the calendar is fetched again: its row must not go back to «opening the calendar»
+        su({ fase: 'calendario', stato: 'apro l’agenda' })
+        viste.push(lettura.stato().righe!.map(r => `${r.id}:${r.stato}`))
+        su({ fase: 'calendario', stato: 'fatto', documenti: 2, invariati: 42 })
+        su({ fase: 'postamac', stato: 'leggo', letti: 20 })
+        viste.push(lettura.stato().righe!.map(r => `${r.id}:${r.stato}`))
+        // but when the second read finishes it, a read row says its new count
+        assert.equal(lettura.stato().righe![0]!.testo, '44 events')
+        su({ fase: 'postamac', stato: 'fatto', documenti: 60 })
+        su({ fase: 'fine', totale: 60 })
+      }
+    },
+    collegate: async () => ({ calendario: letture >= 2 ? 44 : 42, postamac: letture >= 2 ? 60 : 0 })
+  })
+  const righe = await lettura.leggiTutte(['calendario', 'postamac'])
+  assert.deepEqual(viste, [['calendario:fatto', 'postamac:attesa'], ['calendario:fatto', 'postamac:leggo']])
+  assert.deepEqual(righe.map(r => [r.id, r.stato, r.testo]), [['calendario', 'fatto', '44 events'], ['postamac', 'fatto', '60 emails']])
+})

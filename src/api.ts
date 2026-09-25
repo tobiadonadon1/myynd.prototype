@@ -1115,7 +1115,7 @@ export const api = {
   avvioProgetto: (b: { nome: string; obiettivo: string; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/progetto', { method: 'POST', body: JSON.stringify(b) }),
   /** Le fonti da leggere insieme; una lista vuota vuol dire «continuo senza». */
-  avvioFonti: (b: { fonti: string[]; revisione: number }) =>
+  avvioFonti: (b: { fonti: string[]; revisione: number; durante?: boolean }) =>
     json<StatoAvvio>('/api/avvio/fonte', { method: 'POST', body: JSON.stringify(b) }),
   avvioConferma: (b: { ids: string[]; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/conferma', { method: 'POST', body: JSON.stringify(b) }),
@@ -2102,6 +2102,8 @@ export type PaginaAvvio = {
   /** `prima`: la prima lettura sta girando; `coda`: il resto dei novanta giorni in sottofondo. */
   lettura: 'prima' | 'coda' | null
   trovato: Partial<Record<Genere, number>>
+  /** Gli stessi conti per fonte, solo quelle con qualcosa dentro. */
+  perFonte?: Record<string, number>
   pagina: StatoPrimaPagina
   carte: number
 }

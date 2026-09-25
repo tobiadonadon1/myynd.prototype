@@ -3,7 +3,7 @@ import { giornoLocale, spostaGiorno } from '../oggi/giorni'
 import { api, apiP4, type PaginaAvvio, type Stato, type StatoAvvio } from '../api'
 import { frasi, t } from '../lingua'
 import { aperta as rigaAperta, daGuardare, leggiPoiScegli, nonLette } from '../lettura-fonti'
-import { trovato } from '../conta-fonti'
+import { trovato, trovatoDurante } from '../conta-fonti'
 import { letturaFonti, useLettura } from '../lettura-app'
 import { ConnectorIcon } from '../components/ConnectorIcon'
 import { Form } from '../components/forms'
@@ -316,7 +316,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
     giaScelte.current = true
     vai(2)
     try {
-      const n = await api.avvioFonti({ fonti, revisione: a.revisione })
+      // la sua lettura non è finita, anche se aspetta ancora il suo turno: gli estratti si fermano a qui
+      const n = await api.avvioFonti({ fonti, revisione: a.revisione, durante: true })
       setAvvio(n); setConfermati(n.fatti.filter(f => f.confermato).map(f => f.id))
       try { sessionStorage.removeItem(chiaveLettura(a.id)) } catch { /* il segno serve solo a chi ricarica */ }
     } catch (e) {
@@ -383,6 +384,8 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
   const lettura = vistaLettura ? letturaStato.righe : null
   // il titolo segue le righe: finché una è in coda o in lettura si sta leggendo
   const inLettura = !!lettura?.some(r => r.stato === 'attesa' || r.stato === 'leggo')
+  // le fonti la cui riga dice ancora «In coda»: la riga dei conti non le conta (P4)
+  const inCoda = lettura?.filter(r => r.stato === 'attesa').map(r => r.id) ?? []
   /** La fonte che l'ultima lettura non ha letto (o solo in parte), finché non la si ricollega. */
   const nonLetta = (id: string) => riparate.includes(id) ? undefined
     : letturaStato.righe?.find(r => r.id === id && (r.stato === 'guaio' || r.stato === 'avviso'))
@@ -480,7 +483,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         <h2 ref={titolo} tabIndex={-1}>{!lettura ? t('Cosa deve leggere Myynd?') : inLettura ? t('Leggo le tue fonti…') : nonLette(lettura) ? frasi.fontiNonLetteInsieme(nonLette(lettura)) : t('Ho letto le tue fonti.')}</h2>
         {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
         {/* quello che ha trovato finora, per genere: una riga di stato, e niente finché non c'è niente */}
-        {lettura && trovato(pagina?.trovato) && <p className="onboard-why" role="status">{trovato(pagina?.trovato)}</p>}
+        {lettura && trovatoDurante(pagina, inCoda) && <p className="onboard-why" role="status">{trovatoDurante(pagina, inCoda)}</p>}
         {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} corte /> : <fieldset disabled={occupato} className="onboard-fieldset">
           {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
           {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata».

@@ -30,6 +30,8 @@ export type StatoPagina = 'nessuna' | 'attesa' | 'lavoro' | 'pronta' | 'senza-mo
 type Ferri = {
   generaFeed: typeof generaFeed
   forse: (forza?: boolean) => Promise<number>
+  /** Se un giro di priorità partirebbe adesso (i dieci minuti minimi valgono anche con `forza`). */
+  pronta: (forza?: boolean) => boolean
   salvaFeed: typeof store.salvaFeed
   annuncia: () => void
   collegato: () => boolean
@@ -38,6 +40,7 @@ type Ferri = {
 const VERI: Ferri = {
   generaFeed: n => generaFeed(n),
   forse: f => priorita.forse(f),
+  pronta: f => priorita.pronta(f),
   salvaFeed: v => store.salvaFeed(v),
   annuncia: () => compiti.annunciaFeed(),
   collegato: () => mod.collegato(),
@@ -63,6 +66,14 @@ function fontiConDocumenti(): string[] {
 /** Per quanto una pagina rimasta vuota si rifà se arriva una fonte nuova: il primo giorno. */
 export const RIFA_VUOTA_MS = 24 * 3_600_000
 
+/** Il segno di una pagina rimasta vuota: da quando, e con quali fonti. `null` se non è vuota. */
+function segnoVuoto(): { quando: string; fonti: string[] } | null {
+  const v = store.cursore(SEGNO)
+  if (!v?.startsWith('vuota|')) return null
+  const [, quando = '', fonti = ''] = v.split('|')
+  return { quando, fonti: fonti.split(',').filter(Boolean) }
+}
+
 /*
  * La pagina è fatta. Una pagina rimasta vuota però, il primo giorno, vale solo
  * per le fonti che aveva: il segno dice quali erano («vuota|quando|calendario,
@@ -73,14 +84,26 @@ export const RIFA_VUOTA_MS = 24 * 3_600_000
  * prima pagina gira una volta). Una pagina con delle carte è fatta per sempre.
  */
 function fatta(adesso = Date.now()): boolean {
-  const v = store.cursore(SEGNO)
-  if (!v) return false
-  if (!v.startsWith('vuota|')) return true
-  const [, quando = '', fonti = ''] = v.split('|')
-  const t = Date.parse(quando)
+  if (!store.cursore(SEGNO)) return false
+  const vuota = segnoVuoto()
+  if (!vuota) return true
+  const t = Date.parse(vuota.quando)
   if (!Number.isFinite(t) || adesso - t >= RIFA_VUOTA_MS) return true
-  const aveva = new Set(fonti.split(',').filter(Boolean))
+  const aveva = new Set(vuota.fonti)
   return !fontiConDocumenti().some(f => !aveva.has(f))
+}
+
+/** Il segno dell'inizio della prima lettura di tutte le fonti del conto (spec 8). */
+const LETTA_DAL = 'prima:letta-dal'
+
+/**
+ * Comincia una lettura di tutte le fonti durante una prima lettura: se è la
+ * prima del conto, da qui si conta il tempo della prima pagina. Il segno
+ * `prima:iniziata` non va bene: si scrive al primo collegamento (anche quello
+ * del Mac all'avvio dell'app), non quando si comincia a leggere.
+ */
+export function segnaInizioLettura(dal = Date.now()): void {
+  if (!store.cursore(LETTA_DAL)) store.segnaCursore(LETTA_DAL, new Date(dal).toISOString())
 }
 
 /**
@@ -90,7 +113,7 @@ function fatta(adesso = Date.now()): boolean {
  */
 function inizioDellaLettura(dal: number | undefined, inizio: number): number {
   if (dal !== undefined) return dal
-  const t = Date.parse(store.cursore('prima:iniziata') ?? '')
+  const t = Date.parse(store.cursore(LETTA_DAL) ?? '')
   return Number.isFinite(t) && t <= inizio ? t : inizio
 }
 
@@ -123,6 +146,9 @@ export async function prepara(dal?: number): Promise<void> {
   metti('lavoro')
   const inizio = Date.now()
   const da = inizioDellaLettura(dal, inizio)
+  // i dieci minuti fra un giro di priorità e l'altro valgono anche qui: una
+  // pagina rifatta subito dopo la prima (una fonte nuova) può restare senza
+  const conPriorita = ferri.pronta(true)
   console.log('myynd · prima pagina · comincia')
   try {
     if (ferri.motore()) {
@@ -136,8 +162,17 @@ export async function prepara(dal?: number): Promise<void> {
     ferri.annuncia()
     const carte = feedAttuale().length
     const quando = new Date().toISOString()
-    // nessuna carta, in nessuno stato: il segno ricorda con quali fonti
-    store.segnaCursore(SEGNO, store.nessunaCarta() ? `vuota|${quando}|${fontiConDocumenti().join(',')}` : quando)
+    /*
+     * Nessuna carta, in nessuno stato: il segno ricorda con quali fonti, e da
+     * quando (la prima pagina: il primo giorno si conta da lì). Ma una fonte
+     * vale «vista» solo se le priorità ci hanno girato: senza (i dieci minuti
+     * non erano passati) il segno resta com'era, e la pagina si rifà ancora
+     * alla prossima lettura, con le priorità.
+     */
+    const prima = segnoVuoto()
+    const fonti = conPriorita ? fontiConDocumenti() : prima?.fonti ?? []
+    if (!conPriorita) console.log('myynd · prima pagina · le priorità avevano appena girato: si rifà alla prossima lettura')
+    store.segnaCursore(SEGNO, store.nessunaCarta() ? `vuota|${prima?.quando ?? quando}|${fonti.join(',')}` : quando)
     metti('pronta', carte)
     // dall'inizio della lettura che l'ha preparata, o della prima lettura (spec 8)
     console.log(`myynd · prima pagina · pronta in ${Date.now() - da} ms · ${carte} carte`)

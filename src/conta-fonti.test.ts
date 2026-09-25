@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 
 ;(globalThis as unknown as { document: unknown }).document = { documentElement: { lang: '' } }
 const { impostaLingua } = await import('./lingua.ts')
-const { carta, contaGenere, lettiFinora, numero, trovato } = await import('./conta-fonti.ts')
+const { carta, contaGenere, lettiFinora, numero, trovato, trovatoDurante } = await import('./conta-fonti.ts')
 
 afterEach(() => impostaLingua('en'))
 
@@ -88,4 +88,18 @@ test('no dash in any phrase', () => {
       carta.desktop({ tutto: true, cartelle: 1, mac: true }), carta.desktop({ tutto: false, cartelle: 2, mac: true }), trovato({ email: 1, evento: 2, file: 3, nota: 4 })!, lettiFinora(1, 2)]
     for (const f of frasi) assert.doesNotMatch(f, /[—–]/, f)
   }
+})
+
+test('while the rows are on screen, a source whose row is still queued is not counted in the line above', () => {
+  impostaLingua('en')
+  const pagina = { trovato: { email: 60, evento: 42, file: 10 }, perFonte: { postamac: 60, calendario: 42, desktop: 10 } }
+  // the drain already read Mail on this Mac, but its row still says «Queued»
+  assert.equal(trovatoDurante(pagina, ['postamac']), '42 events, 10 files')
+  // with Mail from another account read, the emails of the read source still count
+  assert.equal(trovatoDurante({ trovato: {}, perFonte: { posta: 5, postamac: 60 } }, ['postamac']), '5 emails')
+  // counter-cases: nothing queued, everything as by kind; an older server without per-source counts; nothing yet
+  assert.equal(trovatoDurante(pagina, []), '60 emails, 42 events, 10 files')
+  assert.equal(trovatoDurante({ trovato: { email: 60 } }, ['postamac']), '60 emails')
+  assert.equal(trovatoDurante(pagina, ['postamac', 'calendario', 'desktop']), null)
+  assert.equal(trovatoDurante(null, []), null)
 })
