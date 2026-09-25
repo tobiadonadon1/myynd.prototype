@@ -16,9 +16,9 @@ const OGGI = new Date('2026-09-24T12:00:00')
 
 test('la riga della fonte: nome senza indirizzo, «Tu» se inviata, l’anno solo se non è questo, senza le parti che mancano', () => {
   impostaLingua('en')
-  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: '"Marco Rossi" <m@x.example>', quando: '2026-09-03T10:00:00' }, OGGI), 'Mail · Marco Rossi · 3 Sept')
-  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: 'Alex <a@x.example>', quando: '2026-09-03T10:00:00', inviato: true }, OGGI), 'Mail · You · 3 Sept')
-  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: 'Marco Rossi', quando: '2025-09-03T10:00:00' }, OGGI), 'Mail · Marco Rossi · 3 Sept 2025')
+  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: '"Marco Rossi" <m@x.example>', quando: '2026-09-03T10:00:00' }, OGGI), 'Mail · Marco Rossi · Sep 3')
+  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: 'Alex <a@x.example>', quando: '2026-09-03T10:00:00', inviato: true }, OGGI), 'Mail · You · Sep 3')
+  assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', tipo: 'email', autore: 'Marco Rossi', quando: '2025-09-03T10:00:00' }, OGGI), 'Mail · Marco Rossi · Sep 3, 2025')
   assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'desktop', tipo: 'documento' }, OGGI), 'My Mac')
   assert.equal(rigaFonte({ id: 'a', label: '[1] x', fonte: 'posta', autore: 'nora@harbor.example' }, OGGI), 'Mail · nora')
   impostaLingua('it')

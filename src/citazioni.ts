@@ -5,7 +5,7 @@
 // il nome piano di una fonte, le virgolette della lingua, e dove sta un passo
 // dentro i blocchi di un documento.
 
-import { loc, t } from './lingua.ts'
+import { lingua, t } from './lingua.ts'
 
 export type Fonte = {
   id: string
@@ -65,12 +65,25 @@ export function nomeAutore(autore?: string | null): string {
   return senzaIndirizzo
 }
 
-/** «3 set», o «3 set 2025» se non è quest'anno; nella lingua dell'app. */
+const MESI = {
+  it: ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+}
+
+/**
+ * «3 set» o «Sep 3», e l'anno solo se non è questo: «3 set 2025», «Sep 3, 2025».
+ *
+ * La stessa lista di mesi della riga delle preferenze (risposte-archivio.ts),
+ * non il locale del browser: «21 Sept» nella nuvoletta e «Sep 24» nella riga
+ * accanto sarebbero due app.
+ */
 export function giornoCorto(iso: string, oggi = new Date()): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const questAnno = d.getFullYear() === oggi.getFullYear()
-  return d.toLocaleDateString(loc(), { day: 'numeric', month: 'short', ...(questAnno ? {} : { year: 'numeric' }) }).replace(/\.$/, '')
+  const en = lingua() === 'en'
+  const mese = MESI[en ? 'en' : 'it'][d.getMonth()]
+  const anno = d.getFullYear() === oggi.getFullYear() ? '' : en ? `, ${d.getFullYear()}` : ` ${d.getFullYear()}`
+  return en ? `${mese} ${d.getDate()}${anno}` : `${d.getDate()} ${mese}${anno}`
 }
 
 /**

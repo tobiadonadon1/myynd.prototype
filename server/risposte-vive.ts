@@ -22,7 +22,8 @@ const apostrofi = (s: string) => s.replace(/[’‘`´]/g, '\'').normalize('NFD'
 export function eUnaCorrezione(testo: string): boolean {
   const t = apostrofi(testo).trim().toLowerCase().replace(/\s+/g, ' ')
   if (!t) return false
-  if (/^(?:no worries|no problem|no thanks|no grazie|nessun problema)\b/.test(t)) return false
+  // «No, thanks» e «no thanks» sono la stessa cortesia: la virgola dopo il «no» non conta
+  if (/^(?:no worries|no problem|no thanks|no grazie|nessun problema)\b/.test(t.replace(/^no[\s,.!;:]+/, 'no '))) return false
   const inizi = /^(?:nope|wrong|that's wrong|that's not|not what i asked|incorrect|sbagliat\w*|non e cosi|non e vero|non hai capito|non e quello)(?![a-z])/
   if (inizi.test(t)) return true
   if (!/^no\b/.test(t)) return false

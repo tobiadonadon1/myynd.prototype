@@ -44,7 +44,8 @@ function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: 
   const riga = fonte ? (memoria ? titoloDi(fonte) : rigaFonte(fonte)) : ''
   const passo = fonte?.passo
   const aperta = (sopra || fuoco) && !!titolo
-  const apri = () => { if (fonte) onApri?.(fonte.id, passo) }
+  // la nuvoletta si chiude aprendo: il mouse non esce dal segno finché la finestra del documento è sopra
+  const apri = () => { if (!fonte) return; setSopra(false); setFuoco(false); onApri?.(fonte.id, passo) }
 
   useLayoutEffect(() => {
     if (!aperta || !segno.current) { setPosto(null); return }

@@ -22,7 +22,7 @@ test('una correzione si riconosce; un «no» che continua, o un «no problem», 
   for (const s of ['no, it starts in November', 'Nope', 'that’s wrong', 'sbagliato, è venerdì', 'non è così', 'No.', 'Wrong: it is Friday']) {
     assert.ok(eUnaCorrezione(s), s)
   }
-  for (const s of ['no, and also the invoice?', 'No worries, thanks', 'No problem', 'note the date', 'No, but can you also check the fee?', 'no e anche il preventivo', 'Nothing else', '']) {
+  for (const s of ['no, and also the invoice?', 'No worries, thanks', 'No problem', 'No, thanks', 'No, grazie', 'no thanks', 'No. Thanks!', 'note the date', 'No, but can you also check the fee?', 'no e anche il preventivo', 'Nothing else', '']) {
     assert.ok(!eUnaCorrezione(s), s)
   }
 })

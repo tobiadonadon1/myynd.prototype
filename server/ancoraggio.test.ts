@@ -164,3 +164,41 @@ test('le lineette spariscono e il verbale dice via e segni tolti', () => {
   const prosa = ancora('The fee is €4,800. It starts in October.', { visti, estratti: new Map(), letto: '', memoria: false, via: 'claude' })
   assert.equal(prosa.verifica.senzaFonti, true)
 })
+
+// — i punti dentro le cifre, il codice, gli spazi fra i numeri —
+
+test('il punto dentro «1.200», «27.07.2026» e «1.0.3» non chiude la frase: il passo è intero, con la cifra giusta', () => {
+  assert.equal(passoPer('Il preventivo resta 1.200 € più IVA [1].', LOGO), 'Il preventivo resta 1.200 € più IVA.')
+  const checklist = 'Owner: Priya Shah. Build 1.0.3 goes to App Review on 2 October 2026. Then the screenshots.'
+  assert.equal(passoPer('Northwind 1.0.3 goes to App Review on 2 October 2026 [1].', checklist), 'Build 1.0.3 goes to App Review on 2 October 2026.')
+  assert.equal(passoPer('La scadenza è il 27.07.2026.', 'Ciao. La scadenza resta il 27.07.2026 per tutti. Saluti.'), 'La scadenza resta il 27.07.2026 per tutti.')
+  // e la frase della risposta che porta il segno è intera, non da dopo il punto
+  const r = ancora('Il preventivo resta 1.200 € più IVA [1].', { visti: [doc('b', 'Consegna del logo', LOGO)], estratti: new Map([['b', 1500]]), letto: LOGO, memoria: false, via: 'claude' })
+  assert.equal(r.fonti[0].passo, 'Il preventivo resta 1.200 € più IVA.')
+  assert.deepEqual(r.verifica.scoperti, [])
+})
+
+test('il codice non si tocca: «items[0]» resta, una lista resta una lista, gli spazi allineati restano', () => {
+  const testo = 'Use `items[0]` here [1]. The list is `[1, 2, 3]`.\n\n```\nconst a = b[0]\nx  =  1\nc = d[2]\n```'
+  const r = ancora(testo, { visti: [doc('a', 'A', 'items here')], estratti: new Map([['a', 100]]), letto: '', memoria: false, via: 'claude' })
+  assert.equal(r.testo, 'Use `items[0]` here[1]. The list is `[1, 2, 3]`.\n\n```\nconst a = b[0]\nx  =  1\nc = d[2]\n```')
+  assert.deepEqual(r.verifica.nonValide, [])
+  assert.equal(r.verifica.citazioni, 1, 'il [2] nel codice non è una citazione')
+  assert.deepEqual(pulisciCitazioni('See `x[9]` and [9].', 3, false), { testo: 'See `x[9]` and.', nonValide: [9] })
+})
+
+test('gli spazi fra i numeri: «1 200 000» è una cifra, un numero di telefono o un a capo no', () => {
+  assert.deepEqual(fattiDuri('In 2026\n12 people came'), ['2026', '12'])
+  assert.deepEqual(fattiDuri('Phone 555 1234 567'), ['555', '1234', '567'])
+  assert.deepEqual(fattiDuri('costa 1 200 000 €'), ['1200000'])
+  assert.deepEqual(fattiDuri('1 200,50 €'), ['1200.5'])
+  assert.deepEqual(fattiDuri('nel 2026 100 persone'), ['2026', '100'])
+})
+
+test('i fatti duri di un testo grande costano poco: niente copia riscritta a ogni presa', () => {
+  const denso = Array.from({ length: 40_000 }, (_, i) => `n ${1000 + i}`).join(' ')
+  const t0 = Date.now()
+  const fatti = fattiDuri(denso)
+  assert.ok(Date.now() - t0 < 1500, `${Date.now() - t0} ms`)
+  assert.equal(fatti.length, 40_000)
+})

@@ -103,14 +103,19 @@ const UNITA = '%|k|kg|km|h|ore|min'
 /** I fatti duri con la loro posizione nel testo: cifre, date, ore, indirizzi, codici. */
 function fattiConPosizione(testo: string): Fatto[] {
   const fuori: Fatto[] = []
-  // si lavora su una copia mascherata: quello che è già stato preso non si riprende
-  let resto = testo
+  // quello che è già stato preso non si riprende: una maschera di occupazione,
+  // non una copia del testo riscritta a ogni presa (su un prompt intero
+  // costava il quadrato della lunghezza, sulla strada di ogni risposta)
+  const preso = new Uint8Array(testo.length)
+  const libero = (da: number, a: number) => { for (let i = da; i < a; i++) if (preso[i]) return false; return true }
   const prendi = (re: RegExp, valore: (m: RegExpExecArray) => string | null) => {
-    for (const m of resto.matchAll(re)) {
+    for (const m of testo.matchAll(re)) {
+      const da = m.index, a = m.index + m[0].length
+      if (!libero(da, a)) continue
       const v = valore(m as RegExpExecArray)
       if (v === null) continue
-      fuori.push({ valore: v, inizio: m.index, fine: m.index + m[0].length })
-      resto = resto.slice(0, m.index) + ' '.repeat(m[0].length) + resto.slice(m.index + m[0].length)
+      fuori.push({ valore: v, inizio: da, fine: a })
+      preso.fill(1, da, a)
     }
   }
   // indirizzi e link, prima di tutto: dentro hanno cifre e punti
@@ -133,8 +138,11 @@ function fattiConPosizione(testo: string): Fatto[] {
   prendi(/\b(\d{1,2}):(\d{2})\b/g, m => Number(m[1]) < 24 && Number(m[2]) < 60 ? `${due(Number(m[1]))}:${m[2]}` : null)
   // i codici: lettere e cifre attaccate, «INV-2231», «AB1234»
   prendi(/\b[A-Za-z]{2,6}-?\d{2,}\b/g, m => m[0].toUpperCase())
-  // le cifre: con valuta, unità o decimali sempre; da sole, solo con almeno due cifre
-  prendi(new RegExp(`(?:(?<![\\p{L}])(${VALUTE}))?\\s?(\\d+(?:[.,\\s]\\d+)*)\\s?(${VALUTE}|${UNITA})?(?![\\w])`, 'giu'), m => {
+  // le cifre: con valuta, unità o decimali sempre; da sole, solo con almeno due
+  // cifre. Uno spazio (anche fine o non separabile) unisce le migliaia solo
+  // nella forma «1 200 000», da una a tre cifre e poi gruppi di tre esatte:
+  // «555 1234 567» sono tre numeri, e a capo non si unisce mai niente
+  prendi(new RegExp(`(?:(?<![\\p{L}])(${VALUTE}))?\\s?(\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3}(?!\\d))+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)*)\\s?(${VALUTE}|${UNITA})?(?![\\w])`, 'giu'), m => {
     const grezzo = m[2]
     const cifre = grezzo.replace(/\D/g, '')
     const conSegno = !!m[1] || !!m[3] || /[.,]\d+$/.test(grezzo) && !(/[.,]\d{3}$/.test(grezzo))
@@ -199,6 +207,24 @@ export function eUnRifiuto(testo: string): boolean {
   return frasi[0].split(/\s+/).length <= 15
 }
 
+// — il codice nella risposta —
+
+const SEGNAPOSTO = /(\d+)/g
+
+/**
+ * Il codice messo da parte: i blocchi ``` ``` e gli `apici`.
+ *
+ * Dentro ci sono parentesi quadre e spazi allineati che non sono segni né
+ * refusi: `items[0]` resta `items[0]`, e `[1, 2, 3]` resta una lista. Al
+ * posto di ogni pezzo un segnaposto che nessuna regola tocca; `rimetti` li
+ * rimette al loro posto.
+ */
+export function senzaCodice(testo: string): { testo: string; rimetti(t: string): string } {
+  const pezzi: string[] = []
+  const t = testo.replace(/```[\s\S]*?(?:```|$)|`[^`\n]+`/g, m => { pezzi.push(m); return `${pezzi.length - 1}` })
+  return { testo: t, rimetti: s => s.replace(SEGNAPOSTO, (_, i: string) => pezzi[Number(i)] ?? '') }
+}
+
 // — le citazioni —
 
 const SEGNO = /\[(\d{1,3}|M)\]/g
@@ -209,10 +235,11 @@ const SEGNO = /\[(\d{1,3}|M)\]/g
  * «[1, 2]» e «[1-3]» diventano «[1][2]» e «[1][2][3]»; un numero fuori
  * dall'elenco sparisce e finisce in `nonValide`; «[M]» resta solo se c'era
  * davvero della memoria nel prompt; lo spazio prima di un segno se ne va.
- * «[2024]» e «[a]» non sono segni e non si toccano.
+ * «[2024]» e «[a]» non sono segni e non si toccano, e il codice nemmeno.
  */
 export function pulisciCitazioni(testo: string, quanti: number, memoria: boolean): { testo: string; nonValide: number[] } {
-  let t = testo
+  const codice = senzaCodice(testo)
+  let t = codice.testo
     .replace(/\[(\d{1,3})(?:\s*[,;]\s*\d{1,3})+\]/g, m => m.slice(1, -1).split(/\s*[,;]\s*/).map(n => `[${n}]`).join(''))
     .replace(/\[(\d{1,3})\s*[-–]\s*(\d{1,3})\]/g, (m, a: string, b: string) => {
       const da = Number(a), a_ = Number(b)
@@ -235,17 +262,21 @@ export function pulisciCitazioni(testo: string, quanti: number, memoria: boolean
   t = t.replace(/[ \t]+(?=[.,;:!?](?:\s|$))/g, '')
   // e due spazi dove stava un segno in mezzo alla frase
   t = t.replace(/([^\s\n]) {2,}(?=[^\s\n])/g, '$1 ')
-  return { testo: t, nonValide }
+  return { testo: codice.rimetti(t), nonValide }
 }
 
 // — il passo —
 
 const senzaSegni = (s: string) => s.replace(SEGNO, '').replace(/\s{2,}/g, ' ').trim()
 
-/** Le frasi di un testo, con la posizione: prima le righe, poi le frasi dentro ogni riga. */
+/**
+ * Le frasi di un testo, con la posizione: prima le righe, poi le frasi dentro
+ * ogni riga. Un punto chiude la frase solo davanti a uno spazio o alla fine:
+ * quello dentro «1.200», «27.07.2026» o «1.0.3» è parte della frase.
+ */
 function frasiCon(testo: string): { testo: string; inizio: number; fine: number }[] {
   const fuori: { testo: string; inizio: number; fine: number }[] = []
-  const re = /[^.!?\n]+(?:[.!?]+(?=\s|$)|\n|$)/g
+  const re = /(?:[^.!?\n]|[.!?](?!\s|$))+(?:[.!?]+(?=\s|$)|\n|$)/g
   for (const m of testo.matchAll(re)) {
     const t = m[0]
     if (!t.trim()) continue
@@ -354,8 +385,10 @@ export function ancora(testo: string, o: {
 }): { testo: string; fonti: FonteAncorata[]; verifica: Verifica } {
   const pulita = pulisciCitazioni(testo, o.visti.length, o.memoria)
   const t = senzaTrattini(pulita.testo)
+  // i segni si contano e si cercano nella prosa: `b[1]` in un blocco di codice non cita niente
+  const prosa = senzaCodice(t)
   const citati = new Set<number>()
-  for (const m of t.matchAll(/\[(\d{1,3})\]/g)) citati.add(Number(m[1]))
+  for (const m of prosa.testo.matchAll(/\[(\d{1,3})\]/g)) citati.add(Number(m[1]))
   const fonti: FonteAncorata[] = []
   o.visti.forEach((d, i) => {
     const n = i + 1
@@ -364,13 +397,13 @@ export function ancora(testo: string, o: {
       id: d.id, label: `[${n}] ${d.titolo}`,
       fonte: d.fonte, tipo: d.tipo, autore: d.autore ?? null, quando: d.quando ?? null, inviato: !!d.inviato
     }
-    const passo = passoPer(fraseCol(t, `[${n}]`), d.corpo.slice(0, o.estratti.get(d.id) ?? 0))
+    const passo = passoPer(prosa.rimetti(fraseCol(prosa.testo, `[${n}]`)), d.corpo.slice(0, o.estratti.get(d.id) ?? 0))
     if (passo) f.passo = passo
     fonti.push(f)
   })
-  const memoria = o.memoria && t.includes('[M]')
+  const memoria = o.memoria && prosa.testo.includes('[M]')
   if (memoria) {
-    const p = progettoNominato(senzaSegni(fraseCol(t, '[M]')), o.progetti ?? [])
+    const p = progettoNominato(senzaSegni(prosa.rimetti(fraseCol(prosa.testo, '[M]'))), o.progetti ?? [])
     fonti.push(p
       ? { id: `memoria:progetto:${p.id}`, label: `[M] ${p.nome}`, fonte: 'memoria' }
       : { id: 'memoria', label: '[M]', fonte: 'memoria' })
@@ -378,7 +411,7 @@ export function ancora(testo: string, o: {
   const lettiTutti = fattiDuri(o.letto)
   const scoperti = fattiDuri(t).filter(x => !coperto(x, lettiTutti))
   const rifiuto = eUnRifiuto(t)
-  const frasi = frasiCon(senzaSegni(t)).length
+  const frasi = frasiCon(senzaSegni(prosa.testo)).length
   const senzaFonti = !rifiuto && citati.size === 0 && !memoria && (fattiDuri(t).length >= 1 || frasi >= 2)
   return {
     testo: t, fonti,
