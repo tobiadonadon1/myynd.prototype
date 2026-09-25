@@ -61,7 +61,12 @@ const EN: Record<string, string> = {
     'The shortcut needs a modifier and a key, for example CommandOrControl+Shift+M.',
   'Questa combinazione non si può usare qui.': 'This shortcut cannot be used here.',
   'Questo indirizzo non si apre fuori da Myynd.': 'This address cannot be opened outside Myynd.',
-  'Gli aggiornamenti non sono disponibili.': 'Updates are not available.'
+  'Gli aggiornamenti non sono disponibili.': 'Updates are not available.',
+  // l'osservatore e il mostriciattolo (P1)
+  'Pausa per un’ora': 'Pause watching for an hour',
+  'Riprendi a guardare': 'Resume watching',
+  'in pausa fino alle': 'paused until',
+  'Togli dallo schermo': 'Remove from screen'
 }
 
 /** Quale lingua parla il guscio adesso. */
