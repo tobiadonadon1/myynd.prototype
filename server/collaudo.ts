@@ -281,7 +281,8 @@ function gira() {
   if (occupatoDalVivo(l.utente)) { fila.push(l); setTimeout(gira, 2000).unref(); return }
   occupato = true
   corrente = l
-  const esegui = () => chi.dentro(l.utente, () => l.bozza ? unaBozza(l) : corri(l))
+  const lavora = () => l.bozza ? unaBozza(l) : corri(l)
+  const esegui = () => l.utente ? chi.dentro(l.utente, lavora) : lavora()
   void Promise.resolve()
     .then(() => l.origine === 'editor' ? withBackgroundWork(esegui) : esegui())
     .catch(e => console.error('myynd · prova', l.prova, e instanceof Error ? e.message : e))
