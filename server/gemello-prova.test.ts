@@ -45,6 +45,7 @@ test('su una copia seminata: nessuna rete, il rapporto solo sotto la copia, i nu
   const chi = await import('./chi.ts')
   const cfg = await import('./config.ts')
   const store = await import('./store.ts')
+  const ordine = await import('./ordine.ts')
   const a = await conti.registra('anna@esempio.it', 'passwordlunga1')
   assert.ok(a.ok); const id = a.ok ? a.id : ''
   const GIORNO = 86_400_000
@@ -54,6 +55,8 @@ test('su una copia seminata: nessuna rete, il rapporto solo sotto la copia, i nu
     store.azzeraTutto()
     let n = 0
     const docs: Parameters<typeof store.salvaDocumenti>[0] = []
+    // prima di tutto, in fondo all'indice: 4.500 mail vecchie di gennaio, oltre i quattromila di una chiamata del registro
+    for (let i = 0; i < 4500; i++) docs.push({ id: `posta:Archivio:${i}`, fonte: 'posta', tipo: 'email', titolo: `Vecchia ${i}`, corpo: 'x', autore: `p${i % 40}@vecchio.example`, quando: new Date(Date.parse('2026-01-05T00:00:00.000Z') + i * 60_000).toISOString() })
     for (let d = 40; d >= 1; d--) {
       // Nora scrive alle sei di Roma, prima delle otto in cui si afferma, e ha risposta alle nove
       const q = new Date(fino.getTime() - d * GIORNO - 2 * 3_600_000)
@@ -63,7 +66,14 @@ test('su una copia seminata: nessuna rete, il rapporto solo sotto la copia, i nu
       n++
       docs.push({ id: `posta:INBOX:${n}`, fonte: 'posta', tipo: 'email', titolo: `Priya ${n}`, corpo: 'Can you confirm?', autore: `Priya <priya@a.example>`, quando: new Date(q.getTime() + 60_000).toISOString(), filo: `f${n}@x`, messageId: `m${n}@x` })
     }
-    store.salvaDocumenti(docs)
+    for (let i = 0; i < docs.length; i += 2000) store.salvaDocumenti(docs.slice(i, i + 2000))
+    // le righe della lista: otto in programma nei giorni della prova (cinque chiuse il loro giorno), tutte scritte prima
+    for (let i = 0; i < 8; i++) {
+      const g = `2026-09-${String(12 + i).padStart(2, '0')}`
+      store.scriviCompito({ id: `c${i}`, testo: `Riga ${i}`, quando: 'oggi', ordine: ordine.dopo(store.ultimoOrdine('oggi')), giorno: g })
+      store.default.prepare('UPDATE compiti SET creato = ? WHERE id = ?').run('2026-09-01T08:00:00.000Z', `c${i}`)
+      if (i < 5) store.default.prepare("UPDATE compiti SET stato = 'fatto', chiuso = ? WHERE id = ?").run(`${g}T15:00:00.000Z`, `c${i}`)
+    }
   })
   store.chiudiIndici()
   const fetchPrima = globalThis.fetch
@@ -75,11 +85,26 @@ test('su una copia seminata: nessuna rete, il rapporto solo sotto la copia, i nu
   assert.deepEqual(readdirSync(join(CASA, 'valutazioni')).length, 1)
   assert.equal(rapporto.giorni, 14)
   assert.ok(rapporto.totale.affermazioni >= 28, String(rapporto.totale.affermazioni))
-  assert.ok(rapporto.totale.giuste >= 0.9, `giuste ${rapporto.totale.giuste}`)
+  // per genere, non per famiglia: Nora sempre risposta, Priya mai
+  assert.ok(rapporto.perGenere['posta.risponde']!.giuste >= 0.9, JSON.stringify(rapporto.perGenere))
+  assert.ok(rapporto.perGenere['posta.non_risponde']!.giuste >= 0.9)
   assert.ok(rapporto.totale.lift > 0, 'batte chi non lo conosce')
+  // anche le righe della lista: otto giorni con una riga in programma
+  const compiti = Object.entries(rapporto.perGenere).filter(([g]) => g.startsWith('compito.'))
+  assert.equal(compiti.reduce((s, [, x]) => s + x.affermazioni, 0), 8, JSON.stringify(rapporto.perGenere))
+  // la copertura e il Brier per giorno (sezione 8)
+  assert.equal(rapporto.perGiorno.length, 14)
+  assert.ok(rapporto.perGiorno.every(g => typeof g.candidati === 'number' && g.candidati >= g.affermazioni))
+  assert.equal(rapporto.copertura.giorniAttivi, rapporto.perGiorno.filter(g => g.candidati >= 5).length)
+  assert.ok(rapporto.spinta.con.n + rapporto.spinta.senza.n === rapporto.totale.affermazioni)
   assert.equal(rapporto.distorsioni.length, 4)
   const scritto = JSON.parse(readFileSync(file, 'utf8'))
   assert.equal(scritto.righe.length, rapporto.totale.affermazioni)
   const testo = prova.stampa(rapporto)
-  assert.match(testo, /posta/); assert.match(testo, /Distorsioni note/); assert.doesNotMatch(testo, /[—–]/)
+  assert.match(testo, /posta\.risponde/); assert.match(testo, /compito\./); assert.match(testo, /copertura:/); assert.match(testo, /brier per giorno/)
+  assert.match(testo, /Distorsioni note/); assert.doesNotMatch(testo, /[—–]/)
+  // il registro è arrivato in fondo all'indice: ogni mail c'è, non solo le prime quattromila
+  const nelRegistro = chi.dentro(id, () => (store.default.prepare("SELECT COUNT(*) AS n FROM segnali WHERE genere = 'posta.arrivata'").get() as { n: number }).n)
+  store.chiudiIndici()
+  assert.equal(nelRegistro, 4500 + 80, 'le 4.500 vecchie e le 80 di Nora e Priya')
 })

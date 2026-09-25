@@ -4407,6 +4407,12 @@ app.get('/api/gemello', (_req, res) => {
   try { res.json(gemello.vista()) } catch (e) { errore(res, e) }
 })
 
+// le misure della sezione 8 (punteggio, base, copertura, Brier per giorno, calibrazione, per genere, con e senza spinta): per chi guida, da curl
+app.get('/api/gemello/misura', (req, res) => {
+  const giorni = Number(req.query.giorni ?? 30)
+  try { res.json(gemello.misura(Number.isInteger(giorni) && giorni >= 1 && giorni <= 400 ? giorni : 30)) } catch (e) { errore(res, e) }
+})
+
 app.post('/api/gemello/abitudini/:chiave', (req, res) => {
   const azione = String(req.body?.azione ?? '')
   if (!['tieni', 'correggi', 'togli', 'ripristina'].includes(azione)) return res.status(400).json({ errore: 'Azione sconosciuta.' })

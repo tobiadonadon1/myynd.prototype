@@ -21,6 +21,7 @@
 import { homedir } from 'node:os'
 import { resolve, join, sep, dirname, basename } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs'
+import type { Candidato } from './previsioni.ts'
 
 export type Argomenti = { dati?: string; conto?: string; dal?: string; al?: string; ora?: string }
 
@@ -64,11 +65,19 @@ export function cartellaVietata(dati: string, casa = homedir(), radicePredefinit
   return null
 }
 
-export type Riga = { giorno: string; genere: string; ref: string; p: number; esito: 'giusta' | 'sbagliata' | 'annullata'; base: boolean }
+export type Riga = { giorno: string; genere: string; ref: string; p: number; esito: 'giusta' | 'sbagliata' | 'annullata'; base: boolean; spinta: boolean }
+type Secchio = { da: number; a: number; n: number; giuste: number }
 export type Rapporto = {
   conto: string; dal: string; al: string; ora: string; giorni: number
-  perGenere: Record<string, { affermazioni: number; alGiorno: number; giuste: number; base: number; brier: number; calibrazione: { da: number; a: number; n: number; giuste: number }[] }>
-  totale: { affermazioni: number; giuste: number; base: number; lift: number; brier: number }
+  /** Per genere (posta.risponde, posta.non_risponde, compito.chiude, compito.slitta), non per famiglia. */
+  perGenere: Record<string, { affermazioni: number; alGiorno: number; giuste: number; base: number; brier: number; calibrazione: Secchio[] }>
+  totale: { affermazioni: number; giuste: number; base: number; lift: number; brier: number; calibrazione: Secchio[] }
+  /** Sezione 8: i giorni attivi (almeno cinque candidate), le affermazioni per giorno attivo, la quota di giorni attivi con almeno cinque. */
+  copertura: { giorniAttivi: number; alGiorno: number; quotaConCinque: number }
+  /** Il Brier giorno per giorno. */
+  perGiorno: { giorno: string; candidati: number; affermazioni: number; giuste: number; brier: number | null }[]
+  /** Con una carta del feed sulla stessa mail, e senza. */
+  spinta: { con: { n: number; giuste: number }; senza: { n: number; giuste: number } }
   distorsioni: string[]
 }
 
@@ -79,41 +88,64 @@ export const DISTORSIONI = [
   'Niente storia delle app: nessuna affermazione sul progetto del giorno.'
 ]
 
-export function riassumi(righe: Riga[], o: { conto: string; dal: string; al: string; ora: string }): Rapporto {
+const brierDi = (xs: Riga[]) => xs.length ? xs.reduce((s, r) => s + (r.p - (r.esito === 'giusta' ? 1 : 0)) ** 2, 0) / xs.length : 0
+const secchi = (xs: Riga[]): Secchio[] => [0, 0.2, 0.4, 0.6, 0.8].map(x => {
+  const dentro = xs.filter(r => r.p >= x && (x === 0.8 || r.p < x + 0.2))
+  return { da: x, a: x + 0.2, n: dentro.length, giuste: dentro.filter(r => r.esito === 'giusta').length }
+})
+
+export function riassumi(righe: Riga[], o: { conto: string; dal: string; al: string; ora: string; candidatiPerGiorno?: Record<string, number> }): Rapporto {
+  const { candidatiPerGiorno = {}, ...testata } = o
   const decise = righe.filter(r => r.esito !== 'annullata')
-  const giorni = new Set(righe.map(r => r.giorno)).size
+  const giorniTutti = new Set([...righe.map(r => r.giorno), ...Object.keys(candidatiPerGiorno)])
+  const giorni = giorniTutti.size
   const perGenere: Rapporto['perGenere'] = {}
-  const famiglie = new Map<string, Riga[]>()
-  for (const r of decise) { const f = r.genere.split('.')[0]!; const l = famiglie.get(f) ?? []; l.push(r); famiglie.set(f, l) }
-  const brier = (xs: Riga[]) => xs.length ? xs.reduce((s, r) => s + (r.p - (r.esito === 'giusta' ? 1 : 0)) ** 2, 0) / xs.length : 0
-  for (const [f, xs] of famiglie) {
-    perGenere[f] = {
+  const generi = new Map<string, Riga[]>()
+  for (const r of decise) { const l = generi.get(r.genere) ?? []; l.push(r); generi.set(r.genere, l) }
+  for (const [g, xs] of [...generi].sort((a, b) => a[0].localeCompare(b[0]))) {
+    perGenere[g] = {
       affermazioni: xs.length, alGiorno: giorni ? xs.length / giorni : 0,
-      giuste: xs.filter(r => r.esito === 'giusta').length / xs.length, base: xs.filter(r => r.base).length / xs.length, brier: brier(xs),
-      calibrazione: [0, 0.2, 0.4, 0.6, 0.8].map(x => {
-        const dentro = xs.filter(r => r.p >= x && (x === 0.8 || r.p < x + 0.2))
-        return { da: x, a: x + 0.2, n: dentro.length, giuste: dentro.filter(r => r.esito === 'giusta').length }
-      })
+      giuste: xs.filter(r => r.esito === 'giusta').length / xs.length, base: xs.filter(r => r.base).length / xs.length, brier: brierDi(xs),
+      calibrazione: secchi(xs)
     }
   }
   const giuste = decise.filter(r => r.esito === 'giusta').length
   const base = decise.filter(r => r.base).length
+  const perGiorno = [...giorniTutti].sort().map(giorno => {
+    const mie = righe.filter(r => r.giorno === giorno), dec = mie.filter(r => r.esito !== 'annullata')
+    return { giorno, candidati: candidatiPerGiorno[giorno] ?? mie.length, affermazioni: mie.length, giuste: dec.filter(r => r.esito === 'giusta').length, brier: dec.length ? brierDi(dec) : null }
+  })
+  const attivi = perGiorno.filter(g => g.candidati >= 5)
+  const con = decise.filter(r => r.spinta), senza = decise.filter(r => !r.spinta)
   return {
-    ...o, giorni, perGenere,
-    totale: { affermazioni: decise.length, giuste: decise.length ? giuste / decise.length : 0, base: decise.length ? base / decise.length : 0, lift: decise.length ? (giuste - base) / decise.length : 0, brier: brier(decise) },
+    ...testata, giorni, perGenere,
+    totale: { affermazioni: decise.length, giuste: decise.length ? giuste / decise.length : 0, base: decise.length ? base / decise.length : 0, lift: decise.length ? (giuste - base) / decise.length : 0, brier: brierDi(decise), calibrazione: secchi(decise) },
+    copertura: {
+      giorniAttivi: attivi.length,
+      alGiorno: attivi.length ? attivi.reduce((s, g) => s + g.affermazioni, 0) / attivi.length : 0,
+      quotaConCinque: attivi.length ? attivi.filter(g => g.affermazioni >= 5).length / attivi.length : 0
+    },
+    perGiorno,
+    spinta: { con: { n: con.length, giuste: con.filter(r => r.esito === 'giusta').length }, senza: { n: senza.length, giuste: senza.filter(r => r.esito === 'giusta').length } },
     distorsioni: DISTORSIONI
   }
 }
 
 export function stampa(r: Rapporto): string {
   const pc = (x: number) => `${Math.round(x * 100)}%`
+  const cal = (c: Secchio[]) => c.map(x => `${x.n ? pc(x.giuste / x.n) : '-'}/${x.n}`).join(' ')
   const righe = [`gemello · ${r.conto} · dal ${r.dal} al ${r.al} alle ${r.ora} · ${r.giorni} giorni`]
-  righe.push('genere        affermazioni  al giorno  giuste  base  lift    brier  calibrazione')
+  righe.push('genere              affermazioni  al giorno  giuste  base  lift    brier  calibrazione')
   for (const [g, x] of Object.entries(r.perGenere)) {
-    const cal = x.calibrazione.map(c => `${c.n ? pc(c.giuste / c.n) : '-'}/${c.n}`).join(' ')
-    righe.push(`${g.padEnd(13)} ${String(x.affermazioni).padStart(12)}  ${x.alGiorno.toFixed(1).padStart(9)}  ${pc(x.giuste).padStart(6)}  ${pc(x.base).padStart(4)}  ${pc(x.giuste - x.base).padStart(5)}  ${x.brier.toFixed(2).padStart(5)}  ${cal}`)
+    righe.push(`${g.padEnd(19)} ${String(x.affermazioni).padStart(12)}  ${x.alGiorno.toFixed(1).padStart(9)}  ${pc(x.giuste).padStart(6)}  ${pc(x.base).padStart(4)}  ${pc(x.giuste - x.base).padStart(5)}  ${x.brier.toFixed(2).padStart(5)}  ${cal(x.calibrazione)}`)
   }
-  righe.push(`totale        ${String(r.totale.affermazioni).padStart(12)}  ${' '.repeat(9)}  ${pc(r.totale.giuste).padStart(6)}  ${pc(r.totale.base).padStart(4)}  ${pc(r.totale.lift).padStart(5)}  ${r.totale.brier.toFixed(2).padStart(5)}`)
+  righe.push(`${'totale'.padEnd(19)} ${String(r.totale.affermazioni).padStart(12)}  ${' '.repeat(9)}  ${pc(r.totale.giuste).padStart(6)}  ${pc(r.totale.base).padStart(4)}  ${pc(r.totale.lift).padStart(5)}  ${r.totale.brier.toFixed(2).padStart(5)}  ${cal(r.totale.calibrazione)}`)
+  const c = r.copertura
+  righe.push(`copertura: ${c.giorniAttivi} giorni attivi (almeno cinque candidate) · ${c.alGiorno.toFixed(1)} affermazioni al giorno attivo · ${pc(c.quotaConCinque)} dei giorni attivi con almeno cinque (obiettivo 100%)`)
+  const brier = r.perGiorno.map(g => g.brier).filter((b): b is number => b !== null).sort((a, b) => a - b)
+  if (brier.length) righe.push(`brier per giorno: migliore ${brier[0]!.toFixed(2)} · mediana ${brier[Math.floor(brier.length / 2)]!.toFixed(2)} · peggiore ${brier[brier.length - 1]!.toFixed(2)} (giorno per giorno nel file)`)
+  const s = r.spinta
+  righe.push(`con una carta del feed: giuste ${s.con.giuste} su ${s.con.n} · senza: giuste ${s.senza.giuste} su ${s.senza.n}`)
   righe.push('Distorsioni note:')
   for (const d of r.distorsioni) righe.push(`  · ${d}`)
   return righe.join('\n')
@@ -143,8 +175,11 @@ export async function esegui(a: Argomenti, oggi = new Date()): Promise<{ rapport
   const GIORNO = 86_400_000
 
   const righe: Riga[] = []
+  const candidatiPerGiorno: Record<string, number> = {}
+  type CompitoRiga = { id: string; testo: string; priorita: string | null; stato: string; creato: string; chiuso: string | null; giorno: string; progetto: string | null; sparito: string | null }
   const esito = chi.dentro(conto, () => {
-    segnali.raccogliPosta(oggi)
+    // il registro fino in fondo, in una chiamata: qui non c'è nessuno da non fermare
+    segnali.raccogliPosta(oggi, { tutto: true })
     const tutteArrivate = segnali.arrivate('1970-01-01T00:00:00.000Z', oggi.toISOString())
     const tutteInviate = segnali.inviate('1970-01-01T00:00:00.000Z', oggi.toISOString())
     const miei = segnali.mieiIndirizzi()
@@ -154,26 +189,50 @@ export async function esegui(a: Argomenti, oggi = new Date()): Promise<{ rapport
     const [hh, mm] = ora.split(':').map(Number) as [number, number]
     const perInviata = new Map(tutteInviate.map(s => [s.id, s.quando]))
     const tutteLeCoppie = segnali.coppieRisposta(tutteArrivate, tutteInviate, miei)
+    // le carte del feed sulla stessa mail: la spinta
+    const spinte = new Set((store.default.prepare('SELECT doc FROM feed WHERE doc IS NOT NULL').all() as { doc: string }[]).map(r => r.doc))
+    // i compiti com'erano quel giorno, per quanto si può dire dallo stato di adesso (distorsione nota)
+    const compiti = store.default.prepare('SELECT id, testo, priorita, stato, creato, chiuso, giorno, progetto, sparito FROM compiti WHERE giorno IS NOT NULL').all() as CompitoRiga[]
+    const chiusoIl = (c: CompitoRiga) => (c.stato === 'fatto' && c.chiuso ? fuso.giornoIn(new Date(c.chiuso)) : null)
     // come nel giro vero: una mail si afferma una volta sola
     const giaDette = new Set<string>()
     for (let g = dal; g <= al; g = fuso.giornoIn(new Date(gemello.inizioGiorno(g).getTime() + GIORNO + 12 * 3_600_000))) {
       const t0 = new Date(gemello.inizioGiorno(g).getTime() + hh * 3_600_000 + mm * 60_000)
+      const t0Iso = t0.toISOString()
       const fine = gemello.fineGiorno(g)
+      const candidati: Candidato[] = []
       const inviatePrima = tutteInviate.filter(s => Date.parse(s.quando) < t0.getTime())
-      if (!inviatePrima.length) continue
-      const coppiePrima = segnali.coppieRisposta(tutteArrivate, inviatePrima, miei)
-      const candidati = previsioni.candidatiPosta(tutteArrivate, coppiePrima, t0, fine).filter(c => !giaDette.has(c.ref))
+      if (inviatePrima.length) {
+        const coppiePrima = segnali.coppieRisposta(tutteArrivate, inviatePrima, miei)
+        candidati.push(...previsioni.candidatiPosta(tutteArrivate, coppiePrima, t0, fine).filter(c => !giaDette.has(c.ref)))
+      }
+      // le righe di quel giorno che alle t0 erano già scritte e ancora aperte
+      const aperti = compiti.filter(c => c.giorno === g && c.creato < t0Iso && (!c.chiuso || c.chiuso >= t0Iso) && (!c.sparito || c.sparito >= t0Iso))
+      const da30 = gemello.giornoPrima(g, 30)
+      const storia = compiti.filter(c => c.giorno >= da30 && c.giorno < g && c.creato < t0Iso)
+      const storia30 = { pianificati: storia.length, chiusiInGiornata: storia.filter(c => chiusoIl(c) === c.giorno).length }
+      candidati.push(...previsioni.candidatiCompiti(aperti.map(c => ({ id: c.id, testo: c.testo, priorita: c.priorita, stato: c.stato, creato: c.creato, progetto: c.progetto })), storia30, t0))
+      candidatiPerGiorno[g] = candidati.length
       const { scelte } = previsioni.scegli(candidati)
       for (const c of scelte) {
-        giaDette.add(c.ref)
-        const e = previsioni.esitoPosta(c, tutteLeCoppie, t0, fine, id => perInviata.get(id) ?? null)
-        righe.push({ giorno: g, genere: c.genere, ref: c.ref, p: c.p, esito: e, base: previsioni.base({ genere: c.genere, ref: c.ref, dati: {} }, { esito: e }) })
+        let e: 'giusta' | 'sbagliata'
+        let spinta = false
+        if (c.genere.startsWith('posta.')) {
+          giaDette.add(c.ref)
+          e = previsioni.esitoPosta(c, tutteLeCoppie, t0, fine, id => perInviata.get(id) ?? null)
+          spinta = typeof c.dati.doc === 'string' && spinte.has(c.dati.doc)
+        } else {
+          const k = compiti.find(x => x.id === c.ref)
+          const chiuso = !!k && chiusoIl(k) === g
+          e = (c.genere === 'compito.chiude') === chiuso ? 'giusta' : 'sbagliata'
+        }
+        righe.push({ giorno: g, genere: c.genere, ref: c.ref, p: c.p, esito: e, base: previsioni.base({ genere: c.genere, ref: c.ref, dati: {} }, { esito: e }), spinta })
       }
     }
     return { dal, al }
   })
   store.chiudiIndici()
-  const rapporto = riassumi(righe, { conto, dal: esito.dal, al: esito.al, ora })
+  const rapporto = riassumi(righe, { conto, dal: esito.dal, al: esito.al, ora, candidatiPerGiorno })
   const dove = join(resolve(a.dati), 'valutazioni')
   mkdirSync(dove, { recursive: true })
   const file = join(dove, `gemello-${fuso.giornoIn(oggi)}.json`)

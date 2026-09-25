@@ -22,14 +22,18 @@ export function durata(min: number): string {
 }
 
 /**
- * Un'ora del giorno (o i minuti da mezzanotte) come la si dice: «9», «19».
+ * Un'ora del giorno (o i minuti da mezzanotte) come la si dice, con `Intl`:
+ * «9», «19» in italiano; "9 AM", "7 PM" in inglese.
  *
- * Le due lingue dell'app scrivono le ore a ventiquattro; `Intl` in en-GB
- * scriverebbe «09», che nessuno dice.
+ * In inglese si passa da en-US e non da `loc()` (en-GB), perché en-GB scrive
+ * «09», che nessuno dice: è l'unica differenza voluta dalla regola delle ore
+ * con `Intl`.
  */
 export function ora(h: number): string {
   const ore = h > 24 ? Math.round(h / 60) % 24 : Math.round(h) % 24
-  return String(ore)
+  try {
+    return new Intl.DateTimeFormat(en() ? 'en-US' : loc(), { hour: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 0, 1, ore)))
+  } catch { return String(ore) }
 }
 
 /** «tra le 9 e le 12» / "between 9 AM and 12 PM". */

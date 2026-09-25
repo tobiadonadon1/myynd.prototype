@@ -51,13 +51,16 @@ export function PreferenzeOsservatore() {
     try { setPermesso(vero(await Promise.resolve(d.osservatore?.chiediPermessoTitoli?.()))) } catch { /* il guscio vecchio non lo sa fare */ }
   }
 
+  // il permesso lo chiede solo un gesto che accende davvero i titoli: il server
+  // ricorda «titoli spenti» di prima, e allora riaccendere non chiede niente
   const accendi = async () => {
     const prima = s
     const on = !s.acceso || s.altroConto
     setS({ ...s, acceso: on, titoli: on ? true : false, altroConto: false, pausaFino: null }); setGuaio('')
     try {
-      setS(await gemelloApi.imposta({ acceso: on }))
-      if (on) await chiediTitoli()
+      const nuovo = await gemelloApi.imposta({ acceso: on })
+      setS(nuovo)
+      if (on && nuovo.titoli === true) await chiediTitoli()
     } catch (e) { setS(prima); male(e) }
   }
   const titoli = async () => {
@@ -65,8 +68,9 @@ export function PreferenzeOsservatore() {
     const on = !s.titoli
     setS({ ...s, titoli: on }); setGuaio('')
     try {
-      setS(await gemelloApi.imposta({ titoli: on }))
-      if (on) await chiediTitoli()
+      const nuovo = await gemelloApi.imposta({ titoli: on })
+      setS(nuovo)
+      if (on && nuovo.titoli === true) await chiediTitoli()
     } catch (e) { setS(prima); male(e) }
   }
   const pausa = async () => {

@@ -22,6 +22,7 @@ const store = await import('./store.ts')
 const oss = await import('./osservatore.ts')
 const addio = await import('./addio.ts')
 const progetti = await import('./progetti.ts')
+const ab = await import('./abitudini.ts')
 
 let anna = '', bruno = ''
 const mandati: unknown[] = []
@@ -68,11 +69,19 @@ test('le tre costanti sono uguali carattere per carattere a desktop/sessioni.ts,
   }
 })
 
-test('disponibile solo dentro l’app e non su un server', () => {
+test('disponibile solo dentro l’app e non su un server; e ospitato, o senza app, `ascolta` non registra nessun ascoltatore', () => {
   assert.equal(oss.disponibile(), true)
+  const registrati: unknown[] = []
+  const portaSpia = { on(_e: string, f: unknown) { registrati.push(f) }, postMessage() {} }
   oss.perProva.forza({ app: true, ospitato: true }); assert.equal(oss.disponibile(), false)
+  assert.equal(oss.ascolta(portaSpia), false, 'ospitato: niente ascoltatore')
   oss.perProva.forza({ app: false, ospitato: false }); assert.equal(oss.disponibile(), false)
+  assert.equal(oss.ascolta(portaSpia), false, 'senza app: niente ascoltatore')
+  assert.equal(registrati.length, 0)
   oss.perProva.forza(null)
+  assert.equal(oss.ascolta(portaSpia), true, 'dentro l’app sì')
+  assert.equal(registrati.length, 1)
+  oss.ascolta(porta)
 })
 
 test('accendere scrive il proprietario; il precedente si spegne; gli altri vedono «altro conto»', () => {
@@ -203,16 +212,30 @@ test('la conservazione: dopo trenta giorni una riga al giorno per app e progetto
   })
 })
 
-test('cancella le osservazioni: sessioni, righe app.* e la previsione di oggi sul progetto', () => {
+test('cancella le osservazioni: sessioni, righe app.* e la previsione di oggi sul progetto; una riga app tolta resta tolta e non rinasce', () => {
   chi.dentro(anna, () => {
     store.default.prepare("INSERT INTO abitudini (chiave, genere, dati, prova, fiducia, stato, visto, aggiornato) VALUES ('app.principale','app.principale','{}','{}',1,'osservata','x','x')").run()
+    store.default.prepare("INSERT INTO abitudini (chiave, genere, dati, prova, fiducia, stato, visto, aggiornato, tolta) VALUES ('app.giornata','app.giornata','{}','{}',1,'tolta','x','x','x')").run()
     store.default.prepare("INSERT INTO abitudini (chiave, genere, dati, prova, fiducia, stato, visto, aggiornato) VALUES ('posta.tempo','posta.tempo','{}','{}',1,'osservata','x','x')").run()
     store.default.prepare("INSERT INTO previsioni (id, giorno, genere, ref, probabilita, dati, fatta) VALUES ('p1','2026-09-24','progetto.del_giorno','nw',0.8,'{}','x')").run()
     oss.cancellaOsservazioni(ADESSO)
     assert.equal(righe().length, 0)
-    assert.deepEqual((store.default.prepare('SELECT chiave FROM abitudini').all() as { chiave: string }[]).map(r => r.chiave), ['posta.tempo'])
+    assert.deepEqual((store.default.prepare('SELECT chiave, stato FROM abitudini ORDER BY chiave').all() as { chiave: string; stato: string }[]).map(r => [r.chiave, r.stato]), [['app.giornata', 'tolta'], ['posta.tempo', 'osservata']])
     assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM previsioni').get() as { n: number }).n, 0)
     store.default.exec('DELETE FROM abitudini')
+    // dal vivo: sette giorni di Safari, la riga app.principale tolta, «cancella», altri sette giorni: la tolta non torna, l'altra sì
+    const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
+    const semina = () => { for (let i = 1; i <= 7; i++) { const g = `2026-09-${String(24 - i).padStart(2, '0')}`; ins.run('com.apple.Safari', 'Safari', null, `${g}T07:00:00.000Z`, `${g}T10:00:00.000Z`, 10800, g, null, null) } }
+    semina(); ab.ricalcola(ADESSO)
+    const stati = () => Object.fromEntries((store.default.prepare("SELECT chiave, stato FROM abitudini WHERE genere LIKE 'app.%'").all() as { chiave: string; stato: string }[]).map(r => [r.chiave, r.stato]))
+    assert.deepEqual(stati(), { 'app.principale': 'osservata', 'app.giornata': 'osservata' })
+    ab.cambia('app.principale', 'togli', undefined, undefined, ADESSO)
+    oss.cancellaOsservazioni(ADESSO); ab.ricalcola(ADESSO)
+    assert.deepEqual(stati(), { 'app.principale': 'tolta' }, 'dopo «cancella» resta solo il segno della tolta')
+    semina(); ab.ricalcola(ADESSO)
+    assert.deepEqual(stati(), { 'app.principale': 'tolta', 'app.giornata': 'osservata' }, 'la riga tolta non torna mai')
+    assert.ok(!ab.tutte().some(a => a.chiave === 'app.principale'))
+    store.default.exec('DELETE FROM abitudini; DELETE FROM sessioni_app')
   })
 })
 

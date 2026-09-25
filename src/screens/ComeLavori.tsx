@@ -11,6 +11,7 @@ import { frasi, t } from '../lingua'
 import { Cestino, useAttiva } from '../ui'
 import { IconCroce, IconGiu, IconSpunta } from '../icons'
 import { portaAlleFonti } from '../vals'
+import { preparaApertura } from '../navigazione'
 import * as g from '../gemello-frasi'
 
 /** Quante righe per mittente prima di «Tutte (n)». */
@@ -25,8 +26,10 @@ type Prova = { riga: string; esempi: AbitudineVista['esempi'] }
  * Una riga di «Come lavori»: la frase, l'evidenza, il perché; sotto mano,
  * Correggi e il cestino. Le proprietà sono quelle che P5 sposterà altrove.
  */
-export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, correggi, tieni, scorda }: {
+export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuori, correggi, tieni, scorda }: {
   testo: string; prova: Prova; inAttesa: boolean; superata?: boolean; fino?: string | null
+  /** Un guaio nato fuori dalla scheda (un «togli» non riuscito): si mostra qui, sotto la riga premuta. */
+  guaioFuori?: string
   correggi: (testo: string) => Promise<void>; tieni?: () => Promise<void>; scorda: () => Promise<void>
 }) {
   const { attiva, props } = useAttiva()
@@ -40,6 +43,7 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, correggi
   useEffect(() => { setMostrato(testo); setBozza(testo) }, [testo])
   useEffect(() => { setAspetta(inAttesa) }, [inAttesa])
   useEffect(() => { if (modifico) campo.current?.select() }, [modifico])
+  useEffect(() => { if (guaioFuori) setGuaio(guaioFuori) }, [guaioFuori])
 
   const salva = async () => {
     const nuovo = bozza.trim()
@@ -54,14 +58,23 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, correggi
   }
   const tasti = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); void salva() }
-    if (e.key === 'Escape') { e.preventDefault(); setBozza(mostrato); setModifico(false) }
+    if (e.key === 'Escape') { e.preventDefault(); setBozza(mostrato); setModifico(false); setGuaio('') }
   }
   const tienila = async () => {
     if (!tieni) return
     setAspetta(false); setGuaio('')
     try { await tieni() } catch { setAspetta(true); setGuaio(t('Non sono riuscito a salvarla.')) }
   }
-  const esempio = async (doc: string) => { try { await api.portami(doc) } catch { /* il documento non si apre: la riga resta */ } }
+  // «Portami lì»: il documento dell'esempio (una mail, non una riga della lista), aperto come ogni altra fonte
+  const esempio = async (doc: string) => {
+    setGuaio('')
+    const apertura = preparaApertura()
+    try {
+      const r = await apertura.completa(await api.portamiDocumento(doc))
+      if (!r.ok) setGuaio(t(r.errore))
+    } catch { apertura.annulla(); setGuaio(t('Non trovo più il documento.')) }
+  }
+  const scordala = async () => { setGuaio(''); await scorda() }
 
   return (
     <div {...props} className="mem-card mem-convinzione cl-card" data-attiva={attiva ? '' : undefined} data-superata={superata ? '' : undefined}>
@@ -86,7 +99,7 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, correggi
         {!superata && !modifico && (
           <div className="cl-gesti">
             <button type="button" className="cl-correggi" onClick={() => setModifico(true)}>{t('Correggi')}</button>
-            <Cestino fai={scorda} titolo={t('Toglila')} visibile={attiva} subito />
+            <Cestino fai={scordala} titolo={t('Toglila')} visibile={attiva} subito />
           </div>
         )}
       </div>
@@ -140,6 +153,8 @@ const VAI = 'myynd:vai'
 export function ComeLavori() {
   const [d, setD] = useState<Gemello | null>(null)
   const [tolte, setTolte] = useState<Map<string, { stato: AbitudineVista['stato']; orologio: ReturnType<typeof setTimeout> }>>(new Map())
+  /** Per riga: il «togli» che non è riuscito, mostrato dentro la scheda tornata al suo posto. */
+  const [guai, setGuai] = useState<Map<string, string>>(new Map())
   const [tutteLePosta, setTutteLePosta] = useState(false)
   const [superateAperte, setSuperateAperte] = useState(false)
   const [cerchiata, setCerchiata] = useState(false)
@@ -186,11 +201,12 @@ export function ComeLavori() {
       setD(v => v ? { ...v, abitudini: v.abitudini.filter(x => x.chiave !== a.chiave) } : v)
     }, 6000)
     setTolte(m => new Map(m).set(a.chiave, { stato: prima, orologio }))
+    setGuai(m => { const n = new Map(m); n.delete(a.chiave); return n })
     try { await gemelloApi.abitudine(a.chiave, 'togli') }
     catch {
       clearTimeout(orologio)
       setTolte(m => { const n = new Map(m); n.delete(a.chiave); return n })
-      setGuaio(t('Non sono riuscito a toglierla.'))
+      setGuai(m => new Map(m).set(a.chiave, t('Non sono riuscito a toglierla.')))
     }
   }
   const annulla = (a: AbitudineVista) => async () => {
@@ -209,7 +225,7 @@ export function ComeLavori() {
     if (tolta) return <Tolta key={a.chiave} annulla={() => void annulla(a)()} />
     return (
       <RigaAbitudine key={a.chiave} testo={g.rigaAbitudine(a)} prova={{ riga: g.provaAbitudine(a), esempi: a.esempi }}
-        inAttesa={!a.inVigore} correggi={correggi(a)} tieni={a.inVigore ? undefined : tieni(a)} scorda={scorda(a)} />
+        inAttesa={!a.inVigore} guaioFuori={guai.get(a.chiave)} correggi={correggi(a)} tieni={a.inVigore ? undefined : tieni(a)} scorda={scorda(a)} />
     )
   }
   const gruppi: { chiave: 'posta' | 'agenda' | 'lavoro'; titolo: string }[] = [
@@ -259,8 +275,10 @@ export function ComeLavori() {
         const altre = mie.filter(a => !PER_MITTENTE.has(a.genere))
         const nascoste = gr.chiave === 'posta' && !tutteLePosta && perMittente.length > MITTENTI_IN_VISTA
         const mostrate = nascoste ? perMittente.slice(0, MITTENTI_IN_VISTA) : perMittente
-        // per casi, le più forti in cima (a pari casi, su più mail): il taglio «Tutte (n)» vale solo per i mittenti
-        const inOrdine = [...mostrate, ...altre].sort((x, y) => y.casi - x.casi || (y.su ?? 0) - (x.su ?? 0) || x.chiave.localeCompare(y.chiave))
+        // per numero di mail o giorni contati (`su`, lo stesso della regola dei venti casi; `casi` dove non c'è):
+        // le più forti in cima; il taglio «Tutte (n)» vale solo per i mittenti
+        const peso = (a: AbitudineVista) => a.su ?? a.casi
+        const inOrdine = [...mostrate, ...altre].sort((x, y) => peso(y) - peso(x) || y.casi - x.casi || x.chiave.localeCompare(y.chiave))
         return (
           <div key={gr.chiave} className="cl-blocco">
             <div className="cl-gruppo">{gr.titolo}</div>

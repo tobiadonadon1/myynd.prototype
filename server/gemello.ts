@@ -14,6 +14,13 @@
 // numero; dalle venti le affermazioni, con l'esito solo per quelle già
 // decise. Niente si scrive prima che il giorno sia chiuso.
 //
+// Il registro della posta cammina a pezzi (segnali.ts): finché è indietro
+// rispetto all'indice, nessun giorno si chiude e nessuna mattina afferma
+// niente, perché una risposta non ancora nel registro farebbe «sbagliata»
+// una previsione giusta. Una lettura finita mentre il registro è indietro
+// resta in attesa (`gemello:letta:attesa`) e vale come letta al primo giro in
+// cui il registro è arrivato in fondo.
+//
 // Nessun modello, da nessuna parte: tutto è contato.
 
 import db from './store.ts'
@@ -37,7 +44,7 @@ const GIORNO = 86_400_000
 export const ORA_SIGILLO = 20
 export const ORA_MATTINA = 6
 export const ORA_NOTTE = 3
-const CURS = { letta: 'gemello:letta', notte: 'gemello:notte', mattina: 'gemello:mattina' }
+const CURS = { letta: 'gemello:letta', attesa: 'gemello:letta:attesa', notte: 'gemello:notte', mattina: 'gemello:mattina' }
 
 export type EsitoPrev = 'giusta' | 'sbagliata' | 'annullata'
 export type PrevisioneVista = { id: string; genere: string; nome: string; titolo: string | null; esito: EsitoPrev | null }
@@ -165,17 +172,25 @@ function candidatiDiOggi(adesso: Date): previsioni.Candidato[] {
   return fuori
 }
 
-function mattina(adesso: Date): number {
+/**
+ * Le affermazioni di oggi, una volta al giorno dalle sei. Col registro della
+ * posta indietro si rimanda al giro dopo: una mail già risposta che il registro
+ * non ha ancora visto darebbe un «non risponde» facile e falso.
+ */
+function mattina(adesso: Date, indietro = false): number {
   const oggi = fuso.giornoIn(adesso)
   if (store.cursore(CURS.mattina) === oggi) return 0
   if (fuso.parti(adesso).ora < ORA_MATTINA) return 0
   if (cfg.leggi().gemello?.previsioni === false) { store.segnaCursore(CURS.mattina, oggi); return 0 }
-  const { scelte } = previsioni.scegli(candidatiDiOggi(adesso))
+  if (indietro && fontePosta()) return 0
+  const candidati = candidatiDiOggi(adesso)
+  const { scelte } = previsioni.scegli(candidati)
   const ins = db.prepare('INSERT OR IGNORE INTO previsioni (id, giorno, genere, ref, probabilita, dati, fatta) VALUES (?,?,?,?,?,?,?)')
   let n = 0
   db.exec('BEGIN')
   try {
-    for (const c of scelte) { ins.run(`${oggi}|${c.genere}|${c.ref}`, oggi, c.genere, c.ref, c.p, JSON.stringify(c.dati), adesso.toISOString()); n++ }
+    // ogni riga porta quante candidate c'erano: un giorno «attivo» (sezione 8) ne ha almeno cinque
+    for (const c of scelte) { ins.run(`${oggi}|${c.genere}|${c.ref}`, oggi, c.genere, c.ref, c.p, JSON.stringify({ ...c.dati, candidati: candidati.length }), adesso.toISOString()); n++ }
     store.segnaCursore(CURS.mattina, oggi)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
@@ -190,6 +205,8 @@ function decidiPosta(p: Prev, giorno: string, coppie: segnali.Coppia[], quandoIn
   const c = coppie.find(x => x.arrivata === p.ref)
   const q = c ? quandoInviata(c.inviata) : null
   const t0 = Date.parse(p.fatta), fine = fineGiorno(giorno).getTime()
+  // la risposta c'era già quando si è affermato (indicizzata dopo): l'affermazione era su una mail già chiusa, non conta
+  if (q && Date.parse(q) < t0) return { esito: 'annullata', prova: c!.inviata }
   const risposta = !!q && Date.parse(q) >= t0 && Date.parse(q) < fine
   if (risposta) return { esito: p.genere === 'posta.risponde' ? 'giusta' : 'sbagliata', prova: c!.inviata }
   if (!lettaDopo) return { esito: 'annullata', prova: null }
@@ -218,8 +235,12 @@ function spintaDi(p: Prev): 'carta' | 'bozza' | null {
   return null
 }
 
-/** I giorni passati con affermazioni ancora aperte, chiusi quando si può. Torna i giorni chiusi. */
-export function chiudiGiorni(adesso = new Date()): string[] {
+/**
+ * I giorni passati con affermazioni ancora aperte, chiusi quando si può.
+ * Col registro della posta indietro (`indietro`) si chiudono solo i giorni
+ * scaduti, dove la posta si annulla comunque. Torna i giorni chiusi.
+ */
+export function chiudiGiorni(adesso = new Date(), o: { indietro?: boolean } = {}): string[] {
   const oggi = fuso.giornoIn(adesso)
   const giorni = (db.prepare('SELECT DISTINCT giorno FROM previsioni WHERE verificata IS NULL AND giorno < ? ORDER BY giorno').all(oggi) as { giorno: string }[]).map(r => r.giorno)
   const letta = store.cursore(CURS.letta)
@@ -229,6 +250,9 @@ export function chiudiGiorni(adesso = new Date()): string[] {
     const lettaDopo = !!letta && Date.parse(letta) >= fine.getTime()
     const scaduto = adesso.getTime() >= fine.getTime() + GIORNO + 12 * 3_600_000
     if (!lettaDopo && fontePosta() && !scaduto) continue
+    if (o.indietro && fontePosta() && !scaduto) continue
+    // un giorno scaduto col registro indietro: la posta si giudica solo dove la risposta c'è già, il resto si annulla
+    const postaAffidabile = (lettaDopo && !o.indietro) || !fontePosta()
     const righe = previsioniDel(giorno).filter(r => !r.verificata)
     const daPosta = new Date(inizioGiorno(giorno).getTime() - 100 * GIORNO).toISOString()
     const arrivate = segnali.arrivate(daPosta, fine.toISOString())
@@ -242,7 +266,7 @@ export function chiudiGiorni(adesso = new Date()): string[] {
     db.exec('BEGIN')
     try {
       for (const p of righe) {
-        const d = p.genere.startsWith('posta.') ? decidiPosta(p, giorno, coppie, quandoInviata, lettaDopo || !fontePosta())
+        const d = p.genere.startsWith('posta.') ? decidiPosta(p, giorno, coppie, quandoInviata, postaAffidabile)
           : p.genere.startsWith('compito.') ? decidiCompito(p, giorno) : decidiProgetto(p, giorno)
         let base: boolean | null = null
         if (d.esito === 'annullata') conta.annullate++
@@ -287,8 +311,24 @@ function ricalcolaFiducia(adesso: Date): void {
   for (const s of segnali.leggi('myynd.bozza', da, adesso.toISOString())) {
     segna('bozza.documento', s.dati.classe === 'identico' || s.dati.classe === 'ritocco')
   }
-  for (const r of db.prepare("SELECT stato, ragione, motivo, vista FROM feed WHERE stato IN ('fatto','scartato','scaduto') AND COALESCE(risposto, quando) >= ?").all(da) as { stato: string; ragione: string | null; motivo: string | null; vista: string | null }[]) {
-    const e = esitoCarta({ stato: r.stato, ragione: r.ragione, motivo: r.motivo, vista: r.vista })
+  // una carta sulla mail a cui ha poi risposto dalla posta: `risposta` dice se dopo la carta o prima
+  const daPosta = new Date(adesso.getTime() - 100 * GIORNO).toISOString()
+  const arrivate = segnali.arrivate(daPosta, adesso.toISOString())
+  const inviate = segnali.inviate(da, adesso.toISOString())
+  const perArrivata = new Map(arrivate.map(a => [a.id, a.ref]))
+  const perInviata = new Map(inviate.map(s => [s.id, s.quando]))
+  const rispostaPerDoc = new Map<string, string>()
+  for (const c of segnali.coppieRisposta(arrivate, inviate, segnali.mieiIndirizzi())) {
+    const doc = perArrivata.get(c.arrivata), q = perInviata.get(c.inviata)
+    if (doc && q) rispostaPerDoc.set(doc, q)
+  }
+  const carte = db.prepare(`SELECT stato, ragione, motivo, vista, doc, quando FROM feed
+    WHERE (stato IN ('fatto','scartato','scaduto') AND COALESCE(risposto, quando) >= ?) OR (stato = 'aperto' AND quando >= ?)`)
+    .all(da, da) as { stato: string; ragione: string | null; motivo: string | null; vista: string | null; doc: string | null; quando: string }[]
+  for (const r of carte) {
+    const q = r.doc ? rispostaPerDoc.get(r.doc) : undefined
+    const risposta = q ? (q >= r.quando ? 'dopo' : 'prima') : null
+    const e = esitoCarta({ stato: r.stato, ragione: r.ragione, motivo: r.motivo, vista: r.vista, risposta })
     if (e !== 'neutra') segna('feed.carta', e === 'giusta')
   }
   const up = db.prepare(`INSERT INTO fiducia (genere, giuste, sbagliate, aggiornato) VALUES (?,?,?,?)
@@ -318,6 +358,8 @@ async function notte(adesso: Date): Promise<boolean> {
     const n = (db.prepare('SELECT COUNT(*) AS n FROM sessioni_app WHERE giorno = ?').get(giornoPrima(oggi)) as { n: number }).n
     console.log(`myynd · osservatore · ${n} sessioni ieri`)
   }
+  const m = misura(30, adesso)
+  if (m.affermazioni) console.log(`myynd · gemello · ${rigaMisura(m)}`)
   store.segnaCursore(CURS.notte, oggi)
   return true
 }
@@ -326,6 +368,20 @@ async function notte(adesso: Date): Promise<boolean> {
 
 const inCorso = new Set<string>()
 
+/** Il registro della posta non è in pari con l'indice: si aspetta il giro dopo prima di giudicare o affermare. */
+function registroIndietro(raccolta: { finito: boolean }): boolean {
+  return !raccolta.finito || segnali.ripassoInCorso()
+}
+
+/** Una lettura finita mentre il registro era indietro vale come letta appena il registro è in pari. */
+function promuoviLetturaInAttesa(): void {
+  const attesa = store.cursore(CURS.attesa)
+  if (!attesa) return
+  const prima = store.cursore(CURS.letta)
+  if (!prima || prima < attesa) store.segnaCursore(CURS.letta, attesa)
+  store.segnaCursore(CURS.attesa, null)
+}
+
 export async function giro(adesso = new Date()): Promise<void> {
   const me = chi.adesso() ?? ''
   if (inCorso.has(me)) return
@@ -333,11 +389,13 @@ export async function giro(adesso = new Date()): Promise<void> {
   inCorso.add(me)
   const partenza = Date.now()
   try {
-    segnali.raccogliPosta(adesso)
+    const raccolta = segnali.raccogliPosta(adesso)
+    const indietro = registroIndietro(raccolta)
+    if (!indietro) promuoviLetturaInAttesa()
     await segnali.raccogliCodice(adesso)
-    chiudiGiorni(adesso)
+    chiudiGiorni(adesso, { indietro })
     await notte(adesso)
-    mattina(adesso)
+    mattina(adesso, indietro)
   } finally {
     inCorso.delete(me)
     const durata = Date.now() - partenza
@@ -347,12 +405,17 @@ export async function giro(adesso = new Date()): Promise<void> {
 
 // — i ganci —
 
-/** Alla fine di ogni lettura: la posta nel registro, e il segno che il giorno si può chiudere. */
+/**
+ * Alla fine di ogni lettura: la posta nel registro, e il segno che il giorno
+ * si può chiudere. Se il registro non è arrivato in fondo, il segno aspetta
+ * il giro che lo porta in pari (`gemello:letta:attesa`).
+ */
 export function dopoLaLettura(partita: string, postaOk: boolean): void {
-  segnali.raccogliPosta()
+  const raccolta = segnali.raccogliPosta()
   if (!postaOk) return
-  const prima = store.cursore(CURS.letta)
-  if (!prima || prima < partita) store.segnaCursore(CURS.letta, partita)
+  const chiave = registroIndietro(raccolta) ? CURS.attesa : CURS.letta
+  const prima = store.cursore(chiave)
+  if (!prima || prima < partita) store.segnaCursore(chiave, partita)
 }
 
 /** Dopo una lettura intera dell'agenda: i cambi nel registro. */
@@ -382,7 +445,9 @@ function esitoParziale(p: Prev, coppie: segnali.Coppia[] | null, quandoInviata: 
   if (p.genere.startsWith('posta.')) {
     const c = coppie?.find(x => x.arrivata === p.ref)
     const q = c ? quandoInviata(c.inviata) : null
-    if (!q || Date.parse(q) < Date.parse(p.fatta)) return null
+    if (!q) return null
+    // risposta prima dell'affermazione (indicizzata dopo): la mail era già chiusa, non conta
+    if (Date.parse(q) < Date.parse(p.fatta)) return 'annullata'
     return p.genere === 'posta.risponde' ? 'giusta' : 'sbagliata'
   }
   if (p.genere.startsWith('compito.')) {
@@ -442,10 +507,20 @@ export function punteggio(o: { dal: string; al: string }): { giuste: number; sba
 export type Misura = {
   giorni: number; affermazioni: number; giuste: number; sbagliate: number; annullate: number
   punteggio: number | null; base: number | null; lift: number | null; brier: number | null
+  /** I giorni attivi: almeno cinque candidate quella mattina (`dati.candidati`); una riga senza il numero conta solo con cinque affermazioni. */
   giorniAttivi: number; perGiorno: number | null; quotaGiorniConCinque: number | null
   calibrazione: { da: number; a: number; n: number; giuste: number }[]
   perGenere: Record<string, { n: number; giuste: number; base: number }>
   spinta: { con: { n: number; giuste: number }; senza: { n: number; giuste: number } }
+  /** I giorni chiusi, uno per riga di `punteggi`: il Brier per giorno sta qui. */
+  giorniChiusi: { giorno: string; giuste: number; sbagliate: number; annullate: number; base: number; brier: number | null }[]
+}
+
+/** La riga di registro delle misure: punteggio, base, copertura, Brier. */
+export function rigaMisura(m: Misura): string {
+  const pc = (x: number | null) => (x === null ? '-' : `${Math.round(x * 100)}%`)
+  return `${m.giorni} giorni · ${m.affermazioni} affermazioni · giuste ${pc(m.punteggio)} · senza conoscerti ${pc(m.base)} · ` +
+    `${m.giorniAttivi} giorni attivi, ${m.perGiorno === null ? '-' : m.perGiorno.toFixed(1)} al giorno, ${pc(m.quotaGiorniConCinque)} con cinque · brier ${m.brier === null ? '-' : m.brier.toFixed(2)}`
 }
 
 export function misura(giorni: number, adesso = new Date()): Misura {
@@ -455,9 +530,14 @@ export function misura(giorni: number, adesso = new Date()): Misura {
   const decise = righe.filter(p => p.esito === 'giusta' || p.esito === 'sbagliata')
   const giuste = decise.filter(p => p.esito === 'giusta').length
   const base = decise.filter(p => p.dati.base === true).length
-  const perGiornoMap = new Map<string, number>()
-  for (const p of righe) perGiornoMap.set(p.giorno, (perGiornoMap.get(p.giorno) ?? 0) + 1)
-  const attivi = [...perGiornoMap.values()]
+  const perGiornoMap = new Map<string, { n: number; candidati: number }>()
+  for (const p of righe) {
+    const g = perGiornoMap.get(p.giorno) ?? { n: 0, candidati: 0 }
+    g.n++; g.candidati = Math.max(g.candidati, typeof p.dati.candidati === 'number' ? p.dati.candidati : 0)
+    perGiornoMap.set(p.giorno, g)
+  }
+  const attivi = [...perGiornoMap.values()].filter(g => Math.max(g.candidati, g.n) >= 5).map(g => g.n)
+  const giorniChiusi = (db.prepare('SELECT giorno, giuste, sbagliate, annullate, base, brier FROM punteggi WHERE giorno >= ? AND giorno < ? ORDER BY giorno').all(da, oggi) as Misura['giorniChiusi'])
   const calibrazione = [0, 0.2, 0.4, 0.6, 0.8].map(x => {
     const dentro = decise.filter(p => p.probabilita >= x && (x === 0.8 ? true : p.probabilita < x + 0.2))
     return { da: x, a: x + 0.2, n: dentro.length, giuste: dentro.filter(p => p.esito === 'giusta').length }
@@ -473,11 +553,12 @@ export function misura(giorni: number, adesso = new Date()): Misura {
     punteggio: decise.length ? giuste / decise.length : null, base: decise.length ? base / decise.length : null,
     lift: decise.length ? (giuste - base) / decise.length : null,
     brier: decise.length ? previsioni.brier(decise.map(p => ({ p: p.probabilita, giusta: p.esito === 'giusta' }))) : null,
-    giorniAttivi: attivi.length, perGiorno: attivi.length ? righe.length / attivi.length : null,
+    giorniAttivi: attivi.length, perGiorno: attivi.length ? attivi.reduce((s, n) => s + n, 0) / attivi.length : null,
     quotaGiorniConCinque: attivi.length ? attivi.filter(n => n >= 5).length / attivi.length : null,
     calibrazione, perGenere,
-    spinta: { con: { n: con.length, giuste: con.filter(p => p.esito === 'giusta').length }, senza: { n: senza.length, giuste: senza.filter(p => p.esito === 'giusta').length } }
+    spinta: { con: { n: con.length, giuste: con.filter(p => p.esito === 'giusta').length }, senza: { n: senza.length, giuste: senza.filter(p => p.esito === 'giusta').length } },
+    giorniChiusi
   }
 }
 
-export const perProva = { mattina, notte, ricalcolaFiducia, candidatiDiOggi, CURS, inCorso }
+export const perProva = { mattina, notte, ricalcolaFiducia, candidatiDiOggi, CURS, inCorso, registroIndietro }

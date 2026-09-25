@@ -80,9 +80,13 @@ test('la durata a secchi, e le ore nella lingua', () => {
   assert.equal(g.durata(180), '3 hours'); assert.equal(g.durata(300), 'a few hours'); assert.equal(g.durata(900), 'a day'); assert.equal(g.durata(4320), '3 days')
   impostaLingua('it')
   assert.equal(g.durata(10), 'un’ora'); assert.equal(g.durata(4320), '3 giorni')
-  assert.match(g.ore(9, 12), /^tra le \S+ e le \S+$/)
+  assert.equal(g.ore(9, 12), 'tra le 9 e le 12')
+  assert.equal(g.ora(19), '19')
   impostaLingua('en')
-  assert.match(g.ore(9, 12), /^between .+ and .+$/)
+  // le ore con Intl: in inglese con AM e PM (en-US: en-GB scriverebbe «09»)
+  assert.equal(g.ore(9, 12), 'between 9 AM and 12 PM')
+  assert.equal(g.ora(19), '7 PM'); assert.equal(g.ora(0), '12 AM')
+  assert.equal(g.rigaAbitudine({ genere: 'app.giornata', dati: { da: 540, a: 1140 }, stato: 'osservata', testoSuo: null }), 'You start around 9 AM and stop around 7 PM')
 })
 
 test('oggi, ieri, la fiducia e le altre righe: niente lineette, tutte e due le lingue', () => {

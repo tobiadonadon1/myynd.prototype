@@ -19,6 +19,7 @@ const store = await import('./store.ts')
 const seg = await import('./segnali.ts')
 const ab = await import('./abitudini.ts')
 const memoria = await import('./memoria.ts')
+const fuso = await import('./fuso.ts')
 
 let anna = ''
 const ADESSO = new Date('2026-09-24T12:00:00.000Z')
@@ -70,6 +71,16 @@ test('posta.risponde_sempre nasce a cinque mail con l’85%; a 0,84 no; posta.la
     assert.ok(tempo); assert.ok(tempo.casi >= 10); assert.equal(tempo.inVigore, true, 'oltre venti risposte valgono da sole')
     const ore = riga('posta.ore')!
     assert.ok(ore, 'le risposte stanno in una finestra di tre ore'); assert.ok(typeof ore.dati.da === 'number')
+    // il perché: fino a cinque risposte scritte dentro quelle tre ore
+    assert.ok(ore.esempi.length >= 1 && ore.esempi.length <= 5, String(ore.esempi.length))
+    for (const e of ore.esempi) assert.ok((fuso.parti(new Date(e.quando)).ora - Number(ore.dati.da) + 24) % 24 < 3, e.quando)
+    // «Portami lì» solo dove il documento c'è ancora: qui l'indice è vuoto, quindi nessun esempio lo porta
+    assert.ok(ab.tutte().every(a => a.esempi.every(e => e.doc === null)))
+    const grezza = JSON.parse((store.default.prepare("SELECT prova FROM abitudini WHERE chiave = 'posta.tempo'").get() as { prova: string }).prova) as { esempi: { doc: string }[] }
+    store.salvaDocumenti([{ id: grezza.esempi[0]!.doc, fonte: 'posta', tipo: 'email', titolo: 'Re', corpo: 'x', quando: '2026-09-20T08:00:00.000Z' }])
+    const conDoc = riga('posta.tempo')!
+    assert.equal(conDoc.esempi.filter(e => e.doc !== null).length, 1, 'solo l’esempio il cui documento è nell’indice')
+    store.default.exec('DELETE FROM documenti')
   })
 })
 

@@ -193,8 +193,14 @@ export function ripassoInCorso(): boolean { return store.cursore(CURSORE_RIPASSO
  * alla fine di ogni lettura e a ogni giro, così una mail risposta e
  * archiviata fra due letture è nel registro prima che la riconciliazione la
  * tolga.
+ *
+ * `finito` dice se il registro è arrivato in fondo all'indice: nessuna mail
+ * oltre il cursore. Finché è falso il registro è indietro, e chi giudica un
+ * giorno o afferma qualcosa sulla posta deve aspettare (gemello.ts). Con
+ * `tutto: true` (la prova sul passato, che non ha nessuno da non fermare) si
+ * cammina fino in fondo in una chiamata sola.
  */
-export function raccogliPosta(adesso = new Date()): { arrivate: number; inviate: number } {
+export function raccogliPosta(adesso = new Date(), o: { tutto?: boolean } = {}): { arrivate: number; inviate: number; finito: boolean } {
   void adesso
   const partenza = Date.now()
   let cursore = store.cursore(CURSORE_POSTA)
@@ -214,7 +220,7 @@ export function raccogliPosta(adesso = new Date()): { arrivate: number; inviate:
   let daRid = Number(store.cursore(CURSORE_POSTA_RID) ?? -1)
   if (!Number.isFinite(daRid)) daRid = -1
   let finito = false
-  for (let giri = 0; giri < PEZZI_PER_CHIAMATA; giri++) {
+  for (let giri = 0; o.tutto || giri < PEZZI_PER_CHIAMATA; giri++) {
     const righe = q.all(daIndicizzato, daIndicizzato, daRid, A_PEZZI) as (DocPosta & { rid: number })[]
     if (!righe.length) { finito = true; break }
     db.exec('BEGIN')
@@ -230,10 +236,10 @@ export function raccogliPosta(adesso = new Date()): { arrivate: number; inviate:
       db.exec('COMMIT')
     } catch (e) { db.exec('ROLLBACK'); throw e }
     if (righe.length < A_PEZZI) { finito = true; break }
-    if (Date.now() - partenza > BUDGET_MS) break
+    if (!o.tutto && Date.now() - partenza > BUDGET_MS) break
   }
   if (finito && ricostruito) store.segnaCursore(CURSORE_RIPASSO, null)
-  return conta
+  return { ...conta, finito }
 }
 
 /** C'è posta mandata negli ultimi trenta giorni: senza, le righe sulla posta sarebbero cieche. */

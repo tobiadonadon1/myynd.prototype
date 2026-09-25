@@ -289,7 +289,8 @@ export function cancellaOsservazioni(adesso = new Date()): void {
   db.exec('BEGIN')
   try {
     db.exec('DELETE FROM sessioni_app')
-    db.exec("DELETE FROM abitudini WHERE genere LIKE 'app.%'")
+    // una riga tolta resta: è l'unico segno che non deve rinascere (e non porta niente del sensore, solo la chiave)
+    db.exec("DELETE FROM abitudini WHERE genere LIKE 'app.%' AND stato != 'tolta'")
     db.prepare("DELETE FROM previsioni WHERE giorno = ? AND genere = 'progetto.del_giorno' AND verificata IS NULL").run(oggi)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
@@ -361,6 +362,8 @@ export function annuncia(): void {
  * ricevuto dopo un mazzo vuol dire che il mazzo è scritto.
  */
 export function ascolta(filo?: Filo | null): boolean {
+  // su un server, o fuori dall'app: nessun ascoltatore, qualunque cosa faccia chi chiama
+  if (!disponibile()) return false
   const f = filo ?? filoDiProcesso()
   if (!f) return false
   porta = f

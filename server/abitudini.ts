@@ -126,7 +126,10 @@ function righePosta(adesso: Date): Candidata[] {
       if (n > meglio.n) meglio = { da: h, n }
     }
     if (meglio.n / recenti.length >= 0.35) {
-      fuori.push({ chiave: 'posta.ore', genere: 'posta.ore', dati: { da: meglio.da, a: (meglio.da + 3) % 24 }, prova: { casi: meglio.n, su: recenti.length, esempi: [] }, fiducia: meglio.n / recenti.length })
+      // il perché: le ultime risposte scritte dentro quelle tre ore
+      const dentro = recenti.filter(([, s]) => (fuso.parti(new Date(s.quando)).ora - meglio.da + 24) % 24 < 3)
+      const esempiOre = dentro.slice(-5).reverse().map(([id, s]) => ({ quando: s.quando, testo: arrivate.find(a => a.id === id)?.dati.titolo ?? '', doc: s.ref }))
+      fuori.push({ chiave: 'posta.ore', genere: 'posta.ore', dati: { da: meglio.da, a: (meglio.da + 3) % 24 }, prova: { casi: meglio.n, su: recenti.length, esempi: esempiOre }, fiducia: meglio.n / recenti.length })
     }
   }
   return fuori
@@ -262,12 +265,17 @@ export function ricalcola(adesso = new Date()): { righe: number } {
   return { righe: n }
 }
 
-/** Le righe per la pagina: tutte tranne le tolte. */
+/**
+ * Le righe per la pagina: tutte tranne le tolte. Un esempio porta il suo
+ * documento solo se è ancora nell'indice: «Portami lì» si mostra solo dove porta.
+ */
 export function tutte(): AbitudineVista[] {
+  const c = db.prepare('SELECT 1 FROM documenti WHERE id = ?')
+  const esiste = (id: string) => !!c.get(id)
   return righe().filter(r => r.stato !== 'tolta').map(r => ({
     chiave: r.chiave, genere: r.genere, dati: r.dati, testoSuo: r.testoSuo, casi: r.prova.casi, su: r.prova.su,
     stato: r.stato as AbitudineVista['stato'], inVigore: inVigore(r), fino: r.stato === 'superata' ? r.aggiornato : null,
-    esempi: r.prova.esempi ?? []
+    esempi: (r.prova.esempi ?? []).map(e => ({ ...e, doc: e.doc && esiste(e.doc) ? e.doc : null }))
   })).sort((a, b) => (b.su ?? b.casi) - (a.su ?? a.casi) || a.chiave.localeCompare(b.chiave))
 }
 

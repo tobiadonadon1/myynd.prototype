@@ -94,12 +94,12 @@ test('raccogliPosta: una mail in una cartella scelta a mano ma scritta da lui è
       { id: 'posta:INBOX:4', fonte: 'posta', tipo: 'email', titolo: 'Ping', corpo: 'x', autore: 'no-reply@svc.example', quando: '2026-09-20T11:00:00.000Z' }
     ])
     const r = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'))
-    assert.deepEqual(r, { arrivate: 1, inviate: 1 })
+    assert.deepEqual(r, { arrivate: 1, inviate: 1, finito: true })
     const a = seg.arrivate('2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')
     assert.equal(a.length, 1); assert.equal(a[0]!.chi, 'nora@h.example'); assert.equal(a[0]!.dati.nome, 'Nora Vance'); assert.equal(a[0]!.dati.richiesta, true); assert.equal(a[0]!.dati.ricostruito, true)
     const s = seg.inviate('2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')
     assert.equal(s.length, 1); assert.deepEqual(s[0]!.dati.destinatari, ['nora@h.example']); assert.equal(s[0]!.dati.risponde, 'm1@x')
-    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 0, inviate: 0 })
+    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 0, inviate: 0, finito: true })
     assert.equal(seg.coperturaInviata(new Date('2026-09-21T00:00:00.000Z')), true)
     assert.equal(seg.coperturaInviata(new Date('2026-11-21T00:00:00.000Z')), false)
     // la mail archiviata: sparisce dall'indice, resta nel registro, e la coppia si trova ancora
@@ -124,6 +124,7 @@ test('il ripasso dell’indice cammina a pezzi e a più chiamate: dodicimila doc
     do {
       const r = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'))
       assert.ok(r.arrivate <= 4000, `una chiamata non ferma il server: ${r.arrivate}`)
+      assert.equal(r.finito, !seg.ripassoInCorso(), '`finito` dice se il registro è in fondo all\'indice')
       totale += r.arrivate; chiamate++
       assert.ok(chiamate < 40)
     } while (seg.ripassoInCorso())
@@ -131,11 +132,31 @@ test('il ripasso dell’indice cammina a pezzi e a più chiamate: dodicimila doc
     assert.ok(chiamate >= 3, `il ripasso è a più chiamate: ${chiamate}`)
     assert.equal((store.default.prepare("SELECT COUNT(*) AS n FROM segnali WHERE genere = 'posta.arrivata' AND dati LIKE '%\"ricostruito\":true%'").get() as { n: number }).n, 12_000)
     // finito il ripasso, la chiamata dopo non ripassa l'ultimo pezzo, e una mail nuova nasce senza «ricostruito»
-    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 0, inviate: 0 })
+    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 0, inviate: 0, finito: true })
     store.salvaDocumenti([{ id: 'posta:INBOX:99999', fonte: 'posta', tipo: 'email', titolo: 'Nuova', corpo: 'x', autore: 'Nora <nora@h.example>', quando: '2026-09-20T08:00:00.000Z' }])
-    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 1, inviate: 0 })
+    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 1, inviate: 0, finito: true })
     const nuova = seg.arrivate('2026-09-20T00:00:00.000Z', '2026-09-21T00:00:00.000Z').find(a => a.ref === 'posta:INBOX:99999')!
     assert.equal(nuova.dati.ricostruito, undefined)
+    store.azzeraTutto(); store.default.exec('DELETE FROM cursori')
+  })
+})
+
+test('con `tutto: true` (la prova sul passato) il ripasso arriva in fondo in una chiamata sola: cinquemila documenti, `finito` subito', () => {
+  chi.dentro(anna, () => {
+    store.azzeraTutto(); store.default.exec('DELETE FROM cursori')
+    const docs = [...Array(5000)].map((_, i) => ({
+      id: `posta:INBOX:${20000 + i}`, fonte: 'posta', tipo: 'email', titolo: `Mail ${i}`, corpo: 'x', autore: `p${i % 50}@h.example`,
+      quando: new Date(Date.parse('2026-06-01T00:00:00.000Z') + i * 60_000).toISOString()
+    }))
+    for (let i = 0; i < docs.length; i += 2500) store.salvaDocumenti(docs.slice(i, i + 2500))
+    const r = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'), { tutto: true })
+    assert.deepEqual(r, { arrivate: 5000, inviate: 0, finito: true })
+    assert.equal(seg.ripassoInCorso(), false)
+    // senza `tutto`, la stessa mole si ferma a quattromila e dice che non è finita
+    store.azzeraTutto(); store.default.exec('DELETE FROM cursori')
+    for (let i = 0; i < docs.length; i += 2500) store.salvaDocumenti(docs.slice(i, i + 2500))
+    const parziale = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'))
+    assert.ok(parziale.arrivate <= 4000); assert.equal(parziale.finito, false); assert.equal(seg.ripassoInCorso(), true)
     store.azzeraTutto(); store.default.exec('DELETE FROM cursori')
   })
 })
