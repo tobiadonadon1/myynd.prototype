@@ -191,9 +191,13 @@ const DOMANDA_JEV = {
 }
 
 async function compiti(dal: string, adesso: number, opz: { jev: boolean; limiteJev: number }, scartati: { indirizzi: string[] }): Promise<Mancata[]> {
+  // una figlia di revisione («Cambia» su un file o su una bozza salvata, o
+  // dalla chat) porta il titolo di sua madre e origine chat: non è una riga
+  // scritta a mano, e non deve contare due volte la mancata di sua madre
   const righe = db.prepare(`
     SELECT id, testo, creato, sparito, progetto FROM compiti
-    WHERE origine IN ('mano', 'chat') AND doc IS NULL AND voce IS NULL AND creato > ? AND creato <= ?
+    WHERE origine IN ('mano', 'chat') AND doc IS NULL AND voce IS NULL AND madre IS NULL AND id NOT LIKE 'rev-%'
+      AND creato > ? AND creato <= ?
     ORDER BY creato
   `).all(dal, new Date(adesso).toISOString()) as Compito[]
   const fuori: Mancata[] = []

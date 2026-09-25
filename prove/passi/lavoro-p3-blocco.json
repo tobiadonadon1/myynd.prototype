@@ -1,0 +1,38 @@
+[
+  {
+    "scatta": "blocco"
+  },
+  {
+    "testo": "blocco"
+  },
+  {
+    "clicca": "Change: Write the kickoff note for the Harbor pilot"
+  },
+  {
+    "scrivi": "Monday, October 5"
+  },
+  {
+    "premi": "Enter"
+  },
+  {
+    "aspetta": 600
+  },
+  {
+    "scatta": "rifalla"
+  },
+  {
+    "testo": "rifalla"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const fine = Date.now() + 85000; for (;;) { const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const figlia = righe.find(x => x.madre === 'c-p1' && x.id.startsWith('rev-')); if (figlia && figlia.stato !== 'delegato') return figlia.id + ':' + figlia.stato; if (Date.now() > fine) return 'ancora: ' + (figlia ? figlia.stato : 'nessuna figlia'); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "aspetta": 1500
+  },
+  {
+    "scatta": "rifatta"
+  },
+  {
+    "testo": "rifatta"
+  }
+]

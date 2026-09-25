@@ -13,6 +13,8 @@
 
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
+import * as lavoroDati from './lavoro-dati.ts'
+import { IPOTESI, MANCA, rigaIpotesi } from './cornice.ts'
 
 const SCHEMA = {
   type: 'object',
@@ -64,10 +66,47 @@ const SPIA_ITALIANO = /\b(che|non|una|per|con|della|nella|sono|come|quando|perch
  * l'undici per cento e non fa scattare niente. È esattamente com'era andata:
  * una domanda in italiano ferma lì, e il controllo che diceva «tutto a posto».
  */
+/**
+ * Le righe della cornice di una consegna (P3): la prima riga «Fatto:», le
+ * righe delle fonti con i numeri e la riga «Ho supposto»/«Manca» dell'ultimo
+ * paragrafo. Sono le righe per lei, nella lingua dell'app; il resto è la cosa
+ * consegnata, nella lingua di chi la riceve. Indici nelle righe del testo.
+ */
+export function righeDellaCornice(testo: string): number[] {
+  const righe = testo.split('\n')
+  const idx: number[] = []
+  if (righe.length && /^(?:fatto|done)\s*:/i.test(righe[0].trim())) idx.push(0)
+  let inizio = righe.length
+  while (inizio > 0 && righe[inizio - 1].trim()) inizio--
+  for (let i = Math.max(inizio, 1); i < righe.length; i++) {
+    const r = righe[i].trim()
+    if (r && (/\[\d{1,2}\]/.test(r) || IPOTESI.test(r) || MANCA.test(r))) idx.push(i)
+  }
+  return idx
+}
+
+/**
+ * Cosa si manda a tradurre di una riga: il risultato intero, o, per una bozza
+ * scritta apposta nella lingua di chi la riceve (P3), solo le righe della
+ * cornice: il corpo resta suo, ma «Fatto:» e «Ho supposto» sono per lei e
+ * vanno nella lingua dell'app. Null se non c'è niente di storto.
+ */
+function daTradurreDi(c: store.Compito, lingua: string): { testo: string; cornice: number[] | null } | null {
+  const intero = (c.risultato ?? '').trim()
+  if (intero.length <= 15) return null
+  if (c.voceScritta?.lingua && c.voceScritta.lingua !== lingua) {
+    const cornice = righeDellaCornice(intero)
+    const testo = cornice.map(i => intero.split('\n')[i].trim()).join('\n')
+    return testo.length > 15 && SPIA_ITALIANO.test(testo) ? { testo, cornice } : null
+  }
+  return SPIA_ITALIANO.test(intero) ? { testo: intero, cornice: null } : null
+}
+
 function compitiStorti(lingua: string) {
   if (lingua === 'it') return []
   return store.elencoCompiti()
-    .filter(c => (c.risultato ?? '').trim().length > 15 && SPIA_ITALIANO.test(c.risultato!))
+    .map(c => ({ c, da: daTradurreDi(c, lingua) }))
+    .filter((x): x is { c: store.Compito; da: NonNullable<ReturnType<typeof daTradurreDi>> } => !!x.da)
 }
 
 /** Ce n'è anche una sola? Basta quella. */
@@ -166,8 +205,14 @@ async function feedInLingua(
  * che si nota quando è nella lingua sbagliata.
  */
 async function compitiInLingua(lingua: string): Promise<number> {
-  const righe = compitiStorti(lingua).map(c => ({ id: c.id, testo: c.risultato!.trim() }))
+  const storte = compitiStorti(lingua)
+  const righe = storte.map(({ c, da }) => ({ id: c.id, testo: da.testo }))
   if (!righe.length) return 0
+  // la riga dell'ipotesi si rilegge solo dove c'era: una riga a cui «Cambia»
+  // l'ha tolta (la correzione è passata alla figlia), o una riga chiusa, non
+  // deve ritrovarsela per aver cambiato lingua
+  const conIpotesi = new Set(storte.filter(({ c }) => c.stato === 'pronto' && c.ipotesi?.length).map(({ c }) => c.id))
+  const cornici = new Map(storte.filter(({ da }) => da.cornice).map(({ c, da }) => [c.id, da.cornice!]))
 
   const out = await chiediJSON<{ righe: { id: string; testo: string }[] }>({
     lavoro: 'traduzione',
@@ -176,7 +221,9 @@ async function compitiInLingua(lingua: string): Promise<number> {
       `Traduci in ${NOMI[lingua] ?? 'italiano'} queste bozze e domande che un assistente ha ` +
       'scritto per chi lo usa. Gli id restano identici. Nomi di persone, di aziende, di file ' +
       'e citazioni testuali restano come sono, e la forma resta quella: una bozza di email ' +
-      'resta una bozza di email, una domanda resta una domanda della stessa lunghezza.',
+      'resta una bozza di email, una domanda resta una domanda della stessa lunghezza. ' +
+      'Alcune voci sono solo le righe di cornice di una bozza (la riga «Fatto:», le fonti con i ' +
+      'numeri, la riga «Ho supposto»): traducile riga per riga, lo stesso numero di righe nello stesso ordine.',
     formato: SCHEMA_MEMORIA,
     messages: [{ role: 'user', content: JSON.stringify({ righe }) }]
   })
@@ -189,7 +236,24 @@ async function compitiInLingua(lingua: string): Promise<number> {
     // un id inventato non deve poter riscrivere niente, e un campo vuoto
     // cancellerebbe una bozza per aver cambiato lingua
     if (!prima || !r.testo?.trim() || r.testo.trim() === prima) continue
-    store.traduciRisultato(r.id, r.testo.trim())
+    let testo = r.testo.trim()
+    const cornice = cornici.get(r.id)
+    if (cornice) {
+      // solo la cornice: le righe tradotte tornano al loro posto nel testo
+      // intero, e il corpo per chi riceve resta com'era. Un numero di righe
+      // diverso non si può rimettere a posto: quella riga resta com'è
+      const tradotte = testo.split('\n').map(x => x.trim()).filter(Boolean)
+      if (tradotte.length !== cornice.length) continue
+      const tutte = (store.compito(r.id)?.risultato ?? '').trim().split('\n')
+      cornice.forEach((i, k) => { tutte[i] = tradotte[k] })
+      testo = tutte.join('\n')
+    }
+    store.traduciRisultato(r.id, testo)
+    // la riga dell'ipotesi sta dentro il risultato: tradotto quello, si rilegge da lì
+    if (conIpotesi.has(r.id)) {
+      const ipotesi = rigaIpotesi(testo)
+      lavoroDati.scriviIpotesi(r.id, ipotesi ? [ipotesi] : null)
+    }
     n++
   }
   return n

@@ -118,7 +118,7 @@ async function main() {
       }
       await pausa(400)
     } else if (p.passa) {
-      const c = await js(`(() => { const it=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while((n=it.nextNode())){ if((n.textContent||'').includes(${JSON.stringify(p.passa)})) break } if(!n) return null; let e=n.parentElement; for(let i=0;i<6 && e && e.getBoundingClientRect().height<28;i++) e=e.parentElement; if(!e) return null; e.scrollIntoView({block:'nearest'}); const r=e.getBoundingClientRect(); return {x:Math.round(r.left+Math.min(r.width/2,300)), y:Math.round(r.top+r.height/2)} })()`)
+      const c = await js(`(() => { const it=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while((n=it.nextNode())){ if((n.textContent||'').includes(${JSON.stringify(p.passa)})) break } if(!n) return null; let e=n.parentElement; for(let i=0;i<6 && e && e.getBoundingClientRect().height<28;i++) e=e.parentElement; if(!e) return null; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:Math.round(r.left+Math.min(r.width/2,300)), y:Math.round(r.top+r.height/2)} })()`)
       if (c) w.webContents.sendInputEvent({ type: 'mouseMove', x: c.x, y: c.y })
       console.log(`scatta · passa su «${p.passa}»: ${c ? 'fatto' : 'NON TROVATO'}`)
       await pausa(700)

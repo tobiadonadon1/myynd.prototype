@@ -26,7 +26,7 @@ import { spezzaPrompt } from './prompt'
 import { Coriandoli } from './Coriandoli'
 import { Giro } from './Giro'
 import { api, type Compito, type PassoCompito, type ProjectExecutionReport, type ProjectRuntime } from '../api'
-import { nomePorta, portaAlProgetto, portaInChat, siPuoParlarne } from '../vals'
+import { nomePorta, portaAlleFonti, portaAlProgetto, portaInChat, siPuoAprireLeFonti, siPuoParlarne } from '../vals'
 import { Calendario } from './Calendario'
 import { Agenda } from '../screens/Agenda'
 import { Dettaglio } from './Dettaglio'
@@ -34,6 +34,8 @@ import { dataLocale, giornoLocale, secchioDelGiorno } from './giorni'
 import { oraDi } from '../agenda-ore'
 import { desktop } from '../desktop'
 import { azioneEmail, copiaBozzaEApri, type BozzaDaCopiare } from './azione-email.ts'
+import { RigaIpotesi } from './RigaIpotesi'
+import { bloccoDi, haSegnaposto, mandataValida, puoMandare, siCambia, testoDellaBozza } from '../lavoro-affidato'
 
 const NOME: Record<Secchio, string> = { oggi: 'Oggi', settimana: 'Questa settimana', poi: 'Prima o poi' }
 
@@ -224,8 +226,29 @@ function CartaCalendario({ c, l, modifica, ritardo }: { c: Compito; l: Lista; mo
       {attende ? <button type="button" className="task-planning-status" aria-expanded={l.aperti.has(c.id)} onClick={apri}>{c.stato === 'chiede' ? t('ti chiede') : t('pronta')} <IconAvanti size={11} /></button>
         : c.stato === 'delegato' ? <span className="task-planning-status">{t('Al lavoro')}</span> : null}
     </div>
-    {c.guaio && <p className="task-planning-error">{t(c.guaio)}</p>}
+    {c.guaio && (bloccoDi(c) ? <Ferma guaio={c.guaio} carta /> : <p className="task-planning-error">{t(c.guaio)}</p>)}
   </li>
+}
+
+/**
+ * La riga ferma su una fonte che manca (P3), in Da fare: la frase nel colore
+ * di una riga, non di un guaio, e sotto il link alle Fonti, lo stesso della
+ * prima pagina. Non è una domanda e non è un errore: è una strada.
+ */
+function Ferma({ guaio, carta }: { guaio: string; carta?: boolean }) {
+  const vai = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); portaAlleFonti() }
+  return (
+    <div style={{ fontSize: carta ? '11px' : '12px', lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.64)', marginTop: carta ? 6 : 3, overflowWrap: 'anywhere', overflow: 'hidden' }}
+      onClick={e => e.stopPropagation()}>
+      <span>{t(guaio)}</span>
+      {siPuoAprireLeFonti() && <>
+        {' '}
+        <Hov as="a" href="#" onClick={vai}
+          style={{ color: 'var(--rame-testo)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+          hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Fonti')}</Hov>
+      </>}
+    </div>
+  )
 }
 
 /**
@@ -361,9 +384,9 @@ function Riga({ c, l, stretta, modifica }: { c: Compito; l: Lista; stretta: bool
               }}
               hover={{ color: 'var(--rame-testo)' }}>{c.testo}</Hov>
 
-          {c.guaio && (
-            <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>
-          )}
+          {c.guaio && (bloccoDi(c)
+            ? <Ferma guaio={c.guaio} />
+            : <div style={{ fontSize: '12px', color: 'var(--rame-testo)', marginTop: 3, overflowWrap: 'anywhere', overflow: 'hidden' }}>{t(c.guaio)}</div>)}
 
           {/* cosa sta facendo, finché ci lavora: una riga sola, smorzata, che
               non può sforare — un titolo di documento può essere lungo quanto vuole */}
@@ -730,9 +753,16 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
 }
 
 /** La bozza, sotto la riga che l'ha chiesta. */
+/** Il testo della bozza da mostrare e correggere: senza la riga dell'ipotesi, che sta sotto con «Cambia». */
 function Bozza({ c, l }: { c: Compito; l: Lista }) {
-  const [testo, setTesto] = useState(c.risultato ?? '')
+  const [testo, setTesto] = useState(testoDellaBozza(c))
   const [modifico, setModifico] = useState(false)
+  /**
+   * Quello che ha tenuto, se l'ha cambiato: il testo della lista com'è (senza
+   * la riga dell'ipotesi, che sta sotto da sola) non è una correzione, e
+   * mandarlo come tale faceva imparare a Myynd una lezione falsa a ogni «Va bene».
+   */
+  const tenuto = testo !== testoDellaBozza(c) ? testo : undefined
   /**
    * Un prompt non si manda e non si salva: si copia. Il testo è quello che
    * finirà negli appunti — testo semplice, senza le fonti trasformate in
@@ -748,7 +778,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
   const [pannello, setPannello] = useState<'' | 'manda' | 'salva' | 'lavora'>('')
   const area = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => { setTesto(c.risultato ?? '') }, [c.risultato])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setTesto(testoDellaBozza(c)) }, [c.risultato, c.ipotesi?.[0]])
   useEffect(() => {
     const a = area.current
     if (!modifico || !a) return
@@ -782,8 +813,8 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             e.target.style.height = `${Math.min(e.target.scrollHeight, 400)}px`
           }}
           onKeyDown={e => {
-            if (e.key === 'Escape') { e.stopPropagation(); setTesto(c.risultato ?? ''); setModifico(false) }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), testo)
+            if (e.key === 'Escape') { e.stopPropagation(); setTesto(testoDellaBozza(c)); setModifico(false) }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) l.chiudi(c.id, t('Va bene così.'), tenuto)
           }}
           aria-label={prompt ? t('Il prompt') : t('Il lavoro')}
           style={{
@@ -806,9 +837,10 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere', maxHeight: 340, overflowY: 'auto'
         }}>
-          <Testo testo={testo} fonti={c.fonti ?? []} />
+          <Testo testo={testo} fonti={c.fonti ?? []} aCapo />
         </div>
       )}
+      {siCambia(c) && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
         {/* il gesto principale di un prompt è copiarlo: «Va bene» si fa di contorno */}
@@ -817,7 +849,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
             style={pannello ? CONTORNO : PIENO}
             hover={pannello ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Copia il prompt')}</Hov>
         )}
-        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), testo)}
+        <Hov as="button" type="button" onClick={() => l.chiudi(c.id, t('Va bene così.'), tenuto)}
           style={pannello || spezzato ? CONTORNO : PIENO}
           hover={pannello || spezzato ? { borderColor: 'var(--rame)', color: 'var(--rame-testo)' } : { opacity: 0.92 }}>{t('Va bene')}</Hov>
 
@@ -1205,16 +1237,36 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
  */
 type Email = { a: string; oggetto: string; corpo: string; conosciuto: boolean }
 
+/** Il file da allegare (P3): sopra il pannello, con il nome che si apre. */
+function DaAllegare({ c }: { c: Compito }) {
+  const a = c.email?.allegato
+  if (!a) return null
+  return (
+    <div style={{ marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.64)' }}>
+      <span style={{ flex: 'none' }}>{t('Da allegare:')}</span>
+      <Hov as="button" type="button" title={a.titolo} onClick={() => { void api.portamiDocumento(a.id).catch(() => {}) }}
+        style={{ padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', fontSize: '12.5px', color: 'var(--rame-testo)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: 3, whiteSpace: 'nowrap', maxWidth: 260, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        hover={{ textDecorationColor: 'currentColor' }}>{a.titolo}</Hov>
+    </div>
+  )
+}
+
 function Manda(p: { c: Compito; l: Lista; testo: string } & Pannello) {
   const casella = p.c.email?.casella
+  // partita dalla sua posta (P3): la bozza non c'è più, resta lo stato
+  if (casella && mandataValida(p.c)) return <div style={{ marginTop: 12, fontSize: 13 }}><p>{t('Mandata dalla tua posta.')}</p></div>
   if (casella) return <div style={{ marginTop: 12, fontSize: 13 }}>
-    {casella.stato === 'salvata' ? <><p>{t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
+    <DaAllegare c={p.c} />
+    {casella.stato === 'salvata' ? <><p>{p.c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</p><a href={casella.url} target="_blank" rel="noreferrer">{t('Apri la bozza nella posta')}</a></>
       : <p role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {casella.errore}</p>}
   </div>
+  // un segnaposto nel corpo (P3): non si manda, la riga dell'ipotesi dice
+  // cosa manca; il file da allegare resta scritto, come in prima pagina
+  if (!puoMandare(p.c) || haSegnaposto(p.testo)) return <DaAllegare c={p.c} />
   const azione = azioneEmail(p.c, p.testo)
   if (azione.tipo === 'nessuna') return null
-  if (azione.tipo === 'copia') return <CopiaEmail c={p.c} l={p.l} bozza={azione} />
-  return <InvioEmail {...p} />
+  if (azione.tipo === 'copia') return <><DaAllegare c={p.c} /><CopiaEmail c={p.c} l={p.l} bozza={azione} /></>
+  return <><DaAllegare c={p.c} /><InvioEmail {...p} /></>
 }
 
 function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopiare }) {
@@ -1407,7 +1459,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           l'unica cosa che qui deve leggersi per intero, e la nota in fondo
           può scendere sotto senza perdere niente */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
-        <button type="button" onClick={manda} disabled={!puo} style={{
+        <button type="button" onClick={manda} disabled={!puo} title={c.email?.allegato ? a : undefined} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
           background: puo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
           color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
@@ -1415,7 +1467,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
           cursor: puo ? 'pointer' : 'default',
           // l'indirizzo sta dentro il bottone: lungo, si tronca — non esce dal riquadro
           maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-        }}>{mando ? t('Mando…') : daControllare ? t('Controlla e manda') : frasi.mandaA(a)}</button>
+        }}>{mando ? t('Mando…') : daControllare ? t('Controlla e manda') : c.email?.allegato ? t('Manda senza allegato') : frasi.mandaA(a)}</button>
         <Hov as="button" type="button" onClick={() => { chiudi(); setGuaio(''); setScrivo(false) }}
           style={{
             border: 'none', background: 'none', padding: '9px 4px', cursor: 'pointer',

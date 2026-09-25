@@ -45,6 +45,13 @@ import * as domande from './domande.ts'
 import * as traduci from './traduci.ts'
 import * as posta from './connettori/posta.ts'
 import * as invio from './invio.ts'
+import * as invii from './invii-osservati.ts'
+import * as lavoroDati from './lavoro-dati.ts'
+import * as voce from './voce.ts'
+import * as revisioni from './revisioni.ts'
+import { misuraLavoro } from './misura-lavoro.ts'
+import { corpoPerChiRiceve, testoMostrato } from './cornice.ts'
+import { classe as classeRitocco, parole as paroleDi, ritocco } from './ritocco.ts'
 import * as scrivania from './scrivania.ts'
 import { openInProva } from './senza-open.ts'
 import { apriDocumento } from './native-document.ts'
@@ -344,7 +351,13 @@ app.get('/api/oauth/ritorno', async (req, res) => {
     return res.send(oauth.paginaConsenso(!guaio && String(req.query.admin_consent).toLowerCase() === 'true'))
   }
   try {
-    const { nome, scheda } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
+    const { nome, scheda, utente } = await oauth.completaWeb(stato, codice, guaio, bigliettoPortato(req), descrizione)
+    // un collegamento in più, detto alle finestre di chi l'ha fatto e alle
+    // sue righe ferme sulla posta (P3): questa richiesta torna dal browser
+    // senza sessione, quindi la regola sui connettori qui sopra non la vede
+    const dillo = () => compiti.annunciaCollegamento()
+    if (utente) chi.dentro(utente, dillo)
+    else dillo()
     res.send(oauth.paginaWeb(true, nome, '', scheda))
   } catch (e) {
     res.status(400).send(oauth.paginaWeb(false, '', e instanceof Error ? e.message : String(e)))
@@ -501,10 +514,13 @@ app.use(auth.guardia)
 app.use((req, res, next) => {
   if (cambiaUnCollegamento(req.method, req.path, req.body)) {
     const di = chi.adesso()
+    // un collegamento tolto è un fatto per le finestre, non una fonte in più
+    // per le righe ferme (P3): riprenderle le farebbe fermare di nuovo
+    const dillo = () => compiti.annunciaCollegamento(false, { riprendi: req.method.toUpperCase() !== 'DELETE' })
     res.on('finish', () => {
       if (res.statusCode >= 400) return
-      if (di) chi.dentro(di, () => compiti.annunciaCollegamento())
-      else compiti.annunciaCollegamento()
+      if (di) chi.dentro(di, dillo)
+      else dillo()
     })
   }
   next()
@@ -529,7 +545,9 @@ abbonamento.quandoCambia(() => {
 mod.quandoUsato(() => { try { saluteTeste.segnaTesta('ok') } catch { /* contare non rompe la chiamata contata */ } })
 mod.quandoRifiutata(() => {
   try { saluteTeste.segnaTesta() } catch { /* idem */ }
-  compiti.annunciaCollegamento()
+  // un fatto di salute, non un collegamento in più: le finestre lo sanno,
+  // le righe ferme restano ferme (riprenderle adesso le manderebbe sulla chiave respinta)
+  compiti.annunciaSalute()
 })
 
 /**
@@ -1878,7 +1896,7 @@ app.post('/api/connettori/whatsapp', async (req, res) => {
     if (!e.ok) return res.status(400).json({ errore: e.errore })
     cfg.aggiorna({ whatsapp: { ...c, etichetta: e.etichetta, arrivati: 0 } })
     // la sonda è appena riuscita: il guaio del token si chiude adesso, non domani
-    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaCollegamento()
+    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaSalute()
     res.json({ ok: true, etichetta: e.etichetta })
   } catch (e) { errore(res, e) }
 })
@@ -2025,7 +2043,9 @@ async function leggiTutto(
    * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
-  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaCollegamento() })
+  // un cambio di salute è un fatto per la riga fissa, non un collegamento in
+  // più: le righe ferme (P3) si riprendono solo per una fonte che guarisce
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: c => compiti.annunciaSalute(c) })
   // per il gemello (P1B): quando è partita, e se ogni casella è arrivata in fondo
   const partita = new Date().toISOString()
   const fasi: { fase?: string; stato?: string }[] = []
@@ -2428,6 +2448,8 @@ app.get('/api/sincronizza', async (req, res) => {
       () => annullata
     )
     invia({ fase: 'fine', totale, conteggi: store.conteggi() })
+    // una bozza salvata nella sua posta può essere partita: si guarda adesso (P3)
+    await invii.osserva().catch(() => 0)
     // «quando arriva» vale anche per quello che è arrivato premendo il bottone,
     // non solo per il giro delle sei ore
     if (totale > 0 && claude.collegato()) {
@@ -2532,6 +2554,8 @@ async function rileggiDaSola() {
     })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
+    // una bozza salvata nella sua posta può essere partita: si guarda prima del feed (P3)
+    await invii.osserva().catch(() => 0)
     // P2 · le carte mancate: una risposta mandata dalla posta, una riga scritta a mano. Senza modello.
     await mancate.forse().catch(e => console.warn('myynd · mancate:', e instanceof Error ? e.message : e))
     await dopoLArrivo(daQuando, nuovi)
@@ -3407,6 +3431,8 @@ app.post('/api/compiti/:id/rispondi', (req, res) => {
   compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
   res.json({ ok: true, compiti: compitiAttuali() })
   compiti.annunciaCambio()
+  // la risposta si impara (P3): la stessa domanda non deve tornare sulla riga dopo
+  if (c.stato === 'chiede') compiti.imparaDallaRisposta(c, c.risultato, testo, 'risposta')
 })
 
 /**
@@ -3439,8 +3465,13 @@ app.post('/api/compiti/:id/prepara-email', async (req, res) => {
 
   try {
     // dalle fonti che la bozza ha citato, non da una ricerca nuova: il
-    // destinatario deve venire da quello che ha letto lei
-    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti, c.doc)
+    // destinatario deve venire da quello che ha letto lei. E nella lingua di
+    // chi riceve (P3): quella salvata sulla riga alla consegna, altrimenti la
+    // voce ricalcolata adesso; senza, il modello riscriveva in inglese una
+    // risposta italiana a Marco. Anche il file da allegare si propone qui.
+    const lingua = c.voceScritta?.lingua
+    const consegna = lingua === 'it' || lingua === 'en' ? lingua : voce.perRiga(c)?.consegna
+    const e = await claude.preparaEmail(c.testo, c.risultato, c.fonti, c.doc, { consegna, candidati: claude.candidatiAllegato([], c.fonti ?? []) })
     if (!e) return res.status(400).json({ errore: 'Non sono riuscito a ricavarne un\'email.' })
     const pronta: store.EmailPronta = { ...e, conosciuto: e.a ? store.indirizzoConosciuto(e.a) : false }
     if (c.stato === 'pronto') store.scriviEmailCompito(c.id, pronta)
@@ -3462,6 +3493,13 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
   const conf = cfg.leggi()
   if (!conf.posta) return res.status(400).json({ errore: 'Collega la posta e potrò mandarla.' })
 
+  // se la bozza è già partita dalla sua posta, non parte due volte (P3)
+  await invii.osservaUno(c).catch(() => null)
+  const adesso = store.compito(c.id) ?? c
+  if (adesso.mandata && adesso.chiesto && adesso.mandata.quando >= adesso.chiesto) {
+    return res.status(409).json({ errore: 'L\'hai già mandata dalla tua posta.' })
+  }
+
   const d = invio.daMandare(c, req.body)
   if (!d.ok) return res.status(400).json({ errore: d.errore })
 
@@ -3472,8 +3510,16 @@ app.post('/api/compiti/:id/invia', async (req, res) => {
 
   res.json({ ok: true, compiti: compitiAttuali(), chiusi: store.compitiChiusi() })
   compiti.annunciaCambio()
-  // quello che hai tenuto davvero passa alla memoria come per ogni altra chiusura
-  compiti.imparaSeCorretto(c.risultato, d.m.corpo)
+  /*
+   * Quello che hai tenuto davvero passa alla memoria come per ogni altra
+   * chiusura. La coppia giusta è il corpo dell'email contro il corpo mandato
+   * (P3): il risultato intero porta la prima riga «Fatto:», l'oggetto e la
+   * riga delle fonti, e confrontato con il corpo pulito non coincideva mai.
+   */
+  const bozza = c.email?.corpo ?? corpoPerChiRiceve(c.risultato ?? '')
+  const r = ritocco(bozza, d.m.corpo)
+  lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: new Date().toISOString(), distanza: r, parole: paroleDi(d.m.corpo).length, classe: classeRitocco(r) })
+  compiti.imparaSeCorretto(bozza, d.m.corpo)
 })
 
 /**
@@ -3881,9 +3927,14 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // finiva soltanto dentro una convinzione: il testo com'è uscito non lo
   // rileggevi più da nessuna parte. Adesso resta sulla riga, e quando la
   // riapri fra le fatte trovi la versione tua, non la sua.
-  if (tenuto && tenuto.trim() && tenuto.trim() !== (c.risultato ?? '').trim()) {
-    store.tieniLaTua(c.id, tenuto.trim())
-  }
+  //
+  // Il metro è il testo che la riga mostra: su una riga con l'ipotesi sotto
+  // (P3) la lista mostra il risultato senza quella riga, e «Va bene» su quel
+  // testo com'è non è una correzione. Contarla come tale faceva imparare a
+  // Myynd, a ogni «Va bene», che lei toglie la riga «Ho supposto».
+  const mostrato = testoMostrato(c.risultato, c.ipotesi).trim()
+  const corretto = !!tenuto.trim() && tenuto.trim() !== mostrato && tenuto.trim() !== (c.risultato ?? '').trim()
+  if (corretto) store.tieniLaTua(c.id, tenuto.trim())
   store.cambiaStatoCompito(c.id, stato, esito || undefined)
   // di quale progetto è, subito e senza modello: l'avviso sotto il bottone lo dice
   const fatto: dopoFatto.Fatto = { genere: 'compito', id: c.id }
@@ -3897,7 +3948,7 @@ app.post('/api/compiti/:id/chiudi', (req, res) => {
   // della sua bozza dice come scrivi; quello che hai *scritto* chiudendo dice
   // com'è andata e perché. Prima si raccoglieva solo la prima, che è anche la
   // più rara — e tutte le righe chiuse a mano passavano senza lasciare niente.
-  if (tenuto) compiti.imparaSeCorretto(c.risultato, tenuto)
+  if (corretto) compiti.imparaSeCorretto(mostrato, tenuto)
   compiti.imparaDallaChiusura(c, stato, esito)
   // E il traguardo: si segna nella memoria del progetto, e si guarda il passo
   // dopo, o glielo si chiede. Una riga lasciata perdere non è un traguardo.
@@ -4619,6 +4670,71 @@ app.get('/api/feed/misura', async (req, res) => {
 // — P2: rotte, fine —
 
 // — P3: rotte, inizio —
+
+/**
+ * «Cambia» sotto l'ipotesi: quello che vale invece (P3).
+ *
+ * Non è una risposta a una domanda e non chiude mai la riga: è una
+ * correzione di una cosa già consegnata. Una riga con una bozza salvata
+ * nella posta o con un file consegnato passa dalla revisione (una riga
+ * figlia `rev-`, la versione di prima al sicuro); una riga semplice si
+ * riaffida con la correzione in nota. La correzione si impara, dopo.
+ */
+app.post('/api/compiti/:id/correggi', async (req, res) => {
+  const c = store.compito(req.params.id)
+  if (!c) return res.status(404).json({ errore: 'Compito non trovato.' })
+  const testo = String(req.body?.testo ?? '').trim()
+  if (!testo) return res.status(400).json({ errore: 'Scrivi cosa cambia.' })
+  // partita dalla sua posta: la bozza non c'è più e la mail è già andata, non c'è più niente da cambiare (lo schermo non lo offre)
+  const partita = !!c.mandata && !!c.chiesto && c.mandata.quando >= c.chiesto
+  if (c.stato !== 'pronto' || !c.ipotesi?.length || partita) return res.status(400).json({ errore: 'Questa riga non ha niente da cambiare.' })
+  const riga = c.ipotesi[0]
+  try {
+    let contata = true
+    if (c.email?.casella?.stato === 'salvata' || c.consegna) {
+      const r = await revisioni.rivediDaCorrezione(c.id, testo)
+      // la stessa correzione due volte è una revisione sola, e una correzione sola
+      contata = !r.giaAvviato
+      // la correzione è passata alla figlia: la riga madre non ha più un'ipotesi
+      // da cambiare, e la riga «Ho supposto …» le esce anche dal testo (sotto
+      // la figlia che la rifà, il dato appena corretto non resta come riga sua)
+      lavoroDati.passaIpotesi(c.id)
+    } else {
+      // la nota dice cosa cambia e al posto di cosa: «Friday» da solo, senza
+      // l'ipotesi che corregge, chi rifà il lavoro non sa dove metterlo.
+      // Nella lingua dell'app, perché la riga la mostra mentre lavora
+      const en = cfg.lingua() === 'en'
+      const manca = /^(?:manca|mancano|missing)\b/i.test(riga)
+      // La correzione prima, la riga che sostituisce dopo: la riga che lavora
+      // mostra la nota in due righe, e una riga lunga citata per prima
+      // nascondeva quello che aveva appena scritto lei
+      const correzione = manca
+        ? (en ? `${testo}, in place of «${riga}»` : `${testo}, al posto di «${riga}»`)
+        : (en ? `${testo}, instead of «${riga}»` : `${testo}, invece di «${riga}»`)
+      store.cambiaCompito(c.id, { nota: c.nota ? `${c.nota}\n${correzione}` : correzione })
+      store.cambiaStatoCompito(c.id, 'aperto')
+      store.sbozzaCompito(c.id)
+      compiti.affida(c.id, c.modo === 'io' ? 'bozza' : c.modo)
+    }
+    if (contata) lavoroDati.registraCorrezione(c.id)
+  } catch (e) {
+    // un no che ha causato lei (la bozza non c'è più, la posta scollegata) è un 4xx nella lingua di casa, non un 500
+    const rifiuto = revisioni.rifiutoCorrezione(e)
+    if (rifiuto) return res.status(rifiuto.stato).json({ errore: rifiuto.errore })
+    return errore(res, e)
+  }
+  res.json({ ok: true, compiti: compitiAttuali() })
+  compiti.annunciaCambio()
+  compiti.imparaDallaRisposta(c, riga, testo, 'correzione')
+})
+
+/** Le misure del lavoro affidato (P3): quante senza domande, quante bozze partite com'erano. */
+app.get('/api/lavoro/misura', async (req, res) => {
+  const giorni = Number(req.query.giorni ?? 30)
+  try { res.json(await misuraLavoro(Number.isFinite(giorni) && giorni > 0 ? giorni : 30)) }
+  catch (e) { errore(res, e) }
+})
+
 // — P3: rotte, fine —
 
 // — P4: rotte, inizio —
@@ -5128,6 +5244,11 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   }
   for (const u of conti.tutti()) {
     try { appesi += chi.dentro(u, () => compiti.riprendiAppesi()) } catch { /* uno rotto non ferma gli altri */ }
+  }
+  // e le righe ferme su un permesso (P3): lui l'ha dato nelle Impostazioni di
+  // sistema e ha riaperto Myynd, come la riga fissa gli ha chiesto (P8)
+  for (const u of conti.tutti()) {
+    try { chi.dentro(u, () => { void compiti.riprendiBloccati({ avvio: true }).catch(() => {}) }) } catch { /* idem */ }
   }
   // una configurazione rimasta con un motore che non può lavorare — ChatGPT
   // scelto e spento — si ripara adesso, prima che i giri di fondo la usino

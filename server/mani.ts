@@ -43,6 +43,7 @@ import { RADICE, cartella as cartellaProfilo, leggi, lingua as cfgLingua } from 
 import { OSPITATO } from './ospitato.ts'
 import { daBuffer, daHtml, RICCHI } from './connettori/estrai.ts'
 import { riflua } from './testo.ts'
+import { IPOTESI, MANCA } from './cornice.ts'
 import * as lavoro from './lavoro.ts'
 import { landReport } from './esecuzione-isolata.ts'
 import { detectRuntime } from './agent-runtime.ts'
@@ -694,10 +695,19 @@ const DI_IPOTESI = /\b(?:assum\w*|ipotes\w*|ipotizz\w*|verif\w*|chose|chosen|cho
  */
 export function rigaPerLei(testo: string): { corpo: string; nota: string } {
   const paragrafi = testo.trim().split(/\n\s*\n/)
-  if (paragrafi.length < 3) return { corpo: testo.trim(), nota: '' }
+  if (paragrafi.length < 2) return { corpo: testo.trim(), nota: '' }
   const ultimo = paragrafi[paragrafi.length - 1].trim()
-  const righe = ultimo.split('\n').filter(r => r.trim())
-  const sembra = ultimo.length <= 400 && righe.length <= 2 && !/^#{1,6}\s/.test(ultimo) && (PER_LEI.test(ultimo) || DI_IPOTESI.test(ultimo))
+  const righe = ultimo.split('\n').map(r => r.trim()).filter(Boolean)
+  // dal 24 settembre (P3) le righe possono essere tre: le fonti con i numeri,
+  // l'ipotesi «Ho supposto», o la riga «Manca» di un segnaposto: ognuna deve
+  // avere l'aria giusta, non solo l'insieme. Con un corpo di un paragrafo
+  // solo, si stacca soltanto una coda che è tutta cornice: un'ipotesi non
+  // deve finire nel file, ma nel dubbio il documento resta intero
+  const dellaCornice = (r: string) => IPOTESI.test(r) || MANCA.test(r) || /\[\d{1,2}\]/.test(r)
+  const sembra = ultimo.length <= 400 && !/^#{1,6}\s/.test(ultimo) && righe.length <= 3 && (
+    paragrafi.length === 2 ? righe.every(dellaCornice)
+      : righe.length <= 2 ? (PER_LEI.test(ultimo) || DI_IPOTESI.test(ultimo))
+        : righe.every(r => dellaCornice(r) || PER_LEI.test(r) || DI_IPOTESI.test(r)))
   if (!sembra) return { corpo: testo.trim(), nota: '' }
   return { corpo: paragrafi.slice(0, -1).join('\n\n').trim(), nota: ultimo }
 }

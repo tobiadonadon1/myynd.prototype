@@ -246,9 +246,19 @@ export function registraPortaCose(f: (() => void) | null) { portaAlleCose = f }
 export function siPuoAprireLeCose(): boolean { return !!portaAlleCose }
 export function portaAlleAttivita() { portaAlleCose?.() }
 
-/** «Vai alle Fonti», detto da chi non ha `v` (la riga fissa di «Come lavori», P1B). Stessa mano delle altre porte. */
+/**
+ * «Portami alle Fonti», detto da chi non ha `v`: la riga fissa di «Come lavori» (P1B)
+ * e le righe ferme in Da fare (P3).
+ *
+ * Una riga ferma su una fonte che manca (P3) dice «Collega la posta e la
+ * riprendo da qui» anche in Da fare, e lì la frase da sola era una promessa
+ * senza la strada: il link alle Fonti che la prima pagina ha (`v.goConn`) qui
+ * passa da questa mano, per la stessa ragione delle altre tre.
+ */
 let portaAlleConnessioni: (() => void) | null = null
 export function registraPortaFonti(f: (() => void) | null) { portaAlleConnessioni = f }
+/** Vera quando c'è chi sa aprirle: senza, il collegamento non si disegna. */
+export function siPuoAprireLeFonti(): boolean { return !!portaAlleConnessioni }
 export function portaAlleFonti() { portaAlleConnessioni?.() }
 
 /**
@@ -1137,6 +1147,12 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     registraPortaCose(() => { setScreen('oggi'); setSearch(false); setMenu(false) })
     return () => registraPortaCose(null)
   }, [])
+  useEffect(() => {
+    registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
+    return () => registraPortaFonti(null)
+  }, [])
+
+  // e quella delle Fonti, per una riga ferma in Da fare: vedi `portaAlleFonti`
   useEffect(() => {
     registraPortaFonti(() => { setScreen('conn'); setSearch(false); setMenu(false) })
     return () => registraPortaFonti(null)

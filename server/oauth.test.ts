@@ -60,8 +60,10 @@ test('il ritorno scambia il codice e salva dentro il conto di chi aveva avviato'
     // il ritorno arriva senza nessun contesto: è lo state a dire di chi è,
     // e il biglietto nel cookie a dire che è lo stesso browser
     await assert.rejects(() => oauth.completaWeb(stato, 'il-codice', null, ''), /un altro browser/)
-    const { nome } = await oauth.completaWeb(stato, 'il-codice', null, oauth.biglietto(stato))
+    const { nome, utente } = await oauth.completaWeb(stato, 'il-codice', null, oauth.biglietto(stato))
     assert.equal(nome, 'Prova')
+    // di chi era: la rotta del ritorno lo dice alle finestre di quella persona (P3: le righe ferme sulla posta)
+    assert.equal(utente, 'anna')
   } finally {
     globalThis.fetch = veraFetch
   }

@@ -493,8 +493,12 @@ test('rigaPerLei stacca la riga per lei dal documento, e nel dubbio la lascia de
   const doc = '# Intro\n\nParagraph one.\n\nParagraph two.\n\nI assumed the audience is the H-Farm leadership team; tell me if it is the students.'
   assert.deepEqual(mani.rigaPerLei(doc), { corpo: '# Intro\n\nParagraph one.\n\nParagraph two.', nota: 'I assumed the audience is the H-Farm leadership team; tell me if it is the students.' })
   assert.deepEqual(mani.rigaPerLei('# Intro\n\nOne.\n\nA closing paragraph about the future of the pilot.'), { corpo: '# Intro\n\nOne.\n\nA closing paragraph about the future of the pilot.', nota: '' })
-  // due paragrafi soli: il secondo è il documento, non una nota
-  assert.deepEqual(mani.rigaPerLei('One.\n\nHo ipotizzato che il pilota parta a ottobre.'), { corpo: 'One.\n\nHo ipotizzato che il pilota parta a ottobre.', nota: '' })
+  // due paragrafi soli: il secondo resta nel documento, a meno che non sia
+  // tutto cornice (P3: un'ipotesi dichiarata non finisce mai nel file)
+  assert.deepEqual(mani.rigaPerLei('One.\n\nHo ipotizzato che il pilota parta a ottobre.'), { corpo: 'One.', nota: 'Ho ipotizzato che il pilota parta a ottobre.' })
+  assert.deepEqual(mani.rigaPerLei('One.\n\nA closing paragraph, based on the plan, about the pilot.'), { corpo: 'One.\n\nA closing paragraph, based on the plan, about the pilot.', nota: '' })
+  // tre righe di cornice: le fonti, l'ipotesi, il segnaposto
+  assert.deepEqual(mani.rigaPerLei('One.\n\nTwo.\n\nFrom the plan [1].\nI assumed Friday.\nMissing: the owner.'), { corpo: 'One.\n\nTwo.', nota: 'From the plan [1].\nI assumed Friday.\nMissing: the owner.' })
   assert.deepEqual(mani.rigaPerLei('One.\n\nTwo.\n\nHo ipotizzato che il pilota parta a ottobre.'), { corpo: 'One.\n\nTwo.', nota: 'Ho ipotizzato che il pilota parta a ottobre.' })
   assert.equal(mani.senzaChiusura('Done: x.\n\nBody.\n'), 'Body.')
   assert.equal(mani.senzaChiusura('Body.'), 'Body.')

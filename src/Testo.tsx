@@ -226,10 +226,17 @@ function attacca(testo: string): string {
  * perché l'elenco intero smettesse di essere un elenco e finisse appiattito in
  * un paragrafo con dentro i trattini e gli spazi del rientro.
  */
-export function Testo({ testo, fonti = [], onApri }: {
+export function Testo({ testo, fonti = [], onApri, aCapo = false }: {
   testo: string
   fonti?: Fonte[]
   onApri?: (id: string, passo?: string) => void
+  /**
+   * Gli a capo semplici restano a capo. In chat le righe di seguito sono un
+   * paragrafo; in una cosa consegnata «A presto,» e «Alex» sono due righe,
+   * e mostrarle come «A presto, Alex» è mostrare una mail diversa da quella
+   * che parte.
+   */
+  aCapo?: boolean
 }) {
   const blocchi = leggibile(attacca(testo.trim()), IMPAGINATO)
   // nuovo a ogni impaginazione: i segni si contano dall'inizio del testo
@@ -291,7 +298,9 @@ export function Testo({ testo, fonti = [], onApri }: {
     while (i < blocchi.length && blocchi[i].tipo === 'riga') { righe.push(blocchi[i].testo); i++ }
     pezzi.push(
       <p key={pezzi.length} style={{ margin: primo() ? 0 : '10px 0 0', lineHeight: 1.6, textWrap: 'pretty', overflowWrap: 'anywhere' }}>
-        {inline(righe.join(' '), fonti, onApri, conteggi)}
+        {aCapo
+          ? righe.map((r, j) => <span key={j}>{j > 0 && <br />}{inline(r, fonti, onApri, conteggi)}</span>)
+          : inline(righe.join(' '), fonti, onApri, conteggi)}
       </p>
     )
   }

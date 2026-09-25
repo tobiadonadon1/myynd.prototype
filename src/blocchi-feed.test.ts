@@ -372,3 +372,71 @@ test('la carta di Myynd che ha scritto è una cosa sul tavolo: il titolo e il me
   assert.equal(cheAspettano({ domanda: { id: 'q' }, iniziative: 2, lettera: false }), 3)
   assert.equal(cheAspettano({ domanda: null, iniziative: 0, lettera: false }), 0)
 })
+
+test('una revisione sta sotto sua madre e non conta nel tetto: con sei righe pronte si vede lo stesso (P3)', () => {
+  const pronte = Array.from({ length: 6 }, (_, i) => compito(`p${i}`, 'hf', { stato: 'pronto' }))
+  // la figlia in fondo alla lista, come la mette il server
+  const figlia = compito('rev-1', 'hf', { stato: 'delegato', madre: 'p2', origine: 'chat' })
+  const b = blocchiFeed({ voci: [], compiti: [...pronte, compito('a1', 'hf'), figlia], progetti: PROGETTI, nomeResto: 'Il resto' })
+  const tutte = b.flatMap(ids)
+  assert.deepEqual(tutte, ['p0', 'p1', 'p2', 'rev-1', 'p3', 'p4', 'p5'])
+  // la finta di `useCompiti.correggi`, inserita subito dopo la madre: stesso posto
+  const attesa = compito('rev-attesa-p2', 'hf', { stato: 'delegato', madre: 'p2', origine: 'chat' })
+  const b2 = blocchiFeed({ voci: [], compiti: [...pronte.slice(0, 3), attesa, ...pronte.slice(3), compito('a1', 'hf')], progetti: PROGETTI, nomeResto: 'Il resto' })
+  assert.deepEqual(b2.flatMap(ids), ['p0', 'p1', 'p2', 'rev-attesa-p2', 'p3', 'p4', 'p5'])
+  // finita, la figlia resta sotto la madre
+  const b3 = blocchiFeed({ voci: [], compiti: [...pronte, { ...figlia, stato: 'pronto' }], progetti: PROGETTI, nomeResto: 'Il resto' })
+  assert.deepEqual(b3.flatMap(ids), ['p0', 'p1', 'p2', 'rev-1', 'p3', 'p4', 'p5'])
+  // senza la madre in pagina è una riga come le altre, e conta
+  const orfana = compito('rev-9', 'hf', { stato: 'delegato', madre: 'chiusa', origine: 'chat' })
+  const b4 = blocchiFeed({ voci: [], compiti: [...pronte, orfana], progetti: PROGETTI, nomeResto: 'Il resto' })
+  assert.equal(b4.flatMap(ids).length, COMPITI_IN_PAGINA)
+  assert.ok(!b4.flatMap(ids).includes('rev-9'))
+})
+
+test('una riga appena corretta con «Cambia» resta al suo posto mentre si rifà, anche con la pagina piena (P3)', () => {
+  const pronte = Array.from({ length: 7 }, (_, i) => compito(`p${i}`, 'hf', { stato: 'pronto' }))
+  const compiti = [...pronte.slice(0, 2), { ...pronte[2], stato: 'delegato' }, ...pronte.slice(3)]
+  // senza dirlo, la riga che lavora finisce dietro le sei pronte e sotto il tetto
+  assert.deepEqual(blocchiFeed({ voci: [], compiti, progetti: PROGETTI, nomeResto: 'Il resto' }).flatMap(ids), ['p0', 'p1', 'p3', 'p4', 'p5', 'p6'])
+  // corretta: al suo posto, fra le pronte
+  const b = blocchiFeed({ voci: [], compiti, progetti: PROGETTI, nomeResto: 'Il resto', corrette: new Set(['p2']) })
+  assert.deepEqual(b.flatMap(ids), ['p0', 'p1', 'p2', 'p3', 'p4', 'p5'])
+  // corretta ma già tornata pronta: il peso è quello di sempre
+  const b2 = blocchiFeed({ voci: [], compiti: pronte, progetti: PROGETTI, nomeResto: 'Il resto', corrette: new Set(['p2']) })
+  assert.deepEqual(b2.flatMap(ids), ['p0', 'p1', 'p2', 'p3', 'p4', 'p5'])
+})
+
+test('(P3) una riga ferma su un blocco o su un dato che manca aspetta lui: sta in prima pagina anche a pagina piena', () => {
+  const compiti = [
+    ...Array.from({ length: 8 }, (_, i) => compito(`a${i}`, 'hf')),
+    { ...compito('bloccata', 'nx'), guaio: 'Collega la posta e la riprendo da qui.' },
+    { ...compito('senzaDato', 'nx'), guaio: 'Non sono riuscito a finirla senza un dato che manca.' },
+    // un guaio qualunque su una riga aperta non la porta davanti
+    { ...compito('altroGuaio', 'nx'), guaio: 'Il modello non ha risposto.' }
+  ]
+  const b = blocchiFeed({ voci: [], compiti, progetti: PROGETTI, nomeResto: 'Il resto' })
+  const tutte = b.flatMap(ids)
+  assert.equal(tutte.length, COMPITI_IN_PAGINA)
+  assert.ok(tutte.includes('bloccata'), 'la riga bloccata è sparita sotto il tetto')
+  assert.ok(tutte.includes('senzaDato'), 'la riga ferma su un dato che manca è sparita sotto il tetto')
+  assert.ok(!tutte.includes('altroGuaio'))
+  assert.deepEqual(ids(b.find(x => x.nome === 'Nextas')!), ['bloccata', 'senzaDato'])
+})
+
+test('(P3) quanteAspettano: le pronte, le domande e le righe ferme su un blocco o su un dato che manca; non una riga aperta e basta, né una che lavora', async () => {
+  const { quanteAspettano } = await import('./blocchi-feed.ts')
+  assert.equal(quanteAspettano([
+    { stato: 'pronto' },
+    { stato: 'chiede' },
+    { stato: 'aperto', guaio: 'Collega la posta e la riprendo da qui.' },
+    { stato: 'aperto', guaio: 'Non sono riuscito a finirla senza un dato che manca.' },
+    // (contro) una riga aperta senza guaio, una con un guaio qualunque, e una che sta lavorando
+    { stato: 'aperto' },
+    { stato: 'aperto', guaio: 'Il modello non ha risposto.' },
+    { stato: 'delegato' },
+    // (contro) una riga già chiusa con un blocco addosso non aspetta più nessuno
+    { stato: 'fatto', guaio: 'Collega la posta e la riprendo da qui.' }
+  ]), 4)
+  assert.equal(quanteAspettano([]), 0)
+})

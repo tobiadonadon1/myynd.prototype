@@ -3516,7 +3516,7 @@ export type Compito = {
    * Sta in `compiti.voceScritta` perché `voce` è la voce del feed da cui la
    * riga è nata.
    */
-  voceScritta?: { destinatario?: string; lingua?: string; esempi?: { id: string; label: string }[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
   /**
    * La bozza è partita dalla sua posta (P9): quale messaggio, quando, con che
    * certezza e quanto l'ha ritoccata. Si scrive una volta e non si riscrive.
@@ -3539,6 +3539,8 @@ export type EmailPronta = {
   corpo: string
   conosciuto: boolean
   rispondeA?: { messageId: string; references?: string[] } | null
+  /** Il file da allegare, suggerito e verificato (P3, fase 1: si apre, non si mette nella bozza). */
+  allegato?: { id: string; titolo: string } | null
 }
 
 /** Quello che una riga nata da un'automazione ha il permesso di aprire. */

@@ -1146,7 +1146,7 @@ test('«save it to my Desktop» nella risposta si impara e vale da subito; un me
   o5.smetti()
 })
 
-test('quando chiede, sulla riga ci sono tutte le domande, fino a tre, dopo cosa ha visto', async () => {
+test('quando chiede, sulla riga c\'è una domanda sola dopo cosa ha visto, anche se il modello ne ha scritte tre', async () => {
   prova({
     svolgi: async () => ({ testo: 'x', fonti: [] }),
     chiedeAiuto: async () => ({ chiede: true, manca: ['unità', 'quando'], domanda: 'Di quale unità parliamo?\nEntro quando? E chi firma?\nUna quarta?', visto: 'Ho letto il filo con H-Farm.' }),
@@ -1161,8 +1161,446 @@ test('quando chiede, sulla riga ci sono tutte le domande, fino a tre, dopo cosa 
   compiti.affida(id, 'bozza')
   await o.aspetta('chiede')
   const c = store.compito(id)!
-  assert.equal(c.risultato, 'Ho letto il filo con H-Farm.\nDi quale unità parliamo?\nEntro quando?\nE chi firma?')
-  assert.equal(c.chieste?.length, 3)
+  assert.equal(c.risultato, 'Ho letto il filo con H-Farm.\nDi quale unità parliamo?')
+  assert.equal(c.chieste?.length, 1)
+  assert.equal(c.domandeFatte, 1)
   o.smetti()
 })
 
+
+/*
+ * — P3: lavoro senza domande —
+ *
+ * Una domanda sola nella vita di una riga, contata solo quando è scritta;
+ * l'ipotesi sulla riga; il fondo che non chiede; il blocco che non è una
+ * domanda e si riprende da solo; le misure. Le mani finte leggono la forma
+ * di quello che il modello finto ha scritto, come farebbe `chiedeAiuto`
+ * senza modello.
+ */
+const classificaP3: Ferri['chiedeAiuto'] = async (_c, risposta) => {
+  const righe = risposta.split('\n').filter(Boolean)
+  if (/^Done:/.test(righe[0])) return { chiede: false, manca: [], domanda: '' }
+  const domanda = righe.find(r => r.endsWith('?')) ?? ''
+  if (!domanda) return { chiede: false, manca: [], domanda: '' }
+  return { chiede: true, manca: [], domanda, visto: righe[0] }
+}
+const DOMANDA_P3 = 'I read Nora\'s mail and the pilot plan.\nWhat day is the kickoff?\nOtherwise I\'ll assume Tuesday, October 6.'
+const NOTA_P3 = 'Done: the kickoff note for the Harbor pilot.\n\nThe kickoff note, with the agenda, the people and the two goals of the pilot, in three short paragraphs that say who does what.\n\nFrom Nora\'s mail [1].\nI assumed Tuesday, October 6 as the kickoff.'
+/** Un `svolgi` finto che risponde in fila e ricorda l'esecuzione ricevuta. */
+function svolgiInFila(uscite: string[]) {
+  const ricevute: { nota: string | null; esecuzione: unknown }[] = []
+  const svolgi: Ferri['svolgi'] = async (_t, nota, _m, _a, _c, _p, _d, _s, esecuzione) => {
+    ricevute.push({ nota: nota ?? null, esecuzione })
+    return { testo: uscite[Math.min(ricevute.length - 1, uscite.length - 1)], fonti: [], lette: ['posta:INBOX:502'] }
+  }
+  return { svolgi, ricevute }
+}
+
+test('P3 · una scadenza morbida si presume: pronta senza mai chiedere, con l\'ipotesi sulla riga e nelle misure', async () => {
+  const cfg = await import('./config.ts')
+  const lavoroDati = await import('./lavoro-dati.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const { svolgi, ricevute } = svolgiInFila([DOMANDA_P3, NOTA_P3])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, pesaLaDomanda: async () => ({ genere: 'data', costo: 'basso' }) })
+  const id = riga('Write the kickoff note for the Harbor pilot')
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  await o.aspetta('pronto')
+  assert.ok(!o.sentiti.some(e => e.fase === 'chiede'), 'ha chiesto')
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.deepEqual(c.ipotesi, ['I assumed Tuesday, October 6 as the kickoff.'])
+  assert.equal(c.domandeFatte, 0)
+  assert.equal(ricevute.length, 2)
+  assert.match(ricevute[1].nota ?? '', /Non fermarti a chiedere «What day is the kickoff\?»/)
+  const m = lavoroDati.misura(id)!
+  assert.equal(m.domande, 0)
+  assert.equal(m.presunte, 1)
+  assert.equal(m.mossa, 'presumi')
+  assert.equal(m.genere, 'data')
+  assert.equal(m.tipo, 'documento')
+  assert.ok(m.consegnato)
+  o.smetti()
+})
+
+test('P3 · (contro) un dato duro è una domanda sola, contata una volta; dopo la risposta un altro dato duro diventa un segnaposto', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  let pesate = 0
+  const { svolgi } = svolgiInFila(['I read the thread with Dana.\nWhat is Dana\'s email address?\nOtherwise I\'ll assume dana@example.com.'])
+  prova({ svolgi, chiedeAiuto: classificaP3, pesaLaDomanda: async () => { pesate++; return { genere: 'preferenza', costo: 'basso' } },
+    domandeDaFare: async (_c, _r, o) => [{ domanda: 'Which address?', opzioni: o?.genere === 'destinatario' ? [] : ['a', 'b'], multipla: false }, { domanda: 'Una seconda?', opzioni: ['x', 'y'], multipla: false }] })
+  const id = riga('Reply to Dana about the invoice')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('chiede')
+  let c = store.compito(id)!
+  assert.equal(c.risultato, 'I read the thread with Dana.\nWhat is Dana\'s email address?')
+  assert.equal(c.chieste?.length, 1)
+  assert.equal(c.domandeFatte, 1)
+  assert.equal(pesate, 0, 'il pavimento ha già deciso')
+  assert.equal(lavoroDati.misura(id)!.domande, 1)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'chiedi')
+  o.smetti()
+
+  // la risposta, e il modello chiede un'altra cosa dura: nessuna seconda domanda
+  const dopo = svolgiInFila(['I read the thread.\nWhat is the price for 20 people?', 'Done: the reply to Dana.\n\nHi Dana,\n\nthe price for 20 people is [to fill: price for 20 people].\n\nBest,\nAlex\n\nMissing: the price for 20 people. I left it blank.'])
+  prova({ svolgi: dopo.svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda })
+  store.cambiaCompito(id, { nota: 'dana@example.com' })
+  store.cambiaStatoCompito(id, 'aperto'); store.sbozzaCompito(id); store.scordaChieste(id)
+  const o2 = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o2.aspetta('pronto')
+  assert.ok(!o2.sentiti.some(e => e.fase === 'chiede'))
+  c = store.compito(id)!
+  assert.equal(c.domandeFatte, 1, 'ha contato una seconda domanda')
+  assert.match(c.risultato ?? '', /\[to fill: price for 20 people\]/)
+  assert.deepEqual(c.ipotesi, ['Missing: the price for 20 people. I left it blank.'])
+  assert.equal(lavoroDati.misura(id)!.domande, 1)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'segnaposto')
+  // la risposta sta nella nota: il giro in più dice prima di usarla, e solo altrimenti di lasciare il posto vuoto
+  assert.match(dopo.ricevute[1].nota ?? '', /^dana@example\.com\n\nNon fermarti a chiedere «What is the price for 20 people\?»: se la nota qui sopra lo dice già \(la sua risposta\), vale quella, usala\. Se davvero non c'è, manca un dato che nessuna fonte contiene/)
+  o2.smetti()
+})
+
+test('P3 · il fondo non chiede mai: un\'iniziativa con un dato duro consegna con un segnaposto', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  const d = { id: 'posta:fondo-1', fonte: 'posta', tipo: 'email', titolo: 'Quote', corpo: 'Can you send the quote for 20 people?', autore: 'Nora <nora@harbor.example>', quando: new Date().toISOString() }
+  store.salvaDocumenti([d])
+  const { svolgi } = svolgiInFila(['I read Nora\'s mail.\nWhat is the price for 20 people?', 'Done: the quote.\n\nHi Nora,\n\nthe price for 20 people is [to fill: price].\n\nBest\n\nMissing: the price for 20 people.'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda })
+  const id = 'c-fondo-1'
+  store.scriviCompito({ id, testo: 'Reply to Nora about the quote', ordine: id, origine: 'auto:human-mail', doc: d.id })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza', false)
+  await o.aspetta('pronto')
+  assert.ok(!o.sentiti.some(e => e.fase === 'chiede'))
+  assert.equal(store.compito(id)!.domandeFatte, 0)
+  const m = lavoroDati.misura(id)!
+  assert.equal(m.origine, 'fondo')
+  assert.equal(m.domande, 0)
+  assert.equal(m.mossa, 'segnaposto')
+  o.smetti()
+})
+
+test('P3 · un documento nativo bocciato dalla revisione visiva resta «chiede» ma non conta come domanda', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  prova({
+    svolgi: async () => ({ testo: 'The document was saved but needs review.', fonti: [], eseguito: true, consegna: { app: 'Pages', titolo: 'Piano', percorso: '/tmp/piano.pages', revisione: { esito: 'revise', problemi: ['too long'] } } as never }),
+    chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda
+  })
+  const id = riga('Write the plan in Pages')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('chiede')
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'chiede')
+  assert.equal(c.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(id)!.domande, 0)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'produci')
+  o.smetti()
+})
+
+test('P3 · una consegna nativa (Pages) passata dalla revisione visiva tiene la sua riga «I assumed», come le altre', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  prova({
+    svolgi: async () => ({ testo: 'Done: the plan is in Pages.\n\nI assumed four weeks for the pilot.', fonti: [], eseguito: true, consegna: { app: 'Pages', titolo: 'Piano', percorso: '/tmp/piano.pages', revisione: { esito: 'pass', problemi: [] } } as never }),
+    chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda
+  })
+  const id = riga('Write the plan in Pages')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('pronto')
+  const c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.deepEqual(c.ipotesi, ['I assumed four weeks for the pilot.'])
+  assert.equal(c.consegna?.app, 'Pages')
+  assert.equal(lavoroDati.misura(id)!.mossa, 'produci')
+  o.smetti()
+})
+
+test('P3 · una fonte che manca è un blocco: la riga torna sua con la frase fissa, senza «chiede», e si riprende quando la posta si collega', async () => {
+  const claude = await import('./claude.ts')
+  const lavoroDati = await import('./lavoro-dati.ts')
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  let posta = false
+  const { svolgi, ricevute } = svolgiInFila(['I need your mail connected to read Dana\'s thread.', 'Done: the reply to Dana.\n\nHi Dana,\n\nthe invoice is attached.\n\nBest'])
+  prova({ svolgi, chiedeAiuto: (...a) => claude.chiedeAiuto(...a), domandeDaFare: nessunaDomanda, postaCollegata: () => posta })
+  const id = riga('Reply to Dana about the invoice')
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  const g = await o.aspetta('guaio')
+  assert.equal(g.fase === 'guaio' ? g.guaio : '', BLOCCHI.posta)
+  assert.ok(!o.sentiti.some(e => e.fase === 'chiede'))
+  let c = store.compito(id)!
+  assert.equal(c.stato, 'aperto')
+  assert.equal(c.guaio, BLOCCHI.posta)
+  assert.equal(c.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'blocco')
+  assert.equal(lavoroDati.misura(id)!.domande, 0)
+  o.smetti()
+
+  // senza la posta non si riprende; con la posta sì, e la riga arriva pronta
+  assert.equal(await compiti.riprendiBloccati(), 0)
+  assert.equal(ricevute.length, 1)
+  posta = true
+  const o2 = orecchio(id)
+  assert.equal(await compiti.riprendiBloccati(), 1)
+  await o2.aspetta('pronto')
+  c = store.compito(id)!
+  assert.equal(c.stato, 'pronto')
+  assert.equal(c.guaio, null)
+  assert.equal(ricevute.length, 2)
+  o2.smetti()
+
+  // anche dopo sette giorni la riga dice ancora «la riprendo da qui»: si riprende, a qualunque età
+  const vecchia = riga('Reply to Sam about the invoice')
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, new Date(Date.now() - 8 * 86_400_000).toISOString(), vecchia)
+  const o3 = orecchio(vecchia)
+  assert.equal(await compiti.riprendiBloccati(), 1)
+  await o3.aspetta('pronto')
+  assert.equal(store.compito(vecchia)!.stato, 'pronto')
+  o3.smetti()
+})
+
+test('P3 · (contro) una fonte che si rompe (P8) non riprende una riga ferma, e nemmeno un collegamento tolto; una fonte che guarisce sì', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi, ricevute } = svolgiInFila(['Done: the note.\n\nThe note about the Notion page, long enough to be a note and not a status line.'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda })
+  const id = riga('Summarize the Notion page, again')
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
+  const o = orecchio(id)
+  // una fonte che si rompe a una lettura: il fatto arriva alle finestre, la riga resta ferma
+  const sentiti: string[] = []
+  const smetti = compiti.ascolta(e => { sentiti.push(e.fase) }, null)
+  compiti.annunciaSalute({ guarite: [] })
+  compiti.annunciaSalute()
+  await pausa(150)
+  assert.ok(sentiti.includes('collegamento'), 'il fatto non è arrivato alle finestre')
+  assert.equal(ricevute.length, 0, 'ripresa per una fonte che si è rotta')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  // un collegamento tolto (DELETE /api/connettori/:id): le finestre lo sanno, la riga resta ferma
+  compiti.annunciaCollegamento(false, { riprendi: false })
+  await pausa(150)
+  assert.equal(ricevute.length, 0, 'ripresa per un collegamento tolto')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  // una fonte che guarisce alla lettura dopo (un token rimesso, un permesso dato): si riprende
+  compiti.annunciaSalute({ guarite: ['notion'] })
+  await o.aspetta('pronto')
+  assert.equal(ricevute.length, 1)
+  assert.equal(store.compito(id)!.stato, 'pronto')
+  smetti(); o.smetti()
+})
+
+test('P3 · all\'avvio una riga ferma su un permesso si riprende (lui l\'ha dato e ha riaperto Myynd); una ferma su un\'altra fonte aspetta il collegamento o la guarigione', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi, ricevute } = svolgiInFila(['Done: the note.\n\nThe note from Apple Notes, long enough to be a note and not a status line.'])
+  let motore = false
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => false, motorePronto: () => motore })
+  const permesso = riga('Summarize my Apple Notes about the pilot')
+  const fonte = riga('Summarize the Notion page about the pilot')
+  const posta = riga('Reply to Dana about the pilot')
+  const ieri = new Date(Date.now() - 86_400_000).toISOString()
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.permesso, ieri, permesso)
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, ieri, fonte)
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, ieri, posta)
+  const o = orecchio(permesso)
+  // (contro) senza un motore che lavora non si riprende niente: il guaio del motore coprirebbe «la riprendo da qui»
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 0)
+  assert.equal(store.compito(permesso)!.guaio, BLOCCHI.permesso)
+  motore = true
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 1)
+  await o.aspetta('pronto')
+  assert.equal(store.compito(permesso)!.stato, 'pronto')
+  assert.equal(store.compito(fonte)!.stato, 'aperto', 'una fonte non si collega con Myynd chiuso: all\'avvio non c\'è niente di nuovo')
+  assert.equal(store.compito(fonte)!.guaio, BLOCCHI.fonte)
+  assert.equal(store.compito(posta)!.stato, 'aperto', 'la posta non è collegata')
+  assert.equal(ricevute.length, 1)
+  o.smetti()
+  // (contro) la stessa riga sul permesso non si riprende due volte nello stesso giorno
+  assert.equal(await compiti.riprendiBloccati({ avvio: true }), 0)
+  // e una fonte che guarisce riprende quella ferma sulla fonte
+  const o2 = orecchio(fonte)
+  compiti.annunciaSalute({ guarite: ['notion'] })
+  await o2.aspetta('pronto')
+  assert.equal(ricevute.length, 2)
+  o2.smetti()
+  // la riga sulla posta resta ferma: si toglie, o le prove dopo con la posta collegata la riprenderebbero
+  store.scordaCompito(posta)
+})
+
+test('P3 · (contro) con la chiave del motore respinta (P8) una riga ferma non si riprende, e tiene «la riprendo da qui»; con la chiave a posto sì', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  const lavoroDati = await import('./lavoro-dati.ts')
+  compiti.scordaRiprese()
+  // il motore respinge la chiave: ogni lavoro muore sulla chiave
+  let respinta = true
+  let chiamate = 0
+  const svolgi: Ferri['svolgi'] = async () => {
+    chiamate++
+    if (respinta) throw new Error('Claude ha rifiutato la chiave: controllala nelle Fonti.')
+    return { testo: 'Done: the note.\n\nThe note about the Notion page, long enough to be a note and not a status line.', fonti: [], lette: [] }
+  }
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, motoreRifiutato: () => respinta })
+  const id = riga('Summarize the Notion page, with the key refused')
+  store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
+  assert.ok(lavoroDati.bloccatiDaRiprendere().some(c => c.id === id))
+  const o = orecchio(id)
+  // un collegamento annunciato mentre la chiave è respinta: la riga non parte,
+  // e non perde la frase del blocco (prima ci finiva sopra il guaio della chiave)
+  compiti.annunciaCollegamento()
+  await pausa(200)
+  assert.equal(chiamate, 0, 'ripresa con la chiave respinta')
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  assert.equal(store.compito(id)!.guaio, BLOCCHI.fonte)
+  assert.ok(lavoroDati.bloccatiDaRiprendere().some(c => c.id === id), 'non è più una riga ferma')
+  assert.ok(!o.sentiti.some(e => e.fase === 'guaio'))
+  // la chiave torna buona (incollata di nuovo: POST sui connettori, quindi un collegamento): si riprende, senza aspettare un giorno
+  respinta = false
+  compiti.annunciaCollegamento()
+  await o.aspetta('pronto')
+  assert.equal(chiamate, 1)
+  assert.equal(store.compito(id)!.guaio, null)
+  o.smetti()
+})
+
+test('P3 · (contro) un lavoro sul codice che finisce «chiede» e una revisione della bozza fallita non toccano domandeFatte né le misure', async () => {
+  const lavoroDati = await import('./lavoro-dati.ts')
+  // il lavoro sul codice (la rotta `lavora` di index.ts) scrive il risultato da sé, con lo stato del giro
+  const codice = riga('Fix the login bug in the Harbor repo')
+  store.affidaCompito(codice, 'tutto')
+  lavoroDati.registraAffido(store.compito(codice)!, true)
+  assert.ok(store.risultatoCompito(codice, 'I read the repo. Should the fix cover the signup form too?', [], 'chiede'))
+  const c1 = store.compito(codice)!
+  assert.equal(c1.stato, 'chiede')
+  assert.equal(c1.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(codice)!.domande, 0)
+
+  // una riga figlia di revisione senza una base verificabile: la bozza si prepara, la revisione fallisce, la riga chiede
+  const cfg = await import('./config.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const d = { id: 'posta:leo-9', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: new Date().toISOString(), messageId: 'l9@studio.example' }
+  store.salvaDocumenti([d])
+  const { svolgi } = svolgiInFila(['Done: the reply to Leo.\n\nHi Leo,\n\nHere are the logo files in all three formats and the icon set.\n\nBest,\nAlex\n\nFrom the mail [1].'])
+  prova({
+    svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => ({ a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', allegato: null })
+  })
+  const madre = riga('Reply to Leo about the logo files')
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', risultato = ? WHERE id = ?").run('Done: the reply.\n\nHi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', madre)
+  const m = store.compito(madre)!
+  const { createHash } = await import('node:crypto')
+  const base = { tipo: 'testo', task: madre, versione: m.versione, impronta: createHash('sha256').update((m.risultato ?? '').trim()).digest('hex') }
+  const id = 'rev-prova-1'
+  store.scriviCompito({ id, testo: 'Reply to Leo about the logo files', ordine: id, doc: d.id, madre, nota: `REVISION REQUEST: add the icon set\n\nREVISION BASELINE: ${JSON.stringify(base)}` })
+  // la casella dice di no alla bozza rivista: la riga figlia chiede, con il guaio come testo
+  prova({
+    svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => ({ a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: 'Hi Leo,\n\nHere are the logo files.\n\nBest,\nAlex', allegato: null }),
+    salvaBozzaCasella: async () => ({ stato: 'errore', errore: 'The mailbox did not confirm the revised draft identity.' })
+  })
+  const o = orecchio(id)
+  compiti.affida(id, 'bozza')
+  // l'annuncio segue lo stato finale: la riga chiede, ma non ha fatto una domanda
+  await o.aspetta('chiede')
+  const c2 = store.compito(id)!
+  assert.equal(c2.stato, 'chiede')
+  assert.match(c2.risultato ?? '', /did not confirm/)
+  assert.equal(c2.domandeFatte, 0)
+  assert.equal(lavoroDati.misura(id)!.domande, 0)
+  assert.equal(lavoroDati.misura(id)!.mossa, 'produci')
+  o.smetti()
+})
+
+test('P3 · anche un blocco sulla posta si riprende al più una volta al giorno', async () => {
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  compiti.scordaRiprese()
+  const { svolgi } = svolgiInFila(['Done: the reply.\n\nHi Dana,\n\nthe invoice is attached, with the two lines you asked about.\n\nBest'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true })
+  const id = riga('Reply to Dana about the invoice, again')
+  const ferma = () => store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.posta, new Date().toISOString(), id)
+  ferma()
+  const o = orecchio(id)
+  assert.equal(await compiti.riprendiBloccati(), 1)
+  await o.aspetta('pronto')
+  // torna a bloccarsi nello stesso giorno: non si rifà il lavoro a ogni cambio di collegamento
+  ferma()
+  assert.equal(await compiti.riprendiBloccati(), 0)
+  assert.equal(store.compito(id)!.stato, 'aperto')
+  o.smetti()
+})
+
+test('P3 · un blocco generico si riprende al più una volta al giorno, e due persone non si vedono', async () => {
+  const chi = await import('./chi.ts')
+  const conti = await import('./conti.ts')
+  const { BLOCCHI } = await import('./domanda-sola.ts')
+  const a = await conti.registra('p3-a@esempio.it', 'password-di-prova-a')
+  const b = await conti.registra('p3-b@esempio.it', 'password-di-prova-b')
+  assert.ok(a.ok && b.ok)
+  compiti.scordaRiprese()
+  const { svolgi } = svolgiInFila(['Done: the note.\n\nThe note about Notion, long enough to be a note and not a status line.'])
+  prova({ svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda })
+  const ferma = (id: string) => {
+    store.scriviCompito({ id, testo: 'Summarize the Notion page', ordine: id })
+    store.default.prepare("UPDATE compiti SET stato = 'aperto', guaio = ?, aggiornato = ? WHERE id = ?").run(BLOCCHI.fonte, new Date().toISOString(), id)
+  }
+  chi.dentro(a.id, () => { store.azzeraTutto(); ferma('n1') })
+  chi.dentro(b.id, () => { store.azzeraTutto(); ferma('n1') })
+  const oA = chi.dentro(a.id, () => orecchio('n1', a.id))
+  assert.equal(await chi.dentro(a.id, () => compiti.riprendiBloccati()), 1)
+  await oA.aspetta('pronto')
+  assert.equal(await chi.dentro(a.id, () => compiti.riprendiBloccati()), 0, 'ripresa due volte nello stesso giorno')
+  // B ha la sua riga, con lo stesso id: la memoria di A non la ferma
+  const oB = chi.dentro(b.id, () => orecchio('n1', b.id))
+  assert.equal(await chi.dentro(b.id, () => compiti.riprendiBloccati()), 1)
+  await oB.aspetta('pronto')
+  oA.smetti(); oB.smetti()
+})
+
+test('P3 · un messaggio a una persona porta la voce e la lingua a chi svolge, e la riga tiene la voce usata e l\'allegato vero', async () => {
+  const cfg = await import('./config.ts')
+  const lavoroDati = await import('./lavoro-dati.ts')
+  cfg.scrivi({ lingua: 'en' })
+  const d = { id: 'posta:marco-1', fonte: 'posta', tipo: 'email', titolo: 'Preventivo corso', corpo: 'Ciao Alex, ci mandi il preventivo per il corso da dodici persone?', autore: 'Marco Rossi <marco.rossi@lumen.example>', quando: new Date().toISOString(), messageId: 'm1@lumen.example' }
+  store.salvaDocumenti([d])
+  const voceFinta = { blocco: 'Come scrive a Marco, da 4 mail che gli ha mandato: in italiano, del tu.', consegna: 'it' as const, scritta: { destinatario: 'Marco', lingua: 'it', quanti: 4, esempi: [{ id: 'posta:Sent:4', label: 'Re: corso' }] }, profilo: { lingua: 'it' as const, saluto: null, chiusura: null, parole: { mediana: 40, alta: 60 }, registro: 'tu' as const, elenchi: false, quanti: 4 }, destinatario: { indirizzo: 'marco.rossi@lumen.example', nome: 'Marco' } }
+  const { svolgi, ricevute } = svolgiInFila(['Done: the reply to Marco, with the price from the list.\n\nCiao Marco,\n\nil corso da dodici persone costa 890 euro a persona, come da listino.\n\nA presto,\nAlex\n\nPrice from the price list [2].'])
+  let opzioniEmail: unknown
+  prova({
+    svolgi, chiedeAiuto: classificaP3, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    voce: { perRiga: () => voceFinta },
+    preparaEmail: async (_c, _b, _f, _d, o) => { opzioniEmail = o; return { a: 'marco.rossi@lumen.example', oggetto: 'Re: Preventivo corso', corpo: 'Done: x.\n\nCiao Marco,\n\nil corso costa 890 euro a persona.\n\nA presto,\nAlex\n\nPrice from the list [2].', allegato: null } }
+  })
+  const id = 'c-marco-1'
+  store.scriviCompito({ id, testo: 'Reply to Marco about the course quote', ordine: id, doc: d.id })
+  const o = orecchio(id)
+  compiti.affida(id, 'tutto')
+  await o.aspetta('pronto')
+  const e = ricevute[0].esecuzione as { voce?: string; consegna?: string }
+  assert.equal(e.voce, voceFinta.blocco)
+  assert.equal(e.consegna, 'it')
+  assert.deepEqual(opzioniEmail, { consegna: 'it', candidati: [] })
+  const c = store.compito(id)!
+  assert.deepEqual(c.voceScritta, voceFinta.scritta)
+  assert.equal(c.ipotesi, null)
+  // la cornice non arriva a chi riceve, qualunque cosa abbia capito chi smonta
+  assert.equal(c.email?.corpo, 'Ciao Marco,\n\nil corso costa 890 euro a persona.\n\nA presto,\nAlex')
+  assert.equal(lavoroDati.misura(id)!.tipo, 'preventivo')
+  o.smetti()
+})
+
+test('P3 · imparaDallaRisposta distilla la risposta e la correzione con il compito e quello che Myynd aveva detto', async () => {
+  const scambi: { scambio: { ruolo: string; testo: string }[]; origine?: string }[] = []
+  prova({ svolgi: async () => ({ testo: 'x', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, distilla: async (scambio, origine) => { scambi.push({ scambio, origine }); return 0 } })
+  compiti.imparaDallaRisposta({ testo: 'Reply to Dana' }, 'What is Dana\'s address?', 'dana@example.com', 'risposta')
+  compiti.imparaDallaRisposta({ testo: 'Write the note' }, 'I assumed Tuesday.', 'Monday, October 5', 'correzione')
+  compiti.imparaDallaRisposta({ testo: 'Write the note' }, 'I assumed Tuesday.', '   ', 'correzione')
+  await pausa(20)
+  assert.equal(scambi.length, 2)
+  assert.equal(scambi[0].origine, 'risposta')
+  assert.match(scambi[0].scambio[0].testo, /Aveva affidato: «Reply to Dana»\. Myynd le aveva chiesto: What is Dana's address\?/)
+  assert.equal(scambi[0].scambio[1].testo, 'dana@example.com')
+  assert.equal(scambi[1].origine, 'correzione')
+  assert.match(scambi[1].scambio[0].testo, /Myynd aveva supposto: I assumed Tuesday\./)
+})
