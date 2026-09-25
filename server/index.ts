@@ -1862,9 +1862,12 @@ app.post('/api/connettori/whatsapp', async (req, res) => {
   }
   if (!c.parola) return res.status(400).json({ errore: 'Serve una parola d\u2019ordine: la riscriverai su Meta.' })
   try {
+    const inizio = Date.now()
     const e = await whatsapp.prova(c)
     if (!e.ok) return res.status(400).json({ errore: e.errore })
     cfg.aggiorna({ whatsapp: { ...c, etichetta: e.etichetta, arrivati: 0 } })
+    // la sonda è appena riuscita: il guaio del token si chiude adesso, non domani
+    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaCollegamento()
     res.json({ ok: true, etichetta: e.etichetta })
   } catch (e) { errore(res, e) }
 })

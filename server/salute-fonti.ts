@@ -79,6 +79,13 @@ export function versioneApp(): string | null {
 }
 
 const CURSORE_VERSIONE = (fonte: string) => `salute:versione:${fonte}`
+/**
+ * Com'è andata la prima lettura dopo un giorno finito male: «si» pulita, «no»
+ * fallita. La scrive la lettura stessa, perché alla chiusura del giorno
+ * l'episodio può essersi già chiuso con una lettura pulita venuta dopo quella
+ * che ha fallito di nuovo, e allora non si saprebbe più.
+ */
+const CURSORE_DOPO = (fonte: string, giorno: string) => `salute:dopo:${fonte}:${giorno}`
 
 // — le righe —
 
@@ -125,11 +132,11 @@ function rigaNuova(giorno: string, fonte: string): Riga {
  * prima pagina deve cambiare: l'episodio di questa fonte è diventato
  * visibile, o ha smesso di esserlo.
  */
-export function registra(r: Registrazione, o: { risveglio?: number } = {}): { cambiato: boolean } {
+export function registra(r: Registrazione, o: { risveglio?: number; adesso?: number } = {}): { cambiato: boolean } {
   const fallita = r.esito !== 'pulita'
   if (fallita && r.rimedio === 'attendi' && r.quando - (o.risveglio ?? ultimoRisveglio()) < DOPO_RISVEGLIO_MS) return { cambiato: false }
   const iso = new Date(r.quando).toISOString()
-  const giorno = giornoIn(new Date(r.quando))
+  let giorno = giornoIn(new Date(r.quando))
   const versione = versioneApp()
   db.exec('BEGIN')
   try {
@@ -158,7 +165,29 @@ export function registra(r: Registrazione, o: { risveglio?: number } = {}): { ca
         .run(dopo.motivo, dopo.rimedio, dopo.frase, dopo.fila, dopo.visto, r.fonte)
     }
 
-    const g = riga(giorno, r.fonte) ?? rigaNuova(giorno, r.fonte)
+    // una lettura lunga, finita dopo che il suo giorno si è chiuso, conta
+    // su oggi: una riga chiusa non si riscrive mai
+    let g = riga(giorno, r.fonte)
+    if (g && g.verdetto !== null) {
+      const oggi = giornoIn(new Date(Math.max(o.adesso ?? Date.now(), r.quando)))
+      g = oggi > giorno ? riga(oggi, r.fonte) : null
+      if (g && g.verdetto !== null) g = null
+      giorno = oggi > giorno ? oggi : ''
+    }
+    // la prima lettura dopo un giorno finito male dice se si è ripresa
+    if (giorno) {
+      const aspettano = db.prepare('SELECT giorno FROM salute_fonti WHERE fonte = ? AND giorno < ? AND fila > 0 AND verdetto IS NULL')
+        .all(r.fonte, giorno) as { giorno: string }[]
+      for (const x of aspettano) {
+        const k = CURSORE_DOPO(r.fonte, x.giorno)
+        if (cursore(k) === null) segnaCursore(k, fallita ? 'no' : 'si')
+      }
+    }
+    if (!giorno) {
+      db.exec('COMMIT')
+      return { cambiato: primaVisibile !== (!!dopo && visibile(dopo)) }
+    }
+    g = g ?? rigaNuova(giorno, r.fonte)
     g.letture += 1
     if (!fallita) {
       g.pulite += 1
@@ -324,9 +353,12 @@ export function chiudiGiorni(adesso = new Date()): number {
       const testa = TESTE.has(r.fonte)
       if (!testa) r.documenti = arrivi.get(r.fonte) ?? 0
       let ripreso: boolean | null = true
+      const segno = !testa && r.fila > 0 ? cursore(CURSORE_DOPO(r.fonte, giorno)) : null
       if (!testa && r.fila > 0 && fonteCollegata(r.fonte, c)) {
         const ep = episodio(r.fonte)
-        if (ep && ep.dal < fine) {
+        // la lettura dopo l'ha detto lei, quando è arrivata
+        if (segno !== null) ripreso = segno === 'si'
+        else if (ep && ep.dal < fine) {
           const dopo = db.prepare('SELECT 1 FROM salute_fonti WHERE fonte = ? AND giorno > ? AND (letture > 0 OR sonda IS NOT NULL) LIMIT 1')
             .get(r.fonte, giorno)
           ripreso = dopo ? false : null
@@ -338,6 +370,7 @@ export function chiudiGiorni(adesso = new Date()): number {
         continue
       }
       db.prepare('UPDATE salute_fonti SET documenti = ?, verdetto = ? WHERE giorno = ? AND fonte = ?').run(r.documenti, v, giorno, r.fonte)
+      if (segno !== null) segnaCursore(CURSORE_DOPO(r.fonte, giorno), null)
       chiuse++
     }
   }
@@ -423,6 +456,20 @@ const WHATSAPP_TOKEN = 'Il token di WhatsApp non è valido o è scaduto.'
 const WHATSAPP_ZITTO = 'Meta non ha risposto.'
 
 /**
+ * Quello che ha detto Meta a una sonda di WhatsApp, nel conto del giorno.
+ *
+ * La fa il giro del giorno, e la fa il pannello quando lui rimette il token:
+ * una sonda riuscita lì chiude subito il guaio, senza aspettare domani.
+ */
+export function sondaWhatsapp(
+  esito: { ok: true } | { ok: false; errore: string }, durata: number, quando = Date.now()
+): { cambiato: boolean } {
+  if (esito.ok) return registra({ fonte: 'whatsapp', esito: 'pulita', rimedio: null, frase: null, durata, tolti: 0, inventario: null, sonda: 'ok', quando })
+  const rimedio: Rimedio = esito.errore === WHATSAPP_TOKEN ? 'credenziale' : esito.errore === WHATSAPP_ZITTO ? 'attendi' : 'guarda'
+  return registra({ fonte: 'whatsapp', esito: 'guaio', rimedio, frase: esito.errore, durata, tolti: 0, inventario: null, sonda: rimedio, quando })
+}
+
+/**
  * Una volta al giorno: chiude i giorni, bussa a WhatsApp, e scrive una riga.
  *
  * WhatsApp non si legge mai (i messaggi li spinge Meta): la sua salute la dice
@@ -439,13 +486,7 @@ export async function giornaliero(dip: { prova?: typeof whatsapp.prova; adesso?:
     if (fonteCollegata('whatsapp', c) && c.whatsapp) {
       const inizio = Date.now()
       const r = await (dip.prova ?? whatsapp.prova)(c.whatsapp)
-      const quando = adesso().getTime()
-      const durata = Date.now() - inizio
-      if (r.ok) registra({ fonte: 'whatsapp', esito: 'pulita', rimedio: null, frase: null, durata, tolti: 0, inventario: null, sonda: 'ok', quando })
-      else {
-        const rimedio: Rimedio = r.errore === WHATSAPP_TOKEN ? 'credenziale' : r.errore === WHATSAPP_ZITTO ? 'attendi' : 'guarda'
-        registra({ fonte: 'whatsapp', esito: 'guaio', rimedio, frase: r.errore, durata, tolti: 0, inventario: null, sonda: rimedio, quando })
-      }
+      sondaWhatsapp(r, Date.now() - inizio, adesso().getTime())
     }
   } catch (e) { console.error('myynd · fonti · WhatsApp non si è lasciato provare:', e instanceof Error ? e.message : e) }
   try { console.log(rigaDelGiorno(spostaGiorno(giornoIn(adesso()), 1), adesso())) }

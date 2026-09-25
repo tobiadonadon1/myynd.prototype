@@ -228,6 +228,41 @@ test('chiudiGiorni: timeout alle 23:55 e lettura pulita alle 8: la giornata è p
   assert.equal(rigaDi(giorno(10), 'slack')!.verdetto, 'pulito')
 }))
 
+test('chiudiGiorni: la lettura delle 8 fallisce di nuovo e quella delle 8:15 è pulita: il giorno prima resta guasto', () => inA(() => {
+  reg({ fonte: 'slack', quando: alle(20, 9) })
+  reg({ fonte: 'slack', quando: alle(20, 23, 55), esito: 'guaio', rimedio: 'attendi' })
+  reg({ fonte: 'slack', quando: alle(21, 8), esito: 'guaio', rimedio: 'attendi' })
+  reg({ fonte: 'slack', quando: alle(21, 8, 15) })
+  assert.equal(ep('slack'), undefined, 'l’episodio è già chiuso')
+  sf.chiudiGiorni(new Date(alle(21, 9)))
+  assert.equal(rigaDi(giorno(20), 'slack')!.verdetto, 'guasto')
+  assert.equal(store.cursore('salute:dopo:slack:2026-09-20'), null, 'il segno se ne va con la chiusura')
+}))
+
+test('chiudiGiorni: la prima lettura dopo è pulita, e poi ne fallisce un’altra: ripreso (counter-case)', () => inA(() => {
+  reg({ fonte: 'slack', quando: alle(20, 9) })
+  reg({ fonte: 'slack', quando: alle(20, 23, 55), esito: 'guaio', rimedio: 'attendi' })
+  reg({ fonte: 'slack', quando: alle(21, 8) })
+  reg({ fonte: 'slack', quando: alle(21, 8, 10), esito: 'guaio', rimedio: 'attendi' })
+  sf.chiudiGiorni(new Date(alle(21, 9)))
+  assert.equal(rigaDi(giorno(20), 'slack')!.verdetto, 'pulito')
+}))
+
+test('una lettura lunga che finisce dopo la chiusura del suo giorno conta su oggi: la riga chiusa non cambia', () => inA(() => {
+  reg({ fonte: 'note', quando: alle(20, 12) })
+  sf.chiudiGiorni(new Date(alle(21, 0, 5)))
+  const prima = { ...rigaDi(giorno(20), 'note')! }
+  assert.equal(prima.verdetto, 'pulito')
+  sf.registra({ fonte: 'note', esito: 'guaio', rimedio: 'permesso-disco', frase: null, durata: 600_000, tolti: 0, inventario: null, quando: alle(20, 23, 59) },
+    { risveglio: 0, adesso: alle(21, 0, 10) })
+  assert.deepEqual({ ...rigaDi(giorno(20), 'note') }, prima)
+  const oggi = rigaDi(giorno(21), 'note')!
+  assert.equal(oggi.letture, 1)
+  assert.equal(oggi.guai, 1)
+  assert.equal(oggi.rimedio, 'permesso-disco')
+  assert.equal(ep('note')!.rimedio, 'permesso-disco', 'l’episodio si apre comunque')
+}))
+
 test('chiudiGiorni: il silenzio si scrive sul giorno giusto; una fonte che di solito tace no', () => inA(() => {
   for (let g = 1; g <= 10; g++) { metti(giorno(g), 'posta', { documenti: 20 }); metti(giorno(g), 'slack', { documenti: g % 5 === 0 ? 1 : 0 }) }
   for (const g of [11, 12]) { metti(giorno(g), 'posta', { verdetto: null }); metti(giorno(g), 'slack', { verdetto: null }) }
@@ -281,6 +316,17 @@ test('la sonda di WhatsApp: ok è pulita; il token scaduto è credenziale; Meta 
     assert.equal(rigaDi('2026-09-20', 'whatsapp')!.rimedio, 'attendi')
   })
 })
+
+test('il token rimesso dal pannello: la sonda riuscita chiude subito il guaio di WhatsApp', () => inA(() => {
+  assert.equal(sf.sondaWhatsapp({ ok: false, errore: 'Il token di WhatsApp non è valido o è scaduto.' }, 10, alle(20, 12)).cambiato, true)
+  assert.equal(sf.fontiIncomplete()[0].fonte, 'whatsapp')
+  // un altro guaio non cambia la riga (counter-case)
+  assert.equal(sf.sondaWhatsapp({ ok: false, errore: 'Il token di WhatsApp non è valido o è scaduto.' }, 10, alle(20, 13)).cambiato, false)
+  cfg.aggiorna({ whatsapp: { token: 'nuovo', numero: '1', segreto: 's', parola: 'p' } } as Partial<Config>)
+  assert.equal(sf.sondaWhatsapp({ ok: true }, 10, alle(20, 14)).cambiato, true)
+  assert.deepEqual(sf.fontiIncomplete(), [])
+  assert.equal(rigaDi('2026-09-20', 'whatsapp')!.sonda, 'ok')
+}))
 
 test('un giorno che non si chiude non ferma la sonda', async () => {
   await chi.dentro(A, async () => {
