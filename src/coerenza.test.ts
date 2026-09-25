@@ -38,7 +38,9 @@ const CAMPI_CONSENTITI = new Set([
   'screens/Agenda.tsx', 'oggi/Dettaglio.tsx', 'modals.tsx',
   'automazioni/Costruttore.tsx', 'automazioni/Editor.tsx', 'automazioni/Chiocciola.tsx', 'screens/Automazioni.tsx',
   'screens/ComeLavori.tsx', 'screens/RigaConvinzione.tsx', 'screens/ProgettoEditor.tsx', 'screens/Mappa.tsx',
-  'components/SenderRules.tsx', 'oggi/Calendario.tsx', 'oggi/Giro.tsx', 'richiamo/Richiamo.tsx'
+  'components/SenderRules.tsx', 'oggi/Calendario.tsx', 'oggi/Giro.tsx', 'richiamo/Richiamo.tsx',
+  // P3: la correzione dell'ipotesi sta dentro la `Scatola` della barra, come i campi della prima pagina
+  'oggi/RigaIpotesi.tsx'
 ])
 
 function campiGrezzi(): Map<string, number> {
@@ -94,8 +96,9 @@ test('i campi di testo grezzi stanno solo dove hanno una ragione', () => {
   assert.deepEqual(fuori, [], 'un campo nuovo passa da Campo o Casella in components/forme.tsx')
   const totale = [...m.values()].reduce((a, b) => a + b, 0)
   console.log(`coerenza · campi grezzi: ${totale}`)
-  // 25 set 2026: 111 sul main prima di P5, 100 dopo (Preferenze e Memoria a zero; forme.tsx ne ha 3)
-  assert.ok(totale <= 100, `campi grezzi: ${totale}, il cricchetto è a 100`)
+  // 25 set 2026: 111 sul main prima di P5, 100 dopo (Preferenze e Memoria a zero; forme.tsx ne ha 3);
+  // 101 con P3, la correzione dell'ipotesi dentro la Scatola della barra
+  assert.ok(totale <= 101, `campi grezzi: ${totale}, il cricchetto è a 101`)
 })
 
 test('Preferenze e Memoria non hanno campi grezzi né le schede di prima', () => {
