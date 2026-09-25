@@ -49,7 +49,7 @@
   {"vai": "Preferences"},
   {"clicca": "AI and costs"},
   {"aspetta": 800},
-  {"js": "(() => { const lab = [...document.querySelectorAll('.prefs-nome')].find(x => /Check answers every week/.test(x.textContent || '')); if (!lab) return 'riga non trovata'; lab.scrollIntoView({ block: 'center' }); return 'riga in vista' })()"},
+  {"js": "(() => { const lab = [...document.querySelectorAll('.f-nome')].find(x => /Check answers every week/.test(x.textContent || '')); if (!lab) return 'riga non trovata'; lab.scrollIntoView({ block: 'center' }); return 'riga in vista' })()"},
   {"aspetta": 600},
   {"scatta": "preferenze"},
   {"testo": "preferenze"}
