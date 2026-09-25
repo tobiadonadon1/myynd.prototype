@@ -132,11 +132,26 @@ const GIORNI_DELLA_SETTIMANA = [
 ]
 
 /**
+ * Le parole relative che una fonte può dire, e a quanti giorni dalla sua data
+ * stanno: la stessa lista che `data-carta.assoluto` scioglie nel giorno della
+ * settimana. Devono restare uguali: una carta nata da «tonight» dice
+ * «Thursday evening», e il filtro della pagina la deve leggere come fondata,
+ * altrimenti è salvata e mai mostrata.
+ */
+const RELATIVI_DELLA_FONTE: readonly [RegExp, number][] = [
+  [/\b(?:today|oggi|tonight|stasera|stamattina|stanotte|this morning|this evening)\b/i, 0],
+  [/\b(?:tomorrow|domani)\b/i, 1],
+  [/\bdopodomani\b/i, 2],
+  [/\b(?:yesterday|ieri)\b/i, -1]
+]
+
+/**
  * Un giorno nel testo è fondato se la fonte lo nomina, **oppure** se la fonte
  * dice «domani» e il testo dice il giorno che «domani» voleva dire nel
  * calendario della fonte. Strettamente più permissivo di `tempoFondato`: una
  * mail di lunedì che chiede «tomorrow at 9:30» regge una carta che dice
- * «Tuesday 9:30», che è quello che si vuole leggere anche mercoledì.
+ * «Tuesday 9:30», che è quello che si vuole leggere anche mercoledì. Lo
+ * stesso per «tonight» (il giorno della mail), «yesterday» (quello prima).
  */
 export function giornoFondato(testo: string, d: Pick<Documento, 'titolo' | 'corpo' | 'autore' | 'quando'>): boolean {
   const senzaAccenti = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -151,8 +166,7 @@ export function giornoFondato(testo: string, d: Pick<Documento, 'titolo' | 'corp
   }
   const giorno = new Date(quando).getDay()
   const ammessi = new Set<number>()
-  const relativi: [RegExp, number][] = [[/\b(?:today|oggi)\b/i, 0], [/\b(?:tomorrow|domani)\b/i, 1], [/\bdopodomani\b/i, 2]]
-  for (const [re, k] of relativi) if (re.test(fonte)) ammessi.add((giorno + k) % 7)
+  for (const [re, k] of RELATIVI_DELLA_FONTE) if (re.test(fonte)) ammessi.add((giorno + k + 7) % 7)
   return GIORNI_DELLA_SETTIMANA.every((re, i) => !re.test(s) || re.test(fonte) || ammessi.has(i))
 }
 

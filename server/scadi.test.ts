@@ -126,3 +126,19 @@ test('riaprire una carta cancella la ragione, chiuderla la scrive', () => {
   store.cambiaStatoFeed(id, 'aperto', '', 'lui')
   assert.equal(stato(id).ragione, null)
 })
+
+test('nata lunedì con «next Monday» sta martedì: scade la settimana dopo, non il giorno dopo; e una pillola «stasera» di prima scade martedì', async () => {
+  store.azzeraTutto()
+  const { assoluta } = await import('./data-carta.ts')
+  const prossimo = nata('Fai la revisione con Marco', LUNEDI_SERA, assoluta('next Monday', LUNEDI_SERA))
+  assert.equal(stato(prossimo).urgenza, '28 set')
+  assert.ok(aperte(MARTEDI).includes(prossimo), 'il martedì è ancora lì')
+  assert.ok(aperte(new Date(2026, 8, 28, 23)).includes(prossimo), 'il lunedì dopo è il suo giorno')
+  assert.ok(!aperte(new Date(2026, 8, 29, 7)).includes(prossimo), 'il martedì dopo è sparita')
+  assert.equal(stato(prossimo).ragione, 'data')
+  // una pillola relativa scritta prima di P2: «stasera» si legge sulla nascita, e il giorno dopo scade per data
+  const stasera = nata('Chiama Anna sul contratto', LUNEDI_SERA, 'stasera')
+  assert.equal(pillolaDi(stato(stasera).urgenza, stato(stasera).quando, LUNEDI_SERA), 'Oggi')
+  assert.ok(!aperte(MARTEDI).includes(stasera))
+  assert.equal(stato(stasera).ragione, 'data')
+})

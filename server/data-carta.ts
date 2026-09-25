@@ -25,6 +25,8 @@ export const MESI_EN_CORTI = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', '
 export const MESI_IT_CORTI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
 export const GIORNI_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 export const GIORNI_IT = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
+/** «next Monday», «lunedì prossimo»: la settimana dopo, non questa. */
+const PROSSIMO = /\b(?:next|prossim[oa])\b/i
 const GIORNO_SETTIMANA = /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|domenica|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato)\b/i
 
 const senzaAccenti = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -83,13 +85,15 @@ export function dataNel(s: string, base: Date): Date | null {
   if ((m = new RegExp(`\\b(${MESE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?![:.]\\d)(?:,?\\s*(\\d{4}))?`, 'i').exec(piano))) {
     return componi(anno(m[3]), meseDa(m[1]), Number(m[2]))
   }
-  if ((m = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(piano))) {
+  // «22/9» è una data; «entro 3/4 giorni» e «in 2/3 days» sono una durata, non il 3 aprile
+  if ((m = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b(?!\s*(?:giorni|giorno|gg|days?|ore|ora|hours?|settimane|settimana|weeks?|mesi|mese|months?)\b)/i.exec(piano))) {
     const a = Number(m[1]), b = Number(m[2])
     // «22/9» è giorno/mese in italiano e in ogni caso in cui il primo numero non può essere un mese
     const [g, mese] = a > 12 || (b <= 12 && lingua() === 'it') ? [a, b] : [b, a]
     return componi(anno(m[3]), mese - 1, g)
   }
-  if (/\b(?:today|oggi)\b/i.test(piano)) return inizioDelGiorno(base)
+  // «stasera», «tonight», «stamattina»: il giorno della base, come «oggi»
+  if (/\b(?:today|oggi|tonight|stasera|stamattina|stanotte|this morning|this evening)\b/i.test(piano)) return inizioDelGiorno(base)
   if (/\b(?:tomorrow|domani)\b/i.test(piano)) return new Date(inizioDelGiorno(base).getTime() + GIORNO)
   if ((m = GIORNO_SETTIMANA.exec(piano))) {
     const nome = m[1].toLowerCase()
@@ -97,11 +101,14 @@ export function dataNel(s: string, base: Date): Date | null {
     const it = GIORNI_IT.findIndex(g => senzaAccenti(g).toLowerCase() === nome)
     const giorno = en >= 0 ? en : it
     if (giorno < 0) return null
-    const fra = (giorno - base.getDay() + 7) % 7
+    let fra = (giorno - base.getDay() + 7) % 7
+    // «next Monday» detto di lunedì è fra sette giorni, non oggi
+    if (fra === 0 && PROSSIMO.test(piano)) fra = 7
     return new Date(inizioDelGiorno(base).getTime() + fra * GIORNO)
   }
   return null
 }
+
 
 /**
  * Quando scade una carta: l'inizio del giorno scritto nella sua urgenza,

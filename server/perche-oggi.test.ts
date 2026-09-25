@@ -83,3 +83,16 @@ test('l’ordine dei guai: il primo che trova', () => {
   // relativo viene prima di obiettivo
   assert.equal(percheFondato('Conta per il progetto H-Farm da domani.', FONTE, PROGETTI), 'relativo')
 })
+
+test('passa: il giorno che «tonight» e «yesterday» volevano dire nella fonte, come li scrive `assoluto`', () => {
+  const stasera = { titolo: 'x', corpo: 'Can you send me the signed contract tonight? I file it first thing.', autore: null, quando: LUNEDI }
+  assert.equal(giornoFondato('Nora needs the signed contract Monday evening.', stasera), true)
+  assert.equal(giornoFondato('Nora needs the signed contract Tuesday evening.', stasera), false, 'martedì non è «tonight» per una mail di lunedì')
+  assert.equal(percheFondato('Nora files it Monday evening, first thing.', { testo: stasera.corpo, quando: LUNEDI }), null)
+  const ieri = { titolo: 'x', corpo: 'Anna sent the draft yesterday and waits for your notes.', autore: null, quando: LUNEDI }
+  assert.equal(giornoFondato('Anna sent the draft Sunday.', ieri), true)
+  assert.equal(giornoFondato('Anna sent the draft Saturday.', ieri), false)
+  for (const [parola, giorno] of [['stasera', 'lunedì'], ['stamattina', 'lunedì'], ['stanotte', 'lunedì'], ['this morning', 'Monday'], ['this evening', 'Monday'], ['ieri', 'domenica'], ['dopodomani', 'mercoledì']]) {
+    assert.equal(giornoFondato(`Chiama ${giorno}`, { titolo: 'x', corpo: `Puoi chiamarmi ${parola}?`, autore: null, quando: LUNEDI }), true, parola)
+  }
+})
