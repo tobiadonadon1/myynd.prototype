@@ -24,6 +24,7 @@ import { join, resolve, sep } from 'node:path'
 import * as conti from './conti.ts'
 import * as cfg from './config.ts'
 import * as store from './store.ts'
+import * as risposteArchivio from './risposte-archivio.ts'
 
 /**
  * La cartella di questo conto si può cancellare?
@@ -69,6 +70,9 @@ export async function cancella(utente: string): Promise<Esito> {
     rmSync(dove, { recursive: true, force: true })
     file = true
   } else {
+    // la cartella resta, ma le copie private della prova delle risposte no:
+    // sono domande e risposte tratte dal suo materiale
+    risposteArchivio.togli(dove)
     console.error(`myynd · il conto ${utente} è stato cancellato, ma i suoi file stanno in ${dove} — fuori da utenti/ — e li ho lasciati lì.`)
   }
 

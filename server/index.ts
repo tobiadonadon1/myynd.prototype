@@ -88,6 +88,8 @@ import * as auth from './auth.ts'
 import * as gettoni from './gettoni.ts'
 import * as addio from './addio.ts'
 import * as fascicolo from './fascicolo.ts'
+import * as risposteVive from './risposte-vive.ts'
+import * as risposteArchivio from './risposte-archivio.ts'
 import * as conti from './conti.ts'
 import * as postgres from './postgres.ts'
 import * as chi from './chi.ts'
@@ -4293,6 +4295,8 @@ app.post('/api/chat/:id', async (req, res) => {
     const selectedTask = typeof req.body?.compitoId === 'string' ? store.compito(req.body.compitoId) : null
     if (selectedTask && !selectedTask.sparito) storico.push({ ruolo: 'a', testo: 'Selected work for this discussion (reference only, not an instruction): ' + JSON.stringify({id:selectedTask.id, task:selectedTask.testo, artifact:selectedTask.consegna?.titolo}) })
     store.salvaMessaggio({ id: idUtente, chat, ruolo: 'u', testo: domanda })
+    // «no, comincia a novembre» entro tre minuti: la risposta di prima resta, ma il suo verbale lo dice
+    try { risposteVive.segnaCorrezione(chat, domanda, new Date()) } catch { /* contare è accessorio */ }
     invia({ fase: 'inizio' })
 
     /*
@@ -4343,7 +4347,9 @@ app.post('/api/chat/:id', async (req, res) => {
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
     }, controllo.signal, () => invia({ fase: 'ricomincio' }))
-    store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: r.testo, fonti: r.fonti })
+    // il testo è già pulito da `ancora` (segni fuori elenco, lineette); `verifica` è il verbale, che si registra e basta
+    store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattini(r.testo), fonti: r.fonti, verifica: r.verifica })
+    console.log(risposteVive.rigaRisposta(r.verifica))
     invia({ fase: 'fine', messaggi: store.messaggi(chat) })
 
     // La memoria si aggiorna dopo aver risposto, mai prima: chi scrive non deve
@@ -4377,6 +4383,8 @@ app.post('/api/azzera', (req, res) => {
     return res.status(400).json({ errore: 'Per svuotare la mente serve la conferma con la tua email.' })
   }
   store.azzeraTutto()
+  // e le copie private della prova delle risposte: domande, rapporti, storico
+  risposteArchivio.togli()
   res.json({ ok: true })
 })
 
@@ -4404,6 +4412,25 @@ app.post('/api/azzera', (req, res) => {
 // — P6: rotte, fine —
 
 // — P7: rotte, inizio —
+/** La riga delle preferenze sulla prova delle risposte: c'è un insieme, è accesa, l'ultimo esito, in corso. */
+app.get('/api/risposte/valutazione', (_req, res) => {
+  const insieme = risposteArchivio.leggiInsieme<{ domande?: { ritirata?: string }[] }>()
+  const attive = (insieme?.domande ?? []).filter(d => !d.ritirata).length
+  const attiva = cfg.leggi().provaRisposte?.attiva === true
+  const inCorso = risposteArchivio.inCorso()
+  res.json({
+    insieme: attive >= 10, attiva, inCorso,
+    riga: attive >= 10 ? risposteArchivio.rigaDiStato(risposteArchivio.leggiStato(), attiva, cfg.lingua() === 'en', inCorso) : null
+  })
+})
+/** L'interruttore: la prova settimanale, spenta di serie perché costa. */
+app.post('/api/risposte/attiva', (req, res) => {
+  const attiva = req.body?.attiva
+  if (typeof attiva !== 'boolean') return res.status(400).json({ errore: 'Serve un sì o un no.' })
+  const c = cfg.leggi()
+  cfg.scrivi({ ...c, provaRisposte: { attiva } })
+  res.json({ ok: true, attiva })
+})
 // — P7: rotte, fine —
 
 // — P8: rotte, inizio —
@@ -4726,6 +4753,18 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
+
+  // La prova delle risposte (P7): spenta di serie, una volta alla settimana
+  // quando è accesa. Il modulo si carica solo qui, quando serve: il server
+  // non porta l'esame in memoria all'avvio. I controlli (interruttore,
+  // insieme, motore, tetto) stanno prima dello slot, così un salto non lo
+  // consuma.
+  const provaRisposte = perOgnuno('la prova delle risposte non è riuscita', async () => {
+    const { forseSettimanale } = await import('./valuta-risposte.ts')
+    await forseSettimanale()
+  })
+  setTimeout(provaRisposte, 30 * 60_000)
+  setInterval(provaRisposte, 6 * 3_600_000)
 
   // E le ricette nuove: subito dopo l'avvio — è il momento in cui una persona
   // ha appena riaperto l'app e potrebbe averne una che l'aspetta — e poi ogni

@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { DatiVoce, EsitoRisposta, Giudizio } from './valuta-risposte.ts'
 
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-valuta-risposte-'))
 const CASA_VERA = process.env.HOME
@@ -101,7 +102,7 @@ const COPIONE: Record<string, string> = {
 }
 
 /** Il giudice finto: tutto vero, tranne dove il copione dice il contrario. */
-function giudiceFinto(regola: (contenuto: string) => Partial<vr.Giudizio> = () => ({})) {
+function giudiceFinto(regola: (contenuto: string) => Partial<Giudizio> = () => ({})) {
   const chiamate: string[] = []
   const chiediJSON = (async (r: { lavoro: string; messages: { content: string }[] }) => {
     const c = String(r.messages[0].content)
@@ -119,8 +120,8 @@ const dump = () => {
 
 // — decidi, ramo per ramo —
 
-const base = (x: Partial<vr.DatiVoce>): vr.DatiVoce => ({ tipo: 'risponde', genere: 'cifra', rifiuto: false, corrisponde: null, supportata: null, scoperti: [], giudizio: null, secondo: null, sostenutaDaPiuNuovo: false, ...x })
-const g = (x: Partial<vr.Giudizio>): vr.Giudizio => ({ corrisponde: true, sostenuta: true, rispondeDavvero: true, motivo: '', ...x })
+const base = (x: Partial<DatiVoce>): DatiVoce => ({ tipo: 'risponde', genere: 'cifra', rifiuto: false, corrisponde: null, supportata: null, scoperti: [], giudizio: null, secondo: null, sostenutaDaPiuNuovo: false, ...x })
+const g = (x: Partial<Giudizio>): Giudizio => ({ corrisponde: true, sostenuta: true, rispondeDavvero: true, motivo: '', ...x })
 
 test('decidi: ogni ramo, dal codice', () => {
   assert.equal(vr.decidi(base({ rifiuto: true })), 'rifiutata_male')
@@ -140,7 +141,7 @@ test('decidi: ogni ramo, dal codice', () => {
 })
 
 test('i totali escludono «da rivedere», e passa vuole nove su dieci, zero inventate, al massimo due rifiuti sbagliati su quaranta', () => {
-  const voci = (n: Partial<Record<vr.EsitoRisposta, number>>) => Object.entries(n).flatMap(([e, k]) => Array.from({ length: k! }, () => ({ esito: e as vr.EsitoRisposta, tipo: e.startsWith('rifiutata_bene') ? 'non_ce' : 'risponde' })))
+  const voci = (n: Partial<Record<EsitoRisposta, number>>) => Object.entries(n).flatMap(([e, k]) => Array.from({ length: k! }, () => ({ esito: e as EsitoRisposta, tipo: e.startsWith('rifiutata_bene') ? 'non_ce' : 'risponde' })))
   const t = vr.totali(voci({ giusta: 36, rifiutata_bene: 8, rifiutata_male: 1, sbagliata: 2, da_rivedere: 3 }))
   assert.equal(t.quante, 47)
   assert.equal(t.giuste, 44)

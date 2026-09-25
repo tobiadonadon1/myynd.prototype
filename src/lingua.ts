@@ -3055,6 +3055,16 @@ const EN: Record<string, string> = {
   // — P6: fine —
 
   // — P7: inizio —
+  'Dalla tua memoria': 'From your memory',
+  'Cartella di lavoro': 'Work folder',
+  'Tu': 'You',
+  'Verifica le risposte ogni settimana': 'Check answers every week',
+  'Non ce l’ho.': 'I don’t have that.',
+  'Serve un sì o un no.': 'It needs a yes or a no.',
+  'Una prova delle risposte è già in corso.': 'An answers check is already running.',
+  'Non c’è ancora un insieme di domande: costruiscilo con --genera.': 'There is no question set yet: build it with --genera.',
+  'Nessun motore collegato: la prova non parte.': 'No engine connected: the check cannot start.',
+  'Su un modello locale la prova gira solo con --anche-locale.': 'On a local model the check runs only with the local flag.',
   // — P7: fine —
 
   // — P8: inizio —

@@ -25,6 +25,7 @@ import * as store from './store.ts'
 import * as automazioni from './automazioni.ts'
 import * as progetti from './progetti.ts'
 import * as riferimento from './riferimento.ts'
+import * as risposteArchivio from './risposte-archivio.ts'
 import type { Gettone } from './gettoni.ts'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -210,6 +211,9 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
   // — i file accanto all'indice: il punto, le priorità, il tavolo… —
   yield ',\n' + riga('file', fileDiStato())
 
+  // — la prova delle risposte: l'insieme, lo storico, l'ultimo rapporto —
+  yield ',\n' + riga('risposte', risposteArchivio.perIlFascicolo())
+
   // — quello che ha imparato su di te —
   yield ',\n' + riga('memoria', {
     ritratto: store.blocchi(),
@@ -221,7 +225,8 @@ export function* scrivi(gettoniDelConto: Gettone[] = []): Generator<string> {
   yield ',\n"chat":[\n'
   primo = true
   for (const ch of store.elencoChat()) {
-    yield (primo ? '' : ',\n') + JSON.stringify({ ...ch, messaggi: store.messaggi(ch.id) })
+    // con il verbale di ogni risposta (`verifica`): è una cosa scritta su di lei
+    yield (primo ? '' : ',\n') + JSON.stringify({ ...ch, messaggi: store.messaggi(ch.id, true) })
     primo = false
   }
   yield '\n]'
