@@ -182,6 +182,54 @@ test('perIlRitratto: le due intestazioni solo quando servono, otto righe, cinque
   })
 })
 
+test('mai un indirizzo: un mittente senza nome e un organizzatore senza CN escono col nome dell’indirizzo, e le righe confermate non restano fuori dal ritratto', () => {
+  chi.dentro(anna, () => {
+    pulisci()
+    // ventidue mail da un mittente senza nome (il registro ha l'indirizzo come nome, com'era prima della regola)
+    for (let i = 0; i < 22; i++) mail('bob@corp.example', 'bob@corp.example', 40 - i, 50)
+    // ventidue inviti rifiutati da un organizzatore senza nome, e quattro da uno col nome
+    const up = store.default.prepare("INSERT INTO agenda_viste (uid, titolo, inizio, fine, originale, stato, mio, visto, organizzatore) VALUES (?,?,?,?,?,?,?,?,?)")
+    for (let i = 0; i < 22; i++) { const t = new Date(ADESSO.getTime() - (30 - i) * GIORNO).toISOString(); up.run(`r${i}|${t}`, 'Sync', t, null, t, 'CONFIRMED', 'DECLINED', ADESSO.toISOString(), 'tom@brill.example') }
+    for (let i = 0; i < 4; i++) { const t = new Date(ADESSO.getTime() - (20 - i) * GIORNO).toISOString(); up.run(`k${i}|${t}`, 'Sync', t, null, t, 'CONFIRMED', 'DECLINED', ADESSO.toISOString(), 'Kim Lee <kim@lee.example>') }
+    ab.ricalcola(ADESSO)
+    const righe = ab.tutte()
+    assert.equal(riga('posta.risponde_sempre:bob@corp.example')?.dati.nome, 'Bob')
+    assert.equal(riga('agenda.rifiuta:tom@brill.example')?.dati.nome, 'Tom')
+    assert.equal(riga('agenda.rifiuta:kim@lee.example')?.dati.nome, 'Kim Lee')
+    for (const r of righe) assert.ok(!String(r.dati.nome ?? '').includes('@'), `${r.chiave}: ${r.dati.nome}`)
+    const ritratto = ab.perIlRitratto()
+    assert.ok(ritratto.includes('A Bob risponde sempre'), ritratto)
+    assert.ok(ritratto.includes('Rifiuta gli inviti di Tom.'), ritratto)
+    assert.ok(!ritratto.includes('@'), ritratto)
+    assert.ok(!memoria.carta().includes('@corp.example') && !memoria.carta().includes('@brill.example'))
+    // una riga col vecchio indirizzo dentro `dati.nome` non entra nel prompt (e la si salta senza intestazione vuota)
+    store.default.prepare("UPDATE abitudini SET dati = ? WHERE chiave = 'posta.risponde_sempre:bob@corp.example'").run(JSON.stringify({ nome: 'bob@corp.example', latenzaMin: 50 }))
+    assert.ok(!ab.perIlRitratto().includes('@'))
+    // otto righe misurate più una tenuta: la tenuta ha il suo posto, nessuna intestazione resta senza righe
+    pulisci()
+    for (let m = 0; m < 8; m++) for (let i = 0; i < 21; i++) mail(`m${m}@h.example`, `Al ${m}`, 40 - i, 60)
+    for (let i = 0; i < 6; i++) mail('priya@a.example', 'Priya Shah', 30 - i, null)
+    ab.ricalcola(ADESSO)
+    ab.cambia('posta.lascia:priya@a.example', 'tieni')
+    const t = ab.perIlRitratto()
+    const linee = t.split('\n')
+    assert.ok(t.includes('Come lavora, confermato da lei:\n· Le mail di Priya Shah di solito restano senza risposta.'), t)
+    assert.equal(linee.filter(l => l.startsWith('· ')).length, 8)
+    assert.ok(!linee[linee.length - 1]!.endsWith(':'), 'nessuna intestazione in coda')
+    for (let i = 0; i < linee.length; i++) if (linee[i]!.endsWith(':')) assert.ok(linee[i + 1]?.startsWith('· '), `intestazione vuota: ${linee[i]}`)
+    // nomi lunghi: il taglio dei cinquecento caratteri non lascia un'intestazione sola
+    pulisci()
+    for (let m = 0; m < 8; m++) for (let i = 0; i < 21; i++) mail(`l${m}@h.example`, `Mittente Numero ${m} Con Un Nome Lungo Davvero`, 40 - i, 60)
+    for (let i = 0; i < 6; i++) mail('priya@a.example', 'Priya Shah', 30 - i, null)
+    ab.ricalcola(ADESSO)
+    ab.cambia('posta.lascia:priya@a.example', 'tieni')
+    const corto = ab.perIlRitratto()
+    assert.ok(corto.length <= 500 && corto.includes('Priya Shah'), corto)
+    const ll = corto.split('\n')
+    for (let i = 0; i < ll.length; i++) if (ll[i]!.endsWith(':')) assert.ok(ll[i + 1]?.startsWith('· '), `intestazione vuota: ${ll[i]}`)
+  })
+})
+
 test('perMittente e imparateDal', () => {
   chi.dentro(anna, () => {
     pulisci()

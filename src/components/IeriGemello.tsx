@@ -14,7 +14,8 @@ import { Hov } from '../ui'
 const CHIAVE = 'myynd:ieri-gemello'
 const VAI = 'myynd:vai'
 
-const oggi = () => new Date().toISOString().slice(0, 10)
+/** Il giorno di qui, non quello di Greenwich: alle 21 di New York è ancora oggi. */
+const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 const RIGA: CSSProperties = {
   display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 26, padding: '9px 0 0', border: 0, borderTop: '1px solid rgba(var(--inchiostro-rgb),.08)',

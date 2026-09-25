@@ -3058,6 +3058,7 @@ const EN: Record<string, string> = {
   'I titoli aspettano il permesso': 'Window titles need permission',
   'Myynd sullo schermo': 'Myynd on screen',
   'Cancella le osservazioni': 'Delete observations',
+  'Cancella': 'Delete',
   // gli errori del server (server/abitudini.ts, server/osservatore.ts)
   'Azione sconosciuta.': 'Unknown action.',
   'Scrivila in poche parole.': 'Write it in a few words.',

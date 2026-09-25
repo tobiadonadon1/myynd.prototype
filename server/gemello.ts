@@ -69,9 +69,27 @@ function fonteCollegata(): boolean {
   const c = cfg.leggi()
   return !!(c.desktop || c.notion || c.posta || c.google || c.slack || c.drive || c.microsoft || c.dropbox || c.calendario || c.granola || c.note || c.conversazioni || c.github)
 }
-function fontePosta(): boolean {
-  const c = cfg.leggi()
-  return !!(c.posta || c.google || c.microsoft)
+/** Le caselle collegate, coi nomi delle fasi della lettura: Microsoft conta solo se legge la posta. */
+export function casellePostali(c: { posta?: unknown; google?: unknown; microsoft?: { parti?: string[] } | null } = cfg.leggi()): string[] {
+  const fuori: string[] = []
+  if (c.posta) fuori.push('posta')
+  if (c.google) fuori.push('google')
+  if (c.microsoft?.parti?.includes('posta')) fuori.push('microsoft')
+  return fuori
+}
+function fontePosta(): boolean { return casellePostali().length > 0 }
+
+/**
+ * La posta è «a posto» dopo una lettura solo se ogni casella collegata è
+ * arrivata in fondo in quella lettura, nessuna ha avuto un guaio, e nessuno
+ * l'ha fermata. Una lettura di una fonte sola (il calendario, Slack), una
+ * fermata a metà o una che ha lanciato non l'ha letta: il giorno non chiude.
+ */
+export function postaLettaBene(o: { fasi: { fase?: string; stato?: string }[]; collegate: string[]; fermata: boolean }): boolean {
+  if (o.fermata || !o.collegate.length) return false
+  const finite = new Set(o.fasi.filter(x => x.stato === 'fatto' && x.fase).map(x => x.fase))
+  if (o.fasi.some(x => x.fase && o.collegate.includes(x.fase) && x.stato === 'guaio')) return false
+  return o.collegate.every(f => finite.has(f))
 }
 function indicizzatoDiRecente(adesso: Date): boolean {
   const r = db.prepare('SELECT MAX(indicizzato) AS m FROM documenti').get() as { m: string | null }

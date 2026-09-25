@@ -4,7 +4,7 @@
 
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -19,6 +19,13 @@ test('leggiArgomenti e cartellaVietata', () => {
   assert.ok(prova.cartellaVietata(join(homedir(), '.myynd', 'utenti', 'x')))
   assert.ok(prova.cartellaVietata('/a/b', '/casa', '/a/b'), 'la radice di serie')
   assert.equal(prova.cartellaVietata(CASA), null)
+  // un collegamento simbolico alla cartella vera, e le maiuscole sul disco del Mac: sempre vietata
+  const casaFinta = join(CASA, 'casa'); mkdirSync(join(casaFinta, '.myynd'), { recursive: true })
+  const ponte = join(CASA, 'ponte'); symlinkSync(join(casaFinta, '.myynd'), ponte)
+  assert.ok(prova.cartellaVietata(ponte, casaFinta), 'il collegamento simbolico')
+  assert.ok(prova.cartellaVietata(join(ponte, 'utenti', 'x'), casaFinta))
+  if (process.platform === 'darwin') assert.ok(prova.cartellaVietata(join(casaFinta, '.MYYND'), casaFinta), 'le maiuscole')
+  assert.equal(prova.cartellaVietata(join(CASA, 'copia'), casaFinta), null)
 })
 
 test('rifiuta senza --dati, e rifiuta la cartella vera senza crearla né aprirla', async () => {

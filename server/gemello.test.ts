@@ -147,6 +147,33 @@ test('il giorno chiude solo dopo una lettura partita dopo la mezzanotte: la risp
   })
 })
 
+test('la posta è letta bene solo se ogni casella è arrivata in fondo: una lettura del solo calendario, una fermata o una rotta non chiudono il giorno', async () => {
+  const ok = (fasi: { fase?: string; stato?: string }[], collegate = ['posta'], fermata = false) => gem.postaLettaBene({ fasi, collegate, fermata })
+  assert.equal(ok([{ fase: 'posta', stato: 'fatto' }]), true)
+  assert.equal(ok([{ fase: 'posta', stato: 'mi collego alla casella' }, { fase: 'posta', stato: 'fatto' }]), true)
+  assert.equal(ok([{ fase: 'calendario', stato: 'fatto' }]), false, 'una fonte sola che non è la posta')
+  assert.equal(ok([]), false, 'una lettura che ha lanciato prima della posta')
+  assert.equal(ok([{ fase: 'posta', stato: 'guaio' }]), false)
+  assert.equal(ok([{ fase: 'posta', stato: 'fatto' }], ['posta'], true), false, 'fermata')
+  assert.equal(ok([{ fase: 'google', stato: 'fatto' }], ['posta', 'google']), false, 'due caselle, una sola letta')
+  assert.equal(ok([{ fase: 'google', stato: 'fatto' }, { fase: 'posta', stato: 'fatto' }], ['posta', 'google']), true)
+  assert.equal(ok([{ fase: 'posta', stato: 'fatto' }], []), false, 'senza caselle non c\'è posta da leggere')
+  assert.deepEqual(gem.casellePostali({ posta: {}, google: {}, microsoft: { parti: ['agenda'] } }), ['posta', 'google'])
+  assert.deepEqual(gem.casellePostali({ microsoft: { parti: ['posta'] } }), ['microsoft'])
+  // dal vivo: una lettura del solo calendario dopo la mezzanotte non chiude il giorno
+  await chi.dentro(anna, async () => {
+    azzera(); storia(MATTINA)
+    mail('nora@h.example', 'Nora Vance', new Date('2026-09-24T05:00:00.000Z'), null)
+    await gem.giro(MATTINA)
+    gem.dopoLaLettura('2026-09-25T06:05:00.000Z', gem.postaLettaBene({ fasi: [{ fase: 'calendario', stato: 'fatto' }], collegate: gem.casellePostali(cfg.leggi()), fermata: false }))
+    await gem.giro(new Date('2026-09-25T06:15:00.000Z'))
+    assert.ok(prev().every(x => x.verificata === null), 'il calendario da solo non dice niente della posta')
+    gem.dopoLaLettura('2026-09-25T06:20:00.000Z', gem.postaLettaBene({ fasi: [{ fase: 'calendario', stato: 'fatto' }, { fase: 'posta', stato: 'fatto' }], collegate: gem.casellePostali(cfg.leggi()), fermata: false }))
+    await gem.giro(new Date('2026-09-25T06:25:00.000Z'))
+    assert.ok(prev().filter(x => x.giorno === '2026-09-24').every(x => x.verificata), 'con la posta letta il giorno chiude')
+  })
+})
+
 test('a D + 2 giorni 12:00 senza lettura le affermazioni sulla posta si annullano; senza casella il giorno chiude subito', async () => {
   await chi.dentro(anna, async () => {
     azzera(); storia(MATTINA)

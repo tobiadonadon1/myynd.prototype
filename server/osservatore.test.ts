@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Sessione } from './osservatore.ts'
 
 const CASA = mkdtempSync(join(tmpdir(), 'myynd-osservatore-'))
@@ -44,9 +45,27 @@ const sessione = (x: Partial<Sessione> = {}): Sessione => ({
 })
 const righe = () => store.default.prepare('SELECT * FROM sessioni_app ORDER BY id').all() as { bundle: string; titolo: string | null; secondi: number; giorno: string; progetto: string | null; cartella: string | null }[]
 
-test('le tre costanti sono quelle del guscio, quando il file c’è', { skip: !existsSync(join(CASA, '..', 'desktop', 'sessioni.ts')) }, () => {
-  const testo = readFileSync(join(process.cwd(), 'desktop', 'sessioni.ts'), 'utf8')
-  for (const nome of ['ESCLUSE_SEMPRE', 'TITOLO_PRIVATO', 'TITOLO_SEGRETO']) assert.ok(testo.includes(nome))
+/** Il file del guscio (P1A), cercato accanto a questo test, non nella cartella temporanea. */
+const GUSCIO = fileURLToPath(new URL('../desktop/sessioni.ts', import.meta.url))
+const QUI = fileURLToPath(new URL('./osservatore.ts', import.meta.url))
+
+/** Le tre dichiarazioni, testo per testo: l'insieme fino alla sua parentesi, le due espressioni fino a fine riga. */
+function dichiarazioni(testo: string): Record<string, string> {
+  const prendi = (re: RegExp) => testo.match(re)?.[0] ?? ''
+  return {
+    ESCLUSE_SEMPRE: prendi(/export const ESCLUSE_SEMPRE = new Set\(\[[\s\S]*?\]\)/),
+    TITOLO_PRIVATO: prendi(/export const TITOLO_PRIVATO = .*$/m),
+    TITOLO_SEGRETO: prendi(/export const TITOLO_SEGRETO = .*$/m)
+  }
+}
+
+test('le tre costanti sono uguali carattere per carattere a desktop/sessioni.ts, quando il file c’è', { skip: !existsSync(GUSCIO) }, () => {
+  const guscio = dichiarazioni(readFileSync(GUSCIO, 'utf8'))
+  const server = dichiarazioni(readFileSync(QUI, 'utf8'))
+  for (const nome of ['ESCLUSE_SEMPRE', 'TITOLO_PRIVATO', 'TITOLO_SEGRETO']) {
+    assert.ok(guscio[nome] && server[nome], `${nome} manca da una parte`)
+    assert.equal(server[nome], guscio[nome], `${nome} non è lo stesso testo del guscio`)
+  }
 })
 
 test('disponibile solo dentro l’app e non su un server', () => {

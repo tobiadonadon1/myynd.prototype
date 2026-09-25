@@ -1945,18 +1945,18 @@ async function leggiTutto(
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
   const oss = osservaLettura(chi.adesso() ?? '', soloFonte)
-  // per il gemello (P1B): quando è partita, e se la posta è arrivata a posto
+  // per il gemello (P1B): quando è partita, e se ogni casella è arrivata in fondo
   const partita = new Date().toISOString()
-  let postaOk = true
+  const fasi: { fase?: string; stato?: string }[] = []
   try {
     return await leggiTuttoDentro(soloFonte, d => {
-      const x = d as { fase?: string; stato?: string }
-      if ((x.fase === 'posta' || x.fase === 'google' || x.fase === 'microsoft') && x.stato === 'guaio') postaOk = false
+      fasi.push(d as { fase?: string; stato?: string })
       oss.avvisa(d); avvisa(d)
     }, fermo)
   } finally {
     oss.chiudi(fermo())
-    try { gemello.dopoLaLettura(partita, postaOk) } catch { /* il registro non ferma la lettura */ }
+    try { gemello.dopoLaLettura(partita, gemello.postaLettaBene({ fasi, collegate: gemello.casellePostali(cfg.leggi()), fermata: fermo() })) }
+    catch { /* il registro non ferma la lettura */ }
   }
 }
 

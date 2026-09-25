@@ -136,7 +136,7 @@ export function PreferenzeOsservatore() {
       {(acceso || s.osservate > 0) && (
         <div className="prefs-riga">
           <div className="prefs-nome">{t('Cancella le osservazioni')}</div>
-          <BottoneSicuro fai={cancella} guaio={f => setGuaio(t(f))} titolo={t('Cancella le osservazioni')}>{t('Cancella le osservazioni')}</BottoneSicuro>
+          <BottoneSicuro fai={cancella} guaio={f => setGuaio(t(f))} titolo={t('Cancella le osservazioni')}>{t('Cancella')}</BottoneSicuro>
         </div>
       )}
 

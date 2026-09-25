@@ -64,13 +64,25 @@ test('coppieRisposta, i casi che non si appaiano: filo «s:», altro destinatari
   assert.equal(seg.coppieRisposta([a], [inv(7, '2026-09-01T09:00:00.000Z', { filo: 'r@x' })]).length, 1)
 })
 
-test('i nomi si ripuliscono: «Nora <script>» diventa «Nora script», vuoto è l’indirizzo', () => {
+test('i nomi si ripuliscono: «Nora <script>» diventa «Nora script»; senza un nome vale la parte prima della chiocciola, mai l’indirizzo', () => {
   assert.equal(seg.nomePulito('Nora <script>alert(1)</script>', 'nora@h.example'), 'Nora alert 1')
   assert.equal(seg.nomePulito('Nora <script>', 'nora@h.example'), 'Nora')
   assert.equal(seg.nomeDaAutore('"Nora Vance" <nora@h.example>', 'nora@h.example'), 'Nora Vance')
-  assert.equal(seg.nomeDaAutore('nora@h.example', 'nora@h.example'), 'nora@h.example')
+  assert.equal(seg.nomeDaAutore('nora@h.example', 'nora@h.example'), 'Nora')
+  assert.equal(seg.nomeDaAutore('tom.brill@corp.example', 'tom.brill@corp.example'), 'Tom Brill')
   assert.equal(seg.nomePulito('x'.repeat(80), 'a@b.c').length, 40)
-  assert.equal(seg.nomePulito('  ', 'a@b.c'), 'a@b.c')
+  assert.equal(seg.nomePulito('  ', 'bob@corp.example'), 'Bob')
+  assert.equal(seg.nomeDallIndirizzo('sam_ortiz+news@lumen.example'), 'Sam Ortiz News')
+  // una riga scritta prima della regola, col l'indirizzo come nome, si mostra col nome dell'indirizzo
+  assert.equal(seg.nomeMostrabile('bob@corp.example', 'bob@corp.example'), 'Bob')
+  assert.equal(seg.nomeMostrabile('Bob Ross', 'bob@corp.example'), 'Bob Ross')
+  for (const n of [seg.nomePulito('', 'a.b@c.d'), seg.nomeDaAutore(null, 'x@y.z'), seg.nomeMostrabile(null, 'q@w.e')]) assert.ok(!n.includes('@'), n)
+  // l'organizzatore: nella colonna col nome, e di ritorno mai l'indirizzo
+  assert.equal(seg.colonnaOrganizzatore({ organizzatore: 'Tom@Brill.example', organizzatoreNome: 'Tom Brill' }), 'Tom Brill <tom@brill.example>')
+  assert.equal(seg.colonnaOrganizzatore({ organizzatore: 'tom@brill.example' }), 'tom@brill.example')
+  assert.deepEqual(seg.organizzatoreDi('Tom Brill <tom@brill.example>'), { indirizzo: 'tom@brill.example', nome: 'Tom Brill' })
+  assert.deepEqual(seg.organizzatoreDi('tom@brill.example'), { indirizzo: 'tom@brill.example', nome: 'Tom' })
+  assert.equal(seg.organizzatoreDi(null), null)
 })
 
 test('raccogliPosta: una mail in una cartella scelta a mano ma scritta da lui è inviata; la massa e gli automatici non entrano; una seconda passata non scrive niente', () => {
@@ -100,7 +112,7 @@ test('raccogliPosta: una mail in una cartella scelta a mano ma scritta da lui è
   })
 })
 
-test('il ripasso dell’indice cammina a pezzi: dodicimila documenti, tutti ricostruiti', () => {
+test('il ripasso dell’indice cammina a pezzi e a più chiamate: dodicimila documenti, mai più di quattromila per volta, tutti ricostruiti; dopo, una mail nuova non lo è', () => {
   chi.dentro(anna, () => {
     store.azzeraTutto()
     const docs = [...Array(12_000)].map((_, i) => ({
@@ -108,10 +120,23 @@ test('il ripasso dell’indice cammina a pezzi: dodicimila documenti, tutti rico
       quando: new Date(Date.parse('2026-06-01T00:00:00.000Z') + i * 60_000).toISOString()
     }))
     for (let i = 0; i < docs.length; i += 2000) store.salvaDocumenti(docs.slice(i, i + 2000))
-    const r = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'))
-    assert.equal(r.arrivate, 12_000)
+    let totale = 0, chiamate = 0
+    do {
+      const r = seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z'))
+      assert.ok(r.arrivate <= 4000, `una chiamata non ferma il server: ${r.arrivate}`)
+      totale += r.arrivate; chiamate++
+      assert.ok(chiamate < 40)
+    } while (seg.ripassoInCorso())
+    assert.equal(totale, 12_000)
+    assert.ok(chiamate >= 3, `il ripasso è a più chiamate: ${chiamate}`)
     assert.equal((store.default.prepare("SELECT COUNT(*) AS n FROM segnali WHERE genere = 'posta.arrivata' AND dati LIKE '%\"ricostruito\":true%'").get() as { n: number }).n, 12_000)
-    store.azzeraTutto()
+    // finito il ripasso, la chiamata dopo non ripassa l'ultimo pezzo, e una mail nuova nasce senza «ricostruito»
+    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 0, inviate: 0 })
+    store.salvaDocumenti([{ id: 'posta:INBOX:99999', fonte: 'posta', tipo: 'email', titolo: 'Nuova', corpo: 'x', autore: 'Nora <nora@h.example>', quando: '2026-09-20T08:00:00.000Z' }])
+    assert.deepEqual(seg.raccogliPosta(new Date('2026-09-21T00:00:00.000Z')), { arrivate: 1, inviate: 0 })
+    const nuova = seg.arrivate('2026-09-20T00:00:00.000Z', '2026-09-21T00:00:00.000Z').find(a => a.ref === 'posta:INBOX:99999')!
+    assert.equal(nuova.dati.ricostruito, undefined)
+    store.azzeraTutto(); store.default.exec('DELETE FROM cursori')
   })
 })
 
@@ -144,6 +169,24 @@ test('raccogliAgenda: occorrenze separate, una spostata, una sparita in futuro; 
   })
 })
 
+test('un impegno singolo spostato è uno spostato, non uno sparito e uno nuovo; e la colonna tiene il nome di chi organizza', () => {
+  chi.dentro(anna, () => {
+    store.default.exec('DELETE FROM segnali; DELETE FROM agenda_viste')
+    const adesso = new Date('2026-09-10T12:00:00.000Z')
+    // la chiave di un impegno singolo è il solo UID: l'inizio originale cambia con lui
+    const solo = (inizio: string) => vista('solo-1', inizio, { originale: inizio, organizzatoreNome: 'Tom Brill' })
+    assert.equal(seg.raccogliAgenda([solo('2026-10-01T09:00:00.000Z')], FIN2, adesso), 0)
+    assert.equal(seg.raccogliAgenda([solo('2026-10-01T10:00:00.000Z')], FIN2, adesso), 1)
+    const sp = seg.leggi('agenda.spostato', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')
+    assert.deepEqual(sp.map(x => [x.ref, x.valore]), [['solo-1', 60]])
+    assert.equal(seg.leggi('agenda.annullato', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z').length, 0, 'nessuna falsa cancellazione')
+    const r = store.default.prepare("SELECT organizzatore FROM agenda_viste WHERE uid = 'solo-1'").get() as { organizzatore: string }
+    assert.equal(r.organizzatore, 'Tom Brill <tom@b.example>')
+    assert.equal(seg.organizzatoreDi(r.organizzatore)?.nome, 'Tom Brill')
+  })
+})
+const FIN2 = { da: '2026-09-01T00:00:00.000Z', a: '2026-10-31T00:00:00.000Z' }
+
 test('i commit: solo i suoi, il trailer segna l’agente, e una cartella ferma non chiama git', async () => {
   const repo = join(CASA, 'repo-prova')
   mkdirSync(repo, { recursive: true })
@@ -165,6 +208,16 @@ test('i commit: solo i suoi, il trailer segna l’agente, e una cartella ferma n
     const r2 = await seg.raccogliCodice(new Date('2026-09-21T00:00:00.000Z'))
     assert.equal(r2.commit, 0)
     assert.equal(seg.perProva.ultimeOcchiate.get(anna)!.get(repo), prima)
+    assert.equal(store.cursore('segnali:commit'), '2026-09-21T00:00:00.000Z')
+    // una cartella su cui git non risponde (c'è il registro, non c'è un deposito) tiene fermo il cursore
+    const rotta = join(CASA, 'repo-rotto')
+    mkdirSync(join(rotta, '.git', 'logs'), { recursive: true }); writeFileSync(join(rotta, '.git', 'logs', 'HEAD'), 'x')
+    seg.impostaCartelleDiLavoro([repo, rotta])
+    await seg.raccogliCodice(new Date('2026-09-22T00:00:00.000Z'))
+    assert.equal(store.cursore('segnali:commit'), '2026-09-21T00:00:00.000Z', 'il cursore non avanza: i commit di quella cartella non si perdono')
+    seg.impostaCartelleDiLavoro([repo])
+    await seg.raccogliCodice(new Date('2026-09-22T00:00:00.000Z'))
+    assert.equal(store.cursore('segnali:commit'), '2026-09-22T00:00:00.000Z')
   })
 })
 

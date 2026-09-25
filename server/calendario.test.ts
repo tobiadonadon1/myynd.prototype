@@ -111,6 +111,22 @@ test('una riunione settimanale compare tutte le settimane, non una volta sola', 
     ['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28'])
 })
 
+test('la chiave di un’occorrenza: il solo UID per un impegno singolo (anche spostato), UID e inizio originale per una serie', () => {
+  const singolo = evento('UID:solo-1\r\nDTSTART:20261001T090000Z\r\nSUMMARY:Pranzo')
+  const [e] = cal.leggiIcal(singolo, new Date('2026-09-01'), new Date('2026-12-31')).eventi
+  assert.equal(e!.originale, undefined)
+  assert.equal(cal.chiaveOccorrenza(e!), 'solo-1')
+  const spostato = evento('UID:solo-1\r\nDTSTART:20261001T100000Z\r\nSUMMARY:Pranzo')
+  assert.equal(cal.chiaveOccorrenza(cal.leggiIcal(spostato, new Date('2026-09-01'), new Date('2026-12-31')).eventi[0]!), 'solo-1', 'la stessa chiave: è uno spostamento')
+  const serie = evento('UID:sett\r\nDTSTART:20260907T080000Z\r\nRRULE:FREQ=WEEKLY;COUNT=2\r\nSUMMARY:Punto')
+  const { eventi } = cal.leggiIcal(serie, new Date('2026-09-01'), new Date('2026-12-31'))
+  assert.deepEqual(eventi.map(cal.chiaveOccorrenza), ['sett|2026-09-07T08:00:00.000Z', 'sett|2026-09-14T08:00:00.000Z'])
+  // un'eccezione tiene l'istante originale anche se è spostata
+  const conEccezione = ics(`BEGIN:VEVENT\r\nUID:sett\r\nDTSTART:20260907T080000Z\r\nRRULE:FREQ=WEEKLY;COUNT=2\r\nSUMMARY:Punto\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:sett\r\nRECURRENCE-ID:20260914T080000Z\r\nDTSTART:20260914T100000Z\r\nSUMMARY:Punto\r\nEND:VEVENT`)
+  const mossa = cal.leggiIcal(conEccezione, new Date('2026-09-01'), new Date('2026-12-31')).eventi.find(x => x.inizio.toISOString().startsWith('2026-09-14T10'))!
+  assert.equal(cal.chiaveOccorrenza(mossa), 'sett|2026-09-14T08:00:00.000Z')
+})
+
 test('UNTIL ferma la serie, e la finestra la ferma comunque', () => {
   const f = evento('UID:fino\r\nDTSTART:20260907T080000Z\r\nRRULE:FREQ=DAILY;UNTIL=20260910T080000Z\r\nSUMMARY:Ogni giorno')
   const { eventi } = cal.leggiIcal(f, new Date('2026-09-01'), new Date('2026-12-31'))

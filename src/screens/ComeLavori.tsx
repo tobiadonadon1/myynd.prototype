@@ -180,7 +180,11 @@ export function ComeLavori() {
   }
   const scorda = (a: AbitudineVista) => async () => {
     const prima = a.stato
-    const orologio = setTimeout(() => setTolte(m => { const n = new Map(m); n.delete(a.chiave); return n }), 6000)
+    // passati i sei secondi la riga se ne va davvero anche da qui: il server la ha già come tolta
+    const orologio = setTimeout(() => {
+      setTolte(m => { const n = new Map(m); n.delete(a.chiave); return n })
+      setD(v => v ? { ...v, abitudini: v.abitudini.filter(x => x.chiave !== a.chiave) } : v)
+    }, 6000)
     setTolte(m => new Map(m).set(a.chiave, { stato: prima, orologio }))
     try { await gemelloApi.abitudine(a.chiave, 'togli') }
     catch {
@@ -255,10 +259,12 @@ export function ComeLavori() {
         const altre = mie.filter(a => !PER_MITTENTE.has(a.genere))
         const nascoste = gr.chiave === 'posta' && !tutteLePosta && perMittente.length > MITTENTI_IN_VISTA
         const mostrate = nascoste ? perMittente.slice(0, MITTENTI_IN_VISTA) : perMittente
+        // per casi, le più forti in cima (a pari casi, su più mail): il taglio «Tutte (n)» vale solo per i mittenti
+        const inOrdine = [...mostrate, ...altre].sort((x, y) => y.casi - x.casi || (y.su ?? 0) - (x.su ?? 0) || x.chiave.localeCompare(y.chiave))
         return (
           <div key={gr.chiave} className="cl-blocco">
             <div className="cl-gruppo">{gr.titolo}</div>
-            <div className="cl-griglia">{[...mostrate, ...altre].map(riga)}</div>
+            <div className="cl-griglia">{inOrdine.map(riga)}</div>
             {nascoste && <button type="button" className="cl-altre" onClick={() => setTutteLePosta(true)}>{g.tutte(perMittente.length)}</button>}
           </div>
         )

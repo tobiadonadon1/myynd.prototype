@@ -318,7 +318,11 @@ export type Evento = {
   organizzatore: string
   invitati: string[]
   stato: string
-  /** L'istante originale di un'eccezione di una serie (il RECURRENCE-ID); vuoto per le altre. */
+  /**
+   * L'istante originale di un'occorrenza di una serie: il RECURRENCE-ID di
+   * un'eccezione, o l'inizio srotolato dalla regola. Vuoto per un impegno
+   * singolo, che si riconosce dal solo UID anche quando lo spostano.
+   */
   originale?: Date
   /** Ogni ATTENDEE con l'indirizzo minuscolo e il suo PARTSTAT: serve al gemello (P1B). */
   partecipanti: { indirizzo: string; stato: string }[]
@@ -471,7 +475,7 @@ export function leggiIcal(testo: string | string[], da: Date, a: Date): { eventi
 
     for (const i of quando) {
       if (eventi.length >= TETTO) { troncato = true; return }
-      eventi.push({ ...base, inizio: i, fine: durata == null ? null : new Date(i.getTime() + durata) })
+      eventi.push({ ...base, ...(v.RRULE ? { originale: i } : {}), inizio: i, fine: durata == null ? null : new Date(i.getTime() + durata) })
     }
   }
 
@@ -828,10 +832,26 @@ export function daDocumento(
   return { inizio, fine, tuttoIlGiorno, luogo: d.percorso?.trim() || null, note: note || null }
 }
 
-/** Un'occorrenza com'è adesso, per il registro dei cambi (P1B): chiave `UID|inizio originale`. */
+/**
+ * Un'occorrenza com'è adesso, per il registro dei cambi (P1B): chiave
+ * `UID|inizio originale` per le occorrenze di una serie, il solo `UID` per un
+ * impegno singolo. Così un impegno singolo spostato è lo stesso impegno con
+ * un altro inizio (spostato), non uno sparito e uno nuovo.
+ */
+export function chiaveOccorrenza(e: Pick<Evento, 'uid' | 'originale'>): string {
+  return e.originale ? `${e.uid}|${e.originale.toISOString()}` : e.uid
+}
+
+/** Il nome di chi organizza, se il calendario lo dà: «Tom Brill <tom@…>» → «Tom Brill». */
+function nomeOrganizzatore(organizzatore: string): string | undefined {
+  const m = organizzatore.match(/^(.*?)\s*<[^<>]+>$/)
+  const nome = m?.[1]?.replace(/^["']|["']$/g, '').trim()
+  return nome && !nome.includes('@') ? nome : undefined
+}
+
 export type VistaAgenda = {
   chiave: string; titolo: string; inizio: string; fine: string | null; originale: string; stato: string
-  organizzatore?: string; partecipanti: { indirizzo: string; stato: string }[]
+  organizzatore?: string; organizzatoreNome?: string; partecipanti: { indirizzo: string; stato: string }[]
 }
 export type EsitoCalendario = { docs: Documento[]; nome: string; troncato: boolean; viste: VistaAgenda[]; finestra: { da: string; a: string } }
 
@@ -893,9 +913,10 @@ export async function sincronizza(c: ConfigCalendario): Promise<EsitoCalendario>
    * grande, sparito senza che niente lo dica.
    */
   const viste: VistaAgenda[] = eventi.map(e => ({
-    chiave: `${e.uid}|${(e.originale ?? e.inizio).toISOString()}`, titolo: e.titolo, inizio: e.inizio.toISOString(),
+    chiave: chiaveOccorrenza(e), titolo: e.titolo, inizio: e.inizio.toISOString(),
     fine: e.fine ? e.fine.toISOString() : null, originale: (e.originale ?? e.inizio).toISOString(), stato: e.stato,
-    organizzatore: e.organizzatore.match(/[^\s<>]+@[^\s<>]+/)?.[0].toLowerCase(), partecipanti: e.partecipanti ?? []
+    organizzatore: e.organizzatore.match(/[^\s<>]+@[^\s<>]+/)?.[0].toLowerCase(), organizzatoreNome: nomeOrganizzatore(e.organizzatore),
+    partecipanti: e.partecipanti ?? []
   }))
   return { docs, nome: c.nome?.trim() || nome, troncato: troncato || tagliato, viste, finestra: { da: da.toISOString(), a: a.toISOString() } }
 }

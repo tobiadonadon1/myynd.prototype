@@ -19,8 +19,8 @@
 // `config.ts` legga la radice (lo stesso schema di valuta-feed.ts).
 
 import { homedir } from 'node:os'
-import { resolve, join, sep } from 'node:path'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { resolve, join, sep, dirname, basename } from 'node:path'
+import { existsSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs'
 
 export type Argomenti = { dati?: string; conto?: string; dal?: string; al?: string; ora?: string }
 
@@ -39,11 +39,27 @@ export function leggiArgomenti(argv: string[]): Argomenti {
 }
 
 /** La cartella vera, o una dentro di lei: mai. Senza aprire e senza creare niente. */
+/**
+ * Il percorso com'è davvero: i collegamenti simbolici risolti, e sul Mac
+ * (dove il disco non distingue le maiuscole) tutto minuscolo. Un percorso che
+ * non esiste resta com'è, senza aprire né creare niente.
+ */
+function reale(p: string): string {
+  const assoluto = resolve(p)
+  // si risolve il pezzo che esiste (anche solo la casa) e si riattacca il resto: `~/.myynd/utenti/nuovo` resta vietata
+  let base = assoluto
+  const resto: string[] = []
+  while (!existsSync(base) && dirname(base) !== base) { resto.unshift(basename(base)); base = dirname(base) }
+  let r = assoluto
+  try { r = join(realpathSync.native(base), ...resto) } catch { /* resta com'è */ }
+  return process.platform === 'darwin' ? r.toLowerCase() : r
+}
+
 export function cartellaVietata(dati: string, casa = homedir(), radicePredefinita = join(homedir(), '.myynd')): string | null {
-  const d = resolve(dati)
-  const vera = resolve(casa, '.myynd')
+  const d = reale(dati)
+  const vera = reale(resolve(casa, '.myynd'))
   if (d === vera || d.startsWith(vera + sep)) return 'è la cartella vera (~/.myynd) o una dentro di lei'
-  const pre = resolve(radicePredefinita)
+  const pre = reale(radicePredefinita)
   if (d === pre || d.startsWith(pre + sep)) return 'è la radice di serie'
   return null
 }

@@ -28,7 +28,7 @@ import * as chi from './chi.ts'
 import * as fuso from './fuso.ts'
 import * as ospitato from './ospitato.ts'
 import { contieneRichiesta, indirizzoAttenzione, mittenteAutomatico } from './rilevanza.ts'
-import { progettoDelTesto } from './attenzione.ts'
+import { progettoDelTesto, cercatoreDiProgetti } from './attenzione.ts'
 
 const execFileP = promisify(execFile)
 const GIORNO = 86_400_000
@@ -52,11 +52,13 @@ export type Coppia = { arrivata: string; inviata: string; latenza: number }
 
 // — scrivere —
 
-/** Scrive un segnale; torna `true` se era nuovo. */
-export function scrivi(s: Segnale): boolean {
+const INSERISCI = 'INSERT OR IGNORE INTO segnali (id, genere, quando, giorno, chi, progetto, ref, valore, dati) VALUES (?,?,?,?,?,?,?,?,?)'
+type Istruzione = ReturnType<typeof db.prepare>
+
+/** Scrive un segnale; torna `true` se era nuovo. Chi ne scrive migliaia di fila passa l'istruzione preparata una volta. */
+export function scrivi(s: Segnale, ins: Istruzione = db.prepare(INSERISCI)): boolean {
   const giorno = s.giorno ?? fuso.giornoIn(new Date(s.quando))
-  const r = db.prepare(`INSERT OR IGNORE INTO segnali (id, genere, quando, giorno, chi, progetto, ref, valore, dati) VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(s.id, s.genere, s.quando, giorno, s.chi ?? null, s.progetto ?? null, s.ref ?? null, s.valore ?? null, s.dati ? JSON.stringify(s.dati) : null)
+  const r = ins.run(s.id, s.genere, s.quando, giorno, s.chi ?? null, s.progetto ?? null, s.ref ?? null, s.valore ?? null, s.dati ? JSON.stringify(s.dati) : null)
   return Number(r.changes) > 0
 }
 
@@ -79,13 +81,30 @@ export function inviate(da: string, a: string): SegnaleInviata[] { return leggi<
 
 // — i nomi, ripuliti —
 
-/** Un nome da mostrare e da mettere in un prompt: niente segni, niente istruzioni. */
+/**
+ * Senza un nome, la parte prima della chiocciola, a parole: «tom.brill» →
+ * «Tom Brill», «bob» → «Bob». Mai l'indirizzo intero: la regola è nomi, non
+ * indirizzi, sulla pagina e nel prompt.
+ */
+export function nomeDallIndirizzo(indirizzo: string): string {
+  const locale = String(indirizzo ?? '').split('@')[0] ?? ''
+  const parole = locale.replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(Boolean)
+  return parole.map(p => p[0]!.toUpperCase() + p.slice(1)).join(' ').slice(0, 40).trim()
+}
+
+/** Un nome da mostrare e da mettere in un prompt: niente segni, niente istruzioni, e mai una chiocciola. */
 export function nomePulito(grezzo: string | null | undefined, indirizzo: string): string {
   const n = String(grezzo ?? '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[^\p{L}\p{N} .'-]+/gu, ' ')
     .replace(/\s+/g, ' ').trim().slice(0, 40).trim()
-  return n || indirizzo
+  return n || nomeDallIndirizzo(indirizzo)
+}
+
+/** Un nome già salvato, reso mostrabile: se porta una chiocciola (righe scritte prima della regola) torna quello dell'indirizzo. */
+export function nomeMostrabile(nome: string | null | undefined, indirizzo: string): string {
+  const n = String(nome ?? '').trim()
+  return n && !n.includes('@') ? n : nomeDallIndirizzo(indirizzo)
 }
 
 /** «Nora Vance <nora@…>» → Nora Vance; «nora@…» → nora@… */
@@ -112,7 +131,15 @@ export function mieiIndirizzi(): Set<string> {
 // — la posta —
 
 const CURSORE_POSTA = 'segnali:posta'
-const A_PEZZI = 5000
+/** La riga (`rid`) fino a cui si è arrivati dentro l'ultimo `indicizzato`: così una seconda chiamata non ripassa il pezzo. */
+const CURSORE_POSTA_RID = 'segnali:posta:rid'
+/** C'è finché il primo ripasso di tutto l'indice non è arrivato in fondo. */
+const CURSORE_RIPASSO = 'segnali:posta:ripasso'
+/** Documenti per pezzo, e quanti pezzi per chiamata: il ripasso di quarantamila mail non ferma il server per nessuno. */
+const A_PEZZI = 1000
+const PEZZI_PER_CHIAMATA = 4
+/** Il tempo che una chiamata si concede prima di lasciare il resto alla prossima. */
+const BUDGET_MS = 800
 
 type DocPosta = {
   id: string; titolo: string; corpo: string; autore: string | null; autoreIndirizzo: string | null; quando: string | null
@@ -125,72 +152,87 @@ export function indirizziDi(destinatari: string | null | undefined): string[] {
   return String(destinatari ?? '').split(/[,;]/).map(x => indirizzoAttenzione(x)).filter(Boolean)
 }
 
-function scriviDocPosta(d: DocPosta, miei: Set<string>, ricostruito: boolean): 'arrivata' | 'inviata' | null {
+type Attrezzi = { miei: Set<string>; ricostruito: boolean; ins: Istruzione; progettoDi: (testo: string) => string | null }
+
+function scriviDocPosta(d: DocPosta, a: Attrezzi): 'arrivata' | 'inviata' | null {
   if (!d.quando) return null
   const autore = (d.autoreIndirizzo ?? indirizzoAttenzione(d.autore)).toLowerCase()
-  const inviata = d.inviato === 1 || (!!autore && miei.has(autore))
+  const inviata = d.inviato === 1 || (!!autore && a.miei.has(autore))
   if (inviata) {
     const destinatari = indirizziDi(d.destinatari)
     return scrivi({
       id: `posta.inviata|${d.id}`, genere: 'posta.inviata', quando: d.quando, chi: destinatari[0] ?? null, ref: d.id,
-      dati: { messageId: d.messageId, risponde: d.risponde, filo: d.filo, destinatari, ...(ricostruito ? { ricostruito: true } : {}) }
-    }) ? 'inviata' : null
+      dati: { messageId: d.messageId, risponde: d.risponde, filo: d.filo, destinatari, ...(a.ricostruito ? { ricostruito: true } : {}) }
+    }, a.ins) ? 'inviata' : null
   }
   if (d.massa === 1 || !autore || mittenteAutomatico(d.autore ?? autore)) return null
   const titolo = String(d.titolo ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
   return scrivi({
     id: `posta.arrivata|${d.id}`, genere: 'posta.arrivata', quando: d.quando, chi: autore, ref: d.id,
-    progetto: progettoDelTesto(titolo),
+    progetto: a.progettoDi(titolo),
     dati: {
       messageId: d.messageId, filo: d.filo, nome: nomeDaAutore(d.autore, autore), titolo,
       richiesta: contieneRichiesta(`${titolo} ${String(d.corpo ?? '').slice(0, 1500)}`),
-      ...(ricostruito ? { ricostruito: true } : {})
+      ...(a.ricostruito ? { ricostruito: true } : {})
     }
-  }) ? 'arrivata' : null
+  }, a.ins) ? 'arrivata' : null
 }
+
+/** Il primo ripasso dell'indice è ancora a metà. */
+export function ripassoInCorso(): boolean { return store.cursore(CURSORE_RIPASSO) !== null }
 
 /**
  * La posta indicizzata dall'ultima volta, in righe del registro.
  *
- * La prima volta (senza cursore) si percorre tutto l'indice a pezzi, e le
- * righe nascono `ricostruito: true`: dicono com'è la posta adesso, non
- * com'era il giorno in cui è arrivata. Dopo, al massimo cinquemila per volta.
- * Si chiama alla fine di ogni lettura, così una mail risposta e archiviata fra
- * due letture è nel registro prima che la riconciliazione la tolga.
+ * La prima volta (senza cursore) si percorre tutto l'indice, e le righe
+ * nascono `ricostruito: true`: dicono com'è la posta adesso, non com'era il
+ * giorno in cui è arrivata. Ma un indice di quarantamila mail non si percorre
+ * in una chiamata sola: ogni chiamata fa pochi pezzi, o meno di un secondo,
+ * e lascia il resto alla prossima (il cursore avanza a ogni pezzo, e
+ * `segnali:posta:ripasso` resta finché non si è arrivati in fondo). Si chiama
+ * alla fine di ogni lettura e a ogni giro, così una mail risposta e
+ * archiviata fra due letture è nel registro prima che la riconciliazione la
+ * tolga.
  */
 export function raccogliPosta(adesso = new Date()): { arrivate: number; inviate: number } {
   void adesso
-  const miei = mieiIndirizzi()
+  const partenza = Date.now()
   let cursore = store.cursore(CURSORE_POSTA)
-  const prima = cursore === null
+  if (cursore === null) { store.segnaCursore(CURSORE_RIPASSO, '1'); store.segnaCursore(CURSORE_POSTA, ''); cursore = '' }
+  const ricostruito = ripassoInCorso()
+  const a: Attrezzi = { miei: mieiIndirizzi(), ricostruito, ins: db.prepare(INSERISCI), progettoDi: cercatoreDiProgetti() }
   const conta = { arrivate: 0, inviate: 0 }
   // Si cammina per (indicizzato, rid): una lettura scrive migliaia di righe con lo
   // stesso `indicizzato`, e «maggiore del cursore» ne salterebbe metà a ogni
-  // pezzo. Fra una chiamata e l'altra si riparte da «uguale o dopo»: gli id sono
-  // gli stessi, riscriverli non fa niente.
+  // pezzo. Il rid dell'ultima riga vista si salva anche lui, così la chiamata
+  // dopo riparte dalla riga giusta invece di ripassare (e riscrivere per niente)
+  // l'ultimo pezzo.
   const q = db.prepare(`
     SELECT rid, id, titolo, corpo, autore, autoreIndirizzo, quando, filo, messageId, inviato, massa, risponde, destinatari, indicizzato
     FROM documenti WHERE tipo = 'email' AND (indicizzato > ? OR (indicizzato = ? AND rid > ?)) ORDER BY indicizzato, rid LIMIT ?`)
-  let daRid = -1
-  let daIndicizzato = cursore ?? ''
-  for (let giri = 0; giri < (prima ? 1000 : 4); giri++) {
+  let daIndicizzato = cursore
+  let daRid = Number(store.cursore(CURSORE_POSTA_RID) ?? -1)
+  if (!Number.isFinite(daRid)) daRid = -1
+  let finito = false
+  for (let giri = 0; giri < PEZZI_PER_CHIAMATA; giri++) {
     const righe = q.all(daIndicizzato, daIndicizzato, daRid, A_PEZZI) as (DocPosta & { rid: number })[]
-    if (!righe.length) break
+    if (!righe.length) { finito = true; break }
     db.exec('BEGIN')
     try {
       for (const d of righe) {
-        const che = scriviDocPosta(d, miei, prima)
+        const che = scriviDocPosta(d, a)
         if (che) conta[che === 'arrivata' ? 'arrivate' : 'inviate']++
       }
       const ultima = righe[righe.length - 1]!
       daIndicizzato = ultima.indicizzato; daRid = ultima.rid
-      cursore = ultima.indicizzato
-      store.segnaCursore(CURSORE_POSTA, cursore)
+      store.segnaCursore(CURSORE_POSTA, daIndicizzato)
+      store.segnaCursore(CURSORE_POSTA_RID, String(daRid))
       db.exec('COMMIT')
     } catch (e) { db.exec('ROLLBACK'); throw e }
-    if (righe.length < A_PEZZI) break
+    if (righe.length < A_PEZZI) { finito = true; break }
+    if (Date.now() - partenza > BUDGET_MS) break
   }
-  if (cursore === null) store.segnaCursore(CURSORE_POSTA, '')
+  if (finito && ricostruito) store.segnaCursore(CURSORE_RIPASSO, null)
   return conta
 }
 
@@ -320,6 +362,9 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
   const miei = mieiIndirizzi()
   const globale = await emailGitGlobale()
   if (globale) miei.add(globale)
+  // una cartella su cui git non ha risposto (il tempo scaduto, un registro rotto) tiene fermo il cursore:
+  // altrimenti i suoi commit di oggi finirebbero prima di `--since` e non entrerebbero mai
+  let guasti = 0
   for (const dir of cartelle) {
     let m = 0
     try { m = statSync(join(dir, '.git', 'logs', 'HEAD')).mtimeMs } catch { continue }
@@ -328,7 +373,7 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
     try {
       const r = await execFileP('git', ['-C', dir, 'log', `--since=${daQuando}`, '--no-merges', '--format=%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C)%x1e'], { timeout: 5000, maxBuffer: 1 << 22 })
       stdout = r.stdout
-    } catch { continue }
+    } catch { guasti++; continue }
     occhiate.set(dir, m)
     const progetto = progettoDelTesto(basename(dir))
     for (const c of leggiCommit(stdout)) {
@@ -339,7 +384,7 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
       })) conta.commit++
     }
   }
-  store.segnaCursore(CURSORE_COMMIT, adesso.toISOString())
+  if (!guasti) store.segnaCursore(CURSORE_COMMIT, adesso.toISOString())
   return conta
 }
 
@@ -347,7 +392,26 @@ export async function raccogliCodice(adesso = new Date()): Promise<{ sessioni: n
 
 export type VistaAgenda = {
   chiave: string; titolo: string; inizio: string; fine: string | null; originale: string; stato: string
-  organizzatore?: string; partecipanti: { indirizzo: string; stato: string }[]
+  /** L'indirizzo di chi organizza, minuscolo; e il suo nome (il CN), se il calendario lo dà. */
+  organizzatore?: string; organizzatoreNome?: string; partecipanti: { indirizzo: string; stato: string }[]
+}
+
+/** La colonna `organizzatore` di `agenda_viste`: «Tom Brill <tom@…>» col nome, l'indirizzo solo senza. */
+export function colonnaOrganizzatore(v: Pick<VistaAgenda, 'organizzatore' | 'organizzatoreNome'>): string | null {
+  const addr = v.organizzatore?.toLowerCase() ?? ''
+  if (!addr) return null
+  const nome = nomePulito(v.organizzatoreNome, '')
+  return nome ? `${nome} <${addr}>` : addr
+}
+
+/** Il rovescio: indirizzo e nome da mostrare (mai l'indirizzo) da quella colonna. */
+export function organizzatoreDi(colonna: string | null | undefined): { indirizzo: string; nome: string } | null {
+  const c = String(colonna ?? '').trim()
+  if (!c) return null
+  const m = c.match(/^(.*?)\s*<([^<>]+@[^<>]+)>$/)
+  const indirizzo = (m ? m[2]! : c).trim().toLowerCase()
+  if (!indirizzo.includes('@')) return null
+  return { indirizzo, nome: nomePulito(m?.[1], indirizzo) }
 }
 
 type RigaVista = { uid: string; titolo: string | null; inizio: string | null; fine: string | null; originale: string | null; stato: string | null; mio: string | null; visto: string; organizzatore: string | null }
@@ -382,19 +446,19 @@ export function raccogliAgenda(viste: VistaAgenda[], finestra: { da: string; a: 
           const minuti = Math.round((Date.parse(v.inizio) - Date.parse(prima.inizio)) / 60_000)
           const giorno = fuso.giornoIn(adesso)
           if (scrivi({
-            id: `agenda.spostato|${v.chiave}|${giorno}`, genere: 'agenda.spostato', quando: oraIso, giorno, chi: v.organizzatore ?? null, ref: v.chiave, valore: minuti,
+            id: `agenda.spostato|${v.chiave}|${giorno}`, genere: 'agenda.spostato', quando: oraIso, giorno, chi: v.organizzatore?.toLowerCase() ?? null, ref: v.chiave, valore: minuti,
             dati: { titolo, da: prima.inizio, a: v.inizio, organizzatore: v.organizzatore ?? null }
           })) nuovi++
         }
         if (mio === 'DECLINED' && prima.mio !== 'DECLINED') {
           const giorno = fuso.giornoIn(adesso)
           if (scrivi({
-            id: `agenda.rifiutato|${v.chiave}|${giorno}`, genere: 'agenda.rifiutato', quando: oraIso, giorno, chi: v.organizzatore ?? null, ref: v.chiave,
+            id: `agenda.rifiutato|${v.chiave}|${giorno}`, genere: 'agenda.rifiutato', quando: oraIso, giorno, chi: v.organizzatore?.toLowerCase() ?? null, ref: v.chiave,
             dati: { titolo, da: v.inizio, a: null, organizzatore: v.organizzatore ?? null }
           })) nuovi++
         }
       }
-      up.run(v.chiave, String(v.titolo ?? '').slice(0, 120), v.inizio, v.fine, v.originale, v.stato, mio, oraIso, v.organizzatore?.toLowerCase() ?? null)
+      up.run(v.chiave, String(v.titolo ?? '').slice(0, 120), v.inizio, v.fine, v.originale, v.stato, mio, oraIso, colonnaOrganizzatore(v))
     }
     for (const [uid, r] of note) {
       if (viste_.has(uid) || !dentro(r.originale) || !r.inizio || r.inizio <= oraIso) continue

@@ -102,7 +102,7 @@ function righePosta(adesso: Date): Candidata[] {
   for (const [addr, mail] of perMittente) {
     const risposte = mail.filter(m => risposta.has(m.id))
     const rate = risposte.length / mail.length
-    const nome = mail[mail.length - 1]!.dati.nome
+    const nome = segnali.nomeMostrabile(mail[mail.length - 1]!.dati.nome, addr)
     const esempi = (xs: Arr[]) => xs.slice(-5).reverse().map(m => ({ quando: m.quando, testo: m.dati.titolo, doc: m.ref }))
     if (mail.length >= 5 && rate >= 0.85) {
       const latenzaMin = Math.round(mediana(risposte.map(m => risposta.get(m.id)!.latenza)) / 60)
@@ -150,16 +150,17 @@ function righeAgenda(adesso: Date): Candidata[] {
         prova: { casi: spostateRef.size, su: occorrenze.length, esempi: spostate.slice(-5).reverse().map(s => ({ quando: s.quando, testo: String(s.dati.titolo ?? ''), doc: null })) }, fiducia: quota })
     }
   }
-  const perOrganizzatore = new Map<string, Vista[]>()
+  const perOrganizzatore = new Map<string, { nome: string; inviti: Vista[] }>()
   for (const v of viste) {
-    const o = v.organizzatore?.toLowerCase()
+    const o = segnali.organizzatoreDi(v.organizzatore)
     if (!o || !v.originale || v.originale < da90) continue
-    const l = perOrganizzatore.get(o) ?? []; l.push(v); perOrganizzatore.set(o, l)
+    const l = perOrganizzatore.get(o.indirizzo) ?? { nome: o.nome, inviti: [] }
+    l.inviti.push(v); l.nome = o.nome; perOrganizzatore.set(o.indirizzo, l)
   }
-  for (const [addr, inviti] of perOrganizzatore) {
+  for (const [addr, { nome, inviti }] of perOrganizzatore) {
     const rifiutati = inviti.filter(v => v.mio === 'DECLINED')
     if (inviti.length >= 4 && rifiutati.length / inviti.length >= 0.75) {
-      fuori.push({ chiave: `agenda.rifiuta:${addr}`, genere: 'agenda.rifiuta', dati: { nome: segnali.nomePulito('', addr) },
+      fuori.push({ chiave: `agenda.rifiuta:${addr}`, genere: 'agenda.rifiuta', dati: { nome },
         prova: { casi: rifiutati.length, su: inviti.length, esempi: rifiutati.slice(-5).map(v => ({ quando: v.inizio ?? '', testo: v.titolo ?? '', doc: null })) }, fiducia: rifiutati.length / inviti.length })
     }
   }
@@ -309,6 +310,8 @@ const oraIt = (minutiDelGiorno: number) => String(Math.round(minutiDelGiorno / 6
 
 function fraseIt(a: Abitudine): string {
   const d = a.dati
+  // un nome con la chiocciola è un indirizzo: non entra in un prompt, la riga si salta
+  if (typeof d.nome === 'string' && d.nome.includes('@')) return ''
   switch (a.genere) {
     case 'posta.risponde_sempre': return `A ${d.nome} risponde sempre, di solito entro ${durata(Number(d.latenzaMin))}.`
     case 'posta.lascia': return `Le mail di ${d.nome} di solito restano senza risposta.`
@@ -323,23 +326,36 @@ function fraseIt(a: Abitudine): string {
   }
 }
 
-/** Per `memoria.carta()`: al massimo otto righe e cinquecento caratteri, o niente. */
+/** Al massimo tante righe e tanti caratteri nel ritratto. */
+export const RIGHE_RITRATTO = 8
+export const CARATTERI_RITRATTO = 500
+
+/**
+ * Per `memoria.carta()`: al massimo otto righe e cinquecento caratteri, o niente.
+ *
+ * Le righe confermate da lei (tenute o scritte da lei) hanno la precedenza
+ * sul posto: sono parole sue. Un'intestazione compare solo se sotto ha
+ * almeno una riga, anche dopo il taglio dei cinquecento caratteri.
+ */
 export function perIlRitratto(): string {
   const valide = righe().filter(inVigore).sort((a, b) => a.chiave.localeCompare(b.chiave))
-  const misurate = valide.filter(a => a.stato === 'osservata').map(fraseIt).filter(Boolean)
-  const confermate = valide.filter(a => a.stato !== 'osservata').map(a => a.stato === 'corretta' && a.testoSuo ? a.testoSuo : fraseIt(a)).filter(Boolean)
-  const righeFuori: string[] = []
-  let quante = 0
-  const metti = (titolo: string, frasi: string[]) => {
-    if (!frasi.length) return
-    righeFuori.push(titolo)
-    for (const f of frasi) { if (quante >= 8) break; righeFuori.push(`· ${senzaTrattini(f)}`); quante++ }
+  const pulita = (f: string) => senzaTrattini(f).trim()
+  const confermate = valide.filter(a => a.stato !== 'osservata').map(a => a.stato === 'corretta' && a.testoSuo ? a.testoSuo : fraseIt(a)).map(pulita).filter(Boolean).slice(0, RIGHE_RITRATTO)
+  const misurate = valide.filter(a => a.stato === 'osservata').map(fraseIt).map(pulita).filter(Boolean).slice(0, RIGHE_RITRATTO - confermate.length)
+  const blocchi: { titolo: string; frasi: string[] }[] = [
+    { titolo: 'Come lavora, misurato su almeno 20 casi:', frasi: misurate },
+    { titolo: 'Come lavora, confermato da lei:', frasi: confermate }
+  ]
+  const testo = () => blocchi.filter(b => b.frasi.length).flatMap(b => [b.titolo, ...b.frasi.map(f => `· ${f}`)]).join('\n')
+  // sopra i cinquecento caratteri si toglie prima una riga misurata, poi una confermata
+  let t = testo()
+  while (t.length > CARATTERI_RITRATTO) {
+    const b = blocchi[0]!.frasi.length ? blocchi[0]! : blocchi[1]!
+    if (!b.frasi.length) break
+    b.frasi.pop()
+    t = testo()
   }
-  metti('Come lavora, misurato su almeno 20 casi:', misurate)
-  metti('Come lavora, confermato da lei:', confermate)
-  let testo = righeFuori.join('\n')
-  while (testo.length > 500 && righeFuori.length > 1) { righeFuori.pop(); testo = righeFuori.join('\n') }
-  return righeFuori.length > 1 ? testo : ''
+  return t
 }
 
 /** Per il feed e la preparazione delle risposte: com'è messo un mittente. */
