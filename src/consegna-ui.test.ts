@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { consegnaPronta, messaggioConsegna, presentazioneRevisione, statoRevisione } from './consegna-ui.ts'
 
 test('missing or unavailable review never claims a pass', () => {
-  assert.equal(statoRevisione(undefined, true), 'Review unavailable — not verified')
-  assert.equal(statoRevisione({ esito: 'unavailable' }, true), 'Review unavailable — not verified')
-  assert.equal(statoRevisione({ esito: 'revise' }, true), 'Review found issues — needs revision')
+  assert.equal(statoRevisione(undefined, true), 'Review unavailable: not verified')
+  assert.equal(statoRevisione({ esito: 'unavailable' }, true), 'Review unavailable: not verified')
+  assert.equal(statoRevisione({ esito: 'revise' }, true), 'Review found issues: needs revision')
   assert.equal(statoRevisione({ esito: 'pass' }, true), 'Review passed')
   assert.match(statoRevisione(undefined, false), /non verificato/)
 })
