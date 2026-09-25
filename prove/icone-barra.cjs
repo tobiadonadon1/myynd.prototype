@@ -21,12 +21,20 @@ const { pathToFileURL } = require('node:url')
 
 const OUT = process.env.OUT || process.cwd()
 const ICONE = path.join(__dirname, '..', 'desktop', 'icone')
-setTimeout(() => { console.error('icone-barra · 120 s passati: esco'); app.exit(1) }, 120_000).unref()
+setTimeout(() => { console.error('icone-barra · 120 s passati: esco'); pulisci(); app.exit(1) }, 120_000).unref()
 app.commandLine.appendSwitch('force-device-scale-factor', '1')
 if (app.dock) app.dock.hide()
 const DATI = fs.mkdtempSync(path.join(os.tmpdir(), 'myynd-icone-barra-'))
 app.setPath('userData', DATI)
-process.on('exit', () => { try { fs.rmSync(DATI, { recursive: true, force: true }) } catch { /* pazienza */ } })
+// Chromium scrive nella cartella dei dati fino all'ultimo istante: la butta
+// via un processo a parte, tre secondi dopo l'uscita
+const pulisci = () => {
+  try {
+    require('node:child_process').spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', DATI], { detached: true, stdio: 'ignore' }).unref()
+  } catch { /* pazienza */ }
+}
+app.on('quit', pulisci)
+const esci = codice => { process.exitCode = codice; app.quit() }
 
 const url = f => pathToFileURL(path.join(ICONE, f)).href
 
@@ -65,5 +73,5 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(OUT, `${nome}.png`), img.toPNG())
     console.log(`icone-barra · ${nome}.png ${JSON.stringify(img.getSize())}`)
   }
-  app.exit(0)
-}).catch(e => { console.error(e); app.exit(1) })
+  esci(0)
+}).catch(e => { console.error(e); esci(1) })

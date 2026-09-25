@@ -17,12 +17,20 @@ const path = require('node:path')
 
 const OUT = process.env.OUT || process.cwd()
 const PAGINA = path.join(__dirname, '..', 'desktop', 'compagno.html')
-setTimeout(() => { console.error('compagno-foto · 120 s passati: esco'); app.exit(1) }, 120_000).unref()
+setTimeout(() => { console.error('compagno-foto · 120 s passati: esco'); pulisci(); app.exit(1) }, 120_000).unref()
 app.commandLine.appendSwitch('force-device-scale-factor', '1')
 if (app.dock) app.dock.hide()
 const DATI = fs.mkdtempSync(path.join(os.tmpdir(), 'myynd-compagno-foto-'))
 app.setPath('userData', DATI)
-process.on('exit', () => { try { fs.rmSync(DATI, { recursive: true, force: true }) } catch { /* pazienza */ } })
+// Chromium scrive nella cartella dei dati fino all'ultimo istante: la butta
+// via un processo a parte, tre secondi dopo l'uscita
+const pulisci = () => {
+  try {
+    require('node:child_process').spawn('/bin/sh', ['-c', 'sleep 3; rm -rf "$0"', DATI], { detached: true, stdio: 'ignore' }).unref()
+  } catch { /* pazienza */ }
+}
+app.on('quit', pulisci)
+const esci = codice => { process.exitCode = codice; app.quit() }
 
 // il preload finto: le stesse funzioni di compagno-preload.cjs, ma lo stato
 // arriva dagli argomenti e i gesti tornano a questo processo
@@ -99,5 +107,5 @@ app.whenReady().then(async () => {
   verifica(gesti.some(g => g[0] === 'menu') && !gesti.some(g => g[0] === 'premuto'), `il tasto destro è il menu (${JSON.stringify(gesti)})`)
   w.destroy()
   console.log(guasti.length ? `guasti: ${guasti.length}` : 'ok')
-  app.exit(guasti.length ? 1 : 0)
-}).catch(e => { console.error(e); app.exit(1) })
+  esci(guasti.length ? 1 : 0)
+}).catch(e => { console.error(e); esci(1) })

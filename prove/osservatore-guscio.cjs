@@ -57,11 +57,21 @@ async function aspetta(cosa, ms, ogni = 25) {
 const guasti = []
 const verifica = (ok, frase) => { if (!ok) guasti.push(frase); console.log(`${ok ? '✓' : '✗'} ${frase}`) }
 
-app.whenReady().then(principale).catch(e => { console.error(e); pulisci(); app.exit(1) })
+// su un guasto a metà il server va fermato prima di buttare i suoi dati
+let fermaServer = async () => {}
+app.whenReady().then(principale).catch(async e => {
+  console.error(e)
+  try { await fermaServer() } catch { /* pazienza */ }
+  process.exitCode = 1
+  app.quit()
+})
+// si butta tutto a `quit`: dopo, Chromium non scrive più nella cartella dei dati
+app.on('quit', pulisci)
 
 async function principale() {
   const importa = p => import(pathToFileURL(path.join(RADICE, p)).href)
   const server = await importa('desktop/server.ts')
+  fermaServer = () => server.ferma()
   const impostazioni = await importa('desktop/impostazioni.ts')
   const oss = await importa('desktop/osservatore.ts')
   impostazioni.apri(path.join(TMP, 'electron'))
@@ -225,6 +235,6 @@ async function principale() {
   }
 
   console.log(guasti.length ? `guasti: ${guasti.length}` : 'ok')
-  pulisci()
-  app.exit(guasti.length ? 1 : 0)
+  process.exitCode = guasti.length ? 1 : 0
+  app.quit()
 }
