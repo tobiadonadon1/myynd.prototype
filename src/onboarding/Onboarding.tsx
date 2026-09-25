@@ -495,7 +495,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
           })}</div>
           {fonti.length > quante && <button type="button" className="onboard-secondary" onClick={() => { setTutteFonti(!tutteFonti); setCercaFonte('') }}>{tutteFonti ? t('Mostra meno') : t('Tutte le fonti')} <span aria-hidden="true">{tutteFonti ? '−' : '+'}</span></button>}
           {/* chi ragiona, solo se nessuno ragionava quando il passo è comparso: tre strade, la scheda si apre qui sotto (P4) */}
-          {chiediModello && <div className="onboard-option" style={{ borderTop: '1px solid #ffffff1f', marginTop: 14 }}>
+          {chiediModello && <div className="onboard-option onboard-model-row">
             <span className="onboard-option-label">{t('Modello')}</span>
             {modelloCollegato
               ? <span className="onboard-connected" style={{ marginLeft: 0, fontSize: 12, overflowWrap: 'anywhere' }}>✓ {t('Collegato')} · {t(modelloCollegato.nome)}</span>

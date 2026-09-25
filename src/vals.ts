@@ -16,6 +16,8 @@ import { leggibile } from './leggibile.ts'
 import { anteprimaDocumentoMappa, dataDocumentoMappa, motivoMappa } from './mappa-testo.ts'
 import {statoAccessoNote} from './note-access.ts'
 import { nonLette } from './lettura-fonti.ts'
+import { contaGenere } from './conta-fonti.ts'
+import { genereDi as genereDiFonte } from '../server/generi.ts'
 import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi, desktop } from './desktop.ts'
@@ -1807,7 +1809,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       // fra «letto sei ore fa» e «quello che salvi adesso è già dentro»
       // a zero documenti «collegato» ripeteva il «Collegato» della tessera, una riga sotto
       // una fonte che tace lo dice al posto del conto: un fatto, e la scheda resta verde
-      stato: [c.silenzio ? lineaSilenzio(c.id, c.silenzio) : c.documenti ? frasi.statoConnettore(c.documenti) : null, c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
+      stato: [c.silenzio ? lineaSilenzio(c.id, c.silenzio) : c.documenti ? contaGenere(genereDiFonte(c.id), c.documenti) : null, c.id === 'note' && statoAccessoNote(stato).messaggio ? t(statoAccessoNote(stato).messaggio!) : c.id === 'desktop' && stato.vedetta?.attiva ? t('in ascolto') : null]
         .filter(Boolean).join(' · '),
       // un clic apre la fonte nel suo pannello: scollegare si fa lì, con la domanda «Sicuro?».
       // Prima un clic qui scollegava subito, e la chiave di Claude spariva senza che nessuno l'avesse chiesto

@@ -377,7 +377,7 @@ const EN: Record<string, string> = {
   "Salvo il progetto, gli estratti confermati e questa attività.": "Save your project, confirmed excerpts and this task.",
   "Prepara la prima traccia": "Prepare the first outline",
   "Modello collegato": "Model connected",
-  "Altro modello": "Another model",
+  "Altro modello": "Other model",
   "Il primo avvio": "First setup",
   "Puoi chiudere. Ripartirai da qui.": "You can close this. Your progress is saved.",
   'Il tuo primo progetto': 'Your first project',

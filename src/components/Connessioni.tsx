@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, letturaDesktop, type Stato } from '../api'
 import { moduloDaFinire } from '../collegamenti'
 import { AccessoDisco, Form } from './forms'
-import { frasi, loc, t } from '../lingua'
+import { frasi, t } from '../lingua'
 import { BottoneSicuro, useFocoDialogo } from '../ui'
 import { ConnectorIcon, ConnectorTile } from './ConnectorIcon'
 import { letturaFonti, useLettura } from '../lettura-app'
@@ -10,6 +10,8 @@ import { RigheLettura } from './RigheLettura'
 import { SaluteFonte } from './SaluteFonte'
 import { lineaPannello, mancanzeDi, parolaProblema } from '../salute-fonti'
 import { statoAccessoNote } from '../note-access'
+import { contaGenere } from '../conta-fonti.ts'
+import { genereDi } from '../../server/generi.ts'
 import './connessioni.css'
 
 // Quelli che non portano documenti: niente «Rileggi», perché non c'è niente da rileggere.
@@ -185,10 +187,8 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       : scelta.id === 'openai'
         ? (s?.config.motore === 'chatgpt' && s.config.chatgpt?.attivo ? t('Con il tuo account ChatGPT') : [t('Con la chiave API'), s?.config.openai?.modello].filter(Boolean).join(' · '))
       : [
-        // Granola conta riunioni, come la sua scheda («Collegato: 42 riunioni lette»)
-        scelta.documenti
-          ? scelta.id === 'granola' ? frasi.nRiunioni(scelta.documenti.toLocaleString(loc())) : frasi.nDocumenti(scelta.documenti.toLocaleString(loc()))
-          : null,
+        // ogni fonte conta con il suo nome: email, eventi, file, riunioni (P4)
+        scelta.documenti ? contaGenere(genereDi(scelta.id), scelta.documenti) : null,
         // il computer dice se è la macchina intera, e se la sta guardando
         // dal vivo. Mac o PC lo dice il nome che manda il server: qui non
         // si indovina dalla finestra, si legge da quello.
