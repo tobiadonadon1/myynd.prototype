@@ -1,5 +1,17 @@
 [
   {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }; const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const fatte = []; for (const id of ['c-p1', 'c-q1', 'c-r1', 'c-b1']) { const c = righe.find(x => x.id === id); if (c && c.stato === 'aperto' && !c.guaio) { await fetch('/api/compiti/' + id + '/delega', { method: 'POST', headers: h, body: JSON.stringify({ modo: 'tutto' }) }); fatte.push(id) } } return 'affidate: ' + (fatte.join(', ') || 'nessuna (già fatte)') })()"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const fine = Date.now() + 150000; for (;;) { const r = await fetch('/api/compiti', { headers: h }); const j = await r.json(); const righe = j.compiti || j; const ferme = ['c-p1', 'c-q1', 'c-r1', 'c-b1'].map(id => righe.find(x => x.id === id)).filter(c => c && c.stato === 'delegato'); if (!ferme.length) return 'tutte ferme: ' + ['c-p1', 'c-q1', 'c-r1', 'c-b1'].map(id => { const c = righe.find(x => x.id === id); return id + '=' + (c ? c.stato : '?') }).join(' '); if (Date.now() > fine) return 'ancora al lavoro: ' + ferme.map(c => c.id).join(', '); await new Promise(x => setTimeout(x, 1000)) } })()"
+  },
+  {
+    "js": "(async () => { const h = { authorization: 'Bearer ' + localStorage.getItem('myynd.token') }; const prima = await (await fetch('/api/compiti', { headers: h })).json(); const s1 = (prima.compiti || prima).find(x => x.id === 'c-s1'); if (s1 && s1.mandata) return 'c-s1 già mandata'; const r = await fetch('/api/sincronizza', { headers: h }); const lettore = r.body.getReader(); const dec = new TextDecoder(); let tutto = ''; for (;;) { const { value, done } = await lettore.read(); if (done) break; tutto += dec.decode(value) } return 'sincronizza: ' + r.status + ' · ' + tutto.length + ' byte' })()"
+  },
+  {
+    "aspetta": 3000
+  },
+  {
     "scatta": "prima"
   },
   {
@@ -12,13 +24,23 @@
     "scatta": "voce"
   },
   {
-    "clicca": "Change: Write the kickoff note for the Harbor pilot"
+    "clicca": "Change: Write the Q4 plan for the Harbor pilot"
   },
   {
     "scatta": "cambia"
   },
   {
-    "scrivi": "Monday, October 5"
+    "premi": "Escape"
+  },
+  {
+    "aspetta": 300
+  },
+  {
+    "clicca": "Change: Write the kickoff note for the Harbor pilot"
+  },
+  {
+    "scrivi": "Monday, October 5",
+    "in": "I assumed Tuesday, October 6"
   },
   {
     "premi": "Enter"
