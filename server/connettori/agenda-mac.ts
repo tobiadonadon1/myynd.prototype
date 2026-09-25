@@ -11,6 +11,7 @@
 
 import * as apple from '../agenda-apple.ts'
 import * as store from '../store.ts'
+import * as primaLettura from '../prima-lettura.ts'
 import type { Documento } from '../store.ts'
 import { corpoEvento, type Evento } from './calendario.ts'
 import { GuaioFonte } from './guaio.ts'
@@ -42,6 +43,23 @@ export function daLeggere(o: { prima: boolean; sfondo: boolean; aperto: boolean;
   const ultima = Date.parse(o.ultima ?? '')
   const vecchia = Number.isNaN(ultima) || (o.adesso ?? Date.now()) - ultima >= 60 * 60_000
   return o.aperto && vecchia
+}
+
+/**
+ * Se questo giro legge Calendario del Mac, deciso con lo stato vero.
+ *
+ * Un giro saltato durante la prima lettura conta fra i suoi giri, come una
+ * lettura andata storta: con Calendario chiuso per giorni la prima lettura
+ * non resta «in corso» per sempre (ogni giro dei dieci minuti la tratterebbe
+ * come una prima, e il primo giro di apprendimento non partirebbe mai). Al
+ * quarantesimo si arrende, e da lì Calendario del Mac si legge come sempre,
+ * appena è aperto.
+ */
+export async function questoGiro(o: { sfondo: boolean }): Promise<boolean> {
+  const prima = primaLettura.statoPrima('agendamac') === 'in-corso'
+  const si = daLeggere({ prima, sfondo: o.sfondo, aperto: await apple.aperto(), ultima: store.cursore('agendamac:ultima') })
+  if (!si && prima) primaLettura.esito('agendamac', false)
+  return si
 }
 
 /** Un guaio di Calendario, detto con il suo rimedio. */

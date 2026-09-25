@@ -16,6 +16,7 @@ import { homedir } from 'node:os'
 import { simpleParser } from 'mailparser'
 import type { Documento } from '../store.ts'
 import * as store from '../store.ts'
+import * as chi from '../chi.ts'
 import { riflua } from '../testo.ts'
 import { filoDi, idPulito, rispondeDi, destinatariDi } from '../filo.ts'
 import { massaDi } from './posta.ts'
@@ -182,6 +183,29 @@ export function apriEmlx(b: Buffer): { messaggio: Buffer; letto: boolean | undef
   return { messaggio, letto: m ? Number(BigInt(m[1]!) % 2n) === 1 : undefined }
 }
 
+/**
+ * I file dei messaggi che non diventano un documento: illeggibili, o senza niente
+ * dentro (né testo, né oggetto, né allegati). Per conto, in memoria: senza
+ * questo si rileggerebbero a ogni giro, prendendo il posto dei nuovi sotto il
+ * tetto, e la prima lettura non arriverebbe mai in fondo.
+ */
+const scartati = new Map<string, Set<string>>()
+const scartatiDi = () => {
+  const k = chi.adesso() ?? ''
+  let s = scartati.get(k)
+  if (!s) { s = new Set(); scartati.set(k, s) }
+  return s
+}
+
+/**
+ * Il corpo di un messaggio senza testo: l'oggetto e i nomi degli allegati.
+ * Una scansione o un PDF inoltrato senza una riga sono posta anche loro.
+ */
+export function corpoSenzaTesto(p: { subject?: string; attachments?: { filename?: string }[] }): string {
+  const allegati = (p.attachments ?? []).map(a => a.filename?.trim()).filter((x): x is string => !!x)
+  return [p.subject?.trim(), allegati.join(', ')].filter(Boolean).join('\n')
+}
+
 export type EsitoPostaMac = { docs: Documento[]; visti: string[]; dal: string; resto: Resto; caselle: number }
 
 /**
@@ -197,15 +221,17 @@ export async function sincronizza(o: { giorni: number; tetto?: number; casa?: st
   const visti = lista.map(c => c.id)
   const gia = new Set(store.idsConPrefisso('postamac:'))
   const buoni = senzaDoppioni(lista)
-  const mancano = buoni.filter(c => !gia.has(c.id))
+  const via = scartatiDi()
+  const mancano = buoni.filter(c => !gia.has(c.id) && !via.has(c.file))
   const scelti = mancano.slice(0, tetto)
   const docs: Documento[] = []
   for (const c of scelti) {
     try {
       const { messaggio, letto } = apriEmlx(await readFile(c.file))
       const p = await simpleParser(messaggio)
-      const testo = riflua((p.text || '').trim())
-      if (!testo) continue
+      // solo allegati (una scansione, un PDF inoltrato): l'oggetto e i nomi dei file
+      const testo = riflua((p.text || '').trim()) || corpoSenzaTesto(p)
+      if (!testo) { via.add(c.file); continue }
       const mittente = p.from?.value?.[0]
       docs.push({
         id: c.id,
@@ -227,7 +253,8 @@ export async function sincronizza(o: { giorni: number; tetto?: number; casa?: st
       })
     } catch (e) {
       if (negato(e)) throw new GuaioFonte(PERMESSO, 'permesso-disco')
-      // un messaggio illeggibile non ferma gli altri
+      // un messaggio illeggibile non ferma gli altri, e non si riprova a ogni giro
+      via.add(c.file)
     }
   }
   const arretrato = mancano.length - scelti.length

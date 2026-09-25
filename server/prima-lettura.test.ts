@@ -128,6 +128,27 @@ test('la prima volta l’agenda e la posta prima del Mac; le altre volte l’ord
   assert.deepEqual(ignoti, ['nuova', 'altra', 'desktop'])
 })
 
+test('la prima pagina comincia prima del Mac, che è lento: non aspetta migliaia di file', async () => {
+  const passi = [{ nome: 'desktop' }, { nome: 'posta' }, { nome: 'notion' }, { nome: 'calendario' }]
+  const storia: string[] = []
+  let desktopFinito = false
+  await prima.inOrdine(passi, true, async p => {
+    storia.push(`inizio ${p.nome}`)
+    // il Mac finto è lento: la pagina deve essere già partita prima che cominci
+    if (p.nome === 'desktop') { await new Promise(r => setTimeout(r, 30)); desktopFinito = true }
+  }, () => { storia.push('pagina'); assert.equal(desktopFinito, false) })
+  assert.deepEqual(storia, ['inizio calendario', 'inizio posta', 'inizio notion', 'pagina', 'inizio desktop'])
+})
+
+test('senza il Mac la prima pagina parte alla fine, una volta; fuori da una prima lettura non parte (counter-case)', async () => {
+  const storia: string[] = []
+  await prima.inOrdine([{ nome: 'posta' }, { nome: 'calendario' }], true, async p => { storia.push(p.nome) }, () => storia.push('pagina'))
+  assert.deepEqual(storia, ['calendario', 'posta', 'pagina'])
+  const dopo: string[] = []
+  await prima.inOrdine([{ nome: 'desktop' }, { nome: 'posta' }], false, async p => { dopo.push(p.nome) }, () => dopo.push('pagina'))
+  assert.deepEqual(dopo, ['desktop', 'posta'], 'l’ordine di sempre, e nessuna pagina')
+})
+
 test('il resto in sottofondo: legge finché non è tutto dentro, e dopo si ferma', async () => {
   collega()
   const lette: string[] = []

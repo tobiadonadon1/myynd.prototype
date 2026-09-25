@@ -15,6 +15,8 @@ process.env.MYYND_DATI = casa
 const store = await import('./store.ts')
 const apple = await import('./agenda-apple.ts')
 const agendaMac = await import('./connettori/agenda-mac.ts')
+const cfg = await import('./config.ts')
+const primaLettura = await import('./prima-lettura.ts')
 const { GuaioFonte } = await import('./connettori/guaio.ts')
 
 const GIORNO = 86_400_000
@@ -166,4 +168,36 @@ test('quando un giro legge Calendario del Mac, e quando lo salta', () => {
   assert.equal(agendaMac.daLeggere({ prima: false, sfondo: true, aperto: true, ultima: fa(61), adesso }), true)
   assert.equal(agendaMac.daLeggere({ prima: false, sfondo: true, aperto: true, ultima: fa(20), adesso }), false)
   assert.equal(agendaMac.daLeggere({ prima: false, sfondo: false, aperto: false, ultima: fa(600), adesso }), false)
+})
+
+test('una prima lettura saltata con Calendario chiuso conta fra i giri: finisce, e il primo giro di apprendimento parte', { skip: process.platform !== 'darwin' }, async () => {
+  cfg.aggiorna({ agendamac: { attiva: true } })
+  primaLettura.perProva({ pausa: 1, giri: 12, occupato: 1 })
+  apple.perProva({ piattaforma: () => 'darwin', ospitato: () => false, vietato: () => false, aperto: async () => false })
+  let imparato = 0
+  primaLettura.quandoFinisce(() => { imparato++ })
+  try {
+    // premuta da lui si legge, e non si conta (counter-case)
+    assert.equal(await agendaMac.questoGiro({ sfondo: false }), true)
+    assert.equal(store.cursore('prima:agendamac'), 'in-corso')
+    assert.equal(store.cursore('prima:agendamac:giri'), null)
+    // come `leggiUna` in index.ts: una lettura saltata si mette da parte per quel giro
+    let letture = 0
+    const leggiUna = async () => { letture++; return await agendaMac.questoGiro({ sfondo: true }) ? 'letta' as const : 'guaio' as const }
+    await primaLettura.continua('', leggiUna)
+    assert.equal(letture, 1, 'una volta per giro, non dodici')
+    assert.equal(store.cursore('prima:agendamac:giri'), '1')
+    assert.equal(primaLettura.eUnaPrima(), true)
+    // un giro dei dieci minuti dopo l'altro: finisce in un numero finito di giri
+    let cicli = 1
+    while (primaLettura.inCorso().includes('agendamac') && cicli < 100) { await primaLettura.continua('', leggiUna); cicli++ }
+    assert.equal(cicli, primaLettura.GIRI_MASSIMI)
+    assert.equal(store.cursore('prima:agendamac'), 'fatto')
+    assert.equal(primaLettura.eUnaPrima(), false)
+    assert.equal(imparato, 1)
+    assert.ok(store.cursore('prima:imparato'))
+  } finally {
+    primaLettura.perProva(null)
+    cfg.scrivi({}, { togli: ['agendamac'] })
+  }
 })

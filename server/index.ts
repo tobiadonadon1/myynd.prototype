@@ -102,7 +102,7 @@ import * as apple from './agenda-apple.ts'
 import * as agendaMac from './connettori/agenda-mac.ts'
 import * as postaMac from './connettori/posta-mac.ts'
 import { fonteCollegata } from './fonti-collegate.ts'
-import { qualcosaDaFeed } from './rilevanza.ts'
+import { feedDegliArrivi } from './dopo-arrivo.ts'
 import * as ospitato from './ospitato.ts'
 import * as auth from './auth.ts'
 import * as gettoni from './gettoni.ts'
@@ -2267,8 +2267,8 @@ async function leggiTuttoDentro(
    * lo dice. Aperta, si rilegge al massimo una volta l'ora.
    */
   if (c.agendamac && process.platform === 'darwin' && !ospitato.OSPITATO) await fonte('agendamac', async () => {
-    const prima = primaLettura.statoPrima('agendamac') === 'in-corso'
-    if (!agendaMac.daLeggere({ prima, sfondo: !!o.sfondo, aperto: await apple.aperto(), ultima: store.cursore('agendamac:ultima') })) {
+    // un giro saltato durante la prima lettura conta fra i suoi giri: niente resta «in corso» per sempre
+    if (!await agendaMac.questoGiro({ sfondo: !!o.sfondo })) {
       avvisa({ fase: 'agendamac', stato: 'fatto', saltata: true, documenti: store.idsConPrefisso('agendamac:').length })
       return 0
     }
@@ -2487,10 +2487,8 @@ async function leggiTuttoDentro(
    * prima pagina: non deve aspettare migliaia di file per leggere la posta.
    */
   const prima = primaLettura.eUnaPrima(c)
-  let veloci = false
-  for (const p of primaLettura.ordina(passi, prima)) {
-    if (prima && !veloci && p.nome === 'desktop') { veloci = true; o.dopoLeVeloci?.() }
-    if (fermo() || (soloFonte && soloFonte !== p.nome)) continue
+  await primaLettura.inOrdine(passi, prima, async p => {
+    if (fermo() || (soloFonte && soloFonte !== p.nome)) return
     const inizio = Date.now()
     try {
       // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
@@ -2505,8 +2503,7 @@ async function leggiTuttoDentro(
       const frase = fraseDi(err)
       avvisa({ fase: p.nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
     }
-  }
-  if (prima && !veloci) o.dopoLeVeloci?.()
+  }, o.dopoLeVeloci)
   return totale
 }
 
@@ -2595,8 +2592,10 @@ async function leggiUna(fonte: string): Promise<'letta' | 'occupato' | 'guaio'> 
   try {
     await withBackgroundWork(() => store.senzaToccare(() => leggiTutto(fonte, e => {
       v.avvisa(e)
-      const x = e as { fase?: string; stato?: string; errore?: string }
+      const x = e as { fase?: string; stato?: string; errore?: string; saltata?: boolean }
       if (x.fase === fonte && x.stato === 'guaio') { guaio = true; console.error(`myynd · prima lettura · ${fonte}: ${x.errore}`) }
+      // saltata (Calendario chiuso): per questo giro si mette da parte, come un guaio, invece di riprovarla dodici volte
+      if (x.fase === fonte && x.saltata) guaio = true
     }, () => cancellati.cancellata(cfg.cartella()), { sfondo: true })))
     return guaio ? 'guaio' : 'letta'
   } catch (e) {
@@ -2665,7 +2664,7 @@ async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuan
    * lettura per sentirsi dire «niente». Le domande e «quando arriva» sotto
    * restano come sono.
    */
-  const voci = qualcosaDaFeed(nuovi) ? await claude.generaFeed(nuovi) : []
+  const voci = await feedDegliArrivi(nuovi)
   const nuove = voci.length ? store.salvaFeed(voci) : 0
   if (nuove) {
     console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)

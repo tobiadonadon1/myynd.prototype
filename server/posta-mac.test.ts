@@ -7,7 +7,7 @@
 
 import { test, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -135,4 +135,56 @@ test('trenta giorni dopo la prima lettura: i vecchi restano fra i documenti, ric
   const tolti = store.riconcilia('postamac', { completo: true, dal: trenta.dal }, [...trenta.docs.map(d => d.id), ...trenta.visti])
   assert.equal(tolti, 0)
   assert.equal(store.conteggi().perFonte.find(f => f.fonte === 'postamac')?.n, 40)
+})
+
+/** Un `.emlx` scritto a mano: il messaggio grezzo, e le bandiere in fondo. */
+function emlxGrezzo(dir: string, nome: string, righe: string[], data: Date) {
+  mkdirSync(dir, { recursive: true })
+  const b = Buffer.from(righe.join('\r\n'), 'utf8')
+  const coda = '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n\t<key>flags</key>\n\t<integer>0</integer>\n</dict>\n</plist>\n'
+  const file = join(dir, nome)
+  writeFileSync(file, Buffer.concat([Buffer.from(`${b.length}\n`, 'ascii'), b, Buffer.from(coda, 'utf8')]))
+  utimesSync(file, data, data)
+}
+
+test('una mail con solo un allegato entra con l’oggetto e il nome del file; una vuota non si rilegge a ogni giro', async () => {
+  nuovaCasa({ caselle: 1, inArrivo: 3, inviate: 0, vecchie: 0, spazzatura: 0 })
+  const dir = join(casa, 'Library', 'Mail', 'V10', finta.CONTI[0]!, 'INBOX.mbox', 'A', 'Data', 'Messages')
+  const ieri = new Date(ADESSO - 86_400_000)
+  const testa = (id: string, oggetto: string | null) => [
+    'From: Sara Okafor <sara@okafor-legal.test>', 'To: Alex Morgan <alex@morgan-works.test>',
+    ...(oggetto ? [`Subject: ${oggetto}`] : []), `Date: ${ieri.toUTCString().replace('GMT', '+0000')}`, `Message-ID: <${id}>`, 'MIME-Version: 1.0'
+  ]
+  // la scansione: multipart con un PDF e nessuna riga di testo
+  emlxGrezzo(dir, '900.emlx', [...testa('scansione@okafor-legal.test', 'Signed contract'),
+    'Content-Type: multipart/mixed; boundary="xx"', '', '--xx',
+    'Content-Type: application/pdf; name="contract-signed.pdf"', 'Content-Disposition: attachment; filename="contract-signed.pdf"', 'Content-Transfer-Encoding: base64', '',
+    Buffer.from('%PDF-1.4 finto').toString('base64'), '--xx--', ''], ieri)
+  // niente di niente: né oggetto, né testo, né allegati
+  emlxGrezzo(dir, '901.emlx', [...testa('vuota@okafor-legal.test', null), 'Content-Type: text/plain; charset=utf-8', '', ''], ieri)
+  emlxGrezzo(dir, '902.emlx', [...testa('vuota-2@okafor-legal.test', null), 'Content-Type: text/plain; charset=utf-8', '', ''], ieri)
+
+  const e = await postaMac.sincronizza({ giorni: 90, tetto: 2, casa, adesso: ADESSO })
+  const scansione = e.docs.find(d => d.messageId === 'scansione@okafor-legal.test')
+  assert.ok(scansione, 'la mail con solo l’allegato è un documento')
+  assert.equal(scansione.titolo, 'Signed contract')
+  assert.match(scansione.corpo, /Signed contract/)
+  assert.match(scansione.corpo, /contract-signed\.pdf/)
+  assert.ok(!e.docs.some(d => d.messageId === 'vuota@okafor-legal.test'), 'una mail vuota non diventa un documento')
+  store.salvaDocumenti(e.docs)
+  // ai giri dopo la vuota non prende il posto delle altre, e la lettura arriva in fondo
+  let giri = 1
+  let ultimo = e
+  while (!ultimo.resto.aGiorno && giri < 6) {
+    ultimo = await postaMac.sincronizza({ giorni: 90, tetto: 2, casa, adesso: ADESSO })
+    store.salvaDocumenti(ultimo.docs)
+    giri++
+  }
+  assert.equal(ultimo.resto.aGiorno, true, 'la prima lettura arriva in fondo')
+  assert.equal(giri, 3, 'sei messaggi, due per giro')
+  assert.equal(store.idsConPrefisso('postamac:').length, 4, 'tre mail e la scansione')
+  // le due vuote non tornano sotto il tetto: con un posto solo, prima una e poi l'altra sarebbero per sempre «in arretrato»
+  const dopo = await postaMac.sincronizza({ giorni: 90, tetto: 1, casa, adesso: ADESSO })
+  assert.equal(dopo.docs.length, 0)
+  assert.equal(dopo.resto.aGiorno, true)
 })

@@ -109,6 +109,21 @@ export function ordina<T extends { nome: string }>(passi: T[], prima: boolean): 
   return [...passi].sort((a, b) => posto(a.nome) - posto(b.nome))
 }
 
+/**
+ * I passi della lettura, uno dopo l'altro, nell'ordine giusto. Durante una
+ * prima lettura `dopoLeVeloci` parte appena prima del Mac (la prima pagina
+ * non aspetta migliaia di file), o alla fine se il Mac non c'è; le altre
+ * volte non parte.
+ */
+export async function inOrdine<T extends { nome: string }>(passi: T[], prima: boolean, fai: (p: T) => Promise<void>, dopoLeVeloci?: () => void): Promise<void> {
+  let veloci = false
+  for (const p of ordina(passi, prima)) {
+    if (prima && !veloci && p.nome === 'desktop') { veloci = true; dopoLeVeloci?.() }
+    await fai(p)
+  }
+  if (prima && !veloci) dopoLeVeloci?.()
+}
+
 // — dopo la prima lettura —
 
 const finali: (() => Promise<void> | void)[] = []
