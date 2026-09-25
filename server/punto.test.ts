@@ -148,6 +148,8 @@ const minuti = (n: number) => n * 60_000
 const adesso = () => Date.now() + 1
 /** Perché il prossimo documento risulti entrato *dopo* l'ultimo punto. */
 const unAttimo = () => new Promise(r => setTimeout(r, 5))
+/** Domani alle 10 ora locale: per le prove che sommano ore e non devono cambiare giorno. */
+const domattinaAlleDieci = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d.getTime() }
 
 // — il materiale —
 
@@ -707,7 +709,9 @@ test('l’istruzione dice le quattro sezioni, dove finiscono i compiti, e la lin
 
 // — il cancello —
 
-test('subito dopo un punto si torna quello di prima, senza chiamare nessuno', async () => {
+test('subito dopo un punto si torna quello di prima, senza chiamare nessuno', async t => {
+  // domattina alle 10: dopo tutto quello che è già scritto, e un'ora o cinque dopo non scavallano la mezzanotte
+  t.mock.timers.enable({ apis: ['Date'], now: domattinaAlleDieci() })
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
@@ -720,7 +724,9 @@ test('subito dopo un punto si torna quello di prima, senza chiamare nessuno', as
   assert.deepEqual(secondo.punto, primo.punto)
 })
 
-test('passate tre ore senza che sia successo niente, ancora quello di prima', async () => {
+test('passate tre ore senza che sia successo niente, ancora quello di prima', async t => {
+  // domattina alle 10: dopo tutto quello che è già scritto, e un'ora o cinque dopo non scavallano la mezzanotte
+  t.mock.timers.enable({ apis: ['Date'], now: domattinaAlleDieci() })
   pulisci()
   store.salvaDocumenti([doc('posta:INBOX:1', 'Preventivo Rossi')])
   const ricevute = fornitoreFinto()
