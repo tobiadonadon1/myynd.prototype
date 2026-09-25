@@ -64,6 +64,13 @@ export const CATALOGO: VoceConnettore[] = [
    * novanta per cento di quello che una persona voleva da Google.
    */
   { id: 'calendario', nome: 'Calendario', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'La tua agenda, sempre aggiornata.' },
+  /*
+   * La posta e l'agenda che stanno già su questo Mac, senza niente da
+   * incollare (P4): Mail e Calendario sono già collegati agli account di chi
+   * li usa. Si leggono e basta: niente bozze, niente invii. Solo in casa.
+   */
+  { id: 'postamac', nome: 'Mail del Mac', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'Le email di Mail su questo Mac, in sola lettura.' },
+  { id: 'agendamac', nome: 'Calendario del Mac', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I calendari di Calendario su questo Mac.' },
   { id: 'google', nome: 'Gmail e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto. Intanto la posta si collega da «Posta» e l’agenda da «Calendario».' },
   { id: 'microsoft', nome: 'Outlook e Calendario', gruppo: 'Comunicazione', pronto: false, legge: true, nota: 'Arriva presto: posta e agenda di Microsoft 365.' },
   { id: 'slack', nome: 'Slack', gruppo: 'Comunicazione', pronto: true, legge: true, nota: 'I canali di cui fai già parte.' },
@@ -155,6 +162,17 @@ export const CATALOGO: VoceConnettore[] = [
 ]
 
 export const PRONTI = CATALOGO.filter(c => c.pronto).map(c => c.id)
+
+/**
+ * Le fonti che portano posta, tutte in un posto (P4).
+ *
+ * Erano scritte a mano in sette file, ognuno con la sua lista: una fonte di
+ * posta nuova che ne manca una è posta che il punto non vede, che le
+ * iniziative non guardano, che gli attrezzi non leggono. Chi chiede «è
+ * un'email?» chiede qui. Gli alias di prima (`gmail`, `outlook`, `imap`) li
+ * aggiunge chi li incontra ancora nei dati.
+ */
+export const FONTI_POSTA = ['posta', 'google', 'microsoft', 'postamac'] as const
 
 /**
  * Le fonti che portano documenti nell'indice.

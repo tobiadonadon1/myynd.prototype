@@ -47,6 +47,7 @@ import { chiediJSON, collegato } from './modello.ts'
 import { senzaTrattini } from './testo.ts'
 import { classificaAttenzione } from './rilevanza.ts'
 import { contestoOperativo } from './memoria.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 /**
  * Una proposta, con dentro tutto quello che servirà a scriverla davvero.
@@ -102,7 +103,7 @@ const MODELLI: Modello[] = [
       (n, dove) => `Ogni mattina, i ${n} preventivi ${dove} vanno in lista con il prossimo passo di ciascuno.`],
     en: ['Keep proposals moving',
       (n, dove) => `Every morning, the ${n} proposals ${dove} go into your list with the next step for each.`] },
-  { id: 'inbox', fonti: ['posta', 'google', 'microsoft'], minimo: 3,
+  { id: 'inbox', fonti: [...FONTI_POSTA], minimo: 3,
     it: ['Le priorità della posta',
       (n, dove) => `Ogni mattina, dai ${n} messaggi ${dove} raccolgo le richieste ancora aperte, con mittente e prossimo passo.`],
     en: ['Inbox priorities',
@@ -364,7 +365,7 @@ function catalogoScritto(collegati: { nome: string; spiega: string }[]): string 
 }
 
 /** Le fonti in cui un documento è un messaggio, e un mittente vuol dire qualcosa. */
-const POSTA = new Set(['posta', 'google', 'microsoft'])
+const POSTA = new Set<string>([...FONTI_POSTA, 'gmail', 'outlook', 'imap'])
 
 /** Chi lo manda, come si scrive: il nome quando c'è, se no quello che c'è. */
 function chiScritto(autore: string): string {

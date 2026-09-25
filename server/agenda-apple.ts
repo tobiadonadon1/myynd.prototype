@@ -27,6 +27,8 @@
 // il messaggio su PERMESSO.
 
 import { execFile } from 'node:child_process'
+import { resolve } from 'node:path'
+import { userInfo } from 'node:os'
 import { OSPITATO } from './ospitato.ts'
 import * as chi from './chi.ts'
 import { ripetizioni } from './connettori/calendario.ts'
@@ -270,11 +272,11 @@ function run(argv) {
  * nessuno dei due casi aspettare di più cambia qualcosa. Niente `activate`:
  * il Mac di chi usa non si tocca.
  */
-function corriDavvero(azione: string, argomento: unknown): Promise<string> {
+function corriDavvero(azione: string, argomento: unknown, attesa = 20_000): Promise<string> {
   return new Promise((risolvi, rifiuta) => {
     execFile('/usr/bin/osascript',
       ['-l', 'JavaScript', '-e', SCRIPT, azione, JSON.stringify(argomento ?? {})],
-      { timeout: 20_000, maxBuffer: 16 * 1024 * 1024 },
+      { timeout: attesa, maxBuffer: 16 * 1024 * 1024 },
       (e, stdout, stderr) => {
         if (e) {
           /*
@@ -302,16 +304,31 @@ function corriDavvero(azione: string, argomento: unknown): Promise<string> {
  * essere su un server o su Windows.
  */
 type Ferri = {
-  corri: (azione: string, argomento: unknown) => Promise<string>
+  corri: (azione: string, argomento: unknown, attesa?: number) => Promise<string>
   piattaforma: () => string
   ospitato: () => boolean
   adesso: () => number
+  /**
+   * Qui Calendario non si tocca mai: nelle prove dal vivo (`MYYND_SENZA_APP_MAC`)
+   * e ogni volta che la casa non è quella vera di chi usa il Mac (una casa
+   * finta vuol dire una prova, e il Calendario sarebbe il suo).
+   */
+  vietato: () => boolean
+  /** Calendario è aperto adesso: una lettura di sottofondo non lo apre mai. */
+  aperto: () => Promise<boolean>
+}
+function calendarioAperto(): Promise<boolean> {
+  return new Promise(risolvi => {
+    execFile('/usr/bin/pgrep', ['-x', 'Calendar'], { timeout: 5_000 }, e => risolvi(!e))
+  })
 }
 const VERI: Ferri = {
   corri: corriDavvero,
   piattaforma: () => process.platform,
   ospitato: () => OSPITATO,
-  adesso: () => Date.now()
+  adesso: () => Date.now(),
+  vietato: () => process.env.MYYND_SENZA_APP_MAC === '1' || resolve(process.env.HOME ?? '') !== resolve(userInfo().homedir),
+  aperto: calendarioAperto
 }
 let ferri: Ferri = VERI
 
@@ -323,7 +340,13 @@ export function perProva(f: Partial<Ferri> | null) {
 
 /** Vero quando questa macchina può parlare con Calendario: un Mac, non un server. */
 export function disponibile(): boolean {
-  return !ferri.ospitato() && ferri.piattaforma() === 'darwin'
+  return !ferri.ospitato() && ferri.piattaforma() === 'darwin' && !ferri.vietato()
+}
+
+/** Calendario è aperto su questo Mac. Mai vero dove Calendario non si può toccare. */
+export async function aperto(): Promise<boolean> {
+  if (!disponibile()) return false
+  try { return await ferri.aperto() } catch { return false }
 }
 
 /**
@@ -348,11 +371,11 @@ export function traduciGuasto(e: unknown): GuaioAgenda {
   return new GuaioAgenda(NON_RISPONDE, 500)
 }
 
-async function esegui<T>(azione: string, argomento: unknown): Promise<T> {
+async function esegui<T>(azione: string, argomento: unknown, attesa?: number): Promise<T> {
   if (!disponibile()) throw new GuaioAgenda(NON_QUI, 503)
   let fuori: string
   try {
-    fuori = await ferri.corri(azione, argomento)
+    fuori = await ferri.corri(azione, argomento, attesa)
   } catch (e) {
     throw traduciGuasto(e)
   }
@@ -381,11 +404,11 @@ const conto = () => chi.adesso() ?? ''
 
 type CalendarioGrezzo = { id: string; nome: string; colore: string; scrivibile: boolean }
 
-export async function calendari(): Promise<Calendario[]> {
+export async function calendari(attesa?: number): Promise<Calendario[]> {
   const k = conto()
   const c = cache.get(k)
   if (c && ferri.adesso() - c.quando < CACHE_MS) return c.lista
-  const grezzi = await esegui<CalendarioGrezzo[]>('calendari', {})
+  const grezzi = await esegui<CalendarioGrezzo[]>('calendari', {}, attesa)
   const lista: Calendario[] = (Array.isArray(grezzi) ? grezzi : []).map((g): Calendario => ({
     id: String(g.id ?? ''), nome: String(g.nome ?? ''), colore: String(g.colore ?? ''),
     scrivibile: !!g.scrivibile, fonte: 'apple'
@@ -479,8 +502,8 @@ function srotola(serie: EventoGrezzo[], singoli: EventoAgenda[], da: Date, a: Da
 }
 
 /** Gli eventi di tutti i calendari fra due istanti, in ordine di inizio. */
-export async function eventi(da: Date, a: Date): Promise<EventoAgenda[]> {
-  const r = await esegui<{ eventi: EventoGrezzo[]; serie: EventoGrezzo[] }>('eventi', { da: da.toISOString(), a: a.toISOString() })
+export async function eventi(da: Date, a: Date, attesa?: number): Promise<EventoAgenda[]> {
+  const r = await esegui<{ eventi: EventoGrezzo[]; serie: EventoGrezzo[] }>('eventi', { da: da.toISOString(), a: a.toISOString() }, attesa)
   const singoli = (Array.isArray(r?.eventi) ? r.eventi : []).filter(g => !g.ripete).map(pulisci).filter((e): e is EventoAgenda => !!e)
   const serie = Array.isArray(r?.serie) ? r.serie : []
   const tutti = [...singoli, ...srotola(serie, singoli, da, a)]

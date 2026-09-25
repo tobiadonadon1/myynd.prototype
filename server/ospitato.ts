@@ -260,7 +260,10 @@ export const SOLO_IN_CASA: string[] = [
   'conversazioni',
   // le Note di Apple stanno in `~/Library/Group Containers` del Mac di chi le
   // scrive: dentro un contenitore non c'è nemmeno la cartella
-  'note'
+  'note',
+  // Mail e Calendario di questo Mac (P4): stessa ragione
+  'postamac',
+  'agendamac'
 ]
 
 /**

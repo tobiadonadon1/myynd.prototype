@@ -600,6 +600,27 @@ test('an explicitly delegated email reply is saved as a real mailbox draft', asy
   assert.equal(writes,1);assert.equal(store.compito(id)?.email?.casella?.stato,'salvata')
 })
 
+// P4 · una mail di Mail del Mac non ha una casella dove mettere la bozza: la
+// riga resta pronta con il testo, e nessuno bussa alla casella IMAP
+test('a delegated reply to a Mail on this Mac message stays ready with no mailbox call and no error', async () => {
+  const doc = { id: 'postamac:CONTO/INBOX/12.emlx', fonte: 'postamac', tipo: 'email', titolo: 'Menu wording', corpo: 'Could you confirm the menu wording by Thursday?', autore: 'Maya <maya@northwind-studio.test>', quando: new Date().toISOString(), messageId: 'menu@northwind-studio.test' }
+  store.salvaDocumenti([doc])
+  const id = 'reply-mail-on-mac'
+  store.scriviCompito({ id, testo: 'Reply to Maya about the menu wording', doc: doc.id, ordine: 'z2' })
+  let casella = 0, smontata = 0
+  prova({ svolgi: async () => ({ testo: 'Dear Maya, the wording is confirmed.', fonti: [] }), chiedeAiuto: nonChiede, domandeDaFare: nessunaDomanda, postaCollegata: () => true,
+    preparaEmail: async () => { smontata++; return { a: 'maya@northwind-studio.test', oggetto: 'Re: Menu wording', corpo: 'The wording is confirmed.' } },
+    salvaBozzaCasella: async () => { casella++; return { stato: 'salvata', id: 'x', url: 'message://x' } } })
+  const o = orecchio(id); compiti.affida(id, 'bozza'); await o.aspetta('pronto'); await pausa(20); o.smetti()
+  assert.equal(casella, 0)
+  assert.equal(smontata, 0)
+  const c = store.compito(id)
+  assert.equal(c?.stato, 'pronto')
+  assert.equal(c?.guaio ?? null, null)
+  assert.equal(c?.email ?? null, null)
+  assert.match(String(c?.risultato ?? ''), /wording is confirmed/)
+})
+
 test('restart recovers one bounded read-only initiative attempt, never arbitrary/native work', async () => {
   const cfg=await import('./config.ts');const initiative=await import('./iniziativa.ts')
   cfg.scrivi({lingua:'en',autonomia:'preparare'});initiative.imposta(true)

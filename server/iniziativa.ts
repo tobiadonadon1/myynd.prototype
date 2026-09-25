@@ -10,6 +10,7 @@ import { fra } from './ordine.ts'
 import { classificaAttenzione, contieneRichiesta, corpoAttuale } from './rilevanza.ts'
 import { documentoVero } from './veri.ts'
 import * as progetti from './progetti.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 export const LIMITE = 2
 export const PAUSA = 3 * 3600_000
@@ -37,7 +38,7 @@ export function imposta(attiva: boolean) { scrivi({ ...leggi(), attiva }); retur
 
 export type TipoPreparazione = 'risposta' | 'passo-progetto' | 'fattura' | 'modulo'
 export type Candidato = {doc:store.Documento;tipo:TipoPreparazione;progetto?:progetti.Progetto}
-const POSTA = ['posta','gmail','outlook']
+const POSTA: string[] = [...FONTI_POSTA, 'gmail', 'outlook', 'imap']
 const email = (d:store.Documento) => d.tipo === 'email' || POSTA.includes(d.fonte)
 const FATTURA = /\b(?:invoice|invoices|fattura|fatture|bill(?:ing)? statement|payment request)\b/i
 const DA_PAGARE = /\b(?:payment due|due (?:by|on|date)|amount due|balance due|pay(?:ment)? (?:by|before)|please pay|payable|da pagare|pagamento (?:entro|dovuto)|scadenza|saldo dovuto|importo dovuto)\b/i

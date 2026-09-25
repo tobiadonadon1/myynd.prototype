@@ -26,6 +26,7 @@ import { existsSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ConfigDesktop } from './config.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 const esegui = promisify(execFile)
 
@@ -171,7 +172,7 @@ const SOLO_MAC = 'Posso portarti lì solo sul Mac.'
 const DA_NESSUN_POSTO = 'Questa riga non viene da nessun posto che possa aprire.'
 
 /** I connettori che portano posta: l'id del documento dice quale. */
-const POSTA = new Set(['posta', 'google', 'microsoft', 'gmail', 'outlook', 'imap'])
+const POSTA = new Set<string>([...FONTI_POSTA, 'gmail', 'outlook', 'imap'])
 /** Quelli che si leggono nel browser: lì «aprire la mail» vuol dire una pagina. */
 const POSTA_WEB = new Set(['google', 'gmail'])
 

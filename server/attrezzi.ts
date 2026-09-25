@@ -46,6 +46,7 @@ import * as agenda from './agenda.ts'
 import * as lavoro from './lavoro.ts'
 import * as microsoft from './connettori/microsoft.ts'
 import { oraIn } from './fuso.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 /** Il nome di un attrezzo. Fuori da questo elenco non esiste niente. */
 export type Nome =
@@ -90,10 +91,10 @@ export type Attrezzo = {
 const FONTI: Partial<Record<Nome, string[]>> = {
   // tre protocolli, una cosa sola: chi dice «guarda nella posta» non sta
   // chiedendo se quella casella parli IMAP, Gmail o Graph
-  'posta.leggi': ['posta', 'google', 'microsoft'],
+  'posta.leggi': [...FONTI_POSTA],
   // legge il calendario collegato con un indirizzo iCal, ma non cercandoci
   // dentro: vedi l'ordine dei rami dentro `esegui`
-  'agenda.leggi': ['calendario'],
+  'agenda.leggi': ['calendario', 'agendamac'],
   'desktop.leggi': ['desktop'],
   'notion.leggi': ['notion'],
   'granola.leggi': ['granola'],
@@ -387,7 +388,7 @@ export function collegato(n: Nome): boolean {
   if (!a) return false
   const c = leggi()
   switch (a.serve) {
-    case 'posta': return !!(c.posta || c.google || c.microsoft?.parti.includes('posta'))
+    case 'posta': return !!(c.posta || c.google || c.postamac || c.microsoft?.parti.includes('posta'))
     case 'desktop': return !!c.desktop?.cartelle?.length
     case 'notion': return !!c.notion
     case 'granola': return !!c.granola

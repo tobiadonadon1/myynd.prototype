@@ -765,6 +765,8 @@ async function preparaLaMail(c: store.Compito, bozza: string, fonti: claude.Font
     // testo che comincia con «Sei un assistente».
     if (c.modo === 'prompt') return
     if (!ferri.postaCollegata()) return
+    // una mail di Mail del Mac non ha una casella dove mettere la bozza: il testo resta nella riga (P4)
+    if (c.doc?.startsWith('postamac:')) return
     if (!invio.sembraUnMessaggio(c.testo, bozza, [c.doc, ...fonti.map(f => f.id)])) return
     const e = await ferri.preparaEmail(c.testo, bozza, fonti, c.doc)
     if (!e || richiamati.has(chiave(c.id))) return

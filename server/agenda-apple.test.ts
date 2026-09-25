@@ -31,7 +31,9 @@ function corridore(risposte: Record<string, unknown | ((a: unknown) => unknown)>
       return typeof v === 'string' ? v : JSON.stringify(v)
     },
     piattaforma: () => 'darwin',
-    ospitato: () => false
+    ospitato: () => false,
+    // la casa delle prove non è quella vera: qui Calendario è finto, e si può
+    vietato: () => false
   })
   return chiamate
 }
@@ -50,7 +52,7 @@ test('i calendari escono con la forma della vista, e per un minuto non si richie
   const chiamate = corridore({ calendari: CAL })
   apple.perProva({
     corri: async (azione, argomento) => { chiamate.push({ azione, argomento }); return JSON.stringify(CAL) },
-    piattaforma: () => 'darwin', ospitato: () => false, adesso: () => ora
+    piattaforma: () => 'darwin', ospitato: () => false, adesso: () => ora, vietato: () => false
   })
   const prima = await apple.calendari()
   assert.deepEqual(prima, [

@@ -170,10 +170,10 @@ test('il recinto: si vede solo quello che l’automazione ha il permesso di apri
 test('il recinto lo decide una funzione sola, e gli attrezzi che non leggono non restringono', async () => {
   const attrezzi = await import('./attrezzi.ts')
   // dichiarare la posta restringe alla posta
-  assert.deepEqual(attrezzi.recinto(['posta.leggi']), ['posta', 'google', 'microsoft'])
+  assert.deepEqual(attrezzi.recinto(['posta.leggi']), ['posta', 'google', 'microsoft', 'postamac'])
   // due attrezzi si sommano, senza ripetizioni
   assert.deepEqual(attrezzi.recinto(['posta.leggi', 'desktop.leggi']),
-    ['posta', 'google', 'microsoft', 'desktop'])
+    ['posta', 'google', 'microsoft', 'postamac', 'desktop'])
   // niente di dichiarato: nessun recinto, cioè il compito scritto a mano
   assert.equal(attrezzi.recinto([]), null)
   /*

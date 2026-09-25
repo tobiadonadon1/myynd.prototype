@@ -45,6 +45,7 @@ import * as compiti from './compiti.ts'
 import * as ordine from './ordine.ts'
 import * as scrivania from './scrivania.ts'
 import * as giudizi from './giudizi.ts'
+import { FONTI_POSTA as FONTI_DI_POSTA } from './connettori/registro.ts'
 
 /** Quanti punti al giorno, per persona. È il lavoro più caro dell'app. */
 export const AL_GIORNO = 3
@@ -318,7 +319,7 @@ export function inMassa(d: store.Documento): boolean {
 const DISCO_MAX = 5
 
 /** Le fonti da cui arriva la posta: da un file o da un impegno non risponde nessuno. */
-const FONTI_POSTA = new Set(['posta', 'google', 'microsoft'])
+const FONTI_POSTA = new Set<string>([...FONTI_DI_POSTA, 'gmail', 'outlook', 'imap'])
 /** «Re:», «R:», «Fwd:»: una mail che continua una conversazione, non una che la comincia. */
 const RIMANDO = /^\s*(re|r|rif|fwd|fw)\s*:/i
 /** Quante risposte e quante notizie da GitHub si mostrano al modello. */
