@@ -39,7 +39,8 @@ export function leggi(): Riferimento {
   return { testo: b?.valore?.trim() ?? '', aggiornato: b?.aggiornato ?? null }
 }
 
-export function scrivi(testo: string) {
+/** Torna i nomi dei progetti nati da queste righe (P5: la Memoria lo dice). */
+export function scrivi(testo: string): string[] {
   const pulito = testo.trim()
   if (!pulito) throw new Error('Scrivi qualcosa.')
   store.scriviBlocco({
@@ -48,7 +49,7 @@ export function scrivi(testo: string) {
     valore: pulito,
     tetto: TETTO
   })
-  registraProgettiNominati(pulito)
+  return registraProgettiNominati(pulito)
 }
 
 /**
