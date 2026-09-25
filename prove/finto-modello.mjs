@@ -30,6 +30,15 @@
 //
 // /api/tags risponde 404 apposta: Myynd bussa lì per capire se è Ollama, e
 // questo non deve sembrarlo.
+//
+// P10 · parla anche come Anthropic: POST /v1/messages, intero o in streaming
+// (message_start, content_block_start, un text_delta per parola,
+// content_block_stop, message_delta, message_stop). Ci si arriva con
+// ANTHROPIC_BASE_URL=http://127.0.0.1:<porta> e una chiave finta. Lo stesso
+// copione sceglie il testo. FINTO_PRIMA_PAROLA_MS ritarda il primo pezzo.
+// Il fermo: POST /__trattieni fa aspettare ogni risposta (tutte e due le
+// lingue), POST /__lascia le libera, GET /__richieste dice quante ne sono
+// arrivate finora.
 
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
@@ -37,6 +46,13 @@ import { appendFileSync, readFileSync } from 'node:fs'
 const PORTA = Number(process.env.FINTO_PORTA || process.argv[2] || 0)
 const REGISTRO = process.env.FINTO_REGISTRO || ''
 const COPIONE = process.env.FINTO_COPIONE || ''
+const PRIMA_PAROLA = Number(process.env.FINTO_PRIMA_PAROLA_MS || 0)
+
+// il fermo: mentre è chiuso, ogni risposta aspetta che si riapra
+let trattieni = false
+let inAttesa = []
+let richieste = 0
+const aspettaIlFermo = () => trattieni ? new Promise(r => inAttesa.push(r)) : Promise.resolve()
 
 /** Il copione si rilegge a ogni richiesta: si può cambiare mentre la prova gira. */
 function copione() {
@@ -79,6 +95,23 @@ function dalloSchema(s) {
     case 'boolean': return false
     case 'null': return null
     default: return s.properties ? dalloSchema({ ...s, type: 'object' }) : null
+  }
+}
+
+/** Una richiesta Anthropic nella forma di una OpenAI, per scegliere la risposta con le stesse regole. */
+function daAnthropic(corpo) {
+  const system = typeof corpo.system === 'string' ? corpo.system : testoDi(corpo.system)
+  const messaggi = (Array.isArray(corpo.messages) ? corpo.messages : []).map(m => ({
+    role: Array.isArray(m.content) && m.content.some(p => p?.type === 'tool_result') ? 'tool' : m.role,
+    content: m.content
+  }))
+  const formato = corpo.output_config?.format
+  return {
+    messages: [...(system ? [{ role: 'system', content: system }] : []), ...messaggi],
+    response_format: formato?.type === 'json_schema' ? { type: 'json_schema', json_schema: { schema: formato.schema } } : undefined,
+    tools: Array.isArray(corpo.tools) ? corpo.tools.map(t => ({ function: { name: t?.name } })) : undefined,
+    stream: corpo.stream,
+    model: corpo.model
   }
 }
 
@@ -130,6 +163,18 @@ function leggiCorpo(req) {
 
 const server = createServer(async (req, res) => {
   const percorso = (req.url || '').split('?')[0]
+  if (req.method === 'POST' && percorso === '/__trattieni') { trattieni = true; res.writeHead(200); return res.end('{}') }
+  if (req.method === 'POST' && percorso === '/__lascia') {
+    trattieni = false
+    const via = inAttesa; inAttesa = []
+    for (const r of via) r()
+    res.writeHead(200); return res.end('{}')
+  }
+  if (req.method === 'GET' && percorso === '/__richieste') {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    return res.end(JSON.stringify({ richieste, trattenute: inAttesa.length }))
+  }
+  if (req.method === 'POST' && /\/v1\/messages$/.test(percorso)) return anthropic(req, res)
   if (req.method === 'GET' && /\/models$/.test(percorso)) {
     res.writeHead(200, { 'content-type': 'application/json' })
     return res.end(JSON.stringify({ object: 'list', data: [{ id: copione().modello || 'finto', object: 'model' }] }))
@@ -139,6 +184,7 @@ const server = createServer(async (req, res) => {
     return res.end(JSON.stringify({ error: { message: 'not found' } }))
   }
   const corpo = await leggiCorpo(req)
+  richieste++
   const s = scegli(corpo)
   const modello = corpo.model || copione().modello || 'finto'
   const entrata = token(s.system + s.utente)
@@ -146,8 +192,11 @@ const server = createServer(async (req, res) => {
   registra({
     quando: new Date().toISOString(), modello, stream: !!corpo.stream, regola: s.regola,
     formato: corpo.response_format?.type ?? null, attrezzi: Array.isArray(corpo.tools) ? corpo.tools.length : 0,
+    ...(corpo.max_tokens !== undefined ? { max_tokens: corpo.max_tokens } : {}),
+    ...(corpo.options?.num_predict !== undefined ? { num_predict: corpo.options.num_predict, num_ctx: corpo.options.num_ctx } : {}),
     system: s.system, utente: s.utente, risposta: s.testo
   })
+  await aspettaIlFermo()
   if (s.attesa > 0) await new Promise(r => setTimeout(r, s.attesa))
   const id = 'finto-' + Date.now().toString(36)
   const usage = { prompt_tokens: entrata, completion_tokens: uscita, total_tokens: entrata + uscita }
@@ -175,6 +224,7 @@ const server = createServer(async (req, res) => {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
   const manda = o => res.write(`data: ${JSON.stringify(o)}\n\n`)
   manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: { role: 'assistant', content: '' } }] })
+  if (PRIMA_PAROLA > 0) await new Promise(r => setTimeout(r, PRIMA_PAROLA))
   // a pezzi di venti caratteri, con un respiro: la chat deve vedere il testo che arriva
   for (let i = 0; i < s.testo.length; i += 20) {
     manda({ id, object: 'chat.completion.chunk', model: modello, choices: [{ index: 0, delta: { content: s.testo.slice(i, i + 20) } }] })
@@ -184,6 +234,55 @@ const server = createServer(async (req, res) => {
   res.write('data: [DONE]\n\n')
   res.end()
 })
+
+/** POST /v1/messages: la stessa scelta, nella lingua di Anthropic. */
+async function anthropic(req, res) {
+  const grezzo = await leggiCorpo(req)
+  richieste++
+  const corpo = daAnthropic(grezzo)
+  const s = scegli(corpo)
+  const modello = grezzo.model || copione().modello || 'finto'
+  const entrata = token(s.system + s.utente)
+  const uscita = token(s.testo)
+  registra({
+    quando: new Date().toISOString(), api: 'anthropic', modello, stream: !!grezzo.stream, regola: s.regola,
+    formato: corpo.response_format?.type ?? null, attrezzi: Array.isArray(grezzo.tools) ? grezzo.tools.length : 0,
+    max_tokens: grezzo.max_tokens, system: s.system, utente: s.utente, risposta: s.testo
+  })
+  await aspettaIlFermo()
+  if (s.attesa > 0) await new Promise(r => setTimeout(r, s.attesa))
+  const id = 'msg_finto' + Date.now().toString(36)
+  const blocco = s.chiama
+    ? { type: 'tool_use', id: 'toolu_' + Date.now().toString(36), name: s.chiama, input: {} }
+    : { type: 'text', text: s.testo }
+  const fermo = s.chiama ? 'tool_use' : 'end_turn'
+  if (!grezzo.stream) {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    return res.end(JSON.stringify({
+      id, type: 'message', role: 'assistant', model: modello, content: [blocco],
+      stop_reason: fermo, stop_sequence: null, usage: { input_tokens: entrata, output_tokens: uscita }
+    }))
+  }
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+  const manda = (tipo, o) => res.write(`event: ${tipo}\ndata: ${JSON.stringify({ type: tipo, ...o })}\n\n`)
+  manda('message_start', { message: { id, type: 'message', role: 'assistant', model: modello, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: entrata, output_tokens: 1 } } })
+  if (s.chiama) {
+    manda('content_block_start', { index: 0, content_block: { ...blocco, input: {} } })
+    manda('content_block_delta', { index: 0, delta: { type: 'input_json_delta', partial_json: '{}' } })
+  } else {
+    manda('content_block_start', { index: 0, content_block: { type: 'text', text: '' } })
+    if (PRIMA_PAROLA > 0) await new Promise(r => setTimeout(r, PRIMA_PAROLA))
+    // una parola alla volta, con lo spazio che la precede
+    for (const parola of s.testo.match(/\s*\S+/g) ?? []) {
+      manda('content_block_delta', { index: 0, delta: { type: 'text_delta', text: parola } })
+      await new Promise(r => setTimeout(r, 5))
+    }
+  }
+  manda('content_block_stop', { index: 0 })
+  manda('message_delta', { delta: { stop_reason: fermo, stop_sequence: null }, usage: { output_tokens: uscita } })
+  manda('message_stop', {})
+  res.end()
+}
 
 server.on('error', e => { console.error('finto · non parto:', e.message); process.exit(1) })
 server.listen(PORTA, '127.0.0.1', () => {

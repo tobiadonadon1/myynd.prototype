@@ -766,6 +766,7 @@ export type EventoCompito =
   | { fase: 'feed' }
   /** Un collegamento è cambiato, anche in un'altra finestra o dentro Claude Code: si rilegge lo stato. */
   | { fase: 'collegamento' }
+  | EventoLettura
 
 export type Accesso = {
   entrato: boolean
@@ -1834,9 +1835,9 @@ export const api = {
     method: 'POST', body: JSON.stringify({ id })
   }),
 
-  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[] }>('/api/feed'),
+  feed: () => json<{ aperti: Record<string, string>[]; fatte: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; lettura?: Lettura | null; fuoco?: string; domanda?: null | { id: string; testo: string; spunto: string[]; tema?: string } }>('/api/feed'),
   /** `gia`: stava già leggendo, e quello che trova arriva da sé. Non è un guasto. */
-  generaFeed: () => json<{ ok: true; generate: number; feed: Record<string, string>[]; iniziative: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto; cerco?: boolean; gia?: boolean }>('/api/feed/genera', { method: 'POST' }),
+  generaFeed: () => json<{ ok: true; generate: number; feed?: Record<string, string>[]; iniziative?: ProjectInitiative[]; fonti?: FonteIncompleta[]; vuoto?: PercheVuoto; cerco?: boolean; gia?: boolean; avviata?: boolean; lettura?: Lettura | null }>('/api/feed/genera', { method: 'POST' }),
   feedbackIniziativa: (id: string, outcome: 'dismissed' | 'answered' | 'done') => json<{ iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/feedback`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   /** La risposta alla domanda di un progetto, dalla prima pagina: l'esito dice dove è finita. */
   rispondiIniziativa: (id: string, testo: string) => json<{ ok: true; esito: string; iniziative: ProjectInitiative[] }>(`/api/feed/iniziative/${encodeURIComponent(id)}/rispondi`, { method: 'POST', body: JSON.stringify({ testo }) }),
@@ -2279,4 +2280,26 @@ export const resocontoApi = {
 // — P9: fine —
 
 // — P10: inizio —
+/** A che punto è una lettura chiesta con l'occhio (P10). */
+export type PassoLettura = 'arrivato' | 'scelgo' | 'ordine' | 'fonti' | 'progetti'
+export type Lettura = { id: string; dal: string; passo: PassoLettura; n: number | null; unita: boolean }
+/** La lettura sul filo dei compiti: corre, finisce, o va storta. */
+export type EventoLettura = { fase: 'lettura'; stato: 'corre' | 'fine' | 'guaio'; lettura: Lettura; nuove?: number; errore?: string }
+
+let scaldatoIl = 0
+export const apiP10 = {
+  /** «Affidalo a Myynd» da una carta: la riga nasce e la carta si chiude insieme, o niente. */
+  affida: (p: { id: string; testo: string; voce: string; doc?: string | null; nota?: string | null }) =>
+    json<{ ok: true; id: string; compiti: Compito[] }>('/api/compiti/affida', { method: 'POST', body: JSON.stringify(p) }),
+  /** Scalda il modello di questo Mac, se ce n'è uno: una volta ogni cinque minuti, e senza aspettare. */
+  scaldaIlModello(): void {
+    const ora = Date.now()
+    if (ora - scaldatoIl < 5 * 60_000) return
+    scaldatoIl = ora
+    json('/api/modello/scalda', { method: 'POST' }).catch(() => {})
+  },
+  /** I segni di una pagina o di una chat: una richiesta, e nessuno aspetta la risposta. */
+  segni: (segni: Record<string, number>) =>
+    json<{ ok: true }>('/api/tempi', { method: 'POST', body: JSON.stringify({ segni }) })
+}
 // — P10: fine —

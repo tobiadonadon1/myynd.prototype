@@ -20,6 +20,7 @@ import { letturaFonti as lettura, useLettura } from './lettura-app'
 import { fontiCollegate } from './collegamenti'
 import { avvisiAccesi, desktop } from './desktop.ts'
 import { elenco, lineaSilenzio, mancanzeDi, nomeInFrase, nuoviGuai, parolaProblema, problemiVisibili, riempi, rigaFonti, ripresi, saniDi } from './salute-fonti.ts'
+import { segna, tempiChat } from './tempi.ts'
 
 /**
  * Un avviso, e — se il gesto si può disfare — il modo di disfarlo.
@@ -561,6 +562,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     try {
       f = await api.feed()
       setGuastoFeed(null)
+      segna('feed')
     } catch (e) {
       setGuastoFeed(e instanceof Error ? e.message : String(e))
       throw e
@@ -809,6 +811,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     filoChat.current?.abort()
     const filo = new AbortController()
     filoChat.current = filo
+    // P10 · quanto ci mette la prima parola
+    const cronometro = tempiChat()
     try {
       // La risposta cresce sotto gli occhi invece di comparire tutta insieme:
       // un messaggio finto che si riempie a ogni frammento, sostituito da
@@ -818,6 +822,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
       setPassoChat(null)
       const r = await api.chiedi(id, testo, delta => {
         if (gen.current !== mio) return
+        cronometro.primaParola()
         cresciuta += delta
         setPensando(false)
         setPassoChat(null)
@@ -834,6 +839,7 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
         setMessaggi(m => m.filter(x => x.id !== idVivo))
       }, filo.signal, compitoDiscussione(id), passo => { if (gen.current === mio) setPassoChat(passo) })
       if (gen.current === mio) setMessaggi(r.messaggi)
+      cronometro.fine()
     } catch (e) {
       /*
        * «Annulla» non è un guasto.

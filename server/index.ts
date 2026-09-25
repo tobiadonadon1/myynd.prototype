@@ -28,6 +28,7 @@ import * as chatgpt from './chatgpt.ts'
 import * as memoria from './memoria.ts'
 import * as conoscenza from './conoscenza.ts'
 import * as timone from './timone.ts'
+import * as tempi from './tempi.ts'
 import * as rassegna from './rassegna.ts'
 import * as gusto from './gusto.ts'
 import * as punto from './punto.ts'
@@ -505,6 +506,8 @@ app.post('/api/auth/reimposta', async (req, res) => {
 
 // da qui in giù serve essere dentro
 app.use(auth.guardia)
+// P10 · quanto si aspetta: metodo e forma della rotta, mai l'indirizzo vero
+app.use(tempi.misuraRichieste)
 
 /*
  * Un collegamento cambiato si dice anche alle altre finestre.
@@ -4912,6 +4915,24 @@ app.post('/api/resoconto/visto', (req, res) => {
 // — P9: rotte, fine —
 
 // — P10: rotte, inizio —
+/*
+ * Quanto si aspetta (P10): i numeri di questo processo e di questo conto.
+ * Mai su un server: dicono quando qualcuno lavora, e non servono a nessuno.
+ */
+const QUATTORDICI_GIORNI = 14 * 24 * 3_600_000
+app.get('/api/tempi', (_req, res) => {
+  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Questa strada non esiste.' })
+  const dal = new Date(Date.now() - QUATTORDICI_GIORNI).toISOString()
+  res.json({ ...tempi.riassunto(), bordo: tempi.bordo(store.ritardiCarte(dal), store.ritardiLavori(dal)) })
+})
+
+app.post('/api/tempi', (req, res) => {
+  if (ospitato.OSPITATO) return res.status(404).json({ errore: 'Questa strada non esiste.' })
+  const segni = tempi.segniDelClient(req.body)
+  if (!segni) return res.status(400).json({ errore: 'Segni non validi.' })
+  console.log(tempi.rigaSegni(segni))
+  res.json({ ok: true })
+})
 // — P10: rotte, fine —
 
 // qualunque cosa sfugga ai singoli handler esce come JSON, non come stack HTML

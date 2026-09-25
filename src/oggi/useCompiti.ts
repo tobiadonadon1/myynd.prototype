@@ -18,6 +18,7 @@ import { quanteAspettano } from '../blocchi-feed'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
+import { segna } from '../tempi'
 import { giornoLocale } from './giorni'
 import { secchioVivo } from './secchi'
 import { preparaApertura } from '../navigazione.ts'
@@ -62,7 +63,7 @@ export function useCompiti(
 
   useEffect(() => {
     api.compiti()
-      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setGuasto('') })
+      .then(l => { setCompiti(l.compiti); setChiusi(l.chiusi); setFuoco(l.fuoco); setGuasto(''); segna('compiti') })
       // dire «la lista è vuota» quando in realtà non si è riusciti a leggerla è
       // il modo peggiore di sbagliare: la schermata mentirebbe con sicurezza
       .catch(e => setGuasto(e instanceof Error ? e.message : String(e)))

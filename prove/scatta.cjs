@@ -75,7 +75,7 @@ async function main() {
   const w = new BrowserWindow({
     show: false, width: LARGA, height: ALTA, titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 19, y: 15 },
     backgroundColor: TEMA === 'scuro' ? '#1F1A17' : '#F2E9DC',
-    webPreferences: { preload: path.join(__dirname, 'finto-guscio.cjs'), contextIsolation: false, sandbox: false }
+    webPreferences: { preload: path.join(__dirname, 'finto-guscio.cjs'), contextIsolation: false, sandbox: false, backgroundThrottling: false }
   })
   const js = codice => w.webContents.executeJavaScript(codice)
   await w.loadURL(URL)

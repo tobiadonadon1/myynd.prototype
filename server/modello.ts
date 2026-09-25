@@ -104,7 +104,7 @@ export function modelloOpenAIPer(livello: LivelloConfig, c = leggi()): string | 
   return null
 }
 
-function fornitore(): compatibile.Fornitore | null {
+export function fornitore(): compatibile.Fornitore | null {
   const c = leggi()
   if (c.motore === 'openai') return fornitoreOpenAI(c)
   if (c.motore !== 'compatibile') return null
@@ -281,6 +281,8 @@ export type Lavoro =
   | 'esame'         // P7: le domande dell'esame delle risposte, e il giudizio su ognuna
   | 'verifica'      // P7: rileggere una risposta contro le fonti che cita, prima di fidarsene
   | 'presumere'     // P3: di che genere è il dato che manca a un lavoro, e se sbagliarlo costa
+  | 'rispostaBreve' // P10: una domanda secca in chat (quando, chi, dove); tutto il resto resta `risposta`
+  | 'scalda'        // P10: scaldare il modello di questo Mac quando si apre la chat; non esce mai dal Mac
 
 /*
  * Tre livelli, non due.
@@ -445,6 +447,18 @@ const LAVORI: Record<Lavoro, Profilo> = {
    * deterministico (`domanda-sola.ts`) sta comunque davanti a questa risposta.
    */
   presumere:  { livello: 'media', ragiona: false, sforzo: 'low', attesa: 30_000 },
+  /*
+   * Una domanda secca in chat (P10): quando, chi, dove. Lo stesso modello
+   * della risposta, con meno sforzo: la decide `domanda-secca.ts`, e nel
+   * dubbio resta `risposta`. «Short factual chat questions may use low effort.»
+   */
+  rispostaBreve: { livello: 'frontiera', ragiona: true, sforzo: 'low', attesa: 60_000 },
+  /*
+   * Scaldare il modello di questo Mac (P10) quando la chat prende il fuoco:
+   * un token, gratis, e non esce dal Mac. Non passa da `chiedi`, che potrebbe
+   * cadere su un motore a pagamento: la chiamata va dritta al fornitore.
+   */
+  scalda:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 15_000 },
   traduzione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
   estrazione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
   giudizio:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 },

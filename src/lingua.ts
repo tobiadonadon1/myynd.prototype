@@ -3274,6 +3274,15 @@ const EN: Record<string, string> = {
   // — P9: fine —
 
   // — P10: inizio —
+  'Guardo cosa è arrivato': 'Looking at what came in',
+  'Scelgo cosa conta in un documento': 'Choosing what matters in one document',
+  'Scelgo cosa conta fra {n} documenti': 'Choosing what matters among {n} documents',
+  'Metto in ordine': 'Putting it in order',
+  'Aggiorno le fonti': 'Refreshing your sources',
+  'Guardo i tuoi progetti': 'Looking at your projects',
+  'Myynd si sta svegliando.': 'Waking up.',
+  'Questa carta non c’è più.': 'This card is gone.',
+  'Segni non validi.': 'Invalid marks.',
   // — P10: fine —
 }
 
