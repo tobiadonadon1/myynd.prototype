@@ -4,7 +4,7 @@
 
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { sincronizza } from './connettori/slack.ts'
+import { prova, sincronizza } from './connettori/slack.ts'
 import { GuaioFonte } from './connettori/guaio.ts'
 
 const VERA = globalThis.fetch
@@ -62,4 +62,25 @@ test('gli inciampi che Slack dice con un 200, e una pagina che non è JSON, sono
   assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'attendi')
   risponde({ ok: false, error: 'invalid_auth' }, { status: 200 })
   assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'credenziale')
+})
+
+// — P4: il conto sulla scheda —
+
+/** Slack finto: `auth.test` risponde, `users.conversations` come si chiede. */
+const conConversazioni = (conversazioni: () => Response) => {
+  globalThis.fetch = (async (u: string | URL | Request) =>
+    String(u).includes('auth.test') ? Response.json({ ok: true, team: 'Northwind', user: 'alex' }) : conversazioni()) as typeof fetch
+}
+
+test('la scheda di Slack conta i posti di cui fa parte', async () => {
+  conConversazioni(() => Response.json({ ok: true, channels: [{ id: 'C1' }, { id: 'C2' }, { id: 'C3', is_archived: true }] }))
+  const e = await prova(C)
+  assert.equal(e.ok && e.canali, 2)
+})
+
+test('un conto che non riesce non è uno zero: collegata, senza numero (counter-case)', async () => {
+  conConversazioni(() => Response.json({ ok: false, error: 'missing_scope' }))
+  const e = await prova(C)
+  assert.equal(e.ok, true, 'il token va bene lo stesso')
+  assert.equal(e.ok && e.canali, undefined)
 })

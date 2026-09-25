@@ -115,14 +115,15 @@ export function collegato(c?: { slack?: ConfigSlack }): boolean {
  * quella si dice «più di 200», senza sfogliare il resto.
  */
 export async function prova(c: ConfigSlack): Promise<
-  { ok: true; squadra: string; utente: string; canali: number; oltre: boolean } | { ok: false; errore: string }
+  { ok: true; squadra: string; utente: string; canali?: number; oltre: boolean } | { ok: false; errore: string }
 > {
   if (!/^xox[pbe]-/.test(c.token.trim())) {
     return { ok: false, errore: 'Un token di Slack comincia per xoxp- o xoxb-.' }
   }
   try {
     const r = await api<{ team?: string; user?: string }>(c, 'auth.test')
-    let canali = 0, oltre = false
+    // un conto che non riesce non è uno zero: senza numero, la scheda conferma e basta
+    let canali: number | undefined, oltre = false
     try {
       const l = await api<{ channels?: Canale[] }>(c, 'users.conversations', {
         types: 'public_channel,private_channel,mpim,im', exclude_archived: 'true', limit: '200'

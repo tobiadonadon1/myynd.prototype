@@ -11,7 +11,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { simpleParser } from 'mailparser'
 import type { ImapFlow } from 'imapflow'
-import { lettoDa, massaDi, messaggioDa, mosseDa, normalizza, usaClient, sincronizza, vuolePasswordPerLeApp } from './connettori/posta.ts'
+import { lettoDa, massaDi, messaggioDa, mosseDa, normalizza, prova, usaClient, sincronizza, vuolePasswordPerLeApp } from './connettori/posta.ts'
 
 test('un id normale diventa cartella e uid', () => {
   assert.deepEqual(mosseDa(['posta:INBOX:4211']), [{ cartella: 'INBOX', uid: 4211 }])
@@ -339,5 +339,25 @@ test('una cartella che non risponde alla ricerca non ferma il collegamento (coun
   const { prova } = await import('./connettori/posta.ts')
   const e = await prova(CASELLA)
   assert.ok(e.ok)
-  assert.equal(e.ok && e.messaggi, 0)
+  // collegata, ma senza un numero: «0 email» su una casella che non si è contata sarebbe falso
+  assert.equal(e.ok && e.messaggi, undefined)
+})
+
+/*
+ * Il conto della scheda (P4): i messaggi degli ultimi giorni in arrivo e
+ * inviati. Una cartella che non si lascia contare non ferma il collegamento,
+ * ma il numero senza di lei sarebbe falso: «0 email» su una casella piena.
+ */
+const casellaDaContare = (rotta?: string) => ({
+  connect: async () => {}, logout: async () => {}, close() {},
+  list: async () => [{ path: 'INBOX', name: 'INBOX' }, { path: 'Sent', name: 'Sent', specialUse: '\\Sent' }],
+  getMailboxLock: async (cartella: string) => { if (cartella === rotta) throw new Error('bloccata'); return { release() {} } },
+  search: async () => [1, 2, 3]
+})
+
+test('una cartella che non si lascia contare: collegata, ma senza un numero (mai «0 email» falso)', async () => {
+  usaClient(() => casellaDaContare('Sent') as never)
+  const e = await prova(CASELLA, 90)
+  assert.equal(e.ok, true, 'il collegamento regge')
+  assert.equal(e.ok && e.messaggi, undefined)
 })

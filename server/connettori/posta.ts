@@ -200,7 +200,7 @@ async function apri(c: ConfigPosta): Promise<{ cl: ImapFlow; adattato: string | 
  * per data, nessun corpo scaricato: la scheda dice «312 email» subito.
  */
 export async function prova(c: ConfigPosta, giorni = 30): Promise<
-  { ok: true; cartelle: string[]; certificatoAdattato: string | null; messaggi: number }
+  { ok: true; cartelle: string[]; certificatoAdattato: string | null; messaggi?: number }
   | { ok: false; errore: string; amministratore?: CasoAmministratore }
 > {
   let cl: ImapFlow | null = null
@@ -211,14 +211,17 @@ export async function prova(c: ConfigPosta, giorni = 30): Promise<
     const since = new Date(Date.now() - giorni * 86_400_000)
     const inviata = lista.find(l => l.specialUse === '\\Sent')?.path
       ?? lista.find(l => NOMI_INVIATA.includes(l.path.toLowerCase()) || NOMI_INVIATA.includes(l.name.toLowerCase()))?.path
-    let messaggi = 0
+    // una cartella che non risponde non ferma il collegamento, ma il conto
+    // senza di lei non è vero: senza numero, la scheda conferma e basta
+    let messaggi: number | undefined = 0
     for (const cartella of [...new Set(['INBOX', ...(inviata ? [inviata] : [])])]) {
       let lock
-      try { lock = await cl.getMailboxLock(cartella) } catch { continue }
+      try { lock = await cl.getMailboxLock(cartella) } catch { messaggi = undefined; continue }
       try {
         const uids = await cl.search({ since }, { uid: true })
-        if (Array.isArray(uids)) messaggi += uids.length
-      } catch { /* una cartella che non risponde non ferma il collegamento */ }
+        if (Array.isArray(uids) && messaggi !== undefined) messaggi += uids.length
+        else messaggi = undefined
+      } catch { messaggi = undefined }
       finally { lock.release() }
     }
     await cl.logout()
