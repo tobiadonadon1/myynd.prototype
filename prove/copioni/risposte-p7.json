@@ -1,0 +1,17 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "^Prima domanda:[\\s\\S]*Harbor pilot", "in": "utente", "testo": "Harbor pilot start" },
+    { "se": "^Prima domanda:[\\s\\S]*Lisbon", "in": "utente", "testo": "Lisbon office rent" },
+    { "se": "giudice delle risposte[\\s\\S]*Keel ordered", "in": "tutto", "json": { "corrisponde": false, "sostenuta": false, "rispondeDavvero": true, "motivo": "No document says how many seats Keel ordered." } },
+    { "se": "giudice delle risposte", "in": "system", "json": { "corrisponde": true, "sostenuta": true, "rispondeDavvero": true, "motivo": "The cited passage says it." } },
+    { "se": "Domanda: When does the Harbor pilot start", "in": "utente", "testo": "The Harbor pilot starts on 14 October 2026 [1] — with Brightline and Keel. It serves your Harbor Labs goal [M]. The fee is €4,800 [1][9]." },
+    { "se": "Domanda: What is the fee for the first phase", "in": "utente", "testo": "The fee is €4,800 [1]." },
+    { "se": "Domanda: When will Marco deliver the logo files", "in": "utente", "testo": "Marco delivers the logo files on 9 October 2026 [1]." },
+    { "se": "Domanda: Who owns the Northwind release checklist", "in": "utente", "testo": "Priya Shah owns it [1]." },
+    { "se": "Domanda: When does the Northwind build go to App Review", "in": "utente", "testo": "It goes to App Review in early October [1]." },
+    { "se": "Domanda: How many seats did Keel order", "in": "utente", "testo": "Keel ordered 12 seats [1]." },
+    { "se": "Lisbon office", "in": "utente", "testo": "I don’t have that. I found no rent for the Lisbon office." }
+  ],
+  "predefinita": "Done."
+}

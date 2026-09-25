@@ -8,62 +8,115 @@
 // invisibili: un segno tenue nel testo, rivelato al passaggio. Nessun blocco di
 // citazioni, nessuna pastiglia» — perché la prova serve a chi la cerca, e a
 // tutti gli altri toglie spazio alla risposta. Quindi [7] diventa un numerino
-// alto accanto alla parola, che al passaggio dice da dove viene.
+// alto accanto alla parola, che al passaggio dice da dove viene: il titolo,
+// chi e quando, e il passo che regge la frase. «[M]» è un cerchietto: la
+// frase viene da quello che Myynd sa di lei, e apre il progetto o la Memoria.
 
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { IMPAGINATO, leggibile, type Blocco } from './leggibile.ts'
+import { lingua, t } from './lingua'
+import { perNumero, fonteMemoria, rigaFonte, titoloDi, virgolette, type Fonte } from './citazioni.ts'
 
-export type Fonte = { id: string; label: string }
+export type { Fonte }
 
-/** Il numerino della citazione: si vede se lo cerchi, non se non lo cerchi. */
-function Segno({ n, fonte, onApri }: { n: number; fonte?: Fonte; onApri?: (id: string) => void }) {
+type Posto = { top: number; left: number; larga: number }
+
+/**
+ * Il segno della citazione: si vede se lo cerchi, non se non lo cerchi.
+ *
+ * Raggiungibile da tastiera quando ha una fonte (Tab, Invio, Esc); la zona
+ * che risponde al mouse è di sedici pixel, il segno resta piccolo; niente
+ * velo dietro, né di giorno né di notte. La nuvoletta si misura all'apertura
+ * e sta sopra il segno, o sotto se sopra non c'è posto, sempre dentro la
+ * colonna che scorre.
+ */
+function Segno({ n, fonte, onApri }: { n: number | 'M'; fonte?: Fonte; onApri?: (id: string, passo?: string) => void }) {
   const [sopra, setSopra] = useState(false)
-  // via il «[7] » iniziale: lì dentro resta il titolo del documento
-  const titolo = fonte?.label.replace(/^\[\d+\]\s*/, '') ?? ''
+  const [fuoco, setFuoco] = useState(false)
+  const [dalMouse, setDalMouse] = useState(false)
+  const [posto, setPosto] = useState<Posto | null>(null)
+  const segno = useRef<HTMLElement>(null)
+  const nuvola = useRef<HTMLSpanElement>(null)
+  const en = lingua() === 'en'
+  const memoria = n === 'M'
+  const attivo = !!fonte
+  const titolo = fonte ? (memoria ? t('Dalla tua memoria') : titoloDi(fonte)) : ''
+  const riga = fonte ? (memoria ? titoloDi(fonte) : rigaFonte(fonte)) : ''
+  const passo = fonte?.passo
+  const aperta = (sopra || fuoco) && !!titolo
+  const apri = () => { if (fonte) onApri?.(fonte.id, passo) }
+
+  useLayoutEffect(() => {
+    if (!aperta || !segno.current) { setPosto(null); return }
+    const s = segno.current
+    const r = s.getBoundingClientRect()
+    let a: HTMLElement | null = s.parentElement
+    while (a && !/auto|scroll/.test(getComputedStyle(a).overflowY)) a = a.parentElement
+    const box = a ? a.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth }
+    const larga = Math.max(120, Math.min(300, box.width - 16))
+    const alta = nuvola.current?.offsetHeight ?? 0
+    const ciSta = r.top - box.top >= alta + 8
+    const top = ciSta ? r.top - alta - 8 : r.bottom + 8
+    const left = Math.max(box.left + 8, Math.min(r.left + r.width / 2 - larga / 2, box.right - 8 - larga))
+    setPosto({ top, left, larga })
+    const chiudi = () => { setSopra(false); setFuoco(false) }
+    a?.addEventListener('scroll', chiudi, { passive: true })
+    return () => a?.removeEventListener('scroll', chiudi)
+  }, [aperta, passo, titolo, riga])
+
+  const tasti = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apri() }
+    if (e.key === 'Escape') { e.stopPropagation(); setFuoco(false); setSopra(false) }
+  }
+  const conFuocoDaTastiera = fuoco && !dalMouse
+
   return (
     <span style={{ position: 'relative', whiteSpace: 'nowrap' }}>
       <sup
+        ref={segno}
         onMouseEnter={() => setSopra(true)}
         onMouseLeave={() => setSopra(false)}
-        onClick={() => fonte && onApri?.(fonte.id)}
+        onMouseDown={() => setDalMouse(true)}
+        onFocus={() => setFuoco(true)}
+        onBlur={() => { setFuoco(false); setDalMouse(false) }}
+        onKeyDown={attivo ? tasti : undefined}
+        onClick={apri}
+        {...(attivo ? { role: 'button', tabIndex: 0, 'aria-label': memoria ? t('Dalla tua memoria') : `${t('Fonte')}: ${titolo}` } : {})}
         style={{
-          // Stretto: due citazioni di fila sono un gruppo, non due segni che
-          // si guardano da lontano. Prima fra l'una e l'altra c'erano cinque
-          // pixel di margine e imbottitura, e sulla pagina si leggevano come
-          // «¹ ²» — due cose separate, con dentro uno spazio che nel testo
-          // non c'è.
           fontSize: '.66em', lineHeight: 0, verticalAlign: 'super',
-          padding: '0 1px', borderRadius: 3, cursor: fonte ? 'pointer' : 'default',
-          fontWeight: 500,
-          color: sopra ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)',
-          background: sopra ? 'rgba(var(--rame-rgb),.14)' : 'transparent',
-          transition: 'color .12s, background .12s'
-        }}
-        title={fonte ? titolo : undefined}>{n}</sup>
-      {sopra && titolo && (
-        <span style={{
-          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 30, whiteSpace: 'normal', width: 'max-content', maxWidth: 280,
+          // il segno resta piccolo, la zona che risponde no: sedici pixel di
+          // imbottitura trasparente, ripresi dal margine
+          padding: '4px 3px', margin: '-4px -3px', borderRadius: 3,
+          cursor: attivo ? 'pointer' : 'default', fontWeight: 500,
+          color: (sopra || fuoco) && attivo ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)',
+          background: 'transparent', outline: conFuocoDaTastiera ? '2px solid rgba(var(--rame-rgb),.45)' : 'none', outlineOffset: 1,
+          transition: 'color .12s'
+        }}>{memoria ? '◦' : n}</sup>
+      {aperta && (
+        <span ref={nuvola} role="tooltip" style={{
+          position: 'fixed', top: posto?.top ?? 0, left: posto?.left ?? 0, width: posto?.larga ?? 300,
+          visibility: posto ? 'visible' : 'hidden', zIndex: 30, whiteSpace: 'normal', boxSizing: 'border-box',
           padding: '7px 11px', borderRadius: 10, background: 'var(--pieno)', color: 'var(--avorio)',
-          fontSize: '11.5px', lineHeight: 1.4, fontWeight: 400,
+          fontSize: '11.5px', lineHeight: 1.4, fontWeight: 400, textAlign: 'left',
           boxShadow: '0 12px 28px rgba(var(--ombra-rgb),.34)', pointerEvents: 'none'
-        }}>{titolo}</span>
+        }}>
+          <span style={{ display: 'block', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titolo}</span>
+          {riga && <span style={{ display: 'block', opacity: .72, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{riga}</span>}
+          {passo && !memoria && (
+            <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginTop: 3, overflowWrap: 'anywhere' }}>{virgolette(passo, en)}</span>
+          )}
+        </span>
       )}
     </span>
   )
 }
 
-/** La fonte il cui numero combacia con quello scritto nel testo. */
-function perNumero(fonti: Fonte[], n: number): Fonte | undefined {
-  return fonti.find(f => Number(f.label.match(/^\[(\d+)\]/)?.[1]) === n)
-}
-
 /** Grassetto, corsivo, codice e citazioni dentro una riga. */
-function inline(testo: string, fonti: Fonte[], onApri?: (id: string) => void): ReactNode[] {
+function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: string) => void): ReactNode[] {
   const pezzi: ReactNode[] = []
   // Nuova a ogni chiamata: `lastIndex` è di stato, e la ricorsione qui sotto
   // condividerebbe la posizione con il chiamante
-  const re = /\*\*(.+?)\*\*|(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)|`(.+?)`|\[(\d{1,2})\]/g
+  const re = /\*\*(.+?)\*\*|(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)|`(.+?)`|\[(\d{1,3}|M)\]/g
   let ultimo = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(testo))) {
@@ -77,6 +130,8 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string) => void): R
       pezzi.push(
         <code key={m.index} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
       )
+    } else if (m[4] === 'M') {
+      pezzi.push(<Segno key={m.index} n="M" fonte={fonteMemoria(fonti)} onApri={onApri} />)
     } else {
       const n = Number(m[4])
       // La fonte si cerca per numero scritto nell'etichetta, non per posizione:
@@ -101,7 +156,7 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string) => void): R
  * quindi le sta addosso, come in un libro.
  */
 function attacca(testo: string): string {
-  return testo.replace(/[ \t]+(?=\[\d{1,2}\])/g, '')
+  return testo.replace(/[ \t]+(?=\[(?:\d{1,3}|M)\])/g, '')
 }
 
 /**
@@ -131,7 +186,7 @@ function attacca(testo: string): string {
 export function Testo({ testo, fonti = [], onApri }: {
   testo: string
   fonti?: Fonte[]
-  onApri?: (id: string) => void
+  onApri?: (id: string, passo?: string) => void
 }) {
   const blocchi = leggibile(attacca(testo.trim()), IMPAGINATO)
   const pezzi: ReactNode[] = []

@@ -1272,9 +1272,11 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     // scritta lui
     argomentiDaMe: stato.config.argomentiDaMe === true,
     salvaArgomenti,
-    /** Aprire il documento dietro una citazione, dal segno nel testo. */
-    apriFonte: (id: string) => {
-      api.documento(id).then(setDoc).catch(() => mostraToast(t('Non trovo più il documento.')))
+    /** Aprire il documento dietro una citazione, dal segno nel testo: sul passo, se c'è; «[M]» apre il progetto o la Memoria. */
+    apriFonte: (id: string, passo?: string) => {
+      if (id === 'memoria') { go('memoria')(); return }
+      if (id.startsWith('memoria:progetto:')) { apriProgetto(id.slice('memoria:progetto:'.length)); return }
+      api.documento(id).then(d => setDoc(passo ? { ...d, _passo: passo } : d)).catch(() => mostraToast(t('Non trovo più il documento.')))
     },
     /** I progetti come li conosce il client: servono a dare un nome a un id. */
     progetti: progetti ?? [],

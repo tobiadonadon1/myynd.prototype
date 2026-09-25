@@ -168,9 +168,13 @@ test('la cartella nella radice non si cancella mai', async () => {
   writeFileSync(join(CASA, 'vecchio', 'config.json'), '{}')
   const id = await conti.adotta('vecchio@esempio.it', 'unsale', 'unhash', join(CASA, 'vecchio'))
   assert.ok(id, 'il conto adottato non si è creato: la prova non proverebbe niente')
+  // le copie private della prova delle risposte (P7) però se ne vanno anche da qui
+  mkdirSync(join(CASA, 'vecchio', 'valutazioni', 'risposte'), { recursive: true })
+  writeFileSync(join(CASA, 'vecchio', 'valutazioni', 'risposte', 'domande.json'), '{}')
 
   const esito = await addio.cancella(id)
   assert.equal(esito.file, false, 'ha detto di aver cancellato una cartella che non doveva toccare')
   assert.ok(existsSync(join(CASA, 'vecchio', 'config.json')), 'ha cancellato i file di un conto adottato')
+  assert.ok(!existsSync(join(CASA, 'vecchio', 'valutazioni', 'risposte')), 'le domande della prova sono rimaste in una cartella senza conto')
   assert.equal(conti.conto(id), null, 'il conto però se n’è andato lo stesso')
 })

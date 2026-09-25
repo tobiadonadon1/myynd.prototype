@@ -1,0 +1,14 @@
+{
+  "versione": 1,
+  "lingua": "en",
+  "creato": "2026-09-24T08:00:00.000Z",
+  "aggiornato": "2026-09-24T08:00:00.000Z",
+  "domande": [
+    { "id": "q01", "domanda": "What is the fee for the first phase of the Harbor pilot?", "tipo": "risponde", "attesa": "€4,800", "genere": "cifra", "doc": { "id": "posta:INBOX:701", "titolo": "Harbor pilot kickoff", "fonte": "posta", "quando": null }, "citazione": "The fee is €4,800 for the first phase.", "scarto": 105, "origine": "costruita", "interlingua": false, "verificata": "persona", "creata": "2026-09-24T08:00:00.000Z" },
+    { "id": "q02", "domanda": "When will Marco deliver the logo files?", "tipo": "risponde", "attesa": "9 October 2026", "genere": "data", "doc": { "id": "posta:INBOX:702", "titolo": "Consegna del logo Northwind", "fonte": "posta", "quando": null }, "citazione": "la consegna dei file del logo è confermata per venerdì 9 ottobre 2026", "scarto": 11, "origine": "costruita", "interlingua": true, "verificata": "persona", "creata": "2026-09-24T08:00:00.000Z" },
+    { "id": "q03", "domanda": "Who owns the Northwind release checklist?", "tipo": "risponde", "attesa": "Priya Shah", "genere": "persona", "doc": { "id": "desktop:Northwind release checklist.md", "titolo": "Northwind release checklist.md", "fonte": "desktop", "quando": null }, "citazione": "Owner: Priya Shah.", "scarto": 32, "origine": "costruita", "interlingua": false, "verificata": "persona", "creata": "2026-09-24T08:00:00.000Z" },
+    { "id": "q04", "domanda": "When does the Northwind build go to App Review?", "tipo": "risponde", "attesa": "2 October 2026", "genere": "data", "doc": { "id": "desktop:Northwind release checklist.md", "titolo": "Northwind release checklist.md", "fonte": "desktop", "quando": null }, "citazione": "Build 1.0.3 goes to App Review on 2 October 2026.", "scarto": 51, "origine": "costruita", "interlingua": false, "verificata": "persona", "creata": "2026-09-24T08:00:00.000Z" },
+    { "id": "q05", "domanda": "What is the rent for the Lisbon office?", "tipo": "non_ce", "attesa": "", "genere": "stato", "doc": null, "citazione": "", "scarto": null, "origine": "costruita", "interlingua": false, "verificata": "persona", "assenza": { "cercato": ["affitto Lisbona", "rent Lisbon office"], "guardati": 0 }, "creata": "2026-09-24T08:00:00.000Z" },
+    { "id": "q06", "domanda": "How many seats did Keel order?", "tipo": "non_ce", "attesa": "", "genere": "stato", "doc": null, "citazione": "", "scarto": null, "origine": "costruita", "interlingua": false, "verificata": "persona", "assenza": { "cercato": ["posti Keel ordine", "seats Keel order"], "guardati": 1 }, "creata": "2026-09-24T08:00:00.000Z" }
+  ]
+}

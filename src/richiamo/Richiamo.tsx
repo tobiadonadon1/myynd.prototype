@@ -34,7 +34,7 @@ const chiaveDi = (c: Comando) => (lingua() === 'en' ? c.en : c.it)
  * una frase è solo un pezzo di codice avanzato.
  */
 function paragrafi(testo: string): string[] {
-  return testo.replace(/\*\*/g, '').replace(/\s*\[\d+(?:,\s*\d+)*\]/g, '')
+  return testo.replace(/\*\*/g, '').replace(/\s*\[(?:\d+(?:,\s*\d+)*|M)\]/g, '')
     .split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
 }
 
