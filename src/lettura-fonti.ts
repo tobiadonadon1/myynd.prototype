@@ -231,15 +231,26 @@ export const GIA_IN_CORSO = 'Una lettura è già in corso.'
  * che è appena stato letto costa poco. Il tetto è di due minuti, poi la frase
  * arriva com'è.
  */
+/*
+ * Il resto della prima lettura (P4) cede il passo solo dopo la fonte che ha
+ * in mano, e una passata del Mac o di novanta giorni di posta dura minuti:
+ * dopo due minuti le righe restavano «In coda» per sempre. Quando il 409
+ * dice `coda` (è il resto, e ha già promesso di fermarsi) si aspetta fino a
+ * venti minuti: la lettura sua parte appena il resto molla la serratura.
+ */
 export async function leggiAlProprioTurno(
   leggi: () => Promise<void>,
   attendi: (ms: number) => Promise<void> = ms => new Promise(r => setTimeout(r, ms)),
-  tentativi = 80
+  tentativi = 80,
+  tentativiInCoda = 800
 ): Promise<void> {
-  for (let i = 0; ; i++) {
+  let altri = 0, dietroAlResto = 0
+  for (;;) {
     try { return await leggi() }
     catch (e) {
-      if (!(e instanceof Error) || e.message !== GIA_IN_CORSO || i >= tentativi) throw e
+      if (!(e instanceof Error) || e.message !== GIA_IN_CORSO) throw e
+      const resto = (e as Error & { coda?: boolean }).coda === true
+      if (resto ? dietroAlResto++ >= tentativiInCoda : altri++ >= tentativi) throw e
       await attendi(1500)
     }
   }

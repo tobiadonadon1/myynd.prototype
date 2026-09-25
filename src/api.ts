@@ -413,6 +413,8 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     const altro = corpo as { repo?: unknown; dove?: unknown }
     if (typeof altro.repo === 'string' && altro.repo) (e as Error & { repo?: string }).repo = altro.repo
     if (typeof altro.dove === 'string' && /^https:\/\//.test(altro.dove)) (e as Error & { dove?: string }).dove = altro.dove
+    // la serratura è del resto della prima lettura, che cede il passo: si aspetta di più (P4)
+    if ((corpo as { coda?: unknown }).coda === true) (e as Error & { coda?: boolean }).coda = true
     const giorni = (corpo as { giorni?: unknown }).giorni
     if (typeof giorni === 'number' && giorni > 0) (e as Error & { giorni?: number }).giorni = giorni
     /*

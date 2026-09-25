@@ -162,6 +162,42 @@ test('una pagina rimasta vuota si rifà quando arriva una fonte nuova, una volta
   assert.equal(pagina.stato().pagina, 'nessuna')
 })
 
+test('una pagina rimasta vuota più di un giorno fa è fatta: una fonte nuova non la rifà (counter-case)', () => {
+  store.salvaDocumenti([futuro(1)])
+  const ieri = new Date(Date.now() - pagina.RIFA_VUOTA_MS - 60_000).toISOString()
+  store.segnaCursore('prima:pagina', `vuota|${ieri}|calendario`)
+  pagina.perProva({ collegato: () => true })
+  // Slack collegato settimane dopo, e nessuna carta mai: niente riga, niente pagina
+  store.salvaDocumenti([mail(0)])
+  assert.equal(pagina.dovuta(), false)
+  assert.equal(pagina.stato().pagina, 'nessuna')
+  // lo stesso segno di un'ora fa: il primo giorno la pagina si rifà
+  store.segnaCursore('prima:pagina', `vuota|${new Date(Date.now() - 3_600_000).toISOString()}|calendario`)
+  assert.equal(pagina.dovuta(), true)
+})
+
+test('il tempo della pagina partita da sola si conta dall’inizio della prima lettura (spec 8)', async () => {
+  store.salvaDocumenti([mail(0)])
+  store.segnaCursore('prima:iniziata', new Date(Date.now() - 90_000).toISOString())
+  pagina.perProva({ collegato: () => true, motore: () => null, forse: async () => 0 })
+  const righe: string[] = []
+  const log = console.log
+  console.log = (...a: unknown[]) => { righe.push(a.join(' ')) }
+  try { await pagina.prepara() } finally { console.log = log }
+  const riga = righe.find(r => r.includes('prima pagina · pronta'))
+  assert.ok(riga, righe.join('\n'))
+  const m = riga!.match(/^myynd · prima pagina · pronta in (\d+) ms · 0 carte$/)
+  assert.ok(m, riga)
+  assert.ok(Number(m![1]) >= 90_000, `dall'inizio della prima lettura, non dalla pagina: ${riga}`)
+  // con `dal` (la lettura che l'ha preparata) si conta da lì (counter-case)
+  pagina.dimentica(); store.segnaCursore('prima:pagina', null)
+  righe.length = 0
+  console.log = (...a: unknown[]) => { righe.push(a.join(' ')) }
+  try { await pagina.prepara(Date.now() - 5_000) } finally { console.log = log }
+  const n = Number(righe.find(r => r.includes('pronta in'))?.match(/pronta in (\d+) ms/)?.[1])
+  assert.ok(n >= 5_000 && n < 90_000, String(n))
+})
+
 test('il giro di fondo aspetta che le fonti dell’avvio siano scelte, e non crea l’avvio per saperlo', () => {
   rmSync(join(cfg.cartella(), 'avvio.json'), { force: true })
   cfg.aggiorna({ onboarding: false })

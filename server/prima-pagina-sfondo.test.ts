@@ -1,11 +1,13 @@
-// La prima pagina aspetta le fonti che ha scelto (P4), sul server vero.
+// Il giro dei dieci minuti sul passo delle fonti, sul server vero (P4).
 //
-// Il giro dei dieci minuti legge quello che è collegato anche mentre lui è
-// ancora sul passo delle fonti: fatta lì, la pagina sarebbe fatta con due
-// schede su quattro, senza la posta che sta per collegare, e non si rifarebbe
-// più. Il giro di fondo la lascia a dopo; «Leggi», premuto da lui, la fa.
+// Tre cose che si vedevano solo con un giro di fondo che parte mentre lui
+// sceglie ancora le fonti: chi ricarica non deve ritrovarsi a guardare una
+// lettura che non ha chiesto (e poi al passo dopo); un file entrato dalla
+// vedetta prima della lettura non deve chiudere la prima lettura del Mac; e
+// «Leggi» premuto mentre il giro legge si attacca, e da lì la lettura è sua:
+// la prima pagina si fa alla fine, con la sua priorità.
 //
-//   node --test server/prima-pagina-avvio.test.ts
+//   node --test server/prima-pagina-sfondo.test.ts
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,40 +17,48 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const CASA = mkdtempSync(join(tmpdir(), 'myynd-pagina-avvio-casa-'))
-const DATI = mkdtempSync(join(tmpdir(), 'myynd-pagina-avvio-dati-'))
+const CASA = mkdtempSync(join(tmpdir(), 'myynd-pagina-sfondo-casa-'))
+const DATI = mkdtempSync(join(tmpdir(), 'myynd-pagina-sfondo-dati-'))
 const TOKEN = 'sviluppo-non-in-produzione'
 const CARTELLA = join(CASA, 'Lavoro')
-/** Il primo giro di fondo parte dopo questo tempo, invece che dopo un minuto. */
-const PRIMO_GIRO_MS = 4000
+/** Il primo giro di fondo: dopo che la vedetta ha visto il file nuovo. */
+const PRIMO_GIRO_MS = 9000
+
+// — l'agenda finta: risponde solo quando la si lascia andare —
+let trattieni = false
+let inAttesa: (() => void)[] = []
+const lasciaAgenda = () => { trattieni = false; const x = inAttesa; inAttesa = []; for (const f of x) f() }
+function ics(): string {
+  const riga = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const ev = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(Date.now() + (i - 3) * 2 * 86_400_000)
+    return `BEGIN:VEVENT\r\nUID:ev${i}@finto\r\nDTSTART:${riga(d)}\r\nDTEND:${riga(new Date(d.getTime() + 3_600_000))}\r\nSUMMARY:Riunione ${i}\r\nEND:VEVENT`
+  }).join('\r\n')
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:Lavoro\r\n${ev}\r\nEND:VCALENDAR\r\n`
+}
+
+/** Le chiamate al modello per le priorità. */
+let priorita = 0
+function risposta(corpo: string): unknown {
+  if (!corpo.includes('capo di gabinetto')) return { voci: [] }
+  priorita++
+  // la pagina parte prima del Mac: il file che c'è già è quello della vedetta
+  const doc = corpo.match(/desktop:[^\s"\\]*scaricato\.md/)?.[0] ?? ''
+  return {
+    priorita: doc ? [{
+      genere: 'priorita', titolo: 'File the downloaded note', testo: 'The note you downloaded belongs to the new website.',
+      perche: 'You downloaded it while setting up.', progetto: 'New website', doc,
+      offerta: 'I can file it for you.', quando: '', prova: 'Un file scaricato mentre sceglie le fonti'
+    }] : [],
+    domande: [], superate: []
+  }
+}
 
 let finto: Server
 let fintoUrl = ''
 let server: ChildProcess
 let base = ''
 let registro = ''
-/** Le chiamate al modello per le priorità, in ordine: il registro dice quando sono arrivate. */
-const priorita: number[] = []
-
-/*
- * Il modello finto. Alle priorità («capo di gabinetto») risponde con una voce
- * vera, che cita un file del Mac con una frase che c'è davvero: una voce così
- * passa i controlli e finisce sul feed. Con `{ voci: [] }` a ogni domanda il
- * giro di fondo non salvava niente, e il guasto non si vedeva.
- */
-function risposta(corpo: string): unknown {
-  if (!corpo.includes('capo di gabinetto')) return { voci: [] }
-  priorita.push(Date.now())
-  const doc = corpo.match(/desktop:[^\s"\\]*appunti-0\.md/)?.[0] ?? ''
-  return {
-    priorita: doc ? [{
-      genere: 'priorita', titolo: 'Write the new homepage', testo: 'The homepage is due Friday, with the team photos.',
-      perche: 'Your notes say the homepage is due Friday.', progetto: 'New website', doc,
-      offerta: 'I can draft the homepage text.', quando: '', prova: 'la pagina iniziale va scritta entro venerdì'
-    }] : [],
-    domande: [], superate: []
-  }
-}
 
 before(async () => {
   mkdirSync(CARTELLA, { recursive: true })
@@ -57,6 +67,11 @@ before(async () => {
     let corpo = ''
     req.on('data', d => { corpo += String(d) })
     req.on('end', () => {
+      if (req.url?.startsWith('/agenda.ics')) {
+        const manda = () => { res.setHeader('content-type', 'text/calendar'); res.end(ics()) }
+        if (trattieni) inAttesa.push(manda); else manda()
+        return
+      }
       res.setHeader('content-type', 'application/json')
       if (req.url?.endsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'finto' }] }))
       if (req.url?.includes('/chat/completions')) {
@@ -86,6 +101,7 @@ before(async () => {
 })
 
 after(async () => {
+  lasciaAgenda()
   server?.kill('SIGKILL')
   await new Promise<void>(r => finto?.close(() => r()))
   rmSync(CASA, { recursive: true, force: true })
@@ -103,47 +119,45 @@ async function chiama(metodo: string, percorso: string, corpo?: unknown): Promis
 const aspettaChe = async (f: () => Promise<boolean> | boolean, ms = 20_000) => {
   const fine = Date.now() + ms
   while (Date.now() < fine) { if (await f()) return; await new Promise(r => setTimeout(r, 100)) }
-  throw new Error(`la condizione non si è mai avverata:\n${registro.slice(-2000)}`)
+  throw new Error(`la condizione non si è mai avverata:\n${registro.slice(-2500)}`)
 }
+const dorme = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-test('il giro di fondo sul passo delle fonti non consuma la prima pagina; «Leggi» la fa', async () => {
-  // un conto nuovo sul passo delle fonti: un modello, il Mac collegato, l'avvio al progetto
+test('sul passo delle fonti il giro di fondo non è una lettura sua; il Mac visto dalla vedetta resta una prima lettura; «Leggi» che si attacca fa la pagina', async () => {
   let p = await chiama('POST', '/api/profilo', { lingua: 'en', nome: 'Prova' })
-  for (let i = 0; p.stato === 401 && i < 100; i++) {
-    await new Promise(r => setTimeout(r, 100))
-    p = await chiama('POST', '/api/profilo', { lingua: 'en', nome: 'Prova' })
-  }
+  for (let i = 0; p.stato === 401 && i < 100; i++) { await dorme(100); p = await chiama('POST', '/api/profilo', { lingua: 'en', nome: 'Prova' }) }
   assert.equal(p.stato, 200, JSON.stringify(p.json))
   assert.equal((await chiama('POST', '/api/connettori/compatibile', { url: `${fintoUrl}/v1`, modello: 'finto', chiave: 'sk-finta' })).stato, 200)
   assert.equal((await chiama('POST', '/api/connettori/desktop', { cartelle: [CARTELLA] })).stato, 200)
+  // un file nuovo sotto la cartella guardata, prima di qualunque lettura: lo indicizza la vedetta
+  await dorme(500)
+  writeFileSync(join(CARTELLA, 'scaricato.md'), 'Un file scaricato mentre sceglie le fonti: la vedetta lo mette nell’indice.')
+  assert.equal((await chiama('POST', '/api/connettori/calendario', { url: `${fintoUrl}/agenda.ics` })).stato, 200)
   const a = await chiama('GET', '/api/avvio')
   const s = await chiama('POST', '/api/avvio/progetto', { nome: 'New website', obiettivo: 'Launch the new website by October', revisione: a.json.revisione })
   assert.equal(s.json.fase, 'fonte')
   assert.doesNotMatch(registro, /rilettura automatica/, 'il conto era pronto prima del giro di fondo')
 
-  // il giro di fondo legge il Mac, e la pagina non parte: né le priorità, né il feed
-  await aspettaChe(() => /rilettura automatica/.test(registro))
-  // quello che viene dopo la lettura (le priorità, il feed degli arrivi) ha il tempo di finire
-  await new Promise(r => setTimeout(r, 2000))
-  assert.doesNotMatch(registro, /prima pagina · comincia/)
-  assert.equal(priorita.length, 0, `il giro di fondo ha chiesto le priorità sul passo delle fonti:\n${registro.slice(-1500)}`)
-  assert.equal((await chiama('GET', '/api/feed')).json.aperti?.length ?? 0, 0, 'il giro di fondo ha messo carte sul feed prima di «Leggi»')
-  const attesa = await chiama('GET', '/api/avvio/pagina')
-  assert.ok(attesa.json.trovato.file >= 4, JSON.stringify(attesa.json))
-  // e nemmeno la domanda della pagina la fa partire, finché le fonti non sono scelte
-  await new Promise(r => setTimeout(r, 400))
-  assert.notEqual((await chiama('GET', '/api/avvio/pagina')).json.pagina, 'pronta')
-  assert.doesNotMatch(registro, /prima pagina · comincia/)
+  // il giro di fondo parte e si ferma sull'agenda: sta leggendo, ma non per lui
+  trattieni = true
+  await aspettaChe(() => inAttesa.length > 0)
+  assert.equal((await chiama('GET', '/api/avvio')).json.leggendo, false, 'chi ricarica sul passo delle fonti resta sulle schede')
+  assert.equal((await chiama('GET', '/api/avvio/pagina')).json.lettura, null)
 
-  // lui preme «Leggi»: la lettura delle fonti che ha scelto fa la pagina (counter-case)
+  // lui preme «Leggi»: si attacca al giro, e da qui la lettura è sua (counter-case)
   const r = await fetch(`${base}/api/sincronizza`, { headers: { authorization: `Bearer ${TOKEN}` } })
   assert.equal(r.status, 200)
-  assert.match(await r.text(), /"fase":"fine"/)
+  const testo = r.text()
+  await aspettaChe(async () => (await chiama('GET', '/api/avvio')).json.leggendo === true, 5000)
+  lasciaAgenda()
+  assert.match(await testo, /"fase":"fine"/)
+
+  // la prima pagina la fa il giro a cui si è attaccato, con la priorità
   await aspettaChe(async () => (await chiama('GET', '/api/avvio/pagina')).json.pagina === 'pronta')
-  assert.match(registro, /prima pagina · comincia/)
-  assert.match(registro, /prima pagina · pronta in \d+ ms · 1 carte\n/)
-  // e la pagina ha la sua priorità: il giro di fondo non le ha tolto il turno
-  assert.equal(priorita.length, 1)
+  assert.equal(priorita, 1, 'un giro di priorità, quello della pagina')
   const feed = (await chiama('GET', '/api/feed')).json.aperti as { titolo: string }[]
-  assert.deepEqual(feed.map(v => v.titolo), ['Write the new homepage'])
+  assert.deepEqual(feed.map(v => v.titolo), ['File the downloaded note'], registro.slice(-3000))
+
+  // e il Mac, anche con il file della vedetta già dentro, ha fatto la sua prima lettura
+  assert.match(registro, /prima lettura · desktop completa/, 'il segno del Mac era «in corso» prima che la vedetta scrivesse')
 })

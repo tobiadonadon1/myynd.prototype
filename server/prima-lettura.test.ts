@@ -26,6 +26,7 @@ const collega = () => cfg.aggiorna({
 
 before(() => { prima.perProva({ pausa: 1, giri: 12, occupato: 1 }) })
 beforeEach(() => {
+  prima.fermaRiprese()
   store.azzeraTutto()
   cancellati.dimentica()
   cfg.scrivi({}, { togli: [...cfg.CON_SEGRETI] })
@@ -253,6 +254,32 @@ test('una lettura chiesta mentre gira il resto: il resto finisce la fonte che ha
   const poi: string[] = []
   await prima.continua('', async fonte => { poi.push(fonte); prima.finita(fonte); return 'letta' })
   assert.deepEqual(poi.sort(), ['calendario', 'posta'])
+})
+
+test('il resto che ha ceduto il passo, se nessuno prende la serratura, riparte da sé', async () => {
+  collega()
+  const viste: string[] = []
+  // chi ha chiesto ha chiuso la pagina: nessuna lettura sua prende la serratura
+  await prima.continua('', async fonte => {
+    viste.push(fonte)
+    if (viste.length === 1) { prima.cedi(''); return 'letta' }
+    prima.finita(fonte); return 'letta'
+  })
+  assert.equal(viste.length, 1)
+  const fine = Date.now() + 2000
+  while (Date.now() < fine && prima.inCorso().length) await new Promise(r => setTimeout(r, 5))
+  assert.deepEqual(prima.inCorso(), [], 'il resto è ripartito e ha finito, senza aspettare il giro dei dieci minuti')
+  assert.ok(viste.length >= 3, `riletta la fonte a metà, poi l’altra: ${viste.join(', ')}`)
+})
+
+test('il resto fermato da una serratura presa (non ceduto) non riparte da sé (counter-case)', async () => {
+  collega()
+  const viste: string[] = []
+  await prima.continua('', async fonte => { viste.push(fonte); return 'occupato' })
+  assert.equal(viste.length, 2)
+  await new Promise(r => setTimeout(r, 50))
+  assert.equal(viste.length, 2, 'nessuna ripresa: lo fa la lettura che tiene la serratura, finita')
+  assert.equal(prima.inCoda(''), false)
 })
 
 test('cedere senza un resto in corso non ferma il resto che parte dopo (counter-case)', async () => {

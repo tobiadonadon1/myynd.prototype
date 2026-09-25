@@ -15,6 +15,13 @@ export type Viva = {
   tutte: boolean
   /** È la prima lettura di almeno una fonte. */
   prima: boolean
+  /**
+   * L'ha chiesta una persona («Leggi», una fonte collegata), o una persona ci
+   * si è attaccata. Il giro dei dieci minuti sul passo delle fonti no: chi
+   * ricarica lì non deve ritrovarsi a guardare una lettura che non ha
+   * chiesto, e poi al passo dopo (P4).
+   */
+  chiesta: boolean
   /** Le fonti che questa lettura visiterà. */
   fonti: string[]
   avvisa(e: unknown): void
@@ -25,12 +32,15 @@ export type Viva = {
 
 const vive = new Map<string, Viva>()
 
-function crea(o: { tutte: boolean; prima: boolean; fonti: string[] }): Viva {
+type Apri = { tutte: boolean; prima: boolean; fonti: string[]; chiesta?: boolean }
+
+function crea({ chiesta = true, ...o }: Apri): Viva {
   const ultimi = new Map<string, unknown>()
   const ascoltatori = new Set<(e: unknown) => void>()
   let finita = false
   return {
     ...o,
+    chiesta,
     avvisa(e) {
       const fase = String((e as { fase?: unknown } | null)?.fase ?? '')
       if (fase === 'fine' || fase === 'errore') finita = true
@@ -52,7 +62,7 @@ function crea(o: { tutte: boolean; prima: boolean; fonti: string[] }): Viva {
 }
 
 /** Comincia il registro di una lettura per questo conto. */
-export function apri(conto: string, o: { tutte: boolean; prima: boolean; fonti: string[] }): Viva {
+export function apri(conto: string, o: Apri): Viva {
   const v = crea(o)
   vive.set(conto, v)
   return v
@@ -62,6 +72,12 @@ export function apri(conto: string, o: { tutte: boolean; prima: boolean; fonti: 
 export function di(conto: string): Viva | null {
   const v = vive.get(conto)
   return v && !v.finita() ? v : null
+}
+
+/** Una prima lettura chiesta da una persona sta girando: chi ricarica torna a guardarla. */
+export function primaChiesta(conto: string): boolean {
+  const v = di(conto)
+  return !!v && v.prima && v.chiesta
 }
 
 /** La lettura è chiusa: il registro se ne va. */

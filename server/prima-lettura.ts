@@ -161,6 +161,13 @@ export function perProva(o: { pausa?: number; giri?: number; occupato?: number }
 }
 
 const inVolo = new Map<string, Promise<void>>()
+/** Le riprese del resto che ha ceduto il passo, in attesa di partire. */
+const riprese = new Set<ReturnType<typeof setTimeout>>()
+/** Solo per le prove: nessuna ripresa in attesa passa alla prova dopo. */
+export function fermaRiprese(): void {
+  for (const t of riprese) clearTimeout(t)
+  riprese.clear()
+}
 /** I conti dove una persona ha chiesto di leggere mentre girava il resto: il resto cede il passo. */
 const cedute = new Set<string>()
 const aspetta = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
@@ -177,7 +184,9 @@ export function inCoda(conto: string): boolean {
  * resta libera per un istante solo: chi preme «Leggi», o collega una fonte,
  * riproverebbe per due minuti senza mai trovarla libera. Così il resto finisce
  * la fonte che sta leggendo e si ferma; la lettura della persona, finita, lo
- * fa ripartire. Senza un resto in corso non fa niente.
+ * fa ripartire. Se nessuno prende la serratura (chi chiedeva ha chiuso la
+ * pagina), il resto riparte da sé poco dopo: non aspetta il giro dei dieci
+ * minuti. Senza un resto in corso non fa niente.
  */
 export function cedi(conto: string): void {
   if (inVolo.has(conto)) cedute.add(conto)
@@ -202,6 +211,7 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
     const cede = () => {
       if (!cedute.has(conto)) return false
       console.log('myynd · prima lettura · il resto cede il passo a una lettura chiesta')
+      ceduto = true
       return true
     }
     for (let giro = 0; giro < giriMassimi && !fermo; giro++) {
@@ -228,11 +238,22 @@ export function continua(conto: string, leggiUna: (fonte: string) => Promise<'le
       store.segnaCursore('prima:imparato', new Date().toISOString())
     }
   }
+  let ceduto = false
   // si comincia al giro dopo: il conto è già «in coda» quando il primo passo parte
   const p = Promise.resolve().then(async () => {
     try { await (conto ? chi.dentro(conto, lavoro) : lavoro()) }
     catch (err) { console.error('myynd · prima lettura · il resto non si è letto:', err instanceof Error ? err.message : err) }
-    finally { inVolo.delete(conto); cedute.delete(conto) }
+    finally {
+      inVolo.delete(conto); cedute.delete(conto)
+      // ha ceduto il passo: se la lettura chiesta ha la serratura, il resto
+      // riparte, la trova presa e lascia fare (la ripresa la fa lei, finita);
+      // se nessuno l'ha presa, riprende da dove era
+      if (ceduto) {
+        const t = setTimeout(() => { riprese.delete(t); void continua(conto, leggiUna) }, attesaOccupato)
+        t.unref?.()
+        riprese.add(t)
+      }
+    }
   })
   inVolo.set(conto, p)
   return p

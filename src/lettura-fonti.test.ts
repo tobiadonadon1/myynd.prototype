@@ -82,6 +82,22 @@ test('a reading already running is waited for, anything else is reported at once
   assert.equal(volte, 5, 'it gives up after its limit instead of waiting forever')
 })
 
+test('behind the rest of the first read (409 with coda) a reading waits longer, and still not forever', async () => {
+  const dalResto = () => Object.assign(new Error(GIA_IN_CORSO), { coda: true })
+  // il resto tiene la serratura per più dei due minuti soliti (qui: 10 tentativi su 4), poi la molla
+  let volte = 0
+  await leggiAlProprioTurno(async () => { if (++volte <= 10) throw dalResto() }, async () => {}, 4, 20)
+  assert.equal(volte, 11)
+  // counter-case: un'altra lettura (senza coda) si aspetta solo il tetto solito
+  volte = 0
+  await assert.rejects(leggiAlProprioTurno(async () => { if (++volte <= 10) throw new Error(GIA_IN_CORSO) }, async () => {}, 4, 20), /già in corso/)
+  assert.equal(volte, 5)
+  // e anche dietro al resto c'è un tetto
+  volte = 0
+  await assert.rejects(leggiAlProprioTurno(async () => { volte++; throw dalResto() }, async () => {}, 4, 20), /già in corso/)
+  assert.equal(volte, 21)
+})
+
 /*
  * Una cartella del Mac sparita o chiusa non è un successo.
  *

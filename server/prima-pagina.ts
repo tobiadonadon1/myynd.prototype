@@ -60,18 +60,38 @@ function fontiConDocumenti(): string[] {
   return store.conteggi().perFonte.filter(r => r.n > 0 && vere.has(r.fonte)).map(r => r.fonte).sort()
 }
 
+/** Per quanto una pagina rimasta vuota si rifà se arriva una fonte nuova: il primo giorno. */
+export const RIFA_VUOTA_MS = 24 * 3_600_000
+
 /*
- * La pagina è fatta. Una pagina rimasta vuota però vale solo per le fonti che
- * aveva: il segno dice quali erano («vuota|quando|calendario,desktop»), e
- * quando ne arriva una nuova (la posta collegata dopo) la pagina si rifà, una
- * volta per fonte. Una pagina con delle carte è fatta per sempre.
+ * La pagina è fatta. Una pagina rimasta vuota però, il primo giorno, vale solo
+ * per le fonti che aveva: il segno dice quali erano («vuota|quando|calendario,
+ * desktop»), e quando ne arriva una nuova quel giorno (la posta collegata
+ * dopo il riavvio per l'accesso completo al disco) la pagina si rifà, una
+ * volta per fonte. Dopo il primo giorno è fatta come le altre: chi collega
+ * Slack fra un mese non rivede «Preparo la tua prima pagina» (spec 3.6: la
+ * prima pagina gira una volta). Una pagina con delle carte è fatta per sempre.
  */
-function fatta(): boolean {
+function fatta(adesso = Date.now()): boolean {
   const v = store.cursore(SEGNO)
   if (!v) return false
   if (!v.startsWith('vuota|')) return true
-  const aveva = new Set((v.split('|')[2] ?? '').split(',').filter(Boolean))
+  const [, quando = '', fonti = ''] = v.split('|')
+  const t = Date.parse(quando)
+  if (!Number.isFinite(t) || adesso - t >= RIFA_VUOTA_MS) return true
+  const aveva = new Set(fonti.split(',').filter(Boolean))
   return !fontiConDocumenti().some(f => !aveva.has(f))
+}
+
+/**
+ * Da quando si conta il tempo della prima pagina (spec 8): dall'inizio della
+ * lettura che l'ha preparata, o, se è partita da sola (un modello collegato
+ * dopo la lettura), dall'inizio della prima lettura del conto.
+ */
+function inizioDellaLettura(dal: number | undefined, inizio: number): number {
+  if (dal !== undefined) return dal
+  const t = Date.parse(store.cursore('prima:iniziata') ?? '')
+  return Number.isFinite(t) && t <= inizio ? t : inizio
 }
 
 /**
@@ -102,6 +122,7 @@ export async function prepara(dal?: number): Promise<void> {
   if (via()) return
   metti('lavoro')
   const inizio = Date.now()
+  const da = inizioDellaLettura(dal, inizio)
   console.log('myynd · prima pagina · comincia')
   try {
     if (ferri.motore()) {
@@ -118,9 +139,8 @@ export async function prepara(dal?: number): Promise<void> {
     // nessuna carta, in nessuno stato: il segno ricorda con quali fonti
     store.segnaCursore(SEGNO, store.nessunaCarta() ? `vuota|${quando}|${fontiConDocumenti().join(',')}` : quando)
     metti('pronta', carte)
-    // dall'inizio della lettura che l'ha preparata (spec 8), e quanto è durata la pagina da sola
-    const suo = Date.now() - inizio
-    console.log(`myynd · prima pagina · pronta in ${dal === undefined ? suo : Date.now() - dal} ms · ${carte} carte · la pagina ${suo} ms`)
+    // dall'inizio della lettura che l'ha preparata, o della prima lettura (spec 8)
+    console.log(`myynd · prima pagina · pronta in ${Date.now() - da} ms · ${carte} carte`)
   } catch (e) {
     if (via()) return
     metti('guaio')

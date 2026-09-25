@@ -851,8 +851,9 @@ app.post('/api/argomenti/proposta', async (_req, res) => {
 // Durable first-project onboarding. Existing authenticated request context
 // scopes both the state file and document/task access to this account.
 app.get('/api/avvio', (_req, res) => {
-  // `leggendo`: una prima lettura sta girando, e chi ricarica torna a guardarla (P4)
-  try { res.json({ ...avvio.stato(), leggendo: viva.di(chi.adesso() ?? '')?.prima === true }) }
+  // `leggendo`: una prima lettura chiesta da lui sta girando, e chi ricarica torna a guardarla (P4);
+  // il giro dei dieci minuti sul passo delle fonti non è una lettura sua
+  try { res.json({ ...avvio.stato(), leggendo: viva.primaChiesta(chi.adesso() ?? '') }) }
   catch (e) { errore(res, e, e instanceof avvio.ErroreAvvio ? e.stato : 500) }
 })
 app.post('/api/avvio/progetto', (req, res) => {
@@ -1163,6 +1164,24 @@ app.post('/api/connettori/claude/ambiente', async (_req, res) => {
   res.json({ ok: true, ...(e.avviso ? { avviso: e.avviso } : {}), ...(e.dettaglio ? { dettaglio: e.dettaglio } : {}) })
 })
 
+
+/**
+ * La vedetta sulle cartelle del Mac, col segno della prima lettura messo prima.
+ *
+ * La vedetta indicizza ogni file che cambia sotto le radici (con «tutto», la
+ * casa intera: un download, una schermata, iCloud). Se il primo file entrasse
+ * prima di `statoPrima('desktop')`, la fonte avrebbe già documenti e la prima
+ * lettura sarebbe «fatto» senza essere mai cominciata: niente novanta giorni
+ * dal più recente, niente tetto di millecinquecento, niente resto in
+ * sottofondo (P4). Chi ha già documenti del Mac resta «fatto» com'era.
+ */
+function guardaIlMac(c: cfg.ConfigDesktop | undefined | null): void {
+  if (c && !ospitato.OSPITATO) {
+    try { primaLettura.statoPrima('desktop') } catch { /* l'indice chiuso: lo segnerà la lettura */ }
+  }
+  vedetta.avvia(c)
+}
+
 /** «Ho capito»: il cartellino del credito si chiude finché non ricapita. */
 app.post('/api/credito/visto', (_req, res) => {
   mod.scordaIlCredito()
@@ -1246,7 +1265,7 @@ app.post('/api/connettori/desktop', async (req, res) => {
       : { cartelle: esito.cartelle, scelte: true }
     cfg.aggiorna({ desktop: nuovo })
     // le cartelle nuove si guardano da subito, non dal prossimo avvio
-    vedetta.avvia(nuovo)
+    guardaIlMac(nuovo)
     res.json({ ok: true, cartelle: esito.cartelle, tutto })
   } catch (e) { errore(res, e) }
 })
@@ -2521,10 +2540,11 @@ function fontiCheLeggera(soloFonte: string | null): string[] {
  * La prima pagina, se tocca a questo conto: una volta sola, sotto la serratura
  * di chi la chiama (P4). `dal` è l'inizio della lettura, per il registro.
  */
-function paginaSeDovuta(prima: boolean, dal = Date.now()): () => Promise<void> | null {
+function paginaSeDovuta(prima: boolean | (() => boolean), dal = Date.now()): () => Promise<void> | null {
   let pagina: Promise<void> | null = null
+  const puo = typeof prima === 'function' ? prima : () => prima
   return () => {
-    if (!pagina && prima && primaPagina.dovuta()) {
+    if (!pagina && puo() && primaPagina.dovuta()) {
       pagina = withBackgroundWork(() => primaPagina.prepara(dal))
         .catch(e => console.error('myynd · prima pagina:', e instanceof Error ? e.message : e))
     }
@@ -2546,11 +2566,17 @@ app.get('/api/sincronizza', async (req, res) => {
   const soloFonte = typeof req.query.fonte === 'string' ? req.query.fonte : null
   if (sincronizzazioneInCorso()) {
     const v = viva.di(conto)
-    if (v?.tutte && !soloFonte) return viva.attacca(req, res, v)
+    if (v?.tutte && !soloFonte) {
+      // da qui è anche sua: la prima pagina si fa alla fine, e chi ricarica ci torna
+      if (!v.chiesta) { v.chiesta = true; try { v.prima = primaLettura.eUnaPrima() } catch { /* resta com'era */ } }
+      return viva.attacca(req, res, v)
+    }
     // se la serratura è del resto della prima lettura, finisce la fonte che
-    // ha in mano e si ferma: il prossimo tentativo di chi chiede la trova libera
+    // ha in mano e si ferma: il prossimo tentativo di chi chiede la trova libera.
+    // `coda` lo dice a chi aspetta: la fonte in mano può durare più di due minuti
+    const coda = primaLettura.inCoda(conto)
     primaLettura.cedi(conto)
-    return res.status(409).json({ errore: 'Una lettura è già in corso.' })
+    return res.status(409).json({ errore: 'Una lettura è già in corso.', ...(coda ? { coda: true } : {}) })
   }
   sincronizzazioniInCorso.add(conto)
   let prima = false
@@ -2668,14 +2694,18 @@ const OGNI = 10 * 60 * 1000
  */
 async function dopoLArrivo(daQuando: string, nuovi = store.appenaArrivati(daQuando, 20)): Promise<number> {
   if (!nuovi.length || !await mod.disponibilePer('lettura')) return nuovi.length
-
   /*
-   * Il modello si chiama solo se fra gli arrivi c'è qualcosa da feed (P4): un
+   * La prima pagina è ancora da fare (P4): la farà lei, sulla posta dei trenta
+   * giorni. Una carta messa qui prima, dalla vedetta o dal giro di fondo sul
+   * passo delle fonti, la consumerebbe: con una carta sul feed la pagina non
+   * è più dovuta, e la posta letta da «Leggi» non passerebbe mai dal feed.
+   *
+   * E il modello si chiama solo se fra gli arrivi c'è qualcosa da feed: un
    * giro che ha portato solo file vecchi del Mac, o impegni, non paga una
    * lettura per sentirsi dire «niente». Le domande e «quando arriva» sotto
    * restano come sono.
    */
-  const voci = await feedDegliArrivi(nuovi)
+  const voci = primaPagina.dovuta() ? [] : await feedDegliArrivi(nuovi)
   const nuove = voci.length ? store.salvaFeed(voci) : 0
   if (nuove) {
     console.log(`myynd · ${nuove} cose nuove messe da parte senza che nessuno le chiedesse`)
@@ -2707,15 +2737,16 @@ async function rileggiDaSola() {
    */
   let prima = false
   try { prima = primaLettura.eUnaPrima(c) } catch { /* lo dirà la lettura */ }
-  const v = viva.apri(conto, { tutte: true, prima, fonti: fontiCheLeggera(null) })
   /*
    * La pagina da sola, sì, ma non mentre lui è ancora sul passo delle fonti:
    * sarebbe fatta con le schede collegate fin lì, senza la posta che sta per
-   * collegare, e non si rifarebbe più. Lì la fa «Leggi».
+   * collegare, e non si rifarebbe più. Lì la fa «Leggi», anche quando si
+   * attacca a questa lettura (`chiesta`). E lì questa lettura non è sua: chi
+   * ricarica sul passo delle fonti non la guarda (`viva.primaChiesta`).
    */
-  let scelte = false
-  try { scelte = primaPagina.fontiScelte() } catch { /* lo dirà il giro dopo */ }
-  const pagina = paginaSeDovuta(scelte)
+  const scelte = () => { try { return primaPagina.fontiScelte() } catch { return false } }
+  const v = viva.apri(conto, { tutte: true, prima, fonti: fontiCheLeggera(null), chiesta: scelte() })
+  const pagina = paginaSeDovuta(() => v.chiesta || scelte())
   let conPagina = false
   try {
     const totale = await leggiTutto(null, d => {
@@ -2729,16 +2760,25 @@ async function rileggiDaSola() {
     v.avvisa({ fase: 'fine', totale, conteggi: store.conteggi() })
     const p = pagina()
     if (p) { conPagina = true; await p }
+    /*
+     * La pagina è ancora da fare e questo giro non l'ha fatta (lui è sul passo
+     * delle fonti): niente feed e niente priorità qui. Una carta messa adesso
+     * la consumerebbe (con una carta la pagina non è più dovuta), e anche un
+     * giro di priorità a vuoto le toglierebbe il suo per dieci minuti
+     * (`priorita.MINUTI_MINIMI`): la pagina di «Leggi» uscirebbe senza (P4).
+     */
+    let trattenuta = false
+    try { trattenuta = !conPagina && primaPagina.dovuta() } catch { /* come prima */ }
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
     // P2 · le carte mancate: una risposta mandata dalla posta, una riga scritta a mano. Senza modello.
     await mancate.forse().catch(e => console.warn('myynd · mancate:', e instanceof Error ? e.message : e))
     // la prima pagina ha appena letto la stessa posta: il feed non si rifà in questo giro
-    if (!conPagina) await dopoLArrivo(daQuando, nuovi)
+    if (!conPagina && !trattenuta) await dopoLArrivo(daQuando, nuovi)
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
     // stanno dentro `forse`; qui si dà solo l'occasione, a ogni giro.
-    if (await priorita.forse()) compiti.annunciaFeed()
+    if (!trattenuta && await priorita.forse()) compiti.annunciaFeed()
     // niente tavolo qui: le righe inventate per riempire un progetto vuoto
     // erano «messed-up tasks that do not mean anything». Vedi `tavolo.ts`.
     // e le automazioni che non si è ancora scritto. Il cancello — un giro al
@@ -4790,7 +4830,7 @@ app.get('/api/avvio/pagina', (_req, res) => {
         .finally(() => { sincronizzazioniInCorso.delete(conto) })
       s = primaPagina.stato()
     }
-    const lettura = viva.di(conto)?.prima ? 'prima' : primaLettura.inCoda(conto) ? 'coda' : null
+    const lettura = viva.primaChiesta(conto) ? 'prima' : primaLettura.inCoda(conto) ? 'coda' : null
     res.json({ lettura, trovato: generi.perGenere(store.conteggi().perFonte), pagina: s.pagina, carte: s.carte })
   } catch (e) { errore(res, e) }
 })
@@ -5080,7 +5120,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       const largo: cfg.ConfigDesktop = { ...desk, cartelle: desktop.radiciTutto(), tutto: true }
       cfg.aggiorna({ desktop: largo })
       console.log(`myynd · «Il mio Mac» ora legge tutto il computer per ${chi.adesso() ?? 'questo conto'}`)
-      vedetta.avvia(largo)
+      guardaIlMac(largo)
       // e la rilettura di quella fonte sola, in sottofondo: allargare le
       // cartelle senza rileggerle vorrebbe dire aspettare sei ore per vedere
       // la differenza. Non si aspetta qui — gli altri conti hanno una vedetta
@@ -5096,7 +5136,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
       })()
       return
     }
-    vedetta.avvia(desk)
+    guardaIlMac(desk)
   })()
 
   /*
