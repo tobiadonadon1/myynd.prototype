@@ -261,7 +261,10 @@ test('forse: registra, scrive il segnalibro, guarda solo quello che è arrivato 
   assert.equal(await mancate.forse(adesso), 1)
   const file = join(cfg.cartella(), 'mancate.json')
   assert.ok(existsSync(file))
-  assert.equal(JSON.parse(readFileSync(file, 'utf8')).ultimo, new Date(adesso).toISOString())
+  // il segnalibro è l'ultima cosa guardata (il documento indicizzato più di recente), non l'ora del giro
+  const ultimoIndicizzato = (store.default.prepare('SELECT MAX(indicizzato) AS m FROM documenti').get() as { m: string }).m
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).ultimo, ultimoIndicizzato)
+  assert.notEqual(ultimoIndicizzato, new Date(adesso).toISOString())
   assert.equal((store.default.prepare('SELECT COUNT(*) AS n FROM mancate').get() as { n: number }).n, 1)
   // mezz'ora non è passata: niente, anche se c'è una risposta nuova
   const i2 = mail('posta:INBOX:61', { quando: fa(47), messageId: 'i61@ex' })
@@ -279,4 +282,31 @@ test('forse: registra, scrive il segnalibro, guarda solo quello che è arrivato 
   assert.equal(mancate.daDove(Date.parse(storto) + 1) < storto, true)
   store.chiudiIndice(cfg.cartellaDi('altro-conto'))
   rmSync(cfg.cartellaDi('altro-conto'), { recursive: true, force: true })
+})
+
+test('due giri a mezz’ora di distanza senza niente di nuovo: il secondo non rilegge quattordici giorni e non chiede niente a Jev', async () => {
+  store.azzeraTutto()
+  mancate.dimentica()
+  store.salvaFeed([{ tipo: 'Da decidere', titolo: 'Qualcosa di prima', testo: 'Una cosa da fare di prima.', fonte: 'posta' }])
+  store.default.prepare('UPDATE feed SET quando = ?').run(fa(24 * 5))
+  // una riga a mano con tre parole su quattro in un documento: la domanda tocca a Jev
+  const d = documentoDaFare('posta:INBOX:70', 'Contract', 'Hi, Marta here: the signed contract is what we need before we hand over the keys.', { autore: 'Marta <marta@ceru.example>' })
+  semina([d], { [d.id]: fa(72) })
+  riga('c-w1', 'Send Marta the signed contract pages', { creato: fa(48) })
+  let chiamate = jevFinto(0.2)
+  const adesso = Date.now()
+  assert.equal(await mancate.forse(adesso), 0, 'Jev ha detto no')
+  assert.equal(chiamate.length, 1)
+  // mezz'ora dopo, niente di nuovo: il segnalibro regge, si riparte da lì, zero domande
+  const dal = mancate.daDove(adesso + mancate.OGNI + 1)
+  assert.ok(dal >= fa(72), `si riparte da quattordici giorni fa: ${dal}`)
+  chiamate = jevFinto(0.2)
+  assert.equal(await mancate.forse(adesso + mancate.OGNI + 1), 0)
+  assert.equal(chiamate.length, 0, 'senza niente di nuovo Jev è stato richiesto')
+  // e una riga nuova dopo il segnalibro si guarda, una sola domanda
+  riga('c-w2', 'Send Marta the signed contract pages again', { creato: new Date(adesso + mancate.OGNI + 2).toISOString() })
+  chiamate = jevFinto(0.2)
+  assert.equal(await mancate.forse(adesso + 2 * mancate.OGNI + 3), 0)
+  assert.equal(chiamate.length, 1)
+  senzaJev()
 })

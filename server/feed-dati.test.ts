@@ -105,9 +105,23 @@ test('segnaEsame scrive dove è finito ogni documento, tiene «quando» se non c
   // la stessa cosa: non si tocca
   assert.equal(dati.segnaEsame([{ doc: 'a', fase: 'regole', motivo: 'posta_in_serie' }], t2), 0)
   assert.equal(dati.esameDi(['a']).get('a')!.quando, t1)
+  // «modello» riletto: la stessa fase, ma l'ora si rinfresca (è quella che il salto delle 24 ore confronta)
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'modello' }], t2), 1)
+  assert.equal(dati.esameDi(['b']).get('b')!.quando, t2)
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'verifica', motivo: 'perche:numero' }], t2), 1)
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'verifica', motivo: 'perche:numero' }], '2026-09-21T11:00:00.000Z'), 1, 'anche «verifica» si rinfresca')
   // una cosa diversa: si riscrive, con l'ora nuova
   assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'carta' }], t2), 1)
   assert.deepEqual(dati.esameDi(['b']).get('b'), { fase: 'carta', motivo: null, quando: t2 })
+  // «gia» e «risposto» non coprono la fase che dice dove il feed l'ha perso: a chi misura le mancate serve quella
+  assert.equal(dati.segnaEsame([{ doc: 'b', fase: 'gia' }], t2), 0)
+  assert.equal(dati.segnaEsame([{ doc: 'a', fase: 'risposto' }], t2), 0)
+  assert.deepEqual([dati.esameDi(['a']).get('a')!.fase, dati.esameDi(['b']).get('b')!.fase], ['regole', 'carta'])
+  // ma fra loro sì, e su un documento nuovo si scrivono
+  assert.equal(dati.segnaEsame([{ doc: 'd', fase: 'gia' }], t2), 1)
+  assert.equal(dati.segnaEsame([{ doc: 'd', fase: 'risposto' }], t2), 1)
+  assert.equal(dati.esameDi(['d']).get('d')!.fase, 'risposto')
+  store.default.prepare('DELETE FROM feed_esame WHERE doc = ?').run('d')
   assert.equal(dati.esameDi(['a', 'b', 'c']).size, 2)
   // sessanta giorni dopo: via le vecchie
   dati.segnaEsame([{ doc: 'c', fase: 'posti' }], '2026-11-22T10:00:00.000Z')

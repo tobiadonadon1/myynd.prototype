@@ -989,5 +989,102 @@ test('la riga della misura si scrive una volta per lettura che arriva al modello
   console.log = (...a: unknown[]) => { righe.push(a.map(String).join(' ')) }
   try { await claude.generaFeed() } finally { console.log = vero }
   assert.equal(righe.filter(r => r.startsWith('myynd · misura ·')).length, 1, righe.join('\n'))
-  assert.match(righe.find(r => r.startsWith('myynd · misura ·'))!, /^myynd · misura · 14 giorni: \d+ viste, \d+ giuste o tenute \((?:\d+%|n\.d\.)\), \d+ tardive, \d+ mancate su \d+ \((?:\d+%|n\.d\.)\)$/)
+  assert.match(righe.find(r => r.startsWith('myynd · misura ·'))!, /^myynd · misura · 14 giorni: \d+ viste, \d+ giuste o tenute su \d+ \((?:\d+%|n\.d\.)\), di cui \d+ tardive, \d+ mancate su \d+ \((?:\d+%|n\.d\.)\)$/)
+})
+
+// — le correzioni del primo giro di verifica —
+
+test('una mail che dice «tonight»: la carta nasce con il giorno della sera, si salva, e la pagina la mostra ancora', async () => {
+  store.azzeraTutto()
+  const d = doc('posta:INBOX:1101', 'Signed contract', { corpo: 'Can you send me the signed contract tonight? I file it first thing.', autore: 'Nora Vance <nora@harbor.example>', quando: fraOre(1) })
+  const ieri = doc('posta:INBOX:1102', 'Draft notes', { corpo: 'Anna sent you the draft yesterday. Can you send her your notes on it?', autore: 'Anna Ruiz <ana@harbor.example>', quando: fraOre(2) })
+  store.salvaDocumenti([d, ieri])
+  fornitoreFinto([
+    { tipo: 'Da decidere', titolo: 'Send Nora the signed contract', testo: 'Nora needs the signed contract tonight.', urgenza: 'tonight', fonte: 'posta', doc: d.id, perche: 'Nora files it tonight, first thing.', prova: 'Can you send me the signed contract tonight?' },
+    { tipo: 'Da decidere', titolo: 'Send Anna your notes on the draft', testo: 'Anna sent the draft yesterday and waits for your notes.', urgenza: 'no rush', fonte: 'posta', doc: ieri.id, perche: 'Anna waits for your notes since yesterday.', prova: 'Can you send her your notes on it?' }
+  ], 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 2, 'le due carte nascono')
+  const sera = GIORNI_EN[new Date(d.quando!).getDay()]
+  assert.equal(voci[0].testo, `Nora needs the signed contract ${sera} evening.`)
+  assert.equal(voci[0].perche, `Nora files it ${sera} evening, first thing.`)
+  const oggi = new Date(d.quando!)
+  assert.equal(voci[0].urgenza, `${MESI_EN[oggi.getMonth()]} ${oggi.getDate()}`, '«tonight» si salva come il giorno della mail')
+  const prima = GIORNI_EN[(new Date(ieri.quando!).getDay() + 6) % 7]
+  assert.equal(voci[1].testo, `Anna sent the draft ${prima} and waits for your notes.`)
+  store.salvaFeed(voci)
+  const { feedAttuale } = await import('./attenzione.ts')
+  const inPagina = feedAttuale()
+  assert.equal(inPagina.length, 2, 'salvate aperte ma nascoste dal filtro della pagina: la richiesta si perde senza traccia')
+  assert.equal(inPagina.find(v => v.doc === d.id)?.urgenza, 'Today')
+})
+
+test('una risposta tronca, o rifiutata, non segna «modello» a trenta documenti: la lettura dopo li rimanda', async () => {
+  store.azzeraTutto()
+  const x = doc('posta:INBOX:1111', 'Which day', { corpo: 'Can you tell Pia which day works for the visit?', autore: 'Pia <pia@ex.example>', quando: fraOre(1) })
+  store.salvaDocumenti([x])
+  const tronca = (contenuto: string) => {
+    cfg.scrivi({ lingua: 'en', motore: 'compatibile', compatibile: { url: 'https://esempio.test/v1/', chiave: 'sk-prova', modello: 'gpt-prova' } })
+    const ricevute: unknown[] = []
+    compatibile.usaRete((async (_url: string | URL | Request, init?: RequestInit) => {
+      ricevute.push(init?.body ? JSON.parse(String(init.body)) : {})
+      return Response.json({ id: 'c1', model: 'gpt-prova', choices: [{ index: 0, message: { role: 'assistant', content: contenuto }, finish_reason: 'length' }], usage: { prompt_tokens: 10, completion_tokens: 10 } })
+    }) as typeof fetch)
+    return ricevute
+  }
+  let ricevute = tronca('{"voci": [{"tipo": "Da decidere", "titolo": "Tell Pia which day')
+  assert.deepEqual(await claude.generaFeed(), [])
+  assert.equal(ricevute.length, 1)
+  assert.equal(feedDati.esameDi([x.id]).get(x.id), undefined, 'una risposta non letta non è «il modello ha detto no»')
+  // «voci» che non è una lista: lo stesso
+  ricevute = tronca('{"voci": "niente"}')
+  assert.deepEqual(await claude.generaFeed(), [])
+  assert.equal(ricevute.length, 1)
+  assert.equal(feedDati.esameDi([x.id]).get(x.id), undefined)
+  // il fornitore torna sano: il documento si rimanda, e adesso «modello» si scrive
+  ricevute = fornitoreFinto([], 'en')
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 1, 'dopo una risposta tronca il documento non è stato rimandato')
+  assert.equal(feedDati.esameDi([x.id]).get(x.id)?.fase, 'modello')
+})
+
+test('il salto delle ventiquattro ore vale anche dal secondo giorno: rimandato a più di un giorno, l’ora dell’esame si rinfresca', async () => {
+  store.azzeraTutto()
+  const x = doc('posta:INBOX:1121', 'Question', { corpo: 'Can you tell me which day works for the visit?', autore: 'Pia <pia@ex.example>', quando: fraOre(1) })
+  store.salvaDocumenti([x])
+  let ricevute = fornitoreFinto([], 'en')
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 1)
+  // venticinque ore dopo (l'esame si sposta indietro): si rimanda…
+  store.default.prepare('UPDATE feed_esame SET quando = ? WHERE doc = ?').run(fraOre(25), x.id)
+  ricevute = fornitoreFinto([], 'en')
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 1)
+  const dopo = feedDati.esameDi([x.id]).get(x.id)!
+  assert.equal(dopo.fase, 'modello')
+  assert.ok(Date.parse(dopo.quando) > Date.now() - 60_000, 'l’ora dell’esame non si è rinfrescata: dal secondo giorno il salto non varrebbe più')
+  // …e un attimo dopo no
+  ricevute = fornitoreFinto([], 'en')
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 0)
+})
+
+test('un documento la cui carta è caduta alla verifica non si rimanda per un giorno, e «gia» non copre «carta»', async () => {
+  store.azzeraTutto()
+  const d1 = doc('posta:INBOX:1131', 'Northwind scope', { corpo: 'Can you confirm the pilot scope? We start with supplier invoices.', autore: 'Nora <nora@harbor.example>', quando: fraOre(2) })
+  const d2 = doc('posta:INBOX:1132', 'Contract', { corpo: 'Can you sign the contract for the new office?', autore: 'Lea <lea@ex.example>', quando: fraOre(1) })
+  store.salvaDocumenti([d1, d2])
+  let ricevute = fornitoreFinto([
+    { tipo: 'Da decidere', titolo: 'Confirm the pilot scope with Nora', testo: 'Nora asks you to confirm the pilot scope.', urgenza: 'no rush', fonte: 'posta', doc: d1.id, perche: 'Matters for the Northwind project.', prova: 'Can you confirm the pilot scope?' },
+    { tipo: 'Da decidere', titolo: 'Sign the office contract for Lea', testo: 'Lea asks you to sign the contract for the new office.', urgenza: 'no rush', fonte: 'posta', doc: d2.id, perche: 'Lea waits for the signed contract.', prova: 'Can you sign the contract for the new office?' }
+  ], 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 1)
+  store.salvaFeed(voci)
+  assert.deepEqual([feedDati.esameDi([d1.id]).get(d1.id)?.fase, feedDati.esameDi([d2.id]).get(d2.id)?.fase], ['verifica', 'carta'])
+  // la lettura dopo: quello caduto alla verifica non si ripaga, e quello con la carta resta «carta» e non «gia»
+  ricevute = fornitoreFinto([], 'en')
+  await claude.generaFeed()
+  assert.equal(ricevute.length, 0, 'il documento caduto alla verifica è tornato al modello')
+  assert.deepEqual([feedDati.esameDi([d1.id]).get(d1.id)?.motivo, feedDati.esameDi([d2.id]).get(d2.id)?.fase], ['perche:obiettivo', 'carta'])
 })

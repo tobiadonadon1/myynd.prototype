@@ -130,10 +130,20 @@ export const ESAME_GIORNI = 60
  */
 export function segnaEsame(righe: readonly { doc: string; fase: Fase | string; motivo?: string | null }[], quando = new Date().toISOString()): number {
   if (!righe.length) return 0
+  /*
+   * Si riscrive quando cambia qualcosa; e sempre per «modello» e «verifica»,
+   * che dicono *quando* il modello l'ha letto l'ultima volta: è l'ora che il
+   * salto delle ventiquattro ore confronta, e se restasse quella del primo
+   * giorno il salto varrebbe un giorno solo. «gia» e «risposto» invece non
+   * coprono una fase che dice dove il feed l'ha perso (carta, modello, posti,
+   * verifica, regole): dicono solo che ormai è a posto, e a chi misura le
+   * mancate serve la fase di prima.
+   */
   const ins = db.prepare(`
     INSERT INTO feed_esame (doc, fase, motivo, quando) VALUES (?, ?, ?, ?)
     ON CONFLICT(doc) DO UPDATE SET fase = excluded.fase, motivo = excluded.motivo, quando = excluded.quando
-    WHERE feed_esame.fase IS NOT excluded.fase OR feed_esame.motivo IS NOT excluded.motivo
+    WHERE (feed_esame.fase IS NOT excluded.fase OR feed_esame.motivo IS NOT excluded.motivo OR excluded.fase IN ('modello', 'verifica'))
+      AND NOT (excluded.fase IN ('gia', 'risposto') AND feed_esame.fase NOT IN ('gia', 'risposto'))
   `)
   let scritte = 0
   db.exec('BEGIN')

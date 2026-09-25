@@ -20,8 +20,9 @@
 // statici partono prima di qualunque riga di questo file. I moduli puri
 // (`feed-esiti.ts`) si possono importare subito.
 
-import { resolve, join } from 'node:path'
+import { resolve, join, relative, isAbsolute } from 'node:path'
 import { userInfo } from 'node:os'
+import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { esitoCarta, ragioneDi, type Ragione } from './feed-esiti.ts'
 import type { Mancata } from './mancate.ts'
@@ -92,7 +93,12 @@ function precisioneDi(c: Misura['carte']): number | null {
   return tutte < MINIMO ? null : buone / tutte
 }
 
-const giornoDi = (iso: string) => iso.slice(0, 10)
+/** Il giorno di un'ora ISO, nel calendario di chi guarda: alle 22:49 di giovedì una carta è di giovedì, non del venerdì UTC. */
+export const giornoDi = (iso: string) => {
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return iso.slice(0, 10)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 /**
  * La misura sulla finestra `[a − giorni, a]`, letta dal database del conto.
@@ -190,12 +196,18 @@ export function misura(giorni = 14, adesso = Date.now(), extra?: { mancate?: Man
 
 const percento = (x: number | null) => x === null ? 'n.d.' : `${Math.round(x * 100)}%`
 
-/** Una riga per il registro: «myynd · misura · 14 giorni: 31 viste, 25 giuste o tenute (81%), 3 tardive, 2 mancate su 27 (7%)». */
+/**
+ * Una riga per il registro: «myynd · misura · 14 giorni: 31 viste, 28 giuste o
+ * tenute su 31 (90%), di cui 3 tardive, 2 mancate su 30 (7%)». Il conto e la
+ * percentuale sono la stessa frazione: numeratore e denominatore della
+ * precisione, con le tardive dentro il numeratore, dette a parte.
+ */
 export function rigaDelRegistro(m: Misura): string {
   const c = m.carte
-  const buone = c.agite + c.fuori + c.tenute
+  const buone = c.agite + c.fuori + c.tardive + c.tenute
+  const tutte = buone + c.scartate.vecchia + c.scartate.non_mia + c.scartate.non_chiara + c.scartate.senza + c.scadute.tempo
   const su = c.agite + c.fuori + c.tardive + m.mancate.totale
-  return `myynd · misura · ${m.giorni} giorni: ${c.viste} viste, ${buone} giuste o tenute (${percento(m.precisione)}), ${c.tardive} tardive, ${m.mancate.totale} mancate su ${su} (${percento(m.mancanza)})`
+  return `myynd · misura · ${m.giorni} giorni: ${c.viste} viste, ${buone} giuste o tenute su ${tutte} (${percento(m.precisione)}), di cui ${c.tardive} tardive, ${m.mancate.totale} mancate su ${su} (${percento(m.mancanza)})`
 }
 
 // — i moduli, caricati quando servono —
@@ -249,11 +261,25 @@ export function leggiArgomenti(argv: string[]): Argomenti {
 /** La cartella vera di Myynd, che la riga di comando non deve mai aprire. */
 export const CARTELLA_VERA = () => join(userInfo().homedir, '.myynd')
 
-/** `--dati` è la cartella vera, o sta dentro? Allora ci si ferma, prima di aprire qualunque cosa. */
+/**
+ * `a` è `b`, o sta dentro? Con il separatore: `/x/copia2` non sta in `/x/copia`.
+ * Sul Mac il disco non distingue le maiuscole, quindi nemmeno qui.
+ */
+export function dentroA(a: string, b: string): boolean {
+  const piega = (s: string) => process.platform === 'darwin' || process.platform === 'win32' ? s.toLowerCase() : s
+  const fra = relative(piega(resolve(b)), piega(resolve(a)))
+  return fra === '' || (!fra.startsWith('..') && !isAbsolute(fra))
+}
+
+/**
+ * `--dati` è la cartella vera, o sta dentro? Allora ci si ferma, prima di
+ * aprire qualunque cosa. Un collegamento simbolico verso la cartella vera si
+ * segue (`realpath` della copia, mai della cartella vera: quella non si tocca).
+ */
 export function eLaCartellaVera(dati: string): boolean {
-  const d = resolve(dati)
-  const vera = resolve(CARTELLA_VERA())
-  return d === vera || d.startsWith(vera + '/')
+  const vera = CARTELLA_VERA()
+  if (dentroA(dati, vera)) return true
+  try { return dentroA(realpathSync(dati), vera) } catch { return false }
 }
 
 const USO = `Uso: node server/misura-feed.ts --conto <email> --dati <copia> [--giorni 14] [--json]
@@ -266,7 +292,7 @@ const USO = `Uso: node server/misura-feed.ts --conto <email> --dati <copia> [--g
 export function tabella(m: Misura, en: boolean): string {
   const c = m.carte
   const r: string[] = []
-  r.push(en ? `Window: ${m.giorni} days, ${m.da.slice(0, 10)} to ${m.a.slice(0, 10)}` : `Finestra: ${m.giorni} giorni, dal ${m.da.slice(0, 10)} al ${m.a.slice(0, 10)}`)
+  r.push(en ? `Window: ${m.giorni} days, ${giornoDi(m.da)} to ${giornoDi(m.a)}` : `Finestra: ${m.giorni} giorni, dal ${giornoDi(m.da)} al ${giornoDi(m.a)}`)
   r.push(en ? `Cards born ${c.nate}, seen ${c.viste} (${c.storiche} from before the seen column)` : `Carte nate ${c.nate}, viste ${c.viste} (${c.storiche} di prima della colonna vista)`)
   r.push(en
     ? `  acted ${c.agite} · replied from mail ${c.fuori} · already done ${c.tardive} · kept ${c.tenute}`
@@ -318,7 +344,7 @@ async function main() {
     // la cartella del conto deve stare dentro la copia: conti.db copiato può
     // puntare ancora ai dati veri, e allora ci si ferma prima di leggere
     const dentro = chi.dentro(id, () => config.cartella())
-    if (!resolve(dentro).startsWith(resolve(a.dati))) throw new Error('La cartella del conto sta fuori da --dati: mi fermo, per non toccare i dati veri.')
+    if (!dentroA(dentro, a.dati)) throw new Error('La cartella del conto sta fuori da --dati: mi fermo, per non toccare i dati veri.')
     const adesso = Date.now()
     const dal = new Date(adesso - a.giorni * GIORNO).toISOString()
     // senza Jev, senza modello, senza scrivere: le mancate si contano e basta

@@ -2077,7 +2077,8 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const esami = esameDi(leggibili.map(d => d.id))
   const daMandare = leggibili.filter(d => {
     const e = esami.get(d.id)
-    if (!e || e.fase !== 'modello' || arrivati.has(d.id)) return true
+    // «modello» e «verifica»: letto, e senza una carta che regga; costa rimandarlo
+    if (!e || (e.fase !== 'modello' && e.fase !== 'verifica') || arrivati.has(d.id)) return true
     const quando = Date.parse(e.quando)
     if (!Number.isFinite(quando) || quando < adesso - 24 * 3_600_000) return true
     const indicizzato = (d as Documento & { indicizzato?: string }).indicizzato ?? ''
@@ -2125,7 +2126,9 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
   const docs = ordinati.slice(0, DOCS_PER_LETTURA)
   for (const d of ordinati.slice(DOCS_PER_LETTURA)) finito(d, 'posti')
   if (!docs.length) { scriviEsame(); return [] }
-  for (const d of docs) finito(d, 'modello')
+  // «modello» si scrive solo quando la risposta è stata letta davvero (in
+  // `chiama`): un rifiuto o un JSON tronco non sono «il modello ha detto no»,
+  // e per un giorno intero nasconderebbero trenta documenti alla lettura dopo
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file
   const f = fuoco()
@@ -2264,6 +2267,8 @@ Scrivi in ${nellaLingua()}.`),
       const parsed = JSON.parse(estraiJSON(testo)).voci
       if (!Array.isArray(parsed)) return []
       const voci = parsed as VoceFeed[]
+      // letti davvero: da qui in poi «niente carta» vuol dire che il modello ha detto no
+      for (const d of docs) finito(d, 'modello')
       // Only exact source identifiers survive, including with providers that
       // ignore JSON schema. A plausible title is not a document identifier.
       const veri = new Map(docs.map(d => [d.id, d]))

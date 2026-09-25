@@ -6,7 +6,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -131,7 +131,20 @@ test('la riga del registro, con «n.d.» dove il numero non si dice', () => {
   store.azzeraTutto()
   semina([{ id: 'a1', stato: 'fatto', ragione: 'lui', vista: fa(3), quando: fa(4), risposto: fa(3) }])
   const m = misuraFeed.misura(14, ADESSO)
-  assert.equal(misuraFeed.rigaDelRegistro(m), 'myynd · misura · 14 giorni: 1 viste, 1 giuste o tenute (n.d.), 0 tardive, 0 mancate su 1 (n.d.)')
+  assert.equal(misuraFeed.rigaDelRegistro(m), 'myynd · misura · 14 giorni: 1 viste, 1 giuste o tenute su 1 (n.d.), di cui 0 tardive, 0 mancate su 1 (n.d.)')
+  // il conto e la percentuale sono la stessa frazione: 4 agite + 1 fuori + 1 tardiva + 1 tenuta su 8, con la tardiva dentro
+  store.azzeraTutto()
+  semina([
+    ...[1, 2, 3, 4].map(i => ({ id: `g${i}`, stato: 'fatto', ragione: 'lui', vista: fa(3), quando: fa(4), risposto: fa(3) })),
+    { id: 'f1', stato: 'fatto', ragione: 'fuori', vista: fa(3), quando: fa(4), risposto: fa(3) },
+    { id: 't1', stato: 'scartato', ragione: 'fatta', vista: fa(3), quando: fa(4), risposto: fa(3) },
+    { id: 'k1', stato: 'aperto', vista: fa(1), quando: fa(2) },
+    { id: 'v1', stato: 'scartato', ragione: 'vecchia', vista: fa(3), quando: fa(4), risposto: fa(3) },
+    { id: 'n1', stato: 'scaduto', ragione: 'tempo', vista: fa(3), quando: fa(6), risposto: fa(1) }
+  ])
+  const m2 = misuraFeed.misura(14, ADESSO)
+  assert.equal(m2.precisione, 7 / 9)
+  assert.equal(misuraFeed.rigaDelRegistro(m2), 'myynd · misura · 14 giorni: 9 viste, 7 giuste o tenute su 9 (78%), di cui 1 tardive, 0 mancate su 6 (n.d.)')
   assert.doesNotMatch(misuraFeed.rigaDelRegistro(m), /[—–]/)
   assert.doesNotMatch(misuraFeed.tabella(m, true), /[—–]/)
   assert.match(misuraFeed.tabella(m, false), /Precisione n\.d\./)
@@ -157,6 +170,33 @@ test('la cartella vera non si apre: uguale o dentro ~/.myynd', () => {
   assert.equal(misuraFeed.eLaCartellaVera(join(vera, 'utenti', 'x')), true)
   assert.equal(misuraFeed.eLaCartellaVera(vera + '-copia'), false)
   assert.equal(misuraFeed.eLaCartellaVera(CASA), false)
+  // sul Mac il disco non distingue le maiuscole: nemmeno la guardia
+  if (process.platform === 'darwin') {
+    assert.equal(misuraFeed.eLaCartellaVera(vera.replace('.myynd', '.MYYND')), true)
+    assert.equal(misuraFeed.eLaCartellaVera(join(vera, 'Utenti', 'x')), true)
+  }
+  // un collegamento simbolico verso la cartella vera si segue
+  const finta = join(CASA, 'vera-finta'); mkdirSync(finta, { recursive: true })
+  const collegamento = join(CASA, 'collegamento'); symlinkSync(finta, collegamento)
+  assert.equal(misuraFeed.dentroA(realpathSync(collegamento), realpathSync(finta)), true)
+  assert.equal(misuraFeed.dentroA(collegamento, realpathSync(finta)), false, 'senza seguirlo il nome non basta')
+  // e «dentro» vuole il separatore: /x/copia2 non sta in /x/copia
+  assert.equal(misuraFeed.dentroA('/x/copia2', '/x/copia'), false)
+  assert.equal(misuraFeed.dentroA('/x/copia/utenti/a', '/x/copia'), true)
+  assert.equal(misuraFeed.dentroA('/x/copia', '/x/copia'), true)
+  assert.equal(misuraFeed.dentroA('/x', '/x/copia'), false)
+})
+
+test('i giorni della misura sono quelli di chi guarda, non UTC', () => {
+  // le 22:49 di giovedì 24 a Roma sono le 20:49Z: il giorno resta il 24. Qui si prova con il fuso della macchina.
+  const sera = new Date(2026, 8, 24, 23, 30)
+  assert.equal(misuraFeed.giornoDi(sera.toISOString()), '2026-09-24')
+  assert.equal(misuraFeed.giornoDi('boh'), 'boh')
+  store.azzeraTutto()
+  semina([{ id: 'z1', stato: 'aperto', vista: sera.toISOString(), quando: sera.toISOString() }])
+  const m = misuraFeed.misura(14, new Date(2026, 8, 25, 1, 0).getTime())
+  assert.equal(m.perGiorno.find(g => g.nate === 1)?.giorno, '2026-09-24')
+  assert.match(misuraFeed.tabella(m, true), /Window: 14 days, \d{4}-\d{2}-\d{2} to 2026-09-25/)
 })
 
 test('la riga di comando si rifiuta senza --dati, con --jev, e con la cartella del conto fuori da --dati; senza rete', () => {

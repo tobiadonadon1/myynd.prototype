@@ -125,7 +125,7 @@ function risposte(dal: string, adesso: number, su: 'quando' | 'indicizzato', sca
   const fine = new Date(adesso).toISOString()
   const inviate = db.prepare(`
     SELECT ${CAMPI} FROM documenti WHERE inviato = 1 AND fonte IN (${EMAIL.map(() => '?').join(',')})
-      AND ${su} >= ? AND quando <= ? ORDER BY quando
+      AND ${su} > ? AND quando <= ? ORDER BY quando
   `).all(...EMAIL, dal, fine) as unknown as Doc[]
   const fuori: Mancata[] = []
   const adessoIso = new Date(adesso).toISOString()
@@ -188,7 +188,7 @@ const DOMANDA_JEV = {
 async function compiti(dal: string, adesso: number, opz: { jev: boolean; limiteJev: number }, scartati: { indirizzi: string[] }): Promise<Mancata[]> {
   const righe = db.prepare(`
     SELECT id, testo, creato, sparito, progetto FROM compiti
-    WHERE origine IN ('mano', 'chat') AND doc IS NULL AND voce IS NULL AND creato >= ? AND creato <= ?
+    WHERE origine IN ('mano', 'chat') AND doc IS NULL AND voce IS NULL AND creato > ? AND creato <= ?
     ORDER BY creato
   `).all(dal, new Date(adesso).toISOString()) as Compito[]
   const fuori: Mancata[] = []
@@ -308,15 +308,31 @@ function scriviSegnalibro(ultimo: string) {
 }
 
 /**
+ * L'ultima cosa che un giro può aver guardato: il documento indicizzato più
+ * di recente, o la riga scritta più di recente. È quello che si scrive nel
+ * segnalibro, e non l'ora del giro: scrivendo l'ora, in una notte senza posta
+ * il segnalibro era «più avanti dell'ultimo documento», quindi storto, e ogni
+ * mezz'ora si rileggevano quattordici giorni e si rifacevano a Jev le stesse
+ * venti domande.
+ */
+function ultimoGuardabile(adesso: number): string | null {
+  const docs = (db.prepare('SELECT MAX(indicizzato) AS m FROM documenti').get() as { m: string | null } | undefined)?.m ?? null
+  const righe = (db.prepare('SELECT MAX(creato) AS m FROM compiti').get() as { m: string | null } | undefined)?.m ?? null
+  const max = [docs, righe].filter((x): x is string => !!x && Number.isFinite(Date.parse(x))).sort().at(-1) ?? null
+  if (!max) return null
+  return Date.parse(max) > adesso ? new Date(adesso).toISOString() : max
+}
+
+/**
  * Da dove si riparte: il segnalibro, o quattordici giorni fa la prima volta.
- * Un segnalibro più avanti dell'ultimo documento indicizzato è storto (un
- * indice rifatto, un orologio andato avanti): si riparte da quattordici giorni.
+ * Un segnalibro più avanti dell'ultima cosa guardabile è storto (un indice
+ * rifatto, un orologio andato avanti): si riparte da quattordici giorni.
  */
 export function daDove(adesso = Date.now()): string {
   const primaVolta = new Date(adesso - GIORNI_PRIMA_VOLTA * GIORNO).toISOString()
   const ultimo = leggiSegnalibro()
   if (!ultimo || !Number.isFinite(Date.parse(ultimo))) return primaVolta
-  const max = (db.prepare('SELECT MAX(indicizzato) AS m FROM documenti').get() as { m: string | null } | undefined)?.m ?? null
+  const max = ultimoGuardabile(adesso)
   if (max && ultimo > max) return primaVolta
   return ultimo
 }
@@ -330,7 +346,10 @@ export async function forse(adesso = Date.now()): Promise<number> {
   const dal = daDove(adesso)
   const { mancate } = await trova({ dal, adesso, jev: true, su: 'indicizzato' })
   const { nuove, risposte: a, compiti: b } = registraContando(mancate)
-  scriviSegnalibro(new Date(adesso).toISOString())
+  // il segnalibro è l'ultima cosa guardata, non l'ora: così un giro senza
+  // niente di nuovo riparte da lì, e non da quattordici giorni fa
+  const guardato = ultimoGuardabile(adesso)
+  scriviSegnalibro(guardato && guardato > dal ? guardato : dal)
   if (nuove) console.log(`myynd · mancate · ${nuove} nuove (${a} risposte, ${b} compiti)`)
   return nuove
 }
