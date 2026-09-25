@@ -5,7 +5,8 @@ import { Sfondo } from './Sfondo'
 import { Cestino, Hov, daTastiera, taglia, useAttiva, useLarghezza } from './ui'
 import {
   IconAiuto, IconCerca, IconChat, IconFulmine, IconIngranaggio,
-  IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
+  IconMappa, IconMemoria, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
+import { useTastiMenu } from './components/MenuGiu'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
 import { ResocontoAperto } from './components/Resoconto'
@@ -373,6 +374,10 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
    * portano dove porterebbe la voce corrispondente della colonna. `v` si rifà a
    * ogni disegno, e ci si iscrive una volta sola: il riferimento tiene l'ultimo.
    */
+  // il menù del conto (P5): i tasti di un menù vero, e il fuoco che torna al bottone
+  const menuConto = useRef<HTMLDivElement>(null)
+  const bottoneConto = useRef<HTMLButtonElement>(null)
+  useTastiMenu(menuConto, { chiudi: v.chiudiMenu, ritorno: bottoneConto, aperto: v.menuOpen })
   const vRef = useRef(v)
   vRef.current = v
   useEffect(() => desktop()?.naviga(dove => {
@@ -530,19 +535,25 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
               dalla colonna e si allarga verso destra — le voci del menù le parole
               ce le hanno anche quando la navigazione non le ha. */}
           {v.menuOpen && (
-            <div style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(var(--carta-rgb),.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(var(--luce-rgb),.85)', boxShadow: '0 22px 50px rgba(var(--ombra-rgb),.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
-              <a href="#" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
-              <a href="#" onClick={v.goMemoria} style={v.menuMemoria}><IconSpunta size={15} style={{ flex: 'none' }} />{t('Memoria')}</a>
-              <a href="#" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>
-              <a href="#" onClick={v.goConn} style={v.menuConn}>
+            <div ref={menuConto} role="menu" aria-label={t('Il tuo conto')} style={{ position: 'absolute', left: rail ? 0 : -3, right: rail ? 'auto' : -3, width: rail ? 200 : 'auto', bottom: 54, borderRadius: 16, background: 'rgba(var(--carta-rgb),.92)', backdropFilter: 'blur(30px) saturate(1.5)', WebkitBackdropFilter: 'blur(30px) saturate(1.5)', border: '1px solid rgba(var(--luce-rgb),.85)', boxShadow: '0 22px 50px rgba(var(--ombra-rgb),.22)', padding: 5, zIndex: 5, animation: 'fadein .18s ease' }}>
+              <a href="#" role="menuitem" onClick={v.goPref} style={v.menuPref}><IconIngranaggio style={{ flex: 'none' }} />{t('Preferenze')}</a>
+              {/* il punto di rame: cose nuove da guardare nate dopo l'ultima visita; solo qui, mai sul bottone del conto */}
+              <a href="#" role="menuitem" onClick={v.goMemoria} style={v.menuMemoria}
+                aria-label={v.memoriaNuove.quante > 0 ? t('Memoria, cose nuove da guardare') : undefined}>
+                <IconMemoria size={15} style={{ flex: 'none' }} />
+                <span style={{ flex: 1 }}>{t('Memoria')}</span>
+                {v.memoriaNuove.quante > 0 && <span aria-hidden="true" style={{ width: 6, height: 6, flex: 'none', borderRadius: '50%', background: v.isMemoria ? 'var(--avorio)' : 'var(--rame)' }} />}
+              </a>
+              <a href="#" role="menuitem" onClick={v.goMappa} style={v.menuMappa}><IconMappa style={{ flex: 'none' }} />{t('Mappa')}</a>
+              <a href="#" role="menuitem" onClick={v.goConn} style={v.menuConn}>
                 <IconSpina style={{ flex: 'none' }} />
                 <span style={{ flex: 1 }}>{t('Fonti')}</span>
                 {/* le tessere collegate della pagina delle Fonti, teste comprese: è quella pagina che apre */}
                 <span style={{ fontSize: 12, opacity: 0.7 }}>{v.connAttivi.length}</span>
               </a>
-              {!desktop() && <a href="#" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}
+              {!desktop() && <a href="#" role="menuitem" onClick={v.goAiuto} style={v.menuAiuto}><IconAiuto style={{ flex: 'none' }} />{t('Aiuto')}</a>}
               <div style={{ height: 1, background: 'rgba(var(--inchiostro-rgb),.1)', margin: '5px 8px' }} />
-              <Hov as="a" href="#"
+              <Hov as="a" href="#" role="menuitem"
                 onClick={(e: React.MouseEvent) => { e.preventDefault(); esci() }}
                 style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 12, fontSize: '13.5px', cursor: 'pointer', color: 'rgba(var(--inchiostro-rgb),.7)' }}
                 hover={{ color: 'var(--rame-testo)', background: 'rgba(var(--rame-rgb),.1)' }}>
@@ -551,10 +562,10 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
           )}
           {/* un bottone, non un div: dietro ci stanno Preferenze, Memoria, le fonti e
               «Esci», e da tastiera un div non si raggiunge */}
-          <Hov as="button" type="button" onClick={v.toggleMenu} aria-haspopup="menu" aria-label={t('Il tuo conto')}
+          <Hov as="button" type="button" ref={bottoneConto} onClick={v.toggleMenu} aria-haspopup="menu" aria-expanded={v.menuOpen} aria-label={t('Il tuo conto')}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 8px', borderRadius: 14, background: 'rgba(var(--luce-rgb),.42)', border: '1px solid rgba(var(--luce-rgb),.72)', cursor: 'pointer', width: '100%', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', textAlign: 'left' }}
             hover={{ background: 'rgba(var(--luce-rgb),.72)' }}>
-            <div style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', background: 'linear-gradient(140deg,var(--rame),#8FA593)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
+            <div style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', background: 'var(--gradiente-rame)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 500 }}>{v.iniziali}</div>
             {/* il punto sta con il ruolo, non da solo in fondo alla riga: un nome
                 lungo mandava a capo dopo il separatore, e restava lì appeso.
                 E una riga sola: il ruolo è la prima risposta dell'intervista,
@@ -607,7 +618,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
         {v.isAuto && <Automazioni v={v} />}
         {v.isMappa && <Mappa v={v} />}
         {v.isPref && <Preferenze v={v} />}
-        {v.isMemoria && <Memoria />}
+        {v.isMemoria && <Memoria v={v} />}
         {v.isConn && <Connettori v={v} />}
         {v.isAiuto && <Aiuto v={v} />}
       </div>

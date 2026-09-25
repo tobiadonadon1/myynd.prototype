@@ -96,7 +96,7 @@ export const CARTA: CSSProperties = {
 const BOTTONE: CSSProperties = {
   flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 8,
   padding: '11px 20px', borderRadius: 99, border: 'none',
-  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
+  background: 'var(--gradiente-rame)', color: 'var(--avorio)',
   fontSize: '13.5px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit'
 }
 

@@ -78,7 +78,7 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
         className={scuro ? 'scuro' : undefined}
         disabled={!v.claudeOn}
         style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : 'var(--inchiostro)' }} />
-      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(120,110,100,.35)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
+      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'var(--gradiente-rame)' : 'rgba(120,110,100,.35)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
         <IconSu size={14} />
       </button>
     </div>
@@ -142,12 +142,9 @@ export function Mappa({ v }: { v: Vals }) {
             border: '1px solid rgba(var(--inchiostro-rgb),.18)', background: 'rgba(var(--luce-rgb),.6)', color: 'var(--inchiostro)',
             fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
           hover={{ background: 'var(--carta-piena)', borderColor: 'rgba(var(--rame-rgb),.4)' }}>
-          {t('Le tue fonti')} <IconAvanti size={12} />
+          {t('Fonti')} <IconAvanti size={12} />
         </Hov>
       </div>
-      <p style={{ margin: '0 4px 16px', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', maxWidth: 760 }}>
-        {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
-      </p>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexDirection: stretta ? 'column' : 'row' }}>
         <div style={{ flex: 1, width: stretta ? '100%' : undefined, minWidth: 0, borderRadius: 20, background: '#1B1917', border: '1px solid rgba(var(--avorio-rgb),.14)', boxShadow: '0 30px 70px rgba(var(--ombra-rgb),.32)', overflow: 'hidden', position: 'relative' }}>
           <canvas ref={v.cvA} tabIndex={0} role="img" aria-label={t('Mappa dei documenti. Usa le frecce per selezionare un documento.')}
@@ -188,9 +185,6 @@ export function MappaPiena({ v }: { v: Vals }) {
         <div style={{ flex: 1 }} />
         <button onClick={v.resetView} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.34)', background: 'none', color: 'rgba(var(--luce-rgb),.85)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }}>{t('Rimetti a fuoco')}</button>
         <button onClick={v.closeMap} style={{ padding: '8px 15px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.55)', background: 'rgba(var(--luce-rgb),.14)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>{t('Chiudi')}</button>
-        <p style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'rgba(var(--avorio-rgb),.6)' }}>
-          {t('Materiale salvato dalle fonti, inclusi gli archivi. Le linee mostrano parole in comune. Le attività vengono selezionate in base alla rilevanza.')}
-        </p>
       </div>
       <div className="map-full-layout">
         <div className="map-full-canvas">

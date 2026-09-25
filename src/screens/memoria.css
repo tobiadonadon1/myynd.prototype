@@ -15,19 +15,11 @@
    Nessun colore che non distingua: le schede sono tutte uguali, e l'unica
    cosa colorata è il pallino del progetto, che serve a riconoscerlo. */
 
-.mem-page{width:980px;max-width:100%;box-sizing:border-box;padding:8px 4px 34px;color:var(--inchiostro)}
-.mem-header{padding:0 4px 4px}
-.mem-header h1{margin:0;font-size:34px;line-height:1.1;font-weight:400;letter-spacing:-.03em}
-.mem-header p{margin:9px 0 0;font-size:13px;line-height:1.55;color:var(--inchiostro-2);text-wrap:pretty}
-
 .mem-section{margin-top:26px}
 .mem-section-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 4px 12px}
 .mem-section-head h2{margin:0;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.68)}
 .mem-conta{font-size:12px;color:var(--inchiostro-2);font-variant-numeric:tabular-nums}
 .mem-stato{font-size:12px;line-height:1.5;color:var(--inchiostro-2);text-wrap:pretty;min-width:0}
-.mem-azione{margin-left:auto;flex:none;border:0;background:none;padding:0;font-family:inherit;font-size:12px;color:var(--rame-testo);cursor:pointer}
-.mem-azione:hover{color:var(--rame)}
-.mem-azione[disabled]{cursor:default;color:var(--inchiostro-3)}
 
 /* la griglia: tre colonne quando c'è posto, due sotto i mille, una sul telefono */
 /* niente `align-items:start`: le schede di una riga sono alte uguali, e il
@@ -50,7 +42,6 @@
 .mem-progetto{cursor:pointer;outline:2px solid transparent;outline-offset:4px;transition:border-color .16s,box-shadow .16s,background .16s,opacity .22s ease,outline-color .3s}
 .mem-progetto:hover{border-color:rgba(var(--inchiostro-rgb),.2);box-shadow:0 12px 26px -16px rgba(var(--ombra-rgb),.7)}
 .mem-progetto:focus-visible{outline-color:rgba(var(--rame-rgb),.55)}
-.mem-progetto[data-acceso]{outline-color:var(--rame)}
 .mem-progetto[data-chiuso]{opacity:.72}
 .mem-progetto[data-chiuso]:hover,.mem-progetto[data-chiuso]:focus-within{opacity:1}
 
@@ -59,9 +50,12 @@
 .mem-card-gesti{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:2px}
 .mem-card-obiettivo{display:flex;align-items:center;min-width:0;padding-left:31px}
 .mem-card-dentro{padding-left:31px;font-size:11.5px;line-height:1.4;color:rgba(var(--inchiostro-rgb),.62);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mem-card-piede{display:flex;align-items:center;gap:9px;min-width:0;margin-top:auto;padding-top:10px;border-top:1px solid rgba(var(--inchiostro-rgb),.07)}
+.mem-card-piede{display:flex;flex-wrap:wrap;align-items:center;gap:6px 9px;min-width:0;margin-top:auto;padding-top:10px;border-top:1px solid rgba(var(--inchiostro-rgb),.07)}
 .mem-card-piede.nudo{padding-top:2px;border-top:0}
-.mem-conto{flex:1;min-width:0;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* base fissa e non 0: sotto misura la fila del piede porta il conteggio su
+   una riga tutta sua (flex-wrap la sposta intera, mai a metà parola) invece
+   di tagliarlo con l'ellissi contro i tre bottoni dello stato */
+.mem-conto{flex:1 1 130px;min-width:130px;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mem-apri{flex:none;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--rame-testo);opacity:0;transition:opacity .15s}
 .mem-progetto:hover .mem-apri,.mem-progetto:focus-within .mem-apri{opacity:1}
 .mem-guaio{font-size:12px;line-height:1.5;color:var(--rame-testo);overflow-wrap:anywhere}
@@ -71,61 +65,17 @@
 
 /* Un ritratto, cinque righe espandibili: il colore e lo spessore del
    controllo rendono visibile che ogni riga si apre. */
-.mem-profile-card{gap:0;padding:2px 16px}
-.mem-profile-field{border-bottom:1px solid rgba(var(--inchiostro-rgb),.1)}
-.mem-profile-field:last-child{border-bottom:0}
-.mem-profile-field summary{display:flex;align-items:center;gap:11px;min-height:54px;padding:8px 2px;cursor:pointer;list-style:none}
-.mem-profile-field summary::-webkit-details-marker{display:none}
-.mem-profile-field summary:focus-visible{outline:2px solid var(--rame);outline-offset:3px;border-radius:8px}
-.mem-disclosure{display:grid;place-items:center;flex:none;width:25px;height:25px;border:2px solid rgba(var(--rame-rgb),.7);border-radius:50%;color:var(--rame-testo);transition:transform .18s,background .18s}
-.mem-profile-field[open] .mem-disclosure{transform:rotate(180deg);background:rgba(var(--rame-rgb),.12)}
-.mem-profile-heading{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
-.mem-profile-heading strong{font-size:13.5px;font-weight:550;line-height:1.35;color:var(--inchiostro)}
-.mem-profile-heading>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;line-height:1.4;color:rgba(var(--inchiostro-rgb),.68)}
-.mem-profile-body{padding:0 2px 14px 38px;display:flex;flex-direction:column;gap:8px}
 
 /* I file prodotti non spariscono dalla storia quando vengono cancellati: la
    riga resta, grigia, e dice perché non si può più aprire. */
-.mem-documents-card{padding:4px 16px;gap:0}
-.mem-document-row{display:flex;align-items:center;gap:18px;min-height:54px;padding:8px 2px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.1);outline:none}
-.mem-document-row:last-of-type{border-bottom:0}
-.mem-document-row[role=button]{cursor:pointer}
-.mem-document-row[role=button]:hover .mem-document-main strong{color:var(--rame-testo)}
-.mem-document-row[role=button]:focus-visible{outline:2px solid var(--rame);outline-offset:2px;border-radius:8px}
-.mem-document-row[data-missing]{opacity:.58}
-.mem-document-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
-.mem-document-main strong{font-size:13.5px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mem-document-main span,.mem-document-status{font-size:11.5px;line-height:1.4;color:rgba(var(--inchiostro-rgb),.65)}
-.mem-document-status{flex:none;max-width:170px;text-align:right}
 
 /* la scheda che non c'è ancora: un nome, dove punta, e Invio */
-.mem-nuovo{border-style:dashed;border-color:rgba(var(--inchiostro-rgb),.2);background:rgba(var(--luce-rgb),.34);box-shadow:none;gap:9px}
-.mem-nuovo:hover,.mem-nuovo:focus-within{border-color:rgba(var(--rame-rgb),.42);background:rgba(var(--luce-rgb),.5)}
-.mem-etichetta{font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.55)}
-.mem-nuovo-piede{display:flex;align-items:center;justify-content:flex-end}
 
 /* — il campo di testo, uno solo per tutta l'app: quello della barra — */
-.mem-campo{width:100%;box-sizing:border-box;padding:10px 14px;border-radius:14px;
-  border:1px solid rgba(var(--luce-rgb),.9);background:rgba(var(--carta-rgb),.86);
-  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
-  color:var(--inchiostro);font-family:inherit;font-size:13.5px;line-height:1.55;outline:none;
-  box-shadow:0 4px 16px rgba(var(--ombra-rgb),.05);transition:border-color .15s,box-shadow .15s}
-.mem-campo:focus{border-color:rgba(var(--inchiostro-rgb),.26);box-shadow:0 8px 26px rgba(var(--ombra-rgb),.1)}
-textarea.mem-campo{resize:vertical;min-height:62px}
-
-.mem-pill{flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:99px;border:0;
-  background:rgba(var(--rame-rgb),.16);color:var(--rame-testo);font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
-.mem-pill:hover{background:rgba(var(--rame-rgb),.26)}
-.mem-pill[disabled]{cursor:default;background:rgba(var(--rame-rgb),.12)}
-.mem-pieno{flex:none;padding:9px 18px;border-radius:99px;border:0;background:var(--gradiente-rame);color:var(--avorio);
-  font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
-.mem-pieno:hover{opacity:.92}
-.mem-pieno[disabled]{cursor:default;background:rgba(var(--inchiostro-rgb),.12);color:rgba(var(--inchiostro-rgb),.35)}
-.mem-quieto{flex:none;border:0;background:none;padding:0;font-family:inherit;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.65);cursor:pointer}
-.mem-quieto:hover{color:var(--rame-testo)}
 
 /* — quello che ha capito — */
-.mem-aggiungi{display:flex;gap:9px;align-items:center;margin:0 0 12px}
+.mem-aggiungi{display:flex;gap:9px;align-items:flex-end;margin-top:12px}
+.mem-aggiungi>.f-campo{flex:1}
 .mem-convinzione{gap:7px;padding-right:34px}
 .mem-enunciato{font-size:14px;line-height:1.5;color:var(--inchiostro);text-wrap:pretty;overflow-wrap:anywhere}
 .mem-convinzione[data-storica] .mem-enunciato{text-decoration:line-through}
@@ -135,18 +85,17 @@ textarea.mem-campo{resize:vertical;min-height:62px}
    leggeva come un elenco puntato */
 .mem-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.65);min-width:0}
 .mem-meta>span{overflow-wrap:anywhere}
-.mem-meta>span:not(.mem-genere):not(:last-of-type)::after{content:' ·';opacity:.6}
+
 .mem-perche{border:0;background:none;padding:0;font-family:inherit;font-size:11.5px;color:rgba(var(--inchiostro-rgb),.65);cursor:pointer;display:inline-flex;align-items:center;gap:4px}
 .mem-perche:hover{color:var(--rame-testo)}
 .mem-prova{margin-top:2px;padding:9px 12px;border-radius:11px;background:rgba(var(--inchiostro-rgb),.04);
   font-size:12.5px;line-height:1.6;color:rgba(var(--inchiostro-rgb),.7);overflow-wrap:anywhere}
 .mem-prova .mem-dedotta{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.45);margin-bottom:3px}
-.mem-genere{flex:none;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:5px}
+
 .mem-tieni{flex:none;align-self:flex-start;border:1px solid rgba(var(--inchiostro-rgb),.16);background:none;cursor:pointer;
   font-family:inherit;font-size:12px;color:var(--inchiostro);padding:4px 11px;border-radius:7px}
 .mem-tieni:hover{border-color:rgba(var(--inchiostro-rgb),.4)}
 
-.mem-vuoto{grid-column:1/-1;font-size:13.5px;line-height:1.6;color:rgba(var(--inchiostro-rgb),.55);text-wrap:pretty;padding:2px 4px}
 .mem-piega{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:0;cursor:pointer;font-family:inherit;text-align:left}
 .mem-piega span.freccia{display:flex;transition:transform .2s}
 
@@ -154,28 +103,15 @@ textarea.mem-campo{resize:vertical;min-height:62px}
    Il velo è quello dei documenti e della ricerca: stessa alfa, stessa
    sfocatura. Sopra ci sta un foglio che scorre per conto suo, alto al
    massimo quanto la finestra meno un respiro. */
-.mem-velo{position:fixed;inset:0;z-index:48;background:rgba(40,30,22,.4);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
-.mem-finestra{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:620px;max-width:86vw;max-height:calc(100vh - 96px);z-index:49;
-  display:flex;flex-direction:column;border-radius:20px;overflow:hidden;
-  background:var(--carta-piena);border:1px solid rgba(var(--luce-rgb),.9);box-shadow:0 40px 90px rgba(var(--ombra-rgb),.34);
-  animation:editoresu .16s cubic-bezier(.16,1,.3,1)}
-.mem-finestra-cima{display:flex;align-items:center;gap:10px;flex:none;padding:15px 16px 13px 19px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.08)}
-.mem-finestra-cima strong{flex:1;min-width:0;font-size:15px;font-weight:500;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mem-finestra-cima .mem-obiettivo{flex:none;max-width:40%;font-size:12px;color:var(--inchiostro-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mem-chiudi{flex:none;border:1px solid rgba(var(--inchiostro-rgb),.16);background:none;border-radius:99px;padding:5px 13px;
-  font-family:inherit;font-size:12px;color:rgba(var(--inchiostro-rgb),.65);cursor:pointer}
-.mem-chiudi:hover{border-color:rgba(var(--rame-rgb),.45);color:var(--rame-testo)}
-.mem-finestra-corpo{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:2px 22px 22px}
 
-@media(max-width:1080px){.mem-page{width:760px}}
 @media(max-width:650px){
-  .mem-header h1{font-size:30px}
+  
   .mem-grid,.mem-grid.fitta{grid-template-columns:minmax(0,1fr)}
-  .mem-finestra{max-height:calc(100vh - 48px);max-width:94vw}
-  .mem-finestra-corpo{padding:2px 15px 18px}
-  .mem-profile-body{padding-left:2px}.mem-document-row{align-items:flex-start;flex-direction:column;gap:4px}.mem-document-status{text-align:left}
+  
+  
+  
 }
-@media(prefers-reduced-motion:reduce){.mem-card,.mem-apri,.mem-campo{transition:none}.mem-finestra{animation:none}}
+@media(prefers-reduced-motion:reduce){.mem-card,.mem-apri{transition:none}}
 
 /* — Come lavori (P1B): le righe osservate, le affermazioni, il punteggio — */
 /* l'anello sta nel margine, sei pixel fuori dalle schede, non sui loro bordi */
@@ -221,3 +157,26 @@ textarea.mem-campo{resize:vertical;min-height:62px}
 .cl-esempio button{flex:none;border:0;background:none;padding:0;font-family:inherit;font-size:11.5px;color:var(--rame-testo);cursor:pointer}
 .cl-altre{border:0;background:none;padding:6px 4px;font-family:inherit;font-size:12.5px;color:var(--inchiostro-2);cursor:pointer}
 .cl-altre:hover{color:var(--rame-testo)}
+
+/* — P5: la Memoria a sezioni —
+   Dentro una sezione i gruppi hanno un titoletto (non un altro titolo di
+   sezione); «Da guardare» è di rame perché aspetta lui. */
+.mem-blocco{margin-top:18px}
+.mem-titoletto{margin:0 4px 10px;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.68)}
+.mem-titoletto.rame{color:var(--rame-testo)}
+.mem-documenti{display:flex;flex-direction:column}
+.mem-documento{display:flex;align-items:center;gap:10px;min-width:0;border-top:1px solid rgba(var(--inchiostro-rgb),.08)}
+.mem-documento:first-child{border-top:0}
+.mem-documento-apri{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 4px;border:0;background:none;text-align:left;font-family:inherit;color:var(--inchiostro);cursor:pointer;border-radius:10px}
+.mem-documento-apri strong{max-width:100%;font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mem-documento-apri span{max-width:100%;font-size:12px;color:var(--inchiostro-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.mem-documento-apri:hover strong{color:var(--rame-testo)}
+button.mem-documento-apri:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--rame-rgb),.35)}
+.mem-documento[data-missing] .mem-documento-apri{cursor:default}
+.mem-documento[data-missing] strong{color:var(--inchiostro-2)}
+.mem-finder{opacity:0;transition:opacity .15s}
+.mem-documento:hover .mem-finder,.mem-documento:focus-within .mem-finder{opacity:1}
+/* «Come lavori» ha il suo titolo: dentro il pannello il titolo è già quello della sezione */
+.f-pannello>.cl-section{margin-top:11px}
+.f-pannello>.cl-section>.mem-section-head>h2{display:none}
+@media(prefers-reduced-motion:reduce){.mem-finder{transition:none}}

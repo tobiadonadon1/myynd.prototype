@@ -135,7 +135,7 @@ export function Toast({ v }: { v: Vals }) {
   return createPortal(
     // una notizia che compare da sola va anche letta da sola, senza rubare il fuoco
     <div role="status" aria-live="polite" style={{ position: 'fixed', top: 22, right: 26, zIndex: 62, color: 'var(--inchiostro)', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 16, background: 'rgba(var(--carta-rgb),.94)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(var(--luce-rgb),.9)', boxShadow: '0 26px 60px rgba(var(--ombra-rgb),.26)', animation: 'toastin .3s ease', maxWidth: 340 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', flex: 'none' }} />
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--gradiente-rame)', flex: 'none' }} />
       <span style={{ fontSize: '13.5px', lineHeight: 1.45, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{v.toastText}</span>
       {v.toastUndo && (
         <button onClick={v.undo} style={{ border: 'none', background: 'none', color: 'var(--verde-cupo)', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', flex: 'none' }}>{frasi.annullaGesto()}</button>

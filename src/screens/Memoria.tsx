@@ -1,297 +1,78 @@
-// Quello che Myynd sa di te — e che devi poter correggere.
+// Quello che Myynd sa di te, e che devi poter correggere.
 //
-// Il server questa roba la teneva da sempre: cinque blocchi da riempire, le
-// convinzioni con il loro genere e la loro fiducia, la storia di quelle che non
-// valgono più. Quattro rotte, funzionanti, con zero chiamanti. Nessuno poteva
-// vedere niente di tutto questo, e i cinque blocchi — «come decido», «cosa
-// controllo», «come scrivo» — restavano vuoti per sempre perché non c'era
-// nessun posto dove scriverli.
+// «I think the thing that is confusing is the settings and all of the
+// memory.» (P5) La Memoria ha adesso la stessa forma delle Preferenze: a
+// sinistra quattro sezioni con la loro nota di stato, a destra le schede.
 //
-// Il commento sulla rotta, nel server, spiegava già perché è un problema:
-// «un gemello che tiene convinzioni su di te che non puoi vedere né correggere
-// non è uno strumento, e nessuno gli consegna la propria posta».
+//   · Progetti: prima «Le tue parole», la riga che Myynd legge per prima;
+//     poi le schede dei progetti, e quella per farne uno nuovo.
+//   · Come lavori: le righe contate di P1B, com'erano.
+//   · Il tuo ritratto: quello che aspetta di essere guardato, le cinque
+//     risposte, quello che sa, quello che pensava prima.
+//   · Cosa ha fatto Myynd: i documenti consegnati, un clic per aprirli.
 //
-// Due scelte di questa schermata, che vengono da lì:
-//
-//   · il genere di ogni convinzione si vede. Esplicita vuol dire «me l'hai
-//     detto», indotta vuol dire «l'ho notato io»: sono cose diversissime e
-//     confonderle è il modo in cui un assistente comincia a inventarti.
-//   · niente si cancella davvero: quello che non vale più prende una data di
-//     fine e scende in fondo, dove si può ancora leggere.
-//
-// La forma, dal 21 settembre 2026. Era una colonna di elenchi dentro tre
-// riquadroni, e la sua frase era «especially the memory. It's difficult».
-// Adesso ogni cosa è una scheda della stessa griglia: i progetti, le cinque
-// domande su come lavori, le convinzioni. Una scheda si legge da lontano, si
-// corregge dove è scritta, e quello che si tocca una volta al mese sta in una
-// finestra che si apre cliccandola.
+// Due scelte vengono da prima e restano: da dove viene una convinzione si
+// vede (una parola neutra), e niente si cancella senza dirlo: quello che non
+// vale più prende una data di fine e scende in «Prima pensava».
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  api, type Blocco, type CambioProgetto, type Compito, type Convinzione, type DocumentoProdotto, type Memoria as Dati, type Progetto
+  api, memoriaP5, type Blocco, type CambioProgetto, type Compito, type Convinzione, type DocumentoProdotto,
+  type Memoria as Dati, type Progetto, type Sommario
 } from '../api'
 import { frasi, t, loc } from '../lingua'
 import { DOMANDE } from '../data'
-import { Cestino, useAttiva } from '../ui'
 import { IconGiu } from '../icons'
-import { Glifo } from '../components/Stato'
-import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso } from '../vals'
-import { SchedaProgetto, Tic } from './ProgettoEditor'
+import { desktop } from '../desktop'
+import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso, type Vals } from '../vals'
+import { SchedaProgetto } from './ProgettoEditor'
 import { ComeLavori } from './ComeLavori'
 import { CosaHaFatto } from './CosaHaFatto'
+import { RigaConvinzione, inAttesa } from './RigaConvinzione'
+import { Bottone, Campo, Carta, Casella } from '../components/forme'
+import { PaginaASezioni, sezioneRicordata } from '../components/PaginaASezioni'
+import { sezioneAttesa, sezioneIniziale, sezioniMemoria, type SezioneMem } from '../sezioni.ts'
 import './memoria.css'
 
-/** Quanto pesa una convinzione, detto a parole invece che con un numero. */
-function quanto(f: number): string {
-  return f >= 0.8 ? t('certo') : f >= 0.5 ? t('probabile') : t('da confermare')
+const detto = (e: unknown) => (e instanceof Error ? t(e.message) : String(e))
+const giorno = (iso: string) => new Date(iso).toLocaleDateString(loc(), { day: 'numeric', month: 'short' })
+
+/** Il segno che lascia la riga di ieri (P1B) per atterrare su «Come lavori»: si guarda, lo consuma ComeLavori. */
+function vaiComeLavori(): string | null {
+  try { return sessionStorage.getItem('myynd:vai') === 'come-lavori' ? 'come-lavori' : null } catch { return null }
 }
 
-/** Da dove viene: esplicita è tua, indotta è sua. Non è la stessa cosa. */
-const COLORE_GENERE: Record<string, { testo: string; fondo: string }> = {
-  esplicita: { testo: 'var(--verde-cupo)', fondo: 'rgba(var(--salvia-rgb),.18)' },
-  dedotta: { testo: 'var(--rame-testo)', fondo: 'rgba(var(--rame-rgb),.2)' },
-  indotta: { testo: 'var(--rame-testo)', fondo: 'rgba(var(--rame-rgb),.14)' }
-}
-
-function Etichetta({ genere }: { genere: string }) {
-  const c = COLORE_GENERE[genere] ?? COLORE_GENERE.indotta
-  return <span className="mem-genere" style={{ color: c.testo, background: c.fondo }}>{t(genere)}</span>
-}
-
-/** Il titolo di una sezione: la parola, il conto, e al massimo un'azione. */
-function Testata({ titolo, conto, stato, children }: {
-  titolo: string
-  conto?: string
-  /** Una riga che dice come sta la sezione adesso. Mai una che spieghi. */
-  stato?: string
-  children?: React.ReactNode
-}) {
-  return (
-    <div className="mem-section-head">
-      <h2>{titolo}</h2>
-      {conto !== undefined && <span className="mem-conta">{conto}</span>}
-      {stato && <span className="mem-stato">{stato}</span>}
-      {children}
-    </div>
-  )
-}
+/** I conti già tradotti in questa sessione: cambiare sezione non rifà la traduzione. */
+const tradotti = new Set<string>()
 
 /**
- * Una scheda di «come lavori»: una domanda su di te, e la tua risposta.
- *
- * Il tetto di caratteri non è una scortesia: è quello che costringe a
- * consolidare invece di accumulare. Un ritratto che cresce senza limite smette
- * di essere un ritratto e diventa un archivio, e il modello lo legge come
- * rumore. Il contatore compare solo quando manca poco, e si accende in rame
- * prima del limite, non dopo.
- *
- * Non c'è nessun bottone «Salva»: si salva lasciando il campo, o con ⌘Invio,
- * e una spunta piccola lo dice — la stessa regola dell'editor di un progetto.
+ * «Le tue parole»: su cosa lavori adesso, progetto per progetto, detto da te.
+ * È il testo che Myynd legge prima di scegliere. Un nome in testa a una riga
+ * che corrisponde a una cartella di lavoro diventa un progetto.
  */
-function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
-  const [testo, setTesto] = useState(b.valore)
-  const [fatto, setFatto] = useState(false)
-  const [riordino, setRiordino] = useState(false)
-  /** Com'era prima che la riordinasse: senza, «riordina» è un gesto senza ritorno. */
-  const [prima, setPrima] = useState<string | null>(null)
-  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => { setTesto(b.valore); setPrima(null) }, [b.valore])
-  useEffect(() => () => clearTimeout(orologio.current), [])
-
-  const riordina = async () => {
-    const grezzo = testo.trim()
-    if (!grezzo) return
-    setRiordino(true)
-    try {
-      const r = await api.riscriviBlocco(b.etichetta, grezzo)
-      if (r.testo && r.testo !== grezzo) { setPrima(grezzo); setTesto(r.testo) }
-    } catch { /* resta quello che avevi scritto: è già la cosa giusta */ }
-    setRiordino(false)
+function LeTueParole({ accendi }: { accendi: (nomi: string[]) => void }) {
+  const [r, setR] = useState<{ testo: string; aggiornato: string | null } | null>(null)
+  const [nati, setNati] = useState<string[]>([])
+  useEffect(() => { memoriaP5.riferimento().then(setR).catch(() => setR({ testo: '', aggiornato: null })) }, [])
+  const salva = async (testo: string) => {
+    const x = await memoriaP5.scriviRiferimento(testo)
+    setR({ testo: x.testo, aggiornato: x.aggiornato })
+    setNati(x.nuovi)
+    if (x.nuovi.length) { annunciaProgetti(); accendi(x.nuovi) }
   }
-
-  const cambiato = testo.trim() !== b.valore.trim()
-  const resta = b.tetto - testo.length
-
-  const salva = async () => {
-    if (!cambiato) return
-    try {
-      await api.scriviBlocco(b.etichetta, testo.slice(0, b.tetto))
-      setFatto(true)
-      clearTimeout(orologio.current)
-      orologio.current = setTimeout(() => setFatto(false), 2400)
-      salvato()
-    } catch { /* il valore vero lo dirà il ricarico */ }
-  }
-
+  const stato = nati.length ? frasi.nuoviProgetti(nati) : r?.aggiornato ? frasi.scritteIl(giorno(r.aggiornato)) : undefined
   return (
-    <details className="mem-profile-field">
-      <summary>
-        <span className="mem-disclosure"><IconGiu size={13} stroke="currentColor" /></span>
-        <span className="mem-profile-heading">
-          <strong>{t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}</strong>
-          {!!testo.trim() && <span>{testo}</span>}
-        </span>
-        <Tic mostra={fatto} />
-      </summary>
-      <div className="mem-profile-body">
-        {b.daMe && !cambiato && (
-          <div className="mem-stato">
-            {frasi.scrittoDaMe(new Date(b.daMe).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }))}
-          </div>
-        )}
-        <textarea
-          className="mem-campo"
-          value={testo}
-          onChange={e => setTesto(e.target.value.slice(0, b.tetto))}
-          onBlur={salva}
-          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) salva() }}
-          placeholder={t(DOMANDE[b.etichetta]?.esempio ?? 'Non gliel’hai ancora detto.')}
-          aria-label={t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)}
-          rows={testo.length > 140 ? 4 : 3} />
-        <div className="mem-card-piede nudo">
-          <span className="mem-conto">
-            {resta < 120 ? <span style={{ color: resta < 60 ? 'var(--rame-testo)' : undefined }}>{resta} {t('caratteri rimasti')}</span> : ''}
-          </span>
-          {prima !== null && (
-            <button type="button" className="mem-quieto" onClick={() => { setTesto(prima); setPrima(null) }}>
-              {t('Rimetti com’era')}
-            </button>
-          )}
-          {!!testo.trim() && (
-            <button type="button" className="mem-pill" onClick={riordina} disabled={riordino} aria-busy={riordino || undefined}>
-              <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
-              {riordino ? t('Riordino…') : t('Riordina')}
-            </button>
-          )}
-        </div>
-      </div>
-    </details>
+    <Carta titolo={t('Le tue parole')} id="parole" larga stato={stato}>
+      <Campo etichettaDa="carta-parole" righe={6} vuotoVietato limite={1500} valore={r?.testo ?? ''} salva={salva}
+        disabilitato={!r} esempio={t('Northwind: la revisione dell’app, poi il lancio. Harbor Labs: in pausa fino a ottobre.')} />
+    </Carta>
   )
 }
 
-/** Lo scaffale delle consegne: resta leggibile anche se il file è stato spostato. */
-function DocumentiProdotti({ documenti }: { documenti: DocumentoProdotto[] }) {
-  const [apro, setApro] = useState('')
-  const [guaio, setGuaio] = useState('')
-  const apri = async (d: DocumentoProdotto) => {
-    if (!d.disponibile || apro) return
-    setApro(d.id); setGuaio('')
-    try { await api.portami(d.id) }
-    catch (e) { setGuaio(e instanceof Error ? e.message : String(e)) }
-    finally { setApro('') }
-  }
-  return (
-    <section className="mem-section">
-      <Testata titolo={t('Documenti creati')} conto={String(documenti.length)} />
-      <div className="mem-card mem-documents-card">
-        {documenti.map(d => (
-          <div key={d.id} className="mem-document-row" data-missing={!d.disponibile ? '' : undefined}
-            role={d.disponibile ? 'button' : undefined} tabIndex={d.disponibile ? 0 : undefined}
-            onDoubleClick={() => apri(d)}
-            onKeyDown={e => { if (d.disponibile && e.key === 'Enter') void apri(d) }}>
-            <div className="mem-document-main">
-              <strong>{d.titolo}</strong>
-              <span>{[d.progetto, new Date(d.aggiornato).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })].filter(Boolean).join(' · ')}</span>
-            </div>
-            <span className="mem-document-status">
-              {!d.disponibile ? t('Non più rintracciabile') : apro === d.id ? t('Apro…') : t('Doppio clic per aprire')}
-            </span>
-          </div>
-        ))}
-        {!documenti.length && <div className="mem-vuoto">{t('Nessun documento creato finora.')}</div>}
-        {guaio && <div role="status" className="mem-guaio">{t(guaio)}</div>}
-      </div>
-    </section>
-  )
-}
-
-/**
- * Una convinzione che aspetta.
- *
- * *Indotta* vuol dire che nessuno gliel'ha detta: l'ha notata lui, da una
- * regolarità. Quelle non pesano su nessuna bozza finché una persona non le
- * guarda — è la regola scritta in `server/memoria.ts` — e questa schermata è
- * il posto dove si guardano. Si tengono con un dito, o si buttano con quello
- * che c'era già.
- */
-const inAttesa = (c: Convinzione) => c.genere === 'indotta' && !c.confermata
-
-function SchedaConvinzione({ c, scorda, tieni, storica }:
-  { c: Convinzione; scorda?: (id: string) => void; tieni?: (id: string) => void; storica?: boolean }) {
-  const { attiva, props } = useAttiva()
-  const [aperta, setAperta] = useState(false)
-  const haProva = !!(c.prova?.citazione || c.premesse?.length)
-  const aspetta = inAttesa(c) && !storica
-
-  return (
-    <div {...props} className="mem-card mem-convinzione" data-storica={storica ? '' : undefined}>
-      <div className="mem-enunciato">{c.enunciato}</div>
-      <div className="mem-meta">
-        <Etichetta genere={c.genere} />
-        {aspetta && <span style={{ color: 'var(--rame-testo)' }}>{t('non la sto usando')}</span>}
-        <span>{quanto(c.fiducia)}</span>
-        {c.ambito !== 'persona' && (
-          // «cliente:Nick» è come sta scritto nel database, non come si legge
-          <span>{c.ambito === 'azienda' ? t('azienda') : c.ambito.replace(/^(?:cliente|progetto):/, '')}</span>
-        )}
-        <span>{t('da')} {t(c.origine)}</span>
-        {storica && c.al && (
-          <span>{t('fino al')} {new Date(c.al).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-        )}
-        {haProva && (
-          <button type="button" className="mem-perche" onClick={() => setAperta(a => !a)} aria-expanded={aperta}>
-            {t('perché')}
-            <span style={{ display: 'flex', transform: aperta ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
-              <IconGiu size={9} stroke="currentColor" />
-            </span>
-          </button>
-        )}
-      </div>
-
-      {/* «tienila» non chiede conferma: è il gesto leggero dei due, e si può sempre scordare dopo */}
-      {aspetta && tieni && (
-        <button type="button" className="mem-tieni" onClick={() => tieni(c.id)}>{t('Tienila')}</button>
-      )}
-      {/* scordare chiede una volta: è la sua testa, ma è una cosa che non torna */}
-      {scorda && (
-        <span className="mem-card-gesti">
-          <Cestino fai={() => scorda(c.id)} titolo={t('Scordala')} visibile={attiva} />
-        </span>
-      )}
-
-      {aperta && (
-        <div className="mem-prova">
-          {c.prova?.citazione && <div style={{ fontStyle: 'italic' }}>«{c.prova.citazione}»</div>}
-          {c.premesse?.length ? (
-            <div style={{ marginTop: c.prova?.citazione ? 7 : 0 }}>
-              <div className="mem-dedotta">{t('dedotta da')}</div>
-              {c.premesse.map((p, i) => <div key={i}>— {p}</div>)}
-            </div>
-          ) : null}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * I progetti: su cosa lavora, e a cosa punta ciascuno.
- *
- * Stanno in cima alla Memoria, prima dei blocchi, perché sono la cosa che il
- * feed, la rassegna e il punto leggono *prima* di scegliere: un obiettivo
- * scritto in una riga vale più di trenta documenti.
- */
-function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
+/** I progetti: le schede, e quella per farne uno nuovo. Ogni gesto si vede subito e torna indietro se il server dice di no. */
+function Progetti({ daAccendere }: { daAccendere: string[] }) {
   const [progetti, setProgetti] = useState<Progetto[] | null>(null)
-  /**
-   * La scheda da portare sotto gli occhi, e quella accesa.
-   *
-   * Il biglietto lo lascia la prima pagina («Da il progetto H-Farm») e qui si
-   * legge quando la schermata si monta, o mentre è già aperta. Si strappa solo
-   * quando la scheda esiste davvero: prima dei progetti caricati non c'è niente
-   * su cui scorrere, e strapparlo lì vorrebbe dire arrivare in Memoria senza
-   * sapere quale progetto si era chiesto.
-   */
+  // il biglietto della prima pagina («Da il progetto H-Farm»): si strappa quando la scheda c'è davvero
   const [daMostrare, setDaMostrare] = useState<string | null>(progettoAtteso)
   const [acceso, setAcceso] = useState<string | null>(null)
   /** L'ordine della griglia com'era quando il puntatore ci è entrato, o null. */
@@ -300,15 +81,7 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
   const [obiettivo, setObiettivo] = useState('')
   const [guaio, setGuaio] = useState('')
   const [nasce, setNasce] = useState(false)
-  /** L'ultimo nato: la sua scheda prende il fuoco con il nome selezionato. */
   const [nato, setNato] = useState<string | null>(null)
-  /**
-   * Quante attività ha ciascuno.
-   *
-   * Una chiamata sola per tutta la lista, non una per scheda: il conto è una
-   * cosa che si legge di sfuggita, e non vale otto richieste. Se non arriva,
-   * la scheda semplicemente non lo dice.
-   */
   const [conti, setConti] = useState<Record<string, { aperte: number; fatte: number }>>({})
 
   const carica = useCallback(async () => {
@@ -326,57 +99,11 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
       setConti(m)
     } catch { /* la scheda non dice il conto, e basta */ }
   }, [])
-  useEffect(() => { carica() }, [carica])
+  useEffect(() => { void carica() }, [carica])
   useEffect(() => ascoltaProgetto(() => setDaMostrare(progettoAtteso())), [])
-  // la pagina di un progetto si apre sopra questa, e quello che vi si cambia
-  // (il nome, il colore, la priorità, un'unione) deve vedersi anche qui sotto
   const questaCopia = useRef({})
   useEffect(() => ascoltaProgetti(da => { if (da !== questaCopia.current) void carica() }), [carica])
-  useEffect(() => { dimmi((progetti ?? []).filter(p => p.stato === 'attivo').length) }, [progetti, dimmi])
-  useEffect(() => {
-    if (!daMostrare || !progetti?.length) return
-    const scheda = document.getElementById(`progetto-${daMostrare}`)
-    if (!scheda) return
-    scheda.scrollIntoView({ block: 'center' })
-    dimenticaProgetto()
-    // chi arriva qui con un biglietto è venuto per *questo* progetto: si apre
-    // la sua pagina, sopra, e la scheda resta accesa sotto
-    portaAlProgetto(daMostrare)
-    setDaMostrare(null)
-    setAcceso(daMostrare)
-    // un secondo e mezzo: il tempo di vedere quale scheda, non di doverla spegnere
-    const via = setTimeout(() => setAcceso(null), 1500)
-    return () => clearTimeout(via)
-  }, [daMostrare, progetti])
 
-  /**
-   * Cambia, e lascia passare il guaio.
-   *
-   * L'eccezione non si mangia qui: la scheda la prende e la scrive sotto al
-   * campo che l'ha causata. «Esiste già un progetto con questo nome» sotto la
-   * casella del nome è una risposta; la stessa riga in fondo alla schermata è
-   * un enigma.
-   */
-  const cambia = async (id: string, c: CambioProgetto) => {
-    // subito nella pagina, poi al server: se non passa, il ricarico dice il vero
-    setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
-    try { await api.cambiaProgetto(id, c); annunciaProgetti(questaCopia.current) } finally { await carica() }
-  }
-
-  const elimina = async (id: string) => {
-    try { await api.eliminaProgetto(id); annunciaProgetti(questaCopia.current) } finally { await carica() }
-  }
-
-  /*
-   * Un progetto nuovo: la scheda c'è nell'istante di Invio.
-   *
-   * Aspettava il server e poi un ricarico intero, e per quel mezzo secondo
-   * la griglia restava com'era: la prima persona da fuori che l'ha provato
-   * ha concluso che di progetti se ne potesse avere uno solo. Adesso la
-   * scheda nasce subito, con un id provvisorio; la risposta la sostituisce
-   * con quella vera, e il fuoco va sul nome. Se non passa, sparisce e le
-   * caselle tornano con dentro le sue parole.
-   */
   /** Una scheda che c'è già, portata sotto gli occhi con l'anello di rame per un attimo. */
   const mostraScheda = (id: string) => {
     requestAnimationFrame(() => document.getElementById(`progetto-${id}`)?.scrollIntoView({ block: 'center' }))
@@ -384,12 +111,41 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
     setTimeout(() => setAcceso(a => (a === id ? null : a)), 1500)
   }
 
+  useEffect(() => {
+    if (!daMostrare || !progetti?.length) return
+    if (!document.getElementById(`progetto-${daMostrare}`)) return
+    dimenticaProgetto()
+    // chi arriva con un biglietto è venuto per questo progetto: la sua pagina si apre sopra
+    portaAlProgetto(daMostrare)
+    setDaMostrare(null)
+    mostraScheda(daMostrare)
+  }, [daMostrare, progetti])
+
+  // i progetti appena nati dalle sue parole: il primo prende l'anello
+  useEffect(() => {
+    if (!daAccendere.length || !progetti) return
+    const primo = progetti.find(p => daAccendere.some(n => n.toLowerCase() === p.nome.toLowerCase()))
+    if (primo) mostraScheda(primo.id)
+  }, [daAccendere, progetti])
+
+  // subito nella pagina, poi al server: se non passa, torna com'era e la scheda lo dice
+  const cambia = async (id: string, c: CambioProgetto) => {
+    const prima = progetti
+    setProgetti(ps => ps ? ps.map(p => p.id === id ? { ...p, ...c } : p) : ps)
+    try { await api.cambiaProgetto(id, c); annunciaProgetti(questaCopia.current) }
+    catch (e) { setProgetti(prima); throw e }
+    finally { void carica() }
+  }
+
+  const elimina = async (id: string) => {
+    try { await api.eliminaProgetto(id); annunciaProgetti(questaCopia.current) } finally { await carica() }
+  }
+
+  // un progetto nuovo: la scheda c'è nell'istante di Invio, e sparisce se il server dice di no
   const aggiungi = async () => {
     const n = nome.trim()
     if (!n || nasce) return
     const o = obiettivo.trim()
-    // lo stesso nome è lo stesso progetto: se c'è già (e non è chiuso) non si
-    // finge di averne fatto uno, lo si dice e si indica il suo
     const noto = (progetti ?? []).find(p => p.nome.trim().toLowerCase() === n.toLowerCase())
     if (noto && noto.stato !== 'chiuso') { setGuaio(frasi.progettoEsiste(noto.nome)); mostraScheda(noto.id); return }
     const adesso = new Date().toISOString()
@@ -405,14 +161,10 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
       annunciaProgetti(questaCopia.current)
       await carica()
       if (r.esisteva) {
-        // c'era già, o era chiuso ed è stato riaperto (normale): si dice quale dei due
         setGuaio(r.riaperto ? frasi.progettoRiaperto(r.progetto.nome) : frasi.progettoEsiste(r.progetto.nome))
         mostraScheda(r.progetto.id)
         return
       }
-      // appena nato, il fuoco va sulla sua scheda con il nome già selezionato:
-      // è lì che si correggono il nome, l'obiettivo, lo stato e il colore, e
-      // mandarlo altrove vorrebbe dire fargli cercare le stesse cose due volte
       setNato(r.progetto.id)
     } catch (e) {
       setProgetti(ps => (ps ?? []).filter(p => p.id !== finto.id))
@@ -426,223 +178,272 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
   const inOrdine = tenuto ? [...(progetti ?? [])].sort((a, b) => posto(a.id) - posto(b.id)) : (progetti ?? [])
 
   return (
-    <section className="mem-section">
-      <Testata titolo={t('Progetti')} conto={progetti ? String(progetti.length) : undefined} />
-
-      {/* sotto il puntatore l'ordine sta fermo: la priorità o lo stato cambiati
-          riordinano la griglia quando il puntatore se ne va, non mentre si guarda */}
-      <div className="mem-grid" onMouseEnter={() => setTenuto((progetti ?? []).map(p => p.id))} onMouseLeave={() => setTenuto(null)}>
-        {inOrdine.map(p => (
-          <SchedaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} elimina={elimina}
-            apri={() => { if (!p.id.startsWith('nuovo-')) portaAlProgetto(p.id) }} acceso={acceso === p.id} conto={conti[p.id]} nato={nato === p.id} />
-        ))}
-
-        {/*
-          La scheda che non c'è ancora.
-
-          Due caselle, non undici: un progetto nasce da un nome e da dove punta,
-          e il colore, gli altri nomi e il progetto padre si scrivono dopo,
-          aprendolo. Sta nella griglia con le altre e non in cima alla pagina:
-          è una scheda in più, non un modulo.
-        */}
-        <div className="mem-card mem-nuovo">
-          <span className="mem-etichetta">{t('Nuovo progetto')}</span>
-          <input value={nome} onChange={e => setNome(e.target.value)} className="mem-campo"
-            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
-            placeholder={t('Il nome del progetto')} aria-label={t('Il nome del progetto')} />
-          <input value={obiettivo} onChange={e => setObiettivo(e.target.value.slice(0, 200))} className="mem-campo"
-            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
-            placeholder={t('A cosa punta, in una riga')} aria-label={t('Obiettivo')} />
-          {!!nome.trim() && (
-            <div className="mem-nuovo-piede">
-              <button type="button" className="mem-pieno" onClick={aggiungi} disabled={nasce} aria-busy={nasce || undefined}>
-                {nasce ? t('Aggiungo…') : t('Aggiungi')}
-              </button>
-            </div>
-          )}
-          {guaio && <div role="alert" className="mem-guaio">{t(guaio)}</div>}
-        </div>
-      </div>
-
-      {/* la confusione era proprio questa: un progetto senza un compito in corso
-          non è finito. Una riga sola, in fondo, per tutte le schede */}
-      <div className="mem-stato" style={{ margin: '11px 4px 0' }}>
-        {t('Un progetto senza attività resta attivo: chiudilo solo quando è finito.')}
-      </div>
-
-    </section>
+    // sotto il puntatore l'ordine sta fermo: la griglia si riordina quando il puntatore se ne va
+    <div className="mem-grid" data-scheda="progetti" style={{ marginTop: 11 }}
+      onMouseEnter={() => setTenuto((progetti ?? []).map(p => p.id))} onMouseLeave={() => setTenuto(null)}>
+      {inOrdine.map(p => (
+        <SchedaProgetto key={p.id} p={p} tutti={progetti ?? []} cambia={cambia} elimina={elimina}
+          apri={() => { if (!p.id.startsWith('nuovo-')) portaAlProgetto(p.id) }} acceso={acceso === p.id} conto={conti[p.id]} nato={nato === p.id} />
+      ))}
+      <Carta titolo={t('Nuovo progetto')} id="nuovo" stato={guaio ? t(guaio) : undefined} statoRame>
+        <Casella etichetta={t('Nome')} valore={nome} cambia={setNome} avanti esempio={t('Il rilancio del sito')} />
+        <Casella etichetta={t('Obiettivo')} valore={obiettivo} cambia={v => setObiettivo(v.slice(0, 200))} invio={aggiungi}
+          esempio={t('Vendere il primo prodotto')} />
+        {!!nome.trim() && (
+          <div className="f-piede"><div style={{ flex: 1 }} />
+            <Bottone tipo="pieno" piccolo onClick={aggiungi} occupato={nasce} etichettaOccupato={t('Aggiungo…')}>{t('Aggiungi')}</Bottone>
+          </div>
+        )}
+      </Carta>
+    </div>
   )
 }
 
-export function Memoria() {
+/**
+ * Una delle cinque domande su come lavori, e la tua risposta. Il tetto di
+ * caratteri costringe a consolidare invece di accumulare. «Riordina» scrive
+ * la versione in ordine, e «Rimetti com’era» la riporta indietro.
+ */
+function Risposta({ b, salvato }: { b: Blocco; salvato: () => void }) {
+  const [riordino, setRiordino] = useState(false)
+  const [prima, setPrima] = useState<string | null>(null)
+  const [guaio, setGuaio] = useState('')
+  const id = `domanda-${b.etichetta}`
+  const salva = async (testo: string) => { await api.scriviBlocco(b.etichetta, testo.slice(0, b.tetto)); salvato() }
+  const riordina = async () => {
+    const grezzo = b.valore.trim()
+    if (!grezzo) return
+    setRiordino(true); setGuaio('')
+    try {
+      const r = await api.riscriviBlocco(b.etichetta, grezzo)
+      if (r.testo && r.testo !== grezzo) { await api.scriviBlocco(b.etichetta, r.testo.slice(0, b.tetto)); setPrima(grezzo); salvato() }
+    } catch (e) { setGuaio(detto(e)) }
+    setRiordino(false)
+  }
+  const rimetti = async () => {
+    if (prima === null) return
+    const x = prima
+    setPrima(null)
+    try { await api.scriviBlocco(b.etichetta, x); salvato() } catch (e) { setPrima(x); setGuaio(detto(e)) }
+  }
+  return (
+    <Carta titolo={t(DOMANDE[b.etichetta]?.domanda ?? b.descrizione)} id={id}
+      stato={guaio || (b.daMe ? frasi.scrittoDaMe(giorno(b.daMe)) : undefined)} statoRame={!!guaio}
+      azione={b.valore.trim() ? (
+        prima !== null
+          ? <Bottone tipo="parola" piccolo onClick={() => void rimetti()}>{t('Rimetti com’era')}</Bottone>
+          : <Bottone tipo="parola" piccolo onClick={() => void riordina()} occupato={riordino} etichettaOccupato={t('Riordino…')}>{t('Riordina')}</Bottone>
+      ) : undefined}>
+      <Campo etichettaDa={`carta-${id}`} righe={3} limite={b.tetto} valore={b.valore} salva={salva}
+        esempio={t(DOMANDE[b.etichetta]?.esempio ?? 'Non gliel’hai ancora detto.')} />
+    </Carta>
+  )
+}
+
+/** Il ritratto: quello che aspetta, le cinque risposte, quello che sa, quello che pensava prima. */
+function Ritratto({ d, setD, carica }: { d: Dati | null; setD: (f: (d: Dati | null) => Dati | null) => void; carica: () => Promise<void> }) {
+  const [nuova, setNuova] = useState('')
+  const [guaio, setGuaio] = useState('')
+  const [ordino, setOrdino] = useState(false)
+  const [esito, setEsito] = useState('')
+  const [storicheAperte, setStoricheAperte] = useState(false)
+
+  const consolida = async () => {
+    setOrdino(true); setEsito('')
+    try {
+      const r = await api.consolidaMemoria()
+      await carica()
+      setEsito(r.blocchi.length ? frasi.ritrattoAggiornato(r.blocchi.length, r.guardate) : t('Già aggiornato.'))
+    } catch { setEsito(t('Aggiornamento non riuscito.')) }
+    setOrdino(false)
+  }
+
+  const togli = (id: string) => setD(v => (v ? { ...v, convinzioni: v.convinzioni.filter(c => c.id !== id) } : v))
+  const scorda = (c: Convinzione) => async () => {
+    togli(c.id)
+    try { await api.scordaConvinzione(c.id) } catch (e) { setD(v => (v ? { ...v, convinzioni: [...v.convinzioni, c] } : v)); throw e }
+  }
+  const tieni = (c: Convinzione) => async () => {
+    setD(v => (v ? { ...v, convinzioni: v.convinzioni.map(x => x.id === c.id ? { ...x, confermata: new Date().toISOString() } : x) } : v))
+    try { await api.confermaConvinzione(c.id) } catch (e) { setD(v => (v ? { ...v, convinzioni: v.convinzioni.map(x => x.id === c.id ? c : x) } : v)); throw e }
+  }
+  const correggi = (c: Convinzione) => async (testo: string) => { await memoriaP5.correggiConvinzione(c.id, testo); void carica() }
+
+  // una scritta a mano: la riga c'è subito, e se il server dice di no se ne va
+  const aggiungi = async () => {
+    const testo = nuova.trim()
+    if (!testo) return
+    const finta: Convinzione = { id: `nuova-${Date.now()}`, enunciato: testo, ambito: 'persona', genere: 'esplicita', fiducia: 1, origine: 'mano', dal: new Date().toISOString() }
+    setNuova(''); setGuaio('')
+    setD(v => (v ? { ...v, convinzioni: [finta, ...v.convinzioni] } : v))
+    try { await api.scriviConvinzione(testo); await carica() }
+    catch (e) { togli(finta.id); setNuova(testo); setGuaio(detto(e)) }
+  }
+
+  const aspettano = (d?.convinzioni ?? []).filter(inAttesa)
+  const sa = (d?.convinzioni ?? []).filter(c => !inAttesa(c))
+  const riga = (c: Convinzione) => (
+    <RigaConvinzione key={c.id} c={c} scorda={c.id.startsWith('nuova-') ? undefined : scorda(c)}
+      tieni={inAttesa(c) ? tieni(c) : undefined} correggi={c.id.startsWith('nuova-') ? undefined : correggi(c)} />
+  )
+
+  return (
+    <>
+      <div className="f-sezione-azione">
+        <Bottone piccolo onClick={() => void consolida()} occupato={ordino} etichettaOccupato={t('Aggiorno…')}>{t('Aggiorna adesso')}</Bottone>
+        {esito && <span className="f-stato">{esito}</span>}
+      </div>
+
+      {aspettano.length > 0 && (
+        <div className="mem-blocco" data-scheda="da-guardare">
+          <div className="mem-titoletto rame">{t('Da guardare')}</div>
+          <div className="mem-grid fitta">{aspettano.map(riga)}</div>
+        </div>
+      )}
+
+      <div className="f-griglia" data-scheda="domande">
+        {(d?.blocchi ?? []).map(b => <Risposta key={b.etichetta} b={b} salvato={() => void carica()} />)}
+      </div>
+
+      <div className="mem-blocco" data-scheda="sa">
+        <div className="mem-titoletto">{t('Quello che sa')}</div>
+        {sa.length > 0 && <div className="mem-grid fitta">{sa.map(riga)}</div>}
+        <div className="mem-aggiungi">
+          <Casella etichetta={t('Una cosa che deve sapere')} valore={nuova} cambia={setNuova} invio={() => void aggiungi()}
+            esempio={t('Non faccio sconti sotto i mille euro')} />
+          <Bottone tipo="pieno" onClick={() => void aggiungi()} disabled={!nuova.trim()}>{t('Aggiungi')}</Bottone>
+        </div>
+        {guaio && <div className="f-guaio" role="alert">{guaio}</div>}
+      </div>
+
+      {!!d?.storiche.length && (
+        <div className="mem-blocco" data-scheda="prima">
+          <button type="button" className="mem-piega" onClick={() => setStoricheAperte(v => !v)} aria-expanded={storicheAperte}>
+            <span className="freccia" style={{ transform: storicheAperte ? 'none' : 'rotate(-90deg)' }}><IconGiu size={10} stroke="currentColor" /></span>
+            <span className="mem-titoletto" style={{ margin: 0 }}>{t('Prima pensava')}</span>
+            <span className="mem-conta">{d.storiche.length}</span>
+          </button>
+          {storicheAperte && <div className="mem-grid fitta" style={{ marginTop: 10 }}>{d.storiche.map(c => <RigaConvinzione key={c.id} c={c} storica />)}</div>}
+        </div>
+      )}
+    </>
+  )
+}
+
+/** I documenti consegnati: un clic li apre; quelli spostati restano scritti, e non si premono. */
+function Documenti({ documenti }: { documenti: DocumentoProdotto[] }) {
+  const d = desktop()
+  const [apro, setApro] = useState('')
+  const [guaio, setGuaio] = useState('')
+  if (!documenti.length) return null
+  const apri = async (x: DocumentoProdotto) => {
+    if (!x.disponibile || apro) return
+    setApro(x.id); setGuaio('')
+    try { await api.portami(x.id) } catch (e) { setGuaio(detto(e)) } finally { setApro('') }
+  }
+  return (
+    <Carta titolo={t('Documenti')} id="documenti" larga stato={guaio || undefined} statoRame>
+      <div className="mem-documenti">
+        {documenti.map(x => {
+          const sotto = [x.progetto, new Date(x.aggiornato).toLocaleDateString(loc(), { day: 'numeric', month: 'short', year: 'numeric' })].filter(Boolean).join(' · ')
+          return (
+            <div key={x.id} className="mem-documento" data-missing={!x.disponibile ? '' : undefined}>
+              {x.disponibile ? (
+                <button type="button" className="mem-documento-apri" onClick={() => void apri(x)} aria-busy={apro === x.id || undefined}>
+                  <strong>{x.titolo}</strong><span>{apro === x.id ? t('Apro…') : sotto}</span>
+                </button>
+              ) : (
+                <div className="mem-documento-apri"><strong>{x.titolo}</strong><span>{t('Spostato o cancellato')}</span></div>
+              )}
+              {x.disponibile && d && (
+                <Bottone tipo="parola" piccolo className="mem-finder" onClick={() => { Promise.resolve(d.mostraNelFinder(x.percorso)).catch(() => {}) }}>
+                  {t('Mostra nel Finder')}
+                </Bottone>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Carta>
+  )
+}
+
+export function Memoria({ v }: { v: Vals }) {
   const [d, setD] = useState<Dati | null>(null)
   const [guasto, setGuasto] = useState('')
-  const [storicheAperte, setStoricheAperte] = useState(false)
-  const [nuova, setNuova] = useState('')
-  const [ordino, setOrdino] = useState(false)
-  const [dettoRitratto, setDettoRitratto] = useState('')
-  const [attivi, setAttivi] = useState(0)
-  const contaProgetti = useCallback((n: number) => setAttivi(n), [])
+  const [sommario, setSommario] = useState<Sommario | null>(null)
+  const [traduco, setTraduco] = useState(false)
+  const [daAccendere, setDaAccendere] = useState<string[]>([])
 
   const carica = useCallback(async () => {
     try { setD(await api.memoria()); setGuasto('') }
     catch (e) { setGuasto(e instanceof Error ? e.message : String(e)) }
   }, [])
-  useEffect(() => { carica() }, [carica])
+  const caricaSommario = useCallback(async () => {
+    try { setSommario(await memoriaP5.sommario()) } catch { /* le note restano quelle di prima */ }
+  }, [])
+  const tutto = useCallback(() => { void carica(); void caricaSommario() }, [carica, caricaSommario])
+  useEffect(() => { tutto() }, [tutto])
+  // un progetto cambiato altrove (la sua pagina, la prima pagina): la nota dei Progetti segue
+  useEffect(() => ascoltaProgetti(() => { void caricaSommario() }), [caricaSommario])
 
-  /**
-   * Rimette in ordine adesso quello che ha imparato.
-   *
-   * Dire quanti blocchi ha toccato, e dire anche quando non ne ha toccato
-   * nessuno: «non c'è niente di nuovo» è una risposta, e senza quella riga un
-   * bottone che non fa niente sembra rotto.
-   */
-  const consolida = async () => {
-    setOrdino(true); setDettoRitratto('')
-    try {
-      const r = await api.consolidaMemoria()
-      await carica()
-      setDettoRitratto(r.blocchi.length
-        ? frasi.ritrattoAggiornato(r.blocchi.length, r.guardate)
-        : t('Non c’è niente di nuovo da aggiungere.'))
-    } catch { setDettoRitratto(t('Non ce l’ha fatta.')) }
-    setOrdino(false)
-  }
-
-  /**
-   * Quello che ha imparato, nella lingua che stai leggendo.
-   *
-   * Le convinzioni nascono nella lingua in cui gliele hai dette, e la
-   * traduzione finora partiva solo *cambiando* lingua. Chi ha l'app in
-   * inglese da sempre non ha mai cambiato niente: apriva questa pagina e
-   * trovava sette righe in italiano, cioè l'unico posto dell'app rimasto
-   * nella lingua sbagliata — e per giunta quello che gli chiede di fidarsi.
-   *
-   * Parte da sé, una volta sola, e solo quando serve davvero: è un lavoro da
-   * modello piccolo, quindi su una macchina con Ollama non costa niente.
-   */
-  const [traduco, setTraduco] = useState(false)
-  const giaFatto = useRef(false)
+  // il punto nel menù: da dove si parte se era acceso, e poi si spegne
+  const allApertura = useRef(v.memoriaNuove)
+  useEffect(() => { v.memoriaVista() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // qualcosa di nuovo mentre guarda: si rilegge, e il punto non si accende sotto i suoi occhi
+  const quante = v.memoriaNuove.quante
   useEffect(() => {
-    if (!d?.daTradurre || giaFatto.current) return
-    giaFatto.current = true
+    if (quante > 0) { tutto(); v.memoriaVista() }
+  }, [quante]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // le note del ritratto seguono la pagina, non l'ultima lettura: «Tienila» o il cestino le cambiano nello stesso fotogramma
+  const sommarioVero: Sommario | null = sommario && d
+    ? { ...sommario, ritratto: { sa: d.convinzioni.filter(c => !inAttesa(c)).length, daGuardare: d.convinzioni.filter(inAttesa).length } }
+    : sommario
+  const sezioni = sezioniMemoria(sommarioVero)
+  const [sezione, setSezione] = useState<SezioneMem>(() => sezioneIniziale({
+    pagina: 'memoria', richiesta: sezioneAttesa('memoria')?.sezione ?? vaiComeLavori(), biglietto: !!progettoAtteso(),
+    nuove: allApertura.current.quante > 0 ? allApertura.current.dove : null,
+    ricordata: sezioneRicordata('memoria', v.emailConto), valide: sezioni.map(s => s.id)
+  }) as SezioneMem)
+  // un biglietto per un progetto con la pagina già aperta: si va ai Progetti
+  useEffect(() => ascoltaProgetto(() => { if (progettoAtteso()) setSezione('progetti') }), [])
+
+  /*
+   * Quello che ha imparato, nella lingua che stai leggendo: una volta sola per
+   * conto e per sessione, a livello di pagina (cambiare sezione non la rifà).
+   */
+  useEffect(() => {
+    const chi = v.emailConto ?? ''
+    if (!d?.daTradurre || tradotti.has(chi)) return
+    tradotti.add(chi)
     setTraduco(true)
     api.traduciMemoria().then(carica).catch(() => {}).finally(() => setTraduco(false))
-  }, [d?.daTradurre, carica])
-
-  const scorda = async (id: string) => {
-    // sparisce subito: è la sua testa, e toglierci una cosa non deve far aspettare
-    setD(v => (v ? { ...v, convinzioni: v.convinzioni.filter(c => c.id !== id) } : v))
-    try { await api.scordaConvinzione(id) } finally { carica() }
-  }
-
-  const tieni = async (id: string) => {
-    const quando = new Date().toISOString()
-    setD(v => (v ? { ...v, convinzioni: v.convinzioni.map(c => c.id === id ? { ...c, confermata: quando } : c) } : v))
-    try { await api.confermaConvinzione(id) } finally { carica() }
-  }
-
-  /** Prima quelle che aspettano una risposta, poi il resto nell'ordine di prima. */
-  const ordinate = (d?.convinzioni ?? []).slice().sort((a, b) => Number(inAttesa(b)) - Number(inAttesa(a)))
-  const quanteInAttesa = ordinate.filter(inAttesa).length
-
-  const aggiungi = async () => {
-    const testo = nuova.trim()
-    if (!testo) return
-    setNuova('')
-    try { await api.scriviConvinzione(testo) } finally { carica() }
-  }
-
-  if (guasto) {
-    return (
-      <main className="mem-page">
-        <header className="mem-header"><h1>{t('Memoria')}</h1></header>
-        <div className="mem-guaio" style={{ padding: '0 4px' }}>{t(guasto)}</div>
-      </main>
-    )
-  }
-
-  const imparate = d?.convinzioni.length ?? 0
+  }, [d?.daTradurre, carica, v.emailConto])
 
   return (
-    <main className="mem-page">
-      <header className="mem-header">
-        <h1>{t('Memoria')}</h1>
-        <p>
-          {attivi} {attivi === 1 ? t('progetto attivo') : t('progetti attivi')}
-          {' · '}
-          {imparate} {imparate === 1 ? t('cosa imparata') : t('cose imparate')}
-        </p>
-      </header>
+    <PaginaASezioni titolo={t('Memoria')} pagina="memoria" etichettaNav={t('Sezioni della memoria')} sezioni={sezioni}
+      attuale={sezione} scegli={id => setSezione(id as SezioneMem)} email={v.emailConto}>
+      {guasto && <div className="f-guaio" role="alert" style={{ margin: '11px 4px' }}>{t(guasto)}</div>}
+      {traduco && <div className="f-stato" style={{ margin: '11px 4px 0' }}>{t('Le rimetto nella tua lingua…')}</div>}
 
-      {/* — i progetti: prima di tutto, perché sono la prima cosa che legge — */}
-      <Progetti dimmi={contaProgetti} />
-
-      {/* — come lavori, contato: le righe osservate e le previsioni (P1B) — */}
-      <ComeLavori />
-
-      {/* — le cinque domande: il tuo ritratto — */}
-      <section className="mem-section">
-        <Testata titolo={t('Il tuo ritratto')} stato={dettoRitratto || undefined}>
-          {/*
-            Gira già da solo ogni sei ore. Questo sta qui per il momento in cui
-            uno finisce una conversazione lunga e vuole *vedere* cosa ne è
-            uscito, invece di scoprirlo domani per caso.
-          */}
-          <button type="button" className="mem-azione" onClick={consolida} disabled={ordino} aria-busy={ordino || undefined}>
-            {ordino ? t('Ci penso…') : t('Aggiorna da quello che hai imparato')}
-          </button>
-        </Testata>
-        <div className="mem-card mem-profile-card">
-          {(d?.blocchi ?? []).map(b => <Campo key={b.etichetta} b={b} salvato={carica} />)}
-          {!d && <div className="mem-vuoto">{t('carico…')}</div>}
-        </div>
-      </section>
-
-      {d && <DocumentiProdotti documenti={d.documenti} />}
-      <CosaHaFatto />
-
-      {/* — quello che ha capito da solo — */}
-      <section className="mem-section">
-        <Testata titolo={t('Quello che ha capito')} conto={String(imparate)}
-          stato={traduco ? t('Le rimetto nella tua lingua…') : quanteInAttesa ? frasi.inAttesa(quanteInAttesa) : undefined} />
-
-        {/* scriverne una a mano: è la sua testa, deve poterci mettere le mani */}
-        <div className="mem-aggiungi">
-          <input className="mem-campo" value={nuova} onChange={e => setNuova(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') aggiungi() }}
-            aria-label={t('Aggiungine una tu: «non faccio sconti sotto i mille euro»')}
-            placeholder={t('Aggiungine una tu: «non faccio sconti sotto i mille euro»')} />
-          <button type="button" className="mem-pieno" onClick={aggiungi} disabled={!nuova.trim()}>{t('Aggiungi')}</button>
-        </div>
-
-        <div className="mem-grid fitta">
-          {ordinate.map(c => <SchedaConvinzione key={c.id} c={c} scorda={scorda} tieni={tieni} />)}
-          {d && !d.convinzioni.length && (
-            <div className="mem-vuoto">{t('Ancora niente. Impara parlandoti, e da quello che correggi delle sue bozze.')}</div>
-          )}
-        </div>
-      </section>
-
-      {/* — quello che pensava prima — */}
-      {!!d?.storiche.length && (
-        <section className="mem-section">
-          <div className="mem-section-head">
-            <button type="button" className="mem-piega" onClick={() => setStoricheAperte(v => !v)} aria-expanded={storicheAperte}>
-              <span className="freccia" style={{ transform: storicheAperte ? 'none' : 'rotate(-90deg)' }}>
-                <IconGiu size={10} stroke="currentColor" />
-              </span>
-              <h2 style={{ flex: 1 }}>{t('Quello che pensava prima')}</h2>
-              <span className="mem-conta">{d.storiche.length}</span>
-            </button>
-          </div>
-          {storicheAperte && (
-            <div className="mem-grid fitta">
-              {d.storiche.map(c => <SchedaConvinzione key={c.id} c={c} storica />)}
-            </div>
-          )}
-        </section>
+      {sezione === 'progetti' && (
+        <>
+          <div className="f-griglia"><LeTueParole accendi={setDaAccendere} /></div>
+          <Progetti daAccendere={daAccendere} />
+        </>
       )}
-    </main>
+
+      {sezione === 'come-lavori' && <ComeLavori />}
+
+      {sezione === 'ritratto' && <Ritratto d={d} setD={setD} carica={async () => { await carica(); await caricaSommario() }} />}
+
+      {sezione === 'fatto' && (
+        <div className="f-griglia">
+          <CosaHaFatto titolo={false} />
+          {d && <Documenti documenti={d.documenti} />}
+        </div>
+      )}
+    </PaginaASezioni>
   )
 }

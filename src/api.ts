@@ -40,6 +40,10 @@ export type StatoAvvio = {
   fonti: string[]
   fonte: string | null; fonteSaltata: boolean; fatti: FattoAvvio[]
   azione: string; risultato: RisultatoAvvio | null; aggiornato: string
+  /** Una prima lettura sta girando sul server (P4): chi ricarica torna a guardarla. */
+  leggendo?: boolean
+  /** Le fonti sono state scelte a metà lettura («Continua», P4): gli estratti non hanno visto tutto. */
+  aMetaLettura?: boolean
 }
 
 export type Stato = {
@@ -145,6 +149,8 @@ export type Stato = {
   suggerimentiNuovi: number
   /** I risultati nuovi del vassoio di prova (P6): accendono lo stesso punto. */
   vassoioNuovi?: number
+  /** P5: le cose da guardare nate dopo l'ultima visita alla Memoria. */
+  memoriaNuove?: { quante: number; dove: 'come-lavori' | 'ritratto' | null }
   /** C'è `~/.claude/projects` su questa macchina: la scheda delle conversazioni offre l'interruttore solo allora. */
   codiceConversazioni: boolean
   /** Quante sessioni di Claude Code ci sono lì: la scheda lo dice prima di accendere l'interruttore. */
@@ -411,6 +417,8 @@ function guastoDellaRisposta(r: Response, corpo: unknown): Error {
     const altro = corpo as { repo?: unknown; dove?: unknown }
     if (typeof altro.repo === 'string' && altro.repo) (e as Error & { repo?: string }).repo = altro.repo
     if (typeof altro.dove === 'string' && /^https:\/\//.test(altro.dove)) (e as Error & { dove?: string }).dove = altro.dove
+    // la serratura è del resto della prima lettura, che cede il passo: si aspetta di più (P4)
+    if ((corpo as { coda?: unknown }).coda === true) (e as Error & { coda?: boolean }).coda = true
     const giorni = (corpo as { giorni?: unknown }).giorni
     if (typeof giorni === 'number' && giorni > 0) (e as Error & { giorni?: number }).giorni = giorni
     // il risultato del vassoio superato (P6): il codice e il giorno, per la frase nella lingua giusta
@@ -497,7 +505,8 @@ const NOME_FONTE: Record<string, string> = {
   claude: 'Claude', jev: 'Jev', mind2do: 'Mind2Do',
   google: 'Gmail e Calendario', microsoft: 'Outlook e Calendario', slack: 'Slack',
   drive: 'Google Drive', sharepoint: 'SharePoint e OneDrive', dropbox: 'Dropbox',
-  whatsapp: 'WhatsApp Business'
+  whatsapp: 'WhatsApp Business',
+  agendamac: 'Calendario del Mac', postamac: 'Mail del Mac'
 }
 
 /**
@@ -510,6 +519,8 @@ const NOME_FONTE: Record<string, string> = {
  */
 export function rigaSincronizzazione(m: Record<string, unknown>): string {
   const id = String(m.fase ?? '')
+  // l'elenco delle fonti che la lettura visiterà non è una riga (P4)
+  if (id === 'inizio') return ''
   /*
    * La fonte del computer si chiama come la macchina: «Il mio Mac», «Il mio
    * PC». Il nome vero lo decide il server e viaggia dentro `stato.connettori`,
@@ -1125,7 +1136,7 @@ export const api = {
   avvioProgetto: (b: { nome: string; obiettivo: string; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/progetto', { method: 'POST', body: JSON.stringify(b) }),
   /** Le fonti da leggere insieme; una lista vuota vuol dire «continuo senza». */
-  avvioFonti: (b: { fonti: string[]; revisione: number }) =>
+  avvioFonti: (b: { fonti: string[]; revisione: number; durante?: boolean }) =>
     json<StatoAvvio>('/api/avvio/fonte', { method: 'POST', body: JSON.stringify(b) }),
   avvioConferma: (b: { ids: string[]; revisione: number }) =>
     json<StatoAvvio>('/api/avvio/conferma', { method: 'POST', body: JSON.stringify(b) }),
@@ -1280,7 +1291,7 @@ export const api = {
     json('/api/profilo', { method: 'POST', body: JSON.stringify({ ordineBlocchi: ids }) }),
 
   collegaPosta: (p: { host: string; porta: number; utente: string; password: string; giorni: number }) =>
-    json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null }>(
+    json<{ ok: true; cartelle: string[]; certificatoAdattato: string | null; messaggi?: number; giorni?: number }>(
       '/api/connettori/posta', { method: 'POST', body: JSON.stringify(p) }),
 
   /** Le cartelle scelte — o, con `tutto`, la casa intera: allora le cartelle le decide il server. */
@@ -1338,7 +1349,7 @@ export const api = {
 
   /** I `conversations.json` scelti, e l'interruttore per le sessioni di Claude Code. */
   collegaConversazioni: (file: string[], codice: boolean) =>
-    json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number }>(
+    json<{ ok: true; file: { file: string; formato: 'chatgpt' | 'claude'; conversazioni: number }[]; codice: number; conversazioni?: number }>(
       '/api/connettori/conversazioni', { method: 'POST', body: JSON.stringify({ file, codice }) }),
 
   collegaNotion: (token: string) =>
@@ -1406,7 +1417,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ url, chiave }) }),
 
   collegaSlack: (token: string) =>
-    json<{ ok: true; squadra: string }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
+    json<{ ok: true; squadra: string; canali?: number; oltre?: boolean }>('/api/connettori/slack', { method: 'POST', body: JSON.stringify({ token }) }),
 
   /** GitHub: il token, e — se ne ha scelti — i soli repository da leggere. */
   collegaGithub: (token: string, repos: string[]) =>
@@ -2152,9 +2163,46 @@ export const misuraLavoro = (giorni = 30) => json<Misura>(`/api/lavoro/misura?gi
 // — P3: fine —
 
 // — P4: inizio —
+/** Che cosa è un documento, per contarlo: lo stesso elenco di `server/generi.ts`. */
+export type Genere = import('../server/generi.ts').Genere
+/** Lo stato della prima pagina, e quello della prima lettura (`GET /api/avvio/pagina`). */
+export type StatoPrimaPagina = 'nessuna' | 'attesa' | 'lavoro' | 'pronta' | 'senza-motore' | 'guaio'
+export type PaginaAvvio = {
+  /** `prima`: la prima lettura sta girando; `coda`: il resto dei novanta giorni in sottofondo. */
+  lettura: 'prima' | 'coda' | null
+  trovato: Partial<Record<Genere, number>>
+  /** Gli stessi conti per fonte, solo quelle con qualcosa dentro. */
+  perFonte?: Record<string, number>
+  pagina: StatoPrimaPagina
+  carte: number
+}
+export const apiP4 = {
+  avvioPagina: () => json<PaginaAvvio>('/api/avvio/pagina'),
+  /** Calendario del Mac: niente da incollare; la prima volta macOS chiede il permesso. */
+  collegaAgendaMac: () => json<{ ok: true; eventi: number; calendari: number }>('/api/connettori/agendamac', { method: 'POST', body: '{}' }),
+  /** Mail del Mac: niente da incollare; serve l'accesso completo al disco. */
+  collegaPostaMac: () => json<{ ok: true; email: number; caselle: number }>('/api/connettori/postamac', { method: 'POST', body: '{}' })
+}
 // — P4: fine —
 
 // — P5: inizio —
+export type { Sommario } from './sezioni.ts'
+import type { Sommario as SommarioMemoria } from './sezioni.ts'
+/** Le cose da guardare nate dopo l'ultima visita alla Memoria: il punto accanto a «Memoria». */
+export type MemoriaNuove = { quante: number; dove: 'come-lavori' | 'ritratto' | null }
+export const memoriaP5 = {
+  /** La Memoria è aperta: il punto si spegne. */
+  vista: () => json<{ ok: true }>('/api/memoria/vista', { method: 'POST', body: '{}' }),
+  sommario: () => json<SommarioMemoria>('/api/memoria/sommario'),
+  /** Corregge una convinzione dove è scritta: la vecchia va in «Prima pensava». */
+  correggiConvinzione: (id: string, testo: string) =>
+    json<{ ok: true; id: string }>(`/api/memoria/convinzione/${encodeURIComponent(id)}/correggi`, { method: 'POST', body: JSON.stringify({ testo }) }),
+  /** Quello che la rassegna ha capito, senza prepararla. */
+  gusto: () => json<{ vale: boolean; testo: string }>('/api/rassegna/gusto'),
+  riferimento: () => json<{ testo: string; aggiornato: string | null }>('/api/riferimento'),
+  scriviRiferimento: (testo: string) =>
+    json<{ ok: true; testo: string; aggiornato: string | null; nuovi: string[] }>('/api/riferimento', { method: 'POST', body: JSON.stringify({ testo }) })
+}
 // — P5: fine —
 
 // — P6: inizio —

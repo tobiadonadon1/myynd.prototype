@@ -84,7 +84,10 @@ fi
 
 # 4. il server, con la sola casa finta (APP=1: come dentro il guscio, per l'osservatore del Mac)
 #    MYYND_PROVA_NIENTE_OPEN=1: «Portami lì» e «Apri» scrivono nel registro invece di lanciare `open` sul Mac
-env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_PROVA_NIENTE_OPEN=1 ${APP:+MYYND_APP=1} ${MYYND_ADESSO:+MYYND_ADESSO=$MYYND_ADESSO} \
+#    MYYND_SENZA_APP_MAC=1 (P4): Calendario del Mac non tocca mai il Calendario vero di chi prova
+#    MYYND_PRIMA_RILETTURA_MS anticipa il primo giro di fondo (di serie un minuto dopo l'avvio)
+env -i $AMBIENTE MYYND_DATI="$DATI" MYYND_DEV=1 MYYND_PORT=$PORTA MYYND_PROVA_NIENTE_OPEN=1 MYYND_SENZA_APP_MAC=1 ${APP:+MYYND_APP=1} ${MYYND_ADESSO:+MYYND_ADESSO=$MYYND_ADESSO} \
+  ${MYYND_PRIMA_RILETTURA_MS:+MYYND_PRIMA_RILETTURA_MS=$MYYND_PRIMA_RILETTURA_MS} \
   node --disable-warning=ExperimentalWarning server/index.ts > "$OUT/server.log" 2>&1 &
 SRV=$!
 aspetta_riga "$OUT/server.log" 'server su http' 40
@@ -104,7 +107,7 @@ if [[ "${FOTO:-1}" != "0" ]]; then
     # il tema sta anche sul profilo, e il profilo vince sul browser: si dice a tutti e due
     curl -s -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -X POST $B/api/profilo -d "{\"tema\":\"$tema\"}" > /dev/null
     for larga in ${=LARGHEZZE}; do
-      env -i $AMBIENTE URL=$B/ OUT="$OUT" TEMA=$tema LARGA=$larga TOKEN=$TOKEN DATI_ELECTRON="$T/electron-$tema-$larga" ${PASSI:+PASSI="$PASSI"} ${AGENDA_FINTA:+AGENDA_FINTA=$AGENDA_FINTA} \
+      env -i $AMBIENTE URL=$B/ OUT="$OUT" TEMA=$tema LARGA=$larga TOKEN=$TOKEN DATI_ELECTRON="$T/electron-$tema-$larga" ${PASSI:+PASSI="$PASSI"} ${AGENDA_FINTA:+AGENDA_FINTA=$AGENDA_FINTA} ${MODO:+MODO=$MODO} ${ALTA:+ALTA=$ALTA} \
         node_modules/.bin/electron prove/scatta.cjs 2>> "$OUT/electron.log" | tee -a "$OUT/scatta.log"
     done
   done

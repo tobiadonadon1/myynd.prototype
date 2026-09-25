@@ -21,6 +21,7 @@ import { blocchiFeed, chiaveBlocco, type Blocco as BloccoFeed, ordinaBlocchi, or
 import { AuroraCompito, PassoAttivo } from '../components/AuroraCompito'
 import { RigaCheLavora } from '../components/RigaCheLavora'
 import { testoPasso } from '../lettura-passo'
+import { PrimaPagina, inVista, usePrimaPagina } from '../prima-pagina'
 import { compitoInEsecuzione } from '../compito-attivo'
 import { rigaFonti } from '../salute-fonti'
 import { RimedioFonte, osservatore } from '../components/RimedioFonte'
@@ -1237,8 +1238,11 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   // quello che c'è in pagina: ogni riga che si vede, e le domande nella loro
   // carta. Lo stesso conto del menù, per costruzione.
   const inPagina = sulTavolo(blocchi, cheAspettano({ domanda: v.domanda, iniziative: v.iniziative.length, lettera: v.chatDaLeggere }))
-  // P10 · l'occhio è premuto dalla pressione alla fine della lettura
-  const leggendo = v.generando || !!v.lettura
+  // P4 · la prima pagina di un conto nuovo: finché la prepara, una riga che lavora sotto la riga fissa
+  const primaPagina = usePrimaPagina()
+  const preparando = inVista(primaPagina)
+  // P10 · l'occhio è premuto dalla pressione alla fine della lettura, anche mentre P4 prepara la prima pagina
+  const leggendo = v.generando || !!v.lettura || preparando
 
   return (
     <div style={{ width: 760, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1269,7 +1273,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
               «più piccolo, più umile». Un occhio accanto alle fonti, e basta:
               la lettura ormai parte da sola ogni dieci minuti, questo è per
               chi non vuole aspettarli. Il nome lo dice al passaggio. */}
-          {/* P10 · premuto nello stesso istante, mai spento: un anello di rame mentre legge */}
+          {/* P10 · premuto nello stesso istante, mai spento: un anello di rame mentre legge (anche mentre P4 prepara la prima pagina) */}
           <Hov as="button" type="button" onClick={v.genera}
             title={leggendo ? t('Leggo…') : t('Leggi adesso')} aria-label={t('Leggi adesso')}
             aria-pressed={leggendo} aria-busy={leggendo || undefined}
@@ -1285,8 +1289,9 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       </div>
 
       <Avviso v={v} />
-      {/* P10 · la lettura di «Leggi adesso»: una riga che lavora, sotto la riga fissa */}
-      {(leggendo || v.finita) && (
+      <PrimaPagina s={primaPagina} />
+      {/* P10 · la lettura di «Leggi adesso»: una riga che lavora, sotto la riga fissa; mentre P4 prepara la prima pagina il posto è suo */}
+      {!preparando && (leggendo || v.finita) && (
         <RigaCheLavora titolo={t('Leggo le tue fonti')} passo={testoPasso(v.lettura)}
           finita={!leggendo && v.finita} onFinita={() => v.setFinita(false)} />
       )}

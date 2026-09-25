@@ -3,13 +3,12 @@
 .connections-page button,.connections-dialog button,.connections-page input,.connections-dialog input{font-family:inherit;touch-action:manipulation}
 .connections-page button,.connections-dialog button{cursor:pointer}.connections-page button:disabled,.connections-dialog button:disabled{opacity:.5;cursor:wait}
 .connections-page :is(button,input,summary):focus-visible,.connections-dialog :is(button,input,summary,textarea,select):focus-visible{outline:2px solid var(--rame-testo);outline-offset:4px}
-.connections-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--filo);background:rgba(var(--carta-rgb),.7);padding:9px 13px;min-height:36px;border-radius:10px;font-size:12px;color:var(--inchiostro-2)}
+.connections-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--filo);background:rgba(var(--carta-rgb),.7);padding:9px 13px;min-height:36px;border-radius:99px;font-size:12px;color:var(--inchiostro-2)}
 .connections-button:hover{border-color:rgba(var(--rame-rgb),.3);background:var(--carta-piena)}.connections-button.connect{background:var(--rame-forte);color:var(--avorio);border-color:var(--rame-testo)}.connections-button.connect:hover{background:var(--rame-forte-su)}
 
 
 
 .connector-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
-.connections-lead{margin:6px 0 0;max-width:520px;font-size:13.5px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.88)}
 .connector-tile-note{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:5px;font-size:11px;line-height:1.4;color:rgba(var(--inchiostro-rgb),.78);text-align:center;overflow-wrap:anywhere;text-wrap:pretty}.connector-tiles.compact .connector-tile-note{font-size:10px;-webkit-line-clamp:2}.connector-tiles.compact{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .connector-tile{--connector-face:var(--carta-piena);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-width:0;min-height:153px;padding:20px 12px 17px;border:1px solid var(--filo);border-radius:19px;background:linear-gradient(145deg,rgba(var(--carta-rgb),.91),rgba(var(--carta-rgb),.76));color:var(--inchiostro-2);box-shadow:0 4px 11px -8px rgba(var(--ombra-rgb),.15);transition:transform .18s,box-shadow .18s,border-color .18s}
 .connector-tile.connected{--connector-face:rgba(var(--salvia-rgb),.1);background:linear-gradient(145deg,rgba(var(--salvia-rgb),.1),rgba(var(--salvia-rgb),.14));border-color:rgba(var(--salvia-rgb),.4);color:var(--salvia)}

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { provaRisposte, type ProvaRisposteStato } from '../api'
 import { t } from '../lingua'
-import { knob, track } from '../ui'
+import { Interruttore } from '../components/forme'
 
 export function ProvaRisposte() {
   const [s, setS] = useState<ProvaRisposteStato | null>(null)
@@ -41,13 +41,12 @@ export function ProvaRisposte() {
 
   return (
     <>
-      <div className="prefs-riga">
-        <div><div className="prefs-nome">{t('Verifica le risposte ogni settimana')}</div></div>
-        <button type="button" role="switch" aria-checked={s.attiva} aria-label={t('Verifica le risposte ogni settimana')}
-          onClick={cambia} style={track(s.attiva)}><span style={knob()} /></button>
+      <div className="f-riga">
+        <div><div className="f-nome">{t('Verifica le risposte ogni settimana')}</div></div>
+        <Interruttore acceso={s.attiva} cambia={() => void cambia()} etichetta={t('Verifica le risposte ogni settimana')} />
       </div>
-      {s.riga && <div className="prefs-stato">{s.riga}</div>}
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
+      {s.riga && <div className="f-stato">{s.riga}</div>}
+      {guaio && <div className="f-stato rame">{guaio}</div>}
     </>
   )
 }

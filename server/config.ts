@@ -12,6 +12,7 @@ import * as chi from './chi.ts'
 import * as conti from './conti.ts'
 import * as postgres from './postgres.ts'
 import { vietato } from './prova-chiusa.ts'
+import * as cancellati from './cancellati.ts'
 
 /**
  * I modelli fra cui si può scegliere, dal più economico al più capace.
@@ -741,6 +742,10 @@ export type Config = {
    */
   accesiDaSoli?: string[]
   calendario?: ConfigCalendario
+  /** Calendario del Mac (P4): i calendari di Calendario su questo Mac, letti e basta. */
+  agendamac?: { attiva: true }
+  /** Mail del Mac (P4): le email di Mail su questo Mac, lette dal disco e basta. */
+  postamac?: { attiva: true }
   claude?: ConfigClaude
   jev?: ConfigJev
   tono?: string
@@ -798,6 +803,8 @@ export type Config = {
    * quel campo non si riscrive da solo mai più.
    */
   fuocoDaMe?: boolean
+  /** L'ultima volta che ha aperto la Memoria (ISO): il punto nel menù conta solo quello nato dopo (P5). */
+  memoriaVista?: string
   /**
    * Le undici automazioni che arrivano con il pacchetto: le vuole?
    *
@@ -960,6 +967,8 @@ export type Config = {
  */
 function assicuraDir() {
   const dir = cartella()
+  // un conto appena cancellato non si riscrive: una lettura in volo ricreava la cartella (P4)
+  if (cancellati.cancellata(dir)) throw new Error(cancellati.CONTO_CANCELLATO)
   if (!existsSync(dir)) {
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 })
@@ -1022,6 +1031,8 @@ export function leggi(): Config {
   // una copia, non l'oggetto in memoria: chi lo modificasse senza passare da
   // `scrivi()` cambierebbe la configurazione senza che il database lo sappia
   if (postgres.ATTIVO && u) return ricorda(structuredClone(inMemoria.get(u)?.config ?? {}))
+  // un conto cancellato non ha configurazione, e leggerla non ricrea la cartella (P4)
+  if (cancellati.cancellata(cartella())) return ricorda({})
   assicuraDir()
   if (!existsSync(file())) return ricorda({})
   try {
@@ -1049,7 +1060,7 @@ export function leggi(): Config {
  * quello nuovo, mai una via di mezzo.
  */
 /** I campi che portano una credenziale: non spariscono da una scrittura qualunque. */
-export const CON_SEGRETI = ['claude', 'jev', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni'] as const
+export const CON_SEGRETI = ['claude', 'jev', 'posta', 'notion', 'slack', 'github', 'compatibile', 'openai', 'credenzialiModelli', 'google', 'drive', 'dropbox', 'whatsapp', 'calendario', 'microsoft', 'sharepoint', 'granola', 'note', 'conversazioni', 'agendamac', 'postamac'] as const
 const CAMPI_SEGRETI = new Set(['apiKey', 'chiave', 'password', 'token', 'refresh', 'clientSecret', 'segreto', 'parola'])
 const segretoPresente = (v: unknown): v is string => typeof v === 'string' && !!v.trim()
   && !/^[*•●…\.\s]+$/.test(v) && v !== '[credenziale rimossa / credential removed]'

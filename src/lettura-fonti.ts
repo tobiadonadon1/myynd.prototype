@@ -11,6 +11,8 @@
 // guardano da Node.
 
 import { frasi, lingua, t } from './lingua.ts'
+import { genereDi } from '../server/generi.ts'
+import { contaGenere, lettiFinora } from './conta-fonti.ts'
 
 /**
  * In coda, in lettura, letta, letta a metà, o non letta.
@@ -35,17 +37,36 @@ export type RigaLettura = {
  * sta già accanto all'icona, e ripeterlo in ogni riga sarebbe leggerlo due
  * volte. `rigaSincronizzazione` lo rimette davanti, e dice le stesse cose.
  */
-export function dettaglioSincronizzazione(m: Record<string, unknown>, conConteggio = true): string {
+/**
+ * `breve` (il primo avvio, P4): solo il conto, quanto manca della posta e i
+ * guasti. Il conto porta il nome di quello che è: «312 email», «42 eventi»,
+ * «1.204 file», non «documenti».
+ */
+export function dettaglioSincronizzazione(m: Record<string, unknown>, conConteggio = true, breve = false): string {
   const en = lingua() === 'en'
+  const genere = genereDi(String(m.fase ?? ''))
   // una fonte andata storta porta la sua frase: «calendario · guaio» non diceva niente
   if (m.stato === 'guaio') return t(String(m.errore ?? 'Non ce l’ha fatta.'))
   // con i numeri si compone qui: «40 di 120 messaggi» scritto dal server non si traduce
   if (m.stato !== 'fatto' && typeof m.fatti === 'number') {
     if (typeof m.tot === 'number') return `${m.fatti} ${en ? 'of' : 'di'} ${m.tot} ${en ? 'messages' : 'messaggi'}`
-    return `${m.fatti} ${en ? 'documents' : 'documenti'}`
+    return contaGenere(genere, m.fatti)
   }
   if (m.stato !== 'fatto') return t(String(m.stato ?? ''))
-  const parti = conConteggio ? [frasi.nDocumenti(String(Number(m.documenti ?? 0)))] : []
+  const parti = conConteggio ? [contaGenere(genere, Number(m.documenti ?? 0))] : []
+  // Calendario del Mac chiuso: un giro di sottofondo non lo apre, e lo dice
+  if (m.saltata) parti.push(t('In pausa finché Calendario è chiuso'))
+  if (breve) {
+    const r = m.resto as { letti?: number; totale?: number; aGiorno?: boolean } | undefined
+    if (r && !r.aGiorno && typeof r.letti === 'number') parti.push(lettiFinora(r.letti, r.totale))
+    if (elenco(m.falliti)) parti.push(`${(m.falliti as unknown[]).length} ${en ? 'unreadable' : 'illeggibili'}`)
+    const dirs = (m.illeggibili as string[] | undefined) ?? []
+    if (dirs.length) parti.push(dirs.length === 1 ? (en ? '1 folder would not open' : '1 cartella non si apre')
+      : `${dirs.length} ${en ? 'folders would not open' : 'cartelle non si aprono'}`)
+    const cadute = (m.cartelleFallite as string[] | undefined) ?? []
+    if (cadute.length) parti.push(frasi.cartelleNonLette(cadute.length))
+    return parti.join(' · ')
+  }
   if (Number(m.tolti)) parti.push(`${Number(m.tolti)} ${en ? 'gone' : 'spariti'}`)
   // la posta che c'era già e non è stata riscaricata: è quello che rende la rilettura leggera
   if (Number(m.giaLetti)) parti.push(`${Number(m.giaLetti)} ${en ? 'already read' : 'già letti'}`)
@@ -87,11 +108,8 @@ export function dettaglioSincronizzazione(m: Record<string, unknown>, conContegg
    */
   const resto = m.resto as { letti?: number; totale?: number; aGiorno?: boolean } | undefined
   if (resto?.aGiorno) parti.push(en ? 'all in' : 'è tutto dentro')
-  else if (typeof resto?.letti === 'number') {
-    parti.push(typeof resto.totale === 'number'
-      ? `${resto.letti} ${en ? 'of' : 'di'} ${resto.totale} ${en ? 'read so far' : 'letti finora'}`
-      : `${resto.letti} ${en ? 'read so far' : 'letti finora'}`)
-  } else if (m.troncato) parti.push(en ? 'cap reached' : 'tetto raggiunto')
+  else if (typeof resto?.letti === 'number') parti.push(lettiFinora(resto.letti, resto.totale))
+  else if (m.troncato) parti.push(en ? 'cap reached' : 'tetto raggiunto')
   if (m.interrotto) parti.push(en ? 'interrupted by Notion' : 'interrotto da Notion')
   const dirs = (m.illeggibili as string[] | undefined) ?? []
   // «senza permessi» diceva il perché, e non sempre è quello: anche una
@@ -120,7 +138,7 @@ export function dettaglioSincronizzazione(m: Record<string, unknown>, conContegg
  * leggendo. La copia verso un server ospitato viene dopo che il Mac è già
  * letto. Nessuna delle due tocca una riga.
  */
-const NON_RIGHE = new Set(['lavoro', 'desktop-remoto'])
+const NON_RIGHE = new Set(['lavoro', 'desktop-remoto', 'inizio'])
 
 /** Una riga in coda per ogni fonte che si sta per leggere, nell'ordine dato. */
 export function iniziaLettura(ids: string[]): RigaLettura[] {
@@ -160,7 +178,7 @@ export function avanzaLettura(righe: RigaLettura[], m: Record<string, unknown>):
     const visti = { ...m, documenti: Number(m.documenti ?? 0) + Number(m.invariati ?? 0) + Number(m.invariate ?? 0) + Number(m.giaLetti ?? 0), giaLetti: 0, invariate: 0 }
     const niente = !visti.documenti
     const stato: StatoRiga = lettaAMeta(m) ? (niente ? 'guaio' : 'avviso') : 'fatto'
-    return righe.map(r => r.id === id ? { id, stato, testo: dettaglioSincronizzazione(visti, stato !== 'guaio'), ultimo: m } : r)
+    return righe.map(r => r.id === id ? { id, stato, testo: dettaglioSincronizzazione(visti, stato !== 'guaio'), ultimo: visti } : r)
   }
   const stato: StatoRiga = m.stato === 'guaio' ? 'guaio' : 'leggo'
   return righe.map(r => r.id === id ? { id, stato, testo: dettaglioSincronizzazione(m), ultimo: m } : r)
@@ -179,12 +197,15 @@ export function avanzaLettura(righe: RigaLettura[], m: Record<string, unknown>):
  * documenti» accanto a cinque documenti veri. Quello che non si è riletto
  * perché uguale («30 già letti») è dentro il totale, e non si ripete.
  */
-export function chiudiLettura(righe: RigaLettura[], documenti: (id: string) => number | undefined): RigaLettura[] {
+export function chiudiLettura(righe: RigaLettura[], documenti: (id: string) => number | undefined, o: { vuoteInCoda?: boolean } = {}): RigaLettura[] {
   return righe.map(r => {
     const n = documenti(r.id)
-    if (aperta(r)) return { ...r, stato: 'fatto', testo: frasi.nDocumenti(String(n ?? 0)) }
+    // dopo aver aspettato invano il proprio turno, una fonte senza documenti non si è letta: resta in coda, mai «✓ 0»
+    if (o.vuoteInCoda && aperta(r) && !(n && n > 0)) return { ...r, stato: 'attesa', testo: '' }
+    if (aperta(r)) return { ...r, stato: 'fatto', testo: contaGenere(genereDi(r.id), n ?? 0), ultimo: { fase: r.id, stato: 'fatto', documenti: n ?? 0 } }
     if (r.stato === 'fatto' && r.ultimo && n !== undefined) {
-      return { ...r, testo: dettaglioSincronizzazione({ ...r.ultimo, documenti: n, giaLetti: 0, invariate: 0 }) }
+      const ultimo = { ...r.ultimo, documenti: n, giaLetti: 0, invariate: 0 }
+      return { ...r, testo: dettaglioSincronizzazione(ultimo), ultimo }
     }
     return r
   })
@@ -210,15 +231,26 @@ export const GIA_IN_CORSO = 'Una lettura è già in corso.'
  * che è appena stato letto costa poco. Il tetto è di due minuti, poi la frase
  * arriva com'è.
  */
+/*
+ * Il resto della prima lettura (P4) cede il passo solo dopo la fonte che ha
+ * in mano, e una passata del Mac o di novanta giorni di posta dura minuti:
+ * dopo due minuti le righe restavano «In coda» per sempre. Quando il 409
+ * dice `coda` (è il resto, e ha già promesso di fermarsi) si aspetta fino a
+ * venti minuti: la lettura sua parte appena il resto molla la serratura.
+ */
 export async function leggiAlProprioTurno(
   leggi: () => Promise<void>,
   attendi: (ms: number) => Promise<void> = ms => new Promise(r => setTimeout(r, ms)),
-  tentativi = 80
+  tentativi = 80,
+  tentativiInCoda = 800
 ): Promise<void> {
-  for (let i = 0; ; i++) {
+  let altri = 0, dietroAlResto = 0
+  for (;;) {
     try { return await leggi() }
     catch (e) {
-      if (!(e instanceof Error) || e.message !== GIA_IN_CORSO || i >= tentativi) throw e
+      if (!(e instanceof Error) || e.message !== GIA_IN_CORSO) throw e
+      const resto = (e as Error & { coda?: boolean }).coda === true
+      if (resto ? dietroAlResto++ >= tentativiInCoda : altri++ >= tentativi) throw e
       await attendi(1500)
     }
   }
@@ -289,7 +321,7 @@ export function creaLettura(d: DipendenzeLettura) {
     return p
   }
   const ascolta = (m: Record<string, unknown>) => {
-    if (m.fase === 'fine' || m.fase === 'errore') return
+    if (m.fase === 'fine' || m.fase === 'errore' || m.fase === 'inizio') return
     if (d.riga) metti({ riga: d.riga(m) })
     if (m.fase === 'desktop' && m.stato === 'fatto') metti({ fineDesktop: m })
   }
@@ -303,12 +335,43 @@ export function creaLettura(d: DipendenzeLettura) {
     const mostra = (nuove: RigaLettura[]) => { r = nuove; metti({ righe: nuove }) }
     mostra(r)
     let guasto = ''
+    /** Due minuti in fila dietro un'altra lettura, senza mai leggere: le righe vuote restano in coda. */
+    let senzaTurno = false
+    /*
+     * Le fonti che la lettura visita davvero (P4): chi si attacca a una
+     * lettura già partita riceve l'elenco di quella, e una fonte collegata
+     * dopo non c'è. La sua riga resta «In coda», e alla fine si legge ancora
+     * una volta per lei: mai «✓ 0» per una fonte che non si è letta.
+     */
+    let visitate: string[] | null = null
+    /*
+     * La seconda lettura, per le righe rimaste «In coda», rilegge tutto (è una
+     * lettura di tutte le fonti: così fa anche la prima pagina con la posta).
+     * Le righe già chiuse non tornano indietro: una fonte letta non torna a
+     * «apro l'agenda» mentre si aspetta quella che mancava. Il suo conto sì,
+     * quando questa lettura la finisce: il Mac riletto per intero ha anche i
+     * file più vecchi dei novanta giorni, e la riga dice quanti sono.
+     */
+    let soloAperte: Set<string> | null = null
+    const su = (m: Record<string, unknown>) => {
+      if (m.fase === 'inizio') { visitate = Array.isArray(m.fonti) ? m.fonti.map(String) : null; return }
+      ascolta(m)
+      if (soloAperte && !soloAperte.has(String(m.fase ?? '')) && m.stato !== 'fatto') return
+      mostra(avanzaLettura(r, m))
+    }
+    const fuori = () => { const v: string[] | null = visitate; return v ? r.filter(x => aperta(x) && !v.includes(x.id)) : [] }
     try {
-      await leggiAlProprioTurno(() => d.sincronizza(m => { ascolta(m); mostra(avanzaLettura(r, m)) }), d.attendi)
+      await leggiAlProprioTurno(() => d.sincronizza(su), d.attendi)
+      if (fuori().length) {
+        visitate = null
+        soloAperte = new Set(r.filter(aperta).map(x => x.id))
+        await leggiAlProprioTurno(() => d.sincronizza(su), d.attendi)
+      }
     } catch (e) {
       // dopo due minuti di fila dietro a un'altra lettura non è un guasto di
       // nessuna fonte: si guarda com'è l'indice adesso, sotto
       if (messaggio(e) !== GIA_IN_CORSO) guasto = t(messaggio(e))
+      else senzaTurno = true
     }
     const dopo = await d.collegate().catch(() => null)
     if (guasto) {
@@ -316,7 +379,7 @@ export function creaLettura(d: DipendenzeLettura) {
       metti({ guaio: guasto })
     } else {
       // una fonte scollegata nel frattempo non ha più una riga
-      mostra(chiudiLettura(dopo ? r.filter(x => x.id in dopo) : r, id => dopo?.[id]))
+      mostra(chiudiLettura(dopo ? r.filter(x => x.id in dopo) : r, id => dopo?.[id], { vuoteInCoda: senzaTurno }))
     }
     return r
   }

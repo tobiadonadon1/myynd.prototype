@@ -30,6 +30,7 @@ import { classificaAttenzione, contieneRichiesta, contestoAttenzione, corpoAttua
 import { esameDi } from './feed-dati.ts'
 import * as giudizi from './giudizi.ts'
 import * as jev from './jev.ts'
+import { FONTI_POSTA } from './connettori/registro.ts'
 
 export type Mancata = {
   id: string
@@ -72,7 +73,7 @@ export const RISPOSTA_LUNGA = 200
 /** Una riga tolta entro tanti minuti era uno sbaglio, non una cosa da fare. */
 export const MINUTI_RIPENSAMENTO = 10
 
-const EMAIL = ['posta', 'gmail', 'outlook']
+const EMAIL: string[] = [...FONTI_POSTA, 'gmail', 'outlook', 'imap']
 const SUE = new Set(['conversazioni', 'x', 'lavoro'])
 const CAMPI = 'id, fonte, tipo, titolo, corpo, autore, percorso, quando, gruppo, indicizzato, filo, inviato, messageId, letto, massa, risponde, destinatari'
 

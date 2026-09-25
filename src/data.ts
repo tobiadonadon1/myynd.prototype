@@ -56,11 +56,11 @@ export type Gruppo = { id: string; nome: string; colore: string; nodi: number }
  * e `server/index.ts` rifiuta un valore che il server non conosce.
  */
 export const AUTONOMIE = [
-  { id: 'chiedere', titolo: 'Solo osservare', nota: 'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.' },
-  { id: 'preparare', titolo: 'Preparare e aspettare', nota: 'Prepara il lavoro, niente esce senza il tuo Invia.' },
+  { id: 'chiedere', titolo: 'Solo osservare', nota: 'Chiede prima di preparare qualcosa da solo.' },
+  { id: 'preparare', titolo: 'Preparare e aspettare', nota: 'Prepara in anticipo. Niente esce senza il tuo Invia.' },
   // l'apostrofo è quello dritto perché è quello della chiave nel dizionario:
   // con quello tipografico la ricerca falliva e il titolo restava in italiano
-  { id: 'fare', titolo: "Fino all'ultimo passo", nota: 'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.' }
+  { id: 'fare', titolo: "Fino all'ultimo passo", nota: 'Porta il lavoro fino all’ultimo passo. Invia resta tuo.' }
 ]
 
 /** I modelli fra cui scegliere, dal più economico al più capace. Rispecchia MODELLI in server/config.ts. */

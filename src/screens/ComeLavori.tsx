@@ -91,7 +91,7 @@ export function RigaAbitudine({ testo, prova, inAttesa, superata, fino, guaioFuo
       )}
       <div className="mem-meta">
         <span>{prova.riga}</span>
-        {aspetta && <span style={{ color: 'var(--rame-testo)' }}>{t('non la sto usando')}</span>}
+        {aspetta && <span style={{ color: 'var(--rame-testo)' }}>{t('Da guardare')}</span>}
         {superata && fino && <span>{g.finoAl(fino)}</span>}
         {prova.esempi.length > 0 && (
           <button type="button" className="mem-perche" onClick={() => setAperta(a => !a)} aria-expanded={aperta}>

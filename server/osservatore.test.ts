@@ -276,8 +276,12 @@ test('il proprietario cancellato: le sessioni cadono, nessuna cartella nasce, il
   assert.equal(existsSync(join(CASA, 'utenti', anna)), false, 'nessuna cartella per un conto che non c’è più')
 })
 
-test('«cancella le osservazioni» è una transazione sola: se il ricalcolo delle righe cade, le sessioni restano e la pagina che dice «non è andata» dice il vero', () => {
-  chi.dentro(anna, () => {
+test('«cancella le osservazioni» è una transazione sola: se il ricalcolo delle righe cade, le sessioni restano e la pagina che dice «non è andata» dice il vero', async () => {
+  // un conto suo: quello di anna la prova di prima l'ha cancellato, e un conto cancellato non si riapre (P4)
+  const c = await conti.registra('carla@esempio.it', 'passwordlunga3')
+  const carla = c.ok ? c.id : ''
+  chi.dentro(carla, () => { cfg.scrivi({ lingua: 'en', fuso: 'Europe/Rome' }); store.azzeraTutto() })
+  chi.dentro(carla, () => {
     store.default.exec('DELETE FROM abitudini; DELETE FROM sessioni_app')
     const ins = store.default.prepare('INSERT INTO sessioni_app (bundle, app, titolo, inizio, fine, secondi, giorno, progetto, cartella) VALUES (?,?,?,?,?,?,?,?,?)')
     for (let i = 1; i <= 7; i++) { const g = `2026-09-${String(24 - i).padStart(2, '0')}`; ins.run('com.apple.Safari', 'Safari', null, `${g}T07:00:00.000Z`, `${g}T10:00:00.000Z`, 10800, g, null, null) }

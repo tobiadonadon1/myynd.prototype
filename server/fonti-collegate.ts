@@ -18,6 +18,8 @@ export function fonteCollegata(id: string, c: cfg.Config = cfg.leggi()): boolean
     case 'note': return !!c.note
     case 'conversazioni': return !!c.conversazioni
     case 'calendario': return !!c.calendario
+    case 'agendamac': return !!c.agendamac
+    case 'postamac': return !!c.postamac
     case 'x': return !!c.x
     case 'google': return !!c.google?.refresh
     case 'slack': return !!c.slack?.token

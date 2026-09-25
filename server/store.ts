@@ -15,6 +15,7 @@ import { dovePortare } from './scrivania.ts'
 import { contestoAttenzione, stessaRichiesta, mittenteAutomatico, indirizzoAttenzione, type ContestoAttenzione } from './rilevanza.ts'
 // una foglia: da qui lo store sa quando scade una carta con una data
 import { scadenzaDi } from './data-carta.ts'
+import * as cancellati from './cancellati.ts'
 import type { Ragione } from './feed-esiti.ts'
 
 /*
@@ -51,6 +52,9 @@ const guasti = new Map<string, { errore: Error; quando: number }>()
 const GUASTO_VALE = 60_000
 
 function apri(dove: string): DatabaseSync {
+  // un conto appena cancellato non si riapre: una lettura rimasta in volo
+  // ricreerebbe la cartella con dentro la sua posta (P4)
+  if (cancellati.cancellata(dove)) throw new Error(cancellati.CONTO_CANCELLATO)
   if (!existsSync(dove)) mkdirSync(dove, { recursive: true, mode: 0o700 })
   const file = join(dove, 'mente.db')
   const d = new DatabaseSync(file)
@@ -567,7 +571,9 @@ const TABELLE = {
       fonte TEXT PRIMARY KEY, motivo TEXT NOT NULL, rimedio TEXT, frase TEXT,
       dal TEXT NOT NULL, fila INTEGER NOT NULL DEFAULT 1, visto TEXT NOT NULL
     );
-  `
+  `,
+  // P5 · le convinzioni scordate a mano: una deduzione uguale non torna
+  convinzioni_tolte: 'CREATE TABLE IF NOT EXISTS convinzioni_tolte (id TEXT PRIMARY KEY, quando TEXT NOT NULL);'
 } as const
 
 /**
@@ -1510,7 +1516,9 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
     d.exec('CREATE INDEX IF NOT EXISTS idx_compiti_chiuso ON compiti(chiuso)')
   },
   // 64 → 65 · P1B · chi ha invitato a un'occorrenza dell'agenda: serve alla riga «gli inviti di X li rifiuti».
-  d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT')
+  d => colonna(d, 'agenda_viste', 'organizzatore', 'TEXT'),
+  // 65 → 66 · P5 · una convinzione scordata non torna
+  d => d.exec(TABELLE.convinzioni_tolte)
 ]
 
 /**
@@ -2165,6 +2173,15 @@ export type Ambito = {
   completo: boolean
   /** Le radici percorse fino in fondo; vuoto significa «tutta la fonte». */
   radiciViste?: string[]
+  /**
+   * Il tratto di date guardato, quando la lettura è una finestra (ISO).
+   *
+   * Una prima lettura di novanta giorni seguita da una di trenta non deve
+   * cancellare i sessanta in mezzo: fuori dalla finestra il silenzio non
+   * prova niente. Un documento senza data si tratta come dentro.
+   */
+  dal?: string
+  al?: string
 }
 
 /**
@@ -2204,10 +2221,20 @@ export function scordaDocumenti(ids: string[]): number {
 export function riconcilia(fonte: string, ambito: Ambito, idVisti: string[]): number {
   if (!ambito.completo) return 0
   const vivi = new Set(idVisti)
-  const tutti = db.prepare('SELECT rid, id, percorso FROM documenti WHERE fonte = ?').all(fonte) as
-    { rid: number; id: string; percorso: string | null }[]
+  const tutti = db.prepare('SELECT rid, id, percorso, quando FROM documenti WHERE fonte = ?').all(fonte) as
+    { rid: number; id: string; percorso: string | null; quando: string | null }[]
 
-  const dentro = (r: { percorso: string | null }) => {
+  const da = ambito.dal ? Date.parse(ambito.dal) : NaN
+  const a = ambito.al ? Date.parse(ambito.al) : NaN
+  const nellaFinestra = (r: { quando: string | null }) => {
+    if (Number.isNaN(da) && Number.isNaN(a)) return true
+    if (!r.quando) return true
+    const q = Date.parse(r.quando)
+    if (Number.isNaN(q)) return true
+    return (Number.isNaN(da) || q >= da) && (Number.isNaN(a) || q <= a)
+  }
+  const dentro = (r: { percorso: string | null; quando: string | null }) => {
+    if (!nellaFinestra(r)) return false
     const radici = ambito.radiciViste
     if (!radici || !radici.length) return true
     return !!r.percorso && radici.some(rad => r.percorso === rad || r.percorso!.startsWith(rad + '/'))
@@ -4373,8 +4400,11 @@ function idConvinzione(enunciato: string, ambito: string): string {
 export function ricorda(c: Omit<Convinzione, 'id' | 'dal'> & { id?: string; dal?: string }): string {
   const ora = new Date().toISOString()
   const id = c.id ?? idConvinzione(c.enunciato, c.ambito)
+  // scordata a mano: quello che deduce da solo non la rimette; quello che dice lei sì (P5)
+  if (c.genere !== 'esplicita' && db.prepare('SELECT 1 FROM convinzioni_tolte WHERE id = ?').get(id)) return id
   db.exec('BEGIN')
   try {
+    if (c.genere === 'esplicita') db.prepare('DELETE FROM convinzioni_tolte WHERE id = ?').run(id)
     if (c.sostituisce) {
       db.prepare('UPDATE convinzioni SET al = ? WHERE id = ? AND al IS NULL').run(ora, c.sostituisce)
     }
@@ -4409,7 +4439,16 @@ export function ricorda(c: Omit<Convinzione, 'id' | 'dal'> & { id?: string; dal?
     db.exec('ROLLBACK')
     throw e
   }
+  // una che aspetta di essere guardata: chi ha la Memoria aperta lo sa subito (P5)
+  if (c.genere === 'indotta' && !c.confermata) for (const f of suInAttesa) { try { f() } catch { /* un ascoltatore non ferma la scrittura */ } }
   return id
+}
+
+/** Chi vuole sapere che è nata una convinzione da guardare (P5: il punto accanto a «Memoria»). */
+const suInAttesa = new Set<() => void>()
+export function quandoNeAspettaUna(f: () => void): () => void {
+  suInAttesa.add(f)
+  return () => { suInAttesa.delete(f) }
 }
 
 /**
@@ -4481,7 +4520,13 @@ export function convinzioniStoriche(): Convinzione[] {
 
 /** Cancellare a mano è un diritto: è la sua testa, deve poterci mettere le mani. */
 export function scordaConvinzione(id: string) {
-  db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
+  // la lapide prima: la stessa frase dedotta domani non deve tornare (P5)
+  db.exec('BEGIN')
+  try {
+    db.prepare('INSERT OR REPLACE INTO convinzioni_tolte (id, quando) VALUES (?, ?)').run(id, new Date().toISOString())
+    db.prepare('DELETE FROM convinzioni WHERE id = ?').run(id)
+    db.exec('COMMIT')
+  } catch (e) { db.exec('ROLLBACK'); throw e }
 }
 
 export function chiudiConvinzione(id: string) {
@@ -5364,5 +5409,97 @@ export function ritardiLavori(dal: string): number[] {
 }
 
 // — P10: fine —
+
+// — P4: inizio —
+//
+// Il primo avvio: sapere se una fonte ha già dei documenti, la posta arrivata
+// per la prima pagina, i doppioni fra Mail del Mac e la casella letta da IMAP,
+// e le date vere dell'imbuto (primo documento, prima carta vista, primo gesto).
+
+/** C'è almeno un documento (di questa fonte, se detta). */
+export function haDocumenti(fonte?: string): boolean {
+  const r = fonte
+    ? db.prepare('SELECT 1 AS x FROM documenti WHERE fonte = ? LIMIT 1').get(fonte)
+    : db.prepare('SELECT 1 AS x FROM documenti LIMIT 1').get()
+  return !!r
+}
+
+/** Il feed non ha mai avuto una carta, in nessuno stato. */
+export function nessunaCarta(): boolean {
+  return !db.prepare('SELECT 1 AS x FROM feed LIMIT 1').get()
+}
+
+/**
+ * La posta arrivata negli ultimi giorni, dalla più recente.
+ *
+ * Per la prima pagina: la lettura di novanta giorni mette nell'indice anche
+ * centinaia di impegni futuri, e i «recenti» per indicizzazione sarebbero
+ * quelli. Qui solo email ricevute, con una data che è già passata.
+ */
+export function postaArrivataRecente(giorni = 30, limite = 200): Documento[] {
+  const adesso = new Date()
+  const da = new Date(adesso.getTime() - giorni * 86_400_000).toISOString()
+  return db.prepare(`
+    SELECT ${CAMPI} FROM documenti
+    WHERE tipo = 'email' AND (inviato IS NULL OR inviato = 0) AND quando <= ? AND quando >= ?
+    ORDER BY quando DESC LIMIT ?
+  `).all(adesso.toISOString(), da, limite) as unknown as Documento[]
+}
+
+/** I Message-ID già nell'indice per queste fonti. */
+export function messageIdGia(ids: string[], fonti: readonly string[]): Set<string> {
+  const fuori = new Set<string>()
+  const puliti = [...new Set(ids.filter(Boolean))]
+  if (!puliti.length || !fonti.length) return fuori
+  const segnaposto = fonti.map(() => '?').join(',')
+  for (let i = 0; i < puliti.length; i += 400) {
+    const pezzo = puliti.slice(i, i + 400)
+    const righe = db.prepare(`SELECT messageId FROM documenti WHERE fonte IN (${segnaposto}) AND messageId IN (${pezzo.map(() => '?').join(',')})`)
+      .all(...fonti, ...pezzo) as { messageId: string }[]
+    for (const r of righe) fuori.add(r.messageId)
+  }
+  return fuori
+}
+
+/**
+ * La stessa email letta due volte: da Mail del Mac e dalla casella.
+ *
+ * Vince la casella, che sa rispondere e mettere da parte le bozze: la copia
+ * di Mail del Mac se ne va, e il feed che la citava smette di prometterla.
+ */
+export function togliDoppioniMac(docs: Pick<Documento, 'messageId'>[]): number {
+  const mid = [...new Set(docs.map(d => d.messageId).filter((m): m is string => !!m))]
+  if (!mid.length) return 0
+  const ids: string[] = []
+  for (let i = 0; i < mid.length; i += 400) {
+    const pezzo = mid.slice(i, i + 400)
+    const righe = db.prepare(`SELECT id FROM documenti WHERE fonte = 'postamac' AND messageId IN (${pezzo.map(() => '?').join(',')})`)
+      .all(...pezzo) as { id: string }[]
+    ids.push(...righe.map(r => r.id))
+  }
+  return scordaDocumenti(ids)
+}
+
+/** Quando è entrato il primo documento. */
+export function primoIndicizzato(): string | null {
+  const r = db.prepare('SELECT MIN(indicizzato) AS q FROM documenti').get() as { q: string | null } | undefined
+  return r?.q ?? null
+}
+
+/** Quando una carta è stata vista per la prima volta (P2 scrive `vista`). */
+export function primaVista(): string | null {
+  const r = db.prepare('SELECT MIN(vista) AS q FROM feed').get() as { q: string | null } | undefined
+  return r?.q ?? null
+}
+
+/** Il primo gesto su una carta: fatta, scartata, o affidata a una riga. */
+export function primoGesto(): string | null {
+  const a = (db.prepare("SELECT MIN(risposto) AS q FROM feed WHERE stato IN ('fatto','scartato')").get() as { q: string | null } | undefined)?.q ?? null
+  const b = (db.prepare('SELECT MIN(creato) AS q FROM compiti WHERE voce IS NOT NULL').get() as { q: string | null } | undefined)?.q ?? null
+  if (!a) return b
+  if (!b) return a
+  return Date.parse(a) <= Date.parse(b) ? a : b
+}
+// — P4: fine —
 
 export default db

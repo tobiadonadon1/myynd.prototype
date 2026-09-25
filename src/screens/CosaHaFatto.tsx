@@ -16,7 +16,8 @@ const RIGA: CSSProperties = {
   border: 'none', background: 'none', textAlign: 'left', font: 'inherit', color: 'var(--inchiostro)', cursor: 'pointer'
 }
 
-export function CosaHaFatto() {
+/** `titolo` falso dentro la sezione della Memoria che ha già il suo titolo (P5). */
+export function CosaHaFatto({ titolo = true }: { titolo?: boolean } = {}) {
   const [s, setS] = useState<SommarioResoconto | null>(null)
   useEffect(() => {
     let vivo = true
@@ -27,7 +28,7 @@ export function CosaHaFatto() {
   const etichetta = (q: QualeResoconto) => q === 'questa' ? t('Questa settimana') : q === 'scorsa' ? t('La settimana scorsa') : parole.etichettaInizio(s.inizio)
   return (
     <section className="mem-section" data-sezione="cosa-ha-fatto">
-      <div className="mem-section-head"><h2>{t('Cosa ha fatto Myynd')}</h2></div>
+      {titolo && <div className="mem-section-head"><h2>{t('Cosa ha fatto Myynd')}</h2></div>}
       <div className="mem-card">
         {s.righe.map(r => (
           <Hov key={r.quale} as="button" type="button" style={RIGA} hover={{ color: 'var(--rame)' }} onClick={() => apriResoconto(r.quale)}>

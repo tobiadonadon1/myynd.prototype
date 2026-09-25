@@ -92,6 +92,13 @@ before(async () => {
   chi.dentro(account.id, () => {
     cfg.scrivi({
       lingua: 'en', diSerie: false,
+      /*
+       * Un conto che ha finito l'avvio. Senza, è uno sconosciuto ancora sul
+       * passo delle fonti, e da P4 la rilettura di sottofondo lì non fa né la
+       * prima pagina né il feed: libera la serratura in un attimo, e la
+       * seconda pressione, con la macchina carica, non la trova più presa.
+       */
+      onboarding: true,
       // una fonte collegata, o la rilettura di sottofondo non parte nemmeno
       desktop: { cartelle: [cartella], scelte: true },
       motore: 'compatibile',

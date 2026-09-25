@@ -1,0 +1,13 @@
+[
+  { "clicca": "Your account" },
+  { "vai": "Memory" },
+  { "clicca": "Your portrait" },
+  { "aspetta": 800 },
+  { "js": "(() => { const c = [...document.querySelectorAll('.mem-convinzione')].find(x => x.textContent.includes('Prefers calls to email')); const b = c && c.querySelector('button[aria-label=\"Forget it\"]'); if (b) b.click(); return !!b })()" },
+  { "aspetta": 300 },
+  { "js": "(() => { const c = [...document.querySelectorAll('.mem-convinzione')].find(x => x.textContent.includes('Prefers calls to email')); const b = c && c.querySelector('button[aria-label=\"Sure?\"]'); if (b) b.click(); return !!b })()" },
+  { "aspetta": 600 },
+  { "js": "(() => { const c = [...document.querySelectorAll('.mem-convinzione')].find(x => x.textContent.includes('Replies to Harbor Labs')); const b = c && [...c.querySelectorAll('button')].find(x => x.textContent.trim() === 'Keep it'); if (b) b.click(); return !!b })()" },
+  { "aspetta": 800 },
+  { "scatta": "T3-fine" }
+]

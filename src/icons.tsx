@@ -52,6 +52,14 @@ export const IconDoc = ({ size = 22, style }: P) => (
   </svg>
 )
 
+/** La Memoria nel menù del conto (P5): una pagina con l'angolo piegato e due righe, lo stesso tratto di IconDoc. */
+export const IconMemoria = ({ size = 15, style }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" style={style} aria-hidden="true" focusable="false">
+    <path d="M6 3.2h7.4L18.6 8.4V20.8H6Z" /><path d="M13.2 3.4v5.2h5.2" />
+    <path d="M8.8 13.2h6.4M8.8 16.6h4.6" strokeLinecap="round" />
+  </svg>
+)
+
 // La riga della lista: indica la voce — «questa qui» — e in fondo alla frase
 // c'è un chevron che apre il testo. Due segni diversi per due gesti diversi.
 export const IconFrecciaDx = ({ size = 13, style }: P) => <IconFreccia size={size} style={style} />

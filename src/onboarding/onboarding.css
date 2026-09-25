@@ -75,3 +75,9 @@
 .onboard-source.is-failed{border-color:#d98a5a8c;background:#d98a5a14}.onboard-source-state.is-failed,.onboard-connected.is-failed{color:#e8a87c}.onboard-source-note{font-size:12px;line-height:1.55;color:#d1c6bc;margin:-6px 0 12px;overflow-wrap:anywhere}.onboard-source-note.is-failed{color:#f8d5c5}.onboard-source-actions{display:flex;align-items:center;gap:22px;margin:-4px 0 4px}.onboard-source-actions .onboard-secondary{padding:6px 0}.is-avviso .onboard-reading-state{color:#e8a87c}
 /* revisione finale: Indietro resta a sinistra anche da solo; la fonte di un estratto è una riga, senza freccia */
 .onboard-actions>.onboard-back{margin-left:0;margin-right:auto}.onboard-fact-source{margin:8px 0 0 42px;color:#b8a99c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+/* la riga del modello sotto le schede: lo stesso filo delle altre righe (P4) */
+.onboard-model-row{border-top:1px solid #ffffff1f;margin-top:14px}
+/* i marchi quasi neri (Notion, Slack, Note, Anthropic) seguono il tema dell'app, ma l'avvio è scuro sempre:
+   sulle piastrelle chiare il loro colore vero, sul fondo scuro l'inchiostro chiaro */
+.onboard-source>svg,.intro-tessera svg,.onboard-reading-row>svg{--marchio-scuro:initial}
+.onboard-source-title>svg,.onboard-option-body>svg{--marchio-scuro:#f6f2eb}

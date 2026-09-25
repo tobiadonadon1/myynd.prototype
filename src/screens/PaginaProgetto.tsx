@@ -35,8 +35,8 @@ import { coloreProgetto } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
 import { annunciaProgetti, portaAlleAttivita, primoParagrafo, siPuoAprireLeCose, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
-import { NomiERaggruppamento, Pallino, Scritta, Stati, Tic, useSalvataggi } from './ProgettoEditor'
-import { CAMPO, Scatola } from './Myynd'
+import { NomiERaggruppamento, Pallino, Scritta, Stati, useSalvataggi } from './ProgettoEditor'
+import { Casella, Salvato } from '../components/forme'
 import './progetto.css'
 
 const INCHIOSTRO = 'var(--inchiostro)'
@@ -160,7 +160,7 @@ function Pagina({ p, v, lista }: { p: Progetto; v: Vals; lista: Lista }) {
               <PrioritaProgetto alta={p.priorita === 'alta'} nome={p.nome}
                 cambia={alta => void manda('priorita', { priorita: alta ? 'alta' : null })} />
             )}
-            <Tic mostra={!!(fatti.stato || fatti.priorita)} />
+            <Salvato mostra={!!(fatti.stato || fatti.priorita)} />
             <span className="prog-conto">{frasi.attivitaDelProgetto(aperte.length, fatte.length)}</span>
           </div>
           {(guai.nome || guai.obiettivo || guai.stato || guai.priorita) && (
@@ -277,12 +277,10 @@ function Passi({ p, aperte, lista, chiudiPagina }: { p: Progetto; aperte: Compit
           {/* vuoto, la sezione è una domanda sola con la barra sotto: P4, si impara facendo */}
           {!aperte.length && <label htmlFor="prog-nuovo-passo" className="prog-invito">{t('Qual è il primo passo?')}</label>}
           <form className="prog-barra" onSubmit={e => { e.preventDefault(); aggiungi() }}>
-            <Scatola>
-              <input id="prog-nuovo-passo" value={testo} maxLength={300} onChange={e => setTesto(e.target.value)}
-                placeholder={aperte.length ? t('Aggiungi un passo') : t('Manda il preventivo a Rossi')}
-                aria-label={aperte.length ? t('Aggiungi un passo') : t('Qual è il primo passo?')} style={CAMPO} />
-              {!!testo.trim() && <button type="submit" className="prog-aggiungi">{t('Aggiungi')}</button>}
-            </Scatola>
+            <Casella id="prog-nuovo-passo" valore={testo} maxLength={300} cambia={setTesto} invio={aggiungi}
+              esempio={aperte.length ? t('Aggiungi un passo') : t('Manda il preventivo a Rossi')}
+              aria-label={aperte.length ? t('Aggiungi un passo') : t('Qual è il primo passo?')}
+              dopo={testo.trim() ? <button type="submit" className="prog-aggiungi">{t('Aggiungi')}</button> : null} />
           </form>
         </>
       )}
@@ -328,14 +326,10 @@ function Note({ p, manda, salvato, guaio }: {
   }, [])
   return (
     <section className="prog-sezione" aria-labelledby="prog-note">
-      <div className="prog-testa"><h2 id="prog-note">{t('Note')}</h2><Tic mostra={salvato} /></div>
+      <div className="prog-testa"><h2 id="prog-note">{t('Note')}</h2><Salvato mostra={salvato} /></div>
       {p.note && <div className="prog-note">{p.note}</div>}
-      <Scatola alto>
-        <textarea value={nota} onChange={e => setNota(e.target.value)} onBlur={aggiungi}
-          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); aggiungi() } }}
-          rows={2} aria-label={t('Aggiungi una nota')} placeholder={t('Aggiungi una nota')}
-          style={{ ...CAMPO, resize: 'vertical', lineHeight: 1.5, padding: '2px 0', minHeight: 40 }} />
-      </Scatola>
+      <Casella righe={2} valore={nota} cambia={setNota} invio={aggiungi} alUscire={aggiungi}
+        aria-label={t('Aggiungi una nota')} esempio={t('Aggiungi una nota')} />
       {guaio && <div role="alert" className="prog-guaio">{t(guaio)}</div>}
     </section>
   )

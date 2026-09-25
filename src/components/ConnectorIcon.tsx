@@ -76,6 +76,9 @@ export function ConnectorIcon({ id, size = 28, spenta = false }: { id: string; s
     posta: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></>,
     calendario: <><rect x="4" y="5" width="16" height="16" rx="3" /><path d="M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 3h2" /></>,
     desktop: <><rect x="2.5" y="4" width="19" height="13" rx="2.5" /><path d="M8 21h8m-4-4v4M7 8h5" /></>,
+    /* Mail e Calendario di questo Mac (P4): la busta e il calendario di casa, sopra la base di un computer. Niente segni di Apple. */
+    postamac: <><rect x="3" y="3.5" width="18" height="12.5" rx="2.5" /><path d="m4.5 6 7.5 5.5L19.5 6" /><path d="M7 20.5h10" /></>,
+    agendamac: <><rect x="4" y="3.5" width="16" height="13.5" rx="3" /><path d="M8 2v3m8-3v3M4 8.5h16M8 12.5h2m4 0h2" /><path d="M7 20.5h10" /></>,
     granola: <><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 0v18m3-13h4m-4 4h4" /></>,
     conversazioni: <><path d="M14 14H7l-4 3V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5a3 3 0 0 1-3 3Z" /><path d="M8 17v1a2 2 0 0 0 2 2h6l4 2V11a2 2 0 0 0-1-1.7" /></>,
     mind2do: <><rect x="4" y="3" width="16" height="18" rx="4" /><path d="m8 12 3 3 5-6" strokeWidth="2" /></>,

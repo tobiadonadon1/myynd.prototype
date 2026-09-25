@@ -31,6 +31,7 @@
     "valuta:lavoro": "node --disable-warning=ExperimentalWarning server/valuta-lavoro.ts",
     "misura:feed": "node --disable-warning=ExperimentalWarning server/misura-feed.ts",
     "prova:resoconto": "node --disable-warning=ExperimentalWarning server/resoconto-prova.ts",
+    "imbuto": "node --disable-warning=ExperimentalWarning server/imbuto-cli.ts",
     "prova:jev": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/prova-jev.ts"
   },
   "dependencies": {

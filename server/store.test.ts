@@ -1160,7 +1160,7 @@ test('ogni migrazione ha davvero lasciato la sua colonna', () => {
   for (const t of ['documenti', 'ricerca', 'chat', 'messaggi', 'feed', 'convinzioni', 'blocchi',
     'domande', 'compiti', 'automazioni', 'azioni', 'notizie', 'raccolte', 'uso', 'progetti',
     'segnali', 'sessioni_app', 'agenda_viste', 'previsioni', 'punteggi', 'abitudini', 'fiducia', 'mancate',
-    'feed_esame', 'misure_compiti', 'prove', 'esiti', 'salute_fonti', 'stato_fonti']) {
+    'feed_esame', 'misure_compiti', 'prove', 'esiti', 'salute_fonti', 'stato_fonti', 'convinzioni_tolte']) {
     assert.ok(tabelle.includes(t), `manca la tabella «${t}»`)
   }
 })

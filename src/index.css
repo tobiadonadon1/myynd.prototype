@@ -307,3 +307,105 @@ html.app-darwin :is(button,a,input,textarea,select,[role=button],[role=switch],.
    sopra le colonne, che App.tsx aggiunge come margine (`striscia`). */
 
 @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+
+/* — P5: forme, inizio —
+   Il corredo: un campo, un bottone, una scelta, un interruttore, una scheda,
+   e la pagina a sezioni delle Preferenze e della Memoria. Solo gettoni della
+   tavolozza, raggi 10/14/20/99. Di notte niente velo sotto il mouse, e un
+   riempimento scurisce invece di schiarire. */
+.f-scatola{display:flex;align-items:flex-start;gap:8px;box-sizing:border-box;width:100%;min-width:0;padding:10px 14px;border-radius:14px;background:rgba(var(--carta-rgb),.86);border:1px solid rgba(var(--luce-rgb),.9);box-shadow:0 4px 16px rgba(var(--ombra-rgb),.05);transition:border-color .15s,box-shadow .15s}
+.f-scatola:focus-within{border-color:rgba(var(--inchiostro-rgb),.26);box-shadow:0 8px 26px rgba(var(--ombra-rgb),.1)}
+.f-scatola.libera{backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.f-scatola.spento{opacity:.55}
+.f-scatola input,.f-scatola textarea,.f-scatola select{flex:1;min-width:0;width:100%;border:0;background:none;outline:none;padding:0;margin:0;color:var(--inchiostro);font-family:inherit;font-size:14px;line-height:1.55}
+.f-scatola textarea{resize:vertical;min-height:1.55em}
+.f-scatola select{cursor:pointer}
+.f-scatola ::placeholder{color:var(--inchiostro-3)}
+.f-campo{display:flex;flex-direction:column;gap:5px;min-width:0}
+.f-etichetta{display:block;font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:rgba(var(--inchiostro-rgb),.55)}
+.f-riga-etichetta{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.f-piede-campo{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:16px;min-width:0}
+.f-guaio{font-size:12px;line-height:1.5;color:var(--rame-testo);overflow-wrap:anywhere}
+.f-stato{font-size:12.5px;line-height:1.55;color:rgba(var(--inchiostro-rgb),.7);overflow-wrap:anywhere;text-wrap:pretty;min-width:0}
+.f-stato.rame{color:var(--rame-testo)}
+.f-stato.verde{color:var(--verde-cupo)}
+.f-stato code{background:rgba(var(--inchiostro-rgb),.07);padding:1px 6px;border-radius:10px;word-break:break-all}
+.f-salvato{flex:none;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--verde-cupo);transition:opacity .35s}
+.f-conto{font-size:11.5px;color:var(--inchiostro-3)}
+.f-conto.rame{color:var(--rame-testo)}
+
+.f-bottone{flex:none;display:inline-grid;align-items:center;justify-items:center;box-sizing:border-box;padding:9px 18px;border-radius:99px;border:1px solid transparent;background:none;font-family:inherit;font-size:13px;font-weight:500;line-height:1.3;white-space:nowrap;cursor:pointer;transition:opacity .15s,border-color .15s,color .15s,background .15s}
+.f-bottone>span{grid-area:1/1;display:inline-flex;align-items:center;gap:6px}
+.f-bottone>span[aria-hidden=true]{visibility:hidden}
+.f-bottone.pieno{background:var(--gradiente-rame);color:var(--avorio);border-color:rgba(var(--luce-rgb),.4)}
+.f-bottone.contorno{border-color:rgba(var(--inchiostro-rgb),.2);color:rgba(var(--inchiostro-rgb),.82);font-weight:400}
+.f-bottone.contorno:hover{border-color:rgba(var(--rame-rgb),.45);color:var(--rame-testo)}
+.f-bottone.parola{padding-left:0;padding-right:0;color:var(--rame-testo);font-weight:400}
+.f-bottone.parola:hover{color:var(--rame)}
+.f-bottone.pericolo{background:var(--rame-forte);color:var(--avorio)}
+.f-bottone.piccolo{padding:5px 13px;font-size:12px}
+.f-bottone.parola.piccolo{padding:0}
+.f-bottone:disabled{opacity:.45;cursor:default}
+.f-bottone:focus-visible,.f-scelta:focus-visible,.f-interruttore:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--rame-rgb),.35)}
+
+.f-scelte{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.f-scelta{padding:9px 17px;border-radius:99px;border:1px solid rgba(var(--inchiostro-rgb),.2);background:rgba(var(--luce-rgb),.5);color:var(--inchiostro);font-family:inherit;font-size:13px;cursor:pointer;max-width:100%;overflow-wrap:anywhere;transition:border-color .15s,background .15s}
+.f-scelta:hover{border-color:rgba(var(--rame-rgb),.45)}
+.f-scelta[aria-checked=true]{background:var(--gradiente-rame);color:var(--avorio);border-color:rgba(var(--luce-rgb),.5);font-weight:500}
+.f-scelta:disabled{opacity:.55;cursor:default}
+
+.f-interruttore{flex:none;display:flex;justify-content:flex-start;box-sizing:border-box;width:40px;height:23px;padding:2px;border:0;border-radius:99px;background:rgba(var(--inchiostro-rgb),.2);cursor:pointer;transition:background .2s}
+.f-interruttore[aria-checked=true]{background:var(--gradiente-rame);justify-content:flex-end}
+.f-interruttore>span{width:19px;height:19px;border-radius:50%;background:var(--avorio);box-shadow:0 2px 5px rgba(var(--ombra-rgb),.3)}
+.f-interruttore:disabled{opacity:.5;cursor:default}
+
+.f-griglia{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));align-items:stretch;gap:11px;margin-top:11px}
+.f-carta{position:relative;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;padding:15px 16px;border:1px solid rgba(var(--luce-rgb),.8);border-radius:20px;background:rgba(var(--carta-rgb),.72);box-shadow:0 6px 18px -12px rgba(var(--ombra-rgb),.5);outline:2px solid transparent;outline-offset:4px;transition:outline-color .3s}
+.f-carta.larga{grid-column:1/-1}
+.f-carta.quieta{background:rgba(var(--carta-rgb),.46);box-shadow:none;border-color:rgba(var(--inchiostro-rgb),.1)}
+.f-carta-cima{display:flex;align-items:center;gap:10px;min-width:0}
+.f-carta-cima h3{flex:1;min-width:0;margin:0;font-size:15px;font-weight:500;line-height:1.35;letter-spacing:-.01em;color:var(--inchiostro);overflow-wrap:anywhere}
+.f-carta[data-acceso],.mem-progetto[data-acceso]{outline-color:var(--rame)}
+.f-riga{display:flex;align-items:center;gap:12px;min-width:0;padding-top:12px;border-top:1px solid rgba(var(--inchiostro-rgb),.08)}
+.f-riga:first-of-type,.f-carta-cima+.f-riga{padding-top:0;border-top:0}
+.f-riga>div{flex:1;min-width:0}
+.f-nome{font-size:13.5px;line-height:1.4;overflow-wrap:anywhere}
+.f-coppia{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.f-piede{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.f-piede>.f-stato{flex:1}
+
+/* la pagina a sezioni: un titolo, la colonna delle sezioni, il pannello */
+.f-pagina{width:1040px;max-width:100%;padding:8px 4px 34px;box-sizing:border-box;color:var(--inchiostro)}
+.f-pagina>h1{margin:0;padding:0 4px 22px;font-family:var(--serif);font-size:34px;line-height:1.1;font-weight:400;letter-spacing:-.03em}
+.f-layout{display:grid;grid-template-columns:188px minmax(0,800px);gap:20px;align-items:start}
+.f-nav{position:sticky;top:0;display:flex;flex-direction:column;gap:4px;padding:7px;border:1px solid rgba(var(--luce-rgb),.72);border-radius:20px;background:rgba(var(--carta-rgb),.64);box-shadow:0 18px 42px rgba(var(--ombra-rgb),.08)}
+.f-nav button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-width:0;padding:11px 12px;border:1px solid transparent;border-radius:14px;background:transparent;color:rgba(var(--inchiostro-rgb),.72);text-align:left;cursor:pointer;font-family:inherit;transition:background .16s,color .16s}
+.f-nav button:hover{background:rgba(var(--luce-rgb),.6);color:var(--inchiostro)}
+.f-nav button[aria-current=page]{background:var(--gradiente-rame);border-color:rgba(var(--luce-rgb),.5);box-shadow:0 10px 22px -12px rgba(var(--ombra-rgb),.65);color:var(--avorio)}
+.f-nav button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(var(--rame-rgb),.35)}
+.f-nav button span{font-size:13.5px;font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+.f-nav button small{font-size:10.5px;line-height:1.35;color:inherit;opacity:.84;overflow-wrap:anywhere}
+.f-nav button small.rame{color:var(--rame-testo);opacity:1}
+.f-nav button[aria-current=page] small.rame{color:var(--avorio)}
+.f-pannello{min-width:0}
+.f-pannello>h2{margin:0 0 2px;padding:3px 4px 10px;border-bottom:1px solid rgba(var(--inchiostro-rgb),.1);font-size:20px;font-weight:450;letter-spacing:-.02em}
+.f-sezione-azione{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:11px}
+@media(max-width:1180px){
+  .f-pagina{width:800px}.f-layout{grid-template-columns:minmax(0,1fr);gap:14px}
+  .f-nav{position:static;display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));border-radius:20px}
+  .f-nav button{padding:10px 11px}
+}
+@media(max-width:650px){
+  .f-pagina>h1{font-size:30px}.f-nav button small{display:none}.f-griglia{grid-template-columns:minmax(0,1fr)}
+}
+/* di notte niente velo sotto il mouse, e la scatola non si schiarisce */
+:root[data-theme="dark"] .f-nav button:hover{background:transparent}
+:root[data-theme="dark"] .f-scelta:not([aria-checked=true]){background:transparent}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .f-nav button:hover{background:transparent}
+  :root:not([data-theme="light"]) .f-scelta:not([aria-checked=true]){background:transparent}
+}
+@media(prefers-reduced-motion:reduce){
+  .f-scatola,.f-bottone,.f-scelta,.f-interruttore,.f-carta,.f-nav button,.f-salvato{transition:none}
+}
+/* — P5: forme, fine — */

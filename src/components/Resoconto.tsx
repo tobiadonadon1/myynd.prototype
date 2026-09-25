@@ -191,7 +191,8 @@ export function FoglioResoconto({ r, v, chiudi }: { r: Resoconto; v: Vals; chiud
   const allaMemoria = () => {
     try { sessionStorage.setItem(VAI, 'come-lavori') } catch { /* la Memoria si apre lo stesso */ }
     chiudi()
-    v.goMemoria()
+    // la Memoria a sezioni (P5) si apre direttamente su «Come lavori»
+    v.apri('memoria', 'come-lavori')
   }
   const apri = (x: VoceResoconto) => gestoDi(x.apre, {
     suMac, chiudi, portamiFonte: v.portamiFonte, portami: api.portami, prepara: () => preparaApertura(), avvisa: v.mostraToast, t

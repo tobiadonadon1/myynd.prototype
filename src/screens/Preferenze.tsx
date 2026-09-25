@@ -1,84 +1,39 @@
-// Le preferenze: quattro aree, e dentro ognuna una griglia di schede.
+// Le preferenze: tre sezioni a sinistra, e dentro ognuna una griglia di schede.
 //
-// «The settings page is clustered, not intuitive, not straightforward, not
-// easy to edit, and not easy to manage.»
+// «I like the layout as is. I think the thing that is confusing is the
+// settings and all of the memory.» (P5)
 //
-// Quello che era: una pila di riquadri larghi quanto il pannello, ognuno con
-// un titolo, un paragrafo che spiegava cosa fa il controllo, e poi il
-// controllo. Per trovare l'aspetto bisognava leggere quattro paragrafi.
-//
-// Quello che è adesso, e le tre regole che lo tengono insieme:
+// Le regole che la tengono insieme, e che valgono anche per la Memoria:
 //
 //   · una scheda è un titolo, un controllo, e al massimo una riga che dice
-//     come sta la cosa adesso. I paragrafi che insegnano non ci sono più:
-//     «Chiaro di giorno, scuro di sera» non aggiunge niente a tre pastiglie
-//     che dicono Sistema, Chiaro, Scuro.
-//   · un solo bottone pieno per scheda, e sta in fondo a destra. Il resto è
-//     bordo o sole parole.
-//   · le caselle di testo sono quelle della barra di «Da fare»: stesso raggio,
-//     stesso fondo, stesso bordo che si accende quando ci scrivi.
+//     come sta la cosa adesso. Niente paragrafi che insegnano.
+//   · un campo solo (quello della barra), un bottone solo, una scelta sola,
+//     un interruttore solo: il corredo di components/forme.tsx.
+//   · ogni pressione cambia qualcosa nello stesso fotogramma, e se il server
+//     dice di no torna com'era e lo dice in una riga.
+//   · le sezioni e l'ordine delle schede li decide src/sezioni.ts, provato
+//     sotto node; `v.apri('pref', sezione, scheda)` porta su una scheda.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, sessione, type ChatGPT, type ClaudeCon } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import { api, memoriaP5, sessione, type ChatGPT, type ClaudeCon } from '../api'
 import { rilettura, suCollegamento } from '../collegamenti'
 import { frasi, t } from '../lingua'
-import { Hov, daTastiera, knob, track } from '../ui'
-import { IconSpunta } from '../icons'
+import { daTastiera } from '../ui'
 import type { Vals } from '../vals'
 import { acceleratore, avvisiAccesi, desktop, impostaAvvisi, nomePiattaforma, simboli, soloModificatore, type Aggiornamento } from '../desktop'
-import { PreferenzeOsservatore } from './PreferenzeOsservatore'
+import { PreferenzeOsservatore, useOsservatoreDisponibile } from './PreferenzeOsservatore'
 import './preferenze.css'
 import { nomePianoChatGPT } from '../chatgpt-accesso.ts'
 import { ProvaRisposte } from './ProvaRisposte'
+import { Bottone, Campo, Carta, Casella, Interruttore, Scatola, Scelte } from '../components/forme'
+import { PaginaASezioni, sezioneRicordata } from '../components/PaginaASezioni'
+import { sezioneAttesa, sezioneIniziale, sezioniPreferenze, type SezionePref } from '../sezioni.ts'
 
-/** Una scheda: il titolo è la gerarchia, e sotto ci sta quello che si tocca. */
-function Scheda({ titolo, larga, quieta, children }: {
-  titolo: string
-  /** Larga quanto il pannello: solo dove il controllo non ci sta in metà. */
-  larga?: boolean
-  /** Smorzata: quello che non si preme di fretta. */
-  quieta?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <article className={`prefs-card${larga ? ' larga' : ''}${quieta ? ' quieta' : ''}`}>
-      <h3>{titolo}</h3>
-      {children}
-    </article>
-  )
-}
-
-/** La spunta che dice «l'ho salvato», e se ne va da sola. */
-function Tic({ mostra }: { mostra: boolean }) {
-  return (
-    <span aria-live="polite" style={{
-      flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '11.5px',
-      color: 'var(--verde-cupo)', opacity: mostra ? 1 : 0, transition: 'opacity .35s'
-    }}>
-      {mostra && <><IconSpunta size={11} />{t('Salvato')}</>}
-    </span>
-  )
-}
-
-/** Una pastiglia di scelta: è quella dell'app, scelta di rame e spenta di bordo. */
-function pastiglia(scelta: boolean): React.CSSProperties {
-  return scelta
-    ? { padding: '9px 17px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }
-    : { padding: '9px 17px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer' }
-}
+const detto = (e: unknown) => (e instanceof Error ? t(e.message) : String(e))
 
 /**
- * L'app da scrivania: quello che sa fare il guscio e il sito no.
- *
- * Si vede solo dentro l'app. Sono le quattro cose che una persona tocca una
- * volta e poi dimentica: gli aggiornamenti, la scorciatoia che porta Myynd
- * davanti da qualunque programma, se parte da sola all'accesso, e gli avvisi.
- * La scorciatoia si cambia premendola — non scrivendola — perché
- * «CommandOrControl+Shift+M» non è una cosa che si chiede a nessuno di sapere.
- *
- * Quando l'app non può aggiornarsi lo dice con una riga e basta, senza un
- * bottone spento accanto: un «Controlla» che non controlla niente insegna a
- * non fidarsi degli altri.
+ * L'app da scrivania: quello che sa fare il guscio e il sito no. Si vede solo
+ * dentro l'app. La scorciatoia si cambia premendola, non scrivendola.
  */
 function LApp() {
   const d = desktop()
@@ -92,21 +47,17 @@ function LApp() {
 
   useEffect(() => {
     if (!d) return
-    d.scorciatoia().then(setAcc).catch(() => {})
-    d.avvioAutomatico().then(setAvvio).catch(() => {})
-    // gli eventi già mandati prima che questa scheda esistesse non tornano:
-    // si chiede com'è adesso, e da lì in poi si ascolta
-    d.aggiornamenti.attuale().then(setAgg).catch(() => {})
-    return d.aggiornamenti.stato(setAgg)
+    // ogni risposta del guscio passa da Promise.resolve: un guscio vecchio (o quello finto delle prove) può non dare una promessa
+    const vero = <T,>(x: T) => (typeof x === 'string' || typeof x === 'boolean' || (x && typeof x === 'object') ? x : null)
+    Promise.resolve(d.scorciatoia()).then(x => { if (typeof x === 'string') setAcc(x) }).catch(() => {})
+    Promise.resolve(d.avvioAutomatico()).then(x => { if (typeof x === 'boolean') setAvvio(x) }).catch(() => {})
+    // gli eventi già mandati prima che questa scheda esistesse non tornano
+    Promise.resolve(d.aggiornamenti.attuale()).then(x => { const a = vero(x); if (a && typeof (a as Aggiornamento).stato === 'string') setAgg(a as Aggiornamento) }).catch(() => {})
+    const smetti = d.aggiornamenti.stato(setAgg)
+    return () => { if (typeof smetti === 'function') smetti() }
   }, [d])
 
-  /*
-   * La registrazione: il prossimo tasto premuto è la scorciatoia nuova.
-   *
-   * In cattura e su `window`, così arriva prima di qualunque campo o
-   * scorciatoia della pagina — ⌘K aprirebbe la ricerca invece di diventare
-   * la combinazione. Esc lascia com'era; un modificatore da solo aspetta.
-   */
+  // la registrazione: il prossimo tasto premuto è la scorciatoia nuova (in cattura, prima di ogni altra)
   useEffect(() => {
     if (!registro || !d) return
     const alTasto = (e: KeyboardEvent) => {
@@ -119,9 +70,9 @@ function LApp() {
         return
       }
       setRegistro(false); setGuaio('')
-      d.impostaScorciatoia(nuovo)
+      Promise.resolve(d.impostaScorciatoia(nuovo))
         .then(r => { if (r.ok) setAcc(nuovo); else setGuaio(r.errore ? t(r.errore) : t('Non sono riuscito a cambiare la scorciatoia.')) })
-        .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+        .catch(e => setGuaio(detto(e)))
     }
     window.addEventListener('keydown', alTasto, true)
     return () => window.removeEventListener('keydown', alTasto, true)
@@ -132,13 +83,13 @@ function LApp() {
   const cambiaAvvio = async () => {
     const nuovo = !avvio
     setAvvio(nuovo); setGuaio('')
-    try { await d.impostaAvvioAutomatico(nuovo) }
-    catch (e) { setAvvio(!nuovo); setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+    try { await Promise.resolve(d.impostaAvvioAutomatico(nuovo)) }
+    catch (e) { setAvvio(!nuovo); setGuaio(detto(e)) }
   }
 
   const controlla = async () => {
     setChiedo(true); setGuaio('')
-    try { setAgg(await d.aggiornamenti.controlla()) }
+    try { setAgg(await Promise.resolve(d.aggiornamenti.controlla())) }
     catch (e) { setAgg({ stato: 'errore', messaggio: e instanceof Error ? e.message : String(e) }) }
     setChiedo(false)
   }
@@ -160,166 +111,91 @@ function LApp() {
   const inCorso = chiedo || agg?.stato === 'controllo' || agg?.stato === 'scarico'
 
   return (
-    <Scheda titolo={t('L’app')}>
-      <div className="prefs-riga">
+    <Carta titolo={t('L’app')} id="app" larga stato={guaio || undefined} statoRame>
+      <div className="f-riga">
         <div>
-          <div className="prefs-nome">{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
-          <div className="prefs-stato">{rigaAggiornamenti()}</div>
+          <div className="f-nome">{t('Versione')} {d.versione} · {nomePiattaforma(d.piattaforma)}</div>
+          <div className="f-stato">{rigaAggiornamenti()}</div>
         </div>
         {agg?.stato === 'pronta' ? (
-          <button type="button" className="prefs-pieno" onClick={() => d.aggiornamenti.installa()}>{t('Riavvia e aggiorna')}</button>
+          <Bottone tipo="pieno" onClick={() => d.aggiornamenti.installa()}>{t('Riavvia e aggiorna')}</Bottone>
         ) : agg?.stato !== 'spento' && (
-          <button type="button" className="prefs-secondario" onClick={controlla} disabled={inCorso} aria-busy={inCorso || undefined}>
-            {inCorso ? t('Controllo…') : t('Controlla')}
-          </button>
+          <Bottone onClick={controlla} occupato={inCorso} etichettaOccupato={t('Controllo…')}>{t('Controlla')}</Bottone>
         )}
       </div>
 
-      <div className="prefs-riga">
+      <div className="f-riga">
         <div>
-          <div className="prefs-nome">{t('Il richiamo')}</div>
+          <div className="f-nome">{t('Barra rapida')}</div>
           {registro
-            ? <div className="prefs-stato rame">{t('Premi la combinazione nuova…')} {t('Esc lascia com’è.')}</div>
+            ? <div className="f-stato rame">{t('Premi la combinazione nuova…')} {t('Esc lascia com’è.')}</div>
             : <div style={{ marginTop: 4 }}><span className="prefs-tasto">{acc ? simboli(acc, d.piattaforma) : '…'}</span></div>}
         </div>
-        <button type="button" className="prefs-secondario" onClick={() => { setGuaio(''); setRegistro(r => !r) }}>
-          {registro ? t('Annulla') : t('Cambia')}
-        </button>
+        <Bottone onClick={() => { setGuaio(''); setRegistro(r => !r) }}>{registro ? t('Annulla') : t('Cambia')}</Bottone>
       </div>
 
-      <div className="prefs-riga">
-        <div className="prefs-nome">{t('Si apre all’accesso')}</div>
-        <button type="button" role="switch" aria-checked={!!avvio} aria-label={t('Si apre all’accesso')}
-          disabled={avvio === null} onClick={cambiaAvvio} style={track(!!avvio)}><span style={knob()} /></button>
+      <div className="f-riga">
+        <div className="f-nome">{t('Si apre all’accesso')}</div>
+        <Interruttore acceso={!!avvio} cambia={cambiaAvvio} etichetta={t('Si apre all’accesso')} disabilitato={avvio === null} />
       </div>
 
-      {/* Spento finché non lo si accende: il brief vuole un'app quieta, e un
-          avviso è un'interruzione che si sceglie. */}
-      <div className="prefs-riga">
-        <div className="prefs-nome">{t('Avvisami quando un lavoro è pronto')}</div>
-        <button type="button" role="switch" aria-checked={avvisi} aria-label={t('Avvisami quando un lavoro è pronto')}
-          onClick={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} style={track(avvisi)}><span style={knob()} /></button>
+      {/* spento finché non lo si accende; P8 lo usa anche per una fonte che si rompe */}
+      <div className="f-riga">
+        <div className="f-nome">{t('Notifiche')}</div>
+        <Interruttore acceso={avvisi} cambia={() => { impostaAvvisi(!avvisi); setAvvisi(!avvisi) }} etichetta={t('Notifiche')} />
       </div>
 
-      {/* l'osservatore del Mac (P1B): solo dentro l'app, solo se il server lo ha */}
-      <PreferenzeOsservatore />
-
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+      {/* il mostriciattolo (P1B): resta in questa scheda */}
+      <PreferenzeOsservatore parte="schermo" />
+    </Carta>
   )
 }
 
-
-/** Il campo del fuoco: stato suo, di nessun altro. */
-/**
- * Salvare uscendo dal campo, come il nome e il ruolo: la spunta dice che è
- * fatto, e se ne va da sola. Un «Salva» di rame per ogni campo erano due
- * bottoni primari nella stessa riga di schede — «how the buttons are».
- */
-function useSalvaUscendo(vero: string, salva: (testo: string) => void) {
-  const [testo, setTesto] = useState(vero)
-  const [fatto, setFatto] = useState(false)
-  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  // si riallinea solo quando il valore vero cambia — cioè al caricamento e al
-  // salvataggio. Mentre scrivi, nessun caricamento in sottofondo può toccarlo.
-  useEffect(() => { setTesto(vero) }, [vero])
-  useEffect(() => () => clearTimeout(orologio.current), [])
-  const esci = () => {
-    if (testo.trim() === vero.trim()) return
-    salva(testo)
-    setFatto(true)
-    clearTimeout(orologio.current)
-    orologio.current = setTimeout(() => setFatto(false), 2400)
-  }
-  return { testo, setTesto, fatto, esci }
-}
-
-function CampoFuoco({ v }: { v: Vals }) {
-  const { testo, setTesto, fatto, esci } = useSalvaUscendo(v.fuoco, v.salvaFuoco)
-
+/** Il fuoco: dove guardare dentro (la posta, i file, quello che ti riguarda). */
+function CartaFuoco({ v }: { v: Vals }) {
   return (
-    <Scheda titolo={t('Su cosa mi concentro')}>
-      <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
-        onBlur={esci}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) e.currentTarget.blur() }}
-        aria-label={t('Su cosa mi concentro')}
-        placeholder={t('Questa settimana solo i preventivi e i pagamenti')} rows={3} />
-      <div className="prefs-piede">
-        {/*
-          Chi ha scritto quella riga.
-
-          Il campo restava vuoto perché «su cosa vuoi che mi concentri adesso?»
-          non è una domanda a cui si risponde in astratto. Adesso, se è vuoto,
-          lo scrive Myynd da quello che ha in lista — e lo dice, perché una riga
-          comparsa da sola che nessuno dichiara è peggio di una riga vuota.
-        */}
-        <span className="prefs-stato">
-          {v.fuocoDaMe && !!v.fuoco ? t('L’ha scritto Myynd dalle tue attività e dai tuoi progetti. Se non torna, correggilo.') : ''}
-        </span>
-        <Tic mostra={fatto} />
-      </div>
-    </Scheda>
+    <Carta titolo={t('Fuoco')} id="fuoco" larga
+      stato={v.fuocoDaMe && !!v.fuoco ? t('Scritto da Myynd dalle tue attività e dai progetti.') : undefined}>
+      <Campo etichettaDa="carta-fuoco" righe={3} valore={v.fuoco} salva={v.salvaFuocoCampo}
+        esempio={t('Questa settimana solo i preventivi e i pagamenti')} />
+    </Carta>
   )
 }
 
-/**
- * Gli argomenti della rassegna.
- *
- * Gemello del fuoco, e vale la pena tenerli distinti anche qui sotto gli occhi:
- * il fuoco dice a Myynd dove guardare *dentro* — nella posta, nei file, in
- * quello che ti riguarda — questo dice cosa cercare *fuori*, nei giornali.
- */
-function CampoArgomenti({ v }: { v: Vals }) {
-  const { testo, setTesto, fatto, esci } = useSalvaUscendo(v.argomenti, v.salvaArgomenti)
-
+/** Le notizie: cosa cercare fuori, nei giornali. La riga di stato solo quando c'è qualcosa di vero da dire. */
+function CartaNotizie({ v }: { v: Vals }) {
+  const [gusto, setGusto] = useState('')
+  useEffect(() => {
+    let vivo = true
+    memoriaP5.gusto().then(g => { if (vivo) setGusto(g.vale ? g.testo : '') }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
   return (
-    <Scheda titolo={t('Di cosa ti tengo aggiornato')}>
-      <textarea className="prefs-campo prefs-campo-lungo" value={testo} onChange={e => setTesto(e.target.value)}
-        onBlur={esci}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) e.currentTarget.blur() }}
-        aria-label={t('Di cosa ti tengo aggiornato')}
-        placeholder={t('intelligenza artificiale, startup, Medio Oriente, mercati')} rows={3} />
-      <div className="prefs-piede">
-        <div className="prefs-stato" />
-        <Tic mostra={fatto} />
-      </div>
-    </Scheda>
+    <Carta titolo={t('Notizie')} id="notizie" larga stato={gusto || undefined}>
+      <Campo etichettaDa="carta-notizie" righe={3} valore={v.argomenti} salva={v.salvaArgomentiCampo}
+        esempio={t('intelligenza artificiale, startup, Medio Oriente, mercati')} />
+    </Carta>
   )
 }
 
-/**
- * Quanto è costato ragionare.
- *
- * Prima «perché ho speso sei dollari in tre giorni» non aveva un posto in
- * cui trovare risposta. Qui si vede oggi e gli ultimi giorni, in token — che
- * è quello che si paga — senza trasformare questa schermata in un pannello
- * tecnico di quote.
- */
+/** Quanto è costato ragionare: la scheda c'è subito, i numeri arrivano. */
 function Uso() {
   const [u, setU] = useState<Awaited<ReturnType<typeof api.uso>> | null>(null)
   const [guaio, setGuaio] = useState('')
   useEffect(() => {
-    // un errore qui faceva sparire la carta intera, senza dire niente: è la
-    // stessa distinzione fra «vuoto» e «guasto» che vale per il feed e la mappa
-    api.uso()
-      .then(setU)
-      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
+    api.uso().then(setU).catch(e => setGuaio(detto(e)))
   }, [])
 
-  if (!u) {
-    if (!guaio) return null
-    return <Scheda titolo={t('Quanto ha ragionato')}><div className="prefs-stato rame">{guaio}</div></Scheda>
-  }
   const mila = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : String(n)
-  const giorni = u.giorni.slice(-7)
+  const giorni = u ? u.giorni.slice(-7) : []
   const max = Math.max(1, ...giorni.map(g => g.entrata + g.uscita))
 
   return (
-    <Scheda titolo={t('Quanto ha ragionato')}>
-      <div className="prefs-stato">
-        {u.oggi.chiamate
+    <Carta titolo={t('Consumo')} id="consumo">
+      <div className={`f-stato${guaio ? ' rame' : ''}`}>
+        {guaio || (!u ? '…' : u.oggi.chiamate
           ? frasi.usoOggi(u.oggi.chiamate, mila(u.oggi.entrata + u.oggi.uscita), mila(u.oggi.cache))
-          : t('Oggi ancora niente.')}
+          : t('Oggi ancora niente.'))}
       </div>
       {giorni.length > 1 && (
         <div aria-hidden="true" className="prefs-barre">
@@ -330,158 +206,78 @@ function Uso() {
           })}
         </div>
       )}
-      {/* la prova delle risposte (P7): l'interruttore e la riga di stato, solo con un insieme */}
+      {/* la prova delle risposte (P7): l'ultima riga di questa scheda */}
       <ProvaRisposte />
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+    </Carta>
   )
 }
 
-/**
- * Il conto: la password si cambia da qui, e le sessioni si chiudono da qui.
- * Prima l'unica strada era la riga di comando di chi ospita — cioè nessuna,
- * per chi usa.
- */
+/** L'accesso: la password si cambia da qui, e le sessioni si chiudono da qui. */
 function Conto() {
   const [attuale, setAttuale] = useState('')
   const [nuova, setNuova] = useState('')
   const [ripeti, setRipeti] = useState('')
   const [faccio, setFaccio] = useState<'' | 'cambio' | 'esco'>('')
-  const [detto, setDetto] = useState('')
+  const [fatto, setFatto] = useState('')
   const [guaio, setGuaio] = useState('')
 
+  const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
   const cambia = async () => {
+    if (!pronto) return
     if (nuova !== ripeti) { setGuaio(t('Le due password nuove non coincidono.')); return }
-    setFaccio('cambio'); setDetto(''); setGuaio('')
+    setFaccio('cambio'); setFatto(''); setGuaio('')
     try {
       await api.cambiaPassword(attuale, nuova)
       setAttuale(''); setNuova(''); setRipeti('')
-      setDetto(t('Password cambiata. Gli altri dispositivi dovranno rientrare.'))
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+      setFatto(t('Password cambiata. Gli altri dispositivi dovranno rientrare.'))
+    } catch (e) { setGuaio(detto(e)) }
     setFaccio('')
   }
 
   const esciOvunque = async () => {
     setFaccio('esco'); setGuaio('')
     try { await api.esciOvunque(); sessione.pulisci(); location.reload() }
-    catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio('') }
+    catch (e) { setGuaio(detto(e)); setFaccio('') }
   }
 
-  const pronto = attuale.length > 0 && nuova.length >= 8 && ripeti.length >= 8 && !faccio
-
   return (
-    <Scheda titolo={t('Il tuo accesso')} larga>
+    <Carta titolo={t('Accesso')} id="accesso" larga>
       <div className="prefs-password">
-        <div>
-          <span className="prefs-etichetta">{t('Password attuale')}</span>
-          <input type="password" className="prefs-campo" value={attuale} onChange={e => setAttuale(e.target.value)} autoComplete="current-password" />
-        </div>
-        <div>
-          <span className="prefs-etichetta">{t('Password nuova')}</span>
-          <input type="password" className="prefs-campo" value={nuova} onChange={e => setNuova(e.target.value)} autoComplete="new-password"
-            placeholder={t('otto caratteri')} />
-        </div>
-        <div>
-          <span className="prefs-etichetta">{t('Ripeti la nuova')}</span>
-          <input type="password" className="prefs-campo" value={ripeti} onChange={e => setRipeti(e.target.value)} autoComplete="new-password"
-            onKeyDown={e => { if (e.key === 'Enter' && pronto) cambia() }} />
-        </div>
+        <Casella etichetta={t('Password attuale')} type="password" valore={attuale} cambia={setAttuale} autoComplete="current-password" avanti />
+        <Casella etichetta={t('Password nuova')} type="password" valore={nuova} cambia={setNuova} autoComplete="new-password" esempio={t('otto caratteri')} avanti />
+        <Casella etichetta={t('Ripeti la nuova')} type="password" valore={ripeti} cambia={setRipeti} autoComplete="new-password" invio={cambia} />
       </div>
-      <div className="prefs-piede">
-        <button type="button" className="prefs-quieto" onClick={esciOvunque} disabled={!!faccio} aria-busy={faccio === 'esco' || undefined}>
-          {faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}
-        </button>
+      <div className="f-piede">
+        <Bottone tipo="parola" piccolo onClick={esciOvunque} occupato={faccio === 'esco'} etichettaOccupato={t('Un momento…')}>{t('Esci da tutti i dispositivi')}</Bottone>
         <div style={{ flex: 1 }} />
-        <button type="button" className="prefs-pieno" onClick={cambia} disabled={!pronto}>
-          {faccio === 'cambio' ? t('Un momento…') : t('Cambia la password')}
-        </button>
+        <Bottone tipo="pieno" onClick={cambia} disabled={!pronto && faccio !== 'cambio'} occupato={faccio === 'cambio'} etichettaOccupato={t('Un momento…')}>{t('Cambia la password')}</Bottone>
       </div>
-      {detto && <div className="prefs-stato verde">{detto}</div>}
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+      {fatto && <div className="f-stato verde">{fatto}</div>}
+      {guaio && <div className="f-stato rame">{guaio}</div>}
+    </Carta>
   )
 }
 
-/**
- * Come ti chiami, e cosa fai.
- *
- * `/api/profilo` li accetta da sempre e li chiedeva **solo l'onboarding**: una
- * scrittura andata storta là dentro — la rete che salta, una scheda chiusa a
- * metà — e da lì in avanti Myynd ti chiamava «tu» per sempre, senza nessuna
- * schermata da cui rimediare.
- *
- * Si salva lasciando il campo o con Invio, con una spunta piccola che lo dice:
- * la stessa regola dei campi di un progetto, e nessun bottone da premere.
- */
-function Identita() {
-  const [nome, setNome] = useState('')
-  const [ruolo, setRuolo] = useState('')
-  const [caricato, setCaricato] = useState(false)
-  const [fatto, setFatto] = useState(false)
-  const [guaio, setGuaio] = useState('')
-  /** Quello che il server ha davvero: senza, ogni uscita dal campo riscrive. */
-  const vero = useRef({ nome: '', ruolo: '' })
-  const orologio = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  useEffect(() => {
-    api.stato()
-      .then(s => {
-        const n = s.config.nome ?? '', r = s.config.ruolo ?? ''
-        vero.current = { nome: n, ruolo: r }
-        setNome(n); setRuolo(r); setCaricato(true)
-      })
-      .catch(e => setGuaio(e instanceof Error ? t(e.message) : String(e)))
-  }, [])
-  useEffect(() => () => clearTimeout(orologio.current), [])
-
-  const salva = async () => {
-    if (!caricato) return
-    const n = nome.trim(), r = ruolo.trim()
-    if (n === vero.current.nome && r === vero.current.ruolo) return
-    setGuaio('')
-    try {
-      await api.profilo({ nome: n, ruolo: r })
-      vero.current = { nome: n, ruolo: r }
-      setFatto(true)
-      clearTimeout(orologio.current)
-      orologio.current = setTimeout(() => setFatto(false), 2400)
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
-  }
-
+/** Nome e ruolo: la colonna cambia nello stesso fotogramma, e torna com'era se il server dice di no. */
+function Identita({ v }: { v: Vals }) {
   return (
-    <Scheda titolo={t('Chi sei')}>
-      <div className="prefs-coppia">
-        <div>
-          <span className="prefs-etichetta">{t('Nome')}</span>
-          <input className="prefs-campo" value={nome} onChange={e => setNome(e.target.value)} disabled={!caricato}
-            onBlur={salva} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
-        </div>
-        <div>
-          <span className="prefs-etichetta">{t('Ruolo')}</span>
-          <input className="prefs-campo" value={ruolo} onChange={e => setRuolo(e.target.value)} disabled={!caricato}
-            onBlur={salva} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-            placeholder={t('titolare, responsabile vendite, …')} />
-        </div>
+    <Carta titolo={t('Nome e ruolo')} id="nome">
+      <div className="f-coppia">
+        <Campo etichetta={t('Nome')} valore={v.nomeVero} salva={x => v.salvaIdentita('nome', x)} avanti />
+        <Campo etichetta={t('Ruolo')} valore={v.ruolo} salva={x => v.salvaIdentita('ruolo', x)} esempio={t('titolare, responsabile vendite, …')} />
       </div>
-      <div className="prefs-piede"><div className="prefs-stato" /><Tic mostra={fatto} /></div>
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+    </Carta>
   )
 }
 
-/**
- * «Dammi tutto quello che avete su di me».
- *
- * Si legge, si stampa, si manda a un consulente. La password si chiede lo
- * stesso: dentro non ci sono chiavi, ma c'è tutta la posta letta.
- */
+/** «Dammi tutto quello che avete su di me»: dove stanno, aprirli nel Finder, scaricarli (con la password). */
 function Fascicolo({ v }: { v: Vals }) {
   const d = desktop()
   const [dati, setDati] = useState('')
   const [password, setPassword] = useState('')
   const [chiedo, setChiedo] = useState(false)
   const [faccio, setFaccio] = useState(false)
-  const [detto, setDetto] = useState('')
+  const [fatto, setFatto] = useState('')
   const [guaio, setGuaio] = useState('')
   useEffect(() => {
     // la cartella vera, non `home + '/.myynd'`: con MYYND_DATI è un'altra
@@ -490,7 +286,7 @@ function Fascicolo({ v }: { v: Vals }) {
 
   const scarica = async () => {
     if (!password) { setChiedo(true); return }
-    setFaccio(true); setDetto(''); setGuaio('')
+    setFaccio(true); setFatto(''); setGuaio('')
     try {
       const { nome, dati } = await api.scaricaDati(password)
       setPassword(''); setChiedo(false)
@@ -498,56 +294,39 @@ function Fascicolo({ v }: { v: Vals }) {
       const a = document.createElement('a')
       a.href = url; a.download = nome; a.click()
       URL.revokeObjectURL(url)
-      setDetto(t('Scaricato: è nella cartella dei download.'))
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)) }
+      setFatto(t('Scaricato: è nella cartella dei download.'))
+    } catch (e) { setGuaio(detto(e)) }
     setFaccio(false)
   }
 
-  /*
-   * «I tuoi dati» e «Scarica i miei dati» erano due schede in due sezioni per
-   * la stessa cosa. «You can also keep the "Your Data" card on the same card
-   * as the "Download My Data" card.» Una scheda: dove stanno, aprirli nel
-   * Finder, scaricarli.
-   */
   return (
-    <Scheda titolo={t('I tuoi dati')}>
-      <div className="prefs-stato">
+    <Carta titolo={t('I tuoi dati')} id="dati" larga>
+      <div className="f-stato">
         {v.ospitato ? frasi.doveStannoIDatiServer() : <code>{dati || '~/.myynd'}</code>}
       </div>
       {chiedo && (
-        <input type="password" className="prefs-campo" value={password} onChange={e => setPassword(e.target.value)}
-          autoComplete="current-password" placeholder={t('la tua password')} autoFocus
-          aria-label={t('la tua password')}
-          onKeyDown={e => { if (e.key === 'Enter' && password) scarica() }} />
+        <Casella type="password" valore={password} cambia={setPassword} autoComplete="current-password" autoFocus
+          esempio={t('la tua password')} aria-label={t('la tua password')} invio={() => { if (password) void scarica() }} />
       )}
-      <div className="prefs-piede">
+      <div className="f-piede">
         {d && !v.ospitato && (
-          <button type="button" className="prefs-secondario" disabled={!dati}
-            onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }}>
+          <Bottone disabled={!dati} onClick={() => { Promise.resolve(d.mostraNelFinder(dati)).catch(() => {}) }}>
             {d.piattaforma === 'darwin' ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
-          </button>
+          </Bottone>
         )}
-        <div className="prefs-stato" />
-        <button type="button" className="prefs-pieno" onClick={scarica} disabled={faccio} aria-busy={faccio || undefined}>
-          {faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica')}
-        </button>
+        <div style={{ flex: 1 }} />
+        <Bottone tipo="pieno" onClick={scarica} occupato={faccio} etichettaOccupato={t('Preparo…')}>{chiedo ? t('Conferma') : t('Scarica')}</Bottone>
       </div>
-      {detto && <div className="prefs-stato verde">{detto}</div>}
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+      {fatto && <div className="f-stato verde">{fatto}</div>}
+      {guaio && <div className="f-stato rame">{guaio}</div>}
+    </Carta>
   )
 }
 
 /**
- * Andarsene.
- *
- * Due cose insieme, e non è una cerimonia: la password dice che è lei, e il
- * proprio indirizzo ricopiato a mano la obbliga a fermarsi un secondo davanti a
- * un gesto che non ha un annulla. Un bottone rosso con «sei sicuro?» si preme
- * per riflesso; ricopiare il proprio indirizzo no.
- *
- * E sopra ai due campi c'è scritto **cosa sparisce**, per esteso: quella riga
- * non è una spiegazione del bottone, è la conseguenza di premerlo.
+ * Andarsene. La password e il proprio indirizzo ricopiato a mano: davanti a
+ * un gesto senza annulla ci si ferma un secondo. La riga sopra non spiega il
+ * bottone: dice cosa sparisce.
  */
 function Cancella() {
   const [aperto, setAperto] = useState(false)
@@ -556,56 +335,43 @@ function Cancella() {
   const [faccio, setFaccio] = useState(false)
   const [guaio, setGuaio] = useState('')
 
+  const puo = !!password && !!email.trim() && !faccio
   const cancella = async () => {
+    if (!puo) return
     setFaccio(true); setGuaio('')
     try {
       await api.cancellaConto(password, email)
       sessione.pulisci()
       location.reload()
-    } catch (e) { setGuaio(e instanceof Error ? t(e.message) : String(e)); setFaccio(false) }
+    } catch (e) { setGuaio(detto(e)); setFaccio(false) }
   }
 
-  const puo = !!password && !!email.trim() && !faccio
-
   return (
-    // nell'app da scrivania c'è anche «L'app», che fa coppia con «I tuoi
-    // dati»: questa allora resta sola in fondo, e larga non lascia il buco
-    <Scheda titolo={t('Cancella il conto')} quieta larga={aperto || !!desktop()}>
-      <div className="prefs-stato">{t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}</div>
+    <Carta titolo={t('Cancella il conto')} id="cancella" quieta larga>
+      <div className="f-stato">{t('Sparisce tutto: documenti, lista, chat, memoria, automazioni e fonti. Non si torna indietro.')}</div>
       {!aperto ? (
-        <div className="prefs-piede">
-          <div className="prefs-stato" />
-          <button type="button" className="prefs-secondario prefs-rosso" onClick={() => setAperto(true)}>
-            {t('Voglio cancellare il conto')}
-          </button>
+        <div className="f-piede">
+          <div style={{ flex: 1 }} />
+          <Bottone onClick={() => setAperto(true)}>{t('Voglio cancellare il conto')}</Bottone>
         </div>
       ) : (
         <>
-          <div className="prefs-coppia">
-            <div>
-              <span className="prefs-etichetta">{t('La tua password')}</span>
-              <input type="password" className="prefs-campo" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
-            </div>
-            <div>
-              <span className="prefs-etichetta">{t('Il tuo indirizzo, per conferma')}</span>
-              <input type="email" className="prefs-campo" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off"
-                placeholder={t('nome@esempio.it')} />
-            </div>
+          <div className="f-coppia">
+            <Casella etichetta={t('La tua password')} type="password" valore={password} cambia={setPassword} autoComplete="current-password" avanti />
+            <Casella etichetta={t('Il tuo indirizzo, per conferma')} type="email" valore={email} cambia={setEmail} autoComplete="off"
+              esempio={t('nome@esempio.it')} invio={cancella} />
           </div>
-          <div className="prefs-piede">
-            <button type="button" className="prefs-quieto" onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }}>
-              {t('Lascia stare')}
-            </button>
+          <div className="f-piede">
+            <Bottone tipo="parola" piccolo onClick={() => { setAperto(false); setPassword(''); setEmail(''); setGuaio('') }}>{t('Lascia stare')}</Bottone>
             <div style={{ flex: 1 }} />
-            <button type="button" className="prefs-pieno" onClick={cancella} disabled={!puo}
-              style={puo ? { background: 'var(--rame-forte)' } : undefined}>
-              {faccio ? t('Un momento…') : t('Cancella tutto, per sempre')}
-            </button>
+            <Bottone tipo={puo ? 'pericolo' : 'pieno'} onClick={cancella} disabled={!puo && !faccio} occupato={faccio} etichettaOccupato={t('Un momento…')}>
+              {t('Cancella tutto, per sempre')}
+            </Bottone>
           </div>
         </>
       )}
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-    </Scheda>
+      {guaio && <div className="f-stato rame">{guaio}</div>}
+    </Carta>
   )
 }
 
@@ -615,31 +381,16 @@ function chiEComeSiChiama(f: NonNullable<Vals['compatibile']>): string {
 }
 
 /**
- * Con chi ragiona Myynd: una scelta sola, con tre strade.
- *
- * Anthropic, OpenAI, o un modello sul proprio computer (e chiunque parli la
- * lingua di OpenAI). Le prime due sono le due schede delle Fonti: ognuna si
- * collega con l'account che uno paga già o con una chiave a consumo, e
- * *come* è collegata lo dice la riga sotto il nome. Qui si sceglie solo chi
- * lavora; per collegare o cambiare strada c'è il bottone, che apre la scheda.
- *
- * Siccome Myynd è stato messo a punto su Claude, scegliere un altro si può,
- * ma con una riga che lo dice — non più un riquadro d'avviso di quattro righe
- * sotto la scelta.
+ * Con chi ragiona Myynd: Anthropic, OpenAI, o un modello sul proprio computer.
+ * Qui si sceglie solo chi lavora; collegare apre la sua scheda delle Fonti.
  */
 function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   type Via = 'claude' | 'openai' | 'compatibile'
   const [s, setS] = useState<ClaudeCon | null>(null)
   const [chatgpt, setChatgpt] = useState<ChatGPT | null>(null)
   const [occupato, setOccupato] = useState(false)
-  // una lettura alla volta: lo chiedono in cinque — il fatto, il filo, e tre
-  // valori qui sotto — e prima partivano quattro `/api/modello/claude` insieme
+  // una lettura alla volta, e di nuovo quando cambia un collegamento qualunque
   const guarda = useMemo(() => { const r = rilettura(() => api.claude(), setS); return () => { r().catch(() => setS(null)) } }, [])
-  // e si rilegge quando cambia un collegamento qualunque, da qui, dalla scheda
-  // che si apre sopra questa schermata o da un'altra finestra: è il fatto di
-  // `collegamenti.ts`. Prima si rileggeva anche a ogni nuovo `v.compatibile`
-  // e `v.openai`, che sono oggetti nuovi a ogni lettura dello stato: sei
-  // `/api/modello/claude` per un collegamento solo
   useEffect(() => { guarda() }, [guarda])
   const [giroCollegamento, setGiroCollegamento] = useState(0)
   useEffect(() => suCollegamento(() => { guarda(); setGiroCollegamento(n => n + 1) }), [guarda])
@@ -653,16 +404,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const f = v.compatibile
   const o = v.openai
 
-  /*
-   * Il modello di casa, provato davvero, all'apertura della scheda.
-   *
-   * Un modello sul proprio computer è una cosa che si spegne: si chiude
-   * Ollama, si riavvia il portatile, e la riga continua a dire «In uso»
-   * mentre la chat non risponde più. Si prova, e si dice in quanto ha
-   * risposto. Solo in casa: la rotta che prova riscrive la configurazione con
-   * quello che le si manda, e la chiave di un fornitore in rete qui non ce
-   * l'abbiamo.
-   */
+  // il modello di casa, provato davvero all'apertura della scheda: una cosa che si spegne
   const inCasa = !!f && /^https?:\/\/(127\.|localhost|\[?::1\]?|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(f.url)
   const [velocita, setVelocita] = useState<{ ok: boolean; ms: number } | null>(null)
   const [provando, setProvando] = useState(false)
@@ -680,10 +422,6 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const LENTO = 10_000
 
   const attuale: Via = v.motore === 'chatgpt' || v.motore === 'openai' ? 'openai' : v.motore === 'compatibile' ? 'compatibile' : 'claude'
-  // Claude collegato, con la chiave o con l'account: lo dicono le Fonti, cioè
-  // il server, e da subito. Legato anche alla risposta di `/api/modello/claude`,
-  // che aspetta Claude Code, per quindici secondi la riga diceva «in uso» con
-  // accanto «Collega», e non si lasciava premere
   const claudeCollegato = v.claudeCollegato
   const accountChatGPT = !!chatgpt?.entrato
   const openaiCollegato = accountChatGPT || !!o?.collegato
@@ -693,7 +431,6 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   const dettaglio = (via: Via): string | undefined => {
     if (via === 'claude') {
       if (!claudeCollegato) return undefined
-      // la strada che lavora davvero: un account da cui si è usciti non è «con il tuo account»
       return v.claudeVia === 'abbonamento' ? t('Con il tuo account, tramite Claude Code') : t('Con la chiave API')
     }
     if (via === 'openai') {
@@ -703,8 +440,6 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
       return o?.collegato ? [t('Con la chiave API'), o.modello].join(' · ') : undefined
     }
     if (!f) return undefined
-    // l'indirizzo può essere lungo: si spezza, non sfora. E davanti, quando
-    // si è potuto misurare, quello che conta di più: risponde, e in quanto
     return [
       provando ? t('Provo…')
         : velocita ? (velocita.ok
@@ -724,8 +459,7 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
 
   const scegli = async (via: Via) => {
     if (occupato) return
-    // premere di nuovo la riga scelta serve solo a svegliare l'account dopo un
-    // guasto: il server azzera il riposo e riprova alla richiesta successiva
+    // premere di nuovo la riga scelta serve solo a svegliare l'account dopo un guasto
     if (via === attuale) {
       if (via === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo) {
         setOccupato(true)
@@ -741,7 +475,6 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
     setOccupato(true)
     try {
       if (via === 'claude') await v.scegliMotore('claude')
-      // l'account prima della chiave: è quello che non manda una bolletta
       else if (accountChatGPT) { await api.usaChatGPT(true); await v.ricaricaStato() }
       else await v.scegliMotore('openai')
     } catch (e) { avvisa(e instanceof Error ? t(e.message) : t('Non sono riuscito a cambiare motore.')) }
@@ -755,8 +488,8 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
   ]
 
   return (
-    <Scheda titolo={t('Con quale motore lavora')} larga>
-      <div role="radiogroup" aria-label={t('Con quale motore lavora')} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Carta titolo={t('Motore')} id="motore" larga>
+      <div role="radiogroup" aria-labelledby="carta-motore" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {vie.map(x => {
           const scelto = attuale === x.id
           const guaio = manca(x.id)
@@ -773,93 +506,48 @@ function Motore({ v, avvisa }: { v: Vals; avvisa: (testo: string) => void }) {
                   <span className={`prefs-status ${guaio || spento ? 'needs-attention' : 'ready'}`}>
                     {spento ? t('Disattivato in Myynd') : guaio ? t('Da collegare') : scelto ? t('In uso') : t('Pronto')}
                   </span>
-                  <Hov as="button" type="button" className="prefs-secondario"
-                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); x.apri() }}
-                    style={{ padding: '5px 12px', fontSize: '12px' }}
-                    hover={{ borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
-                    {x.collegato ? t('Gestisci') : t('Collega')}
-                  </Hov>
+                  <Bottone piccolo onClick={e => { e.stopPropagation(); x.apri() }}>{x.collegato ? t('Gestisci') : t('Collega')}</Bottone>
                 </div>
-                {/* da quale strada passa, o cosa manca: sotto il nome, in una riga */}
-                {(riga || guaio) && (
-                  <div className={`prefs-stato${guaio ? ' rame' : ''}`} style={{ marginTop: 5 }}>{riga ?? guaio}</div>
-                )}
+                {(riga || guaio) && <div className={`f-stato${guaio ? ' rame' : ''}`} style={{ marginTop: 5 }}>{riga ?? guaio}</div>}
                 {scelto && x.id === 'claude' && s?.con === 'abbonamento' && s.abbonamento.inRiposo && (
-                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
+                  <div className="f-stato rame" style={{ marginTop: 5 }}>
                     {t('L’ultima volta non ha risposto: per qualche minuto uso la chiave.')}{' '}
                     <span style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>{t('Riprova adesso')}</span>
                   </div>
                 )}
-                {/*
-                  Un modello che ci mette più di dieci secondi a cominciare non
-                  è «un po' lento»: è la chat che sembra rotta, ed è la cosa che
-                  lui ha raccontato per prima. Dirlo qui, con la via d'uscita.
-                */}
                 {scelto && x.id === 'compatibile' && velocita?.ok && velocita.ms > LENTO && (
-                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
-                    {t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}
-                  </div>
+                  <div className="f-stato rame" style={{ marginTop: 5 }}>{t('Questo modello è lento sul tuo computer: prova uno più piccolo.')}</div>
                 )}
                 {scelto && x.id !== 'claude' && (
-                  <div className="prefs-stato rame" style={{ marginTop: 5 }}>
-                    {t('Messo a punto su Claude: con un altro modello rileggi le bozze e le fonti citate.')}
-                  </div>
+                  <div className="f-stato rame" style={{ marginTop: 5 }}>{t('Messo a punto su Claude: con un altro modello rileggi le bozze e le fonti citate.')}</div>
                 )}
               </div>
             </div>
           )
         })}
       </div>
-    </Scheda>
+    </Carta>
   )
 }
 
-/** La pastiglia di un modello: scelta, di rame; altrimenti solo il bordo. */
-function pastigliaModello(scelta: boolean): React.CSSProperties {
-  return scelta
-    ? { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--luce-rgb),.5)', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontFamily: 'inherit', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }
-    : { padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(var(--inchiostro-rgb),.2)', background: 'rgba(var(--luce-rgb),.5)', color: 'var(--inchiostro)', fontFamily: 'inherit', fontSize: '12.5px', cursor: 'pointer' }
-}
-
-/**
- * Quale modello di Claude, per quale lavoro.
- *
- * Il lavoro non è uno: dare un titolo a una chat e scrivere una bozza che esce
- * dall'azienda non valgono la stessa spesa, e chi paga deve poterlo dire senza
- * conoscere la tabella dei lavori. Tre righe, una per livello, e su ognuna i
- * tre modelli come pastiglie.
- */
+/** Un modello di Claude per livello di lavoro: tre righe, e su ognuna i modelli come pastiglie. */
 function Modelli({ v }: { v: Vals }) {
   return (
-    <Scheda titolo={t('Quale modello, per quale lavoro')} larga>
+    <Carta titolo={t('Un modello per ogni lavoro')} id="modelli" larga>
       <div>
         {v.livelli.map(l => (
           <div key={l.id} className="prefs-livello">
-            <div>
-              <div className="prefs-nome">{l.titolo}</div>
-              <div className="prefs-stato">{l.nota}</div>
-            </div>
-            <div role="radiogroup" aria-label={l.titolo} className="prefs-pastiglie">
-              {v.modelli.map(m => (
-                <button key={m.id} type="button" role="radio" aria-checked={l.scelto === m.id} title={m.nota}
-                  onClick={() => { if (l.scelto !== m.id) l.scegli(m.id) }} style={pastigliaModello(l.scelto === m.id)}>{m.nome}</button>
-              ))}
-            </div>
+            <div className="f-nome" title={l.nota}>{l.titolo}</div>
+            <Scelte etichetta={l.titolo} opzioni={v.modelli.map(m => ({ id: m.id, nome: m.nome, titolo: m.nota }))}
+              scelta={l.scelto} scegli={l.scegli} />
           </div>
         ))}
       </div>
-    </Scheda>
+    </Carta>
   )
 }
 
-/**
- * Quale modello di OpenAI, per quale lavoro.
- *
- * La stessa scheda di Claude, con una differenza che decide la forma: i modelli
- * non sono tre nostri, sono quelli del catalogo — dell'API con la chiave, del
- * piano con l'account — e possono essere venti. Quindi un menù per riga, non
- * le pastiglie.
- */
+/** La stessa scheda per OpenAI: i modelli sono quelli del catalogo, e possono essere venti. Un menù per riga. */
 function ModelliOpenAI({ v }: { v: Vals }) {
   const [via, setVia] = useState<'chiave' | 'account' | null>(null)
   const [catalogo, setCatalogo] = useState<string[]>([])
@@ -872,164 +560,102 @@ function ModelliOpenAI({ v }: { v: Vals }) {
       .catch(e => { if (!controller.signal.aborted) setGuaio(e instanceof Error ? t(e.message) : t('Non riesco a leggere i modelli.')) })
     return () => controller.abort()
   }, [v.motore, v.openai])
-  if (!via || !scelti) return null
 
   const scegli = (livello: 'casa' | 'media' | 'frontiera', modello: string) => {
+    if (!scelti) return
+    const prima = scelti
     const nuovi = { ...scelti, [livello]: modello }
-    setScelti(nuovi)
-    api.scegliModelliOpenAI(nuovi).catch(() => { v.mostraToast(t('Non sono riuscito a salvare la preferenza.')); v.ricaricaStato() })
+    setScelti(nuovi); setGuaio('')
+    api.scegliModelliOpenAI(nuovi).catch(() => { setScelti(prima); setGuaio(t('Non sono riuscito a salvare la preferenza.')) })
   }
-  // il modello scelto resta in lista anche se il catalogo non è arrivato: un
-  // menù che non mostra quello che c'è scritto sembra rotto
+  // il modello scelto resta in lista anche se il catalogo non è arrivato
   const opzioni = (attuale: string) => [...new Set([...(attuale && !catalogo.includes(attuale) ? [attuale] : []), ...catalogo])]
 
   return (
-    <Scheda titolo={t('Quale modello, per quale lavoro')} larga>
-      {guaio && <div className="prefs-stato rame">{guaio}</div>}
-      <div>
-        {v.livelli.map(l => (
-          <div key={l.id} className="prefs-livello">
-            <div>
-              <div className="prefs-nome">{l.titolo}</div>
-              <div className="prefs-stato">{l.nota}</div>
+    <Carta titolo={t('Un modello per ogni lavoro')} id="modelli" larga stato={guaio || (!via || !scelti ? '…' : undefined)} statoRame={!!guaio}>
+      {via && scelti && (
+        <div>
+          {v.livelli.map(l => (
+            <div key={l.id} className="prefs-livello">
+              <div className="f-nome" title={l.nota}>{l.titolo}</div>
+              <div style={{ minWidth: 200, maxWidth: '100%' }}>
+                <Scatola>
+                  <select aria-label={l.titolo} value={scelti[l.id]} onChange={e => scegli(l.id, e.target.value)}>
+                    {via === 'account' && <option value="">{t('Il modello del piano')}</option>}
+                    {opzioni(scelti[l.id]).map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Scatola>
+              </div>
             </div>
-            <select aria-label={l.titolo} value={scelti[l.id]} onChange={e => scegli(l.id, e.target.value)}
-              className="prefs-campo" style={{ width: 'auto', minWidth: 200, maxWidth: '100%', padding: '8px 12px', fontSize: '13px' }}>
-              {via === 'account' && <option value="">{t('Il modello del piano')}</option>}
-              {opzioni(scelti[l.id]).map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-    </Scheda>
+          ))}
+        </div>
+      )}
+    </Carta>
   )
 }
 
 export function Preferenze({ v }: { v: Vals }) {
-  type Sezione = 'myynd' | 'intelligenza' | 'account'
-  const [sezione, setSezione] = useState<Sezione>('myynd')
-  const sezioni: { id: Sezione; titolo: string; nota: string }[] = [
-    { id: 'myynd', titolo: t('Generale'), nota: t('Priorità, voce e aspetto') },
-    { id: 'intelligenza', titolo: t('Intelligenza e costi'), nota: t('Modello, chiave e utilizzo') },
-    { id: 'account', titolo: t('Account e app'), nota: t('Accesso, notifiche e sicurezza') }
-  ]
-  const attuale = sezioni.find(s => s.id === sezione)!
+  const d = desktop()
+  const osservatore = useOsservatoreDisponibile()
+  const sezioni = sezioniPreferenze({ desktop: !!d, osservatore, motoreDaCollegare: !v.claudeOn })
+  const [sezione, setSezione] = useState<SezionePref>(() => sezioneIniziale({
+    pagina: 'pref', richiesta: sezioneAttesa('pref')?.sezione ?? null, biglietto: false, nuove: null,
+    ricordata: sezioneRicordata('pref', v.emailConto), valide: sezioni.map(s => s.id)
+  }) as SezionePref)
+  const schede = sezioni.find(s => s.id === sezione)?.schede ?? []
 
   return (
-    <main className="prefs-page">
-      <header className="prefs-header">
-        <h1>{t('Preferenze')}</h1>
-      </header>
-
-      <div className="prefs-layout">
-        <nav className="prefs-nav" aria-label={t('Sezioni delle preferenze')}>
-          {sezioni.map(s => (
-            <button key={s.id} type="button" aria-current={sezione === s.id ? 'page' : undefined}
-              onClick={() => setSezione(s.id)}>
-              <span>{s.titolo}</span>
-              <small>{s.nota}</small>
-            </button>
-          ))}
-        </nav>
-
-        <section className="prefs-panel" aria-labelledby={`prefs-${sezione}`}>
-          <div className="prefs-panel-heading">
-            <h2 id={`prefs-${sezione}`}>{attuale.titolo}</h2>
-            <p>{attuale.nota}</p>
-          </div>
-
-          {sezione === 'myynd' && (
-            <div className="prefs-grid">
-              {/*
-                Il fuoco sta qui e non più come pastiglia sopra al feed: è una
-                preferenza a tutti gli effetti, e vale per tutte le letture che
-                verranno, non per quella che stai guardando.
-              */}
-              <CampoFuoco v={v} />
-              {/* Subito dopo il fuoco perché sono la stessa domanda fatta due
-                  volte — dove guardo dentro, cosa cerco fuori. */}
-              <CampoArgomenti v={v} />
-
-              <Scheda titolo={t('Autonomia')} larga>
-                <div role="radiogroup" aria-label={t('Autonomia')} className="prefs-pastiglie">
-                  {v.autonomie.map(a => (
-                    <button key={a.id} type="button" role="radio" aria-checked={a.scelto} onClick={a.onClick}
-                      style={pastiglia(a.scelto)}>{a.titolo}</button>
-                  ))}
-                </div>
-                {/* una riga sola: quella della scelta fatta, non tutte e tre */}
-                <div className="prefs-stato">{v.autonomie.find(a => a.scelto)?.nota}</div>
-              </Scheda>
-
-              <Scheda titolo={t('Tono')}>
-                <div className="prefs-pastiglie">
-                  {v.toni.map(tono => (
-                    <button key={tono.id} type="button" onClick={tono.onClick} style={tono.style}>{tono.label}</button>
-                  ))}
-                </div>
-                <div className="prefs-stato" style={{ padding: '11px 13px', borderRadius: 14, background: 'rgba(var(--inchiostro-rgb),.05)', color: 'rgba(var(--inchiostro-rgb),.72)' }}>
-                  {v.tonoEsempio}
-                </div>
-              </Scheda>
-
-              {/* accanto al tono: due schede della stessa altezza, niente buchi */}
-              <Identita />
-
-              <Scheda titolo={t('Lingua e aspetto')} larga>
-                <div className="prefs-inline-settings">
-                  <div>
-                    <span className="prefs-etichetta">{t('Lingua')}</span>
-                    <div className="prefs-pastiglie">
-                      {v.lingue.map(l => (
-                        <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} aria-busy={l.occupato || undefined} style={pastiglia(l.scelto)}>
-                          {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="prefs-etichetta">{t('Aspetto')}</span>
-                    <div role="radiogroup" aria-label={t('Aspetto')} className="prefs-pastiglie">
-                      {v.temi.map(x => (
-                        <button key={x.id} type="button" role="radio" aria-checked={x.scelto} onClick={x.onClick}
-                          style={pastiglia(x.scelto)}>{x.label}</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Scheda>
-
-              {/* «Le tue fonti» e «I tuoi dati» non stanno più qui: le fonti si
-                  aprono dalla Mappa, dove si vede cosa hanno portato, e la
-                  cartella dei dati sta con «Scarica i miei dati», in Account */}
-            </div>
+    <PaginaASezioni titolo={t('Preferenze')} pagina="pref" etichettaNav={t('Sezioni delle preferenze')} sezioni={sezioni}
+      attuale={sezione} scegli={id => setSezione(id as SezionePref)} email={v.emailConto}>
+      {sezione === 'myynd' && (
+        <div className="f-griglia">
+          <CartaFuoco v={v} />
+          <CartaNotizie v={v} />
+          <Carta titolo={t('Autonomia')} id="autonomia" stato={v.autonomie.find(a => a.scelto)?.nota}>
+            <Scelte etichetta={t('Autonomia')} opzioni={v.autonomie.map(a => ({ id: a.id, nome: a.titolo }))}
+              scelta={v.autonomie.find(a => a.scelto)?.id ?? null} scegli={id => v.autonomie.find(a => a.id === id)?.onClick()} />
+          </Carta>
+          {schede.includes('osservazione') && (
+            <Carta titolo={t('Osservazione')} id="osservazione">
+              <PreferenzeOsservatore parte="osservazione" />
+            </Carta>
           )}
+          <Carta titolo={t('Tono')} id="tono">
+            <Scelte etichetta={t('Tono')} opzioni={v.toni.map(x => ({ id: x.id, nome: x.label }))}
+              scelta={v.toni.find(x => x.scelto)?.id ?? null} scegli={id => v.toni.find(x => x.id === id)?.onClick()} />
+            <div className="f-stato prefs-esempio">{v.tonoEsempio}</div>
+          </Carta>
+        </div>
+      )}
 
-          {sezione === 'intelligenza' && (
-            <div className="prefs-grid">
-              {/* Chi ragiona: Anthropic, OpenAI, o un modello in casa. */}
-              <Motore v={v} avvisa={v.mostraToast} />
-              {/* I modelli, uno per livello di lavoro: quelli di chi lavora. */}
-              {v.motore === 'claude' && <Modelli v={v} />}
-              {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
-              <Uso />
-            </div>
-          )}
+      {sezione === 'intelligenza' && (
+        <div className="f-griglia">
+          <Motore v={v} avvisa={v.mostraToast} />
+          {v.motore === 'claude' && <Modelli v={v} />}
+          {(v.motore === 'openai' || v.motore === 'chatgpt') && <ModelliOpenAI v={v} />}
+          <Uso />
+        </div>
+      )}
 
-          {sezione === 'account' && (
-            <div className="prefs-grid">
-              <Conto />
-              {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
-              <LApp />
-              <Fascicolo v={v} />
-              {/* ultima di tutte, e non per pudore: è l'unica cosa in questa
-                  schermata che non si può annullare, e non deve stare accanto a
-                  niente che si preme di fretta */}
-              <Cancella />
-            </div>
-          )}
-        </section>
-      </div>
-    </main>
+      {sezione === 'account' && (
+        <div className="f-griglia">
+          <Identita v={v} />
+          <Carta titolo={t('Lingua e aspetto')} id="lingua">
+            <Scelte etichetta={t('Lingua')} mostraEtichetta
+              opzioni={v.lingue.map(l => ({ id: l.id, nome: l.occupato && !l.scelto ? t('Traduco…') : l.nome, disabilitato: l.occupato, occupato: l.occupato }))}
+              scelta={v.lingue.find(l => l.scelto)?.id ?? null} scegli={id => { void v.lingue.find(l => l.id === id)?.onClick() }} />
+            <Scelte etichetta={t('Aspetto')} mostraEtichetta attivazione="automatica"
+              opzioni={v.temi.map(x => ({ id: x.id, nome: x.label }))}
+              scelta={v.temi.find(x => x.scelto)?.id ?? null} scegli={id => v.temi.find(x => x.id === id)?.onClick()} />
+          </Carta>
+          {/* solo dentro l'app da scrivania: nel browser la scheda non si disegna */}
+          {d && <LApp />}
+          <Conto />
+          <Fascicolo v={v} />
+          {/* ultima di tutte: l'unica cosa qui che non si può annullare */}
+          <Cancella />
+        </div>
+      )}
+    </PaginaASezioni>
   )
 }

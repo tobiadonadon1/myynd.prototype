@@ -281,7 +281,7 @@ const EN: Record<string, string> = {
   'A consumo, sul credito Anthropic. È il modello su cui Myynd è stato messo a punto.': 'Pay as you go, on your Anthropic credit. The model Myynd was tuned on.',
   'Claude, con l’abbonamento che paghi già': 'Claude, with the subscription you already pay for',
   'Un altro fornitore, o un modello sul tuo computer': 'Another provider, or a model on your computer',
-  'OpenAI, OpenRouter, Groq, Mistral — o Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.': 'OpenAI, OpenRouter, Groq, Mistral — or Ollama, LM Studio and llama.cpp on this computer. An address and a model name: Myynd installs nothing.',
+  'OpenAI, OpenRouter, Groq, Mistral, oppure Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.': 'OpenAI, OpenRouter, Groq, Mistral, or Ollama, LM Studio and llama.cpp on this computer. An address and a model name: Myynd installs nothing.',
   'Cambia chiave': 'Change key',
   'Verifica della connessione in corso…': 'Checking the connection…',
   'Chiave collegata': 'Key connected',
@@ -377,7 +377,7 @@ const EN: Record<string, string> = {
   "Salvo il progetto, gli estratti confermati e questa attività.": "Save your project, confirmed excerpts and this task.",
   "Prepara la prima traccia": "Prepare the first outline",
   "Modello collegato": "Model connected",
-  "Altro modello": "Another model",
+  "Altro modello": "Other model",
   "Il primo avvio": "First setup",
   "Puoi chiudere. Ripartirai da qui.": "You can close this. Your progress is saved.",
   'Il tuo primo progetto': 'Your first project',
@@ -436,9 +436,9 @@ const EN: Record<string, string> = {
   'Anteprima non valida.': 'Invalid document preview.',
   'Numero di pagine non valido.': 'Invalid page count.',
   'Revisione non valida.': 'Invalid document review.',
-  'Revisione non disponibile — non verificato': 'Review unavailable — not verified',
+  'Revisione non disponibile: non verificato': 'Review unavailable: not verified',
   'Revisione superata': 'Review passed',
-  'La revisione ha trovato problemi — da correggere': 'Review found issues — needs revision',
+  'La revisione ha trovato problemi: da correggere': 'Review found issues: needs revision',
   'Consegna non valida.': 'Invalid document delivery.',
   'Data non valida.': 'Invalid date.',
   'Dettagli attività': 'Task details',
@@ -561,8 +561,8 @@ const EN: Record<string, string> = {
 
 // — portare il proprio Myynd altrove —
   'Portalo su un’altra macchina': 'Move it to another machine',
-  'Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.':
-    'Download one file with everything in it — documents, list, memory, automations and connected sources — and upload it to another Myynd to find it exactly as it was.',
+  'Scarica un file con dentro tutto (i documenti, la lista, la memoria, le automazioni e le fonti collegate) e caricalo su un altro Myynd per ritrovartelo identico.':
+    'Download one file with everything in it (documents, list, memory, automations and connected sources) and upload it to another Myynd to find it exactly as it was.',
   'Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.':
     'It also contains your mailbox passwords and source tokens: that file opens your mail. Move it, then delete it.',
   'Scaricalo': 'Download it',
@@ -782,8 +782,8 @@ const EN: Record<string, string> = {
   'Parola d’ordine del webhook': 'Webhook verify token',
   'inventala, e riscrivila su Meta': 'make one up, and write it again on Meta',
   'Collega WhatsApp': 'Connect WhatsApp',
-  'WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose — quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.':
-    'WhatsApp cannot be re-read: Meta pushes messages, it does not let you ask for them. That means two things — whatever arrived before today will not be there, and this computer has to be reachable from the internet for new ones to arrive.',
+  'WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose: quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.':
+    'WhatsApp cannot be re-read: Meta pushes messages, it does not let you ask for them. That means two things: whatever arrived before today will not be there, and this computer has to be reachable from the internet for new ones to arrive.',
   'Su developers.facebook.com: nell’app WhatsApp, in Configurazione dell’API, copia l’ID del numero e crea un token permanente da utente di sistema. Il segreto dell’app sta in Impostazioni › Di base.':
     'On developers.facebook.com: in the WhatsApp app, under API Setup, copy the phone number ID and create a permanent system-user token. The app secret is under Settings › Basic.',
   'È quello che firma i messaggi in arrivo: senza, quell’indirizzo non saprebbe distinguere Meta da chiunque altro.':
@@ -982,8 +982,8 @@ const EN: Record<string, string> = {
   'Gettoni per le macchine': 'Tokens for machines',
   'Servono al Myynd di casa per spingere qui i documenti che ha letto dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro: con uno di questi non si entra nell’app e non si tocca il conto.':
     'They let the Myynd at home push here the documents it has read from your folders. They do not expire, you revoke them from here, and they open nothing else: one of these cannot sign in to the app and cannot touch the account.',
-  'Servono a un altro Myynd — quello su un server — per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.':
-    'They let another Myynd — the one on a server — receive the documents this one reads from your folders. They do not expire, you revoke them from here, and they open nothing else.',
+  'Servono a un altro Myynd, quello su un server, per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.':
+    'They let another Myynd, the one on a server, receive the documents this one reads from your folders. They do not expire, you revoke them from here, and they open nothing else.',
   'il MacBook dell’ufficio': 'the office MacBook',
   'Creane uno': 'Create one',
   'Copialo adesso: questa è l’unica volta che si vede. Incolla queste due righe nel Myynd di casa.':
@@ -1125,7 +1125,7 @@ const EN: Record<string, string> = {
   'Non riesco a leggere le automazioni.': 'I cannot read the automations.',
   'Non sono riuscito a rileggere questa fonte.': 'I could not re-read this source.',
   'Non sono riuscito a collegare.': 'I could not connect.',
-  'Prepara tutto fino in fondo. L’ultimo passo, premere invio, resta tuo.': 'Prepares everything to the end. The last step, pressing send, stays yours.',
+  'Porta il lavoro fino all’ultimo passo. Invia resta tuo.': 'Takes work to the last step. Send stays yours.',
   'trascina per girare, rotella per lo zoom': 'drag to rotate, scroll to zoom',
   'Va bene così.': 'Good as is.',
   'Non sono riuscito a salvare la preferenza.': 'I could not save that preference.',
@@ -1484,8 +1484,8 @@ const EN: Record<string, string> = {
   'PDF, Word, testo. Solo lettura, solo dove dici tu.':
     'PDF, Word, plain text. Read-only, and only where you say.',
   'Oppure un percorso': 'Or a path',
-  'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.':
-    'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime — it does not happen on its own.',
+  'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi: non succede da solo.':
+    'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime: it does not happen on its own.',
   'Scegli una cartella': 'Choose a folder',
   'Sto leggendo…': 'Reading…',
   'Token da notion.so/my-integrations. Poi condividi con l\'integrazione le pagine da leggere.':
@@ -1624,9 +1624,9 @@ const EN: Record<string, string> = {
 
   // — le opzioni delle preferenze —
   'Solo osservare': 'Watch only',
-  'Legge e indicizza. Prima di proporti qualcosa di operativo, chiede.': 'Reads and indexes. Before suggesting anything to act on, it asks.',
+  'Chiede prima di preparare qualcosa da solo.': 'Asks before preparing anything on its own.',
   'Preparare e aspettare': 'Prepare and wait',
-  'Prepara il lavoro, niente esce senza il tuo Invia.': 'Prepares the work; nothing goes out without your Send.',
+  'Prepara in anticipo. Niente esce senza il tuo Invia.': 'Prepares ahead. Nothing leaves without your Send.',
   'Agire sulla routine': 'Act on the routine',
   'Archivia e risponde dove hai già confermato tre volte.': "Files and replies where you've already confirmed three times.",
   'Diretto': 'Direct',
@@ -1767,7 +1767,7 @@ const EN: Record<string, string> = {
   'Spento: fa tutto Claude.': 'Off: Claude does everything.',
   'Nessun modello trovato su questa macchina.': 'No model found on this machine.',
   'Titoli delle chat, traduzioni, e quello che si segna di te: se qui c’\u00e8 un modello acceso lo fa lui e non costa niente. Le risposte e le bozze restano a Claude, perch\u00e9 \u00e8 l\u00ec che sbagliare costa.':
-    'Chat titles, translations, and what it notes down about you: if a model is running here it does that work, for nothing. Answers and drafts stay with Claude \u2014 that is where being wrong costs.',
+    'Chat titles, translations, and what it notes down about you: if a model is running here it does that work, for nothing. Answers and drafts stay with Claude, because that is where being wrong costs.',
   'Trascina per spostarla': 'Drag to move it',
   // — mandare per email —
   'Mandala per email…': 'Send it by email…',
@@ -1862,8 +1862,8 @@ const EN: Record<string, string> = {
   'Installato, ma non ci sei ancora entrato.': 'Installed, but you have not signed in yet.',
   'Apri il Terminale, scrivi «claude» e fai l’accesso. Da lì in poi Myynd può ragionare con l’abbonamento che paghi già, invece che a consumo con la chiave.':
     'Open Terminal, type “claude” and sign in. From then on Myynd can reason on the subscription you already pay for, instead of per use with the API key.',
-  'Hai Claude Code su questo computer. Se fai l’accesso — Terminale, scrivi «claude» — Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.':
-    'You have Claude Code on this computer. Sign in — Terminal, type “claude” — and Myynd can reason on the subscription you already pay for, with no API key at all.',
+  'Hai Claude Code su questo computer. Se fai l’accesso (Terminale, scrivi «claude»), Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.':
+    'You have Claude Code on this computer. Sign in (Terminal, type “claude”) and Myynd can reason on the subscription you already pay for, with no API key at all.',
   'Claude Code è installato ma non ci sei ancora entrato. Apri il Terminale, scrivi «claude» e fai l’accesso.':
     'Claude Code is installed but you have not signed in yet. Open Terminal, type “claude” and sign in.',
   'Claude Code non ha risposto, e non c’è una chiave di riserva.':
@@ -1951,8 +1951,8 @@ const EN: Record<string, string> = {
   'ogni giorno': 'every day',
   'ogni settimana': 'every week',
   'quando arriva qualcosa': 'when something comes in',
-  'le parole da cercare nei tuoi documenti — vuoto: guarda tutto':
-    'the words to look for in your documents — empty: it looks at everything',
+  'le parole da cercare nei tuoi documenti; vuoto: guarda tutto':
+    'the words to look for in your documents; empty: it looks at everything',
   'mette solo una riga': 'just leaves a line',
   'prepara anche la bozza': 'writes the draft too',
   'in Oggi': 'in Today',
@@ -2015,9 +2015,9 @@ const EN: Record<string, string> = {
   'In che cartella lavora Claude Code': 'Which folder Claude Code works in',
   'Legge il progetto e scrive cosa farebbe. Non tocca un file: quello lo decidi tu.': 'It reads the project and writes what it would do. It touches no file: that’s your call.',
   'Collega una cartella del desktop e potrà lavorarci.': 'Connect a desktop folder and it will be able to work there.',
-  '— scegline una —': '— pick one —',
+  'Scegline una': 'Pick one',
   'Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: guarda tutto.': 'The words of whoever wrote those documents, in their language. Empty: it looks at everything.',
-  'Scrivi @ per dirle cosa può aprire — la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.': 'Type @ to tell it what it may open — your email, your desktop, your calendar. I’ll do the rest: it starts paused, you try it, and you switch it on when it convinces you.',
+  'Scrivi @ per dirle cosa può aprire: la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.': 'Type @ to tell it what it may open: your email, your desktop, your calendar. I’ll do the rest: it starts paused, you try it, and you switch it on when it convinces you.',
   'Fuori dalle cartelle': 'Outside every folder',
   'Nessuna apre questo, per ora.': 'None of them opens this, for now.',
   'Sicuro?': 'Sure?',
@@ -2042,7 +2042,7 @@ const EN: Record<string, string> = {
   'Prima collega un fornitore compatibile.': 'Connect a compatible provider first.',
   'Con quale motore lavora': 'Which engine does the work',
   'Cambia': 'Change',
-  'Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise — soprattutto le bozze e le fonti citate: rileggile prima di fidarti.': 'Myynd was tuned on Claude. With another model the answers may be less precise — especially drafts and cited sources: reread them before you trust them.',
+  'Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise, soprattutto le bozze e le fonti citate: rileggile prima di fidarti.': 'Myynd was tuned on Claude. With another model the answers may be less precise, especially drafts and cited sources: reread them before you trust them.',
   'Può fare anche il lavoro grosso: collega un fornitore compatibile con OpenAI puntandolo a http://127.0.0.1:11434/v1, con un modello come qwen2.5:14b. Ma sappi cosa scegli: un modello piccolo sbaglia di più e inventa più volentieri, e sulle bozze e sulle fonti si vede.': 'It can do the heavy work too: connect an OpenAI-compatible provider pointed at http://127.0.0.1:11434/v1, with a model such as qwen2.5:14b. But know what you’re choosing: a small model gets more wrong and makes things up more readily, and it shows in drafts and sources.',
   'Non sono riuscito a cambiare motore.': 'I couldn’t switch engine.',
   'Al posto di Claude, per le risposte, le bozze e il feed. Serve un indirizzo che parli come OpenAI e il nome di un modello; la chiave solo se il fornitore la vuole.': 'Instead of Claude, for answers, drafts and the feed. You need an address that speaks like OpenAI and a model name; the key only if the provider wants one.',
@@ -2102,8 +2102,8 @@ const EN: Record<string, string> = {
   'Una riga per ogni documento.': 'One line per document.',
   'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 // — le conversazioni: la scheda, e quello che può dire il connettore —
-  'Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.':
-    'The chats you already had with ChatGPT and Claude, and — if you want — the Claude Code sessions on this computer.',
+  'Le chat che hai già avuto con ChatGPT e con Claude, e se vuoi le sessioni di Claude Code su questo computer.':
+    'The chats you already had with ChatGPT and Claude, and if you want the Claude Code sessions on this computer.',
   'ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.':
     'ChatGPT: Settings › Data controls › Export data. Claude: Settings › Privacy › Export data. An archive arrives by email: inside there is conversations.json, and that is the file to choose.',
   'I file esportati': 'The exported files',
@@ -2643,8 +2643,8 @@ const EN: Record<string, string> = {
   'Note è un’app per Mac: su questo computer non c’è niente da leggere.': 'Notes is a Mac app: there is nothing to read on this computer.',
   'Le Note si leggono dal Mac dove gira Myynd, e qui Myynd gira su un server.': 'Notes are read from the Mac Myynd runs on, and here Myynd runs on a server.',
   'leggo le note': 'reading the notes',
-  'Le chat di claude.ai non stanno su questo Mac — nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.':
-    'claude.ai chats are not on this Mac — not even with the Claude app installed: they live on their side, and the export is the only way.',
+  'Le chat di claude.ai non stanno su questo Mac, nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.':
+    'claude.ai chats are not on this Mac, not even with the Claude app installed: they live on their side, and the export is the only way.',
   // — i progetti: su cosa lavora, e a cosa punta —
   'Progetti': 'Projects',
   'Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.':
@@ -3049,8 +3049,8 @@ const EN: Record<string, string> = {
   'Tolta.': 'Removed.',
   'Ieri · ancora aperte': 'Yesterday · still open',
   // le preferenze: l'osservatore del Mac
-  'Osserva come lavoro': 'Watch how I work',
-  'Lo usa un altro account su questo Mac': 'Another account on this Mac is using it',
+  'Guarda come lavori': 'Watch how you work',
+  'Lo usa un altro conto su questo Mac': 'Another account on this Mac is using it',
   'Lo usa un altro account su questo Mac.': 'Another account on this Mac is using it.',
   'Riprendi a guardare': 'Resume watching',
   'Pausa per un’ora': 'Pause watching for an hour',
@@ -3110,9 +3110,74 @@ const EN: Record<string, string> = {
   // — P3: fine —
 
   // — P4: inizio —
+  // il primo avvio: Mail e Calendario del Mac, la riga che prepara la prima pagina, i conti per genere
+  'Mail del Mac': 'Mail on this Mac',
+  'Calendario del Mac': 'Calendar on this Mac',
+  'Le email di Mail su questo Mac, in sola lettura.': 'Your email in Mail on this Mac, read only.',
+  'I calendari di Calendario su questo Mac.': 'Your calendars in Calendar on this Mac.',
+  'Legge le email di Mail su questo Mac: arrivate e inviate.': 'Reads the email in Mail on this Mac: received and sent.',
+  'Legge i calendari di Calendario su questo Mac.': 'Reads the calendars in Calendar on this Mac.',
+  'Preparo la prima pagina': 'Preparing your first page',
+  'In pausa finché Calendario è chiuso': 'Paused while Calendar is closed',
+  'Mail non è su questo Mac, o non è mai stata aperta.': 'Mail is not on this Mac, or has never been opened.',
+  'Per leggere Mail serve l’accesso completo al disco.': 'Reading Mail needs Full Disk Access.',
+  'Per leggere Mail serve l’accesso completo al disco': 'Reading Mail needs Full Disk Access',
+  'Mail ha cambiato formato: serve un aggiornamento di Myynd.': 'Mail has changed its format: Myynd needs an update.',
+  'Questo conto è stato cancellato.': 'This account has been deleted.',
+  'apro la posta': 'opening the mail',
   // — P4: fine —
 
   // — P5: inizio —
+  // le sezioni delle Preferenze e della Memoria, con le note di stato
+  'Il tuo Myynd': 'Your Myynd',
+  'Fuoco, notizie, autonomia, osservazione, tono': 'Focus, news, autonomy, watching, tone',
+  'Fuoco, notizie, autonomia, tono': 'Focus, news, autonomy, tone',
+  'Motore, modelli, consumo': 'Engine, models, usage',
+  'Motore da collegare': 'Engine not connected',
+  'Nome, lingua, aspetto, accesso, dati': 'Name, language, look, sign-in, data',
+  'Cosa ha fatto Myynd': 'What Myynd did',
+  'Fuoco': 'Focus',
+  'Motore': 'Engine',
+  'Un modello per ogni lavoro': 'A model for each job',
+  'Consumo': 'Usage',
+  'Nome e ruolo': 'Name and role',
+  'Accesso': 'Sign-in',
+  // da dove viene una convinzione: una sola etichetta, neutra
+  'Scritta da te': 'Written by you',
+  'Detta in chat': 'You said it in chat',
+  'Da una chat': 'From a chat',
+  'Da una bozza corretta': 'From a draft you fixed',
+  'Da un’attività chiusa': 'From a task you closed',
+  'Da un’attività lasciata': 'From a task you dropped',
+  'Da quello che scarti': 'From what you dismiss',
+  'Da una tua risposta': 'From your answer',
+  'Dal primo avvio': 'From setup',
+  'forse': 'maybe',
+  // le Preferenze
+  'Barra rapida': 'Quick bar',
+  'Notifiche': 'Notifications',
+  'Scritto da Myynd dalle tue attività e dai progetti.': 'Written by Myynd from your tasks and projects.',
+  // la Memoria
+  'Sezioni della memoria': 'Memory sections',
+  'Le tue parole': 'In your words',
+  'Northwind: la revisione dell’app, poi il lancio. Harbor Labs: in pausa fino a ottobre.': 'Northwind: app review, then launch. Harbor Labs: on hold until October.',
+  'Vendere il primo prodotto': 'Sell the first product',
+  'Da guardare': 'To check',
+  'Quello che sa': 'What it knows',
+  'Una cosa che deve sapere': 'Something it should know',
+  'Non faccio sconti sotto i mille euro': 'No discounts under €1,000',
+  'Prima pensava': 'It used to think',
+  'Aggiorna adesso': 'Update now',
+  'Aggiorno…': 'Updating…',
+  'Già aggiornato.': 'Already up to date.',
+  'Aggiornamento non riuscito.': 'Update failed.',
+  'Spostato o cancellato': 'Moved or deleted',
+  'Memoria, cose nuove da guardare': 'Memory, new things to check',
+  // «Fonti», un nome solo
+  'Manca una fonte': 'A source is missing',
+  'manca una fonte': 'a source is missing',
+  'Apri le Fonti': 'Open Sources',
+  'Cerca fonti…': 'Search sources…',
   // — P5: fine —
 
   // — P6: inizio —
@@ -3264,7 +3329,6 @@ const EN: Record<string, string> = {
   'Tempo risparmiato': 'Time saved',
   'Cosa ha notato di te': 'What it noticed about you',
   'Cose che ti ha segnalato': 'Things it flagged',
-  'Cosa ha fatto Myynd': 'What Myynd did',
   'La settimana scorsa': 'Last week',
   'nella lista': 'in your list',
   'vista': 'seen',
@@ -3908,5 +3972,29 @@ export const frasi = {
     ? `${nome} was closed: it is open again, at normal priority.`
     : `${nome} era chiuso: l’ho riaperto, con priorità normale.`,
   /** La riga dei progetti sotto i blocchi, quando i nomi sono tanti. */
-  altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`)
+  altriN: (n: number) => corrente === 'en' ? `${n} more` : (n === 1 ? 'un altro' : `altri ${n}`),
+
+  // — P5: inizio —
+  /** La nota dei Progetti nella colonna della Memoria. */
+  attivi: (n: number) => corrente === 'en' ? `${n} active` : (n === 1 ? '1 attivo' : `${n} attivi`),
+  /** La nota di rame: cose che aspettano di essere guardate. */
+  quanteDaGuardare: (n: number) => corrente === 'en' ? `${n} to check` : `${n} da guardare`,
+  /** Quante convinzioni valgono, nella nota del ritratto. */
+  coseCheSa: (n: number) => corrente === 'en'
+    ? (n === 1 ? '1 thing it knows' : `${n} things it knows`)
+    : (n === 1 ? '1 cosa che sa' : `${n} cose che sa`),
+  /** Il tempo risparmiato questa settimana, arrotondato come lo direbbe una persona. */
+  questaSettimana: (minuti: number) => {
+    const m = Math.max(1, Math.round(minuti))
+    const h = Math.floor(m / 60), r = m % 60
+    if (corrente === 'en') return `This week: about ${h ? `${h} h${r ? ` ${r}` : ''}` : `${m} min`}`
+    return `Questa settimana: circa ${h ? `${h === 1 ? '1 ora' : `${h} ore`}${r ? ` e ${r}` : ''}` : `${m} minuti`}`
+  },
+  /** Quando ha scritto «Le tue parole». */
+  scritteIl: (data: string) => corrente === 'en' ? `Written ${data}` : `Scritte il ${data}`,
+  /** Dopo un salvataggio che ha fatto nascere dei progetti. */
+  nuoviProgetti: (nomi: string[]) => corrente === 'en'
+    ? `Saved. ${nomi.length === 1 ? 'New project' : 'New projects'}: ${nomi.join(', ')}.`
+    : `Salvato. ${nomi.length === 1 ? 'Nuovo progetto' : 'Nuovi progetti'}: ${nomi.join(', ')}.`
+  // — P5: fine —
 }
