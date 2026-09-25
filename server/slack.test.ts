@@ -39,3 +39,14 @@ test('un errore che non conosciamo resta «guarda» (counter-case)', async () =>
   risponde({ ok: false, error: 'channel_not_found' })
   assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'guarda')
 })
+
+test('un 5xx di Slack, anche con una pagina HTML, è passeggero; un token non valido resta «credenziale» (counter-case)', async () => {
+  for (const status of [500, 502, 503]) {
+    globalThis.fetch = (async () => new Response('<html>Bad gateway</html>', { status, headers: { 'content-type': 'text/html' } })) as typeof fetch
+    const e = await sincronizza(C).catch(x => x)
+    assert.ok(e instanceof GuaioFonte, String(status))
+    assert.equal(e.rimedio, 'attendi', String(status))
+  }
+  risponde({ ok: false, error: 'invalid_auth' }, { status: 200 })
+  assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'credenziale')
+})

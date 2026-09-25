@@ -76,6 +76,10 @@ async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> 
     return api<T>(c, metodo, q, tentativo + 1)
   }
 
+  // un 5xx è Slack che inciampa (spesso con una pagina HTML al posto del
+  // JSON): passa da solo, non è un token da rifare
+  if (r.status >= 500) throw new GuaioFonte(spiega(''), 'attendi')
+
   const j = await r.json().catch(() => ({ ok: false, error: 'risposta_illeggibile' })) as T & Risposta
   if (!j.ok) throw new GuaioFonte(spiega(j.error ?? ''), rimedioSlack(j.error ?? ''))
   return j

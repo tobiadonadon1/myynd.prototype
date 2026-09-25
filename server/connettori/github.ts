@@ -215,6 +215,8 @@ async function controlla(r: Response): Promise<void> {
     throw new NoDiGithub(PERMESSI_MANCANTI, { rimedio: 'credenziale' })
   }
   if (r.status === 404) throw new NoDiGithub('GitHub non trova questo repository, o il token non lo vede.')
+  // un 5xx è GitHub che inciampa: passa da solo
+  if (r.status >= 500) throw new NoDiGithub('GitHub non ha risposto come mi aspettavo.', { rimedio: 'attendi' })
   throw new NoDiGithub('GitHub non ha risposto come mi aspettavo.')
 }
 

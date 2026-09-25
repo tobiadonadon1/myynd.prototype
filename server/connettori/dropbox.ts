@@ -183,6 +183,7 @@ async function api<T>(percorso: string, corpo: unknown = null): Promise<T> {
     // il rimedio accanto: un nuovo accesso, o solo aspettare
     if (r.status === 401) throw new GuaioFonte('Dropbox non mi lascia leggere: ricollega l’account.', 'accedi')
     if (r.status === 429) throw new GuaioFonte('Dropbox ha detto di rallentare. Riprovo più tardi.', 'attendi')
+    if (r.status >= 500) throw new GuaioFonte('Dropbox non ha risposto.', 'attendi')
     throw new Error('Dropbox non ha risposto.')
   }
   return await r.json() as T

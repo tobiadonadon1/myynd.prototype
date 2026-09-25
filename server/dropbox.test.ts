@@ -48,8 +48,18 @@ test('un permesso duraturo che Dropbox non riconosce più è «accedi»', async 
   assert.equal(e.message, 'Quel codice non è più valido: rifai il collegamento.')
 })
 
-test('un 500 non si sa: nessun rimedio scritto (counter-case)', async () => {
-  risponde(500)
+test('un 5xx è Dropbox che inciampa: passeggero', async () => {
+  for (const stato of [500, 502, 503]) {
+    dropbox.scordaIlToken()
+    risponde(stato)
+    const e = await dropbox.sincronizza({ giorni: 30 } as never).catch(x => x)
+    assert.ok(e instanceof GuaioFonte, String(stato))
+    assert.equal(e.rimedio, 'attendi', String(stato))
+  }
+})
+
+test('un 400 non si sa: nessun rimedio scritto (counter-case)', async () => {
+  risponde(400)
   const e = await dropbox.sincronizza({ giorni: 30 } as never).catch(x => x)
   assert.ok(e instanceof Error)
   assert.equal((e as { rimedio?: string }).rimedio, undefined)
