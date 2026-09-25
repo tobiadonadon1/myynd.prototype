@@ -42,7 +42,7 @@ import {
   elencoCompiti, riordina, ultimoOrdine, type Compito
 } from './store.ts'
 import * as ordine from './ordine.ts'
-import { classificaAttenzione, validaVoceFeed, corpoAttuale, tempoFondato, contieneRichiesta, indirizzoAttenzione } from './rilevanza.ts'
+import { classificaAttenzione, validaVoceFeed, corpoAttuale, giornoFondato, contieneRichiesta, indirizzoAttenzione } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
 import { rifinisci } from './rifinitura.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
@@ -2292,8 +2292,10 @@ Scrivi in ${nellaLingua()}.`),
         const d = veri.get(v.doc)!
         if (!['Da decidere', 'Da leggere', 'Scadenza'].includes(v.tipo) || typeof v.urgenza !== 'string' || v.urgenza.length > 60) return scarta(v, 'tipo o urgenza fuori forma', 'forma')
         if (!validaVoceFeed(v, d)) return scarta(v, 'la prova non regge (citazione, verbo o numeri)', 'prova')
-        const fonte = `${d.titolo}\n${corpoAttuale(d)}`
-        if (!tempoFondato(v.urgenza, fonte)) return scarta(v, 'urgenza con un giorno che la fonte non nomina', 'urgenza')
+        // il giorno che «domani» voleva dire nella mail regge anche qui: il
+        // prompt chiede «giovedì 9:30» e non «domani», e una carta che scrive
+        // il giorno giusto non si butta via (e poi si tace per un giorno)
+        if (!giornoFondato(v.urgenza, d)) return scarta(v, 'urgenza con un giorno che la fonte non nomina', 'urgenza')
         if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return scarta(v, 'scadenza senza una data nella prova', 'scadenza')
         /*
          * P2 · il perché oggi, e i giorni, controllati dove la carta nasce.

@@ -113,6 +113,30 @@ test('la prova: nel documento citato, nella memoria del progetto, o in una riga 
   assert.doesNotMatch(JSON.stringify(priorita.FORMA_PER_PROVA.properties.priorita.description), /\d|sei|fino a/i)
 })
 
+test('una citazione con una lineetta dentro si ritrova nella fonte; «domani» in una carta dalla memoria non nasce, da un documento diventa il suo giorno', () => {
+  store.salvaDocumenti([{ id: 'posta:INBOX:5', fonte: 'posta', tipo: 'email', titolo: 'The audit letter', corpo: 'Hi, the auditors need the signed letter — without it we cannot file the return by the end of the month.', autore: 'Priya <priya@audit.example>', quando: giorniFa(1), letto: 1 }] as never)
+  const ids = new Set(['posta:INBOX:1', 'posta:INBOX:5'])
+  const nomi = new Map([['evermute', p.id]])
+  const fonti = fontiDiProva()
+  const base = { genere: 'priorita', titolo: 'Send Priya the signed audit letter', testo: 'The auditors cannot file the return without the signed letter.', perche: 'The auditors wait for the signed letter to file the return.', offerta: 'I prepare the letter for your signature.', progetto: '', doc: 'posta:INBOX:5' }
+  // la lineetta della mail resta nella citazione: la prova non si mostra, e toglierla la staccava dalla fonte
+  const conLineetta = priorita.ripulisci({ ...base, prova: 'the signed letter — without it we cannot file the return' }, ids, nomi, [], new Set(), fonti)
+  assert.equal(conLineetta?.origine, 'doc')
+  // e se il modello la scrive con un trattino corto, si ritrova lo stesso
+  assert.equal(priorita.ripulisci({ ...base, prova: 'the signed letter - without it we cannot file the return' }, ids, nomi, [], new Set(), fonti)?.origine, 'doc')
+  // una carta dalla memoria che dice «tomorrow»: non c'è una data contro cui scioglierlo, e resterebbe finché la riga c'è
+  const memoria = { genere: 'priorita', titolo: 'Record the Evermute review video tomorrow', testo: 'The resubmission waits on the review video being recorded.', perche: 'The App Store release waits on the recording.', progetto: 'Evermute', doc: '', offerta: 'I write the shot list for the video.', prova: 'Ship Evermute 1.0 on the App Store' }
+  assert.equal(priorita.ripulisci(memoria, ids, nomi, [], new Set(), fonti), null)
+  assert.equal(priorita.ripulisci({ ...memoria, titolo: 'Record the Evermute review video', testo: 'The resubmission waits on the review video being recorded tomorrow.' }, ids, nomi, [], new Set(), fonti), null)
+  // il controcaso: senza la parola, nasce
+  assert.equal(priorita.ripulisci({ ...memoria, titolo: 'Record the Evermute review video' }, ids, nomi, [], new Set(), fonti)?.origine, 'memoria')
+  // e da un documento «tomorrow» si scioglie nel giorno che voleva dire nella mail
+  const daDoc = priorita.ripulisci({ ...base, testo: 'The auditors cannot file the return without the signed letter tomorrow.', prova: 'the signed letter — without it we cannot file the return' }, ids, nomi, [], new Set(), fonti)
+  assert.ok(daDoc)
+  assert.doesNotMatch(daDoc.testo, /\btomorrow\b/i)
+  assert.match(daDoc.testo, /\b(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\b/)
+})
+
 test('i generi nuovi: una scadenza vuole la data letta nella fonte, una cosa da leggere vuole il documento', () => {
   const ids = new Set(['posta:INBOX:1'])
   const nomi = new Map([['evermute', p.id]])
@@ -299,6 +323,27 @@ test('una priorità che non si capisce arriva sul feed riscritta, con il peso; s
     jev.perProva(null); rifinitura.perProva(null); giudizi.scorda()
     const c = cfg.leggi(); delete c.jev; cfg.scrivi(c, { togli: ['jev'] })
   }
+})
+
+test('sette priorità valide: sei arrivano sul feed, il parapetto del giro sta nel codice', async () => {
+  priorita.dimentica()
+  const sette = [
+    ['Record the Evermute review video for Apple', 'The resubmission waits on the review video being recorded.', 'The App Store release waits on the recording.'],
+    ['Write the setup instructions document', 'Apple asked for setup instructions with the recording.', 'The App Store release waits on the instructions.'],
+    ['Book a physical iPhone for the recording', 'The recording has to be made on a physical device.', 'The App Store release waits on the device recording.'],
+    ['Draft the release notes for version one', 'The store listing needs release notes before submission.', 'The App Store release waits on the notes.'],
+    ['Prepare the store screenshots', 'The listing needs screenshots of the main screens.', 'The App Store release waits on the screenshots.'],
+    ['Answer the reviewer about the login flow', 'The reviewer asked how the login flow works without an account.', 'The App Store release waits on the answer.'],
+    ['Check the privacy labels before resubmitting', 'The privacy labels have to match what the app collects.', 'The App Store release waits on the labels.']
+  ].map(([titolo, testo, perche]) => ({ genere: 'priorita', titolo, testo, perche, progetto: 'Evermute', doc: '', offerta: 'I prepare a first draft for you.', quando: '', prova: 'Ship Evermute 1.0 on the App Store' }))
+  const prima = new Set((feedAttuale() as { id: string }[]).map(v => v.id))
+  priorita.perProva({ collegato: () => true, chiediJSON: (async () => ({ priorita: sette, domande: [] })) as never })
+  assert.equal(await priorita.forse(true), 6)
+  const nuove = (feedAttuale() as Record<string, unknown>[]).filter(v => !prima.has(String(v.id))) as { id: string; titolo: string }[]
+  assert.equal(nuove.length, 6)
+  assert.deepEqual(nuove.map(v => v.titolo).sort(), sette.slice(0, 6).map(v => v.titolo).sort(), 'le prime sei, nell’ordine del modello')
+  for (const v of nuove) store.cambiaStatoFeed(v.id, 'scartato', 'prova')
+  priorita.perProva(null)
 })
 
 test('progettoDelTesto: il nome vince, il più lungo prima, l’alias del riferimento conta, due parole dell’obiettivo no', async () => {

@@ -794,6 +794,28 @@ test('«tomorrow» nel testo di una carta diventa il giorno che voleva dire nell
   assert.equal(in_pagina.urgenza, 'Tomorrow 9:30', 'la pagina legge la pillola relativa a oggi')
 })
 
+test('un’urgenza che scrive il giorno che «tomorrow» voleva dire nella mail nasce; un giorno che la mail non nomina no', async () => {
+  store.azzeraTutto()
+  const d = doc('posta:INBOX:1002', 'Review call', { corpo: 'Can you join the review call tomorrow at 9:30? We need your yes on the course price.', autore: 'Sam Ortiz <sam@lumen.example>', quando: fraOre(1) })
+  store.salvaDocumenti([d])
+  const domani = new Date(Date.now() + 86_400_000)
+  const giornoGiusto = GIORNI_EN[domani.getDay()]
+  // il prompt chiede «giovedì 9:30» e non «domani»: la carta che obbedisce non si butta via
+  fornitoreFinto([{ tipo: 'Da decidere', titolo: 'Reply to Sam about the course price', testo: 'Sam needs your yes on the course price.', urgenza: `${giornoGiusto} 9:30`, fonte: 'posta', doc: d.id, perche: 'Sam waits for your yes on the course price.', prova: 'Can you join the review call tomorrow at 9:30?' }], 'en')
+  const voci = await claude.generaFeed()
+  assert.equal(voci.length, 1, 'il giorno sciolto da «tomorrow» regge anche nell’urgenza')
+  assert.equal(voci[0].urgenza, `${MESI_EN[domani.getMonth()]} ${domani.getDate()} 9:30`)
+  const { esameDi } = await import('./feed-dati.ts')
+  assert.equal(esameDi([d.id]).get(d.id)?.fase, 'carta')
+  // il controcaso: un giorno che la mail non nomina e che «tomorrow» non vuol dire
+  store.azzeraTutto()
+  store.salvaDocumenti([d])
+  const giornoSbagliato = GIORNI_EN[(domani.getDay() + 3) % 7]
+  fornitoreFinto([{ tipo: 'Da decidere', titolo: 'Reply to Sam about the course price', testo: 'Sam needs your yes on the course price.', urgenza: `${giornoSbagliato} 9:30`, fonte: 'posta', doc: d.id, perche: 'Sam waits for your yes on the course price.', prova: 'Can you join the review call tomorrow at 9:30?' }], 'en')
+  assert.deepEqual(await claude.generaFeed(), [])
+  assert.deepEqual([esameDi([d.id]).get(d.id)?.fase, esameDi([d.id]).get(d.id)?.motivo], ['verifica', 'urgenza'])
+})
+
 test('un perché che parla del progetto, uno con un numero inventato, e una data già passata non nascono, e l’esame dice perché', async () => {
   store.azzeraTutto()
   const ieri = new Date(Date.now() - 86_400_000)

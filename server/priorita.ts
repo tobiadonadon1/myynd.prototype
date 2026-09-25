@@ -47,7 +47,7 @@ import { nominaAmbito } from './ambiti-memoria.ts'
 import { carta } from './memoria.ts'
 import { feedAttuale } from './attenzione.ts'
 import { projectEvidence } from './project-memory.ts'
-import { assoluto, PERCHE_DESCRIZIONE } from './data-carta.ts'
+import { assoluto, conRelativi, PERCHE_DESCRIZIONE } from './data-carta.ts'
 import { percheFondato } from './perche-oggi.ts'
 
 export type Genere = 'priorita' | 'proposta' | 'da-leggere' | 'scadenza'
@@ -94,7 +94,8 @@ export type FontiPriorita = {
 }
 
 /** La prova, come si confronta: senza maiuscole, accenti compatibili, spazi piani. */
-export const normalizzata = (s: string) => s.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()
+/** Per confrontare una citazione con la sua fonte: le lineette lunghe contano come un trattino, da tutte e due le parti. */
+export const normalizzata = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim()
 /** Quanto lunga può essere una prova: da una frase a un paragrafo. */
 export const PROVA_MIN = 12
 export const PROVA_MAX = 300
@@ -513,7 +514,9 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
    * memoria del progetto nominato o in una riga del riferimento che nomina
    * quel progetto. Altrimenti la voce non c'è.
    */
-  const prova = typeof g.prova === 'string' ? senzaTrattini(unaRiga(g.prova, PROVA_MAX + 1)) : ''
+  // la prova resta com'è scritta: non si mostra mai, e togliere una lineetta
+  // la staccava dalla fonte che la contiene (la carta non nasceva)
+  const prova = typeof g.prova === 'string' ? unaRiga(g.prova, PROVA_MAX + 1) : ''
   if (prova.length < PROVA_MIN || prova.length > PROVA_MAX) return null
   const cercata = normalizzata(prova)
   let origine: Priorita['origine']
@@ -538,6 +541,9 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
     else return null
   }
   if (percheFondato(percheF, fonte, fonti.progetti ?? []) !== null) return null
+  // «domani» in una carta dalla memoria non ha una data contro cui sciogliersi:
+  // sarebbe vero un giorno solo, e la carta resta finché la riga c'è
+  if (conRelativi(`${titoloF} ${testoF} ${percheF}`)) return null
   return { genere, titolo: titoloF, testo: testoF, perche: percheF, progetto, doc, offerta, quando, prova, origine }
 }
 
