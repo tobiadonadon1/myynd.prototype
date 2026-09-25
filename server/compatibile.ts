@@ -359,7 +359,8 @@ function detto(testo: string): string {
  */
 export function erroreDelFornitore(stato: number, testo: string): Error {
   const d = detto(testo)
-  if (stato === 401 || stato === 403) return new Error('La chiave del fornitore non è valida.')
+  // lo stato viaggia con la frase: la salute dei motori riconosce la chiave rifiutata senza leggere il testo
+  if (stato === 401 || stato === 403) return Object.assign(new Error('La chiave del fornitore non è valida.'), { status: stato })
   if (stato === 402 || /insufficient_quota|quota|billing|credit/i.test(d)) {
     return new Error('Il conto del fornitore è senza credito.')
   }

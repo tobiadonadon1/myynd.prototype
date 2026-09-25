@@ -10,6 +10,9 @@ import { OSPITATO } from './ospitato.ts'
 import { radici, radice, termini } from './lingua.ts'
 import { dovePortare } from './scrivania.ts'
 import { contestoAttenzione, stessaRichiesta, mittenteAutomatico, indirizzoAttenzione, type ContestoAttenzione } from './rilevanza.ts'
+// una foglia: da qui lo store sa quando scade una carta con una data
+import { scadenzaDi } from './data-carta.ts'
+import type { Ragione } from './feed-esiti.ts'
 
 /*
  * Un indice per persona, aperto quando serve.
@@ -1466,7 +1469,7 @@ const MIGRAZIONI: ((d: DatabaseSync) => void)[] = [
   d => d.exec(TABELLE.abitudini),
   // 54 → 55 · P1 · la scala della fiducia, per genere di lavoro.
   d => d.exec(TABELLE.fiducia),
-  // 55 → 56 · P2 · perché oggi, quando l'ha vista, quando l'ha toccata.
+  // 55 → 56 · P2 · perché è stata chiusa, quando l'ha vista, quando l'ha toccata.
   d => { colonna(d, 'feed', 'ragione', 'TEXT'); colonna(d, 'feed', 'vista', 'TEXT'); colonna(d, 'feed', 'toccata', 'TEXT') },
   // 56 → 57 · P2 · le carte che mancavano: quello che ha fatto lui senza che il feed l'avesse detto.
   d => d.exec(TABELLE.mancate),
@@ -2104,6 +2107,9 @@ export function svuotaFonte(fonte: string) {
     // niente da togliere a mano dall'indice: la cancellazione fa scattare il
     // trigger, che è l'unico posto che sa passargli i vecchi valori
     db.prepare('DELETE FROM documenti WHERE fonte = ?').run(fonte)
+    // e il guaio di adesso: una fonte scollegata non ha niente da sistemare.
+    // La storia dei giorni resta, è quello che è successo davvero
+    db.prepare('DELETE FROM stato_fonti WHERE fonte = ?').run(fonte)
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
@@ -2814,7 +2820,7 @@ const OMBRA_GIORNI = 60
  * Il conto che torna è delle righe *nuove*: quello che dice il messaggio dopo
  * una lettura deve poter dire «niente di nuovo» quando era tutto già lì.
  */
-export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string; offerta?: string; progetto?: string | null; peso?: number | null }[]): number {
+export function salvaFeed(items: { tipo: string; titolo: string; testo: string; urgenza?: string; fonte?: string; doc?: string; perche?: string; offerta?: string; progetto?: string | null; peso?: number | null; contesto?: string | null }[]): number {
   // il peso è un giudizio dato quando la voce nasce: chi lo porta lo scrive,
   // chi non ce l'ha (una lettura senza Jev) non cancella quello di ieri
   const ins = db.prepare(`
@@ -2880,7 +2886,9 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
       }
       const d = i.doc ? documento(i.doc) : undefined
       const peso = typeof i.peso === 'number' && Number.isFinite(i.peso) ? Math.min(3, Math.max(0, i.peso)) : null
-      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : null, i.offerta?.trim() || null, i.progetto ?? null, peso, ora)
+      // senza documento vale l'istantanea che porta la carta: una priorità
+      // nata dalla memoria di un progetto dice da quale riga viene
+      ins.run(id, i.tipo, i.titolo, i.testo, i.urgenza ?? null, i.fonte ?? null, i.doc ?? null, i.perche?.trim() || null, d ? JSON.stringify(contestoAttenzione(d)) : (i.contesto ?? null), i.offerta?.trim() || null, i.progetto ?? null, peso, ora)
     }
     // e quello che le nuove spingono oltre il tetto se ne va, nello stesso giro
     scadiFeed()
@@ -2892,12 +2900,19 @@ export function salvaFeed(items: { tipo: string; titolo: string; testo: string; 
   return nuove
 }
 
-/** Più di tante aperte, o più vecchie di tanti giorni, non stanno sul feed. */
-export const FEED_APERTE_MAX = 8
+/**
+ * Un parapetto, mai un obiettivo: oltre tante aperte le più leggere scadono.
+ *
+ * Erano otto, e decidevano loro quante carte vedeva: «You want the right
+ * amount of cards. They have to be curated.» Il numero giusto lo decide
+ * l'asticella della lettura; venti è la rete contro un giro impazzito.
+ */
+export const FEED_APERTE_MAX = 20
+/** Una carta senza data che sta lì da tanti giorni non era una cosa da fare adesso. */
 export const FEED_GIORNI_MAX = 4
 
 /**
- * Le voci che il feed lascia andare da solo.
+ * Le voci che il feed lascia andare da solo, e perché (`ragione`).
  *
  * Sul database vero il feed è arrivato a ventiquattro voci aperte: otto al
  * giorno per tre giorni, perché ogni lettura in sottofondo ne aggiungeva e
@@ -2905,9 +2920,12 @@ export const FEED_GIORNI_MAX = 4
  * Ventiquattro cose «da guardare» non le guarda nessuno, e la pagina smette
  * di voler dire qualcosa.
  *
- * Qui il feed si tiene corto in due modi: oltre le otto più recenti le
- * altre scadono, e scade anche una voce che sta lì da più di quattro giorni
- * — se in quattro giorni non l'ha toccata, non era una cosa da fare oggi.
+ * Tre modi, in ordine:
+ *   · una carta con una data («22 set 9:30», letta rispetto alla nascita)
+ *     scade il giorno dopo la sua data, e non prima: `data`. Non scade per età;
+ *   · una carta senza data scade dopo quattro giorni: `tempo`;
+ *   · se restano aperte più di venti, le più leggere (peso, poi le più
+ *     vecchie) escono: `tetto`.
  *
  * `scaduto` non è `fatto`, e non è `scartato`: non l'ha fatta e non l'ha
  * buttata via, l'ha lasciata passare. Non compare fra le fatte, non si
@@ -2917,18 +2935,30 @@ export const FEED_GIORNI_MAX = 4
  * titolo nuovo. Se era davvero importante, lo dirà il documento cambiando,
  * o lui.
  */
-export function scadiFeed(massimo = FEED_APERTE_MAX, giorni = FEED_GIORNI_MAX): number {
-  const ora = new Date().toISOString()
-  const soglia = new Date(Date.now() - giorni * 86_400_000).toISOString()
-  const vecchie = db.prepare(`
-    UPDATE feed SET stato = 'scaduto', risposto = ? WHERE stato = 'aperto' AND quando < ?
-  `).run(ora, soglia).changes
-  const oltre = db.prepare(`
-    UPDATE feed SET stato = 'scaduto', risposto = ?
-    WHERE stato = 'aperto'
-      AND id NOT IN (SELECT id FROM feed WHERE stato = 'aperto' ORDER BY quando DESC, id LIMIT ?)
-  `).run(ora, massimo).changes
-  return Number(vecchie) + Number(oltre)
+export function scadiFeed(massimo = FEED_APERTE_MAX, giorni = FEED_GIORNI_MAX, adesso = Date.now()): number {
+  const ora = new Date(adesso).toISOString()
+  const oggi = new Date(adesso)
+  const inizioDiOggi = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate()).getTime()
+  const soglia = new Date(adesso - giorni * 86_400_000).toISOString()
+  const aperte = db.prepare('SELECT id, urgenza, quando, peso FROM feed WHERE stato = ? ORDER BY quando').all('aperto') as { id: string; urgenza: string | null; quando: string; peso: number | null }[]
+  const chiudi = db.prepare("UPDATE feed SET stato = 'scaduto', risposto = ?, ragione = ? WHERE id = ? AND stato = 'aperto'")
+  let quante = 0
+  const restano: typeof aperte = []
+  for (const v of aperte) {
+    const data = scadenzaDi(v.urgenza, v.quando)
+    if (data) {
+      if (data.getTime() < inizioDiOggi) { quante += Number(chiudi.run(ora, 'data', v.id).changes); continue }
+    } else if (v.quando < soglia) {
+      quante += Number(chiudi.run(ora, 'tempo', v.id).changes); continue
+    }
+    restano.push(v)
+  }
+  if (restano.length > massimo) {
+    const leggere = [...restano].sort((a, b) =>
+      (a.peso ?? 1.5) - (b.peso ?? 1.5) || a.quando.localeCompare(b.quando) || a.id.localeCompare(b.id))
+    for (const v of leggere.slice(0, restano.length - massimo)) quante += Number(chiudi.run(ora, 'tetto', v.id).changes)
+  }
+  return quante
 }
 
 /**
@@ -2954,12 +2984,12 @@ export function docsSulFeed(ids: string[], entroGiorni = OMBRA_GIORNI): Set<stri
   return fuori
 }
 
-type RispostaAttenzione = { doc: string | null; contesto: string | null; stato: string; motivo: string | null }
+type RispostaAttenzione = { doc: string | null; contesto: string | null; stato: string; motivo: string | null; ragione: string | null; da: 'feed' | 'compiti' }
 function risposteAttenzione(): RispostaAttenzione[] {
   return db.prepare(`
-    SELECT doc, contesto, stato, motivo FROM feed WHERE stato IN ('fatto', 'scartato')
+    SELECT doc, contesto, stato, motivo, ragione, 'feed' AS da FROM feed WHERE stato IN ('fatto', 'scartato')
     UNION ALL
-    SELECT doc, contesto, CASE WHEN sparito IS NOT NULL OR stato = 'lasciato' THEN 'scartato' ELSE 'fatto' END AS stato, esito AS motivo
+    SELECT doc, contesto, CASE WHEN sparito IS NOT NULL OR stato = 'lasciato' THEN 'scartato' ELSE 'fatto' END AS stato, esito AS motivo, NULL AS ragione, 'compiti' AS da
     FROM compiti WHERE stato IN ('fatto', 'lasciato') OR sparito IS NOT NULL
   `).all() as RispostaAttenzione[]
 }
@@ -3025,6 +3055,11 @@ export function mittentiScartati(_giorni = 90): { indirizzi: string[]; domini: s
   const indirizzi = new Set<string>()
   for (const r of risposteAttenzione()) {
     if (r.stato !== 'scartato') continue
+    // una carta insegna a tacere un mittente solo se l'ha scartata come «non
+    // è mia» (o senza dire perché, com'era prima delle quattro ragioni):
+    // «già fatta», «vecchia» e «non si capisce» non parlano del mittente, e
+    // una fattura già pagata non deve far sparire chi la manda
+    if (r.da === 'feed' && r.ragione !== null && r.ragione !== 'non_mia') continue
     const c = contestoRisposta(r)
     // One irrelevant request is not permission to silence a person, a
     // shared team mailbox, or their whole company domain indefinitely.
@@ -3091,9 +3126,15 @@ export function elencoFeed(stato = 'aperto', oreMax = 0) {
  * di chi ha risposto. Il perché serve due volte: per mostrarlo dopo («hai
  * detto: l'ho già mandato»), e per non riproporre la stessa cosa.
  */
-export function cambiaStatoFeed(id: string, stato: string, motivo?: string) {
+export function cambiaStatoFeed(id: string, stato: string, motivo?: string, ragione?: Ragione | null) {
   ricordaFonteAttenzione('feed', id)
   const ora = new Date().toISOString()
+  /*
+   * La ragione va con lo stato. Riaprire («Annulla») la cancella sempre:
+   * quello che uno scarto aveva insegnato (feed-impara legge lo stato di
+   * adesso) si ritira con il gesto, senza altro codice.
+   */
+  const laRagione = stato === 'aperto' ? null : (ragione ?? null)
   if (motivo === undefined) {
     /**
      * Anche senza parole, «adesso» va scritto.
@@ -3109,11 +3150,11 @@ export function cambiaStatoFeed(id: string, stato: string, motivo?: string) {
      * Il motivo di prima non si tocca: qui si sta cambiando stato, non
      * cancellando quello che avevi scritto la volta scorsa.
      */
-    db.prepare('UPDATE feed SET stato = ?, risposto = ? WHERE id = ?').run(stato, ora, id)
+    db.prepare('UPDATE feed SET stato = ?, risposto = ?, ragione = ? WHERE id = ?').run(stato, ora, laRagione, id)
     return
   }
-  db.prepare('UPDATE feed SET stato = ?, motivo = ?, risposto = ? WHERE id = ?')
-    .run(stato, motivo, new Date().toISOString(), id)
+  db.prepare('UPDATE feed SET stato = ?, motivo = ?, risposto = ?, ragione = ? WHERE id = ?')
+    .run(stato, motivo, ora, laRagione, id)
 }
 
 /**

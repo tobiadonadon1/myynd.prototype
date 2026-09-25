@@ -68,6 +68,9 @@
   /* il verde: solo stati, mai decorazione */
   --salvia:#5C7660;
   --verde-cupo:#3E5140;
+  /* il fondo della pastiglia di uno stato («Risposto»): un velo di salvia di
+     giorno; di notte nessuno, perché sul bruno sarebbe una lastra più chiara */
+  --stato-fondo:rgba(var(--salvia-rgb),.14);
 
   /* la selezione del testo: un velo di rame, e nient'altro.
      Era verde pieno con la crema riscritta sopra — e il verde qui non
@@ -140,6 +143,7 @@
   --sabbia-viva-rgb:122,78,50;
   --crema-rgb:86,58,42;
   --verde-cupo:#9BB79F;
+  --stato-fondo:transparent;
   /* i marchi quasi neri — Anthropic, OpenAI, GitHub, Notion, Apple — sul
      bruno sparivano: di notte si disegnano col colore del testo */
   --marchio-scuro:rgba(var(--inchiostro-rgb),.92);
@@ -189,6 +193,7 @@
     --sabbia-viva-rgb:122,78,50;
     --crema-rgb:86,58,42;
     --verde-cupo:#9BB79F;
+    --stato-fondo:transparent;
     --marchio-scuro:rgba(var(--inchiostro-rgb),.92);
     --fatto-fondo:rgba(var(--salvia-rgb),.38);
     --fatto-segno:#E3EFE4;

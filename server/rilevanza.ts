@@ -125,6 +125,51 @@ export function tempoFondato(testo: string, fonte: string): boolean {
   return !tempi.some(t => t.test(testo) && !t.test(fonte))
 }
 
+const GIORNI_DELLA_SETTIMANA = [
+  /\b(?:sunday|domenica)\b/i, /\b(?:monday|luned[iì])\b/i, /\b(?:tuesday|marted[iì])\b/i,
+  /\b(?:wednesday|mercoled[iì])\b/i, /\b(?:thursday|gioved[iì])\b/i, /\b(?:friday|venerd[iì])\b/i,
+  /\b(?:saturday|sabato)\b/i
+]
+
+/**
+ * Le parole relative che una fonte può dire, e a quanti giorni dalla sua data
+ * stanno: la stessa lista che `data-carta.assoluto` scioglie nel giorno della
+ * settimana. Devono restare uguali: una carta nata da «tonight» dice
+ * «Thursday evening», e il filtro della pagina la deve leggere come fondata,
+ * altrimenti è salvata e mai mostrata.
+ */
+const RELATIVI_DELLA_FONTE: readonly [RegExp, number][] = [
+  [/\b(?:today|oggi|tonight|stasera|stamattina|stanotte|this morning|this evening)\b/i, 0],
+  [/\b(?:tomorrow|domani)\b/i, 1],
+  [/\bdopodomani\b/i, 2],
+  [/\b(?:yesterday|ieri)\b/i, -1]
+]
+
+/**
+ * Un giorno nel testo è fondato se la fonte lo nomina, **oppure** se la fonte
+ * dice «domani» e il testo dice il giorno che «domani» voleva dire nel
+ * calendario della fonte. Strettamente più permissivo di `tempoFondato`: una
+ * mail di lunedì che chiede «tomorrow at 9:30» regge una carta che dice
+ * «Tuesday 9:30», che è quello che si vuole leggere anche mercoledì. Lo
+ * stesso per «tonight» (il giorno della mail), «yesterday» (quello prima).
+ */
+export function giornoFondato(testo: string, d: Pick<Documento, 'titolo' | 'corpo' | 'autore' | 'quando'>): boolean {
+  const senzaAccenti = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const fonte = senzaAccenti(normalizza(`${d.titolo}\n${d.autore ?? ''}\n${corpoAttuale(d)}`))
+  if (tempoFondato(testo, fonte)) return true
+  const quando = Date.parse(d.quando ?? '')
+  if (!Number.isFinite(quando)) return false
+  const s = senzaAccenti(testo)
+  // «oggi», «domani», «questa settimana» nel testo vogliono comunque la fonte
+  for (const t of [/\b(?:today|oggi)\b/i, /\b(?:tomorrow|domani)\b/i, /\b(?:this week|questa settimana)\b/i]) {
+    if (t.test(s) && !t.test(fonte)) return false
+  }
+  const giorno = new Date(quando).getDay()
+  const ammessi = new Set<number>()
+  for (const [re, k] of RELATIVI_DELLA_FONTE) if (re.test(fonte)) ammessi.add((giorno + k + 7) % 7)
+  return GIORNI_DELLA_SETTIMANA.every((re, i) => !re.test(s) || re.test(fonte) || ammessi.has(i))
+}
+
 /** Provider schemas and prompts are advisory; these checks fail closed. */
 export function validaVoceFeed(
   voce: CardDaVerificare | Record<string, unknown>,
@@ -159,7 +204,9 @@ export function validaVoceFeed(
   // Concrete identities/numbers mentioned in the card must be present in
   // the source. The exact request remains available to audit semantic fit.
   const fonte = normalizza(`${d.titolo}\n${d.autore ?? ''}\n${corpoAttuale(d)}`)
-  if (!tempoFondato(`${titolo} ${testo}`, fonte)) return false
+  // il giorno che «domani» voleva dire nella fonte regge: questo filtro gira
+  // anche a ogni caricamento della pagina, e non deve essere più severo di ieri
+  if (!giornoFondato(`${titolo} ${testo}`, d)) return false
   const numeri = `${titolo} ${testo}`.match(/\b\d+(?:[.,]\d+)*\b/g) ?? []
   if (numeri.some(n => !new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(fonte))) return false
   return true
@@ -171,7 +218,7 @@ export function contestoAttenzione(d: Documento): ContestoAttenzione {
 }
 
 const COMUNI = new Set('please could would should your yours their this that with from have will them thank thanks hello regards ciao grazie saluti puoi potresti favore della delle dello degli quale quello questa questo sono perche quindi reply respond response rispondere risposta confirm confermare conferma send inviare review rivedere approve approvare'.split(' '))
-function paroleRilevanti(s: string): Set<string> {
+export function paroleRilevanti(s: string): Set<string> {
   return new Set(normalizza(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(p => p.length >= 4 && !COMUNI.has(p)))
 }
 function sovrapposizione(a: Set<string>, b: Set<string>): number {

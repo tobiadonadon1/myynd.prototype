@@ -26,6 +26,7 @@ import type { Documento } from '../store.ts'
 import { apriIlBrowser, chiediGettoni, Vivo, type Sportello } from './oauth.ts'
 import { daBuffer, leggibile, tipoDi } from './estrai.ts'
 import { riprendi, segna, resto, type Resto } from './ripresa.ts'
+import { GuaioFonte } from './guaio.ts'
 
 export const AMBITI = ['account_info.read', 'files.metadata.read', 'files.content.read']
 
@@ -50,9 +51,11 @@ const MAX_DOCUMENTI = 1200
  */
 const MAX_ELENCO = 20_000
 
+const INVALIDO = 'Quel codice non è più valido: rifai il collegamento.'
+
 function traduci(j: Record<string, unknown>, _stato: number): string | null {
   const e = String(j.error ?? '')
-  if (e === 'invalid_grant') return 'Quel codice non è più valido: rifai il collegamento.'
+  if (e === 'invalid_grant') return INVALIDO
   if (e === 'invalid_client') return 'La chiave dell’app Dropbox non è valida.'
   return null
 }
@@ -146,8 +149,14 @@ export function scollega() {
 
 const vivo = new Vivo(async () => {
   const d = leggi().dropbox
-  if (!d?.refresh) throw new Error('Collega Dropbox e potrò farlo.')
-  return chiediGettoni(sportello(d.chiave), { refresh_token: d.refresh, grant_type: 'refresh_token' })
+  if (!d?.refresh) throw new GuaioFonte('Collega Dropbox e potrò farlo.', 'accedi')
+  try {
+    return await chiediGettoni(sportello(d.chiave), { refresh_token: d.refresh, grant_type: 'refresh_token' })
+  } catch (e) {
+    // il permesso duraturo che Dropbox non riconosce più: serve un nuovo accesso
+    if (e instanceof Error && e.message === INVALIDO) throw new GuaioFonte(INVALIDO, 'accedi')
+    throw e
+  }
 })
 
 export function scordaIlToken() { vivo.scorda() }
@@ -171,8 +180,10 @@ async function api<T>(percorso: string, corpo: unknown = null): Promise<T> {
     signal: AbortSignal.timeout(45_000)
   })
   if (!r.ok) {
-    if (r.status === 401) throw new Error('Dropbox non mi lascia leggere: ricollega l’account.')
-    if (r.status === 429) throw new Error('Dropbox ha detto di rallentare. Riprovo più tardi.')
+    // il rimedio accanto: un nuovo accesso, o solo aspettare
+    if (r.status === 401) throw new GuaioFonte('Dropbox non mi lascia leggere: ricollega l’account.', 'accedi')
+    if (r.status === 429) throw new GuaioFonte('Dropbox ha detto di rallentare. Riprovo più tardi.', 'attendi')
+    if (r.status >= 500) throw new GuaioFonte('Dropbox non ha risposto.', 'attendi')
     throw new Error('Dropbox non ha risposto.')
   }
   return await r.json() as T

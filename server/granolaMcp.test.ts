@@ -1068,3 +1068,29 @@ test('dopo la prima lettura, il giro che parte subito non rifà Granola: una vol
   assert.equal(g.appenaLetto(), true)
   assert.equal(g.appenaLetto(), false)
 })
+
+// — P8: il guaio di Granola porta il suo rimedio —
+
+test('un refresh morto è «accedi»; un no sull’elenco è passeggero', async () => {
+  giàCollegato('ref-morto')
+  f.refreshValidi.clear()
+  const e = await g.sincronizza(new Map()).catch(x => x)
+  assert.equal(e.message, g.SCADUTO)
+  assert.equal(e.rimedio, 'accedi')
+  azzera(); g.scorda()
+  f.listaInErrore = 'Internal error'
+  giàCollegato()
+  const e2 = await g.sincronizza(new Map()).catch(x => x)
+  assert.equal(e2.message, g.NON_LEGGE)
+  assert.equal(e2.rimedio, 'attendi')
+})
+
+test('ogni frase di Granola ha il suo rimedio', () => {
+  assert.equal(g.rimedioGranola(g.SCADUTO), 'accedi')
+  assert.equal(g.rimedioGranola(g.NIENTE_ACCESSO), 'accedi')
+  for (const x of [g.RETE, g.RALLENTA, g.GIU, g.LENTO, g.NON_LEGGE, g.REGISTRAZIONE, g.SENZA_DURATA]) assert.equal(g.rimedioGranola(x), 'attendi', x)
+  assert.equal(g.rimedioGranola(g.CAMBIATO), 'aggiorna')
+  // quello che non è una delle frasi di Granola non si sa (counter-case)
+  assert.equal(g.rimedioGranola(g.GUASTO), 'guarda')
+  assert.equal(g.rimedioGranola('qualcos’altro'), 'guarda')
+})

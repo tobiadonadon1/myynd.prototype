@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('myynd', {
   scegliFile: estensioni => chiedi('myynd:scegli-file', Array.isArray(estensioni) ? estensioni.map(String) : []),
   apriFuori: url => chiedi('myynd:apri-fuori', String(url)),
   mostraNelFinder: percorso => chiedi('myynd:mostra', String(percorso)),
+  // riapre l'app: un permesso dato adesso vale solo per la copia che parte dopo
+  riavvia: () => chiedi('myynd:riavvia'),
   segnala: inAttesa => ipcRenderer.send('myynd:segnala', Number(inAttesa)),
   lingua: l => ipcRenderer.send('myynd:lingua', l === 'en' ? 'en' : 'it'),
   scorciatoia: () => chiedi('myynd:scorciatoia'),
@@ -71,5 +73,18 @@ contextBridge.exposeInMainWorld('myynd', {
     misura: altezza => ipcRenderer.send('myynd:richiamo-misura', Number(altezza)),
     // il guscio l'ha appena mostrata: la pagina rimette il fuoco nella casella
     mostrato: cb => ascolta('myynd:richiamo-mostrato', () => cb())
+  },
+  // — l'osservatore del Mac: il permesso per i titoli delle finestre. Chiederlo
+  //   è il solo modo in cui compare la richiesta di sistema, una volta per versione —
+  osservatore: {
+    permessoTitoli: () => chiedi('myynd:osservatore-permesso'),
+    chiediPermessoTitoli: () => chiedi('myynd:osservatore-chiedi-permesso'),
+    apriImpostazioniTitoli: () => chiedi('myynd:osservatore-impostazioni')
+  },
+  // — il mostriciattolo sullo schermo, acceso o spento dalle Preferenze —
+  compagno: {
+    acceso: () => chiedi('myynd:compagno-acceso'),
+    accendi: on => chiedi('myynd:compagno-accendi', on === true),
+    suCambio: cb => ascolta('myynd:compagno-cambiato', on => cb(on === true))
   }
 })

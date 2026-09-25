@@ -68,14 +68,16 @@ function jevFinto(carta: (titolo: string) => { chiara: number; peso: number }, d
 }
 
 /** Il modello grande finto: riscrive come gli si dice, e conta. */
-function modelloFinto(riscrivi: (carta: { titolo: string; testo: string; urgenza: string }) => { titolo: string; testo: string; urgenza: string } | null) {
+function modelloFinto(riscrivi: (carta: { titolo: string; testo: string; urgenza: string }) => { titolo: string; testo: string; urgenza: string; perche?: string } | null) {
   const chiamate: { titolo: string }[] = []
   rifinitura.perProva({
     collegato: () => true,
     chiediJSON: (async (o: { messages: { content: string }[] }) => {
       const carta = JSON.parse(o.messages[0].content.replace(/^Carta \(dati\):\n/, '')) as { titolo: string; testo: string; urgenza: string }
       chiamate.push({ titolo: carta.titolo })
-      return riscrivi(carta)
+      const r = riscrivi(carta)
+      // il perché oggi è obbligatorio nella forma: chi non lo dice riceve quello di prima, ripulito
+      return r && !r.perche ? { ...r, perche: 'Privacy is the promise of Myynd.' } : r
     }) as never
   })
   return chiamate
@@ -98,7 +100,8 @@ const CHIARA: Carta = {
 const RISCRITTA = {
   titolo: 'Check that Jev keeps Myynd data local',
   testo: 'Jev\'s judgments go through TypeSafe\'s service: decide that before using it more widely.',
-  urgenza: ''
+  urgenza: '',
+  perche: 'The privacy promise of Myynd waits on this decision.'
 }
 
 beforeEach(() => {
@@ -119,7 +122,12 @@ test('il codice conta: nove parole di titolo, diciotto di testo, tre di pillola,
   assert.deepEqual(rifinitura.controlla(CONFUSA), ['testo lungo', 'due fonti cucite'])
   assert.deepEqual(rifinitura.controlla({ titolo: 'Fix Evermute’s family account issues and upload the new build', testo: 'ok', urgenza: '' }), ['titolo lungo'])
   assert.deepEqual(rifinitura.controlla({ titolo: 'Approve the X draft on Myynd’s founder workflow', testo: 'Approve or revise the draft.', urgenza: 'no rush' }), ['gergo'])
-  assert.deepEqual(rifinitura.controlla({ titolo: 'Prepare for Amanda’s audit', testo: 'Tomorrow.', urgenza: 'Tuesday Sep 22, 2026, 9:30am. 10am Eastern Time' }), ['urgenza lunga'])
+  // «Tomorrow.» nel testo è vero un giorno solo: si riscrive con il giorno
+  assert.deepEqual(rifinitura.controlla({ titolo: 'Prepare for Amanda’s audit', testo: 'Tomorrow.', urgenza: 'Tuesday Sep 22, 2026, 9:30am. 10am Eastern Time' }), ['urgenza lunga', 'giorno relativo'])
+  assert.deepEqual(rifinitura.controlla({ titolo: 'Prepare for Amanda’s audit', testo: 'At 9:30.', urgenza: 'Tuesday Sep 22, 2026, 9:30am. 10am Eastern Time' }), ['urgenza lunga'])
+  // e il perché oggi si conta come il resto: dodici parole, niente gergo, niente «mentre»
+  assert.deepEqual(rifinitura.controlla({ ...CHIARA, perche: 'Apple waits for the recording since Monday, while the partner waits for the videos and the store waits too.' }), ['perché lungo', 'due fonti cucite'])
+  assert.deepEqual(rifinitura.controlla({ ...CHIARA, perche: 'The UX spec waits.' }), ['gergo'])
   assert.deepEqual(rifinitura.controlla({ titolo: 'Rispondi a Sara', testo: 'Sara aspetta da lunedì, mentre Marco no.', urgenza: '' }), ['due fonti cucite'])
   assert.equal(rifinitura.parole('Tomorrow 9:30'), 2)
   assert.equal(rifinitura.parole('Tuesday Sep 22, 2026, 9:30am. 10am Eastern Time'), 8)
@@ -164,7 +172,7 @@ test('senza chiave la carta esce com’è entrata: niente riscrittura, niente pe
   assert.equal(fuori[0].peso, undefined)
   assert.equal(fuori[1].titolo, CHIARA.titolo)
   assert.equal(fuori[1].testo, CHIARA.testo)
-  assert.equal(fuori[1].urgenza, 'Tomorrow 9:30', 'la pillola si accorcia anche senza Jev: è codice')
+  assert.equal(fuori[1].urgenza, 'Sep 22 9:30', 'la pillola si scrive assoluta anche senza Jev: è codice')
   assert.equal(fuori[1].peso, undefined)
 })
 
@@ -188,7 +196,7 @@ test('la carta che non si capisce esce riscritta, quella chiara no, e ognuna ha 
   assert.equal(fuori[0].titolo, RISCRITTA.titolo)
   assert.equal(fuori[0].testo, RISCRITTA.testo)
   assert.equal(fuori[0].peso, 1.4)
-  assert.equal(fuori[0].perche, CONFUSA.perche, 'il perché non si tocca')
+  assert.equal(fuori[0].perche, RISCRITTA.perche, 'il perché oggi si riscrive con il resto')
   assert.equal(fuori[1].titolo, CHIARA.titolo)
   assert.equal(fuori[1].testo, CHIARA.testo)
   assert.equal(fuori[1].peso, 2.5)
@@ -205,11 +213,14 @@ test('il codice ferma anche quello che Jev lascia passare: un titolo di dodici p
 
 test('una riscrittura che parla d’altro, che è ancora lunga, o che inventa un giorno non entra: resta l’originale', async () => {
   jevFinto(() => ({ chiara: 0.1, peso: 1 }))
-  const casi: { nome: string; riscritta: { titolo: string; testo: string; urgenza: string } | null }[] = [
+  const casi: { nome: string; riscritta: { titolo: string; testo: string; urgenza: string; perche?: string } | null }[] = [
     { nome: 'soggetto perso', riscritta: { titolo: 'Call the accountant about the invoices', testo: 'The accountant is waiting.', urgenza: '' } },
     { nome: 'ancora lunga', riscritta: { titolo: RISCRITTA.titolo, testo: 'Jev sends every judgment through the TypeSafe service, and the review of the twentieth says real use always calls it, so decide before expanding.', urgenza: '' } },
     { nome: 'giorno inventato', riscritta: { titolo: RISCRITTA.titolo, testo: 'Decide by tomorrow whether Jev can keep Myynd data local.', urgenza: '' } },
     { nome: 'cucita ancora', riscritta: { titolo: RISCRITTA.titolo, testo: 'The commit uses Jev, while the review says it calls the service.', urgenza: '' } },
+    { nome: 'perché con un giorno inventato', riscritta: { ...RISCRITTA, perche: 'The review waits since Friday for this decision.' } },
+    { nome: 'perché relativo', riscritta: { ...RISCRITTA, perche: 'The review waits since yesterday for this decision.' } },
+    { nome: 'perché che parla del progetto', riscritta: { ...RISCRITTA, perche: 'Matters for the Myynd project and its goal.' } },
     { nome: 'modello muto', riscritta: null }
   ]
   for (const caso of casi) {
@@ -229,7 +240,10 @@ test('l’urgenza riscritta: prima la pillola del codice, poi quella del modello
   // il codice sa leggere la data: vince lui, qualunque cosa dica il modello
   modelloFinto(() => ({ ...RISCRITTA, urgenza: 'Friday' }))
   let [fuori] = await rifinitura.rifinisci([{ ...base, urgenza: 'Tuesday Sep 22, 2026, 9:30am. 10am Eastern Time' }], { oggi: OGGI })
-  assert.equal(fuori.urgenza, 'Tomorrow 9:30')
+  assert.equal(fuori.urgenza, 'Sep 22 9:30')
+  // nata ieri con «domani 9:30»: domani è rispetto alla nascita, non a oggi
+  ;[fuori] = await rifinitura.rifinisci([{ ...base, urgenza: 'tomorrow 9:30', nata: new Date(2026, 8, 20, 20).toISOString() }], { oggi: OGGI })
+  assert.equal(fuori.urgenza, 'Sep 21 9:30')
   // il codice non la sa leggere: vale quella del modello, se corta e senza giorni inventati
   modelloFinto(() => ({ ...RISCRITTA, urgenza: 'No rush' }))
   ;[fuori] = await rifinitura.rifinisci([{ ...base, urgenza: 'whenever you get to it, honestly' }], { oggi: OGGI })
