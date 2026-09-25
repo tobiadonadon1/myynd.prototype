@@ -44,6 +44,8 @@ test('un lucchetto stantio per età o per pid morto non ferma nessuno', () => {
   assert.equal(a.inCorso(), false, 'pid morto: stantio')
   const l2 = a.prendi()
   assert.ok(l2); l2!.lascia()
+  assert.ok(!readdirSync(DOVE).some(n => n.includes('.stantio-')), 'il lucchetto stantio portato via non resta in giro')
+  assert.ok(!existsSync(join(DOVE, '.in-corso')))
 })
 
 test('i file si scrivono interi, con i modi giusti', () => {
@@ -76,7 +78,9 @@ test('la riga delle preferenze, in ogni stato e nelle due lingue, senza lineette
   assert.deepEqual(r({ ultima }), ['Ultima prova il 22 set: 46 su 50 giuste, nessuna inventata.', 'Last check on Sep 22: 46 of 50 right, none invented.'])
   assert.deepEqual(r({ ultima: { ...ultima, inventate: 1 } }), ['Ultima prova il 22 set: 46 su 50 giuste, 1 inventata.', 'Last check on Sep 22: 46 of 50 right, 1 invented.'])
   assert.deepEqual(r({ ultima: { ...ultima, inventate: 2 } }), ['Ultima prova il 22 set: 46 su 50 giuste, 2 inventate.', 'Last check on Sep 22: 46 of 50 right, 2 invented.'])
-  assert.deepEqual(r({ ultima: { ...ultima, interrotta: 'budget', fatte: 30 } }), ['Prova del 22 set fermata a 30 su 50.', 'Check on Sep 22 stopped at 30 of 50.'])
+  // fermata: le fatte su tutte quelle da fare, non sulle giudicate senza le «da rivedere» (30 su 28 non si può leggere)
+  assert.deepEqual(r({ ultima: { ...ultima, interrotta: 'budget', fatte: 30, quante: 28, totale: 50 } }), ['Prova del 22 set fermata a 30 su 50.', 'Check on Sep 22 stopped at 30 of 50.'])
+  assert.deepEqual(r({ ultima: { ...ultima, interrotta: 'errore', fatte: 30, quante: 30 } })[1], 'Check on Sep 22 stopped at 30 of 30.', 'un riassunto vecchio senza totale')
   const dopo = '2026-09-29T10:00:00.000Z'
   assert.deepEqual(r({ ultima, saltata: { quando: dopo, motivo: 'tetto' } }), ['Saltata il 29 set: tetto di token di oggi raggiunto.', 'Skipped on Sep 29: today’s token limit reached.'])
   assert.deepEqual(r({ ultima, saltata: { quando: dopo, motivo: 'motore' } }), ['Saltata il 29 set: nessun motore collegato.', 'Skipped on Sep 29: no engine connected.'])

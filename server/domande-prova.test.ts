@@ -226,3 +226,49 @@ test('ritira toglie la domanda di un documento sparito e di una citazione cambia
   assert.equal(dp.ritira(ins), 0, 'una volta ritirata non si conta più')
   assert.ok(dp.attive(ins).some(d => d.id === 'q92'), 'una non_ce non si ritira')
 })
+
+test('ogni chiamata è severa; senza un giudizio sull’assenza la domanda non entra; il tetto a metà ferma e scrive; un guasto pure', async () => {
+  archivio.togli()
+  const { controllaIlTetto } = await import('./tetto.ts')
+  const severi: boolean[] = []
+  const assenti = [
+    { domanda: 'What is the rent for the Lisbon office?', paroleIt: ['affitto', 'Lisbona'], paroleEn: ['rent', 'Lisbon'] },
+    { domanda: 'What is Nora’s birthday?', paroleIt: ['compleanno', 'Nora'], paroleEn: ['birthday', 'Nora'] }
+  ]
+  // il giudizio sull'assenza di «Lisbon» non si legge (quello che il vero chiediJSON torna su un JSON storto): la domanda non entra
+  dp.perProva({ chiediJSON: (async (r: { lavoro: string; severo?: boolean; messages: { content: string }[] }) => {
+    severi.push(r.severo === true)
+    const content = String(r.messages[0].content)
+    if (r.lavoro === 'esame' && content.startsWith('Progetti:')) return { domande: assenti }
+    if (r.lavoro === 'verifica' && content.includes('Quello che sai di lei')) return content.includes('Lisbon') ? null : { risponde: false, n: 0 }
+    if (r.lavoro === 'verifica') return { risposta: '', citazione: '' }
+    return { buona: false, domanda: '', attesa: '', citazione: '', genere: 'stato' }
+  }) as never })
+  const r = await dp.generaInsieme({ n: 10 })
+  assert.ok(severi.length > 0 && severi.every(Boolean), 'tutte le chiamate portano severo')
+  assert.deepEqual(dp.attive(r.insieme).filter(d => d.tipo === 'non_ce').map(d => d.domanda), ['What is Nora’s birthday?'])
+  assert.equal(r.scartate.verifica, 1)
+  assert.equal(r.interrotta, undefined)
+
+  // il tetto raggiunto a metà, come lo lancia il modello vero con `severo`: la costruzione si ferma con «tetto» e scrive
+  archivio.togli()
+  let chiamate = 0
+  dp.perProva({ chiediJSON: (async () => {
+    chiamate++
+    cfg.aggiorna({ tetto: 1 }); store.segnaUso({ lavoro: 'x', motore: 'f', entrata: 5, cache: 0, uscita: 5 }); controllaIlTetto()
+    throw new Error('mai')
+  }) as never })
+  const t = await dp.generaInsieme({ n: 10 })
+  assert.equal(t.interrotta, 'tetto')
+  assert.equal(chiamate, 1, 'al tetto si ferma subito, non scorre i candidati scartandoli uno a uno')
+  assert.ok(archivio.leggiInsieme(), 'scritto lo stesso')
+  cfg.aggiorna({ tetto: 0 }); store.default.exec('DELETE FROM uso')
+
+  // e un guasto della strada (rete, motore giù) ferma con «errore», sempre scrivendo
+  archivio.togli(); chiamate = 0
+  dp.perProva({ chiediJSON: (async () => { chiamate++; throw new Error('fetch failed') }) as never })
+  const g = await dp.generaInsieme({ n: 10 })
+  assert.equal(g.interrotta, 'errore')
+  assert.equal(chiamate, 1)
+  assert.ok(archivio.leggiInsieme())
+})

@@ -17,14 +17,19 @@ import { join } from 'node:path'
 import * as cfg from './config.ts'
 import type { Via } from './ancoraggio.ts'
 
-export type Interrotta = 'budget' | 'tempo' | 'tetto' | 'annullata'
+/** Perché una prova si è fermata: il budget, i minuti, il tetto di oggi, il segnale, o un guasto della strada (rete, motore). */
+export type Interrotta = 'budget' | 'tempo' | 'tetto' | 'annullata' | 'errore'
 
 export type Riassunto = {
   quando: string
   origine: 'comando' | 'settimana'
   via: Via | 'misto'
+  /** Le domande giudicate. */
   fatte: number
+  /** Le giudicate senza quelle da rivedere: il denominatore della riga. */
   quante: number
+  /** Quante domande la prova doveva fare: per la riga di una prova fermata. Manca nei riassunti più vecchi. */
+  totale?: number
   giuste: number
   senzaFonte: number
   sbagliate: number
@@ -50,6 +55,8 @@ export const INSIEME_MINIMO = 6
 export type StatoProva = {
   ultima?: Riassunto
   ultimaCompleta?: string
+  /** L'ultima prova della settimana, finita o no: anche una fermata a metà aspetta sette giorni. */
+  ultimaSettimanale?: string
   saltata?: { quando: string; motivo: Salto }
   inCorso?: { dal: string; fatte: number; quante: number }
 }
@@ -99,8 +106,11 @@ function stantio(l: Lucchetto | null): boolean {
  * Il lucchetto della prova: uno solo per cartella.
  *
  * `O_EXCL` sul file: chi lo apre per primo lo tiene. Uno lasciato lì da un
- * processo morto, o più vecchio di due ore, si toglie e si riprova una volta.
- * Torna null se un altro lo tiene davvero.
+ * processo morto, o più vecchio di due ore, si porta via e si riprova una
+ * volta. Portarlo via è un `rename` a un nome unico: se due lo trovano
+ * stantio insieme, uno solo riesce a spostarlo, e l'altro al giro dopo trova
+ * il lucchetto nuovo del primo e si ferma. Torna null se un altro lo tiene
+ * davvero.
  */
 export function prendi(cartella?: string): { lascia(): void } | null {
   const dove = cartellaRisposte(cartella)
@@ -115,7 +125,9 @@ export function prendi(cartella?: string): { lascia(): void } | null {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
       if (!stantio(leggiJSON<Lucchetto>(file))) return null
-      try { unlinkSync(file) } catch { /* l'ha tolto un altro */ }
+      const via = `${file}.stantio-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+      try { renameSync(file, via) } catch { continue /* l'ha portato via un altro: si riprova, e si trova il suo */ }
+      try { unlinkSync(via) } catch { /* già via */ }
     }
   }
   return null
@@ -241,7 +253,9 @@ export function rigaDiStato(s: StatoProva, attiva: boolean, en: boolean, lucchet
   if (!u) return null
   const g = giornoCorto(u.quando, en)
   if (u.interrotta) {
-    return en ? `Check on ${g} stopped at ${u.fatte} of ${u.quante}.` : `Prova del ${g} fermata a ${u.fatte} su ${u.quante}.`
+    // le fatte su tutte quelle da fare; un riassunto vecchio senza `totale` ha solo le giudicate
+    const su = u.totale ?? u.quante
+    return en ? `Check on ${g} stopped at ${u.fatte} of ${su}.` : `Prova del ${g} fermata a ${u.fatte} su ${su}.`
   }
   const inventate = u.inventate === 0
     ? (en ? 'none invented' : 'nessuna inventata')

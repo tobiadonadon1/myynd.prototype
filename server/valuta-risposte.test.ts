@@ -102,13 +102,16 @@ const COPIONE: Record<string, string> = {
 }
 
 /** Il giudice finto: tutto vero, tranne dove il copione dice il contrario. */
-function giudiceFinto(regola: (contenuto: string) => Partial<Giudizio> = () => ({})) {
+function giudiceFinto(regola: (contenuto: string) => Partial<Giudizio> | null = () => ({})) {
   const chiamate: string[] = []
-  const chiediJSON = (async (r: { lavoro: string; messages: { content: string }[] }) => {
+  const chiediJSON = (async (r: { lavoro: string; severo?: boolean; messages: { content: string }[] }) => {
     const c = String(r.messages[0].content)
+    assert.equal(r.severo, true, 'il giudice è severo: il tetto arriva come errore, non come null')
     chiamate.push(`${r.lavoro}:${c.match(/^Domanda: ([^\n]+)/)?.[1] ?? ''}`)
     store.segnaUso({ lavoro: r.lavoro, motore: 'finto', entrata: 50, cache: 0, uscita: 5 })
-    return { corrisponde: true, sostenuta: true, rispondeDavvero: true, motivo: 'ok', ...regola(c) }
+    const extra = regola(c)
+    if (extra === null) return null
+    return { corrisponde: true, sostenuta: true, rispondeDavvero: true, motivo: 'ok', ...extra }
   }) as never
   return { chiediJSON, chiamate }
 }
@@ -326,5 +329,106 @@ test('settimanale: spento non fa niente; poi salta per insieme, motore, locale e
   await vr.forseSettimanale()
   assert.equal(archivio.leggiStato().saltata?.motivo, 'tetto')
   assert.equal(readFileSync(join(cfg.cartella(), 'scheduled-catchup.json'), 'utf8'), catchup, 'un salto non consuma lo slot')
+  cfg.aggiorna({ tetto: 0, provaRisposte: { attiva: false } }); store.default.exec('DELETE FROM uso')
+})
+
+test('un giudizio che non si legge lascia la voce senza etichetta; il tetto e un guasto a metà fermano, salvano, e la riga dice «fermata a 1 su 6»', async () => {
+  archivio.togli(); archivio.scriviInsieme(INSIEME()); store.default.exec('DELETE FROM uso'); cfg.aggiorna({ tetto: 0 })
+  // il giudice torna null su «Who owns»: la voce resta senza etichetta, non «sbagliata»
+  vr.perProva({ rispondi: chatFinta(COPIONE) as never, chiediJSON: giudiceFinto(c => c.includes('Who owns') ? null : c.includes('Keel ordered') ? { sostenuta: false } : {}).chiediJSON })
+  let r = await vr.valutaRisposte({ origine: 'comando' })
+  const q03 = r.voci.find(v => v.id === 'q03')!
+  assert.equal(q03.esito, null)
+  assert.equal(q03.errore, 'giudizio mancante')
+  assert.equal(r.totali.sbagliata, 1, 'solo q04')
+  assert.equal(r.totali.fatte, 5)
+  assert.equal(r.interrotta, undefined)
+  assert.match(vr.tabella(r, true), /q03 {2}error/)
+
+  // il tetto raggiunto dentro il giudice, come lo lancia il modello vero con `severo`
+  archivio.togli(); archivio.scriviInsieme(INSIEME()); store.default.exec('DELETE FROM uso')
+  const { controllaIlTetto } = await import('./tetto.ts')
+  vr.perProva({ rispondi: chatFinta(COPIONE) as never, chiediJSON: (async (o: { severo?: boolean; messages: { content: string }[] }) => {
+    assert.equal(o.severo, true)
+    if (String(o.messages[0].content).includes('Who owns')) { cfg.aggiorna({ tetto: 1 }); store.segnaUso({ lavoro: 'x', motore: 'f', entrata: 5, cache: 0, uscita: 5 }); controllaIlTetto() }
+    return { corrisponde: true, sostenuta: true, rispondeDavvero: true, motivo: '' }
+  }) as never })
+  r = await vr.valutaRisposte({ origine: 'comando' })
+  assert.equal(r.interrotta, 'tetto')
+  assert.deepEqual(r.voci.map(v => [v.id, v.esito]), [['q01', 'giusta'], ['q02', 'giusta'], ['q03', null]])
+  assert.ok(r.file && existsSync(r.file))
+  cfg.aggiorna({ tetto: 0 }); store.default.exec('DELETE FROM uso')
+
+  // un guasto della strada alla seconda domanda: la prima resta giudicata, il rapporto si salva, la riga è vera
+  archivio.togli(); archivio.scriviInsieme(INSIEME())
+  const chat = chatFinta(COPIONE)
+  vr.perProva({ rispondi: (async (domanda: string, ...resto: unknown[]) => {
+    if (domanda.includes('logo')) throw new Error('Claude Code ci ha messo troppo')
+    return (chat as (...a: unknown[]) => Promise<Risposta>)(domanda, ...resto)
+  }) as never, chiediJSON: giudiceFinto().chiediJSON })
+  r = await vr.valutaRisposte({ origine: 'comando' })
+  assert.equal(r.interrotta, 'errore')
+  assert.equal(r.voci.length, 2)
+  assert.equal(r.voci[0].esito, 'giusta')
+  assert.equal(r.voci[1].esito, null)
+  assert.match(r.voci[1].errore ?? '', /ci ha messo troppo/)
+  assert.ok(r.file && existsSync(r.file))
+  const stato = archivio.leggiStato()
+  assert.equal(stato.ultima?.interrotta, 'errore')
+  assert.equal(stato.ultima?.totale, 6)
+  assert.equal(stato.ultimaCompleta, undefined)
+  assert.equal(archivio.rigaDiStato(stato, true, true, false), `Check on ${archivio.giornoCorto(stato.ultima!.quando, true)} stopped at 1 of 6.`)
+  assert.equal(archivio.rigaDiStato(stato, true, false, false), `Prova del ${archivio.giornoCorto(stato.ultima!.quando, false)} fermata a 1 su 6.`)
+  assert.equal(archivio.inCorso(), false)
+  store.default.exec('DELETE FROM uso')
+})
+
+test('con una prova fresca il lavoro settimanale tace: niente «Saltata» su un modello locale o col tetto raggiunto', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  archivio.scriviInsieme({ ...INSIEME(), domande: Array.from({ length: 12 }, (_, i) => item(`q${i}`, { domanda: `q ${i}?`, tipo: 'non_ce', genere: 'stato' })) })
+  cfg.aggiorna({ provaRisposte: { attiva: true }, tetto: 0 })
+  vr.perProva({ rispondi: chatFinta(COPIONE) as never, chiediJSON: giudiceFinto().chiediJSON })
+  await vr.settimanale()
+  const dopo = archivio.leggiStato()
+  assert.equal(dopo.ultima?.fatte, 12)
+  const riga = archivio.rigaDiStato(dopo, true, true, false)!
+  assert.match(riga, /^Last check on /)
+  // due giorni dopo, su un modello locale: nessuna prova era dovuta, nessun salto si scrive
+  cfg.scrivi({ ...cfg.leggi(), motore: 'compatibile', compatibile: { url: 'http://127.0.0.1:1/v1/', chiave: 'x', modello: 'finto' } })
+  await vr.settimanale()
+  await vr.forseSettimanale()
+  assert.equal(archivio.leggiStato().saltata, undefined)
+  assert.equal(archivio.rigaDiStato(archivio.leggiStato(), true, true, false), riga)
+  // e col tetto di oggi raggiunto, lo stesso
+  cfg.scrivi({ ...cfg.leggi(), motore: 'claude', claude: { apiKey: 'sk-ant-prova-finta' }, tetto: 1000 }, { togli: ['compatibile'] })
+  store.segnaUso({ lavoro: 'x', motore: 'f', entrata: 999, cache: 0, uscita: 1 })
+  await vr.settimanale()
+  assert.equal(archivio.leggiStato().saltata, undefined)
+  assert.equal(archivio.rigaDiStato(archivio.leggiStato(), true, true, false), riga)
+  cfg.aggiorna({ tetto: 0, provaRisposte: { attiva: false } }); store.default.exec('DELETE FROM uso')
+})
+
+test('una prova della settimana fermata al budget non si ripete il giorno dopo: aspetta sette giorni', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  archivio.scriviInsieme({ ...INSIEME(), domande: Array.from({ length: 12 }, (_, i) => item(`q${i}`, { domanda: `q ${i}?`, tipo: 'non_ce', genere: 'stato' })) })
+  cfg.aggiorna({ provaRisposte: { attiva: true }, tetto: 0 })
+  let orologio = Date.now()
+  vr.perProva({ rispondi: chatFinta(COPIONE, { costo: vr.BUDGET_RUN }) as never, chiediJSON: giudiceFinto().chiediJSON, adesso: () => orologio })
+  await vr.settimanale()
+  let stato = archivio.leggiStato()
+  assert.equal(stato.ultima?.interrotta, 'budget')
+  assert.equal(stato.ultimaCompleta, undefined)
+  assert.ok(stato.ultimaSettimanale)
+  assert.equal(archivio.leggiStorico().length, 1)
+  store.default.exec('DELETE FROM uso')
+  orologio += 86_400_000
+  await vr.settimanale()
+  assert.equal(archivio.leggiStorico().length, 1, 'il giorno dopo non riparte')
+  assert.equal(archivio.leggiStato().saltata, undefined)
+  orologio += 7 * 86_400_000
+  await vr.settimanale()
+  assert.equal(archivio.leggiStorico().length, 2, 'dopo sette giorni sì')
+  stato = archivio.leggiStato()
+  assert.notEqual(stato.ultimaSettimanale, undefined)
   cfg.aggiorna({ tetto: 0, provaRisposte: { attiva: false } }); store.default.exec('DELETE FROM uso')
 })
