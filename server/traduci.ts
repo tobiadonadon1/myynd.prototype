@@ -13,6 +13,8 @@
 
 import { chiediJSON } from './modello.ts'
 import * as store from './store.ts'
+import * as lavoroDati from './lavoro-dati.ts'
+import { rigaIpotesi } from './cornice.ts'
 
 const SCHEMA = {
   type: 'object',
@@ -67,6 +69,8 @@ const SPIA_ITALIANO = /\b(che|non|una|per|con|della|nella|sono|come|quando|perch
 function compitiStorti(lingua: string) {
   if (lingua === 'it') return []
   return store.elencoCompiti()
+    // una bozza scritta apposta nella lingua di chi la riceve (P3) non è storta: si lascia
+    .filter(c => !(c.voceScritta?.lingua && c.voceScritta.lingua !== lingua))
     .filter(c => (c.risultato ?? '').trim().length > 15 && SPIA_ITALIANO.test(c.risultato!))
 }
 
@@ -166,8 +170,13 @@ async function feedInLingua(
  * che si nota quando è nella lingua sbagliata.
  */
 async function compitiInLingua(lingua: string): Promise<number> {
-  const righe = compitiStorti(lingua).map(c => ({ id: c.id, testo: c.risultato!.trim() }))
+  const storte = compitiStorti(lingua)
+  const righe = storte.map(c => ({ id: c.id, testo: c.risultato!.trim() }))
   if (!righe.length) return 0
+  // la riga dell'ipotesi si rilegge solo dove c'era: una riga a cui «Cambia»
+  // l'ha tolta (la correzione è passata alla figlia), o una riga chiusa, non
+  // deve ritrovarsela per aver cambiato lingua
+  const conIpotesi = new Set(storte.filter(c => c.stato === 'pronto' && c.ipotesi?.length).map(c => c.id))
 
   const out = await chiediJSON<{ righe: { id: string; testo: string }[] }>({
     lavoro: 'traduzione',
@@ -190,6 +199,11 @@ async function compitiInLingua(lingua: string): Promise<number> {
     // cancellerebbe una bozza per aver cambiato lingua
     if (!prima || !r.testo?.trim() || r.testo.trim() === prima) continue
     store.traduciRisultato(r.id, r.testo.trim())
+    // la riga dell'ipotesi sta dentro il risultato: tradotto quello, si rilegge da lì
+    if (conIpotesi.has(r.id)) {
+      const ipotesi = rigaIpotesi(r.testo.trim())
+      lavoroDati.scriviIpotesi(r.id, ipotesi ? [ipotesi] : null)
+    }
     n++
   }
   return n

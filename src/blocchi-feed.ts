@@ -22,9 +22,11 @@
  * (`server/rifinitura.ts`): «organise it by importance on my feed». Chi non
  * l'ha, perché è nata prima o perché Jev non c'era, sta in mezzo.
  */
+import { BLOCCHI, MANCA_UN_DATO } from './lavoro-affidato.ts'
+
 export type VoceDaBlocco = { id: string; progetto?: string | null; quando: string; peso?: number | null }
 /** Una riga della lista: `origine` e `madre` dicono se è «la cosa dopo» di un'altra. */
-export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null }
+export type CompitoDaBlocco = { id: string; progetto?: string | null; stato: string; origine: string; madre?: string | null; aggiornato: string; testo?: string; nota?: string | null; guaio?: string | null }
 /** Un progetto: solo quelli attivi hanno un blocco. `priorita` «alta» lo porta davanti. */
 export type ProgettoDaBlocco = { id: string; nome: string; stato?: string; priorita?: string | null }
 
@@ -63,9 +65,25 @@ const ATTESA: Record<string, number> = { pronto: 0, chiede: 0, delegato: 1 }
  * `fermi` sono le righe che hanno appena finito: per il tempo in cui il
  * fuoco si posa tengono il posto di una riga affidata, così quello che si
  * guardava non salta in cima a metà animazione. Vedi `useCompiti.appenaFinite`.
+ *
+ * `corrette` sono le righe che ha appena corretto con «Cambia» e che si
+ * stanno rifacendo: restano al posto della riga pronta che erano, così il
+ * gesto si vede dove l'ha fatto e la riga non sparisce sotto il tetto.
  */
-const pesoRiga = (c: { id: string; stato: string }, fermi?: ReadonlySet<string>) =>
-  fermi?.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede') ? ATTESA.delegato : ATTESA[c.stato] ?? 2
+const pesoRiga = (c: { id: string; stato: string; guaio?: string | null }, fermi?: ReadonlySet<string>, corrette?: ReadonlySet<string>) =>
+  fermi?.has(c.id) && (c.stato === 'pronto' || c.stato === 'chiede') ? ATTESA.delegato
+    : corrette?.has(c.id) && c.stato === 'delegato' ? ATTESA.pronto
+    // ferma su una fonte che manca, o su un dato che nessuna fonte aveva (P3):
+    // aspetta lui come una domanda, e non deve sparire sotto il tetto
+    : c.stato === 'aperto' && fermaDi(c) ? ATTESA.chiede
+    : ATTESA[c.stato] ?? 2
+
+/** Una riga ferma su un blocco o su un dato che manca: l'ha affidata lui e aspetta lui. Le stesse frasi del server. */
+export const fermaDi = (c: { guaio?: string | null }): boolean => !!c.guaio && (BLOCCHI.includes(c.guaio) || c.guaio === MANCA_UN_DATO)
+
+/** Una riga figlia di revisione («Cambia» su un file o su una bozza salvata): sta sotto sua madre. */
+const eRevisione = (c: { id: string; madre?: string | null }): c is { id: string; madre: string } =>
+  !!c.madre && (c.id.startsWith('rev-'))
 
 /**
  * Il peso di una voce, come numero sempre.
@@ -94,6 +112,8 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   massimoCompiti?: number
   /** Le righe che hanno appena finito: restano al loro posto finché il fuoco si posa. */
   fermi?: ReadonlySet<string>
+  /** Le righe appena corrette con «Cambia», che si stanno rifacendo: restano dov'erano. */
+  corrette?: ReadonlySet<string>
   /**
    * Progetti che hanno un blocco anche senza righe: quelli appena nati.
    *
@@ -151,12 +171,38 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
     if (c.origine === 'seguito' && c.madre && inLista.has(c.madre) && !seguiti.has(c.madre)) seguiti.set(c.madre, c)
   }
   const appesi = new Set([...seguiti.values()].map(c => c.id))
-  const compiti = dati.compiti
+  /*
+   * Una revisione sta sotto sua madre, e non conta nel tetto.
+   *
+   * «Cambia» su un file consegnato o su una bozza salvata apre una riga
+   * figlia che lavora («Sto aggiornando il documento»): deve comparire
+   * subito, sotto la riga su cui si è premuto, anche con sei righe pronte in
+   * pagina. Quindi prende il posto e il peso di sua madre, più mezzo, e se la
+   * madre è in pagina lei ci sta con la madre, fuori dal conto.
+   */
+  const posto = new Map(dati.compiti.map((c, i) => [c.id, i] as const))
+  const madreIn = (c: C): C | null => eRevisione(c) ? (dati.compiti.find(m => m.id === c.madre) ?? null) : null
+  const peso = (c: C): number => {
+    const m = madreIn(c)
+    return m ? pesoRiga(m, dati.fermi, dati.corrette) : pesoRiga(c, dati.fermi, dati.corrette)
+  }
+  const indice = (c: C): number => {
+    const m = madreIn(c)
+    return m ? (posto.get(m.id) ?? 0) + 0.5 : posto.get(c.id) ?? 0
+  }
+  const tetto = dati.massimoCompiti ?? COMPITI_IN_PAGINA
+  const ordinati = dati.compiti
     .filter(c => !appesi.has(c.id))
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => pesoRiga(a.c, dati.fermi) - pesoRiga(b.c, dati.fermi) || a.i - b.i)
-    .map(x => x.c)
-    .slice(0, dati.massimoCompiti ?? COMPITI_IN_PAGINA)
+    .sort((a, b) => peso(a) - peso(b) || indice(a) - indice(b))
+  const compiti: C[] = []
+  const presi = new Set<string>()
+  let contate = 0
+  for (const c of ordinati) {
+    const m = madreIn(c)
+    if (m && presi.has(m.id)) { compiti.push(c); presi.add(c.id); continue }
+    if (contate >= tetto) continue
+    compiti.push(c); presi.add(c.id); contate++
+  }
 
   type B = Blocco<V, C> & { attese: RigaBlocco<V, C>[]; voci: { riga: RigaBlocco<V, C>; peso: number; i: number }[]; altre: RigaBlocco<V, C>[] }
   const blocchi = new Map<string | null, B>()
@@ -180,7 +226,7 @@ export function blocchiFeed<V extends VoceDaBlocco, C extends CompitoDaBlocco>(d
   for (const compito of compiti) {
     const b = blocco(casa(compito))
     const riga: RigaBlocco<V, C> = { genere: 'compito', compito, seguito: seguiti.get(compito.id) ?? null }
-    ;(pesoRiga(compito, dati.fermi) === 0 ? b.attese : b.altre).push(riga)
+    ;(peso(compito) === 0 ? b.attese : b.altre).push(riga)
     piuRecente(b, compito.aggiornato)
   }
 

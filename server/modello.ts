@@ -279,6 +279,7 @@ export type Lavoro =
   | 'collaudo'      // P6: la prova di un'automazione sugli ultimi trenta giorni, in un recinto che non scrive
   | 'esame'         // P7: le domande dell'esame delle risposte, e il giudizio su ognuna
   | 'verifica'      // P7: rileggere una risposta contro le fonti che cita, prima di fidarsene
+  | 'presumere'     // P3: di che genere è il dato che manca a un lavoro, e se sbagliarlo costa
 
 /*
  * Tre livelli, non due.
@@ -435,6 +436,14 @@ const LAVORI: Record<Lavoro, Profilo> = {
   rassegna:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 90_000 },
   titolo:     { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 20_000 },
   classifica: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 },
+  /*
+   * Chiedere o presumere (P3): di che genere è il dato che manca a un lavoro
+   * affidato, e se sbagliarlo costerebbe. Media e non casa, per sua scelta
+   * del 24 settembre: un modello da due giga qui sbaglia, e uno sbaglio qui
+   * vuol dire una domanda in più o un'ipotesi di troppo. Il pavimento
+   * deterministico (`domanda-sola.ts`) sta comunque davanti a questa risposta.
+   */
+  presumere:  { livello: 'media', ragiona: false, sforzo: 'low', attesa: 30_000 },
   traduzione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
   estrazione: { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 60_000 },
   giudizio:   { livello: 'casa', ragiona: false, sforzo: 'low', attesa: 30_000 },
@@ -1047,13 +1056,33 @@ function ordine(): string {
     : 'Scrivi ogni parola della tua risposta in italiano. Mai in inglese, anche se questa istruzione fosse in inglese.'
 }
 
-export function conLaLingua(system: string): string {
+/**
+ * L'ordine quando la cosa consegnata va a una persona che legge nell'altra
+ * lingua (P3): le righe per lei restano nella lingua dell'app, il messaggio
+ * o il documento per chi lo riceve va nella sua. Scritto nella lingua
+ * dell'app, come l'ordine di sempre.
+ */
+function ordineConsegna(consegna: 'it' | 'en'): string {
+  return lingua() === 'en'
+    ? 'Write the lines for the user (the first line «Done:», the sources line, the «I assumed» line) in English. ' +
+      `Write the deliverable itself, the message or document for the recipient, in ${consegna === 'it' ? 'Italian' : 'English'}: it is the language this recipient reads.`
+    : 'Scrivi in italiano le righe per lei (la prima riga «Fatto:», la riga delle fonti, la riga «Ho supposto»). ' +
+      `Scrivi in ${consegna === 'en' ? 'inglese' : 'italiano'} la cosa consegnata, il messaggio o il documento per chi lo riceve: è la lingua in cui legge questa persona.`
+}
+
+export function conLaLingua(system: string, o?: { consegna?: 'it' | 'en' }): string {
   if (system.includes(REGOLA)) return system
-  const o = ordine()
-  return `${o}\n\n${system}\n\n${REGOLA}\nScrivi in ${nellaLingua()}: ogni parola che leggerà una ` +
+  const consegna = o?.consegna && o.consegna !== lingua() ? o.consegna : null
+  if (consegna) {
+    const oc = ordineConsegna(consegna)
+    return `${oc}\n\n${system}\n\n${REGOLA}\nLe righe per chi ha affidato il lavoro in ${nellaLingua()}; la cosa consegnata ` +
+      `nella lingua di chi la riceve, ${consegna === 'it' ? 'l\'italiano' : 'l\'inglese'}. I nomi propri, le citazioni testuali e le cifre restano come sono.\n${oc}`
+  }
+  const ord = ordine()
+  return `${ord}\n\n${system}\n\n${REGOLA}\nScrivi in ${nellaLingua()}: ogni parola che leggerà una ` +
     'persona — titoli, domande, spiegazioni, righe di lista, motivi — va in quella lingua, ' +
     'anche quando il materiale che stai leggendo è scritto in un\'altra. I nomi propri, le ' +
-    `citazioni testuali e le cifre restano come sono.\n${o}`
+    `citazioni testuali e le cifre restano come sono.\n${ord}`
 }
 
 /*

@@ -1,0 +1,192 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    {
+      "chiave": "hb",
+      "nome": "Harbor Labs",
+      "obiettivo": "Run a two-week AI pilot with the Harbor finance team"
+    }
+  ],
+  "file": [
+    {
+      "nome": "price-list-2026.md",
+      "testo": "# Price list 2026\n\nCourse, up to 12 people: 890 EUR per person.\nWorkshop, half day: 1,400 EUR flat.\nDelivery: three weeks from the signed order.\n"
+    }
+  ],
+  "documenti": [
+    {
+      "id": "posta:INBOX:502",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Kickoff notes for the pilot",
+      "corpo": "Hi Alex, can you send me the kickoff notes for the pilot? No rush. Nora",
+      "autore": "Nora Vance <nora@harbor.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-2h",
+      "messageId": "n502@harbor.example",
+      "filo": "f-nora"
+    },
+    {
+      "id": "posta:INBOX:501",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Preventivo corso",
+      "corpo": "Ciao Alex, ci mandi il preventivo per il corso da dodici persone? Grazie, Marco",
+      "autore": "Marco Rossi <marco.rossi@lumen.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-2h",
+      "messageId": "m501@lumen.example",
+      "filo": "f-marco"
+    },
+    {
+      "id": "posta:Sent:1",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Re: Corso di novembre",
+      "corpo": "Ciao Marco,\n\nti confermo le date del corso di novembre per il tuo gruppo, con la sala grande e il materiale stampato per tutti i partecipanti.\n\nA presto,\nAlex",
+      "autore": "Alex <alex@harbor.example>",
+      "percorso": "Sent",
+      "gruppo": "posta",
+      "quando": "-30d",
+      "inviato": true,
+      "messageId": "s1@harbor.example",
+      "destinatari": "marco.rossi@lumen.example"
+    },
+    {
+      "id": "posta:Sent:2",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Re: Fattura di ottobre",
+      "corpo": "Ciao Marco,\n\nti mando la fattura di ottobre come concordato, con lo sconto per il secondo gruppo e le condizioni di pagamento di sempre.\n\nA presto,\nAlex",
+      "autore": "Alex <alex@harbor.example>",
+      "percorso": "Sent",
+      "gruppo": "posta",
+      "quando": "-20d",
+      "inviato": true,
+      "messageId": "s2@harbor.example",
+      "destinatari": "marco.rossi@lumen.example"
+    },
+    {
+      "id": "posta:Sent:3",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Re: Materiale del corso",
+      "corpo": "Ciao Marco,\n\nil materiale del corso è pronto: te lo porto io il primo giorno, insieme alle dispense per i dodici partecipanti del tuo gruppo.\n\nA presto,\nAlex",
+      "autore": "Alex <alex@harbor.example>",
+      "percorso": "Sent",
+      "gruppo": "posta",
+      "quando": "-10d",
+      "inviato": true,
+      "messageId": "s3@harbor.example",
+      "destinatari": "marco.rossi@lumen.example"
+    },
+    {
+      "id": "posta:Sent:4",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Re: Chiamata di venerdì",
+      "corpo": "Ciao Marco,\n\nper la chiamata di venerdì va bene alle tre, ti mando l'invito con il collegamento e l'ordine del giorno in due punti.\n\nA presto,\nAlex",
+      "autore": "Alex <alex@harbor.example>",
+      "percorso": "Sent",
+      "gruppo": "posta",
+      "quando": "-3d",
+      "inviato": true,
+      "messageId": "s4@harbor.example",
+      "destinatari": "marco.rossi@lumen.example"
+    },
+    {
+      "id": "desktop:price-list-2026.md",
+      "fonte": "desktop",
+      "tipo": "file",
+      "titolo": "price-list-2026.md",
+      "corpo": "Price list 2026\n\nCourse, up to 12 people: 890 EUR per person.\nWorkshop, half day: 1,400 EUR flat.\nDelivery: three weeks from the signed order.\n",
+      "quando": "-30d",
+      "gruppo": "file"
+    },
+    {
+      "id": "posta:INBOX:511",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Course quote for Lumen",
+      "corpo": "Hi Alex, could you send the course quote for our team at Lumen? Thanks, Giulia Neri",
+      "autore": "Giulia Neri <giulia.neri@lumen.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-1d",
+      "messageId": "g511@lumen.example"
+    },
+    {
+      "id": "posta:INBOX:512",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Course quote for Harbor",
+      "corpo": "Hi Alex, we would also like the course quote for the Harbor team. Best, Giulia Bassi",
+      "autore": "Giulia Bassi <giulia@harbor.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-1d",
+      "messageId": "g512@harbor.example"
+    },
+    {
+      "id": "posta:INBOX:503",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Logo files",
+      "corpo": "Hi Alex, can you send me the logo files for the new site? Leo",
+      "autore": "Leo Marsh <leo@studio.example>",
+      "percorso": "INBOX",
+      "gruppo": "posta",
+      "quando": "-3h",
+      "messageId": "l1@studio.example",
+      "filo": "f-leo"
+    },
+    {
+      "id": "posta:Sent:61",
+      "fonte": "posta",
+      "tipo": "email",
+      "titolo": "Re: Logo files",
+      "corpo": "Hi Leo,\n\nHere are the logo files in all three formats, plus the icon.\n\nBest,\nAlex",
+      "autore": "Alex <alex@harbor.example>",
+      "percorso": "Sent",
+      "gruppo": "posta",
+      "quando": "-20m",
+      "inviato": true,
+      "messageId": "s61@harbor.example",
+      "risponde": "l1@studio.example",
+      "filo": "f-leo",
+      "destinatari": "leo@studio.example"
+    }
+  ],
+  "compiti": [
+    {
+      "id": "c-p1",
+      "testo": "Write the kickoff note for the Harbor pilot",
+      "quando": "oggi",
+      "progetto": "hb",
+      "stato": "aperto"
+    },
+    {
+      "id": "c-b1",
+      "testo": "Reply to Dana about the invoice",
+      "quando": "oggi",
+      "stato": "aperto"
+    }
+  ],
+  "punto": {
+    "progetti": [
+      {
+        "progetto": "hb",
+        "novita": "Nora asked for the kickoff notes.",
+        "doc": "posta:INBOX:502"
+      }
+    ],
+    "risposte": [],
+    "github": [],
+    "daLeggere": [],
+    "aggiornamenti": []
+  }
+}

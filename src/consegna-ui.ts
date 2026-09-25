@@ -20,9 +20,21 @@ export function messaggioConsegna(d: { desktop?: string }, en: boolean): string 
     : 'Il documento è salvato. Guardalo e dimmi cosa ne pensi in chat.'
 }
 
-/** Execution instructions stay in the task record; the feed shows a human hand-off. */
-export function presentazioneRevisione(c: { id: string; madre?: string | null; modo: string }, en: boolean): { titolo: string; descrizione: string } | null {
+/** Il titolo di una revisione finita: il compito com'era, senza le istruzioni della revisione che stanno nel testo. */
+export function titoloDellaRevisione(testo: string): string {
+  return testo.split('\n\nOriginal task: ').at(-1)?.trim() || testo
+}
+
+/**
+ * Execution instructions stay in the task record; the feed shows a human hand-off.
+ *
+ * «Sto aggiornando il documento» vale finché lavora: finita, la riga porta il
+ * titolo del compito, come ogni altra riga consegnata. Senza `stato` (chi
+ * chiama non ce l'ha) si legge come se lavorasse.
+ */
+export function presentazioneRevisione(c: { id: string; madre?: string | null; modo: string; stato?: string; testo?: string }, en: boolean): { titolo: string; descrizione: string } | null {
   if (!c.id.startsWith('rev-') || !c.madre) return null
+  if (c.stato && c.stato !== 'delegato') return { titolo: titoloDellaRevisione(c.testo ?? ''), descrizione: '' }
   return {
     titolo: c.modo === 'tutto'
       ? (en ? 'Revising your document' : 'Sto aggiornando il documento')

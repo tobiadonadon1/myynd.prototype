@@ -266,6 +266,10 @@ export async function giudica(o: {
    * diverso da vuoto, che vuol dire «nessuno».
    */
   fatti?: Fatto[]
+  /** La lingua in cui legge chi riceve, se è diversa da quella dell'app (P3). */
+  lingua?: 'it' | 'en'
+  /** Come scrive a chi riceve, dalle sue mail (P3): evidenza per il punto 3, mai un ordine. */
+  voce?: string
 }): Promise<Giudizio> {
   const stimato = destinatario(o.doc, o.compito.testo)
   // il controllo zero non ha bisogno di un modello, e vale anche senza
@@ -316,11 +320,17 @@ export async function giudica(o: {
     'citate con l\'indirizzo o il percorso) o nel testo del compito. Confrontali uno per uno. Se non c\'è, è inventato, e un lavoro con dentro una ' +
     'cosa inventata non passa: mai, nemmeno se tutto il resto è perfetto. Se contraddice una ' +
     'fonte, non passa. Non fidarti della plausibilità: una cifra plausibile e sbagliata è il ' +
-    'difetto peggiore che questo lavoro possa avere.\n' +
+    'difetto peggiore che questo lavoro possa avere. Un\'ipotesi dichiarata in fondo con «Ho ' +
+    'supposto» vale solo per un giorno da proporre, un formato, una lunghezza, un tono o un ' +
+    'perimetro: un prezzo, un indirizzo, una persona o un impegno supposti non passano mai. Un ' +
+    'segnaposto «[da completare: …]» o «[to fill: …]» non è un fatto inventato.\n' +
     '2. Che faccia tutto il compito, e solo quello: niente che manca, niente aggiunto che ' +
     'nessuno ha chiesto, il destinatario giusto.\n' +
     '3. La voce e il tono: sembra scritto da lei, con il suo tono, nella lingua giusta per chi ' +
-    'lo riceve?\n' +
+    'lo riceve?' +
+    (o.lingua ? ` La lingua giusta per questa persona è ${o.lingua === 'it' ? 'l\'italiano' : 'l\'inglese'}: le righe per lei restano nella lingua dell\'app, la cosa consegnata va in quella.` : '') +
+    (o.voce ? `\nCome le scrive davvero, dalle sue mail: ${o.voce}` : '') +
+    '\n' +
     '4. La lunghezza: quanta ne serve a chi legge, non di più e non di meno.\n' +
     '5. La riga finale per lei, se c\'è: quando il lavoro contiene cifre o date, deve dire da ' +
     'quali fonti vengono.\n' +
@@ -361,7 +371,7 @@ export async function giudica(o: {
   const richiesta = {
     lavoro: 'revisione' as const,
     max_tokens: 2500,
-    system: conLaLingua(sistema),
+    system: conLaLingua(sistema, { consegna: o.lingua }),
     formato: SCHEMA_GIUDIZIO,
     messages: [{ role: 'user' as const, content: messaggio }]
   }

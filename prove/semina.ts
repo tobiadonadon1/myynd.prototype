@@ -193,6 +193,18 @@ chi.dentro(conto.id, () => {
       if (v === undefined || v === null) continue
       store.default.prepare(`UPDATE compiti SET ${k} = ? WHERE id = ?`).run(v as string, c.id)
     }
+    // — P3: inizio —
+    // l'email pronta, la voce usata, la bozza partita dalla posta, la consegna,
+    // le domande fatte e un guaio: le colonne di una riga consegnata
+    const p3: [string, unknown][] = [
+      ['email', json(c.email)], ['voceScritta', json(c.voceScritta)], ['mandata', json(c.mandata)], ['consegna', json(c.consegna)],
+      ['domandeFatte', typeof c.domandeFatte === 'number' ? c.domandeFatte : undefined], ['guaio', (c.guaio as string) ?? undefined]
+    ]
+    for (const [k, v] of p3) {
+      if (v === undefined || v === null) continue
+      store.default.prepare(`UPDATE compiti SET ${k} = ? WHERE id = ?`).run(v as string | number, c.id)
+    }
+    // — P3: fine —
   }
 
   for (const d of scena.domande ?? []) {

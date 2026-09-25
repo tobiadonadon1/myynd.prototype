@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 const home = mkdtempSync(join(tmpdir(), 'myynd-revisions-'))
 process.env.MYYND_DATI = home
 const store = await import('./store.ts')
-const { rivediDallaChat, verificaBaseRevisione, contestoRevisioni, richiestaRevisione } = await import('./revisioni.ts')
+const { rivediDallaChat, rivediDaCorrezione, rifiutoCorrezione, verificaBaseRevisione, contestoRevisioni, richiestaRevisione } = await import('./revisioni.ts')
 const { documentoImpaginato } = await import('./document-layout.ts')
 after(() => {store.chiudiIndici();rmSync(home,{recursive:true,force:true})})
 const documento = async (c:{app:'Pages'|'TextEdit';percorso:string;desktop?:string}) => {
@@ -111,4 +111,36 @@ test('ordinary child followups do not require a revision baseline, while a real 
  await verificaBaseRevisione(store.compito('ordinary-child')!)
  store.scriviCompito({id:'rev-missing',testo:'Revise document',madre:'original',nota:'REVISION REQUEST: Shorten it',ordine:'e'})
  await assert.rejects(verificaBaseRevisione(store.compito('rev-missing')!),/no verifiable current artifact baseline/)
+})
+
+test('«Cambia» su una bozza salvata nella posta (P3) apre una figlia rev- dal titolo del compito, con la bozza attuale come base; sparita, il no è un 409 nella lingua di casa', async () => {
+ store.scriviCompito({id:'bozza-ipotesi',testo:'Reply to Leo about the logo files',doc:'posta:INBOX:503',ordine:'d'})
+ store.affidaCompito('bozza-ipotesi','bozza')
+ store.risultatoCompito('bozza-ipotesi','Done: the reply.\n\nHi Leo,\n\nall three formats attached.\n\nBest\n\nI assumed all three formats.',[],'pronto')
+ store.scriviEmailCompito('bozza-ipotesi',{a:'leo@studio.example',oggetto:'Re: Logo files',corpo:'Hi Leo,\n\nall three formats attached.\n\nBest',conosciuto:true,casella:{stato:'salvata',id:'d1'}})
+ let stato:'presente'|'sparita'='presente'
+ const bozza = async (source:string,casella:{id?:string}) => {
+  if (stato==='sparita') return {stato:'sparita' as const,source,id:casella.id!}
+  const data={source,id:casella.id!,corpo:'Hi Leo,\n\nall three formats attached.\n\nBest',oggetto:'Re: Logo files',a:'leo@studio.example',messageId:'myynd@test'}
+  return {stato:'presente' as const,...data,impronta:createHash('sha256').update(JSON.stringify(data)).digest('hex')}
+ }
+ const avviate:string[]=[]
+ const out=await rivediDaCorrezione('bozza-ipotesi','Only the SVG',(id,mode)=>{avviate.push(mode);store.affidaCompito(id,mode)},{bozza})
+ assert.ok(out.id.startsWith('rev-'))
+ assert.equal(out.giaAvviato,false)
+ assert.deepEqual(avviate,['bozza'])
+ const figlia=store.compito(out.id)!
+ assert.equal(figlia.madre,'bozza-ipotesi')
+ assert.equal(figlia.testo,'Reply to Leo about the logo files')
+ assert.match(figlia.nota||'',/REVISION REQUEST: Only the SVG/)
+ assert.match(figlia.nota||'',/"tipo":"bozza"/)
+ assert.equal(store.compito('bozza-ipotesi')?.stato,'pronto')
+ // la stessa correzione due volte è una revisione sola
+ assert.equal((await rivediDaCorrezione('bozza-ipotesi','Only the SVG',()=>{},{bozza})).giaAvviato,true)
+ // la bozza è partita o è stata tolta dalla posta: un no suo, non un guasto
+ stato='sparita'
+ await assert.rejects(rivediDaCorrezione('bozza-ipotesi','Only the PNG',()=>{},{bozza}),/removed or sent/)
+ assert.deepEqual(rifiutoCorrezione(new Error('The saved mailbox draft was removed or sent. Review the current thread before revising it.')),{stato:409,errore:'La bozza salvata nella tua posta non c\'è più.'})
+ assert.deepEqual(rifiutoCorrezione(new Error('Reconnect your email account to read the saved draft.')),{stato:400,errore:'Collega la posta per rileggere la bozza salvata.'})
+ assert.equal(rifiutoCorrezione(new Error('ENOENT: no such file')),null)
 })

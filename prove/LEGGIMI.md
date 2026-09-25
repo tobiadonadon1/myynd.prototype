@@ -17,6 +17,7 @@ OUT=<cartella per le foto> SCENA=pieno PORTA=18700 prove/scena.sh
 - `FOTO=0` salta le fotografie; `COSTRUISCI=si|no` forza o salta `vite build` (di serie solo se `dist/` è più vecchia dei sorgenti).
 - `TIENI=1` lascia acceso server e modello, e stampa porta, gettone e il comando per spegnerli.
 - `COPIONE=<file.json>` cambia le risposte del modello finto (vedi sotto).
+- Una scena i cui passi cambiano lo stato delle righe (P3: «Cambia» su una riga consegnata) si semina da capo per ogni tema e larghezza: `OUT=<cartella> PORTA=18740 prove/lavoro-p3.sh`, che chiama `scena.sh` quattro volte e tiene i registri di ogni passata con il tema e la larghezza nel nome.
 
 In `OUT` finiscono `<passo>-<tema>-<larghezza>.png` e `.txt`, e i registri:
 `server.log`, `modello.jsonl` (ogni richiesta al modello: prompt, schema, risposta), `semina.log`, `scatta.log`.

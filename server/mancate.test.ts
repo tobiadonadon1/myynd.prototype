@@ -161,8 +161,8 @@ test('l’attribuzione: dall’esame se c’è, altrimenti dalle regole ricalcol
 
 const documentoDaFare = (id: string, titolo: string, corpo: string, sopra: Partial<Documento> = {}): Documento =>
   ({ id, fonte: 'posta', tipo: 'email', titolo, corpo, autore: 'Tom Brill <tom@brightline.example>', percorso: 'INBOX', gruppo: 'posta', quando: fa(72), messageId: `${id}@ex`, ...sopra })
-const riga = (id: string, testo: string, sopra: { origine?: string; voce?: string | null; doc?: string | null; creato?: string; sparito?: string | null } = {}) => {
-  store.scriviCompito({ id, testo, ordine: ordine.dopo(store.ultimoOrdine('oggi')), origine: sopra.origine ?? 'mano', voce: sopra.voce ?? null, doc: sopra.doc ?? null })
+const riga = (id: string, testo: string, sopra: { origine?: string; voce?: string | null; doc?: string | null; madre?: string | null; creato?: string; sparito?: string | null } = {}) => {
+  store.scriviCompito({ id, testo, ordine: ordine.dopo(store.ultimoOrdine('oggi')), origine: sopra.origine ?? 'mano', voce: sopra.voce ?? null, doc: sopra.doc ?? null, madre: sopra.madre ?? null })
   store.default.prepare('UPDATE compiti SET creato = ?, sparito = ? WHERE id = ?').run(sopra.creato ?? new Date().toISOString(), sopra.sparito ?? null, id)
 }
 
@@ -175,6 +175,8 @@ test('tipo B: una riga a mano che un documento già chiedeva, per parole (almeno
   riga('c-b2', 'Pay Brightline invoice 2231', { voce: 'f-x' })
   riga('c-b3', 'Pay Brightline invoice 2231', { doc: 'posta:INBOX:99' })
   riga('c-b4', 'Pay Brightline invoice 2231', { creato: fa(1), sparito: fa(1 - 5 / 60) })
+  // una figlia di revisione («Cambia» su un file consegnato) porta il titolo di sua madre e origine chat: non è una riga a mano
+  riga('rev-0123456789abcdef01234567', 'Pay Brightline invoice 2231', { origine: 'chat', madre: 'c-b1', creato: fa(60) })
   const r = await trova()
   assert.equal(r.mancate.length, 1)
   assert.deepEqual([r.mancate[0].genere, r.mancate[0].doc, r.mancate[0].certezza, r.mancate[0].prova], ['compito', d.id, 'parole', 'Pay Brightline invoice 2231'])

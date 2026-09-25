@@ -1,0 +1,238 @@
+// L'osservatore degli invii: una bozza salvata nella posta che poi è partita.
+//
+//   node --test server/invii-osservati.test.ts
+
+import { test, before, after, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const CASA = mkdtempSync(join(tmpdir(), 'myynd-invii-'))
+process.env.MYYND_DATI = CASA
+delete process.env.ANTHROPIC_API_KEY
+const store = await import('./store.ts')
+const invii = await import('./invii-osservati.ts')
+const lavoroDati = await import('./lavoro-dati.ts')
+const voce = await import('./voce.ts')
+
+const imparate: [string, string][] = []
+before(() => { store.azzeraTutto(); invii.perProva({ impara: async (b, i) => { imparate.push([b, i]); return 1 } }) })
+beforeEach(() => { store.azzeraTutto(); voce.dimentica(); imparate.length = 0 })
+after(() => { invii.perProva(null); store.chiudiIndici(); rmSync(CASA, { recursive: true, force: true }) })
+
+const oreFa = (n: number) => new Date(Date.now() - n * 3_600_000).toISOString()
+const BOZZA = 'Hi Leo,\n\nHere are the logo files in all three formats.\n\nBest,\nAlex'
+
+/** La mail di Leo, e una riga pronta con la bozza salvata nella posta, consegnata due ore fa. */
+function riga(id = 'c-s1', o: { consegnato?: string; casella?: 'salvata' | 'errore' } = {}) {
+  store.salvaDocumenti([{ id: 'posta:INBOX:503', fonte: 'posta', tipo: 'email', titolo: 'Logo files', corpo: 'Can you send me the logo files?', autore: 'Leo Marsh <leo@studio.example>', quando: oreFa(3), filo: 'f-leo', messageId: 'l1@studio.example' }])
+  store.scriviCompito({ id, testo: 'Reply to Leo about the logo files', ordine: id, doc: 'posta:INBOX:503' })
+  const email = { casella: { stato: o.casella ?? 'salvata', id: 'd1', url: 'https://mail.example/d1' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: BOZZA, conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ? WHERE id = ?").run(oreFa(2.5), `Done: the reply to Leo.\n\n${BOZZA}`, JSON.stringify(email), id)
+  const c = store.compito(id)!
+  lavoroDati.registraAffido(c, true)
+  lavoroDati.registraEsito(id, { mossa: 'produci', tipo: 'risposta', consegnato: o.consegnato ?? oreFa(2) })
+  return c
+}
+
+function mandata(id: string, o: { quando: string; corpo?: string; risponde?: string | null; filo?: string | null; messageId?: string }) {
+  store.salvaDocumenti([{ id, fonte: 'posta', tipo: 'email', titolo: 'Re: Logo files', inviato: true, quando: o.quando, autore: 'Alex <alex@harbor.example>',
+    corpo: o.corpo ?? BOZZA, risponde: o.risponde === undefined ? 'l1@studio.example' : o.risponde, filo: o.filo === undefined ? 'f-leo' : o.filo, messageId: o.messageId ?? `s${id}@harbor.example` }])
+}
+
+test('una mail mandata dopo la consegna, che risponde al messaggio, segna la riga: mandata dal filo, misure dalla casella, e la riga resta', async () => {
+  const c = riga()
+  mandata('posta:Sent:61', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  assert.equal(await invii.osserva(), 1)
+  const dopo = store.compito(c.id)!
+  assert.equal(dopo.stato, 'pronto', 'la riga è stata chiusa')
+  assert.equal(dopo.mandata?.doc, 'posta:Sent:61')
+  assert.equal(dopo.mandata?.certezza, 'filo')
+  assert.ok(dopo.mandata!.ritocco > 0 && dopo.mandata!.ritocco <= 0.15, `ritocco ${dopo.mandata!.ritocco}`)
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'casella')
+  assert.equal(m.classe, 'ritocco')
+  assert.equal(m.inviato, dopo.mandata!.quando)
+  assert.ok(m.parole! > 5)
+  assert.equal(imparate.length, 1, 'un ritocco si impara')
+  // la coppia è pari: la firma («Alex») tolta da tutte e due le parti
+  assert.equal(imparate[0][0], BOZZA.replace(/\nAlex$/, ''))
+  assert.equal(imparate[0][1], 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,')
+  // idempotente: al giro dopo non riscrive niente
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:61')
+})
+
+test('il Message-ID della bozza vale come certezza «id»; identica non si impara', async () => {
+  const c = riga('c-s2')
+  mandata('posta:Sent:62', { quando: oreFa(1), messageId: invii.idDellaBozza(c.id, 'posta:INBOX:503') })
+  assert.equal(await invii.osservaUno(store.compito(c.id)!)?.then(v => v && v.mandata && v.certezza), 'id')
+  assert.equal(lavoroDati.misura(c.id)!.classe, 'identico')
+  assert.equal(imparate.length, 0)
+})
+
+test('i contro: una mail prima della consegna, un altro filo, un filo «s:», una riga già segnata', async () => {
+  const c = riga('c-s3')
+  mandata('posta:Sent:70', { quando: oreFa(2.2), risponde: null })            // prima della consegna (due ore fa)
+  mandata('posta:Sent:71', { quando: oreFa(1), risponde: null, filo: 'f-altro' }) // un altro filo
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+
+  // un filo per oggetto non abbina da solo
+  store.default.prepare("UPDATE documenti SET filo = 's:logo' WHERE id = 'posta:INBOX:503'").run()
+  mandata('posta:Sent:72', { quando: oreFa(1), risponde: null, filo: 's:logo' })
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+
+  // ma se risponde al messaggio, sì; e una riga già segnata non si riscrive
+  mandata('posta:Sent:73', { quando: oreFa(0.5) })
+  assert.ok(await invii.osservaUno(store.compito(c.id)!))
+  assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:73')
+  mandata('posta:Sent:74', { quando: oreFa(0.2) })
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:73')
+})
+
+test('una risposta riscritta da capo nello stesso filo è sua: via «propria», niente mandata, niente da imparare', async () => {
+  const c = riga('c-s4')
+  mandata('posta:Sent:80', { quando: oreFa(1), risponde: null, corpo: 'Leo, sorry, the logo files are still with the designer: I will send them on Monday together with the brand guide. Alex' })
+  const v = await invii.osservaUno(store.compito(c.id)!)
+  assert.deepEqual(v, { mandata: false, via: 'propria' })
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+  assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
+  assert.equal(lavoroDati.misura(c.id)!.classe, 'riscritto')
+  assert.equal(imparate.length, 0)
+})
+
+test('modificata si impara; una bozza non salvata nella posta non si guarda', async () => {
+  const c = riga('c-s5')
+  mandata('posta:Sent:90', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all three formats and the icon set.\n\nBest,\nAlex' })
+  const v = await invii.osservaUno(store.compito(c.id)!)
+  assert.ok(v && v.mandata)
+  assert.equal(lavoroDati.misura(c.id)!.classe, 'modificato')
+  assert.equal(imparate.length, 1)
+
+  const senza = riga('c-s6', { casella: 'errore' })
+  mandata('posta:Sent:91', { quando: oreFa(0.5) })
+  assert.equal(await invii.osservaUno(senza), null)
+})
+
+test('(contro) una bozza partita da «Manda» e poi vista nella posta inviata non si segna due volte, e non si impara due volte', async () => {
+  const c = riga('c-s7')
+  // «Manda»: la riga si chiude e le misure hanno già l'invio via smtp
+  store.cambiaStatoCompito(c.id, 'fatto')
+  lavoroDati.registraInvio(c.id, { via: 'smtp', inviato: oreFa(1), distanza: 0.2, parole: 12, classe: 'modificato' })
+  // alla lettura dopo, la copia in «Inviata» risponde allo stesso messaggio
+  mandata('posta:Sent:70', { quando: oreFa(0.9), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'smtp')
+  assert.equal(m.classe, 'modificato')
+  assert.equal(imparate.length, 0, 'ha imparato una seconda volta')
+})
+
+test('una risposta sua si segna una volta sola: al giro dopo non è più candidata e non si annuncia niente', async () => {
+  const c = riga('c-s8')
+  mandata('posta:Sent:81', { quando: oreFa(1), risponde: null, corpo: 'Leo, sorry, the logo files are still with the designer: I will send them on Monday together with the brand guide. Alex' })
+  assert.equal(await invii.osserva(), 1)
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osserva(), 0)
+  assert.equal(await invii.osservaUno(store.compito(c.id)!), null)
+  assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
+  assert.equal(store.compito(c.id)!.mandata ?? null, null)
+})
+
+test('(contro) dopo «Cambia» su una bozza salvata, una mail partita si segna sulla figlia sola: una mandata, un invio, niente imparato dalla madre', async () => {
+  const madre = riga('c-m')
+  // la figlia di revisione ha riscritto la stessa bozza nella casella, con la data corretta
+  const corpoFiglia = 'Hi Leo,\n\nHere are the logo files in all three formats, by Monday.\n\nBest,\nAlex'
+  store.scriviCompito({ id: 'rev-abc', testo: 'Reply to Leo about the logo files', ordine: 'rev-abc', doc: 'posta:INBOX:503', madre: madre.id, origine: 'chat',
+    nota: 'REVISION REQUEST: Monday, not Friday\n\nREVISION BASELINE: {"tipo":"bozza"}' })
+  const email = { casella: { stato: 'salvata', id: 'd1', url: 'https://mail.example/d1' }, a: 'leo@studio.example', oggetto: 'Re: Logo files', corpo: corpoFiglia, conosciuto: true, rispondeA: { messageId: 'l1@studio.example' } }
+  store.default.prepare("UPDATE compiti SET stato = 'pronto', chiesto = ?, risultato = ?, email = ? WHERE id = ?").run(oreFa(1.5), `Done: the reply to Leo.\n\n${corpoFiglia}`, JSON.stringify(email), 'rev-abc')
+  lavoroDati.registraAffido(store.compito('rev-abc')!, true)
+  lavoroDati.registraEsito('rev-abc', { mossa: 'produci', tipo: 'risposta', consegnato: oreFa(1.2) })
+  // una mail sola parte dalla sua posta, con il corpo della figlia
+  mandata('posta:Sent:9', { quando: oreFa(1), corpo: corpoFiglia })
+
+  assert.equal(await invii.osserva(), 1, 'una mail sola, una riga sola')
+  assert.equal(store.compito(madre.id)!.mandata ?? null, null, 'la madre non ha più la bozza: non è partita lei')
+  assert.equal(store.compito('rev-abc')!.mandata?.doc, 'posta:Sent:9')
+  assert.equal(lavoroDati.misura(madre.id)!.inviato, null)
+  assert.equal(lavoroDati.misura('rev-abc')!.via, 'casella')
+  assert.equal(lavoroDati.misura('rev-abc')!.classe, 'identico')
+  assert.equal(imparate.length, 0, 'la revisione di Myynd non è una correzione sua')
+  // e anche guardando la madre da sola (la guardia di «Manda») non si scrive niente
+  assert.equal(await invii.osservaUno(store.compito(madre.id)!), null)
+  assert.equal(await invii.osserva(), 0)
+})
+
+test('(contro) una mail già segnata su una riga non si abbina a un\'altra riga con la stessa bozza', async () => {
+  const a = riga('c-a')
+  const b = riga('c-b')
+  mandata('posta:Sent:10', { quando: oreFa(1) })
+  assert.equal(await invii.osserva(), 1, 'la stessa mail non parte due volte')
+  const segnate = [a, b].map(c => store.compito(c.id)!.mandata?.doc ?? null)
+  assert.deepEqual(segnate.filter(Boolean), ['posta:Sent:10'])
+  assert.equal(imparate.length, 0)
+})
+
+test('(contro) una sua risposta corta nel filo prima della bozza non nasconde l\'invio vero: si sceglie la mail con il Message-ID della bozza, o la più vicina', async () => {
+  const c = riga('c-s9')
+  // prima una riga sua («arrivo»), poi la bozza di Myynd mandata com'era, con il suo Message-ID
+  mandata('posta:Sent:60', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  mandata('posta:Sent:61', { quando: oreFa(1), messageId: invii.idDellaBozza(c.id, 'posta:INBOX:503') })
+  const v = await invii.osservaUno(store.compito(c.id)!)
+  assert.ok(v && v.mandata && v.certezza === 'id', JSON.stringify(v))
+  assert.equal(store.compito(c.id)!.mandata?.doc, 'posta:Sent:61')
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'casella')
+  assert.equal(m.classe, 'identico')
+  assert.equal(imparate.length, 0)
+
+  // senza il Message-ID vince la più vicina alla bozza, non la più vecchia
+  const d = riga('c-s10')
+  mandata('posta:Sent:62', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  mandata('posta:Sent:63', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  const w = await invii.osservaUno(store.compito(d.id)!)
+  assert.ok(w && w.mandata && w.certezza === 'filo', JSON.stringify(w))
+  assert.equal(store.compito(d.id)!.mandata?.doc, 'posta:Sent:63')
+  assert.equal(lavoroDati.misura(d.id)!.classe, 'ritocco')
+})
+
+test('una risposta sua vista al giro prima («propria») lascia il posto alla bozza partita dopo: mandata, e le misure dicono «casella»', async () => {
+  const c = riga('c-s11')
+  mandata('posta:Sent:64', { quando: oreFa(1.5), corpo: 'Got it, sending them shortly.' })
+  assert.deepEqual(await invii.osservaUno(store.compito(c.id)!), { mandata: false, via: 'propria' })
+  assert.equal(lavoroDati.misura(c.id)!.via, 'propria')
+  // al giro dopo, la bozza è partita davvero
+  mandata('posta:Sent:65', { quando: oreFa(1) })
+  assert.equal(await invii.osserva(), 1)
+  const dopo = store.compito(c.id)!
+  assert.equal(dopo.mandata?.doc, 'posta:Sent:65')
+  assert.equal(dopo.stato, 'pronto')
+  const m = lavoroDati.misura(c.id)!
+  assert.equal(m.via, 'casella')
+  assert.equal(m.classe, 'identico')
+  assert.equal(m.inviato, dopo.mandata!.quando)
+  // e un altro giro non scrive più niente
+  assert.equal(await invii.osserva(), 0)
+})
+
+test('la coppia che si impara è pari: la firma manca da tutte e due le parti, non solo da quella mandata', async () => {
+  // cinque mail sue che finiscono con «Best,» e il nome: la firma comune è «Alex»
+  for (let i = 1; i <= 5; i++) {
+    store.salvaDocumenti([{ id: `posta:Sent:${100 + i}`, fonte: 'posta', tipo: 'email', titolo: `Mail ${i}`, inviato: true, quando: oreFa(24 * i), autore: 'Alex <alex@harbor.example>', corpo: `Hi,\n\nnote number ${i}.\n\nBest,\nAlex`, filo: `f-${i}` }])
+  }
+  const c = riga('c-s12')
+  mandata('posta:Sent:66', { quando: oreFa(1), corpo: 'Hi Leo,\n\nHere are the logo files in all four formats.\n\nBest,\nAlex' })
+  assert.ok(await invii.osservaUno(store.compito(c.id)!))
+  assert.equal(imparate.length, 1)
+  const [bozza, inviata] = imparate[0]
+  assert.doesNotMatch(bozza, /\nAlex\s*$/, 'la bozza imparata porta ancora la firma')
+  assert.doesNotMatch(inviata, /\nAlex\s*$/)
+  assert.match(bozza, /Best,\s*$/)
+  assert.match(inviata, /Best,\s*$/)
+})

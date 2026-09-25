@@ -3089,6 +3089,24 @@ const EN: Record<string, string> = {
   // — P2: fine —
 
   // — P3: inizio —
+  'Cosa vale invece?': 'What\'s right instead?',
+  'Cosa ci va?': 'What goes there?',
+  'Non sono riuscito a rifarla.': 'I couldn\'t redo it.',
+  'Mandata dalla tua posta.': 'Sent from your mail.',
+  'Da allegare:': 'To attach:',
+  'Manda senza allegato': 'Send without the attachment',
+  'Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.': 'Saved in your email Drafts, without the attachment. Nothing sent.',
+  'Collega la posta e la riprendo da qui.': 'Connect your mail and I\'ll pick it up from here.',
+  'Collega i file del Mac e la riprendo da qui.': 'Connect your Mac\'s files and I\'ll pick it up from here.',
+  'Collega la fonte che serve e la riprendo da qui.': 'Connect the source it needs and I\'ll pick it up from here.',
+  'Dai a Myynd il permesso che serve e la riprendo da qui.': 'Give Myynd the access it needs and I\'ll pick it up from here.',
+  'Non sono riuscito a finirla senza un dato che manca.': 'I couldn\'t finish it without a missing piece.',
+  'Scrivi cosa cambia.': 'Write what changes.',
+  'Questa riga non ha niente da cambiare.': 'This task has nothing to change.',
+  'L\'hai già mandata dalla tua posta.': 'You already sent it from your mail.',
+  'C\'è ancora un pezzo da completare.': 'There is still a blank to fill.',
+  'La bozza salvata nella tua posta non c\'è più.': 'The draft saved in your mail is gone.',
+  'Collega la posta per rileggere la bozza salvata.': 'Connect your mail to read the saved draft.',
   // — P3: fine —
 
   // — P4: inizio —
@@ -3604,6 +3622,8 @@ export const frasi = {
    * «Non ho letto tutto: Note non si legge, Il mio Mac letto solo in parte.»
    * Il nome è quello della scheda nelle Fonti, che è dove porta il link accanto.
    */
+  /** La voce usata per una bozza (P3): «come le tue 4 mail a Marco», nella fascia della riga. */
+  comeLeTueMail: (n: number, nome: string) => corrente === 'en' ? `like your ${n} emails to ${nome}` : `come le tue ${n} mail a ${nome}`,
   /** Il verdetto sul lavoro consegnato, in una riga: chi l'ha riletta e com'è andata. */
   riletta: (per: string, esito: 'pass' | 'revise', giri: number) => corrente === 'en'
     ? (esito === 'pass'

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { frasi, lingua, t } from '../lingua'
+import { frasi, lingua, loc, t } from '../lingua'
 import { Hov, daTastiera, useAttiva } from '../ui'
 import { IconAvanti, IconOcchio, IconPiu, IconSpunta } from '../icons'
 import { Glifo } from '../components/Stato'
@@ -25,6 +25,11 @@ import { desktop } from '../desktop'
 import { presentazioneRevisione, statoRevisione } from '../consegna-ui'
 import { velato } from '../colori-progetto'
 import { PrioritaProgetto } from '../components/PrioritaProgetto'
+import { CAMPO, Scatola } from '../oggi/Scatola'
+import { RigaIpotesi } from '../oggi/RigaIpotesi'
+import { Testo } from '../Testo'
+import { bloccoDi, mandataValida, puoMandare, rigaDellaVoce, siCambia, testoMostrato } from '../lavoro-affidato'
+export { CAMPO, Scatola }
 
 /** Il bottone pieno su fondo scuro: ne resta uno, sulla fascia «Myynd ti ha scritto». */
 const PIENO_SCURO: CSSProperties = {
@@ -106,35 +111,6 @@ const MANDA_SPENTO: CSSProperties = {
 
 /** Un gesto dentro una riga che è essa stessa un bersaglio: il clic non deve risalire. */
 const fermo = (fai: () => void) => (e: MouseEvent) => { e.stopPropagation(); fai() }
-
-/**
- * La scatola in cui si scrive: la stessa della barra che aggiunge una cosa
- * da fare (`Barra.tsx`), copiata e non ridisegnata.
- *
- * «This input bar is very small and it's not designed like the others. I
- * liked the other designs better.» Un campo sottolineato in fondo alla
- * pagina e una casella con un altro raggio dentro una riga erano tre disegni
- * per lo stesso mestiere. Da qui in poi è uno: raggio 14, la carta all'86%,
- * il vetro, e il bordo che si accende quando ci sei dentro.
- */
-export function Scatola({ children, alto = false }: { children: ReactNode; alto?: boolean }) {
-  const [fuoco, setFuoco] = useState(false)
-  return (
-    <div onFocus={() => setFuoco(true)} onBlur={() => setFuoco(false)} style={{
-      flex: 1, minWidth: 0, display: 'flex', alignItems: alto ? 'flex-end' : 'center', gap: 6,
-      padding: alto ? '9px 9px 9px 15px' : '3px 9px 3px 15px', borderRadius: 14,
-      background: 'rgba(var(--carta-rgb),.86)', backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-      border: `1px solid ${fuoco ? 'rgba(var(--inchiostro-rgb),.26)' : 'rgba(var(--luce-rgb),.9)'}`,
-      boxShadow: fuoco ? '0 8px 26px rgba(var(--ombra-rgb),.10)' : '0 4px 16px rgba(var(--ombra-rgb),.05)',
-      transition: 'border-color .15s, box-shadow .15s'
-    }}>{children}</div>
-  )
-}
-/** Il campo dentro la scatola: senza bordo suo, è la scatola che lo veste. */
-export const CAMPO: CSSProperties = {
-  flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
-  color: 'var(--inchiostro)', fontSize: '13.5px', fontFamily: 'inherit', padding: '7px 0'
-}
 
 /**
  * La riga piccola sotto il testo: da dove viene a sinistra, cosa farne a destra.
@@ -504,10 +480,54 @@ function Portami({ c, l, v, scuro, piatto = false, anteprima = false, etichetta:
 function BozzaInPosta({ c }: { c: Compito }) {
   const b = c.email?.casella
   if (!b) return null
+  // partita dalla sua posta (P3): la bozza non c'è più, e il link nemmeno
+  if (mandataValida(c)) {
+    return <div style={{ marginTop: 10, fontSize: 13 }} onClick={e => e.stopPropagation()} title={c.mandata ? new Date(c.mandata.quando).toLocaleString(loc()) : undefined}>
+      <span>{t('Mandata dalla tua posta.')}</span>
+    </div>
+  }
   return <div style={{ marginTop: 10, fontSize: 13 }} onClick={e => e.stopPropagation()}>
-    {b.stato === 'salvata' ? <><span>{t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</span>{' '}<a href={b.url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{t('Apri la bozza nella posta')}</a></>
+    {b.stato === 'salvata' ? <><span>{c.email?.allegato ? t('Salvata nelle bozze della tua posta, senza allegato. Nessun messaggio inviato.') : t('Salvata nelle bozze della tua posta. Nessun messaggio inviato.')}</span>{' '}<a href={b.url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{t('Apri la bozza nella posta')}</a></>
       : <span role="status">{t('La bozza è qui, ma non è stata salvata nella posta.')} {b.errore}</span>}
   </div>
+}
+
+/** Il file da allegare (P3): una riga vera, con il nome che si apre. Fase 1: si apre, non si mette dentro la bozza. */
+function DaAllegare({ c, v }: { c: Compito; v: Vals }) {
+  const a = c.email?.allegato
+  if (!a) return null
+  return (
+    <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0, fontSize: '12.5px', color: 'rgba(var(--inchiostro-rgb),.64)' }} onClick={e => e.stopPropagation()}>
+      <span style={{ flex: 'none' }}>{t('Da allegare:')}</span>
+      <Hov as="button" type="button" title={a.titolo} onClick={(e: MouseEvent) => { e.stopPropagation(); v.apriFonte(a.id) }}
+        style={{ ...LINK, maxWidth: 260, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} hover={{ textDecorationColor: 'currentColor' }}>{a.titolo}</Hov>
+    </div>
+  )
+}
+
+/** La riga ferma su una fonte che manca (P3): la frase, e il link alle Fonti. Non è una domanda. */
+function Bloccata({ v }: { v: Vals }) {
+  return (
+    <div style={{ marginTop: 5 }} onClick={e => e.stopPropagation()}>
+      <Hov as="a" href="#" onClick={v.goConn}
+        style={{ fontSize: '12.5px', color: 'var(--rame-testo)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+        hover={{ color: 'var(--inchiostro)' }}>{t('Vai alle Fonti')}</Hov>
+    </div>
+  )
+}
+
+/** «come le tue 4 mail a Marco» (P3): nella fascia, dopo la provenienza, con la più recente da aprire. */
+function VoceUsata({ c, v }: { c: Compito; v: Vals }) {
+  const r = rigaDellaVoce(c)
+  if (!r) return null
+  return (
+    <>
+      <span style={{ flex: 'none' }}>·</span>
+      <Hov as="button" type="button" onClick={(e: MouseEvent) => { e.stopPropagation(); v.apriFonte(r.apri) }}
+        style={{ ...LINK, color: 'rgba(var(--inchiostro-rgb),.55)', maxWidth: 260, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        hover={{ color: 'var(--rame-testo)', textDecorationColor: 'currentColor' }}>{frasi.comeLeTueMail(r.n, r.nome)}</Hov>
+    </>
+  )
 }
 
 /**
@@ -574,10 +594,15 @@ function corpo(c: Compito): string {
   if (c.guaio) return t(c.guaio)
   // su un file scritto da sé resta la riga per lei, se c'era: le ipotesi
   // fatte, la scelta presa. Il documento sta nel file, non qui.
-  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') : ''
+  if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c) || fraseFinita(c) : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
-  return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
+  // una figlia di revisione non mostra mai la sua nota: è il blocco di
+  // istruzioni della revisione (REVISION REQUEST, la base, il documento di
+  // prima per intero), non una riga per lei. Richiamata, resta il titolo
+  const revisione = presentazioneRevisione(c, lingua() === 'en')
+  if (revisione) return revisione.descrizione
+  return c.nota || ''
 }
 
 /**
@@ -604,9 +629,15 @@ function domande(c: Compito): { visto: string; tutte: Chiesta[] } {
 }
 
 /** Quello che viene dopo la frase di chiusura, se è corto: la riga per lei. */
-function dopoLaChiusura(risultato: string): string {
-  const [, ...resto] = risultato.trim().split(/\n\s*\n/)
-  const nota = resto.join('\n').trim()
+function dopoLaChiusura(c: Compito): string {
+  // la riga dell'ipotesi si mostra da sola, con «Cambia»: qui non si ripete,
+  // ma solo quando la riga la porta davvero (una riga consegnata prima, senza
+  // `ipotesi`, la tiene nel testo, come nella lista); e i numeri delle fonti
+  // non hanno senso in una riga piana
+  const [, ...resto] = testoMostrato(c.risultato, c.ipotesi).trim().split(/\n\s*\n/)
+  // la riga delle fonti («From Nora's mail [1].») è provenienza, non un
+  // riassunto: da sola non è la riga del corpo (resta la frase «Done:»)
+  const nota = resto.join('\n').split('\n').filter(r => !/\[\d{1,2}\]/.test(r)).join('\n').trim()
   return nota.length <= 400 ? nota : ''
 }
 
@@ -797,9 +828,11 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const eraAffidato = useRef(affidato)
   const [finita, setFinita] = useState(false)
   useEffect(() => {
-    if (eraAffidato.current && !affidato && (c.stato === 'pronto' || c.stato === 'chiede')) setFinita(true)
+    // rimessa com'era dopo un errore («Non sono riuscito a rifarla»): non è
+    // finita, e il fuoco che si posa direbbe «fatto» sopra un guaio
+    if (eraAffidato.current && !affidato && (c.stato === 'pronto' || c.stato === 'chiede') && !l.ripristinata(c.id)) setFinita(true)
     eraAffidato.current = affidato
-  }, [affidato, c.stato])
+  }, [affidato, c.stato, c.id, l])
   const titolo = presentazioneRevisione(c, lingua() === 'en')?.titolo ?? c.testo
   const testo = corpo(c)
   // quello che ha scritto per intero: si legge aprendo la riga, dove stava, e
@@ -811,7 +844,9 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
   const espandibile = !chiede && intero.length > corta.length
   const apri = () => { if (espandibile) setAperta(x => !x) }
   const parlane = siPuoParlarne() ? () => v.discutiCompito(c) : null
-  const email = pronto && c.email && azioneEmail(c).tipo === 'invia'
+  const email = pronto && c.email && azioneEmail(c).tipo === 'invia' && puoMandare(c)
+  const mandata = pronto && mandataValida(c)
+  const bloccata = bloccoDi(c) && c.stato === 'aperto'
 
   return (
     <div className="task-aurora-host task-aurora-row" data-working={affidato || finita || undefined}
@@ -826,10 +861,15 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             {affidato && <Glifo tipo="penso" dim={12} colore="var(--inchiostro)" />}
             <span style={{ minWidth: 0 }}>{titolo}</span>
           </div>
-          {testo && <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>}
+          {testo && (aperta && pronto && !c.consegna
+            // aperta, il lavoro intero si legge con le fonti in apice, senza la riga dell'ipotesi che sta già sotto
+            ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={testoMostrato(intero, c.ipotesi)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
+            : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
+          {siCambia(c) && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
+          {bloccata && <Bloccata v={v} />}
           <Riletta c={c} chiaro />
           {attivo && <PassoAttivo passo={l.passi[c.id]} />}
-          <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} />
+          <ConsegnaPronta c={c} l={l} v={v} /><BozzaInPosta c={c} /><DaAllegare c={c} v={v} />
           {chiede && <Domande c={c} l={l} />}
         </div>
         {attesa
@@ -837,7 +877,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           : <span style={QUANDO}>{didascalia(c, attivo)}</span>}
       </div>
       <Fascia attiva={attiva}
-        sinistra={<Prove c={c} v={v} l={l} inRiga />}
+        sinistra={<><Prove c={c} v={v} l={l} inRiga /><VoceUsata c={c} v={v} /></>}
         destra={affidato
           ? (
             // una riga che sta lavorando non si chiude e non si affida due
@@ -848,11 +888,12 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
             <>
               {/* su una bozza pronta «Fatto» sarebbe una bugia: quello che
                   chiudi lì è il testo che hai davanti, e va tenuto */}
-              <Hov as="button" type="button" aria-label={`${pronto ? t('Va bene') : t('Fatto')}: ${titolo}`}
-                onClick={fermo(() => (pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
-                style={PILLOLA} hover={PILLOLA_SOPRA}>{pronto ? t('Va bene') : t('Fatto')}</Hov>
+              {/* partita dalla sua posta (P3): il testo tenuto è quello che ha mandato lei, e qui non c'è: si chiude e basta */}
+              <Hov as="button" type="button" aria-label={`${pronto && !mandata ? t('Va bene') : t('Fatto')}: ${titolo}`}
+                onClick={fermo(() => (mandata ? l.chiudi(c.id, t('Mandata dalla tua posta.')) : pronto ? l.chiudi(c.id, t('Va bene così.'), intero) : l.chiudi(c.id)))}
+                style={PILLOLA} hover={PILLOLA_SOPRA}>{pronto && !mandata ? t('Va bene') : t('Fatto')}</Hov>
               {email && (
-                <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{t('Manda')}</Hov>
+                <Hov as="button" type="button" onClick={fermo(() => { void l.manda(c.id) })} style={PILLOLA} hover={PILLOLA_SOPRA}>{c.email?.allegato ? t('Manda senza allegato') : t('Manda')}</Hov>
               )}
               {pronto && (
                 <Hov as="button" type="button" onClick={fermo(() => l.delega(c.id, c.modo))} style={GESTO} hover={{ color: 'var(--rame-testo)' }}>{t('Rifallo')}</Hov>
@@ -1164,7 +1205,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, vuoti: v.progettiNuovi })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi, v.progettiNuovi)

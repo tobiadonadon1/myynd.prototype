@@ -110,6 +110,19 @@ test('cambiato il destinatario, la risposta non è più una risposta', () => {
   assert.equal(d.ok && d.m.rispondeA, null)
 })
 
+test('con un segnaposto nel corpo non parte: manca ancora un dato (P3)', () => {
+  const c = riga({ corpo: 'Gentile Rossi, il prezzo per venti persone è [da completare: prezzo per venti persone].' })
+  const d = invio.daMandare(c, undefined)
+  assert.equal(d.ok, false)
+  assert.equal(!d.ok && d.errore, 'C\'è ancora un pezzo da completare.')
+  // anche se lo scrive lei nei campi, e nelle due lingue
+  assert.equal(invio.daMandare(c, { corpo: 'Hi, the price is [to fill: price for 20 people].' }).ok, false)
+  // riempito, parte
+  const pieno = invio.daMandare(c, { corpo: 'Gentile Rossi, il prezzo per venti persone è 890 euro.' })
+  assert.equal(pieno.ok, true)
+  assert.equal(pieno.ok && pieno.m.corpo, 'Gentile Rossi, il prezzo per venti persone è 890 euro.')
+})
+
 test('senza un indirizzo valido o senza testo non parte niente', () => {
   const senza = riga(null)
   assert.deepEqual(invio.daMandare(senza, {}), { ok: false, errore: 'Manca un indirizzo valido.' })

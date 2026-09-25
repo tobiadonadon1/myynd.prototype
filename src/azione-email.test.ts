@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { azioneEmail, copiaBozzaEApri } from './oggi/azione-email.ts'
 import type { Compito } from './api.ts'
+import { testoDellaBozza } from './lavoro-affidato.ts'
 
 const riga = (valori: Partial<Compito> = {}) => ({
   doc: 'google:message-42', porta: 'pagina' as const, puoInviare: false,
@@ -65,4 +66,18 @@ test('missing source never opens a generic inbox; failed opening keeps the copie
     copia: async () => true,
     apri: async () => null
   }), 'non-aperta')
+})
+
+test('(P3) a row with an assumption, copied untouched from the list, gives the recipient body: no «Done:», no sources line, no [n]', () => {
+  const risultato = 'Done: the reply to Nora.\n\nHi Nora,\n\nThe kickoff is on Tuesday.\n\nBest,\nAlex\n\nFrom Nora\'s mail [1].\nI assumed Tuesday, October 6 as the kickoff.'
+  const c = { doc: 'posta:INBOX:1', porta: 'posta' as const, email: null, puoInviare: false, risultato, ipotesi: ['I assumed Tuesday, October 6 as the kickoff.'] }
+  // the list shows and edits the text without the assumption line: untouched, it is not a correction
+  const mostrato = testoDellaBozza(c)
+  assert.ok(mostrato.startsWith('Done:') && mostrato.includes('[1]') && !mostrato.includes('I assumed'))
+  const a = azioneEmail(c, mostrato)
+  assert.equal(a.tipo, 'copia')
+  assert.equal((a as { corpo: string }).corpo, 'Hi Nora,\n\nThe kickoff is on Tuesday.\n\nBest,\nAlex')
+  // a real edit is copied, still through the frame: what he changed arrives, the frame does not
+  const corretta = azioneEmail(c, mostrato.replace('Tuesday.', 'Monday.'))
+  assert.equal((corretta as { corpo: string }).corpo, 'Hi Nora,\n\nThe kickoff is on Monday.\n\nBest,\nAlex')
 })

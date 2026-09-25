@@ -12,7 +12,8 @@
 //     coordinamento.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
+import { api, correggiCompito, DaCollegare, type Compito, type EventoCompito, type PassoCompito, type Portato, type Priorita, type ProjectWorkRequest } from '../api'
+import { appenaFinite as appenaFiniteFra, siRivede } from '../lavoro-affidato'
 import { frasi, t } from '../lingua'
 import { avvisiAccesi, desktop } from '../desktop'
 import { copia as negliAppunti } from './prompt'
@@ -206,17 +207,34 @@ export function useCompiti(
    * dopo sale. Chi disegna i blocchi la legge da qui (`fermi`).
    */
   const [appenaFinite, setAppenaFinite] = useState<ReadonlySet<string>>(() => new Set())
+  /**
+   * Le righe rimesse com'erano da `indietro` dopo un errore: al giro dopo
+   * il passaggio da affidata a pronta non è un lavoro finito, e non si dice
+   * «Fatto» sopra il guaio appena mostrato. Si svuota a ogni giro: un
+   * ripristino vale per la lista che lo segue, non per sempre.
+   */
+  const ripristinate = useRef(new Set<string>())
+  /**
+   * Le righe appena corrette con «Cambia» (riga semplice): si rifanno, e
+   * intanto restano dov'erano in prima pagina (`blocchi-feed.corrette`).
+   * Se ne vanno da sole quando la riga smette di lavorare.
+   */
+  const [appenaCorrette, setAppenaCorrette] = useState<ReadonlySet<string>>(() => new Set())
   const FERMA_MS = 1800
   useEffect(() => {
     const prima = statiVisti.current
     const adesso: Record<string, string> = {}
     for (const c of compiti) adesso[c.id] = c.stato
     statiVisti.current = adesso
-    if (!prima) return
-    const finite: string[] = []
-    for (const c of compiti) {
-      if (prima[c.id] === 'delegato' && c.stato === 'pronto') mostraToast(frasi.compitoFinito(titoloCorto(c.testo)))
-      if (prima[c.id] === 'delegato' && (c.stato === 'pronto' || c.stato === 'chiede')) finite.push(c.id)
+    const { pronte, finite } = appenaFiniteFra(prima, compiti, ripristinate.current)
+    ripristinate.current.clear()
+    setAppenaCorrette(s => {
+      const ancora = [...s].filter(id => adesso[id] === 'delegato')
+      return ancora.length === s.size ? s : new Set(ancora)
+    })
+    for (const id of pronte) {
+      const c = compiti.find(x => x.id === id)
+      if (c) mostraToast(frasi.compitoFinito(titoloCorto(c.testo)))
     }
     if (!finite.length) return
     setAppenaFinite(f => new Set([...f, ...finite]))
@@ -234,6 +252,7 @@ export function useCompiti(
    */
   const indietro = useCallback((prima: Compito[], id: string, messaggio: string) => {
     const comEra = prima.find(c => c.id === id)
+    ripristinate.current.add(id)
     setCompiti(cs => {
       const presente = cs.some(c => c.id === id)
       if (!comEra) return cs.filter(c => c.id !== id)          // era nata ora: sparisce
@@ -430,6 +449,49 @@ export function useCompiti(
       if (r.chiuso === 'lasciato') mostraToast(t('Lasciata, con il tuo perché: me lo ricordo.'))
       else if (r.chiuso === 'fatto') mostraToast(t('Segnata come fatta.'))
     } catch { indietro(prima, id, t('Non sono riuscito a rispondergli.')) }
+  }, [indietro, mostraToast])
+
+  /**
+   * «Cambia» sotto l'ipotesi (P3): quello che vale invece, e la riga si rifà.
+   *
+   * Subito, come `rispondi`: una riga semplice torna affidata all'istante;
+   * una riga con una bozza salvata nella posta o con un file consegnato passa
+   * dalla revisione, e allora sotto compare da subito la riga figlia «Sto
+   * aggiornando la bozza», che il server sostituisce con la sua. Se il server
+   * dice di no, tutto torna com'era e lo si dice.
+   */
+  const correggi = useCallback(async (id: string, testo: string) => {
+    const prima = compitiRef.current
+    const c = prima.find(x => x.id === id)
+    if (!c) return
+    const rivede = siRivede(c)
+    const attesa = `rev-attesa-${id}`
+    if (rivede) {
+      const adesso = new Date().toISOString()
+      const finta: Compito = {
+        ...c, id: attesa, madre: id, modo: c.consegna ? 'tutto' : 'bozza', stato: 'delegato', testo, quando: 'oggi',
+        origine: 'chat', ordine: `${c.ordine}0`, chiesto: adesso, creato: adesso, aggiornato: adesso, versione: 0,
+        risultato: null, fonti: null, email: null, consegna: null, chieste: null, ipotesi: null, revisione: null,
+        proposta: null, guaio: null, esito: null, chiuso: null, sparito: null, voceScritta: null, mandata: null
+      }
+      // la figlia sotto la madre, e la madre senza più la riga dell'ipotesi: la correzione è passata a lei
+      setCompiti(cs => {
+        const i = cs.findIndex(x => x.id === id)
+        const madre = cs.map(x => (x.id === id ? { ...x, ipotesi: null } : x))
+        return i < 0 ? [...madre, finta] : [...madre.slice(0, i + 1), finta, ...madre.slice(i + 1)]
+      })
+    } else {
+      setCompiti(cs => cs.map(x => (x.id === id ? { ...x, stato: 'delegato', risultato: null, ipotesi: null, guaio: null } : x)))
+      setAppenaCorrette(s => new Set([...s, id]))
+      scorda(id)
+    }
+    try {
+      const r = await correggiCompito(id, testo)
+      setCompiti(r.compiti)
+    } catch {
+      if (rivede) setCompiti(cs => cs.filter(x => x.id !== attesa))
+      indietro(prima, id, t('Non sono riuscito a rifarla.'))
+    }
   }, [indietro, mostraToast])
 
   const cambia = useCallback(async (id: string, c: { testo?: string; nota?: string | null; quando?: string; giorno?: string | null; ora?: string | null; progetto?: string | null; priorita?: Priorita | null }): Promise<boolean> => {
@@ -640,10 +702,12 @@ export function useCompiti(
     // «chiede» conta come da fare: è una riga che aspetta te, e dire «tutto
     // pronto» sopra a una domanda senza risposta è la stessa bugia di prima
     daFare: compiti.filter(c => ['aperto', 'delegato', 'chiede'].includes(c.stato)).length,
-    appenaFinite,
+    appenaFinite, appenaCorrette,
+    /** La riga è appena stata rimessa com'era da `indietro`: il passaggio da affidata a pronta non è un lavoro finito. */
+    ripristinata: (id: string) => ripristinate.current.has(id),
     quante: (s: Secchio) => { const oggi = giornoLocale(); return compiti.filter(c => secchioVivo(c, oggi) === s).length },
     pronte, chiedono,
-    aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
+    aggiungi, aggiungiTante, affidaNuovo, chiudi, riapri, delega, richiama, rispondi, correggi, cambia, sposta, elimina, salvaFuoco, apriChiudi, manda,
     portami,
     daAprire, chiediDiAprire, richiestaServita
   }

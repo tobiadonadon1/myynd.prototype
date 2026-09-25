@@ -95,13 +95,60 @@ export async function rivediDallaChat(input: unknown, domanda: string,
   // Grounding is enforced before reading any artifact or changing the task list.
   const parent = store.compito(x.id)
   if (!parent || parent.sparito || parent.stato === 'delegato' || (!parent.consegna && !parent.risultato)) throw new Error('That work is unavailable or still running. Choose a delivered document or draft.')
+  return creaRevisione(parent, feedback, avvia, letture)
+}
+
+/**
+ * Una revisione chiesta cambiando l'ipotesi sotto la riga (P3): «Cambia» su
+ * «I assumed Friday». Non passa dai controlli della chat (non c'è un
+ * messaggio da cui il testo debba venire, né un verbo di comando da
+ * riconoscere): il gesto è già la richiesta. Il resto è la stessa strada,
+ * con la versione precedente al sicuro.
+ */
+export async function rivediDaCorrezione(id: string, feedback: string, avvia?: (id: string, modo: string) => void, letture:Letture = {}): Promise<{id:string;giaAvviato:boolean}> {
+  const testo = feedback.trim()
+  if (!testo) throw new Error('Scrivi cosa cambia.')
+  const parent = store.compito(id)
+  if (!parent || parent.sparito || parent.stato === 'delegato' || (!parent.consegna && !parent.risultato)) throw new Error('That work is unavailable or still running. Choose a delivered document or draft.')
+  // il titolo resta quello del compito: il file sulla Scrivania e il «Fatto:» portano quello, non la correzione
+  return creaRevisione(parent, testo.slice(0, 8000), avvia, letture, { titolo: titoloOriginale(parent.testo) })
+}
+
+/**
+ * Un no della revisione che dipende da lei, detto nella lingua di casa e con
+ * lo stato giusto: la bozza salvata non c'è più (409), la posta è scollegata
+ * (400). Il resto (un guasto vero) torna null e resta un 500.
+ */
+export function rifiutoCorrezione(e: unknown): { stato: number; errore: string } | null {
+  const m = e instanceof Error ? e.message : String(e)
+  if (/mailbox draft was removed or sent/i.test(m)) return { stato: 409, errore: 'La bozza salvata nella tua posta non c\'è più.' }
+  if (/^Reconnect your email account/i.test(m)) return { stato: 400, errore: 'Collega la posta per rileggere la bozza salvata.' }
+  return null
+}
+
+/** Il compito com'era, senza le istruzioni di una revisione precedente. */
+export function titoloOriginale(testo: string): string {
+  return testo.split('\n\nOriginal task: ').at(-1)?.trim() || testo
+}
+
+/**
+ * La riga figlia di una revisione, con la base verificata: la usano la chat e
+ * la correzione dell'ipotesi. Dalla chat il testo della figlia è la richiesta
+ * più il compito («Original task: …»), com'era; da «Cambia» è il titolo del
+ * compito e basta (`titolo`), e la richiesta sta nella nota come REVISION
+ * REQUEST: un file consegnato prende il nome dal testo della riga, e «Monday,
+ * October 5 Original task Write the kickoff note.md» sulla Scrivania non è un
+ * nome che si può leggere.
+ */
+export async function creaRevisione(parent: store.Compito, feedback: string,
+  avvia?: (id: string, modo: string) => void, letture:Letture = {}, o: { titolo?: string } = {}): Promise<{id:string;giaAvviato:boolean}> {
   const current = await versioneAttuale(parent,letture)
   const id = 'rev-' + createHash('sha256').update(parent.id + '\0' + parent.aggiornato + '\0' + current.impronta + '\0' + feedback).digest('hex').slice(0,24)
   if (store.compito(id)) return {id,giaAvviato:true}
   const previous = current.testo
   if (!previous || previous.length > 100_000) throw new Error('The original content is unavailable. I cannot reliably revise it yet.')
   const run = avvia ?? (await import('./compiti.ts')).affida
-  store.scriviCompito({ id, testo: feedback + '\n\nOriginal task: ' + parent.testo.split('\n\nOriginal task: ').at(-1), quando:'oggi', ordine:dopo(store.ultimoOrdine('oggi')), origine:'chat', madre:parent.id,
+  store.scriviCompito({ id, testo: o.titolo ?? feedback + '\n\nOriginal task: ' + titoloOriginale(parent.testo), quando:'oggi', ordine:dopo(store.ultimoOrdine('oggi')), origine:'chat', madre:parent.id,
     progetto:parent.progetto, doc:parent.doc,
     nota: [parent.nota?.split('REVISION REQUEST:')[0]?.trim(), 'REVISION REQUEST: '+feedback,
       parent.consegna ? 'Create the revised complete document in '+parent.consegna.app+'. Preserve the previous file and apply the same rendered review.' : 'Prepare a revised draft. Do not send or publish it.',

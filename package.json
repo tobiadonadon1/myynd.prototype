@@ -25,6 +25,8 @@
     "fronte": "node build/fronte.cjs",
     "valuta:feed": "node server/valuta-feed.ts",
     "prova:gemello": "node --disable-warning=ExperimentalWarning server/gemello-prova.ts",
+    "misura:lavoro": "node --disable-warning=ExperimentalWarning server/misura-lavoro.ts",
+    "valuta:lavoro": "node --disable-warning=ExperimentalWarning server/valuta-lavoro.ts",
     "misura:feed": "node --disable-warning=ExperimentalWarning server/misura-feed.ts",
     "prova:jev": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/prova-jev.ts"
   },

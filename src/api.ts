@@ -590,6 +590,8 @@ export type EmailPronta = {
   corpo: string
   conosciuto: boolean
   rispondeA?: { messageId: string; references?: string[] } | null
+  /** Il file da allegare, suggerito: si apre dalla riga, non sta dentro la bozza. */
+  allegato?: { id: string; titolo: string } | null
 }
 
 /**
@@ -659,7 +661,7 @@ export type Compito = {
   /** Quante domande ha fatto questa riga: mai più di una. */
   domandeFatte?: number
   /** Come scrive a chi riceve la bozza, dalle mail che gli ha mandato. */
-  voceScritta?: { destinatario?: string; lingua?: string; esempi?: { id: string; label: string }[] } | null
+  voceScritta?: { destinatario?: string; lingua?: string; quanti?: number; esempi?: { id: string; label: string }[] } | null
   /** La bozza è partita dalla sua posta: quale messaggio, quando, e quanto l'ha ritoccata. */
   mandata?: { doc: string; quando: string; certezza: 'id' | 'filo'; ritocco: number } | null
 }
@@ -2111,6 +2113,25 @@ export const apiP2 = {
 // — P2: fine —
 
 // — P3: inizio —
+
+/** Le misure del lavoro affidato (P3): quante senza domande, quante bozze partite com'erano. */
+export type Misura = {
+  giorni: number
+  dal: string
+  lavori: { arrivati: number; senzaDomande: number; conUna: number; max: number; presunte: number; segnaposto: number; correzioni: number; tassoSenza: number | null }
+  blocchi: number
+  guai: number
+  fondo: { arrivati: number; segnaposto: number; domande: number }
+  bozze: { inviate: number; identiche: number; ritocchi: number; modificate: number; riscritte: number; tassoBuone: number | null; via: { smtp: number; casella: number; propria: number; copia: number } }
+  copertura: { postaInviata: boolean }
+}
+
+/** «Cambia» sotto l'ipotesi: quello che vale invece. La riga si rifà, o la sua revisione parte. */
+export const correggiCompito = (id: string, testo: string) =>
+  json<{ ok: true; compiti: Compito[] }>(`/api/compiti/${encodeURIComponent(id)}/correggi`, { method: 'POST', body: JSON.stringify({ testo }) })
+
+export const misuraLavoro = (giorni = 30) => json<Misura>(`/api/lavoro/misura?giorni=${encodeURIComponent(String(giorni))}`)
+
 // — P3: fine —
 
 // — P4: inizio —
