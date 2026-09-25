@@ -82,6 +82,10 @@ export type Desktop = {
      */
     mostrato?(cb: () => void): () => void
   }
+  /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
+  osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
+  /** Il mostriciattolo sullo schermo (P1). Manca nei gusci vecchi. */
+  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void> }
 }
 
 declare global {
