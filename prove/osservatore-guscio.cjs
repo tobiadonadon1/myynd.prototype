@@ -75,6 +75,9 @@ async function principale() {
   const impostazioni = await importa('desktop/impostazioni.ts')
   const oss = await importa('desktop/osservatore.ts')
   impostazioni.apri(path.join(TMP, 'electron'))
+  // il server vero ascolta su una porta di questo filone (18710-18719), non
+  // su una qualsiasi: il guscio gliela passa come la «porta dell'ultima volta»
+  if (VERO) impostazioni.scrivi({ porta: Number(process.env.PORTA) || 18714 })
   server.apriRegistro(TMP)
 
   // — il registro visto dal guscio: quello che parte e quello che torna —
