@@ -4418,9 +4418,10 @@ app.get('/api/risposte/valutazione', (_req, res) => {
   const attive = (insieme?.domande ?? []).filter(d => !d.ritirata).length
   const attiva = cfg.leggi().provaRisposte?.attiva === true
   const inCorso = risposteArchivio.inCorso()
+  const conInsieme = attive >= risposteArchivio.INSIEME_MINIMO
   res.json({
-    insieme: attive >= 10, attiva, inCorso,
-    riga: attive >= 10 ? risposteArchivio.rigaDiStato(risposteArchivio.leggiStato(), attiva, cfg.lingua() === 'en', inCorso) : null
+    insieme: conInsieme, attiva, inCorso,
+    riga: conInsieme ? risposteArchivio.rigaDiStato(risposteArchivio.leggiStato(), attiva, cfg.lingua() === 'en', inCorso) : null
   })
 })
 /** L'interruttore: la prova settimanale, spenta di serie perché costa. */

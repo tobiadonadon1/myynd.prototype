@@ -39,6 +39,14 @@ export type Riassunto = {
 
 export type Salto = 'tetto' | 'motore' | 'locale' | 'insieme'
 
+/**
+ * Sotto queste domande attive non c'è un insieme: la riga delle preferenze
+ * non si disegna e il lavoro settimanale salta. Sei e non dieci: la scena di
+ * prova committata ne ha sei, e quello che lo schermo mostra deve poter
+ * girare davvero.
+ */
+export const INSIEME_MINIMO = 6
+
 export type StatoProva = {
   ultima?: Riassunto
   ultimaCompleta?: string

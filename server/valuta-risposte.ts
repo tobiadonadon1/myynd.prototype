@@ -29,8 +29,8 @@ export type EsitoRisposta = 'giusta' | 'senza_fonte' | 'sbagliata' | 'inventata'
 export const BUDGET_RUN = 1_200_000
 export const TEMPO_RUN = 25 * 60_000
 export const SOGLIA = { giuste: 0.9, inventate: 0, rifiutateMale: 0.05 } as const
-/** Sotto queste domande attive il lavoro settimanale non parte. */
-export const INSIEME_MINIMO = 10
+/** Sotto queste domande attive il lavoro settimanale non parte: lo stesso numero della riga nelle preferenze. */
+export const INSIEME_MINIMO = 6
 const SETTE_GIORNI = 7 * 86_400_000
 
 export type Giudizio = { corrisponde: boolean; sostenuta: boolean; rispondeDavvero: boolean; motivo: string }
