@@ -42,10 +42,17 @@ import {
   elencoCompiti, riordina, ultimoOrdine, type Compito
 } from './store.ts'
 import * as ordine from './ordine.ts'
-import { classificaAttenzione, validaVoceFeed, corpoAttuale, tempoFondato } from './rilevanza.ts'
+import { classificaAttenzione, validaVoceFeed, corpoAttuale, giornoFondato, contieneRichiesta, indirizzoAttenzione } from './rilevanza.ts'
 import * as giudizi from './giudizi.ts'
 import { rifinisci } from './rifinitura.ts'
 import { docsIgnoratiDalFeed } from './store.ts'
+// P2 · la lettura con l'asticella: quello che ha imparato dalle sue ragioni,
+// dove finisce ogni documento, il «perché oggi» controllato dove nasce, e la misura
+import { impara, inviatoDopo, righePrompt } from './feed-impara.ts'
+import { segnaEsame, esameDi, rispostiPerId, type Fase } from './feed-dati.ts'
+import { assoluto, conRelativi, scadenzaDi, inizioDelGiorno } from './data-carta.ts'
+import { percheFondato } from './perche-oggi.ts'
+import { misura, rigaDelRegistro, caricaModuli } from './misura-feed.ts'
 
 /**
  * Il client e i parametri stanno in `modello.ts`, non più qui.
@@ -1889,23 +1896,24 @@ const schemaFeed = (ids: string[]) => ({
   properties: {
     voci: {
       type: 'array',
-      // cinque e non «da tre a sei»: il feed si riempiva di cose che non
-      // chiedevano niente. Il tetto NON sta nello schema: l'API di Claude
-      // rifiuta `maxItems` (e con lui l'intera lettura, in silenzio, alle tre
-      // di notte) — sta nel prompt e nel taglio dopo la risposta
-      description: `Al massimo ${VOCI_PER_LETTURA} voci.`,
+      // nessun numero: il numero giusto lo decide l'asticella («You want the
+      // right amount of cards. They have to be curated»). Il parapetto NON
+      // sta nello schema: l'API di Claude rifiuta `maxItems` (e con lui
+      // l'intera lettura, in silenzio, alle tre di notte) — sta nel taglio
+      // dopo la risposta, e non è un obiettivo
+      description: 'Solo le voci che passano l\'asticella. Nessun numero da raggiungere; nessuna voce è una risposta giusta.',
       items: {
         type: 'object',
         properties: {
           tipo: { type: 'string', enum: ['Da decidere', 'Da leggere', 'Scadenza'] },
           titolo: { type: 'string', description: 'Un verbo all\'inizio e la cosa concreta, al massimo nove parole: «Rispondi a Sara sulla proposta».' },
-          testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: chi aspetta, o perché adesso. Parole piane, senza gergo.' },
-          urgenza: { type: 'string', description: 'Due o tre parole al massimo: «entro venerdì», «questa settimana», «nessuna fretta». Mai una frase.' },
+          testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: il dettaglio, chi aspetta o cosa chiede. Parole piane, senza gergo. Mai oggi, domani o ieri.' },
+          urgenza: { type: 'string', description: 'Due o tre parole: il giorno o la data come li hai letti («entro venerdì», «giovedì 9:30», «3 ottobre»), o «nessuna fretta». Mai una frase.' },
           fonte: { type: 'string' },
           doc: { type: 'string', enum: ids, description: 'Uno degli identificativi forniti, copiato alla lettera dalla riga «id:».' },
-          // la riga che rende la scelta controllabile: senza, una voce è
-          // un'opinione del modello; con, è una cosa che si può contraddire
-          perche: { type: 'string', description: 'Al massimo dodici parole: perché conta e per quale progetto o obiettivo — o quale decisione chiede.' },
+          // la riga che lui legge sotto il titolo: il perché oggi, preso dal
+          // documento; senza, una voce è un'opinione del modello
+          perche: { type: 'string', description: 'Perché oggi, in una riga di al massimo dodici parole presa da questo documento: chi aspetta e da quando, la data, o cosa si ferma senza di lei. Mai oggi, domani o ieri: il giorno o la data. Mai il progetto o l\'obiettivo. Se non sai scriverla, la voce non ci va.' },
           prova: { type: 'string', description: 'Citazione ESATTA dal messaggio corrente: la richiesta rivolta alla persona. Da 12 a 500 caratteri, nella lingua originale della fonte.' }
         },
         required: ['tipo', 'titolo', 'testo', 'urgenza', 'fonte', 'doc', 'perche', 'prova'],
@@ -1917,10 +1925,15 @@ const schemaFeed = (ids: string[]) => ({
   additionalProperties: false
 })
 
-export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string; progetto?: string | null; peso?: number | null }
+export type VoceFeed = { tipo: string; titolo: string; testo: string; urgenza: string; fonte: string; doc: string; perche?: string; prova?: string; progetto?: string | null; peso?: number | null; /** Quando è nata la carta: la data del documento (P2). */ nata?: string | null }
 
-/** Quante voci al massimo può tirare fuori una lettura. */
-export const VOCI_PER_LETTURA = 5
+/**
+ * Quante voci al massimo tiene una lettura: un parapetto, mai un obiettivo.
+ * Non sta né nel prompt né nello schema. Erano cinque, e decidevano loro
+ * quante cose vedeva; il numero giusto lo decide l'asticella, questo è la
+ * rete contro un fornitore impazzito.
+ */
+export const VOCI_PER_LETTURA = 15
 /** Quanti documenti si mandano a leggere: è questo che fa il costo della lettura. */
 const DOCS_PER_LETTURA = 30
 /**
@@ -2013,15 +2026,64 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * punto usa da sempre — un documento, in una cartella dove le cose
    * arrivano — e vale qui per la stessa ragione.
    */
-  const candidati = [...nuovi, ...recenti(DOCS_PER_LETTURA * 10).filter(d => !arrivati.has(d.id))]
-    .filter(d => candidatoDaFeed(d, filtro, Date.now(), toccaUnSuo(d)))
+  /*
+   * Quello che ha imparato dalle sue ragioni e dalle carte mancate
+   * (`feed-impara.ts`), letto una volta per lettura, senza modello. E dove
+   * finisce ogni documento del giro (`feed_esame`): la riga di registro che
+   * prima era un `console.warn` e basta, scritta una volta sola in fondo.
+   */
+  const adesso = Date.now()
+  const imp = impara(adesso)
+  const esame = new Map<string, { fase: Fase; motivo?: string | null }>()
+  const finito = (d: Documento, fase: Fase, motivo?: string | null) => { esame.set(d.id, { fase, motivo: motivo ?? null }) }
+  const scriviEsame = () => {
+    try { segnaEsame([...esame].map(([doc, e]) => ({ doc, fase: e.fase, motivo: e.motivo }))) } catch (e) { console.warn('myynd · lettura · esame non scritto:', e instanceof Error ? e.message : e) }
+  }
+  const pescata = [...nuovi, ...recenti(DOCS_PER_LETTURA * 10).filter(d => !arrivati.has(d.id))]
+  const candidati = pescata.filter(d => {
+    const progettoAttivo = toccaUnSuo(d)
+    if (candidatoDaFeed(d, filtro, adesso, progettoAttivo)) return true
+    const r = classificaAttenzione(d, { adesso, progettoAttivo })
+    if (r.destinazione !== 'feed') finito(d, 'regole', r.motivo)
+    else finito(d, 'scartati')
+    return false
+  })
   const ids = candidati.map(d => d.id)
   // aperte, fatte, scartate o scadute da poco: quel documento ha già avuto la sua voce
   const giaSulFeed = docsSulFeed(ids)
   const inLista = docsConRiga(ids)
   const ignorati = docsIgnoratiDalFeed(candidati)
-  const leggibili = candidati.filter(d => !giaSulFeed.has(d.id) && !inLista.has(d.id) && !ignorati.has(d.id))
-    .filter(d => !(d.filo && stessoFilo(d.filo, [], 30).some(r => r.inviato && Date.parse(r.quando ?? '') > Date.parse(d.quando ?? ''))))
+  // e a chi ha già risposto: nel filo, dopo la mail, o per «risponde»
+  const risposti = rispostiPerId(candidati.map(d => d.messageId ?? '').filter(Boolean))
+  const mittenteDi = (d: Documento) => indirizzoAttenzione(d.autore)
+  const leggibili = candidati.filter(d => {
+    if (giaSulFeed.has(d.id) || inLista.has(d.id) || ignorati.has(d.id)) { finito(d, 'gia'); return false }
+    if ((d.messageId && risposti.has(d.messageId))
+      || (d.filo && stessoFilo(d.filo, [], 30).some(r => r.inviato && Date.parse(r.quando ?? '') > Date.parse(d.quando ?? '')))) { finito(d, 'risposto'); return false }
+    const addr = mittenteDi(d)
+    // «già fatta» da questo mittente: prima si guarda se ha già scritto a
+    // quell'indirizzo dopo la mail, anche in un altro filo
+    if (addr && imp.ricontrolla.has(addr) && d.quando && inviatoDopo(addr, d.quando)) { finito(d, 'gia_risposto'); return false }
+    // «non è mia», due volte da una persona: la sua posta entra solo se chiede qualcosa alla lettera
+    if (addr && imp.nonSuoi.has(addr) && !contieneRichiesta(corpoAttuale(d))) { finito(d, 'non_suo'); return false }
+    return true
+  })
+  /*
+   * Quello che il modello ha già letto e lasciato fuori nelle ultime
+   * ventiquattro ore non si rimanda: costa, e la risposta era già no. Salvo
+   * che sia appena arrivato, o cambiato da allora. La riga dell'esame resta
+   * quella di ieri: non si riscrive.
+   */
+  const esami = esameDi(leggibili.map(d => d.id))
+  const daMandare = leggibili.filter(d => {
+    const e = esami.get(d.id)
+    // «modello» e «verifica»: letto, e senza una carta che regga; costa rimandarlo
+    if (!e || (e.fase !== 'modello' && e.fase !== 'verifica') || arrivati.has(d.id)) return true
+    const quando = Date.parse(e.quando)
+    if (!Number.isFinite(quando) || quando < adesso - 24 * 3_600_000) return true
+    const indicizzato = (d as Documento & { indicizzato?: string }).indicizzato ?? ''
+    return !(indicizzato <= e.quando)
+  })
   /*
    * Prima quello che tocca un suo progetto.
    *
@@ -2033,26 +2095,40 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
    * finestra; l'ordine fra loro resta quello di arrivo. Non è una scelta al
    * posto del modello: è la scelta di cosa fargli leggere, e costa zero.
    */
-  const inFila = [...leggibili.filter(toccaUnSuo), ...leggibili.filter(d => !toccaUnSuo(d))]
+  const inFila = [...daMandare.filter(toccaUnSuo), ...daMandare.filter(d => !toccaUnSuo(d))]
   /*
-   * E poi Jev guarda chi c'è in fila.
+   * E poi Jev guarda chi c'è in fila, e la ordina: non toglie nessuno.
    *
    * Fin qui hanno scelto delle regole: la data, il mittente, il progetto
    * nominato. Regole che non sanno leggere — «We found an issue with your
    * submission» non contiene nessuna delle parole che `rilevanza.ts` cerca, e
    * «please find attached» le contiene tutte. Jev legge i primi sessanta della
    * fila e risponde a due domande per ognuno: qualcuno aspetta lui? e quanto
-   * può aspettare? Chi non aspetta nessuno esce dai trenta posti della
-   * lettura, chi aspetta da venerdì passa davanti.
+   * può aspettare? Chi aspetta da venerdì passa davanti; chi non aspetta
+   * nessuno va in fondo, e sono i trenta posti a tagliare, non Jev.
    *
-   * I trenta posti sono gli stessi di prima: qui non si spende di più, si
-   * spende meglio. E se Jev non c'è — nessuna chiave, rete giù, tetto del
-   * giorno finito — `attenzione` torna una Map vuota, `primaChiAspetta` non
-   * tocca niente, e la fila resta quella che era.
+   * Davanti a tutti le persone a cui ha risposto da solo senza che il feed
+   * gliele mostrasse (le carte mancate); in coda quello che, da una fonte
+   * da cui ha scartato roba vecchia, è più vecchio di quello che scarta.
+   *
+   * E se Jev non c'è — nessuna chiave, rete giù, tetto del giorno finito —
+   * `attenzione` torna una Map vuota e la fila resta quella che era.
    */
   const visti = await giudizi.attenzione(inFila.slice(0, GIUDIZI_PER_LETTURA))
-  const docs = giudizi.primaChiAspetta(inFila, visti).slice(0, DOCS_PER_LETTURA)
-  if (!docs.length) return []
+  const davanti = new Set(inFila.filter(d => imp.daNonPerdere.has(mittenteDi(d))).map(d => d.id))
+  const dietro = new Set(inFila.filter(d => {
+    const mediana = imp.etaVecchia.get(d.fonte)
+    if (mediana === undefined) return false
+    const eta = (adesso - Date.parse(d.quando ?? '')) / 86_400_000
+    return Number.isFinite(eta) && eta > mediana
+  }).map(d => d.id))
+  const ordinati = giudizi.primaChiAspetta(inFila, visti, { davanti, dietro })
+  const docs = ordinati.slice(0, DOCS_PER_LETTURA)
+  for (const d of ordinati.slice(DOCS_PER_LETTURA)) finito(d, 'posti')
+  if (!docs.length) { scriviEsame(); return [] }
+  // «modello» si scrive solo quando la risposta è stata letta davvero (in
+  // `chiama`): un rifiuto o un JSON tronco non sono «il modello ha detto no»,
+  // e per un giorno intero nasconderebbero trenta documenti alla lettura dopo
 
   // quello che le hai già detto: vale più di qualsiasi cosa ci sia nei file
   const f = fuoco()
@@ -2101,14 +2177,17 @@ export async function generaFeed(nuovi: Documento[] = []): Promise<VoceFeed[]> {
     scartati.indirizzi.length
       ? '\nHa scartato la posta di questi mittenti automatici:\n' +
         scartati.indirizzi.slice(0, MITTENTI_NOMINATI).join(', ')
-      : ''
+      : '',
+    // quello che le sue ragioni gli hanno insegnato: le cose vecchie, le
+    // carte che non ha capito, le persone la cui posta non è per lei, e
+    // quelle a cui risponde da sola (`feed-impara.ts`)
+    righePrompt(imp) ? `\n${righePrompt(imp)}` : ''
   ].filter(Boolean).join('\n')
 
   const chiama = async (aggiunta: string): Promise<VoceFeed[]> => {
     const risposta = await m.crea({
       ...parametri('lettura', 16000, schemaFeed(docs.map(d => d.id))),
-      system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori
-al massimo ${VOCI_PER_LETTURA} cose che hanno bisogno di lei oggi. Zero è una risposta giusta.
+      system: conLaLingua(`Sei Myynd. Leggi il materiale recente di questa persona e tira fuori tutte e sole le cose che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Non c'è un numero da raggiungere; zero è una risposta giusta. Nel dubbio, fuori.
 
 ${indicazioni}
 
@@ -2143,18 +2222,14 @@ Quello che ti ha detto lei batte quello che dicono i documenti: i file sono
 quasi sempre indietro sulla realtà. Se ti ha detto che una cosa è fatta, è
 fatta, anche se il documento non lo sa ancora.
 
-Per ognuna: che tipo è, un titolo, UNA riga sotto, quanto è urgente in DUE O
-TRE PAROLE — «entro venerdì», «questa settimana», «nessuna fretta» — mai una
-frase, da che fonte arriva, l'identificativo del documento fra quelli
-forniti, e un «perché» di dodici parole al massimo: per
-quale progetto o obiettivo conta, o quale decisione chiede. Se non sai
-scrivere il perché, la voce non ci va.
+Per ognuna: che tipo è; un titolo; UNA riga sotto, il dettaglio che lei apre se vuole; quando, in due o tre parole, con il giorno o la data come li hai letti («entro venerdì», «giovedì 9:30», «3 ottobre») o «nessuna fretta»; da che fonte arriva; l'identificativo del documento fra quelli forniti; e il «perché oggi»: una riga di al massimo dodici parole presa da questo documento, che dice chi aspetta e da quando, la data, o cosa si ferma senza di lei. Mai oggi, domani o ieri nel titolo, nella riga o nel perché: il giorno o la data. Mai il progetto o l'obiettivo. Se non sai scriverla, la voce non ci va.
 
 Il titolo è un verbo e la cosa concreta, al massimo nove parole, come lo
 direbbe un collega a voce: «Rispondi a Sara sulla proposta», «Paga la fattura
 di Rossi». La riga sotto è UNA frase di al massimo diciotto parole che dice
 CHI aspetta o PERCHÉ adesso: «Sara aspetta un sì o un no da lunedì per chiudere
-il preventivo». Non cucire due fonti con «mentre»; non raccontare cosa dice un
+il preventivo». Perché oggi, bene: «Sara aspetta il sì da lunedì per chiudere il preventivo.» «La fattura di Rossi scade venerdì 26.» Male: «Conta per il progetto H-Farm.» «Fa avanzare il sito.»
+Non cucire due fonti con «mentre»; non raccontare cosa dice un
 documento, un commit o una revisione: di' la situazione. Niente gergo di
 prodotto o di consulenza. Male: «Verify Jev keeps Myynd data local before
 expanding it» / «The September 20 commit uses Jev for reading decisions, while
@@ -2170,7 +2245,7 @@ da 12 a 500 caratteri, nella lingua originale. Se non puoi citarla, lascia
 fuori la voce. Non inventare scadenze, nomi, obiettivi, obblighi o urgenza.
 
 Sii concreto: nomi, cifre e date che hai letto davvero. Niente inventato.
-Nel dubbio, lascia fuori: meno voci, giuste.
+Nel dubbio, fuori.
 Scrivi in ${nellaLingua()}.`),
       messages: [{
         role: 'user',
@@ -2192,34 +2267,64 @@ Scrivi in ${nellaLingua()}.`),
       const parsed = JSON.parse(estraiJSON(testo)).voci
       if (!Array.isArray(parsed)) return []
       const voci = parsed as VoceFeed[]
+      // letti davvero: da qui in poi «niente carta» vuol dire che il modello ha detto no
+      for (const d of docs) finito(d, 'modello')
       // Only exact source identifiers survive, including with providers that
       // ignore JSON schema. A plausible title is not a document identifier.
       const veri = new Map(docs.map(d => [d.id, d]))
       const usati = new Set<string>()
       // una voce che il modello propone e la verifica butta via si scrive nel
       // registro: «niente da segnalare» senza questa riga non si può indagare
-      const scarta = (v: VoceFeed, perche: string) => {
+      // e nel registro dell'esame (`feed_esame`), con il motivo: «verifica»
+      const scarta = (v: VoceFeed, perche: string, motivo: string) => {
         console.warn(`myynd · lettura · scartata «${String(v?.titolo ?? '').slice(0, 80)}»: ${perche}`)
-        return false
+        const d = v && typeof v.doc === 'string' ? veri.get(v.doc) : undefined
+        if (d && !usati.has(d.id)) finito(d, 'verifica', motivo)
+        return null
       }
       console.log(`myynd · lettura · ${docs.length} documenti guardati, ${voci.length} voci proposte`)
       // con MYYND_DEBUG_LETTURA=1 si vede anche cosa ha detto il modello: è
       // l'unico modo di capire un feed vuoto che non dovrebbe esserlo
       if (process.env.MYYND_DEBUG_LETTURA === '1') console.log(`myynd · lettura · risposta del modello: ${testo.slice(0, 2000)}`)
-      return voci.filter(v => {
-        if (!v || typeof v.doc !== 'string' || !veri.has(v.doc) || usati.has(v.doc)) return scarta(v, 'documento non fra quelli letti, o già usato')
-        if (!['Da decidere', 'Da leggere', 'Scadenza'].includes(v.tipo) || typeof v.urgenza !== 'string' || v.urgenza.length > 60) return scarta(v, 'tipo o urgenza fuori forma')
-        if (!validaVoceFeed(v, veri.get(v.doc)!)) return scarta(v, 'la prova non regge (citazione, verbo o numeri)')
-        const fonte = `${veri.get(v.doc)!.titolo}\n${corpoAttuale(veri.get(v.doc)!)}`
-        if (!tempoFondato(v.urgenza, fonte)) return scarta(v, 'urgenza con un giorno che la fonte non nomina')
-        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return scarta(v, 'scadenza senza una data nella prova')
+      const oggiInizio = inizioDelGiorno(new Date(adesso)).getTime()
+      const esamina = (v: VoceFeed): VoceFeed | null => {
+        if (!v || typeof v.doc !== 'string' || !veri.has(v.doc) || usati.has(v.doc)) return scarta(v, 'documento non fra quelli letti, o già usato', 'documento')
+        const d = veri.get(v.doc)!
+        if (!['Da decidere', 'Da leggere', 'Scadenza'].includes(v.tipo) || typeof v.urgenza !== 'string' || v.urgenza.length > 60) return scarta(v, 'tipo o urgenza fuori forma', 'forma')
+        if (!validaVoceFeed(v, d)) return scarta(v, 'la prova non regge (citazione, verbo o numeri)', 'prova')
+        // il giorno che «domani» voleva dire nella mail regge anche qui: il
+        // prompt chiede «giovedì 9:30» e non «domani», e una carta che scrive
+        // il giorno giusto non si butta via (e poi si tace per un giorno)
+        if (!giornoFondato(v.urgenza, d)) return scarta(v, 'urgenza con un giorno che la fonte non nomina', 'urgenza')
+        if (v.tipo === 'Scadenza' && !/\b(?:\d{1,4}[/.:-]\d{1,2}|entro|scadenza|deadline|due|by|before)\b/i.test(v.prova ?? '')) return scarta(v, 'scadenza senza una data nella prova', 'scadenza')
+        /*
+         * P2 · il perché oggi, e i giorni, controllati dove la carta nasce.
+         *
+         * «Domani» scritto in una carta è vero un giorno solo: si scioglie nel
+         * giorno che voleva dire nel calendario del documento («tomorrow» in
+         * una mail di lunedì è «Tuesday»). Poi il perché deve reggere sul
+         * documento: né «conta per il progetto», né un numero o un giorno che
+         * la fonte non nomina. E una richiesta con la data già passata non
+         * nasce: sarebbe scaduta domattina.
+         */
+        const base = new Date(d.quando ?? adesso)
+        const quandoDoc = Number.isFinite(base.getTime()) ? base : new Date(adesso)
+        const titolo = assoluto(String(v.titolo ?? ''), quandoDoc)
+        const testoCarta = assoluto(String(v.testo ?? ''), quandoDoc)
+        const perche = assoluto(typeof v.perche === 'string' ? v.perche.trim() : '', quandoDoc)
+        const guaio = percheFondato(perche, { titolo: d.titolo, testo: corpoAttuale(d), autore: d.autore, quando: d.quando }, suoi)
+        if (guaio) return scarta(v, `il perché oggi non regge (${guaio})`, `perche:${guaio}`)
+        if (conRelativi(`${titolo} ${testoCarta} ${perche}`)) return scarta(v, 'oggi o domani in una carta', 'relativo')
+        const scadenza = scadenzaDi(v.urgenza, quandoDoc)
+        if (scadenza && scadenza.getTime() < oggiInizio) return scarta(v, 'la data è già passata', 'data_passata')
         usati.add(v.doc)
-        return true
-      }).slice(0, VOCI_PER_LETTURA).map(v => ({
-        ...v,
-        perche: typeof v.perche === 'string' ? v.perche.trim() : '',
-        fonte: veri.get(v.doc)!.fonte
-      }))
+        return { ...v, titolo, testo: testoCarta, perche, fonte: d.fonte, nata: d.quando ?? null }
+      }
+      const valide = voci.flatMap(v => { const e = esamina(v); return e ? [e] : [] })
+      // il parapetto, in codice e non nel prompt: quello che resta fuori è
+      // tagliato dai posti, non «letto e detto no»
+      for (const v of valide.slice(VOCI_PER_LETTURA)) { const d = veri.get(v.doc); if (d) finito(d, 'posti', 'parapetto') }
+      return valide.slice(0, VOCI_PER_LETTURA)
       /*
        * E fuori quelle che sono l'obiettivo di un progetto, riscritto.
        *
@@ -2237,6 +2342,7 @@ Scrivi in ${nellaLingua()}.`),
         .filter(v => {
           if (!suoi.length || !progetti.eUnObiettivo(`${v.titolo} ${v.testo ?? ''}`, suoi)) return true
           console.warn(`myynd · lettura: «${v.titolo}» è l'obiettivo di un progetto riscritto, non una notizia`)
+          const d = veri.get(v.doc); if (d) finito(d, 'obiettivo')
           return false
         })
     } catch {
@@ -2263,14 +2369,22 @@ Scrivi in ${nellaLingua()}.`),
   if (voci.some(v => linguaSbagliata(daLeggere(v), l))) voci = await chiama(`\n\n${soloInLingua(l)}`)
   const buone = voci.filter(v => !linguaSbagliata(daLeggere(v), l))
   if (buone.length < voci.length) console.warn('myynd · lettura: risposta nella lingua sbagliata, scartata')
+  for (const v of voci) if (!buone.includes(v)) { const d = documento(v.doc); if (d) finito(d, 'lingua') }
   /*
    * L'ultimo passaggio, in `rifinitura.ts`: via quello che ha già, a ognuna
-   * il suo progetto, riscritta quella che non si capisce al primo sguardo,
-   * il peso di ognuna, la pillola corta, niente lineette. Sono giudizi sulla
+   * il suo progetto, riscritta quella che non si capisce al primo sguardo
+   * (con la soglia alzata dai suoi «non si capisce», e i suoi esempi), il
+   * peso di ognuna, la pillola assoluta, niente lineette. Sono giudizi sulla
    * *voce*, non sul documento da cui viene, e si fanno dopo che è nata e
    * prima che si salvi. Senza Jev restano solo le lineette via e la pillola.
    */
-  return await rifinisci(buone, { progetti: suoi, registro: 'lettura' })
+  const rifinite = await rifinisci(buone, { progetti: suoi, registro: 'lettura', sogliaChiara: imp.sogliaChiara, oscure: imp.oscure })
+  const sopravvissute = new Set(rifinite.map(v => v.doc))
+  for (const v of buone) { const d = documento(v.doc); if (d) finito(d, sopravvissute.has(v.doc) ? 'carta' : 'doppione') }
+  scriviEsame()
+  // la misura, una riga a ogni lettura: quante viste, quante giuste, quante mancate
+  try { await caricaModuli(); console.log(rigaDelRegistro(misura(14, Date.now()))) } catch (e) { console.warn('myynd · misura:', e instanceof Error ? e.message : e) }
+  return rifinite
 }
 
 /**

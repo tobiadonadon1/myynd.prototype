@@ -23,8 +23,10 @@
 //      stessa cosa;
 //   4. il peso, da 0 a 3: quanto conta oggi, giudicato sulla carta, con il
 //      giudizio già dato sul documento come punto di partenza;
-//   5. la pillola dell'urgenza, accorciata dal codice quando dentro c'è una
-//      data che si sa leggere;
+//   5. la pillola dell'urgenza, scritta assoluta («22 set 9:30») rispetto al
+//      giorno in cui la carta è nata, quando dentro c'è una data che si sa
+//      leggere: la pagina la legge relativa a oggi («Domani 9:30», poi
+//      «Oggi 9:30») con `data-carta.pillolaDi`;
 //   6. via le lineette, da tutto.
 //
 // Le tre regole di `jev.ts` valgono anche qui, e la prima più di tutte:
@@ -40,6 +42,12 @@ import { chiediJSON, collegato } from './modello.ts'
 import { tempoFondato } from './rilevanza.ts'
 import { elencoFeed } from './store.ts'
 import { senzaTrattini } from './testo.ts'
+import { assoluta, conRelativi, dataNel, oraNel, pillolaDi, inizioDelGiorno, GIORNI_EN, GIORNI_IT, MESI_EN_CORTI, MESI_IT_CORTI, PERCHE_DESCRIZIONE } from './data-carta.ts'
+import { PERCHE_PAROLE, percheFondato } from './perche-oggi.ts'
+
+// quando scade una carta: sta in `data-carta.ts`, una foglia; da qui la
+// leggono le prove e il resoconto della settimana
+export { scadenzaDi } from './data-carta.ts'
 
 export type Carta = {
   tipo?: string | null
@@ -51,6 +59,8 @@ export type Carta = {
   doc?: string | null
   progetto?: string | null
   peso?: number | null
+  /** Quando è nata (ISO): «domani» nella sua urgenza è domani rispetto a questo giorno. */
+  nata?: string | null
 }
 
 export type Progetto = { id: string; nome: string; obiettivo?: string | null }
@@ -64,6 +74,10 @@ export type Opzioni = {
   registro?: string
   /** Il giorno di oggi, per le prove: «domani» è domani rispetto a questo. */
   oggi?: Date
+  /** Sotto questa chiarezza si riscrive: sale quando lui scarta carte come «non si capisce» (feed-impara). */
+  sogliaChiara?: number
+  /** Le carte che ha trovato poco chiare: esempi di come NON scrivere, per la riscrittura. */
+  oscure?: readonly { titolo: string; perche: string }[]
 }
 
 // — i controlli del codice —
@@ -104,102 +118,29 @@ const unaRiga = (s: string) => s.replace(/\s+/g, ' ').trim()
  * Vuoto vuol dire «passa». Sono i controlli che un prompt non può garantire:
  * si misurano, e chi li misura è un contatore di parole, non un modello.
  */
-export function controlla(c: Pick<Carta, 'titolo' | 'testo' | 'urgenza'>): string[] {
+export function controlla(c: Pick<Carta, 'titolo' | 'testo' | 'urgenza' | 'perche'>): string[] {
   const perche: string[] = []
   const titolo = unaRiga(c.titolo ?? '')
   const testo = unaRiga(c.testo ?? '')
   const urgenza = unaRiga(c.urgenza ?? '')
+  const percheOggi = unaRiga(c.perche ?? '')
   if (!titolo) perche.push('titolo vuoto')
   else if (parole(titolo) > TITOLO_PAROLE || titolo.length > TITOLO_CARATTERI) perche.push('titolo lungo')
   if (parole(testo) > TESTO_PAROLE) perche.push('testo lungo')
-  if (CUCITURA.test(testo) || CUCITURA.test(titolo)) perche.push('due fonti cucite')
-  if (conGergo(titolo) || conGergo(testo)) perche.push('gergo')
+  if (parole(percheOggi) > PERCHE_PAROLE) perche.push('perché lungo')
+  if (CUCITURA.test(testo) || CUCITURA.test(titolo) || CUCITURA.test(percheOggi)) perche.push('due fonti cucite')
+  if (conGergo(titolo) || conGergo(testo) || conGergo(percheOggi)) perche.push('gergo')
   if (parole(urgenza) > URGENZA_PAROLE) perche.push('urgenza lunga')
+  // «domani» scritto in una carta è vero un giorno solo: si riscrive con il giorno
+  if (conRelativi(`${titolo} ${testo} ${percheOggi}`)) perche.push('giorno relativo')
   return perche
 }
 
 // — la pillola —
-
-const MESE_EN = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?'
-const MESE_IT = 'gen(?:naio)?|feb(?:braio)?|mar(?:zo)?|apr(?:ile)?|mag(?:gio)?|giu(?:gno)?|lug(?:lio)?|ago(?:sto)?|set(?:tembre)?|ott(?:obre)?|nov(?:embre)?|dic(?:embre)?'
-const MESE = `(?:${MESE_EN}|${MESE_IT})`
-const MESI_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-const MESI_IT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-const MESI_EN_CORTI = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const MESI_IT_CORTI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-const GIORNI_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const GIORNI_IT = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
-const GIORNO_SETTIMANA = /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|domenica|luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato)\b/i
-
-function meseDa(parola: string): number {
-  const p = parola.toLowerCase().slice(0, 3)
-  const en = MESI_EN.indexOf(p)
-  return en >= 0 ? en : MESI_IT.indexOf(p)
-}
-
-const inizioDelGiorno = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-
-/**
- * L'ora dentro un'urgenza, se c'è: «9:30am» → «9:30», «3pm» → «15:00»,
- * «alle 14» → «14:00». Solo la prima: «9:30am. 10am Eastern Time» è un'ora
- * sola, detta in due fusi.
- */
-function oraNel(s: string): string | null {
-  const m = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(s)
-    ?? /\b(\d{1,2}):(\d{2})\b/.exec(s)
-    ?? /\b(?:alle|ore|at)\s+(\d{1,2})(?:[:.](\d{2}))?\b/i.exec(s)
-  if (!m) return null
-  let ore = Number(m[1])
-  const minuti = m[2] ? Number(m[2]) : 0
-  const mezza = m[3]?.toLowerCase()
-  if (ore > 23 || minuti > 59) return null
-  if (mezza === 'pm' && ore < 12) ore += 12
-  if (mezza === 'am' && ore === 12) ore = 0
-  return `${ore}:${String(minuti).padStart(2, '0')}`
-}
-
-/**
- * La data dentro un'urgenza, se il codice la sa leggere: ISO, «Sep 22»,
- * «22 settembre», «22/09», «domani», «venerdì». Senza anno vale quest'anno,
- * salvo che sia già passata da più di un mese: allora è l'anno prossimo.
- */
-function dataNel(s: string, oggi: Date): Date | null {
-  const senzaAccenti = s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const anno = (a: string | undefined) => a ? (a.length === 2 ? 2000 + Number(a) : Number(a)) : null
-  const componi = (a: number | null, m: number, g: number): Date | null => {
-    if (m < 0 || m > 11 || g < 1 || g > 31) return null
-    let d = new Date(a ?? oggi.getFullYear(), m, g)
-    if (d.getMonth() !== m) return null
-    if (a === null && d.getTime() < inizioDelGiorno(oggi).getTime() - 30 * 86_400_000) d = new Date(d.getFullYear() + 1, m, g)
-    return d
-  }
-  let m: RegExpExecArray | null
-  if ((m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(senzaAccenti))) return componi(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  if ((m = new RegExp(`\\b(${MESE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:,?\\s*(\\d{4}))?`, 'i').exec(senzaAccenti))) {
-    return componi(anno(m[3]), meseDa(m[1]), Number(m[2]))
-  }
-  if ((m = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th|°)?\\s+(?:di\\s+|of\\s+)?(${MESE})\\b(?:\\s+(\\d{4}))?`, 'i').exec(senzaAccenti))) {
-    return componi(anno(m[3]), meseDa(m[2]), Number(m[1]))
-  }
-  if ((m = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(senzaAccenti))) {
-    const a = Number(m[1]), b = Number(m[2])
-    // «22/9» è giorno/mese in italiano e in ogni caso in cui il primo numero non può essere un mese
-    const [g, mese] = a > 12 || (b <= 12 && lingua() === 'it') ? [a, b] : [b, a]
-    return componi(anno(m[3]), mese - 1, g)
-  }
-  if (/\b(?:today|oggi)\b/i.test(senzaAccenti)) return inizioDelGiorno(oggi)
-  if (/\b(?:tomorrow|domani)\b/i.test(senzaAccenti)) return new Date(inizioDelGiorno(oggi).getTime() + 86_400_000)
-  if ((m = GIORNO_SETTIMANA.exec(senzaAccenti))) {
-    const nome = m[1].toLowerCase()
-    const en = GIORNI_EN.findIndex(g => g.toLowerCase() === nome)
-    const it = GIORNI_IT.findIndex(g => g.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === nome)
-    const giorno = en >= 0 ? en : it
-    if (giorno < 0) return null
-    const fra = (giorno - oggi.getDay() + 7) % 7
-    return new Date(inizioDelGiorno(oggi).getTime() + fra * 86_400_000)
-  }
-  return null
-}
+//
+// Le date le legge `data-carta.ts` (`dataNel`, `oraNel`): qui resta solo la
+// pillola relativa a oggi, che le prove conoscono. Sul feed la pillola si
+// salva assoluta (`assoluta`) e si legge relativa (`pillolaDi`).
 
 /**
  * La pillola, corta: «Domani 9:30», «Giovedì», «22 set», «No rush».
@@ -240,14 +181,19 @@ const VERI: Ferri = { chiediJSON: o => chiediJSON(o), collegato: () => collegato
 let ferri: Ferri = VERI
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
+// la descrizione del «perché oggi» sta in perche-oggi.ts (una foglia): da qui la
+// leggono le prove di prima
+export { PERCHE_DESCRIZIONE }
+
 const FORMA = {
   type: 'object',
   properties: {
     titolo: { type: 'string', description: 'Un verbo all\'inizio e la cosa concreta, al massimo nove parole.' },
-    testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: chi aspetta, o perché adesso.' },
-    urgenza: { type: 'string', description: 'Al massimo tre parole («entro venerdì», «domani 9:30», «nessuna fretta»), o vuota.' }
+    testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: il dettaglio, chi aspetta o cosa chiede. Mai oggi, domani o ieri.' },
+    urgenza: { type: 'string', description: 'Al massimo tre parole («entro venerdì», «giovedì 9:30», «nessuna fretta»), o vuota.' },
+    perche: { type: 'string', description: PERCHE_DESCRIZIONE }
   },
-  required: ['titolo', 'testo', 'urgenza'],
+  required: ['titolo', 'testo', 'urgenza', 'perche'],
   additionalProperties: false
 }
 
@@ -279,29 +225,33 @@ const testoDi = (v: unknown, max: number) => typeof v === 'string' ? senzaTratti
 /**
  * La carta riscritta dal modello grande, o `null` se è meglio quella di prima.
  *
- * Una volta sola, con uno schema di tre campi. Poi il codice rilegge: gli
- * stessi controlli di `controlla`, la stessa cosa di cui si parlava
- * (`stessoSoggetto`), e nessun giorno inventato (`tempoFondato`: un
- * «venerdì» che nella carta non c'era non entra). L'urgenza segue un ordine
- * suo: prima la pillola del codice, se sa leggere quella di prima; poi
- * quella del modello, se corta e fondata; altrimenti resta quella di prima.
+ * Una volta sola, con uno schema di quattro campi. Poi il codice rilegge: gli
+ * stessi controlli di `controlla` sui quattro campi, la stessa cosa di cui
+ * si parlava (`stessoSoggetto`), nessun giorno inventato (`tempoFondato`: un
+ * «venerdì» che nella carta non c'era non entra), un «perché oggi» che regge
+ * sulla carta di prima (`percheFondato`), e niente «oggi» o «domani». L'urgenza
+ * segue un ordine suo: prima quella del codice, se sa leggere quella di prima
+ * (scritta assoluta rispetto alla nascita); poi quella del modello, se corta e
+ * fondata; altrimenti resta quella di prima.
  */
-async function riscrivi(c: Carta, oggi: Date): Promise<Pick<Carta, 'titolo' | 'testo' | 'urgenza'> | null> {
+async function riscrivi(c: Carta, base: Date, oscure: readonly { titolo: string; perche: string }[] = []): Promise<Pick<Carta, 'titolo' | 'testo' | 'urgenza' | 'perche'> | null> {
   if (!ferri.collegato()) return null
   const out = await ferri.chiediJSON<Record<string, unknown>>({
-    lavoro: 'estrazione', max_tokens: 300, formato: FORMA,
-    system: `Sei Myynd. Riscrivi UNA carta della prima pagina di questa persona, così che la capisca al primo sguardo: cosa fare, e perché conta adesso.
+    lavoro: 'estrazione', max_tokens: 400, formato: FORMA,
+    system: `Sei Myynd. Riscrivi UNA carta della prima pagina di questa persona, così che la capisca al primo sguardo: cosa fare, e perché oggi.
 
 — «titolo»: un verbo all'inizio e la cosa concreta. Al massimo ${TITOLO_PAROLE} parole.
-— «testo»: UNA frase sola, al massimo ${TESTO_PAROLE} parole, che dice chi aspetta o perché adesso. Parole piane, come si parla a un collega. Non cucire due fonti con «mentre»; non raccontare commit, revisioni, corsie, posizionamenti o cosa dice un documento: di' la situazione.
-— «urgenza»: al massimo ${URGENZA_PAROLE} parole («entro venerdì», «domani 9:30», «nessuna fretta»), o vuota se la carta non dice quando.
+— «testo»: UNA frase sola, al massimo ${TESTO_PAROLE} parole: il dettaglio, chi aspetta o cosa chiede. Parole piane, come si parla a un collega. Non cucire due fonti con «mentre»; non raccontare commit, revisioni, corsie, posizionamenti o cosa dice un documento: di' la situazione.
+— «urgenza»: al massimo ${URGENZA_PAROLE} parole («entro venerdì», «giovedì 9:30», «nessuna fretta»), o vuota se la carta non dice quando.
+— «perche»: UNA riga, al massimo ${PERCHE_PAROLE} parole: perché oggi, cioè chi aspetta e da quando, la data, o cosa si ferma. Mai oggi, domani o ieri: il giorno o la data. Mai il progetto o l'obiettivo.
 
-Nomi, date, cifre e giorni («domani», «venerdì») solo se stanno già nella carta: non aggiungere niente, e non cambiare la cosa di cui parla. Niente gergo di prodotto o di consulenza. Niente lineette. Niente virgolette nel titolo.
+Nomi, date, cifre e giorni («venerdì») solo se stanno già nella carta: non aggiungere niente, e non cambiare la cosa di cui parla. Niente gergo di prodotto o di consulenza. Niente lineette. Niente virgolette nel titolo.
 
 Male: «Verify Jev keeps Myynd data local before expanding it» / «The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service.»
 Bene: «Check that Jev keeps Myynd data local» / «Jev's judgments go through TypeSafe's service: decide that before using it more widely.»
 Male: «Unblock genuine incoming DM replies in Hermes» / «The September 18 upgrade says this authorized lane remains blocked despite the restored X schedules.»
 Bene: «Fix the blocked DM replies in Hermes» / «Real replies to DMs still don't go out since the September 18 upgrade.»
+Perché oggi, bene: «Sara aspetta il sì da lunedì per chiudere il preventivo.» «La fattura di Rossi scade venerdì 26.» Male: «Conta per il progetto H-Farm.» «Fa avanzare il sito.»${oscure.length ? `\nMale (le ha trovate poco chiare lui):\n${oscure.map(o => `— «${o.titolo}» / «${o.perche}»`).join('\n')}` : ''}
 Scrivi in ${nellaLingua()}.`,
     messages: [{
       role: 'user',
@@ -313,18 +263,21 @@ Scrivi in ${nellaLingua()}.`,
   if (!out) return null
   const titolo = testoDi(out.titolo, 120)
   const testo = testoDi(out.testo, 240)
+  const perche = testoDi(out.perche, 200)
   const dalModello = testoDi(out.urgenza, 40)
-  if (!titolo || !testo) return null
-  if (controlla({ titolo, testo, urgenza: '' }).length) return null
+  if (!titolo || !testo || !perche) return null
+  if (controlla({ titolo, testo, urgenza: '', perche }).length) return null
   if (!stessoSoggetto(c.titolo, titolo)) return null
   const originale = `${c.titolo} ${c.testo} ${c.urgenza ?? ''} ${c.perche ?? ''}`
   if (!tempoFondato(`${titolo} ${testo}`, originale)) return null
+  if (percheFondato(perche, { testo: originale }) !== null) return null
+  if (conRelativi(`${titolo} ${testo} ${perche}`)) return null
   const diPrima = unaRiga(c.urgenza ?? '')
-  const dalCodice = pillola(diPrima, oggi)
+  const dalCodice = assoluta(diPrima, base)
   const urgenza = dalCodice !== diPrima ? dalCodice
     : parole(dalModello) <= URGENZA_PAROLE && tempoFondato(dalModello, originale) ? dalModello
     : diPrima
-  return { titolo, testo, urgenza }
+  return { titolo, testo, urgenza, perche }
 }
 
 // — il passaggio intero —
@@ -370,17 +323,22 @@ export async function rifinisci<T extends Carta>(voci: readonly T[], opz: Opzion
 
   // 3. si capisce? e 4. quanto conta: le due domande in una chiamata, per carta
   const giudicate = await giudizi.giudicaCarte(carte, { oggi })
+  // la soglia sale quando lui ha scartato carte come «non si capisce»: si riscrive di più
+  const soglia = opz.sogliaChiara ?? giudizi.SOGLIA_CHIARA
+  const oscure = opz.oscure ?? []
   let daRiscrivere = 0, riscritte = 0, conPeso = 0
   carte = await Promise.all(carte.map(async v => {
     const g = giudicate.get(v)
     let c: T = v
-    // la pillola prima del controllo: un'urgenza che il codice sa accorciare
-    // non è un motivo per pagare una riscrittura
-    const guardata = { ...v, urgenza: typeof v.urgenza === 'string' ? pillola(v.urgenza, oggi) : v.urgenza }
-    if (g && (g.chiara < giudizi.SOGLIA_CHIARA || controlla(guardata).length)) {
+    const nata = v.nata ? new Date(v.nata) : oggi
+    const base = Number.isFinite(nata.getTime()) ? nata : oggi
+    // la pillola prima del controllo, nella forma in cui si legge: un'urgenza
+    // che il codice sa accorciare non è un motivo per pagare una riscrittura
+    const guardata = { ...v, urgenza: typeof v.urgenza === 'string' ? pillolaDi(v.urgenza, base.toISOString(), oggi) : v.urgenza }
+    if (g && (g.chiara < soglia || controlla(guardata).length)) {
       daRiscrivere++
-      const motivi = [...(g.chiara < giudizi.SOGLIA_CHIARA ? [`chiara ${g.chiara.toFixed(2)}`] : []), ...controlla(guardata)]
-      const nuova = await riscrivi(v, oggi)
+      const motivi = [...(g.chiara < soglia ? [`chiara ${g.chiara.toFixed(2)}`] : []), ...controlla(guardata)]
+      const nuova = await riscrivi(v, base, oscure)
       if (nuova) {
         riscritte++
         console.log(`myynd · ${registro} · riscritta (${motivi.join(', ')}): «${v.titolo.slice(0, 60)}» → «${nuova.titolo.slice(0, 60)}»`)
@@ -396,12 +354,13 @@ export async function rifinisci<T extends Carta>(voci: readonly T[], opz: Opzion
     return { ...c, peso: Math.round(peso * 100) / 100 }
   }))
 
-  // 5. la pillola e 6. le lineette
+  // 5. la pillola, scritta assoluta rispetto alla nascita («22 set 9:30»: la
+  // pagina la legge relativa a oggi con `pillolaDi`), e 6. le lineette
   carte = carte.map(v => ({
     ...v,
     titolo: senzaTrattini(unaRiga(v.titolo)),
     testo: senzaTrattini(unaRiga(v.testo)),
-    ...(typeof v.urgenza === 'string' ? { urgenza: senzaTrattini(pillola(v.urgenza, oggi)) } : {}),
+    ...(typeof v.urgenza === 'string' ? { urgenza: senzaTrattini(assoluta(v.urgenza, v.nata && Number.isFinite(Date.parse(v.nata)) ? new Date(v.nata) : oggi)) } : {}),
     ...(typeof v.perche === 'string' ? { perche: senzaTrattini(v.perche) } : {}),
     ...(typeof v.offerta === 'string' ? { offerta: senzaTrattini(v.offerta) } : {})
   }))

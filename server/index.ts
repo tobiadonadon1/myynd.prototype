@@ -72,6 +72,11 @@ import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
 import * as riferimento from './riferimento.ts'
 import * as valutaFeed from './valuta-feed.ts'
+// P2 · il feed con l'asticella: le carte mancate, quando l'ha vista, se ha risposto dalla posta, la misura
+import * as mancate from './mancate.ts'
+import { segnaViste, risposteFuori } from './feed-dati.ts'
+import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
+import * as misuraFeed from './misura-feed.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -2510,6 +2515,8 @@ async function rileggiDaSola() {
     })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
+    // P2 · le carte mancate: una risposta mandata dalla posta, una riga scritta a mano. Senza modello.
+    await mancate.forse().catch(e => console.warn('myynd · mancate:', e instanceof Error ? e.message : e))
     await dopoLArrivo(daQuando, nuovi)
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
@@ -2792,7 +2799,11 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
   const testo = String(req.body?.testo ?? '')
   try {
     const stato = req.body?.stato ? String(req.body.stato) : undefined
-    const esito = await timone.rispondiAVoce(req.params.id, testo, stato)
+    // P2 · «Non utile» con una delle quattro ragioni: vecchia, fatta, non_mia, non_chiara
+    const ragione = typeof req.body?.ragione === 'string' ? req.body.ragione : undefined
+    // una ragione fuori dal vocabolario è un errore di chi chiede, non del server
+    if (ragione !== undefined && !eRagioneScarto(ragione)) return res.status(400).json({ errore: 'Ragione sconosciuta.' })
+    const esito = await timone.rispondiAVoce(req.params.id, testo, stato, ragione)
     const ore = cfg.leggi().oreFatte ?? 48
     // di quale progetto è, subito: l'avviso sotto il bottone lo dice
     const fatto: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
@@ -2857,8 +2868,19 @@ app.post('/api/feed/:id/:stato', (req, res) => {
    * Rimetterla in aperto invece è un ripensamento, e un ripensamento non è un
    * motivo: lì il motivo di prima si cancella.
    */
+  // P2 · solo «fatto» e «aperto»: una parola qualunque non è uno stato, e non
+  // deve diventare una rotta per sbaglio. Con «fatto» la ragione dice se l'ha
+  // chiusa lui o se aveva già risposto dalla sua posta; «aperto» (Annulla)
+  // cancella motivo e ragione.
+  if (req.params.stato !== 'fatto' && req.params.stato !== 'aperto') return res.status(400).json({ errore: 'Stato sconosciuto.' })
   const fatto = req.params.stato === 'fatto'
-  store.cambiaStatoFeed(req.params.id, fatto ? 'fatto' : 'aperto', fatto ? 'Già fatto.' : '')
+  if (fatto) {
+    const riga = store.voceFeed(req.params.id)
+    const risposta = riga ? risposteFuori([{ id: riga.id, doc: riga.doc ?? null, contesto: riga.contesto ?? null, quando: riga.quando }]).get(riga.id) : undefined
+    store.cambiaStatoFeed(req.params.id, 'fatto', risposta ? MOTIVO_FUORI : 'Già fatto.', risposta ? 'fuori' : 'lui')
+  } else {
+    store.cambiaStatoFeed(req.params.id, 'aperto', '', null)
+  }
   // di quale progetto è, subito: l'avviso sotto il bottone lo dice
   const cosa: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
   res.json({ ok: true, registrato: { progetto: fatto ? dopoFatto.progettoDelFatto(cosa) : null } })
@@ -3150,7 +3172,7 @@ app.post('/api/compiti', (req, res) => {
   // una voce del feed promossa non resta anche nel feed: sarebbe la stessa cosa
   // in due posti, con due stati che divergono al primo tocco
   if (req.body?.voce && store.voceFeed(String(req.body.voce))) {
-    store.cambiaStatoFeed(String(req.body.voce), 'fatto', 'Passata nella lista.')
+    store.cambiaStatoFeed(String(req.body.voce), 'fatto', 'Passata nella lista.', 'lista')
   }
   } catch (e) { return errore(res, e) }
 
@@ -4469,6 +4491,31 @@ app.post('/api/azzera', (req, res) => {
 // — P1B: rotte, fine —
 
 // — P2: rotte, inizio —
+
+/**
+ * Le carte che ha visto davvero: la pagina lo dice solo quando almeno metà
+ * della carta è stata sullo schermo per un secondo con la finestra davanti
+ * (`src/feed-vista.ts`). Una volta per carta. Nessun evento sul filo: questa
+ * rotta non deve mai far ricaricare il feed.
+ */
+app.post('/api/feed/viste', (req, res) => {
+  const ids = req.body?.ids
+  if (!Array.isArray(ids)) return res.status(400).json({ errore: 'Mancano le voci.' })
+  const buoni = [...new Set(ids.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 50)
+  res.json({ ok: true, segnate: buoni.length ? segnaViste(buoni) : 0 })
+})
+
+/** La misura del feed su tanti giorni: per chi costruisce (il resoconto, P9, la mostrerà a lui). */
+app.get('/api/feed/misura', async (req, res) => {
+  try {
+    // fra uno e novanta; senza un numero (o con zero) quattordici
+    const n = Number(req.query.giorni)
+    const giorni = Number.isFinite(n) && n !== 0 ? Math.min(90, Math.max(1, Math.floor(n))) : 14
+    await misuraFeed.caricaModuli()
+    res.json(misuraFeed.misura(giorni))
+  } catch (e) { errore(res, e) }
+})
+
 // — P2: rotte, fine —
 
 // — P3: rotte, inizio —

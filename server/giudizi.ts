@@ -379,26 +379,59 @@ export function priorDelDocumento(id: string): number | null {
 // — cosa farne —
 
 /**
- * Chi aspetta davvero una risposta, e prima chi aspetta da più tempo.
+ * Cosa ha già detto Jev di un documento, se gliel'hanno chiesto: quanto
+ * «chiede» qualcuno lì dentro. Solo la memoria: non chiama mai Jev. Serve a
+ * chi cerca le carte mancate (`mancate.ts`), che non deve mai pagare un
+ * giudizio per una domanda sul passato.
+ */
+export function chiedeNoto(id: string): number | null {
+  carica()
+  return memoria.get(dove(id))?.chiede ?? null
+}
+
+/**
+ * Chi aspetta davvero una risposta, davanti; chi non aspetta nessuno, in fondo.
  *
- * Una scadenza resta anche quando nessuno «chiede» niente: la data la fa
- * scadere da sola, e una fattura che scade venerdì non ha un mittente che
- * insiste. Chi non ha un giudizio resta dentro, al suo posto: Jev che tace non
- * toglie niente a nessuno.
+ * Jev ordina, i trenta posti tagliano: qui non esce nessuno. Prima toglieva
+ * dalla fila chi «non chiede niente», e una regola di Jev dice che non
+ * decide da solo quello che si vede. Quattro fasce, nell'ordine:
+ *
+ *   · `davanti`: quelli che chi chiama vuole in testa (le persone a cui ha
+ *     risposto da solo senza che il feed gliele mostrasse), nell'ordine in cui
+ *     sono arrivati;
+ *   · la fila normale: giudicati con `chiede` sopra la soglia o una scadenza
+ *     (la data la fa scadere da sola, e una fattura non ha un mittente che
+ *     insiste), più chi non ha un giudizio, a un punteggio di mezzo; per
+ *     urgenza e chiede, e l'ordine di prima a parità;
+ *   · in fondo i giudicati sotto la soglia, nell'ordine di prima;
+ *   · `dietro`: quelli che chi chiama vuole in coda (una fonte da cui ha
+ *     scartato roba vecchia, e questo è più vecchio di quello che scarta).
+ *
+ * Senza Jev (nessun giudizio): `davanti`, poi la fila com'era, poi `dietro`.
+ * Il terzo argomento accetta ancora un numero, la soglia, come prima.
  */
 export function primaChiAspetta(
   docs: readonly Documento[],
   giudizi: Map<string, Giudizio>,
-  soglia = SOGLIA_FEED
+  opz: number | { soglia?: number; davanti?: ReadonlySet<string>; dietro?: ReadonlySet<string> } = {}
 ): Documento[] {
-  if (!giudizi.size) return [...docs]
-  const tieni = docs.filter(d => {
+  const o = typeof opz === 'number' ? { soglia: opz } : opz
+  const soglia = o.soglia ?? SOGLIA_FEED
+  const davanti = o.davanti ?? new Set<string>()
+  const dietro = o.dietro ?? new Set<string>()
+  const testa = docs.filter(d => davanti.has(d.id))
+  const coda = docs.filter(d => !davanti.has(d.id) && dietro.has(d.id))
+  const mezzo = docs.filter(d => !davanti.has(d.id) && !dietro.has(d.id))
+  if (!giudizi.size) return [...testa, ...mezzo, ...coda]
+  const aspetta = (d: Documento) => {
     const g = giudizi.get(d.id)
     return !g || g.chiede >= soglia || g.genere === 'scadenza'
-  })
+  }
+  const fila = mezzo.filter(aspetta)
+  const bassi = mezzo.filter(d => !aspetta(d))
   // l'ordine di prima è il criterio di pareggio: due mail ugualmente urgenti
   // restano nell'ordine in cui le ha ricevute
-  const posto = new Map(tieni.map((d, i) => [d.id, i]))
+  const posto = new Map(fila.map((d, i) => [d.id, i]))
   const punteggio = (d: Documento) => {
     const g = giudizi.get(d.id)
     // senza giudizio si sta in mezzo: non si scavalca chi è urgente davvero,
@@ -406,7 +439,8 @@ export function primaChiAspetta(
     if (!g) return 1.2
     return g.urgenza + g.chiede
   }
-  return tieni.sort((a, b) => punteggio(b) - punteggio(a) || posto.get(a.id)! - posto.get(b.id)!)
+  fila.sort((a, b) => punteggio(b) - punteggio(a) || posto.get(a.id)! - posto.get(b.id)!)
+  return [...testa, ...fila, ...bassi, ...coda]
 }
 
 /** I documenti che il peso mette davanti; chi non ha un peso resta dov'era. */

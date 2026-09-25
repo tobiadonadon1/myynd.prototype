@@ -46,6 +46,9 @@ import { conGergo, rifinisci } from './rifinitura.ts'
 import { nominaAmbito } from './ambiti-memoria.ts'
 import { carta } from './memoria.ts'
 import { feedAttuale } from './attenzione.ts'
+import { projectEvidence } from './project-memory.ts'
+import { assoluto, conRelativi, PERCHE_DESCRIZIONE } from './data-carta.ts'
+import { percheFondato } from './perche-oggi.ts'
 
 export type Genere = 'priorita' | 'proposta' | 'da-leggere' | 'scadenza'
 
@@ -53,6 +56,7 @@ export type Priorita = {
   genere: Genere
   titolo: string
   testo: string
+  /** Il perché oggi: chi aspetta e da quando, la data, o cosa si ferma. Preso dalla fonte. */
   perche: string
   /** L'id del progetto che muove, se ne nomina uno. */
   progetto: string | null
@@ -64,6 +68,53 @@ export type Priorita = {
   quando: string
   /** Quanto conta oggi, da 0 a 3, se Jev l'ha giudicata (`rifinitura.ts`). */
   peso?: number | null
+  /** La citazione esatta dalla fonte da cui nasce: il codice l'ha trovata lì (P2). */
+  prova: string
+  /** Dove sta la prova: nel documento, nella memoria del progetto, o in una riga del riferimento che lo nomina. */
+  origine: 'doc' | 'memoria' | 'riferimento'
+}
+
+/**
+ * Da dove una priorità può prendere la sua prova, oltre che da un documento:
+ * la memoria di un progetto e il riferimento (quello che ha scritto lui sui
+ * progetti). Si passa a `ripulisci` così le prove possono darne una finta;
+ * `proponi` costruisce quella vera.
+ */
+export type FontiPriorita = {
+  /** Il testo di un documento fra quelli mostrati al modello, o null se non c'era. */
+  testoDoc(id: string): { testo: string; quando: string | null; titolo: string; autore: string | null } | null
+  /** La memoria di un progetto: obiettivo, note, e le prove raccolte. */
+  memoria(progettoId: string): string
+  /** Il riferimento, com'è scritto. */
+  riferimento: string
+  /** I nomi con cui si chiama un progetto: il nome e gli altri nomi. */
+  nomiDi(progettoId: string): string[]
+  /** I progetti attivi, per riconoscere un obiettivo riscritto nel perché. */
+  progetti?: readonly { nome: string; obiettivo?: string | null }[]
+}
+
+/** La prova, come si confronta: senza maiuscole, accenti compatibili, spazi piani. */
+/** Per confrontare una citazione con la sua fonte: le lineette lunghe contano come un trattino, da tutte e due le parti. */
+export const normalizzata = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim()
+/** Quanto lunga può essere una prova: da una frase a un paragrafo. */
+export const PROVA_MIN = 12
+export const PROVA_MAX = 300
+
+/**
+ * Il testo di un progetto che vale come fonte di una priorità: l'obiettivo,
+ * le note, e le prove raccolte nella sua memoria (non quelle passate né
+ * quelle dedotte). Un progetto che non c'è più è un testo vuoto.
+ */
+export function testoDelProgetto(id: string): string {
+  const p = progetti.trova(id)
+  if (!p) return ''
+  let prove: string[] = []
+  try {
+    prove = projectEvidence(id)
+      .filter(r => !r.stale && r.value && r.provenance !== 'source-inference')
+      .flatMap(r => [r.value, r.quote ?? ''])
+  } catch { prove = [] }
+  return [p.obiettivo, p.note, ...prove].filter(Boolean).join('\n')
 }
 
 /** Una domanda che il giro fa a lui, quando non sa a che punto è un progetto. */
@@ -303,20 +354,21 @@ const FORMA = {
   properties: {
     priorita: {
       type: 'array',
-      description: 'Fino a sei: una per progetto o cartella di lavoro che ha qualcosa da fare, le più importanti prima.',
+      description: 'Solo quelle che passano l\'asticella, le più importanti prima. Zero è una risposta giusta.',
       items: {
         type: 'object',
         properties: {
           genere: { type: 'string', enum: ['priorita', 'proposta', 'da-leggere', 'scadenza'] },
           titolo: { type: 'string', description: 'Un verbo all\'inizio e la cosa concreta, al massimo nove parole: nomi, cifre e date lette davvero.' },
           testo: { type: 'string', description: 'Una frase sola, al massimo diciotto parole: chi aspetta, o perché adesso. Parole piane, senza gergo.' },
-          perche: { type: 'string', description: 'Dodici parole al massimo: quale progetto o obiettivo muove.' },
+          perche: { type: 'string', description: PERCHE_DESCRIZIONE },
           progetto: { type: 'string', description: 'Il nome esatto di uno dei progetti, o una stringa vuota.' },
           doc: { type: 'string', description: 'L\'id esatto del documento da cui nasce, o una stringa vuota. Per «da-leggere» è obbligatorio.' },
           offerta: { type: 'string', description: 'Cosa faresti tu da solo per portarla avanti, in prima persona, una frase corta di dodici parole al massimo.' },
-          quando: { type: 'string', description: 'Solo per «scadenza»: la data come l\'hai letta nella fonte, in tre parole al massimo, ad esempio «entro il 3 ottobre». Vuota per gli altri generi.' }
+          quando: { type: 'string', description: 'Solo per «scadenza»: la data come l\'hai letta nella fonte, in tre parole al massimo, ad esempio «entro il tre ottobre». Vuota per gli altri generi.' },
+          prova: { type: 'string', description: 'Citazione ESATTA, da 12 a 300 caratteri, dalla fonte da cui nasce: il documento con quell\'id, oppure UNA riga della memoria del progetto o di quello che ha scritto lui. Nella lingua originale.' }
         },
-        required: ['genere', 'titolo', 'testo', 'perche', 'progetto', 'doc', 'offerta', 'quando'],
+        required: ['genere', 'titolo', 'testo', 'perche', 'progetto', 'doc', 'offerta', 'quando', 'prova'],
         additionalProperties: false
       }
     },
@@ -421,7 +473,7 @@ const testoDi = (v: unknown, min: number, max: number) => {
  * muove, o anche solo li nomina nel titolo, non passa. È la regola che lui
  * ha scritto di suo pugno, e non si affida al modello.
  */
-export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>, gia: string[], morti: Set<string> = new Set()): Priorita | null {
+export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>, gia: string[], morti: Set<string> = new Set(), fonti: FontiPriorita = SENZA_FONTI): Priorita | null {
   if (!g || typeof g !== 'object') return null
   const generi: Record<string, Genere> = { priorita: 'priorita', proposta: 'proposta', 'da-leggere': 'da-leggere', scadenza: 'scadenza' }
   let genere = typeof g.genere === 'string' ? generi[g.genere] ?? null : null
@@ -452,8 +504,51 @@ export function ripulisci(g: Grezza, ids: Set<string>, nomi: Map<string, string>
   if (morti.size) {
     for (const [n, id] of nomi) if (morti.has(id) && nominaAmbito(`${titolo} ${perche}`, n)) return null
   }
-  return { genere, titolo, testo, perche, progetto, doc, offerta, quando }
+  /*
+   * P2 · una fonte vera, e una sola, citata alla lettera.
+   *
+   * Prima «priorità» e «proposta» potevano nascere senza documento, e quando
+   * ne citavano uno nessuno controllava che ci fosse dentro qualcosa: due
+   * carte del quattordici settembre stavano appese a una nota della spesa.
+   * Adesso la prova deve stare nel documento citato; senza documento, nella
+   * memoria del progetto nominato o in una riga del riferimento che nomina
+   * quel progetto. Altrimenti la voce non c'è.
+   */
+  // la prova resta com'è scritta: non si mostra mai, e togliere una lineetta
+  // la staccava dalla fonte che la contiene (la carta non nasceva)
+  const prova = typeof g.prova === 'string' ? unaRiga(g.prova, PROVA_MAX + 1) : ''
+  if (prova.length < PROVA_MIN || prova.length > PROVA_MAX) return null
+  const cercata = normalizzata(prova)
+  let origine: Priorita['origine']
+  let fonte: { titolo?: string; testo: string; autore?: string | null; quando?: string | null }
+  let [titoloF, testoF, percheF] = [titolo, testo, perche]
+  if (doc) {
+    const d = fonti.testoDoc(doc)
+    if (!d || !normalizzata(`${d.titolo}\n${d.testo}`).includes(cercata)) return null
+    origine = 'doc'
+    fonte = { titolo: d.titolo, testo: d.testo, autore: d.autore, quando: d.quando }
+    // «domani» in una fonte di lunedì è martedì: si scioglie prima di controllare
+    if (d.quando && Number.isFinite(Date.parse(d.quando))) {
+      const base = new Date(d.quando)
+      titoloF = assoluto(titolo, base); testoF = assoluto(testo, base); percheF = assoluto(perche, base)
+    }
+  } else {
+    if (!progetto) return null
+    const memoria = fonti.memoria(progetto)
+    const rigaRif = fonti.riferimento.split('\n').find(r => normalizzata(r).includes(cercata) && fonti.nomiDi(progetto).some(n => nominaAmbito(r, n)))
+    if (memoria && normalizzata(memoria).includes(cercata)) { origine = 'memoria'; fonte = { testo: memoria, quando: null } }
+    else if (rigaRif) { origine = 'riferimento'; fonte = { testo: rigaRif, quando: null } }
+    else return null
+  }
+  if (percheFondato(percheF, fonte, fonti.progetti ?? []) !== null) return null
+  // «domani» in una carta dalla memoria non ha una data contro cui sciogliersi:
+  // sarebbe vero un giorno solo, e la carta resta finché la riga c'è
+  if (conRelativi(`${titoloF} ${testoF} ${percheF}`)) return null
+  return { genere, titolo: titoloF, testo: testoF, perche: percheF, progetto, doc, offerta, quando, prova, origine }
 }
+
+/** Senza fonti niente passa: chi chiama `ripulisci` deve dire dove cercare le prove. */
+const SENZA_FONTI: FontiPriorita = { testoDoc: () => null, memoria: () => '', riferimento: '', nomiDi: () => [] }
 
 /**
  * Da quello che il modello ha chiesto a una domanda che si può fare, o niente.
@@ -542,7 +637,7 @@ export async function proponi(): Promise<Giro | null> {
 
 ${indicazioni}
 
-Scrivi fino a ${AL_GIRO} priorità, le più importanti prima. Almeno metà riguarda i filoni di questi tre giorni, qui sopra; il resto solo se qualcuno aspetta lui o una data è vicina. Quello che una sessione mostra già fatto, o che sta facendo proprio adesso con un assistente, non è una voce: dirgli di fare quello che sta già facendo è rumore. Lavora su più progetti insieme: passa in rassegna ogni progetto registrato e ogni cartella di lavoro toccata nell'ultimo mese, e per ciascuno chiediti «qual è la prossima cosa da fare qui, che non è già in lista?». Se c'è, è una voce; se per uno non c'è davvero niente, lascialo fuori. Con progetti aperti, zero voci è una risposta sbagliata. Ognuna nasce da qualcosa che hai davanti: un messaggio, un file, un progetto con il suo obiettivo, una cartella con i suoi commit, una chat. Quattro generi:
+Scrivi solo le priorità che passano l'asticella: cose che farebbe entro due giorni, o che le dispiacerebbe non aver visto. Le più importanti prima. Quello che una sessione mostra già fatto, o che sta facendo proprio adesso con un assistente, non è una voce: dirgli di fare quello che sta già facendo è rumore. Guarda ogni progetto registrato e ogni cartella di lavoro toccata nell'ultimo mese, ma se per uno niente passa l'asticella lascialo fuori. Zero è una risposta giusta. Ognuna nasce da UNA fonte che hai davanti e che citi alla lettera in «prova»: un documento del materiale, con il suo id; oppure una riga della memoria di un progetto o di quello che ha scritto lui sui progetti, con il nome esatto del progetto e l'id vuoto. Se non sai citarla, la voce non ci va. Quattro generi:
 — «priorita»: una cosa che dovrebbe fare adesso e che non è in lista. Un problema segnalato in una mail e lasciato lì, un passo che l'obiettivo di un progetto chiede e nessuno ha messo in lista, una cosa cominciata e lasciata a metà.
 — «proposta»: un'idea concreta che porta avanti un suo progetto o un suo obiettivo: un prodotto da un materiale che ha già, un miglioramento a una cosa sua, una mossa che le sue fonti suggeriscono. Solo se è ancorata a qualcosa di suo che hai letto qui. E un processo che si ripete e che potrei fare io da solo (una mail che manda ogni settimana, un file che riordina ogni volta, un controllo che rifà a mano) è una «proposta» con l'offerta che comincia con «Imposto un'automazione…» («I set up an automation…»): dì cosa farebbe e quando gira.
 — «da-leggere»: una mail o un documento che vale la pena leggere adesso, perché dice una cosa che cambia un suo progetto o gli chiede una decisione, e che ha lasciato lì. Sempre con l'id del documento. Non una newsletter, non una ricevuta.
@@ -550,7 +645,7 @@ Scrivi fino a ${AL_GIRO} priorità, le più importanti prima. Almeno metà rigua
 
 Collega quello che vedi fra progetti e cartelle: la stessa cosa vista da due fonti (una mail e un commit, una chat e un file) è una voce sola, e un fatto su un progetto che cambia un altro va detto, nel testo, con i nomi di tutti e due.
 
-Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa, al massimo nove parole; un testo di UNA frase, diciotto parole al massimo, che dice chi aspetta o perché adesso (la carta è piccola: non ripetere il titolo); un perché di dodici parole, cioè quale progetto o obiettivo muove; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase corta, dodici parole al massimo, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
+Per ognuna: un titolo che comincia con un verbo e nomina la cosa precisa, al massimo nove parole; un testo di UNA frase, diciotto parole al massimo, che dice chi aspetta o perché adesso (la carta è piccola: non ripetere il titolo); il perché oggi, una riga di al massimo dodici parole presa da quella fonte: chi aspetta e da quando, la data, o cosa si ferma. Mai oggi, domani o ieri; mai il progetto o l'obiettivo; il nome esatto del progetto fra quelli qui sopra, o vuoto; l'id esatto del documento da cui nasce, o vuoto; la prova, citata alla lettera dalla fonte; e l'offerta: cosa faresti tu, da solo e da subito, per portarla avanti, in prima persona e in una frase corta, dodici parole al massimo, come «Preparo la risposta ad Apple con il video e le istruzioni che chiedono» o «Scrivo tre idee di prodotto informativo a partire dal materiale del sito».
 
 Il titolo è una frase che diresti a voce, davanti a lui, in un fiato: un verbo e la cosa, come la chiamerebbe lui. Niente parole incollate con i trattini («choose-project, connect-source»), niente etichette inventate fra virgolette, niente elenchi compressi in un titolo. Bene: «Rispondi ad Apple sul video di Evermute», «Rimetti mano al sito: le tre offerte sono ferme da venti giorni». Male: «Build the choose-project, connect-source, get-work start», «Verify Jev keeps Myynd data local before expanding it». Il testo dice chi aspetta o perché adesso, con parole piane, e non cuce due fonti con «mentre» né racconta cosa dice un commit o una revisione. Bene: «Tuo padre aspetta una risposta sul deck dall'8 settembre». Male: «The September 20 commit uses Jev for reading decisions, while the TypeSafe review says real use calls its service». Bene: «Real replies to DMs still don't go out since the September 18 upgrade». Male: «The September 18 upgrade says this authorized lane remains blocked despite the restored X schedules».
 Le parole: semplici, dirette, come si parla a un collega. Frasi corte. Dì la cosa da fare e perché, con i nomi delle cose sue. Niente gergo di prodotto o di consulenza: niente «specifica», «criteri di accettazione», «gerarchia», «flusso», «stakeholder», «rubrica di valutazione», «UX». Se una frase la capirebbe solo chi lavora in un'agenzia, riscrivila. L'offerta dice cosa consegni, in una frase che lui capisce al volo: «Ti preparo la risposta ad Apple con il video e le istruzioni», non «una specifica con criteri di accettazione».
@@ -567,10 +662,24 @@ Scrivi in ${nellaLingua()}.`)
   if (!out) return null
   const ids = new Set(docs.map(d => d.id))
   const giaDette = [...lista, ...aperte, ...gia.map(v => v.titolo)]
+  // dove si cercano le prove: il documento com'è stato mostrato, la memoria
+  // del progetto, il riferimento con i nomi di ogni progetto
+  const docPerId = new Map(docs.map(d => [d.id, d]))
+  const fonti: FontiPriorita = {
+    testoDoc: id => {
+      const d = docPerId.get(id)
+      return d ? { titolo: d.titolo, testo: SUE.has(d.fonte) ? d.corpo : corpoAttuale(d), quando: d.quando ?? null, autore: d.autore ?? null } : null
+    },
+    memoria: id => testoDelProgetto(id),
+    riferimento: rif.testo,
+    nomiDi: id => [...nomi].filter(([, x]) => x === id).map(([n]) => n),
+    progetti: suoi
+  }
   const voci: Priorita[] = []
   for (const g of Array.isArray(out.priorita) ? out.priorita : []) {
-    const p = ripulisci(g, ids, nomi, [...giaDette, ...voci.map(v => v.titolo)], morti)
+    const p = ripulisci(g, ids, nomi, [...giaDette, ...voci.map(v => v.titolo)], morti, fonti)
     if (p) voci.push(p)
+    // il parapetto del giro sta qui, nel codice: non nel prompt, non nello schema
     if (voci.length >= AL_GIRO) break
   }
   const domande: DomandaDelGiro[] = []
@@ -598,8 +707,13 @@ Scrivi in ${nellaLingua()}.`)
    * fanno dentro una transazione del database. La carta va a Jev con il tipo
    * e con «quando» al posto dell'urgenza, che è quello che diventa sul feed.
    */
-  const rifinite = await rifinisci(voci.map(p => ({ ...p, tipo: TIPO[p.genere], urgenza: p.quando })), { progetti: suoi, registro: 'priorità' })
-  const tenute: Priorita[] = rifinite.map(({ tipo: _tipo, urgenza, ...p }) => ({ ...p, quando: urgenza ?? '' }))
+  const adessoIso = new Date().toISOString()
+  const rifinite = await rifinisci(voci.map(p => ({
+    ...p, tipo: TIPO[p.genere], urgenza: p.quando,
+    // «domani» in una scadenza è domani rispetto al documento, se ne ha uno
+    nata: (p.doc && docPerId.get(p.doc)?.quando) || adessoIso
+  })), { progetti: suoi, registro: 'priorità' })
+  const tenute: Priorita[] = rifinite.map(({ tipo: _tipo, urgenza, nata: _nata, ...p }) => ({ ...p, quando: urgenza ?? '' }))
   console.log(`myynd · priorità · ${docs.length} documenti, di cui ${cartelle} cartelle di lavoro e ${conversazioni} conversazioni, ${Array.isArray(out.priorita) ? out.priorita.length : 0} proposte, ${tenute.length} buone, ${domande.length} domande`)
   /*
    * Quelle che non valgono più, dette dal modello e controllate qui.
@@ -619,10 +733,20 @@ Scrivi in ${nellaLingua()}.`)
   return { voci: tenute, domande, superate, guardati: docs.length, cartelle, conversazioni }
 }
 
-/** Da priorità a voce del feed: la fonte è il documento, se c'è; altrimenti nessuna. */
+/**
+ * Da priorità a voce del feed: la fonte è il documento, se c'è; altrimenti
+ * la memoria del progetto o il riferimento, con la prova nell'istantanea
+ * (`contesto`), così la pagina può controllare ogni volta che quella riga
+ * c'è ancora (`attenzione.feedAttuale`).
+ */
 export function voceDelFeed(p: Priorita) {
   const d = p.doc ? store.documento(p.doc) : null
-  return { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: p.quando ?? '', perche: p.perche, offerta: p.offerta, progetto: p.progetto, peso: p.peso ?? null, ...(d ? { doc: d.id, fonte: d.fonte } : {}) }
+  const base = { tipo: TIPO[p.genere], titolo: p.titolo, testo: p.testo, urgenza: p.quando ?? '', perche: p.perche, offerta: p.offerta, progetto: p.progetto, peso: p.peso ?? null }
+  if (d) return { ...base, doc: d.id, fonte: d.fonte }
+  if (p.origine === 'memoria' || p.origine === 'riferimento') {
+    return { ...base, fonte: p.origine, contesto: JSON.stringify({ fonte: p.origine, progetto: p.progetto, prova: p.prova }) }
+  }
+  return base
 }
 
 /**
@@ -682,7 +806,8 @@ export async function forse(forza = false): Promise<number> {
     const esito = await proponi()
     scriviArchivio({ ultimo: new Date().toISOString(), proposte: esito?.voci.length ?? 0 })
     if (!esito) return 0
-    for (const x of esito.superate) store.cambiaStatoFeed(x.id, 'scaduto', x.motivo)
+    // superata dal giro, non lasciata passare da lui: la ragione lo dice
+    for (const x of esito.superate) store.cambiaStatoFeed(x.id, 'scaduto', x.motivo, 'superata')
     if (esito.superate.length) console.log(`myynd · priorità · ${esito.superate.length} superate: ${esito.superate.map(x => x.motivo).join('; ')}`)
     const domande = salvaDomande(esito.domande)
     if (domande) console.log(`myynd · priorità · ${domande} domande sulla prima pagina`)
@@ -697,3 +822,6 @@ export async function forse(forza = false): Promise<number> {
 
 /** Serve ai test: il conto ricomincia da zero. */
 export function dimentica() { scriviArchivio({ ultimo: null, proposte: 0 }) }
+
+/** Solo per le prove: lo schema, per leggere le descrizioni. */
+export const FORMA_PER_PROVA = FORMA as { properties: { priorita: { description: string; items: { properties: Record<string, { description?: string }> } } } }

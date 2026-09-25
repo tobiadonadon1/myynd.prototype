@@ -6,7 +6,8 @@ import { coloreProgetto } from './colori-progetto'
 import { costruisciDaGrafo, documentiCollegati, type Ball, type Grafo } from './brain'
 import { loc, ricordaLingua, t, frasi } from './lingua'
 import { ricordaTema, temaValido } from './tema'
-import { api, type Connettore, type Stato } from './api'
+import { api, apiP2, type Connettore, type Stato } from './api'
+import type { RagioneNonUtile } from './feed-carta'
 import { MENU_OFF, MENU_ON, NAV_OFF, NAV_ON, dot, knob, track } from './ui'
 import { useMappa } from './useMappa'
 import { primoParagrafo } from './essenza.ts'
@@ -963,11 +964,16 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     return [...senza.slice(0, posto), v, ...senza.slice(posto)]
   })
 
-  const scarta = async (v: VoceFeed) => {
+  /**
+   * «Non utile», con una delle quattro ragioni: la carta se ne va subito,
+   * il server la chiude senza modello, e la ragione insegna alla prossima
+   * lettura. «Annulla» la riapre, e quello che aveva insegnato si ritira.
+   */
+  const scarta = async (v: VoceFeed, ragione: RagioneNonUtile) => {
     const dove = aperti.findIndex(x => x.id === v.id)
     setAperti(a => a.filter(x => x.id !== v.id))
     try {
-      await api.rispondiFeed(v.id, t('Non mi interessa.'), 'scartato')
+      await apiP2.scartaFeed(v.id, ragione)
       mostraToast(t('Via. Non te la rimetto davanti.'), () => {
         rimettiVoce(v, dove)
         api.segnaFeed(v.id, 'aperto').catch(() => {
@@ -1284,8 +1290,8 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     voci: aperti,
     /** «Fatto» su una voce. */
     risolviVoce: (v: VoceFeed) => { void risolvi(v) },
-    /** «Non mi interessa» su una voce: via, e non torna. */
-    scartaVoce: (v: VoceFeed) => { void scarta(v) },
+    /** «Non utile» su una voce, con la ragione: via, e non torna. */
+    scartaVoce: (v: VoceFeed, ragione: RagioneNonUtile) => { void scarta(v, ragione) },
     // «Parlane in chat»: la coda è testo che finisce nella *sua* bolla e resta
     // scritto nella chat, quindi va nella lingua dell'app come tutto il resto.
     // Niente «Mettila in lista»: una voce del feed è già una cosa da fare —

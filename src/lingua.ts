@@ -3040,6 +3040,19 @@ const EN: Record<string, string> = {
   // — P1B: fine —
 
   // — P2: inizio —
+  // «Non utile» con le sue quattro ragioni, la pastiglia di chi ha già risposto
+  // dalla posta, e i no del server
+  'Non utile': 'Not useful',
+  'Vecchia': 'Old',
+  'Già fatta': 'Already done',
+  'Non è mia': 'Not mine',
+  'Non si capisce': 'Unclear',
+  'Risposto': 'Replied',
+  'Perché non è utile': 'Why it is not useful',
+  'Stato sconosciuto.': 'Unknown state.',
+  'Ragione sconosciuta.': 'Unknown reason.',
+  'Mancano le voci.': 'The cards are missing.',
+  'La misura non è pronta: prima caricaModuli().': 'The measure is not ready: call caricaModuli() first.',
   // — P2: fine —
 
   // — P3: inizio —
