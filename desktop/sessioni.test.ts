@@ -132,6 +132,48 @@ test('costruttore: la stessa finestra non spezza, un titolo nuovo sì', () => {
   assert.equal(c.aperta()?.finestra.titolo, 'Altro doc')
 })
 
+test('costruttore: un titolo che cambia ogni 5 s per dieci minuti tiene tutto il tempo dell’app', () => {
+  const c = creaCostruttore()
+  const T = { bundle: 'com.apple.Terminal', app: 'Terminal' }
+  const fatte: Sessione[] = []
+  for (let i = 0; i < 120; i++) {
+    c.evento({ ...T, titolo: `build ${i}%` }, s(i * 5))
+    c.taglia(s(i * 5))
+    fatte.push(...c.chiusi())
+  }
+  c.ferma(s(600))
+  fatte.push(...c.chiusi())
+  assert.equal(fatte.reduce((n, x) => n + x.secondi, 0), 600)
+  assert.ok(fatte.every(x => x.bundle === T.bundle && x.secondi <= 300), 'il taglio dei cinque minuti vale ancora')
+  assert.equal(fatte.at(-1)?.titolo, 'build 119%', 'la sessione porta il titolo che c’era davanti alla fine')
+})
+
+test('costruttore: due schede alternate ogni 8 s, poi Mail: Chrome tiene i suoi quattro minuti', () => {
+  const c = creaCostruttore()
+  const C = { bundle: 'com.google.Chrome', app: 'Chrome' }
+  const M = { bundle: 'com.apple.mail', app: 'Mail', titolo: 'Posta' }
+  for (let i = 0; i < 30; i++) c.evento({ ...C, titolo: i % 2 ? 'Foglio' : 'Documento' }, s(i * 8))
+  c.evento(M, s(240))
+  c.ferma(s(300))
+  const tempo = new Map<string, number>()
+  for (const x of c.chiusi()) tempo.set(x.app, (tempo.get(x.app) ?? 0) + x.secondi)
+  assert.deepEqual([...tempo], [['Chrome', 240], ['Mail', 60]])
+})
+
+test('costruttore, controcasi: un titolo breve si unisce al seguente, uno lungo resta suo; un’altra app breve si perde', () => {
+  const c = creaCostruttore()
+  c.evento({ ...A, titolo: 'Caricamento' }, s(0))
+  c.evento(A, s(3))
+  assert.deepEqual(c.chiusi(), [])
+  assert.deepEqual(c.aperta(), { finestra: A, inizio: s(0) }, 'i tre secondi vanno col titolo nuovo')
+  c.evento({ ...A, titolo: 'Altro' }, s(40))
+  assert.deepEqual(c.chiusi().map(x => [x.titolo, x.secondi]), [['Doc', 40]], '37 s di Doc bastano per chiudere')
+  c.evento(B, s(45))
+  assert.deepEqual(c.chiusi(), [], 'cinque secondi su Altro, poi un’altra app: si perdono come prima')
+  c.evento(A, s(50))
+  assert.deepEqual(c.chiusi(), [], 'e anche i cinque secondi su un’altra app')
+})
+
 test('costruttore: taglia a cinque minuti chiude e continua', () => {
   const c = creaCostruttore()
   c.evento(A, s(0))

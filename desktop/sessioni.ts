@@ -101,7 +101,13 @@ export function filtra(e: EventoFronte, o: { titoli: boolean; mioPid: number }):
 /* ---------------------------------------------------------------- sessioni */
 
 export type Costruttore = {
-  /** Una finestra davanti da `t`: se è la stessa di adesso non cambia niente. */
+  /**
+   * Una finestra davanti da `t`: se è la stessa di adesso non cambia niente.
+   * Un titolo nuovo nella stessa app chiude la sessione, ma solo se il titolo
+   * di prima è rimasto davanti almeno dieci secondi: altrimenti quel tempo va
+   * col titolo nuovo, e l'app non lo perde (un terminale che cambia titolo a
+   * ogni comando, due schede alternate mentre si copia).
+   */
   evento(f: Finestra, t: number): void
   /** Chiude quella aperta a `t` (inattività, schermo bloccato, sonno, pausa, uscita). */
   ferma(t: number): void
@@ -116,7 +122,9 @@ export type Costruttore = {
 }
 
 export function creaCostruttore(): Costruttore {
-  let aperta: { finestra: Finestra; inizio: number } | null = null
+  // `inizio` è l'inizio della sessione; `titoloDal` da quando c'è davanti il
+  // titolo di adesso (più tardi di `inizio` quando un titolo breve si è unito).
+  let aperta: { finestra: Finestra; inizio: number; titoloDal: number } | null = null
   let fatte: Sessione[] = []
 
   const chiudi = (t: number) => {
@@ -132,13 +140,18 @@ export function creaCostruttore(): Costruttore {
       secondi: Math.round((fine - inizio) / 1000)
     })
   }
-  const apri = (f: Finestra, t: number) => {
-    aperta = { finestra: { bundle: f.bundle, app: f.app, titolo: f.titolo }, inizio: t }
+  const apri = (f: Finestra, t: number, inizio = t) => {
+    aperta = { finestra: { bundle: f.bundle, app: f.app, titolo: f.titolo }, inizio, titoloDal: t }
   }
 
   return {
     evento(f, t) {
-      if (aperta && aperta.finestra.bundle === f.bundle && aperta.finestra.titolo === f.titolo) return
+      if (aperta && aperta.finestra.bundle === f.bundle) {
+        if (aperta.finestra.titolo === f.titolo) return
+        // il titolo di prima è durato meno di dieci secondi: la sessione
+        // continua col titolo nuovo, dallo stesso inizio
+        if (t - aperta.titoloDal < MINIMO_SECONDI * 1000) { apri(f, t, aperta.inizio); return }
+      }
       chiudi(t)
       apri(f, t)
     },

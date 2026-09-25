@@ -270,6 +270,33 @@ test('le finestre escluse chiudono quella di prima e non compaiono mai', () => {
   assert.deepEqual(fatte.map(x => [x.app, x.titolo, x.secondi]), [['Safari', 'Doc', 20], ['Google Chrome', null, 20]])
 })
 
+test('un terminale che cambia titolo ogni 5 s per dieci minuti conta tutti e dieci i minuti', () => {
+  const s = scena({ permesso: true })
+  oss.daServer(ACCESO)
+  for (let i = 0; i < 120; i++) {
+    s.emetti('com.apple.Terminal', 'Terminal', `build ${i}%`)
+    avanti(5_000)
+  }
+  oss.daServer(SPENTO)
+  const fatte = s.sessioni()
+  assert.ok(fatte.length > 0)
+  assert.ok(fatte.every(x => x.app === 'Terminal'))
+  assert.equal(fatte.reduce((n, x) => n + x.secondi, 0), 600)
+})
+
+test('controcaso: un salto di 5 s su un’altra app si perde anche nel regista', () => {
+  const s = scena({ permesso: true })
+  oss.daServer(ACCESO)
+  s.emetti('com.apple.Safari', 'Safari', 'Doc')
+  avanti(30_000)
+  s.emetti('com.apple.mail', 'Mail', 'Posta')
+  avanti(5_000)
+  s.emetti('com.apple.Safari', 'Safari', 'Doc')
+  avanti(30_000)
+  oss.daServer(SPENTO)
+  assert.deepEqual(s.sessioni().map(x => [x.app, x.secondi]), [['Safari', 30], ['Safari', 30]])
+})
+
 test('due minuti fermi chiudono la sessione all’ultimo gesto, e si riapre al ritorno', () => {
   const s = scena()
   oss.daServer(ACCESO)
