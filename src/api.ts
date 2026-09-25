@@ -2031,6 +2031,34 @@ export type ProjectInitiative = { id: string; projectId: string; projectName: st
 // — P1A: fine —
 
 // — P1B: inizio —
+export type PrevisioneVista = { id: string; genere: string; nome: string; titolo: string | null; esito: 'giusta' | 'sbagliata' | 'annullata' | null }
+export type AbitudineVista = {
+  chiave: string; genere: string; dati: Record<string, string | number>; testoSuo: string | null; casi: number; su: number | null
+  stato: 'osservata' | 'tenuta' | 'corretta' | 'superata'; inVigore: boolean; fino: string | null
+  esempi: { quando: string; testo: string; doc: string | null }[]
+}
+export type Gemello = {
+  /** Gli ultimi trenta giorni, solo le affermazioni verificate; null senza. */
+  punteggio: { giuste: number; totale: number; base: number } | null
+  oggi: { quante: number; sigillate: boolean; previsioni: PrevisioneVista[] }
+  ieri: { giorno: string; chiuso: boolean; giuste: number; totale: number; previsioni: PrevisioneVista[] } | null
+  /** Solo i generi con almeno dieci giudizi. */
+  fiducia: { genere: string; giuste: number; totale: number }[]
+  abitudini: AbitudineVista[]
+  /** Una casella collegata ma niente posta mandata in trenta giorni. */
+  guai: 'posta-inviata'[]
+}
+export type StatoOsservatore = { disponibile: boolean; acceso: boolean; titoli: boolean; pausaFino: string | null; altroConto: boolean; osservate: number }
+export const gemelloApi = {
+  vista: () => json<Gemello>('/api/gemello'),
+  abitudine: (chiave: string, azione: 'tieni' | 'correggi' | 'togli' | 'ripristina', testo?: string, prima?: string) =>
+    json<{ ok: true }>(`/api/gemello/abitudini/${encodeURIComponent(chiave)}`, { method: 'POST', body: JSON.stringify({ azione, testo, prima }) }),
+  osservatore: () => json<StatoOsservatore>('/api/osservatore'),
+  imposta: (v: { acceso?: boolean; titoli?: boolean }) => json<StatoOsservatore>('/api/osservatore', { method: 'POST', body: JSON.stringify(v) }),
+  pausa: (minuti: number) => json<StatoOsservatore>('/api/osservatore/pausa', { method: 'POST', body: JSON.stringify({ minuti }) }),
+  riprendi: () => json<StatoOsservatore>('/api/osservatore/riprendi', { method: 'POST', body: '{}' }),
+  cancella: () => json<{ ok: true }>('/api/osservatore/osservazioni', { method: 'DELETE' })
+}
 // — P1B: fine —
 
 // — P2: inizio —

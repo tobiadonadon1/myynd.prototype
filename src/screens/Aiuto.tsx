@@ -56,6 +56,7 @@ const ETICHETTE: Record<string, () => string> = {
   cosaTroverebbe: () => t('Cosa troverebbe adesso'),
   ottimizza: () => t('Ottimizza'),
   comeLavori: () => t('Come lavori'),
+  ilTuoRitratto: () => t('Il tuo ritratto'),
   pensavaPrima: () => t('Quello che pensava prima'),
   aggiornaRitratto: () => t('Aggiorna da quello che hai imparato'),
   riordina: () => t('Riordina'),
@@ -437,8 +438,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Il ritratto', en: 'The portrait' },
             testo: {
-              it: 'Cinque blocchi sotto {{comeLavori}}: come decidi, cosa controlli sempre prima di dire di sì, come scrivi, gli errori da evitare, le persone che contano. Li riempie Myynd da quello che impara, e lo dice. Appena ci metti mano tu diventano parole tue. {{riordina}} rimette in ordine un blocco; {{aggiornaRitratto}} li aggiorna adesso invece che al prossimo giro.',
-              en: 'Five blocks under {{comeLavori}}: how you decide, what you always check before saying yes, how you write, mistakes to avoid, the people who matter. Myynd fills them from what it learns, and says so. As soon as you edit one, it becomes your words. {{riordina}} tidies up a block; {{aggiornaRitratto}} updates them now instead of at the next round.'
+              it: 'Cinque blocchi sotto {{ilTuoRitratto}}: come decidi, cosa controlli sempre prima di dire di sì, come scrivi, gli errori da evitare, le persone che contano. Li riempie Myynd da quello che impara, e lo dice. Appena ci metti mano tu diventano parole tue. {{riordina}} rimette in ordine un blocco; {{aggiornaRitratto}} li aggiorna adesso invece che al prossimo giro.',
+              en: 'Five blocks under {{ilTuoRitratto}}: how you decide, what you always check before saying yes, how you write, mistakes to avoid, the people who matter. Myynd fills them from what it learns, and says so. As soon as you edit one, it becomes your words. {{riordina}} tidies up a block; {{aggiornaRitratto}} updates them now instead of at the next round.'
             }
           },
           {

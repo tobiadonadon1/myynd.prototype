@@ -82,6 +82,10 @@ export type Desktop = {
      */
     mostrato?(cb: () => void): () => void
   }
+  /** L'osservatore delle app (P1A): il permesso di Accessibilità per i titoli delle finestre. Manca nei gusci vecchi. */
+  osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
+  /** La mascotte sullo schermo (P1A). Manca nei gusci vecchi. */
+  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void> }
 }
 
 declare global {

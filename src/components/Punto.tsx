@@ -28,6 +28,7 @@ import { useRef, type CSSProperties } from 'react'
 import { frasi, loc, t, tradotta } from '../lingua'
 import { Hov, LABEL, useFocoDialogo } from '../ui'
 import { IconAvanti, IconCroce } from '../icons'
+import { IeriGemello } from './IeriGemello'
 import type { Vals } from '../vals'
 import { usePunto } from '../usePunto'
 import type { RigaPunto } from '../api'
@@ -249,6 +250,7 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
             si chiudono i fogli, e finisce con l'ultima riga. Rifarlo resta
             possibile dalla carta in prima pagina, che è dove ha senso: lì il
             punto non c'è ancora, o è di ieri. */}
+        <IeriGemello chiudi={p.nascondi} apriMemoria={() => v.goMemoria()} />
       </div>
     </div>
   )
