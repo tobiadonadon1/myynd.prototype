@@ -103,7 +103,7 @@ test('le etichette e l’ordine sono quelli di fontiCitate, sullo stesso testo',
 
 test('una frase inglese trova il suo passo in un estratto italiano, per la data', () => {
   const p = passoPer('Marco delivers the logo files on 14 October 2026 [1].', LOGO)
-  assert.ok(p && p.includes('14 ottobre 2026'), p)
+  assert.ok(p && p.includes('14 ottobre 2026'), String(p))
   assert.ok(p!.length <= 220)
 })
 
