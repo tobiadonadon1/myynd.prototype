@@ -170,7 +170,10 @@ chi.dentro(conto.id, () => {
     if (scena.risposte.insieme) {
       const dove = join(cfg.cartella(), 'valutazioni', 'risposte')
       mkdirSync(dove, { recursive: true, mode: 0o700 })
-      writeFileSync(join(dove, 'domande.json'), readFileSync(resolve(QUI, '..', scena.risposte.insieme), 'utf8'), { mode: 0o600 })
+      // un documento del disco ha per id il suo percorso, e la casa finta cambia
+      // a ogni scena: «desktop:~/…» nell'insieme diventa la casa di questa scena
+      const insieme = readFileSync(resolve(QUI, '..', scena.risposte.insieme), 'utf8').replaceAll('desktop:~/', `desktop:${resolve(CASA)}/`)
+      writeFileSync(join(dove, 'domande.json'), insieme, { mode: 0o600 })
     }
     if (scena.risposte.attiva !== undefined) cfg.aggiorna({ provaRisposte: { attiva: scena.risposte.attiva } })
   }
