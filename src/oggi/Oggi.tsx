@@ -702,7 +702,7 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       <div style={{ maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 9 }}>
         {p.voci.map(v => (
           <div key={v.doc} style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
-            <span style={{ color: 'rgba(var(--inchiostro-rgb),.3)', fontSize: 11, flex: 'none' }}>—</span>
+            <span style={{ color: 'rgba(var(--inchiostro-rgb),.3)', fontSize: 11, flex: 'none' }}>·</span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '13.5px', color: 'var(--inchiostro)', overflowWrap: 'anywhere' }}>{v.titolo}</div>
               <div style={{ fontSize: '12px', color: 'rgba(var(--inchiostro-rgb),.5)', marginTop: 1, overflowWrap: 'anywhere' }}>{v.perche}</div>

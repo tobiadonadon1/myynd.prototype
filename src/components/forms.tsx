@@ -31,7 +31,7 @@ export function campo(tema: Tema): CSSProperties {
   const scuro = tema === 'scuro'
   return {
     width: '100%', boxSizing: 'border-box', marginTop: 8, padding: '12px 15px',
-    borderRadius: 13,
+    borderRadius: scuro ? 13 : 14,
     border: `1px solid ${scuro ? 'rgba(244,239,232,.22)' : 'rgba(var(--inchiostro-rgb),.18)'}`,
     background: scuro ? 'rgba(244,239,232,.06)' : 'rgba(var(--luce-rgb),.7)',
     color: scuro ? CHIARO : 'var(--inchiostro)',

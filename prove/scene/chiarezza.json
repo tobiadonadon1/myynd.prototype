@@ -1,0 +1,45 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" },
+    { "chiave": "hb", "nome": "Harbor Labs", "obiettivo": "Close the Harbor pilot" },
+    { "chiave": "ws", "nome": "Website" }
+  ],
+  "file": [
+    { "nome": "northwind-launch-plan.md", "testo": "# Northwind launch plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n" }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:301", "fonte": "posta", "tipo": "email", "titolo": "App Review: guideline 4.3", "corpo": "Hello Alex, your submission Northwind 1.0.3 was rejected under guideline 4.3.", "autore": "App Review <review@appstore.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-5h", "messageId": "ar301@appstore.example" },
+    { "id": "posta:INBOX:302", "fonte": "posta", "tipo": "email", "titolo": "Pilot scope for Thursday", "corpo": "Hi Alex, can we agree the pilot scope before Thursday? Nora", "autore": "Nora Lind <nora@harborlabs.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "-2h", "messageId": "hb302@harborlabs.example" }
+  ],
+  "feed": [
+    { "id": "f1", "tipo": "Priorità", "titolo": "Fix the three Northwind account issues and upload the build", "testo": "Your partner is waiting on it to submit.", "fonte": "posta", "doc": "posta:INBOX:301", "progetto": "nw", "quando": "-3h", "peso": 2, "perche": "Unblocks the App Store submission" },
+    { "id": "f2", "tipo": "Priorità", "titolo": "Agree the Harbor pilot scope with Nora before Thursday", "testo": "She asked this morning.", "fonte": "posta", "doc": "posta:INBOX:302", "progetto": "hb", "quando": "-2h", "peso": 1, "perche": "Nora asked for it before Thursday" },
+    { "id": "f3", "tipo": "Priorità", "titolo": "Pick a date for the website relaunch", "testo": "Nothing is scheduled yet.", "fonte": "posta", "doc": "posta:INBOX:301", "progetto": "ws", "quando": "-1h", "peso": 1, "perche": "No date yet" }
+  ],
+  "compiti": [
+    { "id": "c1", "testo": "Upload build 1.0.4", "progetto": "nw", "quando": "oggi" },
+    { "id": "c2", "testo": "Reply to App Review", "progetto": "nw", "quando": "oggi" },
+    { "id": "c3", "testo": "Send the pilot scope to Nora", "progetto": "hb", "quando": "oggi" },
+    { "id": "c4", "testo": "Draft the pilot report", "progetto": "hb", "quando": "settimana", "stato": "fatto", "consegna": { "titolo": "Harbor pilot report", "percorso": "~/Desktop/Harbor pilot report.md", "app": "File" } },
+    { "id": "c5", "testo": "Write the launch checklist", "progetto": "nw", "quando": "settimana", "stato": "fatto", "consegna": { "titolo": "Northwind launch checklist", "percorso": "/non/esiste/piu/Northwind launch checklist.md", "app": "File" } },
+    { "id": "c6", "testo": "List website pages to keep", "progetto": "ws", "quando": "poi" }
+  ],
+  "riferimento": "Northwind: app review, then launch. Harbor Labs: pilot scope this week.",
+  "fuoco": "Supplier invoices and payments",
+  "blocchi": [
+    { "etichetta": "come_decido", "valore": "Margin first, then whether the client pays on time." },
+    { "etichetta": "come_scrivo", "valore": "Short. No pleasantries. I sign off with my first name." }
+  ],
+  "config": { "tono": "diretto", "tema": "sistema", "autonomia": "preparare", "osservatore": true },
+  "memoriaVista": "-1d",
+  "gemello": { "giorni": 35, "seme": 7, "osservatore": true },
+  "convinzioni": [
+    { "enunciato": "Keeps meetings under 30 minutes", "genere": "dedotta", "fiducia": 0.85, "origine": "conversazione", "confermata": true },
+    { "enunciato": "Never works on Sundays", "genere": "esplicita", "origine": "mano" },
+    { "enunciato": "Prefers calls to email with suppliers", "genere": "indotta", "fiducia": 0.55, "origine": "scarti" },
+    { "enunciato": "Replies to Harbor Labs within the hour", "genere": "indotta", "fiducia": 0.6, "origine": "chiusura" }
+  ]
+}

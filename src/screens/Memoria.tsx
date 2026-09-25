@@ -355,7 +355,7 @@ function Documenti({ documenti }: { documenti: DocumentoProdotto[] }) {
                 <div className="mem-documento-apri"><strong>{x.titolo}</strong><span>{t('Spostato o cancellato')}</span></div>
               )}
               {x.disponibile && d && (
-                <Bottone tipo="parola" piccolo className="mem-finder" onClick={() => { d.mostraNelFinder(x.percorso).catch(() => {}) }}>
+                <Bottone tipo="parola" piccolo className="mem-finder" onClick={() => { Promise.resolve(d.mostraNelFinder(x.percorso)).catch(() => {}) }}>
                   {t('Mostra nel Finder')}
                 </Bottone>
               )}

@@ -1,8 +1,8 @@
 /** Missing review is not a pass, including documents created by older app versions. */
 export function statoRevisione(revisione: { esito: 'pass' | 'revise' | 'unavailable' } | undefined, en: boolean): string {
   if (revisione?.esito === 'pass') return en ? 'Review passed' : 'Revisione superata'
-  if (revisione?.esito === 'revise') return en ? 'Review found issues — needs revision' : 'La revisione ha trovato problemi — da correggere'
-  return en ? 'Review unavailable — not verified' : 'Revisione non disponibile — non verificato'
+  if (revisione?.esito === 'revise') return en ? 'Review found issues: needs revision' : 'La revisione ha trovato problemi: da correggere'
+  return en ? 'Review unavailable: not verified' : 'Revisione non disponibile: non verificato'
 }
 
 /** Only a completed artifact with a passed review gets the uncomplicated hand-off. */

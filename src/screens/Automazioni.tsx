@@ -1,3 +1,4 @@
+import { Bottone } from '../components/forme'
 import { SenderRules } from '../components/SenderRules'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Attrezzo, type Automazione, type Raccolta, type SuggerimentoAutomazione } from '../api'
@@ -139,7 +140,7 @@ export function Automazioni({ v }: { v: Vals }) {
     ]
     : [
       { chiave: 'pronte', titolo: t('Pronte'), classe: 'pronte', quali: viste.filter(a => a.salute.stato !== 'scollegata'), conSuggeriti: true },
-      { chiave: 'staccate', titolo: t('Manca una connessione'), classe: 'staccate', quali: viste.filter(a => a.salute.stato === 'scollegata'), conSuggeriti: false }
+      { chiave: 'staccate', titolo: t('Manca una fonte'), classe: 'staccate', quali: viste.filter(a => a.salute.stato === 'scollegata'), conSuggeriti: false }
     ]
   const fonti = (nomi: string[]) => <div className="auto-card-sources">{nomi.slice(0, 4).map(n => {
     const c = catalogo.find(x => x.nome === n)
@@ -204,7 +205,7 @@ export function Automazioni({ v }: { v: Vals }) {
     </div>
     <button className="auto-card-open" onClick={() => setAperto(a.id)}><h3>{a.nome}</h3><p>{a.spiega}</p>{fonti(a.attrezzi)}</button>
     <div className="auto-card-footer"><span>{ritmo(a)}</span></div>
-    {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
+    {a.salute.stato !== 'bene' && <div className="auto-health"><span>{a.salute.stato === 'scollegata' ? t('manca una fonte') : a.salute.stato === 'guaio' ? t('l’ultima volta è andata storta') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}</span>{a.salute.stato === 'scollegata' && <button className="auto-button subtle" onClick={() => {
       const mancante = a.attrezzi.map(n => catalogo.find(c => c.nome === n)).find(c => c && !c.collegato)
       v.apriConnessioni(mancante?.serve === 'agenda' ? 'calendario' : mancante?.serve === 'sharepoint' ? 'microsoft' : mancante?.serve ?? '')
     }}>{t('Collega')} <IconAvanti size={11} /></button>}</div>}
@@ -219,7 +220,7 @@ export function Automazioni({ v }: { v: Vals }) {
     <header className="auto-header">
       <h1 id="auto-library-title">{t('Le tue automazioni')}</h1>
       <div className="auto-header-actions">
-        <button className="auto-link" onClick={() => v.apriConnessioni()}>{t('Connessioni')}<span className="auto-link-count">{v.connAttivi.length}</span></button>
+        <button className="auto-link" onClick={() => v.apriConnessioni()}>{t('Fonti')}<span className="auto-link-count">{v.connAttivi.length}</span></button>
         <button className="auto-button primary" onClick={() => setAperto('')}><IconPiu size={14} />{t('Crea automazione')}</button>
       </div>
     </header>
@@ -235,7 +236,8 @@ export function Automazioni({ v }: { v: Vals }) {
     */}
     {iniziativa && <section className="auto-initiative" aria-label={t('Bozze pronte prima che le chieda')}>
       <div><h2>{t('Bozze pronte prima che le chieda')}</h2>
-      {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}</p>}</div>
+      {iniziativa.inPausa && <p>{t('In pausa: la tua autonomia è impostata su chiedere prima.')}{' '}
+        <Bottone tipo="parola" piccolo onClick={() => v.apri('pref', 'myynd', 'autonomia')}>{t('Cambia')}</Bottone></p>}</div>
       <div className="auto-initiative-controls"><button className="auto-switch" role="switch" aria-checked={iniziativa.attiva} aria-label={t('Bozze pronte prima che le chieda')} disabled={!!occupato}
         onClick={() => azione('iniziativa', async () => { setIniziativa(await api.impostaIniziativa(!iniziativa.attiva)); setIniziativaEsito('') })}><span /></button>
       <span>{iniziativa.attiva ? t('Attiva') : t('In pausa')}</span>

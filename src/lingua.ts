@@ -281,7 +281,7 @@ const EN: Record<string, string> = {
   'A consumo, sul credito Anthropic. È il modello su cui Myynd è stato messo a punto.': 'Pay as you go, on your Anthropic credit. The model Myynd was tuned on.',
   'Claude, con l’abbonamento che paghi già': 'Claude, with the subscription you already pay for',
   'Un altro fornitore, o un modello sul tuo computer': 'Another provider, or a model on your computer',
-  'OpenAI, OpenRouter, Groq, Mistral — o Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.': 'OpenAI, OpenRouter, Groq, Mistral — or Ollama, LM Studio and llama.cpp on this computer. An address and a model name: Myynd installs nothing.',
+  'OpenAI, OpenRouter, Groq, Mistral, oppure Ollama, LM Studio e llama.cpp in casa. Un indirizzo e il nome di un modello: Myynd non installa niente.': 'OpenAI, OpenRouter, Groq, Mistral, or Ollama, LM Studio and llama.cpp on this computer. An address and a model name: Myynd installs nothing.',
   'Cambia chiave': 'Change key',
   'Verifica della connessione in corso…': 'Checking the connection…',
   'Chiave collegata': 'Key connected',
@@ -436,9 +436,9 @@ const EN: Record<string, string> = {
   'Anteprima non valida.': 'Invalid document preview.',
   'Numero di pagine non valido.': 'Invalid page count.',
   'Revisione non valida.': 'Invalid document review.',
-  'Revisione non disponibile — non verificato': 'Review unavailable — not verified',
+  'Revisione non disponibile: non verificato': 'Review unavailable: not verified',
   'Revisione superata': 'Review passed',
-  'La revisione ha trovato problemi — da correggere': 'Review found issues — needs revision',
+  'La revisione ha trovato problemi: da correggere': 'Review found issues: needs revision',
   'Consegna non valida.': 'Invalid document delivery.',
   'Data non valida.': 'Invalid date.',
   'Dettagli attività': 'Task details',
@@ -561,8 +561,8 @@ const EN: Record<string, string> = {
 
 // — portare il proprio Myynd altrove —
   'Portalo su un’altra macchina': 'Move it to another machine',
-  'Scarica un file con dentro tutto — i documenti, la lista, la memoria, le automazioni e le fonti collegate — e caricalo su un altro Myynd per ritrovartelo identico.':
-    'Download one file with everything in it — documents, list, memory, automations and connected sources — and upload it to another Myynd to find it exactly as it was.',
+  'Scarica un file con dentro tutto (i documenti, la lista, la memoria, le automazioni e le fonti collegate) e caricalo su un altro Myynd per ritrovartelo identico.':
+    'Download one file with everything in it (documents, list, memory, automations and connected sources) and upload it to another Myynd to find it exactly as it was.',
   'Dentro ci sono anche le password delle caselle e i token delle fonti: quel file apre la tua posta. Spostalo e cancellalo.':
     'It also contains your mailbox passwords and source tokens: that file opens your mail. Move it, then delete it.',
   'Scaricalo': 'Download it',
@@ -782,8 +782,8 @@ const EN: Record<string, string> = {
   'Parola d’ordine del webhook': 'Webhook verify token',
   'inventala, e riscrivila su Meta': 'make one up, and write it again on Meta',
   'Collega WhatsApp': 'Connect WhatsApp',
-  'WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose — quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.':
-    'WhatsApp cannot be re-read: Meta pushes messages, it does not let you ask for them. That means two things — whatever arrived before today will not be there, and this computer has to be reachable from the internet for new ones to arrive.',
+  'WhatsApp non si può rileggere: Meta i messaggi li manda, non li fa chiedere. Vuol dire due cose: quello che è arrivato prima di oggi non ci sarà, e questo computer dev’essere raggiungibile da internet perché ne arrivino di nuovi.':
+    'WhatsApp cannot be re-read: Meta pushes messages, it does not let you ask for them. That means two things: whatever arrived before today will not be there, and this computer has to be reachable from the internet for new ones to arrive.',
   'Su developers.facebook.com: nell’app WhatsApp, in Configurazione dell’API, copia l’ID del numero e crea un token permanente da utente di sistema. Il segreto dell’app sta in Impostazioni › Di base.':
     'On developers.facebook.com: in the WhatsApp app, under API Setup, copy the phone number ID and create a permanent system-user token. The app secret is under Settings › Basic.',
   'È quello che firma i messaggi in arrivo: senza, quell’indirizzo non saprebbe distinguere Meta da chiunque altro.':
@@ -982,8 +982,8 @@ const EN: Record<string, string> = {
   'Gettoni per le macchine': 'Tokens for machines',
   'Servono al Myynd di casa per spingere qui i documenti che ha letto dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro: con uno di questi non si entra nell’app e non si tocca il conto.':
     'They let the Myynd at home push here the documents it has read from your folders. They do not expire, you revoke them from here, and they open nothing else: one of these cannot sign in to the app and cannot touch the account.',
-  'Servono a un altro Myynd — quello su un server — per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.':
-    'They let another Myynd — the one on a server — receive the documents this one reads from your folders. They do not expire, you revoke them from here, and they open nothing else.',
+  'Servono a un altro Myynd, quello su un server, per ricevere i documenti che questo legge dalle tue cartelle. Non scadono, si revocano da qui, e non aprono nient’altro.':
+    'They let another Myynd, the one on a server, receive the documents this one reads from your folders. They do not expire, you revoke them from here, and they open nothing else.',
   'il MacBook dell’ufficio': 'the office MacBook',
   'Creane uno': 'Create one',
   'Copialo adesso: questa è l’unica volta che si vede. Incolla queste due righe nel Myynd di casa.':
@@ -1484,8 +1484,8 @@ const EN: Record<string, string> = {
   'PDF, Word, testo. Solo lettura, solo dove dici tu.':
     'PDF, Word, plain text. Read-only, and only where you say.',
   'Oppure un percorso': 'Or a path',
-  'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi — non succede da solo.':
-    'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime — it does not happen on its own.',
+  'Il browser legge la cartella che scegli e te la manda qui. Niente esce dal tuo computer finché non scegli una cartella, e puoi rifarlo quando vuoi: non succede da solo.':
+    'Your browser reads the folder you pick and sends it here. Nothing leaves your computer until you choose a folder, and you can do it again anytime: it does not happen on its own.',
   'Scegli una cartella': 'Choose a folder',
   'Sto leggendo…': 'Reading…',
   'Token da notion.so/my-integrations. Poi condividi con l\'integrazione le pagine da leggere.':
@@ -1767,7 +1767,7 @@ const EN: Record<string, string> = {
   'Spento: fa tutto Claude.': 'Off: Claude does everything.',
   'Nessun modello trovato su questa macchina.': 'No model found on this machine.',
   'Titoli delle chat, traduzioni, e quello che si segna di te: se qui c’\u00e8 un modello acceso lo fa lui e non costa niente. Le risposte e le bozze restano a Claude, perch\u00e9 \u00e8 l\u00ec che sbagliare costa.':
-    'Chat titles, translations, and what it notes down about you: if a model is running here it does that work, for nothing. Answers and drafts stay with Claude \u2014 that is where being wrong costs.',
+    'Chat titles, translations, and what it notes down about you: if a model is running here it does that work, for nothing. Answers and drafts stay with Claude, because that is where being wrong costs.',
   'Trascina per spostarla': 'Drag to move it',
   // — mandare per email —
   'Mandala per email…': 'Send it by email…',
@@ -1862,8 +1862,8 @@ const EN: Record<string, string> = {
   'Installato, ma non ci sei ancora entrato.': 'Installed, but you have not signed in yet.',
   'Apri il Terminale, scrivi «claude» e fai l’accesso. Da lì in poi Myynd può ragionare con l’abbonamento che paghi già, invece che a consumo con la chiave.':
     'Open Terminal, type “claude” and sign in. From then on Myynd can reason on the subscription you already pay for, instead of per use with the API key.',
-  'Hai Claude Code su questo computer. Se fai l’accesso — Terminale, scrivi «claude» — Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.':
-    'You have Claude Code on this computer. Sign in — Terminal, type “claude” — and Myynd can reason on the subscription you already pay for, with no API key at all.',
+  'Hai Claude Code su questo computer. Se fai l’accesso (Terminale, scrivi «claude»), Myynd può ragionare con l’abbonamento che paghi già, e non ti serve nessuna chiave.':
+    'You have Claude Code on this computer. Sign in (Terminal, type “claude”) and Myynd can reason on the subscription you already pay for, with no API key at all.',
   'Claude Code è installato ma non ci sei ancora entrato. Apri il Terminale, scrivi «claude» e fai l’accesso.':
     'Claude Code is installed but you have not signed in yet. Open Terminal, type “claude” and sign in.',
   'Claude Code non ha risposto, e non c’è una chiave di riserva.':
@@ -1951,8 +1951,8 @@ const EN: Record<string, string> = {
   'ogni giorno': 'every day',
   'ogni settimana': 'every week',
   'quando arriva qualcosa': 'when something comes in',
-  'le parole da cercare nei tuoi documenti — vuoto: guarda tutto':
-    'the words to look for in your documents — empty: it looks at everything',
+  'le parole da cercare nei tuoi documenti; vuoto: guarda tutto':
+    'the words to look for in your documents; empty: it looks at everything',
   'mette solo una riga': 'just leaves a line',
   'prepara anche la bozza': 'writes the draft too',
   'in Oggi': 'in Today',
@@ -2015,9 +2015,9 @@ const EN: Record<string, string> = {
   'In che cartella lavora Claude Code': 'Which folder Claude Code works in',
   'Legge il progetto e scrive cosa farebbe. Non tocca un file: quello lo decidi tu.': 'It reads the project and writes what it would do. It touches no file: that’s your call.',
   'Collega una cartella del desktop e potrà lavorarci.': 'Connect a desktop folder and it will be able to work there.',
-  '— scegline una —': '— pick one —',
+  'Scegline una': 'Pick one',
   'Le parole di chi ha scritto quei documenti, nella loro lingua. Vuoto: guarda tutto.': 'The words of whoever wrote those documents, in their language. Empty: it looks at everything.',
-  'Scrivi @ per dirle cosa può aprire — la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.': 'Type @ to tell it what it may open — your email, your desktop, your calendar. I’ll do the rest: it starts paused, you try it, and you switch it on when it convinces you.',
+  'Scrivi @ per dirle cosa può aprire: la posta, il desktop, l’agenda. Al resto penso io: nasce in pausa, la provi, e la accendi quando ti convince.': 'Type @ to tell it what it may open: your email, your desktop, your calendar. I’ll do the rest: it starts paused, you try it, and you switch it on when it convinces you.',
   'Fuori dalle cartelle': 'Outside every folder',
   'Nessuna apre questo, per ora.': 'None of them opens this, for now.',
   'Sicuro?': 'Sure?',
@@ -2042,7 +2042,7 @@ const EN: Record<string, string> = {
   'Prima collega un fornitore compatibile.': 'Connect a compatible provider first.',
   'Con quale motore lavora': 'Which engine does the work',
   'Cambia': 'Change',
-  'Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise — soprattutto le bozze e le fonti citate: rileggile prima di fidarti.': 'Myynd was tuned on Claude. With another model the answers may be less precise — especially drafts and cited sources: reread them before you trust them.',
+  'Myynd è stato messo a punto su Claude. Con un altro modello le risposte possono essere meno precise, soprattutto le bozze e le fonti citate: rileggile prima di fidarti.': 'Myynd was tuned on Claude. With another model the answers may be less precise, especially drafts and cited sources: reread them before you trust them.',
   'Può fare anche il lavoro grosso: collega un fornitore compatibile con OpenAI puntandolo a http://127.0.0.1:11434/v1, con un modello come qwen2.5:14b. Ma sappi cosa scegli: un modello piccolo sbaglia di più e inventa più volentieri, e sulle bozze e sulle fonti si vede.': 'It can do the heavy work too: connect an OpenAI-compatible provider pointed at http://127.0.0.1:11434/v1, with a model such as qwen2.5:14b. But know what you’re choosing: a small model gets more wrong and makes things up more readily, and it shows in drafts and sources.',
   'Non sono riuscito a cambiare motore.': 'I couldn’t switch engine.',
   'Al posto di Claude, per le risposte, le bozze e il feed. Serve un indirizzo che parli come OpenAI e il nome di un modello; la chiave solo se il fornitore la vuole.': 'Instead of Claude, for answers, drafts and the feed. You need an address that speaks like OpenAI and a model name; the key only if the provider wants one.',
@@ -2102,8 +2102,8 @@ const EN: Record<string, string> = {
   'Una riga per ogni documento.': 'One line per document.',
   'Non sono riuscito a smistare i documenti: riprovo al prossimo giro.': 'I could not sort the documents: I will try again next round.',
 // — le conversazioni: la scheda, e quello che può dire il connettore —
-  'Le chat che hai già avuto con ChatGPT e con Claude, e — se vuoi — le sessioni di Claude Code su questo computer.':
-    'The chats you already had with ChatGPT and Claude, and — if you want — the Claude Code sessions on this computer.',
+  'Le chat che hai già avuto con ChatGPT e con Claude, e se vuoi le sessioni di Claude Code su questo computer.':
+    'The chats you already had with ChatGPT and Claude, and if you want the Claude Code sessions on this computer.',
   'ChatGPT: Impostazioni › Controlli dati › Esporta dati. Claude: Impostazioni › Privacy › Esporta dati. Arriva un archivio via email: dentro c’è conversations.json, ed è quello il file da scegliere.':
     'ChatGPT: Settings › Data controls › Export data. Claude: Settings › Privacy › Export data. An archive arrives by email: inside there is conversations.json, and that is the file to choose.',
   'I file esportati': 'The exported files',
@@ -2643,8 +2643,8 @@ const EN: Record<string, string> = {
   'Note è un’app per Mac: su questo computer non c’è niente da leggere.': 'Notes is a Mac app: there is nothing to read on this computer.',
   'Le Note si leggono dal Mac dove gira Myynd, e qui Myynd gira su un server.': 'Notes are read from the Mac Myynd runs on, and here Myynd runs on a server.',
   'leggo le note': 'reading the notes',
-  'Le chat di claude.ai non stanno su questo Mac — nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.':
-    'claude.ai chats are not on this Mac — not even with the Claude app installed: they live on their side, and the export is the only way.',
+  'Le chat di claude.ai non stanno su questo Mac, nemmeno con l’app Claude installata: vivono dai loro, e l’unica strada è l’esportazione.':
+    'claude.ai chats are not on this Mac, not even with the Claude app installed: they live on their side, and the export is the only way.',
   // — i progetti: su cosa lavora, e a cosa punta —
   'Progetti': 'Projects',
   'Su cosa stai lavorando, e a cosa punta ciascuno. È la prima cosa che Myynd legge prima di scegliere cosa mostrarti.':
@@ -3140,6 +3140,11 @@ const EN: Record<string, string> = {
   'Aggiornamento non riuscito.': 'Update failed.',
   'Spostato o cancellato': 'Moved or deleted',
   'Memoria, cose nuove da guardare': 'Memory, new things to check',
+  // «Fonti», un nome solo
+  'Manca una fonte': 'A source is missing',
+  'manca una fonte': 'a source is missing',
+  'Apri le Fonti': 'Open Sources',
+  'Cerca fonti…': 'Search sources…',
   // — P5: fine —
 
   // — P6: inizio —

@@ -45,41 +45,42 @@ const ETICHETTE: Record<string, () => string> = {
   manda: () => t('Manda'),
   leggiAdesso: () => t('Leggi adesso'),
   rileggi: () => t('Rileggi'),
-  inLista: () => t('in lista'),
+  affidalo: () => t('Affidalo a Myynd'),
+  parlane: () => t('Parlane in chat'),
+  nonUtile: () => t('Non utile'),
   fatto: () => t('Fatto'),
-  piuTardi: () => t('Più tardi'),
   letta: () => t('Letta'),
   nonMiInteressa: () => t('Non mi interessa'),
   guardaIGiornali: () => t('Guarda i giornali'),
-  rassegna: () => t('La rassegna'),
+  rassegna: () => t('Notizie'),
   scrivineUna: () => t('Scrivine una a parole'),
   cosaTroverebbe: () => t('Cosa troverebbe adesso'),
   ottimizza: () => t('Ottimizza'),
   comeLavori: () => t('Come lavori'),
   ilTuoRitratto: () => t('Il tuo ritratto'),
-  pensavaPrima: () => t('Quello che pensava prima'),
-  aggiornaRitratto: () => t('Aggiorna da quello che hai imparato'),
+  pensavaPrima: () => t('Prima pensava'),
+  aggiornaRitratto: () => t('Aggiorna adesso'),
+  daGuardare: () => t('Da guardare'),
+  unaCosa: () => t('Una cosa che deve sapere'),
   riordina: () => t('Riordina'),
-  fuoco: () => t('Su cosa mi concentro'),
-  argomenti: () => t('Di cosa ti tengo aggiornato'),
-  trasloco: () => t('Portalo su un’altra macchina'),
-  scaricalo: () => t('Scaricalo'),
-  caricaneUno: () => t('Caricane uno'),
+  fuoco: () => t('Fuoco'),
+  argomenti: () => t('Notizie'),
+  iTuoiDati: () => t('I tuoi dati'),
+  scarica: () => t('Scarica'),
+  accountEApp: () => t('Account e app'),
+  cancellaIlConto: () => t('Cancella il conto'),
   soloOsservare: () => t('Solo osservare'),
   preparareEAspettare: () => t('Preparare e aspettare'),
   finoAllUltimoPasso: () => t("Fino all'ultimo passo"),
-  modello: () => t('Con quale modello ragiona'),
-  abbonamento: () => t('Con il tuo abbonamento'),
-  motore: () => t('Con quale motore lavora'),
-  fornitore: () => t('Un altro fornitore, o un modello sul tuo computer'),
+  modello: () => t('Un modello per ogni lavoro'),
+  motore: () => t('Motore'),
+  fornitore: () => t('Un modello sul tuo computer, o un altro fornitore'),
   connettori: () => t('Fonti'),
   preferenze: () => t('Preferenze'),
   memoria: () => t('Memoria'),
-  usaAbbonamento: () => t('Usa il tuo abbonamento'),
-  portaloQui: () => t('Ho già un Myynd: portalo qui'),
   ciStaLavorando: () => t('ci sta lavorando'),
   nonHoLetto: () => t('Non ho ancora letto niente.'),
-  senzaCredito: () => t('La chiave di Claude è senza credito. Ricaricala su console.anthropic.com.'),
+  senzaCredito: () => t('Il conto Anthropic è senza credito'),
   myyndNonRisponde: () => t('Myynd non risponde.')
 }
 
@@ -109,8 +110,8 @@ const SEZIONI: Sezione[] = [
     pezzi: [
       {
         p: {
-          it: 'Myynd legge le fonti che colleghi — posta, file, note, chat — e risponde alle tue domande da quello che ha letto, citando da dove viene ogni risposta. Prepara anche lavoro per te: risposte, bozze, documenti, piccole automazioni. Niente esce senza un tuo clic.',
-          en: 'Myynd reads the sources you connect — mail, files, notes, chats — and answers your questions from what it has read, citing where each answer comes from. It also prepares work for you: replies, drafts, documents, small automations. Nothing leaves without your click.'
+          it: 'Myynd legge le fonti che colleghi (posta, file, note, chat) e risponde alle tue domande da quello che ha letto, citando da dove viene ogni risposta. Prepara anche lavoro per te: risposte, bozze, documenti, piccole automazioni. Niente esce senza un tuo clic.',
+          en: 'Myynd reads the sources you connect (mail, files, notes, chats) and answers your questions from what it has read, citing where each answer comes from. It also prepares work for you: replies, drafts, documents, small automations. Nothing leaves without your click.'
         }
       }
     ]
@@ -122,8 +123,8 @@ const SEZIONI: Sezione[] = [
       {
         passi: [
           {
-            it: 'Crea l’accesso. Bastano un indirizzo email e una password di almeno otto caratteri. Se hai già un Myynd su un’altra macchina, in questo passo puoi portarne qui il file ({{portaloQui}}).',
-            en: 'Create your login. An email address and a password of at least eight characters are enough. If you already have a Myynd on another machine, you can bring its file over at this step ({{portaloQui}}).'
+            it: 'Crea l’accesso. Bastano un indirizzo email e una password di almeno otto caratteri.',
+            en: 'Create your login. An email address and a password of at least eight characters are enough.'
           },
           {
             it: 'Scegli con chi ragiona. In Fonti ci sono due schede, Anthropic e OpenAI: ognuna si collega con l’account che paghi già (Claude tramite Claude Code su questo computer, ChatGPT dal browser) o con una chiave API a consumo. Puoi collegare tutt’e due le strade e scegliere quale lavora. C’è anche un modello sul tuo computer, o un altro fornitore.',
@@ -140,7 +141,7 @@ const SEZIONI: Sezione[] = [
         ]
       }
     ],
-    azione: { etichetta: () => t('Apri le connessioni'), vai: v => v.apriConnessioni() }
+    azione: { etichetta: () => t('Apri le Fonti'), vai: v => v.apriConnessioni() }
   },
   {
     id: 'aiuto-fonti',
@@ -157,8 +158,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Posta', en: 'Mail' },
             testo: {
-              it: 'IMAP: indirizzo e password della casella. Il server lo trova Myynd dall’indirizzo; se non ci riesce, scrivi tu l’host IMAP (porta 993, SSL). Gmail e iCloud non accettano la password dell’account: serve una «password per le app» — per Google la crei su [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), per iCloud su [appleid.apple.com](https://appleid.apple.com) sotto «Password per le app». Le caselle Outlook e Microsoft 365 collegale con la fonte Microsoft. Da questa casella partono anche le email che approvi in lista.',
-              en: 'IMAP: the address and the mailbox password. Myynd finds the server from the address; if it cannot, type the IMAP host yourself (port 993, SSL). Gmail and iCloud do not accept the account password: you need an “app password” — for Google create one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), for iCloud at [appleid.apple.com](https://appleid.apple.com) under “App-Specific Passwords”. Connect Outlook and Microsoft 365 mailboxes through the Microsoft source instead. The emails you approve in the list are sent from this mailbox.'
+              it: 'IMAP: indirizzo e password della casella. Il server lo trova Myynd dall’indirizzo; se non ci riesce, scrivi tu l’host IMAP (porta 993, SSL). Gmail e iCloud non accettano la password dell’account: serve una «password per le app»: per Google la crei su [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), per iCloud su [appleid.apple.com](https://appleid.apple.com) sotto «Password per le app». Le caselle Outlook e Microsoft 365 collegale con la fonte Microsoft. Da questa casella partono anche le email che approvi in lista.',
+              en: 'IMAP: the address and the mailbox password. Myynd finds the server from the address; if it cannot, type the IMAP host yourself (port 993, SSL). Gmail and iCloud do not accept the account password: you need an “app password”: for Google create one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), for iCloud at [appleid.apple.com](https://appleid.apple.com) under “App-Specific Passwords”. Connect Outlook and Microsoft 365 mailboxes through the Microsoft source instead. The emails you approve in the list are sent from this mailbox.'
             }
           },
           {
@@ -227,8 +228,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Granola', en: 'Granola' },
             testo: {
-              it: 'Le note delle tue riunioni, lette da Granola su questo Mac. Non c’è niente da incollare: Granola scrive quello che ascolta in un file su questo disco, e Myynd lo legge — il riassunto che ha scritto lei e gli appunti che hai preso tu, tutti e due. Serve che Granola sia installato qui e che tu l’abbia aperto almeno una volta. C’è solo quando Myynd gira sul tuo computer, e solo su Mac: su un server quella cartella non è di nessuno.',
-              en: 'Your meeting notes, read from Granola on this Mac. There is nothing to paste: Granola writes what it hears into a file on this disk, and Myynd reads it — both the summary it wrote and the notes you took. Granola needs to be installed here and opened at least once. It is available only when Myynd runs on your own computer, and only on a Mac: on a server that folder belongs to no one.'
+              it: 'Le note delle tue riunioni, lette da Granola su questo Mac. Non c’è niente da incollare: Granola scrive quello che ascolta in un file su questo disco, e Myynd lo legge: il riassunto che ha scritto lei e gli appunti che hai preso tu, tutti e due. Serve che Granola sia installato qui e che tu l’abbia aperto almeno una volta. C’è solo quando Myynd gira sul tuo computer, e solo su Mac: su un server quella cartella non è di nessuno.',
+              en: 'Your meeting notes, read from Granola on this Mac. There is nothing to paste: Granola writes what it hears into a file on this disk, and Myynd reads it: both the summary it wrote and the notes you took. Granola needs to be installed here and opened at least once. It is available only when Myynd runs on your own computer, and only on a Mac: on a server that folder belongs to no one.'
             }
           },
           {
@@ -241,8 +242,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Conversazioni', en: 'Conversations' },
             testo: {
-              it: 'Le chat che hai già avuto con ChatGPT e con Claude, e le sessioni di Claude Code su questo computer. Le prime arrivano dai file che ti mandano loro — ChatGPT: Impostazioni › Controlli dati › Esporta dati; Claude: Impostazioni › Privacy › Esporta dati — e Myynd legge solo il conversations.json che scegli tu, quando lo scegli. Le sessioni di Claude Code stanno in ~/.claude/projects e si leggono solo se accendi l’interruttore. Di ogni conversazione tiene quello che vi siete scritti: non i file che ha aperto, non i comandi che ha lanciato, non il suo ragionamento. C’è solo quando Myynd gira sul tuo computer.',
-              en: 'The chats you already had with ChatGPT and Claude, and the Claude Code sessions on this computer. The first come from the files they send you — ChatGPT: Settings › Data controls › Export data; Claude: Settings › Privacy › Export data — and Myynd reads only the conversations.json you choose, when you choose it. Claude Code sessions live in ~/.claude/projects and are read only if you turn the switch on. Of each conversation it keeps what you wrote to each other: not the files it opened, not the commands it ran, not its reasoning. It is available only when Myynd runs on your own computer.'
+              it: 'Le chat che hai già avuto con ChatGPT e con Claude, e le sessioni di Claude Code su questo computer. Le prime arrivano dai file che ti mandano loro (ChatGPT: Impostazioni › Controlli dati › Esporta dati; Claude: Impostazioni › Privacy › Esporta dati), e Myynd legge solo il conversations.json che scegli tu, quando lo scegli. Le sessioni di Claude Code stanno in ~/.claude/projects e si leggono solo se accendi l’interruttore. Di ogni conversazione tiene quello che vi siete scritti: non i file che ha aperto, non i comandi che ha lanciato, non il suo ragionamento. C’è solo quando Myynd gira sul tuo computer.',
+              en: 'The chats you already had with ChatGPT and Claude, and the Claude Code sessions on this computer. The first come from the files they send you (ChatGPT: Settings › Data controls › Export data; Claude: Settings › Privacy › Export data), and Myynd reads only the conversations.json you choose, when you choose it. Claude Code sessions live in ~/.claude/projects and are read only if you turn the switch on. Of each conversation it keeps what you wrote to each other: not the files it opened, not the commands it ran, not its reasoning. It is available only when Myynd runs on your own computer.'
             }
           },
           {
@@ -262,7 +263,7 @@ const SEZIONI: Sezione[] = [
         ]
       }
     ],
-    azione: { etichetta: () => t('Vai ai connettori'), vai: v => v.goConn() }
+    azione: { etichetta: () => t('Apri le Fonti'), vai: v => v.goConn() }
   },
   {
     id: 'aiuto-da-fare',
@@ -279,8 +280,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Le tre colonne', en: 'The three columns' },
             testo: {
-              it: '{{io}}: la fai tu, Myynd non la tocca. {{bozza}}: te la scrive, rileggi e mandi tu. Myynd: la porta fino all’ultimo passo — testo, allegati, a chi va. Scegliere la colonna è delegare; tornare su {{io}} è richiamarla indietro.',
-              en: '{{io}}: you do it, Myynd does not touch it. {{bozza}}: Myynd writes it, you read it over and send it. Myynd: it carries it to the last step — text, attachments, who it goes to. Choosing the column is delegating; going back to {{io}} takes it back.'
+              it: '{{io}}: la fai tu, Myynd non la tocca. {{bozza}}: te la scrive, rileggi e mandi tu. Myynd: la porta fino all’ultimo passo (testo, allegati, a chi va). Scegliere la colonna è delegare; tornare su {{io}} è richiamarla indietro.',
+              en: '{{io}}: you do it, Myynd does not touch it. {{bozza}}: Myynd writes it, you read it over and send it. Myynd: it carries it to the last step (text, attachments, who it goes to). Choosing the column is delegating; going back to {{io}} takes it back.'
             }
           },
           {
@@ -293,8 +294,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Cosa vuol dire «ti chiede»', en: 'What “asks you” means' },
             testo: {
-              it: 'Myynd non inventa: se gli manca qualcosa — un indirizzo, cosa vuoi dire — si ferma e lo chiede, e la riga porta la pastiglia {{tiChiede}}. Rispondi sotto la riga, anche con cinque parole, e il lavoro riparte da lì.',
-              en: 'Myynd does not make things up: if something is missing — an address, what you want to say — it stops and asks, and the line shows the {{tiChiede}} tag. Answer under the line, five words are enough, and the work picks up from there.'
+              it: 'Myynd non inventa: se gli manca qualcosa (un indirizzo, cosa vuoi dire) si ferma e lo chiede, e la riga porta la pastiglia {{tiChiede}}. Rispondi sotto la riga, anche con cinque parole, e il lavoro riparte da lì.',
+              en: 'Myynd does not make things up: if something is missing (an address, what you want to say) it stops and asks, and the line shows the {{tiChiede}} tag. Answer under the line, five words are enough, and the work picks up from there.'
             }
           },
           {
@@ -327,8 +328,8 @@ const SEZIONI: Sezione[] = [
       },
       {
         p: {
-          it: 'Se la prima ricerca non trova niente, Myynd riprova con altre parole — e, se i tuoi documenti possono essere in un’altra lingua, con le parole di quella lingua. Se davvero non c’è, lo dice invece di inventare.',
-          en: 'If the first search finds nothing, Myynd tries again with other words — and, if your documents may be in another language, with the words of that language. If it really is not there, it says so instead of guessing.'
+          it: 'Se la prima ricerca non trova niente, Myynd riprova con altre parole e, se i tuoi documenti possono essere in un’altra lingua, con le parole di quella lingua. Se davvero non c’è, lo dice invece di inventare.',
+          en: 'If the first search finds nothing, Myynd tries again with other words and, if your documents may be in another language, with the words of that language. If it really is not there, it says so instead of guessing.'
         }
       },
       {
@@ -362,8 +363,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Quello che richiede te', en: 'What needs you' },
             testo: {
-              it: 'Dalle tue fonti Myynd mette da parte quello che sembra richiedere te: cose da decidere, da leggere, scadenze. La prima sta in grande, le altre sotto. Da ogni voce puoi metterla {{inLista}}, chiedere a Myynd, segnarla {{fatto}} o rimandarla ({{piuTardi}}). Ogni tanto Myynd ti fa una domanda qui: bastano cinque parole.',
-              en: 'From your sources Myynd sets aside what seems to need you: things to decide, to read, deadlines. The first one is shown large, the others below. From each item you can put it {{inLista}}, ask Myynd, mark it {{fatto}} or postpone it ({{piuTardi}}). Now and then Myynd asks you a question here: five words are enough.'
+              it: 'Dalle tue fonti Myynd mette da parte quello che sembra richiedere te: cose da decidere, da leggere, scadenze. La prima sta in grande, le altre sotto. Da ogni voce puoi affidarla a Myynd ({{affidalo}}), parlarne in chat ({{parlane}}), segnarla {{fatto}} o toglierla ({{nonUtile}}): in quel caso Myynd chiede perché, con una parola. Ogni tanto Myynd ti fa una domanda qui: bastano cinque parole.',
+              en: 'From your sources Myynd sets aside what seems to need you: things to decide, to read, deadlines. The first one is shown large, the others below. From each item you can hand it to Myynd ({{affidalo}}), talk it over in chat ({{parlane}}), mark it {{fatto}} or remove it ({{nonUtile}}): then Myynd asks why, in one word. Now and then Myynd asks you a question here: five words are enough.'
             }
           },
           {
@@ -438,15 +439,15 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Il ritratto', en: 'The portrait' },
             testo: {
-              it: 'Cinque blocchi sotto {{ilTuoRitratto}}: come decidi, cosa controlli sempre prima di dire di sì, come scrivi, gli errori da evitare, le persone che contano. Li riempie Myynd da quello che impara, e lo dice. Appena ci metti mano tu diventano parole tue. {{riordina}} rimette in ordine un blocco; {{aggiornaRitratto}} li aggiorna adesso invece che al prossimo giro.',
-              en: 'Five blocks under {{ilTuoRitratto}}: how you decide, what you always check before saying yes, how you write, mistakes to avoid, the people who matter. Myynd fills them from what it learns, and says so. As soon as you edit one, it becomes your words. {{riordina}} tidies up a block; {{aggiornaRitratto}} updates them now instead of at the next round.'
+              it: 'Cinque domande sotto {{ilTuoRitratto}}: come decidi, cosa controlli sempre prima di dire di sì, come scrivi, gli errori da evitare, le persone che contano. Le riempie Myynd da quello che impara, e lo dice. Appena ci metti mano tu diventano parole tue. {{riordina}} rimette in ordine una risposta; {{aggiornaRitratto}} le aggiorna adesso invece che al prossimo giro. {{comeLavori}} è un’altra cosa: le abitudini che Myynd ha contato guardando come lavori.',
+              en: 'Five questions under {{ilTuoRitratto}}: how you decide, what you always check before saying yes, how you write, mistakes to avoid, the people who matter. Myynd fills them from what it learns, and says so. As soon as you edit one, it becomes your words. {{riordina}} tidies up an answer; {{aggiornaRitratto}} updates them now instead of at the next round. {{comeLavori}} is something else: the habits Myynd has counted by watching how you work.'
             }
           },
           {
             nome: { it: 'Quello che ha capito', en: 'What it has worked out' },
             testo: {
-              it: 'Ogni convinzione porta la sua origine — te l’ha sentita dire, l’ha dedotta, l’ha notata — e quanto ci crede. Apri «perché» per vedere la prova. Passaci sopra e usa il cestino per fargliela scordare; scrivine una tua nel campo in fondo.',
-              en: 'Each belief carries its origin — you told it, it inferred it, it noticed it — and how sure it is. Open “why” to see the evidence. Hover a belief and use the bin to make it forget; write one of your own in the field at the bottom.'
+              it: 'Ogni convinzione dice da dove viene (scritta da te, detta in chat, da un’attività chiusa…), e «forse» quando non è sicura. Quelle che Myynd ha notato da solo stanno sotto {{daGuardare}} finché non le tieni. Apri «perché» per vedere la prova, correggila dove è scritta, o usa il cestino per fargliela scordare: non torna. Scrivine una tua in {{unaCosa}}.',
+              en: 'Each belief says where it comes from (written by you, said in chat, from a task you closed…), and “maybe” when it is not sure. The ones Myynd noticed on its own sit under {{daGuardare}} until you keep them. Open “why” to see the evidence, correct it where it is written, or use the bin to make it forget: it does not come back. Write one of your own in {{unaCosa}}.'
             }
           },
           {
@@ -484,15 +485,15 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Tono', en: 'Tone' },
             testo: {
-              it: 'Diretto, cordiale o formale: è la voce delle bozze. Sotto i tre bottoni c’è un esempio di come suona.',
-              en: 'Direct, warm or formal: it is the voice of the drafts. Under the three buttons there is an example of how it sounds.'
+              it: 'Diretto, cordiale o formale: è la voce delle bozze. Sotto le tre scelte c’è un esempio di come suona.',
+              en: 'Direct, warm or formal: it is the voice of the drafts. Under the three choices there is an example of how it sounds.'
             }
           },
           {
             nome: { it: 'Autonomia', en: 'Autonomy' },
             testo: {
-              it: 'Tre livelli. {{soloOsservare}}: legge e indicizza, e prima di proporti qualcosa di operativo chiede. {{preparareEAspettare}}: scrive bozze e brief. {{finoAllUltimoPasso}}: prepara tutto fino in fondo. In tutti e tre l’ultimo passo — premere invio — resta tuo.',
-              en: 'Three levels. {{soloOsservare}}: it reads and indexes, and asks before proposing anything operational. {{preparareEAspettare}}: it writes drafts and briefs. {{finoAllUltimoPasso}}: it prepares everything to the end. In all three the last step — pressing send — stays yours.'
+              it: 'Tre livelli. {{soloOsservare}}: chiede prima di preparare qualcosa da solo. {{preparareEAspettare}}: prepara in anticipo. {{finoAllUltimoPasso}}: porta il lavoro fino all’ultimo passo. In tutti e tre premere Invia resta tuo.',
+              en: 'Three levels. {{soloOsservare}}: it asks before preparing anything on its own. {{preparareEAspettare}}: it prepares ahead. {{finoAllUltimoPasso}}: it takes work to the last step. In all three, pressing Send stays yours.'
             }
           },
           {
@@ -516,22 +517,22 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'Dove stanno', en: 'Where they live' },
             testo: {
-              it: 'Su un Mac tutto sta in `~/.myynd`: l’indice in `mente.db`, le credenziali in `config.json`, leggibili solo da te. Su un server sta nella cartella dei dati di Myynd, in una sottocartella che è solo tua: gli altri account non la vedono. Quello che esce sono le richieste a Claude — la domanda e i pezzi di documento che servono a rispondere — e le chiamate ai giornali per la rassegna.',
-              en: 'On a Mac everything lives in `~/.myynd`: the index in `mente.db`, the credentials in `config.json`, readable only by you. On a server it lives in Myynd’s data folder, in a subfolder that is yours alone: other accounts cannot see it. What goes out are the requests to Claude — the question and the pieces of document needed to answer — and the calls to the newspapers for the news.'
+              it: 'Su un Mac tutto sta in `~/.myynd`: l’indice in `mente.db`, le credenziali in `config.json`, leggibili solo da te. Su un server sta nella cartella dei dati di Myynd, in una sottocartella che è solo tua: gli altri account non la vedono. Quello che esce sono le richieste al modello (la domanda e i pezzi di documento che servono a rispondere) e le chiamate ai giornali per la rassegna.',
+              en: 'On a Mac everything lives in `~/.myynd`: the index in `mente.db`, the credentials in `config.json`, readable only by you. On a server it lives in Myynd’s data folder, in a subfolder that is yours alone: other accounts cannot see it. What goes out are the requests to the model (the question and the pieces of document needed to answer) and the calls to the newspapers for the news.'
             }
           },
           {
             nome: { it: 'Portarli altrove', en: 'Moving them elsewhere' },
             testo: {
-              it: 'In {{preferenze}}, sotto {{trasloco}}, {{scaricalo}} ti dà un file `.myynd` con dentro tutto: documenti, lista, memoria, automazioni e fonti collegate. Dentro ci sono anche le password delle caselle e i token: quel file apre la tua posta. Trattalo come una password — spostalo, poi cancellalo. Su un altro Myynd, {{caricaneUno}} lo carica e sostituisce quello che c’è: non si fonde niente.',
-              en: 'In {{preferenze}}, under {{trasloco}}, {{scaricalo}} gives you a `.myynd` file with everything in it: documents, list, memory, automations and connected sources. It also contains your mailbox passwords and tokens: that file opens your mail. Treat it like a password — move it, then delete it. On another Myynd, {{caricaneUno}} uploads it and replaces what is there: nothing is merged.'
+              it: 'In {{preferenze}}, sotto {{iTuoiDati}}, {{scarica}} ti dà un file con tutto quello che Myynd tiene di te: documenti, lista, chat, memoria, automazioni. Le chiavi e le password non ci sono, ma c’è la posta letta: chiede la tua password prima di prepararlo.',
+              en: 'In {{preferenze}}, under {{iTuoiDati}}, {{scarica}} gives you a file with everything Myynd keeps about you: documents, list, chats, memory, automations. Keys and passwords are not in it, but the mail it has read is: it asks for your password before preparing it.'
             }
           },
           {
             nome: { it: 'Cancellare tutto', en: 'Deleting everything' },
             testo: {
-              it: 'Non c’è ancora un bottone. Sul tuo Mac: chiudi Myynd e cancella la cartella `~/.myynd`. Su un server: chiedilo a chi lo ospita.',
-              en: 'There is no button yet. On your Mac: quit Myynd and delete the `~/.myynd` folder. On a server: ask the person who hosts it.'
+              it: 'In {{preferenze}}, in fondo a {{accountEApp}}, {{cancellaIlConto}} toglie tutto: documenti, lista, chat, memoria, automazioni e fonti. Chiede la password e il tuo indirizzo, e non si torna indietro.',
+              en: 'In {{preferenze}}, at the bottom of {{accountEApp}}, {{cancellaIlConto}} removes everything: documents, list, chats, memory, automations and sources. It asks for your password and your address, and there is no going back.'
             }
           }
         ]
@@ -561,8 +562,8 @@ const SEZIONI: Sezione[] = [
           {
             nome: { it: 'La posta non si collega', en: 'Email will not connect' },
             testo: {
-              it: 'Con Gmail, iCloud e Yahoo serve la **password per le app**, non quella dell’account: sono sedici lettere. Su Google si creano da [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) — e la voce compare solo se hai attivo l’accesso in due passaggi: se non la trovi, è quello che manca. Copiala pure con gli spazi, li tolgo io. Controlla l’host IMAP — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — e la porta, che è 993 con SSL. Le caselle Outlook e Microsoft 365 rifiutano qualsiasi password via IMAP.',
-              en: 'With Gmail, iCloud and Yahoo you need an **app password**, not your account one: it is sixteen letters. On Google you create it at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) — and that page only appears if 2-step verification is on: if you cannot find it, that is what is missing. Copy it with the spaces if you like, I strip them. Check the IMAP host — imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it — and the port, which is 993 with SSL. Outlook and Microsoft 365 mailboxes refuse any password over IMAP.'
+              it: 'Con Gmail, iCloud e Yahoo serve la **password per le app**, non quella dell’account: sono sedici lettere. Su Google si creano da [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), e la voce compare solo se hai attivo l’accesso in due passaggi: se non la trovi, è quello che manca. Copiala pure con gli spazi: Myynd li toglie. Controlla l’host IMAP (imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it) e la porta, che è 993 con SSL. Le caselle Outlook e Microsoft 365 rifiutano qualsiasi password via IMAP.',
+              en: 'With Gmail, iCloud and Yahoo you need an **app password**, not your account one: it is sixteen letters. On Google you create it at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), and that page only appears if 2-step verification is on: if you cannot find it, that is what is missing. Copy it with the spaces if you like: Myynd strips them. Check the IMAP host (imap.gmail.com, imap.mail.me.com, imap.register.it, imaps.aruba.it) and the port, which is 993 with SSL. Outlook and Microsoft 365 mailboxes refuse any password over IMAP.'
             }
           },
           {

@@ -326,7 +326,7 @@ export function Onboarding({ stato, fatto, accountEmail, cambiaAccount }: { stat
         <h2 ref={titolo} tabIndex={-1}>{!lettura ? t('Cosa deve leggere Myynd?') : inLettura ? t('Leggo le tue fonti…') : nonLette(lettura) ? frasi.fontiNonLetteInsieme(nonLette(lettura)) : t('Ho letto le tue fonti.')}</h2>
         {!lettura && <p className="onboard-why">{t('Collegane quante vuoi. Myynd le legge tutte insieme.')}</p>}
         {lettura ? <RigheLettura righe={lettura} classe="onboard" icona={18} nome={nomeFonte} /> : <fieldset disabled={occupato} className="onboard-fieldset">
-          {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca connessioni…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca connessioni…')} /></label>}
+          {tutteFonti && <label className="onboard-field"><span className="onboard-sr-only">{t('Cerca fonti…')}</span><input type="search" value={cercaFonte} onChange={e => setCercaFonte(e.target.value)} placeholder={t('Cerca fonti…')} /></label>}
           {/* Le collegate si vedono da lontano: il bordo e la riga verdi, che qui vogliono dire solo «collegata».
               Una collegata che l'ultima lettura non ha letto non è verde: dice «non letta», e aprendola si ripara. */}
           <div className="onboard-sources">{visibili.map(c => {

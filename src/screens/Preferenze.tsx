@@ -47,11 +47,14 @@ function LApp() {
 
   useEffect(() => {
     if (!d) return
-    d.scorciatoia().then(setAcc).catch(() => {})
-    d.avvioAutomatico().then(setAvvio).catch(() => {})
+    // ogni risposta del guscio passa da Promise.resolve: un guscio vecchio (o quello finto delle prove) può non dare una promessa
+    const vero = <T,>(x: T) => (typeof x === 'string' || typeof x === 'boolean' || (x && typeof x === 'object') ? x : null)
+    Promise.resolve(d.scorciatoia()).then(x => { if (typeof x === 'string') setAcc(x) }).catch(() => {})
+    Promise.resolve(d.avvioAutomatico()).then(x => { if (typeof x === 'boolean') setAvvio(x) }).catch(() => {})
     // gli eventi già mandati prima che questa scheda esistesse non tornano
-    d.aggiornamenti.attuale().then(setAgg).catch(() => {})
-    return d.aggiornamenti.stato(setAgg)
+    Promise.resolve(d.aggiornamenti.attuale()).then(x => { const a = vero(x); if (a && typeof (a as Aggiornamento).stato === 'string') setAgg(a as Aggiornamento) }).catch(() => {})
+    const smetti = d.aggiornamenti.stato(setAgg)
+    return () => { if (typeof smetti === 'function') smetti() }
   }, [d])
 
   // la registrazione: il prossimo tasto premuto è la scorciatoia nuova (in cattura, prima di ogni altra)
@@ -67,7 +70,7 @@ function LApp() {
         return
       }
       setRegistro(false); setGuaio('')
-      d.impostaScorciatoia(nuovo)
+      Promise.resolve(d.impostaScorciatoia(nuovo))
         .then(r => { if (r.ok) setAcc(nuovo); else setGuaio(r.errore ? t(r.errore) : t('Non sono riuscito a cambiare la scorciatoia.')) })
         .catch(e => setGuaio(detto(e)))
     }
@@ -80,13 +83,13 @@ function LApp() {
   const cambiaAvvio = async () => {
     const nuovo = !avvio
     setAvvio(nuovo); setGuaio('')
-    try { await d.impostaAvvioAutomatico(nuovo) }
+    try { await Promise.resolve(d.impostaAvvioAutomatico(nuovo)) }
     catch (e) { setAvvio(!nuovo); setGuaio(detto(e)) }
   }
 
   const controlla = async () => {
     setChiedo(true); setGuaio('')
-    try { setAgg(await d.aggiornamenti.controlla()) }
+    try { setAgg(await Promise.resolve(d.aggiornamenti.controlla())) }
     catch (e) { setAgg({ stato: 'errore', messaggio: e instanceof Error ? e.message : String(e) }) }
     setChiedo(false)
   }
@@ -307,7 +310,7 @@ function Fascicolo({ v }: { v: Vals }) {
       )}
       <div className="f-piede">
         {d && !v.ospitato && (
-          <Bottone disabled={!dati} onClick={() => { d.mostraNelFinder(dati).catch(() => {}) }}>
+          <Bottone disabled={!dati} onClick={() => { Promise.resolve(d.mostraNelFinder(dati)).catch(() => {}) }}>
             {d.piattaforma === 'darwin' ? t('Mostra nel Finder') : t('Mostra la cartella dei dati')}
           </Bottone>
         )}

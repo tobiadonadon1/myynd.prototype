@@ -250,7 +250,7 @@ export function Connessioni({ fonte, chiudi, stato: s, rileggi: ricarica }: {
       }}>
       <header className="connections-dialog-header">
         {scelta && <button ref={indietro} className="connections-icon-button" onClick={torna} aria-label={t('‹ tutte le fonti')} title={t('‹ tutte le fonti')}>←</button>}
-        <h2 id="connessioni-titolo">{scelta ? t(scelta.nome) : t('Connessioni')}</h2>
+        <h2 id="connessioni-titolo">{scelta ? t(scelta.nome) : t('Fonti')}</h2>
         <button className="connections-icon-button" onClick={chiudi} aria-label={t('Chiudi')} title={t('Chiudi')}>×</button>
       </header>
       <div className="connections-dialog-body">

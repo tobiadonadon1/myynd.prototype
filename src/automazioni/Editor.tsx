@@ -530,7 +530,7 @@ export function Editor({ a, catalogo, cartelle, raccolte, cambiata, chiudi, spos
             color: a.salute.stato === 'ferma' ? 'rgba(var(--inchiostro-rgb),.6)' : 'var(--rame-testo)'
           }}>
             <details style={{ width: '100%' }}><summary style={{ cursor: 'pointer', fontSize: 11.5 }}>
-              {a.salute.stato === 'scollegata' ? t('manca una connessione') : a.salute.stato === 'guaio' ? t('L’ultima volta è andata storta.') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}
+              {a.salute.stato === 'scollegata' ? t('manca una fonte') : a.salute.stato === 'guaio' ? t('L’ultima volta è andata storta.') : a.salute.stato === 'ferma' ? t('aspetta che chiudi la sua riga') : t('Da controllare')}
             </summary><div style={{ paddingTop: 9 }}>
             <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
               {a.salute.stato === 'scollegata'

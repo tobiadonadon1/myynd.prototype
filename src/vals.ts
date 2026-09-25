@@ -1380,8 +1380,9 @@ export function useVals(iniziale: Stato, apriConnessioni: (fonte?: string) => vo
     salvaArgomenti,
     /** Aprire il documento dietro una citazione, dal segno nel testo: sul passo, se c'è; «[M]» apre il progetto o la Memoria. */
     apriFonte: (id: string, passo?: string) => {
-      if (id === 'memoria') { go('memoria')(); return }
-      if (id.startsWith('memoria:progetto:')) { apriProgetto(id.slice('memoria:progetto:'.length)); return }
+      // P5: il segno della memoria atterra sulla sezione giusta, e un progetto sui Progetti col suo biglietto
+      if (id === 'memoria') { chiediSezione('memoria', 'ritratto'); go('memoria')(); return }
+      if (id.startsWith('memoria:progetto:')) { chiediProgetto(id.slice('memoria:progetto:'.length)); chiediSezione('memoria', 'progetti'); go('memoria')(); return }
       api.documento(id).then(d => setDoc(passo ? { ...d, _passo: passo } : d)).catch(() => mostraToast(t('Non trovo più il documento.')))
     },
     /** I progetti come li conosce il client: servono a dare un nome a un id. */
