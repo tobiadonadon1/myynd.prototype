@@ -165,7 +165,8 @@ async function avvio() {
   // il mostriciattolo sullo schermo, se la persona l'ha acceso: un clic è la scorciatoia
   compagno.prepara({
     alPremere, apri: finestra.mostra,
-    pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi()
+    pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi(),
+    cambiato: on => finestra.manda('myynd:compagno-cambiato', on)
   })
   // con `--inspect` e MYYND_ISPEZIONE=1 si prova il guscio dal vivo: un
   // `import()` dall'inspector non passa, e la scorciatoia non si preme da

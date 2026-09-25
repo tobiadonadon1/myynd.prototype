@@ -31,7 +31,7 @@ test('ogni metodo del ponte ha il suo canale nel preload e il suo gestore nel gu
     assert.match(tipi, new RegExp(`${metodo}\\(`), `src/desktop.ts: ${metodo}`)
   }
   assert.match(tipi, /osservatore\?: \{ permessoTitoli\(\): Promise<boolean>; chiediPermessoTitoli\(\): Promise<boolean>; apriImpostazioniTitoli\(\): Promise<void> \}/)
-  assert.match(tipi, /compagno\?: \{ acceso\(\): Promise<boolean>; accendi\(on: boolean\): Promise<void> \}/)
+  assert.match(tipi, /compagno\?: \{ acceso\(\): Promise<boolean>; accendi\(on: boolean\): Promise<void>; suCambio\?\(cb: \(on: boolean\) => void\): \(\) => void \}/)
   assert.match(prova, /'osservatore', 'compagno'/)
 })
 
@@ -57,4 +57,12 @@ test('il mostriciattolo: i canali della pagina esistono da tutti e due i lati', 
   }
   assert.ok(compagno.includes("send('compagno:stato'"))
   assert.doesNotMatch(compagno.replace(/\/\/.*$/gm, ''), /\.focus\(\)|\.show\(\)|app\.focus/, 'il mostriciattolo non prende mai il fuoco')
+})
+
+test('acceso o spento arriva alla pagina: «Togli dallo schermo» passa da accendi, e accendi lo dice', () => {
+  assert.match(preload, /suCambio: cb => ascolta\('myynd:compagno-cambiato', on => cb\(on === true\)\)/)
+  assert.match(main, /cambiato: on => finestra\.manda\('myynd:compagno-cambiato', on\)/)
+  const accendi = compagno.slice(compagno.indexOf('export function accendi('), compagno.indexOf('export function osserva('))
+  assert.match(accendi, /azioni\?\.cambiato\?\.\(on\)/)
+  assert.match(compagno, /case 'togli':[^\n]*accendi\(false\)|case 'togli':\s*\n\s*accendi\(false\)/)
 })

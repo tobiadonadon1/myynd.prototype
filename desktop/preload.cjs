@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('myynd', {
   // — il mostriciattolo sullo schermo, acceso o spento dalle Preferenze —
   compagno: {
     acceso: () => chiedi('myynd:compagno-acceso'),
-    accendi: on => chiedi('myynd:compagno-accendi', on === true)
+    accendi: on => chiedi('myynd:compagno-accendi', on === true),
+    suCambio: cb => ascolta('myynd:compagno-cambiato', on => cb(on === true))
   }
 })

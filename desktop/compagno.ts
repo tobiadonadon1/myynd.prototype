@@ -31,7 +31,11 @@ const MAC = process.platform === 'darwin'
 /** Uno spostamento dalla presa più grande di così non viene da un trascinamento. */
 const PASSO_MASSIMO = 20_000
 
-export type Azioni = { alPremere(): void; apri(): void; pausa(): void; riprendi(): void }
+export type Azioni = {
+  alPremere(): void; apri(): void; pausa(): void; riprendi(): void
+  /** Acceso o spento, da qualunque parte: le Preferenze aperte lo devono sapere. */
+  cambiato?(on: boolean): void
+}
 
 let azioni: Azioni | null = null
 let finestra: BrowserWindow | null = null
@@ -184,6 +188,9 @@ export function accendi(on: boolean): void {
     distruggi()
     scriviRegistro('guscio · il mostriciattolo si toglie')
   }
+  // «Togli dallo schermo» non passa dalla pagina, e il pannello non prende
+  // il fuoco: senza questo l'interruttore nelle Preferenze direbbe ancora acceso
+  azioni?.cambiato?.(on)
 }
 
 export function osserva(s: StatoLocale): void {
