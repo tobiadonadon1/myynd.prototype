@@ -1,0 +1,8 @@
+[
+  { "aspetta": 2500 },
+  { "clicca": "Last week." },
+  { "aspetta": 900 },
+  { "js": "document.querySelector('[data-foglio=resoconto]').scrollTop = 900; 1" },
+  { "aspetta": 300 },
+  { "scatta": "casella" }
+]

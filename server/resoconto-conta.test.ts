@@ -77,7 +77,7 @@ test('una mail dalla casella con lo stesso Message-ID conta', () => {
 })
 
 test('un messaggio inviato vale per una riga sola', () => {
-  const md = { doc: 'posta:Sent:9', quando: g(16), certezza: 'id', ritocco: 0.1 }
+  const md = { doc: 'posta:Sent:9', quando: g(16), certezza: 'id' as const, ritocco: 0.1 }
   const m = con({ compiti: [riga('m1', { mandata: md, creato: g(14) }), riga('rev-m1', { madre: 'm1', mandata: md, creato: g(15) })] })
   const v = conta(m, S1).voci
   assert.equal(v.length, 1)

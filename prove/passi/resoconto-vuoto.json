@@ -1,0 +1,8 @@
+[
+  { "aspetta": 2500 },
+  { "scatta": "vuoto" },
+  { "clicca": "Your account" },
+  { "vai": "Memory" },
+  { "scatta": "vuoto-memoria" },
+  { "testo": "vuoto-memoria" }
+]

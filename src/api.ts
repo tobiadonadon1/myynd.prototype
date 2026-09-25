@@ -2172,6 +2172,39 @@ export const saluteFonti = (giorni = 30, fonte?: string) =>
 // — P8: fine —
 
 // — P9: inizio —
+/** Quello che Myynd ha fatto per lui: una settimana, la scorsa, o da quando ha cominciato. */
+export type QualeResoconto = 'questa' | 'scorsa' | 'inizio'
+export type GenereResoconto = 'mail' | 'documento' | 'codice' | 'agenda' | 'riordino' | 'bozza' | 'scadenza' | 'segnalata'
+export type VoceResoconto = {
+  chiave: string; genere: GenereResoconto; titolo: string; chi?: string | null; quando: string
+  apre: { doc: string } | { compito: string } | null
+  anteprima?: string | null; minuti: number; quanti?: number | null; riscritta?: boolean; preparata?: boolean
+  scade?: string | null; presa?: 'fatta' | 'nella lista' | 'vista' | null; prova: string; automazione?: string | null
+  cestino?: boolean; perso?: boolean
+}
+export type NumeriResoconto = { mail: number; lavori: number; scadenze: number; segnalate: number; minuti: number }
+export type Resoconto = {
+  quale: QualeResoconto; da: string; a: string; lunedi: string; inizio: string
+  numeri: NumeriResoconto
+  preparate: { mail: number; lavori: number }
+  stime: { genere: GenereResoconto; minuti: number }[]; riscritte: number
+  punteggio: { giuste: number; totale: number; base: number } | null
+  notato: { chiave: string; genere: string; dati: Record<string, string | number> | null; testoSuo: string | null; stato: string }[]
+  segnalate: { utili: number; viste: number; mancate: number } | null
+  voci: VoceResoconto[]
+  automazioni: { id: string; nome: string; usate: number; prodotte: number }[]
+  copertura: { postaInviata: boolean; bozzeInCasella: number }
+  vuoto: boolean
+}
+export type SommarioResoconto = { inizio: string; righe: { quale: QualeResoconto; numeri: NumeriResoconto }[] }
+export type LunediResoconto = { mostra: false } | { mostra: true; lunedi: string; numeri: { mail: number; lavori: number; scadenze: number } }
+
+export const resocontoApi = {
+  leggi: (quale: QualeResoconto) => json<{ resoconto: Resoconto }>(`/api/resoconto?quale=${encodeURIComponent(quale)}`).then(r => r.resoconto),
+  sommario: () => json<SommarioResoconto>('/api/resoconto/sommario'),
+  lunedi: () => json<LunediResoconto>('/api/resoconto/lunedi'),
+  visto: (lunedi: string) => json<{ ok: true }>('/api/resoconto/visto', { method: 'POST', body: JSON.stringify({ lunedi }) })
+}
 // — P9: fine —
 
 // — P10: inizio —

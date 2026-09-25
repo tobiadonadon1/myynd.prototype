@@ -6,6 +6,7 @@ import { Glifo } from '../components/Stato'
 import { Marchio } from '../components/Marchio'
 import { Rassegna } from '../components/Rassegna'
 import { Punto } from '../components/Punto'
+import { CartaSettimana } from '../components/Resoconto'
 import { generePrimoDocumento, nomeDelFile, nomePorta, parolaFonte, portaInChat, primoParagrafo, siPuoParlarne, taglia, type Vals } from '../vals'
 import type { Lista } from '../oggi/useCompiti'
 import { secchioVivo } from '../oggi/secchi'
@@ -1312,6 +1313,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
       {/* Una riga del punto apre il documento da cui viene, e niente altro: le
           cose da fare non stanno lì dentro, stanno qui sotto. */}
       <Punto v={v} />
+      <CartaSettimana v={v} />
 
       {/*
         I blocchi non sono inclinati, e le altre carte sì. Non è una dimenticanza.
