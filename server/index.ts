@@ -84,6 +84,7 @@ import * as mancate from './mancate.ts'
 import { segnaViste, risposteFuori } from './feed-dati.ts'
 import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
+import * as resoconto from './resoconto.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -4739,6 +4740,31 @@ app.get('/api/fonti/salute', (req, res) => {
 // — P8: rotte, fine —
 
 // — P9: rotte, inizio —
+/*
+ * Quello che Myynd ha fatto per lui: tre letture che non scrivono niente, e
+ * il lunedì visto, che è un gesto suo. Nessun evento sul filo, nessuna riga
+ * nel registro per richiesta.
+ */
+app.get('/api/resoconto', (req, res) => {
+  try {
+    if (!resoconto.eQuale(req.query.quale)) return res.status(400).json({ errore: 'Non conosco questo periodo.' })
+    res.json({ resoconto: resoconto.resoconto(req.query.quale) })
+  } catch (e) { errore(res, e) }
+})
+app.get('/api/resoconto/sommario', (_req, res) => {
+  try { res.json(resoconto.sommario()) } catch (e) { errore(res, e) }
+})
+app.get('/api/resoconto/lunedi', (_req, res) => {
+  try { res.json(resoconto.lunedi()) } catch (e) { errore(res, e) }
+})
+app.post('/api/resoconto/visto', (req, res) => {
+  try {
+    const l = req.body?.lunedi
+    if (typeof l !== 'string' || !resoconto.LUNEDI.test(l)) return res.status(400).json({ errore: 'Non conosco questo periodo.' })
+    resoconto.segnaVisto(l)
+    res.json({ ok: true })
+  } catch (e) { errore(res, e) }
+})
 // — P9: rotte, fine —
 
 // — P10: rotte, inizio —
