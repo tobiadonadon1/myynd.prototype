@@ -53,6 +53,7 @@ export type Verifica = {
   nonValide: number[]
   /** I fatti duri della risposta che non stanno in niente di quello che il modello ha letto. */
   scoperti: string[]
+  /** La riga del rifiuto (`eUnRifiuto`) e nessun segno rimasto: un rifiuto che cita una fonte ha risposto. */
   rifiuto: boolean
   /** Non un rifiuto, nessun segno, e almeno un fatto duro o due frasi. */
   senzaFonti: boolean
@@ -281,15 +282,23 @@ const senzaSegni = (s: string) => s.replace(SEGNO, '').replace(/\s{2,}/g, ' ').t
  * Molti modelli mettono il segno dopo il punto, non prima; senza questo la
  * frase non si chiudeva più e tutto il capoverso diventava una frase sola,
  * con ogni segno che mostrava il passo sbagliato.
+ *
+ * Fra il punto e il segno possono stare le virgolette che chiudono una
+ * citazione («…phase.”[1]», «…phase.»[1]», «'…phase.'[1]»), una parentesi,
+ * o la fine di un grassetto o di un corsivo («**…phase.**[1]»): il punto
+ * dentro le virgolette chiude la frase lo stesso. E i tre puntini «…» sono
+ * un punto come gli altri.
  */
 const SEGNI_DOPO_IL_PUNTO = '(?:[ \\t]*\\[(?:\\d{1,3}|M)\\])*'
-const FRASE = new RegExp(`(?:[^.!?\\n]|[.!?](?!${SEGNI_DOPO_IL_PUNTO}(?:\\s|$)))+(?:[.!?]+${SEGNI_DOPO_IL_PUNTO}(?=\\s|$)|\\n|$)`, 'g')
+const CHIUSURE_DOPO_IL_PUNTO = '(?:[»”’"\')\\]]|\\*\\*|__|\\*|_)*'
+const FINE_FRASE = `${CHIUSURE_DOPO_IL_PUNTO}${SEGNI_DOPO_IL_PUNTO}(?=\\s|$)`
+const FRASE = new RegExp(`(?:[^.!?…\\n]|[.!?…](?!${FINE_FRASE}))+(?:[.!?…]+${FINE_FRASE}|\\n|$)`, 'g')
 
 /**
  * Le frasi di un testo, con la posizione: prima le righe, poi le frasi dentro
  * ogni riga. Un punto chiude la frase solo davanti a uno spazio o alla fine,
- * o davanti a un segno seguito da uno spazio o dalla fine: quello dentro
- * «1.200», «27.07.2026» o «1.0.3» è parte della frase.
+ * anche attraverso una virgoletta o un grassetto che chiude e un segno:
+ * quello dentro «1.200», «27.07.2026» o «1.0.3» è parte della frase.
  */
 function frasiCon(testo: string): { testo: string; inizio: number; fine: number }[] {
   const fuori: { testo: string; inizio: number; fine: number }[] = []

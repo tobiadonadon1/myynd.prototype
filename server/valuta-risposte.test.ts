@@ -9,7 +9,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -291,6 +291,37 @@ test('dalla riga di comando: --dati senza --conto è il conto della radice; con 
   assert.match(r2.stderr, /Non c'è nessun conto/)
   const r3 = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', cli, '--dati', radice, '--boh'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME } })
   assert.equal(r3.status, 2)
+})
+
+test('dalla riga di comando: --dati vale davvero, e la casa (~/.myynd) non si legge né si tocca', () => {
+  // Un import statico di un modulo che importa config.ts fisserebbe la
+  // radice a ~/.myynd prima che main() metta MYYND_DATI da --dati: qui la
+  // casa finta ha un insieme diverso da quello di --dati, e deve restare
+  // com'è, senza conti.db né altro
+  const cli = fileURLToPath(new URL('./valuta-risposte.ts', import.meta.url))
+  const casa = mkdtempSync(join(CASA, 'casa-cli-'))
+  const dati = mkdtempSync(join(CASA, 'dati-cli-'))
+  const quando = ieri(1)
+  const insieme = (marca: string) => JSON.stringify({
+    versione: 1, lingua: 'en', creato: quando, aggiornato: quando,
+    domande: [{ id: 'q01', domanda: `${marca} What is the fee for the first phase?`, tipo: 'risponde', attesa: '€4,800', genere: 'cifra', doc: { id: 'posta:INBOX:701', titolo: 'Harbor pilot kickoff', fonte: 'posta', quando: null }, citazione: 'The fee is €4,800 for the first phase.', scarto: 105, origine: 'costruita', interlingua: false, verificata: 'persona', creata: quando }]
+  })
+  mkdirSync(join(casa, '.myynd', 'valutazioni', 'risposte'), { recursive: true })
+  writeFileSync(join(casa, '.myynd', 'valutazioni', 'risposte', 'domande.json'), insieme('FROM-FAKE-HOME'))
+  mkdirSync(join(dati, 'valutazioni', 'risposte'), { recursive: true })
+  writeFileSync(join(dati, 'valutazioni', 'risposte', 'domande.json'), insieme('FROM-DATI'))
+  const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', cli, '--dati', dati, '--rivedi'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: casa } })
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(r.stdout, /FROM-DATI What is the fee/)
+  assert.doesNotMatch(r.stdout, /FROM-FAKE-HOME/)
+  assert.deepEqual(readdirSync(join(casa, '.myynd')), ['valutazioni'], 'nella casa non nasce niente: né conti.db né altro')
+  assert.equal(readFileSync(join(casa, '.myynd', 'valutazioni', 'risposte', 'domande.json'), 'utf8'), insieme('FROM-FAKE-HOME'))
+  assert.ok(existsSync(join(dati, 'conti.db')), 'i conti si aprono dentro --dati')
+  // con --conto, il conto si cerca dentro --dati, non nella casa
+  const r2 = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', cli, '--dati', dati, '--conto', 'nessuno@esempio.test', '--rivedi'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: casa } })
+  assert.equal(r2.status, 2)
+  assert.ok(r2.stderr.includes(`in ${dati}`), r2.stderr)
+  assert.deepEqual(readdirSync(join(casa, '.myynd')), ['valutazioni'])
 })
 
 // — il lavoro settimanale —

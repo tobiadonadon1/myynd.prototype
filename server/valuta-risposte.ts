@@ -29,9 +29,9 @@ export type EsitoRisposta = 'giusta' | 'senza_fonte' | 'sbagliata' | 'inventata'
 export const BUDGET_RUN = 1_200_000
 export const TEMPO_RUN = 25 * 60_000
 export const SOGLIA = { giuste: 0.9, inventate: 0, rifiutateMale: 0.05 } as const
-/** Sotto queste domande attive il lavoro settimanale non parte: lo stesso numero della riga nelle preferenze, preso da lì. */
-import { INSIEME_MINIMO } from './risposte-archivio.ts'
-export { INSIEME_MINIMO }
+// Il minimo dell'insieme (`INSIEME_MINIMO`) sta in risposte-archivio.ts e si
+// legge da `moduli()`: quel modulo importa config.ts, e un import statico qui
+// fisserebbe la radice dei dati a ~/.myynd prima che `--dati` valga.
 const SETTE_GIORNI = 7 * 86_400_000
 
 export type Giudizio = { corrisponde: boolean; sostenuta: boolean; rispondeDavvero: boolean; motivo: string }
@@ -425,7 +425,7 @@ export async function pronta(): Promise<{ ok: true } | { ok: false; motivo?: Sal
   const recente = (iso?: string) => !!iso && ferri.adesso() - new Date(iso).getTime() < SETTE_GIORNI
   if (recente(stato.ultimaCompleta) || recente(stato.ultimaSettimanale)) return { ok: false }
   const insieme = archivio.leggiInsieme<Insieme>()
-  if (!insieme || dp.attive(insieme).length < INSIEME_MINIMO) return { ok: false, motivo: 'insieme' }
+  if (!insieme || dp.attive(insieme).length < archivio.INSIEME_MINIMO) return { ok: false, motivo: 'insieme' }
   const strada = await stradaDellaChat()
   if (!strada) return { ok: false, motivo: 'motore' }
   if (strada.compatto) return { ok: false, motivo: 'locale' }

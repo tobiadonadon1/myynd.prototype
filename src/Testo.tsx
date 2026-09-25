@@ -32,7 +32,10 @@ type Conteggi = Map<number, number>
  * e sta sopra il segno, o sotto se sopra non c'è posto, sempre dentro la
  * colonna che scorre.
  */
-function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; passo?: string; onApri?: (id: string, passo?: string) => void }) {
+/** Un altro segno attaccato prima o dopo questo («[1][2]»): da quel lato la zona del mouse si ferma al bordo della cifra. */
+type Vicini = { prima: boolean; dopo: boolean }
+
+function Segno({ n, fonte, passo, onApri, vicini }: { n: number | 'M'; fonte?: Fonte; passo?: string; onApri?: (id: string, passo?: string) => void; vicini?: Vicini }) {
   const [sopra, setSopra] = useState(false)
   const [fuoco, setFuoco] = useState(false)
   const [dalMouse, setDalMouse] = useState(false)
@@ -81,6 +84,17 @@ function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; pa
     if (e.key === 'Escape') { e.stopPropagation(); setFuoco(false); setSopra(false) }
   }
   const conFuocoDaTastiera = fuoco && !dalMouse
+  // Il segno resta piccolo, la zona che risponde no: sedici pixel di
+  // larghezza (la cifra ne occupa sei, il cerchietto cinque) di imbottitura
+  // trasparente, ripresi dal margine, e il testo non si muove. Ma due segni
+  // attaccati («¹²») non si coprono: dal lato dove ce n'è un altro
+  // l'imbottitura è un pixel solo, non ripreso dal margine, così fra le due
+  // cifre resta un filo di spazio e puntare la prima non apre la seconda.
+  const largo = memoria ? 6 : 5
+  const sinistra = vicini?.prima ? 1 : largo
+  const destra = vicini?.dopo ? 1 : largo
+  const padding = `4px ${destra}px 4px ${sinistra}px`
+  const margin = `-4px ${vicini?.dopo ? 0 : -largo}px -4px ${vicini?.prima ? 0 : -largo}px`
 
   return (
     <span style={{ position: 'relative', whiteSpace: 'nowrap' }}>
@@ -95,12 +109,13 @@ function Segno({ n, fonte, passo, onApri }: { n: number | 'M'; fonte?: Fonte; pa
         onClick={apri}
         {...(attivo ? { role: 'button', tabIndex: 0, 'aria-label': memoria ? t('Dalla tua memoria') : `${t('Fonte')}: ${titolo}` } : {})}
         style={{
-          fontSize: '.66em', lineHeight: 0, verticalAlign: 'super',
-          // il segno resta piccolo, la zona che risponde no: sedici pixel di
-          // larghezza (la cifra ne occupa sei, il cerchietto quattro) di
-          // imbottitura trasparente, ripresi dal margine, e il testo non si muove
-          padding: memoria ? '4px 6px' : '4px 5px', margin: memoria ? '-4px -6px' : '-4px -5px', borderRadius: 3,
-          cursor: attivo ? 'pointer' : 'default', fontWeight: 500,
+          // il cerchietto della memoria a .66em era un anello sottile di tre
+          // pixel, che sembrava una sbavatura: un po' più grande e col tratto
+          // ripassato, con lo stesso inchiostro tenue
+          fontSize: memoria ? '.85em' : '.66em', lineHeight: 0, verticalAlign: 'super',
+          WebkitTextStroke: memoria ? '.6px currentColor' : undefined,
+          padding, margin, borderRadius: 3,
+          cursor: attivo ? 'pointer' : 'default', fontWeight: memoria ? 600 : 500,
           color: (sopra || fuoco) && attivo ? 'var(--rame-testo)' : 'rgba(var(--inchiostro-rgb),.4)',
           background: 'transparent', outline: conFuocoDaTastiera ? '2px solid rgba(var(--rame-rgb),.45)' : 'none', outlineOffset: 1,
           transition: 'color .12s'
@@ -131,9 +146,13 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: str
   // condividerebbe la posizione con il chiamante
   const re = /\*\*(.+?)\*\*|(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)|`(.+?)`|\[(\d{1,3}|M)\]/g
   let ultimo = 0
+  // dove finiva l'ultimo segno: un segno che comincia lì è attaccato al precedente
+  let fineSegno = -1
   let m: RegExpExecArray | null
   while ((m = re.exec(testo))) {
     if (m.index > ultimo) pezzi.push(testo.slice(ultimo, m.index))
+    const vicini: Vicini = { prima: m.index === fineSegno, dopo: /^\[(?:\d{1,3}|M)\]/.test(testo.slice(m.index + m[0].length)) }
+    if (m[4] !== undefined) fineSegno = m.index + m[0].length
     if (m[1] !== undefined) {
       // ricorsivo: una citazione dentro il grassetto resta una citazione
       pezzi.push(<strong key={m.index} style={{ fontWeight: 600 }}>{inline(m[1], fonti, onApri, conteggi)}</strong>)
@@ -144,7 +163,7 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: str
         <code key={m.index} style={{ background: 'rgba(var(--inchiostro-rgb),.07)', padding: '1px 5px', borderRadius: 4, fontSize: '.92em', overflowWrap: 'anywhere' }}>{m[3]}</code>
       )
     } else if (m[4] === 'M') {
-      pezzi.push(<Segno key={m.index} n="M" fonte={fonteMemoria(fonti)} onApri={onApri} />)
+      pezzi.push(<Segno key={m.index} n="M" fonte={fonteMemoria(fonti)} onApri={onApri} vicini={vicini} />)
     } else {
       const n = Number(m[4])
       // La fonte si cerca per numero scritto nell'etichetta, non per posizione:
@@ -157,7 +176,7 @@ function inline(testo: string, fonti: Fonte[], onApri?: (id: string, passo?: str
       const k = conteggi.get(n) ?? 0
       conteggi.set(n, k + 1)
       const fonte = perNumero(fonti, n)
-      pezzi.push(<Segno key={m.index} n={n} fonte={fonte} passo={passoDi(fonte, k)} onApri={onApri} />)
+      pezzi.push(<Segno key={m.index} n={n} fonte={fonte} passo={passoDi(fonte, k)} onApri={onApri} vicini={vicini} />)
     }
     ultimo = m.index + m[0].length
   }

@@ -301,6 +301,36 @@ test('il segno dopo il punto chiude la frase con lei: ogni segno porta il passo 
   assert.equal(passoPer('Il preventivo resta 1.200 € più IVA.[1]', LOGO), 'Il preventivo resta 1.200 € più IVA.')
 })
 
+test('il punto dentro le virgolette, il grassetto o prima dei tre puntini chiude la frase: il segno dopo porta il passo della sua frase', () => {
+  const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
+  const o = { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' as const }
+  const quota = 'The fee is €4,800 for the first phase.'
+  const data = 'Hi Alex, we confirm the Harbor pilot starts on 14 October 2026 with two suppliers, Brightline and Keel.'
+  const casi: [string, string][] = [
+    ['virgolette alte', 'Nora wrote: “The fee is €4,800 for the first phase.”[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['virgolette basse', 'Nora wrote: «The fee is €4,800 for the first phase.»[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['virgolette dritte', 'Nora wrote: "The fee is €4,800 for the first phase."[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['apostrofo', "Nora wrote: 'The fee is €4,800 for the first phase.'[1] The Harbor pilot starts on 14 October 2026.[1]"],
+    ['grassetto', '**The fee is €4,800 for the first phase.**[1] **The Harbor pilot starts on 14 October 2026.**[1]'],
+    ['corsivo', '*The fee is €4,800 for the first phase.*[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['parentesi', 'The fee is €4,800 (for the first phase.)[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['tre puntini', 'The fee is €4,800…[1] The Harbor pilot starts on 14 October 2026.[1]'],
+    ['virgolette e spazio', 'Nora wrote: “The fee is €4,800 for the first phase.” [1] The Harbor pilot starts on 14 October 2026. [1]']
+  ]
+  for (const [nome, testo] of casi) {
+    const r = ancora(testo, o)
+    assert.deepEqual(r.fonti[0].passi, [quota, data], nome)
+    assert.equal(r.fonti[0].passo, quota, nome)
+  }
+  // il punto dentro una cifra fra virgolette non chiude niente: la frase resta intera
+  assert.equal(passoPer('Il preventivo resta «1.200» € più IVA.[1]', LOGO), 'Il preventivo resta 1.200 € più IVA.')
+  const intera = ancora('Marco wrote «1.200 € più IVA»[2] and the date is 14 October 2026.[1]', { ...o, visti: [doc('a', 'Harbor pilot kickoff', HARBOR), doc('b', 'Consegna del logo', LOGO)], estratti: new Map([['a', 4000], ['b', 4000]]) })
+  assert.equal(intera.fonti[1].passo, 'Il preventivo resta 1.200 € più IVA.')
+  assert.equal(intera.fonti[0].passo, data)
+  // e un asterisco o una virgoletta in mezzo alla frase non la spezza
+  assert.equal(passoPer('The *fee* is “€4,800” for the first phase, they say.[1]', HARBOR), quota)
+})
+
 test('un rifiuto che cita una fonte non è un rifiuto nel verbale; la forma da sola resta un rifiuto', () => {
   const visti = [doc('a', 'Harbor pilot kickoff', HARBOR)]
   const conSegno = ancora('I don’t have that. The fee is €4,800 [1].', { visti, estratti: new Map([['a', 4000]]), letto: HARBOR, memoria: false, via: 'compatibile' })
