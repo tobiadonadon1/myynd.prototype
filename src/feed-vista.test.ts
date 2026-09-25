@@ -33,12 +33,13 @@ function banco() {
   let visibile = true, fuoco = true
   let cade = false
   const mandate: string[][] = []
+  const tentativi: number[] = []
   const timer: { fai: () => void; a: number }[] = []
   const v = creaVista({
     adesso: () => ora,
     visibile: () => visibile,
     fuoco: () => fuoco,
-    manda: async ids => { if (cade) throw new Error('rete giù'); mandate.push(ids) },
+    manda: async ids => { tentativi.push(ora); if (cade) throw new Error('rete giù'); mandate.push(ids) },
     dopo: (fai, ms) => { const t = { fai, a: ora + ms }; timer.push(t); return () => { const i = timer.indexOf(t); if (i >= 0) timer.splice(i, 1) } }
   })
   const avanza = async (ms: number) => {
@@ -47,7 +48,7 @@ function banco() {
     for (const t of [...timer]) if (t.a <= ora) { timer.splice(timer.indexOf(t), 1); t.fai() }
     await new Promise(r => setImmediate(r))
   }
-  return { v, mandate, avanza, nascondi: () => { visibile = false }, mostra: () => { visibile = true }, sfoca: () => { fuoco = false }, focalizza: () => { fuoco = true }, rompi: () => { cade = true }, aggiusta: () => { cade = false } }
+  return { v, mandate, tentativi, avanza, nascondi: () => { visibile = false }, mostra: () => { visibile = true }, sfoca: () => { fuoco = false }, focalizza: () => { fuoco = true }, rompi: () => { cade = true }, aggiusta: () => { cade = false } }
 }
 
 test('una carta sopra la metà per un secondo finisce in coda, parte dopo due secondi, e non si rimanda', async () => {
@@ -120,7 +121,30 @@ test('sotto la metà il conto si azzera; la coda dedupe, manda al massimo cinqua
   assert.deepEqual(d.mandate, [])
   assert.equal(d.v.perProva().coda.has('x'), true)
   d.aggiusta()
-  await d.avanza(2000)
+  // dopo un guasto l'attesa è raddoppiata: quattro secondi, non due
+  await d.avanza(4000)
   assert.deepEqual(d.mandate, [['x']])
   assert.equal(d.v.perProva().inviate.has('x'), true)
+})
+
+test('con il server giù l’attesa raddoppia fino a un minuto, e torna a due secondi al primo invio riuscito', async () => {
+  const b = banco()
+  b.rompi()
+  b.v.frazione('x', 1)
+  await b.avanza(1000)
+  await b.avanza(2000)
+  assert.deepEqual(b.tentativi, [3000], 'il primo tentativo, due secondi dopo il secondo sullo schermo')
+  // poi 4, 8, 16, 32 secondi, e da lì un minuto: non si bussa ogni due secondi
+  for (const passo of [4000, 8000, 16000, 32000, 60000, 60000]) await b.avanza(passo)
+  assert.deepEqual(b.tentativi, [3000, 7000, 15000, 31000, 63000, 123000, 183000])
+  assert.deepEqual(b.mandate, [])
+  assert.equal(b.v.perProva().coda.has('x'), true, 'niente si perde')
+  // il server torna: l'invio riesce, e l'attesa ricomincia da due secondi
+  b.aggiusta()
+  await b.avanza(60000)
+  assert.deepEqual(b.mandate, [['x']])
+  b.v.frazione('y', 1)
+  await b.avanza(1000)
+  await b.avanza(2000)
+  assert.deepEqual(b.mandate, [['x'], ['y']], 'dopo un invio riuscito si torna a due secondi')
 })

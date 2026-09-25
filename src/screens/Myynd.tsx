@@ -64,10 +64,12 @@ const PASTIGLIA_FATTA: CSSProperties = {
 /**
  * La pastiglia di uno stato: «Risposto», quando ha già risposto dalla sua
  * posta. Verde, perché è uno stato e non un'urgenza: l'unico verde della
- * riga. La carta resta finché non preme Fatto.
+ * riga. La carta resta finché non preme Fatto. Il fondo è un gettone: di
+ * notte non c'è (bordo e testo soli), perché sul bruno un velo di salvia
+ * era una lastra più chiara della riga.
  */
 const PASTIGLIA_STATO: CSSProperties = {
-  ...PASTIGLIA, color: 'var(--verde-cupo)', background: 'rgba(var(--salvia-rgb),.14)', border: '1px solid rgba(var(--salvia-rgb),.3)'
+  ...PASTIGLIA, color: 'var(--verde-cupo)', background: 'var(--stato-fondo)', border: '1px solid rgba(var(--salvia-rgb),.3)'
 }
 /** Il nome del progetto in cima al blocco: maiuscoletto spaziato, nel suo colore. */
 const NOME: CSSProperties = { fontSize: '11.5px', fontWeight: 600, letterSpacing: '.09em', textTransform: 'uppercase', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'left' }

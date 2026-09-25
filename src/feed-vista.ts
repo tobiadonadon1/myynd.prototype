@@ -26,6 +26,8 @@ export const OGNI = 500
 export const ATTESA_INVIO = 2000
 /** Quante per chiamata. */
 export const PER_CHIAMATA = 50
+/** Dopo un guasto l'attesa raddoppia, fino a un minuto: una pagina aperta con il server giù non bussa ogni due secondi. */
+export const ATTESA_MASSIMA = 60_000
 
 export function contaComeVista(s: { visibile: boolean; fuoco: boolean; frazione: number; da: number | null; adesso: number }): boolean {
   return s.visibile && s.fuoco && s.frazione >= META && s.da !== null && s.adesso - s.da >= UN_SECONDO
@@ -53,10 +55,11 @@ export function creaVista(f: Ferri) {
   const coda = new Set<string>()
   let cancellaInvio: (() => void) | null = null
   let inViaggio = false
+  let attesa = ATTESA_INVIO
 
   const programma = () => {
     if (cancellaInvio) return
-    cancellaInvio = f.dopo(() => { cancellaInvio = null; void svuota() }, ATTESA_INVIO)
+    cancellaInvio = f.dopo(() => { cancellaInvio = null; void svuota() }, attesa)
   }
 
   const svuota = async () => {
@@ -67,9 +70,12 @@ export function creaVista(f: Ferri) {
     try {
       await f.manda(ids)
       for (const id of ids) inviate.add(id)
+      attesa = ATTESA_INVIO
     } catch {
-      // torna in coda, e si riprova alla prossima occasione: niente si perde
+      // torna in coda, e si riprova più tardi: niente si perde, ma ogni
+      // guasto raddoppia l'attesa fino a un minuto
       for (const id of ids) if (!inviate.has(id)) coda.add(id)
+      attesa = Math.min(attesa * 2, ATTESA_MASSIMA)
     } finally {
       inViaggio = false
     }
