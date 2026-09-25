@@ -218,3 +218,8 @@ export function assoluto(testo: string, base: Date): string {
     return scritto + q.coda
   })
 }
+
+// — il perché oggi, negli schemi —
+
+/** La descrizione del «perché oggi» negli schemi: la stessa per la lettura, le priorità e la riscrittura. Sta qui, in una foglia, così nessuno la legge in mezzo a un giro di import. */
+export const PERCHE_DESCRIZIONE = 'Perché oggi, in una riga di al massimo dodici parole presa da questo documento: chi aspetta e da quando, la data, o cosa si ferma senza di lei. Mai oggi, domani o ieri: il giorno o la data. Mai il progetto o l\'obiettivo. Se non sai scriverla, la voce non ci va.'

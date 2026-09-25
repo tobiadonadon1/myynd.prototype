@@ -42,7 +42,7 @@ import { chiediJSON, collegato } from './modello.ts'
 import { tempoFondato } from './rilevanza.ts'
 import { elencoFeed } from './store.ts'
 import { senzaTrattini } from './testo.ts'
-import { assoluta, conRelativi, dataNel, oraNel, pillolaDi, inizioDelGiorno, GIORNI_EN, GIORNI_IT, MESI_EN_CORTI, MESI_IT_CORTI } from './data-carta.ts'
+import { assoluta, conRelativi, dataNel, oraNel, pillolaDi, inizioDelGiorno, GIORNI_EN, GIORNI_IT, MESI_EN_CORTI, MESI_IT_CORTI, PERCHE_DESCRIZIONE } from './data-carta.ts'
 import { PERCHE_PAROLE, percheFondato } from './perche-oggi.ts'
 
 // quando scade una carta: sta in `data-carta.ts`, una foglia; da qui la
@@ -181,8 +181,9 @@ const VERI: Ferri = { chiediJSON: o => chiediJSON(o), collegato: () => collegato
 let ferri: Ferri = VERI
 export function perProva(f: Partial<Ferri> | null) { ferri = f ? { ...VERI, ...f } : VERI }
 
-/** La descrizione del «perché oggi», la stessa della lettura: una riga sola, presa dal documento. */
-export const PERCHE_DESCRIZIONE = 'Perché oggi, in una riga di al massimo dodici parole presa da questo documento: chi aspetta e da quando, la data, o cosa si ferma senza di lei. Mai oggi, domani o ieri: il giorno o la data. Mai il progetto o l\'obiettivo. Se non sai scriverla, la voce non ci va.'
+// la descrizione del «perché oggi» sta in perche-oggi.ts (una foglia): da qui la
+// leggono le prove di prima
+export { PERCHE_DESCRIZIONE }
 
 const FORMA = {
   type: 'object',

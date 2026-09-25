@@ -18,6 +18,10 @@ export const PERCHE_PAROLE = 12
 /** Sopra queste parole il perché non nasce. */
 export const PERCHE_PAROLE_MAX = 20
 
+// la descrizione negli schemi sta in data-carta.ts, una foglia: chi la legge
+// per comporre uno schema (le priorità) non deve passare da qui
+export { PERCHE_DESCRIZIONE } from './data-carta.ts'
+
 export type Guaio = 'vuoto' | 'lungo' | 'relativo' | 'giorno' | 'numero' | 'obiettivo'
 
 /** «Conta per il progetto», «fa avanzare il sito»: il perché di prima, che non è un perché oggi. */
