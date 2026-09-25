@@ -10,6 +10,7 @@
 // lettura non è finita: dopo `fine` non c'è più niente a cui attaccarsi.
 
 import type { Request, Response } from 'express'
+import * as primaLettura from './prima-lettura.ts'
 
 export type Viva = {
   tutte: boolean
@@ -89,11 +90,23 @@ export function primaChiesta(conto: string): boolean {
  * di tutto quello che era collegato, e «Leggi» parte allora come una lettura
  * qualunque. Chi ricaricava finiva sull'introduzione, con la lettura che
  * andava avanti senza che nessuno la guardasse (P4).
+ *
+ * Il resto della prima lettura (`prima-lettura.ts`, `continua`/`leggiUna`) si
+ * registra qui una fonte alla volta, con un `Viva` suo (`tutte: false, prima:
+ * false`): non è più la lettura combinata di partenza, ma è ancora la prima
+ * lettura, e novanta giorni di una casella grande possono durare più di un
+ * giro. `primaLettura.inCoda` dice se quel resto sta girando adesso per
+ * questo conto (vero anche nella pausa fra una fonte e l'altra, non solo
+ * mentre una `leggiUna` è in volo): senza guardarlo qui, chi ricaricava
+ * mentre il resto leggeva la posta (la più lenta, e l'ultima nell'ordine)
+ * tornava all'introduzione a ogni volta, lo stesso guasto che la riga sopra
+ * pensava di avere già chiuso. Una fonte solo collegata, mai ancora messa a
+ * leggere, non basta: `inCoda` è vero solo mentre il giro sta davvero girando.
  */
 export function daGuardare(conto: string, faseAvvio: string | null | undefined): boolean {
   const v = di(conto)
-  if (!v || !v.chiesta) return false
-  return v.prima || (v.tutte && faseAvvio === 'fonte')
+  if (v && v.chiesta && (v.prima || (v.tutte && faseAvvio === 'fonte'))) return true
+  return primaLettura.inCoda(conto)
 }
 
 /** La lettura è chiusa: il registro se ne va. */
