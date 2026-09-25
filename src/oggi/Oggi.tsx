@@ -80,7 +80,7 @@ const FERMO: CSSProperties = {}
  */
 const PIENO: CSSProperties = {
   padding: '8px 17px', borderRadius: 99, border: '1px solid transparent',
-  background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)',
+  background: 'var(--gradiente-rame)', color: 'var(--avorio)',
   fontSize: '13px', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer'
 }
 const CONTORNO: CSSProperties = {
@@ -586,7 +586,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
                     padding: '7px 13px', borderRadius: 99, fontFamily: 'inherit', fontSize: '12.5px',
                     cursor: 'pointer', maxWidth: '100%', overflowWrap: 'anywhere',
                     border: `1px solid ${presa ? 'transparent' : 'rgba(var(--inchiostro-rgb),.18)'}`,
-                    background: presa ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--luce-rgb),.7)',
+                    background: presa ? 'var(--gradiente-rame)' : 'rgba(var(--luce-rgb),.7)',
                     color: presa ? 'var(--avorio)' : 'var(--inchiostro)'
                   }}
                   hover={presa ? { opacity: 0.92 } : { borderColor: 'var(--rame)', color: 'var(--rame-testo)' }}>
@@ -616,7 +616,7 @@ function Domanda({ c, l }: { c: Compito; l: Lista }) {
           }} />
         <button type="button" onClick={manda} disabled={!qualcosa} style={{
           flex: 'none', padding: '9px 17px', borderRadius: 99, border: 'none',
-          background: qualcosa ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          background: qualcosa ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.1)',
           color: qualcosa ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.3)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: qualcosa ? 'pointer' : 'default'
@@ -716,7 +716,7 @@ function Proposta({ c, l }: { c: Compito; l: Lista }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 13 }}>
         <button type="button" onClick={vai} disabled={faccio} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: faccio ? 'rgba(var(--inchiostro-rgb),.1)' : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))',
+          background: faccio ? 'rgba(var(--inchiostro-rgb),.1)' : 'var(--gradiente-rame)',
           color: faccio ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: faccio ? 'default' : 'pointer'
@@ -1055,7 +1055,7 @@ function Lavora({ c, l, richiesta, aperto, apri, chiudi }: {
             {(pianoFatto || runtime === 'hermes') && (
               <button type="button" onClick={() => vai('fai')} disabled={!!gira || !cartelle.length || !runtimeReady || (team && !acceptanceCriteria.trim()) || (runtime === 'hermes' && (!goal.trim() || !hermesFiles.trim() || !hermesModel.trim() || !hermesProvider.trim()))} style={{
                 padding: '9px 18px', borderRadius: 99, border: 'none',
-                background: gira ? 'rgba(var(--inchiostro-rgb),.1)' : 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))',
+                background: gira ? 'rgba(var(--inchiostro-rgb),.1)' : 'var(--gradiente-rame)',
                 color: gira ? 'rgba(var(--inchiostro-rgb),.35)' : 'var(--avorio)',
                 fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
                 cursor: gira ? 'default' : 'pointer'
@@ -1156,7 +1156,7 @@ function Salva({ c, l, testo, aperto, apri, chiudi }: { c: Compito; l: Lista; te
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
         <button type="button" onClick={salva} disabled={salvo || !nome.trim() || !cartelle.length} style={{
           padding: '9px 18px', borderRadius: 99, border: 'none',
-          background: !salvo && nome.trim() && cartelle.length ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          background: !salvo && nome.trim() && cartelle.length ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.1)',
           color: !salvo && nome.trim() && cartelle.length ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: salvo ? 'default' : 'pointer'
@@ -1235,7 +1235,7 @@ function CopiaEmail({ c, l, bozza }: { c: Compito; l: Lista; bozza: BozzaDaCopia
   return <div style={{ marginTop: 12, padding: '13px 15px', borderRadius: 13, background: 'rgba(var(--luce-rgb),.7)', border: '1px solid rgba(var(--inchiostro-rgb),.12)' }}>
     <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)' }}>{t('Invia questa bozza dal tuo programma di posta dopo averla riletta.')}</p>
     {c.email && <div style={{ fontSize: 12, marginBottom: 10, overflowWrap: 'anywhere', color: 'rgba(var(--inchiostro-rgb),.65)' }}>{[c.email.a, c.email.oggetto].filter(Boolean).join(' · ')}</div>}
-    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))', color: 'var(--avorio)', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
+    <button type="button" onClick={vai} disabled={occupato} style={{ padding: '9px 18px', borderRadius: 99, border: 'none', background: 'var(--gradiente-rame)', color: 'var(--avorio)', fontSize: 13, fontFamily: 'inherit', cursor: occupato ? 'wait' : 'pointer' }}>
       {occupato ? t('Un momento…') : bozza.apri ? t('Copia la bozza e apri l’email') : t('Copia la bozza')}
     </button>
     {esito && <div role="status" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 9, overflowWrap: 'anywhere' }}>{esito}</div>}
@@ -1409,7 +1409,7 @@ function InvioEmail({ c, l, aperto, apri, chiudi }: { c: Compito; l: Lista } & P
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, minWidth: 0, flexWrap: 'wrap' }}>
         <button type="button" onClick={manda} disabled={!puo} style={{
           padding: '9px 20px', borderRadius: 99, border: 'none',
-          background: puo ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(var(--inchiostro-rgb),.1)',
+          background: puo ? 'var(--gradiente-rame)' : 'rgba(var(--inchiostro-rgb),.1)',
           color: puo ? 'var(--avorio)' : 'rgba(var(--inchiostro-rgb),.35)',
           fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
           cursor: puo ? 'pointer' : 'default',

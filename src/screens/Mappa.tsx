@@ -78,7 +78,7 @@ function BarraNodo({ v, scuro }: { v: Vals; scuro?: boolean }) {
         className={scuro ? 'scuro' : undefined}
         disabled={!v.claudeOn}
         style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: scuro ? '#F4EFE8' : 'var(--inchiostro)' }} />
-      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'linear-gradient(120deg,var(--rame-profondo),var(--ambra))' : 'rgba(120,110,100,.35)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
+      <button onClick={v.askNode} disabled={!v.claudeOn} aria-label={t('Manda')} style={{ width: 28, height: 28, flex: 'none', borderRadius: '50%', border: 'none', background: v.claudeOn ? 'var(--gradiente-rame)' : 'rgba(120,110,100,.35)', color: 'var(--avorio)', display: 'grid', placeItems: 'center', cursor: v.claudeOn ? 'pointer' : 'default' }}>
         <IconSu size={14} />
       </button>
     </div>
