@@ -10,7 +10,14 @@ import { join } from 'node:path'
 const base = process.argv[2] || 'http://127.0.0.1:18760'
 const out = process.argv[3]
 const TOKEN = process.env.TOKEN || 'sviluppo-non-in-produzione'
-const leggi = async p => { const r = await fetch(base + p, { headers: { authorization: `Bearer ${TOKEN}` } }); return r.ok ? r.json() : { __stato: r.status } }
+const leggi = async p => {
+  const r = await fetch(base + p, { headers: { authorization: `Bearer ${TOKEN}` } })
+  // Alcune rotte (es. /api/osservatore quando manca l'osservatore) rispondono
+  // apposta con uno stato non-ok ma un corpo JSON valido (disponibile:false):
+  // va letto lo stesso, non scartato, altrimenti T1 sembra fallito invece che «non applicabile».
+  if ((r.headers.get('content-type') ?? '').includes('json')) { try { return await r.json() } catch { return { __stato: r.status } } }
+  return r.ok ? r.json() : { __stato: r.status }
+}
 
 const compiti = {
   // Smetti di leggere i titoli delle finestre, ma continua a guardare le app
