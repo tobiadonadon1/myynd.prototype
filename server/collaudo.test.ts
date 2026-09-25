@@ -200,6 +200,26 @@ test('le volte: in pausa ha i suoi turni, giornaliera ≈ 30 poi 12, settimanale
   assert.ok(r.every((x, i) => i === 0 || x.dal.getTime() === r[i - 1].al.getTime()), 'ogni pezzo parte dove finisce il precedente')
 })
 
+test('col limite sopra 8, la riga porta tutti i documenti guardati: non solo gli otto dell\'anteprima', async () => {
+  const oltre = { ...PREVENTIVI, id: 'oltre', guarda: { cerca: 'quote', limite: 20 }, en: { ...PREVENTIVI.en, cerca: 'quote' } }
+  const a = auto.scrivi(oltre)
+  const catturati: { c: Parameters<import('./verso.ts').Verso['riga']>[0]; docs: string[] }[] = []
+  const verso: import('./verso.ts').Verso = {
+    stato: () => null, vivo: () => false, bozzeOggi: () => 0, segnaBozza: () => 0,
+    arrivati: () => [], docsConRiga: () => new Set(), attenzione: async () => new Map(),
+    riga: (c, docs) => { catturati.push({ c, docs }) },
+    affida: () => {}, proponi: () => {}, girata: () => {}, rimandata: () => {}, saltata: () => {},
+    azione: () => {}, annuncia: () => {}
+  }
+  await auto.faiCon(a, verso)
+  assert.equal(catturati.length, 1)
+  const { c, docs } = catturati[0]
+  assert.ok(docs.length > 8, `documenti guardati: ${docs.length}`)
+  assert.ok(richieste.every(r => docs.includes(r.id)), 'tutte e nove le richieste sono fra i documenti guardati')
+  // l'anteprima nella nota resta corta: otto righe, non una in più
+  assert.equal((c.nota ?? '').split('\n').filter(l => l.startsWith('— [')).length, 8, 'l\'anteprima resta a otto righe')
+})
+
 test('una ricetta di sola ricerca su un indice fermo dà un risultato, non trenta; per documento non si piega mai', async () => {
   const fermo = { ...PREVENTIVI, id: 'fermo', guarda: { cerca: 'framework', limite: 8 }, en: { ...PREVENTIVI.en, cerca: 'framework' } }
   const p = await prova(fermo)
@@ -236,6 +256,10 @@ test('il verdetto: il suo segno, poi quello che ha fatto, poi il giudice; un con
   assert.deepEqual(v({ giudice: true, forma: 'riga', revisione: 'revise' }), { verdetto: 'incerto', da: null })
   assert.deepEqual(v({ giudice: true, chiede: true }), { verdetto: 'incerto', da: null }, 'avrebbe chiesto: incerto')
   assert.deepEqual(v({ suo: 'giusto', chiede: true }), { verdetto: 'giusto', da: 'tuo' })
+  // il senno di poi trovato non salta la revisione/chiede: la bozza ancora da rivedere conta comunque
+  assert.deepEqual(v({ prova: 'risposto', giudice: true, forma: 'documento', revisione: 'revise' }), { verdetto: 'sbagliato', da: 'modello' }, 'per documento, bozza ancora revise: sbagliato anche col senno di poi')
+  assert.deepEqual(v({ prova: 'fatto', giudice: true, forma: 'riga', revisione: 'revise' }), { verdetto: 'incerto', da: null }, 'riga sola, bozza ancora revise: incerto anche col senno di poi')
+  assert.deepEqual(v({ prova: 'risposto', giudice: true, chiede: true }), { verdetto: 'incerto', da: null }, 'avrebbe chiesto: incerto anche col senno di poi')
 })
 
 test('il conto: almeno 5 giudicati e 9 su 10; l\'incerto non conta mai', () => {

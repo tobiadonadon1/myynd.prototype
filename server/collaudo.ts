@@ -87,9 +87,10 @@ export type Giudicabile = {
 
 export function verdetto(v: Giudicabile): { verdetto: Verdetto; da: Da } {
   if (v.suo) return { verdetto: v.suo, da: 'tuo' }
-  if (v.prova === 'scartato') return { verdetto: 'sbagliato', da: 'mosse' }
-  if (v.prova) return v.giudice === false ? { verdetto: 'incerto', da: null } : { verdetto: 'giusto', da: 'mosse' }
-  let r: { verdetto: Verdetto; da: Da } = v.giudice === null
+  let r: { verdetto: Verdetto; da: Da }
+  if (v.prova === 'scartato') r = { verdetto: 'sbagliato', da: 'mosse' }
+  else if (v.prova) r = v.giudice === false ? { verdetto: 'incerto', da: null } : { verdetto: 'giusto', da: 'mosse' }
+  else r = v.giudice === null
     ? { verdetto: 'incerto', da: null }
     : { verdetto: v.giudice ? 'giusto' : 'sbagliato', da: 'modello' }
   if (v.revisione === 'revise' && v.forma === 'documento') r = { verdetto: 'sbagliato', da: 'modello' }

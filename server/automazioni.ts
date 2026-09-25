@@ -1199,7 +1199,7 @@ Respond in ${cfgLingua() === 'it' ? 'Italian' : 'English'}.`,
     // quello che vale è quello che era stato concesso quando la riga è nata.
     attrezzi: { nomi: attrezzi.ripulisci(a.attrezzi), cartella: a.cartella ?? null,
       origine: 'automazione' as const, ...selezioneCompito(a) }
-  }, docs.slice(0, 8).map(d => d.id))
+  }, docs.map(d => d.id))
 
   if (scelti) {
     // la riga nasce già pronta: non c'è niente da far fare al modello dopo, il
