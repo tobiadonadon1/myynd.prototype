@@ -129,6 +129,16 @@ export function pronto(): boolean {
 }
 
 /**
+ * Scelto, installato, e Claude Code ha detto per certo «non sei entrato».
+ *
+ * È l'«Anthropic si è scollegato» della prima pagina. Un silenzio (`boh`) non
+ * cambia `detto`, quindi non lo accende mai.
+ */
+export function uscito(): boolean {
+  return scelto() && !!installato() && detto === 'no'
+}
+
+/**
  * Che la risposta non invecchi: chi guarda lo stato la rinnova, senza aspettarla.
  *
  * Costa `claude auth status` al massimo ogni mezzo minuto, e solo quando

@@ -27,6 +27,10 @@ export type Impostazioni = {
    * una nuova e da lì in poi è quella.
    */
   porta?: number
+  /** Il mostriciattolo sullo schermo: spento finché non lo si accende. Posizione in punti dello schermo. */
+  compagno?: { acceso: boolean; x?: number; y?: number }
+  /** La versione dell'app per cui si è già chiesto il permesso di Accessibilità: una volta sola per versione. */
+  accessibilitaChiesta?: string
 }
 
 let percorso = ''

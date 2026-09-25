@@ -24,8 +24,9 @@ const PORTA_CDP = 9333
 const CHIAVI = [
   'versione', 'piattaforma', 'scegliCartelle', 'scegliFile', 'apriFuori', 'mostraNelFinder', 'segnala',
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
-  'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo'
+  'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo', 'osservatore', 'compagno'
 ]
+CHIAVI.push('riavvia') // P8
 const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura', 'mostrato']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 

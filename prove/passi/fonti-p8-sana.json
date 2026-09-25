@@ -1,0 +1,10 @@
+[
+  { "aspetta": 1500 },
+  { "scatta": "sana" },
+  { "clicca": "Your account" },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "clicca": "My Mac" },
+  { "aspetta": 1200 },
+  { "scatta": "pannello-mac" }
+]

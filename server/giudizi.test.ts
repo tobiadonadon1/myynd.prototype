@@ -95,9 +95,31 @@ test('chi non aspetta nessuno esce dalla fila, chi aspetta passa davanti', async
     { chiede: 0.95, urgenza: 2.6, genere: 'richiesta' })
   const visti = await giudizi.attenzione(docs)
   const fila = giudizi.primaChiAspetta(docs, visti).map(d => d.id)
-  // «grazie» non chiede niente e non scade: fuori, ed era il primo della fila.
-  // La fattura non «chiede» — nessuno insiste — ma una scadenza resta sempre.
-  assert.deepEqual(fila, ['vecchia-urgente', 'fattura'])
+  // «grazie» non chiede niente e non scade: in fondo, ed era il primo della
+  // fila. Ma non esce: Jev ordina, i trenta posti tagliano. La fattura non
+  // «chiede» — nessuno insiste — ma una scadenza sta sempre nella fila.
+  assert.deepEqual(fila, ['vecchia-urgente', 'fattura', 'grazie'])
+  // la soglia si può ancora passare come numero: con una soglia bassissima «grazie» è nella fila, ultimo per punteggio
+  assert.deepEqual(giudizi.primaChiAspetta(docs, visti, 0.01).map(d => d.id), ['vecchia-urgente', 'fattura', 'grazie'])
+})
+
+test('davanti e dietro: chi chiama mette in testa e in coda, con Jev e senza', async () => {
+  const docs = [
+    mail('a', { titolo: 'a' }), mail('b', { titolo: 'b' }), mail('c', { titolo: 'c' }), mail('d', { titolo: 'd' }), mail('e', { titolo: 'e' })
+  ]
+  jevDice(id =>
+    id === 'a' ? { chiede: 0.02, urgenza: 0.1, genere: 'aggiornamento' } :
+    id === 'e' ? { chiede: 0.99, urgenza: 3, genere: 'richiesta' } :
+    { chiede: 0.5, urgenza: 1, genere: 'richiesta' })
+  const visti = await giudizi.attenzione(docs)
+  // «a» non chiede niente ma sta fra i davanti: passa in testa lo stesso; «e» è il più urgente ma sta fra i dietro
+  assert.deepEqual(giudizi.primaChiAspetta(docs, visti, { davanti: new Set(['a']), dietro: new Set(['e']) }).map(d => d.id), ['a', 'b', 'c', 'd', 'e'])
+  // davanti vince su dietro, e l'ordine dentro le fasce è quello di arrivo
+  assert.deepEqual(giudizi.primaChiAspetta(docs, visti, { davanti: new Set(['d', 'c']), dietro: new Set(['c']) }).map(d => d.id), ['c', 'd', 'e', 'b', 'a'])
+  // senza Jev: davanti, la fila com'era, dietro
+  assert.deepEqual(giudizi.primaChiAspetta(docs, new Map(), { davanti: new Set(['e']), dietro: new Set(['a']) }).map(d => d.id), ['e', 'b', 'c', 'd', 'a'])
+  assert.equal(giudizi.chiedeNoto('a'), 0.02)
+  assert.equal(giudizi.chiedeNoto('mai-visto'), null)
 })
 
 test('un documento senza giudizio resta dov’era, in mezzo', async () => {
@@ -114,7 +136,7 @@ test('un documento senza giudizio resta dov’era, in mezzo', async () => {
     } }), { status: 200 })
   })
   const fila = giudizi.primaChiAspetta(docs, await giudizi.attenzione(docs)).map(d => d.id)
-  assert.deepEqual(fila, ['chiede', 'muto'])
+  assert.deepEqual(fila, ['chiede', 'muto', 'rumore'])
 })
 
 test('senza chiave la fila non si tocca: nessuna chiamata, nessun cambiamento', async () => {

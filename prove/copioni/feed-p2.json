@@ -1,0 +1,18 @@
+{
+  "modello": "finto",
+  "risposte": [
+    { "se": "capo di gabinetto", "in": "system", "json": { "priorita": [], "domande": [], "superate": [] } },
+    { "se": "MESSAGGIO CORRENTE", "in": "utente", "json": { "voci": [
+      { "tipo": "Da decidere", "titolo": "Confirm the pilot scope with Nora", "testo": "Nora starts with supplier invoices once you confirm.", "urgenza": "by Thursday", "fonte": "posta", "doc": "posta:INBOX:301", "perche": "Nora waits for the scope by Thursday to start.", "prova": "can you confirm the pilot scope by Thursday?" },
+      { "tipo": "Da decidere", "titolo": "Confirm Sam's review call at 9:30", "testo": "Sam needs your yes on the course price tomorrow.", "urgenza": "tomorrow 9:30", "fonte": "posta", "doc": "posta:INBOX:302", "perche": "Sam waits for your yes on the price.", "prova": "can you join the review call tomorrow at 9:30?" },
+      { "tipo": "Da decidere", "titolo": "Send Priya the signed audit letter", "testo": "Priya files the letter at noon.", "urgenza": "tomorrow 10:00", "fonte": "posta", "doc": "posta:INBOX:303", "perche": "Priya files the audit letter at noon.", "prova": "could you send the signed audit letter tomorrow at 10:00?" },
+      { "tipo": "Da decidere", "titolo": "Approve Mia's design invoice", "testo": "Mia needs your approval before the payment run.", "urgenza": "by Friday", "fonte": "posta", "doc": "posta:INBOX:308", "perche": "The payment run is Friday and waits on your approval.", "prova": "can you approve the invoice for the design work?" },
+      { "tipo": "Da decidere", "titolo": "Sign the Clearwater supplier contract", "testo": "Legal at Clearwater is waiting on your signature.", "urgenza": "by Wednesday", "fonte": "posta", "doc": "posta:INBOX:309", "perche": "Legal waits on your signature by Wednesday.", "prova": "could you sign the supplier contract by Wednesday?" },
+      { "tipo": "Da decidere", "titolo": "Review Elena's onboarding design", "testo": "Elena wants to ship the design next week.", "urgenza": "no rush", "fonte": "posta", "doc": "posta:INBOX:310", "perche": "Elena waits for your review to ship the design.", "prova": "can you review the new onboarding design?" },
+      { "tipo": "Da decidere", "titolo": "Decide on the offer to Dana", "testo": "Jonas asks whether you want to make Dana an offer.", "urgenza": "no rush", "fonte": "posta", "doc": "posta:INBOX:311", "perche": "Dana's other offer expires Monday.", "prova": "do you want to make an offer to Dana?" },
+      { "tipo": "Da decidere", "titolo": "Choose the launch venue for Carla", "testo": "The caterer needs an answer on the venue.", "urgenza": "no rush", "fonte": "posta", "doc": "posta:INBOX:312", "perche": "Matters for the Northwind project.", "prova": "can you choose the venue for the launch, the loft or the garden?" },
+      { "tipo": "Da decidere", "titolo": "Review Ben's investor deck", "testo": "Ben wants to send the deck out soon.", "urgenza": "no rush", "fonte": "posta", "doc": "posta:INBOX:313", "perche": "Ben waits on your 12 comments to send the deck.", "prova": "can you comment on the investor deck?" }
+    ] } }
+  ],
+  "predefinita": "Done. This answer comes from the fake model used in the tests."
+}

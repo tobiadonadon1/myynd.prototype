@@ -63,12 +63,20 @@ import * as granola from './connettori/granola.ts'
 import * as granolaMcp from './connettori/granolaMcp.ts'
 import * as note from './connettori/note.ts'
 import * as accesso from './connettori/accesso.ts'
-import { fontiIncomplete, osservaLettura } from './lettura-feed.ts'
+import { fontiIncomplete, lettureInCorso, osservaLettura } from './lettura-feed.ts'
+import * as saluteFonti from './salute-fonti.ts'
+import * as saluteTeste from './salute-teste.ts'
+import { fraseDi, rimedioDi } from './connettori/guaio.ts'
 import { aperturaProgetto } from './apertura-progetto.ts'
 import { recordCurrentWork, nextResultSince } from './project-memory.ts'
 import * as priorita from './priorita.ts'
 import * as riferimento from './riferimento.ts'
 import * as valutaFeed from './valuta-feed.ts'
+// P2 · il feed con l'asticella: le carte mancate, quando l'ha vista, se ha risposto dalla posta, la misura
+import * as mancate from './mancate.ts'
+import { segnaViste, risposteFuori } from './feed-dati.ts'
+import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
+import * as misuraFeed from './misura-feed.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -503,6 +511,22 @@ app.use((req, res, next) => {
  * senza che nessuno prema niente: vale per tutti, è uno per macchina.
  */
 abbonamento.quandoCambia(() => compiti.annunciaCollegamento(true))
+/*
+ * E la salute del motore che lavora: una riga al giorno quando cambia stato.
+ * L'account di Claude Code è della macchina, quindi il suo cambio vale per
+ * ognuno; una chiamata riuscita o una chiave rifiutata valgono per chi l'ha
+ * fatta. Stanno qui e non in `modello.ts`, che non deve sapere della salute.
+ */
+abbonamento.quandoCambia(() => {
+  for (const u of conti.tutti()) {
+    try { chi.dentro(u, () => saluteTeste.segnaTesta()) } catch { /* uno rotto non ferma gli altri */ }
+  }
+})
+mod.quandoUsato(() => { try { saluteTeste.segnaTesta('ok') } catch { /* contare non rompe la chiamata contata */ } })
+mod.quandoRifiutata(() => {
+  try { saluteTeste.segnaTesta() } catch { /* idem */ }
+  compiti.annunciaCollegamento()
+})
 
 /**
  * Un guaio che si ripara collegando qualcosa.
@@ -649,9 +673,32 @@ app.get('/api/stato', async (_req, res) => {
    */
   mod.riparaIlMotore()
   abbonamento.riguarda()
+  // il giorno del motore si scrive anche senza chiamate: un account da cui si
+  // è usciti non chiama nessuno, e il suo giorno non deve sembrare spento
+  try { saluteTeste.segnaTesta() } catch { /* la pagina prima della riga */ }
   const c = cfg.leggi()
   const n = store.conteggi()
   const ragiona = mod.collegato()
+  const accessoDisco = ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto()
+  const accessoNote = ospitato.OSPITATO ? { stato: 'non-mac', verificato: new Date().toISOString() } : accesso.accessoNote()
+  /*
+   * Le Note guariscono dal vivo: il permesso è appena tornato, l'episodio si
+   * chiude adesso e le Note si rileggono in sottofondo. Solo in casa.
+   */
+  if (!ospitato.OSPITATO) {
+    try { for (const f of saluteFonti.verificaPermessi({ note: accessoNote.stato })) leggiInSottofondo(f) }
+    catch (e) { console.error('myynd · fonti · il permesso delle Note non si è verificato:', e instanceof Error ? e.message : e) }
+  }
+  // i guai di adesso, per le schede: le fonti dal loro episodio, i motori dal vivo
+  const guai = new Map(saluteFonti.fontiIncomplete().map(f => [f.fonte, f.rimedio]))
+  const silenzi = saluteFonti.silenzi()
+  const problemaDi = (id: string) => {
+    if (id === 'claude' || id === 'openai') {
+      const p = saluteTeste.problemaTesta(id)
+      return p && p.rimedio !== 'credito' ? p.rimedio : undefined
+    }
+    return guai.get(id)
+  }
   res.json({
     // `pubblica()` guarda solo la chiave, perché da lì non si può chiedere a
     // `modello.ts` senza girare in tondo: la risposta vera — chiave *o*
@@ -708,7 +755,11 @@ app.get('/api/stato', async (_req, res) => {
       // i compiti NON si contano come documenti: gonfiavano il totale in alto
       // a ogni cosa aggiunta in lista, e quel numero che cresceva da solo
       // sembrava — giustamente — finto
-      documenti: n.perFonte.find(f => f.fonte === v.id)?.n ?? 0
+      documenti: n.perFonte.find(f => f.fonte === v.id)?.n ?? 0,
+      // il guaio che la scheda deve dire con la sua parola, e il silenzio
+      // (un fatto, non un guasto): solo quando ci sono
+      ...(problemaDi(v.id) ? { problema: problemaDi(v.id) } : {}),
+      ...(silenzi.has(v.id) ? { silenzio: silenzi.get(v.id) } : {})
     })),
     // su un server sarebbero le cartelle di root dentro il contenitore: non
     // servono a nessuno, e dicono com'è fatto il server a chiunque sia entrato
@@ -742,11 +793,16 @@ app.get('/api/stato', async (_req, res) => {
      * niente — e deve dirlo con la strada per darlo, non con un errore dopo
      * il bottone. Su un server non ha senso: le Note non si offrono.
      */
-    accessoDisco: ospitato.OSPITATO ? 'non-mac' : accesso.accessoCompleto(),
-    accessoNote: ospitato.OSPITATO ? {stato:'non-mac',verificato:new Date().toISOString()} : accesso.accessoNote(),
+    accessoDisco,
+    accessoNote,
     // le fonti che l'ultima lettura non ha letto per intero: la prima pagina
     // le scrive in una riga fissa finché una lettura non le trova a posto
     letturaIncompleta: fontiIncomplete(chi.adesso() ?? ''),
+    // il guaio del motore che lavora (accesso o chiave), per la stessa riga
+    testa: saluteTeste.testaDaMostrare(),
+    // i titoli delle finestre accesi: allora la pagina chiede al guscio se il
+    // permesso di Accessibilità c'è davvero
+    osservaTitoli: !ospitato.OSPITATO && c.osservatore?.acceso === true && c.osservatore?.titoli === true,
     presetPosta: posta.PRESET,
     home: ospitato.OSPITATO ? '' : homedir(),
     // la cartella vera: `MYYND_DATI` o `~/.myynd`. In casa non è un segreto,
@@ -1813,9 +1869,12 @@ app.post('/api/connettori/whatsapp', async (req, res) => {
   }
   if (!c.parola) return res.status(400).json({ errore: 'Serve una parola d\u2019ordine: la riscriverai su Meta.' })
   try {
+    const inizio = Date.now()
     const e = await whatsapp.prova(c)
     if (!e.ok) return res.status(400).json({ errore: e.errore })
     cfg.aggiorna({ whatsapp: { ...c, etichetta: e.etichetta, arrivati: 0 } })
+    // la sonda è appena riuscita: il guaio del token si chiude adesso, non domani
+    if (saluteFonti.sondaWhatsapp(e, Date.now() - inizio).cambiato) compiti.annunciaCollegamento()
     res.json({ ok: true, etichetta: e.etichetta })
   } catch (e) { errore(res, e) }
 })
@@ -1899,8 +1958,27 @@ app.delete('/api/connettori/:id', (req, res) => {
  * voleva dire che mentre A leggeva la posta, B riceveva «sto già leggendo» e
  * il suo giro di sfondo veniva saltato: per persona, come tutto il resto.
  */
-const sincronizzazioniInCorso = new Set<string>()
+const sincronizzazioniInCorso = lettureInCorso()
 const sincronizzazioneInCorso = () => sincronizzazioniInCorso.has(chi.adesso() ?? '')
+
+/**
+ * Una fonte sola, riletta in sottofondo, appena non c'è una lettura in corso.
+ *
+ * Serve quando un permesso è appena tornato: la riga fissa è già sparita, e
+ * la lettura che segue lo conferma (o lo smentisce) senza aspettare il giro
+ * dei dieci minuti. Stessa coda delle altre letture: non si pestano i piedi;
+ * se una è in corso, questa parte appena quella finisce.
+ */
+function leggiInSottofondo(fonte: string) {
+  const conto = chi.adesso() ?? ''
+  if (sincronizzazioniInCorso.has(conto)) { sincronizzazioniInCorso.dopo(conto, fonte, () => leggiInSottofondo(fonte)); return }
+  sincronizzazioniInCorso.add(conto)
+  void (async () => {
+    try { await leggiTutto(fonte, () => {}) }
+    catch (e) { console.error(`myynd · la rilettura di ${fonte} non è riuscita:`, e instanceof Error ? e.message : e) }
+    finally { sincronizzazioniInCorso.delete(conto) }
+  })()
+}
 
 /**
  * Le riunioni lette dal server di Granola, nell'indice.
@@ -1943,7 +2021,7 @@ async function leggiTutto(
    * lettura dopo — a mano o delle sei ore — la toglie da sola quando trova
    * la fonte a posto. Per questo si osserva qui, dove passano tutte.
    */
-  const oss = osservaLettura(chi.adesso() ?? '', soloFonte)
+  const oss = osservaLettura(chi.adesso() ?? '', soloFonte, { quandoCambia: () => compiti.annunciaCollegamento() })
   try {
     return await leggiTuttoDentro(soloFonte, d => { oss.avvisa(d); avvisa(d) }, fermo)
   } finally { oss.chiudi(fermo()) }
@@ -1972,7 +2050,10 @@ async function leggiTuttoDentro(
       // scollegata mentre si leggeva: quello che ha scaricato non deve rientrare
       totale += await leggiSeAncoraCollegata(nome, leggi, avvisa)
     } catch (err) {
-      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err) })
+      // il rimedio accanto alla frase: la salute delle fonti sa cosa fare; la
+      // frase si tiene solo se l'ha scritta un connettore
+      const frase = fraseDi(err)
+      avvisa({ fase: nome, stato: 'guaio', errore: err instanceof Error ? err.message : String(err), rimedio: rimedioDi(err), ...(frase ? { frase } : {}) })
     }
   }
 
@@ -2019,6 +2100,8 @@ async function leggiTuttoDentro(
       fase: 'desktop', stato: 'fatto', documenti: e.docs.length,
       saltati: e.saltatiProgetti.length, falliti: e.falliti,
       illeggibili: e.illeggibili, troncato: e.troncato, tolti, invariati: e.invariati,
+      // le cartelle che macOS ha negato: un permesso da dare, non un disco staccato
+      negate: e.negate.length, ...(e.negate.length ? { rimedio: 'permesso-disco' } : {}),
       // quello che si è visto e lasciato fuori: è la risposta a «ma ne ho molti
       // di più», e senza di questa quella domanda resta senza risposta
       // `saltati` qui sopra è già preso — le cartelle di codice saltate intere —
@@ -2421,7 +2504,7 @@ async function rileggiDaSola() {
   // da sola: il bottone funziona, e in silenzio l'indice resta indietro
   if (!c.desktop && !c.notion && !c.posta && !c.google && !c.slack
     && !c.drive && !c.microsoft && !c.dropbox && !c.calendario && !c.granola && !c.note && !c.conversazioni
-    && !c.github) return
+    && !c.github && !c.x) return
   sincronizzazioniInCorso.add(chi.adesso() ?? '')
   const daQuando = new Date().toISOString()
   try {
@@ -2434,6 +2517,8 @@ async function rileggiDaSola() {
     })
     const nuovi = store.appenaArrivati(daQuando, 20)
     console.log(`myynd · rilettura automatica: ${totale} documenti letti, ${nuovi.length} nuovi o cambiati`)
+    // P2 · le carte mancate: una risposta mandata dalla posta, una riga scritta a mano. Senza modello.
+    await mancate.forse().catch(e => console.warn('myynd · mancate:', e instanceof Error ? e.message : e))
     await dopoLArrivo(daQuando, nuovi)
     // e, ogni tanto, il quadro intero: cosa dovrebbe fare adesso, che le
     // fonti non chiedono. I cancelli — le ore, quante voci ci sono già —
@@ -2450,6 +2535,8 @@ async function rileggiDaSola() {
       console.log(`myynd · scoperte · ${proposte.length} proposte`)
       if (proposte.length) compiti.annunciaCambio()
     }
+    // il motore, ogni dieci minuti anche senza chiamate: il suo giorno si scrive
+    abbonamento.riguarda(); saluteTeste.segnaTesta()
   } catch (e) {
     // una fonte che non risponde non è un guasto dell'app: si riprova fra sei ore
     console.error('myynd · la rilettura automatica non è riuscita:', e instanceof Error ? e.message : e)
@@ -2714,7 +2801,11 @@ app.post('/api/feed/:id/rispondi', async (req, res) => {
   const testo = String(req.body?.testo ?? '')
   try {
     const stato = req.body?.stato ? String(req.body.stato) : undefined
-    const esito = await timone.rispondiAVoce(req.params.id, testo, stato)
+    // P2 · «Non utile» con una delle quattro ragioni: vecchia, fatta, non_mia, non_chiara
+    const ragione = typeof req.body?.ragione === 'string' ? req.body.ragione : undefined
+    // una ragione fuori dal vocabolario è un errore di chi chiede, non del server
+    if (ragione !== undefined && !eRagioneScarto(ragione)) return res.status(400).json({ errore: 'Ragione sconosciuta.' })
+    const esito = await timone.rispondiAVoce(req.params.id, testo, stato, ragione)
     const ore = cfg.leggi().oreFatte ?? 48
     // di quale progetto è, subito: l'avviso sotto il bottone lo dice
     const fatto: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
@@ -2779,8 +2870,19 @@ app.post('/api/feed/:id/:stato', (req, res) => {
    * Rimetterla in aperto invece è un ripensamento, e un ripensamento non è un
    * motivo: lì il motivo di prima si cancella.
    */
+  // P2 · solo «fatto» e «aperto»: una parola qualunque non è uno stato, e non
+  // deve diventare una rotta per sbaglio. Con «fatto» la ragione dice se l'ha
+  // chiusa lui o se aveva già risposto dalla sua posta; «aperto» (Annulla)
+  // cancella motivo e ragione.
+  if (req.params.stato !== 'fatto' && req.params.stato !== 'aperto') return res.status(400).json({ errore: 'Stato sconosciuto.' })
   const fatto = req.params.stato === 'fatto'
-  store.cambiaStatoFeed(req.params.id, fatto ? 'fatto' : 'aperto', fatto ? 'Già fatto.' : '')
+  if (fatto) {
+    const riga = store.voceFeed(req.params.id)
+    const risposta = riga ? risposteFuori([{ id: riga.id, doc: riga.doc ?? null, contesto: riga.contesto ?? null, quando: riga.quando }]).get(riga.id) : undefined
+    store.cambiaStatoFeed(req.params.id, 'fatto', risposta ? MOTIVO_FUORI : 'Già fatto.', risposta ? 'fuori' : 'lui')
+  } else {
+    store.cambiaStatoFeed(req.params.id, 'aperto', '', null)
+  }
   // di quale progetto è, subito: l'avviso sotto il bottone lo dice
   const cosa: dopoFatto.Fatto = { genere: 'voce', id: req.params.id }
   res.json({ ok: true, registrato: { progetto: fatto ? dopoFatto.progettoDelFatto(cosa) : null } })
@@ -3072,7 +3174,7 @@ app.post('/api/compiti', (req, res) => {
   // una voce del feed promossa non resta anche nel feed: sarebbe la stessa cosa
   // in due posti, con due stati che divergono al primo tocco
   if (req.body?.voce && store.voceFeed(String(req.body.voce))) {
-    store.cambiaStatoFeed(String(req.body.voce), 'fatto', 'Passata nella lista.')
+    store.cambiaStatoFeed(String(req.body.voce), 'fatto', 'Passata nella lista.', 'lista')
   }
   } catch (e) { return errore(res, e) }
 
@@ -4397,6 +4499,31 @@ app.post('/api/azzera', (req, res) => {
 // — P1B: rotte, fine —
 
 // — P2: rotte, inizio —
+
+/**
+ * Le carte che ha visto davvero: la pagina lo dice solo quando almeno metà
+ * della carta è stata sullo schermo per un secondo con la finestra davanti
+ * (`src/feed-vista.ts`). Una volta per carta. Nessun evento sul filo: questa
+ * rotta non deve mai far ricaricare il feed.
+ */
+app.post('/api/feed/viste', (req, res) => {
+  const ids = req.body?.ids
+  if (!Array.isArray(ids)) return res.status(400).json({ errore: 'Mancano le voci.' })
+  const buoni = [...new Set(ids.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 50)
+  res.json({ ok: true, segnate: buoni.length ? segnaViste(buoni) : 0 })
+})
+
+/** La misura del feed su tanti giorni: per chi costruisce (il resoconto, P9, la mostrerà a lui). */
+app.get('/api/feed/misura', async (req, res) => {
+  try {
+    // fra uno e novanta; senza un numero (o con zero) quattordici
+    const n = Number(req.query.giorni)
+    const giorni = Number.isFinite(n) && n !== 0 ? Math.min(90, Math.max(1, Math.floor(n))) : 14
+    await misuraFeed.caricaModuli()
+    res.json(misuraFeed.misura(giorni))
+  } catch (e) { errore(res, e) }
+})
+
 // — P2: rotte, fine —
 
 // — P3: rotte, inizio —
@@ -4435,6 +4562,18 @@ app.post('/api/risposte/attiva', (req, res) => {
 // — P7: rotte, fine —
 
 // — P8: rotte, inizio —
+/*
+ * La salute delle fonti, giorno per giorno: la striscia dei trenta giorni nel
+ * pannello di una fonte, e il conto del traguardo per chi sviluppa. Fuori da
+ * `/api/connettori` apposta: una lettura non è un cambio di collegamento.
+ */
+app.get('/api/fonti/salute', (req, res) => {
+  try {
+    const giorni = Math.min(90, Math.max(1, Math.floor(Number(req.query.giorni)) || 30))
+    const fonte = typeof req.query.fonte === 'string' && /^[a-z][a-z0-9_-]{0,40}$/.test(req.query.fonte) ? req.query.fonte : undefined
+    res.json(saluteFonti.perRotta(giorni, fonte))
+  } catch (e) { errore(res, e) }
+})
 // — P8: rotte, fine —
 
 // — P9: rotte, inizio —
@@ -4729,6 +4868,7 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
     await runScheduled('sender_rules', 15 * 60_000, runSenderRules)
     await runScheduled('automations', 15 * 60_000, () => store.senzaToccare(() => automazioni.giro()))
     await runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro()))
+    await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
   })
   sveglia.ascolta(() => {
     console.log('myynd · il computer si è svegliato: recupero quello che è successo nel frattempo')
@@ -4754,6 +4894,14 @@ const servizio = app.listen(PORTA_CHIESTA, ospitato.INDIRIZZO, () => {
   const preparaInAnticipo = perOgnuno('la preparazione discreta non è riuscita', () => runScheduled('preparation', 15 * 60_000, () => store.senzaToccare(() => iniziativa.giro())))
   setTimeout(preparaInAnticipo, 150_000)
   setInterval(preparaInAnticipo, 15 * 60_000)
+  // la salute delle fonti: ogni ora si chiudono i giorni finiti; una volta al
+  // giorno la sonda di WhatsApp e la riga del giorno
+  const salute = perOgnuno('la salute delle fonti non si è chiusa', async () => {
+    store.senzaToccare(() => saluteFonti.chiudiGiorni())
+    await runScheduled('source_health', 24 * 3600_000, () => store.senzaToccare(() => saluteFonti.giornaliero()))
+  })
+  setTimeout(salute, 5 * 60_000)
+  setInterval(salute, 60 * 60_000)
 
   // La prova delle risposte (P7): spenta di serie, una volta alla settimana
   // quando è accesa. Il modulo si carica solo qui, quando serve: il server

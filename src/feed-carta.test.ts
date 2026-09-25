@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dataFonte, testoCarta } from './feed-carta.ts'
+import { dataFonte, testoCarta, secondaRiga, RAGIONI_NON_UTILE } from './feed-carta.ts'
 
 test('task, request and project reason remain separate readable copy', () => {
   assert.deepEqual(testoCarta({
@@ -39,4 +39,23 @@ test('regenerating a card cannot make an old document appear newly received', ()
   assert.equal(dataFonte({ doc: 'desktop:cv.pdf', quando: '2026-09-14T15:00:00Z', fonteQuando: '2024-06-01T12:00:00Z' }), '2024-06-01T12:00:00Z')
   assert.equal(dataFonte({ doc: 'posta:INBOX:2', quando: '2026-09-14T15:00:00Z' }), null)
   assert.equal(dataFonte({ doc: null, quando: '2026-09-14T15:00:00Z' }), '2026-09-14T15:00:00Z')
+})
+
+// — P2: «Non utile» con una ragione, e la seconda riga di ogni carta —
+
+test('le quattro ragioni, nell’ordine in cui si mostrano, con le loro etichette', () => {
+  assert.deepEqual(RAGIONI_NON_UTILE.map(r => r.ragione), ['vecchia', 'fatta', 'non_mia', 'non_chiara'])
+  assert.deepEqual(RAGIONI_NON_UTILE.map(r => r.etichetta), ['Vecchia', 'Già fatta', 'Non è mia', 'Non si capisce'])
+})
+
+test('la seconda riga è il perché oggi, anche per una priorità; il testo va nel dettaglio; senza perché resta il testo', () => {
+  assert.deepEqual(secondaRiga({ titolo: 'Record the review video', testo: 'The resubmission waits on it.', perche: 'The review video must be recorded before we resubmit.' }),
+    { riga: 'The review video must be recorded before we resubmit.', dettaglio: ['The resubmission waits on it.'] })
+  assert.deepEqual(secondaRiga({ titolo: 'Reply to Marta', testo: 'Marta needs your confirmation by Friday.', perche: '' }),
+    { riga: 'Marta needs your confirmation by Friday.', dettaglio: [] })
+  assert.deepEqual(secondaRiga({ titolo: 'Reply to Marta', testo: 'Marta needs your confirmation by Friday.', perche: null }),
+    { riga: 'Marta needs your confirmation by Friday.', dettaglio: [] })
+  // un perché uguale al titolo non si ripete: resta il testo
+  assert.deepEqual(secondaRiga({ titolo: 'Reply to Marta', testo: 'Marta is waiting.', perche: 'Reply to Marta.' }),
+    { riga: 'Marta is waiting.', dettaglio: [] })
 })

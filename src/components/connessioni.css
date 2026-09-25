@@ -57,3 +57,16 @@
 @keyframes connections-pulse{50%{opacity:.25}}
 @media(prefers-reduced-motion:reduce){.connections-reading-row.is-leggo .connections-reading-state:before{animation:none}}
 .connections-reading-row.is-avviso .connections-reading-state{color:var(--rame-testo)}
+/* P8: una fonte con un guaio dice la sua parola in rame, anche nel pannello; sotto, da quando e perché,
+   e i trenta giorni. Le celle sono i gettoni: di notte il verde e il rame restano quelli, mai una lastra più chiara. */
+.connection-detail-overview.needs-access .connection-detail-status{color:var(--rame-testo)}
+.connection-detail-overview.needs-access .connector-tile-mark{color:var(--rame-testo);border-color:rgba(var(--rame-rgb),.3)}
+.connection-detail-overview p.connection-detail-since{color:var(--rame-testo)}
+.connection-health{margin:0 0 18px}
+.connection-health p{margin:0 0 8px;font-size:12px;line-height:1.5;color:rgba(var(--inchiostro-rgb),.7);font-variant-numeric:tabular-nums}
+.connection-health-strip{display:grid;gap:3px}
+.connection-health-strip span{height:12px;min-width:0;border-radius:99px;box-sizing:border-box}
+.connection-health-strip .is-pulito{background:var(--salvia)}
+.connection-health-strip .is-guasto{background:var(--rame)}
+.connection-health-strip .is-spento{background:transparent;border:1px solid rgba(var(--inchiostro-rgb),.18)}
+.connection-health-strip .is-oggi{opacity:.55}

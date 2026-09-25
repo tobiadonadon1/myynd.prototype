@@ -1,0 +1,8 @@
+[
+  { "aspetta": 2500 },
+  { "clicca": "Sign in again" },
+  { "scatta": "accesso" },
+  { "aspetta": 4000 },
+  { "scatta": "dopo-accesso" },
+  { "testo": "dopo-accesso" }
+]

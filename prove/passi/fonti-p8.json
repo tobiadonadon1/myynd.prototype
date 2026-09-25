@@ -1,0 +1,16 @@
+[
+  { "aspetta": 2500 },
+  { "scatta": "riga" },
+  { "testo": "riga" },
+  { "js": "fetch('/api/fonti/salute?giorni=30', {headers:{authorization:'Bearer '+localStorage.getItem('myynd.token')}}).then(r=>r.json()).then(j=>JSON.stringify(j.sintesi))" },
+  { "vai": "Sources" },
+  { "aspetta": 800 },
+  { "scatta": "fonti" },
+  { "clicca": "Calendar" },
+  { "aspetta": 1200 },
+  { "scatta": "pannello-calendario" },
+  { "chiudi": true },
+  { "clicca": "WhatsApp Business" },
+  { "aspetta": 1200 },
+  { "scatta": "pannello-whatsapp" }
+]

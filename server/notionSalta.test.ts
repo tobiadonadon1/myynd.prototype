@@ -163,3 +163,19 @@ test('un segno che Notion non riconosce più si butta, invece di bloccare tutto'
   assert.equal(e.interrotto, true)
   assert.equal(ripresa.daDove('notion'), null, 'il giro dopo deve poter ripartire da capo')
 })
+
+// — P8: un token che Notion non riconosce più si dice, con il suo rimedio —
+
+test('un token rifiutato prima di leggere niente è «credenziale»; una rete lenta resta una lettura interrotta', async () => {
+  const { GuaioFonte } = await import('./connettori/guaio.ts')
+  const rompe = (errore: unknown) => notion.usaCliente(() => ({ search: async () => { throw errore } }) as unknown as Client)
+  rompe(Object.assign(new Error('API token is invalid.'), { code: 'unauthorized', status: 401 }))
+  const e = await notion.sincronizza(CONTO).catch(x => x)
+  assert.ok(e instanceof GuaioFonte)
+  assert.equal(e.rimedio, 'credenziale')
+  assert.equal(e.message, 'Il token di Notion non va più.')
+  // counter-case: un timeout non è un token rifiutato
+  rompe(Object.assign(new Error('Request to Notion API has timed out'), { code: 'notionhq_client_request_timeout' }))
+  const r = await notion.sincronizza(CONTO)
+  assert.equal(r.interrotto, true)
+})
