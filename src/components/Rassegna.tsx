@@ -87,7 +87,7 @@ function SalaNotizie({ notizie, quando, carico, guaio, aggiorna, togli, occupata
             <p>{t('L’IA e il tuo lavoro')}</p>
           </div></div>
           <div className="news-heading-actions">
-            <button className="news-icon" onClick={aggiorna} disabled={carico}
+            <button className="news-icon" onClick={aggiorna} disabled={carico} aria-busy={carico || undefined}
               title={quando ? frasi.guardatiIGiornali(eta(quando)) : t('Guarda i giornali')}
               aria-label={t('Guarda i giornali')}><span className={carico ? 'news-spinning' : undefined}><IconGiro /></span></button>
             <button className="news-icon" onClick={chiudi} aria-label={t('Chiudi')}><IconCroce size={15} /></button>

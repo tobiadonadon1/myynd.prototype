@@ -202,6 +202,8 @@ function Finestra({ v, p }: { v: Vals; p: ReturnType<typeof usePunto> }) {
         <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.5)', overflowWrap: 'anywhere' }}>
           {sotto}
         </div>
+        {/* P10 · anche qui, se l'ultimo «Rifai il punto» non è andato, si dice perché */}
+        {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
 
         {vuoto && (
           <div style={{ ...LINEA, marginTop: 26 }}>
@@ -273,7 +275,7 @@ function Scaduto({ p }: { p: ReturnType<typeof usePunto> }) {
         {p.guaio && <div style={SPIEGA}>{spiegaGuaio(p.guaio)}</div>}
         {p.tetto && <div style={SPIEGA}>{t('Per oggi basta: tre punti al giorno. Si riparte domani.')}</div>}
       </div>
-      <button type="button" onClick={p.rifai} disabled={p.carico} style={BOTTONE}>
+      <button type="button" onClick={p.rifai} disabled={p.carico} aria-busy={p.carico || undefined} style={BOTTONE}>
         {p.carico ? t('Un momento…') : t('Rifai il punto')}
       </button>
     </div>

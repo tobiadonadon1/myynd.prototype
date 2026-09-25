@@ -158,7 +158,7 @@ function Campo({ b, salvato }: { b: Blocco; salvato: () => void }) {
             </button>
           )}
           {!!testo.trim() && (
-            <button type="button" className="mem-pill" onClick={riordina} disabled={riordino}>
+            <button type="button" className="mem-pill" onClick={riordina} disabled={riordino} aria-busy={riordino || undefined}>
               <Glifo tipo="penso" dim={11} colore="var(--rame-testo)" />
               {riordino ? t('Riordino…') : t('Riordina')}
             </button>
@@ -455,7 +455,7 @@ function Progetti({ dimmi }: { dimmi: (attivi: number) => void }) {
             placeholder={t('A cosa punta, in una riga')} aria-label={t('Obiettivo')} />
           {!!nome.trim() && (
             <div className="mem-nuovo-piede">
-              <button type="button" className="mem-pieno" onClick={aggiungi} disabled={nasce}>
+              <button type="button" className="mem-pieno" onClick={aggiungi} disabled={nasce} aria-busy={nasce || undefined}>
                 {nasce ? t('Aggiungo…') : t('Aggiungi')}
               </button>
             </div>
@@ -589,7 +589,7 @@ export function Memoria() {
             uno finisce una conversazione lunga e vuole *vedere* cosa ne è
             uscito, invece di scoprirlo domani per caso.
           */}
-          <button type="button" className="mem-azione" onClick={consolida} disabled={ordino}>
+          <button type="button" className="mem-azione" onClick={consolida} disabled={ordino} aria-busy={ordino || undefined}>
             {ordino ? t('Ci penso…') : t('Aggiorna da quello che hai imparato')}
           </button>
         </Testata>

@@ -169,7 +169,7 @@ function LApp() {
         {agg?.stato === 'pronta' ? (
           <button type="button" className="prefs-pieno" onClick={() => d.aggiornamenti.installa()}>{t('Riavvia e aggiorna')}</button>
         ) : agg?.stato !== 'spento' && (
-          <button type="button" className="prefs-secondario" onClick={controlla} disabled={inCorso}>
+          <button type="button" className="prefs-secondario" onClick={controlla} disabled={inCorso} aria-busy={inCorso || undefined}>
             {inCorso ? t('Controllo…') : t('Controlla')}
           </button>
         )}
@@ -388,7 +388,7 @@ function Conto() {
         </div>
       </div>
       <div className="prefs-piede">
-        <button type="button" className="prefs-quieto" onClick={esciOvunque} disabled={!!faccio}>
+        <button type="button" className="prefs-quieto" onClick={esciOvunque} disabled={!!faccio} aria-busy={faccio === 'esco' || undefined}>
           {faccio === 'esco' ? t('Un momento…') : t('Esci da tutti i dispositivi')}
         </button>
         <div style={{ flex: 1 }} />
@@ -528,7 +528,7 @@ function Fascicolo({ v }: { v: Vals }) {
           </button>
         )}
         <div className="prefs-stato" />
-        <button type="button" className="prefs-pieno" onClick={scarica} disabled={faccio}>
+        <button type="button" className="prefs-pieno" onClick={scarica} disabled={faccio} aria-busy={faccio || undefined}>
           {faccio ? t('Preparo…') : chiedo ? t('Conferma') : t('Scarica')}
         </button>
       </div>
@@ -981,7 +981,7 @@ export function Preferenze({ v }: { v: Vals }) {
                     <span className="prefs-etichetta">{t('Lingua')}</span>
                     <div className="prefs-pastiglie">
                       {v.lingue.map(l => (
-                        <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} style={pastiglia(l.scelto)}>
+                        <button key={l.id} type="button" onClick={l.onClick} disabled={l.occupato} aria-busy={l.occupato || undefined} style={pastiglia(l.scelto)}>
                           {l.occupato && !l.scelto ? t('Traduco…') : l.nome}
                         </button>
                       ))}

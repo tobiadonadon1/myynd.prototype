@@ -585,7 +585,7 @@ export function NomiERaggruppamento({ p, tutti, cambia, unisci }: {
               {frasi.unisciDentro(p.nome, bersaglio.nome)}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 11 }}>
-              <Hov as="button" type="button" onClick={facciamoUno} disabled={unisco}
+              <Hov as="button" type="button" onClick={facciamoUno} disabled={unisco} aria-busy={unisco || undefined}
                 style={{
                   flex: 'none', padding: '9px 18px', borderRadius: 99, border: 'none', background: GRADIENTE,
                   color: 'var(--avorio)', fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',

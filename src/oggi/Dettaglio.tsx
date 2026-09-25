@@ -52,7 +52,7 @@ export function Dettaglio({ c, l, chiudi }: { c: Compito; l: Lista; chiudi: () =
   return createPortal(<dialog ref={dialogo} className="task-detail" aria-labelledby="task-detail-heading"
     onCancel={e => { e.preventDefault(); if (!salvando) chiudi() }}>
     <form onSubmit={salva}>
-      <header><span id="task-detail-heading">{t('Dettagli attività')}</span><button type="button" className="task-detail-close" aria-label={t('Chiudi')} disabled={salvando} onClick={chiudi}>×</button></header>
+      <header><span id="task-detail-heading">{t('Dettagli attività')}</span><button type="button" className="task-detail-close" aria-label={t('Chiudi')} disabled={salvando} aria-busy={salvando || undefined} onClick={chiudi}>×</button></header>
       <div className="task-detail-body">
         <label className="task-detail-label" htmlFor="task-detail-title">{t('Attività')}</label>
         <input id="task-detail-title" className="task-detail-title" autoFocus required value={testo} onChange={e => setTesto(e.target.value)} />

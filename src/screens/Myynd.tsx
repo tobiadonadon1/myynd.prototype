@@ -275,7 +275,7 @@ function RigaVoce({ voce, v, lista }: { voce: VoceFeed; v: Vals; lista?: Lista }
             <>
               <span>{[fonte, ora].filter(Boolean).join(' · ')}</span>
               {voce.doc && (
-                <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo}
+                <Hov as="button" type="button" title={dettaglio || t('Portami lì')} disabled={aprendo} aria-busy={aprendo || undefined}
                   onClick={fermo(() => { void v.portamiFonte(voce.doc!) })}
                   style={{ ...LINK, cursor: aprendo ? 'wait' : 'pointer' }} hover={{ textDecorationColor: 'currentColor' }}>{aprendo ? t('Un momento…') : t('Portami lì')}</Hov>
               )}
@@ -1558,8 +1558,8 @@ function CartaDomande({ v }: { v: Vals }) {
       {domande.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 21px 14px' }}>
           <div style={{ flex: 1 }} />
-          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando}
-            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{t('Manda')}</button>
+          <button type="button" onClick={() => { void manda() }} disabled={!piene.length || mandando} aria-busy={mandando || undefined}
+            style={piene.length && !mandando ? MANDA : MANDA_SPENTO}>{mandando ? t('Un momento…') : t('Manda')}</button>
         </div>
       )}
     </section>

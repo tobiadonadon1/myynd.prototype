@@ -608,8 +608,8 @@ export function Agenda({ compiti, oggi, giorno, scegli, lingua, pianifica, nuovo
         {bozza.id && <button type="button" className="agenda-butta" onClick={() => void butta()}>{t('Elimina')}</button>}
         <span className="agenda-spinta" />
         <button type="button" onClick={() => setBozza(null)}>{t('Annulla')}</button>
-        <button type="button" className="agenda-salva" disabled={!bozza.titolo.trim() || bozza.salvando}
-          onClick={() => void salva()}>{t('Salva')}</button>
+        <button type="button" className="agenda-salva" disabled={!bozza.titolo.trim() || bozza.salvando} aria-busy={bozza.salvando || undefined}
+          onClick={() => void salva()}>{bozza.salvando ? t('Salvo…') : t('Salva')}</button>
       </footer>
     </div>
   )
