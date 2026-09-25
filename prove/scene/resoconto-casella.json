@@ -1,0 +1,23 @@
+{
+  "lingua": "en", "nome": "Alex",
+  "documenti": [
+    { "id": "posta:INBOX:1", "fonte": "posta", "tipo": "email", "titolo": "October quote", "corpo": "Hi Alex, could you send the October quote? Dana", "autore": "Dana Whitfield <dana@northwind.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "2026-09-16T08:10:00.000Z", "messageId": "d1@northwind.example", "filo": "d1@northwind.example" }
+  ],
+  "compiti": [
+    { "id": "m1", "testo": "Reply to Dana with the October quote", "stato": "fatto", "doc": "posta:INBOX:1" },
+    { "id": "c1", "testo": "Reply to Leo about the kickoff", "stato": "pronto" }
+  ],
+  "p9": {
+    "config": { "fuso": "Europe/Rome" },
+    "compiti": [
+      { "id": "m1", "creato": "2026-09-15T08:00:00.000Z", "chiesto": "2026-09-16T08:30:00.000Z", "chiuso": "2026-09-17T09:00:00.000Z", "email": { "a": "dana@northwind.example", "oggetto": "Re: October quote", "corpo": "Hi Dana, the quote is attached.", "conosciuto": true } },
+      { "id": "c1", "creato": "2026-09-16T07:00:00.000Z", "chiesto": "2026-09-16T07:00:00.000Z", "email": { "a": "leo@harbor.example", "oggetto": "Kickoff", "corpo": "Hi Leo, Tuesday works.", "conosciuto": true, "casella": { "stato": "salvata" } } }
+    ],
+    "azioni": [
+      { "tipo": "email", "compito": "m1", "verso": "dana@northwind.example", "cosa": "Re: October quote", "quando": "2026-09-17T09:00:00.000Z" }
+    ],
+    "misure": [
+      { "compito": "c1", "consegnato": "2026-09-16T07:30:00.000Z", "via": "casella" }
+    ]
+  }
+}

@@ -87,6 +87,7 @@ import * as mancate from './mancate.ts'
 import { segnaViste, risposteFuori } from './feed-dati.ts'
 import { MOTIVO_FUORI, eRagioneScarto } from './feed-esiti.ts'
 import * as misuraFeed from './misura-feed.ts'
+import * as resoconto from './resoconto.ts'
 
 /** Una risposta, non un «ok» o un «?»: almeno una frase, e non una domanda secca. */
 const rispostaSostanziosa = (s: string) => s.trim().length >= 30 && !/^\s*(?:ok|okay|sì|si|yes|no)\b[^a-z]*$/i.test(s) && !/\?\s*$/.test(s.trim())
@@ -889,6 +890,12 @@ const profilo = async (req: express.Request, res: express.Response) => {
   for (const k of ['nome', 'ruolo', 'tono', 'autonomia', 'onboarding', 'modello', 'lingua', 'tema', 'oreFatte', 'giro', 'argomenti', 'tetto', 'fuso'] as const) {
     if (b[k] !== undefined) patch[k] = b[k]
   }
+  // Con l'orologio fermo di una scena (MYYND_DEV=1 e MYYND_ADESSO), il fuso
+  // seminato è parte della scena: il client lo sovrascriverebbe da solo con
+  // quello vero della macchina appena aperta la pagina (App.tsx dilloIlFuso),
+  // rendendo il conto del resoconto impossibile da riprodurre fuori da quel
+  // fuso. Fuori da una scena il campo funziona come sempre.
+  if (process.env.MYYND_DEV === '1' && process.env.MYYND_ADESSO) delete patch.fuso
   // l'ordine dei blocchi della prima pagina: id di progetti che esistono e
   // «resto», puliti da `progetti.ordineBlocchiValido`; un id che non c'è più cade
   if (b.ordineBlocchi !== undefined) {
@@ -4876,6 +4883,32 @@ app.get('/api/fonti/salute', (req, res) => {
 // — P8: rotte, fine —
 
 // — P9: rotte, inizio —
+/*
+ * Quello che Myynd ha fatto per lui: tre letture che non scrivono niente, e
+ * il lunedì visto, che è un gesto suo. Nessun evento sul filo, nessuna riga
+ * nel registro per richiesta.
+ */
+app.get('/api/resoconto', async (req, res) => {
+  try {
+    if (!resoconto.eQuale(req.query.quale)) return res.status(400).json({ errore: 'Non conosco questo periodo.' })
+    await resoconto.prepara()
+    res.json({ resoconto: resoconto.resoconto(req.query.quale) })
+  } catch (e) { errore(res, e) }
+})
+app.get('/api/resoconto/sommario', (_req, res) => {
+  try { res.json(resoconto.sommario()) } catch (e) { errore(res, e) }
+})
+app.get('/api/resoconto/lunedi', (_req, res) => {
+  try { res.json(resoconto.lunedi()) } catch (e) { errore(res, e) }
+})
+app.post('/api/resoconto/visto', (req, res) => {
+  try {
+    const l = req.body?.lunedi
+    if (typeof l !== 'string' || !resoconto.LUNEDI.test(l)) return res.status(400).json({ errore: 'Non conosco questo periodo.' })
+    resoconto.segnaVisto(l)
+    res.json({ ok: true })
+  } catch (e) { errore(res, e) }
+})
 // — P9: rotte, fine —
 
 // — P10: rotte, inizio —

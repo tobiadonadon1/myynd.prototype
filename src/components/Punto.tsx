@@ -38,14 +38,14 @@ function spiegaGuaio(g: string): string {
   return tradotta(g) ? t(g) : t('Il punto non è arrivato: il fornitore non ha risposto.')
 }
 
-const VELO: CSSProperties = {
+export const VELO: CSSProperties = {
   position: 'fixed', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
   background: 'rgba(var(--inchiostro-rgb),.28)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
   padding: 20, animation: 'fadein .16s ease'
 }
 
 /** Il foglio: un documento da leggere, con i margini di una pagina. */
-const FOGLIO: CSSProperties = {
+export const FOGLIO: CSSProperties = {
   position: 'relative', width: 'min(640px, 100%)', maxHeight: 'min(86vh, 820px)',
   overflowY: 'auto', overflowX: 'hidden', minWidth: 0,
   padding: 'clamp(28px, 5vw, 40px) clamp(28px, 6vw, 44px)', borderRadius: 20,
@@ -55,18 +55,18 @@ const FOGLIO: CSSProperties = {
 }
 
 /** L'etichetta di una sezione: la stessa di sempre, con più aria intorno. */
-const ETICHETTA: CSSProperties = { ...LABEL, fontSize: 11, letterSpacing: '.12em' }
+export const ETICHETTA: CSSProperties = { ...LABEL, fontSize: 11, letterSpacing: '.12em' }
 
 /** Una riga: quindici pixel, respiro, e nient'altro addosso. */
-const LINEA: CSSProperties = {
+export const LINEA: CSSProperties = {
   display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0,
   fontSize: 15, lineHeight: 1.55, color: 'var(--inchiostro)'
 }
 
-const TESTO: CSSProperties = { flex: 1, minWidth: 0, overflowWrap: 'anywhere', textWrap: 'pretty' }
+export const TESTO: CSSProperties = { flex: 1, minWidth: 0, overflowWrap: 'anywhere', textWrap: 'pretty' }
 
 /** Quello che sta accanto alla frase e non è la frase: il perché, il dove sei. */
-const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.55)' }
+export const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.55)' }
 
 /**
  * La riga intera è il bersaglio.
@@ -76,16 +76,16 @@ const SPENTO: CSSProperties = { color: 'rgba(var(--inchiostro-rgb),.55)' }
  * nella frase; qui si clicca la frase, e in fondo resta una freccia piccola
  * che dice che si può.
  */
-const APRIBILE: CSSProperties = {
+export const APRIBILE: CSSProperties = {
   ...LINEA, width: '100%', textAlign: 'left', padding: 0, margin: 0,
   border: 'none', background: 'none', fontFamily: 'inherit', cursor: 'pointer'
 }
 
 /** Il rame al passaggio: l'unico accento, e solo dove si può cliccare. */
-const RAME: CSSProperties = { color: 'var(--rame)', textDecoration: 'underline', textUnderlineOffset: 3 }
+export const RAME: CSSProperties = { color: 'var(--rame)', textDecoration: 'underline', textUnderlineOffset: 3 }
 
 /** La carta in prima pagina: come le altre, non un rigo di servizio. */
-const CARTA: CSSProperties = {
+export const CARTA: CSSProperties = {
   flex: 'none', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0,
   borderRadius: 20, background: 'rgba(var(--carta-rgb),.66)',
   backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
@@ -101,7 +101,7 @@ const BOTTONE: CSSProperties = {
 }
 
 /** La riga sotto il titolo della carta: quello che il titolo non dice. */
-const SOTTO: CSSProperties = {
+export const SOTTO: CSSProperties = {
   fontSize: 13, lineHeight: 1.5, color: 'rgba(var(--inchiostro-rgb),.65)', marginTop: 3,
   textWrap: 'pretty', overflowWrap: 'anywhere'
 }
@@ -111,7 +111,7 @@ const SPIEGA: CSSProperties = { ...SOTTO, color: 'rgba(var(--inchiostro-rgb),.5)
 /** «5 cose» comincia una frase: la maiuscola la mette la pagina, non il dizionario. */
 const maiuscola = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1)
 
-function Sezione({ etichetta, children }: { etichetta: string; children: React.ReactNode }) {
+export function Sezione({ etichetta, children }: { etichetta: string; children: React.ReactNode }) {
   return (
     <div style={{ marginTop: 26, minWidth: 0 }}>
       <div style={ETICHETTA}>{etichetta}</div>

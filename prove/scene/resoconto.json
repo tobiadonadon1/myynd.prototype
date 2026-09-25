@@ -1,0 +1,101 @@
+{
+  "lingua": "en", "nome": "Alex", "ruolo": "Founder",
+  "progetti": [{ "chiave": "nw", "nome": "Northwind", "obiettivo": "Win the Northwind account this quarter." }],
+  "file": [
+    { "nome": "Northwind proposal.pages", "testo": "Northwind proposal. Scope, timeline and price." },
+    { "nome": "Kickoff brief.pages", "testo": "Kickoff brief." },
+    { "nome": "leo-notes.txt", "testo": "Notes for Leo." }
+  ],
+  "documenti": [
+    { "id": "posta:INBOX:1", "fonte": "posta", "tipo": "email", "titolo": "October quote", "corpo": "Hi Alex, could you send the October quote? Dana", "autore": "Dana Whitfield <dana@northwind.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "2026-09-16T08:10:00.000Z", "messageId": "d1@northwind.example", "filo": "d1@northwind.example" },
+    { "id": "posta:INBOX:2", "fonte": "posta", "tipo": "email", "titolo": "Harbor pilot dates", "corpo": "Hi Alex, which dates work for the pilot? Leo", "autore": "Leo Park <leo@harbor.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "2026-09-14T09:00:00.000Z", "messageId": "l1@harbor.example", "filo": "l1@harbor.example" },
+    { "id": "posta:INBOX:3", "fonte": "posta", "tipo": "email", "titolo": "Contract signature", "corpo": "Please sign the contract by Friday.", "autore": "Dana Whitfield <dana@northwind.example>", "percorso": "INBOX", "gruppo": "posta", "quando": "2026-09-15T08:00:00.000Z", "messageId": "d2@northwind.example", "filo": "d2@northwind.example" },
+    { "id": "posta:Sent:9", "fonte": "posta", "tipo": "email", "titolo": "Re: Harbor pilot dates", "corpo": "Hi Leo, the 5th or the 6th work. Alex", "autore": "Alex <alex@acme.example>", "percorso": "Sent", "gruppo": "posta", "quando": "2026-09-16T15:00:00.000Z", "inviato": true, "messageId": "s9@acme.example", "filo": "l1@harbor.example", "risponde": "l1@harbor.example", "destinatari": "leo@harbor.example" }
+  ],
+  "feed": [
+    { "id": "s1", "tipo": "Scadenza", "titolo": "Sign the Northwind contract", "urgenza": "Sep 18", "doc": "posta:INBOX:3", "quando": "2026-09-15T07:00:00.000Z", "vista": "2026-09-15T07:30:00.000Z", "stato": "fatto", "ragione": "lui", "risposto": "2026-09-17T10:00:00.000Z" },
+    { "id": "s2", "tipo": "Scadenza", "titolo": "Send the Harbor invoice", "urgenza": "Sep 23", "quando": "2026-09-16T07:00:00.000Z", "vista": "2026-09-16T08:00:00.000Z", "stato": "aperto" },
+    { "id": "s3", "tipo": "Scadenza", "titolo": "Renew the domain", "urgenza": "Sep 19", "quando": "2026-09-15T07:00:00.000Z", "vista": "2026-09-15T08:00:00.000Z", "stato": "scartato", "ragione": "vecchia" },
+    { "id": "s4", "tipo": "Scadenza", "titolo": "File the expenses", "urgenza": "Sep 14", "quando": "2026-09-15T07:00:00.000Z", "stato": "aperto" },
+    { "id": "f1", "tipo": "Priorità", "titolo": "Reply to Dana about the October quote", "quando": "2026-09-15T06:00:00.000Z", "vista": "2026-09-15T06:30:00.000Z", "stato": "fatto", "ragione": "lui", "risposto": "2026-09-15T11:00:00.000Z" },
+    { "id": "f2", "tipo": "Da decidere", "titolo": "Choose the Harbor pilot dates", "quando": "2026-09-16T06:00:00.000Z", "vista": "2026-09-16T06:30:00.000Z", "stato": "fatto", "ragione": "lista", "motivo": "Passata nella lista.", "risposto": "2026-09-16T10:00:00.000Z" },
+    { "id": "f3", "tipo": "Priorità", "titolo": "Review the Northwind timeline", "quando": "2026-09-18T06:00:00.000Z", "vista": "2026-09-18T06:30:00.000Z", "stato": "fatto", "ragione": "lui", "risposto": "2026-09-18T12:00:00.000Z" },
+    { "id": "f-x", "tipo": "Da decidere", "titolo": "Answer Leo on the pilot", "quando": "2026-09-15T06:00:00.000Z", "vista": "2026-09-15T06:20:00.000Z", "stato": "fatto", "ragione": "lista", "motivo": "Passata nella lista.", "risposto": "2026-09-15T07:00:00.000Z" },
+    { "id": "e0", "tipo": "Priorità", "titolo": "Set up the Northwind folder", "quando": "2026-09-02T07:00:00.000Z", "vista": "2026-09-02T07:30:00.000Z", "stato": "fatto", "ragione": "lui", "risposto": "2026-09-02T09:00:00.000Z" }
+  ],
+  "compiti": [
+    { "id": "m1", "testo": "Reply to Dana with the October quote", "progetto": "nw", "stato": "fatto", "doc": "posta:INBOX:1" },
+    { "id": "m2", "testo": "Answer Leo on the pilot", "stato": "fatto", "doc": "posta:INBOX:2" },
+    { "id": "m3", "testo": "Follow up with Priya on the audit slot", "stato": "fatto" },
+    { "id": "m4", "testo": "Confirm the pilot dates to Leo", "stato": "pronto", "doc": "posta:INBOX:2" },
+    { "id": "m5", "testo": "Send Dana the revised scope", "stato": "fatto", "doc": "posta:INBOX:1" },
+    { "id": "m6", "testo": "Reply to Leo about the kickoff", "stato": "pronto" },
+    { "id": "m7", "testo": "Send the Harbor recap", "stato": "pronto" },
+    { "id": "d1", "testo": "Write the Northwind proposal", "progetto": "nw", "stato": "fatto", "risultato": "Northwind proposal." },
+    { "id": "d2", "testo": "Draft notes for Leo", "stato": "fatto", "risultato": "Notes for Leo.\n\nMore below." },
+    { "id": "k1", "testo": "Fix the Northwind signup form", "progetto": "nw", "stato": "fatto" },
+    { "id": "k2", "testo": "Look into the flaky build", "stato": "fatto" },
+    { "id": "a1", "testo": "Put the Harbor pilot sessions in the calendar", "stato": "fatto" },
+    { "id": "r1", "testo": "Tidy the newsletters", "stato": "fatto" },
+    { "id": "b1", "testo": "Draft the Northwind kickoff agenda", "progetto": "nw", "stato": "fatto", "risultato": "Kickoff agenda: introductions, scope, timeline, next steps.\n\nThen the rest." },
+    { "id": "b2", "testo": "Draft a reply to the recruiter", "stato": "fatto", "risultato": "Thanks, not now." },
+    { "id": "t1", "testo": "Send Dana the signed contract", "stato": "fatto", "doc": "posta:INBOX:3" },
+    { "id": "d0", "testo": "Write the kickoff brief", "progetto": "nw", "stato": "fatto", "risultato": "Kickoff brief." }
+  ],
+  "punto": { "progetti": [{ "progetto": "nw", "novita": "Dana confirmed the contract.", "doc": "posta:INBOX:3" }] },
+  "p9": {
+    "config": { "fuso": "Europe/Rome" },
+    "compiti": [
+      { "id": "m1", "origine": "iniziativa", "creato": "2026-09-16T08:20:00.000Z", "chiesto": "2026-09-16T08:30:00.000Z", "chiuso": "2026-09-17T09:00:00.000Z", "email": { "a": "dana@northwind.example", "oggetto": "Re: October quote", "corpo": "Hi Dana, the quote is attached.", "conosciuto": true } },
+      { "id": "m2", "origine": "mano", "voce": "f-x", "creato": "2026-09-15T07:00:00.000Z", "chiesto": "2026-09-15T07:10:00.000Z", "chiuso": "2026-09-15T10:00:00.000Z", "email": { "a": "leo@harbor.example", "oggetto": "Re: Harbor pilot dates", "corpo": "Hi Leo, the 5th works.", "conosciuto": true } },
+      { "id": "m3", "origine": "auto:follow-up", "creato": "2026-09-18T06:00:00.000Z", "chiesto": "2026-09-18T06:00:00.000Z", "chiuso": "2026-09-18T08:00:00.000Z", "email": { "a": "priya@audit.example", "oggetto": "Audit slot", "corpo": "Hi Priya, is Tuesday fine?", "conosciuto": true } },
+      { "id": "m4", "creato": "2026-09-16T09:00:00.000Z", "chiesto": "2026-09-16T09:00:00.000Z", "email": { "a": "leo@harbor.example", "oggetto": "Re: Harbor pilot dates", "corpo": "Hi Leo, the 5th or the 6th work.", "conosciuto": true, "casella": { "stato": "salvata" } }, "mandata": { "doc": "posta:Sent:9", "quando": "2026-09-16T15:00:00.000Z", "certezza": "id", "ritocco": 0.08 } },
+      { "id": "m5", "creato": "2026-09-19T07:00:00.000Z", "chiesto": "2026-09-19T07:00:00.000Z", "chiuso": "2026-09-19T09:00:00.000Z", "email": { "a": "dana@northwind.example", "oggetto": "Revised scope", "corpo": "Hi Dana, here is the scope.", "conosciuto": true } },
+      { "id": "m6", "creato": "2026-09-17T07:00:00.000Z", "chiesto": "2026-09-17T07:00:00.000Z", "email": { "a": "leo@harbor.example", "oggetto": "Kickoff", "corpo": "Hi Leo.", "conosciuto": true, "casella": { "stato": "salvata" } }, "mandata": { "doc": "posta:Sent:10", "quando": "2026-09-17T15:00:00.000Z", "certezza": "filo", "ritocco": 0.8 } },
+      { "id": "m7", "creato": "2026-09-17T07:00:00.000Z", "chiesto": "2026-09-17T07:00:00.000Z" },
+      { "id": "d1", "creato": "2026-09-14T08:00:00.000Z", "chiesto": "2026-09-14T08:00:00.000Z", "chiuso": "2026-09-16T08:00:00.000Z", "consegna": { "app": "Pages", "titolo": "Northwind proposal", "percorso": "~/Documents/Northwind proposal.pages" } },
+      { "id": "d2", "creato": "2026-09-15T08:00:00.000Z", "chiesto": "2026-09-15T08:00:00.000Z", "chiuso": "2026-09-16T12:00:00.000Z", "consegna": { "app": "File", "titolo": "Leo notes", "percorso": "~/Documents/leo-notes.txt" } },
+      { "id": "k1", "creato": "2026-09-17T07:00:00.000Z", "chiesto": "2026-09-17T07:00:00.000Z", "chiuso": "2026-09-17T12:00:00.000Z" },
+      { "id": "k2", "creato": "2026-09-17T07:00:00.000Z", "chiesto": "2026-09-17T07:00:00.000Z", "chiuso": "2026-09-17T12:00:00.000Z" },
+      { "id": "a1", "creato": "2026-09-18T07:00:00.000Z", "chiesto": "2026-09-18T07:00:00.000Z", "chiuso": "2026-09-18T09:00:00.000Z", "esito": "2 in agenda." },
+      { "id": "r1", "creato": "2026-09-19T07:00:00.000Z", "chiesto": "2026-09-19T07:00:00.000Z", "chiuso": "2026-09-19T09:00:00.000Z", "esito": "12 in «Archive»." },
+      { "id": "b1", "origine": "iniziativa", "creato": "2026-09-15T07:00:00.000Z", "chiesto": "2026-09-15T07:00:00.000Z", "chiuso": "2026-09-16T10:00:00.000Z", "esito": "Good as is." },
+      { "id": "b2", "creato": "2026-09-15T07:00:00.000Z", "chiesto": "2026-09-15T07:00:00.000Z", "chiuso": "2026-09-16T10:00:00.000Z" },
+      { "id": "t1", "creato": "2026-09-21T06:00:00.000Z", "chiesto": "2026-09-21T06:00:00.000Z", "chiuso": "2026-09-21T06:30:00.000Z", "email": { "a": "dana@northwind.example", "oggetto": "Re: Contract signature", "corpo": "Signed, attached.", "conosciuto": true } },
+      { "id": "d0", "creato": "2026-09-02T07:00:00.000Z", "chiesto": "2026-09-02T07:00:00.000Z", "chiuso": "2026-09-02T10:00:00.000Z", "consegna": { "app": "Pages", "titolo": "Kickoff brief", "percorso": "~/Documents/Kickoff brief.pages" } }
+    ],
+    "azioni": [
+      { "tipo": "email", "compito": "m1", "verso": "dana@northwind.example", "cosa": "Re: October quote", "quando": "2026-09-17T09:00:00.000Z" },
+      { "tipo": "email", "compito": "m2", "verso": "leo@harbor.example", "cosa": "Re: Harbor pilot dates", "quando": "2026-09-15T10:00:00.000Z" },
+      { "tipo": "email", "compito": "m3", "verso": "priya@audit.example", "cosa": "Audit slot", "quando": "2026-09-18T08:00:00.000Z" },
+      { "tipo": "email", "compito": "m5", "verso": "dana@northwind.example", "cosa": "Revised scope", "quando": "2026-09-19T09:00:00.000Z" },
+      { "tipo": "email", "compito": "m7", "verso": "leo@harbor.example", "cosa": "Harbor recap", "esito": "fallita", "dettaglio": "Connection refused.", "quando": "2026-09-17T09:00:00.000Z" },
+      { "tipo": "documento", "compito": "d2", "cosa": "Leo notes", "quando": "2026-09-16T12:00:00.000Z" },
+      { "tipo": "lavoro.fatto", "compito": "k1", "verso": "/Users/alex/code/northwind-app", "cosa": "Fix the Northwind signup form", "dettaglio": { "changedFiles": [{ "path": "src/signup.tsx", "kind": "modified" }] }, "quando": "2026-09-17T12:00:00.000Z" },
+      { "tipo": "lavoro.fatto", "compito": "k2", "verso": "/Users/alex/code/northwind-app", "cosa": "Look into the flaky build", "dettaglio": { "changedFiles": [] }, "quando": "2026-09-17T12:00:00.000Z" },
+      { "tipo": "agenda", "compito": "a1", "cosa": "2 eventi", "dettaglio": [{ "id": "e1" }, { "id": "e2" }], "quando": "2026-09-18T09:00:00.000Z" },
+      { "tipo": "posta.archivia", "compito": "r1", "verso": "Archive", "cosa": "14 messaggi", "quando": "2026-09-19T09:00:00.000Z" },
+      { "tipo": "email", "compito": "t1", "verso": "dana@northwind.example", "cosa": "Re: Contract signature", "quando": "2026-09-21T06:30:00.000Z" }
+    ],
+    "misure": [
+      { "compito": "m1", "via": "smtp", "distanza": 0.05, "consegnato": "2026-09-16T08:40:00.000Z" },
+      { "compito": "m5", "via": "smtp", "distanza": 0.7 },
+      { "compito": "d1", "consegnato": "2026-09-15T08:00:00.000Z" },
+      { "compito": "m4", "consegnato": "2026-09-16T09:00:00.000Z", "via": "casella", "distanza": 0.08 },
+      { "compito": "d0", "consegnato": "2026-09-02T09:00:00.000Z" }
+    ],
+    "punteggi": [
+      { "giorno": "2026-09-14", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-15", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-16", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-17", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-18", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-19", "giuste": 5, "sbagliate": 1, "base": 0.55 },
+      { "giorno": "2026-09-20", "giuste": 5, "sbagliate": 1, "base": 0.55 }
+    ],
+    "abitudini": [
+      { "chiave": "posta.risponde_sempre:dana", "genere": "posta.risponde_sempre", "dati": { "nome": "Dana Whitfield", "latenzaMin": 150 }, "visto": "2026-09-16T20:00:00.000Z" },
+      { "chiave": "posta.ore", "genere": "posta.ore", "dati": { "da": 9, "a": 11 }, "stato": "tenuta", "testoSuo": "I answer mail before lunch", "visto": "2026-09-16T20:00:00.000Z" }
+    ]
+  }
+}

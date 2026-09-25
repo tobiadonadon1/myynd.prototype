@@ -38,6 +38,7 @@ import { Glifo } from '../components/Stato'
 import { annunciaProgetti, ascoltaProgetti, ascoltaProgetto, dimenticaProgetto, portaAlProgetto, progettoAtteso } from '../vals'
 import { SchedaProgetto, Tic } from './ProgettoEditor'
 import { ComeLavori } from './ComeLavori'
+import { CosaHaFatto } from './CosaHaFatto'
 import './memoria.css'
 
 /** Quanto pesa una convinzione, detto a parole invece che con un numero. */
@@ -599,6 +600,7 @@ export function Memoria() {
       </section>
 
       {d && <DocumentiProdotti documenti={d.documenti} />}
+      <CosaHaFatto />
 
       {/* — quello che ha capito da solo — */}
       <section className="mem-section">

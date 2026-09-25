@@ -1,0 +1,9 @@
+[
+  { "aspetta": 2500 },
+  { "scatta": "giovedi" },
+  { "clicca": "Your account" },
+  { "vai": "Memory" },
+  { "js": "(() => { const s = document.querySelector('[data-sezione=cosa-ha-fatto]'); if (s) s.scrollIntoView(); return !!s })()" },
+  { "aspetta": 400 },
+  { "scatta": "giovedi-memoria" }
+]

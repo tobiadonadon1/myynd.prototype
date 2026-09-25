@@ -8,6 +8,7 @@ import {
   IconMappa, IconPiu, IconSpina, IconSpunta, IconSuPiccola, IconEsci, IconChatPiena } from './icons'
 import { Documento, Ricerca, Toast } from './modals'
 import { Aiuto } from './screens/Aiuto'
+import { ResocontoAperto } from './components/Resoconto'
 import { Automazioni } from './screens/Automazioni'
 import { Chat } from './screens/Chat'
 import { Connettori } from './screens/Connettori'
@@ -603,6 +604,7 @@ function Casa({ stato, apriConnessioni, esci, avviaOnboarding, email }: {
       {v.mapFull && <MappaPiena v={v} />}
       {/* la pagina di un progetto, sopra la schermata da cui la si apre */}
       {v.progettoAperto && <PaginaProgetto v={v} lista={lista} />}
+      <ResocontoAperto v={v} />
       {v.docOpen && <Documento v={v} />}
       {v.toastOn && <Toast v={v} />}
       {v.searchOpen && <Ricerca v={v} />}

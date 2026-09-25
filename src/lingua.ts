@@ -3254,6 +3254,23 @@ const EN: Record<string, string> = {
   // — P8: fine —
 
   // — P9: inizio —
+  'La settimana scorsa.': 'Last week.',
+  'Questa settimana.': 'This week.',
+  'Da quando hai iniziato.': 'Since you started.',
+  'Da quando hai iniziato': 'Since you started',
+  'Mail mandate': 'Emails sent',
+  'Lavori consegnati': 'Work delivered',
+  'Scadenze segnalate': 'Deadlines flagged',
+  'Tempo risparmiato': 'Time saved',
+  'Cosa ha notato di te': 'What it noticed about you',
+  'Cose che ti ha segnalato': 'Things it flagged',
+  'Cosa ha fatto Myynd': 'What Myynd did',
+  'La settimana scorsa': 'Last week',
+  'nella lista': 'in your list',
+  'vista': 'seen',
+  'riscritta': 'rewritten',
+  'La posta inviata non è collegata: le mail mandate da lì non si contano.': 'Sent mail isn’t connected, so emails sent from your mail aren’t counted.',
+  'Non conosco questo periodo.': 'I don’t know this period.',
   // — P9: fine —
 
   // — P10: inizio —
