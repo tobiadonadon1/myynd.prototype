@@ -651,10 +651,16 @@ function RigaChat({ ch }: { ch: Vals['threads'][number] }) {
   )
 }
 
+/**
+ * L'attesa prima della prima pagina (P10): lo stesso aspetto della pagina
+ * con cui il guscio si apre (`paginaDiAvvio` in desktop/finestra.ts), nei
+ * colori del tema. Un avvio a freddo è un aspetto solo, non tre.
+ */
 function Attesa() {
   return (
-    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#191715', color: 'rgba(244,239,232,.6)', fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", fontSize: 15 }}>
-      <div style={{ animation: 'puls 1.6s ease-in-out infinite' }}>myynd</div>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: 'var(--pagina)', color: 'var(--inchiostro)', padding: 16 }}>
+      <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-.02em' }}>Myynd</div>
+      <div style={{ fontSize: 15, opacity: .7, textAlign: 'center' }}>{t('Myynd si sta svegliando.')}</div>
     </div>
   )
 }
