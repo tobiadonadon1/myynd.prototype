@@ -21,7 +21,7 @@ function scena(o: { piattaforma?: string; permesso?: boolean } = {}) {
   const cambi: StatoLocale[] = []
   const righe: string[] = []
   const fonti: Finta[] = []
-  const x = { mandaOk: true, idle: 0, permesso: o.permesso ?? false }
+  const x = { mandaOk: true, idle: 0, permesso: o.permesso ?? false, letture: 0 }
   oss.avvia({
     manda: m => { mandati.push(structuredClone(m)); return x.mandaOk },
     creaFonte: opts => {
@@ -33,7 +33,7 @@ function scena(o: { piattaforma?: string; permesso?: boolean } = {}) {
       return f
     },
     inattivoSecondi: () => x.idle,
-    permesso: () => x.permesso,
+    permesso: () => { x.letture++; return x.permesso },
     adesso: () => Date.now(),
     mioPid: 999,
     piattaforma: o.piattaforma ?? 'darwin',
@@ -419,4 +419,114 @@ test('fuori dal Mac non c’è osservatore', () => {
   assert.equal(oss.stato().guarda, false)
   oss.pausa(60)
   assert.equal(s.mandati.filter(m => m.tipo === 'osservatore-pausa').length, 0)
+})
+
+/* ------------------------------------------------ le correzioni del primo giro */
+
+test('bloccato e poi a dormire: al risveglio davanti al lucchetto non si conta niente fino allo sblocco', () => {
+  const s = scena()
+  oss.daServer(ACCESO)
+  s.emetti('com.apple.Safari', 'Safari')
+  avanti(20_000)
+  oss.bloccato()
+  oss.dorme()
+  avanti(1_000)
+  oss.sveglio()
+  avanti(40_000)   // davanti al lucchetto
+  assert.equal(s.fonte().chieste, 0, 'finché è bloccato non si chiede chi c’è davanti')
+  oss.sbloccato()
+  assert.equal(s.fonte().chieste, 1)
+  avanti(20_000)
+  oss.daServer(SPENTO)
+  assert.deepEqual(s.sessioni().map(x => [x.app, x.inizio, x.secondi]), [
+    ['Safari', new Date(T0).toISOString(), 20],
+    ['Safari', new Date(T0 + 61_000).toISOString(), 20]
+  ])
+})
+
+test('a dormire senza lucchetto: il risveglio riapre da solo (il contrario)', () => {
+  const s = scena()
+  oss.daServer(ACCESO)
+  s.emetti('com.apple.Safari', 'Safari')
+  avanti(20_000)
+  oss.dorme()
+  avanti(1_000)
+  oss.sveglio()
+  avanti(30_000)
+  oss.daServer(SPENTO)
+  assert.deepEqual(s.sessioni().map(x => x.secondi), [20, 30])
+})
+
+test('se il Mac dorme oltre la fine della pausa, al risveglio si guarda di nuovo', () => {
+  const s = scena()
+  oss.daServer({ ...ACCESO, pausaFino: new Date(Date.now() + 60 * 60_000).toISOString() })
+  avanti(30 * 60_000)
+  oss.dorme()
+  // l'orologio del muro va avanti di un'ora e mezza, i timer del processo no
+  mock.timers.setTime(Date.now() + 90 * 60_000)
+  assert.equal(s.fonti.length, 0)
+  oss.sveglio()
+  assert.equal(s.fonti.length, 1, 'la pausa è finita mentre dormiva')
+  assert.equal(s.cambi.at(-1)?.guarda, true)
+})
+
+test('una pausa lontana più di 24,8 giorni non fa girare a vuoto il processo', () => {
+  assert.equal(oss.ritardoScadenza(new Date(T0 + 30 * 86_400_000).toISOString(), T0), 2 ** 31 - 1)
+  assert.equal(oss.ritardoScadenza(new Date(T0 + 60_000).toISOString(), T0), 60_050)
+  assert.equal(oss.ritardoScadenza(new Date(T0 - 60_000).toISOString(), T0), 50)
+  const s = scena()
+  oss.daServer({ ...ACCESO, pausaFino: new Date(Date.now() + 30 * 86_400_000).toISOString() })
+  const cambi = s.cambi.length
+  avanti(1_000)
+  assert.equal(s.cambi.length, cambi)
+  assert.equal(s.fonti.length, 0)
+})
+
+test('tornando da fermo, un cambio di app davanti riapre subito, senza aspettare il giro', () => {
+  const s = scena()
+  oss.daServer(ACCESO)
+  s.emetti('com.apple.Safari', 'Safari')
+  avanti(285_000)
+  s.x.idle = 135   // al giro dei 300 s: fermo da 165
+  avanti(15_000)
+  s.x.idle = 0
+  avanti(5_000)
+  s.emetti('com.apple.mail', 'Mail')   // a 305 s, prima del giro dei 315
+  avanti(40_000)
+  oss.daServer(SPENTO)
+  assert.deepEqual(s.sessioni().map(x => [x.app, x.inizio, x.secondi]), [
+    ['Safari', new Date(T0).toISOString(), 165],
+    ['Mail', new Date(T0 + 305_000).toISOString(), 40]
+  ])
+})
+
+test('il permesso di Accessibilità si guarda solo con i titoli accesi', () => {
+  const s = scena()
+  avanti(180_000)
+  assert.equal(s.x.letture, 0, 'spento: mai')
+  oss.daServer({ ...ACCESO, titoli: false })
+  avanti(180_000)
+  assert.equal(s.x.letture, 0, 'acceso senza titoli: mai')
+  oss.daServer(ACCESO)
+  assert.ok(s.x.letture >= 1, 'i titoli accesi: sì')
+  const prima = s.x.letture
+  avanti(60_000)
+  assert.ok(s.x.letture > prima, 'e poi ogni minuto')
+  oss.daServer(SPENTO)
+  const dopo = s.x.letture
+  avanti(180_000)
+  assert.equal(s.x.letture, dopo)
+  oss.rileggiPermesso()
+  assert.equal(s.x.letture, dopo + 1, 'quando la pagina lo chiede, sempre')
+})
+
+test('ferma(): se il server non ha mai risposto e non c’è niente da consegnare, si esce subito', async () => {
+  const s = scena()
+  oss.nuovoServer()
+  let finito = false
+  const p = oss.ferma().then(() => { finito = true })
+  await Promise.resolve(); await Promise.resolve()
+  assert.equal(finito, true)
+  await p
+  assert.deepEqual(s.tipi(), ['osservatore-chiedi'], 'nessun secondo chiedi')
 })

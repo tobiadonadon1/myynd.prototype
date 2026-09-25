@@ -60,6 +60,8 @@ export const ATTESA_CONFERMA = 5_000
 export const ATTESA_USCITA = 1_500
 /** Uno stato conferma la pausa se il suo istante sta a meno di due minuti da quello chiesto. */
 const TOLLERANZA_PAUSA = 120_000
+/** Il ritardo più lungo che `setTimeout` accetta: oltre, Node lo fa diventare un millisecondo. */
+export const RITARDO_MASSIMO = 2 ** 31 - 1
 const RIAVVII_MASSIMI = 3
 const FINESTRA_RIAVVII = 10 * 60_000
 
@@ -82,7 +84,9 @@ let costruttore: Costruttore = creaCostruttore()
 let coda: Coda = creaCoda()
 let ultimo: Finestra | null = null
 let inattivo = false
-let sospeso = false
+/** Schermo bloccato e Mac addormentato sono due cose: si riguarda solo quando nessuna delle due è vera. */
+let schermoBloccato = false
+let addormentato = false
 let fermato = true
 let orologi: ReturnType<typeof setInterval>[] = []
 let scadenza: ReturnType<typeof setTimeout> | null = null
@@ -91,6 +95,7 @@ let ultimoRegistro = ''
 let attesaStato: (() => void)[] = []
 
 const ora = () => d!.adesso()
+const sospeso = () => schermoBloccato || addormentato
 
 function pausaAttuale(): string | null {
   return ottimista ? ottimista.pausaFino : confermato.pausaFino
@@ -191,8 +196,21 @@ function suEvento(e: EventoFronte) {
   // una finestra che non esiste per Myynd non allunga quella di prima
   if (!f) { ultimo = null; costruttore.ferma(e.t); return }
   ultimo = f
-  if (inattivo || sospeso) return
+  if (sospeso()) return
+  // un'altra app davanti, con la tastiera o il mouse appena toccati, vuol
+  // dire che la persona è tornata: non si aspetta il giro dei quindici secondi
+  if (inattivo) {
+    if (!tornata()) return
+    inattivo = false
+  }
   costruttore.evento(f, e.t)
+}
+
+function tornata(): boolean {
+  try {
+    const secondi = d!.inattivoSecondi()
+    return Number.isFinite(secondi) && secondi < INATTIVO_SECONDI
+  } catch { return false }
 }
 
 /** Il programma è uscito da solo: si riavvia tre volte in dieci minuti, poi il ripiego. */
@@ -215,12 +233,25 @@ function suFineFonte(motivo: string) {
   valuta()
 }
 
-/** Alla fine della pausa si ricomincia da soli: nessun messaggio, ognuno guarda il suo orologio. */
+/**
+ * Quanto aspettare la fine della pausa. Mai più di `RITARDO_MASSIMO`: una
+ * pausa più lontana (un orologio tornato indietro) si riguarda a quel punto e
+ * si riprogramma, invece di far girare il processo a vuoto ogni millisecondo.
+ */
+export function ritardoScadenza(pausaFino: string, adesso: number): number {
+  return Math.min(Math.max(0, Date.parse(pausaFino) - adesso) + 50, RITARDO_MASSIMO)
+}
+
+/**
+ * Alla fine della pausa si ricomincia da soli: nessun messaggio, ognuno guarda
+ * il suo orologio. L'orologio di questo timer però si ferma quando il Mac
+ * dorme: per questo la pausa si riguarda anche al risveglio e a ogni minuto.
+ */
 function programmaScadenza() {
   if (scadenza) { clearTimeout(scadenza); scadenza = null }
   const p = pausaAttuale()
   if (!d || fermato || !p || !inPausa(p, ora())) return
-  scadenza = setTimeout(() => { scadenza = null; valuta() }, Math.max(0, Date.parse(p) - ora()) + 50)
+  scadenza = setTimeout(() => { scadenza = null; valuta() }, ritardoScadenza(p, ora()))
 }
 
 /** Le sessioni chiuse in coda, e la coda al server se il server ha già risposto. */
@@ -242,7 +273,7 @@ function spedisci() {
 }
 
 function giroInattivita() {
-  if (!d || !fonte || sospeso) return
+  if (!d || !fonte || sospeso()) return
   let secondi = 0
   try { secondi = d.inattivoSecondi() } catch { return }
   if (!Number.isFinite(secondi)) return
@@ -257,8 +288,11 @@ function giroInattivita() {
 
 function giroInvio() {
   if (!d) return
-  rileggiPermesso()
-  if (fonte && !inattivo && !sospeso) costruttore.taglia(ora())
+  // il permesso di Accessibilità serve solo ai titoli: senza, non lo si guarda
+  if (confermato.acceso && confermato.titoli) rileggiPermesso()
+  // e la pausa finita mentre l'orologio del timer era fermo
+  valuta()
+  if (fonte && !inattivo && !sospeso()) costruttore.taglia(ora())
   spedisci()
 }
 
@@ -283,14 +317,16 @@ export function avvia(dip: Dipendenze): void {
   coda = creaCoda()
   ultimo = null
   inattivo = false
-  sospeso = false
+  schermoBloccato = false
+  addormentato = false
   fermato = false
   scadenza = null
   ultimoDetto = ''
   ultimoRegistro = ''
   attesaStato = []
   orologi = []
-  permesso = leggiPermesso()
+  // il permesso si guarda solo quando il server vuole i titoli (daServer)
+  permesso = false
   if (disponibile) {
     orologi.push(
       setInterval(giroInattivita, dip.ritmi?.inattivita ?? OGNI_INATTIVITA),
@@ -325,6 +361,7 @@ export function daServer(m: unknown): void {
   if (!s || !d) return
   confermato = s
   risposto = true
+  if (s.acceso && s.titoli) permesso = leggiPermesso()
   // spento dal server: una pausa in volo non ha più niente da mettere in pausa
   if (ottimista && !s.acceso) { clearTimeout(ottimista.orologio); ottimista = null }
   if (ottimista && confermaPausa(ottimista.pausaFino, s.pausaFino)) {
@@ -378,29 +415,55 @@ export function riprendi(): void {
   premuto(null, RIPRENDI, 'la ripresa')
 }
 
-/** Schermo bloccato, o la sessione utente passata a un altro: la sessione si chiude adesso. */
-export function bloccato(): void {
-  if (!d) return
-  sospeso = true
+function chiudiAdesso() {
   costruttore.ferma(ora())
   spedisci()
 }
 
-export function sbloccato(): void {
-  if (!d || !sospeso) return
-  sospeso = false
+/**
+ * Di ritorno dal blocco o dal sonno. Prima si riguarda lo stato: una pausa
+ * può essere finita mentre il Mac dormiva, e il suo timer dormiva con lui.
+ * Poi, se niente tiene ancora fermo (lo schermo ancora bloccato dopo il
+ * risveglio), si riapre sull'ultima finestra e si chiede chi c'è davanti. Una
+ * fonte appena accesa lo dice da sé.
+ */
+function riapri(eraFermo: boolean) {
+  const cera = fonte
+  valuta()
+  if (!eraFermo || sospeso()) return
   inattivo = false
-  if (!fonte) return
+  if (!fonte || fonte !== cera) return
   costruttore.riprendi(ultimo, ora())
   fonte.chiedi()
 }
 
-export function dorme(): void {
-  bloccato()
+/** Schermo bloccato, o la sessione utente passata a un altro: la sessione si chiude adesso. */
+export function bloccato(): void {
+  if (!d) return
+  schermoBloccato = true
+  chiudiAdesso()
 }
 
+export function sbloccato(): void {
+  if (!d) return
+  const era = schermoBloccato
+  schermoBloccato = false
+  riapri(era)
+}
+
+/** Il Mac va a dormire: la sessione si chiude adesso. */
+export function dorme(): void {
+  if (!d) return
+  addormentato = true
+  chiudiAdesso()
+}
+
+/** Il risveglio non basta se lo schermo è bloccato: si riguarda allo sblocco. */
 export function sveglio(): void {
-  sbloccato()
+  if (!d) return
+  const era = addormentato
+  addormentato = false
+  riapri(era)
 }
 
 function attendiStato(ms: number): Promise<boolean> {
@@ -429,6 +492,9 @@ export async function ferma(): Promise<void> {
   if (scadenza) { clearTimeout(scadenza); scadenza = null }
   if (ottimista) { clearTimeout(ottimista.orologio); ottimista = null }
   coda.metti(costruttore.chiusi())
+  // un server che non ha mai risposto e niente da consegnare: non c'è niente
+  // da confermare, e aspettarlo rallenterebbe l'uscita per niente
+  if (!risposto && coda.quante() === 0) return
   for (let giro = 0; giro < 4; giro++) {
     const eraRisposto = risposto
     spedisci()
