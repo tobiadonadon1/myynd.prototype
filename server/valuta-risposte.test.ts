@@ -73,14 +73,14 @@ type Risposta = Awaited<ReturnType<typeof claude.rispondiInStreaming>>
  * con il numero del documento giusto al posto di «[g]». Conta i token come
  * «risposta» dentro l'etichetta della prova, come farebbe il motore.
  */
-function chatFinta(copione: Record<string, string>, o: { costo?: number; lancia?: () => Error } = {}) {
+function chatFinta(copione: Record<string, string>, o: { costo?: number; lancia?: () => Error; insieme?: Insieme } = {}) {
   return async (domanda: string, _s: unknown, onTesto: (d: string) => void): Promise<Risposta> => {
     if (o.lancia) throw o.lancia()
     store.segnaUso({ lavoro: 'risposta', motore: 'finto', entrata: o.costo ?? 100, cache: 0, uscita: 10 })
     const visti = claude.materialeChat(domanda, [], false)
     const grezzo = copione[domanda] ?? 'I don’t have that.'
     // «[g]» è il documento giusto di quella domanda, al numero che ha nel materiale
-    const oro = INSIEME().domande.find(d => d.domanda === domanda)?.doc?.id
+    const oro = (o.insieme ?? INSIEME()).domande.find(d => d.domanda === domanda)?.doc?.id
     const estratti = new Map(visti.map(d => [d.id, 1500]))
     let g = oro ? visti.findIndex(d => d.id === oro) : -1
     // non era nel primo materiale: la chat vera lo troverebbe con un giro di `cerca`, largo quattromila
@@ -219,6 +219,9 @@ test('budget, tempo e tetto fermano la prova e salvano un rapporto parziale', as
   assert.equal(r.voci.length, 1)
   assert.ok(r.file && existsSync(r.file))
   assert.equal(archivio.leggiStato().ultima?.interrotta, 'budget')
+  assert.match(vr.tabella(r, true), /stopped: token budget$/m, 'a parole, non con la chiave')
+  assert.match(vr.tabella(r, false), /fermata: budget di token$/m)
+  assert.equal(vr.fermata('tetto', true), 'daily token limit')
 
   archivio.togli(); archivio.scriviInsieme(INSIEME()); store.default.exec('DELETE FROM uso')
   let orologio = 0
@@ -431,4 +434,70 @@ test('una prova della settimana fermata al budget non si ripete il giorno dopo: 
   stato = archivio.leggiStato()
   assert.notEqual(stato.ultimaSettimanale, undefined)
   cfg.aggiorna({ tetto: 0, provaRisposte: { attiva: false } }); store.default.exec('DELETE FROM uso')
+})
+
+test('una prova a secco non ritira nessuno; quella vera sospende chi ha il documento sparito, e lo riprende quando torna', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  const ins = INSIEME()
+  ins.domande.push(item('q07', { domanda: 'When is the Lumen offsite?', tipo: 'risponde', genere: 'data', attesa: '3 March 2027', doc: { id: 'desktop:manca', titolo: 'Lumen offsite.md', fonte: 'desktop', quando: ieri(2) }, citazione: 'The Lumen offsite is on 3 March 2027.', scarto: 0 }))
+  archivio.scriviInsieme(ins)
+  const prima = readFileSync(join(archivio.cartellaRisposte(), 'domande.json'), 'utf8')
+  const secco = await vr.valutaRisposte({ origine: 'comando', secco: true })
+  assert.equal(secco.ritirate, 0)
+  assert.ok(secco.voci.some(v => v.id === 'q07'), 'la domanda col documento che manca si vede nel secco')
+  assert.equal(readFileSync(join(archivio.cartellaRisposte(), 'domande.json'), 'utf8'), prima, 'l’insieme non si tocca')
+  // la prova vera la sospende
+  vr.perProva({ rispondi: chatFinta(COPIONE, { insieme: ins }) as never, chiediJSON: giudiceFinto().chiediJSON })
+  const vera = await vr.valutaRisposte({ origine: 'comando' })
+  assert.equal(vera.ritirate, 1)
+  assert.ok(!vera.voci.some(v => v.id === 'q07'))
+  const dp = await import('./domande-prova.ts')
+  const suDisco = archivio.leggiInsieme<Insieme>()!
+  assert.equal(suDisco.domande.find(d => d.id === 'q07')?.perche, 'doc_sparito')
+  assert.deepEqual(dp.sospese(suDisco).map(d => d.id), ['q07'])
+  // il documento arriva (la cartella è stata riletta): la domanda torna da sola alla prova dopo
+  store.salvaDocumenti([{ id: 'desktop:manca', fonte: 'desktop', tipo: 'documento', titolo: 'Lumen offsite.md', corpo: 'Plan. The Lumen offsite is on 3 March 2027. Bring the outline.', quando: ieri(2) }])
+  const poi = await vr.valutaRisposte({ origine: 'comando', secco: true })
+  assert.ok(!poi.voci.some(v => v.id === 'q07'), 'a secco resta sospesa: il secco non tocca l’insieme')
+  const tornata = await vr.valutaRisposte({ origine: 'comando' })
+  assert.ok(tornata.voci.some(v => v.id === 'q07'), 'tornata in gioco')
+  assert.equal(archivio.leggiInsieme<Insieme>()!.domande.find(d => d.id === 'q07')?.ritirata, undefined)
+  store.default.prepare('DELETE FROM documenti WHERE id = ?').run('desktop:manca')
+})
+
+test('una prova su poche domande («--solo») non diventa la riga delle preferenze', async () => {
+  archivio.togli(); archivio.scriviInsieme(INSIEME()); store.default.exec('DELETE FROM uso')
+  vr.perProva({ rispondi: chatFinta(COPIONE) as never, chiediJSON: giudiceFinto().chiediJSON })
+  const intera = await vr.valutaRisposte({ origine: 'comando' })
+  assert.equal(archivio.leggiStato().ultima?.quando, intera.quando)
+  const parziale = await vr.valutaRisposte({ origine: 'comando', solo: ['q01'] })
+  assert.ok(parziale.file && existsSync(parziale.file), 'il rapporto c’è')
+  assert.equal(archivio.leggiStorico().length, 2, 'e sta nello storico')
+  const stato = archivio.leggiStato()
+  assert.equal(stato.ultima?.quando, intera.quando, 'ma la riga resta quella della prova intera')
+  assert.equal(stato.ultima?.fatte, 6)
+  assert.equal(stato.ultimaCompleta, intera.quando)
+  // e senza una prova intera prima, la riga resta vuota
+  archivio.togli(); archivio.scriviInsieme(INSIEME())
+  await vr.valutaRisposte({ origine: 'comando', solo: ['q01'] })
+  assert.equal(archivio.leggiStato().ultima, undefined)
+  assert.equal(archivio.rigaDiStato(archivio.leggiStato(), true, true, false), null)
+})
+
+test('una versione è un fatto intero anche per la prova: «1.0.9» al posto di «1.0.3» è sbagliata, non giusta', async () => {
+  archivio.togli(); store.default.exec('DELETE FROM uso')
+  const ins = INSIEME()
+  const domanda = 'Which Northwind build goes to App Review?'
+  ins.domande.push(item('q07', { domanda, tipo: 'risponde', genere: 'cifra', attesa: '1.0.3', doc: { id: 'desktop:checklist', titolo: 'Northwind release checklist.md', fonte: 'desktop', quando: ieri(4) }, citazione: 'Build 1.0.3 goes to App Review', scarto: PRIYA.indexOf('Build') }))
+  archivio.scriviInsieme(ins)
+  const giudice = giudiceFinto()
+  vr.perProva({ rispondi: chatFinta({ [domanda]: 'The build going to App Review is 1.0.9 [g].' }, { insieme: ins }) as never, chiediJSON: giudice.chiediJSON })
+  let r = await vr.valutaRisposte({ origine: 'comando', solo: ['q07'] })
+  assert.equal(r.voci[0].codice.corrisponde, false, 'il codice: 1.0.9 non copre 1.0.3')
+  assert.deepEqual(r.voci[0].codice.scoperti, ['1.0.9'], 'e 1.0.9 non sta da nessuna parte')
+  assert.equal(r.voci[0].esito, 'sbagliata', 'col giudice che dice tutto vero, decide il codice')
+  vr.perProva({ rispondi: chatFinta({ [domanda]: 'Build 1.0.3 goes to App Review [g].' }, { insieme: ins }) as never, chiediJSON: giudice.chiediJSON })
+  r = await vr.valutaRisposte({ origine: 'comando', solo: ['q07'] })
+  assert.equal(r.voci[0].esito, 'giusta')
+  assert.equal(r.voci[0].fonti[0]?.passo, 'Build 1.0.3 goes to App Review on 2 October 2026.')
 })

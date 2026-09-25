@@ -11,7 +11,8 @@
 // Tutto puro: entra testo, esce testo. Le prove stanno in ancoraggio.test.ts.
 
 import { termini, radice } from './lingua.ts'
-import { senzaTrattini } from './testo.ts'
+import { senzaCodice, senzaTrattiniFuoriCodice } from './testo.ts'
+export { senzaCodice }
 import type { Documento } from './store.ts'
 
 /** La riga del rifiuto, esatta, nelle due lingue. Sta nel prompt e nel dizionario. */
@@ -84,6 +85,13 @@ type Fatto = { valore: string; inizio: number; fine: number }
  * è delle migliaia, altrimenti è la virgola dei decimali.
  */
 function numeroPiano(grezzo: string): string {
+  // «1.0.3», «22.1.0», «192.168.1.10»: due o più separatori uguali e almeno
+  // un gruppo che non è di tre cifre. Non è una cifra, è un codice: resta
+  // com'è, e «1.0.3» non è «1.0.4». «1.200.000» (tutti gruppi di tre) resta
+  // un milione e duecentomila, «1.234,56» (separatori diversi) un decimale.
+  const separatori = grezzo.match(/[.,]/g) ?? []
+  const gruppi = grezzo.split(/[.,\s]/)
+  if (separatori.length >= 2 && new Set(separatori).size === 1 && gruppi.slice(1).some(g => g.length !== 3)) return grezzo
   const pezzi = grezzo.split(/([.,\s])/)
   let intero = pezzi[0]
   let decimali = ''
@@ -207,24 +215,6 @@ export function eUnRifiuto(testo: string): boolean {
   return frasi[0].split(/\s+/).length <= 15
 }
 
-// — il codice nella risposta —
-
-const SEGNAPOSTO = /(\d+)/g
-
-/**
- * Il codice messo da parte: i blocchi ``` ``` e gli `apici`.
- *
- * Dentro ci sono parentesi quadre e spazi allineati che non sono segni né
- * refusi: `items[0]` resta `items[0]`, e `[1, 2, 3]` resta una lista. Al
- * posto di ogni pezzo un segnaposto che nessuna regola tocca; `rimetti` li
- * rimette al loro posto.
- */
-export function senzaCodice(testo: string): { testo: string; rimetti(t: string): string } {
-  const pezzi: string[] = []
-  const t = testo.replace(/```[\s\S]*?(?:```|$)|`[^`\n]+`/g, m => { pezzi.push(m); return `${pezzi.length - 1}` })
-  return { testo: t, rimetti: s => s.replace(SEGNAPOSTO, (_, i: string) => pezzi[Number(i)] ?? '') }
-}
-
 // — le citazioni —
 
 const SEGNO = /\[(\d{1,3}|M)\]/g
@@ -304,8 +294,11 @@ function attorno(finestra: string, dove: number, tetto = 220): string {
  * Il passo dell'estratto che regge una frase della risposta.
  *
  * Dieci punti per ogni fatto duro della frase che la finestra contiene, uno
- * per ogni radice in comune. Vale solo con almeno un fatto, o almeno tre
- * radici: senza, non c'è nessun passo, e non se ne inventa uno.
+ * per ogni radice in comune. Una frase con dei fatti duri vale solo con
+ * almeno uno di quei fatti nella finestra: «Build 1.0.3 goes to App Review»
+ * non prova «the build is 1.0.9», per quante parole abbiano in comune. Una
+ * frase senza fatti vale con almeno tre radici. Altrimenti non c'è nessun
+ * passo, e non se ne inventa uno.
  */
 export function passoPer(frase: string, estratto: string): string | undefined {
   const f = senzaSegni(frase)
@@ -337,7 +330,7 @@ export function passoPer(frase: string, estratto: string): string | undefined {
     if (!punti) continue
     if (!migliore || punti > migliore.punti) migliore = { punti, fatti: nFatti, radici: nRadici, testo: fin.testo, dove: Math.max(0, dove) }
   }
-  if (!migliore || (migliore.fatti < 1 && migliore.radici < 3)) return undefined
+  if (!migliore || (fatti.length > 0 ? migliore.fatti < 1 : migliore.radici < 3)) return undefined
   return attorno(migliore.testo, migliore.dove)
 }
 
@@ -384,7 +377,8 @@ export function ancora(testo: string, o: {
   ricominciata?: boolean
 }): { testo: string; fonti: FonteAncorata[]; verifica: Verifica } {
   const pulita = pulisciCitazioni(testo, o.visti.length, o.memoria)
-  const t = senzaTrattini(pulita.testo)
+  // le lineette se ne vanno dalla prosa; dentro un blocco di codice sono sintassi e restano
+  const t = senzaTrattiniFuoriCodice(pulita.testo)
   // i segni si contano e si cercano nella prosa: `b[1]` in un blocco di codice non cita niente
   const prosa = senzaCodice(t)
   const citati = new Set<number>()

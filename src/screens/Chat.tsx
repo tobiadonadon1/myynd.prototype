@@ -4,7 +4,7 @@ import { Hov } from '../ui'
 import { IconSu } from '../icons'
 import { Stato } from '../components/Stato'
 import { Testo } from '../Testo'
-import { senzaTrattini } from '../../server/testo.ts'
+import { senzaTrattiniFuoriCodice } from '../../server/testo.ts'
 import type { Vals } from '../vals'
 import { Mascotte } from '../components/Mascotte'
 
@@ -152,8 +152,8 @@ export function Chat({ v }: { v: Vals }) {
               {/* una risposta che è una frase dell'app — «collega Claude nelle
                   Fonti», detta dal server senza motore — passa dal dizionario:
                   arrivava in italiano in una chat inglese */}
-              {/* le lineette non compaiono mai, nemmeno mentre la risposta arriva: il salvato le ha già tolte, il vivo passa di qui */}
-              {m.mio ? m.text : <Testo testo={tradotta(m.text) ? t(m.text) : senzaTrattini(m.text)} fonti={m.sources} onApri={v.apriFonte} />}
+              {/* le lineette non compaiono mai, nemmeno mentre la risposta arriva: il salvato le ha già tolte, il vivo passa di qui; dentro il codice restano */}
+              {m.mio ? m.text : <Testo testo={tradotta(m.text) ? t(m.text) : senzaTrattiniFuoriCodice(m.text)} fonti={m.sources} onApri={v.apriFonte} />}
             </div>
           </div>
         ))}

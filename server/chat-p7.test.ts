@@ -163,3 +163,9 @@ test('rispondi(), senza streaming, torna lo stesso verbale', async () => {
   assert.equal(r.verifica.citazioni, 1)
   assert.ok(r.fonti[0].passo?.includes('€4,800'))
 })
+
+test('[M] chiude la prima frase, prima del suo punto; senza un punto, la prima riga', () => {
+  assert.equal(claude.conSegnoMemoria({ testo: 'Your goal for Northwind is 1.0. Recorded from your conversation.' }).testo, 'Your goal for Northwind is 1.0[M]. Recorded from your conversation.')
+  assert.equal(claude.conSegnoMemoria({ testo: 'Your current registered projects:\n\n- Northwind: Ship it.' }).testo, 'Your current registered projects:[M]\n\n- Northwind: Ship it.')
+  assert.equal(claude.conSegnoMemoria({ testo: 'Done! Next week.' }).testo, 'Done[M]! Next week.')
+})

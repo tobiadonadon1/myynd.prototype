@@ -12,7 +12,7 @@
 //   <iso>.json      i rapporti interi, gli ultimi 12
 //   .in-corso       il lucchetto: pid e quando, stantio dopo due ore o a pid morto
 
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import * as cfg from './config.ts'
 import type { Via } from './ancoraggio.ts'
@@ -86,7 +86,7 @@ function leggiJSON<T>(file: string): T | null {
 
 const STANTIO = 2 * 3_600_000
 
-type Lucchetto = { pid: number; dal: string }
+export type Lucchetto = { pid: number; dal: string }
 
 function vivo(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch (e) {
@@ -103,14 +103,37 @@ function stantio(l: Lucchetto | null): boolean {
 }
 
 /**
+ * Porta via un lucchetto stantio, e dice se ci è riuscito.
+ *
+ * Un `rename` a un nome unico, e poi si rilegge quello che si è spostato: se
+ * non è più quello letto prima (pid o ora diversi), un altro l'aveva già
+ * portato via e rifatto nel frattempo, e quello spostato è il suo, vivo. Si
+ * rimette al suo posto con un `link`, che non sovrascrive (se nel frattempo
+ * ne è nato un altro ancora, resta quello), e si risponde no. Torna true solo
+ * se quello sparito era davvero lo stantio.
+ */
+export function portaViaStantio(file: string, vecchio: Lucchetto | null): boolean {
+  const via = `${file}.stantio-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+  try { renameSync(file, via) } catch { return false /* l'ha portato via un altro */ }
+  const spostato = leggiJSON<Lucchetto>(via)
+  const stesso = !!spostato && !!vecchio && spostato.pid === vecchio.pid && spostato.dal === vecchio.dal
+  if (spostato && !stesso) {
+    try { linkSync(via, file) } catch { /* ce n'è già un altro: resta quello */ }
+    try { unlinkSync(via) } catch { /* già via */ }
+    return false
+  }
+  try { unlinkSync(via) } catch { /* già via */ }
+  return true
+}
+
+/**
  * Il lucchetto della prova: uno solo per cartella.
  *
  * `O_EXCL` sul file: chi lo apre per primo lo tiene. Uno lasciato lì da un
- * processo morto, o più vecchio di due ore, si porta via e si riprova una
- * volta. Portarlo via è un `rename` a un nome unico: se due lo trovano
- * stantio insieme, uno solo riesce a spostarlo, e l'altro al giro dopo trova
- * il lucchetto nuovo del primo e si ferma. Torna null se un altro lo tiene
- * davvero.
+ * processo morto, o più vecchio di due ore, si porta via (`portaViaStantio`,
+ * che controlla di aver spostato proprio quello) e si riprova una volta: se
+ * nel frattempo un altro l'ha rifatto, al giro dopo si trova il suo, vivo, e
+ * ci si ferma. Torna null se un altro lo tiene davvero.
  */
 export function prendi(cartella?: string): { lascia(): void } | null {
   const dove = cartellaRisposte(cartella)
@@ -124,10 +147,9 @@ export function prendi(cartella?: string): { lascia(): void } | null {
       return { lascia: () => { try { unlinkSync(file) } catch { /* già via */ } } }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
-      if (!stantio(leggiJSON<Lucchetto>(file))) return null
-      const via = `${file}.stantio-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
-      try { renameSync(file, via) } catch { continue /* l'ha portato via un altro: si riprova, e si trova il suo */ }
-      try { unlinkSync(via) } catch { /* già via */ }
+      const vecchio = leggiJSON<Lucchetto>(file)
+      if (!stantio(vecchio)) return null
+      if (!portaViaStantio(file, vecchio)) continue
     }
   }
   return null

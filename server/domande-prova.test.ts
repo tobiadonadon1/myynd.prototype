@@ -218,13 +218,57 @@ test('ritira toglie la domanda di un documento sparito e di una citazione cambia
     { id: 'q91', domanda: 'z?', tipo: 'risponde', attesa: 'y', genere: 'stato', doc: { id: 'posta:INBOX:999', titolo: 'Sparito', fonte: 'posta', quando: null }, citazione: 'niente di niente qui dentro', scarto: 0, origine: 'costruita', interlingua: false, verificata: 'modello', creata: ieri(0) },
     { id: 'q92', domanda: 'w?', tipo: 'non_ce', attesa: '', genere: 'stato', doc: null, citazione: '', scarto: null, origine: 'costruita', interlingua: false, verificata: 'modello', creata: ieri(0) }
   )
-  assert.equal(dp.ritira(ins), 1, 'solo il documento sparito')
+  assert.deepEqual(dp.ritira(ins), { ritirate: 1, tornate: 0 }, 'solo il documento sparito')
   assert.equal(ins.domande.find(d => d.id === 'q91')?.perche, 'doc_sparito')
+  assert.ok(!dp.attive(ins).some(d => d.id === 'q91'), 'sospesa: non è attiva')
+  assert.deepEqual(dp.sospese(ins).map(d => d.id), ['q91'])
   store.default.prepare('UPDATE documenti SET corpo = ? WHERE id = ?').run('Ciao Alex, il preventivo è cambiato. ' + 'x'.repeat(500), 'posta:INBOX:702')
-  assert.equal(dp.ritira(ins), 1, 'ora anche la citazione sparita')
+  assert.deepEqual(dp.ritira(ins), { ritirate: 1, tornate: 0 }, 'ora anche la citazione sparita')
   assert.equal(ins.domande.find(d => d.id === 'q90')?.perche, 'citazione_sparita')
-  assert.equal(dp.ritira(ins), 0, 'una volta ritirata non si conta più')
+  assert.deepEqual(dp.ritira(ins), { ritirate: 0, tornate: 0 }, 'una volta ritirata non si conta più')
   assert.ok(dp.attive(ins).some(d => d.id === 'q92'), 'una non_ce non si ritira')
+  // il documento sparito ricompare con la citazione dentro: la domanda torna in gioco da sola
+  store.salvaDocumenti([{ id: 'posta:INBOX:999', fonte: 'posta', tipo: 'email', titolo: 'Sparito', corpo: 'Ecco: niente di niente qui dentro, ma torna. ' + 'y'.repeat(400), autore: 'x@y.example', quando: ieri(1) }])
+  assert.deepEqual(dp.ritira(ins), { ritirate: 0, tornate: 1 }, 'tornata')
+  assert.ok(dp.attive(ins).some(d => d.id === 'q91'), 'di nuovo attiva')
+  assert.equal(ins.domande.find(d => d.id === 'q91')?.ritirata, undefined)
+  assert.ok(!dp.attive(ins).some(d => d.id === 'q90'), 'una citazione sparita non torna')
+  // e una versione non è una cifra qualunque: 1.0.3 e 1.0.9 non concordano
+  assert.equal(dp.concordano('cifra', '1.0.3', 'Build 1.0.9 goes to App Review.'), false)
+  assert.equal(dp.concordano('cifra', '1.0.3', 'Build 1.0.3 goes to App Review.'), true)
+})
+
+test('una domanda «da rivedere» nell’ultimo rapporto si ritira col --genera, e il posto si riempie', async () => {
+  archivio.togli()
+  const assenti = [
+    { domanda: 'What is the rent for the Lisbon office?', paroleIt: ['affitto', 'Lisbona'], paroleEn: ['rent', 'Lisbon'] },
+    { domanda: 'What is Nora’s birthday?', paroleIt: ['compleanno', 'Nora'], paroleEn: ['birthday', 'Nora'] },
+    { domanda: 'Where is the Keel office?', paroleIt: ['sede', 'Keel'], paroleEn: ['office', 'Keel'] }
+  ]
+  modelloFinto({ assenti })
+  const prima = await dp.generaInsieme({ n: 10 })
+  const nonCe = dp.attive(prima.insieme).filter(d => d.tipo === 'non_ce')
+  assert.equal(nonCe.length, 2, 'dieci su cinquanta sono due su dieci')
+  const lisbona = nonCe.find(d => d.domanda.includes('Lisbon'))!
+  assert.ok(lisbona)
+  // un rapporto più vecchio della domanda non la riguarda
+  archivio.salvaRapporto({ quando: ieri(3), voci: [{ id: lisbona.id, esito: 'da_rivedere' }] }, ieri(3))
+  let r = await dp.generaInsieme({ n: 10 })
+  assert.equal(r.ritirate, 0)
+  assert.ok(dp.attive(r.insieme).some(d => d.id === lisbona.id), 'ancora attiva')
+  // l'ultima prova, dopo la domanda, l'ha trovata sbagliata: via, e al suo posto ne entra un'altra
+  const adesso = new Date(Date.now() + 1000).toISOString()
+  archivio.salvaRapporto({ quando: adesso, voci: [{ id: lisbona.id, esito: 'da_rivedere' }, { id: 'q01', esito: 'giusta' }] }, adesso)
+  r = await dp.generaInsieme({ n: 10 })
+  assert.equal(r.ritirate, 1)
+  const ritirata = r.insieme.domande.find(d => d.id === lisbona.id)!
+  assert.equal(ritirata.perche, 'da_rivedere')
+  assert.ok(ritirata.ritirata)
+  const dopo = dp.attive(r.insieme).filter(d => d.tipo === 'non_ce')
+  assert.equal(dopo.length, 2, 'il posto si è riempito')
+  assert.ok(!dopo.some(d => d.id === lisbona.id))
+  assert.ok(dopo.some(d => d.domanda.includes('Keel office')), 'con la candidata nuova')
+  assert.deepEqual(archivio.leggiInsieme<typeof r.insieme>()!.domande.find(d => d.id === lisbona.id)?.perche, 'da_rivedere', 'scritto su disco')
 })
 
 test('ogni chiamata è severa; senza un giudizio sull’assenza la domanda non entra; il tetto a metà ferma e scrive; un guasto pure', async () => {

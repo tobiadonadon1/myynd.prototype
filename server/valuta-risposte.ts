@@ -235,8 +235,10 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
   const { ferri } = await moduli()
   const partenza = ferri.adesso()
   try {
-    const ritirate = dp.ritira(insieme)
-    if (ritirate) archivio.scriviInsieme(insieme)
+    // una prova a secco non tocca l'insieme: un documento che manca un minuto non ritira nessuno
+    const mosse = o.secco ? { ritirate: 0, tornate: 0 } : dp.ritira(insieme)
+    if (mosse.ritirate || mosse.tornate) archivio.scriviInsieme(insieme)
+    const ritirate = mosse.ritirate
     const domande = dp.attive(insieme).filter(d => !o.solo?.length || o.solo.includes(d.id))
     const compatto = !!strada?.compatto
     const estrattoIniziale = strada?.via === 'abbonamento' ? 4000 : compatto ? 350 : 1500
@@ -365,7 +367,9 @@ export async function valutaRisposte(o: { origine: 'comando' | 'settimana'; solo
     archivio.aggiungiAlloStorico(riassunto)
     const { inCorso: _via, ...senzaInCorso } = archivio.leggiStato()
     archivio.scriviStato({
-      ...senzaInCorso, ultima: riassunto,
+      ...senzaInCorso,
+      // una prova su poche domande («--solo») sta nel rapporto e nello storico, non nella riga delle preferenze
+      ...(o.solo?.length ? {} : { ultima: riassunto }),
       ...(interrotta || o.solo?.length ? {} : { ultimaCompleta: quando }),
       // la settimana conta anche una prova fermata a metà: la prossima aspetta sette giorni
       ...(o.origine === 'settimana' ? { ultimaSettimanale: quando } : {})
@@ -474,6 +478,16 @@ const ETICHETTE: Record<EsitoRisposta, { it: string; en: string }> = {
   rifiutata_male: { it: 'rifiutata male', en: 'refused, wrong' }, da_rivedere: { it: 'da rivedere', en: 'to review' }
 }
 
+const FERMATE: Record<Interrotta, { it: string; en: string }> = {
+  budget: { it: 'budget di token', en: 'token budget' }, tempo: { it: 'tempo', en: 'time limit' }, tetto: { it: 'tetto di oggi', en: 'daily token limit' },
+  annullata: { it: 'annullata', en: 'cancelled' }, errore: { it: 'guasto', en: 'error' }
+}
+
+/** Perché si è fermata, a parole, nella lingua della riga. */
+export function fermata(i: Interrotta, en: boolean): string {
+  return (FERMATE[i] ?? { it: i, en: i })[en ? 'en' : 'it']
+}
+
 /** Il rapporto in righe piane: una per domanda, poi i totali e i token. */
 export function tabella(r: RapportoRisposte, en: boolean): string {
   const righe: string[] = []
@@ -491,8 +505,8 @@ export function tabella(r: RapportoRisposte, en: boolean): string {
       : `Recupero: documento giusto nel primo materiale ${r.recupero.nelMateriale}/${r.recupero.risponde}, nella ricerca stretta ${r.recupero.inCerca}/${r.recupero.risponde}`)
   } else {
     righe.push(en
-      ? `Totals: right ${t.giuste}/${t.quante} · no source ${t.senza_fonte} · wrong ${t.sbagliata} · invented ${t.inventata} · refused wrong ${t.rifiutata_male}/${t.risponde} · to review ${t.da_rivedere} · ${r.passa ? 'PASS' : 'FAIL'}${r.interrotta ? ` · stopped: ${r.interrotta}` : ''}`
-      : `Totali: giuste ${t.giuste}/${t.quante} · senza fonte ${t.senza_fonte} · sbagliate ${t.sbagliata} · inventate ${t.inventata} · rifiutate male ${t.rifiutata_male}/${t.risponde} · da rivedere ${t.da_rivedere} · ${r.passa ? 'PASSA' : 'NON PASSA'}${r.interrotta ? ` · fermata: ${r.interrotta}` : ''}`)
+      ? `Totals: right ${t.giuste}/${t.quante} · no source ${t.senza_fonte} · wrong ${t.sbagliata} · invented ${t.inventata} · refused wrong ${t.rifiutata_male}/${t.risponde} · to review ${t.da_rivedere} · ${r.passa ? 'PASS' : 'FAIL'}${r.interrotta ? ` · stopped: ${fermata(r.interrotta, true)}` : ''}`
+      : `Totali: giuste ${t.giuste}/${t.quante} · senza fonte ${t.senza_fonte} · sbagliate ${t.sbagliata} · inventate ${t.inventata} · rifiutate male ${t.rifiutata_male}/${t.risponde} · da rivedere ${t.da_rivedere} · ${r.passa ? 'PASSA' : 'NON PASSA'}${r.interrotta ? ` · fermata: ${fermata(r.interrotta, false)}` : ''}`)
     righe.push(en
       ? `Retrieval ${r.recupero.nelMateriale}/${r.recupero.risponde} in material, ${r.recupero.inCerca}/${r.recupero.risponde} in search · code and grader agree ${r.accordo.concordi}/${r.accordo.casi} · first word median ${r.tempi.primaParolaMediana ?? '-'} ms, total ${r.tempi.totaleMediana ?? '-'} ms`
       : `Recupero ${r.recupero.nelMateriale}/${r.recupero.risponde} nel materiale, ${r.recupero.inCerca}/${r.recupero.risponde} nella ricerca · codice e giudice concordi ${r.accordo.concordi}/${r.accordo.casi} · prima parola mediana ${r.tempi.primaParolaMediana ?? '-'} ms, totale ${r.tempi.totaleMediana ?? '-'} ms`)
@@ -559,7 +573,8 @@ async function main() {
       for (const d of dp.attive(ins)) {
         console.log(`${d.id} · ${d.tipo} · ${d.genere} · ${d.origine}${d.interlingua ? ' · interlingua' : ''} · ${d.verificata}\n  ${d.domanda}\n  ${d.tipo === 'risponde' ? `→ ${d.attesa}\n  «${d.citazione}» (${d.doc?.titolo ?? ''})` : `(${en ? 'not in the material' : 'non nel materiale'}: ${d.assenza?.cercato.join(' / ') ?? ''})`}`)
       }
-      console.log(en ? `${dp.attive(ins).length} active questions, ${ins.domande.length - dp.attive(ins).length} retired.` : `${dp.attive(ins).length} domande attive, ${ins.domande.length - dp.attive(ins).length} ritirate.`)
+      const att = dp.attive(ins).length, sosp = dp.sospese(ins).length, rit = ins.domande.length - att - sosp
+      console.log(en ? `${att} active questions, ${sosp} suspended (document missing now), ${rit} retired.` : `${att} domande attive, ${sosp} sospese (documento che manca adesso), ${rit} ritirate.`)
       return
     }
     if (a.genera) {
@@ -572,8 +587,8 @@ async function main() {
       })
       const att = dp.attive(r.insieme)
       console.log(en
-        ? `Set: ${att.length} active questions (${att.filter(d => d.tipo === 'risponde').length} answerable, ${att.filter(d => d.tipo === 'non_ce').length} unanswerable), ${r.aggiunte} added${r.interrotta ? `, stopped: ${r.interrotta}` : ''}. Dropped: ${Object.entries(r.scartate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}. Tokens: ${r.gettoni}.`
-        : `Insieme: ${att.length} domande attive (${att.filter(d => d.tipo === 'risponde').length} con risposta, ${att.filter(d => d.tipo === 'non_ce').length} senza), ${r.aggiunte} aggiunte${r.interrotta ? `, fermata: ${r.interrotta}` : ''}. Scartate: ${Object.entries(r.scartate).map(([k, v]) => `${k} ${v}`).join(', ') || 'nessuna'}. Token: ${r.gettoni}.`)
+        ? `Set: ${att.length} active questions (${att.filter(d => d.tipo === 'risponde').length} answerable, ${att.filter(d => d.tipo === 'non_ce').length} unanswerable), ${r.aggiunte} added, ${r.ritirate} retired${r.interrotta ? `, stopped: ${fermata(r.interrotta, true)}` : ''}. Dropped: ${Object.entries(r.scartate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}. Tokens: ${r.gettoni}.`
+        : `Insieme: ${att.length} domande attive (${att.filter(d => d.tipo === 'risponde').length} con risposta, ${att.filter(d => d.tipo === 'non_ce').length} senza), ${r.aggiunte} aggiunte, ${r.ritirate} ritirate${r.interrotta ? `, fermata: ${fermata(r.interrotta, false)}` : ''}. Scartate: ${Object.entries(r.scartate).map(([k, v]) => `${k} ${v}`).join(', ') || 'nessuna'}. Token: ${r.gettoni}.`)
       return
     }
     const controllo = new AbortController()

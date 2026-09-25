@@ -5,7 +5,7 @@
 
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -106,4 +106,24 @@ test('togli porta via solo valutazioni/risposte', () => {
   assert.ok(!existsSync(DOVE))
   assert.ok(existsSync(join(CASA, 'valutazioni', 'feed-vecchio.json')))
   assert.equal(a.perIlFascicolo(), null)
+})
+
+test('portare via uno stantio controlla di aver spostato proprio quello: se un altro l’ha già rifatto, resta il suo', () => {
+  mkdirSync(DOVE, { recursive: true })
+  const file = join(DOVE, '.in-corso')
+  const stantio = { pid: 2_000_000_000, dal: new Date(Date.now() - 3 * 3_600_000).toISOString() }
+  // fra la lettura dello stantio e il rename, un altro processo l'ha portato via e ha messo il suo, vivo
+  const fresco = { pid: process.pid, dal: new Date().toISOString() }
+  writeFileSync(file, JSON.stringify(fresco))
+  assert.equal(a.portaViaStantio(file, stantio), false, 'non era più quello')
+  assert.ok(existsSync(file), 'il lucchetto vivo è al suo posto')
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), fresco)
+  assert.ok(!readdirSync(DOVE).some(n => n.includes('.stantio-')), 'niente file spostati in giro')
+  assert.equal(a.prendi(), null, 'e chi arriva adesso trova quello vivo')
+  // con quello stantio davvero, se ne va
+  writeFileSync(file, JSON.stringify(stantio))
+  assert.equal(a.portaViaStantio(file, stantio), true)
+  assert.ok(!existsSync(file))
+  // un file che non c'è più (l'ha portato via un altro): no, senza errori
+  assert.equal(a.portaViaStantio(file, stantio), false)
 })

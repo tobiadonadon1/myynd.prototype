@@ -973,13 +973,20 @@ const scappa = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  *
  * Le scorciatoie che rispondono dai registri (`panoramicaProgetti`,
  * `obiettivoRegistrato`) non passano dal modello, e la regola sul [M] non le
- * riguarda: il segno lo mette il codice, in fondo alla prima riga, e la fonte
- * punta al progetto se la risposta ne nomina uno solo, altrimenti alla Memoria.
+ * riguarda: il segno lo mette il codice, in fondo alla prima frase, prima del
+ * suo punto (come lo scrive il modello: «goal [M].»). Una prima riga senza un
+ * punto, «I tuoi progetti:», lo prende in fondo. La fonte punta al progetto
+ * se la risposta ne nomina uno solo, altrimenti alla Memoria.
  */
 export function conSegnoMemoria(r: { testo: string }): Risposta {
   const righe = r.testo.split('\n')
   const i = righe.findIndex(x => x.trim())
-  if (i >= 0) righe[i] = `${righe[i].replace(/\s+$/, '')}[M]`
+  if (i >= 0) {
+    const riga = righe[i].replace(/\s+$/, '')
+    // il primo punto che chiude una frase: seguito da uno spazio o dalla fine, così «1.0» resta intero
+    const m = riga.match(/[.!?]+(?=\s|$)/)
+    righe[i] = m && m.index !== undefined ? `${riga.slice(0, m.index).replace(/\s+$/, '')}[M]${riga.slice(m.index)}` : `${riga}[M]`
+  }
   const testo = righe.join('\n')
   const nominati = progettiPerLAncora().filter(p => [p.nome, ...p.alias].some(n =>
     n.trim() && new RegExp(`(?<![\\p{L}\\p{N}])${scappa(n.trim())}(?![\\p{L}\\p{N}])`, 'iu').test(testo)))

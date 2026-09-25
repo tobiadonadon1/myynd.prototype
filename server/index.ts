@@ -97,7 +97,7 @@ import * as trasloco from './trasloco.ts'
 import * as fuso from './fuso.ts'
 import * as sveglia from './sveglia.ts'
 import * as oauth from './connettori/oauth.ts'
-import { riflua, senzaTrattini } from './testo.ts'
+import { riflua, senzaTrattini, senzaTrattiniFuoriCodice } from './testo.ts'
 
 const app = express()
 
@@ -4347,8 +4347,8 @@ app.post('/api/chat/:id', async (req, res) => {
       // a chiave sta per rifarla da capo: chi guarda butta via quella mezza,
       // invece di vedersela accodare a quella intera.
     }, controllo.signal, () => invia({ fase: 'ricomincio' }))
-    // il testo è già pulito da `ancora` (segni fuori elenco, lineette); `verifica` è il verbale, che si registra e basta
-    store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattini(r.testo), fonti: r.fonti, verifica: r.verifica })
+    // il testo è già pulito da `ancora` (segni fuori elenco, lineette fuori dal codice); `verifica` è il verbale, che si registra e basta
+    store.salvaMessaggio({ id: idMsg('a'), chat, ruolo: 'a', testo: senzaTrattiniFuoriCodice(r.testo), fonti: r.fonti, verifica: r.verifica })
     console.log(risposteVive.rigaRisposta(r.verifica))
     invia({ fase: 'fine', messaggi: store.messaggi(chat) })
 

@@ -202,3 +202,33 @@ test('i fatti duri di un testo grande costano poco: niente copia riscritta a ogn
   assert.ok(Date.now() - t0 < 1500, `${Date.now() - t0} ms`)
   assert.equal(fatti.length, 40_000)
 })
+
+test('una versione o un indirizzo restano interi: «1.0.3» non è «1.0.4», e nessuno dei due è «1»', () => {
+  assert.deepEqual(fattiDuri('Build 1.0.3 ships'), ['1.0.3'])
+  assert.deepEqual(fattiDuri('Build 1.0.4 ships'), ['1.0.4'])
+  assert.deepEqual(fattiDuri('Electron 22.1.0'), ['22.1.0'])
+  assert.deepEqual(fattiDuri('192.168.1.10 e 192.168.1.20'), ['192.168.1.10', '192.168.1.20'])
+  assert.ok(!coperto('1.0.9', fattiDuri('Build 1.0.3 goes to App Review')))
+  // e le cifre vere restano cifre: tutti gruppi di tre sono migliaia, separatori diversi sono migliaia e decimali
+  assert.deepEqual(fattiDuri('1.200.000 €'), ['1200000'])
+  assert.deepEqual(fattiDuri('1.234,56 €'), ['1234.56'])
+  assert.deepEqual(fattiDuri('1,5 kg'), ['1.5'])
+})
+
+test('una versione sbagliata è scoperta e non trova il passo di quella giusta', () => {
+  const checklist = 'Owner: Priya Shah. Build 1.0.3 goes to App Review on 2 October 2026.'
+  const d = doc('desktop:checklist', 'Northwind release checklist.md', checklist, { fonte: 'desktop', tipo: 'documento' })
+  const r = ancora('The build going to App Review is 1.0.9 [1].', { visti: [d], estratti: new Map([[d.id, checklist.length]]), letto: checklist, memoria: false, via: 'claude' })
+  assert.deepEqual(r.verifica.scoperti, ['1.0.9'])
+  assert.equal(r.fonti[0].passo, undefined, 'la frase con 1.0.3 non prova 1.0.9')
+  const g = ancora('The build going to App Review is 1.0.3 [1].', { visti: [d], estratti: new Map([[d.id, checklist.length]]), letto: checklist, memoria: false, via: 'claude' })
+  assert.deepEqual(g.verifica.scoperti, [])
+  assert.equal(g.fonti[0].passo, 'Build 1.0.3 goes to App Review on 2 October 2026.')
+  assert.equal(passoPer('The build is 1.0.9.', checklist), undefined)
+})
+
+test('una lineetta dentro il codice resta: la prosa attorno si pulisce', () => {
+  const d = doc('a', 'A', 'Use the flag. Done.')
+  const r = ancora('Use this — it works:\n```\nx = a — b\n```\nDone `c — d` [1].', { visti: [d], estratti: new Map([['a', 100]]), letto: 'x', memoria: false, via: 'claude' })
+  assert.equal(r.testo, 'Use this. It works:\n```\nx = a — b\n```\nDone `c — d`[1].')
+})

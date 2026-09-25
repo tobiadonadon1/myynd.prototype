@@ -49,8 +49,9 @@ export type DomandaProva = {
   verificata: 'modello' | 'persona'
   assenza?: { cercato: string[]; guardati: number }
   creata: string
+  /** Fuori gioco da quando. Con `doc_sparito` è solo sospesa: torna se il documento ricompare con la citazione dentro. */
   ritirata?: string
-  perche?: 'doc_sparito' | 'citazione_sparita'
+  perche?: 'doc_sparito' | 'citazione_sparita' | 'da_rivedere'
 }
 
 export type Insieme = { versione: 1; lingua: 'it' | 'en'; creato: string; aggiornato: string; domande: DomandaProva[] }
@@ -177,20 +178,62 @@ export function concordano(genere: Genere, attesa: string, risposta: string): bo
   return sovrapposizione(attesa, risposta) >= 0.6
 }
 
-/** Le domande ancora in gioco. */
+/** Le domande ancora in gioco: né ritirate né sospese. */
 export function attive(ins: Insieme): DomandaProva[] {
   return ins.domande.filter(d => !d.ritirata)
 }
 
-/** Ritira le domande il cui documento o la cui citazione non ci sono più. Torna quante. */
-export function ritira(ins: Insieme): number {
+/** Le domande sospese: il documento manca adesso, e possono tornare. */
+export function sospese(ins: Insieme): DomandaProva[] {
+  return ins.domande.filter(d => !!d.ritirata && d.perche === 'doc_sparito')
+}
+
+/**
+ * Ritira le domande il cui documento o la cui citazione non ci sono più, e
+ * risveglia le sospese il cui documento è tornato.
+ *
+ * Un documento che manca è una sospensione, non una condanna: una casella
+ * scollegata per un giorno, una cartella non ancora riletta, non devono
+ * bruciare l'insieme. `doc_sparito` tiene la domanda da parte finché il
+ * documento non ricompare con la citazione dentro. Una citazione cambiata in
+ * un documento che c'è, e «da rivedere», sono definitive.
+ */
+export function ritira(ins: Insieme): { ritirate: number; tornate: number } {
+  let ritirate = 0
+  let tornate = 0
+  const adesso = new Date().toISOString()
+  for (const d of ins.domande) {
+    if (!d.doc) continue
+    if (d.ritirata && d.perche !== 'doc_sparito') continue
+    const vero = store.documento(d.doc.id)
+    if (!vero) { if (!d.ritirata) { d.ritirata = adesso; d.perche = 'doc_sparito'; ritirate++ }; continue }
+    if (trovaCitazione(d.citazione, vero.corpo) < 0) {
+      if (!d.ritirata || d.perche !== 'citazione_sparita') ritirate++
+      d.ritirata = d.ritirata ?? adesso; d.perche = 'citazione_sparita'
+      continue
+    }
+    if (d.ritirata) { delete d.ritirata; delete d.perche; tornate++ }
+  }
+  return { ritirate, tornate }
+}
+
+/**
+ * Ritira le domande che l'ultima prova ha segnato «da rivedere»: una senza
+ * risposta a cui il materiale rispondeva, o una con risposta superata da un
+ * documento più nuovo. La domanda era sbagliata: esce per sempre, e il giro
+ * ne mette un'altra al suo posto. Solo `--genera` lo fa; un rapporto più
+ * vecchio della domanda non la riguarda. Torna quante.
+ */
+export function ritiraDaRivedere(ins: Insieme, rapporto: unknown): number {
+  const r = rapporto as { quando?: unknown; voci?: { id?: unknown; esito?: unknown }[] } | null
+  if (!r || !Array.isArray(r.voci)) return 0
+  const quando = typeof r.quando === 'string' ? r.quando : ''
+  const daRivedere = new Set(r.voci.filter(v => v && v.esito === 'da_rivedere' && typeof v.id === 'string').map(v => v.id as string))
   let n = 0
   const adesso = new Date().toISOString()
   for (const d of attive(ins)) {
-    if (!d.doc) continue
-    const vero = store.documento(d.doc.id)
-    if (!vero) { d.ritirata = adesso; d.perche = 'doc_sparito'; n++; continue }
-    if (trovaCitazione(d.citazione, vero.corpo) < 0) { d.ritirata = adesso; d.perche = 'citazione_sparita'; n++ }
+    if (!daRivedere.has(d.id) || d.creata > quando) continue
+    d.ritirata = adesso; d.perche = 'da_rivedere'; n++
   }
   return n
 }
@@ -379,19 +422,21 @@ const docDi = (d: store.Documento) => ({ id: d.id, titolo: d.titolo, fonte: d.fo
  * quaranta con risposta e dieci senza. Si ferma al budget, al tetto di oggi
  * o al segnale, e scrive comunque quello che ha accettato.
  */
-export async function generaInsieme(o: { n?: number; segnale?: AbortSignal } = {}): Promise<{ insieme: Insieme; aggiunte: number; scartate: Record<string, number>; gettoni: number; interrotta?: Interrotta }> {
+export async function generaInsieme(o: { n?: number; segnale?: AbortSignal } = {}): Promise<{ insieme: Insieme; aggiunte: number; ritirate: number; scartate: Record<string, number>; gettoni: number; interrotta?: Interrotta }> {
   const dal = new Date().toISOString()
   const n = o.n ?? 50
   const volute = { risponde: Math.round(n * 0.8), nonCe: n - Math.round(n * 0.8) }
   const lingua = cfg.lingua()
   const ins: Insieme = archivio.leggiInsieme<Insieme>() ?? { versione: 1, lingua, creato: dal, aggiornato: dal, domande: [] }
-  ritira(ins)
+  // via quello che non c'è più, e quello che l'ultima prova ha detto sbagliato: i posti liberi si riempiono sotto
+  const ritirate = ritira(ins).ritirate + ritiraDaRivedere(ins, archivio.ultimoRapporto())
   const scartate: Record<string, number> = {}
   const scarta = (perche: string) => { scartate[perche] = (scartate[perche] ?? 0) + 1 }
   let aggiunte = 0
   let interrotta: Interrotta | undefined
   const conta = () => ({ risponde: attive(ins).filter(d => d.tipo === 'risponde').length, nonCe: attive(ins).filter(d => d.tipo === 'non_ce').length, sue: attive(ins).filter(d => d.origine === 'sua').length })
-  const testi = () => attive(ins).map(d => d.domanda)
+  // i doppioni si cercano fra tutte, anche le ritirate e le sospese: una domanda uscita perché sbagliata non rientra dalla finestra
+  const testi = () => ins.domande.map(d => d.domanda)
 
   /** Un giro costoso: controlla il budget e il segnale prima, e traduce il tetto in un'interruzione. */
   const posso = (): boolean => {
@@ -492,5 +537,5 @@ export async function generaInsieme(o: { n?: number; segnale?: AbortSignal } = {
   ins.lingua = lingua
   ins.aggiornato = new Date().toISOString()
   archivio.scriviInsieme(ins)
-  return { insieme: ins, aggiunte, scartate, gettoni: gettoniDellaProva(dal), ...(interrotta ? { interrotta } : {}) }
+  return { insieme: ins, aggiunte, ritirate, scartate, gettoni: gettoniDellaProva(dal), ...(interrotta ? { interrotta } : {}) }
 }
