@@ -37,11 +37,10 @@ import * as impostazioni from './impostazioni.ts'
 import * as lingua from './lingua.ts'
 import { t } from './lingua.ts'
 import { ARGOMENTO_NASCOSTO, avvioNascosto } from './nascosto.ts'
+import { PANNELLI_AMMESSI } from './pannelli.ts'
 
 /** Dove il renderer può essere mandato: un posto dell'app, o una chat precisa. */
 type Dove = string | { dove: 'chat'; id: string }
-/** L'unico indirizzo fuori da http/https/mailto che il guscio apre: la schermata del permesso per le Note. */
-const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
 const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'])
 
@@ -245,19 +244,25 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   })
   ipcMain.handle('myynd:apri-fuori', async (_e, url: unknown) => {
     /*
-     * Una sola eccezione a http/https/mailto, e uguale alla lettera: la
-     * schermata «Accesso completo al disco» delle Impostazioni di Sistema, che
-     * è dove una persona dà a Myynd il permesso di leggere le Note. Non un
-     * prefisso — `x-apple.systempreferences:` apre qualunque pannello — ma
-     * quell'indirizzo e basta. E lo apre solo chi preme il bottone.
+     * Le sole eccezioni a http/https/mailto, uguali alla lettera: le schermate
+     * delle Impostazioni di Sistema dove una persona dà a Myynd un permesso
+     * (il disco per le Note, i calendari, l'automazione; `pannelli.ts`). Non
+     * un prefisso — `x-apple.systempreferences:` apre qualunque pannello — ma
+     * quegli indirizzi e basta. E li apre solo chi preme il bottone.
      */
-    if (String(url) === PANNELLO_ACCESSO_DISCO) { await shell.openExternal(PANNELLO_ACCESSO_DISCO); return }
+    if (PANNELLI_AMMESSI.has(String(url))) { await shell.openExternal(String(url)); return }
     if (mailMessageLink(url)) { await shell.openExternal(url); return }
     let u: URL
     try { u = new URL(String(url)) } catch { throw new Error(t('Questo indirizzo non si apre fuori da Myynd.')) }
     if (!['http:', 'https:', 'mailto:'].includes(u.protocol)) throw new Error(t('Questo indirizzo non si apre fuori da Myynd.'))
     await shell.openExternal(u.toString())
   })
+  /*
+   * Riapre l'app: un permesso appena dato (l'accesso al disco) vale solo per
+   * la copia che parte dopo. `quit` e non `exit`: prima si ferma il server e
+   * chi deve salvare salva.
+   */
+  ipcMain.handle('myynd:riavvia', () => { app.relaunch(); app.quit() })
   ipcMain.handle('myynd:mostra', (_e, percorso: unknown) => {
     if (typeof percorso === 'string' && percorso) shell.showItemInFolder(percorso)
   })

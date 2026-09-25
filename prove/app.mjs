@@ -26,6 +26,7 @@ const CHIAVI = [
   'lingua', 'scorciatoia', 'impostaScorciatoia', 'avvioAutomatico', 'impostaAvvioAutomatico',
   'aggiornamenti', 'naviga', 'notifica', 'dentroIlRichiamo', 'richiamo'
 ]
+CHIAVI.push('riavvia') // P8
 const CHIAVI_RICHIAMO = ['chiudi', 'apri', 'misura', 'mostrato']
 const CHIAVI_AGGIORNAMENTI = ['attuale', 'controlla', 'installa', 'stato']
 
