@@ -532,6 +532,12 @@ export type Esito = {
   saltatiProgetti: string[]
   falliti: number
   illeggibili: string[]
+  /**
+   * Fra le `illeggibili`, quelle che macOS ha negato (EPERM): la privacy, cioè
+   * un permesso da dare. Un disco staccato o una cartella sparita restano solo
+   * fra le illeggibili: non c'è niente da concedere.
+   */
+  negate: string[]
   troncato: boolean
   /** Le radici percorse fino in fondo: solo queste si possono riconciliare. */
   complete: string[]
@@ -581,6 +587,10 @@ export type GiaIndicizzati = Map<string, string | null | undefined>
 const LOTTO = 400
 const letti = (e: Esito) => e.docs.length + e.versati + e.invariati
 
+/** Come si apre una cartella: `readdir`, o uno finto nelle prove. */
+let elenca: typeof readdir = readdir
+export function usaElenco(f: typeof readdir | null) { elenca = f ?? readdir }
+
 async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaIndicizzati, profondita = 0, regole: Regole = REGOLE) {
   // fermarsi è legittimo, farlo in silenzio no: chi si ferma qui senza dirlo
   // fa credere a riconcilia() che il resto della cartella non esista più
@@ -588,7 +598,7 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
   if (profondita > regole.profondita) { fuori.troncato = true; return }
   let voci
   try {
-    voci = await readdir(radice, { withFileTypes: true })
+    voci = await elenca(radice, { withFileTypes: true })
   } catch (e) {
     // permessi negati (tipico con la privacy di macOS) o disco staccato:
     // vanno detti, non ingoiati — sono la differenza fra «non c'è più» e
@@ -596,6 +606,8 @@ async function cammina(radice: string, fuori: Esito, tetto: number, gia?: GiaInd
     const code = (e as { code?: string }).code
     if (code === 'EACCES' || code === 'EPERM' || code === 'ENOENT' || code === 'ENOTDIR') {
       fuori.illeggibili.push(radice)
+      // EPERM è la privacy di macOS: un permesso che si può dare
+      if (code === 'EPERM') fuori.negate.push(radice)
     } else {
       fuori.falliti++
     }
@@ -720,7 +732,7 @@ export async function prova(c: ConfigDesktop): Promise<{ ok: true; cartelle: str
  * vivo, non il giro delle sei ore.
  */
 export async function leggiCartella(cartella: string, tetto = 200, tutto = false): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
   await cammina(resolve(cartella), esito, tetto, undefined, 0, regoleDi(tutto))
   return esito
 }
@@ -731,7 +743,7 @@ export async function sincronizza(
   gia?: GiaIndicizzati,
   versa?: (docs: Documento[]) => Promise<void>
 ): Promise<Esito> {
-  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
+  const esito: Esito = { docs: [], versati: 0, versa, saltatiProgetti: [], falliti: 0, illeggibili: [], negate: [], troncato: false, complete: [], visti: [], invariati: 0, saltatiPerTipo: 0, saltati: { media: 0, codice: 0, sistema: 0, altro: 0 }, saltateCartelle: 0 }
   const cartelle = radici(c)
   const regole = regoleDi(c.tutto)
   // il tetto è per cartella: una cartella enorme non deve affamare le altre

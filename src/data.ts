@@ -33,8 +33,10 @@ export type VoceFeed = {
   fonteTitolo?: string | null
   fonteQuando?: string | null
   fonteAutore?: string | null
-  /** Perché oggi, in una riga, da una fonte vera (P2). */
+  /** Perché è stata chiusa (P2): vecchia, fatta, non_mia, non_chiara, lui, lista, fuori, tempo, data, tetto, superata. */
   ragione?: string | null
+  /** Quando ha risposto dalla sua posta, se l'ha fatto: la pagina lo dice con una pastiglia, e la carta resta finché non preme Fatto (P2). */
+  risposta?: string | null
   /** Quando l'ha vista sullo schermo la prima volta (P2). */
   vista?: string | null
   /** Quando l'ha toccata: aperta, affidata, chiusa (P2). */

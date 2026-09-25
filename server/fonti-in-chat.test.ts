@@ -39,7 +39,7 @@ test('il racconto in inglese: collegate con i conteggi, le incomplete col motivo
   const adesso = new Date()
   const s = {
     fonti: [{ fonte: 'desktop', documenti: 3410 }, { fonte: 'posta', documenti: 1240 }, { fonte: 'note', documenti: 88 }, { fonte: 'lavoro', documenti: 12 }, { fonte: 'calendario', documenti: 0 }],
-    incomplete: [{ fonte: 'note', motivo: 'non-disponibile' as const }],
+    incomplete: [{ fonte: 'note', motivo: 'non-disponibile' as const, rimedio: 'guarda' as const, dal: adesso.toISOString() }],
     ultimoArrivo: adesso.toISOString()
   }
   const t = fonti.raccontaFonti(s, 'en', 'avviata', adesso, 'darwin')
@@ -57,7 +57,7 @@ test('il racconto in inglese: collegate con i conteggi, le incomplete col motivo
 
 test('il racconto in italiano, e senza fonti si manda alle Fonti', () => {
   const adesso = new Date()
-  const s = { fonti: [{ fonte: 'posta', documenti: 2 }, { fonte: 'conversazioni', documenti: 1 }, { fonte: 'x', documenti: 0 }], incomplete: [{ fonte: 'desktop', motivo: 'incompleta' as const }], ultimoArrivo: adesso.toISOString() }
+  const s = { fonti: [{ fonte: 'posta', documenti: 2 }, { fonte: 'conversazioni', documenti: 1 }, { fonte: 'x', documenti: 0 }], incomplete: [{ fonte: 'desktop', motivo: 'incompleta' as const, rimedio: 'attendi' as const, dal: adesso.toISOString() }], ultimoArrivo: adesso.toISOString() }
   const t = fonti.raccontaFonti(s, 'it', 'avviata', adesso, 'win32')
   assert.match(t, /^Fonti collegate, con quanti documenti ciascuna: Posta \(2\), chat con i modelli \(1\), X \(ancora niente\)\./m)
   assert.match(t, /Non lette per intero l'ultima volta: file sul PC \(letta solo in parte\)\. Vai alle Fonti per sistemarle\./)
@@ -111,4 +111,26 @@ test('una fonte che non si è aperta compare col suo motivo, e la lingua è quel
   assert.match(t, /Fonti collegate, con quanti documenti ciascuna: Posta \(2\)/)
   lettura.dimenticaLetture('')
   cfg.scrivi({})
+})
+
+test('fra parentesi la causa: il permesso, l’accesso, la credenziale, l’amministratore, la rete (P8)', () => {
+  const adesso = new Date()
+  const dal = adesso.toISOString()
+  const s = {
+    fonti: [{ fonte: 'note', documenti: 1 }],
+    incomplete: [
+      { fonte: 'note', motivo: 'non-disponibile' as const, rimedio: 'permesso-disco' as const, dal },
+      { fonte: 'granola', motivo: 'non-disponibile' as const, rimedio: 'accedi' as const, dal },
+      { fonte: 'posta', motivo: 'non-disponibile' as const, rimedio: 'credenziale' as const, dal },
+      { fonte: 'google', motivo: 'non-disponibile' as const, rimedio: 'amministratore' as const, dal },
+      { fonte: 'slack', motivo: 'non-disponibile' as const, rimedio: 'attendi' as const, dal },
+      { fonte: 'github', motivo: 'incompleta' as const, rimedio: 'attendi' as const, dal },
+      { fonte: 'notion', motivo: 'non-disponibile' as const, rimedio: 'guarda' as const, dal }
+    ],
+    ultimoArrivo: null
+  }
+  assert.match(fonti.raccontaFonti(s, 'en', null, adesso),
+    /Not fully read last time: Notes \(Full Disk Access is off\), Granola \(needs a new sign-in\), Mail \(the credential no longer works\), Gmail \(waiting for your admin’s approval\), Slack \(not responding\), GitHub \(only partly read\), Notion \(could not be opened\)\./)
+  assert.match(fonti.raccontaFonti(s, 'it', null, adesso),
+    /Note \(manca l’accesso completo al disco\), Granola \(serve un nuovo accesso\), Posta \(la credenziale non va più\), Gmail \(aspetta il via libera del tuo amministratore\), Slack \(non risponde\), GitHub \(letta solo in parte\), Notion \(non si è aperta\)/)
 })

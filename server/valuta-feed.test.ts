@@ -48,8 +48,8 @@ test('il rapporto: un giro nuovo non salvato più il feed, i totali, la lunghezz
   valutaFeed.perProva({
     proponi: async () => ({
       voci: [
-        { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording; nothing went back yet.', perche: 'Unblocks the Evermute release', progetto: evermute.id, doc: null, offerta: 'I draft the reply with the checklist.', quando: '' },
-        { genere: 'proposta', titolo: 'Turn the notes into a guide that is far too long a title to fit the card at all, really', testo: 'x'.repeat(201), perche: 'Moves the site from copy to products', progetto: null, doc: null, offerta: 'I outline the guide.', quando: '' }
+        { genere: 'priorita', titolo: 'Reply to App Review with the device recording', testo: 'Apple asked twelve days ago for a recording; nothing went back yet.', perche: 'Unblocks the Evermute release', progetto: evermute.id, doc: null, offerta: 'I draft the reply with the checklist.', quando: '', prova: 'Waiting on Apple for the review.', origine: 'memoria' as const },
+        { genere: 'proposta', titolo: 'Turn the notes into a guide that is far too long a title to fit the card at all, really', testo: 'x'.repeat(201), perche: 'Moves the site from copy to products', progetto: null, doc: null, offerta: 'I outline the guide.', quando: '', prova: 'The notes could become a guide.', origine: 'memoria' as const }
       ],
       domande: [], superate: [], guardati: 48, cartelle: 9, conversazioni: 3
     }),

@@ -24,6 +24,7 @@ import { OSPITATO, hostRaggiungibile, hostRaggiungibileDavvero } from '../ospita
 import { lingua } from '../config.ts'
 import { fusoDi, parti, istante } from '../fuso.ts'
 import { zonaDi, zonaIana, ZONA_UTC, leggiVtimezone, type Zona } from './fusiIcal.ts'
+import { GuaioFonte } from './guaio.ts'
 
 export type ConfigCalendario = {
   /** L'indirizzo segreto in formato iCal. È una credenziale: non esce mai. */
@@ -550,9 +551,11 @@ async function scarica(url: string): Promise<{ righe: string[]; troncato: boolea
      * perché un nome pubblico può puntare dove vuole.
      */
     const i = indirizzo(dove)
-    if (!i.ok) throw new Error(i.errore)
+    // un indirizzo che non va, o che non si può raggiungere da qui: lo si
+    // rimette nel pannello, non si aspetta
+    if (!i.ok) throw new GuaioFonte(i.errore, 'credenziale')
     if (!(await hostRaggiungibileDavvero(new URL(i.url).hostname))) {
-      throw new Error('Quell’indirizzo non si può raggiungere da qui.')
+      throw new GuaioFonte('Quell’indirizzo non si può raggiungere da qui.', 'credenziale')
     }
     try {
       r = await rete(i.url, {
@@ -571,20 +574,20 @@ async function scarica(url: string): Promise<{ righe: string[]; troncato: boolea
       })
     } catch (e) {
       const nome = e instanceof Error ? e.name : ''
-      if (nome === 'TimeoutError' || nome === 'AbortError') throw new Error('Il calendario ci ha messo troppo a rispondere. Riprova.')
-      throw new Error('Non riesco a raggiungere quell’indirizzo. Controlla che sia intero.')
+      if (nome === 'TimeoutError' || nome === 'AbortError') throw new GuaioFonte('Il calendario ci ha messo troppo a rispondere. Riprova.', 'attendi')
+      throw new GuaioFonte('Non riesco a raggiungere quell’indirizzo. Controlla che sia intero.', 'attendi')
     }
     if (r.status < 300 || r.status >= 400) break
     const verso = r.headers.get('location')
     void r.body?.cancel().catch(() => {})
-    if (!verso || salto >= SALTI_MAX) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
-    try { dove = new URL(verso, i.url).toString() } catch { throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.') }
+    if (!verso || salto >= SALTI_MAX) throw new GuaioFonte('Il calendario ha risposto con un errore. Riprova fra poco.', 'attendi')
+    try { dove = new URL(verso, i.url).toString() } catch { throw new GuaioFonte('Il calendario ha risposto con un errore. Riprova fra poco.', 'attendi') }
   }
   if (r.status === 401 || r.status === 403) {
-    throw new Error('Quell’indirizzo non è più valido: rigeneralo nelle impostazioni del calendario e incollalo di nuovo.')
+    throw new GuaioFonte('Quell’indirizzo non è più valido: rigeneralo nelle impostazioni del calendario e incollalo di nuovo.', 'credenziale')
   }
-  if (r.status === 404) throw new Error('A quell’indirizzo non c’è nessun calendario. Controlla di aver copiato il link in formato iCal.')
-  if (!r.ok) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
+  if (r.status === 404) throw new GuaioFonte('A quell’indirizzo non c’è nessun calendario. Controlla di aver copiato il link in formato iCal.', 'guarda')
+  if (!r.ok) throw new GuaioFonte('Il calendario ha risposto con un errore. Riprova fra poco.', 'attendi')
 
   /*
    * `content-length` non si guarda più, ed è la riga che rifiutava l'agenda.
@@ -595,7 +598,7 @@ async function scarica(url: string): Promise<{ righe: string[]; troncato: boolea
    * Un controllo che sbaglia in un verso e dorme nell'altro. Il tetto vero
    * adesso è sul testo che si tiene, dove si può contare davvero.
    */
-  if (!r.body) throw new Error('Il calendario ha risposto con un errore. Riprova fra poco.')
+  if (!r.body) throw new GuaioFonte('Il calendario ha risposto con un errore. Riprova fra poco.', 'attendi')
 
   const fuori: string[] = []
   let troncato = false
@@ -705,7 +708,7 @@ async function scarica(url: string): Promise<{ righe: string[]; troncato: boolea
   emetti()
 
   if (!eUnCalendario) {
-    throw new Error('A quell’indirizzo non c’è un calendario. Su Google è «Indirizzo privato in formato iCal», in fondo alle impostazioni dell’agenda.')
+    throw new GuaioFonte('A quell’indirizzo non c’è un calendario. Su Google è «Indirizzo privato in formato iCal», in fondo alle impostazioni dell’agenda.', 'guarda')
   }
   return { righe: fuori, troncato }
 }

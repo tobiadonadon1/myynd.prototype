@@ -1,0 +1,21 @@
+[
+  { "clicca": "Read now" },
+  { "aspetta": 9000 },
+  { "scatta": "prima" },
+  { "testo": "prima" },
+  { "js": "JSON.stringify({ visibile: document.visibilityState, fuoco: document.hasFocus() })" },
+  { "aspetta": 2500 },
+  { "js": "fetch('/api/feed/misura?giorni=14', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(m => JSON.stringify({ viste: m.carte.viste, agite: m.carte.agite, fuori: m.carte.fuori, tardive: m.carte.tardive, tenute: m.carte.tenute, precisione: m.precisione, mancate: m.mancate, mancanza: m.mancanza, copertura: m.copertura }))" },
+  { "passa": "Record the Northwind review video" },
+  { "scatta": "sopra-memoria" },
+  { "passa": "Approve Mia's design invoice" },
+  { "clicca": "Not useful: Approve Mia's design invoice" },
+  { "scatta": "non-utile" },
+  { "clicca": "Old" },
+  { "scatta": "tolta" },
+  { "clicca": "Undo" },
+  { "scatta": "annullata" },
+  { "aspetta": 20000 },
+  { "js": "fetch('/api/feed/misura?giorni=14', { headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token') } }).then(r => r.json()).then(m => JSON.stringify({ viste: m.carte.viste, agite: m.carte.agite, fuori: m.carte.fuori, tardive: m.carte.tardive, tenute: m.carte.tenute, precisione: m.precisione, mancate: m.mancate, mancanza: m.mancanza, mancanzaCompiti: m.mancanzaCompiti, copertura: m.copertura }))" },
+  { "js": "fetch('/api/feed/viste', { method: 'POST', headers: { authorization: 'Bearer ' + localStorage.getItem('myynd.token'), 'content-type': 'application/json' }, body: JSON.stringify({ ids: ['f-m1'] }) }).then(r => r.json()).then(JSON.stringify)" }
+]

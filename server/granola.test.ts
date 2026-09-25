@@ -250,3 +250,15 @@ test('una nota senza titolo prende quello dell’evento del calendario', async (
   assert.equal(e.docs[0]!.titolo, 'Call con Riccardo')
   assert.match(e.docs[0]!.corpo, /Riccardo <r@esempio\.it>/)
 })
+
+// — P8: il guaio della cache di Granola porta il suo rimedio —
+
+test('dalla cache: cifrata è «accedi», assente è «apri-app», un formato nuovo è «aggiorna»', async () => {
+  await assert.rejects(() => granola.sincronizza(), (e: Error & { rimedio?: string }) => e.message === granola.NON_INSTALLATO && e.rimedio === 'apri-app')
+  mkdirSync(CARTELLA, { recursive: true })
+  await assert.rejects(() => granola.sincronizza(), (e: Error & { rimedio?: string }) => e.message === granola.NIENTE_ANCORA && e.rimedio === 'apri-app')
+  scrivi('cache-v9.json', '{"qualcosa":"d’altro"}')
+  await assert.rejects(() => granola.sincronizza(), (e: Error & { rimedio?: string }) => e.message === granola.CAMBIATO && e.rimedio === 'aggiorna')
+  scrivi('cache-v6.json.enc', 'binario cifrato')
+  await assert.rejects(() => granola.sincronizza(), (e: Error & { rimedio?: string }) => e.message === granola.PASSA_ALL_ACCOUNT && e.rimedio === 'accedi')
+})

@@ -33,6 +33,7 @@ import { gunzipSync } from 'node:zlib'
 import { DatabaseSync } from 'node:sqlite'
 import type { Documento } from '../store.ts'
 import { lingua, type ConfigNote } from '../config.ts'
+import { GuaioFonte } from './guaio.ts'
 
 /** Il tetto di note. Chi usa Note da dieci anni ci arriva. */
 const TETTO = 3000
@@ -159,7 +160,7 @@ function righe(db: DatabaseSync): Riga[] {
   const c = colonne(db, 'ZICCLOUDSYNCINGOBJECT')
   const d = colonne(db, 'ZICNOTEDATA')
   if (!c.has('ZTITLE1') || !d.has('ZDATA') || !d.has('ZNOTE')) {
-    throw new Error('Note ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.')
+    throw new GuaioFonte('Note ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.', 'aggiorna')
   }
   const dove = ['n.ZTITLE1 IS NOT NULL']
   if (c.has('ZMARKEDFORDELETION')) dove.push('COALESCE(n.ZMARKEDFORDELETION, 0) = 0', 'COALESCE(f.ZMARKEDFORDELETION, 0) = 0')
@@ -236,9 +237,11 @@ export async function leggi(sorgente = percorso()): Promise<EsitoNote> {
     aperto = await copia(sorgente)
   } catch (e) {
     const code = (e as { code?: string }).code
-    if (code === 'EPERM' || code === 'EACCES') throw new Error(SENZA_PERMESSO)
-    if (code === 'ENOENT') throw new Error('Non trovo le Note su questo Mac. Apri Note una volta e riprova.')
-    throw new Error('Non riesco a leggere le Note.')
+    // il rimedio viaggia con la frase: la riga in prima pagina sa se serve
+    // il permesso, l'app, o se non si sa
+    if (code === 'EPERM' || code === 'EACCES') throw new GuaioFonte(SENZA_PERMESSO, 'permesso-disco')
+    if (code === 'ENOENT') throw new GuaioFonte('Non trovo le Note su questo Mac. Apri Note una volta e riprova.', 'apri-app')
+    throw new GuaioFonte('Non riesco a leggere le Note.', 'guarda')
   }
 
   const senzaTitolo = lingua() === 'it' ? 'Nota senza titolo' : 'Untitled note'
@@ -277,7 +280,7 @@ export async function leggi(sorgente = percorso()): Promise<EsitoNote> {
   // c'erano note, e nessuna si è capita: non è una casa vuota, è un formato
   // che non parla più la nostra lingua — e va detto, non taciuto
   if (!docs.length && illeggibili > 0) {
-    throw new Error('Note ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.')
+    throw new GuaioFonte('Note ha cambiato il modo in cui salva le note: questo collegamento va aggiornato.', 'aggiorna')
   }
   return { docs, vuote, illeggibili, troncato }
 }

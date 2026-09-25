@@ -88,5 +88,18 @@ export function accessoCompleto(casa = homedir(), piattaforma = process.platform
 /** L'indirizzo che apre la schermata giusta delle Impostazioni di Sistema. Lo apre il guscio, mai il server. */
 export const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
+/**
+ * Le schermate delle Impostazioni che Myynd può chiedere di aprire, tutte qui.
+ *
+ * Il guscio ne apre solo queste, una per una (`desktop/pannelli.ts`, la stessa
+ * lista): il disco per le Note e le cartelle, i calendari e l'automazione per
+ * le fonti del Mac che le chiedono.
+ */
+export const PANNELLI = {
+  disco: PANNELLO_ACCESSO_DISCO,
+  calendari: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars',
+  automazione: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation'
+} as const
+
 /** La strada a mano, per chi legge Myynd in un browser e non ha un bottone che la apra. */
 export const STRADA_ACCESSO_DISCO = 'Impostazioni di Sistema › Privacy e sicurezza › Accesso completo al disco › Myynd'

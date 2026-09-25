@@ -2,7 +2,11 @@
 // collegato, le risposte tornano vuote e l'interfaccia lo dice.
 
 /** Una fonte che l'ultima lettura non ha letto per intero, e perché: non ha risposto, o solo in parte. */
-export type FonteIncompleta = { fonte: string; motivo: 'non-disponibile' | 'incompleta' }
+export type FonteIncompleta = {
+  fonte: string; motivo: 'non-disponibile' | 'incompleta'
+  /** Cosa serve perché torni a leggersi, da quando, e se è cominciato con un aggiornamento dell'app (P8). */
+  rimedio?: Rimedio; dal?: string; dopoAggiornamento?: boolean
+}
 
 export type Connettore = {
   id: string
@@ -12,6 +16,10 @@ export type Connettore = {
   nota: string
   collegato: boolean
   documenti: number
+  /** Il guaio che la scheda dice con la sua parola: l'episodio di una fonte, o il motore dal vivo (P8). */
+  problema?: Rimedio
+  /** La fonte tace da più del solito: un fatto da dire sulla scheda, mai un guasto (P8). */
+  silenzio?: Silenzio
 }
 
 export type FattoAvvio = {
@@ -144,6 +152,10 @@ export type Stato = {
   accessoNote?: {stato:'leggibile'|'negato'|'assente'|'errore'|'non-mac';verificato:string;fase?:string;codice?:string}
   /** Le fonti che l'ultima lettura non ha letto per intero: la prima pagina le dice in una riga fissa. */
   letturaIncompleta?: FonteIncompleta[]
+  /** Il guaio del motore che lavora (uscito dall'account, chiave rifiutata): la stessa riga fissa (P8). */
+  testa?: { id: 'claude' | 'openai'; rimedio: 'accedi' | 'credenziale' } | null
+  /** I titoli delle finestre sono accesi: la pagina chiede al guscio se l'Accessibilità c'è davvero (P8). */
+  osservaTitoli?: boolean
   /**
    * L'ordine dei blocchi, se il server lo manda qui invece che dentro `config`.
    *
@@ -2036,6 +2048,39 @@ export type ProjectInitiative = { id: string; projectId: string; projectName: st
 // — P1B: fine —
 
 // — P2: inizio —
+
+/** La misura del feed (`server/misura-feed.ts`): per chi costruisce, non per la pagina. */
+export type MisuraFeed = {
+  da: string; a: string; giorni: number
+  carte: {
+    nate: number; viste: number; storiche: number
+    agite: number; fuori: number; tardive: number; tenute: number
+    scartate: { vecchia: number; non_mia: number; non_chiara: number; senza: number }
+    scadute: { tempo: number; data: number; tetto: number }
+    superate: number
+  }
+  precisione: number | null
+  precisioneChiusa: number | null
+  mancate: { totale: number; risposte: number; compiti: number; perFase: Record<string, number> }
+  mancanza: number | null
+  mancanzaCompiti: number | null
+  perGiorno: { giorno: string; nate: number; viste: number; giuste: number; sbagliate: number; mancate: number }[]
+  perMittente: { mittente: string; viste: number; giuste: number; sbagliate: number }[]
+  copertura: { postaInviata: boolean }
+}
+
+type EsitoVoce = { stato: string; motivo: string; fonteVecchia: boolean; daRicordare: string; aperti: unknown[]; fatte: unknown[]; registrato?: Registrato }
+
+/** Le chiamate del feed con l'asticella: «Non utile» con una ragione, le carte viste, la misura. */
+export const apiP2 = {
+  /** «Non utile», con una delle quattro ragioni: la carta si chiude senza parole e senza modello. */
+  scartaFeed: (id: string, ragione: 'vecchia' | 'fatta' | 'non_mia' | 'non_chiara') =>
+    json<EsitoVoce>(`/api/feed/${encodeURIComponent(id)}/rispondi`, { method: 'POST', body: JSON.stringify({ testo: '', stato: 'scartato', ragione }) }),
+  /** Le carte che ha visto davvero (`feed-vista.ts`): il server le segna una volta, e non ricarica niente. */
+  segnaViste: (ids: string[]) => json<{ ok: true; segnate: number }>('/api/feed/viste', { method: 'POST', body: JSON.stringify({ ids }) }),
+  misuraFeed: (giorni?: number) => json<MisuraFeed>(`/api/feed/misura${giorni ? `?giorni=${giorni}` : ''}`)
+}
+
 // — P2: fine —
 
 // — P3: inizio —
@@ -2073,6 +2118,28 @@ export const misuraLavoro = (giorni = 30) => json<Misura>(`/api/lavoro/misura?gi
 // — P7: fine —
 
 // — P8: inizio —
+/** Cosa serve perché una fonte torni a leggersi. La stessa lista di `server/connettori/guaio.ts` (una prova le confronta). */
+export type Rimedio = 'permesso-disco' | 'accedi' | 'credenziale' | 'amministratore' | 'apri-app' | 'aggiorna' | 'attendi' | 'guarda' | 'credito'
+export const RIMEDI: readonly Rimedio[] = ['permesso-disco', 'accedi', 'credenziale', 'amministratore', 'apri-app', 'aggiorna', 'attendi', 'guarda', 'credito']
+/** Una fonte che tace: da quanti giorni (arrivi), o quanti ne ha l'ultima lettura (inventario). */
+export type Silenzio = { forma: 'arrivi' | 'inventario'; giorni: number; n: number }
+export type Verdetto = 'pulito' | 'muto' | 'guasto' | 'spento'
+export type SintesiSalute = { puliti: number; misurati: number; obiettivo: number; muti: number; dopoAggiornamento: number; aperti: number }
+/** `GET /api/fonti/salute`: i giorni, dal più vecchio a oggi, il conto del traguardo, gli episodi di adesso. */
+export type RispostaSalute = {
+  giorni: {
+    giorno: string; chiuso: boolean; misurato: boolean; pulito: boolean | null
+    fonti: {
+      fonte: string; verdetto: Verdetto; provvisorio: boolean; rimedio: Rimedio | null; letture: number; pulite: number
+      incomplete: number; guai: number; documenti: number; totale: number | null; durata: number; versione: string | null; frase: string | null
+    }[]
+  }[]
+  sintesi: SintesiSalute
+  adesso: { fonte: string; motivo: 'non-disponibile' | 'incompleta'; rimedio: Rimedio | null; frase: string | null; dal: string; fila: number; visto: string; visibile: boolean }[]
+}
+/** I giorni di salute delle fonti (o di una sola): la striscia nel pannello di una fonte. */
+export const saluteFonti = (giorni = 30, fonte?: string) =>
+  json<RispostaSalute>(`/api/fonti/salute?giorni=${giorni}${fonte ? `&fonte=${encodeURIComponent(fonte)}` : ''}`)
 // — P8: fine —
 
 // — P9: inizio —

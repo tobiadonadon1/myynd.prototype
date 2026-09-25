@@ -128,6 +128,28 @@ chi.dentro(conto.id, () => {
     store.salvaDocumenti(scena.documenti.map(d => ({ ...d, quando: tempo(d.quando) })))
   }
 
+  // — P2: inizio —
+  // Le note di un progetto (la memoria da cui nasce una priorità), i documenti
+  // con «indicizzato» (quando Myynd li ha visti, per le carte mancate), e una
+  // riga di controllo: la posta inviata passa intera da `salvaDocumenti`.
+  for (const p of scena.progetti ?? []) {
+    const id = ids.get(p.chiave ?? p.nome)
+    const note = (p as { note?: string }).note
+    if (id && note) progetti.cambia(id, { note })
+  }
+  for (const d of scena.documenti ?? []) {
+    if (typeof d.indicizzato === 'string') store.default.prepare('UPDATE documenti SET indicizzato = ? WHERE id = ?').run(tempo(d.indicizzato), d.id)
+  }
+  const inviataDiControllo = (scena.documenti ?? []).find(d => d.inviato)
+  if (inviataDiControllo) {
+    const letta = store.documento(inviataDiControllo.id)
+    for (const campo of ['inviato', 'filo', 'messageId', 'risponde', 'destinatari'] as const) {
+      const atteso = inviataDiControllo[campo]
+      if (atteso !== undefined && atteso !== null && String(letta?.[campo] ?? '') !== String(campo === 'inviato' ? 1 : atteso)) esci(`«${campo}» non è passato da salvaDocumenti per ${inviataDiControllo.id}: ${String(letta?.[campo])}`)
+    }
+  }
+  // — P2: fine —
+
   const insFeed = store.default.prepare(`
     INSERT INTO feed (id, tipo, titolo, testo, urgenza, fonte, doc, stato, quando, perche, offerta, progetto, peso, ragione)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -136,6 +158,15 @@ chi.dentro(conto.id, () => {
       (v.fonte as string) ?? null, (v.doc as string) ?? null, String(v.stato ?? 'aperto'), tempo(v.quando),
       (v.perche as string) ?? null, (v.offerta as string) ?? null, progetto(v.progetto),
       typeof v.peso === 'number' ? v.peso : null, (v.ragione as string) ?? null)
+    // — P2: inizio —
+    // quando l'ha vista, il motivo, quando l'ha chiusa, e l'istantanea (un
+    // oggetto: il progetto dentro si scrive con l'id vero, non con la chiave)
+    const contesto = v.contesto && typeof v.contesto === 'object'
+      ? JSON.stringify({ ...(v.contesto as Record<string, unknown>), ...('progetto' in (v.contesto as object) ? { progetto: progetto((v.contesto as { progetto?: unknown }).progetto) } : {}) })
+      : typeof v.contesto === 'string' ? v.contesto : null
+    store.default.prepare('UPDATE feed SET vista = ?, motivo = ?, risposto = ?, contesto = ? WHERE id = ?').run(
+      v.vista ? tempo(v.vista) : null, (v.motivo as string) ?? null, v.risposto ? tempo(v.risposto) : null, contesto, v.id)
+    // — P2: fine —
   }
 
   for (const c of scena.compiti ?? []) {
@@ -144,13 +175,19 @@ chi.dentro(conto.id, () => {
     store.scriviCompito({
       id: c.id, testo: c.testo, quando, ordine: chiavi.dopo(store.ultimoOrdine(quando)),
       progetto: progetto(c.progetto), nota: (c.nota as string) ?? null, doc: (c.doc as string) ?? null,
+      // — P2: inizio —
+      ...(c.origine ? { origine: String(c.origine) } : {}),
+      // — P2: fine —
       ...(c.giorno ? { giorno: String(c.giorno) } : {}), ...(c.ora ? { ora: String(c.ora) } : {})
     })
     const campi: [string, unknown][] = [
       ['stato', c.stato], ['modo', c.modo], ['risultato', c.risultato], ['chieste', json(c.chieste)],
       ['revisione', json(c.revisione)], ['fonti', json(c.fonti)], ['ipotesi', json(c.ipotesi)],
       ['chiesto', c.stato && c.stato !== 'aperto' ? tempo(c.chiesto ?? '-1h') : undefined],
-      ['chiuso', c.stato === 'fatto' ? tempo(c.chiuso ?? '-1h') : undefined]
+      ['chiuso', c.stato === 'fatto' ? tempo(c.chiuso ?? '-1h') : undefined],
+      // — P2: inizio —
+      ['creato', c.creato ? tempo(c.creato) : undefined]
+      // — P2: fine —
     ]
     for (const [k, v] of campi) {
       if (v === undefined || v === null) continue
@@ -196,6 +233,13 @@ chi.dentro(conto.id, () => {
       JSON.stringify({ ultimo, progetti: [], scartati: [], chiamate: [adesso], avviate: [] }, null, 2), { mode: 0o600 })
   }
 })
+
+// — P8: inizio —
+if ((scena as Record<string, unknown>).p8) {
+  const p8 = await import(join(QUI, 'semina-p8.ts'))
+  chi.dentro(conto.id, () => p8.semina((scena as Record<string, unknown>).p8, { casa: CASA }))
+}
+// — P8: fine —
 
 store.chiudiIndici()
 console.log(`semina · fatto: ${conto.id} in ${DATI}`)

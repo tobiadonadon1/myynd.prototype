@@ -7,6 +7,7 @@ import type { ConfigNotion } from '../config.ts'
 import * as store from '../store.ts'
 import type { Documento } from '../store.ts'
 import { daDove, segna, type Resto } from './ripresa.ts'
+import { GuaioFonte } from './guaio.ts'
 
 /** Quante pagine si rileggono per giro. Oltre, si riprende al giro dopo. */
 const TETTO = 800
@@ -150,6 +151,12 @@ export type EsitoNotion = {
   resto: Resto
 }
 
+/** Notion ha detto che il token non vale: `unauthorized`, o la sua frase. */
+function tokenRifiutato(e: unknown): boolean {
+  const x = e as { code?: unknown; message?: unknown } | null
+  return x?.code === 'unauthorized' || /unauthorized|API token is invalid/i.test(String(x?.message ?? ''))
+}
+
 export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
   const notion = cliente(c)
   const docs: Documento[] = []
@@ -183,6 +190,14 @@ export async function sincronizza(c: ConfigNotion): Promise<EsitoNotion> {
         page_size: 50
       }))
     } catch (e) {
+      /*
+       * Un token che Notion non riconosce più, prima di aver letto niente:
+       * questo sì è un guaio da raccontare, con il suo rimedio. Una lettura
+       * «interrotta» lo nascondeva per sempre dietro «letta solo in parte».
+       * Tutto il resto resta com'era: la rete, un cursore vecchio, un errore
+       * a metà elenco.
+       */
+      if (!visti.length && tokenRifiutato(e)) throw new GuaioFonte('Il token di Notion non va più.', 'credenziale')
       // un cursore vecchio che Notion non riconosce più non è un guaio da
       // raccontare: si butta e si ricomincia da capo al giro dopo
       if (primoGiro && cursore) {

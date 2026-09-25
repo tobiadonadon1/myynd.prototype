@@ -34,6 +34,7 @@
 // quando non risponde lo si sa.
 
 import Anthropic from '@anthropic-ai/sdk'
+import { createHash } from 'node:crypto'
 import { aggiorna, leggi, lingua, modello, modelloDelLivello, nellaLingua, type Livello as LivelloConfig } from './config.ts'
 import * as abbonamento from './abbonamento.ts'
 import { OSPITATO } from './ospitato.ts'
@@ -499,6 +500,10 @@ export function segnaUso(lavoro: string, u: Anthropic.Usage | null | undefined, 
   // ha risposto: se risultava a secco, non risulta più. Il cartellino si spegne
   // da solo appena si ricarica, senza che nessuno debba dire «ho ricaricato».
   scordaIlCredito()
+  // e la chiave che lavora non è più rifiutata: ha appena risposto
+  const t = testaAlLavoro()
+  if (t === 'claude' || t === 'openai') rifiuti.get(chi.adesso() ?? '')?.delete(t)
+  avvisaUsato()
   const cache = u.cache_read_input_tokens ?? 0
   const scritti = u.cache_creation_input_tokens ?? 0
   // nel registro e nel database di chi ha chiesto: la riga di stampa la legge
@@ -795,7 +800,7 @@ export function motore(): Motore | null {
         if (await compatibile.risponde(f)) return
         throw tradotto(new Error('Il modello sul tuo computer non risponde: controlla che Ollama (o LM Studio) sia acceso.'))
       },
-      crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { throw tradotto(e) }) },
+      crea: (p, attesa) => { controllaIlTetto(); return compatibile.crea(f, p, attesa).catch(e => { segnaSeOpenAI(e); throw tradotto(e) }) },
       flusso: (p, onTesto, attesa, segnale) => {
         controllaIlTetto()
         segnaGuardato(true)
@@ -803,6 +808,7 @@ export function motore(): Motore | null {
           .finally(() => segnaGuardato(false))
           .catch(e => {
             if (segnale?.aborted) throw new DOMException('The request was cancelled.', 'AbortError')
+            segnaSeOpenAI(e)
             throw tradotto(e)
           })
       }
@@ -821,6 +827,7 @@ export function motore(): Motore | null {
       try {
         return await a.messages.create(p, attesa ? { timeout: attesa } : undefined)
       } catch (e) {
+        notaRifiuto(e, 'claude')
         throw inItaliano(e)
       }
     },
@@ -832,10 +839,85 @@ export function motore(): Motore | null {
         s.on('text', onTesto)
         return await senzaSilenzi(s)
       } catch (e) {
+        notaRifiuto(e, 'claude')
         throw inItaliano(e)
       }
     }
   }
+}
+
+// — chi lavora, e se la sua chiave è stata rifiutata —
+
+/**
+ * Il motore che lavora adesso, detto per la salute dei motori.
+ *
+ * `compatibile` è il modello sul computer (o un fornitore scelto a mano): per
+ * la salute delle fonti non conta mai. `null` vuol dire che nessuno lavora.
+ */
+export function testaAlLavoro(): 'claude' | 'openai' | 'compatibile' | null {
+  if (chatgpt.scelto()) return 'openai'
+  const c = leggi()
+  if (c.motore === 'openai') return fornitoreOpenAI(c) ? 'openai' : null
+  if (c.motore === 'compatibile') return c.compatibile?.url && c.compatibile.modello ? 'compatibile' : null
+  if (conLaChiave() || abbonamento.scelto()) return 'claude'
+  return null
+}
+
+type Testa = 'claude' | 'openai'
+/**
+ * Le chiavi rifiutate, per persona: l'impronta della chiave e da quando.
+ *
+ * L'impronta e non la chiave: basta a sapere che la chiave di adesso è
+ * ancora quella rifiutata (incollarne una nuova guarisce subito), e non
+ * tiene un segreto in memoria due volte.
+ */
+const rifiuti = new Map<string, Map<Testa, { impronta: string; dal: string }>>()
+const impronta = (k: string) => createHash('sha256').update(k).digest('hex').slice(0, 16)
+function chiaveDi(testa: Testa): string {
+  const c = leggi()
+  return testa === 'claude' ? (c.claude?.apiKey || chiaveDiCasa() || '') : (c.openai?.chiave || '')
+}
+
+let suUsato: (() => void) | null = null
+let suRifiutata: (() => void) | null = null
+/** Chi vuole sapere che un motore ha appena risposto (la salute dei motori, in `index.ts`: niente giro di import). */
+export function quandoUsato(f: (() => void) | null) { suUsato = f }
+/** Chi vuole sapere che una chiave è appena stata rifiutata. */
+export function quandoRifiutata(f: (() => void) | null) { suRifiutata = f }
+function avvisaUsato() { try { suUsato?.() } catch { /* chi ascolta si arrangia */ } }
+
+/**
+ * Una chiamata al motore è stata respinta per la chiave: se ne tiene
+ * l'impronta. Solo dalle chiamate vere del motore, mai dalla prova di una
+ * chiave non ancora salvata (`claude.prova` passa da `inItaliano`, non di qui).
+ */
+export function notaRifiuto(e: unknown, testa: Testa): void {
+  const respinta = testa === 'claude'
+    ? e instanceof Anthropic.AuthenticationError
+    : [401, 403].includes(Number((e as { status?: unknown } | null)?.status))
+  if (!respinta) return
+  const k = chiaveDi(testa)
+  if (!k) return
+  const di = chi.adesso() ?? ''
+  const m = rifiuti.get(di) ?? new Map<Testa, { impronta: string; dal: string }>()
+  const prima = m.get(testa)
+  const i = impronta(k)
+  if (prima?.impronta !== i) m.set(testa, { impronta: i, dal: new Date().toISOString() })
+  rifiuti.set(di, m)
+  try { suRifiutata?.() } catch { /* chi ascolta si arrangia */ }
+}
+
+/** La chiave del fornitore OpenAI respinta, quando è OpenAI con la chiave a lavorare. */
+function segnaSeOpenAI(e: unknown) {
+  if (leggi().motore === 'openai') notaRifiuto(e, 'openai')
+}
+
+/** La chiave di adesso è quella che è stata rifiutata? Da quando. */
+export function rifiutata(testa: Testa): { dal: string } | null {
+  const r = rifiuti.get(chi.adesso() ?? '')?.get(testa)
+  if (!r) return null
+  const k = chiaveDi(testa)
+  return k && impronta(k) === r.impronta ? { dal: r.dal } : null
 }
 
 // — il tetto di oggi —
@@ -1072,6 +1154,7 @@ export async function chiedi(o: {
   if (!chatgpt.scelto() && abbonamento.disponibile() && !fornitore()) {
     try {
       const testo = await abbonamento.chiedi({ ...o, attesa, modello: modelloPer(o.lavoro) })
+      avvisaUsato()
       return { testo, rifiutata: false, da: 'abbonamento' }
     } catch (e) {
       // il tetto non è un guasto dell'account: niente riposo, e niente chiave

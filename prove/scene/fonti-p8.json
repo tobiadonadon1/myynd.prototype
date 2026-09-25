@@ -1,0 +1,47 @@
+{
+  "lingua": "en",
+  "nome": "Alex",
+  "ruolo": "Founder",
+  "progetti": [
+    { "chiave": "nw", "nome": "Northwind", "obiettivo": "Ship Northwind 1.0 on the App Store", "priorita": "alta" }
+  ],
+  "file": [
+    { "nome": "plan.md", "testo": "# Northwind plan\n\n1. Fix the three account issues.\n2. Upload build 1.0.4.\n" }
+  ],
+  "documenti": [
+    { "id": "whatsapp:100000000000001:wamid.a1", "fonte": "whatsapp", "tipo": "messaggio", "titolo": "Dana Ortiz", "corpo": "Hi, is the Northwind beta still open? I would like two seats.", "autore": "Dana Ortiz", "quando": "-6d", "gruppo": "whatsapp" },
+    { "id": "whatsapp:100000000000001:wamid.a2", "fonte": "whatsapp", "tipo": "messaggio", "titolo": "Dana Ortiz", "corpo": "Also, does it work offline on the train?", "autore": "Dana Ortiz", "quando": "-6d", "gruppo": "whatsapp" },
+    { "id": "whatsapp:100000000000001:wamid.a3", "fonte": "whatsapp", "tipo": "messaggio", "titolo": "Dana Ortiz", "corpo": "Thanks, talk next week.", "autore": "Dana Ortiz", "quando": "-6d", "gruppo": "whatsapp" }
+  ],
+  "punto": {
+    "progetti": [
+      { "progetto": "nw", "novita": "Dana asked for two beta seats on WhatsApp.", "doc": "whatsapp:100000000000001:wamid.a1" }
+    ]
+  },
+  "p8": {
+    "config": {
+      "note": {},
+      "calendario": { "url": "http://127.0.0.1:18790/api/stato", "giorni": 30, "nome": "Work" },
+      "whatsapp": { "token": "finto", "numero": "100000000000001", "segreto": "finto", "parola": "finta", "etichetta": "Northwind Support", "arrivati": 3 },
+      "claudeCon": "abbonamento",
+      "motore": "claude"
+    },
+    "togli": ["compatibile"],
+    "claude": "fuori",
+    "noteNegate": true,
+    "versioni": { "note": "0.2.23" },
+    "indicizzati": { "whatsapp:100000000000001:wamid.a1": "-6d", "whatsapp:100000000000001:wamid.a2": "-6d", "whatsapp:100000000000001:wamid.a3": "-6d" },
+    "storia": [
+      { "fonte": "desktop", "giorni": "pppppppppppppppppppppppgpppppp", "rimedio": "attendi", "arrivi": 6 },
+      { "fonte": "note", "giorni": "ppppppppppppppppppppppppppppgg", "rimedio": "permesso-disco", "totale": 120, "nuova": 2 },
+      { "fonte": "calendario", "giorni": "pppppppppppppppppppppppppppppg", "rimedio": "credenziale", "totale": 40 },
+      { "fonte": "whatsapp", "giorni": "pppppppppppppppppppppppppmmmmm", "arrivi": 8 },
+      { "fonte": "claude", "giorni": "pppppppppppppppppppppppppppppg", "rimedio": "accedi" }
+    ],
+    "episodi": [
+      { "fonte": "note", "motivo": "non-disponibile", "rimedio": "permesso-disco", "dal": "-26h", "fila": 9, "visto": "-15m" },
+      { "fonte": "calendario", "motivo": "non-disponibile", "rimedio": "credenziale", "dal": "-3h", "fila": 2, "visto": "-15m" }
+    ],
+    "saltaGiornaliero": true
+  }
+}

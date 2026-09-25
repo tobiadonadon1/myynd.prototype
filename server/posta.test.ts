@@ -262,3 +262,43 @@ test('una risposta porta con sé il messaggio a cui risponde e i suoi destinatar
   assert.equal(per['posta:INBOX:2'].risponde, null)
   assert.equal(per['posta:INBOX:2'].destinatari, null)
 })
+
+// — P8: il guaio di una lettura porta il suo rimedio —
+
+/** Una casella che non si apre, con l'errore che si vuole. */
+function casellaCheNonSiApre(errore: unknown): ImapFlow {
+  return { connect: async () => { throw errore }, close: async () => {}, logout: async () => {} } as unknown as ImapFlow
+}
+
+test('una password rifiutata è «credenziale», con la frase di sempre', async () => {
+  const { GuaioFonte } = await import('./connettori/guaio.ts')
+  usaClient(() => casellaCheNonSiApre(Object.assign(new Error('Command failed'), { authenticationFailed: true })))
+  const e = await sincronizza({ ...CASELLA, host: 'imap.esempio.it' }).catch(x => x)
+  assert.ok(e instanceof GuaioFonte)
+  assert.equal(e.rimedio, 'credenziale')
+  assert.equal(e.message, 'Utente o password non accettati dal server.')
+})
+
+test('il no dell’amministratore di Gmail è «amministratore», non una password', async () => {
+  usaClient(() => casellaCheNonSiApre(Object.assign(new Error('Command failed'), { responseText: 'IMAP access is disabled for your domain.', authenticationFailed: true })))
+  const e = await sincronizza({ ...CASELLA, host: 'imap.gmail.com', utente: 'anna@azienda-finta.it' }).catch(x => x)
+  assert.equal(e.rimedio, 'amministratore')
+  assert.match(e.message, /amministratore/)
+})
+
+test('la rete che cade è passeggera; il certificato no', async () => {
+  usaClient(() => casellaCheNonSiApre(Object.assign(new Error('getaddrinfo ENOTFOUND imap.esempio.it'), { code: 'ENOTFOUND' })))
+  assert.equal((await sincronizza(CASELLA).catch(x => x)).rimedio, 'attendi')
+  usaClient(() => casellaCheNonSiApre(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })))
+  assert.equal((await sincronizza(CASELLA).catch(x => x)).rimedio, 'attendi')
+  usaClient(() => casellaCheNonSiApre(new Error('self signed certificate in chain')))
+  assert.equal((await sincronizza(CASELLA).catch(x => x)).rimedio, 'guarda')
+})
+
+test('il testo del server che non sappiamo leggere torna com’era, senza rimedio (counter-case)', async () => {
+  const grezzo = new Error('BYE server shutting down for maintenance a@b.it')
+  usaClient(() => casellaCheNonSiApre(grezzo))
+  const e = await sincronizza(CASELLA).catch(x => x) as { rimedio?: string }
+  assert.equal(e, grezzo)
+  assert.equal(e.rimedio, undefined)
+})

@@ -530,7 +530,11 @@ function ConAccountClaude({ tema, s, ok, ricarica }: Props & { s: ClaudeCon | nu
   if (s && !s.abbonamentoPossibile) return null
   const a = s?.abbonamento
   const inUso = !!a?.entrato && s?.con === 'abbonamento'
-  const stato = !s ? null : a?.verificaInSospeso ? { testo: t('Verifica della connessione in corso…'), pronto: false } : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
+  // l'account è la strada scelta e se n'è usciti: la stessa parola della testata del pannello
+  const uscito = s?.con === 'abbonamento' && !!a?.installato && !a.entrato
+  const stato = !s ? null : a?.verificaInSospeso ? { testo: t('Verifica della connessione in corso…'), pronto: false }
+    : uscito ? { testo: t('Accedi di nuovo'), pronto: false }
+    : statoStrada(!!a?.entrato, inUso, a?.installato ? undefined : t('Serve Claude Code'))
 
   return (
     <Strada tema={tema} titolo={t('Con il tuo account Claude')} stato={stato}>
@@ -1716,7 +1720,7 @@ export function FormNote({ tema, ok, collegato }: Props) {
 }
 
 /** L'indirizzo che apre la schermata del permesso. Lo stesso, alla lettera, che il guscio accetta. */
-const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+export const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 
 /**
  * La riga del permesso mancante: inchiostro su sabbia, e dentro l'app il bottone.
