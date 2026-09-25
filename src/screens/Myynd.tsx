@@ -526,7 +526,7 @@ function corpo(c: Compito): string {
   if (c.consegna) return c.consegna.app === 'File' ? dopoLaChiusura(c.risultato ?? '') : ''
   if (c.stato === 'pronto') return fraseFinita(c) || primoParagrafo(c.risultato ?? '')
   if (c.stato === 'chiede') return domande(c).visto
-  return presentazioneRevisione(c, lingua() === 'en')?.descrizione ?? c.nota ?? ''
+  return presentazioneRevisione(c, lingua() === 'en')?.descrizione || c.nota || ''
 }
 
 /**
@@ -781,7 +781,7 @@ function RigaCompito({ c, l, v }: { c: Compito; l: Lista; v: Vals }) {
           </div>
           {testo && (aperta && pronto && !c.consegna
             // aperta, il lavoro intero si legge con le fonti in apice, senza la riga dell'ipotesi che sta già sotto
-            ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={senzaRigaIpotesi(intero)} fonti={c.fonti ?? []} onApri={v.apriFonte} /></div>
+            ? <div style={{ ...PERCHE, whiteSpace: 'pre-line' }}><Testo testo={senzaRigaIpotesi(intero)} fonti={c.fonti ?? []} onApri={v.apriFonte} aCapo /></div>
             : <div style={{ ...PERCHE, whiteSpace: aperta ? 'pre-line' : undefined }}>{aperta ? intero : corta}</div>)}
           {pronto && c.ipotesi?.[0] && <RigaIpotesi c={c} titolo={titolo} correggi={l.correggi} />}
           {bloccata && <Bloccata v={v} />}
@@ -1123,7 +1123,7 @@ export function Myynd({ v, lista, blocchi: dalGuscio }: { v: Vals; lista?: Lista
   const compiti = lista?.compiti ?? []
   // i blocchi li fa il guscio (`App.tsx`), una volta, e li usa anche per il
   // numero nel menù: qui si ricalcolano solo se nessuno li ha passati
-  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, vuoti: v.progettiNuovi })
+  const grezzi: BloccoPagina[] = dalGuscio ?? blocchiFeed({ voci: v.voci, compiti, progetti: v.progetti, nomeResto: t('Il resto'), fermi: lista?.appenaFinite, corrette: lista?.appenaCorrette, vuoti: v.progettiNuovi })
   // l'ordine è l'ultima cosa che si decide, ed è l'unica che decide lui: il
   // guscio mette insieme le righe, questa riga le mette in fila
   const ordinati = ordinaBlocchi(grezzi, v.ordineBlocchi, v.progettiNuovi)

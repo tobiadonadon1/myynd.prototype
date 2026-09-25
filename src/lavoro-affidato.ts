@@ -55,3 +55,27 @@ export function eUnaMancanza(c: Pick<Compito, 'ipotesi' | 'email'>): boolean {
   const riga = c.ipotesi?.[0] ?? ''
   return MANCA.test(riga) || haSegnaposto(c.email?.corpo)
 }
+
+/**
+ * Le righe appena passate da affidate a finite, fra una lista e l'altra:
+ * `pronte` sono quelle da annunciare («Fatto: …»), `finite` quelle che
+ * tengono il posto finché il fuoco si posa. Una riga rimessa com'era dopo
+ * un errore (`ripristinate`, da `indietro`) è passata da affidata a pronta
+ * senza che nessuno abbia fatto niente: non è finita, e dire «Fatto» sopra
+ * «Non sono riuscito a rifarla» sarebbe dire una cosa falsa.
+ */
+export function appenaFinite(
+  prima: Readonly<Record<string, string>> | null,
+  adesso: readonly { id: string; stato: string }[],
+  ripristinate: ReadonlySet<string> = new Set()
+): { pronte: string[]; finite: string[] } {
+  const pronte: string[] = []
+  const finite: string[] = []
+  if (!prima) return { pronte, finite }
+  for (const c of adesso) {
+    if (prima[c.id] !== 'delegato' || ripristinate.has(c.id)) continue
+    if (c.stato === 'pronto') pronte.push(c.id)
+    if (c.stato === 'pronto' || c.stato === 'chiede') finite.push(c.id)
+  }
+  return { pronte, finite }
+}

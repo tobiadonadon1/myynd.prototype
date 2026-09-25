@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bloccoDi, eUnaMancanza, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siRivede } from './lavoro-affidato.ts'
+import { appenaFinite, bloccoDi, eUnaMancanza, mandataValida, puoMandare, rigaDellaVoce, senzaRigaIpotesi, siRivede } from './lavoro-affidato.ts'
 
 test('mandataValida: una mandata più vecchia della delega è di un giro prima', () => {
   assert.equal(mandataValida({ mandata: { doc: 'posta:Sent:61', quando: '2026-09-24T10:00:00.000Z', certezza: 'filo', ritocco: 0.1 }, chiesto: '2026-09-24T09:00:00.000Z' }), true)
@@ -40,4 +40,14 @@ test('siRivede con una bozza salvata nella posta o un file consegnato', () => {
   assert.equal(siRivede({ email: null, consegna: { app: 'File', titolo: 'x', percorso: '/tmp/x.md' } }), true)
   assert.equal(siRivede({ email: { a: '', oggetto: '', corpo: '', conosciuto: false }, consegna: null }), false)
   assert.equal(senzaRigaIpotesi('Done.\n\nBody.\n\nI assumed Friday.'), 'Done.\n\nBody.')
+})
+
+test('appenaFinite: da affidata a pronta è finita; rimessa com\'era dopo un errore no, e non si dice «Fatto»', () => {
+  const prima = { a: 'delegato', b: 'delegato', c: 'delegato', d: 'pronto' }
+  const adesso = [{ id: 'a', stato: 'pronto' }, { id: 'b', stato: 'chiede' }, { id: 'c', stato: 'pronto' }, { id: 'd', stato: 'pronto' }]
+  assert.deepEqual(appenaFinite(prima, adesso), { pronte: ['a', 'c'], finite: ['a', 'b', 'c'] })
+  // «Cambia» fallito: la riga torna pronta da sola, e non è un lavoro finito
+  assert.deepEqual(appenaFinite(prima, adesso, new Set(['c'])), { pronte: ['a'], finite: ['a', 'b'] })
+  // la prima lista non è un passaggio
+  assert.deepEqual(appenaFinite(null, adesso), { pronte: [], finite: [] })
 })

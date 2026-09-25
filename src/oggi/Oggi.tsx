@@ -814,7 +814,7 @@ function Bozza({ c, l }: { c: Compito; l: Lista }) {
           fontSize: '14px', lineHeight: 1.6, color: 'var(--inchiostro)', whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere', maxHeight: 340, overflowY: 'auto'
         }}>
-          <Testo testo={testo} fonti={c.fonti ?? []} />
+          <Testo testo={testo} fonti={c.fonti ?? []} aCapo />
         </div>
       )}
       {c.stato === 'pronto' && c.ipotesi?.[0] && <RigaIpotesi c={c} titolo={c.testo} correggi={l.correggi} />}
