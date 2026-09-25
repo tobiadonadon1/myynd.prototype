@@ -22,6 +22,7 @@
     "pacchetto:win": "npm run build && electron-builder --config build/configura.cjs --win --x64",
     "prova:app": "node prove/app.mjs",
     "valuta:feed": "node server/valuta-feed.ts",
+    "valuta:risposte": "node --disable-warning=ExperimentalWarning server/valuta-risposte.ts",
     "prova:jev": "node --env-file-if-exists=.env.local --disable-warning=ExperimentalWarning server/prova-jev.ts"
   },
   "dependencies": {
