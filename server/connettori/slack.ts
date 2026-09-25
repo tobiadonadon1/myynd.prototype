@@ -85,10 +85,14 @@ async function api<T>(c: ConfigSlack, metodo: string, q: Record<string, string> 
   return j
 }
 
+const PASSEGGERI = new Set(['ratelimited', 'internal_error', 'fatal_error', 'service_unavailable', 'request_timeout', 'risposta_illeggibile'])
+
 /** Cosa serve perché Slack torni a leggersi: un token nuovo, o solo aspettare. */
 function rimedioSlack(e: string): Rimedio {
   if (['invalid_auth', 'not_authed', 'token_revoked', 'account_inactive', 'missing_scope'].includes(e)) return 'credenziale'
-  if (e === 'ratelimited') return 'attendi'
+  // Slack che inciampa lo dice anche con un 200: passa da solo, come un 5xx;
+  // e lo stesso vale per una pagina che non è JSON (un portale del Wi-Fi)
+  if (PASSEGGERI.has(e)) return 'attendi'
   return 'guarda'
 }
 

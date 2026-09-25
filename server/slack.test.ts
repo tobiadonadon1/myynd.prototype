@@ -50,3 +50,16 @@ test('un 5xx di Slack, anche con una pagina HTML, è passeggero; un token non va
   risponde({ ok: false, error: 'invalid_auth' }, { status: 200 })
   assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'credenziale')
 })
+
+test('gli inciampi che Slack dice con un 200, e una pagina che non è JSON, sono passeggeri; un token non valido resta «credenziale» (counter-case)', async () => {
+  for (const error of ['internal_error', 'fatal_error', 'service_unavailable', 'request_timeout']) {
+    risponde({ ok: false, error }, { status: 200 })
+    const e = await sincronizza(C).catch(x => x)
+    assert.ok(e instanceof GuaioFonte, error)
+    assert.equal(e.rimedio, 'attendi', error)
+  }
+  globalThis.fetch = (async () => new Response('<html>Accedi al Wi-Fi</html>', { status: 200, headers: { 'content-type': 'text/html' } })) as typeof fetch
+  assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'attendi')
+  risponde({ ok: false, error: 'invalid_auth' }, { status: 200 })
+  assert.equal((await sincronizza(C).catch(x => x)).rimedio, 'credenziale')
+})
