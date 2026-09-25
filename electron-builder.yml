@@ -18,6 +18,7 @@ directories:
 files:
   - desktop/**
   - "!desktop/**/*.test.ts"
+  - "!desktop/bin/*.swift"
   - server/**
   - "!server/**/*.test.ts"
   - automazioni/**
@@ -26,16 +27,20 @@ files:
   - "!.env*"
   - "!dist-app/**"
 
-# L'archivio asar tiene insieme i file, ma tre cose vogliono file veri sul
+# L'archivio asar tiene insieme i file, ma quattro cose vogliono file veri sul
 # disco: il server, che parte per percorso come processo a parte; il
-# lavoratore dei PDF, che è `new Worker(url)`; e i binari nativi. Anche
-# `dist/` resta fuori, perché lo serve il server dal disco, non Electron.
+# lavoratore dei PDF, che è `new Worker(url)`; i binari nativi; e il
+# programma dell'osservatore. Anche `dist/` resta fuori, perché lo serve il
+# server dal disco, non Electron.
 asar: true
 asarUnpack:
   - server/**
   - automazioni/**
   - dist/**
   - "**/*.node"
+  # il programma che dice chi c'è davanti (desktop/bin/myynd-fronte): un
+  # eseguibile dentro l'asar non si può lanciare
+  - desktop/bin/**
 
 mac:
   category: public.app-category.productivity

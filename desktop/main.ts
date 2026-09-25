@@ -9,7 +9,10 @@
 // scorciatoia da qualunque app che apre il richiamo (`scorciatoia.ts`,
 // `richiamo.ts`), gli aggiornamenti quando si possono fare
 // (`aggiornamenti.ts`), e tre preferenze in un JSON (`impostazioni.ts`). Le
-// frasi passano tutte da `lingua.ts`.
+// frasi passano tutte da `lingua.ts`. E l'osservatore (`osservatore.ts`):
+// quale app sta davanti, consegnato al server solo quando il server dice che
+// è acceso, col mostriciattolo nella barra e, se lo si vuole, sullo schermo
+// (`compagno.ts`).
 //
 // L'app vive anche a finestra chiusa: la X nasconde, il segno nella barra e
 // il Dock la tengono viva, e il server con le sue automazioni continua a
@@ -24,13 +27,16 @@
 
 import { workPowerLease } from './lavoro-background.ts'
 import { mailMessageLink } from './mail-link.ts'
-import { app, dialog, ipcMain, Notification, powerMonitor, powerSaveBlocker, shell, session } from 'electron'
+import { app, dialog, ipcMain, Notification, powerMonitor, powerSaveBlocker, shell, session, systemPreferences } from 'electron'
 import { join } from 'node:path'
 import * as server from './server.ts'
 import * as finestra from './finestra.ts'
 import * as richiamo from './richiamo.ts'
 import * as menu from './menu.ts'
 import * as tray from './tray.ts'
+import * as osservatore from './osservatore.ts'
+import * as fronte from './fronte.ts'
+import * as compagno from './compagno.ts'
 import * as scorciatoia from './scorciatoia.ts'
 import * as aggiornamenti from './aggiornamenti.ts'
 import * as impostazioni from './impostazioni.ts'
@@ -42,6 +48,9 @@ import { ARGOMENTO_NASCOSTO, avvioNascosto } from './nascosto.ts'
 type Dove = string | { dove: 'chat'; id: string }
 /** L'unico indirizzo fuori da http/https/mailto che il guscio apre: la schermata del permesso per le Note. */
 const PANNELLO_ACCESSO_DISCO = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+/** La schermata di Accessibilità, per i titoli delle finestre: un canale suo, non `apri-fuori`. */
+const PANNELLO_ACCESSIBILITA = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+const MAC = process.platform === 'darwin'
 
 const POSTI = new Set(['preferenze', 'chat', 'oggi', 'aiuto', 'nuova-chat'])
 
@@ -131,7 +140,21 @@ async function avvio() {
     apri: finestra.mostra,
     nuovaChat: () => vai('nuova-chat'),
     preferenze: () => vai('preferenze'),
-    esci: () => app.quit()
+    esci: () => app.quit(),
+    pausa: () => osservatore.pausa(60),
+    riprendi: () => osservatore.riprendi()
+  })
+  // l'osservatore: spento finché il server non dice il contrario
+  osservatore.avvia({
+    manda: server.manda,
+    creaFonte: fronte.creaFonte,
+    inattivoSecondi: () => powerMonitor.getSystemIdleTime(),
+    permesso: () => MAC && systemPreferences.isTrustedAccessibilityClient(false),
+    adesso: Date.now,
+    mioPid: process.pid,
+    piattaforma: process.platform,
+    suCambio: s => { tray.osserva(s); compagno.osserva(s) },
+    registra: server.scriviRegistro
   })
   // senza il segno nella barra, fuori dal Mac, la X chiude come prima: un'app
   // viva che non si vede e non si riapre è peggio di una chiusa
@@ -139,12 +162,27 @@ async function avvio() {
   // la scorciatoia apre il richiamo; finché il server non c'è, la finestra
   const alPremere = () => { if (!richiamo.alterna()) finestra.alterna() }
   scorciatoia.attiva(alPremere)
+  // il mostriciattolo sullo schermo, se la persona l'ha acceso: un clic è la scorciatoia
+  compagno.prepara({
+    alPremere, apri: finestra.mostra,
+    pausa: () => osservatore.pausa(60), riprendi: () => osservatore.riprendi(),
+    cambiato: on => finestra.manda('myynd:compagno-cambiato', on)
+  })
   // con `--inspect` e MYYND_ISPEZIONE=1 si prova il guscio dal vivo: un
   // `import()` dall'inspector non passa, e la scorciatoia non si preme da
   // uno script — questi sono i pezzi che servono, a portata di mano
   if (process.env.MYYND_ISPEZIONE) Object.assign(globalThis, { myynd: { app, richiamo, finestra, alPremere } })
   // il computer si è svegliato: il server deve saperlo (`server.ts`)
   powerMonitor.on('resume', server.sveglia)
+  // e l'osservatore chiude la sessione quando la persona non c'è
+  powerMonitor.on('resume', osservatore.sveglio)
+  powerMonitor.on('suspend', osservatore.dorme)
+  powerMonitor.on('lock-screen', osservatore.bloccato)
+  powerMonitor.on('unlock-screen', osservatore.sbloccato)
+  if (MAC) {
+    powerMonitor.on('user-did-resign-active', osservatore.bloccato)
+    powerMonitor.on('user-did-become-active', osservatore.sbloccato)
+  }
   canali(azioniMenu, vai)
 
   // il renderer appena caricato non sa ancora come stanno gli aggiornamenti
@@ -158,8 +196,14 @@ async function avvio() {
   }
   const ascolto: server.Ascolto = {
     suLavoro: message => workLease.message(message),
-    suPorta: porta => caricaApp(`http://127.0.0.1:${porta}/`),
-    suMorte: righe => chiediRiapertura(righe, ascolto)
+    suPorta: porta => {
+      caricaApp(`http://127.0.0.1:${porta}/`)
+      // un server nuovo: gli si chiede com'è l'osservatore, e fino alla
+      // risposta le sessioni aspettano
+      osservatore.nuovoServer()
+    },
+    suMorte: righe => chiediRiapertura(righe, ascolto),
+    suOsservatore: osservatore.daServer
   }
   // in `app:dev` il server ce l'ha già `npm run dev`: un secondo sugli stessi
   // dati farebbe a botte con il primo per l'indice
@@ -191,6 +235,9 @@ async function spegniSenzaUscire() {
   clearInterval(workLeaseTimer)
   scorciatoia.spegni()
   richiamo.distruggi()
+  compagno.distruggi()
+  // prima del server: le ultime sessioni partono, e la risposta dice che sono scritte
+  await osservatore.ferma()
   tray.distruggi()
   await server.ferma()
 }
@@ -220,6 +267,22 @@ async function chiediRiapertura(righe: string[], ascolto: server.Ascolto) {
   dialogoAperto = false
   if (response === 0) void server.riavvia(ascolto)
   else app.quit()
+}
+
+/**
+ * La richiesta di sistema per l'Accessibilità, al massimo una volta per
+ * versione: se questa versione l'ha già fatta, si legge e basta. Fuori dal
+ * Mac non c'è niente da chiedere.
+ */
+function chiediPermesso(): boolean {
+  if (!MAC) return false
+  const versione = app.getVersion()
+  if (impostazioni.leggi().accessibilitaChiesta !== versione) {
+    impostazioni.scrivi({ accessibilitaChiesta: versione })
+    server.scriviRegistro('guscio · chiedo il permesso di Accessibilità (titoli delle finestre)')
+    return systemPreferences.isTrustedAccessibilityClient(true)
+  }
+  return systemPreferences.isTrustedAccessibilityClient(false)
 }
 
 /** Tutti i canali del ponte, nell'ordine del contratto. */
@@ -261,7 +324,10 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
   ipcMain.handle('myynd:mostra', (_e, percorso: unknown) => {
     if (typeof percorso === 'string' && percorso) shell.showItemInFolder(percorso)
   })
-  ipcMain.on('myynd:segnala', (_e, n: unknown) => tray.segnala(Number(n)))
+  ipcMain.on('myynd:segnala', (_e, n: unknown) => {
+    tray.segnala(Number(n))
+    compagno.segnala(Number(n))
+  })
   ipcMain.on('myynd:lingua', (_e, l: unknown) => {
     const nuova = l === 'en' ? 'en' : 'it'
     if (nuova === lingua.lingua()) return
@@ -270,6 +336,29 @@ function canali(azioni: menu.Azioni, vai: (dove: Dove) => void) {
     menu.costruisci(azioni)
     tray.aggiorna()
   })
+  /*
+   * L'osservatore del Mac, dalle Preferenze.
+   *
+   * Il permesso di Accessibilità (per i titoli delle finestre) si legge senza
+   * chiederlo; si chiede — cioè compare la richiesta di sistema — solo quando
+   * la persona accende i titoli, e una volta sola per versione dell'app. La
+   * schermata delle Impostazioni si apre da un canale suo, con un indirizzo
+   * fisso: la pagina non sceglie cosa aprire.
+   */
+  ipcMain.handle('myynd:osservatore-permesso', () => {
+    osservatore.rileggiPermesso()
+    return MAC && systemPreferences.isTrustedAccessibilityClient(false)
+  })
+  ipcMain.handle('myynd:osservatore-chiedi-permesso', () => {
+    const dato = chiediPermesso()
+    osservatore.rileggiPermesso()
+    return dato
+  })
+  ipcMain.handle('myynd:osservatore-impostazioni', async () => {
+    if (MAC) await shell.openExternal(PANNELLO_ACCESSIBILITA)
+  })
+  ipcMain.handle('myynd:compagno-acceso', () => impostazioni.leggi().compagno?.acceso === true)
+  ipcMain.handle('myynd:compagno-accendi', (_e, on: unknown) => { compagno.accendi(on === true) })
   ipcMain.handle('myynd:scorciatoia', () => scorciatoia.corrente())
   ipcMain.handle('myynd:imposta-scorciatoia', (_e, acc: unknown) => scorciatoia.imposta(String(acc)))
   ipcMain.handle('myynd:avvio-automatico', () => app.getLoginItemSettings().openAtLogin)

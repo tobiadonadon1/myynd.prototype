@@ -110,6 +110,8 @@ export type Ascolto = {
   suPorta(porta: number): void
   /** Il server è morto e non lo si riavvia da soli: tocca alla persona. */
   suMorte(ultimeRighe: string[]): void
+  /** Un `osservatore-stato`: com'è l'osservatore per il server (`osservatore.ts`). */
+  suOsservatore?: (m: unknown) => void
 }
 
 const RIAVVII_MASSIMI = 3
@@ -142,7 +144,11 @@ export function acceso(): boolean {
   return figlio !== null
 }
 
-export async function avvia(ascolto: Ascolto): Promise<void> {
+/**
+ * `opzioni.script` solo per la prova del canale (`prove/osservatore-guscio.cjs`):
+ * un finto server al posto di quello vero. Niente nell'app lo passa.
+ */
+export async function avvia(ascolto: Ascolto, opzioni: { script?: string } = {}): Promise<void> {
   // il guardiano sta prima dell'attesa del PATH: un riavvio automatico e un
   // «Riapri» premuto nello stesso istante farebbero partire due server
   if (figlio || partendo) return
@@ -169,7 +175,8 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
   // toglierlo qui che vedere la finestra di errore
   delete env.MYYND_DEV
 
-  const p = utilityProcess.fork(SERVER, [], {
+  const script = opzioni.script ?? SERVER
+  const p = utilityProcess.fork(script, [], {
     env, stdio: 'pipe', serviceName: 'myynd-server',
     execArgv: ['--disable-warning=ExperimentalWarning']
   })
@@ -177,12 +184,13 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
   partendo = false
   ultime = []
   let portaDetta = false
-  scriviRegistro(`guscio · avvio il server (${SERVER}${portaChiesta ? `, porta ${portaChiesta}` : ''})`)
+  scriviRegistro(`guscio · avvio il server (${script}${portaChiesta ? `, porta ${portaChiesta}` : ''})`)
 
   p.stdout?.on('data', d => ricorda('server ·', d))
   p.stderr?.on('data', d => ricorda('server !', d))
   p.on('message', (m: unknown) => {
     ascolto.suLavoro?.(m)
+    if ((m as { tipo?: unknown })?.tipo === 'osservatore-stato') ascolto.suOsservatore?.(m)
     const porta = (m as { porta?: unknown })?.porta
     if (typeof porta === 'number') {
       portaDetta = true
@@ -203,7 +211,7 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
       // fra i riavvii — non è il server che muore, è la porta che manca
       scriviRegistro(`guscio · la porta ${portaChiesta} non si è aperta: ne chiedo una libera`)
       impostazioni.scrivi({ porta: undefined })
-      void avvia(ascolto)
+      void avvia(ascolto, opzioni)
       return
     }
     const adesso = Date.now()
@@ -211,7 +219,7 @@ export async function avvia(ascolto: Ascolto): Promise<void> {
     if (riavvii.length < RIAVVII_MASSIMI) {
       riavvii.push(adesso)
       scriviRegistro(`guscio · lo riavvio da solo (${riavvii.length}/${RIAVVII_MASSIMI} nell'ultimo minuto)`)
-      void avvia(ascolto)
+      void avvia(ascolto, opzioni)
     } else {
       ascolto.suMorte(ultimeRighe())
     }
@@ -236,6 +244,16 @@ export function sveglia() {
   } catch (e) {
     scriviRegistro(`guscio · non sono riuscito a svegliare il server: ${e instanceof Error ? e.message : e}`)
   }
+}
+
+/**
+ * Un messaggio al server, su `parentPort`. Falso se il server non c'è o il
+ * canale non lo prende: chi manda (l'osservatore) tiene da parte e riprova.
+ */
+export function manda(m: unknown): boolean {
+  const p = figlio
+  if (!p) return false
+  try { p.postMessage(m); return true } catch { return false }
 }
 
 /** Da capo, su richiesta della persona: il conto dei riavvii riparte da zero. */

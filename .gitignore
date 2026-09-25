@@ -17,3 +17,6 @@ dist-app/
 desktop/feed.json
 
 /.myynd-local-signing.json
+
+# il programma che dice chi c’è davanti: lo costruisce build/fronte.cjs
+desktop/bin/myynd-fronte

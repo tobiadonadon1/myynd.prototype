@@ -82,6 +82,14 @@ export type Desktop = {
      */
     mostrato?(cb: () => void): () => void
   }
+  /** L'osservatore del Mac: il permesso per i titoli delle finestre (P1). Manca nei gusci vecchi. */
+  osservatore?: { permessoTitoli(): Promise<boolean>; chiediPermessoTitoli(): Promise<boolean>; apriImpostazioniTitoli(): Promise<void> }
+  /**
+   * Il mostriciattolo sullo schermo (P1). Manca nei gusci vecchi. `suCambio`
+   * dice acceso o spento ogni volta che cambia, anche da «Togli dallo
+   * schermo» sul mostriciattolo; torna la funzione per smettere.
+   */
+  compagno?: { acceso(): Promise<boolean>; accendi(on: boolean): Promise<void>; suCambio?(cb: (on: boolean) => void): () => void }
 }
 
 declare global {

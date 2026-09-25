@@ -39,3 +39,55 @@ export function doveSiApre(schermo: Schermo, r: Area): string {
   const nome = schermo.label ? `«${schermo.label}» ` : ''
   return `${nome}#${schermo.id} a ${r.x},${r.y} ${r.width}×${r.height}`
 }
+
+/* ------------------------------------------------------------ il mostriciattolo */
+
+/** Il riquadro del mostriciattolo sullo schermo, in punti. */
+export const LATO_COMPAGNO = 64
+/** Quanto sta lontano dai bordi quando nessuno l'ha spostato. */
+export const MARGINE_COMPAGNO = 24
+
+type Punto = { x: number; y: number }
+
+const dentroTutto = (a: Area, p: Punto) =>
+  p.x >= a.x && p.y >= a.y && p.x + LATO_COMPAGNO <= a.x + a.width && p.y + LATO_COMPAGNO <= a.y + a.height
+const contiene = (a: Area, x: number, y: number) => x >= a.x && x < a.x + a.width && y >= a.y && y < a.y + a.height
+/** Il punto spinto dentro l'area, se ci sta. */
+const dentro = (a: Area, p: Punto): Punto => ({
+  x: Math.round(Math.min(Math.max(p.x, a.x), a.x + a.width - LATO_COMPAGNO)),
+  y: Math.round(Math.min(Math.max(p.y, a.y), a.y + a.height - LATO_COMPAGNO))
+})
+const areaDelCentro = (aree: Area[], p: Punto) =>
+  aree.find(a => contiene(a, p.x + LATO_COMPAGNO / 2, p.y + LATO_COMPAGNO / 2))
+
+/**
+ * Dove sta il mostriciattolo. Senza un posto salvato: in basso a destra dello
+ * schermo principale. Con un posto salvato: lì se il quadrato sta tutto dentro
+ * uno schermo; spinto dentro lo schermo che ne contiene il centro, se sborda;
+ * altrimenti (lo schermo non c'è più) di nuovo in basso a destra.
+ */
+export function posizioneCompagno(aree: Area[], voluta: { x?: number; y?: number } | undefined, principale: Area): Punto {
+  const predefinita = dentro(principale, {
+    x: principale.x + principale.width - LATO_COMPAGNO - MARGINE_COMPAGNO,
+    y: principale.y + principale.height - LATO_COMPAGNO - MARGINE_COMPAGNO
+  })
+  if (!voluta || !Number.isFinite(voluta.x) || !Number.isFinite(voluta.y)) return predefinita
+  const p = { x: Math.round(voluta.x!), y: Math.round(voluta.y!) }
+  if (aree.some(a => dentroTutto(a, p))) return p
+  const a = areaDelCentro(aree, p)
+  return a ? dentro(a, p) : predefinita
+}
+
+/**
+ * Mentre lo si trascina: dov'era quando lo si è preso (`origine`) più tutto
+ * lo spostamento del puntatore da allora, spinto dentro lo schermo che ne
+ * contiene il centro. Se il centro uscirebbe da tutti, sta dov'è (`adesso`)
+ * invece di saltare altrove. Ogni passo si conta dalla presa e non dal passo
+ * prima: spinto contro un bordo e riportato indietro, torna sotto il
+ * puntatore invece di restarne scostato.
+ */
+export function trascinaCompagno(aree: Area[], origine: Punto, dx: number, dy: number, adesso: Punto = origine): Punto {
+  const p = { x: origine.x + dx, y: origine.y + dy }
+  const a = areaDelCentro(aree, p)
+  return a ? dentro(a, p) : { x: adesso.x, y: adesso.y }
+}
